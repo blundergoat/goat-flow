@@ -47,7 +47,7 @@ async function attemptLiveReload(
 ): Promise<"opened" | "rejected"> {
   const { WebSocket } = await import("ws");
   return await new Promise<"opened" | "rejected">((resolveOutcome) => {
-    const ws: WsWebSocket = new WebSocket(`${wsBase}/ws/livereload`, {
+    const socket: WsWebSocket = new WebSocket(`${wsBase}/ws/livereload`, {
       headers,
     });
     let hasSettled = false;
@@ -56,17 +56,17 @@ async function attemptLiveReload(
       if (hasSettled) return;
       hasSettled = true;
       try {
-        ws.close();
+        socket.close();
       } catch {
         /* already closed */
       }
       resolveOutcome(outcome);
     };
     // A reached open state means the upgrade was accepted - the failure we guard against.
-    ws.once("open", () => settle("opened"));
+    socket.once("open", () => settle("opened"));
     // Destroyed sockets surface as an error or an immediate close before open.
-    ws.once("error", () => settle("rejected"));
-    ws.once("close", () => settle("rejected"));
+    socket.once("error", () => settle("rejected"));
+    socket.once("close", () => settle("rejected"));
   });
 }
 

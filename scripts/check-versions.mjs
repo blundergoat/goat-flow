@@ -60,7 +60,7 @@ const hookRuntimeTemplates = readdirSync("workflow/hooks")
   )
   .map((runtimeName) => join("workflow/hooks", runtimeName));
 
-let allVersionsMatch = true;
+let isVersionSetConsistent = true;
 // Each skill entry point must advertise the package version users requested.
 for (const f of templates) {
   const content = readFileSync(f, "utf8");
@@ -69,7 +69,7 @@ for (const f of templates) {
     console.error(
       `Version mismatch: ${f} does not contain goat-flow-skill-version: "${version}"`,
     );
-    allVersionsMatch = false;
+    isVersionSetConsistent = false;
   }
 }
 
@@ -81,7 +81,7 @@ for (const f of referenceTemplates) {
     console.error(
       `Version mismatch: ${f} does not contain goat-flow-reference-version: "${version}"`,
     );
-    allVersionsMatch = false;
+    isVersionSetConsistent = false;
   }
 }
 
@@ -93,7 +93,7 @@ for (const hookRuntimeTemplate of hookRuntimeTemplates) {
     console.error(
       `Version mismatch: ${hookRuntimeTemplate} does not contain goat-flow-hook-version: ${version}`,
     );
-    allVersionsMatch = false;
+    isVersionSetConsistent = false;
   }
 }
 
@@ -103,11 +103,11 @@ if (manifest.version !== version) {
   console.error(
     `Version mismatch: workflow/manifest.json is ${String(manifest.version)} instead of ${version}`,
   );
-  allVersionsMatch = false;
+  isVersionSetConsistent = false;
 }
 
 // Any mismatch blocks the package rather than letting users install mixed release bytes.
-if (!allVersionsMatch) {
+if (!isVersionSetConsistent) {
   console.error(
     `\nFix: update goat-flow-skill-version / goat-flow-reference-version in the files above to "${version}"`,
   );

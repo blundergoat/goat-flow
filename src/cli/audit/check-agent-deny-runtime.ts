@@ -119,11 +119,11 @@ function spawnFailureFromResult(
 /**
  * Quote a hook path so Bash reads it as one literal user-selected location.
  *
- * @param value - The raw string (typically an absolute hook path) to quote.
+ * @param argument - The raw string (typically an absolute hook path) to quote.
  * @returns The value wrapped in single quotes with embedded quotes escaped.
  */
-function shellSingleQuote(value: string): string {
-  return `'${value.replace(/'/g, "'\\''")}'`;
+function shellSingleQuote(argument: string): string {
+  return `'${argument.replace(/'/g, "'\\''")}'`;
 }
 
 /**
@@ -486,24 +486,24 @@ function pushConfiguredArgvCommand(
 /**
  * Walk a settings file of unknown shape and pull out every hook command it registers, wherever the agent chose to nest them.
  *
- * @param value - any node of the parsed config; non-command values are walked through and contribute nothing
+ * @param configNode - any node of the parsed config; non-command values are walked through and contribute nothing
  * @param configPath - config file the commands came from, kept so a finding can name the file the user must edit
  * @param commands - collected commands, appended to in place
  */
 function collectNestedCommandValues(
-  value: unknown,
+  configNode: unknown,
   configPath: string,
   commands: ConfiguredHookCommand[],
 ): void {
   // Agents nest hook registrations differently, so both arrays and objects are walked rather than assuming one layout.
-  if (Array.isArray(value)) {
-    for (const entry of value) {
+  if (Array.isArray(configNode)) {
+    for (const entry of configNode) {
       collectNestedCommandValues(entry, configPath, commands);
     }
     return;
   }
-  if (!value || typeof value !== "object") return;
-  const obj = value as Record<string, unknown>;
+  if (!configNode || typeof configNode !== "object") return;
+  const obj = configNode as Record<string, unknown>;
   // Exec-form rows carry their operands in args; string rows keep shell text in command.
   if (Array.isArray(obj.args)) {
     pushConfiguredArgvCommand(commands, obj.command, obj.args, configPath);

@@ -159,7 +159,7 @@ function supportedAgent(
 function loadHelpers(
   windowOverrides: Record<string, unknown> = {},
 ): HelperContext {
-  const js = [MODEL_READERS_PATH, READERS_PATH]
+  const compiled = [MODEL_READERS_PATH, READERS_PATH]
     .map(
       (path) =>
         transpileModule(readFileSync(path, "utf-8"), {
@@ -179,7 +179,7 @@ function loadHelpers(
     },
   });
   runInContext(
-    `${js}
+    `${compiled}
 globalThis.__helpers = {
   readRunnerId,
   readServerSessionInfo,

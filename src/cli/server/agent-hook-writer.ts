@@ -166,17 +166,17 @@ function matcherParts(matcher: string): string[] {
  *
  * @param agent - supported provider; a missing hook surface is rejected before this derivation
  * @param spec - registry hook; an empty script list produces an empty managed-file target
- * @param enabled - true targets one command per provider event/matcher; false targets no registrations
+ * @param isEnabled - true targets one command per provider event/matcher; false targets no registrations
  * @returns current script filenames plus exact provider registration targets; disabled keeps current files
  */
 export function deriveManagedHookDesiredState(
   agent: AgentProfile,
   spec: HookSpec,
-  enabled: boolean,
+  isEnabled: boolean,
 ): ManagedHookDesiredState {
   const managedScriptFiles = [...spec.scriptFiles];
   // A disabled hook keeps current inert files but gives the user's agent nothing to run.
-  if (!enabled) return { managedScriptFiles, registrationTargets: [] };
+  if (!isEnabled) return { managedScriptFiles, registrationTargets: [] };
 
   const event = hookEventKey(agent, spec);
   // Stop and Copilot use one matcherless registration for the user's lifecycle event.
@@ -423,30 +423,33 @@ function appendHookEntries(
  * Count direct managed commands across every provider config shape.
  * Use so duplicate or misplaced rows cannot look installed merely because one exact row exists.
  *
- * @param value - parsed config value; null, empty, or primitive values contain no commands
+ * @param registrationNode - parsed config value; null, empty, or primitive values contain no commands
  * @param spec - managed hook contract; empty script metadata matches no command
  * @returns physical managed command count; zero means the user has no registration for this hook
  */
 function managedRegistrationCommandCount(
-  value: unknown,
+  registrationNode: unknown,
   spec: HookSpec,
 ): number {
   // Every array item may contain one direct command or another provider wrapper.
-  if (Array.isArray(value)) {
-    return value.reduce<number>(
+  if (Array.isArray(registrationNode)) {
+    return registrationNode.reduce<number>(
       (count, nestedValue) =>
         count + managedRegistrationCommandCount(nestedValue, spec),
       0,
     );
   }
   // Null and primitive values cannot contain a managed command.
-  if (!isAgentHookJsonObject(value)) return 0;
-  const directManagedCommandCount = commandEntryReferencesSpec(value, spec)
+  if (!isAgentHookJsonObject(registrationNode)) return 0;
+  const directManagedCommandCount = commandEntryReferencesSpec(
+    registrationNode,
+    spec,
+  )
     ? 1
     : 0;
   return (
     directManagedCommandCount +
-    Object.values(value).reduce<number>(
+    Object.values(registrationNode).reduce<number>(
       (count, nestedValue) =>
         count + managedRegistrationCommandCount(nestedValue, spec),
       0,
@@ -697,7 +700,7 @@ export function readAgentHookState(
  * @param projectPath - selected project; empty text cannot own a safe config write
  * @param agent - selected provider; a null config path throws before writing
  * @param spec - managed hook contract; empty metadata cannot produce a useful command
- * @param enabled - true installs current rows; false removes only setup-owned rows
+ * @param isEnabled - true installs current rows; false removes only setup-owned rows
  * @returns nothing; successful completion leaves unrelated user hooks unchanged
  * @throws when existing config is invalid JSON or the agent lacks a writable surface
  */
@@ -705,11 +708,11 @@ export function writeAgentHookState(
   projectPath: string,
   agent: AgentProfile,
   spec: HookSpec,
-  enabled: boolean,
+  isEnabled: boolean,
 ): void {
   const path = configPath(projectPath, agent);
   const config = readJsonFile(path);
-  const desiredState = deriveManagedHookDesiredState(agent, spec, enabled);
+  const desiredState = deriveManagedHookDesiredState(agent, spec, isEnabled);
   // Invalid user JSON cannot be safely merged, so setup asks the user to repair it first.
   if (config.invalid) {
     throw new Error(

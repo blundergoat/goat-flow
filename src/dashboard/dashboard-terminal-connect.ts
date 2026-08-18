@@ -10,7 +10,7 @@ interface DashboardTerminalAttachment {
   sessionId: string;
   session: LocalSession;
   term: XTermInstance;
-  ws: WebSocket;
+  socket: WebSocket;
 }
 
 /**
@@ -68,14 +68,14 @@ function dashboardCreateTerminalInstance(
  * @param container - the pane element the terminal is measured against; zero width means it is hidden and not measurable
  * @param term - the terminal whose column and row count is reported
  * @param fitAddon - the xterm fit addon that performs the measurement
- * @param ws - the session socket; a size is only sent while it is open
+ * @param socket - the session socket; a size is only sent while it is open
  * @returns the fit function plus the observer and listener the cleanup path has to release
  */
 function dashboardInstallTerminalFit(
   container: HTMLElement,
   term: XTermInstance,
   fitAddon: FitAddonInstance,
-  ws: WebSocket,
+  socket: WebSocket,
 ): {
   doFit: () => void;
   resizeObserver: ResizeObserver;
@@ -86,8 +86,8 @@ function dashboardInstallTerminalFit(
     // Zero width means the pane is hidden or mid-transition, so measuring now would lock in the wrong size.
     if (!container.offsetWidth) return;
     fitAddon.fit();
-    if (ws.readyState === WebSocket.OPEN) {
-      ws.send(
+    if (socket.readyState === WebSocket.OPEN) {
+      socket.send(
         JSON.stringify({ type: "resize", cols: term.cols, rows: term.rows }),
       );
     }
@@ -222,16 +222,16 @@ function dashboardHandleTerminalSocketOpen(
  *
  * @param attachment - the pane, its session, and its socket
  * @param reactive - the live Alpine copy of the session row, or undefined when the row has already been dropped
- * @param awaitingInput - whether the output suggests the runner is waiting; false leaves the badge exactly as it was
+ * @param isAwaitingInput - whether the output suggests the runner is waiting; false leaves the badge exactly as it was
  * @returns nothing; the badge is never cleared here, only set or scheduled
  */
 function dashboardApplyAwaitingInputState(
   attachment: DashboardTerminalAttachment,
   reactive: LocalSession | undefined,
-  awaitingInput: boolean,
+  isAwaitingInput: boolean,
 ): void {
   // Nothing in this output suggests the runner is waiting, so the badge state is left alone.
-  if (!awaitingInput) return;
+  if (!isAwaitingInput) return;
 
   const { ctx, sessionId, session } = attachment;
   // The badge is already showing, so it is held up rather than re-revealed after another delay.
@@ -252,12 +252,12 @@ function dashboardApplyAwaitingInputState(
  * and the waiting badge.
  *
  * @param attachment - the pane, its session, and its socket
- * @param data - the output chunk; an empty chunk still refreshes state from the existing tail
+ * @param output - the output chunk; an empty chunk still refreshes state from the existing tail
  * @returns nothing; the chunk is written to the terminal last, after state has settled
  */
 function dashboardApplyTerminalOutput(
   attachment: DashboardTerminalAttachment,
-  data: string,
+  output: string,
 ): void {
   const { ctx, sessionId, session, term } = attachment;
   const reactive = ctx.sessions.find((s) => s.id === sessionId);
@@ -267,11 +267,11 @@ function dashboardApplyTerminalOutput(
     reactive?.awaitingInput === true ||
     session.awaitingInput === true ||
     refs?.awaitingInputTimer !== undefined;
-  const tail = (previousTail + data).slice(-5000);
+  const tail = (previousTail + output).slice(-5000);
   const awaitingInput = dashboardNextAwaitingInputState(
     previousAwaiting,
     previousTail,
-    data,
+    output,
   );
   const runnerStartupFailed = dashboardOutputLooksRunnerStartupFailure(
     tail,
@@ -296,10 +296,10 @@ function dashboardApplyTerminalOutput(
       sessionId,
       session,
       previousTail,
-      data,
+      output,
     );
   }
-  dashboardHandlePasteSubmitOutput(ctx, sessionId, data);
+  dashboardHandlePasteSubmitOutput(ctx, sessionId, output);
   // A launch prompt is still waiting to be sent, so this output may be the composer marker it was waiting for.
   if (refs?.launchPrompt) dashboardHandleLaunchPromptOutput(ctx, sessionId);
   dashboardApplyAwaitingInputState(attachment, reactive, awaitingInput);
@@ -327,7 +327,7 @@ function dashboardApplyTerminalOutput(
   //
   // See .goat-flow/learning-loop/patterns/architecture.md (search: `Asymmetric trust - set state from output`) and
   // .goat-flow/learning-loop/footguns/dashboard-terminal.md (search: `Workspace terminal waiting state`).
-  term.write(data);
+  term.write(output);
 }
 
 /**
@@ -416,10 +416,10 @@ function dashboardRouteTerminalMessage(
   attachment: DashboardTerminalAttachment,
   event: MessageEvent,
 ): void {
-  const { ctx, sessionId, session, ws } = attachment;
+  const { ctx, sessionId, session, socket } = attachment;
   try {
     // A stale socket from an earlier attach must not write into the pane the user is looking at now.
-    if (ctx._terminalRefs[sessionId]?.ws !== ws) return;
+    if (ctx._terminalRefs[sessionId]?.ws !== socket) return;
     // Binary frames are not part of this protocol, so anything but text is ignored.
     if (typeof event.data !== "string") return;
 
@@ -462,12 +462,12 @@ function dashboardRouteTerminalMessage(
 function dashboardBindTerminalSocketLifecycle(
   attachment: DashboardTerminalAttachment,
 ): void {
-  const { ctx, sessionId, session, ws } = attachment;
+  const { ctx, sessionId, session, socket } = attachment;
 
   /** Handle the terminal WebSocket closing. */
-  ws.onclose = () => {
+  socket.onclose = () => {
     // A stale socket closing must not mark the pane the user is currently looking at as disconnected.
-    if (ctx._terminalRefs[sessionId]?.ws !== ws) return;
+    if (ctx._terminalRefs[sessionId]?.ws !== socket) return;
     dashboardMutateLocalSession(ctx, sessionId, session, (target) => {
       target.connected = false;
     });
@@ -475,8 +475,8 @@ function dashboardBindTerminalSocketLifecycle(
   };
 
   /** Handle terminal WebSocket errors. */
-  ws.onerror = () => {
-    if (ctx._terminalRefs[sessionId]?.ws !== ws) return;
+  socket.onerror = () => {
+    if (ctx._terminalRefs[sessionId]?.ws !== socket) return;
     // The pane never finished loading, so the failure replaces the spinner instead of appearing behind a live terminal.
     if (session.loadingPhase !== "ready") {
       dashboardSetTerminalLoadingPhase(
@@ -499,19 +499,19 @@ function dashboardBindTerminalSocketLifecycle(
  * Error behavior: throws nothing; a denied clipboard read swallows its error, because the browser has already shown the
  * user its own permission prompt.
  *
- * @param ws - the session socket; a closed socket drops the paste rather than queueing it
+ * @param socket - the session socket; a closed socket drops the paste rather than queueing it
  * @param markUserInputSent - records that the user acted, clearing the waiting badge and resetting the idle clock
  * @returns nothing; an empty clipboard sends nothing at all
  */
 function dashboardSendClipboardPaste(
-  ws: WebSocket,
+  socket: WebSocket,
   markUserInputSent: () => void,
 ): void {
   navigator.clipboard
     .readText()
     .then((text) => {
       // Nothing on the clipboard, or a socket that has already closed, leaves nothing to send.
-      if (!text || ws.readyState !== WebSocket.OPEN) return;
+      if (!text || socket.readyState !== WebSocket.OPEN) return;
 
       // Bracketed-paste markers tell runners "this is one paste, do not submit on internal newlines." Copilot in particular submits on every
       // '\n' without these markers, so multi-line clipboard text gets fragmented across queries.
@@ -519,8 +519,8 @@ function dashboardSendClipboardPaste(
       // Claude / Codex / Antigravity composers tolerate raw multi-line text but still benefit from the explicit marker, so wrap
       // unconditionally.
       const prepared = dashboardPreparePasteBody(text);
-      const data = "\x1b[200~" + prepared + "\x1b[201~";
-      ws.send(JSON.stringify({ type: "input", data }));
+      const bracketedPaste = "\x1b[200~" + prepared + "\x1b[201~";
+      socket.send(JSON.stringify({ type: "input", bracketedPaste }));
       markUserInputSent();
     })
     .catch(() => {});
@@ -540,13 +540,13 @@ function dashboardInstallTerminalInputHandlers(
   attachment: DashboardTerminalAttachment,
   markUserInputSent: () => void,
 ): void {
-  const { term, ws } = attachment;
+  const { term, socket } = attachment;
 
   term.attachCustomKeyEventHandler((e: KeyboardEvent) => {
     // Ctrl+V: clipboard text never reaches term.onData, so the paste is read and sent from here instead.
     if (e.type === "keydown" && e.ctrlKey && e.key === "v") {
       e.preventDefault();
-      dashboardSendClipboardPaste(ws, markUserInputSent);
+      dashboardSendClipboardPaste(socket, markUserInputSent);
       return false;
     }
     // Ctrl+C with text selected means copy, not interrupt - the runner should not see a SIGINT here.
@@ -563,16 +563,16 @@ function dashboardInstallTerminalInputHandlers(
   });
 
   term.onData((data: string) => {
-    if (ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: "input", data }));
+    if (socket.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ type: "input", data }));
     }
     // Xterm protocol replies such as focus events are not the user typing, so they must not clear the waiting badge.
     if (!dashboardTerminalDataLooksProtocolResponse(data)) markUserInputSent();
   });
 
   term.onResize(({ cols, rows }: { cols: number; rows: number }) => {
-    if (ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: "resize", cols, rows }));
+    if (socket.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ type: "resize", cols, rows }));
     }
   });
 }
@@ -593,7 +593,7 @@ function dashboardBuildTerminalCleanup(
   fit: { resizeObserver: ResizeObserver; resizeHandler: () => void },
   getAgeInterval: () => ReturnType<typeof setInterval> | null,
 ): () => void {
-  const { ctx, sessionId, term, ws } = attachment;
+  const { ctx, sessionId, term, socket } = attachment;
   return () => {
     fit.resizeObserver.disconnect();
     window.removeEventListener("resize", fit.resizeHandler);
@@ -607,7 +607,7 @@ function dashboardBuildTerminalCleanup(
     dashboardClearTerminalLoadingTimers(ctx, sessionId);
 
     try {
-      ws.close();
+      socket.close();
     } catch {
       /* ignore: a socket that is already closed needs no closing */
     }
@@ -650,7 +650,7 @@ function dashboardConnectTerminal(
   if (!view) return;
 
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
-  const ws = new WebSocket(
+  const socket = new WebSocket(
     `${proto}//${location.host}${dashboardTerminalWsPath(wsUrl)}`,
   );
   const attachment: DashboardTerminalAttachment = {
@@ -658,24 +658,24 @@ function dashboardConnectTerminal(
     sessionId,
     session,
     term: view.term,
-    ws,
+    socket,
   };
   const fit = dashboardInstallTerminalFit(
     container,
     view.term,
     view.fitAddon,
-    ws,
+    socket,
   );
 
   let ageInterval: ReturnType<typeof setInterval> | null = null;
-  ws.onopen = () => {
+  socket.onopen = () => {
     ageInterval = dashboardHandleTerminalSocketOpen(
       attachment,
       fit.doFit,
       ageInterval,
     );
   };
-  ws.onmessage = (event: MessageEvent) => {
+  socket.onmessage = (event: MessageEvent) => {
     dashboardRouteTerminalMessage(attachment, event);
   };
   dashboardBindTerminalSocketLifecycle(attachment);
@@ -694,7 +694,7 @@ function dashboardConnectTerminal(
 
   ctx._terminalRefs[sessionId] = {
     ...ctx._terminalRefs[sessionId],
-    ws,
+    ws: socket,
     xterm: view.term,
     cleanup: dashboardBuildTerminalCleanup(attachment, fit, () => ageInterval),
   };

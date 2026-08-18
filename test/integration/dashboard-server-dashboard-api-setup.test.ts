@@ -24,8 +24,8 @@ describe("dashboard /api/setup", () => {
     );
     assert.equal(res.status, 400);
 
-    const data = expectRecord(body, "Setup error");
-    assert.match(String(data.error), /agent/i);
+    const payload = expectRecord(body, "Setup error");
+    assert.match(String(payload.error), /agent/i);
   });
 
   it("returns 400 for an invalid agent", async () => {
@@ -34,8 +34,8 @@ describe("dashboard /api/setup", () => {
     );
     assert.equal(res.status, 400);
 
-    const data = expectRecord(body, "Setup error");
-    assert.match(String(data.error), /invalid/i);
+    const payload = expectRecord(body, "Setup error");
+    assert.match(String(payload.error), /invalid/i);
   });
 
   for (const agent of getKnownAgentIds()) {
@@ -45,9 +45,9 @@ describe("dashboard /api/setup", () => {
       );
       assert.equal(res.status, 200);
 
-      const data = expectRecord(body, "Setup response");
-      assert.equal(typeof data.output, "string");
-      assert.ok(String(data.output).length > 100);
+      const payload = expectRecord(body, "Setup response");
+      assert.equal(typeof payload.output, "string");
+      assert.ok(String(payload.output).length > 100);
     });
   }
 
@@ -71,8 +71,8 @@ describe("dashboard /api/setup", () => {
       );
       assert.equal(res.status, 200);
 
-      const data = expectRecord(body, "Setup response");
-      assert.equal(typeof data.output, "string");
+      const payload = expectRecord(body, "Setup response");
+      assert.equal(typeof payload.output, "string");
       assert.equal(
         selfTestCalls,
         0,
@@ -97,8 +97,8 @@ describe("dashboard /api/setup", () => {
       );
       assert.equal(res.status, 200);
 
-      const data = expectRecord(body, "Setup response");
-      const output = String(data.output);
+      const payload = expectRecord(body, "Setup response");
+      const output = String(payload.output);
       assert.doesNotMatch(output, /All audit checks pass\./);
       assert.match(
         output,
@@ -122,8 +122,8 @@ describe("dashboard /api/setup", () => {
       );
       assert.equal(res.status, 200);
 
-      const data = expectRecord(body, "Setup response");
-      const output = String(data.output);
+      const payload = expectRecord(body, "Setup response");
+      const output = String(payload.output);
       assert.match(output, /Decisions/);
       assert.doesNotMatch(output, /All audit checks pass\./);
       assert.match(

@@ -211,27 +211,27 @@ function isRecord(candidate: unknown): candidate is Record<string, unknown> {
 /** Recursively require redaction markers for sensitive payload keys. */
 function validatePayloadValue(
   key: string,
-  value: EvidencePayloadValue,
+  payloadValue: EvidencePayloadValue,
   path: string,
 ): string[] {
-  if (isRedactedEvidenceValue(value)) return [];
+  if (isRedactedEvidenceValue(payloadValue)) return [];
   if (SENSITIVE_PAYLOAD_KEY.test(key)) {
     return [`${path} must be a redacted evidence value`];
   }
   if (
-    value === null ||
-    typeof value === "string" ||
-    typeof value === "number" ||
-    typeof value === "boolean"
+    payloadValue === null ||
+    typeof payloadValue === "string" ||
+    typeof payloadValue === "number" ||
+    typeof payloadValue === "boolean"
   ) {
     return [];
   }
-  if (Array.isArray(value)) {
-    return value.flatMap((item, index) =>
+  if (Array.isArray(payloadValue)) {
+    return payloadValue.flatMap((item, index) =>
       validatePayloadValue(key, item, `${path}[${index}]`),
     );
   }
-  return Object.entries(value).flatMap(([childKey, childValue]) =>
+  return Object.entries(payloadValue).flatMap(([childKey, childValue]) =>
     validatePayloadValue(childKey, childValue, `${path}.${childKey}`),
   );
 }

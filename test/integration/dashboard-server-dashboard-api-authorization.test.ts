@@ -132,26 +132,26 @@ describe("dashboard API authorization", () => {
     { timeout: 1000 },
     async () => {
       const { WebSocket } = await import("ws");
-      let rejectedUpgrade = false;
+      let wasUpgradeRejected = false;
       await new Promise<void>((resolve, reject) => {
-        const ws = new WebSocket(
+        const socket = new WebSocket(
           `${baseUrl.replace(/^http/u, "ws")}/ws/terminal/test`,
           { headers: { Origin: baseUrl } },
         );
-        ws.once("open", () => {
-          ws.close();
+        socket.once("open", () => {
+          socket.close();
           reject(new Error("terminal WebSocket opened without a token"));
         });
-        ws.once("error", () => {
-          rejectedUpgrade = true;
+        socket.once("error", () => {
+          wasUpgradeRejected = true;
           resolve();
         });
-        ws.once("close", () => {
-          rejectedUpgrade = true;
+        socket.once("close", () => {
+          wasUpgradeRejected = true;
           resolve();
         });
       });
-      assert.equal(rejectedUpgrade, true);
+      assert.equal(wasUpgradeRejected, true);
     },
   );
 });

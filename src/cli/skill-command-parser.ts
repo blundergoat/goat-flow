@@ -27,8 +27,8 @@ function parsedString(
   values: ParsedArgValues,
   name: string,
 ): string | undefined {
-  const value = values[name];
-  return typeof value === "string" ? value : undefined;
+  const parsedValue = values[name];
+  return typeof parsedValue === "string" ? parsedValue : undefined;
 }
 
 /** Return whether one raw boolean flag was explicitly selected by the user. */
@@ -37,16 +37,16 @@ function parsedFlag(values: ParsedArgValues, name: string): boolean {
 }
 
 /** Detect path-shaped authoring values so free-form descriptions stay intact. */
-function isPathShapedSkillProject(value: string): boolean {
-  const normalizedPath = value.replace(/\\/gu, "/");
+function isPathShapedSkillProject(projectArg: string): boolean {
+  const normalizedPath = projectArg.replace(/\\/gu, "/");
   return (
-    value === "." ||
-    value === ".." ||
+    projectArg === "." ||
+    projectArg === ".." ||
     normalizedPath.startsWith("./") ||
     normalizedPath.startsWith("../") ||
     normalizedPath.startsWith("/") ||
-    /^[a-zA-Z]:[\\/]/u.test(value) ||
-    value.startsWith("\\\\")
+    /^[a-zA-Z]:[\\/]/u.test(projectArg) ||
+    projectArg.startsWith("\\\\")
   );
 }
 
@@ -255,8 +255,8 @@ function resolvedSkillPath(
   basePath = ".",
 ): string | null {
   if (!isSkillCommand) return null;
-  const value = parsedString(values, name);
-  return value === undefined ? null : resolve(basePath, value);
+  const parsedValue = parsedString(values, name);
+  return parsedValue === undefined ? null : resolve(basePath, parsedValue);
 }
 
 /**

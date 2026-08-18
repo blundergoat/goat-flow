@@ -53,11 +53,11 @@ describe("dashboard /api/projects", () => {
     );
     assert.equal(res.status, 200);
 
-    const data = expectRecord(body, "Projects status response");
-    assert.ok(Array.isArray(data.projects));
-    assert.equal((data.projects as unknown[]).length, 1);
+    const payload = expectRecord(body, "Projects status response");
+    assert.ok(Array.isArray(payload.projects));
+    assert.equal((payload.projects as unknown[]).length, 1);
     const project = expectRecord(
-      (data.projects as unknown[])[0],
+      (payload.projects as unknown[])[0],
       "Projects status item",
     );
     assert.equal(project.path, PROJECT_PATH);
@@ -341,9 +341,9 @@ describe("dashboard /api/projects", () => {
       }),
     });
     assert.equal(res.status, 400);
-    const data = expectRecord(body, "Projects list blocked-root error");
-    assert.match(String(data.error), /Local path validation failed/);
-    assert.doesNotMatch(String(data.error), /\/tmp/);
+    const payload = expectRecord(body, "Projects list blocked-root error");
+    assert.match(String(payload.error), /Local path validation failed/);
+    assert.doesNotMatch(String(payload.error), /\/tmp/);
   });
 
   it("reports blocked roots through the project status result", async () => {
@@ -353,10 +353,10 @@ describe("dashboard /api/projects", () => {
       `/api/projects/status?paths=${encodeURIComponent("/tmp")}`,
     );
     assert.equal(res.status, 200);
-    const data = expectRecord(body, "Projects status blocked-root response");
-    assert.ok(Array.isArray(data.projects));
+    const payload = expectRecord(body, "Projects status blocked-root response");
+    assert.ok(Array.isArray(payload.projects));
     const project = expectRecord(
-      (data.projects as unknown[])[0],
+      (payload.projects as unknown[])[0],
       "Projects status blocked-root item",
     );
     assert.equal(project.state, "error");
@@ -380,15 +380,15 @@ describe("dashboard /api/projects", () => {
       const { body } = await fetchJson(
         `/api/projects/status?paths=${encodeURIComponent(pathsParam)}`,
       );
-      const data = expectRecord(body, "Projects status response");
-      assert.ok(Array.isArray(data.projects));
-      const [first, second] = data.projects as unknown[];
+      const payload = expectRecord(body, "Projects status response");
+      assert.ok(Array.isArray(payload.projects));
+      const [first, second] = payload.projects as unknown[];
       const firstProject = expectRecord(first, "First project");
       const secondProject = expectRecord(second, "Second project");
       assert.equal(firstProject.identity, secondProject.identity);
       assert.equal(firstProject.identitySource, "git-remote");
       assert.equal(typeof firstProject.remoteUrlHash, "string");
-      assert.equal(JSON.stringify(data).includes(remoteUrl), false);
+      assert.equal(JSON.stringify(payload).includes(remoteUrl), false);
     } finally {
       await rm(one, { recursive: true, force: true });
       await rm(two, { recursive: true, force: true });
@@ -403,8 +403,8 @@ describe("dashboard /api/projects", () => {
     });
     assert.equal(res.status, 400);
 
-    const data = expectRecord(body, "Projects list error");
-    assert.equal(typeof data.error, "string");
+    const payload = expectRecord(body, "Projects list error");
+    assert.equal(typeof payload.error, "string");
   });
 
   it("returns 400 without paths", async () => {

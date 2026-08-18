@@ -69,14 +69,14 @@ async function dashboardRunSkillEvaluator(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(dashboardBuildSkillEvaluatorRequestBody(ctx)),
     });
-    const data = readRecord(await res.json(), "Evaluate result");
+    const payload = readRecord(await res.json(), "Evaluate result");
     if (ctx.projectPath !== requestProjectPath) return;
-    const error = readErrorMessage(data);
+    const error = readErrorMessage(payload);
     if (error) {
       ctx.skillEvaluatorError = error;
       return;
     }
-    ctx.skillEvaluatorResult = data;
+    ctx.skillEvaluatorResult = payload;
   } catch (err) {
     if (ctx.projectPath !== requestProjectPath) return;
     ctx.skillEvaluatorError = err instanceof Error ? err.message : String(err);
@@ -293,9 +293,9 @@ function dashboardUtilityActionsFragment(): DashboardAppFragment {
       document.body.appendChild(textarea);
       textarea.select();
       // eslint-disable-next-line @typescript-eslint/no-deprecated -- intentional fallback for insecure contexts without Clipboard API
-      const ok = document.execCommand("copy");
+      const didCopy = document.execCommand("copy");
       document.body.removeChild(textarea);
-      return ok;
+      return didCopy;
     },
 
     /** Copy text and flash the "Copied!" button label, reverting to "Copy" after 2s. Fire-and-forget: the copy result is ignored. */

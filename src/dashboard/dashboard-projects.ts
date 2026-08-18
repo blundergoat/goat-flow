@@ -389,15 +389,15 @@ async function dashboardAddProject(
  *
  * @param ctx - dashboard state being refreshed after the server action
  * @param path - project path selected by the user
- * @param archived - `true` archives the record; `false` restores it
+ * @param isArchived - `true` archives the record; `false` restores it
  * @returns promise that settles after state and visible status rows are refreshed; it reports a failed server action as a toast
  */
 async function dashboardSetProjectArchived(
   ctx: DashboardProjectsContext,
   path: string,
-  archived: boolean,
+  isArchived: boolean,
 ): Promise<void> {
-  const action = archived ? "archive" : "restore";
+  const action = isArchived ? "archive" : "restore";
   try {
     const res = await dashboardFetch(`/api/projects/${action}`, {
       method: "POST",
@@ -411,7 +411,7 @@ async function dashboardSetProjectArchived(
     }
     await dashboardLoadSavedDashboardState(ctx);
     await dashboardRefreshProjectStatuses(ctx);
-    ctx.showToast(archived ? "Project archived" : "Project restored");
+    ctx.showToast(isArchived ? "Project archived" : "Project restored");
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     ctx.showToast(message || `Project ${action} failed`, true);
@@ -660,7 +660,7 @@ async function dashboardLoadSavedDashboardState(
   } = serverState;
   let savedPaths = serverState.savedPaths;
   let savedFavorites = serverState.savedFavorites;
-  let needsServerMigration = false;
+  let requiresServerMigration = false;
   ctx.projectTitles = savedProjectTitles;
   ctx.projectIdentities = {};
   dashboardRememberProjectIdentities(ctx, savedProjectRecords);
@@ -692,7 +692,7 @@ async function dashboardLoadSavedDashboardState(
     (!serverHadProjects && savedPaths.length > 0) ||
     (!serverHadFavorites && savedFavorites.length > 0)
   ) {
-    needsServerMigration = wasLoadedFromServer;
+    requiresServerMigration = wasLoadedFromServer;
   }
   const launchPath = window.__GOAT_FLOW_DEFAULT_PATH__;
 
@@ -709,7 +709,7 @@ async function dashboardLoadSavedDashboardState(
       action: "...",
       details: "Not audited",
     });
-    needsServerMigration = wasLoadedFromServer;
+    requiresServerMigration = wasLoadedFromServer;
   }
   ctx.presetFavorites = [...new Set(savedFavorites)];
 
@@ -721,7 +721,7 @@ async function dashboardLoadSavedDashboardState(
   dashboardRememberProjectIdentities(ctx, ctx.projectsList);
 
   // Only legacy/local fallback or the launch-path seed is written back; discovery stays read-only.
-  if (needsServerMigration) {
+  if (requiresServerMigration) {
     ctx._saveDashboardState();
   }
 }

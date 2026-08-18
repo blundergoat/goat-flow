@@ -16,12 +16,18 @@ const KNOWN_AGENT_IDS = new Set(["claude", "codex", "antigravity", "copilot"]);
  * Narrow an unknown config value to a plain object before reading fields from it.
  * Use on anything parsed out of a user's settings file, so a hand-edited array or string becomes a reported difference rather than a runtime error.
  *
- * @param value - parsed config value of unknown shape; null and arrays are not objects here
+ * @param candidate - parsed config value of unknown shape; null and arrays are not objects here
  * @returns true when fields can be read safely; false means the config cannot be inspected
  *   and the caller reports that as drift instead of guessing
  */
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+export function isRecord(
+  candidate: unknown,
+): candidate is Record<string, unknown> {
+  return (
+    typeof candidate === "object" &&
+    candidate !== null &&
+    !Array.isArray(candidate)
+  );
 }
 
 /**
@@ -29,9 +35,9 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
  * Use before comparing a project's per-agent artifacts, so an unknown or misspelled agent name is skipped rather than producing findings against
  * something that cannot exist.
  *
- * @param value - agent name from manifest or config; an empty or unknown name never matches
+ * @param candidate - agent name from manifest or config; an empty or unknown name never matches
  * @returns true when the name is a supported agent whose artifacts can be compared
  */
-export function isAgentId(value: string): value is AgentId {
-  return KNOWN_AGENT_IDS.has(value);
+export function isAgentId(candidate: string): candidate is AgentId {
+  return KNOWN_AGENT_IDS.has(candidate);
 }

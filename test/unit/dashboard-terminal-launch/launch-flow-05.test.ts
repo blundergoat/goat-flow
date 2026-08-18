@@ -308,10 +308,15 @@ describe("dashboard terminal launch flow", () => {
     assert.equal(thirdSession.awaitingInput, true, "C fires");
 
     // Clear only session B's badge by sending input there.
-    const ok = helpers.dashboardSendToTerminalSession(ctx, "multi-b", "1", {
-      adapt: false,
-    });
-    assert.equal(ok, true);
+    const wasDelivered = helpers.dashboardSendToTerminalSession(
+      ctx,
+      "multi-b",
+      "1",
+      {
+        adapt: false,
+      },
+    );
+    assert.equal(wasDelivered, true);
     assert.equal(
       secondSession.awaitingInput,
       false,

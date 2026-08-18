@@ -25,10 +25,8 @@ function formatDays(days: number | null): string {
 }
 
 /** Pad a string on the right to the target width. */
-function padRight(value: string, width: number): string {
-  return value.length >= width
-    ? value
-    : value + " ".repeat(width - value.length);
+function padRight(text: string, width: number): string {
+  return text.length >= width ? text : text + " ".repeat(width - text.length);
 }
 
 /** Render one learning-loop bucket section with fixed-width rows for scan-friendly terminal output. */

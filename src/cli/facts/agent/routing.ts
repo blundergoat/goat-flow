@@ -9,13 +9,13 @@ import type { AgentFacts, ReadonlyFS } from "../../types.js";
 import { extractSection } from "./instruction.js";
 
 /** Return true if a string contains '/' or '.', suggesting a file path. */
-function looksLikePath(value: string): boolean {
-  return value.includes("/") || value.includes(".");
+function looksLikePath(candidate: string): boolean {
+  return candidate.includes("/") || candidate.includes(".");
 }
 
 /** Return true if a string contains glob or template characters. */
-function hasGlobChars(value: string): boolean {
-  return value.includes("*") || value.includes("{");
+function hasGlobChars(candidate: string): boolean {
+  return candidate.includes("*") || candidate.includes("{");
 }
 
 /**

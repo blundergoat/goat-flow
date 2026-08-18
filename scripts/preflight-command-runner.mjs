@@ -326,7 +326,7 @@ function deliverCapturedCommandResult(
   state,
   childExitCode,
   childExitSignal,
-  cleanupDeadlineReached = false,
+  hasCleanupDeadlinePassed = false,
 ) {
   // A prior close or deadline already gave the developer a result.
   if (state.hasReturnedResultToPreflight) return;
@@ -338,7 +338,7 @@ function deliverCapturedCommandResult(
     state.runnerOptions.childArguments,
   );
   // Escaped descendants can retain pipes after the child group has been killed.
-  if (cleanupDeadlineReached) {
+  if (hasCleanupDeadlinePassed) {
     releaseEscapedOutputHandles(state, renderedCommand);
   }
 

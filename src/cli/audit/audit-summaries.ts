@@ -56,11 +56,11 @@ export function setupSummary(ctx: AuditContext): Record<string, string> {
  * @returns map of display keys (`toolchain`, `hooks`) to human-readable status strings for the report
  */
 export function agentSummary(ctx: AuditContext): Record<string, string> {
-  const tc = ctx.config.config.toolchain;
+  const toolchain = ctx.config.config.toolchain;
   const parts: string[] = [];
-  if (tc.test.length > 0) parts.push("test");
-  if (tc.lint.length > 0) parts.push("lint");
-  if (tc.build.length > 0) parts.push("build");
+  if (toolchain.test.length > 0) parts.push("test");
+  if (toolchain.lint.length > 0) parts.push("lint");
+  if (toolchain.build.length > 0) parts.push("build");
 
   const hookInfo: string[] = [];
   for (const af of ctx.agents) {

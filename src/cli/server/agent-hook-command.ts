@@ -43,16 +43,16 @@ export const LEGACY_DENY_DANGEROUS_HOOK_IDS = [
  * Recognize the keyed JSON shape used by user hook configuration.
  * Use before reading unknown parsed values; null, arrays, and primitives return false.
  *
- * @param value - parsed config value; null or empty primitives are not keyed objects
+ * @param candidate - parsed config value; null or empty primitives are not keyed objects
  * @returns true for a non-null, non-array object; false keeps unsafe values unread
  */
 export function isAgentHookJsonObject(
-  value: unknown,
-): value is AgentHookJsonObject {
+  candidate: unknown,
+): candidate is AgentHookJsonObject {
   return (
-    value !== null &&
-    typeof value === "object" &&
-    Array.isArray(value) === false
+    candidate !== null &&
+    typeof candidate === "object" &&
+    Array.isArray(candidate) === false
   );
 }
 

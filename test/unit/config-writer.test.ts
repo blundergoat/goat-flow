@@ -20,11 +20,11 @@ import {
 } from "../../src/cli/config/writer.js";
 
 /** Writes a cleaned temporary project for each config-writer assertion. */
-function withTempProject(fn: (root: string) => void): void {
+function withTempProject(scenario: (root: string) => void): void {
   const root = mkdtempSync(join(tmpdir(), "goat-flow-config-writer-"));
   try {
     mkdirSync(join(root, ".goat-flow"), { recursive: true });
-    fn(root);
+    scenario(root);
   } finally {
     rmSync(root, { force: true, recursive: true });
   }

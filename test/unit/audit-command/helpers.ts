@@ -121,11 +121,11 @@ export function getRepoAudit(opts: {
  * every incoming path with a forward-slash normaliser so handlers can match
  * on the documented separator-agnostic shape regardless of host.
  *
- * @param value - a path as production code produced it, possibly containing Windows backslash separators
+ * @param nativePath - a path as production code produced it, possibly containing Windows backslash separators
  * @returns the same path with every backslash rewritten to a forward slash
  */
-export function posixifyPath(value: string): string {
-  return value.replace(/\\/g, "/");
+export function posixifyPath(nativePath: string): string {
+  return nativePath.replace(/\\/g, "/");
 }
 
 /**
@@ -133,15 +133,15 @@ export function posixifyPath(value: string): string {
  * Use when stubbing a ReadonlyFS method whose test handler matches path literals: production code
  * passes `path.join` output, which uses backslashes on Windows and would miss those literals.
  *
- * @param fn - handler supplied by the test; `undefined` means the caller wants the fallback instead
+ * @param block - handler supplied by the test; `undefined` means the caller wants the fallback instead
  * @param fallback - value yielded when no handler is supplied, so every stubbed method stays populated
  * @returns a handler that normalises separators before delegating, or one that always yields `fallback`
  */
 export function wrapPathArg<T>(
-  fn: ((path: string) => T) | undefined,
+  block: ((path: string) => T) | undefined,
   fallback: T,
 ): (path: string) => T {
-  return (path: string): T => (fn ? fn(posixifyPath(path)) : fallback);
+  return (path: string): T => (block ? block(posixifyPath(path)) : fallback);
 }
 
 /**
@@ -755,7 +755,7 @@ export function makeReportWithDetails(
  */
 export function createSpanRecorder(): {
   /** Profiler seam accepted by the audit entry points. */
-  profile: { span<T>(name: string, fn: () => T): T };
+  profile: { span<T>(name: string, block: () => T): T };
   names: string[];
 } {
   const names: string[] = [];
@@ -763,9 +763,9 @@ export function createSpanRecorder(): {
     names,
     profile: {
       /** Record this span's label, then run the block untouched so timing never changes what the audit produces. */
-      span<T>(name: string, fn: () => T): T {
+      span<T>(name: string, block: () => T): T {
         names.push(name);
-        return fn();
+        return block();
       },
     },
   };

@@ -25,22 +25,22 @@ import { QUALITY_MODES, type QualityMode } from "./quality/schema.js";
 /**
  * Read the `--mode` filter used to narrow quality history and diff output.
  *
- * @param value - the `--mode` value; omitted means the user wants every mode shown
+ * @param modeArg - the `--mode` value; omitted means the user wants every mode shown
  * @returns the mode to filter by, or null to leave results unfiltered
  * @throws CLIError when the mode is not one goat-flow records
  */
 export function parseQualityModeArg(
-  value: string | undefined,
+  modeArg: string | undefined,
 ): QualityMode | null {
   // No `--mode` given, so history and diff show every mode rather than filtering.
-  if (!value) return null;
-  if (!QUALITY_MODES.includes(value as QualityMode)) {
+  if (!modeArg) return null;
+  if (!QUALITY_MODES.includes(modeArg as QualityMode)) {
     throw new CLIError(
-      `Invalid quality mode: ${value}. Use: ${QUALITY_MODES.join(", ")}`,
+      `Invalid quality mode: ${modeArg}. Use: ${QUALITY_MODES.join(", ")}`,
       2,
     );
   }
-  return value as QualityMode;
+  return modeArg as QualityMode;
 }
 
 /**
@@ -321,18 +321,18 @@ export function parseHooksPositionals(positionals: string[]): {
  * Read the scenario name for `hooks verify`, the only command that accepts one.
  *
  * @param subcommand - hooks action being run; anything other than verify takes no scenario
- * @param value - the `--scenario` value; omitted means the user did not request one
+ * @param scenarioArg - the `--scenario` value; omitted means the user did not request one
  * @returns the scenario to run, or null when this command takes no scenario at all
  * @throws CLIError when the named scenario is not one goat-flow can run
  */
 export function parseHookScenarioArg(
   subcommand: HookSubcommand | null,
-  value: string | undefined,
+  scenarioArg: string | undefined,
 ): HookScenario | null {
   // Other hooks operations do not run runtime scenarios or receive a default group.
   if (subcommand !== "verify") return null;
   // Verification must not choose a proof group the user did not explicitly request.
-  if (value === undefined) {
+  if (scenarioArg === undefined) {
     throw new CLIError(
       'hooks verify requires --scenario "deny-hook", "post-turn-hook", or "gruff-hook".',
       2,
@@ -340,16 +340,16 @@ export function parseHookScenarioArg(
   }
   // Unknown groups must fail before the CLI can imply an unimplemented proof ran.
   if (
-    value !== "deny-hook" &&
-    value !== "post-turn-hook" &&
-    value !== "gruff-hook"
+    scenarioArg !== "deny-hook" &&
+    scenarioArg !== "post-turn-hook" &&
+    scenarioArg !== "gruff-hook"
   ) {
     throw new CLIError(
       '--scenario must be "deny-hook", "post-turn-hook", or "gruff-hook".',
       2,
     );
   }
-  return value;
+  return scenarioArg;
 }
 
 /**

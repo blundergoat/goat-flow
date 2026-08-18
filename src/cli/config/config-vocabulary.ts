@@ -81,15 +81,17 @@ export const LEARNING_LOOP_AUTO_CAPTURE_TARGETS: ReadonlySet<string> =
  * Use on every nested config section, so a user who wrote a list where a block belongs gets a message naming that key instead of an error from
  * somewhere deeper in the load.
  *
- * @param value - value parsed from the user's YAML; null and arrays are not objects here
+ * @param candidate - value parsed from the user's YAML; null and arrays are not objects here
  * @returns true when named fields can be read; false means the section is malformed and the
  *   caller reports it rather than merging anything from it
  */
-export function isRecord(value: unknown): value is Record<string, unknown> {
+export function isRecord(
+  candidate: unknown,
+): candidate is Record<string, unknown> {
   return (
-    value !== null &&
-    typeof value === "object" &&
-    Array.isArray(value) === false
+    candidate !== null &&
+    typeof candidate === "object" &&
+    Array.isArray(candidate) === false
   );
 }
 
@@ -97,13 +99,14 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
  * Check whether a value names a supported learning-loop auto-capture target.
  * Use when filtering future auto-capture config so unknown targets do not create files in random buckets.
  *
- * @param value - raw target value; missing or non-string values are ignored
+ * @param candidate - raw target value; missing or non-string values are ignored
  * @returns whether the target can be shown and written as a durable learning-loop bucket
  */
 export function isLearningLoopAutoCaptureTarget(
-  value: unknown,
-): value is LearningLoopAutoCaptureTarget {
+  candidate: unknown,
+): candidate is LearningLoopAutoCaptureTarget {
   return (
-    typeof value === "string" && LEARNING_LOOP_AUTO_CAPTURE_TARGETS.has(value)
+    typeof candidate === "string" &&
+    LEARNING_LOOP_AUTO_CAPTURE_TARGETS.has(candidate)
   );
 }

@@ -359,12 +359,12 @@ function validateDegradationFlags(
 
 /** Convert one integrity count while rejecting precision-losing integers. */
 function readSafeIntegrityCount(
-  value: string,
+  countText: string,
   label: string,
   line: number,
   violations: ReviewValidationViolation[],
 ): number | null {
-  const count = Number(value);
+  const count = Number(countText);
   if (Number.isSafeInteger(count)) return count;
   addViolation(
     violations,

@@ -328,7 +328,7 @@ type HelperContext = {
    * Updates awaiting-input state from a new PTY output chunk and prior tail.
    */
   dashboardNextAwaitingInputState(
-    previousAwaiting: boolean,
+    wasAwaitingInput: boolean,
     previousTail: string,
     outputChunk: string,
   ): boolean;
@@ -465,7 +465,7 @@ function loadHelpers(
   extraGlobals: Record<string, unknown> = {},
 ): HelperContext {
   const source = readDashboardTerminalSource();
-  const js = transpileModule(source, {
+  const compiled = transpileModule(source, {
     compilerOptions: { target: ScriptTarget.ES2023 },
   }).outputText;
   const context = createContext({
@@ -491,7 +491,7 @@ function loadHelpers(
     ...extraGlobals,
   });
   runInContext(
-    `${js}
+    `${compiled}
 globalThis.__helpers = {
   TERMINAL_PASTE_MARKER_SETTLE_DELAY_MS,
   TERMINAL_CLAUDE_PASTE_NO_MARKER_FALLBACK_DELAY_MS,

@@ -55,10 +55,8 @@ function readOptionalBoolean(
 }
 
 /** Read the optional preset cost tier, rejecting unknown strings from shell injection. */
-function readPresetCostTier(value: unknown): Preset["costTier"] | undefined {
-  return value === "low" || value === "medium" || value === "high"
-    ? value
-    : undefined;
+function readPresetCostTier(raw: unknown): Preset["costTier"] | undefined {
+  return raw === "low" || raw === "medium" || raw === "high" ? raw : undefined;
 }
 
 /**
@@ -178,15 +176,13 @@ function readProjectEntry(rawProject: unknown): ProjectEntry | null {
 }
 
 /** Decode access mode compatibly: absent legacy values stay workspace, unknown values restrict writes. */
-function readTerminalAccessMode(value: unknown): TerminalAccessMode {
-  return value === undefined || value === "workspace"
-    ? "workspace"
-    : "reporting";
+function readTerminalAccessMode(raw: unknown): TerminalAccessMode {
+  return raw === undefined || raw === "workspace" ? "workspace" : "reporting";
 }
 
 /** Read an optional numeric session metric; non-numeric legacy values stay absent. */
-function readOptionalSessionMetric(value: unknown): number | undefined {
-  return typeof value === "number" ? value : undefined;
+function readOptionalSessionMetric(raw: unknown): number | undefined {
+  return typeof raw === "number" ? raw : undefined;
 }
 
 /**

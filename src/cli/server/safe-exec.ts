@@ -200,16 +200,16 @@ export function writeFileAtomic(
   if (!isWithinProject(projectRoot, tempPath)) {
     throw new SafeFileWriteRejection(tempPath, projectRoot);
   }
-  let fd: number | null = null;
+  let fileDescriptor: number | null = null;
   try {
-    fd = openSync(tempPath, "w", 0o600);
-    writeFileSync(fd, content, "utf-8");
-    fsyncSync(fd);
-    closeSync(fd);
-    fd = null;
+    fileDescriptor = openSync(tempPath, "w", 0o600);
+    writeFileSync(fileDescriptor, content, "utf-8");
+    fsyncSync(fileDescriptor);
+    closeSync(fileDescriptor);
+    fileDescriptor = null;
     renameSync(tempPath, targetPath);
   } catch (err) {
-    if (fd !== null) closeSync(fd);
+    if (fileDescriptor !== null) closeSync(fileDescriptor);
     try {
       unlinkSync(tempPath);
     } catch {

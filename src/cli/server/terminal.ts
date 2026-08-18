@@ -145,19 +145,19 @@ function resolveQualityReportOwner(
  * like it worked and then loses the report.
  *
  * @param session - the reserved session; its capture flags are set here from what staging actually allowed
- * @param captureQualityDrafts - whether the launch asked for staged draft capture at all
+ * @param shouldCaptureQualityDrafts - whether the launch asked for staged draft capture at all
  * @param qualityReportProjectPath - the accepted report owner, or null when the launch named none
  * @returns the capture roots to poll; empty means this launch stages no drafts, which leaves capture switched off
  */
 function prepareQualityDraftStaging(
   session: TerminalSession,
-  captureQualityDrafts: boolean,
+  shouldCaptureQualityDrafts: boolean,
   qualityReportProjectPath: string | null,
 ): string[] {
   const reportingCaptureRoots = stagedQualityCaptureRoots(
     session.runner,
     session.accessMode,
-    captureQualityDrafts,
+    shouldCaptureQualityDrafts,
     qualityReportProjectPath,
   );
   session.captureQualityDrafts = reportingCaptureRoots.length > 0;

@@ -128,9 +128,9 @@ function byId(
   report: ReturnType<typeof buildAgentEnforcementCapability>,
   id: string,
 ) {
-  const item = report.capabilities.find((entry) => entry.id === id);
-  assert.ok(item, `expected ${id}`);
-  return item;
+  const capability = report.capabilities.find((entry) => entry.id === id);
+  assert.ok(capability, `expected ${id}`);
+  return capability;
 }
 
 /**

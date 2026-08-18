@@ -268,21 +268,21 @@ function emptyDashboardTaskState(
  *
  * @param requestedPlan - plan the user clicked; null or unknown falls through to the next choice
  * @param active - plan named by the `.active` marker
- * @param activeExists - whether that marker still points at a real directory
+ * @param hasActivePlan - whether that marker still points at a real directory
  * @param plans - plans found in the project
  * @returns the plan to open, or null when the project has none
  */
 function selectDashboardTaskPlan(
   requestedPlan: string | null,
   active: string | null,
-  activeExists: boolean,
+  hasActivePlan: boolean,
   plans: DashboardTaskPlanSummary[],
 ): string | null {
   const requestedExists = plans.some((plan) => plan.name === requestedPlan);
   // An explicit click wins, as long as that plan is still on disk.
   if (requestedPlan && requestedExists) return requestedPlan;
   // Otherwise the user resumes wherever they left off.
-  if (activeExists) return active;
+  if (hasActivePlan) return active;
   return plans[0]?.name ?? null;
 }
 

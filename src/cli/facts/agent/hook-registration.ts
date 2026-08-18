@@ -214,20 +214,20 @@ function normalizeEventConfig(
  * @param fs - read-only filesystem adapter used only when hooks live in a separate file
  * @param agent - agent profile naming its settings and hook-config files
  * @param settingsParsed - already-parsed settings content, reused when it doubles as the hook config
- * @param settingsValid - whether that pre-parsed settings content parsed successfully
+ * @param hasValidSettings - whether that pre-parsed settings content parsed successfully
  * @returns the parsed hook config and its validity; both default to null/false when the agent declares no hook file
  */
 export function readHookConfig(
   fs: ReadonlyFS,
   agent: AgentProfile,
   settingsParsed: unknown,
-  settingsValid: boolean,
+  hasValidSettings: boolean,
 ): { parsed: unknown; valid: boolean } {
   if (!agent.hookConfigFile) {
     return { parsed: null, valid: false };
   }
   if (agent.hookConfigFile === agent.settingsFile) {
-    return { parsed: settingsParsed, valid: settingsValid };
+    return { parsed: settingsParsed, valid: hasValidSettings };
   }
   const parsed = fs.readJson(agent.hookConfigFile);
   return { parsed, valid: parsed !== null };

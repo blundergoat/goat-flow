@@ -170,16 +170,18 @@ function readCapturedSplit(
 }
 
 /** Parse decimal minute text without admitting precision-losing integers. */
-function readSafeMinutes(value: string): number | undefined {
-  const parsed = Number(value);
+function readSafeMinutes(minutesText: string): number | undefined {
+  const parsed = Number(minutesText);
   return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : undefined;
 }
 
 /** Parse a positive decimal rate without accepting infinity or unsafe magnitudes. */
-function readSafePositiveRate(value: string | undefined): number | undefined {
+function readSafePositiveRate(
+  minutesText: string | undefined,
+): number | undefined {
   // Missing rate text means the user did not supply the full low-likely-high basis.
-  if (value === undefined) return undefined;
-  const parsedRate = Number(value);
+  if (minutesText === undefined) return undefined;
+  const parsedRate = Number(minutesText);
   return Number.isFinite(parsedRate) && parsedRate > 0 ? parsedRate : undefined;
 }
 
@@ -268,16 +270,16 @@ export function readTaskEstimate(
 /**
  * Parse the dedicated plan/admin estimate field.
  *
- * @param value - field text such as `2 min other`; empty means no declared overhead
+ * @param estimateText - field text such as `2 min other`; empty means no declared overhead
  * @param warnings - record warning sink for malformed supplied values
  * @returns estimate fields for category summing; empty means absent or malformed
  */
 export function readPlanAdminEstimate(
-  value: string,
+  estimateText: string,
   warnings: string[],
 ): TaskEstimateFields {
-  if (value.length === 0) return {};
-  const match = value.match(PLAN_ADMIN_PATTERN);
+  if (estimateText.length === 0) return {};
+  const match = estimateText.match(PLAN_ADMIN_PATTERN);
   const estimateMinutes = match?.[1] ? readSafeMinutes(match[1]) : undefined;
   if (estimateMinutes === undefined) {
     warnings.push("plan/admin overhead estimate not parseable");
@@ -320,15 +322,15 @@ function readOptionalMinutes(capture: string | undefined): number | undefined {
  * Parse the optional forecast band users see beside a milestone estimate.
  * Missing text preserves legacy point estimates; malformed text emits a fixed warning.
  * `plans check` owns ordering and headline agreement after parsing.
- * @param value - raw text after the `Forecast range:` label; empty means absent
+ * @param rangeText - raw text after the `Forecast range:` label; empty means absent
  * @param warnings - record warning sink receiving the fixed-string parse warning
  * @returns the parsed band; undefined means absent or unreadable
  */
 function parseForecastRangeValue(
-  value: string,
+  rangeText: string,
   warnings: string[],
 ): PlanEffortForecastRange | undefined {
-  const normalized = value.trim();
+  const normalized = rangeText.trim();
 
   // No band at all - the common case for legacy and point-estimate milestones.
   if (normalized.length === 0) return undefined;
@@ -377,15 +379,15 @@ function hasCompleteForecastBasis(
 
 /**
  * Parse the countable units and evidence source behind an optional forecast.
- * @param value - text after `Forecast basis:`; empty means a legacy or point estimate
+ * @param basisText - text after `Forecast basis:`; empty means a legacy or point estimate
  * @param warnings - fixed warning sink; empty stays unchanged for users
  * @returns parsed basis; undefined means the field is absent or cannot be reviewed safely
  */
 function parseForecastBasisValue(
-  value: string,
+  basisText: string,
   warnings: string[],
 ): PlanEffortForecastBasis | undefined {
-  const normalizedBasis = value.trim();
+  const normalizedBasis = basisText.trim();
   // No basis is valid compatibility state for plans written before work-unit forecasting.
   if (normalizedBasis.length === 0) return undefined;
 
@@ -612,15 +614,15 @@ export function parseEffortLineValue(
 /**
  * Parse one machine-readable Actual value while allowing an empty placeholder.
  *
- * @param value - raw Actual field or inline tail
+ * @param actualText - raw Actual field or inline tail
  * @param warnings - warning sink for supplied but unreadable values
  * @returns numeric Actual fields; undefined means absent, placeholder, or malformed
  */
 function parseActualValue(
-  value: string,
+  actualText: string,
   warnings: string[],
 ): PlanEffortActual | undefined {
-  const normalized = value.trim();
+  const normalized = actualText.trim();
   if (normalized.length === 0) return undefined;
   if (normalized === "_") return undefined;
 

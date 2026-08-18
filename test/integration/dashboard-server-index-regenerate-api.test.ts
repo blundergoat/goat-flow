@@ -124,9 +124,9 @@ async function makeIndexFixture(
 }
 
 /** Narrow one JSON field to an array before row-level response assertions. */
-function expectArray(value: unknown, context: string): unknown[] {
-  assert.ok(Array.isArray(value), `${context} should be an array`);
-  return value;
+function expectArray(candidate: unknown, context: string): unknown[] {
+  assert.ok(Array.isArray(candidate), `${context} should be an array`);
+  return candidate;
 }
 
 describe("dashboard index regenerate API", () => {

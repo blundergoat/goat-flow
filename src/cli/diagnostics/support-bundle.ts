@@ -248,20 +248,22 @@ interface RedactionCounter {
 
 /** Scrub one display string and count when the support user receives a placeholder. */
 function scrubSupportString(
-  value: string,
+  text: string,
   redactions: RedactionCounter,
 ): string {
-  const scrubbedValue = scrubDurableText(value);
+  const scrubbedValue = scrubDurableText(text);
   // A changed string tells the recipient that readable metadata was intentionally reduced.
-  if (scrubbedValue !== value) redactions.applied += 1;
+  if (scrubbedValue !== text) redactions.applied += 1;
   return scrubbedValue;
 }
 
 /** Hash text for same/different comparisons while omitting its readable body. */
-function fingerprintText(value: string | null): SupportFileFingerprint | null {
+function fingerprintText(
+  fileText: string | null,
+): SupportFileFingerprint | null {
   // Missing files have no bytes to compare, so the UI shows an explicit null fingerprint.
-  if (value === null) return null;
-  const redactedValue = redactEvidenceText("support file", value);
+  if (fileText === null) return null;
+  const redactedValue = redactEvidenceText("support file", fileText);
   return { sha256: redactedValue.sha256, bytes: redactedValue.length };
 }
 

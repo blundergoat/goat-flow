@@ -68,9 +68,9 @@ function isFencedLine(line: string, state: MarkdownMaskState): boolean {
 }
 
 /** Count source columns, expanding tabs at CommonMark's four-column tab stops. */
-function markdownColumnWidth(value: string): number {
+function markdownColumnWidth(cellText: string): number {
   let width = 0;
-  for (const character of value) {
+  for (const character of cellText) {
     width += character === "\t" ? 4 - (width % 4) : 1;
   }
   return width;

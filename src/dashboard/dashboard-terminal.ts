@@ -461,11 +461,11 @@ function dashboardOutputLooksCommittedPaste(text: string): boolean {
 }
 
 /** Return true for xterm-generated protocol replies, not deliberate user input. */
-function dashboardTerminalDataLooksProtocolResponse(data: string): boolean {
+function dashboardTerminalDataLooksProtocolResponse(output: string): boolean {
   return (
-    /^\x1b\[(?:I|O)$/.test(data) ||
-    /^\x1b\[(?:\?|>)?[0-9;]*c$/.test(data) ||
-    /^\x1b\[\d+(?:;\d+)*[Rn]$/.test(data)
+    /^\x1b\[(?:I|O)$/.test(output) ||
+    /^\x1b\[(?:\?|>)?[0-9;]*c$/.test(output) ||
+    /^\x1b\[\d+(?:;\d+)*[Rn]$/.test(output)
   );
 }
 
@@ -484,7 +484,7 @@ function dashboardOutputStillAtCommittedPaste(text: string): boolean {
 
 /** Decide whether a new output chunk should leave a session waiting. */
 function dashboardNextAwaitingInputState(
-  previousAwaiting: boolean,
+  wasAwaitingInput: boolean,
   previousTail: string,
   outputChunk: string,
 ): boolean {
@@ -493,17 +493,17 @@ function dashboardNextAwaitingInputState(
     dashboardPlainTerminalText(outputChunk).trim().length > 0;
   if (dashboardOutputLooksAwaitingInput(outputChunk)) return true;
   const tailStillAwaiting = dashboardOutputLooksAwaitingInput(nextTail);
-  if (!chunkHasText) return previousAwaiting && tailStillAwaiting;
+  if (!chunkHasText) return wasAwaitingInput && tailStillAwaiting;
   if (
     tailStillAwaiting &&
-    (previousAwaiting ||
+    (wasAwaitingInput ||
       dashboardOutputTailEndsWithAwaitingInputStart(previousTail)) &&
     dashboardOutputLooksAwaitingInputContinuation(outputChunk)
   ) {
     return true;
   }
   if (
-    previousAwaiting &&
+    wasAwaitingInput &&
     tailStillAwaiting &&
     dashboardOutputLooksTransientStatusRedraw(outputChunk)
   ) {

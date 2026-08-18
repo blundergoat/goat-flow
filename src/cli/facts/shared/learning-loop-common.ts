@@ -239,8 +239,8 @@ function getLineRefDiagnostic(
   const lineCount = fs.lineCount(filePath);
   const lineNumbers = Array.from(rawLines.matchAll(/[0-9]+/g)).flatMap(
     (lineMatch) => {
-      const value = Number.parseInt(lineMatch[0], 10);
-      return Number.isNaN(value) ? [] : [value];
+      const lineNumber = Number.parseInt(lineMatch[0], 10);
+      return Number.isNaN(lineNumber) ? [] : [lineNumber];
     },
   );
   const ref = `${filePath}:${rawLines}`;

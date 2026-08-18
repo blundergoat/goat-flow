@@ -30,9 +30,9 @@ const GITHUB_INSTRUCTIONS_DIR = ".github/instructions";
 
 /** Resolve the active local instruction directory. */
 function resolveLocalInstructionDir(
-  githubDirExists: boolean,
+  hasGithubDirectory: boolean,
 ): LocalInstructionDir | null {
-  if (githubDirExists)
+  if (hasGithubDirectory)
     return { location: "github", dir: GITHUB_INSTRUCTIONS_DIR };
   return null;
 }

@@ -124,7 +124,7 @@ function loadHelpers(
     readFileSync(CUSTOM_PROMPTS_PATH, "utf-8"),
     readFileSync(CUSTOM_PROMPTS_ACTIONS_PATH, "utf-8"),
   ].join("\n");
-  const js = transpileModule(source, {
+  const compiled = transpileModule(source, {
     compilerOptions: { target: ScriptTarget.ES2023 },
   }).outputText;
   const context = createContext({
@@ -149,7 +149,7 @@ function loadHelpers(
         : [],
   });
   runInContext(
-    `${js}
+    `${compiled}
 globalThis.__helpers = {
   dashboardDefaultCustomPromptDraft,
   dashboardInferPromptRoute,

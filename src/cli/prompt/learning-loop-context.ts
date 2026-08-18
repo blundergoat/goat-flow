@@ -348,14 +348,14 @@ function selectedFromEntry(
  * @param entries - excerpts chosen so far, in render order
  * @param budgetMax - byte ceiling for the whole rendered block
  * @param omittedCount - entries already left out, carried forward into the block header
- * @param zeroHit - true when nothing matched at all, which the header reports as an explicit retrieval miss
+ * @param isRetrievalMiss - true when nothing matched at all, which the header reports as an explicit retrieval miss
  * @returns the final selection whose header numbers describe the block it appears in
  */
 function finalizeSelection(
   entries: SelectedLearningLoopEntry[],
   budgetMax: number,
   omittedCount: number,
-  zeroHit: boolean,
+  isRetrievalMiss: boolean,
 ): LearningLoopContextSelection {
   let selection: LearningLoopContextSelection = {
     entries,
@@ -363,7 +363,7 @@ function finalizeSelection(
     budgetMax,
     selectedCount: entries.length,
     omittedCount,
-    zeroHit,
+    zeroHit: isRetrievalMiss,
   };
   // The header prints the used-byte count, so writing that number changes the block length; three passes settle it.
   for (let pass = 0; pass < 3; pass++) {
@@ -381,7 +381,7 @@ function finalizeSelection(
       selection.entries.slice(0, -1),
       budgetMax,
       omittedCount + 1,
-      zeroHit,
+      isRetrievalMiss,
     );
   }
   return selection;

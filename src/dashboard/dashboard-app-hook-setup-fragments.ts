@@ -328,13 +328,13 @@ function dashboardTaskDisplayFragment(): DashboardAppFragment {
      * Format a milestone modified timestamp for the plan table.
      * Use so users can tell whether task files changed recently.
      *
-     * @param value - timestamp string; empty or invalid values display as unknown
+     * @param isoTimestamp - timestamp string; empty or invalid values display as unknown
      * @returns localized timestamp label, or `unknown` when the date cannot be trusted
      */
-    taskModifiedLabel(value: string): string {
+    taskModifiedLabel(isoTimestamp: string): string {
       // Empty timestamps mean the plan reader could not prove when the file changed.
-      if (!value) return "unknown";
-      const date = new Date(value);
+      if (!isoTimestamp) return "unknown";
+      const date = new Date(isoTimestamp);
       // Invalid timestamps are hidden behind a neutral label instead of showing `Invalid Date`.
       if (Number.isNaN(date.getTime())) return "unknown";
       return date.toLocaleString();

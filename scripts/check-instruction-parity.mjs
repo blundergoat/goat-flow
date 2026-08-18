@@ -51,8 +51,8 @@ function pathLabel(path) {
 }
 
 /** Escape a package version before matching its exact CHANGELOG heading. */
-function escapeRegExp(value) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+function escapeRegExp(literalText) {
+  return literalText.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 /**

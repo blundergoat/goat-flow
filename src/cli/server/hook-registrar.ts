@@ -696,16 +696,16 @@ function unsupportedAgentHookState(
 /**
  * Name the gap between what the user asked for and what is actually installed, which is what the Hooks card shows as a repair prompt.
  *
- * @param desired - whether the user has this hook switched on
+ * @param shouldBeEnabled - whether the user has this hook switched on
  * @param installed - whether the file is really present and registered
  * @returns the drift direction, or `undefined` when the two agree and nothing needs repairing
  */
 function hookDrift(
-  desired: boolean,
+  shouldBeEnabled: boolean,
   installed: boolean,
 ): HookDrift | undefined {
-  if (desired && !installed) return "desired-on-actual-off";
-  if (!desired && installed) return "desired-off-actual-on";
+  if (shouldBeEnabled && !installed) return "desired-on-actual-off";
+  if (!shouldBeEnabled && installed) return "desired-off-actual-on";
   return undefined;
 }
 
@@ -888,7 +888,7 @@ function agentHookState(
   projectPath: string,
   agent: AgentProfile,
   spec: HookSpec,
-  desired: boolean,
+  shouldBeEnabled: boolean,
   scanRootState: HookScanRootState | null,
 ): HookAgentState {
   const unsupportedReason = unsupportedReasonForSpec(spec, agent);
@@ -898,7 +898,7 @@ function agentHookState(
       projectPath,
       agent,
       spec,
-      desired,
+      shouldBeEnabled,
       unsupportedReason,
       true,
     );
@@ -909,7 +909,7 @@ function agentHookState(
       projectPath,
       agent,
       spec,
-      desired,
+      shouldBeEnabled,
       "Agent manifest has no hook directory or hook config file.",
     );
   }
@@ -917,7 +917,7 @@ function agentHookState(
     projectPath,
     agent,
     spec,
-    desired,
+    shouldBeEnabled,
     scanRootState,
   );
 }
@@ -988,7 +988,7 @@ function reconcileSupportedAgentHook(
 function reconcileHook(
   projectPath: string,
   spec: HookSpec,
-  enabled: boolean,
+  isEnabled: boolean,
 ): void {
   const profiles = getAgentProfiles();
   const scanRootState = postTurnScanRootState(projectPath, spec);
@@ -1004,7 +1004,7 @@ function reconcileHook(
       projectPath,
       agent,
       spec,
-      enabled,
+      isEnabled,
       doesRootContractAllowRegistration,
       profiles,
     );
@@ -1125,14 +1125,14 @@ export function readAllHookStates(projectPath: string): HookState[] {
  * Apply one enabled choice after proving the registrar will not erase known local hook content.
  *
  * @param hookId - registry hook selected by the caller; unknown or fixed hooks are rejected
- * @param enabled - desired persisted state written after divergence preflight
+ * @param isEnabled - desired persisted state written after divergence preflight
  * @param projectPath - selected project whose managed hook surface may change
  * @returns refreshed public state for the selected hook
  * @throws HookRegistrarError for unknown hooks, fixed hooks, unsafe paths, or proven divergence
  */
 export function applyHookState(
   hookId: string,
-  enabled: boolean,
+  isEnabled: boolean,
   projectPath: string,
 ): HookState {
   const spec = resolveSpec(hookId);
@@ -1140,10 +1140,10 @@ export function applyHookState(
     throw new HookRegistrarError(`Hook is not togglable: ${hookId}`, 400);
   }
   // Enabled reconciliation may replace scripts, so prove authority before any cleanup or config write.
-  if (enabled) assertNoKnownManagedHookDivergence(projectPath, [spec]);
+  if (isEnabled) assertNoKnownManagedHookDivergence(projectPath, [spec]);
   pruneRemovedHookTombstones(projectPath);
-  setHookEnabled(projectPath, spec.id, enabled);
-  reconcileHook(projectPath, spec, enabled);
+  setHookEnabled(projectPath, spec.id, isEnabled);
+  reconcileHook(projectPath, spec, isEnabled);
   return readHookState(spec.id, projectPath);
 }
 

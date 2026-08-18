@@ -159,16 +159,16 @@ function parseQualityRequestParams(
  * @param ctx - dashboard route context supplying the short-lived cache
  * @param projectPath - validated project the user selected
  * @param agent - agent the prompt is being composed for
- * @param fresh - true when the user asked for live results and the cache must be ignored
+ * @param isFresh - true when the user asked for live results and the cache must be ignored
  * @returns the cached report, or null when nothing recent enough was stored
  */
 function readQualityAuditCache(
   ctx: DashboardRouteContext,
   projectPath: string,
   agent: AgentId,
-  fresh: boolean,
+  isFresh: boolean,
 ): AuditReport | null {
-  if (fresh) return null;
+  if (isFresh) return null;
   const cached = ctx.qualityAuditCache.get(
     buildQualityAuditCacheKey(projectPath, agent),
   );

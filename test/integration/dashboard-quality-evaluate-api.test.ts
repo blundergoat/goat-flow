@@ -86,8 +86,8 @@ describe("dashboard /api/quality/evaluate", () => {
       body: JSON.stringify({ content: SKILL_DRAFT }),
     });
     assert.equal(res.status, 200);
-    const data = expectRecord(body, "Evaluate result");
-    const artifact = expectRecord(data.artifact, "Evaluate result.artifact");
+    const payload = expectRecord(body, "Evaluate result");
+    const artifact = expectRecord(payload.artifact, "Evaluate result.artifact");
     assert.equal(artifact.kind, "skill");
   });
 
@@ -187,8 +187,8 @@ describe("dashboard /api/quality/evaluate", () => {
       body: JSON.stringify({ content: "x".repeat(330 * 1024) }),
     });
     assert.equal(res.status, 413);
-    const data = expectRecord(body, "Evaluate oversized result");
-    assert.match(String(data.error), /Evaluate body too large/);
+    const payload = expectRecord(body, "Evaluate oversized result");
+    assert.match(String(payload.error), /Evaluate body too large/);
   });
 
   it("returns a quality report and improvement tips for an uploaded skill", async () => {
@@ -202,18 +202,18 @@ describe("dashboard /api/quality/evaluate", () => {
       }),
     });
     assert.equal(res.status, 200);
-    const data = expectRecord(body, "Evaluate result");
-    const artifact = expectRecord(data.artifact, "Evaluate result.artifact");
+    const payload = expectRecord(body, "Evaluate result");
+    const artifact = expectRecord(payload.artifact, "Evaluate result.artifact");
     assert.equal(artifact.kind, "skill");
-    assert.equal(typeof data.totalScore, "number");
-    assert.equal(typeof data.profileMax, "number");
-    assert.ok(Array.isArray(data.metrics));
-    assert.ok(Array.isArray(data.tips));
-    assert.equal(typeof data.subtype, "string");
-    assert.equal(typeof data.detectedShape, "string");
-    assert.equal(typeof data.shapeConfidence, "number");
-    assert.equal(typeof data.shapeMismatch, "boolean");
-    assert.equal(typeof data.recommendation, "string");
+    assert.equal(typeof payload.totalScore, "number");
+    assert.equal(typeof payload.profileMax, "number");
+    assert.ok(Array.isArray(payload.metrics));
+    assert.ok(Array.isArray(payload.tips));
+    assert.equal(typeof payload.subtype, "string");
+    assert.equal(typeof payload.detectedShape, "string");
+    assert.equal(typeof payload.shapeConfidence, "number");
+    assert.equal(typeof payload.shapeMismatch, "boolean");
+    assert.equal(typeof payload.recommendation, "string");
   });
 
   it("scores a multi-file uploaded bundle and lists every file in composedFrom", async () => {
@@ -257,16 +257,16 @@ describe("dashboard /api/quality/evaluate", () => {
       }),
     });
     assert.equal(res.status, 200);
-    const data = expectRecord(body, "Bundle evaluate result");
-    const composed = data.composedFrom as string[];
+    const payload = expectRecord(body, "Bundle evaluate result");
+    const composed = payload.composedFrom as string[];
     assert.ok(Array.isArray(composed), "composedFrom must be an array");
     assertComposedFromIncludes(composed, [
       "SKILL.md",
       "workflow.md",
       "template.md",
     ]);
-    assert.ok(Array.isArray(data.tips));
-    assert.equal(typeof data.totalScore, "number");
+    assert.ok(Array.isArray(payload.tips));
+    assert.equal(typeof payload.totalScore, "number");
   });
 
   it("surfaces improvement tips for a deliberately weak draft", async () => {
@@ -281,10 +281,10 @@ describe("dashboard /api/quality/evaluate", () => {
       body: JSON.stringify({ content: weakDraft, kind: "skill" }),
     });
     assert.equal(res.status, 200);
-    const data = expectRecord(body, "Evaluate result");
-    assert.ok(Array.isArray(data.tips));
+    const payload = expectRecord(body, "Evaluate result");
+    assert.ok(Array.isArray(payload.tips));
     assert.ok(
-      (data.tips as unknown[]).length > 0,
+      (payload.tips as unknown[]).length > 0,
       "expected at least one improvement tip for a weak draft",
     );
   });

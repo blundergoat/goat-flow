@@ -160,11 +160,11 @@ export function initGit(root: string): void {
 /**
  * Escape file names before embedding them in assertion regular expressions.
  *
- * @param value - literal text to escape
+ * @param literalText - literal text to escape
  * @returns the text with regex metacharacters backslash-escaped
  */
-export function escapeRegex(value: string): string {
-  return value.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
+export function escapeRegex(literalText: string): string {
+  return literalText.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&");
 }
 
 /**

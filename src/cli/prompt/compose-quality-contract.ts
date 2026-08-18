@@ -186,7 +186,7 @@ export function appendQualityReportContract(
  *
  * @param lines - prompt lines appended to in place
  * @param input - the quality request, supplying mode and any prior report being compared
- * @param usesStagedDraft - true when the dashboard stages the draft, which changes how the report must be handed back
+ * @param isStagedDraftMode - true when the dashboard stages the draft, which changes how the report must be handed back
  * @param pushVariant - emit the full-detail or compact wording of one rule
  * @param pushFull - emit lines only the full-detail prompt carries
  * @returns nothing; the rules are appended to `lines`
@@ -194,7 +194,7 @@ export function appendQualityReportContract(
 function appendReportJsonRules(
   lines: string[],
   input: ReportContractInput,
-  usesStagedDraft: boolean,
+  isStagedDraftMode: boolean,
   pushVariant: (fullText: string, compactText: string) => void,
   pushFull: (...texts: string[]) => void,
 ): void {
@@ -269,13 +269,13 @@ function appendReportJsonRules(
   pushFull(
     "- `summary` and `detail` MUST be single-line strings. No literal newlines, tabs, or other control characters. If you need to reference multi-line command output, summarise the outcome in prose - do NOT paste raw terminal blocks into JSON string fields. Pasted multi-line content produces unparseable JSON and the report is lost.",
   );
-  if (!usesStagedDraft) {
+  if (!isStagedDraftMode) {
     pushFull(
       "- QUOTE the persistence delimiter (`<<'JSON'`, not `<<JSON`). Unquoted delimiters make the shell interpret `$`, backticks, and escapes inside the report.",
     );
   }
   lines.push("");
-  if (usesStagedDraft) {
+  if (isStagedDraftMode) {
     appendStagedDraftPersistence(lines, input);
     return;
   }

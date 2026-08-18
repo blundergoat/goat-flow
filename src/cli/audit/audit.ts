@@ -132,16 +132,16 @@ interface AuditOptions extends AuditHarnessOption {
 /** Synchronous profiler seam used by dashboard development benchmarks. */
 interface AuditProfiler {
   /** Time one labelled audit step; implementations return whatever the wrapped block returned. */
-  span<T>(name: string, fn: () => T): T;
+  span<T>(name: string, block: () => T): T;
 }
 
 /** Run a block inside an optional profiler span. */
 function span<T>(
   profile: AuditProfiler | undefined,
   name: string,
-  fn: () => T,
+  block: () => T,
 ): T {
-  return profile ? profile.span(name, fn) : fn();
+  return profile ? profile.span(name, block) : block();
 }
 
 /** Resolve the fact profile once so dashboard-summary callers get consistent fact slicing. */

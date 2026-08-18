@@ -91,19 +91,19 @@ function validateUnknownTopLevelKeys(
  * Warn about keys inside a block that no validator reads.
  * Use wherever a block has a closed key set, so a misspelling is distinguishable from an omission instead of both producing silence.
  *
- * @param value - block contents; an empty block produces no warnings
+ * @param configSection - block contents; an empty block produces no warnings
  * @param knownKeys - keys some validator reads at this level; every other key is reported
  * @param path - dot-separated config path of the owning block; used to build the reported key
  * @param warnings - warning accumulator shown by config/audit callers
  * @returns nothing; unrecognized keys append warnings in place
  */
 function warnUnrecognizedKeys(
-  value: RawConfig,
+  configSection: RawConfig,
   knownKeys: ReadonlySet<string>,
   path: string,
   warnings: ValidationIssue[],
 ): void {
-  for (const key of Object.keys(value)) {
+  for (const key of Object.keys(configSection)) {
     // An unread key is either a typo or a setting this version dropped; both are worth saying aloud.
     if (!knownKeys.has(key)) {
       pushWarning(warnings, `${path}.${key}`, "unknown key");
@@ -116,20 +116,20 @@ function warnUnrecognizedKeys(
  * Use for blocks reached by a fixed config path; blocks nested under a user-chosen name call `warnUnrecognizedKeys` directly with the set for that
  * level.
  *
- * @param value - block contents; an empty block produces no warnings
+ * @param configSection - block contents; an empty block produces no warnings
  * @param path - dot-separated config path of the owning block; an unregistered path is skipped
  * @param warnings - warning accumulator shown by config/audit callers
  * @returns nothing; unrecognized keys append warnings in place
  */
 function warnUnknownNestedKeys(
-  value: RawConfig,
+  configSection: RawConfig,
   path: string,
   warnings: ValidationIssue[],
 ): void {
   const knownKeys = KNOWN_NESTED_KEYS.get(path);
   // Blocks keyed by user-chosen names have no closed set and cannot be checked here.
   if (knownKeys === undefined) return;
-  warnUnrecognizedKeys(value, knownKeys, path, warnings);
+  warnUnrecognizedKeys(configSection, knownKeys, path, warnings);
 }
 
 /**
@@ -155,32 +155,32 @@ function validateObjectField(
 ): void {
   // Missing optional blocks keep defaults and need no validation error.
   if (!(key in raw)) return;
-  const value = raw[key];
+  const sectionValue = raw[key];
   // Non-object blocks cannot carry nested settings the user expects.
-  if (!isRecord(value)) {
+  if (!isRecord(sectionValue)) {
     pushError(errors, key, "must be an object");
     return;
   }
-  warnUnknownNestedKeys(value, key, warnings);
-  onValid(value);
+  warnUnknownNestedKeys(sectionValue, key, warnings);
+  onValid(sectionValue);
 }
 
 /**
  * Validate a positive numeric config field.
  * Use for limits where zero or negative values would remove meaningful audit thresholds.
  *
- * @param value - raw field value; missing/non-number values fail when caller chose to validate the field
+ * @param configuredNumber - raw field value; missing/non-number values fail when caller chose to validate the field
  * @param path - config path shown to the user; empty would make the error hard to fix
  * @param errors - error accumulator shown to the user
  * @returns nothing; invalid values append an error
  */
 function validatePositiveNumber(
-  value: unknown,
+  configuredNumber: unknown,
   path: string,
   errors: ValidationIssue[],
 ): void {
   // Non-positive values would make configured thresholds unusable.
-  if (typeof value !== "number" || value <= 0) {
+  if (typeof configuredNumber !== "number" || configuredNumber <= 0) {
     pushError(errors, path, "must be a positive number");
   }
 }
@@ -189,23 +189,23 @@ function validatePositiveNumber(
  * Validate a command-list field as an array of non-empty strings.
  * Use for toolchain and acknowledge lists that are displayed or executed by user-visible flows.
  *
- * @param value - raw list value; non-arrays mean the user did not provide a usable list
+ * @param configuredList - raw list value; non-arrays mean the user did not provide a usable list
  * @param path - config path shown to the user; empty would make the error hard to fix
  * @param errors - error accumulator shown to the user
  * @returns nothing; invalid entries append errors with item indexes
  */
 function validateStringArray(
-  value: unknown,
+  configuredList: unknown,
   path: string,
   errors: ValidationIssue[],
 ): void {
   // Non-array lists cannot be rendered or iterated as user commands/items.
-  if (!Array.isArray(value)) {
+  if (!Array.isArray(configuredList)) {
     pushError(errors, path, "must be an array");
     return;
   }
   // Each configured item must be visible and actionable.
-  for (const [index, item] of value.entries()) {
+  for (const [index, item] of configuredList.entries()) {
     // Blank strings would show as empty commands or acknowledgements.
     if (typeof item !== "string" || item.trim().length === 0) {
       pushError(errors, `${path}[${index}]`, "must be a non-empty string");
@@ -569,23 +569,23 @@ function validateHooksField(
  * The hook script enforces the repo-relative and executability rules at runtime; config validation only guards the YAML shape so typos surface in
  * `config-parses`.
  *
- * @param value - raw `hooks.<id>.binaries` value; missing/non-object values cannot configure binaries
+ * @param configuredBinaries - raw `hooks.<id>.binaries` value; missing/non-object values cannot configure binaries
  * @param path - dot-separated config path used in emitted issues; empty would hide the bad block
  * @param errors - error accumulator shown to the user; empty means this may be the first binary error
  * @returns nothing; invalid binary entries append errors
  */
 function validateHookBinaries(
-  value: unknown,
+  configuredBinaries: unknown,
   path: string,
   errors: ValidationIssue[],
 ): void {
   // Binary overrides must be a map so each language can name one executable.
-  if (!isRecord(value)) {
+  if (!isRecord(configuredBinaries)) {
     pushError(errors, path, "must be an object");
     return;
   }
   // Each configured language override must point at a non-empty path.
-  for (const [lang, binaryPath] of Object.entries(value)) {
+  for (const [lang, binaryPath] of Object.entries(configuredBinaries)) {
     // Empty binary paths would hide default discovery without providing a replacement.
     if (typeof binaryPath !== "string" || binaryPath.trim() === "") {
       pushError(errors, `${path}.${lang}`, "must be a non-empty string path");

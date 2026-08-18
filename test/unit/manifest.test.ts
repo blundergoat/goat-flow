@@ -613,14 +613,17 @@ describe("getRequiredInstructionSections (real repo)", () => {
 describe("renderManifestMarkdown", () => {
   it("produces markdown with a facts table and skill list", () => {
     resetManifestCache();
-    const md = renderManifestMarkdown(loadManifest());
-    assert.match(md, /^# goat-flow manifest/im);
-    assert.match(md, /\| Setup checks \|/);
-    assert.match(md, /\| Skills \(total\) \|/);
-    assert.match(md, /\*\*Agent registry authority:\*\*/);
-    assert.match(md, /^## Agents$/im);
-    assert.match(md, /\| Agent \| Instruction \| Settings \| Hook config \|/);
-    assert.match(md, /\*\*Skills:\*\*/);
-    assert.match(md, /\*\*Dashboard views:\*\*/);
+    const markdown = renderManifestMarkdown(loadManifest());
+    assert.match(markdown, /^# goat-flow manifest/im);
+    assert.match(markdown, /\| Setup checks \|/);
+    assert.match(markdown, /\| Skills \(total\) \|/);
+    assert.match(markdown, /\*\*Agent registry authority:\*\*/);
+    assert.match(markdown, /^## Agents$/im);
+    assert.match(
+      markdown,
+      /\| Agent \| Instruction \| Settings \| Hook config \|/,
+    );
+    assert.match(markdown, /\*\*Skills:\*\*/);
+    assert.match(markdown, /\*\*Dashboard views:\*\*/);
   });
 });

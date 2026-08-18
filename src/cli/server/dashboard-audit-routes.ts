@@ -139,18 +139,18 @@ function jsonErrorResponse(
  *
  * @param ctx - dashboard route context supplying cache access
  * @param projectPath - validated project the user selected
- * @param fresh - true when the user pressed Re-audit and asked for live results
+ * @param isFresh - true when the user pressed Re-audit and asked for live results
  * @param signature - fingerprint of the project state; null means the cache cannot be trusted for this request
  * @returns the cached report, or null when nothing usable was stored and the audit has to run
  */
 function readCachedDashboardAudit(
   ctx: DashboardRouteContext,
   projectPath: string,
-  fresh: boolean,
+  isFresh: boolean,
   signature: string | null,
   profiler: DashboardAuditProfiler,
 ) {
-  if (fresh || signature === null) return null;
+  if (isFresh || signature === null) return null;
   return profiler.span("cache read", () =>
     readAuditCache(projectPath, ctx.packageVersion, signature),
   );
@@ -163,10 +163,10 @@ function recordAuditRunEvent(
   includeHarness: boolean,
   agentFilter: AgentId | null,
   report: DashboardReport,
-  cached: boolean,
+  isCached: boolean,
 ): void {
   ctx.recordDashboardEvent(projectPath, "audit.run", {
-    cached,
+    isCached,
     harness: includeHarness,
     agent: agentFilter ?? "all",
     status: report.status,

@@ -22,13 +22,17 @@ const FILE_OWNERSHIP_CLASSES = new Set<ManifestFileOwnership>([
 ]);
 
 /** Narrow JSON values before ownership fields are read for user-facing validation. */
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
+function isRecord(candidate: unknown): candidate is Record<string, unknown> {
+  return (
+    candidate !== null &&
+    typeof candidate === "object" &&
+    !Array.isArray(candidate)
+  );
 }
 
 /** Require visible source or generator text so operators can reproduce an ownership action. */
-function isNonEmptyString(value: unknown): value is string {
-  return typeof value === "string" && value.trim().length > 0;
+function isNonEmptyString(candidate: unknown): candidate is string {
+  return typeof candidate === "string" && candidate.trim().length > 0;
 }
 
 /** Accept only normalized repository-relative paths for managed artifact identities. */
@@ -42,10 +46,12 @@ function isSafeManifestPath(path: string): boolean {
 }
 
 /** Narrow a JSON value to one behavior the installer and manifest report understand. */
-function isFileOwnership(value: unknown): value is ManifestFileOwnership {
+function isFileOwnership(
+  candidate: unknown,
+): candidate is ManifestFileOwnership {
   return (
-    typeof value === "string" &&
-    FILE_OWNERSHIP_CLASSES.has(value as ManifestFileOwnership)
+    typeof candidate === "string" &&
+    FILE_OWNERSHIP_CLASSES.has(candidate as ManifestFileOwnership)
   );
 }
 
@@ -246,10 +252,10 @@ function duplicateValues(values: readonly string[]): string[] {
   const duplicates = new Set<string>();
 
   // Each repeated declaration would make the installer or command owner ambiguous.
-  for (const value of values) {
+  for (const candidate of values) {
     // A second occurrence creates a duplicate users cannot distinguish during setup.
-    if (seen.has(value)) duplicates.add(value);
-    seen.add(value);
+    if (seen.has(candidate)) duplicates.add(candidate);
+    seen.add(candidate);
   }
   return [...duplicates].sort();
 }

@@ -514,10 +514,10 @@ describe("audit text output has no scan references", () => {
   });
 
   it("renderAuditMarkdown does not mention scan", () => {
-    const md = renderAuditMarkdown(makePassingReport());
+    const markdown = renderAuditMarkdown(makePassingReport());
     assert.ok(
-      !/ scan /i.test(md),
-      `Audit markdown should not reference "scan": ${md}`,
+      !/ scan /i.test(markdown),
+      `Audit markdown should not reference "scan": ${markdown}`,
     );
   });
 });

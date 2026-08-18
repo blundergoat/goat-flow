@@ -30,7 +30,7 @@ type TerminalWebSocket = Parameters<TerminalManager["attachWebSocket"]>[1];
 /** Minimal PTY surface TerminalManager needs for endpoint smoke tests. */
 interface TestPty {
   /** Writes terminal input sent through the fake PTY. */
-  write(data: string): void;
+  write(chunk: string): void;
   /** Record terminal resize requests without opening a real PTY. */
   resize(cols: number, rows: number): void;
   /** Terminate the fake PTY lifecycle used by shutdown assertions. */
@@ -191,7 +191,7 @@ function makeSpawnedPty(): {
   };
   writes: string[];
   /** Emit fake runner output into TerminalManager's PTY data handler. */
-  emitData(data: string): void;
+  emitData(chunk: string): void;
   /** Emit runner exit independently from kill for teardown-order tests. */
   emitExit(): void;
 } {
@@ -222,8 +222,8 @@ function makeSpawnedPty(): {
       },
     },
     /** Emit fake runner output into TerminalManager's PTY data handler. */
-    emitData(data: string): void {
-      dataHandler(data);
+    emitData(chunk: string): void {
+      dataHandler(chunk);
     },
     /** Emit one synthetic PTY exit so endpoint tests can observe terminal teardown. */
     emitExit(): void {

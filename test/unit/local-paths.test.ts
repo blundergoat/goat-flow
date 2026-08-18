@@ -47,11 +47,11 @@ function symlinkOrSkip(
 
 // Assert a call was refused with the exact validation class, so a test cannot pass on the wrong refusal reason.
 function assertLocalPathError(
-  fn: () => unknown,
+  block: () => unknown,
   validationClass: LocalPathValidationError["validationClass"],
 ): void {
   assert.throws(
-    fn,
+    block,
     (err) =>
       err instanceof LocalPathValidationError &&
       err.validationClass === validationClass &&

@@ -113,7 +113,7 @@ export interface DashboardAuditProfileSpan {
 export interface DashboardAuditProfiler extends Record<"enabled", boolean> {
   spans: DashboardAuditProfileSpan[];
   /** Time one labelled step of a dashboard audit; implementations return whatever the wrapped block returned. */
-  span<T>(name: string, fn: () => T): T;
+  span<T>(name: string, block: () => T): T;
 }
 
 /**

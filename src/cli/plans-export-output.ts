@@ -158,8 +158,8 @@ function renderEffortMetadata(record: PlanExportRecord): string[] {
 }
 
 /** Substitute the export placeholder only when a source field is empty. */
-function providedOrMissing(value: string, missingText: string): string {
-  return value.length > 0 ? value : missingText;
+function providedOrMissing(fieldText: string, missingText: string): string {
+  return fieldText.length > 0 ? fieldText : missingText;
 }
 
 /**

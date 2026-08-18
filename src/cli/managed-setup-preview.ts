@@ -517,11 +517,11 @@ function buildProjectWriteFile(
 function migrationRowReason(
   definition: ProjectWriteDefinition,
   state: ManagedSetupFileState,
-  unsafeCurrentTarget: boolean,
+  isCurrentTargetUnsafe: boolean,
   presentationReason: string,
   pendingMigrations: ReadonlyMap<string, string>,
 ): string {
-  if (unsafeCurrentTarget) return presentationReason;
+  if (isCurrentTargetUnsafe) return presentationReason;
   const migrationSummary = pendingMigrations.get(definition.path);
   // A pending migration always carries its own summary; the fallback keeps the row honest if not.
   if (state === "user-migrated") {

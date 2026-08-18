@@ -225,7 +225,7 @@ function hasActiveMechanicalDeny(agentFacts: AgentFacts): boolean {
 function shellCapability(
   agentFacts: AgentFacts,
   capabilityId: "shell-dangerous" | "shell-pipe-to-shell",
-  dangerousPatternIsCovered: boolean,
+  isDangerousPatternCovered: boolean,
   protectedUserSummary: string,
   missingUserSummary: string,
 ): EnforcementCapability {
@@ -242,7 +242,7 @@ function shellCapability(
     );
   }
   // A present deny surface still reports missing when its local facts do not cover the pattern.
-  if (!dangerousPatternIsCovered) {
+  if (!isDangerousPatternCovered) {
     return capability(
       capabilityId,
       "missing",

@@ -80,21 +80,21 @@ function renderSplit(split: PlanEffortSplit): string {
  * retrospective Actual passes here.
  *
  * @param warning - one parser warning from the milestone record
- * @param receiptIsClaimed - whether an Actual derives its authority from the receipt
- * @param receiptIsActive - whether the receipt currently controls an executing clock
+ * @param isReceiptClaimed - whether an Actual derives its authority from the receipt
+ * @param isReceiptActive - whether the receipt currently controls an executing clock
  * @returns true when the warning should become a check error under strict mode
  */
 function isStrictValidationWarning(
   warning: string,
-  receiptIsClaimed: boolean,
-  receiptIsActive: boolean,
+  isReceiptClaimed: boolean,
+  isReceiptActive: boolean,
 ): boolean {
   // A summary claims a final total even when no Actual cites it and no clock is open.
   if (warning === "timing receipt summary requires finalized state")
     return true;
   return (
     warning.includes("actual effort not parseable") ||
-    ((receiptIsClaimed || receiptIsActive) &&
+    ((isReceiptClaimed || isReceiptActive) &&
       warning.startsWith("timing receipt")) ||
     /^multiple .+ values supplied$/u.test(warning) ||
     STRICT_STRUCTURAL_WARNINGS.has(warning) ||
@@ -106,16 +106,16 @@ function isStrictValidationWarning(
  * Decide which parser warnings are fatal under the selected compatibility mode.
  *
  * @param warning - one parser warning from the milestone record
- * @param strict - whether strict current-plan validation is selected
- * @param receiptIsClaimed - whether an Actual derives its authority from the receipt
- * @param receiptIsActive - whether the receipt currently controls an executing clock
+ * @param isStrict - whether strict current-plan validation is selected
+ * @param isReceiptClaimed - whether an Actual derives its authority from the receipt
+ * @param isReceiptActive - whether the receipt currently controls an executing clock
  * @returns true when the warning should become a check error
  */
 function isValidationWarning(
   warning: string,
-  strict: boolean,
-  receiptIsClaimed: boolean,
-  receiptIsActive: boolean,
+  isStrict: boolean,
+  isReceiptClaimed: boolean,
+  isReceiptActive: boolean,
 ): boolean {
   if (warning.includes("estimate not parseable")) return true;
 
@@ -123,8 +123,8 @@ function isValidationWarning(
   if (warning === "forecast range not parseable") return true;
   // An unreadable basis hides the work-unit count and provenance behind the headline.
   if (warning === "forecast basis not parseable") return true;
-  if (!strict) return false;
-  return isStrictValidationWarning(warning, receiptIsClaimed, receiptIsActive);
+  if (!isStrict) return false;
+  return isStrictValidationWarning(warning, isReceiptClaimed, isReceiptActive);
 }
 
 /**
@@ -137,18 +137,18 @@ function isValidationWarning(
  * `measured` Actuals still fail twice over - here and in the reconciliation check that compares their minutes against the receipt allocation.
  *
  * @param record - one parsed milestone
- * @param strict - whether strict current-plan validation is selected
+ * @param isStrict - whether strict current-plan validation is selected
  * @returns error lines naming the milestone; empty means no warning was fatal
  */
 function collectWarningErrors(
   record: PlanExportRecord,
-  strict: boolean,
+  isStrict: boolean,
 ): string[] {
   const receiptIsClaimed = record.effort?.actual?.state === "measured";
   const receiptIsActive = record.timingReceipt?.state === "active";
   return record.warnings
     .filter((warning) =>
-      isValidationWarning(warning, strict, receiptIsClaimed, receiptIsActive),
+      isValidationWarning(warning, isStrict, receiptIsClaimed, receiptIsActive),
     )
     .map((warning) => `${record.sourceFile}: ${warning}`);
 }
@@ -166,13 +166,13 @@ function categoryMinutes(
 function collectCategoryErrors(
   record: PlanExportRecord,
   split: PlanEffortSplit,
-  strict: boolean,
+  isStrict: boolean,
 ): string[] {
   const errors: string[] = [];
   for (const category of CATEGORIES) {
     const taskMinutes = categoryMinutes(record.taskEstimateTotals, category);
     const countedMinutes = categoryMinutes(record.workEstimateTotals, category);
-    if (strict) {
+    if (isStrict) {
       if (countedMinutes !== split[category]) {
         errors.push(
           `${record.sourceFile}: ${category} counted work (${countedMinutes} min) does not equal the split component (${split[category]} min)`,
@@ -192,14 +192,14 @@ function collectCategoryErrors(
 /** Check a declared headline split against its total and counted work. */
 function collectSplitErrors(
   record: PlanExportRecord,
-  strict: boolean,
+  isStrict: boolean,
 ): string[] {
   const errors: string[] = [];
   const effort = record.effort;
   if (!effort) return errors;
   const split = effort.split;
   if (!split) {
-    if (strict) {
+    if (isStrict) {
       errors.push(
         `${record.sourceFile}: strict mode requires a product/proof/other split`,
       );
@@ -213,7 +213,7 @@ function collectSplitErrors(
       `${record.sourceFile}: split ${renderSplit(split)} sums to ${splitSum} min but the headline says ${effort.totalMinutes} min`,
     );
   }
-  errors.push(...collectCategoryErrors(record, split, strict));
+  errors.push(...collectCategoryErrors(record, split, isStrict));
   return errors;
 }
 
@@ -275,7 +275,7 @@ function collectForecastBasisErrors(record: PlanExportRecord): string[] {
 /** Require estimates on every work item that participates in the selected mode. */
 function collectCoverageErrors(
   record: PlanExportRecord,
-  strict: boolean,
+  isStrict: boolean,
 ): string[] {
   const errors: string[] = [];
   const unestimatedTasks = record.tasks.filter(
@@ -286,7 +286,7 @@ function collectCoverageErrors(
       `${record.sourceFile}: ${unestimatedTasks} task(s) missing an (est: ...) entry under a declared effort line`,
     );
   }
-  if (!strict) return errors;
+  if (!isStrict) return errors;
 
   const unestimatedTestingItems = record.testingGateItems.filter(
     (item) => item.estimateMinutes === undefined,
@@ -433,9 +433,9 @@ function countOpenItems(
 
 /** Human ownership is explicit metadata, never inferred from prose or checkbox state. */
 function isHumanOwnedItem(
-  item: PlanExportRecord["testingGateItems"][number],
+  gateItem: PlanExportRecord["testingGateItems"][number],
 ): boolean {
-  return /^\s*\[human\](?:\s|$)/iu.test(item.text);
+  return /^\s*\[human\](?:\s|$)/iu.test(gateItem.text);
 }
 
 /** Validate the executor-owned snapshot before a human receives the milestone. */
@@ -606,21 +606,21 @@ function collectLifecycleErrors(record: PlanExportRecord): string[] {
  * a declared split, task-coverage errors need declared tasks - which is why a legacy milestone falls through every check untouched.
  *
  * @param record - parsed milestone; one declaring nothing reaches no check and returns clean
- * @param strict - whether current-format authoring obligations are mandatory
+ * @param isStrict - whether current-format authoring obligations are mandatory
  * @returns error lines naming the milestone; empty means its arithmetic holds up
  */
 function collectMilestoneErrors(
   record: PlanExportRecord,
-  strict: boolean,
+  isStrict: boolean,
 ): string[] {
-  const errors = collectWarningErrors(record, strict);
-  if (strict) {
+  const errors = collectWarningErrors(record, isStrict);
+  if (isStrict) {
     errors.push(...collectLifecycleErrors(record));
   }
 
   // Default mode preserves legacy plans; strict authoring requires the current notation.
   if (!record.effort) {
-    if (strict) {
+    if (isStrict) {
       errors.push(
         `${record.sourceFile}: strict mode requires an Effort estimate with a product/proof/other split`,
       );
@@ -628,11 +628,11 @@ function collectMilestoneErrors(
     return errors;
   }
 
-  errors.push(...collectSplitErrors(record, strict));
-  errors.push(...collectCoverageErrors(record, strict));
+  errors.push(...collectSplitErrors(record, isStrict));
+  errors.push(...collectCoverageErrors(record, isStrict));
   errors.push(...collectForecastRangeErrors(record));
   errors.push(...collectForecastBasisErrors(record));
-  if (strict) {
+  if (isStrict) {
     errors.push(...collectActualErrors(record));
   }
   return errors;

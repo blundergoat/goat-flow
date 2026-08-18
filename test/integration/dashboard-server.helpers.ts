@@ -92,21 +92,21 @@ export let originalLegacyProjectsList: string | null = null;
  * Dashboard tests await real HTTP and WebSocket traffic, so a server that never answers should report which wait expired.
  *
  * @param promise - work being awaited
- * @param ms - milliseconds to wait before rejecting
+ * @param timeoutMs - milliseconds to wait before rejecting
  * @param label - name used in the timeout error, so the failure says which step stalled
  * @returns the original promise's result, or a rejection naming the label once the deadline passes
  */
 export function withTimeout<T>(
   promise: Promise<T>,
-  ms: number,
+  timeoutMs: number,
   label: string,
 ): Promise<T> {
   return Promise.race([
     promise,
     new Promise<T>((_, reject) => {
       setTimeout(
-        () => reject(new Error(`${label} timed out after ${ms}ms`)),
-        ms,
+        () => reject(new Error(`${label} timed out after ${timeoutMs}ms`)),
+        timeoutMs,
       );
     }),
   ]);
@@ -117,18 +117,18 @@ export function withTimeout<T>(
  *
  * Rejecting arrays and null explicitly means a malformed response fails on its actual shape rather than later on a missing key.
  *
- * @param value - parsed response body
+ * @param candidate - parsed response body
  * @param context - label used in each assertion message, so a failure names the endpoint under test
  * @returns the same value narrowed to a record
  */
 export function expectRecord(
-  value: unknown,
+  candidate: unknown,
   context: string,
 ): Record<string, unknown> {
-  assert.equal(typeof value, "object", `${context} should be an object`);
-  assert.notEqual(value, null, `${context} should not be null`);
-  assert.ok(!Array.isArray(value), `${context} should not be an array`);
-  return value as Record<string, unknown>;
+  assert.equal(typeof candidate, "object", `${context} should be an object`);
+  assert.notEqual(candidate, null, `${context} should not be null`);
+  assert.ok(!Array.isArray(candidate), `${context} should not be an array`);
+  return candidate as Record<string, unknown>;
 }
 
 /**
@@ -163,14 +163,14 @@ export function extractDashboardToken(html: string): string {
  * Assert that a check provenance payload preserves the audit evidence contract: a valid source
  * type, a source_urls array, a verified_on string, and an allowed normative level.
  *
- * @param value - the provenance object from one rendered audit check, of unknown runtime shape
+ * @param check - the provenance object from one rendered audit check, of unknown runtime shape
  * @param context - label woven into assertion messages to identify which check's provenance failed
  */
 export function assertAuditCheckProvenance(
-  value: unknown,
+  check: unknown,
   context: string,
 ): void {
-  const provenance = expectRecord(value, context);
+  const provenance = expectRecord(check, context);
   assert.match(
     String(provenance.source_type),
     /^(spec|vendor_docs|paper|incident|community|unknown)$/,
@@ -193,11 +193,11 @@ export function assertAuditCheckProvenance(
  * Assert one rendered audit scope has a pass/fail status, a checks array (each with valid
  * provenance), a failures array, and a string-valued summary map.
  *
- * @param value - one scope object (setup/agent/harness) from the dashboard report, unknown shape
+ * @param scope - one scope object (setup/agent/harness) from the dashboard report, unknown shape
  * @param context - label woven into assertion messages to identify which scope failed
  */
-export function assertAuditScope(value: unknown, context: string): void {
-  const scope = expectRecord(value, context);
+export function assertAuditScope(scope: unknown, context: string): void {
+  const scope = expectRecord(scope, context);
   assert.match(
     String(scope.status),
     /^(pass|fail)$/,
@@ -230,11 +230,13 @@ export function assertAuditScope(value: unknown, context: string): void {
  * target, agentScores, the setup/agent (and optional harness) scopes, overall status, and the
  * learningLoop and recentLessons sections - so a contract drift fails the test, not the UI.
  *
- * @param value - the parsed dashboard report response body, of unknown runtime shape
+ * @param report - the parsed dashboard report response body, of unknown runtime shape
  * @returns the same payload narrowed to a record, for callers that read further fields
  */
-export function assertDashboardReport(value: unknown): Record<string, unknown> {
-  const report = expectRecord(value, "Dashboard report");
+export function assertDashboardReport(
+  report: unknown,
+): Record<string, unknown> {
+  const report = expectRecord(report, "Dashboard report");
   assert.match(
     String(report.status),
     /^(pass|fail)$/,

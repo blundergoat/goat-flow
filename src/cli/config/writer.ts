@@ -37,11 +37,11 @@ const REMOVED_TOP_LEVEL_BLOCK_COMMENTS = new Map([
 ]);
 
 /** Narrow parsed YAML values before reading the hooks block. */
-function isRecord(value: unknown): value is Record<string, unknown> {
+function isRecord(candidate: unknown): candidate is Record<string, unknown> {
   return (
-    value !== null &&
-    typeof value === "object" &&
-    Array.isArray(value) === false
+    candidate !== null &&
+    typeof candidate === "object" &&
+    Array.isArray(candidate) === false
   );
 }
 
@@ -73,21 +73,22 @@ function normalizeHookIdentifier(hookIdentifier: string): string {
  * Returns null for malformed entries (no boolean `enabled`) so the caller can skip them - a user's hand-edited config never crashes a toggle write.
  *
  * @param hookId - raw hook key as written in config.yaml (may be a legacy alias)
- * @param value - raw YAML value under that key
+ * @param hookEntry - raw YAML value under that key
  * @returns canonical id plus validated state, or null when the entry is malformed
  */
 function readHookEntry(
   hookId: string,
-  value: unknown,
+  hookEntry: unknown,
 ): { id: string; state: HookConfigMap[string] } | null {
   // Entry without a boolean `enabled` is malformed -> ignore it entirely.
-  if (!isRecord(value) || typeof value.enabled !== "boolean") return null;
-  const binaries = readHookBinaries(value.binaries);
-  const scanRoots = readHookScanRootList(value["scan-roots"]);
+  if (!isRecord(hookEntry) || typeof hookEntry.enabled !== "boolean")
+    return null;
+  const binaries = readHookBinaries(hookEntry.binaries);
+  const scanRoots = readHookScanRootList(hookEntry["scan-roots"]);
   return {
     id: normalizeHookIdentifier(hookId),
     state: {
-      enabled: value.enabled,
+      enabled: hookEntry.enabled,
       ...(binaries ? { binaries } : {}),
       ...(scanRoots ? { "scan-roots": scanRoots } : {}),
     },
@@ -250,15 +251,15 @@ function readHookConfig(projectPath: string): HookConfigMap {
  *
  * @param projectPath - project whose goat-flow config stores hook overrides
  * @param hookId - canonical hook id to read
- * @param defaultEnabled - registry default to use when config omits the hook
+ * @param isEnabledByDefault - registry default to use when config omits the hook
  * @returns configured enabled state, or the registry default when absent
  */
 export function readHookEnabled(
   projectPath: string,
   hookId: string,
-  defaultEnabled: boolean,
+  isEnabledByDefault: boolean,
 ): boolean {
-  return readHookConfig(projectPath)[hookId]?.enabled ?? defaultEnabled;
+  return readHookConfig(projectPath)[hookId]?.enabled ?? isEnabledByDefault;
 }
 
 /**
@@ -282,17 +283,17 @@ export function readHookScanRoots(
  *
  * @param projectPath - project whose goat-flow config should be written
  * @param hookId - canonical hook id to update
- * @param enabled - desired enabled state to persist
+ * @param isEnabled - desired enabled state to persist
  */
 export function setHookEnabled(
   projectPath: string,
   hookId: string,
-  enabled: boolean,
+  isEnabled: boolean,
 ): void {
   const path = configPath(projectPath);
   const text = readConfigText(projectPath);
   const hooks = readRawHooks(text);
-  hooks[hookId] = { ...hooks[hookId], enabled };
+  hooks[hookId] = { ...hooks[hookId], enabled: isEnabled };
   mkdirSync(dirname(path), { recursive: true });
   writeFileAtomic(
     path,

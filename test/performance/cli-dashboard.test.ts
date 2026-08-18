@@ -46,8 +46,8 @@ interface DashboardServerHandle {
 }
 
 /** Scale performance budgets from one env-controlled multiplier. */
-function budget(ms: number): number {
-  return ms * performanceBudgetMultiplier;
+function budget(milliseconds: number): number {
+  return milliseconds * performanceBudgetMultiplier;
 }
 
 /** Summarize repeated timings with a stable p95 contract used by assertions. */

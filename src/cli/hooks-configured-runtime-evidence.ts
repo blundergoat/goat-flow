@@ -124,21 +124,21 @@ export interface HookRuntimeReport {
  * Use before either proof path decides whether a hook may run.
  *
  * @param isSupported - false means the selected provider cannot host this hook
- * @param enabled - false means the user intentionally disabled the hook
+ * @param isEnabled - false means the user intentionally disabled the hook
  * @param installed - false means no exact registration and managed files are ready
  * @param scriptPath - managed script path; null means no runnable local target
  * @returns first stable reason code, or null when local execution may continue
  */
 export function managedHookReasonCode(
   isSupported: boolean,
-  enabled: boolean,
+  isEnabled: boolean,
   installed: boolean,
   scriptPath: string | null,
 ): HookRuntimeReasonCode | null {
   // Unsupported agents cannot receive this managed PreToolUse hook.
   if (!isSupported) return "agent-hook-unsupported";
   // A disabled hook is intentionally absent from the user's active policy.
-  if (!enabled) return "hook-disabled";
+  if (!isEnabled) return "hook-disabled";
   // Missing registration, script, or policy files means no checkout proof can run.
   if (!installed || scriptPath === null) return "hook-not-installed";
   return null;

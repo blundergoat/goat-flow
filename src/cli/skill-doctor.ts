@@ -122,8 +122,14 @@ class SkillDoctorInputError extends Error {
 }
 
 /** Check whether parsed YAML is an object whose fields can describe discovery. */
-function isFrontmatterRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+function isFrontmatterRecord(
+  candidate: unknown,
+): candidate is Record<string, unknown> {
+  return (
+    typeof candidate === "object" &&
+    candidate !== null &&
+    !Array.isArray(candidate)
+  );
 }
 
 /**
@@ -195,8 +201,9 @@ function blockedFrontmatterInspection(
 }
 
 /** Normalize a YAML discovery value into non-empty text or null. */
-function frontmatterText(value: unknown): string | null {
-  const text = typeof value === "string" ? value.trim() : null;
+function frontmatterText(frontmatterValue: unknown): string | null {
+  const text =
+    typeof frontmatterValue === "string" ? frontmatterValue.trim() : null;
   return text?.length ? text : null;
 }
 

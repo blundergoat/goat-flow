@@ -48,22 +48,26 @@ export function assertQualityCaptureReceiptAvailable(
 }
 
 /** Recognize the bounded terminal receipt shape written by a prior owner. */
-function isTerminalReceiptValue(value: unknown): boolean {
-  if (typeof value !== "object" || value === null || !("ok" in value)) {
+function isTerminalReceiptValue(candidate: unknown): boolean {
+  if (
+    typeof candidate !== "object" ||
+    candidate === null ||
+    !("ok" in candidate)
+  ) {
     return false;
   }
-  if (value.ok === true) {
+  if (candidate.ok === true) {
     return (
-      "reportPath" in value &&
-      typeof value.reportPath === "string" &&
-      value.reportPath.length > 0
+      "reportPath" in candidate &&
+      typeof candidate.reportPath === "string" &&
+      candidate.reportPath.length > 0
     );
   }
   return (
-    value.ok === false &&
-    "error" in value &&
-    typeof value.error === "string" &&
-    value.error.length > 0
+    candidate.ok === false &&
+    "error" in candidate &&
+    typeof candidate.error === "string" &&
+    candidate.error.length > 0
   );
 }
 

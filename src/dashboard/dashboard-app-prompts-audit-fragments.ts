@@ -29,8 +29,8 @@ function dashboardDragHasImageFiles(event: DragEvent): boolean {
   const items = event.dataTransfer?.items;
   if (!items || items.length === 0) return false;
   for (let index = 0; index < items.length; index += 1) {
-    const item = items[index];
-    if (item?.kind === "file" && item.type.startsWith("image/")) return true;
+    const entry = items[index];
+    if (entry?.kind === "file" && entry.type.startsWith("image/")) return true;
   }
   return false;
 }

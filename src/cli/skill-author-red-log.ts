@@ -97,8 +97,8 @@ function redField(section: string, label: string): string {
 }
 
 /** Reject empty values and the placeholders shipped by the authoring template. */
-function isConcreteRedValue(value: string): boolean {
-  const normalized = value.trim();
+function isConcreteRedValue(evidenceText: string): boolean {
+  const normalized = evidenceText.trim();
   return (
     normalized.length > 0 &&
     !/^(?:\[.*\]|<.*>|none|n\/a|unknown|tbd)$/iu.test(normalized)
@@ -106,8 +106,10 @@ function isConcreteRedValue(value: string): boolean {
 }
 
 /** Detect a direct denial immediately after a field's positive classification. */
-function startsWithNegatedAssertion(value: string): boolean {
-  const normalized = value.trim().replace(/^[?:;,.\u2013\u2014-]+\s*/u, "");
+function startsWithNegatedAssertion(assertionText: string): boolean {
+  const normalized = assertionText
+    .trim()
+    .replace(/^[?:;,.\u2013\u2014-]+\s*/u, "");
   return /^(?:(?:no|not|none|never|false|absent|without|unknown|tbd|n\/a|zero|0)\b|(?:did|does|was|were)\s+not\b)/iu.test(
     normalized,
   );
@@ -115,9 +117,9 @@ function startsWithNegatedAssertion(value: string): boolean {
 
 /** Map one pressure description to the documented pressure taxonomy. */
 function documentedPressure(
-  value: string,
+  pressureText: string,
 ): (typeof RED_PRESSURE_TYPES)[number] | null {
-  const normalized = value
+  const normalized = pressureText
     .toLowerCase()
     .replace(/[-_]+/gu, " ")
     .replace(/\s+/gu, " ")
@@ -165,17 +167,18 @@ function hasExplicitFailureOutcome(section: string): boolean {
 function verbatimRationalisationValue(line: string): string | null {
   const bullet = line.trim();
   if (!bullet.startsWith("- ")) return null;
-  const value = bullet.slice(2).trim();
+  const bulletText = bullet.slice(2).trim();
   const quotePair = VERBATIM_QUOTE_PAIRS.find(
-    ([open, close]) => value.startsWith(open) && value.endsWith(close),
+    ([open, close]) =>
+      bulletText.startsWith(open) && bulletText.endsWith(close),
   );
-  if (quotePair === undefined || value.length <= 2) return null;
-  return value.slice(quotePair[0].length, -quotePair[1].length);
+  if (quotePair === undefined || bulletText.length <= 2) return null;
+  return bulletText.slice(quotePair[0].length, -quotePair[1].length);
 }
 
 /** Reject quoted prose that explicitly reports an absent rationalisation. */
-function isAbsentRationalisation(value: string): boolean {
-  const normalized = value.trim().replace(/\s+/gu, " ");
+function isAbsentRationalisation(rationalisationText: string): boolean {
+  const normalized = rationalisationText.trim().replace(/\s+/gu, " ");
   return /^(?:(?:none|nothing)\s+(?:(?:(?:was|were)\s+)?(?:observed|captured|recorded|provided|available|said|heard|offered)|occurred|to\s+(?:capture|record|quote|say|provide|offer))|no\s+(?:rationali[sz]ations?|quotes?|excuses?)\s+(?:(?:(?:was|were)\s+)?(?:observed|captured|recorded|provided|available|given|made)|occurred)|(?:(?:the\s+)?agent\s+)?(?:did\s+not|never)\s+(?:rationali[sz]e|say|provide|offer|give))\b/iu.test(
     normalized,
   );

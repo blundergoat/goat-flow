@@ -372,12 +372,12 @@ export function verifyAgentHookRegistrationMatrix(
 
 /** Writes a cleaned temporary target project for hook-registrar assertions.
  *
- * @param fn - the case body, given the project root; the directory is removed afterwards even on throw
+ * @param scenario - the case body, given the project root; the directory is removed afterwards even on throw
  */
-export function withTempProject(fn: (root: string) => void): void {
+export function withTempProject(scenario: (root: string) => void): void {
   const root = mkdtempSync(join(tmpdir(), "goat-flow-hook-registrar-"));
   try {
-    fn(root);
+    scenario(root);
   } finally {
     rmSync(root, { force: true, recursive: true });
   }
@@ -802,16 +802,16 @@ export function runLauncherWithPayload(
     `goat-flow-hook-payload-${process.pid}-${Date.now()}.json`,
   );
   writeFileSync(payloadPath, payload);
-  const fd = openSync(payloadPath, "r");
+  const fileDescriptor = openSync(payloadPath, "r");
   try {
     return spawnSync("bash", ["-c", command], {
       cwd,
       encoding: "utf8",
       env,
-      stdio: [fd, "pipe", "pipe"],
+      stdio: [fileDescriptor, "pipe", "pipe"],
     });
   } finally {
-    closeSync(fd);
+    closeSync(fileDescriptor);
     rmSync(payloadPath, { force: true });
   }
 }
@@ -836,16 +836,16 @@ export function runClaudeLauncher(
     `goat-flow-hook-payload-${process.pid}-${Date.now()}.json`,
   );
   writeFileSync(payloadPath, payload);
-  const fd = openSync(payloadPath, "r");
+  const fileDescriptor = openSync(payloadPath, "r");
   try {
     return spawnSync(handler.command, handler.args, {
       cwd,
       encoding: "utf8",
       env,
-      stdio: [fd, "pipe", "pipe"],
+      stdio: [fileDescriptor, "pipe", "pipe"],
     });
   } finally {
-    closeSync(fd);
+    closeSync(fileDescriptor);
     rmSync(payloadPath, { force: true });
   }
 }

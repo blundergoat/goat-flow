@@ -239,12 +239,15 @@ function assertCarriesContract(surface: string, text: string): void {
     );
   }
   // Allowed enum values must match the parser's lists verbatim.
-  for (const value of [
+  for (const candidate of [
     ...QUALITY_FINDING_TYPES,
     ...QUALITY_FINDING_SEVERITIES,
     ...QUALITY_EVIDENCE_METHODS,
   ]) {
-    assert.ok(text.includes(value), `${surface}: missing enum value ${value}`);
+    assert.ok(
+      text.includes(candidate),
+      `${surface}: missing enum value ${candidate}`,
+    );
   }
   // One bounded saver owns redaction, validation, destination choice, and existence proof.
   assert.ok(

@@ -28,9 +28,9 @@ describe("dashboard terminal endpoints", () => {
       }),
     });
     assert.equal(res.status, 400);
-    const data = expectRecord(body, "Terminal create error");
-    assert.equal(data.path, "body.runner");
-    assert.match(String(data.error), /unknown runner: cursor/);
+    const payload = expectRecord(body, "Terminal create error");
+    assert.equal(payload.path, "body.runner");
+    assert.match(String(payload.error), /unknown runner: cursor/);
   });
 
   it("GET /api/terminal/list returns an empty list when no sessions are running", async () => {
@@ -43,11 +43,11 @@ describe("dashboard terminal endpoints", () => {
     const { res, body } = await fetchJson("/api/terminal/sessions");
     assert.equal(res.status, 200);
 
-    const data = expectRecord(body, "Terminal sessions response");
-    assert.ok(Array.isArray(data.sessions));
-    assert.deepEqual(data.sessions, []);
-    assert.equal(data.maxSessions, TERMINAL_MAX_SESSIONS);
-    assert.equal(data.activeCount, 0);
+    const payload = expectRecord(body, "Terminal sessions response");
+    assert.ok(Array.isArray(payload.sessions));
+    assert.deepEqual(payload.sessions, []);
+    assert.equal(payload.maxSessions, TERMINAL_MAX_SESSIONS);
+    assert.equal(payload.activeCount, 0);
   });
 
   it("POST /api/terminal/:id/upload-image rejects an unsafe session id", async () => {
@@ -60,8 +60,8 @@ describe("dashboard terminal endpoints", () => {
       },
     );
     assert.equal(res.status, 400);
-    const data = expectRecord(body, "Upload bad-id error");
-    assert.match(String(data.error), /Invalid session id/);
+    const payload = expectRecord(body, "Upload bad-id error");
+    assert.match(String(payload.error), /Invalid session id/);
   });
 
   it("POST /api/terminal/:id/upload-image returns 404 for an unknown session id", async () => {
@@ -80,8 +80,8 @@ describe("dashboard terminal endpoints", () => {
       },
     );
     assert.equal(res.status, 404);
-    const data = expectRecord(body, "Upload missing-session error");
-    assert.match(String(data.error), /Session not found/);
+    const payload = expectRecord(body, "Upload missing-session error");
+    assert.match(String(payload.error), /Session not found/);
   });
 
   it("POST /api/terminal/:id/upload-image rejects an empty files array", async () => {
@@ -91,9 +91,9 @@ describe("dashboard terminal endpoints", () => {
       body: JSON.stringify({ files: [] }),
     });
     assert.equal(res.status, 400);
-    const data = expectRecord(body, "Upload empty-files error");
-    assert.equal(data.path, "body.files");
-    assert.match(String(data.error), /at least one file/);
+    const payload = expectRecord(body, "Upload empty-files error");
+    assert.equal(payload.path, "body.files");
+    assert.match(String(payload.error), /at least one file/);
   });
 
   it("POST /api/terminal/:id/upload-image rejects too many files in one request", async () => {
@@ -110,9 +110,9 @@ describe("dashboard terminal endpoints", () => {
       }),
     });
     assert.equal(res.status, 400);
-    const data = expectRecord(body, "Upload too-many error");
-    assert.equal(data.path, "body.files");
-    assert.match(String(data.error), /at most 5 file/);
+    const payload = expectRecord(body, "Upload too-many error");
+    assert.equal(payload.path, "body.files");
+    assert.match(String(payload.error), /at most 5 file/);
   });
 
   it("POST /api/terminal/:id/upload-image rejects malformed JSON", async () => {
@@ -122,8 +122,8 @@ describe("dashboard terminal endpoints", () => {
       body: "{not json",
     });
     assert.equal(res.status, 400);
-    const data = expectRecord(body, "Upload bad-json error");
-    assert.match(String(data.error), /invalid JSON/);
+    const payload = expectRecord(body, "Upload bad-json error");
+    assert.match(String(payload.error), /invalid JSON/);
   });
 
   it("POST /api/terminal/:id/upload-image returns JSON 413 for oversized bodies", async () => {
@@ -133,7 +133,7 @@ describe("dashboard terminal endpoints", () => {
       body: "x".repeat(TERMINAL_UPLOAD_MAX_BODY_BYTES + 1),
     });
     assert.equal(res.status, 413);
-    const data = expectRecord(body, "Upload oversized error");
-    assert.match(String(data.error), /Upload body too large/);
+    const payload = expectRecord(body, "Upload oversized error");
+    assert.match(String(payload.error), /Upload body too large/);
   });
 });

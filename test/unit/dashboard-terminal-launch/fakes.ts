@@ -93,12 +93,12 @@ function scheduleFakeTimer(
   state: FakeTimerState,
   id: number,
   callback: (...args: unknown[]) => void,
-  ms: number | undefined,
+  delayMs: number | undefined,
   args: unknown[],
   intervalMs?: number,
 ): FakeTimerHandle {
   state.timers.set(id, {
-    at: state.now + (ms ?? 0),
+    at: state.now + (delayMs ?? 0),
     callback: () => callback(...args),
     ...(intervalMs === undefined ? {} : { intervalMs }),
   });
@@ -213,8 +213,8 @@ class FakeTerminal {
   /**
    * Mutates `written` by appending output that helpers would write into xterm.
    */
-  write(data: string): void {
-    this.written.push(data);
+  write(chunk: string): void {
+    this.written.push(chunk);
   }
 
   /**
@@ -248,8 +248,8 @@ class FakeTerminal {
   /**
    * Simulates xterm input events emitted toward the PTY.
    */
-  emitData(data: string): void {
-    this.dataHandler?.(data);
+  emitData(chunk: string): void {
+    this.dataHandler?.(chunk);
   }
 
   /**

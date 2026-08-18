@@ -85,13 +85,13 @@ function readStringArray(rawValue: unknown, label: string): string[] {
 
 /** Read language/path/glob rows; throws with row indexes so bad shipped data is fixable. */
 function readLanguageSignals(
-  value: unknown,
+  rawRows: unknown,
   label: string,
 ): LanguagePathGlobSignal[] {
-  if (!Array.isArray(value)) {
+  if (!Array.isArray(rawRows)) {
     throw new Error(`${PROJECT_STACK_DATA_PATH} has an invalid ${label} list`);
   }
-  return value.map((entry, index) => {
+  return rawRows.map((entry, index) => {
     if (!isRecord(entry) || typeof entry.language !== "string") {
       throw new Error(
         `${PROJECT_STACK_DATA_PATH} has an invalid ${label}[${index}] entry`,
@@ -129,13 +129,13 @@ function readToolSignals(
 
 /** Read setup-framework marker rows from the project-stack data JSON; it throws on a malformed row so detection never runs on half a table. */
 function readSetupFrameworkMarkers(
-  value: unknown,
+  rawRows: unknown,
   label: string,
 ): SetupFrameworkMarkerSignal[] {
-  if (!Array.isArray(value)) {
+  if (!Array.isArray(rawRows)) {
     throw new Error(`${PROJECT_STACK_DATA_PATH} has an invalid ${label} list`);
   }
-  return value.map((entry, index) => {
+  return rawRows.map((entry, index) => {
     if (!isRecord(entry) || typeof entry.name !== "string") {
       throw new Error(
         `${PROJECT_STACK_DATA_PATH} has an invalid ${label}[${index}] entry`,
@@ -151,13 +151,13 @@ function readSetupFrameworkMarkers(
 
 /** Read Node framework rows from the project-stack data JSON; it throws on a malformed row so detection never runs on half a table. */
 function readNodeFrameworkSignals(
-  value: unknown,
+  rawRows: unknown,
   label: string,
 ): NodeFrameworkSignal[] {
-  if (!Array.isArray(value)) {
+  if (!Array.isArray(rawRows)) {
     throw new Error(`${PROJECT_STACK_DATA_PATH} has an invalid ${label} list`);
   }
-  return value.map((entry, index) => {
+  return rawRows.map((entry, index) => {
     if (!isRecord(entry) || typeof entry.language !== "string") {
       throw new Error(
         `${PROJECT_STACK_DATA_PATH} has an invalid ${label}[${index}] entry`,
@@ -172,13 +172,13 @@ function readNodeFrameworkSignals(
 
 /** Read Node test framework rows from the project-stack data JSON; it throws on a malformed row so detection never runs on half a table. */
 function readNodeTestFrameworkSignals(
-  value: unknown,
+  rawRows: unknown,
   label: string,
 ): NodeTestFrameworkSignal[] {
-  if (!Array.isArray(value)) {
+  if (!Array.isArray(rawRows)) {
     throw new Error(`${PROJECT_STACK_DATA_PATH} has an invalid ${label} list`);
   }
-  return value.map((entry, index) => {
+  return rawRows.map((entry, index) => {
     if (!isRecord(entry) || typeof entry.name !== "string") {
       throw new Error(
         `${PROJECT_STACK_DATA_PATH} has an invalid ${label}[${index}] entry`,

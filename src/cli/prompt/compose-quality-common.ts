@@ -76,21 +76,21 @@ export function formatLocalDate(date: Date = new Date()): string {
 /**
  * Render one JSON-safe string literal for the embedded example block.
  *
- * @param value - raw string to embed in the prompt's JSON example
+ * @param text - raw string to embed in the prompt's JSON example
  * @returns the value as a quoted, escaped JSON string literal
  */
-export function jsonString(value: string): string {
-  return JSON.stringify(value);
+export function jsonString(text: string): string {
+  return JSON.stringify(text);
 }
 
 /**
  * Render a Bash single-quoted literal so generated snippets do not expand `$` or backticks.
  *
- * @param value - raw string to quote for a generated shell snippet
+ * @param argument - raw string to quote for a generated shell snippet
  * @returns a single-quoted Bash literal with embedded quotes escaped as `'\''`
  */
-export function shellSingleQuote(value: string): string {
-  return `'${value.replace(/'/g, "'\\''")}'`;
+export function shellSingleQuote(argument: string): string {
+  return `'${argument.replace(/'/g, "'\\''")}'`;
 }
 
 /**
@@ -343,11 +343,11 @@ function renderPriorFindingSummary(summary: string): string {
 /**
  * Escape Markdown table cell content emitted from scorer details.
  *
- * @param value - raw cell text that may contain pipes or newlines
+ * @param cellText - raw cell text that may contain pipes or newlines
  * @returns single-line cell text with `|` escaped and line breaks flattened to spaces
  */
-export function markdownTableCell(value: string): string {
-  return value.replaceAll("|", "\\|").replace(/\r?\n/g, " ");
+export function markdownTableCell(cellText: string): string {
+  return cellText.replaceAll("|", "\\|").replace(/\r?\n/g, " ");
 }
 
 /**

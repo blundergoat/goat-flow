@@ -68,11 +68,11 @@ function dashboardRefitCapableXterm(
 
 /** Send the current xterm dimensions over an open backend WebSocket. */
 function dashboardSendTerminalResize(
-  ws: WebSocket | undefined,
+  socket: WebSocket | undefined,
   xterm: XTermInstance,
 ): void {
-  if (ws?.readyState !== WebSocket.OPEN) return;
-  ws.send(
+  if (socket?.readyState !== WebSocket.OPEN) return;
+  socket.send(
     JSON.stringify({
       type: "resize",
       cols: xterm.cols,
@@ -84,10 +84,10 @@ function dashboardSendTerminalResize(
 /** Fit a terminal and notify the backend of its new dimensions. */
 function dashboardFitTerminalWithResize(
   xterm: XTermInstance,
-  ws: WebSocket | undefined,
+  socket: WebSocket | undefined,
 ): void {
   xterm._addonFit?.fit();
-  dashboardSendTerminalResize(ws, xterm);
+  dashboardSendTerminalResize(socket, xterm);
 }
 
 /** Retry active-view refits until the freshly-shown terminal container has layout width. */

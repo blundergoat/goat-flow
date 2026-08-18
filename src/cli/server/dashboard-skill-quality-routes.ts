@@ -230,18 +230,18 @@ async function readEvaluateRequestBody(
  * Score a decoded evaluate request against the project, routing a multi-file upload to the bundle scorer and a single payload to the content scorer.
  * Treats a missing `content` field as an empty string so the content path always has a value to score.
  */
-function evaluateRequestBody(projectPath: string, value: EvaluateBody) {
-  if (value.files) {
+function evaluateRequestBody(projectPath: string, body: EvaluateBody) {
+  if (body.files) {
     return evaluateUploadedBundle(projectPath, {
-      files: value.files,
-      suggestedName: value.suggestedName,
-      kind: value.kind,
+      files: body.files,
+      suggestedName: body.suggestedName,
+      kind: body.kind,
     });
   }
   return evaluateContent(projectPath, {
-    content: value.content ?? "",
-    suggestedName: value.suggestedName,
-    kind: value.kind,
+    content: body.content ?? "",
+    suggestedName: body.suggestedName,
+    kind: body.kind,
   });
 }
 

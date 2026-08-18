@@ -191,12 +191,13 @@ function normalizeTomlDottedKey(rawKey: string): string {
 
 /** Parse the simple scalar values used in Codex config.toml. */
 function parseTomlScalar(rawValue: string): unknown {
-  const value = rawValue.trim();
-  if (value === "true") return true;
-  if (value === "false") return false;
-  if (/^-?\d+$/u.test(value)) return Number(value);
-  if (value.startsWith('"') && value.endsWith('"')) return value.slice(1, -1);
-  return value;
+  const trimmedFlag = rawValue.trim();
+  if (trimmedFlag === "true") return true;
+  if (trimmedFlag === "false") return false;
+  if (/^-?\d+$/u.test(trimmedFlag)) return Number(trimmedFlag);
+  if (trimmedFlag.startsWith('"') && trimmedFlag.endsWith('"'))
+    return trimmedFlag.slice(1, -1);
+  return trimmedFlag;
 }
 
 /** Require settings-based read denies for the main secret and credential path families. */
@@ -265,28 +266,28 @@ export interface CodexWorkspaceRootEntry {
  * Turn one Codex config key into workspace-root rules, covering both shapes a user's config can be written in.
  *
  * @param key - config key being read
- * @param value - value at that key; anything other than a string is not a rule and yields nothing
+ * @param entryValue - value at that key; anything other than a string is not a rule and yields nothing
  * @param inlineTableKey - key whose value holds every rule on one line
  * @param prefix - key prefix used when each rule is its own dotted key
  * @returns the rules this key contributes; an empty array means the key is unrelated to workspace roots
  */
 function collectCodexWorkspaceRootEntry(
   key: string,
-  value: unknown,
+  entryValue: unknown,
   inlineTableKey: string,
   prefix: string,
 ): CodexWorkspaceRootEntry[] {
   // The whole table written on one line, so every rule is parsed out of this single value.
-  if (key === inlineTableKey && typeof value === "string") {
-    return parseTomlInlineStringTable(value).map(([pattern, mode]) => ({
+  if (key === inlineTableKey && typeof entryValue === "string") {
+    return parseTomlInlineStringTable(entryValue).map(([pattern, mode]) => ({
       pattern,
       mode,
     }));
   }
   // Any other key belongs to a different setting, so it contributes no rule.
-  if (typeof value !== "string" || !key.startsWith(prefix)) return [];
+  if (typeof entryValue !== "string" || !key.startsWith(prefix)) return [];
   const pattern = key.slice(prefix.length);
-  return pattern ? [{ pattern, mode: value }] : [];
+  return pattern ? [{ pattern, mode: entryValue }] : [];
 }
 
 /**
@@ -336,11 +337,11 @@ function collectCodexDeniedWorkspaceRootPatterns(
 
 /** Parse the single-line TOML inline string table shape Codex accepts. */
 function parseTomlInlineStringTable(rawValue: string): Array<[string, string]> {
-  const value = rawValue.trim();
-  if (!value.startsWith("{") || !value.endsWith("}")) return [];
+  const trimmedTable = rawValue.trim();
+  if (!trimmedTable.startsWith("{") || !trimmedTable.endsWith("}")) return [];
   const entries: Array<[string, string]> = [];
   const entryPattern = /"((?:\\.|[^"\\])*)"\s*=\s*"((?:\\.|[^"\\])*)"/gu;
-  for (const match of value.matchAll(entryPattern)) {
+  for (const match of trimmedTable.matchAll(entryPattern)) {
     const [, key, mode] = match;
     if (key && mode) entries.push([key, mode]);
   }
