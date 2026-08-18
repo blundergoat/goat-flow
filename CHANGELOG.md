@@ -34,6 +34,9 @@
 - **`goat-review` emits only resolved Review Integrity fields** - Small reviews stop drowning in `n/a` rows; degradation flags stay mandatory.
 - **`goat-plan` milestones say what breaks and what helps** - Standard milestones and `ISSUE.md` answer both in one plain sentence each.
 - **Comment and changelog rules ship with runnable checks** - Comment width, prose-run, and bullet-length limits are commands you can run.
+- **A reply now has one editing rule instead of three** - Correctness and residue only, widened just when you ask; the conflicting wordings are gone.
+- **`comments only` and `no behavioural changes` are separate claims** - A local rename falsifies the first but no longer the second.
+- **Sentence diagnostics no longer read as an order to edit** - `Fix on Sight` is now `Candidate Patterns`; a matched phrase stays only a candidate.
 - **Gruff guidance stops declaring the tool missing in consumer projects** - It checks configured paths, wrappers, and package-local installs first.
 - **The quality prompt cites framework ADRs by name** - A path citation no longer resolves to a consumer project's own ADRs.
 

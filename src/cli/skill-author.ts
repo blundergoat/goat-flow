@@ -579,12 +579,10 @@ function lstatIfPresent(path: string): Stats | null {
  * Every parent component is walked rather than only the immediate one, because a symlink anywhere in the chain could redirect the write outside the
  * selected project.
  *
- * Error behavior: throws SkillNewInputError for a destination outside the project or a symlinked or non-directory parent; walking stops at the first
- * component that does not exist yet.
- *
  * @param projectRoot - project the scaffold must stay inside
  * @param proposedPath - absolute destination the caller wants to create
- * @returns nothing; returning means the destination is safe to create
+ * @returns nothing; returning means the destination is safe to create. It throws SkillNewInputError for a destination outside the project or a
+ *   symlinked or non-directory parent; walking stops at the first component that does not exist yet.
  */
 function assertSafeScaffoldDestination(
   projectRoot: string,

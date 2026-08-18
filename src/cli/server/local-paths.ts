@@ -252,11 +252,10 @@ function assertLocalStatePathPurpose(
  * Containment is re-checked here rather than assumed, because a relative path or a symlinked component could still lead outside
  * a project that was itself perfectly valid.
  *
- * Error behavior: throws LocalPathValidationError when the result would land outside `.goat-flow`, before any read or write.
- *
  * @param project - project already proved valid by `validateLocalPath`
  * @param relativePath - path within `.goat-flow`; traversal segments are rejected rather than normalised away
- * @returns the absolute path, safe to read or write
+ * @returns the absolute path, safe to read or write. It throws LocalPathValidationError when the result would land outside `.goat-flow`, before
+ *   any read or write.
  */
 export function resolveValidatedLocalStatePath(
   project: ValidatedLocalPath,

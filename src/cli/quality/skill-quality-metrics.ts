@@ -23,27 +23,32 @@ import {
   type MetricSignals,
 } from "./skill-quality-types.js";
 
-/** Workflow-summary detection for skill descriptions. Sourced from the prime
- *  writing-skills corpus (search: `Testing revealed that when a description
- *  summarizes`): when a description names *what the skill does internally*
- *  (procedural verbs, "X then Y" connectives) rather than *when to trigger*,
- *  agents tend to follow the description and skip the skill body. Detected as
- *  a yellow signal only - emits a tip via the trigger-clarity detail string;
- *  never deducts score. Verb list narrowed to keep <10% false-positive rate
- *  on the in-tree `.claude/skills` corpus. */
+/**
+ * Workflow-summary detection for skill descriptions, sourced from the prime writing-skills corpus
+ * (search: `Testing revealed that when a description summarizes`).
+ *
+ * A description naming what the skill does internally, through procedural verbs or "X then Y" connectives, rather
+ * than when to trigger it, leads agents to follow the description and skip the skill body.
+ *
+ * This is a yellow signal only: it emits a tip through the trigger-clarity detail string and never deducts score.
+ * The verb list is narrowed to keep false positives under 10% on the in-tree `.claude/skills` corpus.
+ */
 const WORKFLOW_VERB_RE =
   /\b(dispatches?|implements?(?:ing|ed)?|executes?(?:ing|ed)?|generates?|runs?|produces?|creates?|builds?|refactors?|writes?)\b/i;
 const WORKFLOW_CONNECTIVE_RE = /\b(then|between)\b/i;
 
-/** Boundary-command labels, tolerant of a mode qualifier. A skill may scope a
- *  command to one of its modes - goat-debug ships `**ALWAYS in Diagnose mode:**`
- *  so Investigate mode is not bound by a diagnosis-only rule - and the triplet
- *  still earns exclusion credit because all three commands are present. The
- *  in-tree contract accepts the same qualified form (`test/contract/skill-hardening-shared-1.test.ts`
- *  (search: `keeps canonical skill boundaries explicit and route-focused`)), so
- *  scoring the bare label only would report a false negative on a deliberately
- *  scoped boundary. Matching stays line-local: the qualifier cannot cross a `*`
- *  or a newline, so one command's label cannot absorb the next. */
+/**
+ * Boundary-command labels, tolerant of a mode qualifier.
+ *
+ * A skill may scope a command to one of its modes, as goat-debug does with `**ALWAYS in Diagnose mode:**`, and the
+ * triplet still earns exclusion credit because all three commands are present.
+ *
+ * The in-tree contract accepts that qualified form (`test/contract/skill-hardening-shared-1.test.ts`
+ * (search: `keeps canonical skill boundaries explicit and route-focused`)), so scoring the bare label alone would
+ * report a false negative on a deliberately scoped boundary.
+ *
+ * Matching stays line-local: the qualifier cannot cross a `*` or a newline, so one label cannot absorb the next.
+ */
 const BOUNDARY_NEVER_RE = /\*\*NEVER\b[^*\n]*:\*\*/i;
 const BOUNDARY_ALWAYS_RE = /\*\*ALWAYS\b[^*\n]*:\*\*/i;
 const BOUNDARY_DEFER_TO_RE = /\*\*DEFER TO\b[^*\n]*:\*\*/i;
@@ -697,10 +702,9 @@ function hasSkillHallmarkSection(input: IdentityFitInput): boolean {
  * Dispatchers and reports are recognised by their own hallmark section rather than the general signal count, because
  * neither carries the intake and mode structure a workflow skill does.
  *
- * A workflow skill showing strong reference signals is demoted in score, since that is the shape that should have been
- * filed under skill-docs rather than installed as an invocable skill.
- *
- * @param input - the subtype, the two signal counts, and the hallmark section flags
+ * @param input - the subtype, the two signal counts, and the hallmark section flags; a workflow skill showing
+ *   strong reference signals is demoted, since that is the shape that belonged under skill-docs rather than
+ *   installed as an invocable skill
  * @param resultSignals - UI signals mutated in place, so the Skills tab can offer a promote or demote action
  * @param notes - accumulator appended to in place; each push is one thing the user will see explained
  * @returns the fit score out of 10
@@ -765,12 +769,11 @@ function scoreReferenceIdentityFit(
 /**
  * Scores whether an artifact is filed as the right kind, and suggests promoting or demoting it when it is not.
  *
- * This is what surfaces the "you installed this as a skill but it reads like a reference" advice in the Skills tab, which
- * matters because an artifact in the wrong place is either never invoked or invoked when it should not be.
+ * This is what surfaces the "you installed this as a skill but it reads like a reference" advice in the Skills tab,
+ * which matters because an artifact in the wrong place is either never invoked or invoked when it should not be.
  *
- * Meta and index references score full marks outright, since neither is user-invocable and neither should be promoted.
- *
- * @param input - the artifact, its raw content, and its detected subtype
+ * @param input - the artifact, its raw content, and its detected subtype; meta and index references score full
+ *   marks outright, since neither is user-invocable and neither should be promoted
  * @returns the scored metric, carrying any promote or demote signal for the UI to act on
  */
 const skillReferenceFit: MetricScorer = (input) => {

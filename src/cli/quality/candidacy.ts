@@ -264,15 +264,14 @@ const CANDIDACY_RULES: readonly CandidacyRule[] = [
 /**
  * Decide what a draft should become, from its structure alone.
  *
- * A user reaches this by running `quality candidacy` on a file they have written but not yet filed, asking whether it is a
- * skill, a reference, a learning-loop entry, or something that belongs as one line in an instruction file.
- *
- * The first matching rule wins, so the table order is the routing policy; nothing matching means the draft carries no
- * decisive signal and the verdict is deliberately low-confidence rather than a guess.
+ * A user reaches this by running `quality candidacy` on a file they have written but not yet filed, asking whether
+ * it is a skill, a reference, a learning-loop entry, or one line in an instruction file.
  *
  * @param content - the draft text being routed
  * @param suggestedName - filename hint used by the name-based rules; omitted just skips those signals
- * @returns the recommendation, its confidence, the reasoning shown to the user, and the next steps to take
+ * @returns the recommendation, its confidence, the reasoning shown to the user, and the next steps. The first
+ *   matching rule wins, so table order is the routing policy, and nothing matching yields a deliberately
+ *   low-confidence verdict rather than a guess.
  */
 function analyzeDraft(
   content: string,

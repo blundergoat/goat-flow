@@ -528,16 +528,15 @@ interface HookAgentStateFacts {
 /**
  * Combine registry and local facts into the single hook state a user sees, while preserving the causal provider gap.
  *
- * These arrive as one named object rather than five positional booleans, because a call reading `false, false, false`
- * tells the next reader nothing about which condition each one describes.
- *
- * When the provider itself excludes the hook, that exclusion owns the state and the local facts are treated as satisfied,
- * so the user is shown "the provider does not support this" instead of a repair they cannot perform.
+ * The facts arrive as one named object rather than five positional booleans, because a call reading
+ * `false, false, false` tells the next reader nothing about which condition each one describes.
  *
  * @param projectPath - selected project, used to check local proof of provider support
  * @param agent - agent whose hook state is being resolved
  * @param spec - hook being resolved, supplying its provider evidence
- * @param facts - the observed hook facts; `doesProviderExclusionOwnState` defaults to false
+ * @param facts - the observed hook facts; `doesProviderExclusionOwnState` defaults to false. When the provider
+ *   excludes the hook, that exclusion owns the state and the local facts count as satisfied, so the user is shown
+ *   "the provider does not support this" instead of a repair they cannot perform.
  * @returns the effective state, its label, evidence identity, and the repair the user should run; the identity is null
  *   when the provider is undocumented
  */

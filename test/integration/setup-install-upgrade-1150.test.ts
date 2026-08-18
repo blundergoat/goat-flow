@@ -1,10 +1,12 @@
 /**
  * Regression proof for the measured 1.15.0-to-1.15.1 upgrade failure.
- * A consumer had added project content under a managed README whose package template
- * never changed, and had switched a shipped hook off with an explanatory comment.
- * The upgrade blocked on that one row, and the only escape erased the added content.
- * These fixtures run the public CLI against disposable targets, so the assertions are
- * about what a user's project looks like after the command, not about internal state.
+ *
+ * A consumer had added project content under a managed README whose package template never changed, and had
+ * switched a shipped hook off with an explanatory comment. The upgrade blocked on that one row, and the only escape
+ * erased the added content.
+ *
+ * These fixtures run the public CLI against disposable targets, so the assertions are about what a user's project
+ * looks like after the command rather than about internal state.
  */
 import { describe, it } from "node:test";
 import type { TestContext } from "node:test";
@@ -63,12 +65,13 @@ interface MeasuredConsumer {
 
 /**
  * Install one agent, then reproduce the measured consumer edits on top of it.
- * Installing first is what makes the reproduction faithful: the recorded baseline hash
- * equals the current package template, which is exactly the unchanged-template state.
- * This writes into a disposable target created by `makeTempProject`.
+ *
+ * Installing first is what makes the reproduction faithful: the recorded baseline hash equals the current package
+ * template, which is exactly the unchanged-template state.
  *
  * @param agent - agent whose managed mirror is installed before the edits
- * @returns the target's paths plus the exact bytes the upgrade must preserve
+ * @returns the target's paths plus the exact bytes the upgrade must preserve; it writes into a disposable target
+ *   created by `makeTempProject`
  */
 function measuredConsumerTarget(agent: string): MeasuredConsumer {
   const projectPath = makeTempProject();
@@ -255,9 +258,9 @@ describe("1.15.0 consumer upgrade", () => {
 
   /**
    * Fixture purpose: prove no unchanged-template rule reaches a redirected destination.
-   * Filesystem side effects: replaces one managed file with a symlink in a disposable target.
-   * Error behavior: a host that refuses unprivileged symlinks throws `EPERM`, which skips
-   * this case rather than reporting a policy failure; any other error is rethrown.
+   *
+   * It writes one managed file as a symlink in a disposable target. A host that refuses unprivileged symlinks
+   * throws `EPERM`, which skips this case rather than reporting a policy failure; any other error is rethrown.
    */
   it("still blocks a redirected managed target under the same unchanged template", (testContext) => {
     const consumer = measuredConsumerTarget("claude");

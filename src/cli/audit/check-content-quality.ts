@@ -1,19 +1,14 @@
 /**
- * Cold-path content quality linting.
+ * Cold-path content quality linting over truth-bearing prose: instruction files, installed skills, and canonical docs.
+ * Logic is ported inline from cclint and agnix, because the project accepts no new runtime dependencies.
  *
- * Three detector families, all running on truth-bearing prose (instruction files, installed skills, canonical docs).
- * Ports logic inline from cclint and agnix (per Assumption "no new runtime deps"):
+ * Three detector families run over every scanned file:
  *
- *   - Vague-term detection (3-term conservative subset: `properly`,
- *     `correctly`, `appropriately`). INFO severity.
- *   - Generic-instruction detection (5 cclint regex patterns, e.g.
- *     "follow best practices"). WARNING severity.
- *   - Non-actionable statement detection (3 cclint regex patterns with
- *     negative lookaheads, e.g. bare "remember" without "to"). INFO.
+ * - Vague terms, a conservative three-word subset: `properly`, `correctly`, `appropriately`. INFO severity.
+ * - Generic instructions, five cclint patterns such as "follow best practices". WARNING severity.
+ * - Non-actionable statements, three cclint patterns such as a bare "remember" with no "to". INFO severity.
  *
- * Both cclint code-block-skipping bugs are fixed here (ContentOrganizationRule and ContentAppropriatenessRule both leak fenced-block content into
- * their matchers).
- * A single `inCodeBlock` state machine is shared across all three detector families - toggled on lines starting with ``` (after trimming).
+ * One shared `inCodeBlock` state machine skips fenced blocks for all three families, which is the bug both cclint rules had.
  */
 import type { AuditContext } from "./types.js";
 import type { ContentFinding, ContentSeverity } from "./types.js";
@@ -45,13 +40,13 @@ interface PatternRule {
   suggestion?: (match: string, line: string) => string | undefined;
 }
 
-/** Scan mode for a target.
- *  - "full": all three detector families (vague-term, generic-instruction, non-actionable).
- *  - "restricted": generic-instruction + non-actionable only. Used for
- *    learning-loop surfaces (footguns/lessons), whose historical-incident
- *    prose legitimately uses vague-adjacent words ("projects that correctly
- *    omitted those fields"). The narrow generic and non-actionable patterns
- *    rarely false-positive on historical prose; vague-term does. */
+/**
+ * Scan mode for a target.
+ *
+ * - `full`: all three detector families, for surfaces that must read as current instruction.
+ * - `restricted`: generic-instruction and non-actionable only, for learning-loop surfaces whose incident prose
+ *   legitimately uses vague-adjacent words such as "projects that correctly omitted those fields".
+ */
 type ScanMode = "full" | "restricted";
 
 /** Static target scope for full content-quality checks: truth-bearing prose.
@@ -108,11 +103,12 @@ const STATIC_QUALITY_TARGETS = [
 
 const DECISIONS_DIR = ".goat-flow/learning-loop/decisions/";
 
-/** Learning-loop buckets. Scanned in restricted mode (no vague-term checks)
- *  because the Symptoms/Why/Evidence sections describe past incidents and
- *  legitimately use words like "correctly"/"properly". Generic-instruction and
- *  non-actionable detectors still apply - those patterns should never appear
- *  in actionable Prevention blocks. */
+/**
+ * Learning-loop buckets, scanned in restricted mode.
+ *
+ * Symptoms, Why, and Evidence sections describe past incidents and legitimately use words like "correctly", so
+ * vague-term checks would fire on honest prose; the other two detectors still apply to Prevention blocks.
+ */
 const LEARNING_LOOP_DIRS = [
   ".goat-flow/learning-loop/footguns/",
   ".goat-flow/learning-loop/lessons/",
@@ -219,8 +215,7 @@ const NON_ACTIONABLE: PatternRule[] = [
  * Legacy v1.0 six-step Execution Loop drift.
  * Matches only the arrow-sequence declaration, not incidental historical prose mentioning CLASSIFY or LOG.
  *
- * All four reviewed v1.2 consumer projects (ambient-scribe, sus-form-detector, blundergoat-platform, rampart) shipped AGENTS.md with the legacy
- * six-step loop while CLAUDE.md + skill-preamble.md used the v1.2 four-step.
+ * Every reviewed v1.2 consumer shipped AGENTS.md with the six-step loop while CLAUDE.md used the four-step one.
  */
 const LEGACY_EXECUTION_LOOP: PatternRule[] = [
   {
@@ -284,13 +279,12 @@ interface ReadinessHeading {
 /**
  * Read one `#`-style heading the way a reader sees it rendered.
  *
- * Used while scanning a document for readiness sections, so an author's "Open Questions" heading is recognised whether or not they left a few spaces
- * in front of it.
- * Pure inspection: it reads the line and writes nothing, so re-running an audit never changes the document.
+ * Used while scanning for readiness sections, so an author's "Open Questions" heading is recognised whether or not
+ * they left a few spaces in front of it.
  *
  * @param line - one line of the document being audited
- * @returns the heading level and visible text, or null when this line is ordinary prose and the audit
- *   simply moves on
+ * @returns the heading level and visible text, or null when the line is ordinary prose and the audit moves on; it
+ *   reads the line and writes nothing, so re-running an audit never changes the document
  */
 function parseAtxHeading(line: string): ReadinessHeading | null {
   // Up to three leading spaces still render as a heading, so an indented "## Open Questions" the
@@ -331,11 +325,11 @@ function nextReadinessHeadingLevel(
 /**
  * Find the placeholder a user left behind in a readiness answer, if there is one.
  *
- * Use when checking a readiness section, so an unfinished-answer marker - a to-do note, "???", or a bare "Answer:" - is raised back to the author
- * instead of shipping as though it were a real answer.
+ * Use when checking a readiness section, so an unfinished answer such as a to-do note, "???", or a bare "Answer:"
+ * is raised back to the author instead of shipping as though it were real.
  *
- * Backticked text is masked out of the line before matching, so an author who writes about
- * such markers as an example is not accused of leaving one behind.
+ * Backticked text is masked before matching, so an author who writes about such markers as an example is not
+ * accused of leaving one behind.
  *
  * @param line - one line from a readiness section, exactly as the author wrote it
  * @returns the marker text to show the author; `null` means the line is properly filled in
@@ -518,14 +512,14 @@ function scanLine(
 /**
  * Scan one file, skipping fenced code blocks before applying prose detectors.
  *
- * Pass `mode: "restricted"` for learning-loop files to skip vague-term checks on incident-description prose while still rejecting generic
- * instructions.
- * Error behavior: throws nothing; every problem is reported as a content finding.
+ * Pass `mode: "restricted"` for learning-loop files to skip vague-term checks on incident prose while still
+ * rejecting generic instructions.
  *
- * @param path - Repo-relative path used in emitted findings and mode-specific rules.
- * @param text - Markdown or instruction-file content to scan.
- * @param mode - Detector set to apply for the target surface.
- * @returns Content-quality findings found outside fenced code blocks.
+ * @param path - repo-relative path used in emitted findings and mode-specific rules
+ * @param text - Markdown or instruction-file content to scan
+ * @param mode - detector set to apply for the target surface
+ * @returns findings outside fenced code blocks; it throws nothing, so every problem is reported as a finding and an
+ *   empty array means the prose passed every enabled detector
  */
 export function scanContentQuality(
   path: string,
@@ -553,8 +547,9 @@ export function scanContentQuality(
  * Find moved literal anchors on current guidance surfaces.
  *
  * Missing files remain owned by path-integrity checks.
- * Existing targets with missing needles are unambiguous drift, including accepted ADR evidence: a historical decision still needs a grep-resolvable
- * pointer to its live proof.
+ *
+ * An existing target with a missing needle is unambiguous drift, including in accepted ADR evidence: a historical
+ * decision still needs a grep-resolvable pointer to its live proof.
  */
 function scanSemanticAnchorQuality(
   ctx: AuditContext,

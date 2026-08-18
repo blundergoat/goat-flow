@@ -134,14 +134,13 @@ function relPosix(projectRoot: string, target: string): string {
  *
  * The same skill is installed under several agent directories, so the second and later sightings become mirrors of the first rather than separate
  * artifacts the user would see duplicated.
- * Side effect: mutates the `artifactsById` map in place.
  *
  * @param projectRoot - project root that paths are made relative to
  * @param artifactsById - accumulator keyed by artifact id
  * @param name - skill name, which forms the artifact id
  * @param skillFile - absolute path to this copy of the skill
  * @param source - which walk root this copy came from
- * @returns nothing; the result is the added or extended entry
+ * @returns nothing; the result is the added or extended entry. It mutates the `artifactsById` map in place.
  */
 function registerSkillArtifact(
   projectRoot: string,

@@ -1,7 +1,7 @@
 /**
- * Executes the registered Claude exec-form handlers exactly as the provider
- * spawns them: benign and blocked payloads from hostile-named projects, then
- * every catchable managed-file failure mapped to its provider response.
+ * Executes the registered Claude exec-form handlers exactly as the provider spawns them: benign and blocked
+ * payloads from hostile-named projects, then every catchable managed-file failure mapped to its provider response.
+ *
  * Windows CI runs this file at the package-minimum Node to lock ADR-053.
  */
 import assert from "node:assert/strict";

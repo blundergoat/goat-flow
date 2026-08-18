@@ -78,14 +78,14 @@ export function renderQualityHistoryText(
  * Use when a user compares two saved quality reports and needs lifecycle buckets in terminal output.
  *
  * The four fixed sections mirror the lifecycle buckets because saved-report diffs are scanned by humans and shell output, not just JSON clients.
- * Invariant: section order must match absent, new, persisted, then stuck findings.
  *
  * The absent section carries an inline caveat whenever it has rows.
  * Readers previously took that bucket as a fixed-issue list and closed remediation on the count, so the warning belongs next to the rows rather than
  * in documentation.
  *
  * @param diff - diff returned by `buildQualityDiff`; empty buckets render as `(none)` so users see no hidden rows
- * @returns human-readable diff grouped by finding lifecycle for CLI review
+ * @returns human-readable diff grouped by finding lifecycle for CLI review. It section order must match absent, new, persisted, then stuck
+ *   findings.
  */
 export function renderQualityDiffText(diff: QualityDiffResult): string {
   const header = `Setup ${diff.from.report.scores.setup.total}/100 → ${diff.to.report.scores.setup.total}/100 (${diff.setupDelta >= 0 ? `+${diff.setupDelta}` : diff.setupDelta}). System ${diff.from.report.scores.system.total}/100 → ${diff.to.report.scores.system.total}/100 (${diff.systemDelta >= 0 ? `+${diff.systemDelta}` : diff.systemDelta}).`;

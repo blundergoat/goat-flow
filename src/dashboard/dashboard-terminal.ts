@@ -387,12 +387,13 @@ function dashboardOutputLooksReadyForLaunchPrompt(
 ): boolean {
   const tail = dashboardPlainTerminalText(text).slice(-5000);
   if (dashboardOutputLooksRunnerStartupFailure(tail, runner)) return false;
-  // Antigravity composer-ready signal verified live against `agy` 1.0.1 (2026-05-24 browser-use smoke against dashboard PTY).
-  // Two anchors: 1.
-  // "Antigravity CLI <version>" — identity line present from launch. 2.
+  // Antigravity composer-ready signal, verified live against `agy` 1.0.1 by a 2026-05-24 browser-use smoke run.
   //
-  // "? for shortcuts" — composer hint shown only after the box border and model row are drawn.
-  // Combined the two patterns are uniquely Antigravity and don't collide with Claude's `/effort`-keyed composer.
+  // Both anchors must appear:
+  // - "Antigravity CLI <version>", the identity line present from launch.
+  // - "? for shortcuts", the composer hint shown only after the box border and model row are drawn.
+  //
+  // Together they are uniquely Antigravity and do not collide with Claude's `/effort`-keyed composer.
   const antigravityReady =
     /Antigravity CLI [0-9]/i.test(tail) &&
     /\?[\s\S]{0,80}for[\s\S]{0,80}shortcuts\b/i.test(tail);

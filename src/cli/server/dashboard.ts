@@ -506,12 +506,12 @@ function reportDashboardRequestFailure(
  *
  * This is the dev-mode loop: edit a dashboard file, and the tab refreshes itself instead of waiting for a manual reload.
  *
- * Side effect: starts a recursive filesystem watcher and registers a process `exit` hook to close it.
  * Error behavior: throws nothing; a send to a closed tab swallows its error so one dead client cannot stop the others reloading.
  *
  * @param dashDir - directory of built dashboard assets to watch recursively
  * @param liveReloadClients - currently connected reload sockets; an empty set simply means no tab is open to notify
- * @returns a function that stops the watcher and releases its exit hook
+ * @returns a function that stops the watcher and releases its exit hook. It starts a recursive filesystem watcher and registers a process `exit`
+ *   hook to close it.
  */
 function startDashboardDevWatcher(
   dashDir: string,
@@ -593,13 +593,12 @@ async function openLiveReloadSocket(
  * The reload channel is dev-only and carries no token, because the injected reload client has none and demanding one would
  * break auto-refresh - so it clears the same Host and Origin allowlist the terminal upgrade uses instead.
  *
- * Side effect: completes a handshake or destroys the socket; nothing is left half-open.
- *
  * @param req - the upgrade request
  * @param socket - the raw socket, destroyed for any upgrade that is not allowed or not recognised
  * @param head - the first packet of the upgraded stream
  * @param context - the running server, its token, dev-mode flag, reload state, and the terminal upgrade handler
- * @returns nothing; every path either hands the socket over or closes it
+ * @returns nothing; every path either hands the socket over or closes it. It completes a handshake or destroys the socket; nothing is left
+ *   half-open.
  */
 async function handleDashboardUpgrade(
   req: IncomingMessage,
@@ -651,10 +650,9 @@ async function handleDashboardUpgrade(
  * Terminals go before the HTTP server so a user's running agent is shut down properly rather than having its socket cut
  * from under it.
  *
- * Side effect: removes the SIGTERM and SIGINT handlers and closes every open connection.
- *
  * @param context - the running server, its signal handler, and the resources to release
- * @returns a promise that resolves once everything is closed; rejects only if the HTTP server itself fails to close
+ * @returns a promise that resolves once everything is closed, rejecting only if the HTTP server itself fails to
+ *   close; it removes the SIGTERM and SIGINT handlers and closes every open connection on the way
  */
 async function shutDownDashboard(context: {
   server: Server;
@@ -692,15 +690,15 @@ async function shutDownDashboard(context: {
 /**
  * Start the local dashboard server and expose its API endpoints.
  *
- * The whole server lives in one closure because every route shares the same per-run token, live reload set, and terminal state; hoisting the routes
- * out would mean threading that mutable state through each one, so the length here is deliberate rather than accidental.
+ * The whole server lives in one closure because every route shares the same per-run token, live-reload set, and
+ * terminal state; hoisting the routes out would thread that mutable state through each one, so the length is
+ * deliberate rather than accidental.
  *
- * Side effect: binds a loopback TCP port, starts a filesystem watcher in dev mode, and registers SIGTERM and SIGINT handlers that exit the process.
- * Error behavior: throws nothing out of this call; the promise resolves once the port is listening, and each per-request failure reports as an HTTP
- * response instead of escaping the server.
- *
- * @param options - selected project path plus optional dev-mode/dashboard configuration
- * @returns running dashboard handle with URL, token, and close method
+ * @param options - selected project path plus optional dev-mode and dashboard configuration
+ * @returns the running dashboard handle with its URL, token, and close method. It binds a loopback TCP port, starts
+ *   a filesystem watcher in dev mode, and registers SIGTERM and SIGINT handlers that exit the process. It throws
+ *   nothing: the promise resolves once the port is listening, and each per-request failure reports as an HTTP
+ *   response instead of escaping the server.
  */
 export function serveDashboard(
   options: DashboardOptions,

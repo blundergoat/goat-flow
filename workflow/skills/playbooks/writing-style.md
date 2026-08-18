@@ -42,7 +42,7 @@ Resolve conflicts in this order: verified facts and safety; the user's task, aud
 
 If an exempt control surface conflicts with a source of truth, report the discrepancy to the owning workflow; do not silently rewrite it as style work.
 
-**Replies are deliberately narrow.** Apply only the correctness pass and residue checks. The social-meaning guard and Colleague check constrain even those edits; no other style rule applies.
+**Replies are deliberately narrow.** Apply only the correctness pass and residue checks. The social-meaning guard and Colleague check constrain even those edits; no other style rule applies unless the user asks.
 
 **Why agent-read control text is exempt.** In a skill, playbook, preamble, or instruction file, emphasis and repetition are compliance mechanisms. Route problems there to the file's own contract.
 
@@ -71,7 +71,7 @@ Run this before every style rule on every in-scope surface, against the source o
 - Open a cited document, issue, or benchmark and confirm it supports the claim.
 - When prose describes code behaviour, open the function, query, or getter it describes and confirm the claim; code is a citation like any other.
 - Match claim strength and specificity to the evidence. Do not inflate a narrow result or hedge a supported conclusion.
-- A scope claim about a change - `comments only`, `no functional changes` - is checked against the diff like any claim; one rename or signature change falsifies it, so name such changes instead.
+- A scope claim is checked against the diff. `comments only` is false when the diff changes executable code, configuration, or schemas. `no behavioural changes` needs implementation evidence; a rename may be non-behavioural but is never `comments only`.
 - Connect named attribution to a specific inspectable point; otherwise name the evidence or remove the prestige cue.
 - Preserve claims, constraints, uncertainty, and provenance. Do not turn a proposal into a decision, an assumption into a fact, an optional action into a required one, or a planned or pending check into a passed check.
 
@@ -91,7 +91,7 @@ Choose the reader and artifact before changing tone. Do not invent a generic end
 
 Use one canonical noun per technical referent. Synonym cycling can make one surface look like three. Retain necessary terminology, hedging, citations, and causal relationships. Remove detail only after the surface owner establishes that the reader does not need it.
 
-**Replies to people carry social meaning.** Hedges, softeners, sentence boundaries, and punctuation can express uncertainty, warmth, or a checking question. Change them only for correctness, residue, a diagnosed social cost, or requested tone. Do not split a sentence about someone's work when the split would turn a qualified observation into an accusation. Apply the Colleague check before sending.
+**Replies to people carry social meaning.** Hedges, softeners, sentence boundaries, and punctuation can express uncertainty, warmth, or a checking question. The Scope Gate sets the permission. Do not split a sentence about someone's work when the split would turn a qualified observation into an accusation. Apply the Colleague check before sending.
 
 Put the decision, behaviour, or action where the reader can find it, but never trade a true public detail for a smooth abstraction.
 

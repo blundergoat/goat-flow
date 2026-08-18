@@ -162,13 +162,13 @@ export function buildLatestQualitySummary(
 /**
  * Count stats findings matching any of the named rules.
  *
- * Home groups several rules into one user-visible number, so this takes a rule list rather than one rule and keeps the grouping visible at the call
- * site.
- * Contract: each finding is counted at most once, so grouping rules together never double-counts a finding that would satisfy more than one of them.
+ * Home groups several rules into one user-visible number, so this takes a rule list rather than one rule and keeps
+ * the grouping visible at the call site.
  *
  * @param findings - stats findings for the selected project
  * @param rules - rule ids to count together; no rules yields zero
- * @returns how many findings matched; zero means that repair action is not due
+ * @returns how many findings matched; zero means that repair action is not due. The contract is that each finding
+ *   counts at most once, so grouping rules never double-counts one that satisfies more than one of them.
  */
 function countStatsFindings(
   findings: ReturnType<typeof checkStats>["findings"],
@@ -198,12 +198,11 @@ function countIndexesInState(
  * Each health count is derived separately because they drive different repair actions: stale review dates need a re-read, brittle line references
  * need semantic-anchor repair, and oversized buckets need splitting, so collapsing them into one number would hide which work is due.
  *
- * Invariant: review dates are sorted so the oldest-review indicator is deterministic across runs.
- *
  * Error behavior: throws nothing; an unreadable project reports as a null card rather than failing the whole dashboard response.
  *
  * @param projectPath - selected project; empty or unreadable paths make the Home card unavailable.
- * @returns Home-card data, or null when the selected project cannot provide safe memory facts.
+ * @returns Home-card data, or null when the selected project cannot provide safe memory facts. It review dates are sorted so the oldest-review
+ *   indicator is deterministic across runs.
  */
 function buildDashboardLearningLoopSummary(
   projectPath: string,

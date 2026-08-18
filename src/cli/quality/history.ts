@@ -82,15 +82,13 @@ export interface QualityDiffResult {
   /**
    * Findings present in the older report and missing from the newer one.
    *
-   * Absence is not proof of a fix.
-   * The bucket is a pure id set difference, so a finding lands here when the defect was repaired, when the newer run never examined that artifact,
-   * and when the finding's id shifted because it encodes a line number.
+   * Absence is not proof of a fix. The bucket is a pure id set difference, so a finding lands here when the defect
+   * was repaired, when the newer run never examined that artifact, and when its id shifted for encoding a line number.
    *
-   * A degraded run is the worst case: a report generated without prior-report context carries `prior_report_id: null`, nothing can be tagged
-   * `persisted`, and every earlier finding reads as absent.
+   * A degraded run is the worst case: a report generated without prior-report context carries `prior_report_id:
+   * null`, nothing can be tagged `persisted`, and every earlier finding reads as absent.
    *
-   * Treat this as a prompt to re-check each cited artifact, never as evidence for
-   * closing remediation work.
+   * Treat this as a prompt to re-check each cited artifact, never as evidence for closing remediation work.
    */
   absent: QualityDiffFindingRow[];
   newFindings: QualityDiffFindingRow[];

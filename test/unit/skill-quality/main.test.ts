@@ -234,11 +234,11 @@ describe("artifact discovery", () => {
   });
 
   /*
-   * A skill may scope a boundary command to one of its modes, the way goat-debug
-   * binds its ALWAYS command to Diagnose mode so Investigate mode stays free of a
-   * diagnosis-only rule. All three commands are still present, so the triplet is
-   * complete. Scoring only the bare label pushed authors toward adding a second,
-   * separately retired exclusion system to recover the lost credit.
+   * A skill may scope a boundary command to one of its modes, the way goat-debug binds its ALWAYS command to
+   * Diagnose mode so Investigate mode stays free of a diagnosis-only rule.
+   *
+   * All three commands are still present, so the triplet is complete. Scoring only the bare label pushed authors
+   * toward adding a second, separately retired exclusion system to recover the lost credit.
    */
   it("credits a mode-qualified boundary command as a complete triplet", () => {
     // Frontmatter description, When to Use, and the boundary triplet each earn 5.

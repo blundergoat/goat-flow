@@ -85,10 +85,12 @@ interface ConcernCountCheck {
   scanFenced?: boolean;
 }
 
-/** Live concern → check-count map, built from the harness check arrays that
- *  are the single source of truth. Keyed by a normalised concern label so doc
- *  phrasings like "Feedback Loop", "Feedback-Loop", and "feedback_loop" all
- *  resolve to the same count. */
+/**
+ * Live concern to check-count map, built from the harness check arrays that are the single source of truth.
+ *
+ * Keys are normalised concern labels, so doc phrasings like "Feedback Loop", "Feedback-Loop", and "feedback_loop"
+ * all resolve to the same count.
+ */
 const CONCERN_SIZES: Record<string, number> = {
   context: CONTEXT_CHECKS.length,
   constraints: CONSTRAINTS_CHECKS.length,
@@ -307,17 +309,14 @@ function scanRemovedCommands(
 /**
  * Scan one doc file for numeric-count drift using the provided check set.
  *
- * By default, fenced code blocks are skipped because prose code samples should not be drift-matched.
- * Individual checks can opt in via `scanFenced: true` to catch structural drift in sample-output blocks.
+ * By default, fenced code blocks are skipped because prose code samples should not be drift-matched; a check can
+ * opt in with `scanFenced: true` to catch structural drift in sample-output blocks.
  *
- * A fresh RegExp is built per line because a global-flag pattern mutates its own `lastIndex`, and a shared instance would silently skip matches on
- * later lines.
- * Error behavior: throws nothing; every drift is reported as a content finding.
- *
- * @param path Repo-relative source path used in findings.
- * @param text Markdown content to scan.
- * @param checks Numeric claim checks to apply.
- * @returns Content findings for count claims that disagree with live code.
+ * @param path - repo-relative source path used in findings
+ * @param text - Markdown content to scan
+ * @param checks - numeric claim checks to apply; a fresh RegExp is built per line, because a global-flag pattern
+ *   mutates its own `lastIndex` and a shared instance would silently skip matches on later lines
+ * @returns Content findings for count claims that disagree with live code. It throws nothing; every drift is reported as a content finding.
  */
 function scanCountClaims(
   path: string,
@@ -362,17 +361,15 @@ function scanCountClaims(
 /**
  * Apply one concern-count check to one line and return any drift findings.
  *
- * Extracted from `scanConcernCountClaims` to keep the outer loop under the eslint complexity cap.
- * The check's pattern is rebuilt here rather than reused because a global-flag RegExp mutates its own `lastIndex`, so a shared instance would skip
- * matches on the lines that follow.
- *
- * Error behavior: throws nothing; a capture group that fails to resolve is skipped silently.
+ * The check's pattern is rebuilt here rather than reused, because a global-flag RegExp mutates its own `lastIndex`
+ * and a shared instance would skip matches on the lines that follow.
  *
  * @param line - single source line to match against
  * @param lineNum - 1-based line number recorded on any finding
  * @param path - repo-relative source path used in findings
  * @param check - concern-count check supplying the pattern and authoritative counts
- * @returns drift findings for this line; empty when the claims match the live counts
+ * @returns drift findings for this line; empty when the claims match the live counts. It throws nothing, and a
+ *   capture group that fails to resolve is skipped silently.
  */
 function matchConcernCheckOnLine(
   line: string,
@@ -406,16 +403,14 @@ function matchConcernCheckOnLine(
 /**
  * Scan one doc file for per-concern count drift.
  *
- * Each check's pattern must have two capture groups: (1) concern label, (2) claimed number.
- * The authoritative count is looked up via `actualFor`.
- * Fenced code blocks are skipped unless the check sets `scanFenced: true`.
+ * Each check's pattern must have two capture groups, the concern label and the claimed number, and the
+ * authoritative count is looked up through `actualFor`.
  *
- * Error behavior: throws nothing; every drift is reported as a content finding.
- *
- * @param path Repo-relative source path used in findings.
- * @param text Markdown content to scan.
- * @param checks Concern-count checks to apply.
- * @returns Content findings for concern counts that disagree with live code.
+ * @param path - repo-relative source path used in findings
+ * @param text - Markdown content to scan
+ * @param checks - concern-count checks to apply; fenced blocks are skipped unless a check sets `scanFenced: true`
+ * @returns content findings for concern counts that disagree with live code. It throws nothing, so every drift is
+ *   reported as a finding rather than raised.
  */
 function scanConcernCountClaims(
   path: string,
@@ -501,33 +496,35 @@ function isIntentionalMissingPath(path: string): boolean {
   );
 }
 
-/** Lifetime/retention/limit phrases that should name the enforcing constant.
- *  When a doc claims "retained for 90 days" without anchoring the value to a
- *  code path, future edits to the constant drift past the doc silently
- *  (awslabs/cli-agent-orchestrator PR #245 P1-B: docs/memory.md claimed
- *  scope-keyed retention while cleanup_service.py keyed on memory_type). */
+/**
+ * Lifetime, retention, and limit phrases that should name the enforcing constant.
+ *
+ * When a doc claims "retained for 90 days" without anchoring the value to a code path, a later edit to the constant
+ * drifts past the doc silently: one memory doc claimed scope-keyed retention while its cleanup service keyed on type.
+ */
 const LIFETIME_PHRASE_RE =
   /\b(?:retained for|expires after|expires in|TTL(?:\s+of)?|ceiling of|max(?:imum)? of|limit of)\s+(\d+)\s+(days?|hours?|minutes?|seconds?|chars?|characters?|entries|items|sessions?|lines?)/gi;
 
-/** Evidence anchors that satisfy the lifetime-claim check: a backtick repo
- *  path, a (search: ...) anchor, or a (file: ...) anchor on the same line. */
+/**
+ * Evidence anchors that satisfy the lifetime-claim check.
+ *
+ * Any one of these on the same line counts: a backtick repo path, a `(search: ...)` anchor, or a `(file: ...)` anchor.
+ */
 const EVIDENCE_ANCHOR_RE =
   /`(?:src|workflow|scripts|\.goat-flow|\.github|test|docs|\.claude|\.codex|\.agents)\/[^`]+`|\(search:\s*["'][^"']+["']\)|\(file:\s*[^)]+\)/u;
 
 /**
  * Scan one doc file for lifetime/retention claims lacking an enforcing-code anchor.
  *
- * Any line that claims a lifetime, expiry, TTL, ceiling, or limit MUST also reference the code path that enforces the value.
- * Without an anchor, future edits to the constant drift past the doc and the divergence ships silently.
+ * Any line claiming a lifetime, expiry, TTL, ceiling, or limit must also reference the code path that enforces the
+ * value, because otherwise a later edit to the constant drifts past the doc and the divergence ships silently.
  *
- * Fenced code blocks are excluded because sample output legitimately discusses values without anchoring them.
- * The phrase pattern is rebuilt per file because a global-flag RegExp mutates its own `lastIndex`.
- *
- * Error behavior: throws nothing; every unanchored claim is reported as informational.
- *
- * @param path Repo-relative source path used in findings.
- * @param text Markdown content to scan.
- * @returns Informational findings for lifetime claims without evidence anchors.
+ * @param path - repo-relative source path used in findings
+ * @param text - Markdown content to scan; fenced blocks are excluded, because sample output legitimately discusses
+ *   values without anchoring them, and the phrase pattern is rebuilt per file because a global-flag RegExp mutates
+ *   its own `lastIndex`
+ * @returns informational findings for lifetime claims without evidence anchors. It throws nothing, so every
+ *   unanchored claim is reported rather than raised.
  */
 function scanLifetimeClaimEvidence(
   path: string,

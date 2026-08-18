@@ -168,12 +168,11 @@ function readUploadBody(req: IncomingMessage): Promise<string> {
  * The manager may substitute its own target path, so the resolved value is read back rather than assumed; falling through
  * to the request path and finally the server default keeps every session attributable to some project.
  *
- * Side effect: starts a backend PTY session.
- *
  * @param manager - terminal manager owning session lifecycle
  * @param decoded - validated create request
  * @param absDefault - the dashboard's own project, used when the request named no path at all
- * @returns the create result, the live session if the manager still holds it, and the resolved target path for evidence
+ * @returns the create result, the live session if the manager still holds it, and the resolved target path for
+ *   evidence; it starts a backend PTY session, so a returned session is a live process
  */
 async function createTerminalSession(
   manager: TerminalManager,
@@ -252,10 +251,9 @@ function recordTerminalLaunchEvents(
  * The user would otherwise only find out by clicking Launch and getting a failure, so the fix is printed while they are
  * still reading the startup output.
  *
- * Error behavior: throws nothing; a failed health probe swallows its error and prints the same notice.
- *
  * @param ctx - shared handler context, used to load the terminal manager and probe it
- * @returns nothing; a healthy backend prints no notice at all
+ * @returns nothing; a healthy backend prints no notice at all, and it swallows a failed health probe into the same
+ *   notice rather than throwing during startup
  */
 function logStartupNotice(ctx: TerminalHandlerContext): void {
   void ctx
@@ -276,14 +274,12 @@ function logStartupNotice(ctx: TerminalHandlerContext): void {
  *
  * This is what a user's click on Launch reaches: the request names a runner, a project, and an optional prompt.
  *
- * Error behavior: throws nothing; a rejected launch reports as a JSON error whose status is derived from the failure
- * message, so the dashboard can distinguish a bad request from a fault.
- *
  * @param req - the incoming request; only POST is handled
  * @param url - parsed request URL; anything other than `/api/terminal/create` is left for the next route
  * @param res - response written with the new session, or the reason the launch was refused
  * @param ctx - shared handler context
- * @returns true when this route claimed the request
+ * @returns true when this route claimed the request; it throws nothing, and reports a rejected launch as a JSON
+ *   error whose status is derived from the failure message, so the dashboard can tell a bad request from a fault
  */
 async function handleTerminalCreateRequest(
   req: IncomingMessage,
@@ -362,14 +358,12 @@ async function handleTerminalListRequest(
  *
  * This is the user closing a terminal tab or clearing a stale row from the recent-sessions list.
  *
- * Error behavior: throws nothing; a manager failure reports as a 500 JSON error, and an unknown session id is a normal
- * negative result rather than a fault.
- *
  * @param req - the incoming request; only DELETE is handled
  * @param url - parsed request URL carrying the session id after `/api/terminal/`
  * @param res - response written with the outcome; a 404 means the session was already gone
  * @param ctx - shared handler context
- * @returns true when this route claimed the request
+ * @returns true when this route claimed the request; it throws nothing, reports a manager failure as a 500 JSON
+ *   error, and treats an unknown session id as a normal negative result rather than a fault
  */
 async function handleTerminalDeleteRequest(
   req: IncomingMessage,
@@ -495,14 +489,12 @@ function persistUploadedFiles(
  * A user drops a screenshot onto a running terminal; the files are saved beside the project and a note naming them is
  * returned for the agent to read.
  *
- * Error behavior: throws nothing; each rejection class reports as its own JSON status so the dashboard can say which rule
- * the drop broke rather than a generic failure.
- *
  * @param req - the incoming request; only POST is handled
  * @param url - parsed request URL carrying the session id
  * @param res - response written with the saved files, or the reason the drop was refused
  * @param ctx - shared handler context
- * @returns true when this route claimed the request
+ * @returns true when this route claimed the request; it throws nothing, and reports each rejection class as its own
+ *   JSON status so the dashboard can name the rule the drop broke rather than a generic failure
  */
 async function handleTerminalUploadRequest(
   req: IncomingMessage,
@@ -585,13 +577,11 @@ async function handleHealthRequest(
  * Those two numbers are what the Workspace list shows under each row, so a user can see which terminal has been sitting
  * untouched before deciding what to clear.
  *
- * Error behavior: throws nothing; a manager failure reports as a 500 JSON error.
- *
  * @param req - the incoming request; only GET is handled
  * @param url - parsed request URL; anything other than `/api/terminal/sessions` is left for the next route
  * @param res - response written with the enriched sessions and the server's session cap
  * @param ctx - shared handler context
- * @returns true when this route claimed the request
+ * @returns true when this route claimed the request; it throws nothing and reports a manager failure as a 500 error
  */
 async function handleTerminalSessionsRequest(
   req: IncomingMessage,
@@ -629,15 +619,13 @@ async function handleTerminalSessionsRequest(
  *
  * This is the socket behind a live terminal pane, so a page from anywhere but this server is refused before the handshake.
  *
- * Error behavior: throws nothing; a disallowed origin destroys the socket rather than reporting a response, because an
- * upgrade that failed origin checks has no trusted channel to answer on.
- *
  * @param req - the upgrade request
  * @param socket - raw socket, destroyed when the origin is refused or the attach fails
  * @param head - the first packet of the upgraded stream
  * @param server - the running dashboard server, read for the port it bound
  * @param ctx - shared handler context
- * @returns true when this handler claimed the upgrade
+ * @returns true when this handler claimed the upgrade; it throws nothing, and a disallowed origin destroys the
+ *   socket rather than answering, because an upgrade that failed origin checks has no trusted channel to reply on
  */
 function handleTerminalUpgrade(
   req: IncomingMessage,
@@ -683,11 +671,9 @@ function handleTerminalUpgrade(
  * Every handler shares one lazily created manager, WebSocket server, and shutdown promise, because those are per-server
  * singletons that must be created at most once and torn down together.
  *
- * Error behavior: throws nothing; each route reports its own failure as a JSON response, so one bad request cannot take the
- * server down.
- *
  * @param deps - server-local dependencies and limits shared by terminal routes
- * @returns terminal route handlers plus the shutdown hook for active sessions
+ * @returns terminal route handlers plus the shutdown hook for active sessions; each route reports its own failure
+ *   as a JSON response and throws nothing, so one bad request cannot take the server down
  */
 export function createDashboardTerminalHandlers(
   deps: DashboardTerminalDependencies,
@@ -824,11 +810,10 @@ export function createDashboardTerminalHandlers(
  * A dashboard where nobody ever opened a terminal has neither backend loaded, so this closes only what exists rather than
  * forcing node-pty to load just to tear it down again.
  *
- * Side effect: kills every live PTY session and closes the terminal WebSocket server.
- *
  * @param getManagerPromise - returns the manager promise, or null when no terminal was ever opened
  * @param getWssPromise - returns the WebSocket server promise, or null when no terminal ever connected
- * @returns a promise that resolves once both backends are closed
+ * @returns a promise that resolves once both backends are closed; it kills every live PTY session and closes the
+ *   terminal WebSocket server on the way
  */
 async function closeTerminalBackends(
   getManagerPromise: () => Promise<TerminalManager> | null,

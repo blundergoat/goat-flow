@@ -285,8 +285,8 @@ interface QualityCaptureSelection {
 /**
  * Reject the launch combinations where staged-draft capture or report ownership could not actually be honoured.
  *
- * A user reaches these by picking a Quality card and then changing the runner or access mode, so each rejection names the
- * field they can change rather than failing the launch with a generic error.
+ * A user reaches these by picking a Quality card and then changing the runner or access mode, so each rejection
+ * names the field they can change rather than failing the launch with a generic error.
  *
  * The rules exist because capture writes a receipt the agent waits on:
  * - only a Claude reporting session can own that write, so any other pairing would strand the agent

@@ -66,11 +66,9 @@ interface RecommendationInputs {
  * The order matters: a demote signal is reported before the score, because an artifact that is not shaped like a skill
  * should be moved rather than merely improved.
  *
- * Side effect: appends the user-facing explanation to `fitNotes`.
- *
  * @param inputs - the score ratio, fail count, classification confidence, and fit metric
  * @param fitNotes - accumulator appended to in place; this is the text shown under the recommendation
- * @returns the recommendation and the notes explaining it
+ * @returns the recommendation and the notes explaining it. It appends the user-facing explanation to `fitNotes`.
  */
 function recommendForSkill(
   inputs: RecommendationInputs,
@@ -137,16 +135,14 @@ function recommendForReference(
 /**
  * Answer the verdicts that hold whatever kind the artifact is, before the skill and reference rules diverge.
  *
- * These come first because each one describes a condition the per-kind advice could not sensibly override: a meta
- * reference is never promotable, a shape mismatch means the score was computed against the wrong profile, a very low
- * score means the artifact may not be worth keeping, and a zeroed metric is a gap a human should look at.
- *
- * Side effect: appends the user-facing explanation to `fitNotes`.
+ * These come first because each describes a condition the per-kind advice could not sensibly override: a meta
+ * reference is never promotable, a shape mismatch means the score used the wrong profile, a very low score means
+ * the artifact may not be worth keeping, and a zeroed metric is a gap a human should look at.
  *
  * @param artifact - the artifact being judged
  * @param inputs - the score ratio, fit metric, and the zeroed metric when one exists
  * @param mismatchNote - the shape-mismatch note when the detected shape disagrees with the scoring profile
- * @param fitNotes - accumulator appended to in place
+ * @param fitNotes - accumulator the user-facing explanation is appended to in place
  * @returns the verdict, or null when none of these conditions applies and per-kind rules should decide
  */
 function recommendKindIndependentVerdict(
@@ -197,10 +193,8 @@ function recommendKindIndependentVerdict(
 /**
  * Turn the scored metrics into the single recommendation and explanation a user reads in the Skills tab.
  *
- * This is the last stage of scoring: keep, revise, reclassify, retire, or escalate to a human.
- *
- * The thresholds are advisory routing rather than hard gates, so the notes matter as much as the verdict; a reviewer still
- * owns the final call.
+ * This is the last stage of scoring: keep, revise, reclassify, retire, or escalate to a human. The thresholds are
+ * advisory routing rather than hard gates, so the notes matter as much as the verdict and a reviewer owns the call.
  *
  * @param artifact - the artifact being judged
  * @param metrics - every scored metric row, read for failures and zeroed dimensions

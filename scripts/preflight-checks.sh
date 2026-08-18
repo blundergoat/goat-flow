@@ -1637,9 +1637,10 @@ fi
 section "Instruction File Quality"
 
 # Line-count check (thresholds from manifest, not hard-coded)
-# String() is load-bearing: console.log of a bare number is inspected, and Node colourizes
-# inspected numbers when FORCE_COLOR is set, which injects ANSI codes into the arithmetic
-# comparisons below and silently skips every per-file verdict.
+#
+# String() is load-bearing: console.log of a bare number is inspected, and Node colourizes inspected numbers when
+# FORCE_COLOR is set, which injects ANSI codes into the arithmetic comparisons below and silently skips every
+# per-file verdict.
 line_target=$(node -e "console.log(String(require('./workflow/manifest.json').instruction_file.line_target))" 2>/dev/null || echo "125")
 line_limit=$(node -e "console.log(String(require('./workflow/manifest.json').instruction_file.line_limit))" 2>/dev/null || echo "150")
 
@@ -1720,11 +1721,11 @@ if [[ -f tsconfig.json ]]; then
 
     # Knip (unused exports, dead code - breaking error). The project graph exceeds
     # Node's default 4 GiB heap on the supported Node 20 runtime.
-    # --no-gitignore keeps Knip from walking the whole checkout to collect every nested
-    # .gitignore. That walk, not the analysis, is what exhausts the heap when a developer
-    # keeps large gitignored trees under .goat-flow/scratchpad; Knip's own `ignore` option
-    # cannot help, because it filters the report rather than the file walk. Nothing under
-    # src/, test/, or scripts/ is gitignored, so the analysed set is unchanged.
+    # --no-gitignore keeps Knip from walking the whole checkout to collect every nested .gitignore.
+    #
+    # That walk, not the analysis, is what exhausts the heap when a developer keeps large gitignored trees under
+    # .goat-flow/scratchpad, and Knip's own `ignore` option cannot help because it filters the report rather than the
+    # file walk. Nothing under src/, test/, or scripts/ is gitignored, so the analysed set is unchanged.
     if command -v npx >/dev/null 2>&1 && npx knip --version >/dev/null 2>&1; then
         knip_output=$(node --max-old-space-size=5120 node_modules/knip/bin/knip.js --no-progress --no-gitignore 2>&1) && knip_exit=0 || knip_exit=$?
         if [[ "$knip_exit" -eq 0 ]]; then

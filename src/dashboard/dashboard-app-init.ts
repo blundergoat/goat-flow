@@ -348,11 +348,9 @@ function dashboardHandleGlobalShortcut(
  * Enter only launches when a preset is selected, no launch is already in flight, and the user is below their session
  * limit, so a held key cannot open a queue of terminals they never asked for.
  *
- * Side effect: may call preventDefault and start a terminal launch.
- *
  * @param ctx - dashboard state supplying the selection, launch flag, and session counts
  * @param event - the keydown being handled; keys other than the three navigation keys are ignored
- * @returns nothing; the effect is the moved selection or the started launch
+ * @returns nothing; the effect is the moved selection or the started launch. It may call preventDefault and start a terminal launch.
  */
 function handlePromptListNavigation(
   ctx: DashboardAlpineContext,

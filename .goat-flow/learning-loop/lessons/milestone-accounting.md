@@ -1,6 +1,6 @@
 ---
 category: milestone-accounting
-last_reviewed: 2026-08-17
+last_reviewed: 2026-08-18
 ---
 
 **Scope:** Milestone state and effort accounting - activation order, where human gates belong, what a task section may contain, and why estimates counted from work units beat estimates written as durations. Multi-agent council coordination is [coordination.md](coordination.md).
@@ -100,8 +100,8 @@ last_reviewed: 2026-08-17
 **Status:** active | **Created:** 2026-08-02
 **Decision changed:** Derive an estimate by counting task, proof, and admin units, then converting once. Never write an hours figure first and decompose backwards from it.
 **Trigger phase:** SCOPE
-**Incident count:** 3
-**Latest occurrence:** 2026-08-10
+**Incident count:** 4
+**Latest occurrence:** 2026-08-18
 
 **What happened:** Two plans authored days apart under the same goat-plan guidance produced opposite calibration. goat-debug-improve budgeted 715 minutes; its two receipt-backed milestones measured 273s and 1043s - ratios of 0.05x and 0.13x. Its three earlier milestones show the same shape (180/190/120 minutes estimated against 15/10/4 reported). effort-estimation-timing, estimated by the same author, measured 1.54x, 1.13x, and 0.79x - every milestone inside its declared forecast range.
 
@@ -110,6 +110,8 @@ last_reviewed: 2026-08-17
 **Recurrence 2026-08-09:** Three consecutive hook-safety milestones were estimated at 150, 165, and 145 minutes; prospective receipts measured 28, 29, and 102 minutes, or 0.19x, 0.18x, and 0.70x. The user flagged the persistent overestimate. A retrospective comparison added six receipt-backed downstream milestones. Across all nine samples, duration-first estimates totalled 1,200 minutes against 276.25 measured minutes: 4.34 times actual in aggregate, with a 5.70-times median overestimate.
 
 **Recurrence 2026-08-10:** A release-identity closeout forecast 103 minutes from 15 units and measured 1,912 recorded-unpaused seconds, rendered as 32 minutes. The 0.31x result fell below the 41-minute low bound because prerequisite work had already absorbed much of the implementation risk; counting every remaining checkbox as fresh work overstated the residual scope.
+
+**Recurrence 2026-08-18:** M55 forecast 28 minutes from 11 units at the 1.16-2.54-8.99 min/unit rates `plans check --strict` emitted from local receipts, and measured 190 recorded seconds - 0.11x, below the 12-minute low bound. The corpus those rates come from is dominated by playbook *authoring* milestones; M55 was prose-only, edited five pre-identified spans, and had its contracts already naming the affected sections. Counting units captured the shape but not the work class. The tool's own rates are still the right default over a hand-picked anchor - an earlier draft of this milestone anchored on one over-running milestone and produced a different wrong number - but a milestone whose spans and assertions are already located should be forecast against comparable located-scope receipts, not the general corpus. The rates and the 15-sample corpus median come from the reforecast advisory in `src/cli/plans-effort.ts` (search: `FORECAST_BASIS_PATTERN`); the milestone carrying the receipt is gitignored local state, so the measured pair (28 forecast, 190 recorded seconds) is recorded here rather than referenced.
 
 **Method comparison:** The nine milestones contained 99 positive agent-owned Task, Proof, Mid-proof, and admin units. Applying a cold `0.5-2.5-10 min/unit` prior produced a 247.5-minute likely total, 10.4% below the measured total, and all nine outcomes landed inside their derived low/high bands. Leave-one-out local rates covered seven of nine outcomes with 36.5% median absolute percentage error. This is a retrospective backtest, not proof that the next forecast will land; its value is showing that countable inputs materially outperform a duration chosen first.
 

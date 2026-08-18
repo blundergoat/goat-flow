@@ -147,13 +147,13 @@ function isGitIgnoredPath(projectPath: string, relativePath: string): boolean {
 /**
  * Read tracked files beneath candidate writable paths so exact files stay read-only.
  *
- * Side effect: spawns `git ls-files` in the project, with a bounded timeout.
  * Error behavior: throws nothing; an unavailable Git or non-repository root swallows the failure and returns no anchors, leaving the conservative
  * canonical fallback list in charge.
  *
  * @param projectPath - repository root the query runs in
  * @param candidatePaths - writable candidates to enumerate tracked files beneath
- * @returns tracked repo-relative paths; empty means the fallback anchors apply instead
+ * @returns tracked repo-relative paths; empty means the fallback anchors apply instead. It spawns `git ls-files` in the project, with a bounded
+ *   timeout.
  */
 function trackedReportingAnchors(
   projectPath: string,
@@ -253,13 +253,11 @@ function isSafeMissingDirectory(
 /**
  * List tracked and canonical protected paths beneath one candidate in one root.
  *
- * Invariant: the result is the deny list that keeps committed files read-only inside an otherwise writable directory, so a path missing here becomes
- * writable for the session.
- * Error behavior: throws nothing; an unreadable anchor is dropped from the list.
- *
  * @param rootPath - workspace root the candidate is resolved against
  * @param candidatePath - project-relative writable candidate to protect beneath
- * @returns protected repo-relative paths; empty means nothing under the candidate is committed
+ * @returns protected repo-relative paths; empty means nothing under the candidate is committed. The result is the
+ *   deny-list contract that keeps committed files read-only inside an otherwise writable directory, so a path missing
+ *   here becomes writable for the session. It throws nothing, and an unreadable anchor is dropped from the list.
  */
 function protectedPathsForCandidate(
   rootPath: string,

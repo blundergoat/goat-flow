@@ -225,12 +225,10 @@ const QUALITY_SUBCOMMAND_PARSERS: Record<
  * A first positional that names no subcommand is treated as a project path for `quality prompt`, which is what makes
  * `goat-flow quality .` work the way users expect.
  *
- * Error behavior: throws CLIError with exit code 2 for the removed `capture` subcommand, or when a subcommand's own
- * argument rules are broken.
- *
  * @param positionals - positional arguments after the `quality` command word
  * @param draftFlag - value of `--draft`, which only `candidacy` consumes; null means it was not supplied
- * @returns the resolved subcommand and its arguments
+ * @returns the resolved subcommand and its arguments. It throws CLIError with exit code 2 for the removed `capture` subcommand, or when a
+ *   subcommand's own argument rules are broken.
  */
 export function parseQualityPositionals(
   positionals: string[],

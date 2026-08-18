@@ -148,9 +148,8 @@ function dashboardExportSessionScrollback(
 /**
  * Build the skill-evaluator fragment: drop/remove/run methods for the ad-hoc markdown evaluator.
  *
- * runSkillEvaluator owns its fetch inline because it has a one-off request/response shape, and it catches a failure into the evaluator's error field
- * and reports it in-view rather than throwing, so a bad evaluate request never breaks the app.
- * Merged by dashboardMergeAppFragments.
+ * `runSkillEvaluator` owns its fetch inline because it has a one-off request and response shape, and it reports a
+ * failure in the evaluator's error field rather than throwing, so a bad request never breaks the app.
  */
 function dashboardSkillEvaluatorInputFragment(): DashboardAppFragment {
   return {
@@ -173,11 +172,9 @@ function dashboardSkillEvaluatorInputFragment(): DashboardAppFragment {
     /**
      * POST the dropped/pasted markdown to the quality evaluate endpoint and store the verdict.
      *
-     * Returns early (no request) when neither files nor content are present, setting a prompt.
-     * On a fetch/parse failure it does not propagate the error; instead it recovers by writing the message into skillEvaluatorError and reports it
-     * in-view, so a bad request never breaks the app.
-     *
-     * Loading state is always cleared in finally.
+     * With neither files nor content present it returns early without a request, leaving a prompt on screen.
+     * A fetch or parse failure is written into `skillEvaluatorError` and reported in view rather than propagated, and
+     * the loading state is always cleared, so a bad request never leaves the panel stuck.
      */
     async runSkillEvaluator() {
       await dashboardRunSkillEvaluator(this);
@@ -272,10 +269,9 @@ function dashboardUtilityActionsFragment(): DashboardAppFragment {
     // -- Clipboard + Toast --
     /**
      * Copy text to the clipboard, preferring the async Clipboard API.
-     * When that throws (the API is undefined in insecure contexts, or the promise rejects) it recovers via a hidden-textarea `execCommand("copy")`
-     * fallback instead of surfacing the error.
      *
-     * Returns whether the copy succeeded by either path; false means both the modern API and the legacy fallback failed.
+     * That API is undefined in insecure contexts and can also reject, so a failure recovers through a hidden-textarea
+     * `execCommand("copy")` fallback instead of surfacing the error. False means both paths failed.
      */
     async copyTextToClipboard(text: string): Promise<boolean> {
       try {
@@ -449,10 +445,9 @@ function dashboardTerminalSessionActionsFragment(): DashboardAppFragment {
 
     /**
      * Download one terminal tab's scrollback as a .txt file built from its xterm buffer.
-     * Dumps the normal buffer and, when a TUI has switched to the alternate screen, appends that view under a divider so the export captures what the
-     * user currently sees.
      *
-     * Returns early (no download) when the session has no live xterm instance; trailing blank lines are trimmed from the normal buffer.
+     * It dumps the normal buffer with trailing blank lines trimmed and, when a TUI has switched to the alternate
+     * screen, appends that view under a divider. A session with no live xterm instance downloads nothing.
      */
     exportSession(sessionId: string) {
       dashboardExportSessionScrollback(this, sessionId);
@@ -485,10 +480,9 @@ function dashboardTerminalSessionActionsFragment(): DashboardAppFragment {
 
 /**
  * Build the time-formatting helper fragment: pure relative-time formatters the templates bind to.
- * No state or I/O - they turn a date into a short "Xm/h/d ago" label.
- * The two differ only in their null/zero handling, called out on each method.
  *
- * Merged into the app by dashboardMergeAppFragments.
+ * They hold no state and do no I/O, turning a date into a short "Xm/h/d ago" label; the two differ only in their
+ * null and zero handling, which each method states for itself.
  */
 function dashboardTimeFormattingFragment(): DashboardAppFragment {
   return {

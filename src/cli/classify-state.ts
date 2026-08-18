@@ -150,14 +150,14 @@ interface InstalledProjectProbe {
 /**
  * Classify a project that already has a `.goat-flow/config.yaml`, so the only questions left are version and completeness.
  *
- * This is what decides the badge a user sees beside an already-installed project: current, incomplete, outdated, or error.
- *
- * The skill check is an OR-union across roots and is a fast pre-check only, so a "current" badge here does not promise a
- * per-agent audit passes; the suggested action points the user at `goat-flow audit` for that.
+ * This is what decides the badge a user sees beside an already-installed project: current, incomplete, outdated,
+ * or error.
  *
  * @param fs - project filesystem probe used to read the config
  * @param probe - what was already found on disk, so this branch does no second pass
- * @returns the state, the action to offer the user, and the detected version when one could be parsed
+ * @returns the state, the action to offer the user, and the detected version when one could be parsed. The skill
+ *   check is an OR-union across roots and a fast pre-check only, so a "current" badge does not promise a per-agent
+ *   audit passes; the suggested action points the user at `goat-flow audit` for that.
  */
 function classifyInstalledProject(
   fs: StateFS,
@@ -218,19 +218,15 @@ function classifyInstalledProject(
 /**
  * Decide which goat-flow adoption state a project is in, which is the badge and suggested action a user sees beside it.
  *
- * A user hits this by opening the dashboard project list or running `goat-flow status`, asking which of their repos still
- * need setup, an upgrade, or a finished install.
- *
- * States divide on one question: whether a `.goat-flow/config.yaml` exists.
+ * A user hits this by opening the dashboard project list or running `goat-flow status`, asking which repos still
+ * need setup, an upgrade, or a finished install. States divide on whether a `.goat-flow/config.yaml` exists:
  * - with a config, the project is installed and only its version and completeness are in question
  * - without one, retired skill names mean a migration, current skills mean an interrupted setup, and neither means a bare project
  *
- * Error behavior: throws nothing; a failed probe reports as an error state carrying the reason, so one unreadable project
- * never blanks the whole list.
- *
  * @param fs - project filesystem probe
  * @param agentId - agent the user filtered by; omitted accepts any agent's instruction file as sufficient
- * @returns the state, the action to offer, and the detected version when the project is installed
+ * @returns the state, the action to offer, and the detected version when the project is installed. It throws nothing; a failed probe reports as an
+ *   error state carrying the reason, so one unreadable project never blanks the whole list.
  */
 export function classifyProjectState(
   fs: StateFS,

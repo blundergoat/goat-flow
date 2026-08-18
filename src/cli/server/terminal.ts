@@ -141,13 +141,12 @@ function resolveQualityReportOwner(
  * Ordering matters: staging has to exist before the permission overlay is built, or a fresh target starts without its
  * `.goat-flow/logs` write allow and the user's report quietly has nowhere to land.
  *
- * Failure here fails the launch closed, because a staged-draft session that starts without a working persistence path looks
- * like it worked and then loses the report.
- *
  * @param session - the reserved session; its capture flags are set here from what staging actually allowed
  * @param shouldCaptureQualityDrafts - whether the launch asked for staged draft capture at all
  * @param qualityReportProjectPath - the accepted report owner, or null when the launch named none
- * @returns the capture roots to poll; empty means this launch stages no drafts, which leaves capture switched off
+ * @returns the capture roots to poll; empty means this launch stages no drafts, which leaves capture switched off.
+ *   A failure here fails the launch closed, because a staged-draft session without a working persistence path looks
+ *   like it worked and then loses the report.
  */
 function prepareQualityDraftStaging(
   session: TerminalSession,
@@ -483,12 +482,10 @@ class TerminalManager {
    * A user who closes the launching tab right after clicking Launch hits exactly this: the DELETE lands while the spawn is
    * still in flight, so the PTY that comes back has no session left to belong to.
    *
-   * Killing it here stops an untracked runner outliving its session, and it throws so the caller frees the reserved slot
-   * rather than resurrecting a session the user already deleted.
-   *
    * @param session - the reservation being launched, checked against the live session map
    * @param pty - the PTY just spawned, killed when the reservation is already gone
-   * @returns nothing when the session is still live; throws when it was cancelled during startup
+   * @returns nothing when the session is still live; it throws when the session was cancelled during startup, which
+   *   stops an untracked runner outliving its session and frees the reserved slot rather than resurrecting it
    */
   private rejectCancelledStartup(session: TerminalSession, pty: IPty): void {
     // Still the live session for this id, so the launch may carry on.
@@ -513,10 +510,8 @@ class TerminalManager {
    *
    * This is what makes the terminal feel live: text appears as the runner prints it.
    *
-   * When the user has detached the tab there is no socket to write to, so output is buffered instead and reconnecting shows
-   * the scrollback rather than a blank screen.
-   *
-   * @param session - the active session being wired; a null `ws` means nobody is watching, which switches output to the buffer
+   * @param session - the active session being wired; a null `ws` means the user detached the tab, so output is
+   *   buffered instead and reconnecting shows the scrollback rather than a blank screen
    * @param pty - the freshly spawned PTY whose data and exit events are subscribed to
    * @param promptDelivery - the pending launch prompt, retimed on output and cancelled on exit
    * @returns nothing; the subscriptions live for as long as the PTY does

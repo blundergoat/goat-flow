@@ -302,11 +302,10 @@ function isPlaceholderScript(command: string): boolean {
  *
  * First writer wins, so the detector order decides which language supplies each command in a polyglot project rather than the last one silently
  * overwriting the rest.
- * Side effect: mutates `target` in place.
  *
  * @param target - accumulated commands; only empty slots are filled
  * @param next - candidate commands from one language detector
- * @returns nothing; the result is the filled slots on `target`
+ * @returns nothing; the result is the filled slots on `target`. It mutates `target` in place.
  */
 function mergeCommands(
   target: SetupCommands,

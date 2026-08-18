@@ -63,13 +63,12 @@ function dashboardCreateTerminalInstance(
  * A wrong size is visible straight away as wrapped or clipped output, so this fits on a few staggered frames as well as on
  * every later resize.
  *
- * Side effect: schedules initial fits, observes the container, and adds a window resize listener.
- *
  * @param container - the pane element the terminal is measured against; zero width means it is hidden and not measurable
  * @param term - the terminal whose column and row count is reported
  * @param fitAddon - the xterm fit addon that performs the measurement
  * @param socket - the session socket; a size is only sent while it is open
- * @returns the fit function plus the observer and listener the cleanup path has to release
+ * @returns the fit function plus the observer and listener the cleanup path has to release. It schedules initial fits, observes the container, and
+ *   adds a window resize listener.
  */
 function dashboardInstallTerminalFit(
   container: HTMLElement,
@@ -622,15 +621,14 @@ function dashboardBuildTerminalCleanup(
 /**
  * Attach one browser terminal pane to its backend session over a WebSocket.
  *
- * This is what runs after a user clicks Launch or Reconnect: the pane is mounted, sized, wired to the socket, and focused so
- * they can start typing straight away.
- *
- * Side effect: mounts an xterm instance in the pane, opens a WebSocket, and registers the pane's refs and cleanup.
+ * This is what runs after a user clicks Launch or Reconnect: the pane is mounted, sized, wired to the socket, and
+ * focused so they can start typing straight away.
  *
  * @param ctx - dashboard state holding the session rows and pane refs
  * @param sessionId - the session being attached; an id with no row or no pane element is a no-op
  * @param wsUrl - backend socket path returned by the create call
- * @returns nothing; failures to construct xterm report as a toast and leave the pane empty
+ * @returns nothing. It mounts an xterm instance in the pane, opens a WebSocket, and registers the pane's refs and
+ *   cleanup; a failure to construct xterm reports as a toast and leaves the pane empty.
  */
 function dashboardConnectTerminal(
   ctx: DashboardTerminalContext,

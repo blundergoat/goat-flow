@@ -78,12 +78,11 @@ function subtypeConfidence(
  * Each matching heading counts, so an artifact carrying several of a subtype's hallmark sections scores higher than one
  * carrying a single heading by coincidence.
  *
- * Side effect: appends one reasoning line per match, which is what the Skills tab shows as evidence for the classification.
- *
  * @param headingPatterns - the subtype's heading patterns
  * @param content - raw artifact text
  * @param reasoning - accumulator appended to in place
- * @returns the total heading score; zero means no hallmark heading was found
+ * @returns the total heading score; zero means no hallmark heading was found. It appends one reasoning line per match, which is what the Skills
+ *   tab shows as evidence for the classification.
  */
 function scoreHeadingMatches(
   headingPatterns: readonly string[],

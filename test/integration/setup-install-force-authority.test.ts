@@ -1,11 +1,12 @@
 /**
  * Proof that install authority stays as narrow as the user made it.
- * Four authorities exist: a named path, all managed conflicts, the bare alias for the second,
- * and named user-owned replacement. Each fixture checks both halves - what the authority
- * permits, and the neighbouring content it must leave alone - because an override that
- * quietly widens is the failure this milestone exists to prevent.
- * These run the public CLI against disposable targets, so the assertions are about the
- * user's project after the command, never about internal state.
+ *
+ * Four authorities exist: a named path, all managed conflicts, the bare alias for the second, and named user-owned
+ * replacement. Each fixture checks both halves, what the authority permits and the neighbouring content it must
+ * leave alone, because an override that quietly widens is the failure this suite exists to prevent.
+ *
+ * These run the public CLI against disposable targets, so the assertions are about the user's project after the
+ * command, never about internal state.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";

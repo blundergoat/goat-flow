@@ -567,7 +567,6 @@ function validateQualityFlags(
  *
  * This is the single ordering point for every per-command validator, so a user with several misplaced flags always sees the same first complaint
  * rather than a parse-order accident.
- * Error behavior: throws the first CLIError raised by any validator, all with exit code 2.
  *
  * @param command - command the user invoked
  * @param values - parsed flag map handed to each validator in turn
@@ -576,7 +575,7 @@ function validateQualityFlags(
  * @param hookSubcommand - hooks subcommand, or null when the command is not `hooks`
  * @param plansSubcommand - plans subcommand, or null when the command is not `plans`
  * @param plansTimeAction - timing action, or null when the subcommand is not `time`
- * @returns nothing; returning means every combination check passed
+ * @returns nothing; returning means every combination check passed. It throws the first CLIError raised by any validator, all with exit code 2.
  */
 function validateFlagCombinations(
   command: Command,

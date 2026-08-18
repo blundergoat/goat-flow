@@ -32,11 +32,11 @@ Choose register from the artifact, actual reader, and supplied voice. Neutral an
 - Documentation and decisions stay plain about ownership, evidence, and uncertainty.
 - Reports and reviews retain necessary terminology, hedging, citations, and causal relationships.
 - Release and changelog prose follows its surface owner's audience and fact-selection gates.
-- Replies to people receive correctness and residue work only unless the user asks for tone changes.
+- Replies to people receive only the permission `writing-style.md` defines.
 
 Ask what the reader already knows from the surrounding artifact, product surface, and request. If the reader already knows a term or premise, do not define it again. If the knowledge is uncertain, preserve the explanation or verify the audience before cutting it.
 
-## Fix on Sight
+## Candidate Patterns
 
 These patterns diagnose reader cost, not authorship. A found phrase is only a candidate. Edit when its actual use imposes the named cost, and rewrite from verified meaning rather than synonym substitution.
 

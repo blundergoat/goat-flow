@@ -187,12 +187,11 @@ function metricSeverity(score: number, maxScore: number): MetricSeverity {
 /**
  * Turn one metric scorer's raw result into the scored row a user sees in the Skills tab.
  *
- * Every scorer ends here, so the label, the clamped score, and the pass/warn/fail band stay consistent across all of them.
+ * Every scorer ends here, so the label, the clamped score, and the pass/warn/fail band stay consistent across them.
  *
- * A metric whose profile maximum is zero does not apply to this artifact subtype and comes back as not-applicable rather than as a zero,
- * because a zero would read to the user as a failure rather than an absence.
- *
- * @param input - the scored artifact and its quality config, which supplies this subtype's profile maximum
+ * @param input - the scored artifact and its quality config, which supplies this subtype's profile maximum; a
+ *   metric whose profile maximum is zero does not apply to this subtype and comes back as not-applicable rather
+ *   than as a zero, because a zero would read to the user as a failure rather than an absence
  * @param metric - metric being finalized, used for its display label
  * @param score - raw score from the scorer, clamped here rather than by every caller
  * @param detail - the note shown under the metric; scorers pass a positive summary when nothing failed

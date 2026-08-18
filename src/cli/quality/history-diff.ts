@@ -150,12 +150,11 @@ function countConsecutivePresence(
  * Build the diff between two comparable quality-history runs.
  * Use when the user asks what went absent, was introduced, persisted, or stuck between runs.
  *
- * Invariant: "absent" means a finding is missing from the newer report, which is not the same as fixed. An unexamined
- * artifact, or a line-based id that shifted, lands there too, so the label deliberately claims disappearance and not repair.
- *
  * @param entries - sorted quality-history entries; empty entries cannot produce a diff
  * @param options - agent, explicit pair, and mode filters; missing pair uses latest two matching runs
- * @returns diff result, or a user-facing error explaining why comparison is not possible
+ * @returns diff result, or a user-facing error explaining why comparison is not possible. It "absent" means a finding is missing from the newer
+ *   report, which is not the same as fixed. An unexamined artifact, or a line-based id that shifted, lands there too, so the label deliberately
+ *   claims disappearance and not repair.
  */
 /** The two runs a diff compares, oldest first. */
 interface DiffPair {
@@ -170,17 +169,15 @@ type DiffPairResult =
 /**
  * Explain why two named runs cannot be diffed, or confirm that they can.
  *
- * Two rejections protect the meaning of the diff itself: runs from different agents, or different quality modes, measure
- * different things, so comparing them would produce a result that looks informative while saying nothing.
- *
- * The other two protect the user's intent: a pair that contradicts `--agent` or `--mode` is refused rather than silently
- * honouring one input over the other.
+ * Two rejections protect the meaning of the diff itself: runs from different agents, or different quality modes,
+ * measure different things, so comparing them would look informative while saying nothing.
  *
  * @param sourceEntry - the older run
  * @param targetEntry - the newer run
  * @param agent - the `--agent` filter, when supplied
  * @param qualityMode - the `--mode` filter, or null when unscoped
- * @returns the reason the pair cannot be compared, or null when it can
+ * @returns the reason the pair cannot be compared, or null when it can. The other two rejections protect the user's
+ *   intent: a pair contradicting `--agent` or `--mode` is refused rather than silently honouring one input.
  */
 function describeIncomparablePair(
   sourceEntry: QualityHistoryEntry,
@@ -214,17 +211,15 @@ function describeIncomparablePair(
 /**
  * Resolve the two runs named by an explicit `<from-id>:<to-id>` pair.
  *
- * Every rejection here protects a comparison the user would misread: runs from different agents or different quality
- * modes measure different things, so a diff between them would look meaningful while comparing nothing.
- *
- * A pair that contradicts the `--agent` or `--mode` flags is also refused, because silently honouring one over the other
- * would show the user a diff they did not ask for.
+ * Every rejection here protects a comparison the user would misread: runs from different agents or different
+ * quality modes measure different things, so a diff between them would look meaningful while comparing nothing.
  *
  * @param entries - all saved history entries
  * @param pair - the raw pair text as typed
  * @param agent - the `--agent` filter, when the user supplied one
  * @param qualityMode - the `--mode` filter, or null when the user did not scope by mode
- * @returns the resolved pair, or the reason it cannot be compared
+ * @returns the resolved pair, or the reason it cannot be compared. A pair contradicting `--agent` or `--mode` is
+ *   refused too, because silently honouring one over the other would show a diff the user did not ask for.
  */
 function resolveExplicitDiffPair(
   entries: QualityHistoryEntry[],
@@ -262,16 +257,14 @@ function resolveExplicitDiffPair(
 /**
  * Resolve the two most recent matching runs when the user named no explicit pair.
  *
- * An agent is required here because "the latest two" is otherwise ambiguous across runners, and comparing a Claude run to
- * a Codex one would be meaningless.
- *
- * When no mode filter is set and the newest two runs happen to be different modes, the user is asked to scope the
- * comparison rather than being shown a cross-mode diff by accident.
+ * An agent is required here, because "the latest two" is otherwise ambiguous across runners and comparing a Claude
+ * run to a Codex one would be meaningless.
  *
  * @param entries - all saved history entries, newest first
  * @param agent - the `--agent` filter; required for this path
  * @param qualityMode - the `--mode` filter, or null to accept any single mode
- * @returns the resolved pair, or the reason it cannot be compared
+ * @returns the resolved pair, or the reason it cannot be compared. With no mode filter and two newest runs in
+ *   different modes, the user is asked to scope rather than shown a cross-mode diff by accident.
  */
 function resolveLatestDiffPair(
   entries: QualityHistoryEntry[],

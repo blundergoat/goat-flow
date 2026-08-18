@@ -587,15 +587,14 @@ interface ReportIdentity {
 /**
  * Parse the fields that say which project, agent, and day a report describes.
  *
- * The project path must be absolute because saved history is keyed on it: a relative path would attach the report to
- * whichever directory happened to be current when it was read back.
- *
- * The date is format-checked for everyone so history sorts, but only newly saved reports must name a real calendar day,
- * which keeps older history readable rather than rejecting it on a rule it predates.
+ * The project path must be absolute because saved history is keyed on it: a relative path would attach the report
+ * to whichever directory happened to be current when it was read back.
  *
  * @param raw - the raw report object
  * @param options - strictness selector; `requireCurrentFields` enables the real-date check
- * @returns the identity fields, or the first path-specific error
+ * @returns the identity fields, or the first path-specific error. The date is format-checked for everyone so
+ *   history sorts, but only newly saved reports must name a real calendar day, which keeps older history readable
+ *   rather than rejecting it on a rule it predates.
  */
 function parseReportIdentity(
   raw: Record<string, unknown>,
@@ -722,15 +721,14 @@ function optionalReportFields(fields: {
 /**
  * Parse every finding row, and confirm a compared report labelled all of them.
  *
- * Invariant: findings keep their emitted order, so the index in an error path always names the row the user must fix.
- *
  * It reports the first bad row and blocks the whole report, because saved history that mixed valid and dropped findings would understate what
  * the run actually found.
  *
  * @param rawFindings - the raw findings value; anything other than an array cannot render as an issue list
  * @param options - strictness selector, passed through to each row
  * @param priorReportId - the compared report, when one was named; its presence requires every delta tag to be set
- * @returns the parsed findings in emitted order, or the first row error
+ * @returns the parsed findings in emitted order, or the first row error. It findings keep their emitted order, so the index in an error path
+ *   always names the row the user must fix.
  */
 function parseReportFindings(
   rawFindings: unknown,

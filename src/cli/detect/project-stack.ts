@@ -212,10 +212,9 @@ function collectNodeLanguages(
  * Turn the repository-root `package.json` into the languages and commands setup reports.
  *
  * Use for the root manifest only; monorepo subdirectory manifests are detected separately.
- * Runtime and dev dependencies are passed on separately as well as merged, because a package present only in `devDependencies` should not make its
- * language look like something the project ships.
  *
- * Commands come from `scripts` alone, so a project with dependencies but no scripts still reports languages with every command left null.
+ * Runtime and dev dependencies are passed on separately as well as merged, because a package present only in
+ * `devDependencies` should not make its language look like something the project ships.
  *
  * @param fs - readonly project filesystem, used for language markers the manifest only implies
  *   (`tsconfig.json`, Node source files)

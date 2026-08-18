@@ -422,11 +422,9 @@ exit 2
  * gruff-py's symbol-scope contract: the analyzer owns changed-region filtering
  * and can retain findings whose primary line sits outside the edited hunk.
  *
- * Side effect: creates `<root>/.venv/bin/` and writes an executable `gruff-py`
- * shim there (chmod 0o755) so the hook discovers it through normal binary resolution.
- *
  * @param root - temp project root the shim is installed under
- * @returns absolute path to the created `.venv/bin` directory
+ * @returns absolute path to the created `.venv/bin` directory. It creates `<root>/.venv/bin/` and writes an executable `gruff-py` shim there
+ *   (chmod 0o755) so the hook discovers it through normal binary resolution.
  */
 export function writeNativeChangedRegionGruffPy(root: string): string {
   const binDir = join(root, ".venv", "bin");

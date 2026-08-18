@@ -289,14 +289,13 @@ function selectDashboardTaskPlan(
 /**
  * Build the Tasks view state: which plans exist for this project, and which one is currently active.
  *
- * A user opens Tasks expecting to resume the plan they were last working on, so the `.active` marker is read first and preferred.
- *
- * A project with no plans directory comes back as empty state rather than an error, because not having started a plan is a normal condition.
- * The preference order is a contract the view depends on: the clicked plan, then the active marker, then the first plan found.
+ * A user opens Tasks expecting to resume the plan they were last working on, so the `.active` marker is read first
+ * and preferred, and the preference order is a contract the view depends on.
  *
  * @param projectPath - selected project whose plans are listed
- * @param requestedPlan - plan the user clicked; null falls back to the active marker, then to the first plan
- * @returns the state to render; an empty plan list means the Tasks view shows its onboarding empty state
+ * @param requestedPlan - plan the user clicked; null falls back to the active marker, then to the first plan found
+ * @returns the state to render; an empty plan list means the Tasks view shows its onboarding empty state, because a
+ *   project with no plans directory is a normal condition rather than an error
  */
 export function buildDashboardTaskState(
   projectPath: string,

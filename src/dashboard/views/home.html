@@ -951,9 +951,8 @@
       const oversized = summary.oversizedCount || 0;
       const fg = typeof summary.footgunCount === 'number' ? summary.footgunCount : null;
       const ls = typeof summary.lessonCount === 'number' ? summary.lessonCount : null;
-      // These are stats totals and include resolved entries, while the Learning loop
-      // card below counts active entries only. Both numbers are correct and they do
-      // not match, so the word records keeps this pill from reading as the same
+      // These are stats totals including resolved entries, while the Learning loop card below counts active entries only.
+      // Both numbers are correct and they do not match, so the word records keeps this pill from reading as the same
       // measurement under the same label.
       const parts = fg !== null && ls !== null
         ? [fg + ' footgun records', ls + ' lesson records']

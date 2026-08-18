@@ -1,11 +1,13 @@
 /**
  * The rules that decide whether Gruff warning debt regressed, kept apart from running the analyzer.
- * Loaded by scripts/check-gruff-warning-ratchet.mjs, which supplies a fresh scan and prints whatever
- * this module reports. It confirms the scan still meets the reviewed coverage floor, then compares
- * warnings with scripts/gruff-warning-baseline.json when that accepted-debt manifest exists. A
- * maintainer changes rules here when the definition of "this got worse" changes, and changes the
- * sibling file when the way the analyzer is launched changes. Failure lines are collected by
- * RatchetFailureReport from ratchet-failure-report.mjs, which every check here writes into.
+ *
+ * Loaded by scripts/check-gruff-warning-ratchet.mjs, which supplies a fresh scan and prints whatever this module
+ * reports. It confirms the scan still meets the reviewed coverage floor, then compares warnings with
+ * scripts/gruff-warning-baseline.json when that accepted-debt manifest exists.
+ *
+ * A maintainer changes rules here when the definition of "this got worse" changes, and changes the sibling file
+ * when the way the analyzer is launched changes. Failure lines are collected by RatchetFailureReport from
+ * ratchet-failure-report.mjs, which every check here writes into.
  */
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -193,14 +195,13 @@ function collectAcceptedEntriesByIdentity(parsedManifest, failures) {
  * Read the reviewed debt list a maintainer maintains by hand and confirm it is usable.
  * Runs before the scan so an unreviewable manifest stops the gate immediately instead of appearing
  * to approve whatever the analyzer reports.
- * Error behavior: never throws - a missing file, unreadable file, or JSON syntax error is reported
- * as an "invalid manifest" line and answered with null.
  * Invariant: once anything is recorded, null is always returned, so a broken manifest can never
  * accept a single warning.
  *
  * @param failures - collector the caller prints; nothing is added when the manifest is sound
- * @returns the coverage floor and accepted entries, or null when the manifest cannot be trusted and
- *   the maintainer must fix it before any debt comparison is meaningful
+ * @returns the coverage floor and accepted entries, or null when the manifest cannot be trusted and the maintainer must fix it before any debt
+ *   comparison is meaningful. It never throws - a missing file, unreadable file, or JSON syntax error is reported as an "invalid manifest" line and
+ *   answered with null.
  */
 export function loadReviewedDebtManifest(failures) {
   let manifestText;

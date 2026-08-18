@@ -120,6 +120,20 @@ last_reviewed: 2026-08-18
 
 ---
 
+## Lesson: A full-suite result is not attributable when another session is mutating the tree
+
+**Status:** active | **Created:** 2026-08-18
+**Decision changed:** In a checkout a second session is writing to, prove attribution from the change set and the failure message before reporting a suite result as yours or as pre-existing. Scope the claim you make to the contracts covering your files.
+**Trigger phase:** VERIFY
+
+**What happened:** `npm test` reported 2066 pass / 0 fail after a playbook edit, then 2069 tests with 3 failures a few minutes later. The suite had grown by three tests and gained failures without my change set growing. `git diff --name-only test/` was useless for attribution because it returned the union of my one edited test file and eleven the other session had modified. Reading the failure messages settled it: both traceable failures asserted `REQUIRED_GOAT_FLOW_GITIGNORE_PATTERNS must match workflow/setup/reference/goat-flow-gitignore`, and both that template and `.goat-flow/.gitignore` were modified in the tree by the other session's ignore-aware-search work. My six-file change set touched no gitignore.
+
+**Root cause:** I reached for a whole-repo gate as the proof of a scoped change. In a shared checkout the suite measures the tree, not the diff, so its result carries another session's in-flight state. `git status` and `git diff` describe the working tree the same way, so neither separates authorship.
+
+**Prevention:** Keep a written list of the files you actually edited; that list, not `git diff`, is your change set. Prove a failure is not yours by reading its assertion and showing it names a file outside that list - a filename overlap is not proof either way, since one test file can hold both a failing gitignore assertion and an unrelated reference to your files. Run the focused contracts covering your change as the gate you claim, and report the full-suite number separately with its attribution stated. Never `git stash` to isolate; a second session can commit between the stash and the pop. Related: [[Parallel sessions need concurrency-safe file patterns]] covers write contention on the same files, which is a different failure from this one.
+
+---
+
 ## Lesson: Parallel sessions need concurrency-safe file patterns
 
 **Status:** active | **Created:** 2026-04-05

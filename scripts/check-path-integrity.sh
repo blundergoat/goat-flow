@@ -3,9 +3,8 @@
 # check-path-integrity.sh
 #
 # Purpose:
-#   Validates that all internal path references in installed goat-flow
-#   output resolve to real files. Catches the R9 regression class where
-#   framework-local paths leak into installed skills.
+#   Validates that all internal path references in installed goat-flow output resolve to real files.
+#   Catches the R9 regression class where framework-local paths leak into installed skills.
 #
 # Usage:
 #   bash scripts/check-path-integrity.sh [project-root]
@@ -25,10 +24,10 @@ hook_configs=".claude/settings.json .codex/hooks.json .github/hooks/hooks.json"
 err() { echo "FAIL: $1" >&2; errors=$((errors + 1)); }
 
 # ── 1. workflow/ paths in installed skills are INVALID ──────────────
-# The R9 regression was exactly this: workflow/templates/* leaked into
-# installed skills. In the goat-flow repo, those paths resolve - so a
-# naive "does it exist?" check would miss the bug. Any workflow/ path
-# in installed skill files is an error regardless of resolution.
+# The R9 regression was exactly this: workflow/templates/* leaked into installed skills.
+#
+# In the goat-flow repo those paths resolve, so a naive "does it exist?" check would miss the bug.
+# Any workflow/ path in an installed skill file is an error regardless of resolution.
 for agent_dir in $skill_dirs; do
     dir="${root}/${agent_dir}"
     [[ -d "$dir" ]] || continue
@@ -41,11 +40,11 @@ for agent_dir in $skill_dirs; do
 done
 
 # ── 2. .goat-flow/ paths in installed skills must resolve ───────────
-# Exception: paths under .goat-flow/plans/, .goat-flow/scratchpad/, and
-# .goat-flow/logs/ are intentionally gitignored (local session state per
-# .goat-flow/plans/.gitignore). Skills reference them as navigation pointers
-# (e.g. `.goat-flow/plans/.active` - the active-plan marker); treating
-# absence as drift false-positives on every clean checkout and CI run.
+# Exception: paths under .goat-flow/plans/, .goat-flow/scratchpad/, and .goat-flow/logs/ are intentionally gitignored,
+# as local session state per .goat-flow/plans/.gitignore.
+#
+# Skills reference them as navigation pointers, such as `.goat-flow/plans/.active`, the active-plan marker.
+# Treating absence as drift false-positives on every clean checkout and CI run.
 for agent_dir in $skill_dirs; do
     dir="${root}/${agent_dir}"
     [[ -d "$dir" ]] || continue
@@ -142,15 +141,16 @@ for agent_dir in $skill_dirs; do
 done
 
 # ── 8. Bare *.md cross-references in docs/*.md must resolve ────────
-# Catches doc-to-doc references like `harness-spec.md` in docs/*.md that point
-# at files which no longer exist. Scoped to `.md` extensions only - `.ts`/`.sh`
-# in coding-standards prose are usually conceptual identifiers, not literal
-# paths, so they would false-positive. Resolves relative to the doc's dir
-# first, then repo root, then by basename anywhere under the repo except
-# gitignored local state (catches refs like `skill-preamble.md` that live under
-# `.goat-flow/skill-docs/` without letting a developer's local-only copy of a
-# renamed file mask drift that a clean CI checkout would report).
-# Skips fenced code blocks.
+# Catches doc-to-doc references like `harness-spec.md` in docs/*.md that point at files which no longer exist.
+#
+# Scoped to `.md` only, because `.ts`/`.sh` in coding-standards prose are usually conceptual identifiers rather than
+# literal paths, so they would false-positive.
+#
+# Resolution order is the doc's own directory, then the repo root, then by basename anywhere under the repo except
+# gitignored local state. That last step catches refs like `skill-preamble.md` living under `.goat-flow/skill-docs/`,
+# without letting a developer's local-only copy of a renamed file mask drift a clean CI checkout would report.
+#
+# Fenced code blocks are skipped.
 docs_dir="${root}/docs"
 if [[ -d "$docs_dir" ]]; then
     while IFS= read -r -d '' docfile; do
@@ -162,11 +162,12 @@ if [[ -d "$docs_dir" ]]; then
             [[ "$ref" == *'<'* || "$ref" == *'>'* ]] && continue
             [[ "$ref" == *'{'* || "$ref" == *'}'* ]] && continue
             [[ "$ref" == http* ]] && continue
-            # Names docs must be able to state even though the file is absent
-            # here by design. `ISSUE.md` is the /goat-plan artifact written under
-            # the gitignored `.goat-flow/plans/<name>/` - the same local-state
-            # exemption section 2 applies. `docs/coding-standards/git-commit.md`
-            # is the compatibility commit-guide path goat-flow still accepts in
+            # Names docs must be able to state even though the file is absent here by design.
+            #
+            # `ISSUE.md` is the /goat-plan artifact written under the gitignored `.goat-flow/plans/<name>/`, so the
+            # same local-state exemption as section 2 applies.
+            #
+            # `docs/coding-standards/git-commit.md` is the compatibility commit-guide path goat-flow still accepts in
             # existing consumer projects but no longer ships itself (ADR-051).
             case "$ref" in
                 ISSUE.md | docs/coding-standards/git-commit.md) continue ;;
@@ -174,13 +175,12 @@ if [[ -d "$docs_dir" ]]; then
             # Resolve relative to doc dir, then repo root.
             if [[ -e "${docdir}/${ref}" ]]; then continue; fi
             if [[ -e "${root}/${ref}" ]]; then continue; fi
-            # Fall back to basename lookup anywhere in the repo (excludes
-            # node_modules/.git for speed). A file with this basename existing
-            # anywhere means the ref is a conceptual cross-ref, not drift.
-            # Gitignored local state is pruned too: agent worktrees, scratchpad
-            # archives, plans, and logs hold stale copies of renamed files that
-            # exist only on a developer's machine, so counting them made this
-            # check pass locally and fail on a clean CI checkout.
+            # Fall back to basename lookup anywhere in the repo, excluding node_modules and .git for speed.
+            # A file with this basename existing anywhere means the ref is a conceptual cross-ref, not drift.
+            #
+            # Gitignored local state is pruned too: agent worktrees, scratchpad archives, plans, and logs hold stale
+            # copies of renamed files that exist only on a developer's machine, so counting them made this check
+            # pass locally and fail on a clean CI checkout.
             base=$(basename "$ref")
             if find "$root" \
                 \( -path '*/node_modules' -o -path '*/.git' -o -path '*/dist' \
@@ -201,10 +201,10 @@ if [[ -d "$docs_dir" ]]; then
 fi
 
 # ── 9. No maintainer-local absolute paths in publishable files ─────
-# Anything under src/ or docs/ (and package.json) ships to npm, so a
-# `/home/<user>/...` string there leaks the maintainer's private directory
-# layout to every consumer. Comments count too - provenance notes must cite
-# projects, not local filesystem locations.
+# Anything under src/ or docs/, and package.json, ships to npm, so a `/home/<user>/...` string there leaks the
+# maintainer's private directory layout to every consumer.
+#
+# Comments count too: a provenance note must cite projects, not local filesystem locations.
 for leak_target in src docs package.json; do
     lpath="${root}/${leak_target}"
     # Skip surfaces that don't exist in this project (consumers may lack src/).

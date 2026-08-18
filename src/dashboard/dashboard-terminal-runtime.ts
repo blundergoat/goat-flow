@@ -285,15 +285,12 @@ function pruneLocalSessionRows(
 /**
  * Clear recent inactive terminal sessions while preserving running backend sessions.
  *
- * Use when the user clicks the clear/recent-session cleanup action in Workspace.
- *
- * Four separate collections are pruned because each tracks sessions by a different key, and leaving any one stale would
- * offer the user a reconnect button for a session the backend already dropped.
- *
- * Error behavior: never throws; a failed request reports as a toast and leaves the rows in place.
+ * Use when the user clicks the clear/recent-session cleanup action in Workspace. Four collections are pruned,
+ * because each tracks sessions by a different key and one stale entry offers a reconnect the backend already dropped.
  *
  * @param ctx - terminal dashboard state; endpoint failures show a toast and keep current rows
- * @returns nothing; cleared count appears as a toast
+ * @returns nothing; the cleared count appears as a toast, and it never throws, so a failed request leaves every
+ *   row in place
  */
 async function dashboardEndAllSessions(
   ctx: DashboardTerminalContext,
@@ -444,11 +441,10 @@ async function loadXtermScript(src: string, label: string): Promise<void> {
  * Load xterm core and addons for the dashboard terminal.
  *
  * Use before opening or reconnecting a Workspace terminal.
- * Error behavior: throws the underlying load failure after removing the asset tags, so the caller reports it and the next explicit launch starts from
- * a clean slate.
  *
  * @param ctx - terminal dashboard state; already-loaded state returns immediately
- * @returns nothing; failed loads reset asset tags so the next launch can retry
+ * @returns nothing; it throws the underlying load failure after removing the asset tags, so the caller reports it
+ *   and the next explicit launch starts from a clean slate
  */
 async function dashboardLoadXterm(
   ctx: DashboardTerminalContext,
@@ -481,11 +477,10 @@ async function dashboardLoadXterm(
  * Warm xterm assets in the background.
  *
  * Use after health confirms terminals are available so the first launch feels faster.
- * Error behavior: never throws; a background load failure swallows the error deliberately, because warming is invisible to the user and the same
- * failure reports on the next explicit launch.
  *
  * @param ctx - terminal dashboard state; unavailable or already-loaded terminals do nothing
- * @returns nothing; background failures are surfaced later on explicit launch
+ * @returns nothing; it swallows a background load failure deliberately, because warming is invisible to the user
+ *   and the same failure reports on the next explicit launch
  */
 async function dashboardWarmXterm(
   ctx: DashboardTerminalContext,
@@ -702,12 +697,11 @@ function forgetProjectSessions(ctx: DashboardTerminalContext): void {
  * The backend is preferred for anything it validated, but a legacy row that omits capture or its report owner falls back
  * to the saved launch values, so an older session keeps the receipt channel it was started with.
  *
- * Side effect: pushes the session, records its title, registers retry bindings, and arms its loading timers.
- *
  * @param ctx - terminal dashboard state mutated in place
  * @param saved - the session as the browser stored it at launch
  * @param alive - the same session as the backend currently reports it
- * @returns nothing; the session appears in the workspace once this returns
+ * @returns nothing; it pushes the session, records its title, registers retry bindings, and arms its loading
+ *   timers, so the session appears in the workspace once this returns
  */
 function restoreSavedSession(
   ctx: DashboardTerminalContext,
@@ -755,12 +749,12 @@ function restoreSavedSession(
 /**
  * Reconnect the workspace to every saved backend session for this project.
  *
- * Each exit path prunes the project's saved-session entries because a saved id the backend no longer reports would leave the user a reconnect button
- * that can never succeed.
- * Error behavior: never throws; an unreachable sessions endpoint reports as a failed reconnect after forgetting this project's saved sessions.
+ * Each exit path prunes the project's saved-session entries, because a saved id the backend no longer reports would
+ * leave the user a reconnect button that can never succeed.
  *
  * @param ctx - terminal dashboard state; saved-session and active-session maps are pruned in place
- * @returns true when at least one session was reopened; false leaves the workspace disconnected
+ * @returns true when at least one session was reopened; false leaves the workspace disconnected, and it never
+ *   throws, so an unreachable endpoint reports as a failed reconnect after forgetting the saved sessions
  */
 async function dashboardReconnectTerminal(
   ctx: DashboardTerminalContext,
@@ -826,11 +820,9 @@ interface BackendSessionRequest {
  * The prompt is deliberately not sent here: it is typed into the session after connect, so a failed launch never leaves
  * the user's prompt sitting in a session they cannot see.
  *
- * Error behavior: throws the server's own message when it reports one, and throws when the reply omits the id or socket
- * URL, so an unusable session is never pushed into the workspace.
- *
  * @param request - the launch choices to create the session with
- * @returns the new session id and the WebSocket URL to connect to
+ * @returns the new session id and the WebSocket URL to connect to; it throws the server's own message when it
+ *   reports one, and throws when the reply omits either field, so an unusable session never reaches the workspace
  */
 async function requestBackendSession(
   request: BackendSessionRequest,
@@ -878,15 +870,14 @@ interface LaunchRegistration {
 /**
  * Add a newly created session to the workspace, along with the state a retry would need.
  *
- * Retry bindings carry the capture flag and report owner forward, because a retry that dropped them would leave the agent
- * waiting on a receipt that has nowhere to persist.
- *
- * Side effect: records the title, pushes the session, stores retry bindings, and arms its loading timers.
+ * Retry bindings carry the capture flag and report owner forward, because a retry that dropped them would leave the
+ * agent waiting on a receipt that has nowhere to persist.
  *
  * @param ctx - terminal dashboard state mutated in place
  * @param created - the id returned by the backend
  * @param launch - the launch choices, retained so a retry can repeat them exactly
- * @returns the session now visible in the workspace
+ * @returns the session now visible in the workspace; it records the title, pushes the session, stores retry
+ *   bindings, and arms the loading timers on the way
  */
 function registerLaunchedSession(
   ctx: DashboardTerminalContext,
@@ -936,16 +927,13 @@ function registerLaunchedSession(
 /**
  * Tear down a session that was created but never became usable, so the user is not left with a dead workspace row.
  *
- * The backend copy is deleted too, and that request is deliberately fire-and-forget: the user has already been told the
- * launch failed, and a second error about the cleanup would only add noise.
- *
- * Side effect: clears timers, removes the row and its bindings, may reselect the active session, and sends a DELETE.
- * Error behavior: throws nothing; the backend delete swallows its own failure, since the user has already been told the
- * launch failed and a second error would only add noise.
+ * The backend copy is deleted too, and that request is deliberately fire-and-forget.
  *
  * @param ctx - terminal dashboard state mutated in place
  * @param failedSessionId - id of the session to discard
- * @returns nothing; the failed session is gone from the workspace once this returns
+ * @returns nothing; the failed session is gone from the workspace once this returns. It clears timers, removes the
+ *   row and its bindings, may reselect the active session, and sends a DELETE whose failure it swallows, because
+ *   the user has already been told the launch failed and a second error would only add noise.
  */
 function discardFailedSession(
   ctx: DashboardTerminalContext,
@@ -969,18 +957,16 @@ function discardFailedSession(
 /**
  * Create a new backend terminal session and open it in the workspace.
  *
- * The xterm assets load concurrently with the create request, and its rejection is captured as a value rather than awaited, because a stalled asset
- * load must not delay creating the session.
- *
- * Error behavior: never throws; a rejected create, an error payload, or an incomplete reply reports as a toast and tears down any session that was
- * already created.
+ * The xterm assets load concurrently with the create request, and their rejection is captured as a value rather than
+ * awaited, because a stalled asset load must not delay creating the session.
  *
  * @param ctx - terminal dashboard state; a new local session is pushed on success
  * @param prompt - prompt text sent after connect; retained so a retry can resend it
  * @param runner - agent to launch; defaults to Claude when the caller has no override
  * @param options - launch metadata; `captureQualityDrafts` must survive into retry state so a retried
  *   report still has somewhere to persist
- * @returns nothing; the session appears in `ctx.sessions` once the backend accepts it
+ * @returns nothing; the session appears in `ctx.sessions` once the backend accepts it. It never throws: a rejected
+ *   create, an error payload, or an incomplete reply reports as a toast and tears down any session already created.
  */
 async function dashboardLaunchInTerminal(
   ctx: DashboardTerminalContext,

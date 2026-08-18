@@ -37,14 +37,12 @@ function dashboardSkillEvidenceLimitNotes(
 /**
  * Render an evaluator result as the Markdown a user pastes into a PR, review note, or session summary.
  *
- * Section order and metric order both follow the visible panel, so the pasted text reads as the same assessment the user
- * was just looking at rather than a re-ordered summary of it.
- *
- * Optional sections are omitted entirely rather than written as empty headings, because a bare "## Improvement tips" with
- * nothing under it reads as advice that went missing.
+ * Section order and metric order both follow the visible panel, so the pasted text reads as the same assessment the
+ * user was just looking at rather than a re-ordered summary of it.
  *
  * @param ctx - dashboard app context, used for the same grade, percentage, and slug helpers the panel displays
- * @param result - the evaluator result being exported
+ * @param result - the evaluator result being exported; optional sections are omitted entirely rather than written
+ *   as empty headings, because a bare "## Improvement tips" with nothing under it reads as advice that went missing
  * @returns the Markdown document; never empty
  */
 function buildEvaluatorReportMarkdown(

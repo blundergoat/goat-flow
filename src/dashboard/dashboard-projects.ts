@@ -550,9 +550,11 @@ function dashboardPreferredSavedList(
 /**
  * Reads whatever saved dashboard state the server holds, so startup has a single place that talks to the projects store.
  *
- * Error behavior: never throws; an unreachable or pre-projects-store server reports `wasLoadedFromServer` false with empty lists, which is the caller's signal to fall back to browser storage.
+ * Error behavior: never throws. An unreachable or pre-projects-store server reports `wasLoadedFromServer` false
+ * with empty lists, which is the caller's signal to fall back to browser storage.
  *
- * @returns saved paths, favorites, titles, identity-aware records, and discovered siblings; a false `wasLoadedFromServer` means every list is empty because the request or its parse failed
+ * @returns saved paths, favorites, titles, identity-aware records, and discovered siblings; a false
+ *   `wasLoadedFromServer` means every list is empty because the request or its parse failed
  */
 async function dashboardReadSavedServerState(): Promise<{
   savedPaths: string[];
@@ -610,7 +612,8 @@ function dashboardBuildProjectRows(
   savedPaths: string[],
   discoveredPaths: string[],
 ): ProjectEntry[] {
-  // Identity-aware rows preserve saved display names, archives, and path aliases; raw saved paths still give the user selectable rows until audit status is refreshed.
+  // Identity-aware rows preserve saved display names, archives, and path aliases.
+  // Raw saved paths still give the user selectable rows until audit status is refreshed.
   const projectRows: ProjectEntry[] =
     savedProjectRecords.length > 0
       ? savedProjectRecords

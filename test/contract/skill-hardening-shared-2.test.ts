@@ -385,6 +385,9 @@ describe("skill hardening contracts: shared surfaces (2/3)", () => {
         /Review comments and replies to a person\s*\|\s*Correctness and residue only/u,
         /Code comments and docstrings\s*\|\s*No - see `code-comments\.md`/u,
         /social-meaning guard and Colleague check/u,
+        // The replies permission is correctness and residue, widened only by an explicit user request; consolidating the three
+        // shipped wordings once deleted this escape outright, so it is pinned here rather than left to prose review.
+        /no other style rule applies unless the user asks/u,
         /deliberate control repetition/u,
         /verified facts and safety[\s\S]+user's task, audience, and required meaning[\s\S]+project-documented style and supplied voice/u,
       ]);
@@ -399,6 +402,9 @@ describe("skill hardening contracts: shared surfaces (2/3)", () => {
         /optional[^\n]+required[^\n]+planned or pending check[^\n]+passed check/u,
         /claim strength and specificity to the evidence/u,
         /named attribution to a specific inspectable point/u,
+        // `comments only` and `no behavioural changes` have different falsifiers; one rule for both produced a false verdict on a local rename.
+        /`comments only` is false when the diff changes executable code/u,
+        /a rename may be non-behavioural but is never `comments only`/u,
       ]);
       assertSectionPatterns(playbookPath, "Before Editing Existing Prose", [
         /human-authored, generated, mixed, or unknown/u,
@@ -410,6 +416,8 @@ describe("skill hardening contracts: shared surfaces (2/3)", () => {
       assertSectionPatterns(playbookPath, "Audience and Precision", [
         /Precision is not a defect/u,
         /Replies to people carry social meaning/u,
+        // One replies permission: Audience defers to the Scope Gate instead of adding a diagnosed social cost as a fourth edit reason.
+        /Scope Gate sets the permission/u,
       ]);
       assertSectionPatterns(playbookPath, "Integrity", [
         /Never invent an incident/u,
@@ -445,7 +453,7 @@ describe("skill hardening contracts: shared surfaces (2/3)", () => {
         /component as the actor when the component performs the action/u,
         /person or team only when responsibility is relevant and evidenced/u,
       ]);
-      assertSectionPatterns(playbookPath, "Fix on Sight", [
+      assertSectionPatterns(playbookPath, "Candidate Patterns", [
         /verified meaning/u,
         /diagnose reader cost, not authorship/u,
         /Assistant voice/u,

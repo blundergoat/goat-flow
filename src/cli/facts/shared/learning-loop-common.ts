@@ -69,14 +69,12 @@ function normalizeSurfacePath(path: string): string {
 }
 
 /**
- * Find learning-loop artifact surfaces that exist on disk but sit outside the configured canonical location - the signal that a project is splitting
- * one concern across two directories.
- * Returns nothing unless a canonical path is actually present, so a project that simply hasn't adopted the surface yet is not flagged.
- *
- * Trailing slashes are normalized before comparison.
+ * Find learning-loop artifact surfaces that exist on disk but sit outside the configured canonical location, which
+ * is the signal that a project is splitting one concern across two directories.
  *
  * @param fs - read-only filesystem adapter for the target project
- * @param canonicalPaths - the configured/blessed locations; at least one must exist or the result is empty
+ * @param canonicalPaths - configured locations, compared with trailing slashes normalized; at least one must exist
+ *   or the result is empty, so a project that has not adopted the surface yet is never flagged
  * @param knownPaths - candidate surfaces to test against the canonical set
  * @returns existing non-canonical paths, sorted lexicographically for deterministic output; empty when none compete
  */
@@ -97,18 +95,14 @@ export function findCompetingArtifactSurfaces(
 /**
  * Read a learning-loop location into a stable, sorted set of markdown entries.
  *
- * Handles both config shapes uniformly: a directory (every `.md` except the README.md/INDEX.md metadata files, sorted lexicographically) and a single
- * flat `.md` file (one entry).
- *
- * INDEX.md is generated bucket metadata (`goat-flow index`), not entry content - including it would count phantom legacy entries and force entry
- * frontmatter onto a generated file.
- *
- * The sort is load-bearing - downstream entry ordering and report output must be deterministic across machines, so directory listing order is never
- * trusted.
+ * Handles both config shapes: a directory of `.md` entries, or a single flat `.md` file that counts as one entry.
  *
  * @param fs - read-only filesystem adapter for the target project
  * @param dir - directory path, or a single `.md` file path for flat-file config mode
- * @returns the location with its existence flag and entries; files is empty when the location is absent or unreadable
+ * @returns the location with its existence flag and entries, sorted lexicographically because downstream ordering
+ *   and report output must be deterministic across machines, so directory listing order is never trusted. `README.md`
+ *   and the generated `INDEX.md` are excluded, since counting generated metadata would invent phantom entries and
+ *   force entry frontmatter onto a generated file. Files is empty when the location is absent or unreadable.
  */
 export function listMarkdownEntries(fs: ReadonlyFS, dir: string): EntryDir {
   // Flat-file mode: config points at a single .md file instead of a directory
@@ -258,12 +252,11 @@ function getLineRefDiagnostic(
 /**
  * Validate every file reference in one footgun section and tally the result.
  *
- * Reports a path as stale when the file no longer exists, and flags a `file:line` reference when the line is out of bounds, lacks a semantic anchor,
- * or carries a line number made redundant by an anchor (the ADR-024 anchor-over-line-number contract).
- * Strikethrough is stripped first so struck evidence is ignored.
+ * Reports a path as stale when the file no longer exists, and flags a `file:line` reference when the line is out of
+ * bounds, lacks a semantic anchor, or carries a line number made redundant by an anchor (the ADR-024 contract).
  *
  * @param fs - read-only filesystem adapter used to resolve and line-count referenced files
- * @param content - the footgun section's markdown
+ * @param content - the footgun section's markdown; strikethrough is stripped first, so struck evidence is ignored
  * @returns counts plus the stale-path and invalid-line-reference lists; all empty when every reference is valid
  */
 export function summarizeFootgunRefs(
@@ -340,10 +333,14 @@ function scanBareEvidenceAnchors(
   }
 }
 
-/** Extract a plain file path from an `Evidence anchors:` line match, or null when
- *  the token is a glob, a `file:line` ref (handled by the line-ref scan), a path
- *  followed by a `(search: ...)` anchor (handled by the search-anchor scan), or
- *  not a file reference at all. */
+/**
+ * Extract a plain file path from an `Evidence anchors:` line match.
+ *
+ * @param line - the evidence-anchors line being scanned
+ * @param match - the token match under test
+ * @returns the file path, or null when the token is a glob, a `file:line` ref, a path already followed by a
+ *   `(search: ...)` anchor, or not a file reference at all; each of those has its own scan
+ */
 function bareEvidenceAnchorPath(
   line: string,
   match: RegExpMatchArray,
@@ -357,10 +354,16 @@ function bareEvidenceAnchorPath(
   return filePath;
 }
 
-/** Flag a gitignored path used in a durable-evidence grammar as a policy violation.
- *  Local-state paths (plans/scratchpad/logs) can never be durable anchors - they
- *  vanish on clean checkouts - so the violation fires regardless of whether the
- *  file exists right now. Returns true when the path was flagged (caller skips it). */
+/**
+ * Flag a gitignored path used in a durable-evidence grammar as a policy violation.
+ *
+ * Local-state paths (plans/scratchpad/logs) vanish on a clean checkout, so they can never be durable anchors, and
+ * the violation fires whether or not the file exists right now.
+ *
+ * @param filePath - the cited path
+ * @param summary - reference summary the violation is recorded in
+ * @returns true when the path was flagged, which tells the caller to skip it
+ */
 function flagGitignoredEvidenceAnchor(
   filePath: string,
   summary: FootgunRefSummary,

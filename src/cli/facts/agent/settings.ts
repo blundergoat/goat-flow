@@ -127,13 +127,12 @@ function hasNonEmptyDenyList(parsed: unknown): boolean {
 /**
  * Read one agent's settings file and report what it actually protects, in whatever format that agent stores it.
  *
- * This feeds the audit's constraints concern, so it answers the user's real question: are my guardrails in force for this
- * agent, or merely written down?
- *
- * JSON and Codex TOML are both supported, and an agent with no settings file is a normal state rather than an error.
+ * This feeds the audit's constraints concern, so it answers the user's real question: are my guardrails in force
+ * for this agent, or merely written down?
  *
  * @param fs - read-only project filesystem adapter
- * @param agent - agent whose settings are read; a profile with no settings file reports everything as absent
+ * @param agent - agent whose settings are read; JSON and Codex TOML are both supported, and a profile with no
+ *   settings file reports everything as absent rather than erroring
  * @returns whether the file exists and parses, its parsed contents, and whether deny rules cover the secret-bearing paths
  */
 export function extractSettingsFacts(

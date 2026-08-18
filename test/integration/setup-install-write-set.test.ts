@@ -1,9 +1,10 @@
 /**
- * Proves the dry-run preview is a complete superset of what an install writes, and that
- * repeating install, sync, disable, or enable leaves the selected target byte-stable.
- * These fixtures run the public CLI against disposable targets and compare content
- * snapshots, so an undisclosed write or a non-converging hook toggle fails by path name.
- * Removals stay outside the compared set by contract; the preview declares that limit.
+ * Proves the dry-run preview is a complete superset of what an install writes, and that repeating install, sync,
+ * disable, or enable leaves the selected target byte-stable.
+ *
+ * These fixtures run the public CLI against disposable targets and compare content snapshots, so an undisclosed
+ * write or a non-converging hook toggle fails by path name. Removals stay outside the compared set by contract,
+ * which the preview itself declares.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -258,14 +259,14 @@ function readUserHookContent(config: Record<string, unknown>): unknown {
 
 /**
  * Add unrelated hook content and one unrelated top-level key to the installed hook config.
- * Use before toggling hooks so convergence has real user content to preserve. The content is
- * planted beside goat-flow's own block, never inside it, because a row placed inside a managed
- * block is owned content the registrar is right to converge away.
- * This writes the disposable target's hook config, so call it only on a fixture
- * project created by `makeTempProject`.
+ *
+ * Use before toggling hooks so convergence has real user content to preserve.
+ * The content is planted beside goat-flow's own block, never inside it, because a row inside a managed block is
+ * owned content the registrar is right to converge away.
  *
  * @param hookConfigPath - absolute path of the installed agent hook config
- * @returns the planted content, for later identity comparison
+ * @returns the planted content, for later identity comparison; it writes the disposable target's hook config, so
+ *   call it only on a fixture project created by `makeTempProject`
  */
 function plantUserHookContent(hookConfigPath: string): unknown {
   const config = JSON.parse(readFileSync(hookConfigPath, "utf-8")) as Record<

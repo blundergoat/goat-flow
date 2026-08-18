@@ -90,13 +90,13 @@ export const cachedRepoAudits = new Map<string, AuditReport>();
 
 /**
  * Audit this repository once per distinct option set and reuse the result afterwards.
- * Use from any describe that audits the controlling workspace with identical inputs: a fresh audit
- * costs roughly 7-12s, so sharing one cuts about 30s off this file's suite time.
- * Callers must treat the report as read-only - every caller with equal options receives the same
- * object, so mutating it corrupts unrelated tests.
+ *
+ * Use from any describe that audits the controlling workspace with identical inputs: a fresh audit costs roughly
+ * 7-12s, so sharing one cuts about 30s off this file's suite time.
  *
  * @param opts - audit selectors; `agentFilter` null audits every agent, `harness` adds harness checks
- * @returns the shared report for `opts`; repeated calls with equal selectors return the same instance
+ * @returns the shared report for `opts`; repeated calls with equal selectors return the same instance, so callers
+ *   must treat it as read-only because mutating it corrupts unrelated tests
  */
 export function getRepoAudit(opts: {
   agentFilter: AgentId | null;
@@ -582,11 +582,10 @@ function auditFixtureFileContent(file: string): string {
  *
  * The options toggle exactly the artifacts whose presence changes a check result, so one helper covers the pass shape and
  * both failure shapes without a test hand-building the manifest itself.
- * Side effect: writes directories and files into the fixture project on disk.
  *
  * @param root - fixture project root
  * @param options - which optional artifacts to create; omitting one is how a test drives that check to fail
- * @returns nothing; the fixture is on disk once this resolves
+ * @returns nothing; the fixture is on disk once this resolves. It writes directories and files into the fixture project on disk.
  */
 export async function writeAuditSetupFixture(
   root: string,

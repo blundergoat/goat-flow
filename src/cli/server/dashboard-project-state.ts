@@ -240,12 +240,12 @@ function resolveMarkerIdentity(
  * Resolve the stable identity the dashboard uses to recognise one project across path changes.
  *
  * Sources are tried in descending durability: Git remote, then local marker, then the path itself.
- * A path identity is deliberately last because it stops matching as soon as the user moves the directory, which is exactly what the other two sources
- * exist to survive.
  *
  * @param projectPath - project root as the user selected it; normalised to a realpath first
  * @param options - `allowMarkerWrite` true permits creating a missing marker file
- * @returns the resolved identity; never null, because the path fallback always succeeds
+ * @returns the resolved identity, never null because the path fallback always succeeds. Path identity is
+ *   deliberately last: it stops matching as soon as the user moves the directory, which is exactly what the other
+ *   two sources exist to survive.
  */
 export function resolveProjectIdentity(
   projectPath: string,
@@ -405,11 +405,10 @@ function readOptionalProjectRecordsProperty(
  *
  * An existing entry keeps its optional fields unless the incoming record supplies them, so re-adding a project by a new path never discards the title
  * or marker learned earlier.
- * Side effect: mutates the `records` map in place.
  *
  * @param records - accumulator keyed by identity
  * @param next - record to merge; its `currentPath` always wins as the most recent location
- * @returns nothing; the result is the merged entry in `records`
+ * @returns nothing; the result is the merged entry in `records`. It mutates the `records` map in place.
  */
 function addProjectRecord(
   records: Map<string, DashboardProjectRecord>,

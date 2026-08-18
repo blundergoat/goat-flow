@@ -233,13 +233,12 @@ function parseHookConfigJson(
  *
  * A hook the user never toggled is left alone entirely, so the comparison only reflects choices they actually made rather than defaults they never
  * saw.
- * Side effect: mutates `config` in place.
  *
  * @param fs - the audited project's filesystem, read for the explicit toggle
  * @param config - Copilot config being edited in place
  * @param agent - agent profile supplying the command this entry would run
  * @param spec - hook whose toggle is applied
- * @returns true when the toggle applied and the config changed shape
+ * @returns true when the toggle applied and the config changed shape. It mutates `config` in place.
  */
 function applyExplicitHookToggle(
   fs: ReadonlyFS,

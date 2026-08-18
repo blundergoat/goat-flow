@@ -85,8 +85,8 @@ function hookCleanupContract(hookSpec) {
  * - The provider loop excludes unsupported hooks, so users never receive registrations their agent cannot deliver.
  * - The hook loop isolates each generated fragment, preventing one enabled hook from leaking another hook's rows.
  *
- * Filesystem side effects: calls the writer below one temporary tree, then removes that tree in `finally`.
- * Public invariant: rendered writer JSON is the installer source of truth, avoiding a second command implementation.
+ * It writes into one temporary filesystem tree and removes that tree in `finally`. The public invariant is that
+ * rendered writer JSON is the installer source of truth, which avoids a second command implementation.
  */
 function buildManagedHookContract() {
   const temporaryProjectRoot = mkdtempSync(

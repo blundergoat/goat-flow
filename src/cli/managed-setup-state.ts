@@ -178,12 +178,11 @@ function parseManagedStateEntry(rawEntry: unknown): ManagedInstallStateEntry {
  * Validate and index one hash-only baseline for the selected agent.
  *
  * Use before comparing user files so duplicate or unsafe rows cannot weaken protection.
- * Error behavior: throws on a malformed row or a duplicate path, because a duplicate would make the previously expected bytes ambiguous for one
- * visible path.
  *
  * @param rawState - parsed state object; null or malformed values are rejected
  * @param expectedAgent - selected agent; never null after CLI validation
- * @returns path-to-hash map; empty means the prior install managed no exact-copy files
+ * @returns path-to-hash map; empty means the prior install managed no exact-copy files. It throws on a malformed row or a duplicate path, because
+ *   a duplicate would make the previously expected bytes ambiguous for one visible path.
  */
 function parseManagedInstallState(
   rawState: unknown,

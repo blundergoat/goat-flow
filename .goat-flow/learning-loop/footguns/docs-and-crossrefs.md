@@ -1,6 +1,6 @@
 ---
 category: docs-and-crossrefs
-last_reviewed: 2026-08-14
+last_reviewed: 2026-08-18
 ---
 
 ## Footgun: Path validators can treat gitignored local-state markers as missing docs
@@ -106,6 +106,24 @@ last_reviewed: 2026-08-14
 ~~**Evidence (historical - resolved):** the M13 Phase 3 setup-step renumber left three stale pointers - `.goat-flow/glossary.md` and an evidence-lifecycle ADR entry at removed `workflow/setup/09-customise-to-project.md`, and the removed historical `ADR-011-critique-mob-core-features.md` at removed `05-install-skills.md`~~ (resolved: now `workflow/setup/05-customise-to-project.md` and `workflow/setup/03-install-skills.md`; the ADR carrying the second pointer later left the active set).
 
 **Prevention:** Before a rename, use `git grep` for the exact path and bare filename across all tracked files. Stage the destination before changing existence-validated pointers. Repeat both sweeps after edits and classify old-path hits as compatibility, legacy, or history; include hidden-file `rg` when ignored state matters. This is DoD gate #6.
+
+---
+
+## Footgun: Consolidating a rule stated several ways deletes the riders only one variant carried
+
+**Status:** active | **Created:** 2026-08-18 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Before merging divergent statements of one rule, list every distinct clause across all variants, not only the clause they disagree about. Merge on the conflict, then re-add each rider the merged text dropped.
+**Trigger phase:** ACT
+**Incident count:** 1
+**Latest occurrence:** 2026-08-18
+
+**Symptoms:** A deduplication pass makes one rule consistent and silently narrows it. Every contract still passes, because the deleted clause was never pinned - it existed in prose in exactly one of the variants being merged.
+
+**Why it happens:** Divergence analysis fixes attention on the axis where the variants disagree. Clauses orthogonal to that axis ride along in only some variants and have no advocate during the merge. The shortest consistent wording is then the one that drops them, and a word budget rewards exactly that. The same trap fires again one level down when the merged rule is restated beside its pointer, because the restatement is a fresh variant that can drift from the owner immediately.
+
+**Evidence:** 2026-08-18, M55. Three sites stated the replies-editing permission in `.goat-flow/skill-docs/playbooks/writing-style.md` (search: `Replies are deliberately narrow`) and `.goat-flow/skill-docs/playbooks/writing-sentence-diagnostics.md` (search: `Replies to people receive`). They disagreed about whether a diagnosed social cost authorises an edit, which is what the milestone set out to resolve. Only two variants also carried a requested-tone escape; consolidating on the social-cost axis removed it from all three, and `command grep -rn 'requested tone\|asks for tone' .goat-flow/skill-docs/playbooks/` then returned nothing. The playbook being edited forbids that class of change in its own Correctness and Meaning section (search: `an optional action into a required one`). The first repair reintroduced the defect at the next level: the Audience paragraph restated `correctness and residue only` as absolute while the owner now read `unless the user asks`.
+
+**Prevention:** Enumerate the clause set across every variant before merging, and diff the merged text against that set rather than against any single source. Pin the recovered rider with a contract assertion in the same change, since a clause no test names is the one the next consolidation deletes. Prefer a pointer over a restatement at every non-owner site; a summary beside the owner is a new variant, not a reference. Evidence anchor: `test/contract/skill-hardening-shared-2.test.ts` (search: `no other style rule applies unless the user asks`).
 
 ---
 

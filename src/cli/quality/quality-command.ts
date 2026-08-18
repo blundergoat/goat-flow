@@ -302,13 +302,12 @@ function qualitySaveTimestamp(date: Date = new Date()): string {
  * Inspect one prospective report directory without following a redirecting final component.
  *
  * A null result means the user's first save still needs to create this directory.
- * Error behavior: throws CLIError with exit code 2 for any failure other than a missing path, so an unreadable or redirected component blocks the
- * save instead of being treated as absent.
  *
  * @param path - absolute prospective directory to inspect
  * @param displayPath - project-relative label used in the error, so no absolute path is echoed
  * @param deps - injected CLI error type
- * @returns the stat result, or null when the directory does not exist yet
+ * @returns the stat result, or null when the directory does not exist yet. It throws CLIError with exit code 2 for any failure other than a
+ *   missing path, so an unreadable or redirected component blocks the save instead of being treated as absent.
  */
 function qualitySaveDirectoryStats(
   path: string,
