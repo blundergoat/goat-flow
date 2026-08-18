@@ -1,6 +1,6 @@
 ---
 category: verification-formatting
-last_reviewed: 2026-08-16
+last_reviewed: 2026-08-18
 ---
 
 **Scope:** Formatter, lint, and Knip debt that only surfaces at repo-wide scope - style flags, copied or untracked files that inherit debt, and touched-test formatting before a verification claim. Adding or tuning a preflight gate is [verification-preflight.md](verification-preflight.md).
@@ -84,6 +84,8 @@ last_reviewed: 2026-08-16
 **Recurrences through 2026-08-12:** M11 SARIF and later contract, setup, dashboard, review, and hook batches repeated the same ordering error. M01 again passed focused tests and typecheck before scoped Prettier rejected its touched TypeScript.
 
 **Recurrence (2026-08-16):** A Copilot file-selector run changed `src/cli/review-validate-anchors.ts` and reported completion after typecheck, but an exact-path Prettier check still rejected the file. The remediation now freezes formatter commands before mutation and makes literal formatter proof mandatory in the receipt.
+
+**Recurrence (2026-08-18):** M56 ran shape, parity, contract, typecheck, and the 2071-test fast suite green, then preflight failed on `Prettier (3 unformatted files)` - all three were the milestone's own new or edited test files (`test/integration/gitignore-shape.test.ts`, `test/integration/audit-build.test.ts`, `test/contract/skill-hardening-shared-3.test.ts`). `npx prettier --write` on the exact paths and a rerun gave `PASS 84 checks`; the amendment batch ran `npx prettier --check` on touched paths before its tests and stayed clean.
 
 Evidence anchors:
 

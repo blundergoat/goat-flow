@@ -27,6 +27,7 @@ import {
   writeAgentHookState,
 } from "../../src/cli/server/agent-hook-writer.js";
 import { getHookSpec } from "../../src/cli/server/hooks-registry.js";
+import { REQUIRED_GOAT_FLOW_GITIGNORE_PATTERNS } from "../../src/cli/audit/check-goat-flow.js";
 import { PROFILES } from "../../src/cli/detect/agents.js";
 import {
   HOOK_IDENTIFIER,
@@ -536,8 +537,29 @@ describe("hook registrar: surface detection, toggles, and sync", () => {
         join(root, ".goat-flow", ".gitignore"),
         "utf-8",
       );
+      // The appended rules must use the shipped template's spelling: an anchored `!hooks/**` would be a 43rd effective line that
+      // fails the goat-flow-gitignore audit order check and is invisible to ignore-aware search tools.
       assert.match(gitignore, /^!hooks\/$/m);
-      assert.match(gitignore, /^!hooks\/\*\*$/m);
+      assert.match(gitignore, /^!\*\*\/hooks\/\*\*$/m);
+      assert.doesNotMatch(gitignore, /^!hooks\/\*\*$/m);
+    });
+  });
+
+  // A consumer already on the shipped template must not gain any line from a hook toggle, or the audit's order check fails.
+  it("leaves a template-spelled goat-flow gitignore byte-identical when enabling deny-dangerous", () => {
+    withTempProject((root) => {
+      mkdirSync(join(root, ".codex"), { recursive: true });
+      mkdirSync(join(root, ".goat-flow"), { recursive: true });
+      writeFileSync(join(root, ".codex", "config.toml"), "");
+      const shipped = `${REQUIRED_GOAT_FLOW_GITIGNORE_PATTERNS.join("\n")}\n`;
+      writeFileSync(join(root, ".goat-flow", ".gitignore"), shipped);
+
+      applyHookState(HOOK_IDENTIFIER, true, root);
+
+      assert.equal(
+        readFileSync(join(root, ".goat-flow", ".gitignore"), "utf-8"),
+        shipped,
+      );
     });
   });
 

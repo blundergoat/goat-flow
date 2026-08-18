@@ -1,9 +1,28 @@
 ---
 category: lockstep-surfaces
-last_reviewed: 2026-08-16
+last_reviewed: 2026-08-18
 ---
 
 **Scope:** Changes where adding or renaming one artifact obliges a matching edit on several other surfaces at once, and the partial-update failures that follow. Stale pointers, path validation, and evidence rot live in [docs-and-crossrefs.md](docs-and-crossrefs.md).
+
+## Footgun: The `.goat-flow/.gitignore` rule spelling is duplicated as literals across template, audit, installer, and tests
+
+**Status:** active | **Created:** 2026-08-18 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** A change to any rule in `workflow/setup/reference/goat-flow-gitignore` is a lock-step change: sweep `command grep -rn -E '"!?(learning-loop|skill-docs|hooks|plans|scratchpad|logs/[a-z]+)/' src test scripts` and update every literal in the same batch, then prove a hook toggle leaves a template-spelled file byte-identical.
+**Trigger phase:** ACT
+
+**Symptoms:** The template, its mirror, `REQUIRED_GOAT_FLOW_GITIGNORE_PATTERNS`, and the parity test all agree, the fast suite is green, and a consumer who enables a hook still ends up with one extra effective line in `.goat-flow/.gitignore` and a `goat-flow-gitignore` audit failure ("does not use the required order").
+
+**Why it happens:** The parity test only pins template ↔ audit constant. `src/cli/server/hook-managed-installation.ts` (search: `ensureHookGitignoreEntries`) and the shell installer `workflow/install-goat-flow.sh` (search: `ensure_gitignore_entry ".goat-flow/.gitignore"`) each append their own literal re-includes - the installer does so right after copying the template, so a fresh install carried 43 effective lines and failed its own `goat-flow-gitignore` audit check until the literal was fixed - and several tests carry hand-written gitignore fixtures (`test/integration/dashboard-server.helpers.ts`, search: `!hooks/**`; `test/integration/audit-build.test.ts`, search: `stay ignored`; `test/contract/skill-hardening-shared-3.test.ts`, search: `logs\/sessions`). None of those literals are derived from the template, so a spelling change (M56: `!hooks/**` → `!**/hooks/**`) leaves them behind silently.
+
+**Evidence:** During 1.16.0 M56 (2026-08-18) the template moved every slash-containing rule to the `**/` prefix; the constant, mirror, parity test, and 2071-test fast suite were green while `ensureHookGitignoreEntries` still appended `!hooks/**`. A registrar test written against the pre-fix literal failed 2 cases (`# pass 43 / # fail 2`) and passed after the two-literal fix (`# tests 79 / # pass 79`): `test/unit/hook-registrar-surfaces.test.ts` (search: `leaves a template-spelled goat-flow gitignore byte-identical`).
+
+**Prevention:**
+1. Treat gitignore rule text as a lock-step surface: template, `.goat-flow/.gitignore` mirror, `REQUIRED_GOAT_FLOW_GITIGNORE_PATTERNS`, `ensureHookGitignoreEntries`, the installer's `ensure_gitignore_entry` calls, and every test fixture or regex that spells a rule; prove the installer with a fresh `goat-flow install <tmp>` followed by `goat-flow audit <tmp>`.
+2. Prefer deriving test fixtures from `REQUIRED_GOAT_FLOW_GITIGNORE_PATTERNS` over hand-written copies; where a fixture must be stale on purpose (simulating an old install), say so in a comment.
+3. Keep `test/unit/hook-registrar-surfaces.test.ts` (search: `byte-identical`) and `test/integration/gitignore-shape.test.ts` green after any rule edit; they are the only checks that exercise the installer literal and Git's actual decisions.
+
+---
 
 ## Footgun: Flipping a doctrine in one playbook leaves siblings citing the old stance
 

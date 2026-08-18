@@ -2867,7 +2867,7 @@ if $HOOKS_ENABLED; then
     COPIED=$((COPIED + 1))
     echo "  ✓ .goat-flow/.gitignore (hooks/ un-ignored)"
   fi
-  ensure_gitignore_entry ".goat-flow/.gitignore" "!hooks/**"
+  ensure_gitignore_entry ".goat-flow/.gitignore" "!**/hooks/**"
   # A changed result makes each shipped hook file visible to version control.
   if [[ "$LAST_TRANSFORM_RESULT" == "changed" ]]; then
     COPIED=$((COPIED + 1))

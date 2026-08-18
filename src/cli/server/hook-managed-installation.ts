@@ -600,13 +600,16 @@ function ensureGoatFlowGitignoreEntry(
 
 /**
  * Keep the shared deny policy store tracked for fresh-clone protection.
- * Use after installing any managed hook files into `.goat-flow/hooks/`.
+ * Use after installing any managed hook files into `.goat-flow/hooks/`. The spelling must match the shipped template
+ * (`workflow/setup/reference/goat-flow-gitignore` and `REQUIRED_GOAT_FLOW_GITIGNORE_PATTERNS`): the double-star-slash
+ * prefixed form is what ignore-aware search tools honour, and the older anchored spelling would add an extra effective line
+ * that fails the goat-flow-gitignore audit order check on every hook-enabled install.
  * @param projectPath - selected project; empty text cannot own the ignore policy
  * @returns nothing; both required negations are present when setup finishes
  */
 function ensureHookGitignoreEntries(projectPath: string): void {
   ensureGoatFlowGitignoreEntry(projectPath, "!hooks/");
-  ensureGoatFlowGitignoreEntry(projectPath, "!hooks/**");
+  ensureGoatFlowGitignoreEntry(projectPath, "!**/hooks/**");
 }
 
 /**
