@@ -1,4 +1,4 @@
-// goat-flow-hook-version: 1.15.1
+// goat-flow-hook-version: 1.16.0
 /**
  * Cross-platform launcher for goat-flow's Bash hook scripts.
  * Agent hook commands use Node so native Windows avoids the System32 WSL shim.

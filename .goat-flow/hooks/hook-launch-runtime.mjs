@@ -1,4 +1,4 @@
-// goat-flow-hook-version: 1.15.1
+// goat-flow-hook-version: 1.16.0
 /**
  * Owns the bounded lifecycle result for an already-started managed hook.
  * The launcher uses it to capture output, enforce deadlines, and render failures.

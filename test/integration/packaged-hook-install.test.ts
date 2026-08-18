@@ -457,7 +457,7 @@ describe("packaged hook installation canary", () => {
         0,
         packedVersionResult.stderr || packedVersionResult.stdout,
       );
-      assert.equal(packedVersionResult.stdout.trim(), "goat-flow v1.15.1");
+      assert.equal(packedVersionResult.stdout.trim(), "goat-flow v1.16.0");
 
       const freshProjectPath = makeDisposablePackageWorkspace("fresh-non-git");
       const freshInstallResult = runPackedCli(

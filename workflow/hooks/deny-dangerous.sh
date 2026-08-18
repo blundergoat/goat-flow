@@ -2,7 +2,7 @@
 # shellcheck disable=SC2034,SC2317,SC2319
 
 # deny-dangerous.sh
-# goat-flow-hook-version: 1.15.1
+# goat-flow-hook-version: 1.16.0
 #
 # Checks an agent's proposed shell command before the developer lets it run.
 # Use this dispatcher from an agent hook to keep safe evidence gathering available
