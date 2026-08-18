@@ -435,6 +435,20 @@ function verifyFreshAgentInstall(agentProfile: AgentProfile): string {
   // Installation leaves the user's non-Git project type unchanged.
   assert.equal(existsSync(join(targetProjectPath, ".git")), false);
   assertInstalledAgentSurface(targetProjectPath, agentProfile);
+  assert.equal(
+    readFileSync(join(targetProjectPath, ".goat-flow", ".gitignore"), "utf-8"),
+    readFileSync(
+      join(
+        PROJECT_ROOT,
+        "workflow",
+        "setup",
+        "reference",
+        "goat-flow-gitignore",
+      ),
+      "utf-8",
+    ),
+    `${agentProfile.id} standalone installer must preserve the canonical goat-flow gitignore exactly`,
+  );
 
   const doctorReport = runSkillDoctor(targetProjectPath, agentProfile.id);
   const expectedInvocation =

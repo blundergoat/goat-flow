@@ -50,6 +50,35 @@ describe("skill hardening contracts: shared surfaces (2/3)", () => {
     assert.doesNotMatch(glossary, /On `\/compact`, session log written/u);
   });
 
+  it("keeps glossary skill-authoring terms on their current canonical owners", () => {
+    const glossary = readProjectFile(".goat-flow/glossary.md");
+    assert.match(
+      glossary,
+      /\| CSO \|[^\n]+\| `workflow\/skills\/playbooks\/skill-quality-testing\/deployment\.md` \|/u,
+    );
+    assert.match(
+      glossary,
+      /\| Rationalization Table \|[^\n]+\| `workflow\/skills\/playbooks\/skill-quality-testing\/tdd-iteration\.md` \|/u,
+    );
+
+    for (const deploymentPath of [
+      "workflow/skills/playbooks/skill-quality-testing/deployment.md",
+      ".goat-flow/skill-docs/skill-quality-testing/deployment.md",
+    ]) {
+      const deployment = readProjectFile(deploymentPath);
+      assert.match(
+        deployment,
+        /skill-quality-testing\/tdd-iteration\.md` \| Core TDD methodology and rationalisation table definition/u,
+        deploymentPath,
+      );
+      assert.doesNotMatch(
+        deployment,
+        /skill-conventions\.md` \| Rationalisation table definition/u,
+        deploymentPath,
+      );
+    }
+  });
+
   it("keeps historical Claude Write-rule evidence distinct from current guidance", () => {
     const settingsFootguns = readProjectFile(
       ".goat-flow/learning-loop/footguns/agent-settings.md",
@@ -254,6 +283,14 @@ describe("skill hardening contracts: shared surfaces (2/3)", () => {
       ".goat-flow/learning-loop/footguns/hook-scanning.md",
       "Footgun: Fail-soft analyzer skips can silently uncover a configured language",
     );
+    const timeoutConfiguration = readMarkdownSection(
+      ".goat-flow/learning-loop/footguns/hooks.md",
+      "Footgun: Rejecting invalid hook configuration instead of clamping it wedges every tool call",
+    );
+    const nonGitRecovery = readMarkdownSection(
+      ".goat-flow/learning-loop/footguns/hook-installation.md",
+      "Footgun: Hook launchers fail closed when the shell cwd is outside any git repo, wedging every Bash",
+    );
 
     // Both footguns must read as resolved on the same date, or a reader cannot tell
     // which boundary is still live. Asserted separately so a failure names the entry.
@@ -261,6 +298,21 @@ describe("skill hardening contracts: shared surfaces (2/3)", () => {
       /\*\*Status:\*\* resolved[^\n]+\*\*Resolved:\*\* 2026-07-17/u;
     assert.match(optionalMigration, resolvedStamp, "optional hook migration");
     assert.match(failSoftAnalyzer, resolvedStamp, "fail-soft analyzer skip");
+    assert.match(
+      timeoutConfiguration,
+      /\*\*Status:\*\* resolved[^\n]+\*\*Resolved:\*\* 2026-08-18/u,
+      "hook timeout configuration",
+    );
+    assert.match(
+      nonGitRecovery,
+      /lessons\/agent-tooling\.md` \(search: "Agent wedged its own shell in \/tmp and tried to bypass the guard instead of recovering"\)/u,
+      "non-Git hook recovery lesson",
+    );
+    assert.doesNotMatch(
+      nonGitRecovery,
+      /lessons\/agent-behavior\.md[^\n]+wedged its own shell/u,
+      "retired non-Git recovery pointer",
+    );
     assert.match(
       optionalMigration,
       /setup-install-codex-config-migration\.test\.ts[^\n]+migrates legacy Codex Gruff registration to the approved provider contract/u,

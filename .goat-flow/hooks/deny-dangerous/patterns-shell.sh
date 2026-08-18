@@ -655,7 +655,7 @@ check_destructive_segment() {
     block "Direct lockfile modification. Use the package manager (npm install, composer update, etc.)." || return $?
   fi
 
-  if [[ "$CMD_UNQUOTED" =~ ^eval[[:space:]] ]] || [[ "$CMD_UNQUOTED" =~ [[:space:]]eval[[:space:]] ]]; then
+  if [[ "$CMD_VERB" == "eval" ]]; then
     block "eval hides commands from safety checks. Write the command directly." || return $?
   fi
 

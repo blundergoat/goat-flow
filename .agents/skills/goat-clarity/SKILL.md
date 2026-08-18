@@ -46,6 +46,12 @@ Universal constraints from `skill-preamble.md` apply.
 
 ## Step 0 - Resolve Authority and Target
 
+### 0.0 Learning-loop retrieval
+
+Run the preamble's INDEX-first learning-loop retrieval for the selected clarity surface and expected
+failure class. Emit `Relevant prior learnings:` with matches or the required explicit miss before
+authority resolution or scope freezing.
+
 ### 0.1 Project authority
 
 Read applicable instructions, accepted architecture, compatibility policy, local vocabulary, and

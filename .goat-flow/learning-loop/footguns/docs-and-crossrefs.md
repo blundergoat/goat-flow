@@ -114,7 +114,7 @@ last_reviewed: 2026-08-18
 **Status:** active | **Created:** 2026-08-18 | **Evidence:** ACTUAL_MEASURED
 **Decision changed:** Before merging divergent statements of one rule, list every distinct clause across all variants, not only the clause they disagree about. Merge on the conflict, then re-add each rider the merged text dropped.
 **Trigger phase:** ACT
-**Incident count:** 1
+**Incident count:** 2
 **Latest occurrence:** 2026-08-18
 
 **Symptoms:** A deduplication pass makes one rule consistent and silently narrows it. Every contract still passes, because the deleted clause was never pinned - it existed in prose in exactly one of the variants being merged.
@@ -122,6 +122,8 @@ last_reviewed: 2026-08-18
 **Why it happens:** Divergence analysis fixes attention on the axis where the variants disagree. Clauses orthogonal to that axis ride along in only some variants and have no advocate during the merge. The shortest consistent wording is then the one that drops them, and a word budget rewards exactly that. The same trap fires again one level down when the merged rule is restated beside its pointer, because the restatement is a fresh variant that can drift from the owner immediately.
 
 **Evidence:** 2026-08-18, M55. Three sites stated the replies-editing permission in `.goat-flow/skill-docs/playbooks/writing-style.md` (search: `Replies are deliberately narrow`) and `.goat-flow/skill-docs/playbooks/writing-sentence-diagnostics.md` (search: `Replies to people receive`). They disagreed about whether a diagnosed social cost authorises an edit, which is what the milestone set out to resolve. Only two variants also carried a requested-tone escape; consolidating on the social-cost axis removed it from all three, and `command grep -rn 'requested tone\|asks for tone' .goat-flow/skill-docs/playbooks/` then returned nothing. The playbook being edited forbids that class of change in its own Correctness and Meaning section (search: `an optional action into a required one`). The first repair reintroduced the defect at the next level: the Audience paragraph restated `correctness and residue only` as absolute while the owner now read `unless the user asks`.
+
+**Recurrence update (2026-08-18):** A physical-line density rewrite compressed the Never and INDEX-first clauses across seven instruction surfaces. The first version kept the apparent policy but dropped the exact user-only commit rider, the current-session GitHub authorization rider, and two canonical retrieval-order phrases. Preflight failed 10 of 2,084 tests; after restoring the Never riders, the focused command-phrase suite still failed 4 of 44 tests on setup retrieval. Restoring every rider and grep-stable phrase kept the longest line at 777 characters and made all 44 focused tests pass. Enforcers: `test/contract/command-phrases.test.ts` (search: `agent mutation and external-write authority`) and `scripts/check-instruction-parity.mjs` (search: `MAX_INSTRUCTION_LINE_CHARACTERS`).
 
 **Prevention:** Enumerate the clause set across every variant before merging, and diff the merged text against that set rather than against any single source. Pin the recovered rider with a contract assertion in the same change, since a clause no test names is the one the next consolidation deletes. Prefer a pointer over a restatement at every non-owner site; a summary beside the owner is a new variant, not a reference. Evidence anchor: `test/contract/skill-hardening-shared-2.test.ts` (search: `no other style rule applies unless the user asks`).
 

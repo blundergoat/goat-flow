@@ -5,15 +5,19 @@
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { findArtifact } from "../../src/cli/quality/skill-quality-content.js";
+import { scoreArtifact } from "../../src/cli/quality/skill-quality-score.js";
+import { DISPATCHER_SKILL_WORD_LIMIT } from "../../src/cli/constants.js";
 import {
   assertForEachTarget,
   countSkillBodyWords,
   installedSkillPaths,
   installedSkillReferencePaths,
+  readProjectFile,
 } from "./skill-hardening.helpers.js";
 
 describe("ADR-023 word budget tiers", () => {
-  const DISPATCHER_CAP = 600;
+  const DISPATCHER_CAP = DISPATCHER_SKILL_WORD_LIMIT;
   const FUNCTIONAL_CAP = 2500;
   const ALWAYS_LOADED_CAP = 1500;
   const AUTHORING_INDEX_CAP = 400;
@@ -55,6 +59,24 @@ describe("ADR-023 word budget tiers", () => {
     });
   });
 
+  it("keeps skill-deployment guidance on the accepted 600-word dispatcher cap", () => {
+    assertForEachTarget(
+      [
+        "workflow/skills/playbooks/skill-quality-testing/deployment.md",
+        ".goat-flow/skill-docs/skill-quality-testing/deployment.md",
+      ],
+      (deploymentPath) => {
+        const deployment = readProjectFile(deploymentPath);
+        assert.match(deployment, /dispatcher ≤600 words/u, deploymentPath);
+        assert.doesNotMatch(
+          deployment,
+          /dispatcher ≤555 words/u,
+          deploymentPath,
+        );
+      },
+    );
+  });
+
   it("functional skills stay within the 2500-word cap across all mirrors", () => {
     // A user may invoke any functional skill from any supported agent integration.
     const installedFunctionalSkillPaths = FUNCTIONAL_SKILLS.flatMap(
@@ -69,6 +91,19 @@ describe("ADR-023 word budget tiers", () => {
       );
     });
   });
+
+  for (const skillName of FUNCTIONAL_SKILLS) {
+    it(`scores ${skillName} against its complete configured context`, () => {
+      const artifact = findArtifact(process.cwd(), `skill:${skillName}`);
+      assert.ok(artifact, `missing quality artifact for ${skillName}`);
+      const report = scoreArtifact(process.cwd(), artifact);
+      assert.doesNotMatch(
+        report.fitNotes.join("\n"),
+        /composition truncated/iu,
+        `${skillName}: quality score must not omit loaded context`,
+      );
+    });
+  }
 
   it("always-loaded shared references stay within the 1500-word cap", () => {
     // Always-loaded guidance affects every user request, so every copy must stay concise.

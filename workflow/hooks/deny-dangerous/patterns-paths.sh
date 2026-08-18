@@ -119,18 +119,143 @@ windows_path_scan_view() {
 
 key_material_path_touch() {
   local input="$1"
+  local command_verb="${CMD_VERB:-}"
   local -a words=()
   split_shell_words_into words "$input"
   local word=""
   local candidate=""
   local base=""
+  local query_command_index=-1
+  local query_filter_index=-1
+  local -a query_data_indices=()
+  local query_data_index=0
+  local skip_query_data=0
+  local word_index=0
+  local short_bundle=""
+  local short_flag=""
+  local short_index=0
+  local jq_bundle_uses_filter_file=0
+  local jq_bundle_consumes_next=0
 
-  for word in "${words[@]}"; do
+  # jq always has one positional filter unless -f/--from-file supplies it.
+  # yq auto-detects whether a positional token is an expression or a file, so
+  # only its explicit --expression operand is safe to exempt. This conservative
+  # split keeps ambiguous yq inputs and every file-valued option protected.
+  if [[ "$command_verb" == "jq" || "$command_verb" == "yq" ]]; then
+    for ((word_index = 0; word_index < ${#words[@]}; word_index++)); do
+      base="${words[$word_index]##*/}"
+      if [[ "${base,,}" == "$command_verb" ]]; then
+        query_command_index="$word_index"
+        break
+      fi
+    done
+
+    if [[ "$query_command_index" -ge 0 && "$command_verb" == "jq" ]]; then
+      word_index=$((query_command_index + 1))
+      while [[ "$word_index" -lt "${#words[@]}" ]]; do
+        word="${words[$word_index]}"
+        case "$word" in
+          --)
+            query_filter_index=$((word_index + 1))
+            break
+            ;;
+          -f|--from-file|--from-file=*)
+            break
+            ;;
+          --arg|--argjson)
+            # Variable names and literal values are data, not file operands.
+            query_data_indices+=("$((word_index + 1))" "$((word_index + 2))")
+            word_index=$((word_index + 3))
+            continue
+            ;;
+          --slurpfile|--rawfile|--argsfile)
+            # The variable name is data, but the following value is a file to scan.
+            query_data_indices+=("$((word_index + 1))")
+            word_index=$((word_index + 3))
+            continue
+            ;;
+          -L)
+            word_index=$((word_index + 2))
+            continue
+            ;;
+          --indent)
+            # The indentation width cannot name a file.
+            query_data_indices+=("$((word_index + 1))")
+            word_index=$((word_index + 2))
+            continue
+            ;;
+          -[^-]*)
+            short_bundle="${word#-}"
+            jq_bundle_uses_filter_file=0
+            jq_bundle_consumes_next=0
+            for ((short_index = 0; short_index < ${#short_bundle}; short_index++)); do
+              short_flag="${short_bundle:short_index:1}"
+              case "$short_flag" in
+                f)
+                  jq_bundle_uses_filter_file=1
+                  break
+                  ;;
+                L)
+                  if [[ "$short_index" -eq $((${#short_bundle} - 1)) ]]; then
+                    jq_bundle_consumes_next=1
+                  fi
+                  break
+                  ;;
+              esac
+            done
+            if [[ "$jq_bundle_uses_filter_file" -eq 1 ]]; then
+              break
+            fi
+            if [[ "$jq_bundle_consumes_next" -eq 1 ]]; then
+              word_index=$((word_index + 2))
+            else
+              word_index=$((word_index + 1))
+            fi
+            continue
+            ;;
+          -*)
+            word_index=$((word_index + 1))
+            continue
+            ;;
+        esac
+        query_filter_index="$word_index"
+        break
+      done
+    elif [[ "$query_command_index" -ge 0 ]]; then
+      for ((word_index = query_command_index + 1; word_index < ${#words[@]}; word_index++)); do
+        word="${words[$word_index]}"
+        case "$word" in
+          --expression)
+            if [[ $((word_index + 1)) -lt "${#words[@]}" ]]; then
+              query_filter_index=$((word_index + 1))
+            fi
+            break
+            ;;
+          --expression=*)
+            query_filter_index="$word_index"
+            break
+            ;;
+        esac
+      done
+    fi
+  fi
+
+  for ((word_index = 0; word_index < ${#words[@]}; word_index++)); do
+    [[ "$word_index" -eq "$query_filter_index" ]] && continue
+    skip_query_data=0
+    for query_data_index in "${query_data_indices[@]}"; do
+      if [[ "$word_index" -eq "$query_data_index" ]]; then
+        skip_query_data=1
+        break
+      fi
+    done
+    [[ "$skip_query_data" -eq 1 ]] && continue
+    word="${words[$word_index]}"
     candidate="${word#*=}"
     candidate="${candidate#*:}"
     candidate="${candidate,,}"
     base="${candidate##*/}"
-    if [[ "$base" =~ ^[^.][^[:space:]]*\.(pem|key|pfx)$ ]]; then
+    if [[ "$base" =~ ^[^.].*\.(pem|key|pfx)$ ]]; then
       return 0
     fi
   done
@@ -164,7 +289,7 @@ is_secret_path_touch() {
   # Exact client config files contain credentials even though their parent directories are ordinary.
   if [[ "$c" =~ $secret_config_file_re ]]; then return 0; fi
   if [[ "$c" =~ application_default_credentials\.json ]]; then return 0; fi
-  if key_material_path_touch "$c"; then return 0; fi
+  if key_material_path_touch "$1"; then return 0; fi
   if [[ "$c" =~ (^|[[:space:]]|=|:|/|[\'\"])(credentials|\.npmrc|\.pypirc)([[:space:]]|$|\.|[\'\"]) ]]; then return 0; fi
   return 1
 }

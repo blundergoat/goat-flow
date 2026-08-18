@@ -1,6 +1,6 @@
 ---
 category: hook-probe-testing
-last_reviewed: 2026-08-16
+last_reviewed: 2026-08-19
 ---
 
 **Scope:** Driving a hook with realistic input - per-agent payload shapes, sandbox and interpreter controls, registered-path smokes, and grammar probes that catch false positives. The script under test is [hook-script-authoring.md](hook-script-authoring.md).
@@ -80,12 +80,15 @@ last_reviewed: 2026-08-16
 ## Lesson: Hook parser regressions need false-positive grammar probes
 
 **Status:** active | **Created:** 2026-05-27
+**Incident count:** 2 | **Latest occurrence:** 2026-08-19
 
 **What happened:** A parser-hardening pass found missing PowerShell and Git option forms plus false positives for shell comments and dotted query syntax.
 
 **Root cause:** The tests covered obvious dangerous strings and a few equals-valued options, but not valid long-option space forms, shell comments, or dotted query syntax that resembles key-file extensions.
 
-**Prevention:** For shell hooks, build regression matrices from valid CLI grammar and common inert syntax, not only incident strings. Include single-dash and double-dash eval flags, equals-valued and space-valued global options, unquoted shell comments, quoted `#`, jq/yq dotted queries, and filename controls such as `private.key`, `deploy.pem`, and `prod.pfx`. Evidence anchors: `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `powershell double-dash command remove-item`), `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `git --git-dir push`), and `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `jq bare key query`).
+**Recurrence 2026-08-19:** A jq/yq false-positive repair added a quote-aware filter-role parser but tested jq's ordinary `-f` form and yq's bare dotted expression only. Fresh review found protected-file bypasses behind jq short bundles, yq boolean flags, yq implicit inputs, attached expression options, and file-valued options; it also found `yq eval` blocked as shell `eval`. The expanded RED corpus failed 9 of 463 cases before the parser split the two command grammars; the final installed and workflow corpora each pass 470 cases after harmless jq data options were separated from file-reading options. Evidence anchors: `workflow/hooks/deny-dangerous/patterns-paths.sh` (search: `yq auto-detects whether a positional token is an expression or a file`), `workflow/hooks/deny-dangerous/patterns-shell.sh` (`check_destructive_segment`), and `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `jq literal key-looking string argument`; search: `jq bundled raw filter file`; search: `yq eval subcommand key query`).
+
+**Prevention:** For shell hooks, build regression matrices from valid per-command grammar and common inert syntax, not only incident strings. Record whether every short or long option is standalone, consumes one or more values, accepts an equals or attached value, supplies the primary expression, or reads a file. Include CLI subcommands that collide with shell keywords, unquoted comments, quoted `#`, jq/yq dotted queries, and filename controls such as `private.key`, `deploy.pem`, and `prod.pfx`. Evidence anchors: `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `powershell double-dash command remove-item`), (search: `git --git-dir push`), (search: `jq bundled raw filter file`), and (search: `yq eval subcommand key query`).
 
 ## Lesson: Normalize agent hook payload variants before field access
 

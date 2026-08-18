@@ -670,6 +670,12 @@ describe("setup-facing learning-loop retrieval", () => {
     "workflow/setup/agents/antigravity.md",
     "workflow/setup/agents/copilot.md",
   ] as const;
+  const allInstructionPaths = [
+    ...agentTemplatePaths,
+    "AGENTS.md",
+    "CLAUDE.md",
+    ".github/copilot-instructions.md",
+  ] as const;
 
   // One named case per agent template, so a failure names the agent whose setup drifted.
   for (const relativePath of agentTemplatePaths) {
@@ -696,6 +702,30 @@ describe("setup-facing learning-loop retrieval", () => {
         relativePath,
       );
       assert.doesNotMatch(content, /Use grep-first retrieval/u, relativePath);
+    });
+  }
+
+  for (const relativePath of allInstructionPaths) {
+    it(`keeps ignored-state search semantics harness-specific in ${relativePath}`, () => {
+      const content = readFileSync(
+        resolve(PROJECT_ROOT, relativePath),
+        "utf-8",
+      );
+      assert.match(
+        content,
+        /\.goat-flow\/learning-loop\/decisions\/INDEX\.md/u,
+        relativePath,
+      );
+      assert.match(
+        content,
+        /Claude Code's session grep shim and `git grep` omit ignored local state/u,
+        relativePath,
+      );
+      assert.doesNotMatch(
+        content,
+        /(?:^|[^A-Za-z])the session grep shim/u,
+        relativePath,
+      );
     });
   }
 

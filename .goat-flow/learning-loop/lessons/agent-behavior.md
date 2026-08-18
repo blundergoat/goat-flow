@@ -1,6 +1,6 @@
 ---
 category: agent-behavior
-last_reviewed: 2026-08-09
+last_reviewed: 2026-08-18
 ---
 
 **Scope:** Reading the request and retrieving memory - parsing what was asked, honouring an explicit next step, retrieval terms that name the real failure class, and treating end-of-task rules as deliverables. Using tools and the environment is [agent-tooling.md](agent-tooling.md); what an explicit skill invocation obliges is [skill-invocation.md](skill-invocation.md).
@@ -108,7 +108,7 @@ Related: `feedback_gruff_never_disable` (auto-memory, 2026-05-25).
 
 **Evidence:** `.goat-flow/learning-loop/lessons/agent-behavior.md` (search: "Retrieval terms must name the concrete failure class"; "Recurring terminal bugs must start with learning-loop retrieval"); `.goat-flow/skill-docs/skill-preamble.md` (search: "Relevant prior learnings:").
 
-**Prevention:** `skill-preamble.md` now requires every functional goat-* skill Step 0 to emit `Relevant prior learnings:`; misses include `Terms searched:`. `test/contract/skill-hardening-contracts.test.ts` pins both preamble copies.
+**Prevention:** `skill-preamble.md` now requires every functional goat-* skill Step 0 to emit `Relevant prior learnings:`; misses include `Terms searched:`. `test/contract/skill-hardening-contracts.test.ts` pins both preamble copies, and `test/contract/skill-hardening-clarity.test.ts` (search: `runs visible learning-loop retrieval before freezing write authority`) closes the goat-clarity omission. Local TDD receipt filename: `2026-08-18-goat-clarity-tdd.md`.
 
 ## Lesson: Quality assessors can reopen ADR-settled skill modes
 
@@ -151,4 +151,3 @@ Related: `feedback_gruff_never_disable` (auto-memory, 2026-05-25).
 **Recurrence update (2026-07-12):** M33's first structural leak matcher treated the generic noun `tests` as repository navigation and nearly discarded a clean Fresh Eyes result. The orchestrator reran a path/config/anchor-only scan and kept the agent output. Leak scans must match traceable navigation tokens, not ordinary review vocabulary.
 
 ---
-

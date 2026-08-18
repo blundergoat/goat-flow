@@ -2,7 +2,13 @@
 
 ## Unreleased
 
-## v1.16.0 - 2026-08-18
+## v1.16.0 - 2026-08-19
+
+- **Full security assessments keep their shared rules** - `/goat-security` loads conventions and every named threat pack instead of dropping guidance to fit the quality scorer.
+- **Clarity passes consult prior project mistakes before freezing scope** - `/goat-clarity` emits its learning-loop retrieval result before the Target Scope Snapshot.
+- **jq and yq filters can inspect `.key` fields** - Glued queries and `yq eval` run, while bundled flags, implicit inputs, and expression-file options still block direct key-file operands.
+- **Skill quality scores use the complete configured context** - Every functional skill is assessed with its preamble, Full-depth conventions, and named references without silent truncation.
+- **Instruction validation rejects scan-resistant giant lines** - Agent instructions retain the same safety riders while keeping every physical line within 800 characters.
 
 - **New `/goat-clarity` skill tidies comments, docs, and private names** - Runs on a PR, uncommitted files, a folder, or file; behaviour is untouched.
 - **`/goat-clarity documentation <selector>` edits human documentation** - Only selected prose changes; agent files and test meaning stay untouched.

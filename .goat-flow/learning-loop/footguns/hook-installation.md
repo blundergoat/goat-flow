@@ -1,6 +1,6 @@
 ---
 category: hook-installation
-last_reviewed: 2026-08-14
+last_reviewed: 2026-08-18
 ---
 
 **Scope:** Hook install / launch / registration / config-drift plumbing. The `deny-dangerous` guardrail's shell-grammar policy parser (substitution/heredoc handling, secret-path and `git`/`gh` write classification, payload parsing) lives in [deny-shell.md](deny-shell.md) (command grammar), [deny-secrets.md](deny-secrets.md) (secret-path reads), and [deny-writes.md](deny-writes.md) (external writes).
@@ -131,7 +131,7 @@ last_reviewed: 2026-08-14
 3. After the ancestor walk, consult the supported project-root environment fallback. Codex can use a complete managed ancestor without Git but still fails closed when its cwd has no candidate and its host supplies no root environment.
 4. Keep policy-root and diff-root claims separate: deny policy works in a complete non-Git installation, while post-turn scanning blocks without a trustworthy Git comparison baseline.
 5. Keep each launcher deadline below its supported host limit and stop the full child process tree on timeout so the user's agent can render the bounded failure.
-6. Recovery: the user types `!cd <repo>` to reset the persisted cwd. Keep scratch work in `.goat-flow/scratchpad/`, not `/tmp` (see `.goat-flow/learning-loop/lessons/agent-behavior.md`, search: `wedged its own shell`).
+6. Recovery: the user types `!cd <repo>` to reset the persisted cwd. Keep scratch work in `.goat-flow/scratchpad/`, not `/tmp`; see `.goat-flow/learning-loop/lessons/agent-tooling.md` (search: "Agent wedged its own shell in /tmp and tried to bypass the guard instead of recovering").
 
 ## Footgun: Copilot hook config can exist while runtime policy hooks are disabled
 

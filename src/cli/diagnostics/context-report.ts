@@ -13,6 +13,7 @@ import type {
 } from "../types.js";
 import { getSkillFiles, loadManifest } from "../manifest/manifest.js";
 import { BUCKET_SIZE_WARN_BYTES } from "../stats/stats.js";
+import { DISPATCHER_SKILL_WORD_LIMIT } from "../constants.js";
 
 /**
  * Divisor behind every `estimatedTokens` figure this report emits.
@@ -30,8 +31,6 @@ const ESTIMATED_BYTES_PER_TOKEN = 4;
 const TOKEN_ESTIMATE_FORMULA = "ceil(utf8_bytes / 4)" as const;
 /** Literal type of the published formula, derived so the schema tracks the constant above. */
 type TokenEstimateFormula = typeof TOKEN_ESTIMATE_FORMULA;
-/** ADR-023 keeps the dispatcher small because users load it only to choose another workflow. */
-const DISPATCHER_WORD_LIMIT = 555;
 /** ADR-023 gives functional workflows room for gates without turning them into handbooks. */
 const FUNCTIONAL_SKILL_WORD_LIMIT = 2_500;
 /** ADR-023 caps shared invocation guidance because every goat-flow request pays this cost. */
@@ -251,7 +250,7 @@ function skillBudget(skillName: string): {
         tier: "ADR-023 dispatcher skill",
         metric: "words",
         warningAt: null,
-        limit: DISPATCHER_WORD_LIMIT,
+        limit: DISPATCHER_SKILL_WORD_LIMIT,
         comparison: "at-most",
       },
     };

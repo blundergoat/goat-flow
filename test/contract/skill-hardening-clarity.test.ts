@@ -46,6 +46,24 @@ function assertIncludesAll(requiredPhrases: readonly string[]): void {
 }
 
 describe("skill hardening contracts: goat-clarity", () => {
+  it("runs visible learning-loop retrieval before freezing write authority", () => {
+    assertForEachTarget(installedSkillPaths("goat-clarity"), (skillPath) => {
+      const stepZero = readMarkdownSection(
+        skillPath,
+        "Step 0 - Resolve Authority and Target",
+      );
+      assertGuidanceIncludesAll(stepZero, skillPath, [
+        "learning-loop retrieval",
+        "Relevant prior learnings:",
+      ]);
+      assert.ok(
+        stepZero.indexOf("Relevant prior learnings:") <
+          stepZero.indexOf("Target Scope Snapshot"),
+        `${skillPath}: learning-loop receipt must precede the frozen scope snapshot`,
+      );
+    });
+  });
+
   it("keeps four selectors and adds documentation as an explicit mode", () => {
     assertIncludesAll([
       "/goat-clarity <GitHub PR URL>",

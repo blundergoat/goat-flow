@@ -26,6 +26,9 @@ const LIVE_FILES = [
 
 const ALL_FILES = [...SETUP_FILES, ...LIVE_FILES];
 
+// A newline-only budget can hide several independent rules in one unreadable physical line.
+const MAX_INSTRUCTION_LINE_CHARACTERS = 800;
+
 const CANONICAL_SECTIONS = [
   "Truth Order",
   "Autonomy Tiers",
@@ -173,6 +176,12 @@ function validateInstructionFile(
   }
 
   const content = readFileSync(abs, "utf8");
+  content.split("\n").forEach((line, lineIndex) => {
+    if (line.length <= MAX_INSTRUCTION_LINE_CHARACTERS) return;
+    failures.push(
+      `${label}:${lineIndex + 1}: instruction line has ${line.length} characters; limit ${MAX_INSTRUCTION_LINE_CHARACTERS}`,
+    );
+  });
   const sections = h2Sections(content);
   const sectionBodies = splitSections(content);
 

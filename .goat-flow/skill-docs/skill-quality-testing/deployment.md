@@ -104,7 +104,7 @@ deterministic scorer rules.
 - [ ] "NOT this skill" boundary section listing what routes elsewhere
 - [ ] No narrative storytelling ("in session 2025-10-03 we found...")
 - [ ] Supporting files only for executable tools or heavy reference (100+ lines)
-- [ ] Token budget met per the four-tier model: dispatcher ≤555 words, functional skill <2500 words, always-loaded shared content <1500 words per file, progressive reference pack <3000 words per file. Skills or packs that exceed their tier must either shed content or split into a sub-pack.
+- [ ] Token budget met per the four-tier model: dispatcher ≤600 words, functional skill <2500 words, always-loaded shared content <1500 words per file, progressive reference pack <3000 words per file. Skills or packs that exceed their tier must either shed content or split into a sub-pack.
 
 **Deployment:**
 - [ ] Write TDD iteration log to `.goat-flow/logs/sessions/YYYY-MM-DD-<skill>-tdd.md`
@@ -128,8 +128,8 @@ Deploying untested skills = deploying untested code. It's a violation of quality
 | Where | What |
 |-------|------|
 | `.goat-flow/skill-docs/skill-preamble.md` | Proof Gate, evidence standard, ceremony level - the loaded-every-invocation layer |
-| `.goat-flow/skill-docs/skill-conventions.md` | Rationalisation table definition, task tracking, recovery protocols |
-| `.goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md` | Core TDD methodology |
+| `.goat-flow/skill-docs/skill-conventions.md` | Task tracking, recovery protocols, orchestration admission |
+| `.goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md` | Core TDD methodology and rationalisation table definition |
 | `.goat-flow/skill-docs/skill-quality-testing/adversarial-framing.md` | Review-class skill patterns |
 | `.goat-flow/learning-loop/decisions/` | Architecture decisions and rationale |
 | `.goat-flow/logs/sessions/*-<skill>-tdd.md` | TDD iteration logs live here; filename convention is the index |

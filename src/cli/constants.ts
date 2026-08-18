@@ -12,6 +12,13 @@ import { join } from "node:path";
 import { getPackageVersion } from "./paths.js";
 import { getTemplatePath } from "./paths.js";
 
+/**
+ * ADR-023 raised the dispatcher ceiling from 555 to 600 when the required
+ * goat-clarity route exhausted the old headroom. Diagnostics and contracts
+ * share this value so reporting cannot silently preserve the obsolete cap.
+ */
+export const DISPATCHER_SKILL_WORD_LIMIT = 600;
+
 /** Minimal manifest schema contract needed to derive canonical and stale skill names. */
 interface SkillsManifestShape {
   skills?: {

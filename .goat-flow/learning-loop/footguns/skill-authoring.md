@@ -164,25 +164,25 @@ Restore pinned phrases verbatim after any compression, take compensating words f
 
 ---
 
-## Footgun: Routing skill-conventions into goat-security overflows the skill-quality composition cap
-
-**Status:** active | **Created:** 2026-08-18 | **Evidence:** ACTUAL_MEASURED
-**Decision changed:** Before adding a `skill-conventions.md` (or any always-loaded) route to a skill, measure the composed bundle the skill-quality scorer builds; a route is a load, not a sentence.
-**Trigger phase:** VERIFY
-
-**Symptoms:** A one-line "on Full also read `.goat-flow/skill-docs/skill-conventions.md`" addition to goat-security passes the ADR-023 word cap, every phrase pin, and the mirror check, then fails `keeps goat-security quality composition complete` in the contract suite with `composition truncated at 32KB`.
-
-**Why it happens:** The deterministic skill-quality scorer composes SKILL.md + `skill-preamble.md` + `skill-conventions.md` (only when the skill text mentions it) + every reference the skill names with a `references/` prefix, then caps the bundle at 32 KB and appends a truncation note (`src/cli/quality/skill-quality-content.ts`, search: `appendSharedGuidance` and `capComposedContent`; `src/cli/quality/quality-config.ts`, search: `skillReferencePattern` and `maxComposedBytes`). goat-security names its five packs as bare filenames (`common-threats.md`, not `references/common-threats.md`), so none of them are composed: its bundle is SKILL.md (~21.4 KB) + preamble (~9.7 KB), about 1.7 KB under the cap. Mentioning conventions adds ~10.4 KB and truncates it. Six of the other seven functional skills already compose past the cap (goat-debug, goat-plan, goat-review, goat-critique, goat-qa, goat-clarity all report `composition truncated at 32KB`), which is why only goat-security carries a composition-complete contract. The word-count gates never see any of this because they measure SKILL.md alone.
-
-**Evidence:** 2026-08-18, a quality report flagged goat-security as the only functional skill without a conventions route. Adding the route made `test/contract/skill-hardening-security-1.test.ts` (search: `goat-security quality composition must include its full configured context`) fail; reverting only that clause and keeping the one-line universal-constraints pointer passed. The omission is therefore a load-budget decision, not an oversight - the same class as the density footgun above (search: "Dense functional skills satisfy the ADR-023 word cap"). Measured the same day with `scoreArtifact` over all eight skills: `/goat` and goat-security fit; the other six are truncated.
-
-**Prevention:** Treat "route X into skill Y" and any growth of `skill-preamble.md` or goat-security's SKILL.md as a composition change: goat-security has about 1.7 KB of composed headroom, so run the composition contract in `test/contract/skill-hardening-security-1.test.ts` (search: `keeps goat-security quality composition complete`) before the phrase contracts, and read the `fitNotes` from `scoreArtifact` for any other skill you touch. For a skill at the cap, put shared doctrine it needs into a reference it already loads, or cite the specific preamble section, instead of adding a whole-file route. A composition-complete assertion exists only for goat-security; do not assume the other skills are scored on their full text.
-
----
-
 ## Resolved Entries
 
 > Historical record. These entries are no longer active traps.
+
+## Footgun: Routing skill-conventions into goat-security overflows the skill-quality composition cap
+
+**Status:** resolved | **Created:** 2026-08-18 | **Resolved:** 2026-08-18 | **Evidence:** ACTUAL_MEASURED
+
+**Original symptoms:** Adding goat-security's required Full-depth route to `skill-conventions.md` made the deterministic quality scorer report `composition truncated at 32KB`. Six other functional skills were already truncated, while goat-security's five packs were absent from composition because the skill named bare filenames instead of `references/<file>.md` paths.
+
+**Why it happened:** The 32 KiB composition ceiling was smaller than the context the skills actually instruct agents to load. That evaluator limit encouraged omission of binding guidance from the runtime skill and made incomplete scoring look complete.
+
+**Resolution:** Goat-security now routes Full depth to conventions and names all five packs with explicit `references/` paths. The scorer's bounded composition window is 128 KiB, below the existing 256 KiB artifact ceiling; measured current functional compositions range from 40.5 to 79.1 KiB. A general contract scores every functional skill and rejects any truncation, while the security contract checks its exact composed sources.
+
+**Resolution evidence:** `src/cli/quality/quality-config.ts` (search: `Current full functional contexts measure 40.5-79.1 KiB`), `test/contract/skill-hardening-contracts.test.ts` (search: `against its complete configured context`), and `test/contract/skill-hardening-security-1.test.ts` (search: `goat-security quality composition must include its full configured context`). Local TDD receipt filename: `2026-08-18-goat-security-tdd.md`.
+
+**Prevention:** Treat every required route and reference pointer as runtime truth first and evaluator input second. Measure all functional compositions after changing shared guidance, keep the bounded ceiling below `maxArtifactBytes`, and never remove binding guidance merely to satisfy a scorer cap.
+
+---
 
 ## Footgun: Review skills can choose the wrong PR base when they hardcode `origin/main`
 

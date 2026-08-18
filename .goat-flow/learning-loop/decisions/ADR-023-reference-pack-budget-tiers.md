@@ -2,7 +2,7 @@
 
 **Date:** 2026-04-20
 **Status:** Accepted
-**Updated:** 2026-05-18 - Path references amended for the v1.6.0 `skill-reference/` and `skill-playbooks/` split; obsolete line citation retargeted to the current deployment playbook anchor. 2026-06-08 - Installed skill-quality-testing index path clarified after the `.goat-flow/skill-docs/skill-quality-testing/` layout split. 2026-07-13 - Shared mirror registry anchor retargeted after the artifact-integrity extraction. 2026-08-15 - absorbed ADR-008 (instruction budget), ADR-007 (shared conventions extraction), and ADR-027 (remove DDT layer packs), then added goat-clarity to the functional tier. Every one of them rations the same scarce resource: how many words an agent must read before it can work.
+**Updated:** 2026-05-18 - Path references amended for the v1.6.0 `skill-reference/` and `skill-playbooks/` split; obsolete line citation retargeted to the current deployment playbook anchor. 2026-06-08 - Installed skill-quality-testing index path clarified after the `.goat-flow/skill-docs/skill-quality-testing/` layout split. 2026-07-13 - Shared mirror registry anchor retargeted after the artifact-integrity extraction. 2026-08-15 - absorbed ADR-008 (instruction budget), ADR-007 (shared conventions extraction), and ADR-027 (remove DDT layer packs), then added goat-clarity to the functional tier. 2026-08-18 - added a hot-path physical-line density guard and separated the scorer's bounded composition window from runtime guidance. Every amendment rations the same scarce resource: how much context an agent must read before it can work.
 **Milestone:** Quality-report follow-up (reports 1-4, persistent MAJOR finding across four runs)
 
 ## Context
@@ -35,6 +35,8 @@ The same scarcity governs the hot path. Instruction files are read on every sess
 ### Instruction files (hot path)
 
 `CLAUDE.md` and its peers MUST stay under 150 lines. Target 125.
+
+No physical line may exceed 800 characters. The line-count ceiling does not excuse compressing several unrelated control rules into one scan-resistant paragraph.
 
 Every rule MUST apply to every session. Situation-specific guidance belongs in skills, playbooks, or local instruction files - not the hot path.
 
@@ -111,6 +113,8 @@ The `ddt-layer/` directory is removed. goat-plan detects language from project s
 **2026-05-02 amendment:** Dispatcher budget raised from <500 to ≤555. The dispatcher gained a structured Route Snapshot output contract, multi-intent decomposition protocol, GATHER checklist, and contract-test-mandated phrases (Proof Gate, "verification planning") that the original 500w budget didn't anticipate. The file was trimmed from 585w to 552w in the same pass - net reduction despite added features.
 
 **2026-08-18 amendment:** Dispatcher budget raised from ≤555 to ≤600. Three same-day quality reports found that the Route Map had no row for `goat-clarity`, so an inferred clarity request ("bring these comments and names up to standard") fell through to `/goat-review`, which returns findings instead of a bounded remediation pass, or to the direct-execution row, which edits without the frozen Target Scope Snapshot and Scope v2 gate that make goat-clarity safe. ADR-009 enrolls goat-clarity as canonical and is silent on routing; only human-facing `docs/skills.md` called it direct-only, so the agent-facing surface never carried the intent. The fix is one 10-token route row, but the dispatcher measured 554/555 body words - the cap had become a freeze rather than a budget, blocking a safety fix. Raised to 600 (564 used) rather than trimming prose that seven contract assertions pin. This is the second dispatcher raise; a third should prompt restructuring instead.
+
+**2026-08-18 composition amendment:** The quality scorer's former 32 KiB composition window truncated six functional skills and made goat-security's required Full-depth conventions route impossible without losing score evidence. Current complete functional compositions measure 40.5-79.1 KiB, so the bounded window is 128 KiB, still below the existing 256 KiB per-artifact ceiling. Runtime guidance is authoritative: a skill must not omit a binding shared layer or disguise a reference path to fit the evaluator. Contracts now reject truncation for every functional skill and verify goat-security's exact composed sources.
 
 **2026-05-17 measurement note:** The "Actual shipped state" table above reflects the 2026-04-20 baseline. Re-measured body word counts as of 2026-05-17:
 

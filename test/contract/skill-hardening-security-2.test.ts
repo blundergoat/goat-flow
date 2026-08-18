@@ -54,7 +54,7 @@ describe("skill hardening contracts: security (2/2)", () => {
         readMarkdownSection(skillPath, "Compliance Mode"),
         [
           /overlay on a selected Quick Scan or Full Assessment.*does not replace/iu,
-          /map controls only after.*Proof Gate.*`project-policy-template\.md` \(search: `## Compliance Mode`\)/iu,
+          /map controls only after.*Proof Gate.*`references\/project-policy-template\.md` \(search: `## Compliance Mode`\)/iu,
         ],
         skillPath,
       );
@@ -208,7 +208,7 @@ describe("skill hardening contracts: security (2/2)", () => {
       readMarkdownSection("docs/skills.md", "/goat-security"),
       [
         /bootstrap authority.*host-selected.*immutable.*absolute installed.*skill.*mandatory references.*may load.*unproven provenance.*`UNVERIFIED`.*MUST NOT support.*clearance.*`ACCEPTED-RISK`.*target-controlled invocation.*assessed head\/worktree.*evidence only.*cannot self-authorize/isu,
-        /Quick Scan.*read.*`common-threats\.md`.*`supply-chain-and-cicd\.md`.*`identity-and-data\.md`.*identity.*authentication.*authorization.*sessions.*secrets.*data.*`file-upload-and-paths\.md`.*uploads.*paths.*archives.*applicable reference.*unavailable.*`not assessed`.*coverage-degraded.*MUST NOT recommend clearance/isu,
+        /Quick Scan.*read.*`references\/common-threats\.md`.*`references\/supply-chain-and-cicd\.md`.*`references\/identity-and-data\.md`.*identity.*authentication.*authorization.*sessions.*secrets.*data.*`references\/file-upload-and-paths\.md`.*uploads.*paths.*archives.*applicable reference.*unavailable.*`not assessed`.*coverage-degraded.*MUST NOT recommend clearance/isu,
         /trusted absolute Git binary.*clean, allowlisted environment.*inherited `GIT_\*`/iu,
         /worktree-sensitive Git diff\/status.*filters.*neutralized.*worktree bytes.*non-Git read-only/iu,
         /no-follow.*before every worktree content read.*symlink.*link text.*escape.*`UNVERIFIED`/iu,

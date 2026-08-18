@@ -69,26 +69,6 @@ The non-Git controller fan-out in `post-turn-safety.sh` collected child envelope
 
 A child result that ends a bounded cycle is a release decision, not a finding. Aggregation may summarise findings, but it must re-derive every terminal decision the single-unit path owns - release, block, and fail-closed - for each host contract the hook actually ships under. Check the same way whenever an aggregate returns a child status verbatim: a status the aggregator never produces itself (a crash or a kill) must not reach the provider as a non-blocking result. Evidence anchors: `workflow/hooks/post-turn-safety.sh` (search: `bounded-reentry-ended`), `workflow/hooks/run-with-bash.mjs` (search: `LEGACY_HOOK_DEADLINES_MS`), `workflow/hooks/hook-provider-adapters.mjs` (search: `adaptStopResult`), and `test/integration/post-turn-safety-controller.test.ts` (search: `ends an exhausted child re-entry on a legacy host`).
 
-## Footgun: Rejecting invalid hook configuration instead of clamping it wedges every tool call
-
-**Status:** active | **Created:** 2026-08-11 | **Evidence:** ACTUAL_MEASURED
-**Decision changed:** When a blocking hook validates user configuration, decide what an out-of-range or empty value does before shipping the validator; rejection is a session-wide outage, not a local error.
-**Trigger phase:** ACT
-
-**Symptoms:** Every Bash tool call is denied with `Policy hook unavailable: hook timeout configuration is invalid`, and the turn cannot stop either, because the Stop hook fails the same way. The message names neither the variable that caused it nor the value that would be accepted, so the user cannot recover without reading the launcher source.
-
-**Why it happens:** `workflow/hooks/hook-launch-runtime.mjs` (search: `resolveHookLaunchTimeoutMs`) returns `null` for any `GOAT_FLOW_HOOK_LAUNCH_TIMEOUT_MS` that is not a plain decimal at or below the mode ceiling, and `workflow/hooks/run-with-bash.mjs` (search: `describeInvalidHookLaunchTimeout`) turns `null` into a fail-closed unavailable result. Three ordinary values reach that branch. An exported-but-empty variable arrives as `""` rather than `undefined`, so it fails the digit test instead of falling back to the ceiling. A value above the ceiling is rejected rather than clamped. The ceilings differ per mode, so one value can be accepted for the feedback hooks and rejected for the policy hook in the same session, which reads as an intermittent fault rather than a configuration error.
-
-**Evidence:** Measured on branch `dev` at `9adf06be` by running the launcher directly. `GOAT_FLOW_HOOK_LAUNCH_TIMEOUT_MS` unset and `=1000` both exit 0; `=30000` (above the 25s policy ceiling), `=abc`, `=0`, and the empty string all exit 2 with the same message. The post-turn hook fails the same way at exit 2, so one variable blocks both command execution and turn completion.
-
-**Prevention:**
-1. Treat unset and empty as the same input. A shell exports an empty string for `export VAR=`, and a validator that only checks `undefined` will reject it.
-2. Clamp a value that exceeds a ceiling rather than rejecting it, or reject it with a message naming the variable, the supplied value, and the accepted maximum.
-3. Decide the failure mode per hook class. Fail-closed is right for a policy hook and defensible for a Stop hook, but a configuration error that blocks both leaves no path back to a working session.
-4. Pair each validator branch with a launcher-level test that asserts the resulting exit status, not just the resolver's return value; the harm lives in the caller's translation of `null`, not in the resolver.
-
-**Applied 2026-08-18:** the launcher now follows rules 1, 2, and 4 for this variable. `workflow/hooks/hook-launch-runtime.mjs` (search: `resolveHookLaunchTimeoutMs`) treats `""` as unset and clamps an oversized value to the mode ceiling; only a value that cannot bound the wait at all (`0`, non-decimal) is rejected, and `describeInvalidHookLaunchTimeout` names the variable, the supplied value, and the accepted range in the failure line. Launcher-level proof: `test/unit/hook-launcher.test.ts` (search: `without blocking the command` and `clamps values above the`). Rule 3 still applies to every future validator: the same probe set (`""`, over-ceiling, `abc`, `0`) must be run against each hook class before a new configuration check ships.
-
 ## Footgun: Per-item subprocess spawning in hooks is ~40x more expensive on Windows Git Bash
 
 **Status:** active | **Created:** 2026-08-01 | **Evidence:** ACTUAL_MEASURED
@@ -140,6 +120,22 @@ A child result that ends a bounded cycle is a release decision, not a finding. A
 ## Resolved Entries
 
 > Historical record. These entries are no longer active traps.
+
+## Footgun: Rejecting invalid hook configuration instead of clamping it wedges every tool call
+
+**Status:** resolved | **Created:** 2026-08-11 | **Resolved:** 2026-08-18 | **Evidence:** ACTUAL_MEASURED
+
+**Original symptoms:** Empty or over-ceiling `GOAT_FLOW_HOOK_LAUNCH_TIMEOUT_MS` values made both policy and Stop hooks fail closed with an unhelpful configuration error, blocking commands and turn completion.
+
+**Why it happened:** The resolver treated an exported empty string as malformed rather than unset and rejected values above a mode ceiling instead of clamping them. The caller translated every rejection into the same unavailable result.
+
+**Resolution:** `workflow/hooks/hook-launch-runtime.mjs` (search: `resolveHookLaunchTimeoutMs`) treats empty as unset and clamps oversized values. Only inputs that cannot bound a wait (`0` or non-decimal text) are rejected, and `workflow/hooks/run-with-bash.mjs` (search: `describeInvalidHookLaunchTimeout`) names the variable, supplied value, and valid range.
+
+**Resolution evidence:** `test/unit/hook-launcher.test.ts` (search: `without blocking the command`) covers empty input and (search: `clamps values above the`) covers oversized input at launcher level.
+
+**Prevention:** For each future hook configuration validator, probe unset, empty, over-ceiling, zero, and malformed input through every hook class. Assert caller exit status and delivered message, not only the resolver return value.
+
+---
 
 - **git diff --stat unreliable for scope detection** (resolved 2026-04-03) - auto-detect uses staged, then unstaged, then full diff.
 - **Advisory hooks create unfixable quality warning after setup** (resolved 2026-04-14) - hooks ship enforce-mode (`GOAT_LINT_ENFORCE` defaults to 1).

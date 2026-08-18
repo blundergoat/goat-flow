@@ -177,7 +177,7 @@ const DEFAULT_PROFILES: Record<ArtifactSubtype, Record<MetricName, number>> = {
   },
 };
 
-/** Goat-flow's calibrated defaults. Mirrors the legacy hardcoded values exactly. */
+/** Goat-flow's calibrated defaults. */
 export const DEFAULT_QUALITY_CONFIG: QualityConfig = {
   walkRoots: {
     skills: [
@@ -199,7 +199,9 @@ export const DEFAULT_QUALITY_CONFIG: QualityConfig = {
     skillPreamblePath: ".goat-flow/skill-docs/skill-preamble.md",
     skillConventionsPath: ".goat-flow/skill-docs/skill-conventions.md",
     skillReferencePattern: "references\\/([^\\s)`\"']+\\.md)",
-    maxComposedBytes: 32 * 1024,
+    // Current full functional contexts measure 40.5-79.1 KiB; 128 KiB preserves
+    // complete evidence while remaining below the 256 KiB per-artifact ceiling.
+    maxComposedBytes: 128 * 1024,
   },
   maxArtifactBytes: 256 * 1024,
   gateVocabulary: {

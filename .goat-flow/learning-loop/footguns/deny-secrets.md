@@ -1,6 +1,6 @@
 ---
 category: deny-secrets
-last_reviewed: 2026-08-17
+last_reviewed: 2026-08-19
 ---
 
 Secret-path read traps: what counts as a secret path, and which read channels the deny surface actually binds.
@@ -33,6 +33,7 @@ Sibling buckets: `deny-shell.md`, `deny-writes.md`.
 ## Footgun: Extension-based secret checks can confuse filenames with query syntax
 
 **Status:** active | **Created:** 2026-05-27 | **Evidence:** ACTUAL_MEASURED
+**Incident count:** 3 | **Latest occurrence:** 2026-08-19
 
 **Symptoms:** A secret-path hook correctly blocks `cat path/to/id_rsa.key`, but also blocks harmless jq/yq expressions such as `jq -r .key file.json` and `yq .metadata.key file.yaml`, plus text after an unquoted shell comment, e.g. `git status # .env`.
 
@@ -42,10 +43,17 @@ Sibling buckets: `deny-shell.md`, `deny-writes.md`.
 - M12 pre-fix probes blocked `git status # .env` and `jq -r .key file.json`; post-fix they return 0 while `cat path/to/id_rsa.key` still returns 2.
 - `workflow/hooks/deny-dangerous.sh` (search: `strip_unquoted_shell_comments`) strips inert comments before policy matching; `workflow/hooks/deny-dangerous/patterns-paths.sh` (search: `key_material_path_touch`) requires a meaningful filename/path stem for `.pem`, `.key`, and `.pfx`; `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `jq bare key query`) locks both allow and block cases.
 
+**Recurrence update (2026-08-18):** The bare-field fix still blocked fields glued to jq syntax: `select(.key == "name")` and `map(.metadata.key == "name")`. Focused RED labels `jq glued select key query` and `jq glued map key query` failed while ordinary real `.key` file controls still blocked. An initial punctuation-tail exemption passed those cases but also allowed later input files named `select(.key`; two new negative controls caught that safety regression. `key_material_path_touch` now finds the single jq/yq filter operand from the quote-aware argument stream and exempts only that role, while every option value and later file operand remains scanned. The full installed and workflow corpora each pass 450 cases, including grouped-name, spaced-name, input-file, filter-file, and non-query controls.
+
+**Second recurrence update (2026-08-19):** Fresh review checked jq 1.7 help and current yq option documentation instead of treating the two CLIs as one grammar. The first role parser missed valid jq `-rf`/`-fr` filter-file bundles, treated yq boolean flags as value-taking, and exempted yq's first positional token even though yq can infer that token is an input file. It also skipped attached or file-valued yq options, while the shell token scan mistook yq's `eval` subcommand for the shell builtin. Inert `--check` probes returned exit 0 for every protected-file shape, and the first expanded corpus failed 9 of 463 cases. `key_material_path_touch` (search: `yq auto-detects whether a positional token is an expression or a file`) now parses jq bundles separately and exempts only yq's explicit `--expression` operand; `patterns-shell.sh` (`check_destructive_segment`) binds the eval denial to the command verb. Both installed and workflow full corpora now pass all 470 cases, including harmless jq literal arguments and file-reading jq option controls.
+
 **Prevention:**
 1. Secret-path tests must include inert dotted query expressions as allow controls alongside real key-file paths.
 2. Run comment false-positive probes for every policy hook after changing shared shell-segment prep.
 3. Prefer file-shape helpers over broad extension regexes when a token can also be valid data syntax.
+4. Include both bare and syntax-glued query fields in allow controls, and pair each with protected input-file, filter-file, and non-query-command blocks.
+5. Build separate option-arity tables for jq and yq. Cover bundled short flags, boolean flags, equals values, implicit-file detection, expression-provider flags, and file-valued options.
+6. Bind a dangerous shell keyword to the normalized command verb; an external CLI subcommand with the same spelling is an allow control.
 
 ---
 

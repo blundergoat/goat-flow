@@ -18,6 +18,35 @@ import {
 } from "./skill-hardening.helpers.js";
 
 describe("skill hardening contracts: security (1/2)", () => {
+  it("loads full-depth conventions and every configured security reference", () => {
+    assertForEachTarget(installedSkillPaths("goat-security"), (skillPath) => {
+      assertMatchesAll(
+        readMarkdownSection(skillPath, "Shared Conventions"),
+        [/skill-preamble\.md/iu, /Full.*skill-conventions\.md/iu],
+        skillPath,
+      );
+    });
+
+    const projectRoot = process.cwd();
+    const artifact = findArtifact(projectRoot, "skill:goat-security");
+    assert.ok(artifact, "missing goat-security quality artifact");
+    const report = scoreArtifact(projectRoot, artifact);
+    assert.deepEqual(
+      report.composedFrom,
+      [
+        "SKILL.md",
+        "skill-preamble.md",
+        "skill-conventions.md",
+        "references/common-threats.md",
+        "references/project-policy-template.md",
+        "references/supply-chain-and-cicd.md",
+        "references/identity-and-data.md",
+        "references/file-upload-and-paths.md",
+      ],
+      "goat-security quality composition must match the context its runtime instructions load",
+    );
+  });
+
   it("keeps goat-security Quick Scan out of Full-only specialist work", () => {
     assertForEachTarget(installedSkillPaths("goat-security"), (skillPath) => {
       const quickScanPath = readMarkdownSection(skillPath, "Quick Scan Path");
@@ -39,9 +68,9 @@ describe("skill hardening contracts: security (1/2)", () => {
       assertMatchesAll(
         quickScanPath,
         [
-          /Before step 1.*read.*`common-threats\.md`.*`supply-chain-and-cicd\.md`/isu,
-          /`identity-and-data\.md`.*identity.*authentication.*authorization.*session.*secret.*data/isu,
-          /`file-upload-and-paths\.md`.*upload.*path.*archive/isu,
+          /Before step 1.*read.*`references\/common-threats\.md`.*`references\/supply-chain-and-cicd\.md`/isu,
+          /`references\/identity-and-data\.md`.*identity.*authentication.*authorization.*session.*secret.*data/isu,
+          /`references\/file-upload-and-paths\.md`.*upload.*path.*archive/isu,
           /applicable reference.*unavailable.*`not assessed`.*`coverage-degraded`.*MUST NOT recommend clearance/isu,
           /Phase 4.*Phase 5.*shared definitions.*does not enter.*Full Assessment/iu,
           /Before stopping.*shared Proof Gate.*Phase 6.*does not enter.*Full Assessment/iu,
@@ -130,7 +159,7 @@ describe("skill hardening contracts: security (1/2)", () => {
       assertMatchesAll(
         readMarkdownSection(skillPath, "Step 0 - Intake"),
         [
-          /Policy exception: validate every field, approval, and status per `project-policy-template\.md` \(search: `Validation during assessment`\) before honouring it/u,
+          /Policy exception: validate every field, approval, and status per `references\/project-policy-template\.md` \(search: `Validation during assessment`\) before honouring it/u,
           /mismatch.*unverifiable.*identity.*role.*binding.*retain.*`OPEN`/iu,
         ],
         skillPath,
@@ -497,7 +526,7 @@ describe("skill hardening contracts: security (1/2)", () => {
           /missing, stale, or currency-unverified.*baseline.*`not assessed`.*`coverage-degraded`.*MUST NOT recommend clearance/iu,
           /native.*desktop.*mobile.*embedded.*unsafe.*FFI/iu,
           /generative AI.*LLM.*RAG.*model.*agent/iu,
-          /non-generative ML\/model.*`supply-chain-and-cicd\.md`/iu,
+          /non-generative ML\/model.*`references\/supply-chain-and-cicd\.md`/iu,
         ],
         skillPath,
       );
