@@ -356,22 +356,17 @@ Before recommending an addition or a change to an existing test, goat-qa reads `
 
 ## /goat-clarity
 
-Bounded clarity remediation for comments, documentation, local/private names, and contained private placement. Code mode uses one of four direct selectors:
+Bounded clarity remediation for comments, documentation, local/private names, and contained private placement. One invocation takes one target form: a GitHub PR URL, `uncommitted files`, or one or more folder and file paths, which form a single inventory:
 
 ```text
 /goat-clarity https://github.com/OWNER/REPOSITORY/pull/123
 /goat-clarity uncommitted files
-/goat-clarity path/to/folder
-/goat-clarity path/to/file.ext
+/goat-clarity path/to/folder path/to/file.ext
 ```
 
-Human-facing documentation becomes writable only with the explicit mode over those same selectors:
+Code comments and private names are edited without a prompt. Human-facing documentation in the inventory is read-only until write authority is resolved: the `documentation` keyword before the target or an explicit update/edit/fix instruction grants it, an explicit report/review/check request withholds it, and otherwise the skill asks one question before freezing its snapshot - "Report only, or update the documentation?" - defaulting to report only when unanswered, including in sub-agent mode. Without write authority, documentation is diagnosed and reported, never edited.
 
-```text
-/goat-clarity documentation <GitHub PR URL | uncommitted files | folder | file>
-```
-
-A bare documentation path stays read-only. The skill inventories the selected target, then classifies each unit as source code, test source, human documentation, agent-control or protected, or generated, binary, or unsupported. The most restrictive applicable class wins and ambiguity fails closed. Test comments and private names are eligible, while assertions, fixtures, snapshots, expected output, level, coverage, and test meaning remain protected.
+The skill inventories the selected target, then classifies each unit as source code, test source, human documentation, agent-control or protected, or generated, binary, or unsupported. A named file is classified by its content and role, not its directory, and a named gitignored file stays in the inventory with baseline attribution `NOT_CHECKED`. The most restrictive applicable class wins and ambiguity fails closed. Test comments and private names are eligible, while assertions, fixtures, snapshots, expected output, level, coverage, and test meaning remain protected.
 
 The test-selection record gives changed tests in a PR or uncommitted selector, and every test in selected folder or file test-source units, a report-only value pass through `test-selection.md`. Folder/file cases and materially changed tests in PR and uncommitted work use `KEEP`, `CONSOLIDATE`, `MOVE LEVEL`, `PRUNE CANDIDATE`, or `UNRESOLVED`. Added tests use `ADDED KEEP`, `ADDED CONSOLIDATE`, `ADDED MOVE LEVEL`, `ADDED DROP CANDIDATE`, or `ADDED UNRESOLVED`; removed tests use `REMOVAL SUPPORTED`, `RESTORE`, `REPLACE`, or `REMOVAL UNRESOLVED`. A proven path or namespace-only carryover uses `RELOCATED`; uncertain identity stays in the added and removed unresolved buckets. A manifest checkpoint counts cases before broader diagnosis and caps provider evidence batches at 20 cases, so incomplete cases cannot disappear. Recommendations never authorize assertion, fixture, level, coverage, or test-meaning changes.
 

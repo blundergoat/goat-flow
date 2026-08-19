@@ -64,18 +64,21 @@ describe("skill hardening contracts: goat-clarity", () => {
     });
   });
 
-  it("keeps four selectors and adds documentation as an explicit mode", () => {
+  it("accepts one target form and resolves documentation write authority", () => {
     assertIncludesAll([
       "/goat-clarity <GitHub PR URL>",
       "/goat-clarity uncommitted files",
-      "/goat-clarity <folder path>",
-      "/goat-clarity <file path>",
-      "/goat-clarity documentation <GitHub PR URL | uncommitted files | folder | file>",
-      "documentation is a mode over the same four selectors, not a fifth selector",
-      "a bare documentation path never becomes writable",
-      "exactly one supported selector",
-      "ask for one selector when none is supplied",
-      "refuse multiple or ambiguous selectors",
+      "/goat-clarity <one or more folder or file paths>",
+      "listed paths form one inventory",
+      "cannot be combined with paths",
+      "ask for a target when none is supplied",
+      "refuse an ambiguous or combined selector",
+      "human documentation is read-only until write authority is resolved",
+      "explicit update/edit/fix instruction, grants it",
+      "explicit report/review/check request withholds it",
+      "Report only, or update the documentation?",
+      "defaulting to report only when unanswered, including sub-agent mode",
+      "without write authority, documentation is diagnosed and reported, never edited",
     ]);
   });
 
@@ -152,20 +155,25 @@ describe("skill hardening contracts: goat-clarity", () => {
     ]);
   });
 
-  it("uses a mode-aware empty-selection gate", () => {
+  it("uses an authority-aware empty-selection gate", () => {
     assertIncludesAll([
-      "Code mode fails closed on zero eligible source-code or test-source units",
-      "Documentation mode fails closed on zero eligible selected human-documentation units",
-      "eligible selected prose remains writable",
-      "Writable only in explicit documentation mode when the unit is inside the selected inventory",
-      "Code mode may read documentation to verify a claim but cannot edit it",
-      "Documentation and READMEs are read-only in code mode",
-      "Documentation mode changes only eligible selected human prose",
+      "when no selected unit is source code, test source, or eligible human documentation",
+      "Writable only with documentation write authority when the unit is inside the selected inventory",
+      "Classify a named file by its content and role, not its directory",
+      "a named ignored file stays in inventory with baseline attribution `NOT_CHECKED`",
+      "Without documentation write authority, documentation and READMEs are read-only",
+      "with it, only eligible selected human prose changes",
+      "With documentation write authority, apply the routed human-prose and surface owners only to eligible human documentation",
     ]);
     assert.doesNotMatch(
       clarityGuidance,
       /zero eligible source files/iu,
       `${SKILL_PATH}: retired mode-agnostic empty-selection gate must not return`,
+    );
+    assert.doesNotMatch(
+      clarityGuidance,
+      /exactly one supported selector|refuse multiple or ambiguous selectors|a bare documentation path never becomes writable/iu,
+      `${SKILL_PATH}: retired single-selector refusal and keyword-only documentation gate must not return`,
     );
   });
 
@@ -421,7 +429,10 @@ describe("skill hardening contracts: goat-clarity", () => {
       "NUL-delimited",
       "never parse paths by newline",
       "bound recursive folder inventory to the canonical selected directory",
+      "One selector may list several folders and files",
       "a file selector remains exactly one canonical file",
+      "Deduplicate exact path bytes across the list",
+      "A listed ignored file stays in inventory; its baseline attribution is `NOT_CHECKED`",
       "content digest",
       "file type",
       "containment",
@@ -516,7 +527,7 @@ describe("skill hardening contracts: goat-clarity", () => {
       "compact summary",
       "literal verification results",
       "Agent: <claude | codex | antigravity | copilot>",
-      "Selector: <github-pr | uncommitted | folder | file>",
+      "Selector: <github-pr | uncommitted | paths>",
       "Summary: <paste-ready pull-request summary when requested or needed for headless/sub-agent handoff; otherwise not requested>",
       "A receipt is complete when formatter capability is classified",
     ]);
@@ -554,7 +565,8 @@ describe("skill hardening contracts: goat-clarity", () => {
       "/goat-clarity",
     );
     assertGuidanceIncludesAll(publicGuidance, "docs/skills.md", [
-      "/goat-clarity documentation <GitHub PR URL | uncommitted files | folder | file>",
+      "/goat-clarity path/to/folder path/to/file.ext",
+      "Report only, or update the documentation?",
       "most restrictive applicable class wins",
       "one public/exported identifier rename plus mechanical references",
       "selected-unit, changed-span, and command-evidence ledgers",

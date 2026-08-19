@@ -6,9 +6,9 @@
 
 1.16.0 adds `/goat-clarity`, makes audits static by default, preserves local setup edits during upgrades, strengthens hooks across Windows and non-Git workspaces, and sharpens review, QA, planning, and security workflows.
 
-- **BREAKING: audits run target hooks only when you opt in** - Audit, setup, and quality stay static; use `--trusted-target --agent <id>` for runtime proof. `--untrusted-target` stays a static alias through v1.16.x.
-- **New `/goat-clarity` tidies comments, docs, and private names** - Use a PR, uncommitted files, folder, or file; behaviour and tests stay unchanged.
-- **`/goat-clarity documentation <selector>` edits selected prose** - Bugs go to debug; named arguments and serialized keys go to planning.
+- **BREAKING: audits run target hooks only when you opt in** - Audit, setup, quality, and `hooks verify` stay static; use `--trusted-target --agent <id>` for runtime proof. `--untrusted-target` stays a static alias through v1.16.x.
+- **New `/goat-clarity` tidies comments, docs, and private names** - Use a PR, uncommitted files, folders, or files; behaviour and tests stay intact.
+- **`/goat-clarity` asks before editing documentation** - Say update or report in the request, or answer "Report only, or update the documentation?". Bugs still go to debug; named arguments and serialized keys go to planning.
 - **Clarity reviews changed tests without editing them** - Each gets a report-only keep, consolidate, move, prune/drop, restore, or replace label.
 - **Upgrades preserve local edits when templates are unchanged** - Install applies the rest; drift reports distinguish behind from diverged files.
 - **Install previews show every write** - Use `--force-path` or `--force-managed`; replacing user-owned files also needs `--force-user-owned`.

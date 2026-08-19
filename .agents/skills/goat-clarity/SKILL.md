@@ -1,6 +1,6 @@
 ---
 name: goat-clarity
-description: "Use when a developer asks to improve code comments, documentation, naming, or private placement for a GitHub pull request, uncommitted files, a repository folder, or one source file."
+description: "Use when a developer asks to improve code comments, documentation, naming, or private placement for a GitHub pull request, uncommitted files, or any repository folders and files."
 goat-flow-skill-version: "1.16.0"
 ---
 # /goat-clarity
@@ -12,23 +12,21 @@ goat-clarity has no quick depth: every invocation runs the full protocol below.
 
 ## Direct Invocation
 
-Code mode accepts one of these forms:
+Accept one target form:
 
 - `/goat-clarity <GitHub PR URL>`
 - `/goat-clarity uncommitted files`
-- `/goat-clarity <folder path>`
-- `/goat-clarity <file path>`
+- `/goat-clarity <one or more folder or file paths>`
 
-Human-documentation work requires this explicit grammar:
+Listed paths form one inventory; a PR URL or `uncommitted files` cannot be combined with paths. Ask
+for a target when none is supplied; refuse an ambiguous or combined selector.
 
-- `/goat-clarity documentation <GitHub PR URL | uncommitted files | folder | file>`
-
-Documentation is a mode over the same four selectors, not a fifth selector. Resolve the value after
-`documentation` under the matching selector contract. A bare documentation path never becomes
-writable; it remains read-only context.
-
-The invocation requires exactly one supported selector. Ask for one selector when none is
-supplied; refuse multiple or ambiguous selectors.
+Human documentation is read-only until write authority is resolved, in this order: the
+`documentation` keyword before the target, or an explicit update/edit/fix instruction, grants it; an
+explicit report/review/check request withholds it; otherwise, when the inventory holds eligible
+human-documentation units, ask one question before the snapshot - "Report only, or update the
+documentation?" - defaulting to report only when unanswered, including sub-agent mode. Without write
+authority, documentation is diagnosed and reported, never edited.
 
 ## Boundary Commands
 
@@ -72,7 +70,7 @@ classified unit meets its condition; do not load every clarity owner uncondition
 | Repository instructions require Gruff for an eligible unit and read-only discovery finds the wrapper | `.goat-flow/skill-docs/playbooks/gruff-code-quality.md` (`Comment and Documentation Passes`) |
 | A PR or uncommitted selector changes test cases, or a folder or file selector includes test source | `.goat-flow/skill-docs/playbooks/test-selection.md` (`Decision Route`) |
 | Verification needs a focused test choice | `.goat-flow/skill-docs/playbooks/test-selection.md` (`Revalidate before mutation`) |
-| Explicit documentation mode selects writable human prose | `.goat-flow/skill-docs/playbooks/writing-style.md` (`Scope Gate`) and any surface owner it routes |
+| Documentation write authority selects writable human prose | `.goat-flow/skill-docs/playbooks/writing-style.md` (`Scope Gate`) and any surface owner it routes |
 | A candidate depends on project vocabulary or a domain term | `.goat-flow/glossary.md` |
 
 No matrix match means no owner load or broader-discipline claim. Project authority may name another
@@ -80,14 +78,14 @@ owner but cannot weaken permanent prohibitions.
 
 ### 0.2 Classify selected units
 
-Resolve exactly one selector with the scoped reference, then classify every inventoried unit before
+Resolve the selector with the scoped reference, then classify every inventoried unit before
 freezing write authority. Use these exclusive surface classes:
 
 | Surface class | Write contract |
 |---|---|
 | Source code | Comments, docstrings, truthful local/private renames, and already-authorized private placement may be writable. |
 | Test source | Test-source comments and private names may be writable; assertions, fixtures, snapshots, expected output, test level, coverage, and meaning remain protected. |
-| Human documentation | Writable only in explicit documentation mode when the unit is inside the selected inventory; context-only documentation is always read-only. |
+| Human documentation | Writable only with documentation write authority when the unit is inside the selected inventory; context-only documentation is always read-only. |
 | Agent-control or protected | Read-only evidence. Agent-control surfaces are never style-remediated by goat-clarity. |
 | Generated, binary, or unsupported | Exclude from writes; refuse a direct file selector in this class. |
 
@@ -97,12 +95,13 @@ output. Fixed control grammar inside another surface remains protected.
 
 The most restrictive applicable class wins. Classification ambiguity fails closed: record the unit as
 `NOT_CHECKED` or excluded and do not write it. A path must already be in the frozen selector inventory
-before explicit selection can make its eligible class writable.
+before explicit selection can make its eligible class writable. Classify a named file by its content
+and role, not its directory; a named ignored file stays in inventory with baseline attribution
+`NOT_CHECKED`.
 
 Fail closed on unmerged state, a direct symlink selector, escape, outside the repository, binary, or
-generated content. Code mode fails closed on zero eligible source-code or test-source units.
-Documentation mode fails closed on zero eligible selected human-documentation units; eligible selected
-prose remains writable. Never follow symlinks. For PR work use authenticated, read-only GitHub access
+generated content, and when no selected unit is source code, test source, or eligible human
+documentation. Never follow symlinks. For PR work use authenticated, read-only GitHub access
 and the reference's remote report-only lane when the invocation checkout does not match. Require a
 matching local repository and head before mutation, and emit `PR_FEEDBACK_NOT_CHECKED` when review-thread
 completeness cannot be established. Bind writable authority to the
@@ -115,7 +114,7 @@ Present this snapshot before the first edit:
 
 ```text
 Target Scope Snapshot
-Identity: <repository, mode, selector, HEAD, and PR identity when applicable>
+Identity: <repository, documentation write authority, selector, HEAD, and PR identity when applicable>
 Authority: <documents, current state and provenance, comparison baseline, and semantic authority drift>
 Writable paths: <frozen, deduplicated repository-relative eligible paths>
 Exclusions: <deleted, ignored, protected, context-only, generated, binary, or unsupported paths>
@@ -178,10 +177,9 @@ Describe the current contract, never history. Do not mention removed symbols, lo
 provenance, or anything a fresh clone cannot inspect. A comment that restates code, compensates for a
 name, invents UI, or rewrites a compliant incumbent is not a clarity improvement.
 
-In explicit documentation mode, apply the routed human-prose and surface owners only to eligible
+With documentation write authority, apply the routed human-prose and surface owners only to eligible
 human documentation inside the frozen writable set. Preserve exact facts, code, quotations, control
-grammar, context-only documents, and protected regions. Code mode may read documentation to verify a
-claim but cannot edit it.
+grammar, context-only documents, and protected regions.
 
 ### 3. Run the test-value pass
 
@@ -222,7 +220,7 @@ authorizes a test change. Route broader coverage work to `goat-qa`.
 #### Safe apply
 
 Snapshot v1 permits diagnosed comments, complete local/private renames, authorized private placement,
-and eligible documentation-mode prose inside writable paths. Preserve observable behaviour, public
+and authorized documentation prose inside writable paths. Preserve observable behaviour, public
 shape, errors, side effects, ordering, compatible inputs and outputs, test meaning, and protected
 bytes. Reject whitespace-only churn.
 
@@ -254,9 +252,10 @@ commit, push, fetch, reset, clean, stash, branch creation, or branch deletion. G
 read-only: do not edit, comment, review, merge, close, reopen, or mark ready a pull request, and do not
 invoke mutating REST or GraphQL operations.
 
-Documentation and READMEs are read-only in code mode. Documentation mode changes only eligible selected
-human prose; agent-control, context-only, generated, binary, unsupported, and test-semantic regions stay
-protected. Produce summary text in memory; never post it or edit a remote description.
+Without documentation write authority, documentation and READMEs are read-only; with it, only eligible
+selected human prose changes, and agent-control, context-only, generated, binary, unsupported, and
+test-semantic regions stay protected. Produce summary text in memory; never post it or edit a remote
+description.
 
 ## Verification
 
@@ -283,7 +282,7 @@ and selector kind below, then the accepted target.
 
 ```text
 Agent: <claude | codex | antigravity | copilot>
-Selector: <github-pr | uncommitted | folder | file> — <accepted target>
+Selector: <github-pr | uncommitted | paths> — <accepted target>
 Snapshot: <identity and frozen authority summary>
 Write paths: <authorized repository-relative paths>
 Modified: <units changed and diagnosed reason>

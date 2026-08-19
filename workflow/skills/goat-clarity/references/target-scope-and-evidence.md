@@ -10,8 +10,9 @@ snapshot, drift, formatter, evidence-status, and receipt mechanics. It grants no
 ## Selector Inventory
 
 Resolve the repository root from the invocation working directory. Canonicalize without following a
-selected symlink, bind every path to that root, retain byte-safe path identity, and record the selected
-mode and exactly one of the four selector kinds. Inventory first, classify second, freeze writes last.
+selected symlink, bind every path to that root, retain byte-safe path identity, and record the resolved
+documentation write authority and one selector kind: a GitHub PR URL, `uncommitted files`, or a list of
+folder and file paths. Inventory first, classify second, freeze writes last.
 
 ### GitHub PR URL
 
@@ -54,18 +55,18 @@ Git's NUL-delimited output through a byte-safe reader and deduplicate exact path
 paths by newline or shell word splitting. Keep the index and worktree states distinct in evidence even
 when they name the same path. Refuse an unmerged state or direct symlink selector.
 
-### Folder path
+### Folder and file paths
 
-Resolve one existing in-repository directory and bound recursive folder inventory to the canonical
-selected directory. Do not traverse a symlink, ignored tree, repository escape, nested repository, or
-generated output merely because it is beneath the lexical path. Preserve ignored, excluded, and
-unsupported counts. Stop when no eligible unit remains.
-
-### File path
-
-A file selector remains exactly one canonical file. Refuse a missing path, direct symlink, repository
-escape, directory, binary, generated, or unsupported file. External producers and consumers are
-read-only context unless separately admitted through Scope v2.
+One selector may list several folders and files. Resolve each listed folder as one existing
+in-repository directory and bound recursive folder inventory to the canonical selected directory. Do not
+traverse a symlink, ignored tree, repository escape, nested repository, or generated output merely
+because it is beneath the lexical path. Each listed file is a file selector; a file selector remains
+exactly one canonical file. Refuse a missing path, direct symlink, repository escape, binary, generated,
+or unsupported file. Deduplicate exact path bytes across the list, so a file inside a listed folder is
+one unit. A listed ignored file stays in inventory; its baseline attribution is `NOT_CHECKED` because no
+committed baseline exists. Preserve ignored, excluded, and unsupported counts. External producers and
+consumers are read-only context unless separately admitted through Scope v2. Stop when no eligible unit
+remains.
 
 ## Test-case Manifest Checkpoint
 
@@ -136,8 +137,8 @@ batch, revalidate that tuple against the latest agent-accounted record. Revalida
 concurrent commit moves the committed baseline under a file or folder run, which silently reattributes
 a failing check between inherited and introduced. For a PR, also revalidate the bound PR head. For uncommitted
 work, re-inventory staged, unstaged, untracked, deleted, and unmerged membership using the same
-byte-safe method. For a folder, repeat the bounded inventory. A file selector must still resolve to
-the same one file.
+byte-safe method. For a path list, repeat the bounded inventory of each listed folder, and each listed
+file must still resolve to the same one file.
 
 For remote report-only PR work, revalidate the bound provider repository plus base and head identifiers
 before the final receipt. Head drift invalidates the report and requires a new inventory; no edit batch
