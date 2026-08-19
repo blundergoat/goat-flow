@@ -442,7 +442,8 @@ describe("post-turn-safety hook: explicit non-Git controller roots", () => {
         assert.ok(envelope.findings.length <= 20);
         assert.equal(
           envelope.findings.some(
-            (finding: { target: string }) => finding.target === "gruff-php/.env",
+            (finding: { target: string }) =>
+              finding.target === "gruff-php/.env",
           ),
           true,
           "the finding that caused the block must survive the cap",

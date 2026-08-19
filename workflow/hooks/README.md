@@ -38,7 +38,7 @@ The capture becomes stale sooner when the provider version or mode, project-laye
    - Copilot: `agent-config/copilot-hooks.json` -> `.github/hooks/hooks.json`
 3. `gruff-code-quality.sh` is opt-in through `.goat-flow/config.yaml`, the dashboard Hooks page, or `goat-flow hooks enable gruff-code-quality`.
 
-For a fresh Codex project, run `npx @blundergoat/goat-flow@1.15.1 install . --agent codex`. To repair a 1.15.0 project, run `npx @blundergoat/goat-flow@1.15.1 hooks sync .` from a normal terminal or unaffected shell, then start a fresh Codex session. Before publication, the checkout-local equivalent is `node --import tsx src/cli/cli.ts hooks sync <project-path>`.
+For a fresh Codex project, run `npx @blundergoat/goat-flow@latest install . --agent codex`. To repair a 1.15.0 project, run `npx @blundergoat/goat-flow@latest hooks sync .` from a normal terminal or unaffected shell, then start a fresh Codex session. Before publication, the checkout-local equivalent is `node --import tsx src/cli/cli.ts hooks sync <project-path>`.
 
 Root-resolving commands prefer Git so linked worktrees and submodules select the correct checkout, then walk upward for a complete project-local Goat Flow installation. A candidate needs relevant registration plus a contained regular, non-symlinked, single-link launcher and requested script. Claude and Antigravity can also use `CLAUDE_PROJECT_DIR`; Codex has no host-root fallback, but a complete managed ancestor works without Git. A partial candidate or no usable root fails closed. Missing Gruff remains a visible non-blocking skip.
 
@@ -81,7 +81,7 @@ hooks:
       - web
 ```
 
-Every listed path must be a contained Git top level. One invalid sibling invalidates the whole list; unlisted and nested repositories are not discovered.
+Every listed path must be a contained Git top level. One invalid sibling invalidates the whole list; unlisted and nested repositories are not discovered. Write the list out in full: a YAML anchor or alias in `scan-roots` is refused at registration because the hook's own parser cannot resolve it.
 
 Tracked and staged text is scanned from added hunks, including files above the whole-file cap. Non-ignored untracked text above the cap and binary changed paths return explicit incomplete results. New content cannot authorize its own suppression: inline allow markers on a new finding still block. Move intentional scanner fixtures to split synthetic values, or leave a reviewed committed fixture unchanged.
 

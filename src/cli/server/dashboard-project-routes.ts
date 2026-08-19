@@ -10,10 +10,11 @@
  */
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { readdirSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { classifyProjectState } from "../classify-state.js";
 import { createFS } from "../facts/fs.js";
 import {
+  dashboardStateHasProjectPath,
   hydrateDashboardState,
   loadDashboardState,
   resolveProjectIdentity,
@@ -26,7 +27,7 @@ import {
   readActiveTaskPlanBody,
   writeActiveTaskPlan,
 } from "./dashboard-task-state.js";
-import { validateLocalPath } from "./local-paths.js";
+import { LocalPathValidationError, validateLocalPath } from "./local-paths.js";
 
 /**
  * Load the persisted recent-projects state, preferring the current state file and falling back to the legacy projects-only file.
@@ -62,7 +63,14 @@ export function discoverSiblingProjectPaths(
   }
 }
 
-/** Return discovered siblings that have not been archived in this dashboard state. */
+/**
+ * List the neighbouring folders the Projects view suggests as "nearby projects", leaving out any the user has archived.
+ * Runs on every load of the Projects list, so it has to stay cheap for a parent folder holding many repositories.
+ *
+ * @param launchProjectPath - project the dashboard was started from; its parent folder is what gets listed
+ * @param state - saved dashboard state; an empty `projects` map means nothing has been archived yet
+ * @returns sibling folder paths in alphabetical order; empty when the parent folder is unreadable or the project sits at a filesystem root
+ */
 function activeDiscoveredProjectPaths(
   launchProjectPath: string,
   state: DashboardStateData,
@@ -70,9 +78,14 @@ function activeDiscoveredProjectPaths(
   const archivedProjects = Object.values(state.projects).filter((project) =>
     Boolean(project.archivedAt),
   );
+  const discoveredPaths = discoverSiblingProjectPaths(launchProjectPath);
+  // Nothing archived means nothing to hide, so skip the per-folder identity lookups (each one shells out to git).
+  // The user sees the same suggestions in the same order; only the wait on a folder of many repositories disappears.
+  if (archivedProjects.length === 0) return discoveredPaths;
 
-  return discoverSiblingProjectPaths(launchProjectPath).filter((path) => {
+  return discoveredPaths.filter((path) => {
     const identity = resolveProjectIdentity(path, { allowMarkerWrite: false });
+    // A folder stays hidden when it matches an archived row by identity or by any path that row was ever saved under.
     return !archivedProjects.some(
       (project) =>
         project.identity === identity.identity ||
@@ -100,6 +113,38 @@ async function writeDashboardState(
 type ProjectArchiveAction = "archive" | "restore";
 
 /**
+ * Pick the folder an Archive or Restore click acts on: a real local folder, or, for Archive only, the exact saved path of a row whose folder
+ * has since been deleted, because hiding that stale row is the one thing the user can still want from it.
+ * Error behavior: throws the validation error for Restore, for any non-missing failure, and for a missing path no saved row names.
+ *
+ * @param rawPath - path of the row the user clicked, exactly as the browser sent it
+ * @param action - `archive` may name a deleted saved row; `restore` always needs a folder that exists
+ * @param state - saved dashboard state the stale-row check looks the path up in
+ * @returns absolute path to archive or restore; never empty
+ */
+function resolveArchiveRequestPath(
+  rawPath: string,
+  action: ProjectArchiveAction,
+  state: DashboardStateData,
+): string {
+  try {
+    return validateLocalPath(rawPath, "write-local-state").path;
+  } catch (err) {
+    // Typical cause: the user deleted a project folder from disk and now clicks Archive on its leftover row in the Projects list.
+    // Only that case passes, by the exact saved path; Restore, other failures, and unknown missing paths keep the original error.
+    if (
+      action === "archive" &&
+      err instanceof LocalPathValidationError &&
+      err.validationClass === "missing" &&
+      dashboardStateHasProjectPath(state, rawPath)
+    ) {
+      return resolve(rawPath);
+    }
+    throw err;
+  }
+}
+
+/**
  * Archive or restore one project after the user clicks it in the Projects list, then answer with the updated state.
  * It reports a wrong method, a bad body, or an unusable path as a JSON status body rather than throwing at the server.
  *
@@ -122,6 +167,7 @@ async function handleProjectArchiveRequest(
   try {
     const { decodeProjectPathBody } = await import("./decoders.js");
     const decoded = decodeProjectPathBody(await ctx.readBody(req));
+    // The request carried no `path` field or a non-string one, so the click is refused before anything is read or written.
     if (!decoded.ok) {
       ctx.jsonResponse(res, 400, {
         error: decoded.error,
@@ -129,11 +175,13 @@ async function handleProjectArchiveRequest(
       });
       return;
     }
-    const projectPath = validateLocalPath(
-      decoded.value.path,
-      "write-local-state",
-    ).path;
+    // Saved state is read before the path is validated so a deleted project can still be matched to the row the user saved.
     const previousState = await readDashboardState(ctx);
+    const projectPath = resolveArchiveRequestPath(
+      decoded.value.path,
+      action,
+      previousState,
+    );
     const nextState = setDashboardProjectArchived(
       previousState,
       projectPath,
@@ -148,6 +196,8 @@ async function handleProjectArchiveRequest(
     });
     ctx.jsonResponse(res, 200, { ok: true });
   } catch (err) {
+    // For example the user clicks Restore on a row whose folder was deleted, or the dashboard state file cannot be written.
+    // The Projects view shows this message as an error toast and the row is left as it was.
     ctx.jsonResponse(res, 400, {
       error: err instanceof Error ? err.message : String(err),
     });

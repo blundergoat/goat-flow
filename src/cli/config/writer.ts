@@ -277,6 +277,88 @@ export function readHookScanRoots(
   return scanRoots ? [...scanRoots] : null;
 }
 
+/** Return a YAML value with any trailing comment removed; quotes are not tracked because scan roots never need a literal `#`. */
+function yamlValueWithoutComment(rawValue: string): string {
+  return rawValue.replace(/\s+#.*$/u, "").trim();
+}
+
+/** Return true for `*roots`, `&roots ...`, or a flow list such as `[*api_root, packages/web]` written on the `scan-roots:` line. */
+function scanRootInlineValueUsesYamlAlias(inlineValue: string): boolean {
+  if (/^[*&]/u.test(inlineValue)) return true;
+  return inlineValue.startsWith("[") && /[[,]\s*[*&]/u.test(inlineValue);
+}
+
+/**
+ * Return true when the block list under a `scan-roots:` key has an item written as `- *name` or `- &name`.
+ * Every deeper `- item` line belongs to scan-roots until the indent returns to the key's level or above.
+ *
+ * @param lines - config text split into lines
+ * @param keyLineIndex - index of the `scan-roots:` line; items are searched below it
+ * @param keyIndent - indent of that key; a line at this indent or shallower ends the list
+ * @returns true on the first alias or anchor item; false when the list ends without one
+ */
+function scanRootBlockListUsesYamlAlias(
+  lines: string[],
+  keyLineIndex: number,
+  keyIndent: number,
+): boolean {
+  for (
+    let itemIndex = keyLineIndex + 1;
+    itemIndex < lines.length;
+    itemIndex += 1
+  ) {
+    const itemLine = lines[itemIndex] ?? "";
+    if (itemLine.trim().length === 0) continue;
+    const itemIndent = itemLine.length - itemLine.trimStart().length;
+    if (itemIndent <= keyIndent) break;
+    if (/^\s*-\s*[*&]/u.test(itemLine)) return true;
+  }
+  return false;
+}
+
+/**
+ * Tell whether the project's `scan-roots` entry is written with a YAML anchor or alias in any shape the hook runtime cannot read.
+ * Use before registering post-turn scan roots: js-yaml resolves `*name` and `&name` for the CLI, but the hook's own parser inside
+ * post-turn-safety.sh does not, so a registration that accepts them would fail closed at Stop time with a misleading message.
+ *
+ * @param projectPath - selected project whose `.goat-flow/config.yaml` is inspected as text; a missing file has no scan roots
+ * @returns true when a `scan-roots` value, flow list item, or block list item starts with `*` or `&`
+ */
+export function hookScanRootsUseYamlAliases(projectPath: string): boolean {
+  const lines = readConfigText(projectPath).split(/\r?\n/u);
+  return lines.some((line, index) =>
+    scanRootLineUsesYamlAlias(lines, line, index),
+  );
+}
+
+/**
+ * Tell whether one config line is a `scan-roots:` key whose value, inline or in the block list below it, uses a YAML alias or anchor.
+ *
+ * @param lines - whole config text split into lines, needed to read a block list beneath the key
+ * @param line - the line being inspected
+ * @param index - its position in `lines`
+ * @returns true for an alias or anchor in this key's value; false for other lines, comments, and plain lists
+ */
+function scanRootLineUsesYamlAlias(
+  lines: string[],
+  line: string,
+  index: number,
+): boolean {
+  // A commented-out example such as `# scan-roots: *roots` configures nothing.
+  if (line.trimStart().startsWith("#")) return false;
+  // The key may sit mid-line inside a flow mapping, `post-turn-safety: { scan-roots: *roots }`, so match it anywhere.
+  const keyMatch = /scan-roots\s*:(.*)$/u.exec(line);
+  if (!keyMatch) return false;
+  const inlineValue = yamlValueWithoutComment(keyMatch[1] ?? "");
+  if (scanRootInlineValueUsesYamlAlias(inlineValue)) return true;
+  // Only a key that starts its line can own a block list beneath it.
+  const blockKeyMatch = /^(\s*)scan-roots\s*:/u.exec(line);
+  return (
+    blockKeyMatch !== null &&
+    scanRootBlockListUsesYamlAlias(lines, index, blockKeyMatch[1]?.length ?? 0)
+  );
+}
+
 /**
  * Set one hook's desired enabled state in `.goat-flow/config.yaml`.
  * It writes the file in place, replacing only the hook block so the rest of the user's config, including their comments, survives the toggle.

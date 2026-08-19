@@ -786,8 +786,24 @@ function validateQualityField(
     }
   }
   const subtypes = quality.subtypes;
+  // No subtypes block means the shipped subtype rows apply unchanged, so there is nothing further to spell-check.
   if (!isRecord(subtypes)) return;
   warnUnknownNestedKeys(subtypes, "quality.subtypes", warnings);
+  warnUnknownQualitySubtypeKeys(subtypes, warnings);
+}
+
+/**
+ * Warn about misspelled fields inside each known `quality.subtypes.<name>` row, including its `detection` and `profile` blocks.
+ * Use after the subtype names themselves have been swept, so an unknown name is reported once and not again for every field inside it.
+ *
+ * @param subtypes - the user's `quality.subtypes` object; a row that is not an object is skipped because the reader ignores it anyway
+ * @param warnings - accumulator the misspelled-field warnings are appended to
+ * @returns nothing; warnings are appended in place
+ */
+function warnUnknownQualitySubtypeKeys(
+  subtypes: Record<string, unknown>,
+  warnings: ValidationIssue[],
+): void {
   const knownSubtypeNames = KNOWN_NESTED_KEYS.get("quality.subtypes");
   for (const [subtypeName, subtypeValue] of Object.entries(subtypes)) {
     // Unknown subtype names were reported by the sweep above; misspelled fields inside them would double-report.

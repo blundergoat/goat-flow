@@ -279,6 +279,17 @@ type HelperContext = {
     wsUrl: string,
   ): void;
   /**
+   * Reads the clipboard on Ctrl+V and sends it to the runner as one bracketed-paste input frame.
+   */
+  dashboardSendClipboardPaste(
+    socket: {
+      readyState: number;
+      /** Receives the serialized input frame the browser would put on the WebSocket. */
+      send(frame: string): void;
+    },
+    markUserInputSent: () => void,
+  ): void;
+  /**
    * Rehydrates a server-active terminal session into the browser session list.
    */
   dashboardOpenServerSession(
@@ -502,6 +513,7 @@ globalThis.__helpers = {
   dashboardSendToTerminalSession,
   dashboardLaunchInTerminal,
   dashboardConnectTerminal,
+  dashboardSendClipboardPaste,
   dashboardOpenServerSession,
   dashboardReconnectTerminal,
   dashboardDetachTerminal,

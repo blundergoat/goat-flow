@@ -344,6 +344,21 @@ describe("decodeClientMessage", () => {
     assert.equal(assertDecodeError(result).path, "message.data");
   });
 
+  it("accepts a bracketed paste only through the input data field", () => {
+    const bracketedPaste = "\x1b[200~line1\nline2\x1b[201~";
+    const decoded = assertDecodeOk(
+      decodeClientMessage(
+        JSON.stringify({ type: "input", data: bracketedPaste }),
+      ),
+    );
+    assert.deepEqual(decoded, { type: "input", data: bracketedPaste });
+    // The same paste under any other field name never reaches the terminal.
+    const rejected = decodeClientMessage(
+      JSON.stringify({ type: "input", bracketedPaste }),
+    );
+    assert.equal(assertDecodeError(rejected).path, "message.data");
+  });
+
   it("rejects non-numeric cols on resize", () => {
     const result = decodeClientMessage(
       JSON.stringify({ type: "resize", cols: "80", rows: 24 }),

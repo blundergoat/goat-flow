@@ -6,18 +6,21 @@
 
 1.16.0 adds `/goat-clarity`, makes audits static by default, preserves local setup edits during upgrades, strengthens hooks across Windows and non-Git workspaces, and sharpens review, QA, planning, and security workflows.
 
-- **BREAKING: audits run target hooks only when you opt in** - Audit, setup, and quality stay static; use `--trusted-target` for runtime proof. `--untrusted-target` stays a static alias through v1.16.x.
+- **BREAKING: audits run target hooks only when you opt in** - Audit, setup, and quality stay static; use `--trusted-target --agent <id>` for runtime proof. `--untrusted-target` stays a static alias through v1.16.x.
 - **New `/goat-clarity` tidies comments, docs, and private names** - Use a PR, uncommitted files, folder, or file; behaviour and tests stay unchanged.
 - **`/goat-clarity documentation <selector>` edits selected prose** - Bugs go to debug; named arguments and serialized keys go to planning.
 - **Clarity reviews changed tests without editing them** - Each gets a report-only keep, consolidate, move, prune/drop, restore, or replace label.
 - **Upgrades preserve local edits when templates are unchanged** - Install applies the rest; drift reports distinguish behind from diverged files.
 - **Install previews show every write** - Use `--force-path` or `--force-managed`; replacing user-owned files also needs `--force-user-owned`.
+- **Install keeps a one-line `hooks: { ... }` mapping valid** - Missing managed hooks go inside the braces; your choices and comments stay as written.
+- **Misspelled `.goat-flow/config.yaml` keys warn** - Unknown keys, including under `quality`, are reported instead of silently defaulting.
 - **Claude hooks now start on Windows and duplicate entries are removed** - Run `hooks sync` or reinstall once; your custom hooks stay intact.
-- **Projects view discovers nearby workspaces and supports archive/restore** - Refresh setup status without a full audit or new identity marker.
+- **Projects view discovers nearby workspaces** - Refresh setup status without a full audit or new identity marker.
+- **Projects can be archived and restored** - A project whose folder was deleted still archives; restore keeps one row per project.
 - **Broken guardrails fail safely** - Missing hooks block or report unverified; invalid limits are refused or reset. Node is required.
-- **Deny hooks catch more publication and secret-path forms** - Git aliases, `send-pack`, and Windows-style credential paths are blocked.
+- **Deny hooks catch more publication and secret-path forms** - Quoted/escaped Git aliases, `send-pack`, and Windows credential paths are blocked.
 - **Read-only queries stop tripping the deny hook** - `git log`, `grep`, `jq`/`yq`, and multiline quoted text stay usable; key files remain protected.
-- **Post-turn scans support non-Git workspaces** - Set `hooks.post-turn-safety.scan-roots` to the repositories you want checked.
+- **Post-turn scans support non-Git workspaces** - List the repositories in `hooks.post-turn-safety.scan-roots`, written out (no YAML aliases).
 - **Code checks cover the full function you edit** - Gruff finds configured/package-local analyzers and refuses binaries outside the project.
 - **Audits distinguish drift from deliberate policy** - `--check-drift` compares sibling instructions; ambiguous Claude rules stay advisory.
 - **Quality tools stop overstating results** - Diffs say `absent`, not fixed; `skill doctor` separates static eligibility from runtime registration.

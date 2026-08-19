@@ -259,6 +259,69 @@ describe("hook registrar: surface detection, toggles, and sync", () => {
     });
   }
 
+  // js-yaml resolves anchors and aliases, but the hook's own runtime parser cannot, so a registration that accepted one would fail
+  // closed at Stop time with a misleading "git repository root unavailable" message. Each shape below names a real child repository.
+  const postTurnHookLines = [
+    "hooks:",
+    "  post-turn-safety:",
+    "    enabled: true",
+  ];
+  for (const aliasCase of [
+    {
+      name: "a scalar alias for the whole list",
+      anchorLines: ["controller-roots: &controller_roots", "  - services/api"],
+      scanRootLines: ["    scan-roots: *controller_roots"],
+    },
+    {
+      name: "an alias inside a flow list",
+      anchorLines: ["api-root: &api_root services/api"],
+      scanRootLines: ["    scan-roots: [*api_root]"],
+    },
+    {
+      name: "an alias as a block list item",
+      anchorLines: ["api-root: &api_root services/api"],
+      scanRootLines: ["    scan-roots:", "      - *api_root"],
+    },
+    {
+      name: "an anchor on the scan-roots value itself",
+      anchorLines: [],
+      scanRootLines: ["    scan-roots: &roots", "      - services/api"],
+    },
+  ]) {
+    it(`refuses post-turn scan roots written as ${aliasCase.name}`, () => {
+      withTempProject((root) => {
+        const childRoot = join(root, "services", "api");
+        mkdirSync(childRoot, { recursive: true });
+        runGit(childRoot, ["init", "-q"]);
+        mkdirSync(join(root, ".codex"), { recursive: true });
+        mkdirSync(join(root, ".goat-flow"), { recursive: true });
+        writeFileSync(join(root, ".codex", "config.toml"), "");
+        writeFileSync(
+          join(root, ".goat-flow", "config.yaml"),
+          [
+            ...aliasCase.anchorLines,
+            ...postTurnHookLines,
+            ...aliasCase.scanRootLines,
+            "",
+          ].join("\n"),
+        );
+
+        // Hand-edited config reaches the registrar through sync; the toggle path rewrites the block first and loses the alias.
+        const state = syncHookStates(root).find(
+          (hookState) => hookState.id === "post-turn-safety",
+        );
+
+        assert.equal(state?.scanRoots?.status, "invalid");
+        assert.match(state?.scanRoots?.issue ?? "", /anchor|alias/iu);
+        assert.equal(state?.agents.codex.isRegistered, false);
+        assert.equal(
+          state?.agents.codex.effectiveState.status,
+          "not-registered",
+        );
+      });
+    });
+  }
+
   // Fixture purpose: creates and later removes an external Git repo, symlinks it, writes config, and attempts registration.
   it("rejects a scan root that escapes through a symlink", () => {
     const externalRoot = mkdtempSync(

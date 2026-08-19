@@ -5,7 +5,7 @@
  * The fixtures execute harmless child processes and never run the repository test suite.
  */
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import {
   existsSync,
   mkdtempSync,
@@ -531,5 +531,64 @@ describe("preflight Tests-phase progress", () => {
       runnerSource,
       /test\/integration\/setup-quality-lifecycle\.test\.ts/u,
     );
+  });
+});
+
+describe("run-tests --shard grammar", () => {
+  /**
+   * Spawn the real runner with an unknown mode: a shard value that passes the parser stops at mode dispatch with a different
+   * error, so the probe can tell "accepted" from "rejected" without ever running a test file.
+   */
+  function probeShard(shardValue: string) {
+    const result = spawnSync(
+      process.execPath,
+      [TEST_RUNNER_PATH, "shard-grammar-probe", "--shard=" + shardValue],
+      { cwd: PROJECT_ROOT, encoding: "utf-8" },
+    );
+    return {
+      status: result.status,
+      stdout: result.stdout,
+      stderr: result.stderr,
+    };
+  }
+
+  it("rejects malformed and out-of-range shard values with the usage message", () => {
+    const malformed = [
+      "1x/5",
+      "1.5/5",
+      "",
+      "/5",
+      "1/",
+      "1/5/2",
+      " 1/5",
+      "0/5",
+      "6/5",
+      "1/0",
+    ];
+    for (const shardValue of malformed) {
+      const result = probeShard(shardValue);
+      assert.equal(result.status, 2, shardValue);
+      assert.match(result.stderr, /Invalid --shard value/u, shardValue);
+      assert.match(
+        result.stderr,
+        /Expected --shard=<index>\/<total>/u,
+        shardValue,
+      );
+      assert.doesNotMatch(result.stderr, /Unknown test mode/u, shardValue);
+      assert.equal(result.stdout, "", shardValue);
+    }
+  });
+
+  it("still hands a well-formed shard to mode selection", () => {
+    for (const shardValue of ["1/5", "5/5", "1/1"]) {
+      const result = probeShard(shardValue);
+      assert.equal(result.status, 2, shardValue);
+      assert.match(
+        result.stderr,
+        /Unknown test mode "shard-grammar-probe"/u,
+        shardValue,
+      );
+      assert.doesNotMatch(result.stderr, /Invalid --shard value/u, shardValue);
+    }
   });
 });

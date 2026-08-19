@@ -493,13 +493,60 @@ export function hydrateDashboardState(
 }
 
 /**
- * Archive or restore one dashboard project without deleting its identity, aliases, or title.
- * Use for explicit Projects-page actions so older path-list saves cannot erase recoverable state.
+ * Tell whether a path is one of the saved project rows, so a row whose folder was deleted can still be archived by the exact path the user
+ * saved. Use before acting on a path that failed folder validation.
  *
- * @param state - current dashboard state loaded from disk
- * @param projectPath - validated project directory selected by the user
+ * @param state - saved dashboard state loaded from disk; an empty `projects` map means no row can match
+ * @param projectPath - path as the user saved it; resolved to its real location when the folder still exists, else to its absolute form
+ * @returns true when some row's current path or alias list contains that path
+ */
+export function dashboardStateHasProjectPath(
+  state: DashboardStateData,
+  projectPath: string,
+): boolean {
+  const currentPath = normalizeProjectPath(projectPath);
+  return Object.values(state.projects).some(
+    (record) =>
+      record.currentPath === currentPath || record.paths.includes(currentPath),
+  );
+}
+
+/**
+ * Decide whether a row that was found only by its path must move to the folder's freshly resolved identity.
+ * Use while archiving or restoring, after the row has been matched, so the Projects list never shows the same checkout twice.
+ *
+ * @param matchedRecord - the saved row the click landed on; undefined means the folder was never saved and nothing can move
+ * @param wasIdentityMatch - true when the row was found under the folder's current identity, so it already sits at the right key
+ * @param identity - identity the folder resolves to right now, for example a new `git-remote:` key after the user added a remote
+ * @param currentPath - folder of the row; a folder that no longer exists cannot prove a new identity
+ * @returns the old key to drop after re-keying, or null when the row keeps the key it was saved under
+ */
+function obsoleteIdentityAfterRekey(
+  matchedRecord: DashboardProjectRecord | undefined,
+  wasIdentityMatch: boolean,
+  identity: DashboardProjectIdentity,
+  currentPath: string,
+): string | null {
+  // A row found only by path may now resolve to a different identity, for example the folder gained a git remote while it was archived.
+  //
+  // Move it to that key, or the list would show the same checkout twice after restore.
+  // A folder that no longer exists cannot prove a new identity, so a stale row being archived keeps the key it was saved under.
+  return matchedRecord &&
+    !wasIdentityMatch &&
+    matchedRecord.identity !== identity.identity &&
+    directoryExists(currentPath)
+    ? matchedRecord.identity
+    : null;
+}
+
+/**
+ * Archive or restore one dashboard project without losing its identity, known paths, or title.
+ * Use for the Archive and Restore buttons on the Projects page, so an older whole-list save cannot erase a row the user may want back.
+ *
+ * @param state - saved dashboard state loaded from disk
+ * @param projectPath - folder of the row the user clicked; for archive it may be a saved path whose folder no longer exists
  * @param archivedAt - archive timestamp, or `null` to restore the project
- * @returns normalized state with the project retained and active paths derived from archive state
+ * @returns rebuilt state with the row kept and the active path list derived from what is archived
  */
 export function setDashboardProjectArchived(
   state: DashboardStateData,
@@ -510,13 +557,17 @@ export function setDashboardProjectArchived(
   const identity = resolveProjectIdentity(currentPath, {
     allowMarkerWrite: false,
   });
+  // Prefer the row saved under this folder's current identity; otherwise any row that lists the folder among its known paths,
+  // which is how a project saved before it gained a git remote is found again.
+  const identityMatchedRecord = state.projects[identity.identity];
   const matchedRecord =
-    state.projects[identity.identity] ??
+    identityMatchedRecord ??
     Object.values(state.projects).find(
       (record) =>
         record.currentPath === currentPath ||
         record.paths.includes(currentPath),
     );
+  // A known row keeps its title and known paths; a folder never saved before becomes a fresh row.
   const record: DashboardProjectRecord = matchedRecord
     ? {
         ...matchedRecord,
@@ -525,7 +576,20 @@ export function setDashboardProjectArchived(
       }
     : { ...identity, paths: [currentPath] };
 
-  // Archive retains the complete record; restore removes only the archive marker.
+  const obsoleteIdentity = obsoleteIdentityAfterRekey(
+    matchedRecord,
+    identityMatchedRecord !== undefined,
+    identity,
+    currentPath,
+  );
+  // Clear the old key's identity fields before copying the new identity in, so a stale remote hash or marker id cannot survive the move.
+  if (obsoleteIdentity !== null) {
+    Reflect.deleteProperty(record, "remoteUrlHash");
+    Reflect.deleteProperty(record, "markerId");
+    Object.assign(record, identity);
+  }
+
+  // Archive keeps the complete row; restore removes only the archive marker.
   if (archivedAt === null) {
     Reflect.deleteProperty(record, "archivedAt");
   } else {
@@ -533,6 +597,11 @@ export function setDashboardProjectArchived(
   }
 
   const projects = { ...state.projects, [record.identity]: record };
+  // Without this the old key would come back as a second row when the state is rebuilt below.
+  if (obsoleteIdentity !== null) {
+    Reflect.deleteProperty(projects, obsoleteIdentity);
+  }
+  // Restore puts the folder back in the active list; archive takes every spelling of it out.
   const paths =
     archivedAt === null
       ? dedupeStrings([...state.paths, currentPath])

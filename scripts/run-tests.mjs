@@ -138,17 +138,12 @@ const DEFAULT_FILE_SECONDS = 5;
 function parseShard() {
   const flag = process.argv.find((argument) => argument.startsWith("--shard="));
   if (!flag) return null;
-  const [index, total] = flag
-    .slice("--shard=".length)
-    .split("/")
-    .map((part) => Number.parseInt(part, 10));
-  if (
-    !Number.isInteger(index) ||
-    !Number.isInteger(total) ||
-    total < 1 ||
-    index < 1 ||
-    index > total
-  ) {
+  // Only `<digits>/<digits>` is a shard. `Number.parseInt` would quietly read `1x/5` or `1.5/5` as `1/5`, so a mistyped matrix value has to
+  // fail here rather than run a split nobody asked for.
+  const match = /^(\d+)\/(\d+)$/u.exec(flag.slice("--shard=".length));
+  const index = match ? Number.parseInt(match[1], 10) : Number.NaN;
+  const total = match ? Number.parseInt(match[2], 10) : Number.NaN;
+  if (match === null || total < 1 || index < 1 || index > total) {
     console.error(
       `Invalid --shard value "${flag}". Expected --shard=<index>/<total> with 1 <= index <= total.`,
     );

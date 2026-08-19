@@ -10,6 +10,7 @@ import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { getAgentProfiles } from "../agents/registry.js";
 import {
+  hookScanRootsUseYamlAliases,
   readHookEnabled,
   readHookScanRoots,
   removeHookConfig,
@@ -349,6 +350,31 @@ function postTurnScanRootState(
       issue: "A non-Git workspace requires explicit post-turn scan roots.",
     };
   }
+  // js-yaml has already resolved any anchor or alias here, but the hook's own parser cannot: at Stop time such a config reads as no
+  // roots and fails closed with a misleading message. Refuse it now, while the user is looking at the Hooks page or the sync output.
+  if (hookScanRootsUseYamlAliases(projectPath)) {
+    return {
+      status: "invalid",
+      roots: configuredRoots,
+      issue:
+        "Post-turn scan roots cannot use YAML anchors or aliases; write the list out in full.",
+    };
+  }
+  return explicitScanRootState(projectRoot, configuredRoots);
+}
+
+/**
+ * Check every explicit post-turn root against the selected project: each must stay inside it and be a Git repository.
+ * The first failing root names the problem so the user can fix that one line of config.
+ *
+ * @param projectRoot - physical directory of the selected project; roots are resolved relative to it
+ * @param configuredRoots - the user's explicit `scan-roots` list, already free of YAML aliases
+ * @returns `configured` with the same list when every root passes, else `invalid` naming the first bad root
+ */
+function explicitScanRootState(
+  projectRoot: string,
+  configuredRoots: string[],
+): HookScanRootState {
   for (const configuredRoot of configuredRoots) {
     const physicalRoot = containedScanRoot(projectRoot, configuredRoot);
     if (physicalRoot === null) {

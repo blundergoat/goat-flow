@@ -7,6 +7,7 @@
 import { discoverSiblingProjectPaths } from "../../src/cli/server/dashboard-project-routes.js";
 import {
   assert,
+  childProcess,
   DASHBOARD_STATE_PATH,
   describe,
   expectRecord,
@@ -16,16 +17,44 @@ import {
   LEGACY_PROJECTS_LIST_PATH,
   mkdir,
   mkdtemp,
+  originalExecFileSync,
   PROJECT_PATH,
   readFile,
   rename,
   resolve,
   rm,
   runGit,
+  syncBuiltinESMExports,
   tmpdir,
   writeFile,
   writeProjectFile,
 } from "./dashboard-server.helpers.js";
+
+/** Return only the persisted part of a /api/projects/list body, dropping the filesystem-derived discoveredPaths. */
+function persistedProjectsState(body: unknown): Record<string, unknown> {
+  const payload = expectRecord(body, "projects list state");
+  return {
+    paths: payload.paths,
+    favorites: payload.favorites,
+    projectTitles: payload.projectTitles,
+    projects: payload.projects,
+  };
+}
+
+/** Return the persisted project records whose alias list contains the given path. */
+function projectRecordsWithPath(
+  body: unknown,
+  path: string,
+): Record<string, unknown>[] {
+  const payload = expectRecord(body, "projects list state");
+  return Object.values(expectRecord(payload.projects, "projects map"))
+    .map((project) => expectRecord(project, "project record"))
+    .filter(
+      (project) =>
+        Array.isArray(project.paths) &&
+        (project.paths as unknown[]).includes(path),
+    );
+}
 describe("dashboard /api/projects", () => {
   it("discovers immediate non-hidden sibling directories", async () => {
     const parent = await mkdtemp(
@@ -470,6 +499,170 @@ describe("dashboard /api/projects", () => {
     } finally {
       await rm(root, { recursive: true, force: true });
       await rm(moved, { recursive: true, force: true });
+    }
+  });
+  it("lists discovered siblings without probing git when nothing is archived", async () => {
+    // A clean empty state means hydration has no saved paths to re-resolve, so every git probe counted below
+    // belongs to sibling discovery alone.
+    await writeFile(
+      DASHBOARD_STATE_PATH,
+      JSON.stringify({
+        paths: [],
+        favorites: [],
+        projectTitles: {},
+        projects: {},
+      }),
+    );
+    const control = await fetchJson("/api/projects/list");
+    assert.equal(control.res.status, 200);
+    const controlBody = expectRecord(control.body, "control list");
+    assert.ok(Array.isArray(controlBody.discoveredPaths));
+
+    // The server never logs identity lookups, so counting its git remote reads is the only way to see that a list load skipped them.
+    let gitRemoteProbes = 0;
+    childProcess.execFileSync = ((file, args, options) => {
+      if (
+        file === "git" &&
+        Array.isArray(args) &&
+        args.includes("remote.origin.url")
+      ) {
+        gitRemoteProbes += 1;
+      }
+      return Reflect.apply(originalExecFileSync, childProcess, [
+        file,
+        args,
+        options,
+      ]);
+    }) as typeof childProcess.execFileSync;
+    syncBuiltinESMExports();
+    try {
+      const probed = await fetchJson("/api/projects/list");
+      assert.equal(probed.res.status, 200);
+      const probedBody = expectRecord(probed.body, "probed list");
+      assert.deepEqual(probedBody.discoveredPaths, controlBody.discoveredPaths);
+      assert.equal(gitRemoteProbes, 0);
+    } finally {
+      childProcess.execFileSync = originalExecFileSync;
+      syncBuiltinESMExports();
+    }
+  });
+
+  it("archives a deleted project by its saved row but rejects unknown missing paths", async () => {
+    const root = await mkdtemp(join(tmpdir(), "goat-flow-stale-archive-"));
+    const unknownMissing = `${root}-never-saved`;
+    try {
+      const save = await fetchJson("/api/projects/list", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          paths: [root],
+          favorites: [],
+          projectTitles: { [root]: "Stale fixture" },
+        }),
+      });
+      assert.equal(save.res.status, 200);
+      await rm(root, { recursive: true, force: true });
+
+      const before = await fetchJson("/api/projects/list");
+      const unknownArchive = await fetchJson("/api/projects/archive", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: unknownMissing }),
+      });
+      assert.equal(unknownArchive.res.status, 400);
+      const after = await fetchJson("/api/projects/list");
+      assert.deepEqual(
+        persistedProjectsState(after.body),
+        persistedProjectsState(before.body),
+      );
+
+      const archive = await fetchJson("/api/projects/archive", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: root }),
+      });
+      assert.equal(archive.res.status, 200);
+      const archived = await fetchJson("/api/projects/list");
+      const archivedBody = expectRecord(archived.body, "stale archived state");
+      assert.equal((archivedBody.paths as string[]).includes(root), false);
+      const [archivedProject, ...extraArchived] = projectRecordsWithPath(
+        archived.body,
+        root,
+      );
+      assert.ok(archivedProject);
+      assert.deepEqual(extraArchived, []);
+      assert.equal(typeof archivedProject.archivedAt, "string");
+      assert.equal(archivedProject.title, "Stale fixture");
+
+      const restore = await fetchJson("/api/projects/restore", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: root }),
+      });
+      assert.equal(restore.res.status, 400);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps one project record when a restored project's identity changes", async () => {
+    const root = await mkdtemp(join(tmpdir(), "goat-flow-rekey-project-"));
+    try {
+      const save = await fetchJson("/api/projects/list", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          paths: [root],
+          favorites: [],
+          projectTitles: { [root]: "Rekey fixture" },
+        }),
+      });
+      assert.equal(save.res.status, 200);
+      const [savedProject] = projectRecordsWithPath(
+        (await fetchJson("/api/projects/list")).body,
+        root,
+      );
+      assert.ok(savedProject);
+      assert.equal(savedProject.identitySource, "path");
+
+      const archive = await fetchJson("/api/projects/archive", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: root }),
+      });
+      assert.equal(archive.res.status, 200);
+
+      // The project gains a git remote while archived, so its identity is no longer the path.
+      runGit(root, ["init"]);
+      runGit(root, [
+        "remote",
+        "add",
+        "origin",
+        "git@github.com:Example/RekeyFixture.git",
+      ]);
+
+      const restore = await fetchJson("/api/projects/restore", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: root }),
+      });
+      assert.equal(restore.res.status, 200);
+
+      const restored = await fetchJson("/api/projects/list");
+      const restoredBody = expectRecord(restored.body, "rekeyed state");
+      assert.ok((restoredBody.paths as string[]).includes(root));
+      const [restoredProject, ...extraRestored] = projectRecordsWithPath(
+        restored.body,
+        root,
+      );
+      assert.ok(restoredProject);
+      assert.deepEqual(extraRestored, []);
+      assert.equal(restoredProject.archivedAt, undefined);
+      assert.equal(restoredProject.title, "Rekey fixture");
+      assert.equal(restoredProject.identitySource, "git-remote");
+      assert.notEqual(restoredProject.identity, savedProject.identity);
+    } finally {
+      await rm(root, { recursive: true, force: true });
     }
   });
 });

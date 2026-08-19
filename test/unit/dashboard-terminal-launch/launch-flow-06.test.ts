@@ -24,6 +24,7 @@ import {
   SETUP_VIEW_PATH,
   WORKSPACE_VIEW_PATH,
 } from "./helpers.js";
+import { decodeClientMessage } from "../../../src/cli/server/decoders.js";
 
 describe("dashboard terminal launch flow", () => {
   it("rehydrates reporting capture metadata when opening a backend session", async () => {
@@ -665,5 +666,68 @@ describe("dashboard terminal launch flow", () => {
     assert.match(workspace, /retryTerminalSession\(session\.id\)/);
     assert.match(styles, /\.terminal-loading-overlay/);
     assert.match(styles, /@keyframes terminal-loading-spinner/);
+  });
+  it("sends Ctrl+V clipboard text as one bracketed paste the server decoder accepts", async () => {
+    const helpers = loadHelpers(
+      async () => ({ json: async () => ({}) }) as Response,
+      { setTimeout, clearTimeout, setInterval, clearInterval },
+      {
+        navigator: {
+          clipboard: { readText: async () => "line1\r\nline2" },
+        },
+      },
+    );
+    const frames: string[] = [];
+    let inputMarks = 0;
+
+    helpers.dashboardSendClipboardPaste(
+      { readyState: 1, send: (frame: string) => frames.push(frame) },
+      () => {
+        inputMarks += 1;
+      },
+    );
+    await delay(0);
+
+    assert.equal(frames.length, 1);
+    const decoded = decodeClientMessage(frames[0] ?? "");
+    assert.equal(decoded.ok, true, JSON.stringify(decoded));
+    if (!decoded.ok) return;
+    assert.deepEqual(decoded.value, {
+      type: "input",
+      data: "\x1b[200~line1\nline2\x1b[201~",
+    });
+    assert.equal(inputMarks, 1);
+  });
+
+  it("sends nothing on Ctrl+V when the clipboard is empty or unreadable", async () => {
+    const clipboards: Array<[string, () => Promise<string>]> = [
+      ["empty clipboard", async () => ""],
+      [
+        "denied clipboard",
+        async () => {
+          throw new Error("clipboard read denied");
+        },
+      ],
+    ];
+    for (const [label, readText] of clipboards) {
+      const helpers = loadHelpers(
+        async () => ({ json: async () => ({}) }) as Response,
+        { setTimeout, clearTimeout, setInterval, clearInterval },
+        { navigator: { clipboard: { readText } } },
+      );
+      const frames: string[] = [];
+      let inputMarks = 0;
+
+      helpers.dashboardSendClipboardPaste(
+        { readyState: 1, send: (frame: string) => frames.push(frame) },
+        () => {
+          inputMarks += 1;
+        },
+      );
+      await delay(0);
+
+      assert.deepEqual(frames, [], label);
+      assert.equal(inputMarks, 0, label);
+    }
   });
 });

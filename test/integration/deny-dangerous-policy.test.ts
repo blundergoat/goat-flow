@@ -228,6 +228,17 @@ const policyBlockCases: PolicyBlockCase[] = [
     userCommand: `git -c 'alias.publish="!git push origin main"' publish`,
     expectedPolicyMessage: /Policy repository/u,
   },
+  // split_cmdline also removes backslash escapes, so `pu\sh` runs as `push` once Git expands the alias.
+  {
+    name: "Git alias whose value backslash-escapes a letter of push",
+    userCommand: String.raw`git -c 'alias.publish=pu\sh origin main' publish`,
+    expectedPolicyMessage: /Policy repository/u,
+  },
+  {
+    name: "Git alias whose value backslash-escapes send-pack",
+    userCommand: String.raw`git -c 'alias.publish=send-p\ack origin main' publish`,
+    expectedPolicyMessage: /Policy repository/u,
+  },
   {
     name: "Windows drive-relative env file read",
     // `C:.env` is drive-relative: Windows resolves it against the current directory on C:,
@@ -417,6 +428,10 @@ const policyAllowCases: PolicyAllowCase[] = [
   {
     name: "benign Git alias whose value keeps single quotes",
     userCommand: `git -c "alias.inspect='log --oneline'" inspect`,
+  },
+  {
+    name: "benign Git alias whose value backslash-escapes a letter of status",
+    userCommand: String.raw`git -c 'alias.inspect=sta\tus --short' inspect`,
   },
   {
     name: "escaped-space POSIX path containing secrets prose",

@@ -493,10 +493,9 @@ function dashboardBindTerminalSocketLifecycle(
 }
 
 /**
- * Send clipboard text to the runner as one bracketed paste.
+ * Send the clipboard to the runner as one bracketed paste. Runs when the user presses Ctrl+V in a Workspace terminal.
  *
- * Error behavior: throws nothing; a denied clipboard read swallows its error, because the browser has already shown the
- * user its own permission prompt.
+ * Error behavior: throws nothing; a denied clipboard read swallows its error because the browser has already shown the user its own prompt.
  *
  * @param socket - the session socket; a closed socket drops the paste rather than queueing it
  * @param markUserInputSent - records that the user acted, clearing the waiting badge and resetting the idle clock
@@ -509,7 +508,7 @@ function dashboardSendClipboardPaste(
   navigator.clipboard
     .readText()
     .then((text) => {
-      // Nothing on the clipboard, or a socket that has already closed, leaves nothing to send.
+      // Nothing on the clipboard, or a session that already closed, leaves nothing to send.
       if (!text || socket.readyState !== WebSocket.OPEN) return;
 
       // Bracketed-paste markers tell runners "this is one paste, do not submit on internal newlines." Copilot in particular submits on every
@@ -519,9 +518,11 @@ function dashboardSendClipboardPaste(
       // unconditionally.
       const prepared = dashboardPreparePasteBody(text);
       const bracketedPaste = "\x1b[200~" + prepared + "\x1b[201~";
-      socket.send(JSON.stringify({ type: "input", bracketedPaste }));
+      // The server accepts terminal input only under `data`; any other field name is rejected and the paste never reaches the runner.
+      socket.send(JSON.stringify({ type: "input", data: bracketedPaste }));
       markUserInputSent();
     })
+    // For example the user declined the browser's clipboard permission prompt; the browser already told them, so nothing more is shown.
     .catch(() => {});
 }
 

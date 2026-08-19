@@ -22,10 +22,10 @@ is_git_publication_target() {
 
 # Reveal the command word Git will actually run from an alias value.
 # Word splitting removes the operand's outer shell quoting, but Git runs the alias through its own
-# split_cmdline, which removes a second layer. Without this, `alias.publish="push"` and
-# `alias.publish=pu"sh"` both reach the remote while the guard sees a command word it does not
-# recognise. Only the command word is normalized; arguments keep their text so a benign alias such
-# as `alias.inspect="status --short"` still reads as status, not as a publication target.
+# split_cmdline, which removes a second layer of quotes and backslash escapes. Without this,
+# `alias.publish="push"`, `alias.publish=pu"sh"`, and `alias.publish=pu\sh` all reach the remote while
+# the guard sees a command word it does not recognise. Only the command word is normalized; arguments
+# keep their text so a benign alias such as `alias.inspect="status --short"` still reads as status.
 git_alias_expansion_command_word() {
   local expansion="$1"
   expansion="${expansion#"${expansion%%[![:space:]]*}"}"
@@ -33,6 +33,7 @@ git_alias_expansion_command_word() {
   local arguments="${expansion:${#command_word}}"
   command_word="${command_word//\"/}"
   command_word="${command_word//\'/}"
+  command_word="${command_word//\\/}"
   printf '%s%s' "$command_word" "$arguments"
 }
 
