@@ -91,7 +91,9 @@ Classify each change:
 | CRITICAL | If this breaks, users are directly affected or security is compromised | Auth logic, payment flow, data mutation, permission checks, API contracts |
 | HIGH | Business logic or integration that affects correctness | Calculations, state transitions, cross-service calls, database queries |
 | MEDIUM | Internal logic with limited blast radius | Utilities, validators, formatters, isolated components |
-| LOW | Cosmetic, config, or changes with no behavioural impact | Styling, copy, constants, type-only changes |
+| LOW | Cosmetic, config, or changes with no behavioural impact | Styling, copy, constants, private/internal type-only changes with no contract impact |
+
+**Risk precedence:** Risk follows impact, not syntax. A type-only change is LOW only when it cannot change or misrepresent a public/exported, serialized, persisted, or cross-module contract. When classifications overlap, use the higher risk.
 
 For each CRITICAL/HIGH change, trace callers, consumers, user-visible flows, downstream services, and matched footguns/lessons.
 

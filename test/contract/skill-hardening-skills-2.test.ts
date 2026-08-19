@@ -20,6 +20,32 @@ import {
 } from "./skill-hardening.helpers.js";
 
 describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () => {
+  it("gives public type contracts higher risk than internal type-only changes", () => {
+    assertForEachTarget(installedSkillPaths("goat-qa"), (skillPath) => {
+      const changeRisk = readMarkdownSection(
+        skillPath,
+        "Phase 1 - Change Risk Analysis",
+      );
+
+      assert.match(
+        changeRisk,
+        /private\/internal type-only changes with no contract impact/u,
+        skillPath,
+      );
+      assert.match(changeRisk, /Risk follows impact, not syntax/u, skillPath);
+      assert.match(
+        changeRisk,
+        /A type-only change is LOW only when it cannot change or misrepresent a public\/exported, serialized, persisted, or cross-module contract/u,
+        skillPath,
+      );
+      assert.match(
+        changeRisk,
+        /When classifications overlap, use the higher risk/u,
+        skillPath,
+      );
+    });
+  });
+
   it("keeps goat-qa Audit priorities coherent through the post-gate plan", () => {
     assertForEachTarget(installedSkillPaths("goat-qa"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);

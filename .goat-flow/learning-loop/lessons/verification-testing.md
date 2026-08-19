@@ -1,6 +1,6 @@
 ---
 category: verification-testing
-last_reviewed: 2026-08-18
+last_reviewed: 2026-08-19
 ---
 
 **Scope:** What a test must actually establish - observable contracts over incidental shape, deadlines independent of the thing under test, telling a transient failure apart from a regression, and the ways a passing suite still fails to prove its claim. Proving a guard or scanner works is [verification-scanners.md](verification-scanners.md); building fixtures is [test-fixtures.md](test-fixtures.md).
@@ -51,6 +51,7 @@ last_reviewed: 2026-08-18
 ## Lesson: Contract tests pin doctrine wording and path semantics
 
 **Status:** active | **Created:** 2026-04-25
+**Incident count:** 10 | **Latest occurrence:** 2026-08-19
 
 **What happened:** While removing one forbidden phrase and changing dashboard quality report ownership, the first full `npm test` run failed two contract-style checks: a skill-hardening contract (now `test/contract/skill-hardening-shared-3.test.ts`, search: `hardening debt`) still required the established "hardening debt" evidence language, and a dashboard prompt-source assertion still expected the old relative quality-report path message.
 
@@ -72,7 +73,9 @@ last_reviewed: 2026-08-18
 
 **Recurrence 2026-08-16:** I told the user that relocating goat-security's exception tuple and Compliance Mode into a reference would cut "~3,000 chars" and reach the skill-quality 10/10 token tier, estimating from a glance rather than measuring. Measured, the two sections were 1,328 and 1,546 chars, and the pointers left behind reduced the net to 2,395; the skill stayed at 5,151 tokens against a 5,000 boundary. The plan the user approved on that estimate could not deliver its stated outcome, and the shortfall only surfaced after the moves and contract retargets were done. Evidence anchors: `.goat-flow/learning-loop/footguns/skill-authoring.md` (search: `Dense functional skills satisfy the ADR-023 word cap`) and `src/cli/quality/skill-quality-metrics.ts` (search: `tokens > 5000`).
 
-**Prevention:** Search tests for changed prose and adjacent commands. Keep fixtures inside their consuming subtest and re-read the block before RED. Update a contract only when product semantics change; preserve unrelated doctrine. Before drafting in a near-cap skill, measure the current word budget; replace or condense existing wording, or move detail into a progressive reference, before GREEN. Before quoting a budget or score outcome to the user, measure the exact sizes involved (moved sections minus the pointer text that replaces them) with the same function the gate uses, and state the measured margin.
+**Recurrence 2026-08-19:** Shortening the three live instruction files passed instruction parity and line-count checks, but `stats --check` rejected the removed durable anchor `Coding agents never run`. After that phrase was restored, full preflight still failed 3 of 2,122 tests because the rewrite had shortened the exact external-write authorization sentence. Both phrases were restored across the three mirrors before preflight passed. Evidence anchors: `.goat-flow/learning-loop/lessons/agent-behavior.md` (search: `Coding agents never run`) and `test/contract/command-phrases.test.ts` (search: `AUTHORIZATION_POLICY`).
+
+**Prevention:** Search tests and durable semantic anchors for changed prose and adjacent commands; sibling parity proves agreement, not preservation of downstream contracts. Keep fixtures inside their consuming subtest and re-read the block before RED. Update a contract only when product semantics change; preserve unrelated doctrine. Before drafting in a near-cap skill, measure the current word budget; replace or condense existing wording, or move detail into a progressive reference, before GREEN. Before quoting a budget or score outcome to the user, measure the exact sizes involved (moved sections minus the pointer text that replaces them) with the same function the gate uses, and state the measured margin.
 ---
 
 ## Lesson: Split transient preflight test failures from task regressions
