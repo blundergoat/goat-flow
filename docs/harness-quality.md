@@ -29,7 +29,7 @@ npx @blundergoat/goat-flow@latest quality history --agent claude
 npx @blundergoat/goat-flow@latest quality diff --agent claude
 ```
 
-Saved reports live locally under `.goat-flow/logs/quality/` as validated JSON. `history` and `diff` only operate on reports that completed the persistence contract.
+Saved reports live locally under `.goat-flow/logs/quality/` as validated JSON. New reports record the assessed revision, worktree state, grounding coverage, unverified probes, and score confidence under `assessment_context`; these facts explain evidence gaps without automatically changing a score. `history` and `diff` also keep older reports loadable when that context predates their schema.
 
 ---
 

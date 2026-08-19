@@ -17,6 +17,9 @@ import {
   QUALITY_EVIDENCE_METHODS,
   QUALITY_FINDING_SEVERITIES,
   QUALITY_FINDING_TYPES,
+  QUALITY_GROUNDING_STATUSES,
+  QUALITY_SCORE_CONFIDENCES,
+  QUALITY_WORKTREE_STATES,
 } from "../quality/schema-types.js";
 import {
   inferQualityScope,
@@ -144,6 +147,15 @@ export function appendQualityReportContract(
   lines.push(
     `  "prior_report_id": ${input.priorReport ? jsonString(input.priorReport.id) : "null"},`,
   );
+  lines.push('  "assessment_context": {');
+  lines.push('    "project_revision": null,');
+  lines.push('    "working_tree_state": "unavailable",');
+  lines.push('    "grounding_status": "blocked",');
+  lines.push(
+    '    "unverified_probes": ["runtime grounding not yet recorded"],',
+  );
+  lines.push('    "score_confidence": "low"');
+  lines.push("  },");
   lines.push('  "scores": {');
   lines.push(
     '    "setup": { "total": 0, "accuracy": 0, "relevance": 0, "completeness": 0, "friction": 0 },',
@@ -233,6 +245,10 @@ function appendReportJsonRules(
   );
   lines.push(
     `- \`quality_mode\` is REQUIRED for new reports generated from this prompt. Use \`${jsonString(input.qualityMode)}\` for this ${qualityModeLabel(input.qualityMode)} assessment.`,
+  );
+  pushVariant(
+    `- \`assessment_context\` is REQUIRED for new reports. Set \`project_revision\` to the assessed Git HEAD or \`null\`; set \`working_tree_state\` to ${backtickList(QUALITY_WORKTREE_STATES)}; set \`grounding_status\` to ${backtickList(QUALITY_GROUNDING_STATUSES)}; list every skipped, denied, or unavailable command or skill probe in \`unverified_probes\`; and set \`score_confidence\` to ${backtickList(QUALITY_SCORE_CONFIDENCES)}. Use an empty \`unverified_probes\` array only when grounding is complete. This metadata does not change or cap the rubric scores.`,
+    `- \`assessment_context\` is REQUIRED: record \`project_revision\`; \`working_tree_state\` as ${backtickList(QUALITY_WORKTREE_STATES)}; \`grounding_status\` as ${backtickList(QUALITY_GROUNDING_STATUSES)}; \`unverified_probes\`; and \`score_confidence\` as ${backtickList(QUALITY_SCORE_CONFIDENCES)}. This metadata does not change or cap the rubric scores.`,
   );
   // Same prior-report id in both wordings - compute once so the branch doesn't
   // sit inline in each variant string.

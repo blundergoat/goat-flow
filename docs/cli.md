@@ -154,11 +154,11 @@ npx @blundergoat/goat-flow@latest quality validate .goat-flow/logs/quality/2026-
 
 ### `goat-flow quality save <project>`
 
-Persist one current quality report supplied as JSON on stdin. The command strictly accepts the report shape in memory, scrubs accepted string values, revalidates the report, verifies its project and goat-flow versions, chooses an exclusive file under the selected project's `.goat-flow/logs/quality/`, and prints `OK <absolute-report-path>`. It rejects caller-selected output paths and redirected report directories.
+Persist one current quality report supplied as JSON on stdin. The command strictly accepts the report shape in memory, scrubs accepted string values, revalidates the report, verifies its project and goat-flow versions, chooses an exclusive file under the selected project's `.goat-flow/logs/quality/`, and prints `OK <absolute-report-path>`. Current reports include `assessment_context`: the assessed revision, worktree state, runtime-grounding coverage, unverified probes, and score confidence. This metadata explains comparability limits but does not alter rubric scores. Historical reports that predate it remain loadable through validate, history, and diff. The saver rejects caller-selected output paths and redirected report directories.
 
 ```bash
 npx @blundergoat/goat-flow@latest quality save . <<'JSON'
-{"report_kind":"goat-flow-quality-report","goat_flow_version":"<current-version>","agent":"claude","project_path":"<absolute-project-path>","run_date":"YYYY-MM-DD","audit_status":"pass","scope":"framework-self","rubric_version":"<current-version>","quality_mode":"skills","prior_report_id":null,"scores":{"setup":{"total":0,"accuracy":0,"relevance":0,"completeness":0,"friction":0},"system":{"total":0,"usefulness":0,"signal_to_noise":0,"adaptability":0,"learnability":0}},"findings":[]}
+{"report_kind":"goat-flow-quality-report","goat_flow_version":"<current-version>","agent":"claude","project_path":"<absolute-project-path>","run_date":"YYYY-MM-DD","audit_status":"pass","scope":"framework-self","rubric_version":"<current-version>","quality_mode":"skills","prior_report_id":null,"assessment_context":{"project_revision":"<git-head>","working_tree_state":"clean","grounding_status":"complete","unverified_probes":[],"score_confidence":"high"},"scores":{"setup":{"total":0,"accuracy":0,"relevance":0,"completeness":0,"friction":0},"system":{"total":0,"usefulness":0,"signal_to_noise":0,"adaptability":0,"learnability":0}},"findings":[]}
 JSON
 ```
 

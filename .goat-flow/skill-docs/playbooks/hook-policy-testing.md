@@ -70,6 +70,16 @@ existing regression, not evidence caused by the proposed change.
 
 ### 2. Reproduce the policy grammar
 
+When this step runs inside an agent session, provider Bash settings may match guarded text in the
+quoted `--check` operand before this hook starts. A settings-layer denial with no `BLOCKED:` policy
+output is not a hook classifier result. Record that denial separately; do not split or reconstruct
+guarded text to evade it.
+
+Use the sanctioned self-test for corpus coverage. If an exact one-off shape still needs classification,
+write the provider event to a gitignored JSON payload file with a non-Bash file tool, then pass that
+file on stdin using a command line that contains only its path. This keeps the guarded phrase in stdin,
+not provider-matched command text, so the resulting hook output has a truthful attribution boundary.
+
 For each policy behaviour, test a denied shape and a neighbouring allowed
 control. This prevents a broad matcher from making ordinary terminal work
 unusable.

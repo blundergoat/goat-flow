@@ -31,8 +31,8 @@ authority, documentation is diagnosed and reported, never edited.
 ## Boundary Commands
 
 - **NEVER:** In every scope, make changes to behaviour, signature shape, serialization, persisted
-  data, compatibility or migration, test meaning, or a public or exported contract, except the one
-  Scope v2 identifier-spelling exception. Never change Git state or remote state.
+  data, compatibility or migration, test meaning, or a public or exported contract, except an
+  approved Scope v2 identifier-spelling set. Never change Git state or remote state.
 - **ALWAYS:** Classify every selected unit, freeze writable paths, verify a concrete clarity defect,
   preserve compliant bytes, and reconcile separate like-unit ledgers in the receipt.
 - **DEFER TO:** Project authority, the named clarity owners, or Scope v2 when a diagnosed fix crosses
@@ -230,15 +230,16 @@ the Scope v2 spelling exception; route it to `goat-plan`.
 
 #### Scope v2
 
-Stop before a new writable path, move outside Snapshot v1, or public-name change. Scope v2 may approve
-exact writable paths for an already-permitted clarity operation or one public or exported identifier
-rename plus its mechanical reference updates. Present the diagnosis, paths, identifier, user-visible
-risk, byte boundary, and proof; then wait for explicit approval.
+Stop on new paths, Snapshot v1 escape, or public renames. Scope v2 needs second approval; initial
+request does not satisfy it. It covers exact writable paths for an already-permitted clarity operation
+or an enumerated set of public or exported identifier renames plus mechanical reference updates.
+Disclose every identifier, exact affected writable paths, per-identifier compatibility impact, and
+proof; wait for explicit approval. One approval covers only that disclosed set. Require explicit user
+acceptance for each compatibility break.
 
-Scope v2 cannot approve behaviour, signature shape, serialization, persisted data, compatibility or
-migration, test meaning, a second public/exported rename, or non-mechanical follow-on work. Approval
-does not waive another boundary. Re-inventory approved paths and freeze Target Scope Snapshot v2
-before mutation.
+Scope v2 excludes behaviour, signature shape, serialization, persisted data, migration work, test
+meaning, and non-mechanical work. An added identifier needs another Scope v2 gate. Re-inventory
+and freeze Target Scope Snapshot v2 before mutation.
 
 Scope v2 remains a blocking human gate in sub-agent mode. A sub-agent must return to the invoking
 agent without writes; it cannot convert this gate into a checkpoint or treat parent context as human

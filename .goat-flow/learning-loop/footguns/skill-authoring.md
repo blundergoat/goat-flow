@@ -132,6 +132,18 @@ Restore pinned phrases verbatim after any compression, take compensating words f
 
 **Prevention:** Write agent-facing style rules as things a reader can check without judgement - a number, a banned list, a required subject - and reserve adjectives for the surrounding explanation. Ship at least two worked examples from different surfaces so neither reads as domain-specific. Treat a contract assertion on guidance text as proof of delivery only; the proof that a rule binds is a run by an agent that did not write it, which is worth doing before assuming the wording works. Same trap class as `Linter or security-scanner output can pressure rewrites of load-bearing skill language` (search: "## Footgun: Linter or security-scanner output can pressure rewrites of load-bearing skill language"), inverted: there a mechanical check overrode meaning, here meaning shipped with no mechanical check at all.
 
+## Footgun: A skill permission exception can outrun its accepted ADR authority
+
+**Status:** active | **Created:** 2026-08-20 | **Evidence:** OBSERVED
+
+**Symptoms:** A shipped skill grants a narrow mutation exception while the accepted ADR that defines the skill boundary still forbids that entire class of change. Both surfaces read coherently alone, phrase-presence tests pass, and agents receive contradictory authority depending on which source they consult.
+
+**Why it happens:** Consumer-installed skills must be self-contained, while framework ADRs remain internal. A skill edit can therefore add useful operational detail without forcing a review of the decision that owns its authority. Mirror-parity tests prove delivery, not policy consistency.
+
+**Evidence:** On 2026-08-20, `workflow/skills/goat-clarity/SKILL.md` Scope v2 allowed one public/exported rename, while `.goat-flow/learning-loop/decisions/ADR-009-skill-consolidation.md` still routed broader or public refactoring outside goat-clarity. The Codex quality report `2026-08-20-0432-codex-04868.json` identified the contradiction. The repair now aligns the skill (search: `enumerated set of public or exported identifier renames`) and ADR-009 (search: `enumerated set of public or exported identifier spelling changes`), and `test/contract/skill-hardening-clarity.test.ts` (search: `keeps the accepted clarity authority aligned`) pins the cross-surface rule. Deterministic RED/GREEN evidence is recorded in `.goat-flow/logs/sessions/2026-08-20-goat-clarity-tdd.md`.
+
+**Prevention:** Treat any new skill permission or write-mode exception as an authority change. Before editing the skill, identify the accepted ADR that owns its boundary, update or supersede that decision in the same approved change, and add one contract that reads both surfaces. Mirror parity remains necessary but is not policy proof.
+
 ---
 
 ## Footgun: goat-plan surface additions collide with near-full word-budget contract caps

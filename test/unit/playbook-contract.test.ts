@@ -238,6 +238,34 @@ describe("standalone playbook audit contract", () => {
     );
   });
 
+  it("distinguishes settings-layer denials from hook classifier results", () => {
+    for (const playbookPath of hookPolicyPlaybookPaths) {
+      const guidance = readFileSync(
+        join(process.cwd(), playbookPath),
+        "utf8",
+      ).replace(/\s+/gu, " ");
+      for (const requiredPhrase of [
+        "settings-layer denial",
+        "no `BLOCKED:` policy output",
+        "not a hook classifier result",
+        "do not split or reconstruct guarded text",
+        "JSON payload file",
+        "keeps the guarded phrase in stdin",
+        "not provider-matched command text",
+      ]) {
+        assert.ok(
+          guidance.includes(requiredPhrase),
+          `${playbookPath}: missing ${requiredPhrase}`,
+        );
+      }
+      assert.doesNotMatch(
+        guidance,
+        /\.goat-flow\/learning-loop\/(?:footguns|lessons|patterns|decisions)\/[\w.-]+\.md/u,
+        `${playbookPath}: shipped playbooks must not cite framework-only learning-loop files`,
+      );
+    }
+  });
+
   it("registers writing-style.md for audit and consumer discovery", () => {
     assert.ok(
       STANDALONE_PLAYBOOK_FILES.some(

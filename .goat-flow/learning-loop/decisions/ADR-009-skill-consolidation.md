@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-04-06
-**Updated:** 2026-08-15 - absorbed the membership rulings formerly held in ADR-002 (goat-preflight), ADR-018 (goat-verify), ADR-019 (goat-sbao and goat-test renames), and ADR-050 (goat-audit), then enrolled goat-clarity after it passed the same justification test.
+**Updated:** 2026-08-20 - ratified goat-clarity's bounded public-name exception; 2026-08-15 - absorbed the membership rulings formerly held in ADR-002 (goat-preflight), ADR-018 (goat-verify), ADR-019 (goat-sbao and goat-test renames), and ADR-050 (goat-audit), then enrolled goat-clarity after it passed the same justification test.
 
 ## Context
 
@@ -42,7 +42,7 @@ Applying the test:
 
 Current canonical skills are 8 total: `/goat`, `/goat-debug`, `/goat-plan`, `/goat-review`, `/goat-critique`, `/goat-security`, `/goat-qa`, `/goat-clarity`.
 
-`goat-clarity` qualifies through a distinct `Clarity Remediation Receipt`, a frozen Target Scope Snapshot and Scope v2 gate, selector-specific refusal states, and repeatable bounded output. It remediates comments, documentation, local/private names, and contained private placement; broader or public refactoring remains ordinary implementation or `/goat-plan`.
+`goat-clarity` qualifies through a distinct `Clarity Remediation Receipt`, a frozen Target Scope Snapshot and Scope v2 gate, selector-specific refusal states, and repeatable bounded output. It remediates comments, documentation, local/private names, contained private placement, and an enumerated set of public or exported identifier spelling changes. That spelling exception requires a second explicit approval after the skill discloses the exact write set and per-identifier compatibility impact; the initial request is insufficient. One approval covers only the disclosed set, and added identifiers require another gate. Require explicit user acceptance for each compatibility break. Broader public refactoring, migration work, and behavioural change remain ordinary implementation or `/goat-plan`.
 
 There is no implementation skill (see ADR-005). Implementation is what the agent does natively. Skills govern everything around it.
 

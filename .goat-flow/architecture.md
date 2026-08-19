@@ -68,7 +68,7 @@ src/cli/
   managed-setup-authority.ts # Per-path replace authority resolved from user flags
   managed-setup-admission.ts # Pre-write admission gate and its refusal messages
   install-command.ts       # Install flow: preview, admission, installer launch, post-install writes
-  prompt/             # Prompt generation: commit-guidance.ts, compose-setup.ts, compose-quality.ts, compose-quality-agent-report.ts, compose-quality-agent-setup.ts, compose-quality-artifact.ts, compose-quality-common.ts, compose-quality-focused.ts, compose-quality-static-sections.ts, learning-loop-context.ts
+  prompt/             # Setup, quality, artifact, commit, and learning-loop composers; compose-quality-contract.ts owns the shared report schema and persistence instructions
   quality/            # Quality report schema, positional ids, history, and diff
   audit/              # Build checks, quality checks, render.ts (output formatters: text, json, markdown)
   server/             # Dashboard server modules:

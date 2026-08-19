@@ -252,7 +252,7 @@ async function handleQualityValidateSubcommand(
       2,
     );
   }
-  const parsed = parseQualityReport(raw);
+  const parsed = parseQualityReport(raw, { requireCurrentFields: false });
   if (!parsed.ok) {
     throw new deps.CLIError(
       `quality validate: schema error in ${path}: ${parsed.error}`,

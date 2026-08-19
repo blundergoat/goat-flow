@@ -16,6 +16,9 @@ import {
   QUALITY_EVIDENCE_METHODS,
   QUALITY_FINDING_SEVERITIES,
   QUALITY_FINDING_TYPES,
+  QUALITY_GROUNDING_STATUSES,
+  QUALITY_SCORE_CONFIDENCES,
+  QUALITY_WORKTREE_STATES,
 } from "../../src/cli/quality/schema-types.js";
 
 /** Top-level JSON keys every contract render must show in its body shape. */
@@ -30,6 +33,7 @@ const REQUIRED_TOP_LEVEL_FIELDS = [
   '"rubric_version"',
   '"quality_mode"',
   '"prior_report_id"',
+  '"assessment_context"',
   '"scores"',
   '"findings"',
 ] as const;
@@ -58,6 +62,14 @@ const VERSION_FINDING_AUTHORITY =
   "Raise version findings only when repository-owned declarations or managed target artifacts disagree.";
 const FAST_CACHE_AUDIT_PLACEHOLDER =
   'The pre-filled `audit_status: "unavailable"` is a placeholder superseded by any live audit completed during this assessment.';
+const ASSESSMENT_CONTEXT_GUIDANCE = [
+  "project_revision",
+  "working_tree_state",
+  "grounding_status",
+  "unverified_probes",
+  "score_confidence",
+  "does not change or cap the rubric scores",
+] as const;
 const REPOSITORY_ROOT = resolve(import.meta.dirname, "..", "..");
 const QUALITY_MODES = ["agent-setup", "process", "harness", "skills"] as const;
 const FOCUSED_QUALITY_MODES = ["process", "harness", "skills"] as const;
@@ -238,11 +250,20 @@ function assertCarriesContract(surface: string, text: string): void {
       `${surface}: missing finding field ${field}`,
     );
   }
+  for (const guidance of ASSESSMENT_CONTEXT_GUIDANCE) {
+    assert.ok(
+      text.includes(guidance),
+      `${surface}: missing assessment-context guidance ${guidance}`,
+    );
+  }
   // Allowed enum values must match the parser's lists verbatim.
   for (const candidate of [
     ...QUALITY_FINDING_TYPES,
     ...QUALITY_FINDING_SEVERITIES,
     ...QUALITY_EVIDENCE_METHODS,
+    ...QUALITY_WORKTREE_STATES,
+    ...QUALITY_GROUNDING_STATUSES,
+    ...QUALITY_SCORE_CONFIDENCES,
   ]) {
     assert.ok(
       text.includes(candidate),

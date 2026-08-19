@@ -1,6 +1,6 @@
 # Code Map
 
-Every path below exists at the repo root of the **goat-flow** Node/TypeScript project. Dependency/build/local outputs (`node_modules/`, `dist/`, `_temp/`, agent worktrees, and runtime logs) are summarized rather than expanded.
+Every path below exists at the repo root of the **goat-flow** Node/TypeScript project. This is a responsibility map, not an exhaustive file inventory: wildcard rows cover cohesive module families. Dependency/build/local outputs (`node_modules/`, `dist/`, `_temp/`, agent worktrees, and runtime logs) are summarized rather than expanded.
 
 ## src/cli/ -- TypeScript CLI auditor and dashboard
 
@@ -41,6 +41,9 @@ src/cli/                         = Node CLI, audit engine, dashboard server, pro
 ├── skill-author.ts              = `goat-flow skill new` authoring flow
 ├── skill-command-parser.ts      = lightweight `skill new|doctor` positional and flag rules
 ├── skill-doctor.ts              = read-only installed skill path, invocation, frontmatter, and mirror diagnosis
+├── review-command-parser.ts     = `review validate` positional and flag rules
+├── review-validate*.ts          = review Proof Gate parsing, evidence anchors, ledgers, integrity, sections, and verdicts
+├── version-compare.ts           = semantic release-version comparison shared by setup and compatibility decisions
 │
 ├── agents/                      = manifest-backed agent registry
 │   └── registry.ts              = typed runtime facade for agent metadata

@@ -154,7 +154,7 @@ The `--mode` flag selects a focused quality assessment. Each mode generates a di
 `history` and `diff` compare within the same mode by default. Cross-mode comparison is not supported since the scoring rubrics differ.
 
 - `quality` composes a structured prompt with a bounded persistence contract. Positional finding IDs are computed at load time by `history` / `diff`.
-- `quality history` lists saved reports and same-agent setup/system score deltas.
+- `quality history` lists saved reports and same-agent setup/system score deltas. New reports also retain revision, worktree, grounding, unverified-probe, and score-confidence context so readers can identify non-comparable runs without changing the scores.
 - `quality diff` derives `absent`, `new`, `persisted`, and `stuck` from saved same-agent report ids.
 
 The two commands stay separated in storage as well as terminology: audit output goes to stdout or `--output`, while quality reports land in a gitignored log directory for local trend analysis.

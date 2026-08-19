@@ -14,10 +14,14 @@ import {
   QUALITY_EVIDENCE_QUALITIES,
   QUALITY_FINDING_SEVERITIES,
   QUALITY_FINDING_TYPES,
+  QUALITY_GROUNDING_STATUSES,
   QUALITY_MODES,
   QUALITY_REPORT_KIND,
+  QUALITY_SCORE_CONFIDENCES,
   QUALITY_SCOPES,
+  QUALITY_WORKTREE_STATES,
   type ParseResult,
+  type QualityAssessmentContext,
   type QualityDeltaTag,
   type QualityEvidenceMethod,
   type QualityFinding,
@@ -659,8 +663,9 @@ function parseReportIdentity(
 /**
  * Parse a field that current reports must carry but older ones are allowed to omit.
  *
- * Three report fields follow this exact rule, so the "required now, optional then" policy lives here once instead of being
- * restated per field, where the three copies could drift apart.
+ * Current report fields that retain historical compatibility follow this rule, so the
+ * "required now, optional then" policy lives here once instead of being restated per
+ * field, where the copies could drift apart.
  *
  * @param raw - the raw report object
  * @param key - report field name, used for both lookup and the error path
@@ -689,6 +694,110 @@ function parseOptionalCurrentField<T>(
   return { ok: true, value: parsed.value };
 }
 
+/** Parse the commands or probes whose absence limits one report's evidence coverage. */
+function parseUnverifiedProbes(
+  raw: unknown,
+  path: string,
+): FieldResult<string[]> {
+  if (!Array.isArray(raw)) {
+    return { ok: false, error: `${path} must be an array` };
+  }
+  const probes: string[] = [];
+  for (const [index, probe] of raw.entries()) {
+    const parsedProbe = expectNonEmptyString(probe, `${path}[${index}]`);
+    if (!parsedProbe.ok) return parsedProbe;
+    probes.push(parsedProbe.value);
+  }
+  return { ok: true, value: probes };
+}
+
+/** Reject provenance states whose coverage label contradicts their skipped-probe list. */
+function validateAssessmentGrounding(
+  groundingStatus: QualityAssessmentContext["grounding_status"],
+  unverifiedProbes: string[],
+  path: string,
+): FieldResult<true> {
+  if (groundingStatus === "complete" && unverifiedProbes.length > 0) {
+    return {
+      ok: false,
+      error: `${path}.unverified_probes must be empty when grounding_status is complete`,
+    };
+  }
+  if (groundingStatus !== "complete" && unverifiedProbes.length === 0) {
+    return {
+      ok: false,
+      error: `${path}.unverified_probes must name at least one probe when grounding_status is partial or blocked`,
+    };
+  }
+  return { ok: true, value: true };
+}
+
+/** Parse the bounded provenance object that makes independent assessment runs comparable. */
+function parseAssessmentContext(
+  raw: unknown,
+  path: string,
+): FieldResult<QualityAssessmentContext> {
+  if (!isRecord(raw)) return { ok: false, error: `${path} must be an object` };
+  const unknownKeyError = rejectUnknownKeys(
+    raw,
+    [
+      "project_revision",
+      "working_tree_state",
+      "grounding_status",
+      "unverified_probes",
+      "score_confidence",
+    ],
+    path,
+  );
+  if (unknownKeyError) return { ok: false, error: unknownKeyError };
+
+  const projectRevision = expectNullableString(
+    raw.project_revision,
+    `${path}.project_revision`,
+  );
+  if (!projectRevision.ok) return projectRevision;
+  const workingTreeState = expectEnumValue(
+    raw.working_tree_state,
+    `${path}.working_tree_state`,
+    QUALITY_WORKTREE_STATES,
+  );
+  if (!workingTreeState.ok) return workingTreeState;
+  const groundingStatus = expectEnumValue(
+    raw.grounding_status,
+    `${path}.grounding_status`,
+    QUALITY_GROUNDING_STATUSES,
+  );
+  if (!groundingStatus.ok) return groundingStatus;
+  const unverifiedProbes = parseUnverifiedProbes(
+    raw.unverified_probes,
+    `${path}.unverified_probes`,
+  );
+  if (!unverifiedProbes.ok) return unverifiedProbes;
+  const grounding = validateAssessmentGrounding(
+    groundingStatus.value,
+    unverifiedProbes.value,
+    path,
+  );
+  if (!grounding.ok) return grounding;
+  const scoreConfidence = expectEnumValue(
+    raw.score_confidence,
+    `${path}.score_confidence`,
+    QUALITY_SCORE_CONFIDENCES,
+  );
+  if (!scoreConfidence.ok) return scoreConfidence;
+
+  return {
+    ok: true,
+    value: {
+      project_revision: projectRevision.value,
+      working_tree_state: workingTreeState.value,
+      grounding_status: groundingStatus.value,
+      unverified_probes: unverifiedProbes.value,
+      score_confidence: scoreConfidence.value,
+    },
+  };
+}
+
 /**
  * Collect only the report fields that were actually supplied.
  *
@@ -703,6 +812,7 @@ function optionalReportFields(fields: {
   rubricVersion: string | undefined;
   qualityMode: QualityMode | undefined;
   priorReportId: string | null | undefined;
+  assessmentContext: QualityAssessmentContext | undefined;
 }): Partial<QualityReport> {
   return {
     ...(fields.scope !== undefined ? { scope: fields.scope } : {}),
@@ -714,6 +824,9 @@ function optionalReportFields(fields: {
       : {}),
     ...(fields.priorReportId !== undefined
       ? { prior_report_id: fields.priorReportId }
+      : {}),
+    ...(fields.assessmentContext !== undefined
+      ? { assessment_context: fields.assessmentContext }
       : {}),
   };
 }
@@ -793,6 +906,7 @@ function parseReportInternal(
       "rubric_version",
       "quality_mode",
       "prior_report_id",
+      "assessment_context",
       "scores",
       "findings",
     ],
@@ -833,6 +947,13 @@ function parseReportInternal(
     (value, path) => expectEnumValue(value, path, QUALITY_MODES),
   );
   if (!qualityMode.ok) return qualityMode;
+  const assessmentContext = parseOptionalCurrentField(
+    raw,
+    "assessment_context",
+    options,
+    parseAssessmentContext,
+  );
+  if (!assessmentContext.ok) return assessmentContext;
 
   let priorReportId: string | null | undefined;
   // A prior report id means the user expects new/persisted labels in the finding list.
@@ -865,6 +986,7 @@ function parseReportInternal(
       rubricVersion: rubricVersion.value,
       qualityMode: qualityMode.value,
       priorReportId,
+      assessmentContext: assessmentContext.value,
     }),
     scores: scores.scores,
   };

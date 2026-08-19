@@ -38,6 +38,18 @@ export const QUALITY_MODES = [
 ] as const;
 export const QUALITY_DELTA_TAGS = ["new", "persisted"] as const;
 export const QUALITY_AUDIT_STATUSES = ["pass", "fail", "unavailable"] as const;
+export const QUALITY_WORKTREE_STATES = [
+  "clean",
+  "dirty",
+  "not-git",
+  "unavailable",
+] as const;
+export const QUALITY_GROUNDING_STATUSES = [
+  "complete",
+  "partial",
+  "blocked",
+] as const;
+export const QUALITY_SCORE_CONFIDENCES = ["high", "medium", "low"] as const;
 export const QUALITY_SCORE_VALUES = [0, 5, 10, 15, 20, 25] as const;
 
 type QualityFindingType = (typeof QUALITY_FINDING_TYPES)[number];
@@ -62,6 +74,9 @@ export type QualityMode = (typeof QUALITY_MODES)[number];
  */
 export type QualityDeltaTag = (typeof QUALITY_DELTA_TAGS)[number];
 type QualityAuditStatus = (typeof QUALITY_AUDIT_STATUSES)[number];
+type QualityWorktreeState = (typeof QUALITY_WORKTREE_STATES)[number];
+type QualityGroundingStatus = (typeof QUALITY_GROUNDING_STATUSES)[number];
+type QualityScoreConfidence = (typeof QUALITY_SCORE_CONFIDENCES)[number];
 /**
  * A single rubric axis score, constrained to the fixed 0-25 five-point band so totals stay
  * comparable across reports. Values outside this set are rejected by the schema parser.
@@ -90,6 +105,20 @@ export interface QualitySystemScores {
 export interface QualityScores {
   setup: QualitySetupScores;
   system: QualitySystemScores;
+}
+
+/** Evidence coverage and workspace provenance needed to compare independently produced reports. */
+export interface QualityAssessmentContext {
+  /** Git revision assessed, or null when the target is not Git-backed or the revision was unavailable. */
+  project_revision: string | null;
+  /** Whether workspace bytes differed from the named revision during assessment. */
+  working_tree_state: QualityWorktreeState;
+  /** How much of the assessment prompt's required runtime grounding actually ran. */
+  grounding_status: QualityGroundingStatus;
+  /** Literal commands or probes that were skipped, denied, or unavailable. */
+  unverified_probes: string[];
+  /** Assessor confidence in the scores after accounting for evidence coverage. */
+  score_confidence: QualityScoreConfidence;
 }
 
 /** One current agent-emitted quality finding before deterministic IDs are attached. */
@@ -139,6 +168,8 @@ export interface QualityReport {
   /** Optional: the previous same-agent report used for delta_tag comparison.
    *  Null or absent means no prior report context was available. */
   prior_report_id?: string | null;
+  /** Required on current emissions and optional on historical reports that predate provenance capture. */
+  assessment_context?: QualityAssessmentContext;
   scores: QualityScores;
   findings: QualityFinding[];
 }

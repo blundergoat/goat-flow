@@ -303,11 +303,18 @@ describe("skill hardening contracts: goat-clarity", () => {
       "Safe apply",
       "Scope v2",
       "exact writable paths for an already-permitted clarity operation",
-      "one public or exported identifier rename",
+      "enumerated set of public or exported identifier renames",
       "mechanical reference updates",
+      "second approval",
+      "initial request does not satisfy",
+      "every identifier",
+      "exact affected writable paths",
+      "per-identifier compatibility impact",
+      "one approval covers only that disclosed set",
+      "explicit user acceptance for each compatibility break",
+      "added identifier needs another Scope v2 gate",
       "signature shape",
       "persisted data",
-      "compatibility or migration",
       "test meaning",
       "Target Scope Snapshot v2",
       "wait for explicit approval",
@@ -320,6 +327,35 @@ describe("skill hardening contracts: goat-clarity", () => {
       "serialized field, payload key, or returned associative key",
       "route it to `goat-plan`",
     ]);
+
+    assert.doesNotMatch(
+      clarityGuidance,
+      /Scope v2 cannot approve[^.]*compatibility/isu,
+      `${SKILL_PATH}: Scope v2 must not contradict the approved compatibility-break exception`,
+    );
+    assert.doesNotMatch(
+      clarityGuidance,
+      /(?:one public or exported identifier rename|second public\/exported rename)/iu,
+      `${SKILL_PATH}: Scope v2 must not impose a one-rename ceiling`,
+    );
+  });
+
+  it("keeps the accepted clarity authority aligned with its public contract", () => {
+    const authority = readProjectFile(
+      ".goat-flow/learning-loop/decisions/ADR-009-skill-consolidation.md",
+    );
+    assertGuidanceIncludesAll(
+      authority,
+      ".goat-flow/learning-loop/decisions/ADR-009-skill-consolidation.md",
+      [
+        "enumerated set of public or exported identifier spelling changes",
+        "second explicit approval",
+        "exact write set",
+        "per-identifier compatibility impact",
+        "approval covers only the disclosed set",
+        "explicit user acceptance for each compatibility break",
+      ],
+    );
   });
 
   it("keeps permanent prohibitions global after Scope v2 approval", () => {
@@ -336,7 +372,7 @@ describe("skill hardening contracts: goat-clarity", () => {
       "compatibility or migration",
       "test meaning",
       "a public or exported contract",
-      "except the one Scope v2 identifier-spelling exception",
+      "except an approved Scope v2 identifier-spelling set",
       "Git state",
       "remote state",
     ]);
@@ -568,7 +604,13 @@ describe("skill hardening contracts: goat-clarity", () => {
       "/goat-clarity path/to/folder path/to/file.ext",
       "Report only, or update the documentation?",
       "most restrictive applicable class wins",
-      "one public/exported identifier rename plus mechanical references",
+      "enumerated public/exported identifier renames plus mechanical references",
+      "second approval",
+      "initial request does not satisfy",
+      "every identifier",
+      "exact affected writable paths",
+      "one approval covers only the disclosed set",
+      "explicit user acceptance for each compatibility break",
       "selected-unit, changed-span, and command-evidence ledgers",
       "remote report-only",
       "test-selection record",
