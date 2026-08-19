@@ -1,7 +1,9 @@
 ---
 category: agent-evidence-claims
-last_reviewed: 2026-08-16
+last_reviewed: 2026-08-20
 ---
+
+**Scope:** What counts as citable evidence - mechanism claims need a read source, absence and exact-count claims need untruncated searches, gitignored paths are never durable anchors, and final verification gates need supported scopes with captured logs. Reading the request and retrieving memory is [agent-behavior.md](agent-behavior.md); using tools and the environment is [agent-tooling.md](agent-tooling.md).
 
 ## Lesson: A config change that fails to fix a symptom is not proof of the mechanism
 

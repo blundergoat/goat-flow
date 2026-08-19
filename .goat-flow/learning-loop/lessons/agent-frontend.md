@@ -1,7 +1,9 @@
 ---
 category: agent-frontend
-last_reviewed: 2026-08-15
+last_reviewed: 2026-08-20
 ---
+
+**Scope:** Building and visually verifying the dashboard UI - stale dev-mode audit caches, mockup-parity discipline, partial-data UI states, rendered-CSS diagnosis, and toast/loading semantics. Proving browser-visible behaviour with live runs is [browser-evidence.md](browser-evidence.md); testing the built dashboard is [dashboard-testing.md](dashboard-testing.md).
 
 ## Lesson: Dashboard audit cache survives code changes because signature doesn't cover compiled JS
 

@@ -1,6 +1,6 @@
 ---
 category: dependencies
-last_reviewed: 2026-05-25
+last_reviewed: 2026-08-20
 ---
 
 ## Pattern: Pin AWAY from known-bad versions via `!=`, not only `>=`

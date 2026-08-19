@@ -1,6 +1,6 @@
 ---
 category: deny-secrets
-last_reviewed: 2026-08-19
+last_reviewed: 2026-08-20
 ---
 
 Secret-path read traps: what counts as a secret path, and which read channels the deny surface actually binds.
@@ -64,7 +64,7 @@ Sibling buckets: `deny-shell.md`, `deny-writes.md`.
 
 **Symptoms:** Before the Bash-side sentinel was added, `goat-flow audit --harness` reported `deny-covers-secrets: pass` while a live Bash probe returned exit 0. Expected is now exit 2 with `BLOCKED: Secret-file access ...`, verified by the context-specific recipes below.
 
-**Why it happens:** Settings/config file-read deny entries are tool-scoped. Claude/Gemini `Read(...)` patterns bind the Read tool; Codex TOML permission profiles bind filesystem access. An agent using the Bash tool to run `cat .env` is not protected by file-read intent alone. Two coverage layers are required: file-read deny for the file tool path AND Bash-hook regex for shell.
+**Why it happens:** Settings/config file-read deny entries are tool-scoped. Claude `Read(...)` patterns bind the Read tool; Codex TOML permission profiles bind filesystem access; Antigravity and Copilot have no settings-layer file-read deny at all (`workflow/manifest.json`, search: `"type": "deny-script"`), so the Bash hook is their only layer. An agent using the Bash tool to run `cat .env` is not protected by file-read intent alone. Two coverage layers are required: file-read deny for the file tool path AND Bash-hook regex for shell.
 
 **Version update (2026-07-31, ACTUAL_MEASURED - narrows this for current Claude Code):** on 2.1.220 under `dontAsk`, a settings `Read(...)` deny DID bind Bash reads of the same path in both rule forms - exact-path and glob (`//<root>/**/hidden-*.txt`). Denials read `Permission to use Bash with command cat <path> has been denied` while control reads passed and the dummy marker never entered either session. Measured in disposable `/tmp` repos (see `.goat-flow/plans/1.15.0/M06-claude-reporting-session-enforcement.md`, search: `That question is now MEASURED`). Does NOT retire this entry: the 2026-04-19 result stands for its version, Codex and other runtimes are unmeasured, and this is version-specific. Keep both layers; re-probe after a CLI upgrade.
 

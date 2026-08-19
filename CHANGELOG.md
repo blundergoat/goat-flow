@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-## v1.16.0 - 2026-08-19
+## v1.16.0 - 2026-08-20
 
 1.16.0 adds `/goat-clarity`, makes audits static by default, preserves local setup edits during upgrades, strengthens hooks across Windows and non-Git workspaces, and sharpens review, QA, planning, and security workflows.
 

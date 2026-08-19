@@ -1,6 +1,6 @@
 ---
 category: learning-loop-extraction
-last_reviewed: 2026-08-15
+last_reviewed: 2026-08-20
 ---
 
 **Scope:** How the CLI reads its own learning loop - entry counting, resolved-vs-active grammars, decision extraction, and stale-reference detection. Audit check semantics and deny-enforcement verification live in [auditor.md](auditor.md).
@@ -24,6 +24,20 @@ last_reviewed: 2026-08-15
 **Prevention:**
 1. Match the count source to the surface's concept: retrieval/index surfaces use `parseBucket` active counts; size/health surfaces use stats totals.
 2. Never render counts from both grammars under the same bucket label on one surface; if both must appear, label them distinctly ("active entries" vs total records).
+
+---
+
+## Footgun: Regex-shaped search needles pass only while their file path is unresolvable
+
+**Status:** active | **Created:** 2026-08-20 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Write `(search: ...)` needles as literal substrings copied from the target file; when completing a citation's path, treat its needle as unvalidated and re-run `stats --check` in the same change.
+**Trigger phase:** VERIFY
+
+**Symptoms:** An anchor pairing a bare source basename with a pattern-shaped needle sits green in a bucket for months, then correcting the citation to a full repository path makes the same line fail `stats --check` as a stale ref - even though a regex reading of the needle matches the target file.
+
+**Why it happens:** Two validator behaviours compose. `src/cli/facts/shared/reference-paths.ts` (search: `shorthand for a deeply nested file`) skips bare source basenames that do not exist at the repo root, so the citation is never checked at all; and needle matching is literal substring comparison - `src/cli/facts/shared/learning-loop-common.ts` (search: `confirm the literal string still appears`) - so `.*` matches only a literal `.*`. A pattern-shaped needle therefore survives exactly as long as its path stays unresolvable; the moment someone "improves" the citation with a full path, validation starts and correctly rejects it. Measured 2026-08-20 in `footguns/auditor.md`: `stats --check` passed with the bare basename, failed with a `stale-ref` finding naming the pattern-shaped needle once the `src/cli/audit/` path was completed, and passed again after the needle became a literal copied from the source line.
+
+**Prevention:** Copy needles verbatim from the cited file - never compose them as patterns. Read a long-green anchor whose path is a bare basename as unverified, not proven: the validator's skip list, not the needle, is what kept it green. When auditing buckets, treat bare-basename citations as candidates to complete, and expect completion to surface latent needle rot.
 
 ---
 

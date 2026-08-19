@@ -1,7 +1,9 @@
 ---
 category: dashboard-terminal
-last_reviewed: 2026-08-15
+last_reviewed: 2026-08-20
 ---
+
+<!-- Note: pre-v1.8.0 evidence below may reference "Gemini"; Antigravity replaced Gemini in v1.8.0. Where a trap shape applies equally to Antigravity (box-bordered menus, selection-bullet glyphs, quiet-delay submits), Gemini references are kept as historical evidence; the `gemini-startup.txt` fixture is retained as legacy coverage. Current code behavior anchors already name Antigravity. -->
 
 ## Footgun: Native Windows terminal sessions need both a Windows shell plan and a Windows runner shim
 

@@ -1,6 +1,6 @@
 ---
 category: cli
-last_reviewed: 2026-08-16
+last_reviewed: 2026-08-20
 ---
 
 ## Footgun: An additive classification rule can silently delete a published state value
@@ -37,7 +37,7 @@ last_reviewed: 2026-08-16
 2. `fs` operations can stay native (Node accepts both). The rule is about *display*, not *use*.
 3. For path *composition* (joining a host-native projectPath with a POSIX sub-path), prefer `path.posix.join(projectPath, sub).replace(/\\/g, "/")` to avoid `path.resolve`'s drive-letter prepending on Windows.
 4. Test stubs that pattern-match on path strings must normalize incoming paths the same way (`test/unit/audit-command/helpers.ts` (search: `export function stubFS`) is the canonical example).
-5. CI lacks a Windows job, so this class of bug ships silently. Until that's added, any path-emission change must be probed on a Windows host before release.
+5. CI's Windows job (`.github/workflows/ci.yml`, search: `windows-hook-contracts`, added 2026-08-14) runs only the hook spawn-matrix and hook-state contracts, so path-emission changes still ship without Windows coverage - probe them on a Windows host before release.
 
 ---
 

@@ -1,11 +1,11 @@
 ---
 category: refactoring
-last_reviewed: 2026-08-16
+last_reviewed: 2026-08-20
 ---
 
 ## Pattern: Hold the file-length line continuously, not in a cleanup pass
 
-**Context:** A size gate (`size.file-length`, threshold 750 in `.gruff-ts.yaml`) accumulates violations quietly because no single commit crosses it — each edit adds twenty lines to an already-large file and nothing fails. The bill arrives all at once as a cleanup project.
+**Context:** A size gate (`size.file-length` in `.gruff-ts.yaml` - threshold 750/warning when the evidence below was measured, 1000/error since 2026-08-16) accumulates violations quietly because no single commit crosses it — each edit adds twenty lines to an already-large file and nothing fails. The bill arrives all at once as a cleanup project.
 
 **Approach:** Treat a file nearing the threshold as the trigger to split, at the moment you are already editing it, while you hold the context needed to find the seam. Splitting is cheap then and expensive later: doing it retroactively means re-deriving every dependency, and a seam that looked like one module often turns out to be two once you check which private helpers are used on both sides.
 

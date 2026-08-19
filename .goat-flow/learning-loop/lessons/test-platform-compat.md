@@ -1,7 +1,9 @@
 ---
 category: test-platform-compat
-last_reviewed: 2026-08-18
+last_reviewed: 2026-08-20
 ---
+
+**Scope:** Platform and runtime differences that break tests - CI Node versions older than local, Windows path/URL shapes and symlink privileges, filesystem-clock skew, and npm scripts that assume a POSIX shell. Choosing and invoking the runner is [test-execution-environment.md](test-execution-environment.md); shell and process behaviour under a test is [test-shell-environment.md](test-shell-environment.md).
 
 ## Lesson: Test runners need CI-runtime reproduction when local Node is newer
 

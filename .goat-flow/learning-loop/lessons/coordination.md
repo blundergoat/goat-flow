@@ -1,6 +1,6 @@
 ---
 category: coordination
-last_reviewed: 2026-08-17
+last_reviewed: 2026-08-20
 ---
 
 **Scope:** Running work across multiple agents or phases - council findings that need normalising before they create work, where reviewers hallucinate, and phase totals that must derive from their breakdowns. Milestone state and effort accounting is [milestone-accounting.md](milestone-accounting.md).
@@ -30,42 +30,31 @@ last_reviewed: 2026-08-17
 
 ## Lesson: Phase 0 normalisation catches council false findings before they create work
 
-**Created:** 2026-05-01
-**What happened:** A five-council synthesis (Claude x2, ChatGPT, Gemini, Codex) produced findings for the v1.4 programme. Phase 0 normalisation verified every factual claim before acting. Two corrections surfaced:
-1. OP-5 claimed installed skills were at v1.3.1 and the review plan needed rebasing. Verification showed all six skills at v1.3.2 across all four parity surfaces. The review plan's baseline was correct. ~1 weekend of recomputation work avoided.
-2. OP-7 claimed word budgets were a programme-wide crisis. Verification showed only goat-critique is at the wall (3 words slack). goat-plan has 79 words of room. The other four skills have 277-1191 words of slack.
-**Evidence:** The v1.4 programme notes (search: `Finding investigated and rejected: OP-5`) document both corrections with `wc -w` and `grep` output from the verification session.
-**Prevention:** Always run Phase 0 normalisation on council synthesis findings before acting on them. Verify version claims with `grep goat-flow-skill-version`, word counts with `wc -w`, and parity with `cmp`. Council findings are inputs to verify, not evidence to trust.
+**Status:** active | **Created:** 2026-05-01
+**Merged:** 2026-08-20 - absorbed "AI council version-baseline claims are an axis where reviewers hallucinate" and "goat-flow correction loop runs at higher precision than council input" (one root cause: council output is unverified input).
 
-## Lesson: AI council version-baseline claims are an axis where reviewers hallucinate
+**What happened:** A five-council synthesis (Claude x2, ChatGPT, Gemini, Codex) produced findings for the v1.4 programme. Phase 0 normalisation verified every factual claim before acting and corrected ~3 of ~19 findings - one false, one over-stated, and one guardrail-consistency question the programme document itself surfaced:
+1. OP-5 claimed installed skills were at v1.3.1 and the review plan needed rebasing. Verification showed all six skills at v1.3.2 across all four parity surfaces; the review plan's baseline was correct and ~1 weekend of recomputation was avoided. The same wrong version appeared across multiple findings (CC-2, OP-5) - all five council members produced or passed the claim through unverified, making version baselines the axis where reviewers hallucinate most.
+2. OP-7 claimed word budgets were a programme-wide crisis. Verification showed only goat-critique at the wall (3 words slack); goat-plan had 79 words of room and the other four skills 277-1191.
 
-**Created:** 2026-05-01
-**What happened:** The council synthesis stated "installed skills are v1.3.1" across multiple findings (CC-2, OP-5). All five council members either produced or passed through this claim without verification. The actual version was v1.3.2 - a one-increment error that would have cascaded into unnecessary score recomputation across the review plan.
-**Prevention:** When a council pass produces version-number claims, Phase 0 must verify them against the actual codebase. Version numbers are cheap to check (`grep goat-flow-skill-version`) and expensive to get wrong (downstream score computations, rebase work). Add "version baseline verification" as a standing Phase 0 checklist item for future council synthesis passes.
+**Evidence:** Measured in the 2026-05-01 session with `wc -w`, `grep goat-flow-skill-version`, and `cmp`; the v1.4 programme notes that recorded the corrections were local working files and are not durable anchors. The blind-apply failure mode this guards against is recorded independently in `.goat-flow/learning-loop/lessons/review-feedback.md` (search: `Blindly applying review feedback without verifying findings`).
 
-## Lesson: goat-flow correction loop runs at higher precision than council input
+**Prevention:** Run a verification pass on any council- or multi-agent-derived findings before acting - this is a standing rule, not a per-programme choice (the original entry conditioned promotion on "if this pattern holds"; it held). Verify version claims with `grep goat-flow-skill-version`, word counts with `wc -w`, parity with `cmp`, and treat version-baseline verification as a standing checklist item. Council findings are inputs to verify, not evidence to trust; the correction rate (~3 of ~19 here) is what makes the verification step load-bearing rather than ceremony.
 
-**Created:** 2026-05-01
-**What happened:** Across Phase 0 and Phase 1 of the v1.4 programme, the framework's structured intake filtered three corrections from council input: one false finding (OP-5), one over-stated finding (OP-7), and one guardrail-consistency question (critique score gap) that the programme document itself surfaced. The correction rate (~3 findings corrected out of ~19) suggests the council pass produces useful but noisy input, and the Phase 0 verification step is load-bearing infrastructure, not ceremony.
-**Prevention:** If this pattern holds across Phase 2 per-plan updates, promote Phase 0 verification from "v1.4 programme requirement" to "standing requirement for any council-derived improvement work." The cost of Phase 0 (~1 weekend) is small relative to the rework it prevents.
+## Lesson: Programme forecast calibration - per-skill items dominate, a programme document halves interpretation stalls
 
-## Lesson: CF coordination cardinality forecast was directionally correct but per-skill bucket was larger than expected
+**Status:** active | **Created:** 2026-05-01
+**Merged:** 2026-08-20 - combined the CF-cardinality and Phase 2 execution calibration notes from the v1.4 programme.
 
-**Created:** 2026-05-01
-**What happened:** Council synthesis estimated CF item Phase C split at ~6 preamble / ~10 shared-vocab / ~6 per-skill. Actual tagging of goat-plan's 19 CF items landed at 3 preamble / 5 shared-vocab / 11 per-skill. Plan-specific items (template rules, milestone formats, output checklists) don't generalise because they're tied to plan's specific output structure. The "single coordination pass replaces 22 patches" framing was directionally right but optimistic on volume - more work happens inside individual plan ships than as a coordinated batch.
-**Prevention:** When forecasting CF coordination, frame as "3 categories of work" rather than "3 batches that ship together." Per-skill items will dominate unless the CF source is genuinely cross-skill (e.g. evidence labelling, proof vocabulary).
+**What happened:** Two calibration results from the v1.4 council programme. (1) Council synthesis estimated the CF item Phase C split at ~6 preamble / ~10 shared-vocab / ~6 per-skill; actual tagging of goat-plan's 19 CF items landed at 3 / 5 / 11. Plan-specific items (template rules, milestone formats, output checklists) don't generalise because they're tied to one skill's output structure, so the "single coordination pass replaces 22 patches" framing was directionally right but optimistic on volume. (2) Across 5 Phase 2 per-plan sessions, forecasts predicted ~4 open questions needing decisions; actual was 2 (both from critique, the most complex plan) - 0.33 questions/plan against a 1.0 forecast - because the coordinating programme document resolved most interpretation work before sessions started.
 
-## Lesson: Phase 2 per-plan execution averaged better than forecast when programme document resolved ambiguity upfront
-
-**Created:** 2026-05-01
-**What happened:** Across 5 Phase 2 per-plan sessions, forecasts predicted a total of ~4 open questions requiring decisions. Actual: 2 (both from critique, the most complex plan). Debug, plan, qa, and review all ran with zero open questions. The programme document (Phase 1) resolved most interpretation work before sessions started, converting per-plan updates into mechanical execution.
-**Prevention:** Validates the "programme document before per-plan work" sequencing. For future council-derived improvement work, always produce the coordinating programme document first and gate on it before touching individual plans. The cost is one extra phase; the payoff is per-plan sessions that run without interpretation stalls. Calibration: when a programme document precedes per-artifact updates, forecast at 50% of the interpretation challenges initially identified (Phase 2 averaged 0.33 questions/plan vs forecast 1.0).
+**Prevention:** Frame CF coordination as three categories of work, not three batches that ship together; expect per-skill items to dominate unless the CF source is genuinely cross-skill (evidence labelling, proof vocabulary). For council-derived improvement work, produce the coordinating programme document first and gate on it; when one precedes per-artifact updates, forecast interpretation challenges at 50% of the count initially identified.
 
 ## Lesson: Phase 3 verification catches state drift invisible to plan-level reasoning
 
-**Created:** 2026-05-01
+**Status:** active | **Created:** 2026-05-01
 **What happened:** Phase 3 verification ran `wc -w` and `git show` against live repo state and found two issues that five council passes and three Phase 2 sessions missed: (1) goat-critique SKILL.md was at 2532 words (32 over ADR-023's 2500 cap), caused by 15 commits made to main between Phase 0 and Phase 3 - not by this audit's work. (2) goat-review's internal version naming (v1.4.0/v1.5.0/v1.6.0) collided with the programme's atomic version sync (all skills bump to v1.4.0 at Phase A). Both required decisions and corrections to the programme document.
-**Evidence:** The v1.4 programme notes (search: `Corrected post-Phase 3 verification`) document the word-count correction. Version naming convention documented in Section 2.1.
+**Evidence:** Measured in the 2026-05-01 session; the programme notes and its Section 2.1 naming convention were local working files and are not durable anchors.
 **Prevention:** Future programme-style improvement work should always end with a verification phase that reads live repo state, not just the artifacts produced. Plan-level reasoning operates on stated numbers; verification operates on measured numbers. The two diverge when the repo changes underneath the audit.
 
 ## Lesson: Verification phases must cross-reference between artifacts, not just check each internally

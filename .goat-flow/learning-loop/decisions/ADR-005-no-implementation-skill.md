@@ -1,8 +1,8 @@
 # ADR-005: No implementation skill - extend existing skills instead
 
-**Status:** Accepted (partial). Core decision stands - no implementation skill was added. Phase 5 (Execute) in goat-plan and the `persona` config field in the "Consequences" section were never shipped. Implementation is handled in the ordinary ACT step per the execution loop; goat-plan remains planning-only and can deliver inline/read-only or file-based milestones without an execution phase.
+**Status:** Accepted
 **Date:** 2026-04-03
-**Updated:** 2026-08-15 - the 2026-07-18 dispatcher-to-plan carry-through remains unchanged.
+**Updated:** 2026-08-20 - status normalised to the README vocabulary; partial shipment recorded here: the core decision stands (no implementation skill was added), while Phase 5 (Execute) in goat-plan and the `persona` config field named in Consequences were never shipped. Implementation is handled in the ordinary ACT step per the execution loop; goat-plan remains planning-only and can deliver inline/read-only or file-based milestones without an execution phase. The 2026-07-18 dispatcher-to-plan carry-through remains unchanged (noted 2026-08-15).
 
 ## Context
 
