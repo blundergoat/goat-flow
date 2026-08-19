@@ -523,6 +523,20 @@ function validateTargetTrustFlags(
       2,
     );
   }
+
+  // Trusted audit raises deny-mechanism evidence to `full`, but the runtime deny probe only runs
+  // for a selected agent. Without one the report would claim runtime proof that nothing produced,
+  // so the omission is refused here rather than allowed to reach the audit.
+  if (
+    command === "audit" &&
+    suppliedFlag === "--trusted-target" &&
+    typeof values["agent"] !== "string"
+  ) {
+    throw new CLIError(
+      "audit --trusted-target requires --agent <id> so the runtime deny check has an agent to execute.",
+      2,
+    );
+  }
 }
 
 /**

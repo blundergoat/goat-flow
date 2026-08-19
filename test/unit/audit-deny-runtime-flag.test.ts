@@ -35,7 +35,8 @@ describe("target execution trust flags", () => {
     },
     {
       name: "accepts the affirmative trusted-target choice",
-      args: ["audit", ".", "--trusted-target"],
+      // Trusted audit requires a selected agent; see "rejects trusted audit without a selected agent".
+      args: ["audit", ".", "--agent", "claude", "--trusted-target"],
       trusted: true,
       untrusted: false,
     },
@@ -86,9 +87,22 @@ describe("target execution trust flags", () => {
     }
   });
 
+  it("rejects trusted audit without a selected agent", () => {
+    // Trusted audit reports `full` deny-mechanism evidence, but the runtime deny check only runs
+    // for a selected agent. Without `--agent` the report would claim proof nothing produced, so the
+    // omission is refused as a usage error before any audit executes.
+    assert.throws(
+      () => parseCLIArgs(["audit", ".", "--trusted-target"]),
+      (error: unknown) =>
+        error instanceof CLIError &&
+        error.exitCode === 2 &&
+        /--agent/u.test(error.message),
+    );
+  });
+
   it("accepts trust choices only on target-executing routes", () => {
     for (const args of [
-      ["audit", ".", "--trusted-target"],
+      ["audit", ".", "--agent", "claude", "--trusted-target"],
       ["setup", ".", "--trusted-target"],
       ["quality", ".", "--agent", "claude", "--trusted-target"],
       [

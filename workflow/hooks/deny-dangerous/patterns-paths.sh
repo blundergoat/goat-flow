@@ -273,11 +273,14 @@ is_secret_path_touch() {
   fi
   # Fast path: only spawn sed if .env.example is even mentioned. The sed below
   # masks .env.example so the subsequent .env regex doesn't false-match.
+  # Drive-relative operands such as `C:.env` are deliberately not masked here: Windows resolves
+  # them against the current directory on that drive, so they address the checkout's own
+  # credential file. Only the `.env.example` spelling is exempt, on any drive.
   local env_scan="$c"
   if [[ "$c" == *.env* ]]; then
     # shellcheck disable=SC2001  # multi-pattern ERE with capture groups
     env_scan=$(sed -E \
-      "s#(^|[[:space:]=:/'\"])\\.env\\.example([[:space:]]|$|['\"])#\\1__goat_env_example__\\2#g; s#(>|>>|>\\|)[[:space:]]*(['\"]?)\\.env\\.example([[:space:]]|$|['\"])#\\1\\2__goat_env_example__\\3#g; s#(^|[[:space:]=/'\"])([A-Za-z]):\\.env[a-zA-Z0-9_.-]*([[:space:]]|$|['\"])#\\1\\2:__goat_drive_relative_env__\\3#g" \
+      "s#(^|[[:space:]=:/'\"])\\.env\\.example([[:space:]]|$|['\"])#\\1__goat_env_example__\\2#g; s#(>|>>|>\\|)[[:space:]]*(['\"]?)\\.env\\.example([[:space:]]|$|['\"])#\\1\\2__goat_env_example__\\3#g" \
       <<<"$c")
   fi
   if [[ "$env_scan" =~ (^|[[:space:]]|=|:|/|[\'\"])\.env[a-zA-Z0-9_.-]*([[:space:]]|$|[\'\"]) ]]; then return 0; fi

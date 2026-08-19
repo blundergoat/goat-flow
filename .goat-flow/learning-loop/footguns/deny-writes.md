@@ -24,6 +24,8 @@ Sibling buckets: `deny-shell.md`, `deny-secrets.md`.
 2. Keep the workflow hook source and installed `.goat-flow/hooks` mirror byte-identical after policy changes.
 3. Prefer normalizing to the shell command word before calling `is_git_push`; don't add one-off regexes for the latest bypass only.
 
+**Recurrence (2026-08-19):** the same class reappeared one layer down, in the alias *value* rather than the command line. `split_shell_words_into` removes the operand's outer shell quoting, but Git runs an alias through its own `split_cmdline`, which removes a second layer. So `git -c 'alias.publish="push"' publish` reached the guard as the unrecognised command word `"push"` and returned allow, while the visibly equivalent `git -c 'alias.publish=push' publish` denied. Measured at `81636441`: `"push"`, `'push'`, `"send-pack"`, `"push" origin main`, `pu"sh"`, and `"!git push origin main"` all returned exit 0. Fixed by normalizing only the alias command word in `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `git_alias_expansion_command_word`); benign `alias.inspect="status --short"` still allows. Prevention rule 3 above holds, but "the shell command word" must be read as *every* unquoting layer the target program applies, not just the one the shell performs.
+
 ---
 
 ## Footgun: GitHub CLI comments bypassed shared-system write guardrails

