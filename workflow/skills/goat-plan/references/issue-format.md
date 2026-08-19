@@ -16,10 +16,12 @@ Write `ISSUE.md` beside the milestones as the GitHub-facing case for the work. I
 
 Write for GitHub readers across technical levels. The floor is a reader with no coding background: a product owner, operations person, or client must be able to act on every prose sentence in Outcome, At a glance, the problem and benefit sections, and Out of scope.
 
+- Cut words, never facts: prefer the shortest version that keeps every distinct fact; a fact may live in its named home (milestone, test, table row) instead of being restated.
 - Use plain professional sentences: neutral tone, everyday words, no compressed noun chains.
 - Prose bullets contain 6-25 visible words on one physical line; count after checkbox and Markdown markers but before ` = <agent-time range>`; punctuation adds no words.
-- Problem and task lines lean to the short end: the shortest true statement wins; mechanism belongs in milestone files.
+- Problem and task lines lean to the short end, and a task line still names each distinct deliverable; mechanism belongs in milestone files.
 - Table answers use plain words around real numbers and never drop a condition to get shorter.
+- Second person is welcome: "You can archive old projects."
 - Name no milestone ID, ADR number, version number, flag, internal file path, or bare command in prose sections; a surface the reader types or sees is not internal.
 - The problem section names who is hit; the benefit section names what someone can now do, never what ships.
 - When a project term is needed, put the plain phrase first and the term in parentheses: "the step-by-step work plans (milestone files)".
@@ -48,6 +50,8 @@ Worked rewrites (illustrative placeholders, never repository evidence):
 - GOOD: "Dashboard search takes about 8 seconds, so most people give up before results appear."
 - BAD: "Implements M03 cache invalidation per ADR-041 to optimize the v2.1 query path."
 - GOOD: "Repeat searches reuse stored results, so common questions get answers in under one second."
+- BAD: "Fix three command-line bugs."
+- GOOD: "Fix the three command-line problems: audits that overclaim, odd folder names crashing, misspelled options hiding."
 
 The headings below are the default output order. The snippets are illustrative input/output shape only, never repository evidence.
 
@@ -94,7 +98,7 @@ Name the problem and its cost in plain words, not the implementation. Ground bul
 
 ## Who benefits and how
 
-Use two to six bullets in plain language. Lead each with the bold reader group, glossed in plain words; cite measured baselines when available, and avoid marketing claims.
+Use two to six bullets in plain language. Lead with the bold reader group when benefits differ by reader, or with the bold claim when one benefit serves everyone; gloss roles in plain words, cite measured baselines when available, and avoid marketing claims.
 
 ```markdown
 ## Who benefits and how
@@ -119,7 +123,7 @@ State testable requirements without file-level detail. During authoring and clos
 
 ## Tasks
 
-Show delivery phases, not duplicated milestone tasks. Tasks remain open at authoring and close only after verified delivery.
+Show three to six delivery phases, not duplicated milestone tasks; after the ` = ` estimate a line carries nothing else, and human actions are named in At a glance instead. Tasks remain open at authoring and close only after verified delivery.
 
 ```markdown
 ## Tasks

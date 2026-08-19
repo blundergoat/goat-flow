@@ -96,6 +96,14 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
           /\| leverage, utilize \| use \|/u,
           issuePath,
         );
+        assert.match(issueGuidance, /Cut words, never facts/u, issuePath);
+        assert.match(
+          issueGuidance,
+          /names each distinct deliverable/u,
+          issuePath,
+        );
+        assert.match(issueGuidance, /three to six delivery phases/u, issuePath);
+        assert.match(issueGuidance, /Fix three command-line bugs/u, issuePath);
         assert.match(
           issueGuidance,
           /\| How long will it take\? \|/u,
@@ -198,6 +206,16 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
         ]) {
           assert.match(examples, derivationRule, examplesPath);
         }
+        assert.match(
+          examples,
+          /a literal command appears once per milestone/u,
+          examplesPath,
+        );
+        assert.match(
+          examples,
+          /Objective is one plain sentence/u,
+          examplesPath,
+        );
         assert.doesNotMatch(
           examples,
           /How users will notice the difference|^\| Motivation \||What we lose without this|Why this helps|^## The problem$|^## What you get$/mu,
@@ -286,8 +304,8 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
     // The obvious way to buy room here is cutting the restating Verification baseline and Maintenance notes subsections,
     // but the "keeps goat-plan handoff artifacts drift-aware" contract pins them, so that trim costs a shipped check.
     assert.ok(
-      canonicalSurfaceWords <= 5450,
-      `canonical goat-plan surface has ${canonicalSurfaceWords} words; expected at most 5450`,
+      canonicalSurfaceWords <= 5650,
+      `canonical goat-plan surface has ${canonicalSurfaceWords} words; expected at most 5650`,
     );
   });
 
