@@ -746,6 +746,97 @@ function yamlFlowStringList(rawValue) {
     : null;
 }
 
+// Return the raw value text for one key of a single-line flow mapping, or null when the
+// text is not a balanced flow mapping. Registration accepts these shapes, so the runtime
+// parser must read them too instead of silently dropping configured child scans.
+function yamlFlowMappingValue(rawValue, expectedKey) {
+  const value = stripYamlComment(rawValue).trim();
+  if (!value.startsWith("{") || !value.endsWith("}")) return null;
+  const body = value.slice(1, -1);
+  const rawEntries = [];
+  let entry = "";
+  let depth = 0;
+  let inSingle = false;
+  let inDouble = false;
+  let escaped = false;
+  for (let index = 0; index < body.length; index += 1) {
+    const character = body[index];
+    if (escaped) {
+      entry += character;
+      escaped = false;
+      continue;
+    }
+    if (inDouble && character === "\\") {
+      entry += character;
+      escaped = true;
+      continue;
+    }
+    if (!inDouble && character === singleQuote) {
+      entry += character;
+      if (inSingle && body[index + 1] === singleQuote) {
+        entry += body[index + 1];
+        index += 1;
+        continue;
+      }
+      inSingle = !inSingle;
+      continue;
+    }
+    if (!inSingle && character === "\"") {
+      entry += character;
+      inDouble = !inDouble;
+      continue;
+    }
+    if (!inSingle && !inDouble) {
+      if (character === "{" || character === "[") depth += 1;
+      if (character === "}" || character === "]") depth -= 1;
+      if (depth < 0) return null;
+      if (character === "," && depth === 0) {
+        rawEntries.push(entry);
+        entry = "";
+        continue;
+      }
+    }
+    entry += character;
+  }
+  if (inSingle || inDouble || escaped || depth !== 0) return null;
+  rawEntries.push(entry);
+  for (const rawEntry of rawEntries) {
+    let separatorIndex = -1;
+    let keySingle = false;
+    let keyDouble = false;
+    let keyEscaped = false;
+    for (let index = 0; index < rawEntry.length; index += 1) {
+      const character = rawEntry[index];
+      if (keyEscaped) {
+        keyEscaped = false;
+        continue;
+      }
+      if (keyDouble && character === "\\") {
+        keyEscaped = true;
+        continue;
+      }
+      if (!keyDouble && character === singleQuote) {
+        keySingle = !keySingle;
+        continue;
+      }
+      if (!keySingle && character === "\"") {
+        keyDouble = !keyDouble;
+        continue;
+      }
+      if (keySingle || keyDouble) continue;
+      if (character === "{" || character === "[") break;
+      if (character === ":") {
+        separatorIndex = index;
+        break;
+      }
+    }
+    if (separatorIndex < 0) continue;
+    const parsedKey = yamlStringScalar(rawEntry.slice(0, separatorIndex));
+    if (parsedKey === expectedKey) return rawEntry.slice(separatorIndex + 1).trim();
+  }
+  return null;
+}
+
 function lineIndent(line) {
   if (line.includes("\t")) return -1;
   return line.length - line.trimStart().length;
@@ -759,10 +850,23 @@ function configuredScanRoots() {
     return null;
   }
   const lines = configText.replace(/\r\n?/gu, "\n").split("\n");
-  const hooksIndex = lines.findIndex((line) =>
-    lineIndent(line) === 0 &&
-    yamlMappingValue(stripYamlComment(line).trim(), "hooks") === "");
+  let hooksInlineValue = null;
+  const hooksIndex = lines.findIndex((line) => {
+    if (lineIndent(line) !== 0) return false;
+    const value = yamlMappingValue(stripYamlComment(line).trim(), "hooks");
+    if (value === null) return false;
+    hooksInlineValue = value;
+    return true;
+  });
   if (hooksIndex < 0) return null;
+  // A flow-style hooks mapping carries the whole hook table on one line.
+  if (hooksInlineValue !== "") {
+    const hookValue = yamlFlowMappingValue(hooksInlineValue, "post-turn-safety");
+    if (hookValue === null) return null;
+    const rootsValue = yamlFlowMappingValue(hookValue, "scan-roots");
+    if (rootsValue === null) return null;
+    return yamlFlowStringList(rootsValue);
+  }
   let hooksEnd = lines.length;
   for (let index = hooksIndex + 1; index < lines.length; index += 1) {
     const cleanLine = stripYamlComment(lines[index]);
@@ -773,19 +877,28 @@ function configuredScanRoots() {
   }
   let hookIndex = -1;
   let hookIndent = -1;
+  let hookInlineValue = null;
   for (let index = hooksIndex + 1; index < hooksEnd; index += 1) {
     const indent = lineIndent(lines[index]);
-    if (
-      indent > 0 &&
-      yamlMappingValue(
-        stripYamlComment(lines[index]).trim(),
-        "post-turn-safety",
-      ) === ""
-    ) {
+    if (indent <= 0) continue;
+    const value = yamlMappingValue(
+      stripYamlComment(lines[index]).trim(),
+      "post-turn-safety",
+    );
+    if (value === null) continue;
+    if (value === "") {
       hookIndex = index;
       hookIndent = indent;
-      break;
+    } else {
+      hookInlineValue = value;
     }
+    break;
+  }
+  // A flow-style hook entry keeps its scan roots inline beneath a block hooks mapping.
+  if (hookIndex < 0 && hookInlineValue !== null) {
+    const rootsValue = yamlFlowMappingValue(hookInlineValue, "scan-roots");
+    if (rootsValue === null) return null;
+    return yamlFlowStringList(rootsValue);
   }
   if (hookIndex < 0) return null;
   for (let index = hookIndex + 1; index < hooksEnd; index += 1) {
@@ -939,11 +1052,20 @@ if (childResults.some((child) => child.result.outcome === "block")) {
     : "advisory";
   reasonCode = everyNonPassBounded ? "bounded-reentry-ended" : outcome === "advisory" ? "findings-reported" : "coverage-incomplete";
 }
-const findings = childResults.flatMap((child) => child.result.findings.map((finding) => ({
-  code: finding.code,
-  message: finding.message,
-  target: prefixTarget(child.name, finding.target),
-}))).slice(0, 20);
+// The retained window must include what decided the aggregate outcome, so findings from
+// outcome-deciding children fill the cap first and the rest keep their deterministic order.
+const collectedFindings = childResults.flatMap((child) => child.result.findings.map((finding) => ({
+  isDecisive: child.result.outcome === outcome,
+  finding: {
+    code: finding.code,
+    message: finding.message,
+    target: prefixTarget(child.name, finding.target),
+  },
+})));
+const findings = [
+  ...collectedFindings.filter((entry) => entry.isDecisive),
+  ...collectedFindings.filter((entry) => !entry.isDecisive),
+].slice(0, 20).map((entry) => entry.finding);
 const aggregateResult = {
   schema: resultSchema,
   hookId: "post-turn-safety",

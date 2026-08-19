@@ -16,6 +16,8 @@ import {
 import { basename, dirname, join, posix } from "node:path";
 import { spawnSync } from "node:child_process";
 
+import { load } from "js-yaml";
+
 import { getAgentProfiles } from "../../src/cli/agents/registry.js";
 import { getSkillNames, getStaleSkillNames } from "../../src/cli/constants.js";
 import { readAgentHookState } from "../../src/cli/server/agent-hook-writer.js";
@@ -989,6 +991,51 @@ describe("cross-agent install smoke matrix", () => {
       ),
       configText,
     );
+  });
+
+  it("adds a missing managed hook to a flow-style hooks mapping without corrupting YAML", () => {
+    const targetProjectPath = makeTempProject();
+    const claudeProfile = supportedAgentProfiles.find(
+      (profile) => profile.id === "claude",
+    );
+    assert.ok(claudeProfile?.hookConfigFile);
+    const configText =
+      'hooks: { "deny-dangerous": { enabled: false }, "gruff-code-quality": { enabled: true } }\n';
+    mkdirSync(join(targetProjectPath, ".goat-flow"), { recursive: true });
+    writeFileSync(
+      join(targetProjectPath, ".goat-flow", "config.yaml"),
+      configText,
+    );
+
+    const installResult = runInstaller(
+      targetProjectPath,
+      "--agent",
+      claudeProfile.id,
+    );
+
+    assert.equal(installResult.status, 0, installResult.stderr);
+    const mutatedText = readFileSync(
+      join(targetProjectPath, ".goat-flow", "config.yaml"),
+      "utf-8",
+    );
+    const parsedConfig = load(mutatedText) as {
+      hooks: Record<string, { enabled: boolean }>;
+    };
+    assert.ok(parsedConfig !== null && typeof parsedConfig === "object");
+    assert.equal(parsedConfig.hooks["post-turn-safety"].enabled, true);
+    assert.equal(parsedConfig.hooks["deny-dangerous"].enabled, false);
+    assert.equal(parsedConfig.hooks["gruff-code-quality"].enabled, true);
+    assert.equal(
+      mutatedText.includes('"deny-dangerous": { enabled: false }'),
+      true,
+      "explicit user hook choices must survive byte-for-byte",
+    );
+    assert.equal(
+      mutatedText.split("\n").length,
+      configText.split("\n").length,
+      "a flow-style mapping must converge inside its own line",
+    );
+    assert.equal(mutatedText.endsWith("\n"), true);
   });
 
   it("migrates a legacy disabled guard before reconciling registration", () => {

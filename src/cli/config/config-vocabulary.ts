@@ -21,8 +21,8 @@ import type { LearningLoopAutoCaptureTarget } from "./types.js";
  * Keyed by the config path of the owning block.
  *
  * Blocks whose keys are user-chosen names are deliberately absent.
- * `hooks` is keyed by hook id and `quality` is handed to `loadQualityConfig` unparsed, so neither has a closed key set to check against;
- * `HOOK_ROW_KEYS` covers the fixed fields inside one hook row instead.
+ * `hooks` is keyed by hook id, so it has no closed key set to check against; `HOOK_ROW_KEYS` covers the fixed fields inside one hook row instead.
+ * `quality` keys are the documented overrides `loadQualityConfig` reads, including its fixed subtype names.
  */
 export const KNOWN_NESTED_KEYS = new Map<string, ReadonlySet<string>>([
   ["line-limits", new Set(["target", "limit"])],
@@ -32,6 +32,65 @@ export const KNOWN_NESTED_KEYS = new Map<string, ReadonlySet<string>>([
   ["terminal", new Set(["idle-timeout"])],
   ["learning-loop", new Set(["auto-capture"])],
   ["learning-loop.auto-capture", new Set(["enabled", "targets"])],
+  [
+    "quality",
+    new Set([
+      "walk-roots",
+      "composition",
+      "max-artifact-bytes",
+      "gate-vocabulary",
+      "tool-keywords-regex",
+      "subtypes",
+      "fixture-path",
+      "additional-fixtures",
+    ]),
+  ],
+  ["quality.walk-roots", new Set(["skills", "references"])],
+  [
+    "quality.composition",
+    new Set([
+      "skill-preamble-path",
+      "skill-conventions-path",
+      "skill-reference-pattern",
+      "max-composed-bytes",
+    ]),
+  ],
+  [
+    "quality.gate-vocabulary",
+    new Set(["verification-gate", "explicit-pass", "human-stop"]),
+  ],
+  [
+    "quality.subtypes",
+    new Set(["workflow", "dispatcher", "report", "playbook", "index", "meta"]),
+  ],
+]);
+
+/** Fixed fields inside one `quality.subtypes.<name>` row; the row key itself is a fixed subtype name. */
+export const QUALITY_SUBTYPE_ROW_KEYS: ReadonlySet<string> = new Set([
+  "detection",
+  "profile",
+  "notes",
+]);
+
+/** Fixed fields inside one `quality.subtypes.<name>.detection` block. */
+export const QUALITY_SUBTYPE_DETECTION_KEYS: ReadonlySet<string> = new Set([
+  "kinds",
+  "name-patterns",
+  "heading-patterns",
+  "must-not-have",
+]);
+
+/** Metric names accepted inside one `quality.subtypes.<name>.profile` block. */
+export const QUALITY_PROFILE_METRIC_KEYS: ReadonlySet<string> = new Set([
+  "trigger-clarity",
+  "workflow-completeness",
+  "gate-quality",
+  "evidence-testability",
+  "cold-start",
+  "token-cost",
+  "tool-deps",
+  "write-risk",
+  "skill-reference-fit",
 ]);
 
 /** Fixed fields inside one `hooks.<hook-id>` row; the row key itself is a hook id. */

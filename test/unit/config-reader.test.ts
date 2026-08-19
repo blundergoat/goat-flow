@@ -208,6 +208,72 @@ plan-guard:
   });
 });
 
+describe("config warns on misspelled quality keys", () => {
+  it("warns on unknown keys across the quality block's fixed nesting", () => {
+    const yaml = `
+version: "${AUDIT_VERSION}"
+quality:
+  max-artifact-byte: 200000
+  composition:
+    skill-preamble-paths: workflow/skills/skill-preamble.md
+  gate-vocabulary:
+    verification-gates: ["runs? tests"]
+  subtypes:
+    dispatchers: {}
+    workflow:
+      profil:
+        token-cost: 5
+`;
+    const result = loadConfig("/tmp", configFS(yaml));
+    assert.equal(result.valid, true);
+    for (const path of [
+      "quality.max-artifact-byte",
+      "quality.composition.skill-preamble-paths",
+      "quality.gate-vocabulary.verification-gates",
+      "quality.subtypes.dispatchers",
+      "quality.subtypes.workflow.profil",
+    ]) {
+      assert.ok(
+        result.warnings.some((warning) => warning.path === path),
+        `${path} missing from ${JSON.stringify(result.warnings)}`,
+      );
+    }
+  });
+
+  it("accepts a fully valid nested quality block without warnings", () => {
+    const yaml = `
+version: "${AUDIT_VERSION}"
+quality:
+  max-artifact-bytes: 200000
+  walk-roots:
+    skills:
+      - dir: .claude/skills
+        source: installed
+  composition:
+    skill-preamble-path: workflow/skills/skill-preamble.md
+  gate-vocabulary:
+    verification-gate: ["runs? tests"]
+  tool-keywords-regex: "browser-use"
+  fixture-path: test/fixtures/quality-scores.json
+  additional-fixtures: []
+  subtypes:
+    workflow:
+      notes: tuned for this project
+      profile:
+        token-cost: 5
+      detection:
+        name-patterns: ["goat-review"]
+`;
+    const result = loadConfig("/tmp", configFS(yaml));
+    assert.equal(result.valid, true);
+    assert.equal(
+      result.warnings.some((warning) => warning.path.startsWith("quality")),
+      false,
+      JSON.stringify(result.warnings),
+    );
+  });
+});
+
 describe("config merges learning-loop auto-capture policy", () => {
   it("defaults automatic capture to disabled with no targets", () => {
     const result = loadConfig("/tmp", configFS(null));

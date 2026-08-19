@@ -171,6 +171,12 @@ describe("quality subcommand parsing", () => {
     assert.equal(parsed.qualityMode, "skills");
   });
 
+  it("treats a prototype-named positional as an ordinary project path", () => {
+    const parsed = parseCLIArgs(["quality", "__proto__"]);
+    assert.equal(parsed.qualitySubcommand, "prompt");
+    assert.equal(parsed.projectPath, resolve("__proto__"));
+  });
+
   it("parses bounded quality-save ownership and rejects ambiguous paths", () => {
     const projectRoot = mkdtempSync(join(tmpdir(), "goat-flow-quality-save-"));
     try {

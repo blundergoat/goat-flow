@@ -21,6 +21,9 @@ import {
   LEARNING_LOOP_AUTO_CAPTURE_TARGETS,
   KNOWN_NESTED_KEYS,
   HOOK_ROW_KEYS,
+  QUALITY_SUBTYPE_ROW_KEYS,
+  QUALITY_SUBTYPE_DETECTION_KEYS,
+  QUALITY_PROFILE_METRIC_KEYS,
 } from "./config-vocabulary.js";
 
 /**
@@ -749,6 +752,72 @@ function validateTerminalField(
   });
 }
 
+/**
+ * Warn about misspelled keys anywhere in the quality block's documented vocabulary.
+ * Use so a mistyped scoring override is distinguishable from an omission instead of silently scoring with shipped defaults.
+ *
+ * Every issue here stays a warning: each quality section already degrades to its default independently, so one bad key
+ * must not invalidate the rest of the user's config the way a structural error would.
+ *
+ * @param raw - parsed config object; a missing quality block keeps shipped scoring defaults
+ * @param warnings - accumulator this block's unrecognized or unusable keys are appended to
+ * @returns nothing; unrecognized keys append warnings in place
+ */
+function validateQualityField(
+  raw: RawConfig,
+  warnings: ValidationIssue[],
+): void {
+  if (!("quality" in raw)) return;
+  const quality = raw.quality;
+  // A non-object block cannot carry overrides, and the quality reader will ignore it without saying so.
+  if (!isRecord(quality)) {
+    pushWarning(warnings, "quality", "must be an object; the block is ignored");
+    return;
+  }
+  warnUnknownNestedKeys(quality, "quality", warnings);
+  for (const blockKey of [
+    "walk-roots",
+    "composition",
+    "gate-vocabulary",
+  ] as const) {
+    const blockValue = quality[blockKey];
+    if (isRecord(blockValue)) {
+      warnUnknownNestedKeys(blockValue, `quality.${blockKey}`, warnings);
+    }
+  }
+  const subtypes = quality.subtypes;
+  if (!isRecord(subtypes)) return;
+  warnUnknownNestedKeys(subtypes, "quality.subtypes", warnings);
+  const knownSubtypeNames = KNOWN_NESTED_KEYS.get("quality.subtypes");
+  for (const [subtypeName, subtypeValue] of Object.entries(subtypes)) {
+    // Unknown subtype names were reported by the sweep above; misspelled fields inside them would double-report.
+    if (!knownSubtypeNames?.has(subtypeName) || !isRecord(subtypeValue))
+      continue;
+    warnUnrecognizedKeys(
+      subtypeValue,
+      QUALITY_SUBTYPE_ROW_KEYS,
+      `quality.subtypes.${subtypeName}`,
+      warnings,
+    );
+    if (isRecord(subtypeValue.detection)) {
+      warnUnrecognizedKeys(
+        subtypeValue.detection,
+        QUALITY_SUBTYPE_DETECTION_KEYS,
+        `quality.subtypes.${subtypeName}.detection`,
+        warnings,
+      );
+    }
+    if (isRecord(subtypeValue.profile)) {
+      warnUnrecognizedKeys(
+        subtypeValue.profile,
+        QUALITY_PROFILE_METRIC_KEYS,
+        `quality.subtypes.${subtypeName}.profile`,
+        warnings,
+      );
+    }
+  }
+}
+
 /** Ordered list of field-level validators applied during config validation. */
 const CONFIG_VALIDATORS: ConfigValidator[] = [
   validateVersionField,
@@ -788,6 +857,8 @@ export function validateConfig(raw: unknown): ValidationResult {
   for (const validator of CONFIG_VALIDATORS) {
     validator(raw, warnings, errors);
   }
+  // Quality issues are warnings-only by design, so the block validates outside the error-capable list.
+  validateQualityField(raw, warnings);
 
   return { valid: errors.length === 0, warnings, errors };
 }

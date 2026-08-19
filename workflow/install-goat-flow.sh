@@ -1104,6 +1104,44 @@ function insertHookEntry(lines, hooksIndex, hookId, enabled) {
   return true;
 }
 
+// Find the index of the "}" closing the first "{" on the line, honoring quotes; -1 when it does not close on this line.
+function flowMappingCloseIndex(line) {
+  let depth = 0;
+  let inSingle = false;
+  let inDouble = false;
+  let escaped = false;
+  let started = false;
+  for (let index = line.indexOf("{"); index >= 0 && index < line.length; index += 1) {
+    const character = line[index];
+    if (escaped) { escaped = false; continue; }
+    if (inDouble && character === "\\") { escaped = true; continue; }
+    if (!inDouble && character === "'") { inSingle = !inSingle; continue; }
+    if (!inSingle && character === '"') { inDouble = !inDouble; continue; }
+    if (inSingle || inDouble) continue;
+    if (character === "{" || character === "[") { depth += 1; started = true; continue; }
+    if (character === "}" || character === "]") {
+      depth -= 1;
+      if (started && depth === 0) return character === "}" ? index : -1;
+      if (depth < 0) return -1;
+    }
+  }
+  return -1;
+}
+
+// Splice one missing managed hook into a single-line flow mapping, leaving every other byte alone.
+// Returns null when the mapping does not close on its own line; corrupting user YAML is never an option.
+function insertFlowHookEntry(line, hookId, enabled) {
+  const openIndex = line.indexOf("{");
+  const closeIndex = flowMappingCloseIndex(line);
+  if (openIndex === -1 || closeIndex === -1) return null;
+  const body = line.slice(openIndex + 1, closeIndex);
+  const entry = `${hookId}: { enabled: ${enabled} }`;
+  const mutatedBody = body.trim().length === 0
+    ? ` ${entry} `
+    : `${body.replace(/\s+$/u, "")}, ${entry} `;
+  return `${line.slice(0, openIndex + 1)}${mutatedBody}${line.slice(closeIndex)}`;
+}
+
 let hooksIndex = lines.findIndex((line) =>
   /^(?:hooks|"hooks"|'hooks')\s*:/u.test(line),
 );
@@ -1128,9 +1166,28 @@ if (hooksIndex !== -1) {
   hooksIndex = lines.findIndex((line) =>
     /^(?:hooks|"hooks"|'hooks')\s*:/u.test(line),
   );
-  changed = insertHookEntry(lines, hooksIndex, "deny-dangerous", legacyEnabled) || changed;
-  changed = insertHookEntry(lines, hooksIndex, "post-turn-safety", "true") || changed;
-  changed = insertHookEntry(lines, hooksIndex, "gruff-code-quality", "false") || changed;
+  const hooksInlineValue = lines[hooksIndex].slice(lines[hooksIndex].indexOf(":") + 1).trim();
+  if (hooksInlineValue.startsWith("{")) {
+    // A flow-style mapping must converge inside its own braces; block-style insertion would break the parse.
+    // Without a successful parse the missing set is unknown, so the registry defaults stay authoritative.
+    if (parsedHooks !== null) {
+      for (const [flowHookId, flowEnabled] of [
+        ["deny-dangerous", legacyEnabled],
+        ["post-turn-safety", "true"],
+        ["gruff-code-quality", "false"],
+      ]) {
+        if (Object.prototype.hasOwnProperty.call(parsedHooks, flowHookId)) continue;
+        const mutatedLine = insertFlowHookEntry(lines[hooksIndex], flowHookId, flowEnabled);
+        if (mutatedLine === null) break;
+        lines[hooksIndex] = mutatedLine;
+        changed = true;
+      }
+    }
+  } else {
+    changed = insertHookEntry(lines, hooksIndex, "deny-dangerous", legacyEnabled) || changed;
+    changed = insertHookEntry(lines, hooksIndex, "post-turn-safety", "true") || changed;
+    changed = insertHookEntry(lines, hooksIndex, "gruff-code-quality", "false") || changed;
+  }
   if (changed) {
     fs.writeFileSync(path, `${lines.join(eol)}${hadFinalNewline ? eol : ""}`);
     console.log("changed");

@@ -243,8 +243,12 @@ export function parseQualityPositionals(
     );
   }
 
+  // Bracket lookup on an object literal resolves inherited names like __proto__, so only own keys may dispatch.
   const parseSubcommand =
-    first === undefined ? undefined : QUALITY_SUBCOMMAND_PARSERS[first];
+    first !== undefined &&
+    Object.prototype.hasOwnProperty.call(QUALITY_SUBCOMMAND_PARSERS, first)
+      ? QUALITY_SUBCOMMAND_PARSERS[first]
+      : undefined;
   if (parseSubcommand) return parseSubcommand({ second, rest, draftFlag });
 
   // No subcommand matched, so the first positional is the project path for a prompt run.

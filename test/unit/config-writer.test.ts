@@ -150,6 +150,21 @@ describe("config writer", () => {
     });
   });
 
+  // Fixture purpose: writes a flow-style mapping and reads it back, pinning the registrar parity target for the runtime hook parser.
+  it("reads scan roots from flow-style hook mappings", () => {
+    withTempProject((root) => {
+      const configPath = join(root, ".goat-flow", "config.yaml");
+      writeFileSync(
+        configPath,
+        'hooks: { "post-turn-safety": { enabled: true, "scan-roots": ["services/api"] } }\n',
+      );
+
+      assert.deepEqual(readHookScanRoots(root, "post-turn-safety"), [
+        "services/api",
+      ]);
+    });
+  });
+
   // Covers unsafe top-level block keys: writes them and expects they are ignored, not built into a regex.
   it("ignores unsafe top-level block keys instead of constructing a regex", () => {
     withTempProject((root) => {

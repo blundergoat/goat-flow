@@ -364,6 +364,93 @@ describe("post-turn-safety hook: explicit non-Git controller roots", () => {
     });
   });
 
+  it("scans a child configured through a flow-style hooks mapping", () => {
+    withTempController(["gruff-go"], (controllerRoot, childRoots) => {
+      writeFile(childRoots["gruff-go"], ".env", `API_KEY=${TEST_API_TOKEN}\n`);
+      writeFile(
+        controllerRoot,
+        ".goat-flow/config.yaml",
+        'hooks: { "post-turn-safety": { enabled: true, "scan-roots": ["gruff-go"] } }\n',
+      );
+
+      const envelope = assertManagedEnvelope(
+        runHook(
+          controllerRoot,
+          MANAGED_STOP_ENV,
+          buildStopPayload("controller-flow-hooks-mapping", false),
+        ),
+      );
+
+      assert.equal(envelope.outcome, "block");
+      assert.equal(envelope.findings[0].target, "gruff-go/.env");
+    });
+  });
+
+  it("scans a child configured through a flow-style hook entry", () => {
+    withTempController(["gruff-go"], (controllerRoot, childRoots) => {
+      writeFile(childRoots["gruff-go"], ".env", `API_KEY=${TEST_API_TOKEN}\n`);
+      writeFile(
+        controllerRoot,
+        ".goat-flow/config.yaml",
+        [
+          "version: 1",
+          "hooks:",
+          '  post-turn-safety: { enabled: true, scan-roots: ["gruff-go"] }',
+          "",
+        ].join("\n"),
+      );
+
+      const envelope = assertManagedEnvelope(
+        runHook(
+          controllerRoot,
+          MANAGED_STOP_ENV,
+          buildStopPayload("controller-flow-hook-entry", false),
+        ),
+      );
+
+      assert.equal(envelope.outcome, "block");
+      assert.equal(envelope.findings[0].target, "gruff-go/.env");
+    });
+  });
+
+  it("keeps a deciding later-child finding visible through the findings cap", () => {
+    withTempController(
+      ["gruff-go", "gruff-php"],
+      (controllerRoot, childRoots) => {
+        for (let index = 0; index < 20; index += 1) {
+          writeFile(
+            childRoots["gruff-go"],
+            `binary-${index}.dat`,
+            Buffer.from([0, 98, 105, 110, index, 10]),
+          );
+        }
+        writeFile(
+          childRoots["gruff-php"],
+          ".env",
+          `API_KEY=${TEST_API_TOKEN}\n`,
+        );
+
+        const envelope = assertManagedEnvelope(
+          runHook(
+            controllerRoot,
+            MANAGED_STOP_ENV,
+            buildStopPayload("controller-capped-block", false),
+          ),
+        );
+
+        assert.equal(envelope.outcome, "block");
+        assert.ok(envelope.findings.length <= 20);
+        assert.equal(
+          envelope.findings.some(
+            (finding: { target: string }) => finding.target === "gruff-php/.env",
+          ),
+          true,
+          "the finding that caused the block must survive the cap",
+        );
+      },
+    );
+  });
+
   it("keeps a nested controller scoped to its configured child repositories", () => {
     withTempRepo((outerRepository) => {
       const controllerRoot = join(outerRepository, "controller");

@@ -65,6 +65,16 @@ describe("target execution trust flags", () => {
     );
   });
 
+  it("rejects trusted audit without a selected agent", () => {
+    assert.throws(
+      () => parseCLIArgs(["audit", ".", "--trusted-target"]),
+      (error: unknown) =>
+        error instanceof CLIError &&
+        error.exitCode === 2 &&
+        /--agent/u.test(error.message),
+    );
+  });
+
   it("rejects trust choices on routes that cannot execute target code", () => {
     for (const args of [
       ["install", ".", "--trusted-target"],
