@@ -15,8 +15,10 @@ import { classifyProjectState } from "../classify-state.js";
 import { createFS } from "../facts/fs.js";
 import {
   dashboardStateHasProjectPath,
+  freshIdentityForSavedRecord,
   hydrateDashboardState,
   loadDashboardState,
+  moveProjectRecordToIdentity,
   resolveProjectIdentity,
   setDashboardProjectArchived,
   type DashboardStateData,
@@ -232,26 +234,37 @@ async function handleProjectsListWriteRequest(
     const validatedProjectPaths = decoded.value.paths.map(
       (path) => validateLocalPath(path, "write-local-state").path,
     );
+    const resolvedIdentities = validatedProjectPaths.map((path) =>
+      resolveProjectIdentity(path, { allowMarkerWrite: true }),
+    );
     const activeIdentities = new Set(
-      validatedProjectPaths.map(
-        (path) =>
-          resolveProjectIdentity(path, { allowMarkerWrite: true }).identity,
-      ),
+      resolvedIdentities.map((identity) => identity.identity),
     );
     const archivedAt = new Date().toISOString();
     const previousProjects = Object.fromEntries(
       Object.entries(previousState.projects).map(([identity, project]) => {
         const nextProject = { ...project };
-        if (activeIdentities.has(identity)) {
+        // A saved row whose folder now resolves to a different identity (its git remote changed) is moved onto that identity first;
+        // otherwise it would be archived below and the rebuild would add a second active row for the same checkout.
+        const freshIdentity = freshIdentityForSavedRecord(
+          nextProject,
+          resolvedIdentities,
+        );
+        if (freshIdentity)
+          moveProjectRecordToIdentity(nextProject, freshIdentity);
+        // The browser may still title the row by the key it last loaded, so both keys and the path are tried.
+        if (activeIdentities.has(nextProject.identity)) {
           Reflect.deleteProperty(nextProject, "archivedAt");
           const title =
             decoded.value.projectTitles[identity] ??
+            decoded.value.projectTitles[nextProject.identity] ??
             decoded.value.projectTitles[project.currentPath];
           if (title) nextProject.title = title;
           else Reflect.deleteProperty(nextProject, "title");
         } else if (!nextProject.archivedAt) {
           nextProject.archivedAt = archivedAt;
         }
+        // The rebuild keys rows by their identity field, so a moved row lands under its fresh key even though this map keeps the old one.
         return [identity, nextProject];
       }),
     );

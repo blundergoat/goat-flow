@@ -16,7 +16,7 @@
 - **Misspelled `.goat-flow/config.yaml` keys warn** - Unknown keys, including under `quality`, are reported instead of silently defaulting.
 - **Claude hooks now start on Windows and duplicate entries are removed** - Run `hooks sync` or reinstall once; your custom hooks stay intact.
 - **Projects view discovers nearby workspaces** - Refresh setup status without a full audit or new identity marker.
-- **Projects can be archived and restored** - A project whose folder was deleted still archives; restore keeps one row per project.
+- **Projects can be archived and restored** - A deleted folder still archives, and a project stays one row even after its git remote changes.
 - **Broken guardrails fail safely** - Missing hooks block or report unverified; invalid limits are refused or reset. Node is required.
 - **Deny hooks catch more publication and secret-path forms** - Quoted/escaped Git aliases, `send-pack`, and Windows credential paths are blocked.
 - **Read-only queries stop tripping the deny hook** - `git log`, `grep`, `jq`/`yq`, and multiline quoted text stay usable; key files remain protected.

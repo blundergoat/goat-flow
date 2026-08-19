@@ -665,4 +665,59 @@ describe("dashboard /api/projects", () => {
       await rm(root, { recursive: true, force: true });
     }
   });
+  it("keeps one project record when a saved project's identity changes before a whole-list save", async () => {
+    const root = await mkdtemp(join(tmpdir(), "goat-flow-list-rekey-project-"));
+    try {
+      const firstSave = await fetchJson("/api/projects/list", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          paths: [root],
+          favorites: [],
+          projectTitles: { [root]: "List rekey fixture" },
+        }),
+      });
+      assert.equal(firstSave.res.status, 200);
+      const [savedProject] = projectRecordsWithPath(
+        (await fetchJson("/api/projects/list")).body,
+        root,
+      );
+      assert.ok(savedProject);
+      assert.equal(savedProject.identitySource, "path");
+
+      // The project gains a git remote, then the user edits its title, which the dashboard sends as a whole-list save.
+      runGit(root, ["init"]);
+      runGit(root, [
+        "remote",
+        "add",
+        "origin",
+        "git@github.com:Example/ListRekeyFixture.git",
+      ]);
+      const secondSave = await fetchJson("/api/projects/list", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          paths: [root],
+          favorites: [],
+          projectTitles: { [String(savedProject.identity)]: "Renamed fixture" },
+        }),
+      });
+      assert.equal(secondSave.res.status, 200);
+
+      const saved = await fetchJson("/api/projects/list");
+      const savedBody = expectRecord(saved.body, "list rekey state");
+      assert.ok((savedBody.paths as string[]).includes(root));
+      const [savedProjectAfter, ...extraProjects] = projectRecordsWithPath(
+        saved.body,
+        root,
+      );
+      assert.ok(savedProjectAfter);
+      assert.deepEqual(extraProjects, []);
+      assert.equal(savedProjectAfter.archivedAt, undefined);
+      assert.equal(savedProjectAfter.title, "Renamed fixture");
+      assert.equal(savedProjectAfter.identitySource, "git-remote");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
 });

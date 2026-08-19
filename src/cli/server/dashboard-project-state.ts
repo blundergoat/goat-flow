@@ -30,7 +30,7 @@ export interface DashboardProjectIdentity {
 /**
  * Persistent dashboard project entry, including every known local path for the identity.
  */
-interface DashboardProjectRecord extends DashboardProjectIdentity {
+export interface DashboardProjectRecord extends DashboardProjectIdentity {
   paths: string[];
   title?: string | undefined;
   archivedAt?: string | undefined;
@@ -512,6 +512,45 @@ export function dashboardStateHasProjectPath(
 }
 
 /**
+ * Find the freshly resolved identity a saved row should move to, when its folder now resolves differently than the key it was saved under.
+ * Use during a whole-list save, where every posted path has just been resolved, so a checkout whose git remote changed is not treated as a
+ * different project.
+ *
+ * @param record - one saved row; its current path and known paths are what the match runs on
+ * @param resolvedIdentities - identities resolved for the posted paths, in posted order
+ * @returns the identity to move the row to, or null when no posted path names this row or its key already matches
+ */
+export function freshIdentityForSavedRecord(
+  record: DashboardProjectRecord,
+  resolvedIdentities: readonly DashboardProjectIdentity[],
+): DashboardProjectIdentity | null {
+  const fresh = resolvedIdentities.find(
+    (candidate) =>
+      record.currentPath === candidate.currentPath ||
+      record.paths.includes(candidate.currentPath),
+  );
+  return fresh && fresh.identity !== record.identity ? fresh : null;
+}
+
+/**
+ * Move a saved row onto a freshly resolved identity in place, so the Projects list never shows the same checkout twice.
+ * Use after the folder has been proven to exist and resolve to that identity.
+ *
+ * @param record - the row to move; its title and known paths stay as they were
+ * @param identity - identity the folder resolves to now; its fields replace the row's identity, remote hash, and marker id
+ * @returns nothing; the row is mutated in place
+ */
+export function moveProjectRecordToIdentity(
+  record: DashboardProjectRecord,
+  identity: DashboardProjectIdentity,
+): void {
+  // Clear the old key's identity fields before copying the new identity in, so a stale remote hash or marker id cannot survive the move.
+  Reflect.deleteProperty(record, "remoteUrlHash");
+  Reflect.deleteProperty(record, "markerId");
+  Object.assign(record, identity);
+}
+
+/**
  * Decide whether a row that was found only by its path must move to the folder's freshly resolved identity.
  * Use while archiving or restoring, after the row has been matched, so the Projects list never shows the same checkout twice.
  *
@@ -582,12 +621,7 @@ export function setDashboardProjectArchived(
     identity,
     currentPath,
   );
-  // Clear the old key's identity fields before copying the new identity in, so a stale remote hash or marker id cannot survive the move.
-  if (obsoleteIdentity !== null) {
-    Reflect.deleteProperty(record, "remoteUrlHash");
-    Reflect.deleteProperty(record, "markerId");
-    Object.assign(record, identity);
-  }
+  if (obsoleteIdentity !== null) moveProjectRecordToIdentity(record, identity);
 
   // Archive keeps the complete row; restore removes only the archive marker.
   if (archivedAt === null) {
