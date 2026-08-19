@@ -41,10 +41,10 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
         const orderedHeadings = [
           "## Outcome",
           "## At a glance",
-          "## The problem",
-          "## What you get",
-          "## What",
-          "## How",
+          "## What problem are we solving",
+          "## Who benefits and how",
+          "## Requirements",
+          "## Tasks",
           "## Out of scope",
         ];
         const issueLines = issueGuidance.split(/\r?\n/u);
@@ -70,8 +70,51 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
         );
         assert.match(
           issueGuidance,
-          /10-20 visible words on one physical line/u,
+          /6-25 visible words on one physical line/u,
           issuePath,
+        );
+        // Adjective bars ("plain language") measurably fail to bind consuming agents, so the
+        // checkable replacements - banned referents, required subjects, a word swap table, and a
+        // labelled worked sample - are pinned the same way the milestone derivation rules are.
+        assert.match(
+          issueGuidance,
+          /no milestone ID, ADR number, version number, flag, internal file path, or bare command/u,
+          issuePath,
+        );
+        assert.match(
+          issueGuidance,
+          /problem section names who is hit/u,
+          issuePath,
+        );
+        assert.match(
+          issueGuidance,
+          /names what someone can now do, never what ships/u,
+          issuePath,
+        );
+        assert.match(
+          issueGuidance,
+          /\| leverage, utilize \| use \|/u,
+          issuePath,
+        );
+        assert.match(
+          issueGuidance,
+          /\| How long will it take\? \|/u,
+          issuePath,
+        );
+        assert.match(
+          issueGuidance,
+          /the row lists, this section explains/u,
+          issuePath,
+        );
+        assert.match(
+          issueGuidance,
+          /never repository evidence; every name and number below is invented/u,
+          issuePath,
+        );
+        assert.doesNotMatch(
+          issueGuidance,
+          /^## What$|^## How$|^## The problem$|^## What you get$/mu,
+          `${issuePath}: superseded ISSUE headings are still present`,
         );
         assert.match(
           issueGuidance,
@@ -112,7 +155,7 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
     assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
       assert.match(
         readProjectFile(skillPath),
-        /`## The problem` and `## What you get` between Objective and Context, one plain line each/u,
+        /`## What problem are we solving` and `## Who benefits and how` between Objective and Context, one plain line each/u,
         skillPath,
       );
     });
@@ -125,8 +168,10 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
       (examplesPath) => {
         const examples = readProjectFile(examplesPath);
         const templateLines = examples.split(/\r?\n/u);
-        const lossIndex = templateLines.indexOf("## The problem");
-        const helpIndex = templateLines.indexOf("## What you get");
+        const lossIndex = templateLines.indexOf(
+          "## What problem are we solving",
+        );
+        const helpIndex = templateLines.indexOf("## Who benefits and how");
 
         assert.ok(lossIndex >= 0, `${examplesPath}: missing loss section`);
         assert.ok(
@@ -155,7 +200,7 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
         }
         assert.doesNotMatch(
           examples,
-          /How users will notice the difference|^\| Motivation \||What we lose without this|Why this helps/mu,
+          /How users will notice the difference|^\| Motivation \||What we lose without this|Why this helps|^## The problem$|^## What you get$/mu,
           `${examplesPath}: superseded section names are still present`,
         );
       },
@@ -241,8 +286,8 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
     // The obvious way to buy room here is cutting the restating Verification baseline and Maintenance notes subsections,
     // but the "keeps goat-plan handoff artifacts drift-aware" contract pins them, so that trim costs a shipped check.
     assert.ok(
-      canonicalSurfaceWords <= 4700,
-      `canonical goat-plan surface has ${canonicalSurfaceWords} words; expected at most 4700`,
+      canonicalSurfaceWords <= 5450,
+      `canonical goat-plan surface has ${canonicalSurfaceWords} words; expected at most 5450`,
     );
   });
 
