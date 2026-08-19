@@ -1,8 +1,8 @@
 /**
  * Single source of truth for workflow manifest data and derived facts.
- * Use from setup, audit, quality, and dashboard flows when users need the
- * current skills, agents, checks, or required files. Invalid static metadata
- * stops loading with precise repair evidence instead of leaking stale state.
+ *
+ * Use from setup, audit, quality, and dashboard flows when users need the current skills, agents, checks, or required files.
+ * Invalid static metadata stops loading with precise repair evidence instead of leaking stale state.
  */
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -33,15 +33,6 @@ import {
   validateSkillReferenceSchema,
 } from "./manifest-json.js";
 
-// Re-exported here for API stability. These declarations moved into a sibling
-// module to break a circular dependency (its header explains the full story);
-// consumers and tests still reference them through this module.
-// (search: "design.circular-import")
-export {
-  validateSkillReferenceSchema,
-  getRequiredInstructionSections,
-} from "./manifest-json.js";
-
 /** goat-flow architectural fact: `goat` is the dispatcher, the rest are functional. */
 const DISPATCHER_NAME = "goat";
 const PROMPT_INVOCATION_STYLES = new Set(["slash", "dollar"]);
@@ -55,13 +46,21 @@ interface AgentCapabilityCandidate {
   skill_source?: unknown;
 }
 
+/**
+ * Pull the capabilities block out of one manifest agent entry before any field is trusted.
+ *
+ * @param agent - raw agent entry from manifest JSON
+ * @returns the capabilities object, or null when the entry or its capabilities are not an object, which the caller reports as a schema finding
+ */
 function readAgentCapabilityCandidate(
   agent: unknown,
 ): AgentCapabilityCandidate | null {
+  // Anything that is not a plain object cannot carry capabilities, so there is nothing to read.
   if (typeof agent !== "object" || agent === null || Array.isArray(agent)) {
     return null;
   }
   const capabilities = (agent as { capabilities?: unknown }).capabilities;
+  // A missing or non-object capabilities key reads the same way: no capabilities were declared.
   if (
     typeof capabilities !== "object" ||
     capabilities === null ||
@@ -72,6 +71,13 @@ function readAgentCapabilityCandidate(
   return capabilities;
 }
 
+/**
+ * Reports one finding per malformed field so a bad manifest reads as a precise repair list rather than a broken install.
+ *
+ * @param capabilities - capabilities object already confirmed to be a plain object
+ * @param prefix - manifest key path used in messages so the user knows which entry to edit
+ * @returns one finding per malformed field; empty means this agent entry is safe to use
+ */
 function validateAgentCapabilityFields(
   capabilities: AgentCapabilityCandidate,
   prefix: string,
@@ -209,18 +215,14 @@ function sameSortedSet(
 }
 
 /**
- * Validate manifest facts against the values observed from live code.
+ * Hold the manifest to its contract: every declared fact must still match what the shipped code reports, or loading throws with the exact drift.
  *
- *  In packaged installs the `src/` tree isn't shipped (package.json `files`
- *  ships only `dist/` + `workflow/`), so source-derived drift checks for
- *  static facts (`dashboard_views`) would always trip against empty observed
- *  values. That fact was validated at publish time - here we trust the
- *  manifest and skip it. Preset count is derived from the shipped preset
- *  catalog, and skill-canonical drift is still checked because `getSkillNames()`
- *  ships in `dist/`.
+ * A packaged install ships `dist/` and `workflow/` but not `src/`, so the source-derived view check is skipped there rather than failing on an
+ * empty observation; that fact was already proven at publish time.
  *
- * @param json - Parsed manifest JSON from `workflow/manifest.json`.
- * @param observed - Facts observed from the current source or packaged install.
+ * @param json - parsed manifest JSON from `workflow/manifest.json`
+ * @param observed - facts observed from the current source or packaged install
+ * @returns nothing; it throws `ManifestValidationError` carrying one finding per drift, so the user sees every repair at once
  */
 export function validateManifest(
   json: ManifestJson,
@@ -231,6 +233,7 @@ export function validateManifest(
   const findings: string[] = [];
   findings.push(...validateAgentCapabilities(json));
 
+  // Without the facts block there is nothing to compare, so loading stops rather than reporting a false match.
   if (!json.facts) {
     const msg = "workflow/manifest.json is missing the top-level `facts` key.";
     throw new ManifestValidationError(msg, [msg]);
@@ -238,6 +241,7 @@ export function validateManifest(
 
   const packaged = isPackagedInstall();
 
+  // Only a source checkout can observe the dashboard views, so this comparison is skipped in a packaged install.
   if (!packaged) {
     const declaredViews = json.facts.dashboard_views;
     if (!sameSortedSet(declaredViews, observed.views)) {
@@ -247,12 +251,14 @@ export function validateManifest(
     }
   }
 
+  // Skill names ship in `dist/`, so this drift is checked everywhere; a mismatch means installs would copy the wrong skill set.
   if (!sameSortedSet(json.skills.canonical, observed.skills)) {
     findings.push(
       `skills.canonical drift: manifest declares [${[...json.skills.canonical].sort().join(", ")}]; getSkillNames() returns [${[...observed.skills].sort().join(", ")}].`,
     );
   }
 
+  // Every drift is raised together so the user repairs the manifest in one pass instead of one error per run.
   if (findings.length > 0) {
     throw new ManifestValidationError(
       `workflow/manifest.json has drifted from observed state (${findings.length} finding${findings.length === 1 ? "" : "s"}).`,
@@ -262,17 +268,19 @@ export function validateManifest(
 }
 
 /**
- * Compose the resolved manifest from validated JSON and observed facts.
+ * Compose the resolved manifest every later reader treats as truth, filling derived counts from observed facts.
+ * Calling this before `validateManifest` breaks that contract and throws, because a half-checked manifest would ship wrong counts to users.
  *
- * @param json - Manifest JSON that has already passed `validateManifest`.
- * @param observed - Current facts used to fill derived fields.
- * @returns Resolved manifest used by CLI, dashboard, and prompt composers.
+ * @param json - manifest JSON that has already passed `validateManifest`
+ * @param observed - current facts used to fill derived fields
+ * @returns the resolved manifest used by CLI, dashboard, and prompt composers
  */
 export function composeManifest(
   json: ManifestJson,
   observed: ObservedFacts,
 ): Manifest {
   const jsonFacts = json.facts;
+  // Reaching here without facts means the validation step was skipped, which is a programming error rather than bad user data.
   if (!jsonFacts) {
     const msg =
       "composeManifest called before validateManifest - json.facts missing.";
@@ -409,7 +417,7 @@ function renderFileOwnershipMarkdown(manifest: Manifest): string[] {
     "| Class | Files | Update behavior |",
     "|-------|-------|-----------------|",
     `| system-owned | ${ownershipCounts.get("system-owned") ?? 0} | overwrite from the canonical workflow source |`,
-    `| user-owned | ${ownershipCounts.get("user-owned") ?? 0} | seed when missing; preserve user content unless \`--force\` is passed |`,
+    `| user-owned | ${ownershipCounts.get("user-owned") ?? 0} | seed when missing; preserve user content during managed force refreshes |`,
     `| generated | ${ownershipCounts.get("generated") ?? 0} | regenerate through the declared command |`,
     `| deprecated | ${ownershipCounts.get("deprecated") ?? 0} | warn with an explicit cleanup path |`,
     `| external | ${ownershipCounts.get("external") ?? 0} | verify only; never overwrite |`,

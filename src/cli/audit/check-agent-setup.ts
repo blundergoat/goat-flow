@@ -1,9 +1,11 @@
 /**
  * Validate agent setup surfaces for `goat-flow audit`.
- * Use when a user wants to know whether an agent has the instruction file, skills, settings, and
- * hook wiring needed to run goat-flow safely in the selected project.
- * Aggregate mode reports missing supported agents and stale artifacts; `--agent <id>` drills into
- * that agent's install details and remediation commands.
+ *
+ * Use when a user wants to know whether an agent has the instruction file, skills, settings, and hook wiring needed to run goat-flow safely in the
+ * selected project.
+ *
+ * Aggregate mode reports missing supported agents and stale artifacts; `--agent <id>` drills into that agent's install details and remediation
+ * commands.
  */
 import type { AuditFailure, BuildCheck, AuditContext } from "./types.js";
 import type { CheckEvidence } from "./provenance-types.js";
@@ -22,7 +24,7 @@ import {
 
 /**
  * Detect whether an agent directory contains goat-flow-owned artifacts.
- * Use when audit finds an agent config directory but must avoid flagging ordinary agent-only config.
+ * It reports absence rather than throwing on an unreadable directory, so a user's own agent config is never mistaken for a broken install.
  *
  * @param fs - target project filesystem; missing directories mean no goat-flow artifact exists there
  * @param profile - manifest profile for one agent; missing hook dir limits detection to skills
@@ -144,13 +146,12 @@ function shouldCheckCopilotCommitInstructions(ctx: AuditContext): boolean {
 /**
  * Check whether the Copilot instruction file bridges to an accepted commit guide.
  *
- * IDEs (VS Code, JetBrains) auto-read .github/copilot-instructions.md but not
- * an accepted docs commit guide, so commit conventions only reach Copilot when the auto-read
- * instruction file references either the preferred git-commit-message.md path or the compatible
- * git-commit.md path. Returns null - no failure - when the .github/ dir is absent, when Copilot is
- * not a configured agent in aggregate mode (a Claude/Codex project that happens to ship GitHub
- * config must not be forced to add it), when the Copilot instruction file itself is missing (the
- * broader instruction-file check owns that failure), or when an accepted reference is present.
+ * IDEs (VS Code, JetBrains) auto-read .github/copilot-instructions.md but not an accepted docs commit guide, so commit conventions only reach Copilot
+ * when the auto-read instruction file references either the preferred git-commit-message.md path or the compatible git-commit.md path.
+ *
+ * Returns null - no failure - when the .github/ dir is absent, when Copilot is not a configured agent in aggregate mode (a Claude/Codex project that
+ * happens to ship GitHub config must not be forced to add it), when the Copilot instruction file itself is missing (the broader instruction-file
+ * check owns that failure), or when an accepted reference is present.
  *
  * @param ctx - audit context; absent Copilot setup means the user should not see this specialized finding
  * @returns audit failure when the bridge is missing, or `null` when Copilot does not need this check
@@ -360,7 +361,7 @@ function expectedReferenceFiles(ctx: AuditContext, skill: string): Set<string> {
 
 /**
  * Check installed skill references that are no longer declared by the manifest.
- * Use after upgrades so users see stale reference files that could mislead an agent.
+ * Use after upgrades, because a reference file left behind by a rename still looks authoritative to an agent reading it.
  *
  * @param ctx - audit context; empty agent list produces no stale reference findings
  * @returns audit failure listing unexpected references, or `null` when installed references are current

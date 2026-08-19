@@ -1,7 +1,8 @@
 /**
  * Compares goat-flow release versions so callers can tell which side of a version skew they are on.
- * Version checks that only test inequality cannot tell "project is ahead of this CLI" from "project is behind",
- * and an older CLI that assumes the second case will prescribe a downgrade of a newer install.
+ *
+ * Version checks that only test inequality cannot tell "project is ahead of this CLI" from "project is behind", and an older CLI that assumes the
+ * second case will prescribe a downgrade of a newer install.
  * Use this module wherever a mismatch drives user-facing remediation or a file write.
  */
 
@@ -9,8 +10,8 @@ const RELEASE_VERSION = /^\d+\.\d+\.\d+$/u;
 
 /**
  * Check that a version reads as a plain `X.Y.Z` release we can safely rank.
- * Use before any version comparison, so a hand-edited or pre-release value in the user's
- * project is screened out up front instead of producing a confusing upgrade prompt.
+ * Use before any version comparison, so a hand-edited or pre-release value in the user's project is screened out up front instead of producing a
+ * confusing upgrade prompt.
  *
  * @param version - version text read from the user's project config or hook stamp; empty
  *   means nothing was recorded there yet, which counts as not comparable
@@ -23,8 +24,8 @@ export function isReleaseVersion(version: string): boolean {
 
 /**
  * Split a release into its major, minor, and patch numbers so they can be compared.
- * Use only behind an `isReleaseVersion` check - this is the strict inner step that refuses
- * to interpret anything it was not handed in plain `X.Y.Z` form.
+ * Use only behind an `isReleaseVersion` check - this is the strict inner step that refuses to interpret anything it was not handed in plain `X.Y.Z`
+ * form.
  *
  * @param version - a release already confirmed comparable; an empty or pre-release value is
  *   rejected rather than quietly read as `0.0.0`
@@ -47,8 +48,7 @@ function releaseNumberParts(version: string): [number, number, number] {
 
 /**
  * Rank two goat-flow releases so the CLI can tell the user which side is out of date.
- * Use when a project's recorded version and the running CLI disagree and the user needs to
- * be pointed at upgrading one side rather than the other.
+ * Use when a project's recorded version and the running CLI disagree and the user needs to be pointed at upgrading one side rather than the other.
  *
  * @param leftVersion - usually the version recorded in the user's project
  * @param rightVersion - usually the version of the CLI the user is running

@@ -19,7 +19,7 @@ const docPathsResolve = HARNESS_CHECKS.find(
  * controls. Router facts are emptied so counted paths come only from `files`.
  */
 function ctxWithDocs(
-  architectureExists: boolean,
+  hasArchitectureDoc: boolean,
   files: Record<string, string>,
   resolvable: string[],
 ) {
@@ -33,7 +33,7 @@ function ctxWithDocs(
         ...baseFacts.shared,
         architecture: {
           ...baseFacts.shared.architecture,
-          exists: architectureExists,
+          exists: hasArchitectureDoc,
         },
       },
     },

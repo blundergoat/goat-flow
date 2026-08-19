@@ -1,8 +1,8 @@
 /**
  * Checks that a review's Ship Verdict matches the findings it actually raised.
- * The verdict is the one line a reader acts on, so it must be derivable from the report rather
- * than asserted: an open MUST cannot coexist with a clean YES, and a verdict may be downgraded
- * by degradation flags even when every finding was resolved.
+ *
+ * The verdict is the one line a reader acts on, so it must be derivable from the report rather than asserted: an open MUST cannot coexist with a
+ * clean YES, and a verdict may be downgraded by degradation flags even when every finding was resolved.
  *
  * Both the full and compact report shapes are handled, because a compact clean review states
  * its verdict in a different form while carrying the same obligation to be earned.

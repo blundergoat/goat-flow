@@ -1,241 +1,222 @@
 ---
-goat-flow-reference-version: "1.15.1"
+goat-flow-reference-version: "1.16.0"
 ---
 # Code Comments
 
-Use this before naming an identifier or adding/editing a comment, docstring, or annotation. Write for the coding agent and the maintainer who later reads the code cold. Use plain English from the reader's perspective: what they did, see, or get next, never mechanics already shown by code.
-
-House style is mandatory. It applies across TypeScript, Python, Go, Rust, PHP, and shell: defer to each language's docstring syntax, while this playbook owns when/why to comment plus tag separators, blank lines before tags, and ~110-char wrapping.
+Use this before adding or editing a comment, docstring, or annotation. Start naming and placement work in [`naming-and-placement.md`](./naming-and-placement.md), then return here for prose that remains necessary. Write for the maintainer who later reads the code cold. Use plain English from the reader's perspective: what they did, see, or get next, never mechanics already shown by code.
 
 ## Availability Check
 
-This is a discipline reference, not a runnable tool. Load it when:
+This is a discipline reference, not a runnable tool. Load it before writing or reviewing a comment,
+docstring, annotation, or TODO / FIXME / HACK marker, after naming work. Static tools cover only
+mechanical items, not `[judge]` semantic checks.
 
-- About to write a comment, docstring, annotation, or TODO / FIXME / HACK marker.
-- Naming or renaming a variable, method, or class.
-- Editing code with existing comments - keep / tighten / rewrite / delete - or reviewing a diff that changes them.
+## Project Authority
 
-Enforcement is partial: static tools may flag mechanical items, not `[judge]` semantic checks. Do not claim more enforcement than the project runs.
+The project standard governs all points it addresses. Playbook defaults apply only when no project
+guidance addresses a point; drop a conflicting default. Before editing a block governed by multiple rules, state
+the expected final shape and check every applicable rule against it. Record the rule source per changed span.
+Explicit current instructions and accepted architecture remain controlling. Project standards and playbook
+defaults cannot override safety, accepted architecture, verified facts, evidence requirements, or verification gates.
 
 ## Pick the Reader First
 
-Every rule here writes from the reader's perspective, and that reader is not always looking at a
-screen. Choose the row first; choosing wrong makes an agent invent a user the code lacks.
+Choose the interface reader first. That reader is not always looking at a screen, and choosing the
+wrong row invents a user the code lacks.
 
-| Surface | Whose perspective |
+| Interface | Reader |
 |---|---|
 | Product code behind a UI | The person using the screen: what they did, see, or get next |
 | CLI, library, SDK, framework | The developer calling it: what they pass, get back, and must handle |
 | Daemon, job, migration, infrastructure | The operator reading the log or holding the pager |
 
-With no UI, "the user's vocabulary" is the calling developer's or the operator's. A comment describing
-a screen a CLI cannot render is fabrication, not translation.
+With no UI, "the user's vocabulary" is the calling developer's or operator's. A comment describing a
+screen a CLI cannot render is fabrication. A prompt asking for "user/UI perspective" selects a reader;
+it never forces the product-UI row onto operator code.
+
+Then apply a separate layer lens. The reader selects who needs the fact; the layer selects which fact is useful.
+
+| Layer | Useful comment subject |
+|---|---|
+| domain/service | The invariant or business consequence |
+| repository/query | The result-set contract or exceptional join rationale |
+| infrastructure | The operator consequence and mechanism |
 
 ## The Comment Standard
 
-These are the comments we want, all in plain English from the reader chosen in Pick the Reader First. Rules 1-4 are mandatory whenever their construct exists and are **not** subject to any "omit by default" rule. Rule 5 is mandatory at flow entry points and hard-to-reconstruct junctions, but not on every method. If you are unsure whether one of the first four applies, it does.
+All comments use plain English for the reader and layer selected above. These rules are conditions,
+not quotas; apply a rule only when its stated contract exists.
 
-1. **Doc comment on every file/module or class boundary (3-8 lines) and every method (1-3 lines).**
-   Say what it does, **when to use it from the reader's perspective**, and how it fits the bigger
-   process. A class/file boundary also names the screen, flow, or capability it serves.
+A request to cover every method, branch, loop, catch, or null/empty path means inspect every candidate;
+it does not require a comment where no verified hidden reader information exists. A 150-character
+layout is a ceiling, not a target: never add filler or merge distinct points to approach it.
+
+1. **Doc comments where project or language canon requires them, for public/exported APIs, and for
+   file/module/class boundaries with a non-obvious contract.** Say what the unit does, when to use it,
+   and how it fits the reader's process; self-explanatory private/local units need none. When a method
+   comment is useful, keep its description to 1-3 lines; use 3-8 for a documented boundary.
    For PHP class files, the class PHPDoc is the file/class boundary comment; do not also add a
    separate top-of-file PHPDoc above `declare`, `namespace`, or `use`.
-2. **Self-documenting names in the user's vocabulary.** Every variable and method named for what the user sees and does - `$data` -> `$overdueInvoices`, `handleSubmit` -> `sendRebookingRequest` - not internal mechanics. If the UI says "appointment", the code does not say "booking".
-3. **A context line above every `if`, every loop (`for` / `foreach` / `while`), and every null/empty check.** One brief plain-English line: what is happening here and what it means for the user.
-4. **Null/empty meaning on every `@param` and `@returns` / `@return`.** Say what an absent, null, or empty value means for the reader - "no folder chosen yet", "the user sees the empty state, not an error" - since the signature cannot.
-5. **A user-journey anchor at flow entry points and non-obvious triggers.** Add a concrete example of what the user did to arrive here when the trigger is hard to reconstruct.
+2. **Naming and placement before compensating prose.** Start naming and placement work in
+   [`naming-and-placement.md`](./naming-and-placement.md). This comment route does not authorize a move,
+   guard removal, extraction, public rename, or behaviour change; report or defer anything outside scope.
+3. **Context for a reader-meaningful branch.** Give an `if`, loop, or null/empty path one local
+   sentence when its consequence is not clear from the code. State the trigger plus consequence. A
+   branch whose only honest line restates code gets none.
+4. **Null/empty meaning only when admitted and semantically visible.** Explain an absent, null, or
+   empty value's reader consequence only when the interface can produce that state and the code does
+   not reveal its meaning. Never document a null, empty, or absent state the interface cannot produce.
+5. **Journey context only when useful.** Add verified arrival context only when it changes the
+   reader's interpretation and remains hidden from the code.
 
-Also: tighten verbose comments without deleting `@param` / `@returns`, use verified rationale only, and wrap ~110 chars (hard max 120). Delete or rewrite stale comments on sight - incorrect is worse than missing.
+Tighten without deleting `@param`, `@return`, or `@returns`. Fix stale comments in scope; outside the authorized
+scope, report or defer it and do not delete it. The project or language formatter's enforced width governs. Resolve it
+from `.editorconfig`, lint, then a formatter that actually reflows comments. When neither defines a
+width, 150 characters is the fallback ceiling.
+The shortest complete useful comment wins; never split one point across lines merely to stay short.
+Before a width sweep, measure the longest existing comment line; many violations can expose a wrong assumed limit.
 
-```text
-File/module, class, or method?      -> doc comment (3-8 / 1-3 lines): what, when-to-use, bigger-picture fit
-if / for / foreach / while / null-empty check?  -> context line: what happens + what it means for the reader
-@param / @returns?                  -> real meaning + what null/empty/absent means for the reader
-Naming anything?                    -> self-documenting, in the words the reader uses
-Flow entry or non-obvious trigger?  -> user-journey anchor: what did the user do to get here
-Any OTHER inline comment?           -> rename / extract / simplify / enforce first; then only for a hidden
-                                       constraint, invariant, workaround, or surprise
-```
+Plain English removes jargon, not precision. Keep exact verbs (`remove`, `compile`, `mask`), technical
+qualifiers (`case-insensitive`) plus a short why, and the code's noun (`seed`, `sidecar`) unless it
+misreads as an ordinary verb. Leave a compliant comment verbatim: rewriting requires a diagnosed
+defect, and a tie goes to the incumbent.
+
+New or edited comments do not use em dashes as sentence punctuation. Preserve them only in exact
+quoted or code material; do not rewrite untouched legacy comments solely for punctuation.
+
+A rewrite needs a report-only diagnosis. Use `STALE`, `FALSE`, `RESTATES`, `TERM`, `METAPHOR`,
+`HISTORY`, `REMOTE`, `VERBOSE`, or `MISSING-CONSEQUENCE`.
+Record one primary code and optional secondary codes in the ledger or report, never in source comments. Secondary codes describe
+overlapping defects; they do not inflate totals.
 
 ## The Standard in One Method
 
-Everything together, in a bulk action triggered from a list screen:
+**Illustrative shape example (not incident evidence).** This generic library helper shows selective
+documentation and one consequence-bearing fallback; all facts are self-contained.
 
-```php
+```ts
 /**
- * Send a payment reminder for each overdue invoice the practitioner selected.
- * Use from the "Outstanding invoices" screen when the user chases unpaid visits in bulk.
+ * Choose the directory where a caller's export is written.
+ * Use after the caller has loaded its configured fallback.
  *
- * @param Practice $practice - practice whose debtors are chased; decides which patients are contactable
- * @param int[] $selectedInvoiceIds - invoices the user ticked; empty means they pressed "Email all" with
- *   nothing selected, so nothing is sent and the list is left as it was
- * @return BatchResult - sent/skipped tallies the UI shows as a summary toast; zero sent means every
- *   selected invoice was already paid or the patient had no email on file
+ * @param requestedDirectory - caller-selected directory; empty means use the configured fallback
+ * @param fallbackDirectory - configured directory used when the caller supplies none
+ * @returns selected or configured directory; never empty
  */
-public function emailOverdueInvoiceReminders(Practice $practice, array $selectedInvoiceIds): BatchResult
-{
-    // e.g. the practitioner opened Reports > Outstanding invoices, ticked three rows, and clicked "Email all".
-    $result = new BatchResult();
+export function resolveExportDirectory(
+  requestedDirectory: string | undefined,
+  fallbackDirectory: string,
+): string {
+  if (requestedDirectory) return requestedDirectory;
 
-    // Nothing was ticked, so there is no one to chase and the screen stays as it was.
-    if (empty($selectedInvoiceIds)) {
-        return $result;
-    }
-
-    // One reminder per selected invoice, in the order the user sees them listed.
-    foreach ($this->overdueInvoices($practice, $selectedInvoiceIds) as $invoice) {
-        // No email on file, so this one is skipped and later shown as "needs a posted letter".
-        if ($invoice->patient->email === null) {
-            $result->skip($invoice);
-            continue;
-        }
-
-        $this->mailer->sendReminder($invoice);
-        $result->markSent($invoice);
-    }
-
-    return $result;
+  // No directory was selected, so the export uses the caller's configured fallback.
+  return fallbackDirectory;
 }
 ```
 
 ## Doc Comments and Tags (tiers 1 and 4)
 
-Every function/method and every file/module or class boundary carries one - trivial and private
-units included. Size to the unit: 1-3 lines for a method, 3-8 for a file/module or class boundary
-(tags excluded). The description orients a product-minded reader: what this does, when to use it
-(and when not to), and where it sits in the reader's flow.
+Write doc comments where project or language canon requires them, for public/exported APIs, and for
+file/module/class boundaries with a non-obvious contract; self-explanatory private/local units need none.
+When a comment exists, use 1-3 description lines for a method and 3-8 for a boundary (tags
+excluded): what it does, when to use it, and where it fits the reader's flow.
 
-PHP class files are the exception to "file plus class": the class PHPDoc carries both, and a separate
-file PHPDoc is used only for PHP files without a class - procedural scripts, bootstrap/config files,
-generated entry files. TypeScript, JavaScript, Python, Go, Rust, and similar module-oriented files may
-still carry a file/module comment when the file is the useful boundary, holding several functions,
-exports, or classes.
+Reserve PHP file-level PHPDoc for classless scripts, bootstrap/config, or generated entry files; module-oriented languages use a file/module comment when that is the useful boundary.
 
-Even private one-liners need this verification surface: stated intent lets a reviewer compare promise with implementation.
+- **Real descriptions, not restated types**, in the language's structured form (JSDoc, PHPDoc, PEP 257, godoc, rustdoc). Each tag names at least one of: what an absent or empty value causes, where the value comes from, what this unit does with it, or the constraint it must satisfy. `@param record - parsed milestone` restates the type and names none. If an admitted null/empty/absent state changes the reader outcome and code hides it, state the consequence; never invent a state.
+- **Hyphen-separate each tag's subject from its description** (`@param value - parsed JSON ...`), with a **blank ` *` line between description and tags**. Use one physical line per tag. Only when the prefix passes column 100 and a meaningful description cannot fit may it use one aligned continuation line, for two physical lines maximum. Keep the complete tag subject on line one; never create a dash-only line or dangling name.
+- **Pure dependency-injection constructors** may omit tags for obvious non-null services. The exemption removes tags only;
+  it never removes a separately required description. A scalar, optional, configured, or side-effectful
+  input is not pure DI and keeps its tag.
 
-- **Real descriptions, not restated types**, in the language's structured form (JSDoc, PHPDoc, PEP 257, godoc, rustdoc). Every `@param` / `@returns` carries meaning **and** its null/empty/absent consequence for the user.
-- **Hyphen-separate each tag's subject from its description** (`@param value - parsed JSON ...`), with a **blank ` *` line between the description block and the tags**.
+When a doc comment is verbose, tighten the prose; a `@param`, `@return`, or `@returns` line is never the thing you cut.
 
-When a doc comment is verbose, tighten it to plain English and the sizes above - but a `@param` or `@returns` line is never the thing you cut. Trim its prose instead.
+## Shape of a Comment Block
 
-Fixing a mechanical comment (name and doc describe mechanics, null path silent, no when-to-use):
+Description budgets remain 3-8 content lines for a class and 1-3 for a method; tags are separate. Bullets count as content, while blank separator lines do not. Including separators, allow at most 10 physical lines for a class and 4 physical lines for a method.
 
-```ts
-/** Trim the trailing slash from a directory path. */
-function trimDir(path: string | undefined): string | null {
-  if (!path) return null;
-  return path.replace(/\/$/, "");
-}
-```
-
-After - renamed into the user's terms, with when-to-use and null meaning:
-
-```ts
-/**
- * Normalize a directory path before the UI shows it or uses it for navigation.
- * Use when a user-selected or discovered project path may have a trailing slash.
- *
- * @param directoryPath - directory chosen by the user or found in config; `undefined` or empty
- *                      means there is no path for the UI to show or open yet
- * @returns the directory without one trailing slash; `null` means no usable path exists and the
- *          UI should skip path-based actions
- */
-function trimTrailingDirectorySlash(directoryPath: string | undefined): string | null {
-  // No directory is available yet, so the UI should skip path-based actions.
-  if (!directoryPath) return null;
-
-  return directoryPath.replace(/\/$/, "");
-}
-```
+- Put one complete point per line when it fits. The applicable formatter or fallback ceiling never rewards filler; cut a nonessential clause before compressing a sentence into a fragment.
+- Never use more than three consecutive prose lines. Separate distinct prose groups with a blank line.
+- Use bullets only when points are genuinely enumerable. A longer block may use one or two lead lines, a blank, then one lead line and 3-5 bullets.
+- Shape serves meaning: never cut a qualifier, limitation, tenancy rule, or user consequence to meet the layout.
 
 ## Context Comments (tier 3)
 
-Above every `if`, loop (`for` / `foreach` / `while`; also chained `.filter().map()`), and null/empty fallback (`?? default`, `empty()`, early return on missing data), write one brief line: what happens and what it means to the user. Equivalent constructs (`else`, `switch` / `case`, `match`, ternary, default return) follow the same rule when they choose a user-visible path.
+A branch with a reader-meaningful consequence gets one local sentence stating the trigger plus
+consequence. This applies to `if`, loops, chained transformations, null/empty fallbacks, `else`,
+`switch` / `case`, `match`, ternaries, and default returns. A branch whose only honest line restates
+code gets none. Route a naming or placement defect through [`naming-and-placement.md`](./naming-and-placement.md)
+and report or defer remedies outside the current authorization.
 
-The line must translate, not restate. `// check if invoice is paid` is banned; "Paid invoices are locked - the user gets a read-only view instead of the edit form" earns its place because that consequence is visible nowhere in the condition.
+The line must translate, not restate; `// check if invoice is paid` is banned.
+Name the acting component only when ownership or sequence changes how the reader interprets the consequence; omit it
+when code already makes the actor clear.
 
-The consequence is the requirement; the sentence shape is not. `[condition], so the UI [does X]` is one
-way to write it, never the house template - a file whose context lines all run one movement reads as
-generated however accurate each line is. Vary the construction; let length follow how much there is to
-say. The branch whose intent is least visible earns the longest line; one whose returned name already
-states the outcome earns four words.
+The consequence matters, not sentence shape. Omit a line when a returned name states the outcome.
+Scrutinize compound conditions, the default, and fail-closed paths; when prose is warranted, name the
+product rule and user outcome instead of repeating a constant or saying "validate input".
 
-In an `if` chain, each branch gets its own line. Here the comments carry what the returned class names
-cannot - where each state comes from, and why two of them share a badge:
+## Catch Comments
 
-```js
-/**
- * Choose the badge style shown beside a saved project in the Projects view.
- * Use when a user scans the project list and needs the recommended next step to read visually.
- *
- * @param projectRow - saved dashboard project; missing or empty `action` means the UI has no specific next step yet
- * @returns CSS badge class for the project action, or a muted badge for an action with no badge of its own
- */
-projectActionBadgeClass(projectRow) {
-  // Set up and current; the audit is only the deeper per-agent check.
-  if (projectRow.action === 'audit') return 'gf-badge-pass';
+A catch comment explains a traceable cause - a nullable getter, a throwing dependency, missing configuration, or a vendor failure allowed by contract or observed in evidence - and what the user sees next, never the catch syntax. “Could not be read” merely restates the catch; if the cause is unknown, open the call and trace what breaks before writing the line.
 
-  // Installed, but behind the current release.
-  if (projectRow.action === 'upgrade') return 'gf-badge-warn';
+An intentionally unlogged catch must state why another local log adds no signal, such as an owning boundary already recording the same failure once. Silence is a reviewed choice.
 
-  // Pre-1.0 layout with retired skill names; a plain setup run would leave them in place.
-  if (projectRow.action === 'migration') return 'gf-badge-high';
+## Verify Before You Assert
 
-  // A half-finished install, or another agent's instructions with no goat-flow beside them.
-  if (projectRow.action === 'setup') return 'gf-badge-ap';
+Before describing code behaviour, open it. Read a query's predicate before claiming its scope; compare the native type, doc comment, and property or setter before claiming nullability; walk the branch through its return; and count a list before writing a number.
 
-  // Not repair work: the manifest probe threw, so the real state is unknown rather than bad.
-  // Shares the setup badge - both mean act on the row before trusting what it says.
-  if (projectRow.action === 'fix') return 'gf-badge-ap';
+Tightening inherited prose turns it into an assertion you own. Verify it before making it more confident: concise false prose is more convincing, not safer. A fluent false comment is worse than a missing one because tests and analyzers may never challenge its meaning.
 
-  // Also where 'incomplete' lands - a current project missing pieces, with no badge of its own.
-  return 'gf-badge-muted';
-},
-```
+If prose is false because behaviour is defective, preserve it as
+`Deferred (BLOCKED-ON-BEHAVIOUR)` and route the reproduced defect; do not rewrite the bug as intent.
 
-Validation, permission, and compliance branches follow the same rule - name the product rule and the user-facing outcome, not just "validate input".
+Identifier and placement claims are verified through [`naming-and-placement.md`](./naming-and-placement.md)
+before comment work begins. Comments cannot make an unverified claim true.
 
 ## Discretionary Inline Comments (tier 5)
 
-Beyond the mandatory tiers, an extra inline comment is a last resort. First make it unnecessary: **rename** (a user-vocabulary identifier often dissolves it), **extract** (a block wanting a header comment wants to be a named function), **simplify** (early returns beat prose explaining nesting), **enforce** (an assertion fails loudly; a comment cannot). If intent still is not visible, four cases earn one, placed immediately above the line - prefer user/business/domain/legal/vendor rationale, shaped as **because [constraint], we do [choice]; prevents [failure], removable when [condition]**:
+Extra inline comments are a last resort after authorized naming and structural work. If intent remains
+hidden, one of four reasons earns a line:
 
-- **Hidden constraint** the code cannot encode - rate limit, vendor contract, regulation, hardware quirk.
-  `# Vendor exports omit the timezone; treat as source-local by contract.`
-- **Subtle invariant** the code relies on but does not enforce, including hidden coupling - name the other side and the breakage from changing only one.
-  `// Must match the mobile app timeout; changing only this side can double-submit payments.`
-- **Workaround** for a bug or constraint elsewhere - name the cause and the removal trigger.
-  `// Double rAF flushes layout before measuring; single rAF is stale on Safari 17. Remove at Safari >= 18.`
-- **Surprising behaviour** that is correct but looks wrong.
-  `// Intentionally mutates the input buffer; copying doubles memory on 2GB+ exports.`
+- **Hidden constraint** the code cannot encode, such as a vendor or regulatory contract.
+- **Subtle invariant** or coupling, naming the other side and breakage from changing only one.
+- **Workaround**, naming its cause and checkable removal trigger.
+- **Surprising behaviour** that is correct but looks wrong, with its consequence.
 
-**Half-Life Test:** a good comment survives renames, extraction, and movement. Anchor it to a durable constraint (user outcome, vendor contract, regulation, invariant, removal trigger), not a person, ticket, or review thread. Translate provenance into the current product/user reason - not `# medium per ticket`, but `# medium so short utterances ("yes", OTP digits) count as prompt events; low made callers repeat themselves.`
+**Half-Life Test:** a good comment survives renames, extraction, and movement. Anchor it to a durable constraint, not a person, ticket, or review thread; translate provenance into the current reader reason.
 
 ## TODO / FIXME / HACK Markers
 
-Every marker carries an expiry (`YYYY-MM-DD` date or a concrete trigger). Add a tracking reference only when it is the durable owner, removal trigger, or verification path; otherwise write the current product/user reason.
+Every marker has a `YYYY-MM-DD` date or concrete trigger. Add a tracking reference only when it owns the contract, removal, or verification; otherwise state the current reason.
 
-Bad: `// TODO: clean this up later.`
-Good: `// TODO: 2026-08-01 remove this fallback once the new auth flow ships.`
+**Illustrative marker shape (not incident evidence).**
+`// TODO: Remove this fallback once the legacy contract is retired.`
 
 ## Antipatterns
 
-The next reader cannot use these. Do not write them; if you are already editing the surrounding code, fix them.
+The next reader cannot use these; fix them when already editing the surrounding code.
 
 - **Restating the mechanics.** `i++; // increment i`, `// check if invoice is paid`. Context lines must add reader meaning, not narrate syntax.
-- **One sentence template for every line.** Six branches sharing `[state], so the UI [does X]` are one sentence six times. Vary the shape; drop the half the code states.
-- **Stripping tags while tightening.** Concision never removes `@param` / `@returns` lines - trim their prose instead.
-- **Codebase jargon.** A comment that only makes sense after reading the module has not reached the user's perspective.
-- **Unverified rationale.** `// for performance`, `// probably safe`. Verify the reason or omit it.
-- **Commented-out code, tombstones, archaeology.** Git records removals; comments explain current constraints.
-- **Position or line-number references.** `// see function below`, `// line 142`. Refer by symbol name.
+- **One sentence template for every line.** Drop what code already states.
+- **Stripping tags while tightening.** Concision never removes `@param`, `@return`, or `@returns` lines.
+- **Codebase jargon.** Translate it for the selected reader.
+- **Compensating prose.** A comment explaining what a better name, type, or structure would show. This
+  is compensating prose, not a remedy. Make an already-authorised code change or report or defer the
+  defect; the comment pass grants no structural authority.
+- **Unverified rationale.** Verify `// for performance` or omit it.
+- **Tombstones and non-load-bearing history.** Version deltas live in git. Keep history only when it defines a current compatibility obligation or a checkable removal trigger. Never cite gitignored paths, local state, or removed symbols.
+- **Position or line-number references.** Refer by symbol name.
 - **Bare suppression markers.** `// eslint-disable-next-line` with no reason is noise.
 - **Non-load-bearing provenance.** PRs, issues, ADRs, task IDs, review notes - unless the reference is the durable contract, removal trigger, or verification path.
-- **Decorative density.** Comment count or presence alone is never evidence of quality.
-- **Markdown, emoji, and session artifacts.** Code comments are plain prose, not chat history.
+- **Counts of adjacent mutable collections.** Describe what a list or branch family is for; the reader can count it. A schema- or test-enforced count remains a valid contract.
+- **Decorative density.** Comment presence is not quality evidence.
+- **Markdown, emoji, and session artifacts.** Code comments are plain prose.
 
 ## Special Contexts
 
-**Test code.** Naming and doc-comment rules apply; a descriptive test name plus a one-line doc is usually enough. The context-line mandate relaxes to omit-by-default inside test bodies - the name and assertions carry the user story.
+**Test code.** Complete applicable naming work through `naming-and-placement.md`; useful-contract doc rules apply. A descriptive test name and assertions
+usually carry the story; add a comment only for a non-obvious test contract.
 
 **Generated code.** Mark generated files at the top: `// AUTO-GENERATED FROM <source> - DO NOT EDIT`.
 
@@ -248,15 +229,10 @@ const raw: any = await client.invoke(params);
 
 ## Multi-Language Stance
 
-The WHEN and WHY rules are portable; syntax is not. Defer to each language, then apply the house layout.
-
-- **TypeScript / JavaScript.** JSDoc for contracts; plain `//` inline.
-- **PHP.** PHPDoc (`/** ... */`) for contracts, with null/empty meaning on `@param` / `@return`;
-  `//` inline. In class files the class PHPDoc carries the file/class description.
-- **Python.** PEP 257 docstrings; `#` inline.
-- **Go.** godoc syntax for exported AND private identifiers; `//` inline.
-- **Rust.** rustdoc (`///` and `//!`) for public AND private items; `//` inline.
-- **Shell.** `#` only; put contract details in a heredoc help block at the top of the script.
+The WHEN and WHY rules are portable; syntax is not. Defer to each language, then apply the house layout:
+JSDoc for TypeScript/JavaScript, PHPDoc for PHP, PEP 257 docstrings for Python, godoc for Go and rustdoc
+(`///`, `//!`) for Rust, with plain `//` or `#` inline. Shell has `#`
+only; put contract details in a heredoc help block at the top of the script.
 
 ## Security
 
@@ -264,32 +240,42 @@ Comments ship with code and get indexed. Never include secrets, tokens, API keys
 
 ## Troubleshooting
 
-**A linter rejects the house doc format.** Keep `@param name - desc` / `@returns value - desc`; suppress the specific rule with rationale rather than restating types.
+**A linter rejects the house doc format.** Prefer the language's or project's native syntax. Suppress only a documented false positive, with rationale, rather than restating types.
 
-**A context line on every branch feels like noise.** State the reader consequence. A branch with no meaning for the reader is a naming or design smell, not permission to restate mechanics.
+**A branch comment feels like noise.** If the code already states the complete outcome, omit it. If a
+reader consequence remains hidden, state the verified trigger and consequence once.
 
 ## Verification Gate
 
-Before claiming a code change is done, check names and comments. **[static]** = mechanical, linter-checkable; **[judge]** = semantic, for a review-judge or human reviewer.
+Before claiming comment work is done, confirm the naming route is complete and check the remaining prose. **[static]** is mechanical; **[judge]** requires semantic review.
 
-1. **[static]+[judge] Every file/module or class boundary (3-8 lines) and method (1-3 lines) has a
-   doc comment.** Sizes and the blank separator line are mechanical; when-to-use, bigger-picture
-   fit, real parameter/return meaning, and non-restated types are semantic. PHP class files must
-   not duplicate a top-of-file PHPDoc and a class PHPDoc for the same boundary.
-2. **[static]+[judge] Every `if`, loop, and null/empty check has one brief context line above it** that translates the moment into reader meaning rather than restating mechanics, and the file's context lines do not all run one sentence template.
-3. **[judge] Every `@param` / `@returns` states what null/empty/absent means for the user**, and no tag was deleted while tightening a verbose comment.
-4. **[judge] Names are self-documenting in the product's vocabulary** - identifiers match the words the user sees wherever a UI exists.
-5. **[judge] Flow entry points carry a user-journey anchor where the trigger is hard to reconstruct.**
-6. **[judge] Discretionary inline comments satisfy one of the four valid reasons**, sit at the decision point, and prefer user/business/domain/legal/vendor rationale over reconstructible implementation rationale.
-7. **[judge] Rationale is verified, not fabricated or hedged**, and passes the Half-Life Test.
+1. **[static]+[judge] Required public/exported APIs and non-obvious file/module/class boundaries have useful doc comments.** Project or language canon decides any stronger requirement; PHP class files do not duplicate file and class PHPDoc.
+2. **[judge] Consequence-bearing branches have one local trigger-and-consequence sentence; self-evident branches have none.** No context line restates mechanics or repeats one sentence template through a file.
+3. **[judge] An admitted and semantically visible null/empty/absent state has its reader consequence**, and no tag invents an impossible state or disappears during tightening.
+4. **[judge] Applicable naming and placement checks are complete** under `naming-and-placement.md`; comments do not compensate for a deferred defect.
+5. **[judge] Verified arrival context appears only when it changes the reader's interpretation and remains hidden from code.**
+6. **[judge] Discretionary inline comments satisfy one valid reason**, sit at the decision, and prefer reader-relevant rationale.
+7. **[judge] Rationale and code-behaviour claims are verified**, including query scope, nullability, branches, counts, and inherited prose; they also pass the Half-Life Test.
 8. **[static] TODO / FIXME / HACK markers carry an expiry** and only load-bearing tracking references.
 9. **[static] No secrets, internal URLs, or production hostnames**; customer/patient identifiers may need **[judge]** review.
-10. **[judge] Existing comments touched or noticed are still accurate.** A stale comment you noticed is now part of the change.
-11. **[static] Comment lines wrap around 110 characters** and never run past 120.
+10. **[judge] Existing comments touched or noticed are still accurate.** Tightening an inherited claim transfers ownership.
+11. **[static] Comment lines meet the project or language formatter's enforced width, or the 150-character fallback ceiling when neither defines one.** Tags and description blocks meet their physical-line limits.
+12. **[static] Apply the em-dash rule above without rewriting exempt material.**
 
-If a comment fails any check, fix it before merging.
+Mechanical checks locate candidates; they never override surface classification or semantic review.
+A mechanical hit is a lead, not a diagnosis. Machine-readable annotations, generated regions, and
+sanctioned bullet shapes are known false-positive classes. Confirm each hit before editing, with
+`<width>` set to the resolved ceiling:
+
+```bash
+awk 'length><width> && /^[[:space:]]*(\/\/|\/\*|\*|#)/ && !/^[[:space:]]*\*[[:space:]]*@(phpstan|psalm|template)[-a-z]*[[:space:]]/ {print FILENAME":"FNR}' <files>
+awk 'FNR==1{n=0} /^[[:space:]]*(\/\/|\*|#)[[:space:]]*([-*+]|@[[:alnum:]-]+)[[:space:]]/{n=0; next} /^[[:space:]]*(\/\/|\*|#)/ && !/^[[:space:]]*(\*\/?|\/\/|#)[[:space:]]*$/{n++; if(n==4) print FILENAME":"FNR; next} {n=0}' <files>
+```
+
+Fix a confirmed applicable failure before merging.
 
 ## Related References
 
+- [`naming-and-placement.md`](./naming-and-placement.md) - responsibility-first placement and verified identifier claims before comment work.
 - `writing-style.md` - comments and docstrings follow this playbook; other human-read prose follows `writing-style.md`.
 - Sibling playbooks share the same scaffold; project instruction files may point here as the canonical comment policy.

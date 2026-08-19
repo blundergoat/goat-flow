@@ -1,5 +1,6 @@
 /**
  * Defines the hooks users can enable from the dashboard or CLI.
+ *
  * Use when setup, sync, and audit need one display name, script, event, and deadline.
  * The manifest still decides which coding agents support hook registration.
  * Keeping these values central makes every user-facing setup path agree.

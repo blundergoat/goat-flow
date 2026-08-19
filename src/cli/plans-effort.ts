@@ -1,10 +1,9 @@
 /**
- * Effort-estimate notation parser for goat-plan milestones - the shared grammar
- * behind `plans export` (which carries the fields into bundles) and
- * `plans check` (which audits their arithmetic). Owns the `Effort estimate:`
- * line, countable `Forecast basis:`, forecast range, counted-work
- * `(est: n min category)` entries, and category sums. This keeps the numbers a
- * plan author reviews consistent across checks and portable exports.
+ * Effort-estimate notation parser for goat-plan milestones - the shared grammar behind `plans export` (which carries the fields into bundles) and
+ * `plans check` (which audits their arithmetic).
+ * Owns the `Effort estimate:` line, countable `Forecast basis:`, forecast range, counted-work `(est: n min category)` entries, and category sums.
+ *
+ * This keeps the numbers a plan author reviews consistent across checks and portable exports.
  */
 
 /** Effort category vocabulary from goat-plan's estimation notation. */
@@ -50,10 +49,10 @@ export function isNumericActual(
 /**
  * Optional `Forecast range:` uncertainty band for a milestone estimate.
  *
- * Every value is recorded-unpaused coding-agent minutes on one active milestone
- * timeline - the same unit as the headline - so `likelyMinutes` must equal the
- * headline total. The band is optional by contract: legacy and in-flight
- * point-estimate plans stay valid without it, so absence is never an error.
+ * Every value is recorded-unpaused coding-agent minutes on one active milestone timeline - the same unit as the headline - so `likelyMinutes` must
+ * equal the headline total.
+ * The band is optional by contract: legacy and in-flight point-estimate plans stay valid without it, so absence is never an error.
+ *
  * Human waiting is excluded, matching the Actual it will later be compared to.
  */
 export interface PlanEffortForecastRange {
@@ -65,8 +64,7 @@ export interface PlanEffortForecastRange {
 
 /**
  * Countable inputs behind a milestone forecast.
- * Users can review the work-unit count, per-unit rates, and evidence source
- * instead of trusting an unexplained duration estimate.
+ * Users can review the work-unit count, per-unit rates, and evidence source instead of trusting an unexplained duration estimate.
  */
 export interface PlanEffortForecastBasis {
   agentWorkUnits: number;
@@ -78,8 +76,7 @@ export interface PlanEffortForecastBasis {
 
 /**
  * Parsed `Effort estimate:` milestone line in agent-time minutes.
- * Records omit this entirely when a milestone predates effort estimation -
- * legacy plans are valid local state and must stay noise-free.
+ * Records omit this entirely when a milestone predates effort estimation - legacy plans are valid local state and must stay noise-free.
  */
 export interface PlanExportEffort {
   totalMinutes: number;
@@ -173,16 +170,18 @@ function readCapturedSplit(
 }
 
 /** Parse decimal minute text without admitting precision-losing integers. */
-function readSafeMinutes(value: string): number | undefined {
-  const parsed = Number(value);
+function readSafeMinutes(minutesText: string): number | undefined {
+  const parsed = Number(minutesText);
   return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : undefined;
 }
 
 /** Parse a positive decimal rate without accepting infinity or unsafe magnitudes. */
-function readSafePositiveRate(value: string | undefined): number | undefined {
+function readSafePositiveRate(
+  minutesText: string | undefined,
+): number | undefined {
   // Missing rate text means the user did not supply the full low-likely-high basis.
-  if (value === undefined) return undefined;
-  const parsedRate = Number(value);
+  if (minutesText === undefined) return undefined;
+  const parsedRate = Number(minutesText);
   return Number.isFinite(parsedRate) && parsedRate > 0 ? parsedRate : undefined;
 }
 
@@ -231,8 +230,7 @@ function selectActualText(
 
 /**
  * Parse one task line's trailing est entry into estimate fields.
- * Est-shaped but unreadable text (or a foreign category) warns with a fixed
- * string naming the task position - never user text.
+ * Est-shaped but unreadable text (or a foreign category) warns with a fixed string naming the task position - never user text.
  *
  * @param text - full task text after the checkbox
  * @param taskIndex - zero-based task position used in warning labels
@@ -272,16 +270,16 @@ export function readTaskEstimate(
 /**
  * Parse the dedicated plan/admin estimate field.
  *
- * @param value - field text such as `2 min other`; empty means no declared overhead
+ * @param estimateText - field text such as `2 min other`; empty means no declared overhead
  * @param warnings - record warning sink for malformed supplied values
  * @returns estimate fields for category summing; empty means absent or malformed
  */
 export function readPlanAdminEstimate(
-  value: string,
+  estimateText: string,
   warnings: string[],
 ): TaskEstimateFields {
-  if (value.length === 0) return {};
-  const match = value.match(PLAN_ADMIN_PATTERN);
+  if (estimateText.length === 0) return {};
+  const match = estimateText.match(PLAN_ADMIN_PATTERN);
   const estimateMinutes = match?.[1] ? readSafeMinutes(match[1]) : undefined;
   if (estimateMinutes === undefined) {
     warnings.push("plan/admin overhead estimate not parseable");
@@ -324,15 +322,15 @@ function readOptionalMinutes(capture: string | undefined): number | undefined {
  * Parse the optional forecast band users see beside a milestone estimate.
  * Missing text preserves legacy point estimates; malformed text emits a fixed warning.
  * `plans check` owns ordering and headline agreement after parsing.
- * @param value - raw text after the `Forecast range:` label; empty means absent
+ * @param rangeText - raw text after the `Forecast range:` label; empty means absent
  * @param warnings - record warning sink receiving the fixed-string parse warning
  * @returns the parsed band; undefined means absent or unreadable
  */
 function parseForecastRangeValue(
-  value: string,
+  rangeText: string,
   warnings: string[],
 ): PlanEffortForecastRange | undefined {
-  const normalized = value.trim();
+  const normalized = rangeText.trim();
 
   // No band at all - the common case for legacy and point-estimate milestones.
   if (normalized.length === 0) return undefined;
@@ -381,15 +379,15 @@ function hasCompleteForecastBasis(
 
 /**
  * Parse the countable units and evidence source behind an optional forecast.
- * @param value - text after `Forecast basis:`; empty means a legacy or point estimate
+ * @param basisText - text after `Forecast basis:`; empty means a legacy or point estimate
  * @param warnings - fixed warning sink; empty stays unchanged for users
  * @returns parsed basis; undefined means the field is absent or cannot be reviewed safely
  */
 function parseForecastBasisValue(
-  value: string,
+  basisText: string,
   warnings: string[],
 ): PlanEffortForecastBasis | undefined {
-  const normalizedBasis = value.trim();
+  const normalizedBasis = basisText.trim();
   // No basis is valid compatibility state for plans written before work-unit forecasting.
   if (normalizedBasis.length === 0) return undefined;
 
@@ -546,8 +544,8 @@ export function sumTaskEstimates(
 
 /**
  * Parse a milestone's `Effort estimate:` field value into agent-time fields.
- * Because a missing line is valid legacy state while a present-but-unreadable
- * one is drifted notation, only the latter warns (fixed string, never user text).
+ * Because a missing line is valid legacy state while a present-but-unreadable one is drifted notation, only the latter warns (fixed string, never
+ * user text).
  *
  * @param fieldValue - raw text after the `Effort estimate:` label; empty means the
  *   milestone predates estimation and stays silent
@@ -616,15 +614,15 @@ export function parseEffortLineValue(
 /**
  * Parse one machine-readable Actual value while allowing an empty placeholder.
  *
- * @param value - raw Actual field or inline tail
+ * @param actualText - raw Actual field or inline tail
  * @param warnings - warning sink for supplied but unreadable values
  * @returns numeric Actual fields; undefined means absent, placeholder, or malformed
  */
 function parseActualValue(
-  value: string,
+  actualText: string,
   warnings: string[],
 ): PlanEffortActual | undefined {
-  const normalized = value.trim();
+  const normalized = actualText.trim();
   if (normalized.length === 0) return undefined;
   if (normalized === "_") return undefined;
 

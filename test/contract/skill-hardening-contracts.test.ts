@@ -5,15 +5,19 @@
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { findArtifact } from "../../src/cli/quality/skill-quality-content.js";
+import { scoreArtifact } from "../../src/cli/quality/skill-quality-score.js";
+import { DISPATCHER_SKILL_WORD_LIMIT } from "../../src/cli/constants.js";
 import {
   assertForEachTarget,
   countSkillBodyWords,
   installedSkillPaths,
   installedSkillReferencePaths,
+  readProjectFile,
 } from "./skill-hardening.helpers.js";
 
 describe("ADR-023 word budget tiers", () => {
-  const DISPATCHER_CAP = 555;
+  const DISPATCHER_CAP = DISPATCHER_SKILL_WORD_LIMIT;
   const FUNCTIONAL_CAP = 2500;
   const ALWAYS_LOADED_CAP = 1500;
   const AUTHORING_INDEX_CAP = 400;
@@ -24,10 +28,14 @@ describe("ADR-023 word budget tiers", () => {
     "code-comments.md",
     "gruff-code-quality.md",
     "hook-policy-testing.md",
+    "naming-and-placement.md",
     "observability.md",
     "page-capture.md",
     "release-notes.md",
     "skill-playbook-authoring-sync.md",
+    "test-selection.md",
+    "writing-sentence-diagnostics.md",
+    "writing-structure-diagnostics.md",
     "writing-style.md",
   ] as const;
 
@@ -38,9 +46,10 @@ describe("ADR-023 word budget tiers", () => {
     "goat-review",
     "goat-critique",
     "goat-security",
+    "goat-clarity",
   ] as const;
 
-  it("dispatcher /goat stays within the 555-word cap across all mirrors", () => {
+  it("dispatcher /goat stays within the 600-word cap across all mirrors", () => {
     assertForEachTarget(installedSkillPaths("goat"), (skillPath) => {
       const userFacingWordCount = countSkillBodyWords(skillPath);
       assert.ok(
@@ -48,6 +57,24 @@ describe("ADR-023 word budget tiers", () => {
         `${skillPath}: ${userFacingWordCount} words exceeds dispatcher cap ${DISPATCHER_CAP}`,
       );
     });
+  });
+
+  it("keeps skill-deployment guidance on the accepted 600-word dispatcher cap", () => {
+    assertForEachTarget(
+      [
+        "workflow/skills/playbooks/skill-quality-testing/deployment.md",
+        ".goat-flow/skill-docs/skill-quality-testing/deployment.md",
+      ],
+      (deploymentPath) => {
+        const deployment = readProjectFile(deploymentPath);
+        assert.match(deployment, /dispatcher ≤600 words/u, deploymentPath);
+        assert.doesNotMatch(
+          deployment,
+          /dispatcher ≤555 words/u,
+          deploymentPath,
+        );
+      },
+    );
   });
 
   it("functional skills stay within the 2500-word cap across all mirrors", () => {
@@ -64,6 +91,19 @@ describe("ADR-023 word budget tiers", () => {
       );
     });
   });
+
+  for (const skillName of FUNCTIONAL_SKILLS) {
+    it(`scores ${skillName} against its complete configured context`, () => {
+      const artifact = findArtifact(process.cwd(), `skill:${skillName}`);
+      assert.ok(artifact, `missing quality artifact for ${skillName}`);
+      const report = scoreArtifact(process.cwd(), artifact);
+      assert.doesNotMatch(
+        report.fitNotes.join("\n"),
+        /composition truncated/iu,
+        `${skillName}: quality score must not omit loaded context`,
+      );
+    });
+  }
 
   it("always-loaded shared references stay within the 1500-word cap", () => {
     // Always-loaded guidance affects every user request, so every copy must stay concise.
@@ -120,6 +160,10 @@ describe("ADR-023 word budget tiers", () => {
         "goat-debug",
         "references/diagnostic-techniques.md",
       ),
+      ...installedSkillReferencePaths(
+        "goat-clarity",
+        "references/target-scope-and-evidence.md",
+      ),
     ].map((referencePath) => ({
       referencePath,
       userFacingWordCount: countSkillBodyWords(referencePath),
@@ -149,5 +193,60 @@ describe("ADR-023 word budget tiers", () => {
     ].map((userFacingWordCount) => userFacingWordCount < PROGRESSIVE_CAP);
 
     assert.deepEqual(progressiveBudgetBoundaryResults, [true, false]);
+  });
+
+  it("M02 playbooks stay within their rollout budgets", () => {
+    const rolloutBudgets = [
+      { filename: "naming-and-placement.md", cap: 2200 },
+      // Raised 2880 -> 2980 -> 3000 on 2026-08-17: first for width-resolution guidance and the two mechanical gate commands, then to swap
+      // "each tag adds meaning beyond its type" for the closed list of admissible contents, after a sweep found @param lines restating the signature.
+      { filename: "code-comments.md", cap: 3000 },
+    ] as const;
+
+    for (const { filename, cap } of rolloutBudgets) {
+      for (const playbookRoot of [
+        "workflow/skills/playbooks",
+        ".goat-flow/skill-docs/playbooks",
+      ]) {
+        const playbookPath = `${playbookRoot}/${filename}`;
+        const userFacingWordCount = countSkillBodyWords(playbookPath);
+        assert.ok(
+          userFacingWordCount <= cap,
+          `${playbookPath}: ${userFacingWordCount} words exceeds M02 cap ${cap}`,
+        );
+      }
+    }
+  });
+
+  it("M51 writing playbooks stay within their routed context budgets", () => {
+    const routedWritingBudgets = [
+      { filename: "writing-style.md", minimum: 1700, maximum: 2000 },
+      {
+        filename: "writing-sentence-diagnostics.md",
+        minimum: 900,
+        // Raised 1100 -> 1150 on 2026-08-17 for the reader-cost code vocabulary and the cadence threshold: "name the reader cost" had no codes
+        // to name it with, and the cadence rule had no count, so nine sibling items opening with the same three words passed it.
+        maximum: 1150,
+      },
+      {
+        filename: "writing-structure-diagnostics.md",
+        minimum: 650,
+        maximum: 900,
+      },
+    ] as const;
+
+    for (const { filename, minimum, maximum } of routedWritingBudgets) {
+      for (const playbookRoot of [
+        "workflow/skills/playbooks",
+        ".goat-flow/skill-docs/playbooks",
+      ]) {
+        const playbookPath = `${playbookRoot}/${filename}`;
+        const userFacingWordCount = countSkillBodyWords(playbookPath);
+        assert.ok(
+          userFacingWordCount >= minimum && userFacingWordCount <= maximum,
+          `${playbookPath}: ${userFacingWordCount} words falls outside M51 range ${minimum}-${maximum}`,
+        );
+      }
+    }
   });
 });

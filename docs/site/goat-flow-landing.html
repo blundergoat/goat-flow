@@ -3,9 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>
-      goat-flow - AI coding agent harness and dashboard
-    </title>
+    <title>goat-flow - AI coding agent harness and dashboard</title>
     <meta
       name="description"
       content="AI coding agent harness and local dashboard for Claude Code, OpenAI Codex, Google Antigravity, and GitHub Copilot/Copilot CLI. Guardrails, setup audits, structured skills, and persistent memory."
@@ -806,6 +804,10 @@
         color: #fb923c;
         background: rgba(251, 146, 60, 0.1);
       }
+      .skill-badge.clarity {
+        color: #e879f9;
+        background: rgba(232, 121, 249, 0.1);
+      }
 
       /* ------- Hooks section ------- */
       .hooks-grid {
@@ -1388,9 +1390,10 @@
               <div class="piece-num">02 / Skills</div>
               <h3>Structured slash commands</h3>
               <p>
-                Seven workflows with defined phases, named artefacts, and
-                stopping points. Debug, plan, review, critique, security, QA -
-                plus a dispatcher that routes your intent to the right skill.
+                Eight workflows with defined phases, named artefacts, and
+                stopping points. Debug, plan, review, critique, security, QA,
+                clarity - plus a dispatcher that routes your intent to the right
+                skill.
               </p>
               <div class="sub">/goat, /goat-debug, /goat-plan...</div>
             </div>
@@ -1453,7 +1456,9 @@
                 becomes next session's context. The compounding bet: every
                 session that hits a problem makes the next one harder to trip.
               </p>
-              <div class="sub">.goat-flow/learning-loop/lessons, /footguns, /decisions</div>
+              <div class="sub">
+                .goat-flow/learning-loop/lessons, /footguns, /decisions
+              </div>
             </div>
           </div>
         </div>
@@ -1569,7 +1574,7 @@
       <!-- ========== SKILLS ========== -->
       <section id="skills">
         <div class="container">
-          <div class="eyebrow">Seven skills</div>
+          <div class="eyebrow">Eight skills</div>
           <h2>Workflows, not suggestions.</h2>
           <p class="lead" style="margin-top: 12px">
             Free-form prompting is how agents get lost. Skills are structured
@@ -1633,6 +1638,14 @@
               >
               <span class="skill-badge qa">QA</span>
             </div>
+            <div class="skill-row">
+              <span class="skill-cmd">/goat-clarity</span>
+              <span class="skill-desc"
+                >Improve comments and names within one frozen source
+                target</span
+              >
+              <span class="skill-badge clarity">Clarity</span>
+            </div>
           </div>
         </div>
       </section>
@@ -1658,8 +1671,7 @@
                 catches selected patterns agents hit when they go off-script:
                 unsafe recursive deletion, all git push, direct literal
                 secret-path reads, and selected destructive shell and database
-                commands. It is a local guardrail, not a complete shell
-                sandbox.
+                commands. It is a local guardrail, not a complete shell sandbox.
               </p>
               <h3 style="margin-top: 24px">Extend with your own</h3>
               <p>

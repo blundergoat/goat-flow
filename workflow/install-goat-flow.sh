@@ -3,8 +3,8 @@
 # install-goat-flow.sh installs canonical goat-flow files into a selected project.
 # Use it through `goat-flow install` or `setup --apply` when refreshing one agent.
 # Each file is completed beside its destination before becoming user-visible.
-# System files refresh; user-owned settings and config stay preserved by default.
-# `--force` permits supported content replacement but never unsafe path redirection.
+# System files refresh after managed preflight; user-owned settings and config remain authoritative.
+# `--force` admits inspected system-owned conflicts but never resets user content or bypasses path safety.
 # Project-specific instruction and architecture content remains a later setup step.
 # Usage: bash workflow/install-goat-flow.sh /path/to/project --agent claude
 # =============================================================================
@@ -172,14 +172,30 @@ SUPPORTED_AGENTS_DISPLAY="${SUPPORTED_AGENTS_CSV//,/, }"
 # --- Parse arguments ---
 PROJECT=""
 AGENT=""
-FORCE=false
 UPDATE_CONFIG_VERSION=false
 CLEAN_DEPRECATED=false
+# System-owned destinations the CLI preview classified as preserved local content.
+PRESERVE_PATHS=()
+# User-owned destinations the CLI admitted for replacement under named, twice-given authority.
+REPLACE_USER_PATHS=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --agent) AGENT="$2"; shift 2 ;;
-    --force) FORCE=true; shift ;;
+    --preserve-path)
+      # The CLI decides which paths this package leaves alone; the installer does not re-derive that.
+      PRESERVE_PATHS+=("$2")
+      shift 2
+      ;;
+    --replace-user-path)
+      # Only the CLI can admit this, and only for a path named by both --force-user-owned and --force-path.
+      REPLACE_USER_PATHS+=("$2")
+      shift 2
+      ;;
+    --force)
+      # The CLI already limits force to inspected system-owned conflicts; this installer never uses it to reset user content.
+      shift
+      ;;
     --update-config-version) UPDATE_CONFIG_VERSION=true; shift ;;
     --clean-deprecated) CLEAN_DEPRECATED=true; shift ;;
     -*)      echo "ERROR: Unknown flag: $1"; exit 1 ;;
@@ -517,12 +533,42 @@ assert_file_ownership() {
   fi
 }
 
-# Copy one canonical or explicitly forced seed into the user's selected project.
-# Use for files whose ownership class permits this installer write.
+# Report whether the CLI preview asked this destination to keep its current bytes.
+# A preserved path holds local content that the current package template does not change,
+# so replacing it would destroy project content for no delivered difference.
+installer_path_is_preserved() {
+  local candidate="$1" preserved_path
+  # The empty-array guard keeps `set -u` satisfied when no path was preserved.
+  for preserved_path in ${PRESERVE_PATHS+"${PRESERVE_PATHS[@]}"}; do
+    [[ "$preserved_path" == "$candidate" ]] && return 0
+  done
+  return 1
+}
+
+# Report whether the CLI admitted this user-owned destination for replacement.
+# Reaching here needs both --force-user-owned and a matching --force-path, so the
+# create-only rule is lifted for exactly the paths the user named and nothing else.
+installer_user_path_is_replaceable() {
+  local candidate="$1" replaceable_path
+  for replaceable_path in ${REPLACE_USER_PATHS+"${REPLACE_USER_PATHS[@]}"}; do
+    [[ "$replaceable_path" == "$candidate" ]] && return 0
+  done
+  return 1
+}
+
+# Copy one canonical template or create-only user seed into the selected project.
+# Use after ownership lookup confirms how setup may change the destination.
 copy_file() {
   local src="$1" dst="$2" expected_ownership="${3:-system-owned}" requested_mode="${4:-}"
   local replacement_mode="replace"
   assert_file_ownership "$dst" "$expected_ownership" "$src"
+
+  # Ownership still validates first, so a preserved path cannot hide a manifest mismatch.
+  if installer_path_is_preserved "$dst"; then
+    SKIPPED=$((SKIPPED + 1))
+    echo "  · $dst (preserved local content; this package does not change it)"
+    return
+  fi
 
   # Missing packaged content would leave the user's installation incomplete.
   if [[ ! -f "$src" ]]; then
@@ -541,9 +587,13 @@ copy_file() {
   if [[ -n "$requested_mode" ]]; then
     chmod "$requested_mode" "$STAGED_PAYLOAD_PATH"
   fi
-  # User-owned seeds remain create-only unless the user explicitly selected force.
-  if [[ "$expected_ownership" == "user-owned" && "$FORCE" == false ]]; then
+  # User-owned files stay create-only, so refreshing managed files cannot replace the user's project choices.
+  if [[ "$expected_ownership" == "user-owned" ]]; then
     replacement_mode="create-only"
+    # An explicitly named and separately authorized path is the one exception.
+    if installer_user_path_is_replaceable "$dst"; then
+      replacement_mode="replace"
+    fi
   fi
   commit_staged_payload "$dst" "$replacement_mode"
   COPIED=$((COPIED + 1))
@@ -556,8 +606,8 @@ copy_if_missing() {
   local src="$1" dst="$2"
   assert_file_ownership "$dst" "user-owned" "$src"
 
-  # Existing user content remains authoritative unless the user explicitly passed --force.
-  if [[ -f "$dst" ]] && ! $FORCE; then
+  # Existing user content remains authoritative unless the user named this exact path.
+  if [[ -f "$dst" ]] && ! installer_user_path_is_replaceable "$dst"; then
     SKIPPED=$((SKIPPED + 1))
     echo "  · $dst (exists, skipped)"
     return
@@ -822,6 +872,11 @@ ensure_gitignore_entry() {
   local path="$1"
   local entry="$2"
   local transform_result
+  # Preview-preserved local content is authoritative for every later reconciliation pass.
+  if installer_path_is_preserved "$path"; then
+    LAST_TRANSFORM_RESULT="unchanged"
+    return 0
+  fi
   stage_existing_destination "$path"
   if ! transform_result="$(node - "$STAGED_PAYLOAD_PATH" "$entry" <<'NODE'
 const fs = require("node:fs");
@@ -998,16 +1053,34 @@ ensure_config_hooks_entry() {
   local path="$1"
   local transform_result
   stage_existing_destination "$path"
-  if ! transform_result="$(node - "$STAGED_PAYLOAD_PATH" <<'NODE'
+  if ! transform_result="$(node - "$STAGED_PAYLOAD_PATH" "$GOAT_FLOW_ROOT" <<'NODE'
 const fs = require("node:fs");
 
 const path = process.argv[2];
+const frameworkRoot = process.argv[3];
+const yaml = require(require.resolve("js-yaml", { paths: [frameworkRoot] }));
 const content = fs.readFileSync(path, "utf8");
 const eol = content.includes("\r\n") ? "\r\n" : "\n";
 const repeatedEol = new RegExp(`(?:${eol === "\r\n" ? "\\r\\n" : "\\n"}){3,}`, "gu");
 const hadFinalNewline = /\r?\n$/u.test(content);
 let lines = content.split(/\r?\n/u);
 if (hadFinalNewline) lines.pop();
+let parsedHooks = null;
+try {
+  const parsedConfig = yaml.load(content);
+  if (
+    parsedConfig !== null &&
+    typeof parsedConfig === "object" &&
+    !Array.isArray(parsedConfig) &&
+    parsedConfig.hooks !== null &&
+    typeof parsedConfig.hooks === "object" &&
+    !Array.isArray(parsedConfig.hooks)
+  ) {
+    parsedHooks = parsedConfig.hooks;
+  }
+} catch {
+  // Existing line-based migration retains its fail-safe behavior for malformed user YAML.
+}
 const staleHookRe = /^  guard-(destructive-shell|secret-paths|repository-writes):\s*$/u;
 const removedHookRe = /^  plan-checkbox-guard:\s*$/u;
 let changed = false;
@@ -1015,7 +1088,13 @@ let legacyEnabled = "true";
 
 function insertHookEntry(lines, hooksIndex, hookId, enabled) {
   const hookRe = new RegExp(`^  ${hookId}:\\s*$`, "u");
-  if (lines.some((line) => hookRe.test(line))) return false;
+  if (
+    lines.some((line) => hookRe.test(line)) ||
+    (parsedHooks !== null &&
+      Object.prototype.hasOwnProperty.call(parsedHooks, hookId))
+  ) {
+    return false;
+  }
   let insertAt = hooksIndex + 1;
   while (insertAt < lines.length && /^  [A-Za-z0-9_-]+:\s*$/u.test(lines[insertAt])) {
     insertAt += 1;
@@ -1025,7 +1104,47 @@ function insertHookEntry(lines, hooksIndex, hookId, enabled) {
   return true;
 }
 
-let hooksIndex = lines.findIndex((line) => /^hooks\s*:/u.test(line));
+// Find the index of the "}" closing the first "{" on the line, honoring quotes; -1 when it does not close on this line.
+function flowMappingCloseIndex(line) {
+  let depth = 0;
+  let inSingle = false;
+  let inDouble = false;
+  let escaped = false;
+  let started = false;
+  for (let index = line.indexOf("{"); index >= 0 && index < line.length; index += 1) {
+    const character = line[index];
+    if (escaped) { escaped = false; continue; }
+    if (inDouble && character === "\\") { escaped = true; continue; }
+    if (!inDouble && character === "'") { inSingle = !inSingle; continue; }
+    if (!inSingle && character === '"') { inDouble = !inDouble; continue; }
+    if (inSingle || inDouble) continue;
+    if (character === "{" || character === "[") { depth += 1; started = true; continue; }
+    if (character === "}" || character === "]") {
+      depth -= 1;
+      if (started && depth === 0) return character === "}" ? index : -1;
+      if (depth < 0) return -1;
+    }
+  }
+  return -1;
+}
+
+// Splice one missing managed hook into a single-line flow mapping, leaving every other byte alone.
+// Returns null when the mapping does not close on its own line; corrupting user YAML is never an option.
+function insertFlowHookEntry(line, hookId, enabled) {
+  const openIndex = line.indexOf("{");
+  const closeIndex = flowMappingCloseIndex(line);
+  if (openIndex === -1 || closeIndex === -1) return null;
+  const body = line.slice(openIndex + 1, closeIndex);
+  const entry = `${hookId}: { enabled: ${enabled} }`;
+  const mutatedBody = body.trim().length === 0
+    ? ` ${entry} `
+    : `${body.replace(/\s+$/u, "")}, ${entry} `;
+  return `${line.slice(0, openIndex + 1)}${mutatedBody}${line.slice(closeIndex)}`;
+}
+
+let hooksIndex = lines.findIndex((line) =>
+  /^(?:hooks|"hooks"|'hooks')\s*:/u.test(line),
+);
 if (hooksIndex !== -1) {
   const next = [];
   for (let i = 0; i < lines.length; i += 1) {
@@ -1044,10 +1163,31 @@ if (hooksIndex !== -1) {
     next.push(lines[i]);
   }
   lines = next;
-  hooksIndex = lines.findIndex((line) => /^hooks\s*:/u.test(line));
-  changed = insertHookEntry(lines, hooksIndex, "deny-dangerous", legacyEnabled) || changed;
-  changed = insertHookEntry(lines, hooksIndex, "post-turn-safety", "true") || changed;
-  changed = insertHookEntry(lines, hooksIndex, "gruff-code-quality", "false") || changed;
+  hooksIndex = lines.findIndex((line) =>
+    /^(?:hooks|"hooks"|'hooks')\s*:/u.test(line),
+  );
+  const hooksInlineValue = lines[hooksIndex].slice(lines[hooksIndex].indexOf(":") + 1).trim();
+  if (hooksInlineValue.startsWith("{")) {
+    // A flow-style mapping must converge inside its own braces; block-style insertion would break the parse.
+    // Without a successful parse the missing set is unknown, so the registry defaults stay authoritative.
+    if (parsedHooks !== null) {
+      for (const [flowHookId, flowEnabled] of [
+        ["deny-dangerous", legacyEnabled],
+        ["post-turn-safety", "true"],
+        ["gruff-code-quality", "false"],
+      ]) {
+        if (Object.prototype.hasOwnProperty.call(parsedHooks, flowHookId)) continue;
+        const mutatedLine = insertFlowHookEntry(lines[hooksIndex], flowHookId, flowEnabled);
+        if (mutatedLine === null) break;
+        lines[hooksIndex] = mutatedLine;
+        changed = true;
+      }
+    }
+  } else {
+    changed = insertHookEntry(lines, hooksIndex, "deny-dangerous", legacyEnabled) || changed;
+    changed = insertHookEntry(lines, hooksIndex, "post-turn-safety", "true") || changed;
+    changed = insertHookEntry(lines, hooksIndex, "gruff-code-quality", "false") || changed;
+  }
   if (changed) {
     fs.writeFileSync(path, `${lines.join(eol)}${hadFinalNewline ? eol : ""}`);
     console.log("changed");
@@ -1133,413 +1273,674 @@ NODE
 }
 
 migrate_agent_hook_config() {
-  local dst="$1"
-  local src="$2"
+  local user_hook_config_path="$1"
+  local desired_state_contract_path="$GOAT_FLOW_ROOT/workflow/hooks/agent-config/managed-hook-desired-state.json"
   local transform_result
   LAST_TRANSFORM_RESULT="unchanged"
-  # Missing optional hook surfaces mean this selected agent has nothing to migrate.
-  if [[ -z "$dst" || -z "$src" || ! -f "$dst" || ! -f "$GOAT_FLOW_ROOT/$src" ]]; then
+
+  # If this provider has no existing hook config, the user has no registration surface to migrate.
+  if [[ -z "$user_hook_config_path" || ! -f "$user_hook_config_path" ]]; then
     return 0
   fi
-  stage_existing_destination "$dst"
-  if ! transform_result="$(node - "$STAGED_PAYLOAD_PATH" "$GOAT_FLOW_ROOT/$src" "$AGENT" <<'NODE'
+  # If the packaged contract is missing, stop before setup can write provider state that disagrees with the UI.
+  if [[ ! -f "$desired_state_contract_path" ]]; then
+    echo "ERROR: managed hook desired-state contract is missing: $desired_state_contract_path" >&2
+    return 1
+  fi
+
+  stage_existing_destination "$user_hook_config_path"
+  if ! transform_result="$(node - "$STAGED_PAYLOAD_PATH" "$desired_state_contract_path" "$AGENT" "$GOAT_FLOW_ROOT" <<'NODE'
+/**
+ * Reconciles one staged user hook config from the TypeScript-generated desired-state contract.
+ * Use during standalone setup so enabled, disabled, duplicate, and retired rows match CLI and dashboard behavior.
+ * Invalid user JSON is preserved; an invalid package contract stops installation before replacement.
+ */
+const childProcess = require("node:child_process");
 const fs = require("node:fs");
+const pathModule = require("node:path");
 
-const [dst, src, agent] = process.argv.slice(2);
-const managedScripts = [
-  "run-with-bash.mjs",
-  "hook-provider-adapters.mjs",
-  "hook-launch-runtime.mjs",
-  "deny-dangerous.sh",
-  "gruff-code-quality.sh",
-  "post-turn-safety.sh",
-  "plan-checkbox-guard.sh",
-  "deny-dangerous.self-test.sh",
-  "guard-common.sh",
-  "guard-destructive-shell.sh",
-  "guard-secret-paths.sh",
-  "guard-repository-writes.sh",
-  "guardrails-self-test.sh",
-];
-const managedHookIds = [
-  "deny-dangerous",
-  "gruff-code-quality",
-  "post-turn-safety",
-  "plan-checkbox-guard",
-  "guard-destructive-shell",
-  "guard-secret-paths",
-  "guard-repository-writes",
-];
+const [userHookConfigPath, desiredStateContractPath, agentId, frameworkRoot] =
+  process.argv.slice(2);
+const CONTRACT_SCHEMA = "goat-flow.managed-hook-desired-state.v1";
+const yaml = require(require.resolve("js-yaml", { paths: [frameworkRoot] }));
 
+/** Recognize JSON objects that can safely hold provider hook configuration. */
 function isObject(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-function readJson(path) {
+/** Read one JSON object, returning null when a user or package file cannot be safely merged. */
+function readJsonObject(path) {
   try {
-    const parsed = JSON.parse(fs.readFileSync(path, "utf8"));
-    return isObject(parsed) ? parsed : null;
+    const parsedValue = JSON.parse(fs.readFileSync(path, "utf8"));
+    return isObject(parsedValue) ? parsedValue : null;
+  } catch {
+    // For example, an interrupted settings-file save can leave partial JSON that setup must preserve for the user to repair.
+    return null;
+  }
+}
+
+/** Escape a managed filename before placing it in an exact-token regular expression. */
+function escapeRegularExpression(value) {
+  return value.replace(/[.*+?^$(){}|[\]\\]/gu, "\\$&");
+}
+
+/**
+ * Match a complete managed script token while preserving similar user filenames.
+ * For example, custom-post-turn-safety.sh must not be claimed as Goat Flow state.
+ */
+function commandReferencesScriptToken(commandText, scriptName) {
+  const escapedScriptName = escapeRegularExpression(scriptName);
+  const backtick = String.fromCharCode(96);
+  const scriptTokenPattern = new RegExp(
+    "(?:^|[\\s\"'" +
+      backtick +
+      "=/\\\\])" +
+      escapedScriptName +
+      "(?=$|[\\s\"'" +
+      backtick +
+      ";|&),])",
+    "mu",
+  );
+  return scriptTokenPattern.test(commandText);
+}
+
+/** Detect a direct provider command owned by any current or retired managed hook script. */
+function entryReferencesManagedScript(entry, scriptNames) {
+  // Null, primitive, and array values cannot be direct runnable command objects.
+  if (!isObject(entry)) return false;
+  // Structured exec-form rows name their script operands as argv elements, not one shell string.
+  const structuredArgumentText = Array.isArray(entry.args)
+    ? entry.args
+        .filter((argumentValue) => typeof argumentValue === "string")
+        .join("\n")
+    : "";
+  const commandText = [
+    typeof entry.command === "string" ? entry.command : "",
+    typeof entry.bash === "string" ? entry.bash : "",
+    typeof entry.powershell === "string" ? entry.powershell : "",
+    structuredArgumentText,
+  ].join("\n");
+  return scriptNames.some((scriptName) =>
+    commandReferencesScriptToken(commandText, scriptName),
+  );
+}
+
+/** Detect one exact managed command anywhere inside a provider definition. */
+function valueReferencesManagedScript(value, scriptNames) {
+  if (Array.isArray(value)) {
+    return value.some((nestedValue) =>
+      valueReferencesManagedScript(nestedValue, scriptNames),
+    );
+  }
+  if (!isObject(value)) return false;
+  if (entryReferencesManagedScript(value, scriptNames)) return true;
+  return Object.values(value).some((nestedValue) =>
+    valueReferencesManagedScript(nestedValue, scriptNames),
+  );
+}
+
+/**
+ * Remove managed commands recursively while retaining user commands in the same provider row.
+ * An empty matcher wrapper disappears so the user's config does not keep a dead lifecycle entry.
+ */
+function withoutManagedHookCommand(entry, scriptNames) {
+  // A direct exact-token match is the registration setup owns and may replace or disable.
+  if (entryReferencesManagedScript(entry, scriptNames)) return undefined;
+  // A null, primitive, array, or non-group object has no nested command list to reconcile.
+  if (!isObject(entry) || !Array.isArray(entry.hooks)) return entry;
+
+  const retainedHooks = entry.hooks
+    .map((nestedHook) => withoutManagedHookCommand(nestedHook, scriptNames))
+    .filter((nestedHook) => nestedHook !== undefined);
+  // An unchanged wrapper remains byte-for-byte equivalent when setup serializes the config.
+  if (retainedHooks.length === entry.hooks.length) return entry;
+  // An empty wrapper no longer represents any action the user's agent can run.
+  if (retainedHooks.length === 0) return undefined;
+  return { ...entry, hooks: retainedHooks };
+}
+
+/** Remove owned command rows from every lifecycle event while preserving unrelated user hooks. */
+function removeManagedRowsFromSharedHooks(currentHooks, scriptNames) {
+  // An empty ownership list cannot identify anything setup is allowed to remove.
+  if (scriptNames.length === 0) return;
+
+  // Snapshot entries because an emptied event is removed while the user's config is traversed.
+  for (const [eventName, eventEntries] of Object.entries(currentHooks)) {
+    // A malformed or non-array user event remains untouched unless an enabled fragment replaces that event.
+    if (!Array.isArray(eventEntries)) continue;
+    const retainedEntries = eventEntries
+      .map((entry) => withoutManagedHookCommand(entry, scriptNames))
+      .filter((entry) => entry !== undefined);
+    // No retained rows means the lifecycle event has nothing left to show or run.
+    if (retainedEntries.length === 0) {
+      delete currentHooks[eventName];
+      continue;
+    }
+    // Changed nested rows replace only this event while all unrelated provider settings remain intact.
+    if (JSON.stringify(retainedEntries) !== JSON.stringify(eventEntries)) {
+      currentHooks[eventName] = retainedEntries;
+    }
+  }
+}
+
+/**
+ * Read the user's explicit hook toggle, with registry defaults used before config exists.
+ * The gruff-on-change alias keeps earlier user choices effective during migration.
+ */
+function configuredHookEnabled(hookId, defaultEnabled) {
+  let configValue;
+  try {
+    configValue = yaml.load(
+      fs.readFileSync(".goat-flow/config.yaml", "utf8"),
+    );
+  } catch {
+    // A missing or malformed config cannot override the registry's documented default.
+    return defaultEnabled === true;
+  }
+  if (!isObject(configValue) || !isObject(configValue.hooks)) {
+    return defaultEnabled === true;
+  }
+  const configuredHook =
+    configValue.hooks[hookId] ??
+    (hookId === "gruff-code-quality"
+      ? configValue.hooks["gruff-on-change"]
+      : undefined);
+  if (isObject(configuredHook) && typeof configuredHook.enabled === "boolean") {
+    return configuredHook.enabled;
+  }
+  return defaultEnabled === true;
+}
+
+const singleQuote = String.fromCharCode(39);
+
+/** Remove one YAML comment without treating quoted hash characters as comments. */
+function stripYamlComment(text) {
+  let inSingle = false;
+  let inDouble = false;
+  let escaped = false;
+  for (let index = 0; index < text.length; index += 1) {
+    const character = text[index];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (inDouble && character === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (!inDouble && character === singleQuote) {
+      if (inSingle && text[index + 1] === singleQuote) {
+        index += 1;
+        continue;
+      }
+      inSingle = !inSingle;
+      continue;
+    }
+    if (!inSingle && character === "\"") {
+      inDouble = !inDouble;
+      continue;
+    }
+    if (
+      !inSingle &&
+      !inDouble &&
+      character === "#" &&
+      (index === 0 || /\s/u.test(text[index - 1]))
+    ) {
+      return text.slice(0, index).trimEnd();
+    }
+  }
+  return text.trimEnd();
+}
+
+/** Parse one YAML string scalar accepted by the post-turn runtime parser. */
+function yamlStringScalar(rawValue) {
+  const value = stripYamlComment(rawValue).trim();
+  if (value.length === 0) return null;
+  if (value.startsWith(singleQuote) && value.endsWith(singleQuote)) {
+    return value.slice(1, -1).split(singleQuote + singleQuote).join(singleQuote);
+  }
+  if (value.startsWith("\"") && value.endsWith("\"")) {
+    try {
+      const decoded = JSON.parse(value);
+      return typeof decoded === "string" ? decoded : null;
+    } catch {
+      return null;
+    }
+  }
+  if (
+    /^(?:null|~|true|false)$/iu.test(value) ||
+    /^[-+]?\d+(?:\.\d+)?$/u.test(value)
+  ) {
+    return null;
+  }
+  return value;
+}
+
+/** Parse one inline YAML string list without accepting mappings or scalar coercion. */
+function yamlFlowStringList(rawValue) {
+  const value = stripYamlComment(rawValue).trim();
+  if (!value.startsWith("[") || !value.endsWith("]")) return null;
+  const body = value.slice(1, -1);
+  if (body.trim().length === 0) return [];
+  const rawItems = [];
+  let item = "";
+  let inSingle = false;
+  let inDouble = false;
+  let escaped = false;
+  for (let index = 0; index < body.length; index += 1) {
+    const character = body[index];
+    if (escaped) {
+      item += character;
+      escaped = false;
+      continue;
+    }
+    if (inDouble && character === "\\") {
+      item += character;
+      escaped = true;
+      continue;
+    }
+    if (!inDouble && character === singleQuote) {
+      item += character;
+      if (inSingle && body[index + 1] === singleQuote) {
+        item += body[index + 1];
+        index += 1;
+        continue;
+      }
+      inSingle = !inSingle;
+      continue;
+    }
+    if (!inSingle && character === "\"") {
+      item += character;
+      inDouble = !inDouble;
+      continue;
+    }
+    if (!inSingle && !inDouble && character === ",") {
+      rawItems.push(item);
+      item = "";
+      continue;
+    }
+    item += character;
+  }
+  if (inSingle || inDouble || escaped) return null;
+  rawItems.push(item);
+  const parsedItems = rawItems.map(yamlStringScalar);
+  return parsedItems.every((candidate) => typeof candidate === "string")
+    ? parsedItems
+    : null;
+}
+
+/** Count leading spaces and reject tab-indented config as ambiguous. */
+function lineIndent(line) {
+  if (line.includes("\t")) return -1;
+  return line.length - line.trimStart().length;
+}
+
+/** Read the explicit post-turn roots from the same YAML shapes the runtime accepts. */
+function configuredPostTurnScanRoots() {
+  let configText;
+  try {
+    configText = fs.readFileSync(".goat-flow/config.yaml", "utf8");
+  } catch {
+    return null;
+  }
+  const lines = configText.replace(/\r\n?/gu, "\n").split("\n");
+  const hooksIndex = lines.findIndex(
+    (line) =>
+      lineIndent(line) === 0 && stripYamlComment(line).trim() === "hooks:",
+  );
+  if (hooksIndex < 0) return null;
+  let hooksEnd = lines.length;
+  for (let index = hooksIndex + 1; index < lines.length; index += 1) {
+    const cleanLine = stripYamlComment(lines[index]);
+    if (cleanLine.trim().length > 0 && lineIndent(lines[index]) <= 0) {
+      hooksEnd = index;
+      break;
+    }
+  }
+  let hookIndex = -1;
+  let hookIndent = -1;
+  for (let index = hooksIndex + 1; index < hooksEnd; index += 1) {
+    const indent = lineIndent(lines[index]);
+    if (
+      indent > 0 &&
+      stripYamlComment(lines[index]).trim() === "post-turn-safety:"
+    ) {
+      hookIndex = index;
+      hookIndent = indent;
+      break;
+    }
+  }
+  if (hookIndex < 0) return null;
+  for (let index = hookIndex + 1; index < hooksEnd; index += 1) {
+    const cleanLine = stripYamlComment(lines[index]);
+    const trimmedLine = cleanLine.trim();
+    if (trimmedLine.length === 0) continue;
+    const indent = lineIndent(lines[index]);
+    if (indent <= hookIndent) break;
+    const fieldMatch = /^scan-roots:\s*(.*)$/u.exec(trimmedLine);
+    if (!fieldMatch) continue;
+    const inlineValue = fieldMatch[1].trim();
+    if (inlineValue.length > 0) return yamlFlowStringList(inlineValue);
+    const roots = [];
+    for (
+      let rootIndex = index + 1;
+      rootIndex < hooksEnd;
+      rootIndex += 1
+    ) {
+      const rootLine = stripYamlComment(lines[rootIndex]);
+      if (rootLine.trim().length === 0) continue;
+      if (lineIndent(lines[rootIndex]) <= indent) break;
+      const itemMatch = /^-\s+(.+)$/u.exec(rootLine.trim());
+      if (!itemMatch) return null;
+      const root = yamlStringScalar(itemMatch[1]);
+      if (root === null) return null;
+      roots.push(root);
+    }
+    return roots;
+  }
+  return null;
+}
+
+/** Resolve one existing directory physically, or return null on any lookup failure. */
+function physicalDirectory(directoryPath) {
+  try {
+    if (!fs.statSync(directoryPath).isDirectory()) return null;
+    return fs.realpathSync(directoryPath);
   } catch {
     return null;
   }
 }
 
-function entryReferencesManagedHook(value) {
-  return managedScripts.some((script) => JSON.stringify(value).includes(script));
-}
-
-function removeManagedHookEntries(currentHooks) {
-  let changed = false;
-  for (const [event, entries] of Object.entries(currentHooks)) {
-    if (!Array.isArray(entries)) continue;
-    const filtered = entries.filter((entry) => !entryReferencesManagedHook(entry));
-    if (filtered.length === 0) {
-      delete currentHooks[event];
-      changed = true;
-    } else if (JSON.stringify(entries) !== JSON.stringify(filtered)) {
-      currentHooks[event] = filtered;
-      changed = true;
-    }
-  }
-  return changed;
-}
-
-function appendTemplateEventEntries(currentHooks, templateHooks) {
-  let changed = false;
-  for (const [event, templateEntries] of Object.entries(templateHooks)) {
-    if (!Array.isArray(templateEntries)) continue;
-    const currentEntries = Array.isArray(currentHooks[event])
-      ? currentHooks[event]
-      : [];
-    const filtered = currentEntries.filter(
-      (entry) => !entryReferencesManagedHook(entry),
-    );
-    const nextEntries = [...filtered, ...templateEntries];
-    if (JSON.stringify(currentEntries) !== JSON.stringify(nextEntries)) {
-      currentHooks[event] = nextEntries;
-      changed = true;
-    }
-  }
-  return changed;
-}
-
-function configuredHookEnabled(hookId) {
-  const defaultEnabled = new Set(["deny-dangerous", "post-turn-safety"]);
-  let content = "";
-  try {
-    content = fs.readFileSync(".goat-flow/config.yaml", "utf8");
-  } catch {
-    return defaultEnabled.has(hookId);
-  }
-  let inHooks = false;
-  let currentHook = "";
-  for (const line of content.split(/\r?\n/u)) {
-    if (/^\S/u.test(line) && !/^hooks\s*:/u.test(line)) {
-      inHooks = false;
-      currentHook = "";
-    }
-    if (/^hooks\s*:/u.test(line)) {
-      inHooks = true;
-      continue;
-    }
-    if (!inHooks) continue;
-    const hookMatch = line.match(/^  ([A-Za-z0-9_-]+):\s*$/u);
-    if (hookMatch) {
-      currentHook = hookMatch[1];
-      continue;
-    }
-    if (currentHook === hookId || (hookId === "gruff-code-quality" && currentHook === "gruff-on-change")) {
-      const enabledMatch = line.match(/^    enabled:\s*(true|false)\s*$/u);
-      if (enabledMatch) return enabledMatch[1] === "true";
-    }
-  }
-  return defaultEnabled.has(hookId);
-}
-
-/**
- * Choose the unavailable-hook response understood by the user's agent host.
- * Use while writing config so a launcher failure cannot masquerade as success.
- *
- * @param {string} hookResponseMode - Agent protocol; empty or unknown fails closed.
- * @returns {string} Node response source; never empty because every hook needs an outcome.
- */
-function unavailableHookResponseProgram(hookResponseMode) {
-  const responseModeParts = hookResponseMode.split(":");
-  const hasNamespacedMode = responseModeParts.length === 6;
-  const providerIdentifier = hasNamespacedMode ? responseModeParts[0] : hookResponseMode;
-  const responseKind = hasNamespacedMode ? responseModeParts[1] : hookResponseMode;
-  // Optional Gruff feedback fails soft so a missing analyzer shell never blocks the user's edit.
-  if (responseKind === "gruff") {
-    return "const reportUnavailable=(reason)=>{process.stderr.write('gruff-code-quality: hook unavailable: '+reason+'; skipped.'+lineBreak);process.exit(0);};";
-  }
-  // Post-turn safety cannot claim a completed scan when its launcher never started.
-  if (responseKind === "post-turn") {
-    return "const reportUnavailable=(reason)=>{process.stderr.write('post-turn-safety: hook unavailable: '+reason+'.'+lineBreak);process.exit(2);};";
-  }
-  // Antigravity expects a deny decision on stdout and treats the host response as handled.
-  if (providerIdentifier === "antigravity") {
-    return "const reportUnavailable=(reason)=>{process.stdout.write(JSON.stringify({decision:'deny',reason:'Policy hook unavailable: '+reason+'.'})+lineBreak);process.exit(0);};";
-  }
-  // Copilot expects its own permission-decision fields when the policy hook cannot start.
-  if (providerIdentifier === "copilot") {
-    return "const reportUnavailable=(reason)=>{process.stdout.write(JSON.stringify({permissionDecision:'deny',permissionDecisionReason:'Policy hook unavailable: '+reason+'.'})+lineBreak);process.exit(0);};";
-  }
-  // Safety hooks default to a visible fail-closed response instead of allowing an unchecked command.
-  return "const reportUnavailable=(reason)=>{process.stderr.write('BLOCKED: Policy hook unavailable: '+reason+'.'+lineBreak);process.exit(2);};";
-}
-
-/**
- * Build shell-neutral Node source that finds the user's project and Bash launcher.
- * Use in generated config so PowerShell, cmd, and POSIX shells share one path.
- *
- * @param {string} hookResponseMode - Agent response protocol; empty uses fail-closed policy behavior.
- * @returns {string} Portable `node -e` source; never empty for an enabled hook.
- */
-function hookLaunchBootstrap(hookResponseMode) {
-  const unavailableResponseProgram = unavailableHookResponseProgram(hookResponseMode);
-  return [
-    "const childProcess=require('node:child_process');",
-    "const filesystem=require('node:fs');",
-    "const path=require('node:path');",
-    "const hookScriptPath=process.argv[1];",
-    "const responseMode=process.argv[2];",
-    "const rootEnvironmentName=process.argv[3];",
-    "const registrationPath=process.argv[4];",
-    "const bashLauncherRelativePath=process.argv[5];",
-    "const lineBreak=String.fromCharCode(10);",
-    unavailableResponseProgram,
-    "const isPlainObject=(value)=>value!==null&&typeof value==='object'&&!Array.isArray(value);",
-    "const normalizeOperand=(value)=>path.normalize(value).replaceAll('\\\\','/').replace(/^\\.\\//u,'');",
-    "const commandOperands=(command)=>{const tokens=command.match(/\"(?:\\\\.|[^\"\\\\])*\"|'[^']*'|\\S+/gu)||[];return tokens.map((token)=>{if(token.startsWith('\"')){try{return JSON.parse(token);}catch{return '';}}if(token.startsWith(\"'\"))return token.slice(1,-1);return token;});};",
-    "const commandNamesOperands=(command)=>{const normalized=commandOperands(command).map(normalizeOperand);return normalized.includes(normalizeOperand(hookScriptPath))&&normalized.includes(normalizeOperand(bashLauncherRelativePath));};",
-    "const registrationNamesOperands=(value)=>{if(Array.isArray(value))return value.some(registrationNamesOperands);if(!isPlainObject(value))return false;for(const [key,nested] of Object.entries(value)){if((key==='command'||key==='bash'||key==='powershell')&&typeof nested==='string'&&commandNamesOperands(nested))return true;if((Array.isArray(nested)||isPlainObject(nested))&&registrationNamesOperands(nested))return true;}return false;};",
-    "const realDirectory=(candidate)=>{try{const absolute=path.resolve(candidate);const entry=filesystem.lstatSync(absolute);if(entry.isSymbolicLink()||!entry.isDirectory())return '';const real=filesystem.realpathSync(absolute);return filesystem.lstatSync(real).isDirectory()?real:'';}catch{return '';}};",
-    "const containedRelativePath=(relativePath)=>{if(!relativePath||path.isAbsolute(relativePath))return '';const normalized=path.normalize(relativePath);return normalized==='..'||normalized.startsWith('..'+path.sep)?'':normalized;};",
-    "const managedEntryExists=(root,relativePath)=>{const normalized=containedRelativePath(relativePath);if(!normalized)return false;try{filesystem.lstatSync(path.join(root,normalized));return true;}catch{return false;}};",
-    "const managedRegularFile=(root,relativePath)=>{const normalized=containedRelativePath(relativePath);if(!normalized)return '';const parts=normalized.split(path.sep).filter(Boolean);let current=root;try{for(let index=0;index<parts.length;index+=1){current=path.join(current,parts[index]);const entry=filesystem.lstatSync(current);if(entry.isSymbolicLink())return '';if(index<parts.length-1&&!entry.isDirectory())return '';if(index===parts.length-1&&(!entry.isFile()||entry.nlink!==1))return '';}const real=filesystem.realpathSync(current);const relative=path.relative(root,real);if(relative==='..'||relative.startsWith('..'+path.sep)||path.isAbsolute(relative))return '';return real;}catch{return '';}};",
-    "const inspectCandidate=(candidate)=>{const root=realDirectory(candidate);if(!root)return {state:'none',root:''};const scriptSeen=managedEntryExists(root,hookScriptPath);const registration=managedRegularFile(root,registrationPath);let registered=false;if(registration){try{const parsed=JSON.parse(filesystem.readFileSync(registration,'utf8'));registered=isPlainObject(parsed)&&registrationNamesOperands(parsed);}catch{registered=false;}}const relevant=scriptSeen||registered;if(!relevant)return {state:'none',root};const launcher=managedRegularFile(root,bashLauncherRelativePath);const script=managedRegularFile(root,hookScriptPath);return registered&&launcher&&script?{state:'complete',root}:{state:'corrupt',root};};",
-    "const visited=new Set();",
-    "const inspectOnce=(candidate)=>{const root=realDirectory(candidate);if(!root||visited.has(root))return {state:'none',root};visited.add(root);return inspectCandidate(root);};",
-    "const gitRootLookup=childProcess.spawnSync('git',['rev-parse','--show-toplevel'],{encoding:'utf8'});",
-    "let selected={state:'none',root:''};",
-    "if(gitRootLookup.status===0&&gitRootLookup.stdout.trim()){selected=inspectOnce(gitRootLookup.stdout.trim());if(selected.state==='corrupt')reportUnavailable('managed root incomplete');}",
-    "let ancestor=realDirectory(process.cwd());",
-    "while(selected.state!=='complete'&&ancestor){const inspected=inspectOnce(ancestor);if(inspected.state==='corrupt')reportUnavailable('managed root incomplete');if(inspected.state==='complete'){selected=inspected;break;}const parent=path.dirname(ancestor);if(parent===ancestor)break;ancestor=parent;}",
-    "if(selected.state!=='complete'&&rootEnvironmentName!=='-'&&process.env[rootEnvironmentName]){const inspected=inspectOnce(process.env[rootEnvironmentName]);if(inspected.state==='corrupt')reportUnavailable('managed root incomplete');if(inspected.state==='complete')selected=inspected;}",
-    "if(selected.state!=='complete')reportUnavailable('managed root unavailable');",
-    "const projectRoot=selected.root;",
-    "const bashLauncherPath=path.join(projectRoot,containedRelativePath(bashLauncherRelativePath));",
-    "const hookResult=childProcess.spawnSync(process.execPath,[bashLauncherPath,hookScriptPath,responseMode],{cwd:projectRoot,stdio:'inherit'});",
-    "/* A startup error or absent status means the user's hook never produced a trustworthy result. */",
-    "if(hookResult.error||!Number.isInteger(hookResult.status))reportUnavailable('managed launcher could not start');",
-    "process.exit(hookResult.status);",
-  ].join("");
-}
-
-/**
- * Select the response protocol the user's agent understands for one hook.
- * Use while writing config; unknown combinations use fail-closed policy behavior.
- *
- * @param {string} hookScriptName - Hook being registered; empty falls back to policy behavior.
- * @returns {string} Response mode consumed by the launcher; never empty.
- */
-function hookLaunchMode(hookScriptName) {
-  // Gruff is optional feedback, so unavailable execution is shown as a non-blocking skip.
-  if (hookScriptName === "gruff-code-quality.sh") {
-    return `${agent}:gruff:goat-flow.hook-result.v1:post-tool:1:75000`;
-  }
-  // Post-turn safety returns a failed scan rather than an agent permission payload.
-  if (hookScriptName === "post-turn-safety.sh") {
-    // Codex receives the neutral Stop result proven through its trusted project layer.
-    if (agent === "codex") {
-      return "codex:post-turn:goat-flow.hook-result.v1:turn-stop:1:75000";
-    }
-    return "post-turn";
-  }
-  // Antigravity requires its decision JSON shape for command admission.
-  if (agent === "antigravity") return "antigravity";
-  // Copilot requires permission-decision fields in its pre-tool response.
-  if (agent === "copilot") return "copilot";
-  // Claude and Codex consume the standard fail-closed policy exit.
-  return "policy";
-}
-
-/**
- * Build the portable hook command written into the user's selected agent config.
- * Use for every managed hook so config never relies on bare `bash` resolution.
- *
- * @param {string} hookScriptName - Managed script to launch; empty would create an invalid path.
- * @returns {string} Shell-neutral Node command; never empty for an enabled hook.
- */
-function rootResolvingCommand(hookScriptName) {
-  // Codex can use managed ancestors but has no supported final host-root environment fallback.
-  const rootEnvironmentName = agent === "codex" ? "-" : "CLAUDE_PROJECT_DIR";
-  const hookResponseMode = hookLaunchMode(hookScriptName);
-  const registrationPath = {
-    claude: ".claude/settings.json",
-    codex: ".codex/hooks.json",
-    antigravity: ".agents/hooks.json",
-    copilot: ".github/hooks/hooks.json",
-  }[agent];
-  const bashLauncherPath = ".goat-flow/hooks/run-with-bash.mjs";
-  return [
-    "node",
-    "-e",
-    JSON.stringify(hookLaunchBootstrap(hookResponseMode)),
-    JSON.stringify(`.goat-flow/hooks/${hookScriptName}`),
-    JSON.stringify(hookResponseMode),
-    JSON.stringify(rootEnvironmentName),
-    JSON.stringify(registrationPath),
-    JSON.stringify(bashLauncherPath),
-  ].join(" ");
-}
-
-/**
- * Build optional Gruff entries in the selected agent's public config shape.
- * Use only when the user enables edit-time quality feedback.
- *
- * @returns {object[]} Agent-specific entries; never empty for a supported agent.
- */
-function gruffHookEntries() {
-  const hookScriptName = "gruff-code-quality.sh";
-  // Codex receives the exact edit tool and host deadline observed by the live provider canary.
-  if (agent === "codex") {
-    return ["^apply_patch$"].map((matcher) => ({
-      matcher,
-      hooks: [
-        {
-          type: "command",
-          command: rootResolvingCommand(hookScriptName),
-          timeout: 90,
-          statusMessage: "gruff code quality",
-        },
-      ],
-    }));
-  }
-  // Copilot requires one command for Bash and PowerShell plus its timeout field name.
-  if (agent === "copilot") {
-    const crossPlatformCommand = rootResolvingCommand(hookScriptName);
-    return [
-      {
-        type: "command",
-        bash: crossPlatformCommand,
-        powershell: crossPlatformCommand,
-        timeoutSec: 90,
-      },
-    ];
-  }
-  return ["Edit", "Write", "Bash"].map((matcher) => ({
-    matcher,
-    hooks: [{ type: "command", command: rootResolvingCommand(hookScriptName), timeout: 90 }],
-  }));
-}
-
-/** Add enabled Gruff feedback only where the selected provider can deliver it to the user. */
-function appendGruffHookEntries(currentHooks) {
-  // Antigravity remains disabled because its PostToolUse result cannot reach the active model.
-  if (agent === "antigravity" || !configuredHookEnabled("gruff-code-quality")) return false;
-  const event = agent === "copilot" ? "postToolUse" : "PostToolUse";
-  const currentEntries = Array.isArray(currentHooks[event]) ? currentHooks[event] : [];
-  const nextEntries = [...currentEntries, ...gruffHookEntries()];
-  if (JSON.stringify(currentEntries) === JSON.stringify(nextEntries)) return false;
-  currentHooks[event] = nextEntries;
-  return true;
-}
-
-/** Build the Stop registration users receive when setup enables safety scanning. */
-function postTurnSafetyHookEntries() {
-  const hookScriptName = "post-turn-safety.sh";
-  // Codex uses the approved status label and 90-second host deadline around the 75-second launcher.
-  if (agent === "codex") {
-    return [
-      {
-        hooks: [
-          {
-            type: "command",
-            command: rootResolvingCommand(hookScriptName),
-            timeout: 90,
-            statusMessage: "Post-turn safety guard",
-          },
-        ],
-      },
-    ];
-  }
-  return [
+/** Read one bounded physical Git top level without mutating the target. */
+function gitTopLevel(directoryPath) {
+  const result = childProcess.spawnSync(
+    "git",
+    ["-C", directoryPath, "rev-parse", "--show-toplevel"],
     {
-      hooks: [
-        {
-          type: "command",
-          command: rootResolvingCommand(hookScriptName),
-          timeout: 90,
-        },
-      ],
+      encoding: "utf8",
+      shell: false,
+      timeout: 5000,
+      maxBuffer: 16384,
+      windowsHide: true,
     },
+  );
+  if (
+    result.error ||
+    result.status !== 0 ||
+    typeof result.stdout !== "string" ||
+    result.stdout.trim().length === 0
+  ) {
+    return null;
+  }
+  return physicalDirectory(result.stdout.trim());
+}
+
+/** Return whether a relative-path result escapes the root it was measured from. */
+function relativePathEscapesRoot(relativePath) {
+  return (
+    relativePath === ".." ||
+    relativePath.startsWith("../") ||
+    relativePath.startsWith("..\\") ||
+    pathModule.isAbsolute(relativePath)
+  );
+}
+
+/** Read one directory's device and inode/file ID, or null when the host cannot prove identity. */
+function filesystemDirectoryIdentity(directoryPath) {
+  try {
+    const stats = fs.statSync(directoryPath, { bigint: true });
+    if (!stats.isDirectory() || stats.ino === 0n) return null;
+    return { device: stats.dev, inode: stats.ino };
+  } catch {
+    return null;
+  }
+}
+
+/** Compare physical spellings first, then exact identity for aliases such as Windows short paths. */
+function filesystemPathsAreEquivalent(leftDirectory, rightDirectory) {
+  if (!leftDirectory || !rightDirectory) return false;
+  const spellingsMatch =
+    pathModule.relative(leftDirectory, rightDirectory) === "" &&
+    pathModule.relative(rightDirectory, leftDirectory) === "";
+  if (spellingsMatch) return true;
+
+  const leftIdentity = filesystemDirectoryIdentity(leftDirectory);
+  const rightIdentity = filesystemDirectoryIdentity(rightDirectory);
+  return (
+    leftIdentity !== null &&
+    rightIdentity !== null &&
+    leftIdentity.device === rightIdentity.device &&
+    leftIdentity.inode === rightIdentity.inode
+  );
+}
+
+/** Validate one configured root against lexical, physical, and exact Git ownership. */
+function isContainedGitScanRoot(projectRoot, configuredRoot) {
+  if (
+    typeof configuredRoot !== "string" ||
+    configuredRoot.length === 0 ||
+    pathModule.isAbsolute(configuredRoot) ||
+    /^[A-Za-z]:[\\/]/u.test(configuredRoot) ||
+    /^\\\\/u.test(configuredRoot)
+  ) {
+    return false;
+  }
+  const lexicalCandidate = pathModule.resolve(projectRoot, configuredRoot);
+  const lexicalRelative = pathModule.relative(projectRoot, lexicalCandidate);
+  if (relativePathEscapesRoot(lexicalRelative)) return false;
+  const physicalCandidate = physicalDirectory(lexicalCandidate);
+  if (physicalCandidate === null) return false;
+  const physicalRelative = pathModule.relative(projectRoot, physicalCandidate);
+  if (relativePathEscapesRoot(physicalRelative)) return false;
+  return filesystemPathsAreEquivalent(
+    gitTopLevel(physicalCandidate),
+    physicalCandidate,
+  );
+}
+
+/** Apply the registrar's implicit-Git or all-explicit-roots registration contract. */
+function postTurnRootContractAllowsRegistration() {
+  const projectRoot = physicalDirectory(process.cwd());
+  if (projectRoot === null) return false;
+  if (filesystemPathsAreEquivalent(gitTopLevel(projectRoot), projectRoot)) {
+    return true;
+  }
+  const configuredRoots = configuredPostTurnScanRoots();
+  return (
+    Array.isArray(configuredRoots) &&
+    configuredRoots.length > 0 &&
+    configuredRoots.every((configuredRoot) =>
+      isContainedGitScanRoot(projectRoot, configuredRoot),
+    )
+  );
+}
+
+/** Combine the user's toggle with any hook-specific registration prerequisite. */
+function shouldRegisterManagedHook(hookId, hookContract) {
+  if (!configuredHookEnabled(hookId, hookContract.defaultEnabled)) return false;
+  if (hookId !== "post-turn-safety") return true;
+  return postTurnRootContractAllowsRegistration();
+}
+
+/** Validate the generated package contract before it can influence a user's config. */
+function readDesiredStateContract(path) {
+  const contract = readJsonObject(path);
+  // Missing, invalid, or stale-schema package data cannot safely define provider registrations.
+  if (
+    !contract ||
+    contract.schema !== CONTRACT_SCHEMA ||
+    !isObject(contract.agents) ||
+    !Array.isArray(contract.retiredHookIds) ||
+    !Array.isArray(contract.retiredHookScriptNames)
+  ) {
+    throw new Error("managed hook desired-state contract is invalid");
+  }
+  return contract;
+}
+
+/** Return validated hook rows for the selected provider, rejecting incomplete generated state. */
+function managedHookEntries(agentContract) {
+  const hookEntries = Object.entries(agentContract.hooks);
+  // Every generated hook row declares support and cleanup ownership before optional enabled state.
+  for (const [hookId, hookContract] of hookEntries) {
+    const cleanup = isObject(hookContract) ? hookContract.cleanup : null;
+    if (
+      !hookId ||
+      !isObject(hookContract) ||
+      typeof hookContract.supported !== "boolean" ||
+      !isObject(cleanup) ||
+      !Array.isArray(cleanup.hookIds) ||
+      !Array.isArray(cleanup.commandScriptNames)
+    ) {
+      throw new Error(
+        "managed hook desired-state contract has an invalid hook row",
+      );
+    }
+    // Unsupported rows carry cleanup only, preventing this provider from receiving unusable config.
+    if (!hookContract.supported) continue;
+    if (
+      typeof hookContract.defaultEnabled !== "boolean" ||
+      !Array.isArray(hookContract.commandScriptNames) ||
+      !Array.isArray(hookContract.managedScriptFiles) ||
+      !Array.isArray(hookContract.registrationTargets) ||
+      !isObject(hookContract.config)
+    ) {
+      throw new Error(
+        "managed hook desired-state contract has an invalid hook row",
+      );
+    }
+  }
+  return hookEntries;
+}
+
+/**
+ * Append one enabled shared-provider fragment after all owned rows have been removed.
+ * Non-hook metadata is repaired only when its type is invalid, preserving valid user values.
+ */
+function appendSharedHookFragment(currentConfig, hookConfigFragment) {
+  // A missing, null, or malformed hooks value cannot contain the lifecycle rows the user enabled.
+  if (!isObject(currentConfig.hooks)) currentConfig.hooks = {};
+  // A generated shared-provider fragment always carries its registrations under hooks.
+  if (!isObject(hookConfigFragment.hooks)) {
+    throw new Error("managed hook config fragment has no hooks object");
+  }
+
+  // Each generated lifecycle array is already the exact provider shape produced by the TypeScript writer.
+  for (const [eventName, managedEntries] of Object.entries(
+    hookConfigFragment.hooks,
+  )) {
+    // A malformed artifact event cannot safely become executable user configuration.
+    if (!Array.isArray(managedEntries)) {
+      throw new Error("managed hook config fragment has an invalid event");
+    }
+    const currentEntries = Array.isArray(currentConfig.hooks[eventName])
+      ? currentConfig.hooks[eventName]
+      : [];
+    currentConfig.hooks[eventName] = [...currentEntries, ...managedEntries];
+  }
+
+  // Provider metadata such as Copilot's numeric version is seeded without replacing a valid user-selected value.
+  for (const [propertyName, propertyValue] of Object.entries(
+    hookConfigFragment,
+  )) {
+    // Hook rows were merged above so user-owned rows remain present.
+    if (propertyName === "hooks") continue;
+    // A missing or malformed metadata value receives the generated value; a valid same-type value remains user-owned.
+    if (typeof currentConfig[propertyName] !== typeof propertyValue) {
+      currentConfig[propertyName] = propertyValue;
+    }
+  }
+}
+
+const desiredStateContract = readDesiredStateContract(
+  desiredStateContractPath,
+);
+const agentContract = desiredStateContract.agents[agentId];
+// An unknown or incomplete provider contract would otherwise leave the selected user's setup half-migrated.
+if (!isObject(agentContract) || !isObject(agentContract.hooks)) {
+  throw new Error(
+    "managed hook desired-state contract has no selected agent",
+  );
+}
+const hookEntries = managedHookEntries(agentContract);
+const supportedHookEntries = hookEntries.filter(
+  ([, hookContract]) => hookContract.supported,
+);
+const currentConfig = readJsonObject(userHookConfigPath);
+// Invalid user JSON remains untouched so setup never replaces settings the user needs to repair.
+if (!currentConfig) {
+  console.log("unchanged");
+  process.exit(0);
+}
+const originalConfig = JSON.stringify(currentConfig);
+
+// Antigravity stores managed hook definitions as top-level ids instead of shared lifecycle arrays.
+if (agentId === "antigravity") {
+  const managedHookIds = new Set([
+    ...hookEntries.flatMap(([, hookContract]) => hookContract.cleanup.hookIds),
+    ...desiredStateContract.retiredHookIds,
+  ]);
+  const managedScriptNames = [
+    ...new Set(
+      hookEntries.flatMap(
+        ([, hookContract]) => hookContract.cleanup.commandScriptNames,
+      ),
+    ),
   ];
+  // Exact command ownership removes renamed definitions as well as canonical current and retired ids.
+  for (const [definitionId, definition] of Object.entries(currentConfig)) {
+    if (
+      managedHookIds.has(definitionId) ||
+      valueReferencesManagedScript(definition, managedScriptNames)
+    ) {
+      delete currentConfig[definitionId];
+    }
+  }
+  // Enabled provider fragments restore exactly one current definition after stale ids are removed.
+  for (const [hookId, hookContract] of supportedHookEntries) {
+    // A disabled user choice leaves the current files installed but no runnable registration.
+    if (!shouldRegisterManagedHook(hookId, hookContract)) continue;
+    Object.assign(currentConfig, hookContract.config);
+  }
+} else {
+  // A missing, null, or malformed hooks container becomes the safe shared surface used by enabled fragments.
+  if (!isObject(currentConfig.hooks)) currentConfig.hooks = {};
+  removeManagedRowsFromSharedHooks(
+    currentConfig.hooks,
+    desiredStateContract.retiredHookScriptNames,
+  );
+  // Every supported current hook is removed from all events before its user-selected state is rebuilt.
+  for (const [, hookContract] of hookEntries) {
+    removeManagedRowsFromSharedHooks(
+      currentConfig.hooks,
+      hookContract.cleanup.commandScriptNames,
+    );
+  }
+  // Enabled hooks append one generated provider fragment; disabled hooks remain installed but inert.
+  for (const [hookId, hookContract] of supportedHookEntries) {
+    // The config toggle is the user's authority over whether their agent runs this hook.
+    if (!shouldRegisterManagedHook(hookId, hookContract)) continue;
+    appendSharedHookFragment(currentConfig, hookContract.config);
+  }
 }
 
-/** Add the default Stop guard only where the selected provider has an approved registration. */
-function appendPostTurnSafetyEntries(currentHooks) {
-  // Copilot and Antigravity remain disabled because their Stop delivery lacks approved proof.
-  if (agent === "copilot" || agent === "antigravity" || !configuredHookEnabled("post-turn-safety")) return false;
-  const currentEntries = Array.isArray(currentHooks.Stop) ? currentHooks.Stop : [];
-  const nextEntries = [...currentEntries, ...postTurnSafetyHookEntries()];
-  if (JSON.stringify(currentEntries) === JSON.stringify(nextEntries)) return false;
-  currentHooks.Stop = nextEntries;
-  return true;
-}
-
-const current = readJson(dst);
-const template = readJson(src);
-if (!current || !template) {
+const nextConfig = JSON.stringify(currentConfig);
+// Identical desired state avoids rewriting a settings file the user did not change.
+if (nextConfig === originalConfig) {
   console.log("unchanged");
   process.exit(0);
 }
 
-let changed = false;
-if (agent === "antigravity") {
-  for (const hookId of managedHookIds) {
-    if (
-      hookId !== "deny-dangerous" &&
-      Object.prototype.hasOwnProperty.call(current, hookId)
-    ) {
-      delete current[hookId];
-      changed = true;
-    }
-  }
-  if (isObject(template["deny-dangerous"])) {
-    if (
-      JSON.stringify(current["deny-dangerous"]) !==
-      JSON.stringify(template["deny-dangerous"])
-    ) {
-      current["deny-dangerous"] = template["deny-dangerous"];
-      changed = true;
-    }
-  }
-  // Antigravity receives policy hooks only because its post-tool channel cannot return feedback.
-} else if (isObject(template.hooks)) {
-  if (!isObject(current.hooks)) {
-    current.hooks = {};
-    changed = true;
-  }
-  changed = removeManagedHookEntries(current.hooks) || changed;
-  changed = appendTemplateEventEntries(current.hooks, template.hooks) || changed;
-  changed = appendGruffHookEntries(current.hooks) || changed;
-  changed = appendPostTurnSafetyEntries(current.hooks) || changed;
-}
-
-if (changed) {
-  fs.writeFileSync(dst, `${JSON.stringify(current, null, 2)}\n`);
-  console.log("changed");
-} else {
-  console.log("unchanged");
-}
+fs.writeFileSync(userHookConfigPath, JSON.stringify(currentConfig, null, 2) + "\n");
+console.log("changed");
 NODE
   )"; then
-    echo "ERROR: could not stage hook registration migration for '$dst'; previous destination was preserved" >&2
+    echo "ERROR: could not stage hook registration migration for '$user_hook_config_path'; previous destination was preserved" >&2
     discard_staged_payload
     return 1
   fi
-  complete_staged_transform "$dst" "$transform_result"
+  complete_staged_transform "$user_hook_config_path" "$transform_result"
 }
 
 migrate_codex_hooks_feature_flag() {
@@ -2368,12 +2769,16 @@ copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/browser-use.md" ".goat-flow
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/code-comments.md" ".goat-flow/skill-docs/playbooks/code-comments.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/gruff-code-quality.md" ".goat-flow/skill-docs/playbooks/gruff-code-quality.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/hook-policy-testing.md" ".goat-flow/skill-docs/playbooks/hook-policy-testing.md"
+copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/naming-and-placement.md" ".goat-flow/skill-docs/playbooks/naming-and-placement.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/observability.md" ".goat-flow/skill-docs/playbooks/observability.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/changelog.md" ".goat-flow/skill-docs/playbooks/changelog.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/page-capture.md" ".goat-flow/skill-docs/playbooks/page-capture.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/release-notes.md" ".goat-flow/skill-docs/playbooks/release-notes.md"
-copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/writing-style.md" ".goat-flow/skill-docs/playbooks/writing-style.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/skill-playbook-authoring-sync.md" ".goat-flow/skill-docs/playbooks/skill-playbook-authoring-sync.md"
+copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/test-selection.md" ".goat-flow/skill-docs/playbooks/test-selection.md"
+copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/writing-sentence-diagnostics.md" ".goat-flow/skill-docs/playbooks/writing-sentence-diagnostics.md"
+copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/writing-structure-diagnostics.md" ".goat-flow/skill-docs/playbooks/writing-structure-diagnostics.md"
+copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/writing-style.md" ".goat-flow/skill-docs/playbooks/writing-style.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/skill-quality-testing.md" ".goat-flow/skill-docs/skill-quality-testing/README.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/skill-quality-testing/tdd-iteration.md" ".goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/skill-quality-testing/adversarial-framing.md" ".goat-flow/skill-docs/skill-quality-testing/adversarial-framing.md"
@@ -2401,9 +2806,9 @@ done
 echo ""
 
 # ==========================================================================
-# 6b. Remove deprecated skills (only with --clean-deprecated or --force)
+# 6b. Remove deprecated skills (only with --clean-deprecated)
 # ==========================================================================
-if $CLEAN_DEPRECATED || $FORCE; then
+if $CLEAN_DEPRECATED; then
   readarray -t STALE_NAMES < <(manifest_eval stale-skills)
   if [[ ${#STALE_NAMES[@]} -gt 0 ]]; then
     DEPRECATED_REMOVED=0
@@ -2426,7 +2831,73 @@ if $CLEAN_DEPRECATED || $FORCE; then
 fi
 
 # ==========================================================================
-# 7. Install hooks (always overwrite - verbatim copy)
+# 7. Scaffold or migrate config.yaml before hook registration reads it
+# ==========================================================================
+echo "Config:"
+CONFIG_PATH=".goat-flow/config.yaml"
+assert_file_ownership "$CONFIG_PATH" "user-owned"
+
+# Existing config keeps user-selected hooks and skills while narrow migrations repair retired shapes.
+if [[ -f "$CONFIG_PATH" ]]; then
+  CONFIG_CHANGED=false
+  CONFIG_NOTES=()
+  if $UPDATE_CONFIG_VERSION; then
+    if grep -q "^version:" "$CONFIG_PATH"; then
+      update_config_version_line "$CONFIG_PATH"
+      CONFIG_CHANGED=true
+      CONFIG_NOTES+=("version updated to $VERSION")
+    else
+      stage_existing_destination "$CONFIG_PATH"
+      printf 'version: "%s"\n' "$VERSION" >> "$STAGED_PAYLOAD_PATH"
+      commit_staged_payload "$CONFIG_PATH" "replace"
+      CONFIG_CHANGED=true
+      CONFIG_NOTES+=("version field added: $VERSION")
+    fi
+  fi
+  remove_config_agents_entry "$CONFIG_PATH"
+  # A changed result removes a legacy agent allowlist that no longer controls setup.
+  if [[ "$LAST_TRANSFORM_RESULT" == "changed" ]]; then
+    CONFIG_CHANGED=true
+    CONFIG_NOTES+=("legacy agents allowlist removed")
+  fi
+  migrate_config_tasks_entry "$CONFIG_PATH"
+  # A changed result points planning workflows at the current local-state directory.
+  if [[ "$LAST_TRANSFORM_RESULT" == "changed" ]]; then
+    CONFIG_CHANGED=true
+    CONFIG_NOTES+=("legacy tasks config migrated to plans")
+  fi
+  ensure_config_hooks_entry "$CONFIG_PATH"
+  # A changed result gives users explicit controls for each shipped hook.
+  if [[ "$LAST_TRANSFORM_RESULT" == "changed" ]]; then
+    CONFIG_CHANGED=true
+    CONFIG_NOTES+=("hook toggles added")
+  fi
+  remove_config_plan_guard_entry "$CONFIG_PATH"
+  # A changed result removes configuration for the retired plan guard.
+  if [[ "$LAST_TRANSFORM_RESULT" == "changed" ]]; then
+    CONFIG_CHANGED=true
+    CONFIG_NOTES+=("removed retired plan guard config")
+  fi
+  if $CONFIG_CHANGED; then
+    COPIED=$((COPIED + 1))
+    note_text="$(IFS=', '; echo "${CONFIG_NOTES[*]}")"
+    echo "  ✓ $CONFIG_PATH ($note_text)"
+  else
+    SKIPPED=$((SKIPPED + 1))
+    echo "  · $CONFIG_PATH (exists, no config changes)"
+  fi
+else
+  prepare_staged_payload "$CONFIG_PATH"
+  printf 'version: "%s"\n\nskills:\n  install: all\n\nhooks:\n  deny-dangerous:\n    enabled: true\n  post-turn-safety:\n    enabled: true\n  gruff-code-quality:\n    enabled: false\n' "$VERSION" > "$STAGED_PAYLOAD_PATH"
+  # A first install may scaffold config, but a concurrent or existing user file wins.
+  commit_staged_payload "$CONFIG_PATH" "create-only"
+  COPIED=$((COPIED + 1))
+  echo "  ✓ $CONFIG_PATH (scaffolded)"
+fi
+echo ""
+
+# ==========================================================================
+# 8. Install hooks (always overwrite - verbatim copy)
 # ==========================================================================
 if $HOOKS_ENABLED; then
   echo "Hooks → $HOOKS_DIR/:"
@@ -2453,7 +2924,7 @@ if $HOOKS_ENABLED; then
     COPIED=$((COPIED + 1))
     echo "  ✓ .goat-flow/.gitignore (hooks/ un-ignored)"
   fi
-  ensure_gitignore_entry ".goat-flow/.gitignore" "!hooks/**"
+  ensure_gitignore_entry ".goat-flow/.gitignore" "!**/hooks/**"
   # A changed result makes each shipped hook file visible to version control.
   if [[ "$LAST_TRANSFORM_RESULT" == "changed" ]]; then
     COPIED=$((COPIED + 1))
@@ -2462,7 +2933,7 @@ if $HOOKS_ENABLED; then
   if [[ -n "${HOOK_CONFIG_DST:-}" && -n "${HOOK_CONFIG_SRC:-}" ]]; then
     echo "Hooks config:"
     copy_if_missing "$GOAT_FLOW_ROOT/$HOOK_CONFIG_SRC" "$HOOK_CONFIG_DST"
-    migrate_agent_hook_config "$HOOK_CONFIG_DST" "$HOOK_CONFIG_SRC"
+    migrate_agent_hook_config "$HOOK_CONFIG_DST"
     # A changed registration makes the central guardrail active for the selected agent.
     if [[ "$LAST_TRANSFORM_RESULT" == "changed" ]]; then
       COPIED=$((COPIED + 1))
@@ -2476,12 +2947,13 @@ fi
 echo ""
 
 # ==========================================================================
-# 8. Install agent settings (skip if exists, unless --force)
+# 9. Install or safely migrate agent settings without replacing user choices
 # ==========================================================================
 echo "Settings:"
 SETTINGS_SKIPPED=false
 if [[ -n "${SETTINGS_SRC:-}" && -n "${SETTINGS_DST:-}" ]]; then
-  if [[ -f "$SETTINGS_DST" ]] && ! $FORCE; then
+  # Existing settings receive narrow migrations; a managed force refresh cannot replace the user's permissions or comments.
+  if [[ -f "$SETTINGS_DST" ]]; then
     SETTINGS_MIGRATIONS=()
     if [[ "$AGENT" == "codex" ]]; then
       migrate_codex_hooks_feature_flag "$SETTINGS_DST"
@@ -2534,91 +3006,20 @@ if [[ "$AGENT" == "codex" && -n "${SETTINGS_DST:-}" && -f "$SETTINGS_DST" ]]; th
     echo ""
     echo "ERROR: $SETTINGS_DST still has invalid Codex permission entries:" >&2
     echo "  ${CODEX_VALIDATION#invalid:}" >&2
-    echo "Codex will reject this config at startup. Re-run with --force to" >&2
-    echo "refresh from the canonical template, or edit the file manually so" >&2
-    echo "the active goat-flow profile extends \":workspace\" and uses" >&2
+    echo "Codex will reject this config at startup. Edit the user-owned file" >&2
+    echo "so the active goat-flow profile extends \":workspace\" and uses" >&2
     echo "access=\"deny\" for secret-path filesystem entries." >&2
     exit 1
   fi
 fi
 if $HOOKS_ENABLED && [[ -z "${HOOK_CONFIG_DST:-}" && -n "${SETTINGS_DST:-}" && -n "${SETTINGS_SRC:-}" && -f "$SETTINGS_DST" ]]; then
-  migrate_agent_hook_config "$SETTINGS_DST" "$SETTINGS_SRC"
+  migrate_agent_hook_config "$SETTINGS_DST"
   # A changed embedded registration makes the central guardrail active for this agent.
   if [[ "$LAST_TRANSFORM_RESULT" == "changed" ]]; then
     COPIED=$((COPIED + 1))
     SETTINGS_SKIPPED=false
     echo "  ✓ $SETTINGS_DST (migrated deny hook registration)"
   fi
-fi
-echo ""
-
-# ==========================================================================
-# 9. Scaffold or maintain config.yaml
-# ==========================================================================
-echo "Config:"
-CONFIG_PATH=".goat-flow/config.yaml"
-assert_file_ownership "$CONFIG_PATH" "user-owned"
-
-# Existing config keeps user-selected hooks and skills unless migration is requested.
-if [[ -f "$CONFIG_PATH" ]] && ! $FORCE; then
-  CONFIG_CHANGED=false
-  CONFIG_NOTES=()
-  if $UPDATE_CONFIG_VERSION; then
-    if grep -q "^version:" "$CONFIG_PATH"; then
-      update_config_version_line "$CONFIG_PATH"
-      CONFIG_CHANGED=true
-      CONFIG_NOTES+=("version updated to $VERSION")
-    else
-      stage_existing_destination "$CONFIG_PATH"
-      printf 'version: "%s"\n' "$VERSION" >> "$STAGED_PAYLOAD_PATH"
-      commit_staged_payload "$CONFIG_PATH" "replace"
-      CONFIG_CHANGED=true
-      CONFIG_NOTES+=("version field added: $VERSION")
-    fi
-  fi
-  remove_config_agents_entry "$CONFIG_PATH"
-  # A changed result removes a legacy agent allowlist that no longer controls setup.
-  if [[ "$LAST_TRANSFORM_RESULT" == "changed" ]]; then
-    CONFIG_CHANGED=true
-    CONFIG_NOTES+=("legacy agents allowlist removed")
-  fi
-  migrate_config_tasks_entry "$CONFIG_PATH"
-  # A changed result points planning workflows at the current local-state directory.
-  if [[ "$LAST_TRANSFORM_RESULT" == "changed" ]]; then
-    CONFIG_CHANGED=true
-    CONFIG_NOTES+=("legacy tasks config migrated to plans")
-  fi
-  ensure_config_hooks_entry "$CONFIG_PATH"
-  # A changed result gives users explicit controls for each shipped hook.
-  if [[ "$LAST_TRANSFORM_RESULT" == "changed" ]]; then
-    CONFIG_CHANGED=true
-    CONFIG_NOTES+=("hook toggles added")
-  fi
-  remove_config_plan_guard_entry "$CONFIG_PATH"
-  # A changed result removes configuration for the retired plan guard.
-  if [[ "$LAST_TRANSFORM_RESULT" == "changed" ]]; then
-    CONFIG_CHANGED=true
-    CONFIG_NOTES+=("removed retired plan guard config")
-  fi
-  if $CONFIG_CHANGED; then
-    COPIED=$((COPIED + 1))
-    note_text="$(IFS=', '; echo "${CONFIG_NOTES[*]}")"
-    echo "  ✓ $CONFIG_PATH ($note_text)"
-  else
-    SKIPPED=$((SKIPPED + 1))
-    echo "  · $CONFIG_PATH (exists, no config changes)"
-  fi
-else
-  prepare_staged_payload "$CONFIG_PATH"
-  printf 'version: "%s"\n\nskills:\n  install: all\n\nhooks:\n  deny-dangerous:\n    enabled: true\n  post-turn-safety:\n    enabled: true\n  gruff-code-quality:\n    enabled: false\n' "$VERSION" > "$STAGED_PAYLOAD_PATH"
-  # Force explicitly permits config replacement; a normal first install remains create-only.
-  if $FORCE; then
-    commit_staged_payload "$CONFIG_PATH" "replace"
-  else
-    commit_staged_payload "$CONFIG_PATH" "create-only"
-  fi
-  COPIED=$((COPIED + 1))
-  echo "  ✓ $CONFIG_PATH (scaffolded)"
 fi
 echo ""
 
@@ -2630,7 +3031,7 @@ echo ""
 # scan. See ADR-017. We only write it automatically when there is no ambiguity.
 echo "Active plan marker:"
 ACTIVE_FILE=".goat-flow/plans/.active"
-if [[ -f "$ACTIVE_FILE" ]] && ! $FORCE; then
+if [[ -f "$ACTIVE_FILE" ]]; then
   SKIPPED=$((SKIPPED + 1))
   echo "  · $ACTIVE_FILE (exists, skipped)"
 else
@@ -2643,12 +3044,8 @@ else
   if [[ ${#version_subdirs[@]} -eq 1 ]]; then
     prepare_staged_payload "$ACTIVE_FILE"
     printf '%s\n' "${version_subdirs[0]}" > "$STAGED_PAYLOAD_PATH"
-    # Force refreshes the marker; normal setup creates it only when still absent.
-    if $FORCE; then
-      commit_staged_payload "$ACTIVE_FILE" "replace"
-    else
-      commit_staged_payload "$ACTIVE_FILE" "create-only"
-    fi
+    # Setup suggests an unambiguous first marker but never overrides the user's selected plan.
+    commit_staged_payload "$ACTIVE_FILE" "create-only"
     COPIED=$((COPIED + 1))
     echo "  ✓ $ACTIVE_FILE → ${version_subdirs[0]}"
   elif [[ ${#version_subdirs[@]} -eq 0 ]]; then

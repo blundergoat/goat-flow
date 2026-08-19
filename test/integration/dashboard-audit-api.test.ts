@@ -53,6 +53,7 @@ describe("dashboard /api/audit", () => {
     return spans.filter((spanEntry) => spanEntry.name === name).length;
   }
 
+  // Request one audit with profiling on, so the test can assert the span labels a developer sees in the timing panel.
   async function fetchProfiledAudit(
     projectPath: string,
     suffix = "",
@@ -66,46 +67,52 @@ describe("dashboard /api/audit", () => {
         projectPath,
       )}&quality=true&profile=true${suffix}`,
     );
-    const ms = performance.now() - start;
+    const elapsedMs = performance.now() - start;
     assert.equal(res.status, 200);
-    return { ms, body: expectRecord(body, "Profiled audit response") };
+    return {
+      ms: elapsedMs,
+      body: expectRecord(body, "Profiled audit response"),
+    };
   }
 
+  // Reduce a response to the keys the dashboard actually renders, so an added internal field cannot break the assertion.
   function dashboardReportSurface(
-    value: Record<string, unknown>,
+    report: Record<string, unknown>,
   ): Record<string, unknown> {
-    const scopes = expectRecord(value.scopes, "Dashboard report scopes");
-    const agentScores = (value.agentScores as unknown[]).map((score, index) => {
-      const entry = expectRecord(
-        score,
-        `Dashboard report agentScores[${index}]`,
-      );
-      const agent = expectRecord(
-        entry.agent,
-        `Dashboard report agentScores[${index}].agent`,
-      );
-      const harness =
-        entry.harness === null
-          ? null
-          : expectRecord(
-              entry.harness,
-              `Dashboard report agentScores[${index}].harness`,
-            );
-      return {
-        id: entry.id,
-        hasAgent: Boolean(entry.agent),
-        hasHarness: entry.harness !== null,
-        hasConcerns: entry.concerns !== null,
-        agentStatus: agent.status,
-        harnessStatus: harness?.status ?? null,
-      };
-    });
+    const scopes = expectRecord(report.scopes, "Dashboard report scopes");
+    const agentScores = (report.agentScores as unknown[]).map(
+      (score, index) => {
+        const entry = expectRecord(
+          score,
+          `Dashboard report agentScores[${index}]`,
+        );
+        const agent = expectRecord(
+          entry.agent,
+          `Dashboard report agentScores[${index}].agent`,
+        );
+        const harness =
+          entry.harness === null
+            ? null
+            : expectRecord(
+                entry.harness,
+                `Dashboard report agentScores[${index}].harness`,
+              );
+        return {
+          id: entry.id,
+          hasAgent: Boolean(entry.agent),
+          hasHarness: entry.harness !== null,
+          hasConcerns: entry.concerns !== null,
+          agentStatus: agent.status,
+          harnessStatus: harness?.status ?? null,
+        };
+      },
+    );
     return {
-      status: value.status,
-      target: value.target,
-      overall: expectRecord(value.overall, "Dashboard report overall").status,
+      status: report.status,
+      target: report.target,
+      overall: expectRecord(report.overall, "Dashboard report overall").status,
       hookCoverage: expectRecord(
-        value.hookCoverage,
+        report.hookCoverage,
         "Dashboard report hookCoverage",
       ).status,
       setup: expectRecord(scopes.setup, "Dashboard report scopes.setup").status,
@@ -114,11 +121,11 @@ describe("dashboard /api/audit", () => {
         .status,
       agentScores,
       hasLearningLoop: Object.prototype.hasOwnProperty.call(
-        value,
+        report,
         "learningLoop",
       ),
       hasRecentLessons: Object.prototype.hasOwnProperty.call(
-        value,
+        report,
         "recentLessons",
       ),
     };

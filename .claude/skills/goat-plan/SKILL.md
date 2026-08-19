@@ -1,13 +1,13 @@
 ---
 name: goat-plan
 description: "Use when starting a non-trivial implementation that needs structured task breakdown with progress tracking."
-goat-flow-skill-version: "1.15.1"
+goat-flow-skill-version: "1.16.0"
 ---
 # /goat-plan
 
 ## Shared Conventions
 
-Read `.goat-flow/skill-docs/skill-preamble.md`; on full-depth also read `.goat-flow/skill-docs/skill-conventions.md`.
+Read `.goat-flow/skill-docs/skill-preamble.md`; Modes R/1/3/4 also read `.goat-flow/skill-docs/skill-conventions.md`.
 
 ## When to Use
 
@@ -80,7 +80,7 @@ Never drop a spike, intake, or kill criteria for milestone count, deadline, or l
 
 ### For each milestone, produce:
 
-Choose a Small, Standard, or high-risk rendering from `references/milestone-examples.md`. Always include outcome, Status, agent-time estimate, scope, executable Tasks, binary Exit, claim-based Proof, and Stop/rescope. Add Actual, dependencies, context, assumptions, Mid-implementation proof, boundaries, rollback, deferred work, or maintenance only when triggered.
+Choose a Small, Standard, or high-risk rendering from `references/milestone-examples.md`. Always include outcome, Status, agent-time estimate, scope, executable Tasks, binary Exit, claim-based Proof, and Stop/rescope. Standard+ renderings also include `## What problem are we solving` and `## Who benefits and how` between Objective and Context, one plain line each under the reference's plain-language rule. Add Actual, dependencies, context, assumptions, Mid-implementation proof, boundaries, rollback, deferred work, or maintenance only when triggered.
 
 ### Risk-weighted task ordering
 

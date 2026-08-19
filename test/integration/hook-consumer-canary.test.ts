@@ -87,7 +87,7 @@ function installSourceCanaryBytes(disposableConsumerPath: string): string {
 }
 
 /**
- * Write the observed Codex project-hook nesting with the proposed managed contract.
+ * Writes the observed Codex project-hook nesting with the proposed managed contract.
  * Use so the canary checks the same matcher, command, and timeout a user would install.
  *
  * @param disposableConsumerPath - non-empty consumer root; empty has no project config location
@@ -132,7 +132,7 @@ function writeObservedCodexFeedbackConfig(
 }
 
 /**
- * Run the installed launcher with a short test-only deadline and capture provider output.
+ * Spawns the installed launcher with a short test-only deadline and captures provider output.
  * Use to prove a stalled analyzer becomes model-facing Codex feedback before the host limit.
  *
  * @param disposableConsumerPath - non-empty installed consumer root; empty cannot resolve hook bytes

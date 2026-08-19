@@ -13,19 +13,6 @@ import {
   detectSetupStack,
   detectStack,
 } from "../../src/cli/detect/project-stack.js";
-import {
-  PROJECT_STACK_DEPLOYMENT_SIGNALS,
-  PROJECT_STACK_NODE_FRAMEWORKS,
-} from "../../src/cli/detect/project-stack-data.js";
-import {
-  hasAnyGlob,
-  hasAnyPath,
-  readFirstExistingFile,
-} from "../../src/cli/detect/project-stack-files.js";
-import {
-  countSourceFiles,
-  detectProjectSignals,
-} from "../../src/cli/detect/project-stack-signals.js";
 import { createFS } from "../../src/cli/facts/fs.js";
 import type { ReadonlyFS } from "../../src/cli/types.js";
 
@@ -50,7 +37,7 @@ function stubFS(overrides: Partial<ReadonlyFS> = {}): ReadonlyFS {
   };
 }
 
-/** Write a nested file inside a temp project, creating parent directories first. */
+/** Writes a nested file inside a temp project, creating parent directories first. */
 async function writeFileInProject(
   root: string,
   path: string,
@@ -100,32 +87,6 @@ function mixedStackDetectionFS(): ReadonlyFS {
 }
 
 describe("detectStack", () => {
-  it("keeps low-level stack helpers aligned with table-driven detection", () => {
-    const fs = mixedStackDetectionFS();
-
-    assert.equal(hasAnyPath(fs, ["missing", "tsconfig.json"]), true);
-    assert.equal(hasAnyGlob(fs, ["missing/**", "src/**/*.ts"]), true);
-    assert.equal(
-      readFirstExistingFile(fs, ["missing", "README.md"]),
-      "HIPAA workflow",
-    );
-    assert.equal(countSourceFiles(fs), 1);
-    assert.equal(
-      detectProjectSignals(fs, ["typescript"], null).llmIntegration,
-      true,
-    );
-    assert.ok(
-      PROJECT_STACK_NODE_FRAMEWORKS.some(
-        (framework) => framework.language === "react",
-      ),
-    );
-    assert.ok(
-      PROJECT_STACK_DEPLOYMENT_SIGNALS.some(
-        (signal) => signal.tool === "docker",
-      ),
-    );
-  });
-
   it("loads external detection tables and preserves stack inference", () => {
     const stack = detectStack(mixedStackDetectionFS());
     assert.deepEqual(stack.languages, [

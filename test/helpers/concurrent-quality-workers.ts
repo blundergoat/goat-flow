@@ -55,6 +55,7 @@ function startWorker(
   );
 
   let hasSettled = false;
+  // Settle once: a worker can fail through several channels, and the first one owns the outcome.
   const rejectWorker = (error: Error): void => {
     if (hasSettled) return;
     hasSettled = true;
@@ -116,7 +117,14 @@ function startWorker(
   return { child, ready, done };
 }
 
-/** Release multiple child processes together and return every observable outcome. */
+/**
+ * Release multiple child processes together and return every observable outcome.
+ *
+ * @param mode - worker behaviour under test
+ * @param projectRoot - shared project the workers contend over
+ * @param count - how many workers to release together; the default of two is the smallest real contention case
+ * @returns one result per worker, in start order, so a test can assert exactly which of them won
+ */
 export async function runConcurrentQualityWorkers(
   mode: WorkerMode,
   projectRoot: string,

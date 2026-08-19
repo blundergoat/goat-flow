@@ -98,10 +98,27 @@ function runHookSelfTest(
   hookPath: string,
   pathPrefix: string,
 ): ReturnType<typeof spawnSync> {
-  return spawnSync("bash", [hookPath, "--self-test"], {
+  return runHookArguments(hookPath, ["--self-test"], pathPrefix);
+}
+
+/** Run one explicit Gruff hook argument vector without supplying an edit payload.
+ * Side effects: starts the selected hook copy inside a disposable project fixture.
+ *
+ * @param hookPath - exact workflow or installed hook copy under test
+ * @param args - user-selected arguments; empty exercises normal stdin dispatch
+ * @param pathPrefix - controlled executable search path used by self-test fixtures
+ * @returns the completed hook process; a null status means Bash did not start
+ */
+function runHookArguments(
+  hookPath: string,
+  args: string[],
+  pathPrefix: string,
+): ReturnType<typeof spawnSync> {
+  return spawnSync("bash", [hookPath, ...args], {
     cwd: makeRoot(),
     encoding: "utf-8",
     env: { ...process.env, PATH: pathPrefix },
+    stdio: ["ignore", "pipe", "pipe"],
   });
 }
 
@@ -127,6 +144,31 @@ describe("gruff-code-quality hook", () => {
         hook.label,
         runHookSelfTest(hook.path, process.env.PATH ?? "/usr/bin:/bin"),
       );
+    });
+
+    it(`accepts smoke and rejects invalid self-test values for the ${hook.label} hook copy`, () => {
+      assertSelfTestOk(
+        `${hook.label} smoke`,
+        runHookArguments(
+          hook.path,
+          ["--self-test=smoke"],
+          process.env.PATH ?? "/usr/bin:/bin",
+        ),
+      );
+      for (const invalidArguments of [
+        ["--self-test=full"],
+        ["--self-test=bogus"],
+        ["--self-test", "extra"],
+        ["--unknown"],
+      ]) {
+        const result = runHookArguments(
+          hook.path,
+          invalidArguments,
+          process.env.PATH ?? "/usr/bin:/bin",
+        );
+        assert.equal(result.status, 2, result.stderr);
+        assert.match(result.stderr, /Usage:/u);
+      }
     });
   }
 
@@ -583,6 +625,83 @@ describe("gruff-code-quality hook", () => {
       /\[warning\] src\/sample\.py:3 config\.rule - changed line finding/,
     );
     assert.deepEqual(readInvocations(root), ["src/sample.py"]);
+  });
+
+  // Fixture purpose: writes contained and escaping analyzer symlinks so config trust is proved
+  // against physical targets; both disposable roots are removed by the shared cleanup hook.
+  it("accepts a contained configured analyzer symlink and rejects an escaping one", () => {
+    const containedRoot = makeRoot();
+    const containedBinDir = writeMockGruffBinary(
+      containedRoot,
+      "trusted/bin",
+      "gruff-py",
+      "contained.rule",
+    );
+    mkdirSync(join(containedRoot, "configured"), { recursive: true });
+    symlinkSync(
+      join(containedBinDir, "gruff-py"),
+      join(containedRoot, "configured", "gruff-py"),
+    );
+    writeFileSync(join(containedRoot, ".gruff-py.yaml"), "rules: {}\n");
+    mkdirSync(join(containedRoot, ".goat-flow"), { recursive: true });
+    writeFileSync(
+      join(containedRoot, ".goat-flow", "config.yaml"),
+      "hooks:\n  gruff-code-quality:\n    binaries:\n      py: configured/gruff-py\n",
+    );
+    mkdirSync(join(containedRoot, "src"), { recursive: true });
+    writeFileSync(join(containedRoot, "src", "sample.py"), "a\nb\nc\n");
+
+    const containedResult = runHook(
+      containedRoot,
+      {
+        tool_name: "Edit",
+        tool_input: {
+          file_path: "src/sample.py",
+          changed_ranges: [{ startLine: 3, endLine: 3 }],
+        },
+      },
+      "/usr/bin:/bin",
+    );
+    assert.equal(containedResult.status, 0, containedResult.stderr);
+    assert.match(containedResult.stdout, /contained\.rule/u);
+
+    const escapingRoot = makeRoot();
+    const outsideRoot = makeRoot();
+    const outsideBinDir = writeMockGruffBinary(
+      outsideRoot,
+      "outside/bin",
+      "gruff-py",
+      "escaped.rule",
+    );
+    mkdirSync(join(escapingRoot, "configured"), { recursive: true });
+    symlinkSync(
+      join(outsideBinDir, "gruff-py"),
+      join(escapingRoot, "configured", "gruff-py"),
+    );
+    writeFileSync(join(escapingRoot, ".gruff-py.yaml"), "rules: {}\n");
+    mkdirSync(join(escapingRoot, ".goat-flow"), { recursive: true });
+    writeFileSync(
+      join(escapingRoot, ".goat-flow", "config.yaml"),
+      "hooks:\n  gruff-code-quality:\n    binaries:\n      py: configured/gruff-py\n",
+    );
+    mkdirSync(join(escapingRoot, "src"), { recursive: true });
+    writeFileSync(join(escapingRoot, "src", "sample.py"), "a\nb\nc\n");
+
+    const escapingResult = runHook(
+      escapingRoot,
+      {
+        tool_name: "Edit",
+        tool_input: {
+          file_path: "src/sample.py",
+          changed_ranges: [{ startLine: 3, endLine: 3 }],
+        },
+      },
+      "/usr/bin:/bin",
+    );
+    assert.equal(escapingResult.status, 0, escapingResult.stderr);
+    assert.equal(escapingResult.stdout, "");
+    assert.match(escapingResult.stderr, /resolves outside the repository/u);
+    assert.deepEqual(readInvocations(escapingRoot), []);
   });
 
   // Covers both override spellings a maintainer writes, because compact and commented forms must both work.

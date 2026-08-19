@@ -1,6 +1,9 @@
 /**
- * Shared type contracts for the goat-flow config file.
- * These interfaces describe the normalized shape used after YAML parsing and validation.
+ * The type contracts for `.goat-flow/config.yaml`, describing the shape callers see after parsing, defaulting, and validation.
+ *
+ * These are the normalized types, not the raw YAML: an omitted key arrives here already filled with its default.
+ *
+ * That distinction matters to the user, because it is why a half-written config still produces a working audit rather than a crash.
  */
 interface GoatFlowToolchain {
   test: string[];
@@ -37,9 +40,10 @@ interface LearningLoopConfig {
 /** One togglable goat-flow hook entry from `.goat-flow/config.yaml`. */
 interface GoatFlowHookConfig {
   enabled: boolean;
+  /** Explicit project-relative Git roots scanned by the post-turn safety hook. */
+  scanRoots?: string[];
   /**
-   * Repo-relative analyzer binary overrides keyed by language suffix (e.g.
-   * `py: strands_agents/.venv/bin/gruff-py`). Consumed at runtime by the hook
+   * Repo-relative analyzer binary overrides keyed by language suffix (e.g. `py: strands_agents/.venv/bin/gruff-py`). Consumed at runtime by the hook
    * script itself; carried here so config round-trips preserve the block.
    */
   binaries?: Record<string, string>;
@@ -85,8 +89,7 @@ export interface GoatFlowConfig extends GoatFlowConfigBooleanFields {
   hooks: Record<string, GoatFlowHookConfig>;
   /**
    * Raw skill-quality configuration block (parsed but not normalized here).
-   * Consumed by `loadQualityConfig` in `src/cli/quality/quality-config.ts`,
-   * which merges it with the goat-flow defaults.
+   * Consumed by `loadQualityConfig` in `src/cli/quality/quality-config.ts`, which merges it with the goat-flow defaults.
    */
   quality?: Record<string, unknown>;
 }

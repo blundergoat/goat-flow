@@ -1,5 +1,6 @@
 /**
  * Focused quality-prompt composer for process, harness, and skills assessments.
+ *
  * Use when a CLI or dashboard user launches a reporting-only review outside agent setup.
  * It carries live audit evidence, target scope, prior context, and the saved-report contract.
  * Prompt assembly is deterministic and performs no project writes.
@@ -55,18 +56,18 @@ function focusedQualityModePrompt(
     ].join("\n");
   }
 
-  // Skill reviewers need the seven-skill RED/GREEN/REFACTOR pressure contract.
+  // Skill reviewers need the eight-skill RED/GREEN/REFACTOR pressure contract.
   if (mode === "skills") {
     return [
       "REPORTING-ONLY ASSESSMENT MODE. Do not edit tracked files. Do not use /goat-critique, /goat-review, or any other goat skill as the wrapper for this assessment; this prompt is the full assessment contract. You may read files, run read-only commands, and write normal gitignored reporting/local-state artifacts if the runner requires them. In this contract, gitignored logs, scratchpad notes, critique snapshots, quality reports, and task-local state do not count as writes; do not report them as read-only violations.",
       "",
-      "Assess all seven goat-flow skills: /goat, /goat-debug, /goat-plan, /goat-review, /goat-critique, /goat-security, and /goat-qa. Use .goat-flow/skill-docs/skill-quality-testing/README.md plus the relevant files under .goat-flow/skill-docs/skill-quality-testing/. Read the workflow template SKILL.md files and installed mirrors under .claude/skills/, .agents/skills/, and .github/skills/ where relevant.",
+      "Assess all eight goat-flow skills: /goat, /goat-debug, /goat-plan, /goat-review, /goat-critique, /goat-security, /goat-qa, and /goat-clarity. Use .goat-flow/skill-docs/skill-quality-testing/README.md plus the relevant files under .goat-flow/skill-docs/skill-quality-testing/. Read the workflow template SKILL.md files and installed mirrors under .claude/skills/, .agents/skills/, and .github/skills/ where relevant.",
       "",
-      "Method rule: prefer live skill invocation only when the runner supports it safely. If live invocation or delegated/sub-agent calls are unavailable, perform a file-grounded protocol run against SKILL.md and label the evidence limit. Never imply a dry run is bulletproof TDD evidence.",
+      "Method rule: prefer live skill invocation only when the runner supports it safely. Run a mutation-capable workflow only against a disposable copy of current project evidence with a frozen write boundary; never let a quality probe edit the assessed checkout. If live invocation or delegated/sub-agent calls are unavailable, perform a file-grounded protocol run against SKILL.md and label the evidence limit. Never imply a dry run is bulletproof TDD evidence.",
       "",
       "For each skill, output exactly these fields: Method used; Evidence limit; Worked; Failed/confusing; Useless ceremony; RED scenario; GREEN result; minimal REFACTOR; Verification command or grep that would prove the fix. Do not stop after one skill and do not ask which skill.",
       "",
-      "After the seven sections, output: Cross-skill patterns; Top 5 skill/system improvements with file or semantic-anchor evidence and expected impact; What was not tested. Prioritize actionable improvements over praise.",
+      "After the eight sections, output: Cross-skill patterns; Top 5 skill/system improvements with file or semantic-anchor evidence and expected impact; What was not tested. Prioritize actionable improvements over praise.",
     ].join("\n");
   }
 

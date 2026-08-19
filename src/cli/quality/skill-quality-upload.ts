@@ -1,12 +1,10 @@
 /**
- * Scoring path for content uploaded or pasted through the dashboard "Evaluate skill" flow, where
- * the artifact has no trusted on-disk location. Scores the supplied markdown with disk scanning
- * disabled, then turns the metric breakdown into actionable improvement tips for the modal.
+ * Scoring path for content uploaded or pasted through the dashboard "Evaluate skill" flow, where the artifact has no trusted on-disk location.
+ * Scores the supplied markdown with disk scanning disabled, then turns the metric breakdown into actionable improvement tips for the modal.
  *
- * The no-disk rule is a safety boundary, not an optimisation: a user-supplied name must never cause
- * sibling files of an installed skill to be composed into the score, so host composition is stripped
- * and `scanDisk: false` is passed throughout. Artifact kind is inferred from content when the caller
- * does not specify it, and the upload name is sanitised before use as an id.
+ * The no-disk rule is a safety boundary, not an optimisation: a user-supplied name must never cause sibling files of an installed skill to be
+ * composed into the score, so host composition is stripped and `scanDisk: false` is passed throughout.
+ * Artifact kind is inferred from content when the caller does not specify it, and the upload name is sanitised before use as an id.
  */
 import {
   cloneQualityConfig,
@@ -342,6 +340,12 @@ function tipsForMetric(metric: MetricResult): ImprovementTip[] {
   return matched;
 }
 
+/**
+ * Turn the scored metric rows into the short list of fixes shown beside the score in the Evaluate modal.
+ *
+ * @param report - scored report for the uploaded content
+ * @returns the tips to display, worst metric first; empty means nothing scored badly enough to name
+ */
 function synthesiseImprovementTips(
   report: SkillQualityReport,
 ): ImprovementTip[] {
@@ -365,11 +369,9 @@ function synthesiseImprovementTips(
 }
 
 /**
- * Strip the host project's shared skill-preamble/conventions from composition
- * so uploaded markdown is scored as a standalone artifact. The dashboard
- * "Evaluate skill" modal evaluates content that may live outside goat-flow
- * entirely; gluing goat-flow's preamble onto it inflates gate/evidence/tool
- * signals the uploaded skill doesn't actually own.
+ * Strip the host project's shared skill-preamble/conventions from composition so uploaded markdown is scored as a standalone artifact.
+ * The dashboard "Evaluate skill" modal evaluates content that may live outside goat-flow entirely; gluing goat-flow's preamble onto it inflates
+ * gate/evidence/tool signals the uploaded skill doesn't actually own.
  */
 function configForUpload(config: QualityConfig): QualityConfig {
   const isolated = cloneQualityConfig(config);
@@ -379,13 +381,13 @@ function configForUpload(config: QualityConfig): QualityConfig {
 }
 
 /**
- * Score uploaded markdown content (no file IO) and synthesise actionable
- * improvement tips from the metric breakdown. Used by the dashboard
- * "Evaluate skill" modal.
+ * Score uploaded markdown content (no file IO) and synthesise actionable improvement tips from the metric breakdown.
+ * Used by the dashboard "Evaluate skill" modal.
  *
- * @param projectRoot - Project whose quality config supplies rubric settings.
- * @param input - Uploaded markdown and optional naming/classification hints.
- * @param config - Optional scoring config; host composition is stripped before scoring.
+ * @param projectRoot - project whose quality config supplies rubric settings
+ * @param input - uploaded markdown plus optional naming and classification hints; an unnamed upload is given a sanitised placeholder name
+ * @param config - scoring config; host composition is stripped before scoring so no on-disk sibling can join the score
+ * @returns the score for what the user pasted, plus the improvement tips shown beneath it
  */
 export function evaluateContent(
   projectRoot: string,
@@ -435,15 +437,15 @@ interface EvaluateBundleInput {
 }
 
 /**
- * Score a multi-file uploaded skill bundle (no file IO). Picks a primary file
- * - `SKILL.md` if any of the dropped files is named that, otherwise `files[0]`
- * - and treats the remaining files as sibling `.md` files appended to the
- * composed surface. The same composition recipe applies as for on-disk skills:
- * preamble + conventions are still pulled in if available, and the bundle
- * surface contributes to gate/evidence/tool-deps scoring. `composedFrom` lists
- * every input file in drop order, plus preamble/conventions when composed in.
+ * Score a whole folder the user dropped into the Evaluate modal, treating `SKILL.md` as the main file and the rest as its siblings.
+ * It throws only when the drop contained no files at all, since there would be nothing to score; every other shape is handled.
+ *
+ * @param projectRoot - project whose quality config supplies rubric settings
+ * @param input - dropped files in drop order, plus optional naming and classification hints
+ * @param config - scoring config; host composition is stripped before scoring so no on-disk sibling can join the score
+ * @returns the bundle score, with `composedFrom` listing every dropped file plus the preamble and conventions when they were composed in
  */
-// eslint-disable-next-line complexity -- intentional because multi-file scoring fans out across primary-file selection, single-file fast path, and the manual compose+score pipeline; each branch represents one distinct case
+// eslint-disable-next-line complexity -- intentional because each branch is one distinct upload case: primary-file selection, single-file fast path, and the manual compose+score pipeline; it throws only when the drop held no files
 export function evaluateUploadedBundle(
   projectRoot: string,
   input: EvaluateBundleInput,
@@ -455,6 +457,7 @@ export function evaluateUploadedBundle(
     files.findIndex((f) => f.name === "SKILL.md"),
   );
   const primary = files[primaryIndex] ?? files[0];
+  // An empty drop cannot be scored, and returning a zero would read as a real verdict on the user's work.
   if (!primary) {
     throw new Error("evaluateUploadedBundle: files array must be non-empty");
   }

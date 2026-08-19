@@ -26,18 +26,18 @@ describe("dashboard /api/setup/detect", () => {
     );
     assert.equal(res.status, 200);
 
-    const data = expectRecord(body, "Setup detect response");
-    assert.ok(Array.isArray(data.languages));
-    assert.ok((data.languages as unknown[]).includes("TypeScript"));
-    assert.ok(Array.isArray(data.frameworks));
-    const commands = expectRecord(data.commands, "Setup detect commands");
+    const payload = expectRecord(body, "Setup detect response");
+    assert.ok(Array.isArray(payload.languages));
+    assert.ok((payload.languages as unknown[]).includes("TypeScript"));
+    assert.ok(Array.isArray(payload.frameworks));
+    const commands = expectRecord(payload.commands, "Setup detect commands");
     assert.equal(typeof commands.build, "string");
     assert.equal(typeof commands.test, "string");
     assert.equal(typeof commands.lint, "string");
     assert.equal(typeof commands.format, "string");
-    expectRecord(data.agents, "Setup detect agents");
-    expectRecord(data.existing, "Setup detect existing");
-    assert.ok(Array.isArray(data.nonGoatFlow));
+    expectRecord(payload.agents, "Setup detect agents");
+    expectRecord(payload.existing, "Setup detect existing");
+    assert.ok(Array.isArray(payload.nonGoatFlow));
   });
 
   it("detects useful mixed-root setup signals without deep stack detection", async () => {
@@ -78,15 +78,15 @@ describe("dashboard /api/setup/detect", () => {
       );
       assert.equal(res.status, 200);
 
-      const data = expectRecord(body, "Mixed setup detect response");
-      assert.deepEqual(data.languages, [
+      const payload = expectRecord(body, "Mixed setup detect response");
+      assert.deepEqual(payload.languages, [
         "JavaScript",
         "TypeScript",
         "PHP",
         "Twig",
       ]);
-      assert.deepEqual(data.frameworks, ["React", "Symfony", "Docker"]);
-      const commands = expectRecord(data.commands, "Mixed setup commands");
+      assert.deepEqual(payload.frameworks, ["React", "Symfony", "Docker"]);
+      const commands = expectRecord(payload.commands, "Mixed setup commands");
       assert.equal(commands.build, "vite build");
       assert.equal(commands.test, "npm run test:unit");
       assert.equal(commands.lint, "eslint .");
@@ -122,8 +122,8 @@ describe("dashboard /api/setup/detect", () => {
       );
       const durationMs = performance.now() - start;
       assert.equal(res.status, 200);
-      const data = expectRecord(body, "Large setup detect response");
-      assert.ok((data.languages as unknown[]).includes("TypeScript"));
+      const payload = expectRecord(body, "Large setup detect response");
+      assert.ok((payload.languages as unknown[]).includes("TypeScript"));
       assert.ok(
         durationMs < 1000,
         `setup detect should stay bounded on large trees (${durationMs.toFixed(1)}ms)`,

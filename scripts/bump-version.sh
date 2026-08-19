@@ -14,7 +14,7 @@
 #   - Instruction file header versions and release dates (CLAUDE.md, AGENTS.md, .github/copilot-instructions.md)
 #   - .goat-flow/config.yaml version field
 #   - workflow/manifest.json
-#   - workflow/skills/*/SKILL.md frontmatter (7 templates)
+#   - workflow/skills/*/SKILL.md frontmatter (8 templates)
 #   - workflow/skills/reference/ (shared skill reference docs)
 #   - workflow/skills/playbooks/ (standalone skill playbooks)
 #   - workflow/skills/*/references/ (per-skill reference packs)
@@ -112,7 +112,7 @@ update_file ".goat-flow/config.yaml"
 # Workflow manifest
 update_file "workflow/manifest.json"
 
-# Skill templates (7 canonical + 1 test fixture)
+# Skill templates (8 canonical + 1 test fixture)
 for skill_md in workflow/skills/*/SKILL.md; do
   update_file "$skill_md"
 done

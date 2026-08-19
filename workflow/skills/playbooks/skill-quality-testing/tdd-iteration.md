@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.15.1"
+goat-flow-reference-version: "1.16.0"
 ---
 # Skill TDD Iteration
 
@@ -51,6 +51,26 @@ Skills to NOT pressure-test:
 - Pure reference (API docs, syntax guides)
 - Skills without a rule to violate
 - Skills where the agent has no incentive to bypass
+
+## Capability-aware evaluation fixtures
+
+Before RED, classify what the skill can do. Every fixture names at least one already-correct control and its expected no-op. For mutation-capable skills, score all five:
+
+- **exact finding identity:** detection names the target, semantic anchor, and rule or defect code; a nonzero count is insufficient.
+- **clean-input preservation:** the correct control remains byte-for-byte identical.
+- **remediation fidelity:** output preserves non-target bytes and meaning while changing only the admitted target.
+- **overcorrection:** a near-miss triggers no finding or mutation.
+- **second-pass stability:** rerunning on remediated output leaves identical bytes and finding set.
+
+For report-only or decision skills, apply equivalent detection, clean-control, overcorrection, and second-pass checks without inventing a mutation. The clean control produces no false finding, recommendation, or action. Blanket rewriting and blanket reporting both fail.
+
+Build attractive wrong answers from observed RED or REFACTOR rationalisations, or from explicitly labelled fixture input. Invented pressure is never repository evidence. Combine plausible pressures only when the risk warrants it. Scale the exercise to capability and risk: a narrow transformation needs relevant evidence, not review-class ceremony.
+
+## Score application, not citation
+
+A required outcome passes only when the produced diff, decision, or report demonstrates it. Correct attribution may earn a criterion that explicitly tests traceability, but citation never substitutes for the required outcome.
+
+Record citation-without-application as a distinct signal. Investigate instruction clarity, routing, conflicting examples, and capability limits; the signal does not establish a routing gap on its own.
 
 ## TDD loop for skills
 
@@ -186,39 +206,20 @@ Give the agent a self-check list it can run before claiming compliance.
 **All of these mean: Delete code. Start over with TDD.**
 ```
 
-## Persuasion principles (research-backed)
+## Persuasion principles
 
-Skills that enforce discipline need to resist rationalisation. LLMs respond to the same persuasion principles as humans - Meincke et al. (2025) tested 7 principles with N=28,000 AI conversations and found persuasion techniques more than doubled compliance rates (33% → 72%, p < .001).
+External research found that persuasion techniques increased model compliance, but it does not prove a local skill is effective. Apply each principle deliberately:
 
-Understanding *why* these work helps you apply them systematically.
+- **Authority:** imperative safety language and explicit exceptions.
+- **Commitment:** announcements or concrete A/B/C choices.
+- **Scarcity:** real ordering constraints, never false urgency.
+- **Social proof:** universal invariants and named failure modes.
+- **Unity:** collaborative language for non-hierarchical work.
+- **Reciprocity and liking:** avoid; both invite manipulation or sycophancy.
 
-### The seven principles
+Discipline-enforcing skills can combine authority, commitment, and social proof. Guidance uses moderate authority and unity; collaborative skills use unity and commitment; reference skills need clarity, not persuasion.
 
-| Principle | Mechanism | Use in skills | Example |
-|-----------|-----------|---------------|---------|
-| **Authority** | Deference to expertise / official sources | Imperative language: "MUST", "Never", "Always", "No exceptions" | `Write code before test? Delete it. No exceptions.` |
-| **Commitment** | Consistency with prior actions / public declarations | Require announcements, force explicit A/B/C choices | `When you find a skill, MUST announce: "I'm using [Skill Name]"` |
-| **Scarcity** | Urgency from time limits / sequential dependencies | "Before proceeding", "Immediately after X" | `IMMEDIATELY request review before proceeding.` |
-| **Social proof** | Conformity to what others do / norms | Universal patterns: "Every time", failure modes: "X without Y = failure" | `Checklists without TodoWrite tracking = steps get skipped. Every time.` |
-| **Unity** | Shared identity, in-group "we-ness" | Collaborative language for non-hierarchical practices | `We're colleagues. I need your honest technical judgement.` |
-| **Reciprocity** | Obligation to return benefits received | **Avoid** - rarely needed, can feel manipulative | - |
-| **Liking** | Preference for cooperating with those we like | **Avoid** - conflicts with honest-feedback culture, creates sycophancy | - |
-
-### Principle combinations by skill type
-
-| Skill type | Use | Avoid |
-|------------|-----|-------|
-| **Discipline-enforcing** | Authority + Commitment + Social Proof | Liking, Reciprocity |
-| **Guidance / technique** | Moderate Authority + Unity | Heavy authority |
-| **Collaborative** | Unity + Commitment | Authority, Liking |
-| **Reference** | Clarity only | All persuasion principles |
-
-### Ethical boundary
-
-**The test:** Would this technique serve the user's genuine interests if they fully understood it?
-
-Legitimate uses: enforcing critical practices, preventing predictable failures, effective documentation.
-Illegitimate uses: personal gain, false urgency, guilt-based compliance.
+**Ethical boundary:** use a technique only when it would serve the user's genuine interests if fully understood. Never use personal gain, manufactured urgency, or guilt as pressure.
 
 ## Bulletproof vs not-bulletproof
 

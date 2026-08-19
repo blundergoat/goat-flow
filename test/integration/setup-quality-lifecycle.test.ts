@@ -52,7 +52,7 @@ interface ConsumerQualityPayload {
 }
 
 /**
- * Run one public CLI action from the controlling workspace against an explicit target.
+ * Spawns one public CLI action from the controlling workspace against an explicit target.
  * Use this instead of importing internals so the test covers the entry point users execute.
  *
  * @param commandArguments - CLI words after `cli.ts`; empty means show the default help path
@@ -222,7 +222,7 @@ templates; audit and quality commands read project evidence from this consumer t
 }
 
 /**
- * Run a scenario in a disposable consumer while preserving content outside the selected target.
+ * Run a scenario in a disposable consumer that this helper writes and then removes, so content outside the selected target is preserved.
  * Use for success and failure paths so users never lose neighboring files during test cleanup.
  *
  * @param scenario - consumer action sequence; a rejection is rethrown after cleanup
@@ -388,6 +388,24 @@ describe("consumer setup to quality-report lifecycle", () => {
         "codex",
       ]);
       assertCliSucceeded(installResult, "consumer install");
+      for (const playbookFilename of [
+        "writing-sentence-diagnostics.md",
+        "writing-structure-diagnostics.md",
+      ]) {
+        assert.equal(
+          existsSync(
+            join(
+              consumerTargetPath,
+              ".goat-flow",
+              "skill-docs",
+              "playbooks",
+              playbookFilename,
+            ),
+          ),
+          true,
+          `${playbookFilename} must reach a fresh consumer install`,
+        );
+      }
 
       // Setup remains prompt-driven, so this verifies its target before the fixture supplies adapted outputs.
       const setupPromptResult = runPublicCli([
@@ -458,7 +476,7 @@ describe("consumer setup to quality-report lifecycle", () => {
         join(consumerTargetPath, ".goat-flow", ".gitignore"),
         "utf-8",
       );
-      assert.match(installedGitignore, /^logs\/quality\/\*\.json$/mu);
+      assert.match(installedGitignore, /^\*\*\/logs\/quality\/\*\.json$/mu);
 
       const expectedScopeContextByMode: Record<QualityMode, RegExp> = {
         "agent-setup": /"scope": "consumer"/u,

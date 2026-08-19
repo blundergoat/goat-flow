@@ -37,6 +37,14 @@ export const INSTALL_FIXTURE_FILES = [
   "references/sample.md",
 ] as const;
 
+/**
+ * Build a minimal but valid skill file for drift fixtures.
+ *
+ * Drift tests care about whether a file matches its template, not what the skill says, so the body is deliberately trivial.
+ *
+ * @param name - skill name written into both the frontmatter and the heading
+ * @returns the stub skill markdown
+ */
 export const SKILL_STUB = (name: string): string =>
   `---\nname: ${name}\ndescription: stub for drift test\n---\n# ${name}\nbody\n`;
 
@@ -48,10 +56,14 @@ const SHARED_PLAYBOOK_FILENAMES = [
   "code-comments.md",
   "gruff-code-quality.md",
   "hook-policy-testing.md",
+  "naming-and-placement.md",
   "observability.md",
   "page-capture.md",
   "release-notes.md",
   "skill-playbook-authoring-sync.md",
+  "test-selection.md",
+  "writing-sentence-diagnostics.md",
+  "writing-structure-diagnostics.md",
   "writing-style.md",
 ] as const;
 export const HOOK_STUB = "#!/usr/bin/env bash\n# deny hook stub\n";
@@ -84,6 +96,7 @@ export interface CommandResult {
 /**
  * Write canonical skill stubs (SKILL.md plus shared reference files) for one skill into a
  * template or installed mirror under the fixture root, so drift comparison sees matching copies.
+ * It writes only inside the fixture root, so a drift fixture can never touch the real project.
  *
  * @param root - the temp fixture root the files are written beneath
  * @param baseDir - skills directory relative to root (e.g. "workflow/skills" or an installed dir)
@@ -440,6 +453,19 @@ export function patchInstallRoundTripFixture(root: string): {
   };
 }
 
+/**
+ * Run one real command inside a fixture project and capture what a user would have seen.
+ *
+ * Drift tests assert on actual CLI behaviour rather than mocked results, so this is the boundary where a test becomes an end-to-end check.
+ *
+ * Side effect: spawns a child process in `cwd`, bounded by the timeout so a hung command fails the test instead of the suite.
+ *
+ * @param cwd - fixture project the command runs in
+ * @param command - executable to run, restricted to the three the fixtures need
+ * @param args - argument vector passed without a shell, so fixture paths containing spaces stay one argument
+ * @param timeout - milliseconds before the command is killed; the default is generous enough for a full audit
+ * @returns the finished process with its captured stdout, stderr, and exit status
+ */
 export function runCommand(
   cwd: string,
   command: "bash" | "node" | "npx",

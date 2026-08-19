@@ -1,9 +1,9 @@
 /**
  * Validate dashboard requests at the server boundary.
- * Use when the browser sends terminal, project, hook, upload, or skill-evaluation payloads so the
- * user gets a precise field error instead of a failed terminal session or broken dashboard state.
- * These decoders are intentionally dependency-free because each route only accepts a small,
- * user-facing payload shape.
+ *
+ * Use when the browser sends terminal, project, hook, upload, or skill-evaluation payloads so the user gets a precise field error instead of a failed
+ * terminal session or broken dashboard state.
+ * These decoders are intentionally dependency-free because each route only accepts a small, user-facing payload shape.
  */
 import type { AgentId } from "../types.js";
 import type { ClientMessage, Runner, TerminalAccessMode } from "./types.js";
@@ -213,11 +213,9 @@ function decodeTerminalRunner(
 /**
  * Decode whether this launch should start staged quality-draft capture.
  *
- * Only the dashboard's quality flow sends `true`, because only its prompt tells
- * the agent to write a draft (ADR-044). Access mode cannot stand in for this:
- * every preset without write permission - and every custom prompt, which
- * resolves to no preset at all - is a reporting session, so deriving capture
- * from access mode would create a staging tree in each selected target.
+ * Only the dashboard's quality flow sends `true`, because only its prompt tells the agent to write a draft (ADR-044).
+ * Access mode cannot stand in for this: every preset without write permission - and every custom prompt, which resolves to no preset at all - is a
+ * reporting session, so deriving capture from access mode would create a staging tree in each selected target.
  */
 function decodeTerminalCaptureQualityDrafts(
   raw: Record<string, unknown>,
@@ -240,18 +238,18 @@ function decodeTerminalCaptureQualityDrafts(
  * @param options - allowed runners plus fallback; empty runner set means every explicit runner is rejected
  * @returns terminal-create payload, or an error the route can show without starting a session
  */
-// eslint-disable-next-line complexity -- Intentional because flat launch checks preserve one error path per rejected relationship.
-export function decodeTerminalCreateBody(
-  body: string,
-  options: { validRunners: ReadonlySet<string>; defaultRunner: AgentId },
-): DecodeResult<TerminalCreateBody> {
-  const parsed = parseJson(body, "body");
-  // Malformed JSON stops the launch before a terminal row appears.
-  if (!parsed.ok) return parsed;
-  const raw = parsed.value;
-  // A non-object body cannot carry the selected runner or project path.
-  if (!isRecord(raw)) return err("body", "must be a JSON object");
 
+/**
+ * Decode the three free-text path fields a terminal launch carries, before any of them is used to choose a directory.
+ *
+ * An empty prompt is deliberately valid: the user can open an idle shell without sending anything to the runner.
+ *
+ * @param raw - the parsed request body
+ * @returns the three fields, or a path-specific error naming which one the user must correct
+ */
+function decodeTerminalPathFields(
+  raw: Record<string, unknown>,
+): DecodeResult<{ prompt: string; projectPath: string; targetPath: string }> {
   // Empty prompt is valid: the terminal route opens an idle shell in that case.
   const prompt = decodeOptionalStringField(raw, "prompt");
   // Invalid prompt types cannot be pasted into a terminal safely.
@@ -266,6 +264,100 @@ export function decodeTerminalCreateBody(
   // Invalid target path types would open the runner in the wrong place.
   if (!targetPath.ok) return targetPath;
 
+  return {
+    ok: true,
+    value: {
+      prompt: prompt.value,
+      projectPath: projectPath.value,
+      targetPath: targetPath.value,
+    },
+  };
+}
+
+/** The launch choices that decide whether staged-draft capture and report ownership are allowed together. */
+interface QualityCaptureSelection {
+  wasCaptureRequested: boolean;
+  qualityReportProjectPath: string;
+  runner: string;
+  accessMode: string;
+}
+
+/**
+ * Reject the launch combinations where staged-draft capture or report ownership could not actually be honoured.
+ *
+ * A user reaches these by picking a Quality card and then changing the runner or access mode, so each rejection
+ * names the field they can change rather than failing the launch with a generic error.
+ *
+ * The rules exist because capture writes a receipt the agent waits on:
+ * - only a Claude reporting session can own that write, so any other pairing would strand the agent
+ * - capture with no owning project would land the receipt in an inferred project the user never chose
+ * - ownership outside reporting mode, or on a runner with no enforceable channel, would overstate the isolation actually in force
+ *
+ * @param selection - the launch choices being validated
+ * @returns the decode error to return, or null when the combination is supported
+ */
+function rejectUnsupportedQualityCapture(
+  selection: QualityCaptureSelection,
+): DecodeResult<never> | null {
+  const hasQualityReportOwner =
+    selection.qualityReportProjectPath.trim().length > 0;
+  const isClaudeReporting =
+    selection.runner === "claude" && selection.accessMode === "reporting";
+
+  if (selection.wasCaptureRequested && !isClaudeReporting) {
+    return err(
+      "body.captureQualityDrafts",
+      "is supported only for Claude reporting sessions",
+    );
+  }
+  if (selection.wasCaptureRequested && !hasQualityReportOwner) {
+    return err(
+      "body.qualityReportProjectPath",
+      "is required when staged-draft capture is enabled",
+    );
+  }
+  if (!hasQualityReportOwner) return null;
+
+  if (selection.accessMode !== "reporting") {
+    return err(
+      "body.qualityReportProjectPath",
+      "is supported only for reporting sessions",
+    );
+  }
+  if (selection.runner !== "claude" && selection.runner !== "codex") {
+    return err(
+      "body.qualityReportProjectPath",
+      "is supported only for Claude or Codex reporting sessions",
+    );
+  }
+  return null;
+}
+
+/**
+ * Decode and validate a `POST /api/terminal/create` request body before any terminal session is started.
+ *
+ * This is the trust boundary for a launch: the body arrives from the browser, so every field is decoded rather than trusted,
+ * and a rejection names the exact field so the dashboard can tell the user what to change.
+ *
+ * @param body - raw request body; malformed JSON stops the launch before a terminal row appears
+ * @param options - the runners this server accepts and the one to fall back to when none is named
+ * @returns the decoded launch, or a path-specific error identifying the field that failed
+ */
+export function decodeTerminalCreateBody(
+  body: string,
+  options: { validRunners: ReadonlySet<string>; defaultRunner: AgentId },
+): DecodeResult<TerminalCreateBody> {
+  const parsed = parseJson(body, "body");
+  // Malformed JSON stops the launch before a terminal row appears.
+  if (!parsed.ok) return parsed;
+  const raw = parsed.value;
+  // A non-object body cannot carry the selected runner or project path.
+  if (!isRecord(raw)) return err("body", "must be a JSON object");
+
+  const paths = decodeTerminalPathFields(raw);
+  if (!paths.ok) return paths;
+  const { prompt, projectPath, targetPath } = paths.value;
+
   const runner = decodeTerminalRunner(raw, options);
   if (!runner.ok) return runner;
 
@@ -274,15 +366,6 @@ export function decodeTerminalCreateBody(
 
   const captureQualityDrafts = decodeTerminalCaptureQualityDrafts(raw);
   if (!captureQualityDrafts.ok) return captureQualityDrafts;
-  if (
-    captureQualityDrafts.value &&
-    (runner.value !== "claude" || accessMode.value !== "reporting")
-  ) {
-    return err(
-      "body.captureQualityDrafts",
-      "is supported only for Claude reporting sessions",
-    );
-  }
 
   const qualityReportProjectPath = decodeOptionalStringField(
     raw,
@@ -290,40 +373,21 @@ export function decodeTerminalCreateBody(
   );
   // A non-string owner cannot be matched safely to the projects visible in the launch.
   if (!qualityReportProjectPath.ok) return qualityReportProjectPath;
-  const hasQualityReportOwner =
-    qualityReportProjectPath.value.trim().length > 0;
-  // Claude draft capture needs one owner so its receipt cannot land in an inferred project.
-  if (captureQualityDrafts.value && !hasQualityReportOwner) {
-    return err(
-      "body.qualityReportProjectPath",
-      "is required when staged-draft capture is enabled",
-    );
-  }
-  // Report ownership only has meaning in the read-mostly reporting mode shown by Quality.
-  if (hasQualityReportOwner && accessMode.value !== "reporting") {
-    return err(
-      "body.qualityReportProjectPath",
-      "is supported only for reporting sessions",
-    );
-  }
-  // Other runners have no enforceable report-owner channel, so accepting one would overstate isolation.
-  if (
-    hasQualityReportOwner &&
-    runner.value !== "claude" &&
-    runner.value !== "codex"
-  ) {
-    return err(
-      "body.qualityReportProjectPath",
-      "is supported only for Claude or Codex reporting sessions",
-    );
-  }
+
+  const captureRejection = rejectUnsupportedQualityCapture({
+    wasCaptureRequested: captureQualityDrafts.value,
+    qualityReportProjectPath: qualityReportProjectPath.value,
+    runner: runner.value,
+    accessMode: accessMode.value,
+  });
+  if (captureRejection) return captureRejection;
 
   return {
     ok: true,
     value: {
-      prompt: prompt.value,
-      projectPath: projectPath.value,
-      targetPath: targetPath.value,
+      prompt,
+      projectPath,
+      targetPath,
       runner: runner.value,
       accessMode: accessMode.value,
       captureQualityDrafts: captureQualityDrafts.value,
@@ -624,7 +688,59 @@ function decodeEvaluateOptionals(obj: Record<string, unknown>): DecodeResult<{
  * @param raw - raw files value; missing, empty, or non-array values mean no file bundle can be scored
  * @returns decoded file bundle, or an error before the skill evaluator runs
  */
-// eslint-disable-next-line complexity -- intentional: per-file boundary checks preserve exact error paths for rejected bundle entries.
+/**
+ * Validate one uploaded file's name, rejecting anything the evaluator could not label unambiguously.
+ *
+ * Names stay bare because the results list shows them back to the user, and a path-shaped name would imply the host
+ * filesystem was uploaded when only the file contents were.
+ *
+ * @param name - candidate filename from the upload control
+ * @param index - position in the bundle, used to build the error path the UI highlights
+ * @param seenNames - names already accepted in this bundle, so duplicates can be refused
+ * @returns the validated filename, or a path-specific error naming what the user must change
+ */
+function decodeEvaluateFilename(
+  name: unknown,
+  index: number,
+  seenNames: ReadonlySet<string>,
+): DecodeResult<string> {
+  // Empty filenames make evaluator results impossible to tie back to a file.
+  if (typeof name !== "string" || name.length === 0) {
+    return err(`body.files[${index}].name`, "must be a non-empty string");
+  }
+  // Overlong names would dominate the evaluator's file list and result labels.
+  if (utf8ByteLength(name) > MAX_EVALUATE_FILENAME_BYTES) {
+    return err(
+      `body.files[${index}].name`,
+      `must be at most ${MAX_EVALUATE_FILENAME_BYTES} bytes`,
+    );
+  }
+  // File names stay bare so the UI does not imply host filesystem paths were uploaded.
+  if (name.includes("/") || name.includes("\\") || name.includes("\0")) {
+    return err(
+      `body.files[${index}].name`,
+      "must be a bare filename (no path separators or NUL bytes)",
+    );
+  }
+  // Duplicate names would make result evidence ambiguous for the user.
+  if (seenNames.has(name)) {
+    return err(
+      `body.files[${index}].name`,
+      `duplicate filename: ${JSON.stringify(name)}`,
+    );
+  }
+  return { ok: true, value: name };
+}
+
+/**
+ * Decode the uploaded file bundle for the Skill Evaluator, rejecting anything it could not score or label.
+ *
+ * The aggregate byte cap is applied across the whole bundle, so many small files cannot slip past the same budget a single
+ * pasted document is held to.
+ *
+ * @param raw - raw files value; missing, empty, or non-array values mean no bundle can be scored
+ * @returns the decoded bundle, or a path-specific error raised before the evaluator runs
+ */
 function decodeEvaluateFiles(
   raw: unknown,
 ): DecodeResult<{ name: string; content: string }[]> {
@@ -649,36 +765,9 @@ function decodeEvaluateFiles(
     if (!isRecord(item)) {
       return err(`body.files[${index}]`, "must be an object");
     }
-    // Empty filenames make evaluator results impossible to tie back to a file.
-    if (typeof item.name !== "string" || item.name.length === 0) {
-      return err(`body.files[${index}].name`, "must be a non-empty string");
-    }
-    // Overlong names would dominate the evaluator's file list and result labels.
-    if (utf8ByteLength(item.name) > MAX_EVALUATE_FILENAME_BYTES) {
-      return err(
-        `body.files[${index}].name`,
-        `must be at most ${MAX_EVALUATE_FILENAME_BYTES} bytes`,
-      );
-    }
-    // File names stay bare so the UI does not imply host filesystem paths were uploaded.
-    if (
-      item.name.includes("/") ||
-      item.name.includes("\\") ||
-      item.name.includes("\0")
-    ) {
-      return err(
-        `body.files[${index}].name`,
-        "must be a bare filename (no path separators or NUL bytes)",
-      );
-    }
-    // Duplicate names would make result evidence ambiguous for the user.
-    if (seenNames.has(item.name)) {
-      return err(
-        `body.files[${index}].name`,
-        `duplicate filename: ${JSON.stringify(item.name)}`,
-      );
-    }
-    seenNames.add(item.name);
+    const decodedName = decodeEvaluateFilename(item.name, index, seenNames);
+    if (!decodedName.ok) return decodedName;
+    seenNames.add(decodedName.value);
     // File content must be text because the evaluator scores source/document content.
     if (typeof item.content !== "string") {
       return err(`body.files[${index}].content`, "must be a string");
@@ -691,7 +780,7 @@ function decodeEvaluateFiles(
         `combined content size exceeds ${MAX_EVALUATE_CONTENT_BYTES} bytes`,
       );
     }
-    files.push({ name: item.name, content: item.content });
+    files.push({ name: decodedName.value, content: item.content });
   }
   return { ok: true, value: files };
 }
@@ -699,9 +788,9 @@ function decodeEvaluateFiles(
 /**
  * Decode and validate a `POST /api/quality/evaluate` request body.
  *
- * This stays explicit because the route accepts the current multi-file uploader
- * and the older single-text form; ambiguous bodies are rejected before quality
- * scoring. The deprecated `/api/quality/analyse` alias reuses the same shape.
+ * This stays explicit because the route accepts the current multi-file uploader and the older single-text form; ambiguous bodies are rejected before
+ * quality scoring.
+ * The deprecated `/api/quality/analyse` alias reuses the same shape.
  *
  * @param body - raw request body; empty or malformed JSON means no evaluation starts
  * @returns evaluate payload, or a path-specific error shown before scoring

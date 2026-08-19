@@ -35,7 +35,7 @@ after(async () => {
 
 /**
  * Attempt one live-reload WebSocket upgrade and report whether the server let
- * it open or tore it down, resolving either way so a hung handshake fails via
+ * it open or tore it down; it swallows socket errors and resolves either way, so a hung handshake fails via
  * the per-test timeout rather than leaking a socket.
  *
  * @param headers - request headers to send with the upgrade (Host / Origin)
@@ -47,26 +47,26 @@ async function attemptLiveReload(
 ): Promise<"opened" | "rejected"> {
   const { WebSocket } = await import("ws");
   return await new Promise<"opened" | "rejected">((resolveOutcome) => {
-    const ws: WsWebSocket = new WebSocket(`${wsBase}/ws/livereload`, {
+    const socket: WsWebSocket = new WebSocket(`${wsBase}/ws/livereload`, {
       headers,
     });
     let hasSettled = false;
-    /** Resolve once and null out listeners so a later event can't double-settle. */
+    /** Resolve once and null out listeners; it swallows any later event so a socket error after close cannot double-settle the promise. */
     const settle = (outcome: "opened" | "rejected"): void => {
       if (hasSettled) return;
       hasSettled = true;
       try {
-        ws.close();
+        socket.close();
       } catch {
         /* already closed */
       }
       resolveOutcome(outcome);
     };
     // A reached open state means the upgrade was accepted - the failure we guard against.
-    ws.once("open", () => settle("opened"));
+    socket.once("open", () => settle("opened"));
     // Destroyed sockets surface as an error or an immediate close before open.
-    ws.once("error", () => settle("rejected"));
-    ws.once("close", () => settle("rejected"));
+    socket.once("error", () => settle("rejected"));
+    socket.once("close", () => settle("rejected"));
   });
 }
 

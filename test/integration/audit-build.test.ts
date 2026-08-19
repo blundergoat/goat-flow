@@ -45,10 +45,14 @@ const requiredSkillDocsFiles = [
   ".goat-flow/skill-docs/playbooks/code-comments.md",
   ".goat-flow/skill-docs/playbooks/gruff-code-quality.md",
   ".goat-flow/skill-docs/playbooks/hook-policy-testing.md",
+  ".goat-flow/skill-docs/playbooks/naming-and-placement.md",
   ".goat-flow/skill-docs/playbooks/observability.md",
   ".goat-flow/skill-docs/playbooks/page-capture.md",
   ".goat-flow/skill-docs/playbooks/release-notes.md",
   ".goat-flow/skill-docs/playbooks/skill-playbook-authoring-sync.md",
+  ".goat-flow/skill-docs/playbooks/test-selection.md",
+  ".goat-flow/skill-docs/playbooks/writing-sentence-diagnostics.md",
+  ".goat-flow/skill-docs/playbooks/writing-structure-diagnostics.md",
   ".goat-flow/skill-docs/playbooks/writing-style.md",
   ".goat-flow/skill-docs/skill-quality-testing/README.md",
   ".goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md",
@@ -79,6 +83,7 @@ Before declaring any tool or capability unavailable, read the matching playbook 
 `;
 }
 
+// Build an audit context whose skill-docs tree is present or missing exactly as the case under test needs.
 function makeSkillDocsCtx(options: {
   dirPresent: boolean;
   readmePresent?: boolean;
@@ -196,17 +201,17 @@ describe("audit build: goat-flow gitignore exceptions", () => {
 
     assertExists(result);
     assert.match(result.message, /!logs\//u);
-    assert.match(result.message, /!logs\/quality\/README\.md/u);
-    assert.match(result.message, /!logs\/events\/README\.md/u);
-    assert.match(result.message, /!logs\/security\/README\.md/u);
+    assert.match(result.message, /!\*\*\/logs\/quality\/README\.md/u);
+    assert.match(result.message, /!\*\*\/logs\/events\/README\.md/u);
+    assert.match(result.message, /!\*\*\/logs\/security\/README\.md/u);
   });
 
   it("fails when required gitignore entries have unsafe last-match order", () => {
     const configuredPatterns = [...REQUIRED_GOAT_FLOW_GITIGNORE_PATTERNS];
-    const readmeInclude = "!logs/quality/README.md";
+    const readmeInclude = "!**/logs/quality/README.md";
     configuredPatterns.splice(configuredPatterns.indexOf(readmeInclude), 1);
     configuredPatterns.splice(
-      configuredPatterns.indexOf("logs/quality/*.md"),
+      configuredPatterns.indexOf("**/logs/quality/*.md"),
       0,
       readmeInclude,
     );
@@ -245,6 +250,49 @@ describe("audit build: goat-flow gitignore exceptions", () => {
       templateLines,
       "REQUIRED_GOAT_FLOW_GITIGNORE_PATTERNS must match workflow/setup/reference/goat-flow-gitignore",
     );
+  });
+
+  // Ignore-aware search tools mis-anchor slash-containing rules, so every one must carry the `**/` prefix and the logs guard must be present;
+  // an unprefixed rule would silently hide a committed subtree from Claude Code's grep shim again.
+  it("keeps every slash-containing rule **/-prefixed and carries the logs subdirectory guard", () => {
+    const unprefixed = REQUIRED_GOAT_FLOW_GITIGNORE_PATTERNS.filter(
+      (pattern) => {
+        const body = pattern.startsWith("!") ? pattern.slice(1) : pattern;
+        return (
+          body.replace(/\/$/u, "").includes("/") && !body.startsWith("**/")
+        );
+      },
+    );
+    assert.deepEqual(
+      unprefixed,
+      [],
+      "slash-containing gitignore rules must start with **/",
+    );
+    assert.ok(
+      REQUIRED_GOAT_FLOW_GITIGNORE_PATTERNS.includes("**/logs/*/*/"),
+      "the **/logs/*/*/ guard keeps **/ re-includes from reaching nested collision directories",
+    );
+  });
+
+  // A consumer still carrying the pre-M56 anchored spelling must be told which patterns are missing, so `goat-flow upgrade` has a reason.
+  it("reports the pre-M56 anchored spelling as a stale install", () => {
+    const anchoredSpelling = REQUIRED_GOAT_FLOW_GITIGNORE_PATTERNS.filter(
+      (pattern) => pattern !== "**/logs/*/*/",
+    )
+      .map((pattern) => pattern.replace(/^(!?)\*\*\//u, "$1"))
+      .join("\n");
+    const ctx = makeCtx({
+      fs: stubFS({
+        exists: (path) => path === ".goat-flow/.gitignore",
+        readFile: (path) =>
+          path === ".goat-flow/.gitignore" ? anchoredSpelling : null,
+      }),
+    });
+    const finding = goatFlowGitignoreCheck.run(ctx);
+    assertExists(finding);
+    assert.match(finding.message, /is missing required entries: /u);
+    assert.match(finding.message, /\*\*\/logs\/\*\/\*\//u);
+    assert.match(finding.message, /\*\*\/learning-loop\/\*\*/u);
   });
 });
 

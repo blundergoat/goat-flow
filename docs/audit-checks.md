@@ -58,7 +58,7 @@ Aggregate-mode nuance:
 
 ## Optional Drift and Content Scopes
 
-`--check-drift` keeps the 20 build checks and adds canonical-package integrity. It compares skill, shared-document, hook, and agent mirrors, then validates the complete artifact graph: skill frontmatter names match their directory commands; command and artifact IDs are unique; manifest skill references stay inside committed `references/` packs; local Markdown resources resolve; and source-only or stale installed skill/playbook files fail with both the affected path and canonical owner. These checks do not add registered build-check IDs, so they appear under the separate `drift` report field.
+`--check-drift` keeps the 20 build checks and adds canonical-package integrity. It compares skill, shared-document, hook, and agent mirrors, then validates the complete artifact graph: skill frontmatter names match their directory commands; command and artifact IDs are unique; manifest skill references stay inside committed `references/` packs; local Markdown resources resolve; and source-only or stale installed skill/playbook files fail with both the affected path and canonical owner. It also checks manifest-declared shared phrases across every distinct sibling instruction file present in the target. That peer comparison still runs with `--agent <id>` and reports the affected file, section, and phrase without selecting a canonical winner. These checks do not add registered build-check IDs, so they appear under the separate `drift` report field.
 
 `--check-content` scans current user guidance for factual drift, including invocations of commands the parser has removed. Removed top-level commands are matched only when written as a code-span or shell-style invocation, so prose such as "goat-flow check IDs" is not treated as a command. Historical learning-loop records remain outside this current-guidance scan. Content findings appear under the separate `content` report field.
 
@@ -77,7 +77,7 @@ Aggregate-mode nuance:
 | Constraints | `deny-blocks-dangerous` | `integrity` | Deny patterns block broad recursive deletion, all git push (ADR-025), and `chmod` |
 | Constraints | `deny-blocks-pipe-to-shell` | `advisory` | Deny patterns block `curl \| bash` and `wget \| sh` pipe-to-shell execution |
 | Constraints | `deny-hook-registered` | `integrity` | A deny hook that exists on disk is registered in the correct pre-tool hook slot |
-| Constraints | `settings-rules-matched` | `integrity` | JSON permission rules (deny/allow/ask) use forms the agent matches; `MultiEdit` (removed tool) and `Write`/`NotebookEdit`/`Glob` path rules warn at launch and enforce nothing - re-running goat-flow setup/install repairs them |
+| Constraints | `settings-rules-matched` | `advisory` | JSON permission rules (deny/allow/ask) use forms Claude Code consults. Its [permissions documentation](https://code.claude.com/docs/en/permissions) says file permissions consult `Edit(path)` and `Read(path)`, while path rules for `Write`, `NotebookEdit`, `Glob`, and legacy `MultiEdit` are accepted but not consulted. The audit reports inert forms as a score-only warning; they MAY remain as defense-in-depth markers or be removed deliberately after project-owner review, and goat-flow never rewrites them automatically. |
 | Verification | `hooks-registered` | `integrity` | Post-turn hook registrations and on-disk hook files stay in sync |
 | Verification | `commit-guidance` | `advisory` | For targets containing `.git`, commit guidance exists at preferred `docs/coding-standards/git-commit-message.md` or compatible `docs/coding-standards/git-commit.md`; targets without `.git` skip the check, and old GitHub commit-guidance locations are flagged as misplaced |
 | Verification | `evidence-before-claims` | `metric` | Present instruction files carry the Hallucination red-flags clauses and Rationalisations-to-reject pointer |
@@ -93,7 +93,7 @@ Aggregate-mode nuance:
 |---------|-----------------|-------|
 | `npx @blundergoat/goat-flow@latest audit .` | 16 setup + 4 agent = 20 build checks | Structural install gate only |
 | `npx @blundergoat/goat-flow@latest audit . --agent <id>` | Same 20 build checks, with agent checks enforced for the selected agent | Best way to validate one runtime's install state |
-| `npx @blundergoat/goat-flow@latest audit . --check-drift` | 20 build checks + artifact drift/integrity | Validates canonical sources, installed mirrors, IDs, frontmatter, and referenced resources |
+| `npx @blundergoat/goat-flow@latest audit . --check-drift` | 20 build checks + artifact and instruction drift | Validates canonical sources, installed mirrors, IDs, frontmatter, referenced resources, and sibling instruction parity |
 | `npx @blundergoat/goat-flow@latest audit . --check-content` | 20 build checks + factual/content drift | Validates current documentation claims and removed-command examples |
 | `npx @blundergoat/goat-flow@latest audit . --harness` | 20 build + 18 harness = 38 checks | Adds harness completeness, still deterministic |
 

@@ -1,11 +1,13 @@
 /**
- * Audit checks for each agent's dangerous-command deny mechanism (concern 4). Verifies that a deny
- * guard is present, that any hook scripts pass `bash -n`, and that deny patterns are registered -
- * accepting both file-based and config-based mechanisms because agents satisfy the contract in
- * different ways. Some checks spawn `bash` and copy fixture hooks to a real path, so this file owns
- * the bridge from the in-memory audit FS to the actual workspace the shell needs. The runtime
- * smoke that replays a blocked payload through configured launchers and the registered hook
- * lives in check-agent-deny-runtime.ts; this file composes both halves into the BuildCheck.
+ * Audit checks for each agent's dangerous-command deny mechanism (concern 4).
+ * Verifies that a deny guard is present, that any hook scripts pass `bash -n`, and that deny patterns are registered - accepting both file-based and
+ * config-based mechanisms because agents satisfy the contract in different ways.
+ *
+ * Some checks spawn `bash` and copy fixture hooks to a real path, so this file owns the bridge from the in-memory audit FS to the actual workspace
+ * the shell needs.
+ *
+ * The runtime smoke that replays a blocked payload through configured launchers and the registered hook lives in check-agent-deny-runtime.ts; this
+ * file composes both halves into the BuildCheck.
  */
 import * as childProcess from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
@@ -47,10 +49,9 @@ const DENY_HOOK_TEMPLATE_FILES = [
 /** Check deny-hook presence because unsupported agents and config-based agents need different handling. */
 function checkDenyHookPresent(ctx: AuditContext): AuditFailure | null {
   for (const agentFacts of ctx.agents) {
-    // Capability-limited agents (e.g. Antigravity at v1.0.1) have no documented
-    // deny mechanism upstream. The manifest records this as
-    // `denyMechanism: null`; skip the check rather than producing a permanent
-    // audit failure that downstream projects cannot fix.
+    // Capability-limited agents (e.g. Antigravity at v1.0.1) have no documented deny mechanism upstream.
+    // The manifest records this as `denyMechanism: null`; skip the check rather than producing a permanent audit failure that downstream projects
+    // cannot fix.
     if (agentFacts.agent.denyMechanism === null) continue;
     if (!agentFacts.hooks.denyExists && !agentFacts.hooks.denyIsConfigBased) {
       return {
@@ -78,7 +79,15 @@ function listShellHookFiles(ctx: AuditContext, hooksDir: string): string[] {
   }
 }
 
-/** Spawn bash syntax validation for one hook and map process failures into audit evidence. */
+/**
+ * Spawns a bash syntax check for one hook file and reports what came back as audit evidence.
+ * A hook that cannot even parse would fail silently at runtime, which is exactly the protection a user believes they have.
+ *
+ * @param ctx - audit context supplying the target project path
+ * @param hooksDir - project-relative hooks directory
+ * @param file - hook filename to check
+ * @returns the syntax verdict plus any error text; an unavailable shell reports as unchecked rather than as a pass
+ */
 function checkHookFileSyntax(
   ctx: AuditContext,
   hooksDir: string,
@@ -152,6 +161,14 @@ function checkDenyPatterns(ctx: AuditContext): AuditFailure | null {
   return null;
 }
 
+/**
+ * Report hook scripts left behind by an older layout, which would otherwise sit unused while the user assumes they still run.
+ *
+ * @param ctx - audit context supplying the target filesystem
+ * @param agentId - agent whose hook directory is being audited
+ * @param hooksDir - project-relative hooks directory for that agent
+ * @returns the failure to show the user, or null when no legacy copies remain
+ */
 function checkLegacyHookDrift(
   ctx: AuditContext,
   agentId: string,
@@ -183,9 +200,8 @@ function checkLegacyHookDrift(
 /**
  * Read a canonical hook template's text from the packaged `workflow/hooks/` tree.
  *
- * Swallows read errors and returns null as a fallback when the template is absent or
- * unreadable, so drift checks can treat "no canonical template" and "installed copy
- * differs" as distinct, non-fatal outcomes instead of aborting the whole audit.
+ * Swallows read errors and returns null as a fallback when the template is absent or unreadable, so drift checks can treat "no canonical template"
+ * and "installed copy differs" as distinct, non-fatal outcomes instead of aborting the whole audit.
  *
  * @param templateFile - path under `workflow/hooks/` (e.g. `deny-dangerous.sh` or `deny-dangerous/patterns-shell.sh`)
  * @returns the template's UTF-8 contents, or null when the file is missing or unreadable
@@ -200,6 +216,13 @@ function readHookTemplateContent(templateFile: string): string | null {
   }
 }
 
+/**
+ * Work out where one shipped hook template lives once installed, since the policy files sit in a shared directory rather than the agent's own.
+ *
+ * @param hooksDir - project-relative hooks directory for the agent being audited
+ * @param templateFile - template path as shipped
+ * @returns the project-relative installed path to compare against
+ */
 function installedTemplateRelPath(
   hooksDir: string,
   templateFile: string,
@@ -209,6 +232,14 @@ function installedTemplateRelPath(
     : join(hooksDir, templateFile);
 }
 
+/**
+ * Report installed hook files that no longer match the shipped templates, so a user learns their guardrails are running old bytes.
+ *
+ * @param ctx - audit context supplying the target filesystem
+ * @param agentId - agent whose hook directory is being audited
+ * @param hooksDir - project-relative hooks directory for that agent
+ * @returns the failure to show the user, or null when every installed file matches its template
+ */
 function checkTemplateDrift(
   ctx: AuditContext,
   agentId: string,
@@ -349,7 +380,9 @@ export const agentDenyMechanism: BuildCheck = {
       checkDenyPatterns(ctx) ??
       checkHookVersion(ctx);
 
-    if (ctx.denyMechanismEvidenceLevel === "static") {
+    // Omitted evidence is static by contract. Only an explicit full level may
+    // execute a managed self-test or configured launcher from the target.
+    if (ctx.denyMechanismEvidenceLevel !== "full") {
       return staticFailure;
     }
 

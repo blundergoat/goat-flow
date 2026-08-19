@@ -42,12 +42,12 @@ response cross a vendor boundary without the user deciding that they should.
 
 Native sub-agent delegation is different in kind: same harness, same session record, already
 governed by the sub-agent rules in every instruction file, and universal across the four
-supported runtimes (`.goat-flow/learning-loop/lessons/agent-behavior.md`, search: `Sub-agent
+supported runtimes (`.goat-flow/learning-loop/lessons/agent-tooling.md`, search: `Sub-agent
 delegation is universal`).
 
-Precedent class: ADR-025 (block all `git push`), ADR-028 (GitHub CLI mostly read-only), and
-ADR-040 (agents never commit) all constrain agent execution authority through the instruction
-files. Those three pair prose with mechanical enforcement because they protect shared or
+Precedent class: ADR-025 (agents never commit or push) and ADR-028 (GitHub CLI mostly
+read-only) both constrain agent execution authority through the instruction
+files. Both pair prose with mechanical enforcement because they protect shared or
 irreversible state, and ADR-028 followed an observed prose failure. This boundary protects
 process integrity, has no observed incident, and therefore starts prose-only.
 
@@ -55,9 +55,9 @@ process integrity, has no observed incident, and therefore starts prose-only.
 
 | Option | What fails | Why rejected or accepted |
 | --- | --- | --- |
-| Prose-only Ask First boundary in the three instruction files | An agent can still bypass prose it never reads or rationalises past | Accepted. Matches the house pattern: mechanical gates are reserved for destructive/shared-state actions (ADR-025, ADR-040) or observed prose failures (ADR-028). The realistic failure mode here is not knowing the norm, and the rule sits in the auto-read file at the decision point |
+| Prose-only Ask First boundary in the three instruction files | An agent can still bypass prose it never reads or rationalises past | Accepted. Matches the house pattern: mechanical gates are reserved for destructive/shared-state actions (ADR-025) or observed prose failures (ADR-028). The realistic failure mode here is not knowing the norm, and the rule sits in the auto-read file at the decision point |
 | `.claude/settings.json` ask/deny entry for harness CLIs | Covers one of four harnesses; prefix patterns miss `bash -c` wrappers and path-qualified binaries; implies the other three runtimes are ungated | Rejected - asymmetric pseudo-enforcement with maintenance cost on every roster change |
-| deny-dangerous hook patterns for the four CLIs | Nothing at bypass time, but requires pattern + self-test + per-agent parity machinery (the ADR-028/ADR-034 surface) for a boundary with no observed violation | Rejected for now - disproportionate pre-incident; named below as the escalation path |
+| deny-dangerous hook patterns for the four CLIs | Nothing at bypass time, but requires pattern + self-test + per-agent parity machinery (the ADR-028/ADR-052 surface) for a boundary with no observed violation | Rejected for now - disproportionate pre-incident; named below as the escalation path |
 
 ## Reversibility
 
@@ -66,7 +66,7 @@ Two-way door. Revisit triggers:
 - First observed silent cross-harness launch: add deny-dangerous patterns and self-test
   coverage for the four CLIs, following the ADR-028 escalation shape (prose rule stays; the
   hook makes it categorical).
-- Agent roster change (ADR-022 governs the canonical `AgentId` tuple): update the CLI example
+- Agent roster change (ADR-020 governs the canonical `AgentId` tuple): update the CLI example
   list in the three instruction files and in this ADR.
 
 Rollback is removing the two identical sentences from the three instruction files and marking

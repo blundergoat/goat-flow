@@ -1,9 +1,9 @@
 /**
  * Implements the `hooks` command family (list / sync / enable / disable / verify) for the CLI.
- * It is a thin presentation+validation layer over the server-side hook registrar: it lazy-imports
- * the registrar so the heavy module only loads when a hooks command actually runs, picks JSON vs
- * the compact text table from `--format`, and translates the registrar's typed errors into
- * CLIErrors with the right exit code (404 -> usage error 2, everything else -> failure 1).
+ *
+ * It is a thin presentation+validation layer over the server-side hook registrar: it lazy-imports the registrar so the heavy module only loads when a
+ * hooks command actually runs, picks JSON vs the compact text table from `--format`, and translates the registrar's typed errors into CLIErrors with
+ * the right exit code (404 -> usage error 2, everything else -> failure 1).
  */
 
 import { CLIError } from "./cli-error.js";
@@ -27,14 +27,24 @@ function renderHooksText(hooks: HookState[]): string {
     lines.push(
       `${hook.id}  ${hook.enabled ? "enabled" : "disabled"}  ${agentBits.join(", ")}`,
     );
+    if (hook.scanRoots !== null) {
+      const roots =
+        hook.scanRoots.roots.length === 0
+          ? "none"
+          : hook.scanRoots.roots.join(", ");
+      lines.push(`  scan roots: ${roots} [${hook.scanRoots.status}]`);
+      if (hook.scanRoots.issue !== null) {
+        lines.push(`  ${hook.scanRoots.issue}`);
+      }
+    }
   }
   return lines.join("\n");
 }
 
 /**
  * Assert a hook id is present for the enable/disable toggles, which cannot run without a target.
- * Throws a usage CLIError (exit 2) naming the offending subcommand when the id is missing; the
- * parser normally enforces this, so a throw here is a defensive guard for direct callers.
+ * Throws a usage CLIError (exit 2) naming the offending subcommand when the id is missing; the parser normally enforces this, so a throw here is a
+ * defensive guard for direct callers.
  */
 function requireHookId(options: ParsedCLI): string {
   if (options.hookId) return options.hookId;
@@ -56,8 +66,8 @@ function renderHooksResult(
 
 /**
  * Render the single hook returned by an enable/disable toggle, reusing the list table for one row.
- * Emits JSON wrapping the hook under a `hook` key when `--format json`, otherwise the one-row text
- * table, so toggle output stays shape-compatible with `hooks list` for scripts that parse either.
+ * Emits JSON wrapping the hook under a `hook` key when `--format json`, otherwise the one-row text table, so toggle output stays shape-compatible
+ * with `hooks list` for scripts that parse either.
  */
 function renderHookToggleResult(options: ParsedCLI, hook: HookState): void {
   writeOutput(
@@ -101,13 +111,16 @@ async function handleHookVerification(options: ParsedCLI): Promise<void> {
           projectPath: options.projectPath,
           agent: options.agent,
           scenarioGroup: options.hookScenario,
-          isTargetUntrusted: options.isTargetUntrusted,
+          // The runtime-evidence layer uses this field as its no-execution gate.
+          // Omission and the deprecated alias both stay static; only explicit
+          // trusted-target selection releases the gate.
+          isTargetUntrusted: !options.isTargetTrusted,
         })
       : verifyManagedConfiguredHook({
           projectPath: options.projectPath,
           agent: options.agent,
           scenarioGroup: options.hookScenario,
-          isTargetUntrusted: options.isTargetUntrusted,
+          isTargetUntrusted: !options.isTargetTrusted,
         });
   writeOutput(
     options,
@@ -121,9 +134,10 @@ async function handleHookVerification(options: ParsedCLI): Promise<void> {
 
 /**
  * Handle the hooks command, dispatching list/sync/enable/disable to the lazily-imported registrar.
- * Reports registrar failures as CLIErrors: a HookRegistrarError 404 (unknown hook) throws exit 2,
- * any other registrar error throws exit 1, and non-registrar errors are rethrown unchanged. An
- * unrecognised subcommand that reaches the end throws a usage CLIError (exit 2) with the syntax.
+ *
+ * Reports registrar failures as CLIErrors: a HookRegistrarError 404 (unknown hook) throws exit 2, any other registrar error throws exit 1, and
+ * non-registrar errors are rethrown unchanged.
+ * An unrecognised subcommand that reaches the end throws a usage CLIError (exit 2) with the syntax.
  *
  * @param options - parsed CLI options; reads `hookSubcommand`, `hookId`, `projectPath`, and `format`
  * @returns a promise that resolves once output is written; rejects (throws) on the error paths above

@@ -1,7 +1,8 @@
 /**
  * Canonical-template versus installed-artifact drift detection.
- * Use during setup audits so operators learn which skill, shared document,
- * hook, or agent mirror differs from the workflow package they intended to run.
+ *
+ * Use during setup audits so operators learn which skill, shared document, hook, or agent mirror differs from the workflow package they intended to
+ * run.
  * Semantic Markdown comparison ignores harmless YAML order and trailing-space changes.
  */
 import { load } from "js-yaml";
@@ -54,8 +55,8 @@ function stripNullish(frontmatterValue: unknown): unknown {
 
 /**
  * Parse YAML frontmatter and body text from a markdown file.
- * The parser swallows malformed YAML into a sentinel object and never throws so
- * drift checks can report content mismatch without aborting the whole audit.
+ * The parser swallows malformed YAML into a sentinel object and never throws so drift checks can report content mismatch without aborting the whole
+ * audit.
  * @param raw - Full markdown file contents, including optional YAML frontmatter.
  * @returns Parsed frontmatter plus body text after the closing marker.
  */
@@ -124,6 +125,12 @@ interface CheckDriftOptions {
   agentFilter?: AgentId | null;
 }
 
+/** One readable peer instruction file plus its H2-keyed bodies. */
+interface InstructionParityDocument {
+  path: string;
+  sections: Map<string, string>;
+}
+
 /** Read the configured list of deprecated skill names from the validated manifest. */
 function getStaleSkillNames(): Set<string> {
   return new Set(loadManifest().facts.skills.stale_names);
@@ -149,9 +156,106 @@ function selectedInstalledSkillRoots(
   );
 }
 
+/** Normalize the one canonical H2 whose visible heading carries a suffix. */
+function normalizeInstructionHeading(heading: string): string {
+  const trimmed = heading.trim().replace(/\s+#+$/u, "");
+  return /^Execution Loop\b/iu.test(trimmed) ? "Execution Loop" : trimmed;
+}
+
+/** Split instruction Markdown into H2 bodies while retaining nested headings. */
+function instructionSections(content: string): Map<string, string> {
+  const lines = content.split("\n");
+  const sections = new Map<string, string>();
+  let currentHeading: string | null = null;
+  let currentLines: string[] = [];
+
+  for (const line of lines) {
+    const heading = line.match(/^##\s+(.+)$/u)?.[1];
+    if (heading === undefined) {
+      if (currentHeading !== null) currentLines.push(line);
+      continue;
+    }
+    if (currentHeading !== null) {
+      sections.set(currentHeading, currentLines.join("\n"));
+    }
+    currentHeading = normalizeInstructionHeading(heading);
+    currentLines = [];
+  }
+  if (currentHeading !== null) {
+    sections.set(currentHeading, currentLines.join("\n"));
+  }
+  return sections;
+}
+
+/** Read each distinct present peer instruction path declared by the manifest. */
+function readInstructionParityDocuments(
+  fs: ReadonlyFS,
+): InstructionParityDocument[] {
+  const paths = [
+    ...new Set(
+      Object.values(loadManifest().agents).map(
+        (agent) => agent.instruction_file,
+      ),
+    ),
+  ];
+
+  return paths.flatMap((path) => {
+    const content = fs.readFile(path);
+    return content === null
+      ? []
+      : [{ path, sections: instructionSections(content) }];
+  });
+}
+
 /**
- * Compare installed skill copies with the templates users receive on setup or upgrade.
- * Use an agent filter to keep a selected-runtime audit from reporting another runtime's drift.
+ * Report manifest-declared phrases that some present peer instructions carry and others omit.
+ * A selected-agent audit still reads siblings because parity is evidence about their relationship.
+ *
+ * @param fs - target-project filesystem used for sibling instruction reads
+ * @param findings - consolidated drift findings extended with parity differences
+ * @returns number of phrase/file comparisons represented in the drift receipt
+ * @throws when the canonical manifest cannot be loaded; filesystem adapter failures propagate
+ */
+function compareInstructionParity(
+  fs: ReadonlyFS,
+  findings: DriftFinding[],
+): number {
+  const documents = readInstructionParityDocuments(fs);
+  if (documents.length < 2) return 0;
+
+  const rules = loadManifest().instruction_file.parity_phrases;
+  for (const rule of rules) {
+    for (const phrase of rule.phrases) {
+      const presentPaths = documents
+        .filter((document) =>
+          document.sections.get(rule.section)?.includes(phrase),
+        )
+        .map((document) => document.path);
+      if (
+        presentPaths.length === 0 ||
+        presentPaths.length === documents.length
+      ) {
+        continue;
+      }
+      for (const document of documents) {
+        if (presentPaths.includes(document.path)) continue;
+        findings.push({
+          kind: "content",
+          path: document.path,
+          message: `instruction parity: ${rule.label} differs in ${rule.section}; missing ${JSON.stringify(phrase)} while present in ${presentPaths.join(", ")}`,
+        });
+      }
+    }
+  }
+
+  return (
+    documents.length * rules.reduce((sum, rule) => sum + rule.phrases.length, 0)
+  );
+}
+
+/**
+ * Compare installed skill copies with the templates users receive on setup or upgrade, and reports each stale copy as a finding.
+ * The agent filter exists because a user auditing one runtime should not be shown drift belonging to another runtime they never installed.
  */
 function compareSkills(
   fs: ReadonlyFS,
@@ -213,7 +317,14 @@ function compareSkills(
   return checked;
 }
 
-/** Compare shared setup files against their workflow templates for drift. */
+/**
+ * Compare shared setup files against their shipped templates and reports each stale copy as a finding.
+ *
+ * @param fs - audited project filesystem
+ * @param templateRoot - package or fixture root holding the shipped templates
+ * @param findings - drift findings appended to in place
+ * @returns how many files were compared, which the caller shows so a zero-finding result is not read as a skipped check
+ */
 function compareSharedFiles(
   fs: ReadonlyFS,
   templateRoot: string,
@@ -253,8 +364,8 @@ function compareSharedFiles(
 }
 
 /**
- * Find non-canonical skills in the mirrors selected for audit.
- * Use the SKILL.md marker to ignore editor files while keeping cleanup guidance actionable.
+ * Find non-canonical skills in the mirrors selected for audit and reports each one as a finding.
+ * A directory counts only when it holds a `SKILL.md`, so that editor scratch folders never turn into cleanup instructions for the user.
  */
 function findOrphans(
   fs: ReadonlyFS,
@@ -327,6 +438,7 @@ export function checkDrift(options: CheckDriftOptions): DriftReport {
   checked += compareSharedFiles(fs, templateRoot, findings);
   checked += compareHooks(
     fs,
+    options.projectPath,
     templateRoot,
     findings,
     checkedHookArtifacts,
@@ -335,12 +447,14 @@ export function checkDrift(options: CheckDriftOptions): DriftReport {
   checked += compareManagedHookRegistrations(fs, findings, agentFilter);
   checked += compareRegistryHookScripts(
     fs,
+    options.projectPath,
     templateRoot,
     findings,
     checkedHookArtifacts,
     agentFilter,
   );
   checked += findDeprecatedHookFiles(fs, findings);
+  checked += compareInstructionParity(fs, findings);
   findOrphans(fs, findings, agentFilter);
 
   // Identity, resource, and complete-set checks catch packaging failures that byte parity cannot see.

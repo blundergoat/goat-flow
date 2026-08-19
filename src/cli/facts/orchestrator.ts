@@ -1,8 +1,8 @@
 /**
  * Coordinates fact extraction for a project.
- * Full extraction combines stack detection, shared project facts, and per-agent
- * facts. Dashboard summary extraction can skip stack detection because that
- * shared report contract does not expose stack-derived fields.
+ *
+ * Full extraction combines stack detection, shared project facts, and per-agent facts.
+ * Dashboard summary extraction can skip stack detection because that shared report contract does not expose stack-derived fields.
  */
 import type { ProjectFacts, ReadonlyFS, AgentId, StackInfo } from "../types.js";
 import type { LoadedConfig } from "../config/types.js";
@@ -14,7 +14,8 @@ import { extractAgentFacts } from "./agent/index.js";
 
 /** Optional profiler seam for timing fact extraction spans without changing returned facts. */
 interface FactExtractionProfiler {
-  span<T>(name: string, fn: () => T): T;
+  /** Time one labelled extraction step; implementations return whatever the wrapped block returned. */
+  span<T>(name: string, block: () => T): T;
 }
 
 /** Configuration for extracting project facts during a scan run. */
@@ -30,12 +31,20 @@ interface ExtractOptions {
   profile?: FactExtractionProfiler | undefined;
 }
 
+/**
+ * Run one extraction step inside a profiler span when the caller supplied a profiler, and plainly when nobody is measuring.
+ *
+ * @param profile - optional profiler; `undefined` means the step runs untimed, which is the normal user path
+ * @param name - label shown in profiler output
+ * @param block - extraction step to run
+ * @returns whatever the step returned, unchanged either way
+ */
 function span<T>(
   profile: FactExtractionProfiler | undefined,
   name: string,
-  fn: () => T,
+  block: () => T,
 ): T {
-  return profile ? profile.span(name, fn) : fn();
+  return profile ? profile.span(name, block) : block();
 }
 
 /** Stack sentinel for profiles without stack facts; throws because invalid checks must fail loudly. */

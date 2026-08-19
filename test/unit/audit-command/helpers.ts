@@ -60,6 +60,12 @@ export const CODEX_WORKSPACE_ROOT_ENTRIES = [
   '"**/*.key" = "deny"',
   '"**/*.pfx" = "deny"',
 ];
+/**
+ * Render a Codex workspace-roots table for settings fixtures.
+ *
+ * @param entries - deny entries to include; the default is the full canonical set a healthy install carries
+ * @returns the inline TOML table as it appears in a Codex config
+ */
 export function codexWorkspaceRootsTable(
   entries = CODEX_WORKSPACE_ROOT_ENTRIES,
 ): string {
@@ -77,12 +83,21 @@ import type {
 } from "../../src.js";
 
 // ---------------------------------------------------------------------------
-// Cached repo audits - shared across describes that audit this repo with
-// identical inputs. Each fresh audit is ~7–12s; lazy-caching cuts ~30s off
-// this file's suite time. Tests must treat the returned report as read-only.
+// Cached repo audits
 // ---------------------------------------------------------------------------
 
 export const cachedRepoAudits = new Map<string, AuditReport>();
+
+/**
+ * Audit this repository once per distinct option set and reuse the result afterwards.
+ *
+ * Use from any describe that audits the controlling workspace with identical inputs: a fresh audit costs roughly
+ * 7-12s, so sharing one cuts about 30s off this file's suite time.
+ *
+ * @param opts - audit selectors; `agentFilter` null audits every agent, `harness` adds harness checks
+ * @returns the shared report for `opts`; repeated calls with equal selectors return the same instance, so callers
+ *   must treat it as read-only because mutating it corrupts unrelated tests
+ */
 export function getRepoAudit(opts: {
   agentFilter: AgentId | null;
   harness: boolean;
@@ -106,22 +121,27 @@ export function getRepoAudit(opts: {
  * every incoming path with a forward-slash normaliser so handlers can match
  * on the documented separator-agnostic shape regardless of host.
  *
- * @param value - a path as production code produced it, possibly containing Windows backslash separators
+ * @param nativePath - a path as production code produced it, possibly containing Windows backslash separators
  * @returns the same path with every backslash rewritten to a forward slash
  */
-export function posixifyPath(value: string): string {
-  return value.replace(/\\/g, "/");
+export function posixifyPath(nativePath: string): string {
+  return nativePath.replace(/\\/g, "/");
 }
 
-/** Wrap a fake FS handler with host-independent path normalization. */
+/**
+ * Wrap a fake FS handler so it sees POSIX-shape paths on every host.
+ * Use when stubbing a ReadonlyFS method whose test handler matches path literals: production code
+ * passes `path.join` output, which uses backslashes on Windows and would miss those literals.
+ *
+ * @param block - handler supplied by the test; `undefined` means the caller wants the fallback instead
+ * @param fallback - value yielded when no handler is supplied, so every stubbed method stays populated
+ * @returns a handler that normalises separators before delegating, or one that always yields `fallback`
+ */
 export function wrapPathArg<T>(
-  fn: ((path: string) => T) | undefined,
+  block: ((path: string) => T) | undefined,
   fallback: T,
-) {
-  /** Invoke a fake FS override after converting Windows separators. */
-  const readNormalizedPath = (path: string): T =>
-    fn ? fn(posixifyPath(path)) : fallback;
-  return readNormalizedPath;
+): (path: string) => T {
+  return (path: string): T => (block ? block(posixifyPath(path)) : fallback);
 }
 
 /**
@@ -450,6 +470,13 @@ export function makeCtx(overrides: Partial<AuditContext> = {}): AuditContext {
   };
 }
 
+/**
+ * Build project facts around a real directory so a test can exercise checks that read the filesystem.
+ *
+ * @param root - project root the facts describe
+ * @param agents - agent facts to attach; empty means the project has no supported agent installed
+ * @returns project facts ready to drop into an audit context
+ */
 export function makeProjectFacts(
   root: string,
   agents: AgentFacts[] = [],
@@ -462,6 +489,14 @@ export function makeProjectFacts(
   };
 }
 
+/**
+ * Writes one file into a fixture project, creating parent directories as needed.
+ *
+ * @param root - fixture project root
+ * @param relativePath - path within the project; missing parent directories are created rather than failing
+ * @param content - file contents; the default empty string creates a present but empty file, which several checks treat differently from absent
+ * @returns nothing; the file exists once this resolves
+ */
 export async function writeProjectFile(
   root: string,
   relativePath: string,
@@ -472,6 +507,14 @@ export async function writeProjectFile(
   await writeFile(fullPath, content);
 }
 
+/**
+ * Create a temporary project, run one setup function against it, and hand back its cleanup.
+ *
+ * It writes a temporary directory on disk and throws only after removing it again, so a broken fixture cannot leave scratch directories behind.
+ *
+ * @param init - callback that populates the fresh project
+ * @returns the project root and the cleanup function the test must call
+ */
 export async function makeTempProject(
   init: (root: string) => Promise<void>,
 ): Promise<{ root: string; cleanup: () => Promise<void> }> {
@@ -489,6 +532,61 @@ export async function makeTempProject(
   };
 }
 
+/**
+ * Populate a fixture project with the setup artifacts the audit expects to find.
+ *
+ * The options toggle exactly the artifacts whose presence changes a check result, so one helper covers the pass and fail shapes.
+ *
+ * @param root - fixture project root
+ * @param options - which optional artifacts to create; omitting one is how a test drives that check to fail
+ * @returns nothing; the fixture is on disk once this resolves
+ */
+/**
+ * Report whether a manifest path belongs to the shared skill-docs pack.
+ *
+ * @param manifestPath - a required file or directory from the manifest
+ * @returns true when the path sits under the skill-docs tree, so the fixture can omit it on request
+ */
+function isSkillDocsPath(manifestPath: string): boolean {
+  return (
+    manifestPath.startsWith(".goat-flow/skill-docs/") ||
+    manifestPath === ".goat-flow/skill-docs/" ||
+    manifestPath === ".goat-flow/skill-docs/playbooks/"
+  );
+}
+
+/**
+ * Supply the contents one fixture file needs to pass its own audit check.
+ *
+ * Two files carry real content because checks parse them: the config is read for its version, and the gitignore is
+ * compared against the shipped template. Everything else only needs to exist.
+ *
+ * @param file - manifest-relative path being written
+ * @returns the file contents to write
+ */
+function auditFixtureFileContent(file: string): string {
+  if (file === ".goat-flow/config.yaml") {
+    return `version: "${AUDIT_VERSION}"\n\nagents:\n  - claude\nskills:\n  install: all\n`;
+  }
+  if (file === ".goat-flow/.gitignore") {
+    return readFileSync(
+      join(PROJECT_ROOT, "workflow/setup/reference/goat-flow-gitignore"),
+      "utf-8",
+    );
+  }
+  return "# Stub\n";
+}
+
+/**
+ * Populate a fixture project with the setup artifacts the audit expects to find.
+ *
+ * The options toggle exactly the artifacts whose presence changes a check result, so one helper covers the pass shape and
+ * both failure shapes without a test hand-building the manifest itself.
+ *
+ * @param root - fixture project root
+ * @param options - which optional artifacts to create; omitting one is how a test drives that check to fail
+ * @returns nothing; the fixture is on disk once this resolves. It writes directories and files into the fixture project on disk.
+ */
 export async function writeAuditSetupFixture(
   root: string,
   options: {
@@ -502,45 +600,21 @@ export async function writeAuditSetupFixture(
   ) as { required_files: string[]; required_dirs: string[] };
 
   for (const dir of manifest.required_dirs) {
-    if (
-      !options.skillReferenceDir &&
-      (dir.startsWith(".goat-flow/skill-docs/") ||
-        dir.startsWith(".goat-flow/skill-docs/playbooks/") ||
-        dir === ".goat-flow/skill-docs/" ||
-        dir === ".goat-flow/skill-docs/playbooks/")
-    ) {
-      continue;
-    }
+    // Omitting the skill-docs tree is how a test drives the "reference pack missing" checks to fail.
+    if (!options.skillReferenceDir && isSkillDocsPath(dir)) continue;
     await mkdir(join(root, dir), { recursive: true });
   }
 
   for (const file of manifest.required_files) {
-    if (
-      !options.skillReferenceDir &&
-      (file.startsWith(".goat-flow/skill-docs/") ||
-        file.startsWith(".goat-flow/skill-docs/playbooks/"))
-    ) {
-      continue;
-    }
+    if (!options.skillReferenceDir && isSkillDocsPath(file)) continue;
+    // Omitting just the README exercises the narrower "pack present but unreadable" case.
     if (
       options.skillReferenceReadme === false &&
       file === ".goat-flow/skill-docs/README.md"
     ) {
       continue;
     }
-    const content =
-      file === ".goat-flow/config.yaml"
-        ? `version: "${AUDIT_VERSION}"\n\nagents:\n  - claude\nskills:\n  install: all\n`
-        : file === ".goat-flow/.gitignore"
-          ? readFileSync(
-              join(
-                PROJECT_ROOT,
-                "workflow/setup/reference/goat-flow-gitignore",
-              ),
-              "utf-8",
-            )
-          : "# Stub\n";
-    await writeProjectFile(root, file, content);
+    await writeProjectFile(root, file, auditFixtureFileContent(file));
   }
 
   const instructionContent = options.instructionPointer
@@ -568,6 +642,13 @@ Before declaring any tool or capability unavailable, read the matching playbook 
   await writeProjectFile(root, "CLAUDE.md", instructionContent);
 }
 
+/**
+ * Build one audit scope block for render and contract tests.
+ *
+ * @param status - scope status the renderer should display
+ * @param checks - checks within the scope; an empty list is valid and renders as a scope with nothing to report
+ * @returns the scope object as the report shape expects it
+ */
 export function makeAuditScope(
   status: "pass" | "fail",
   checks: AuditReport["scopes"]["setup"]["checks"],
@@ -582,6 +663,18 @@ export function makeAuditScope(
   };
 }
 
+/**
+ * Assemble a complete audit report so renderer and output-contract tests have a realistic payload.
+ *
+ * Every scope defaults to empty, letting a test supply only the scope it asserts on without hand-building the rest.
+ *
+ * @param root - project path recorded as the audit target
+ * @param status - overall report status
+ * @param setupChecks - setup-scope checks; empty renders that scope with no rows
+ * @param agentChecks - agent-scope checks; empty renders that scope with no rows
+ * @param harnessChecks - harness-scope checks; empty renders that scope with no rows
+ * @returns the assembled report
+ */
 export function makeAuditReport(
   root: string,
   status: "pass" | "fail",
@@ -636,6 +729,12 @@ export function makeAuditReport(
   };
 }
 
+/**
+ * Wrap one harness scope in an otherwise empty report, for tests that assert only on harness detail rendering.
+ *
+ * @param scope - harness scope to place in the report, supplying both its checks and the overall status
+ * @returns a report carrying just that scope
+ */
 export function makeReportWithDetails(
   scope: NonNullable<AuditReport["scopes"]["harness"]>,
 ): AuditReport {
@@ -648,18 +747,24 @@ export function makeReportWithDetails(
   );
 }
 
-/** Create a profile span recorder for audit-cache instrumentation assertions. */
+/**
+ * Create a profile span recorder for audit-cache instrumentation assertions.
+ *
+ * @returns the profiler to pass into an audit plus the shared `names` array, which fills with span labels in call order
+ */
 export function createSpanRecorder(): {
-  profile: { span<T>(name: string, fn: () => T): T };
+  /** Profiler seam accepted by the audit entry points. */
+  profile: { span<T>(name: string, block: () => T): T };
   names: string[];
 } {
   const names: string[] = [];
   return {
     names,
     profile: {
-      span<T>(name: string, fn: () => T): T {
+      /** Record this span's label, then run the block untouched so timing never changes what the audit produces. */
+      span<T>(name: string, block: () => T): T {
         names.push(name);
-        return fn();
+        return block();
       },
     },
   };

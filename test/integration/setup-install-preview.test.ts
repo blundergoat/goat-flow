@@ -5,39 +5,82 @@
  * Users should see conflicts before any installer mutation occurs.
  */
 import { describe, it } from "node:test";
-import type { TestContext } from "node:test";
 import assert from "node:assert/strict";
 import {
   existsSync,
+  linkSync,
   mkdirSync,
   readFileSync,
   readdirSync,
   rmSync,
-  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
 
 import { getTemplatePath } from "../../src/cli/paths.js";
-import { makeTempProject, runCliInstaller } from "./setup-install.helpers.js";
+import {
+  downgradeCodexBaselineToSevenSkills,
+  makeTempProject,
+  recordStaleBaselineHashes,
+  runCliInstaller,
+  symlinkDirectoryOrSkip,
+  symlinkFileOrSkip,
+} from "./setup-install.helpers.js";
 
-/** Create a directory symlink, or skip when the host forbids the fixture. */
-function symlinkDirectoryOrSkip(
-  testContext: TestContext,
-  target: string,
-  link: string,
-): boolean {
-  try {
-    symlinkSync(target, link, "dir");
-    return true;
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "EPERM") {
-      testContext.skip(
-        "Skipped: host blocks unprivileged symlinks (Windows without Developer Mode)",
-      );
-      return false;
-    }
-    throw error;
+const CODEX_GOAT_CLARITY_PATH = ".agents/skills/goat-clarity/SKILL.md";
+
+/** One preview row as the JSON contract publishes it. */
+interface PreviewRow {
+  path: string;
+  ownership: string;
+  state: string;
+  action: string;
+  reason: string;
+  currentStatus: string;
+  newExpectedSha256: string | null;
+}
+
+/** Every row on a fresh target names a safe relative path with an explained absent destination. */
+function isSafeFreshTargetRow(file: PreviewRow): boolean {
+  return (
+    file.path.length > 0 &&
+    !file.path.startsWith("/") &&
+    file.reason.length > 0 &&
+    file.currentStatus === "missing"
+  );
+}
+
+/** An exact-copy template on a fresh target is created from a package hash. */
+function isFreshTemplateCreate(file: PreviewRow): boolean {
+  return (
+    file.state === "added" &&
+    file.action === "create" &&
+    /^[a-f0-9]{64}$/u.test(file.newExpectedSha256 ?? "")
+  );
+}
+
+/** A non-template destination declares user or generated ownership and carries no template hash. */
+function isProjectWriteRow(file: PreviewRow): boolean {
+  return (
+    (file.ownership === "user-owned" || file.ownership === "generated") &&
+    file.newExpectedSha256 === null
+  );
+}
+
+/**
+ * Assert the preview lists one path, optionally with the exact fields the user must see.
+ *
+ * @param files - every row the preview reported for this target
+ * @param expected - path to find plus any row fields that must match it
+ */
+function assertPreviewLists(
+  files: PreviewRow[],
+  expected: Partial<PreviewRow> & { path: string },
+): void {
+  const row = files.find((file) => file.path === expected.path);
+  assert.ok(row, `preview must list ${expected.path}`);
+  for (const [field, value] of Object.entries(expected)) {
+    assert.equal(row[field as keyof PreviewRow], value, expected.path);
   }
 }
 
@@ -58,47 +101,44 @@ describe("managed setup preview", () => {
       schemaVersion: string;
       coverage: string;
       verdict: string;
-      files: Array<{
-        path: string;
-        ownership: string;
-        state: string;
-        action: string;
-        reason: string;
-        currentStatus: string;
-        newExpectedSha256: string | null;
-      }>;
+      files: PreviewRow[];
     };
-    assert.equal(report.schemaVersion, "goat-flow.managed-setup-preview.v1");
-    assert.equal(report.coverage, "managed-template-files");
+    assert.equal(report.schemaVersion, "goat-flow.managed-setup-preview.v2");
+    assert.equal(report.coverage, "install-write-set");
     assert.equal(report.verdict, "ready");
     assert.equal(
       report.files.some((file) => file.state === "added"),
       true,
     );
+    assert.equal(report.files.every(isSafeFreshTargetRow), true);
+    // Every exact-copy template on a fresh target is a create backed by a package hash.
     assert.equal(
-      report.files.every(
-        (file) =>
-          file.path.length > 0 &&
-          !file.path.startsWith("/") &&
-          file.ownership === "system-owned" &&
-          file.state === "added" &&
-          file.action === "create" &&
-          file.reason.length > 0 &&
-          file.currentStatus === "missing" &&
-          /^[a-f0-9]{64}$/u.test(file.newExpectedSha256 ?? ""),
-      ),
+      report.files
+        .filter((file) => file.ownership === "system-owned")
+        .every(isFreshTemplateCreate),
       true,
     );
+    // User-owned and generated destinations complete the write set and carry no template hash.
     assert.equal(
-      report.files.some(
-        (file) => file.path === ".goat-flow/hooks/deny-dangerous.sh",
-      ),
+      report.files
+        .filter((file) => file.ownership !== "system-owned")
+        .every(isProjectWriteRow),
       true,
     );
-    assert.equal(
-      report.files.some((file) => file.path === ".agents/skills/goat/SKILL.md"),
-      true,
-    );
+    assertPreviewLists(report.files, {
+      path: ".goat-flow/config.yaml",
+      ownership: "user-owned",
+      state: "user-seeded",
+    });
+    assertPreviewLists(report.files, {
+      path: ".codex/hooks.json",
+      ownership: "user-owned",
+      action: "create",
+    });
+    assertPreviewLists(report.files, {
+      path: ".goat-flow/hooks/deny-dangerous.sh",
+    });
+    assertPreviewLists(report.files, { path: ".agents/skills/goat/SKILL.md" });
     const repeatedResult = runCliInstaller(
       projectPath,
       "--agent",
@@ -125,10 +165,14 @@ describe("managed setup preview", () => {
 
     assert.equal(result.status, 0, result.stderr || result.stdout);
     assert.match(result.stdout, /Verdict: ready/u);
-    assert.match(result.stdout, /Coverage: managed-template-files/u);
+    assert.match(result.stdout, /Coverage: install-write-set/u);
     assert.match(
       result.stdout,
-      /create\s+\.goat-flow\/hooks\/deny-dangerous\.sh \[added\] - The current goat-flow package adds this managed file\./u,
+      /create\s+system-owned\s+\.goat-flow\/hooks\/deny-dangerous\.sh \[added\] - The current goat-flow package adds this managed file\./u,
+    );
+    assert.match(
+      result.stdout,
+      /create\s+user-owned\s+\.goat-flow\/config\.yaml \[user-seeded\] - Install scaffolds this config once/u,
     );
     assert.deepEqual(readdirSync(projectPath), []);
   });
@@ -181,7 +225,7 @@ describe("managed setup preview", () => {
     assert.equal(dryRun.status, 0, dryRun.stderr || dryRun.stdout);
     const report = JSON.parse(dryRun.stdout) as {
       verdict: string;
-      files: Array<{ path: string; state: string; action: string }>;
+      files: PreviewRow[];
     };
     assert.equal(report.verdict, "warning");
     const adoptedFile = report.files.find(
@@ -206,7 +250,100 @@ describe("managed setup preview", () => {
     );
   });
 
-  it("blocks a local managed edit until the user supplies force", () => {
+  it("upgrades a seven-skill baseline and repeats without drift", () => {
+    const projectPath = makeTempProject();
+    const firstInstall = runCliInstaller(projectPath, "--agent", "codex");
+    assert.equal(
+      firstInstall.status,
+      0,
+      firstInstall.stderr || firstInstall.stdout,
+    );
+    downgradeCodexBaselineToSevenSkills(projectPath);
+    const installedClarityPath = join(projectPath, CODEX_GOAT_CLARITY_PATH);
+    rmSync(installedClarityPath);
+
+    const upgrade = runCliInstaller(projectPath, "--agent", "codex");
+    assert.equal(upgrade.status, 0, upgrade.stderr || upgrade.stdout);
+    assert.equal(
+      readFileSync(installedClarityPath, "utf-8"),
+      readFileSync(
+        getTemplatePath("workflow/skills/goat-clarity/SKILL.md"),
+        "utf-8",
+      ),
+    );
+
+    const repeatInstall = runCliInstaller(projectPath, "--agent", "codex");
+    assert.equal(
+      repeatInstall.status,
+      0,
+      repeatInstall.stderr || repeatInstall.stdout,
+    );
+    const repeatPreview = runCliInstaller(
+      projectPath,
+      "--agent",
+      "codex",
+      "--dry-run",
+      "--format",
+      "json",
+    );
+    assert.equal(repeatPreview.status, 0, repeatPreview.stderr);
+    const report = JSON.parse(repeatPreview.stdout) as {
+      verdict: string;
+      files: PreviewRow[];
+    };
+    const clarityFile = report.files.find(
+      (file) => file.path === CODEX_GOAT_CLARITY_PATH,
+    );
+    assert.equal(report.verdict, "ready");
+    assert.equal(clarityFile?.state, "unchanged");
+    assert.equal(clarityFile?.action, "none");
+  });
+
+  it("protects an existing goat-clarity path a loaded baseline never owned", () => {
+    const projectPath = makeTempProject();
+    const firstInstall = runCliInstaller(projectPath, "--agent", "codex");
+    assert.equal(
+      firstInstall.status,
+      0,
+      firstInstall.stderr || firstInstall.stdout,
+    );
+    downgradeCodexBaselineToSevenSkills(projectPath);
+    const installedClarityPath = join(projectPath, CODEX_GOAT_CLARITY_PATH);
+    const developerOwnedBytes =
+      "# Local goat-clarity\n\nKeep this developer-owned skill.\n";
+    writeFileSync(installedClarityPath, developerOwnedBytes);
+
+    const preview = runCliInstaller(
+      projectPath,
+      "--agent",
+      "codex",
+      "--dry-run",
+      "--format",
+      "json",
+    );
+    assert.notEqual(preview.status, 0);
+    const report = JSON.parse(preview.stdout) as {
+      verdict: string;
+      files: PreviewRow[];
+    };
+    const clarityFile = report.files.find(
+      (file) => file.path === CODEX_GOAT_CLARITY_PATH,
+    );
+    assert.equal(report.verdict, "blocked");
+    assert.equal(clarityFile?.state, "unmanaged");
+    assert.equal(clarityFile?.action, "protect");
+    assert.match(clarityFile?.reason ?? "", /loaded install baseline/u);
+
+    const blockedInstall = runCliInstaller(projectPath, "--agent", "codex");
+    assert.notEqual(blockedInstall.status, 0);
+    assert.match(blockedInstall.stderr, /goat-clarity/u);
+    assert.equal(
+      readFileSync(installedClarityPath, "utf-8"),
+      developerOwnedBytes,
+    );
+  });
+
+  it("blocks a changed template over a local edit until the user supplies force", () => {
     const projectPath = makeTempProject();
     const firstInstall = runCliInstaller(projectPath, "--agent", "codex");
     assert.equal(
@@ -223,10 +360,14 @@ describe("managed setup preview", () => {
     );
     const localEdit = "keep this local managed edit\n";
     writeFileSync(managedReadmePath, localEdit);
+    // Divergent bytes alone are preserved now; a stale baseline makes the package want this path too.
+    recordStaleBaselineHashes(projectPath, "codex", [
+      ".goat-flow/logs/quality/README.md",
+    ]);
 
     const blockedInstall = runCliInstaller(projectPath, "--agent", "codex");
     assert.notEqual(blockedInstall.status, 0);
-    assert.match(blockedInstall.stderr, /local-edited/u);
+    assert.match(blockedInstall.stderr, /both-changed/u);
     assert.equal(readFileSync(managedReadmePath, "utf-8"), localEdit);
 
     const forcedInstall = runCliInstaller(
@@ -241,6 +382,150 @@ describe("managed setup preview", () => {
       forcedInstall.stderr || forcedInstall.stdout,
     );
     assert.notEqual(readFileSync(managedReadmePath, "utf-8"), localEdit);
+  });
+
+  /** Fixture purpose: force refreshes one edited managed file while preserving user choices and separate cleanup authority.
+   * Filesystem side effects: creates and rewrites a disposable project, then spawns the installer subprocess. */
+  it("limits force to managed conflicts and preserves user-owned content", () => {
+    const projectPath = makeTempProject();
+    const firstInstall = runCliInstaller(projectPath, "--agent", "codex");
+    assert.equal(
+      firstInstall.status,
+      0,
+      firstInstall.stderr || firstInstall.stdout,
+    );
+
+    const managedReadmePath = join(
+      projectPath,
+      ".goat-flow",
+      "logs",
+      "quality",
+      "README.md",
+    );
+    const locallyEditedManagedContent = "force may replace this managed edit\n";
+    writeFileSync(managedReadmePath, locallyEditedManagedContent);
+    // Only a package template change makes this row a conflict force is allowed to resolve.
+    recordStaleBaselineHashes(projectPath, "codex", [
+      ".goat-flow/logs/quality/README.md",
+    ]);
+
+    const securityPolicyPath = join(
+      projectPath,
+      ".goat-flow",
+      "security-policy.md",
+    );
+    const userSecurityPolicy =
+      "# Team security policy\n\nKeep this project-specific rule.\n";
+    writeFileSync(securityPolicyPath, userSecurityPolicy);
+
+    const decisionGuidePath = join(
+      projectPath,
+      ".goat-flow",
+      "learning-loop",
+      "decisions",
+      "README.md",
+    );
+    const userDecisionGuide =
+      "# Team decisions\n\nKeep this local decision format.\n";
+    writeFileSync(decisionGuidePath, userDecisionGuide);
+
+    const configPath = join(projectPath, ".goat-flow", "config.yaml");
+    const userConfig = [
+      "# User-selected setup remains authoritative during a managed refresh.",
+      'version: "local"',
+      'project_name: "operator-console"',
+      "skills:",
+      "  install: all",
+      "hooks:",
+      "  deny-dangerous:",
+      "    enabled: false",
+      "  post-turn-safety:",
+      "    enabled: true",
+      "  gruff-code-quality:",
+      "    enabled: false",
+      "ui:",
+      "  density: compact",
+      "",
+    ].join("\n");
+    writeFileSync(configPath, userConfig);
+
+    const activePlanPath = join(projectPath, ".goat-flow", "plans", ".active");
+    mkdirSync(join(projectPath, ".goat-flow", "plans", "9.9.9"), {
+      recursive: true,
+    });
+    const userActivePlan = "manual-plan-selection\n";
+    writeFileSync(activePlanPath, userActivePlan);
+
+    const codexSettingsPath = join(projectPath, ".codex", "config.toml");
+    const installedCodexSettings = readFileSync(codexSettingsPath, "utf-8");
+    const userCodexSettings = [
+      installedCodexSettings.trimEnd(),
+      "",
+      "# Keep this UI preference and its explanation.",
+      "[ui]",
+      'theme = "high-contrast"',
+      "",
+    ].join("\n");
+    writeFileSync(codexSettingsPath, userCodexSettings);
+
+    const codexHooksPath = join(projectPath, ".codex", "hooks.json");
+    const userHookConfig = JSON.parse(
+      readFileSync(codexHooksPath, "utf-8"),
+    ) as {
+      hooks?: Record<string, Array<Record<string, unknown>>>;
+      userInterface?: { statusMessage: string };
+    };
+    userHookConfig.userInterface = { statusMessage: "keep my status" };
+    userHookConfig.hooks ??= {};
+    userHookConfig.hooks.PreToolUse ??= [];
+    userHookConfig.hooks.PreToolUse.push({
+      matcher: "UserTool",
+      hooks: [{ type: "command", command: "node user-hook.js" }],
+    });
+    writeFileSync(
+      codexHooksPath,
+      `${JSON.stringify(userHookConfig, null, 2)}\n`,
+    );
+
+    const deprecatedSkillNotePath = join(
+      projectPath,
+      ".agents",
+      "skills",
+      "goat-audit",
+      "user-notes.md",
+    );
+    mkdirSync(join(projectPath, ".agents", "skills", "goat-audit"), {
+      recursive: true,
+    });
+    writeFileSync(deprecatedSkillNotePath, "keep until explicit cleanup\n");
+
+    const forcedInstall = runCliInstaller(
+      projectPath,
+      "--agent",
+      "codex",
+      "--force",
+    );
+    assert.equal(
+      forcedInstall.status,
+      0,
+      forcedInstall.stderr || forcedInstall.stdout,
+    );
+    assert.notEqual(
+      readFileSync(managedReadmePath, "utf-8"),
+      locallyEditedManagedContent,
+    );
+    assert.equal(readFileSync(securityPolicyPath, "utf-8"), userSecurityPolicy);
+    assert.equal(readFileSync(decisionGuidePath, "utf-8"), userDecisionGuide);
+    assert.equal(readFileSync(configPath, "utf-8"), userConfig);
+    assert.equal(readFileSync(activePlanPath, "utf-8"), userActivePlan);
+    assert.equal(readFileSync(codexSettingsPath, "utf-8"), userCodexSettings);
+    assert.equal(existsSync(deprecatedSkillNotePath), true);
+
+    const installedHookConfig = readFileSync(codexHooksPath, "utf-8");
+    assert.match(installedHookConfig, /node user-hook\.js/u);
+    assert.match(installedHookConfig, /keep my status/u);
+    assert.doesNotMatch(installedHookConfig, /deny-dangerous\.sh/u);
+    assert.doesNotMatch(installedHookConfig, /post-turn-safety\.sh/u);
   });
 
   it("keeps dry-run state unchanged after a local managed edit", () => {
@@ -276,17 +561,18 @@ describe("managed setup preview", () => {
       "json",
     );
 
-    assert.notEqual(preview.status, 0);
+    assert.equal(preview.status, 0, preview.stderr);
     const report = JSON.parse(preview.stdout) as {
       verdict: string;
-      files: Array<{ path: string; state: string }>;
+      files: PreviewRow[];
     };
-    assert.equal(report.verdict, "blocked");
+    // Preserved local content is not a conflict, so the preview reads ready and still writes nothing.
+    assert.equal(report.verdict, "ready");
     assert.equal(
       report.files.some(
         (file) =>
           file.path === ".goat-flow/logs/quality/README.md" &&
-          file.state === "local-edited",
+          file.state === "local-preserved",
       ),
       true,
     );
@@ -295,6 +581,117 @@ describe("managed setup preview", () => {
       "preview-only local edit\n",
     );
     assert.equal(readFileSync(statePath, "utf-8"), stateBefore);
+  });
+
+  /**
+   * Fixture purpose: supplies two existing user files whose narrow install migrations are pending.
+   * Filesystem side effects: previews without writes, then applies both edits in a disposable target.
+   */
+  it("previews settings and gitignore migrations that apply performs", () => {
+    const projectPath = makeTempProject();
+    const codexSettingsPath = join(projectPath, ".codex", "config.toml");
+    const gitignorePath = join(projectPath, ".gitignore");
+    mkdirSync(join(projectPath, ".codex"), { recursive: true });
+    const settingsBefore = [
+      'model = "gpt-5"',
+      "",
+      "[features]",
+      "codex_hooks = true",
+      "",
+    ].join("\n");
+    const gitignoreBefore = "dist/\n";
+    writeFileSync(codexSettingsPath, settingsBefore);
+    writeFileSync(gitignorePath, gitignoreBefore);
+
+    const preview = runCliInstaller(
+      projectPath,
+      "--agent",
+      "codex",
+      "--dry-run",
+      "--format",
+      "json",
+    );
+    assert.equal(preview.status, 0, preview.stderr || preview.stdout);
+    const report = JSON.parse(preview.stdout) as { files: PreviewRow[] };
+    assertPreviewLists(report.files, {
+      path: ".codex/config.toml",
+      state: "user-migrated",
+      action: "migrate",
+    });
+    assert.match(
+      report.files.find((file) => file.path === ".codex/config.toml")?.reason ??
+        "",
+      /deprecated codex_hooks/u,
+    );
+    assertPreviewLists(report.files, {
+      path: ".gitignore",
+      state: "user-migrated",
+      action: "migrate",
+    });
+    assert.match(
+      report.files.find((file) => file.path === ".gitignore")?.reason ?? "",
+      /appends the node_modules\//u,
+    );
+    assert.equal(readFileSync(codexSettingsPath, "utf-8"), settingsBefore);
+    assert.equal(readFileSync(gitignorePath, "utf-8"), gitignoreBefore);
+
+    const apply = runCliInstaller(projectPath, "--agent", "codex");
+    assert.equal(apply.status, 0, apply.stderr || apply.stdout);
+    const settingsAfter = readFileSync(codexSettingsPath, "utf-8");
+    assert.match(settingsAfter, /^hooks = true$/mu);
+    assert.doesNotMatch(settingsAfter, /codex_hooks/u);
+    assert.equal(
+      readFileSync(gitignorePath, "utf-8"),
+      "dist/\nnode_modules/\n",
+    );
+  });
+
+  /**
+   * Fixture purpose: removes one managed Codex registration while retaining a user-owned field.
+   * Filesystem side effects: rewrites a disposable hook config, previews it, then applies reconciliation.
+   */
+  it("previews the hook-config reconciliation that apply performs", () => {
+    const projectPath = makeTempProject();
+    const firstInstall = runCliInstaller(projectPath, "--agent", "codex");
+    assert.equal(
+      firstInstall.status,
+      0,
+      firstInstall.stderr || firstInstall.stdout,
+    );
+    const hooksPath = join(projectPath, ".codex", "hooks.json");
+    const hooksConfig = JSON.parse(readFileSync(hooksPath, "utf-8")) as {
+      hooks?: Record<string, unknown[]>;
+      userInterface?: { statusMessage: string };
+    };
+    hooksConfig.hooks ??= {};
+    delete hooksConfig.hooks.PreToolUse;
+    hooksConfig.userInterface = { statusMessage: "keep this user field" };
+    writeFileSync(hooksPath, `${JSON.stringify(hooksConfig, null, 2)}\n`);
+    const beforePreview = readFileSync(hooksPath, "utf-8");
+
+    const preview = runCliInstaller(
+      projectPath,
+      "--agent",
+      "codex",
+      "--dry-run",
+      "--format",
+      "json",
+    );
+    assert.equal(preview.status, 0, preview.stderr || preview.stdout);
+    assert.equal(readFileSync(hooksPath, "utf-8"), beforePreview);
+    const report = JSON.parse(preview.stdout) as { files: PreviewRow[] };
+    const hooksRow = report.files.find(
+      (file) => file.path === ".codex/hooks.json",
+    );
+
+    const apply = runCliInstaller(projectPath, "--agent", "codex");
+    assert.equal(apply.status, 0, apply.stderr || apply.stdout);
+    const reconciledHooks = readFileSync(hooksPath, "utf-8");
+    assert.match(reconciledHooks, /deny-dangerous\.sh/u);
+    assert.match(reconciledHooks, /keep this user field/u);
+    assert.equal(hooksRow?.state, "user-migrated");
+    assert.equal(hooksRow?.action, "migrate");
+    assert.match(hooksRow?.reason ?? "", /restore.*deny-dangerous/u);
   });
 
   /**
@@ -341,12 +738,7 @@ describe("managed setup preview", () => {
       assert.notEqual(preview.status, 0);
       const report = JSON.parse(preview.stdout) as {
         verdict: string;
-        files: Array<{
-          path: string;
-          state: string;
-          currentStatus: string;
-          reason: string;
-        }>;
+        files: PreviewRow[];
       };
       const redirectedManagedFile = report.files.find(
         (file) => file.path === ".goat-flow/logs/quality/README.md",
@@ -366,7 +758,7 @@ describe("managed setup preview", () => {
         "--force",
       );
       assert.notEqual(forcedInstall.status, 0);
-      assert.match(forcedInstall.stderr, /--force cannot bypass path safety/u);
+      assert.match(forcedInstall.stderr, /no authority bypasses path safety/u);
       assert.deepEqual(
         readFileSync(redirectedReadmePath),
         redirectedBytesBefore,
@@ -375,6 +767,70 @@ describe("managed setup preview", () => {
       rmSync(projectPath, { recursive: true, force: true });
       rmSync(redirectedDirectory, { recursive: true, force: true });
     }
+  });
+
+  // Fixture purpose: writes and hard-links disposable files, then runs install to prove admission protects the outside inode.
+  it("blocks a multiply linked generated target before any install write", () => {
+    const projectPath = makeTempProject();
+    const outsideDirectory = makeTempProject();
+    const outsideIndexPath = join(outsideDirectory, "outside-index.md");
+    const managedIndexPath = join(
+      projectPath,
+      ".goat-flow",
+      "learning-loop",
+      "lessons",
+      "INDEX.md",
+    );
+    mkdirSync(join(projectPath, ".goat-flow", "learning-loop", "lessons"), {
+      recursive: true,
+    });
+    writeFileSync(outsideIndexPath, "outside bytes must survive\n");
+    linkSync(outsideIndexPath, managedIndexPath);
+
+    const install = runCliInstaller(projectPath, "--agent", "codex");
+
+    assert.notEqual(install.status, 0);
+    assert.match(install.stderr, /no authority bypasses path safety/u);
+    assert.equal(
+      readFileSync(outsideIndexPath, "utf-8"),
+      "outside bytes must survive\n",
+    );
+    assert.equal(
+      existsSync(join(projectPath, ".agents", "skills", "goat", "SKILL.md")),
+      false,
+      "admission must stop before the installer creates an unrelated file",
+    );
+  });
+
+  // Fixture purpose: redirects a user-owned file to prove admission blocks before unrelated writes.
+  it("blocks an unsafe user-owned target before any install write", (testContext) => {
+    const projectPath = makeTempProject();
+    const outsideDirectory = makeTempProject();
+    const outsideGitignorePath = join(outsideDirectory, "outside.gitignore");
+    writeFileSync(outsideGitignorePath, "outside ignore bytes\n");
+    if (
+      !symlinkFileOrSkip(
+        testContext,
+        outsideGitignorePath,
+        join(projectPath, ".gitignore"),
+      )
+    ) {
+      return;
+    }
+
+    const install = runCliInstaller(projectPath, "--agent", "codex");
+
+    assert.notEqual(install.status, 0);
+    assert.equal(
+      readFileSync(outsideGitignorePath, "utf-8"),
+      "outside ignore bytes\n",
+    );
+    assert.equal(
+      existsSync(join(projectPath, ".agents", "skills", "goat", "SKILL.md")),
+      false,
+      "one unsafe project-write row must block every later installer write",
+    );
+    assert.match(install.stderr, /no authority bypasses path safety/u);
   });
 
   // Covers a symlinked baseline under --force: writes it; the install must be blocked before any write.
@@ -411,7 +867,7 @@ describe("managed setup preview", () => {
       );
 
       assert.notEqual(forcedInstall.status, 0);
-      assert.match(forcedInstall.stderr, /--force cannot bypass path safety/u);
+      assert.match(forcedInstall.stderr, /no authority bypasses path safety/u);
       assert.equal(
         existsSync(join(projectPath, ".agents", "skills", "goat", "SKILL.md")),
         false,

@@ -1,14 +1,15 @@
 /**
  * Builds the restricted permission profile an agent runs under in a dashboard terminal.
- * When a user launches Claude or Codex from the dashboard to write a report, that session gets
- * a purpose-built sandbox rather than their normal permissions: it may write the report and the
- * local state around it, and nothing else.
  *
- * Two rules shape everything here. Secrets are denied outright - `.env` files, SSH and cloud
- * credentials, private keys - because a reporting session has no reason to read them and the
- * user is not present to approve a prompt. And write access is granted per directory rather
- * than per file, since a report often needs siblings created next to it; the paths granted are
- * the local-state trees goat-flow owns, never the user's source.
+ * When a user launches Claude or Codex from the dashboard to write a report, that session gets a purpose-built sandbox rather than their normal
+ * permissions: it may write the report and the local state around it, and nothing else.
+ *
+ * Two rules shape everything here.
+ * Secrets are denied outright - `.env` files, SSH and cloud credentials, private keys - because a reporting session has no reason to read them and
+ * the user is not present to approve a prompt.
+ *
+ * And write access is granted per directory rather than per file, since a report often needs siblings created next to it; the paths granted are the
+ * local-state trees goat-flow owns, never the user's source.
  */
 import { execFileSync } from "node:child_process";
 import { lstatSync, realpathSync, type Stats } from "node:fs";
@@ -112,8 +113,8 @@ const CLAUDE_REPORTING_HOME_SECRET_DENIES = [
 ] as const;
 
 /** Encode one TOML basic string for a CLI inline-table override. */
-function tomlString(value: string): string {
-  return JSON.stringify(value);
+function tomlString(rawText: string): string {
+  return JSON.stringify(rawText);
 }
 
 /** Encode string-keyed TOML inline-table entries in stable insertion order. */
@@ -143,7 +144,17 @@ function isGitIgnoredPath(projectPath: string, relativePath: string): boolean {
   }
 }
 
-/** Read tracked files beneath candidate writable paths so exact files stay read-only. */
+/**
+ * Read tracked files beneath candidate writable paths so exact files stay read-only.
+ *
+ * Error behavior: throws nothing; an unavailable Git or non-repository root swallows the failure and returns no anchors, leaving the conservative
+ * canonical fallback list in charge.
+ *
+ * @param projectPath - repository root the query runs in
+ * @param candidatePaths - writable candidates to enumerate tracked files beneath
+ * @returns tracked repo-relative paths; empty means the fallback anchors apply instead. It spawns `git ls-files` in the project, with a bounded
+ *   timeout.
+ */
 function trackedReportingAnchors(
   projectPath: string,
   candidatePaths: readonly string[],
@@ -166,7 +177,16 @@ function trackedReportingAnchors(
   }
 }
 
-/** Confirm a candidate write root exists as a real directory in every workspace. */
+/**
+ * Confirm a candidate write root exists as a real directory in every workspace.
+ *
+ * Every root must agree, because one workspace resolving the path outside the project would let a write escape through that root alone.
+ * Error behavior: throws nothing; an unreadable or symlinked candidate reports false, so the uncertain case denies the write rather than allowing it.
+ *
+ * @param rootPaths - every workspace root that must independently prove the same layout
+ * @param relativePath - project-relative directory under test
+ * @returns true only when the directory is a real in-project directory under every root
+ */
 function isSharedDirectory(
   rootPaths: readonly string[],
   relativePath: string,
@@ -190,7 +210,9 @@ function isSharedDirectory(
 
 /**
  * Confirm an absent write root can be created without following a parent outside the project.
+ *
  * Existing targets stay governed by {@link isSharedDirectory}, which also rejects final symlinks.
+ * Error behavior: throws nothing; an unreadable parent reports false so an unverifiable path is never treated as safe to create.
  *
  * @param rootPath - visible project root that owns the prospective directory
  * @param relativePath - project-relative directory the reporting command may need to create
@@ -228,7 +250,15 @@ function isSafeMissingDirectory(
   return false;
 }
 
-/** List tracked and canonical protected paths beneath one candidate in one root. */
+/**
+ * List tracked and canonical protected paths beneath one candidate in one root.
+ *
+ * @param rootPath - workspace root the candidate is resolved against
+ * @param candidatePath - project-relative writable candidate to protect beneath
+ * @returns protected repo-relative paths; empty means nothing under the candidate is committed. The result is the
+ *   deny-list contract that keeps committed files read-only inside an otherwise writable directory, so a path missing
+ *   here becomes writable for the session. It throws nothing, and an unreadable anchor is dropped from the list.
+ */
 function protectedPathsForCandidate(
   rootPath: string,
   candidatePath: string,
@@ -254,9 +284,9 @@ function protectedPathsForCandidate(
 
 /**
  * Return the protected paths when every workspace has an identical layout.
- * Shared profile rules apply to every root, so asymmetric layouts cannot safely
- * receive the same write rule without either a missing-path startup failure or
- * an unprotected tracked file.
+ *
+ * Shared profile rules apply to every root, so asymmetric layouts cannot safely receive the same write rule without either a missing-path startup
+ * failure or an unprotected tracked file.
  */
 function sharedProtectedPaths(
   rootPaths: readonly string[],
@@ -288,7 +318,15 @@ function claudePermissionPath(filePath: string): string {
   return `//${escaped}`;
 }
 
-/** Resolve the active Claude config directory without reading its contents. */
+/**
+ * Resolve the active Claude config directory without reading its contents.
+ * Error behavior: throws nothing; an unset or unusable `CLAUDE_CONFIG_DIR` reports as no paths, so the caller falls back to the default credential
+ * locations.
+ *
+ * @param projectPath - launch project, used to resolve a relative configured directory
+ * @param environment - process environment supplying `CLAUDE_CONFIG_DIR`
+ * @returns credential paths to deny; empty when no directory is configured
+ */
 function configuredClaudeCredentialPaths(
   projectPath: string,
   environment: NodeJS.ProcessEnv,
@@ -339,10 +377,10 @@ function claudeWritablePaths(rootPath: string): string[] {
 
 /**
  * Build a one-invocation Claude permission overlay for reporting sessions.
- * Inherited user/project settings are disabled by the launch command, so
- * dontAsk permits reads plus these explicit report paths and denies everything
- * else that would require approval. Tracked anchors inside writable roots keep
- * an explicit deny because deny rules take precedence over the directory allow.
+ *
+ * Inherited user/project settings are disabled by the launch command, so dontAsk permits reads plus these explicit report paths and denies everything
+ * else that would require approval.
+ * Tracked anchors inside writable roots keep an explicit deny because deny rules take precedence over the directory allow.
  *
  * @param projectPath - project the user launched the terminal from
  * @param targetPath - project the report is being written about; often the same as
@@ -436,9 +474,13 @@ export function buildClaudeReportingSettings(
 
 /**
  * Build the one-invocation Codex permission profile used by reporting sessions.
+ *
  * Project roots stay readable, while only the mode-selected owner receives log writes.
- * Shared local/build paths remain writable when every root proves the same safe layout,
- * tracked anchors return to read-only, and project secret paths stay denied.
+ * Shared local/build paths remain writable when every root proves the same safe layout, tracked anchors return to read-only, and project secret paths
+ * stay denied.
+ *
+ * Error behavior: throws nothing; a path that cannot be proved safe is simply left out of the
+ * writable set, so an unverifiable layout narrows permissions instead of widening them.
  *
  * @param projectPath - project the user launched from; empty is invalid at the terminal boundary
  * @param targetPath - project being assessed; empty contributes no second readable root
@@ -537,25 +579,26 @@ export function buildCodexReportingProfile(
 /**
  * Roots whose staging directory this launch owns for the session's lifetime.
  *
- * Empty unless the launch explicitly asked for capture: reporting access alone
- * is not the signal. Every preset without write permission - and every custom
- * prompt, which matches no preset - opens as reporting, so keying off access
- * mode would create a `.goat-flow` staging tree inside any selected target and
- * let an unrelated `.goat-flow` component block a read-only launch (ADR-044).
+ * Empty unless the launch explicitly asked for capture: reporting access alone is not the signal.
+ * Every preset without write permission - and every custom prompt, which matches no preset - opens as reporting, so keying off access mode would
+ * create a `.goat-flow` staging tree inside any selected target and let an unrelated `.goat-flow` component block a read-only launch (ADR-044).
+ *
+ * Error behavior: throws when capture is requested for a runner or access mode that cannot own
+ * persistence, because silently returning no roots would strand the agent waiting on a receipt.
  *
  * @param runner - launching runner; only Claude uses dashboard-owned persistence
  * @param accessMode - session access mode; capture belongs to enforced reporting runs
- * @param captureRequested - whether the launch asked for staged-draft capture
+ * @param wasCaptureRequested - whether the launch asked for staged-draft capture
  * @param reportOwnerRoot - the mode-selected owner root, or null when omitted
  * @returns roots to stage and watch, or an empty list when capture does not apply
  */
 export function stagedQualityCaptureRoots(
   runner: Runner,
   accessMode: TerminalAccessMode,
-  captureRequested: boolean,
+  wasCaptureRequested: boolean,
   reportOwnerRoot: string | null,
 ): string[] {
-  if (!captureRequested) return [];
+  if (!wasCaptureRequested) return [];
   if (runner !== "claude" || accessMode !== "reporting") {
     throw new Error(
       "Quality draft capture is supported only for Claude reporting sessions.",

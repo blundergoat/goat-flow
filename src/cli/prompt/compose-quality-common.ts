@@ -1,12 +1,11 @@
 /**
  * Shared building blocks for composing agent quality-review prompts.
  *
- * Collects the cross-mode helpers the per-mode composers reuse: shell/JSON/date
- * escaping for embedded snippets, project-path shaping that survives Windows and
- * UNC roots, audit-summary rendering, prior-report delta context, bounded
- * learning-loop context, and the focused JSON-report contract appended to the end
- * of every prompt. Pure string assembly; the only I/O is the `package.json` read
- * behind `inferQualityScope`.
+ * Collects the cross-mode helpers the per-mode composers reuse: shell/JSON/date escaping for embedded snippets, project-path shaping that survives
+ * Windows and UNC roots, audit-summary rendering, prior-report delta context, bounded learning-loop context, and the focused JSON-report contract
+ * appended to the end of every prompt.
+ *
+ * Pure string assembly; the only I/O is the `package.json` read behind `inferQualityScope`.
  */
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -39,10 +38,10 @@ export interface QualityInput {
 
 /**
  * How the generated prompt tells the agent to persist its report.
- * `bounded-saver` = the agent pipes the report into `quality save` itself
- * (manual and Codex runs). `staged-draft` = the agent writes one draft file
- * and the dashboard server persists it (enforced Claude reporting sessions,
- * per ADR-044, where no Bash rule can authorize the heredoc saver).
+ *
+ * `bounded-saver` = the agent pipes the report into `quality save` itself (manual and Codex runs).
+ * `staged-draft` = the agent writes one draft file and the dashboard server persists it (enforced Claude reporting sessions, per ADR-044, where no
+ * Bash rule can authorize the heredoc saver).
  */
 export type QualityPersistenceVariant = "bounded-saver" | "staged-draft";
 
@@ -77,21 +76,21 @@ export function formatLocalDate(date: Date = new Date()): string {
 /**
  * Render one JSON-safe string literal for the embedded example block.
  *
- * @param value - raw string to embed in the prompt's JSON example
+ * @param text - raw string to embed in the prompt's JSON example
  * @returns the value as a quoted, escaped JSON string literal
  */
-export function jsonString(value: string): string {
-  return JSON.stringify(value);
+export function jsonString(text: string): string {
+  return JSON.stringify(text);
 }
 
 /**
  * Render a Bash single-quoted literal so generated snippets do not expand `$` or backticks.
  *
- * @param value - raw string to quote for a generated shell snippet
+ * @param argument - raw string to quote for a generated shell snippet
  * @returns a single-quoted Bash literal with embedded quotes escaped as `'\''`
  */
-export function shellSingleQuote(value: string): string {
-  return `'${value.replace(/'/g, "'\\''")}'`;
+export function shellSingleQuote(argument: string): string {
+  return `'${argument.replace(/'/g, "'\\''")}'`;
 }
 
 /**
@@ -344,13 +343,21 @@ function renderPriorFindingSummary(summary: string): string {
 /**
  * Escape Markdown table cell content emitted from scorer details.
  *
- * @param value - raw cell text that may contain pipes or newlines
+ * @param cellText - raw cell text that may contain pipes or newlines
  * @returns single-line cell text with `|` escaped and line breaks flattened to spaces
  */
-export function markdownTableCell(value: string): string {
-  return value.replaceAll("|", "\\|").replace(/\r?\n/g, " ");
+export function markdownTableCell(cellText: string): string {
+  return cellText.replaceAll("|", "\\|").replace(/\r?\n/g, " ");
 }
 
+/**
+ * Render prior findings and continuity instructions for a quality prompt.
+ * The continuity contract keeps prior claims provisional and never treats absence as proof of a fix.
+ *
+ * @param priorReport - selected same-mode report; null produces no-prior guidance
+ * @param qualityMode - active mode used to describe a missing prior report
+ * @returns Markdown context block ready for prompt composition
+ */
 export function renderPriorReportContext(
   priorReport: QualityHistoryEntry | null,
   qualityMode: QualityMode,
@@ -406,13 +413,13 @@ export function renderPriorReportContext(
       "A prior finding is a claim to re-test, not a fact. Validate its premise (who the violated standard binds, whether an accepted ADR already resolves it, whether the code still shows it) before carrying it forward; a prior severity is not evidence.",
     );
     lines.push(
-      'For the final JSON block in THIS run, use `delta_tag: "persisted"` when a current finding materially matches a prior finding by type/file/line. Use `delta_tag: "new"` when it does not. Do NOT emit `resolved` in current findings - resolved issues are derived later by `goat-flow quality diff` when a prior finding id disappears from a later run.',
+      'For the final JSON block in THIS run, use `delta_tag: "persisted"` when a current finding materially matches a prior finding by type/file/line. Use `delta_tag: "new"` when it does not. Do NOT emit `absent` in current findings - absence is derived later by `goat-flow quality diff` when a prior finding id disappears from a later run, and it is not proof that the issue was resolved.',
     );
     lines.push(
       `Set top-level \`prior_report_id\` to \`${priorReport.id}\` so readers can tell that \`delta_tag: "new"\` means newly discovered relative to that same-agent report, not necessarily newly introduced in the codebase.`,
     );
     lines.push(
-      'When a prior finding cannot be re-tested, do not carry the unverified claim into the current findings array solely to keep it visible and do not assign it `delta_tag: "persisted"`. List it under `What You Did Not Verify`, include the literal denied or unavailable probe, and state that omission is not verified resolution; the diff\'s derived `resolved` label means absent from the later report, not proven fixed.',
+      'When a prior finding cannot be re-tested, do not carry the unverified claim into the current findings array solely to keep it visible and do not assign it `delta_tag: "persisted"`. List it under `What You Did Not Verify`, include the literal denied or unavailable probe, and state that omission is not verified resolution; the diff\'s derived `absent` bucket means absent from the later report, not proven fixed.',
     );
   } else {
     const modeText = qualityMode === "agent-setup" ? "" : `${qualityMode} `;
@@ -429,6 +436,16 @@ export function renderPriorReportContext(
   return lines.join("\n");
 }
 
+/**
+ * Render the slice of a project's learning loop that belongs in a quality prompt, bounded so it cannot crowd out the assessment itself.
+ *
+ * Only agent-setup and harness modes include it, because those are the assessments where the user's own recorded footguns and lessons
+ * change the answer; the focused modes would just be paying context cost for it.
+ *
+ * @param sharedFacts - project facts holding the learning loop; null or undefined means the project has none to include
+ * @param qualityMode - selected mode; any mode outside agent-setup and harness deliberately renders nothing
+ * @returns the context block, or an empty string when this mode or project contributes none
+ */
 export function renderBoundedLearningLoopContext(
   sharedFacts: SharedFacts | null | undefined,
   qualityMode: QualityMode,

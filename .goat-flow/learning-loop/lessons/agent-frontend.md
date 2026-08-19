@@ -1,7 +1,9 @@
 ---
 category: agent-frontend
-last_reviewed: 2026-05-18
+last_reviewed: 2026-08-20
 ---
+
+**Scope:** Building and visually verifying the dashboard UI - stale dev-mode audit caches, mockup-parity discipline, partial-data UI states, rendered-CSS diagnosis, and toast/loading semantics. Proving browser-visible behaviour with live runs is [browser-evidence.md](browser-evidence.md); testing the built dashboard is [dashboard-testing.md](dashboard-testing.md).
 
 ## Lesson: Dashboard audit cache survives code changes because signature doesn't cover compiled JS
 
@@ -17,31 +19,31 @@ last_reviewed: 2026-05-18
 
 ---
 
-## Lesson: When a mockup exists, match it element-for-element
+## Lesson: A mockup is the spec, and parity is a layer-by-layer diff
+
 **Created:** 2026-04-05
+**Decision changed:** Treat a supplied mockup as a binding spec and diff it across all four layers before calling UI work done, rather than reproducing its general look.
+**Incident count:** 3
+**Latest occurrence:** 2026-04-26
 
-**What happened:** User provided an HTML mockup with exact structure (`.left` div containing title + agent strip + detected config, `.right` div with prompt card) and screenshots. The agent interpreted the layout its own way - putting the title above both columns, the agent strip full-width, and the left column as plain text without a card background. This required 6+ correction rounds to get right: moving the title into the left column, moving the agent strip into the left column, adding the card background, fixing the width from 340px to 50%, adding `align-self: flex-start` so the card doesn't stretch full height. Every one of these was visible in the mockup from the start.
+**What happened:** Three separate rounds, one root cause.
 
-**Why it matters:** Each round of "fix this one thing" costs the user time and patience. The mockup HTML was a working reference with every structural decision already made. The agent's job was to wire up Alpine.js data bindings to the mockup's DOM structure - not to redesign the layout.
+- **2026-04-05, setup view.** A mockup gave exact structure - a `.left` div holding title, agent strip, and detected config; a `.right` div holding the prompt card. The agent reinterpreted it: title above both columns, agent strip full-width, left column as plain text with no card background. Six-plus correction rounds followed - move the title in, move the strip in, add the card background, change width from 340px to 50%, add `align-self: flex-start` so the card stops stretching. Every one was visible in the mockup from the start.
+- **2026-04-26, M05b Home, bindings.** The implementation copied the broad section order but dropped the top rollup identity row, so Home opened with "Home readiness" instead of project name plus audit age. It also called a non-existent Alpine helper (`agentLabel(...)`) where the dashboard exposes `agentName(...)`, so the title expression failed silently in the browser and the section looked missing in the user's screenshots.
+- **2026-04-26, M05b Home, spacing.** Subtitle `<p>` elements were invented under headings the mockup does not have; section margins were missing (rollup 12px, next-action 20px, section-head `0 0 10px`, agent-grid 22px); padding differed (next-action 16px against the mockup's `18px 22px`); titles used mono where the mockup used sans-serif; the ring rendered 128px against 92px and grade-letter 24px/800 against 18px/600. The first fix round corrected fonts and sizes but missed both the invented elements and the spacing model.
 
-**Prevention:** When a mockup HTML file exists, open it and copy the structure directly. Map mockup CSS classes to existing `gf-*` classes or create matching ones. Do not reorganize the DOM structure based on what "seems right." The mockup is the spec - match it element-for-element, then add the dynamic bindings.
+**Root cause:** The mockup was read as layout inspiration rather than a spec. Verification confirmed the page had one root and the API returned data, and compared CSS properties in isolation, instead of diffing the live DOM against the mockup. Adding "helpful" elements the mockup does not contain never got flagged, because nothing was checking for additions.
 
----
+**Prevention:** For UI work backed by a mockup or screenshots, diff four layers before calling it done. A pass on one layer says nothing about the others - each incident above cleared some layers and failed a different one.
 
-## Lesson: Mockup parity includes visible copy and live bindings
-**Created:** 2026-04-26
+- **Structure:** sections appear in the mockup's order, element-for-element. Every element in the live page absent from the mockup is a removal candidate; do not add text, elements, or wrappers the mockup does not contain.
+- **Copy/data:** visible text - project name, audit age, pill labels, CTA labels - matches the mockup's intent.
+- **Bindings:** every Alpine helper used in markup is local to `x-data` or exists on `app()`. Grep the helper names, then smoke the rendered view after rebuilding `dist/dashboard`; a missing helper fails silently and reads as a missing section.
+- **Spacing and type:** every margin, padding, font-family, and font-size in the mockup CSS is a hard spec, not a suggestion.
 
-**What happened:** In M05b Home redesign, the first implementation copied the broad section order but missed the mockup's top rollup identity row. The shipped Home started with "Home readiness" and subtitle text instead of the project name plus audit age. It also used a non-existent Alpine helper (`agentLabel(...)`) where the dashboard already exposes `agentName(...)`, so the project-title expression silently failed in the browser and the top section looked missing in user screenshots.
+Map mockup classes onto existing `gf-*` classes rather than reorganising the DOM around what seems right.
 
-**Root cause:** The implementation treated the mockup as layout inspiration instead of a binding-level spec. Verification checked that there was one Home root and that the API returned data, but did not compare the rendered first viewport against the reference screenshots or exercise every dynamic expression used in the top section.
-
-**Prevention:** For UI work backed by screenshots/mockup HTML, verify three layers before calling it done:
-
-- Structure: sections appear in the same order as the mockup.
-- Copy/data: key visible text such as project name, audit age, pill labels, and CTA labels matches the mockup intent.
-- Bindings: every new Alpine helper used in markup is either local to `x-data` or exists on `app()`; grep for helper names and smoke the rendered browser view after rebuilding `dist/dashboard`.
-
-**Evidence:** `src/dashboard/views/home.html` (search: `rollup-heading`) now renders the project name row; `src/dashboard/dashboard-app-state-fragments.ts` (search: `agentName(agentId`) is the existing helper used by Home bindings.
+**Evidence:** `src/dashboard/views/home.html` (search: `rollup-heading`) renders the project name row; `src/dashboard/dashboard-app-state-fragments.ts` (search: `agentName(agentId`) is the helper Home bindings actually use.
 
 ---
 
@@ -55,18 +57,6 @@ last_reviewed: 2026-05-18
 **Prevention:** For dashboard status UIs, enumerate each meaningful state before testing the rendered screen: missing, partial, complete, stale, and unavailable. Verify that visible labels, project identity, card data source, and CTAs all use the same state model; broad failure helpers are acceptable only for actions that truly apply to every failure mode.
 
 **Evidence:** `src/dashboard/views/home.html` (search: `setupPartial()`) now distinguishes partial setup from missing setup; `src/dashboard/views/home.html` (search: `showPreviewAgents()`) uses real agent audit data when present instead of disabling cards solely because setup failed.
-
----
-
-## Lesson: Mockup parity includes exact structure and visual spacing
-
-**Created:** 2026-04-26
-
-**What happened:** A static HTML mockup defined the exact visual design for the dashboard homepage. The implementation diverged: subtitle `<p>` elements were added under section and panel headings that do not exist in the mockup, section margins (rollup `margin-bottom: 12px`, next-action `margin-bottom: 20px`, section-head `margin: 0 0 10px`, agent-grid `margin-bottom: 22px`) were missing, padding values differed (`next-action` 16px vs mockup's 18px 22px), font families were wrong (section/panel titles used mono instead of sans-serif), and sizing was off (ring 128px vs 92px, grade-letter 24px/800 vs 18px/600). The first fix round only addressed fonts and sizes but missed the structural HTML additions and the spacing model entirely.
-
-**Root cause:** The agent treated the mockup as a loose visual guide rather than a pixel-level spec. It compared individual CSS properties in isolation instead of doing a full structural diff (HTML elements, margin/padding on every section, font-family on every text element). Adding "helpful" subtitles that weren't in the mockup violated the spec without being flagged.
-
-**Prevention:** When a static mockup defines the target, diff the mockup HTML structure against the live HTML element-by-element before touching CSS. Every element in the live page that doesn't exist in the mockup is a removal candidate. Every margin, padding, font-family, and font-size value in the mockup CSS is a hard spec, not a suggestion. Do not add content (text, elements, wrappers) that the mockup does not contain.
 
 ---
 

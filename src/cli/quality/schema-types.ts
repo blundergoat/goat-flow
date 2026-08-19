@@ -1,5 +1,9 @@
 /**
- * Strict schema validation for quality reports emitted by agents and persisted by the CLI.
+ * Defines and enforces the exact shape of a quality report, both when an agent emits one and when the CLI persists it.
+ *
+ * Validation is strict on purpose: a report that saved with unexpected fields would later open as a history row nobody can trust.
+ *
+ * The accepted finding types, severities, and score values are fixed here, so the dashboard always has a badge it can render.
  */
 import type { AgentId } from "../types.js";
 
@@ -34,15 +38,27 @@ export const QUALITY_MODES = [
 ] as const;
 export const QUALITY_DELTA_TAGS = ["new", "persisted"] as const;
 export const QUALITY_AUDIT_STATUSES = ["pass", "fail", "unavailable"] as const;
+export const QUALITY_WORKTREE_STATES = [
+  "clean",
+  "dirty",
+  "not-git",
+  "unavailable",
+] as const;
+export const QUALITY_GROUNDING_STATUSES = [
+  "complete",
+  "partial",
+  "blocked",
+] as const;
+export const QUALITY_SCORE_CONFIDENCES = ["high", "medium", "low"] as const;
 export const QUALITY_SCORE_VALUES = [0, 5, 10, 15, 20, 25] as const;
 
 type QualityFindingType = (typeof QUALITY_FINDING_TYPES)[number];
 type QualityFindingSeverity = (typeof QUALITY_FINDING_SEVERITIES)[number];
 type QualityEvidenceQuality = (typeof QUALITY_EVIDENCE_QUALITIES)[number];
 /**
- * How a finding was gathered: a live `runtime-probe`, `static-analysis` of source, or a `mixed`
- * combination. Present on v2+ reports; v1 reports omit it and are defaulted to static-analysis at
- * parse time, so readers should treat a defaulted value as "unknown", not a confirmed static check.
+ * How a finding was gathered: a live `runtime-probe`, `static-analysis` of source, or a `mixed` combination.
+ * Present on v2+ reports; v1 reports omit it and are defaulted to static-analysis at parse time, so readers should treat a defaulted value as
+ * "unknown", not a confirmed static check.
  */
 export type QualityEvidenceMethod = (typeof QUALITY_EVIDENCE_METHODS)[number];
 /**
@@ -58,6 +74,9 @@ export type QualityMode = (typeof QUALITY_MODES)[number];
  */
 export type QualityDeltaTag = (typeof QUALITY_DELTA_TAGS)[number];
 type QualityAuditStatus = (typeof QUALITY_AUDIT_STATUSES)[number];
+type QualityWorktreeState = (typeof QUALITY_WORKTREE_STATES)[number];
+type QualityGroundingStatus = (typeof QUALITY_GROUNDING_STATUSES)[number];
+type QualityScoreConfidence = (typeof QUALITY_SCORE_CONFIDENCES)[number];
 /**
  * A single rubric axis score, constrained to the fixed 0-25 five-point band so totals stay
  * comparable across reports. Values outside this set are rejected by the schema parser.
@@ -86,6 +105,20 @@ export interface QualitySystemScores {
 export interface QualityScores {
   setup: QualitySetupScores;
   system: QualitySystemScores;
+}
+
+/** Evidence coverage and workspace provenance needed to compare independently produced reports. */
+export interface QualityAssessmentContext {
+  /** Git revision assessed, or null when the target is not Git-backed or the revision was unavailable. */
+  project_revision: string | null;
+  /** Whether workspace bytes differed from the named revision during assessment. */
+  working_tree_state: QualityWorktreeState;
+  /** How much of the assessment prompt's required runtime grounding actually ran. */
+  grounding_status: QualityGroundingStatus;
+  /** Literal commands or probes that were skipped, denied, or unavailable. */
+  unverified_probes: string[];
+  /** Assessor confidence in the scores after accounting for evidence coverage. */
+  score_confidence: QualityScoreConfidence;
 }
 
 /** One current agent-emitted quality finding before deterministic IDs are attached. */
@@ -135,6 +168,8 @@ export interface QualityReport {
   /** Optional: the previous same-agent report used for delta_tag comparison.
    *  Null or absent means no prior report context was available. */
   prior_report_id?: string | null;
+  /** Required on current emissions and optional on historical reports that predate provenance capture. */
+  assessment_context?: QualityAssessmentContext;
   scores: QualityScores;
   findings: QualityFinding[];
 }
@@ -145,9 +180,8 @@ export interface SavedQualityReport extends Omit<QualityReport, "findings"> {
 }
 
 /**
- * Discriminated result of a schema parse: either `ok: true` with the validated report, or
- * `ok: false` with a human-readable `error`. Parsing never throws on bad input - callers must
- * branch on `ok` rather than try/catch, so a malformed report surfaces as a checked error value.
+ * Discriminated result of a schema parse: either `ok: true` with the validated report, or `ok: false` with a human-readable `error`.
+ * Parsing never throws on bad input - callers must branch on `ok` rather than try/catch, so a malformed report surfaces as a checked error value.
  *
  * @template T - the report shape returned on success (`QualityReport` or `SavedQualityReport`).
  */

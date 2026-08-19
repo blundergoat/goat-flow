@@ -74,9 +74,11 @@ last_reviewed: 2026-08-04
 
 **Created:** 2026-03-22
 
-**What happened:** Shape removed from scanner code (ADR-002) but `[APP / LIBRARY / SCRIPT COLLECTION]` survived in 9 setup/workflow/doc files. Confusion-log removed (ADR-001) but agent recreated it because the constraint wasn't in the prompt.
+**What happened:** Shape was removed from scanner code under the removed historical `ADR-002-remove-project-shape.md`, but `[APP / LIBRARY / SCRIPT COLLECTION]` survived in 9 setup/workflow/doc files. Confusion-log was removed under the removed historical `ADR-001-remove-confusion-log.md`, but an agent recreated it because the constraint was not in the prompt; current authority is `ADR-033-goat-flow-directory-restructure.md`.
 **Root cause:** Grepped `src/` and `test/` but not `workflow/setup/`, `workflow/`, `docs/`.
 **Fix:** Preflight now enforces removed patterns across all live directories. ADR removals must grep the entire repo.
+
+**Recurrence 2026-08-15:** Consolidating 48 ADRs to 24 used a hand-enumerated grep target list that omitted `.goat-flow/glossary.md`, leaving its Instruction Budget row pointing at a deleted ADR. `stats --check` passed throughout, because its anchor validation covers footgun, lesson, and pattern buckets only; the harness audit's `doc-paths-resolve` check caught it (`157/158` resolved). Use `git grep -l` over the whole tracked tree for deleted filenames rather than a curated directory list, and run both checks - they cover different surfaces, and neither validates `(search: ...)` anchors inside ADRs (`.goat-flow/learning-loop/footguns/docs-drift.md`, search: `does not validate`).
 
 ---
 

@@ -23,9 +23,9 @@ describe("dashboard /api/skill-quality", () => {
       `/api/skill-quality/inventory?path=${encodeURIComponent(PROJECT_PATH)}&agent=claude`,
     );
     assert.equal(res.status, 200);
-    const data = expectRecord(body, "Skill quality inventory");
-    assert.ok(Array.isArray(data.artifacts));
-    const artifacts = data.artifacts as Array<Record<string, unknown>>;
+    const payload = expectRecord(body, "Skill quality inventory");
+    assert.ok(Array.isArray(payload.artifacts));
+    const artifacts = payload.artifacts as Array<Record<string, unknown>>;
     assert.ok(
       artifacts.length >= 12,
       `expected at least 12 artifacts (skills + shared references), got ${artifacts.length}`,
@@ -42,8 +42,8 @@ describe("dashboard /api/skill-quality", () => {
       `/api/skill-quality/inventory?path=${encodeURIComponent(PROJECT_PATH)}&agent=codex`,
     );
     assert.equal(res.status, 200);
-    const data = expectRecord(body, "Skill quality inventory");
-    const artifacts = data.artifacts as Array<Record<string, unknown>>;
+    const payload = expectRecord(body, "Skill quality inventory");
+    const artifacts = payload.artifacts as Array<Record<string, unknown>>;
     assert.ok(artifacts.some((a) => a.id === "reference:browser-use"));
     assert.ok(artifacts.some((a) => a.id === "reference:skill-preamble"));
   });
@@ -66,8 +66,8 @@ describe("dashboard /api/skill-quality", () => {
         `/api/skill-quality/inventory?path=${encodeURIComponent(root)}&agent=codex`,
       );
       assert.equal(res.status, 200);
-      const data = expectRecord(body, "Skill quality inventory");
-      const artifacts = data.artifacts as Array<Record<string, unknown>>;
+      const payload = expectRecord(body, "Skill quality inventory");
+      const artifacts = payload.artifacts as Array<Record<string, unknown>>;
       assert.ok(artifacts.some((a) => a.id === "skill:codex-only"));
       assert.ok(!artifacts.some((a) => a.id === "skill:claude-only"));
     } finally {
@@ -80,21 +80,21 @@ describe("dashboard /api/skill-quality", () => {
       `/api/skill-quality?path=${encodeURIComponent(PROJECT_PATH)}&agent=claude&artifact=skill:goat-plan`,
     );
     assert.equal(res.status, 200);
-    const data = expectRecord(body, "Skill quality report");
+    const payload = expectRecord(body, "Skill quality report");
     assert.equal(
-      (data.artifact as Record<string, unknown>).id,
+      (payload.artifact as Record<string, unknown>).id,
       "skill:goat-plan",
     );
-    assert.ok(typeof data.totalScore === "number");
-    assert.ok(typeof data.maxTotalScore === "number");
-    assert.equal(data.subtype, "workflow");
+    assert.ok(typeof payload.totalScore === "number");
+    assert.ok(typeof payload.maxTotalScore === "number");
+    assert.equal(payload.subtype, "workflow");
     const expectedWorkflowProfileMax = 100;
-    assert.equal(data.profileMax, expectedWorkflowProfileMax);
-    assert.ok(Array.isArray(data.composedFrom));
-    assert.ok(typeof data.recommendation === "string");
-    assert.ok(Array.isArray(data.metrics));
-    assert.ok(typeof data.prompt === "string");
-    assert.match(String(data.prompt), /Quality Review/);
+    assert.equal(payload.profileMax, expectedWorkflowProfileMax);
+    assert.ok(Array.isArray(payload.composedFrom));
+    assert.ok(typeof payload.recommendation === "string");
+    assert.ok(Array.isArray(payload.metrics));
+    assert.ok(typeof payload.prompt === "string");
+    assert.match(String(payload.prompt), /Quality Review/);
   });
 
   it("returns 404 for unknown artifact id", async () => {
@@ -102,8 +102,8 @@ describe("dashboard /api/skill-quality", () => {
       `/api/skill-quality?path=${encodeURIComponent(PROJECT_PATH)}&agent=claude&artifact=skill:nonexistent`,
     );
     assert.equal(res.status, 404);
-    const data = expectRecord(body, "Skill quality 404");
-    assert.match(String(data.error), /not found/);
+    const payload = expectRecord(body, "Skill quality 404");
+    assert.match(String(payload.error), /not found/);
   });
 
   it("returns 400 when artifact param is missing", async () => {

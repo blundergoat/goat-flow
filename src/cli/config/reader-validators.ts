@@ -1,15 +1,16 @@
 /**
  * Tells a user exactly what is wrong with their `.goat-flow/config.yaml` before anything runs.
- * Each validator owns one config section and reports problems by key name, so someone who
- * mistyped a value gets a message pointing at the line they wrote rather than a failure
- * surfacing later from a command that looks unrelated.
  *
- * The split between errors and warnings is the part that matters to a user. An error means
- * the config cannot be trusted and defaults are used instead; a warning means the setting was
- * understood but is unusual or unrecognised, and their project still runs as written. Unknown
- * top-level keys are warnings on purpose - a config written for a newer goat-flow should not
- * stop an older one from working.
+ * Each validator owns one config section and reports problems by key name, so someone who mistyped a value gets a message pointing at the line they
+ * wrote rather than a failure surfacing later from a command that looks unrelated.
+ *
+ * The split between errors and warnings is the part that matters to a user.
+ * An error means the config cannot be trusted and defaults are used instead; a warning means the setting was understood but is unusual or
+ * unrecognised, and their project still runs as written.
+ *
+ * Unknown top-level keys are warnings on purpose - a config written for a newer goat-flow should not stop an older one from working.
  */
+import { posix } from "node:path";
 import { isReleaseVersion } from "../version-compare.js";
 import type { ValidationIssue, ValidationResult } from "./types.js";
 import {
@@ -18,6 +19,11 @@ import {
   KNOWN_TOP_LEVEL_KEYS,
   KNOWN_USER_ROLES,
   LEARNING_LOOP_AUTO_CAPTURE_TARGETS,
+  KNOWN_NESTED_KEYS,
+  HOOK_ROW_KEYS,
+  QUALITY_SUBTYPE_ROW_KEYS,
+  QUALITY_SUBTYPE_DETECTION_KEYS,
+  QUALITY_PROFILE_METRIC_KEYS,
 } from "./config-vocabulary.js";
 
 /**
@@ -85,11 +91,60 @@ function validateUnknownTopLevelKeys(
 }
 
 /**
+ * Warn about keys inside a block that no validator reads.
+ * Use wherever a block has a closed key set, so a misspelling is distinguishable from an omission instead of both producing silence.
+ *
+ * @param configSection - block contents; an empty block produces no warnings
+ * @param knownKeys - keys some validator reads at this level; every other key is reported
+ * @param path - dot-separated config path of the owning block; used to build the reported key
+ * @param warnings - warning accumulator shown by config/audit callers
+ * @returns nothing; unrecognized keys append warnings in place
+ */
+function warnUnrecognizedKeys(
+  configSection: RawConfig,
+  knownKeys: ReadonlySet<string>,
+  path: string,
+  warnings: ValidationIssue[],
+): void {
+  for (const key of Object.keys(configSection)) {
+    // An unread key is either a typo or a setting this version dropped; both are worth saying aloud.
+    if (!knownKeys.has(key)) {
+      pushWarning(warnings, `${path}.${key}`, "unknown key");
+    }
+  }
+}
+
+/**
+ * Warn about unread keys in a block whose path has a registered key set.
+ * Use for blocks reached by a fixed config path; blocks nested under a user-chosen name call `warnUnrecognizedKeys` directly with the set for that
+ * level.
+ *
+ * @param configSection - block contents; an empty block produces no warnings
+ * @param path - dot-separated config path of the owning block; an unregistered path is skipped
+ * @param warnings - warning accumulator shown by config/audit callers
+ * @returns nothing; unrecognized keys append warnings in place
+ */
+function warnUnknownNestedKeys(
+  configSection: RawConfig,
+  path: string,
+  warnings: ValidationIssue[],
+): void {
+  const knownKeys = KNOWN_NESTED_KEYS.get(path);
+  // Blocks keyed by user-chosen names have no closed set and cannot be checked here.
+  if (knownKeys === undefined) return;
+  warnUnrecognizedKeys(configSection, knownKeys, path, warnings);
+}
+
+/**
  * Validate that an optional top-level field is an object before reading nested keys.
  * Use so nested validators can assume a named-field block.
  *
+ * Sweeping unknown keys here rather than in each nested validator means a new block cannot forget the check: adding its entry to `KNOWN_NESTED_KEYS`
+ * is what turns the sweep on, and a block with no entry is skipped rather than warned about wholesale.
+ *
  * @param raw - parsed config object; missing key means the user omitted this optional block
  * @param key - top-level config key; empty would produce an unusable error path
+ * @param warnings - warning accumulator; receives one entry per unrecognized nested key
  * @param errors - error accumulator shown to the user
  * @param onValid - nested validator to run when the block is an object
  * @returns nothing; errors or nested validation mutate accumulators
@@ -97,36 +152,38 @@ function validateUnknownTopLevelKeys(
 function validateObjectField(
   raw: RawConfig,
   key: string,
+  warnings: ValidationIssue[],
   errors: ValidationIssue[],
   onValid: (value: RawConfig) => void,
 ): void {
   // Missing optional blocks keep defaults and need no validation error.
   if (!(key in raw)) return;
-  const value = raw[key];
+  const sectionValue = raw[key];
   // Non-object blocks cannot carry nested settings the user expects.
-  if (!isRecord(value)) {
+  if (!isRecord(sectionValue)) {
     pushError(errors, key, "must be an object");
     return;
   }
-  onValid(value);
+  warnUnknownNestedKeys(sectionValue, key, warnings);
+  onValid(sectionValue);
 }
 
 /**
  * Validate a positive numeric config field.
  * Use for limits where zero or negative values would remove meaningful audit thresholds.
  *
- * @param value - raw field value; missing/non-number values fail when caller chose to validate the field
+ * @param configuredNumber - raw field value; missing/non-number values fail when caller chose to validate the field
  * @param path - config path shown to the user; empty would make the error hard to fix
  * @param errors - error accumulator shown to the user
  * @returns nothing; invalid values append an error
  */
 function validatePositiveNumber(
-  value: unknown,
+  configuredNumber: unknown,
   path: string,
   errors: ValidationIssue[],
 ): void {
   // Non-positive values would make configured thresholds unusable.
-  if (typeof value !== "number" || value <= 0) {
+  if (typeof configuredNumber !== "number" || configuredNumber <= 0) {
     pushError(errors, path, "must be a positive number");
   }
 }
@@ -135,26 +192,73 @@ function validatePositiveNumber(
  * Validate a command-list field as an array of non-empty strings.
  * Use for toolchain and acknowledge lists that are displayed or executed by user-visible flows.
  *
- * @param value - raw list value; non-arrays mean the user did not provide a usable list
+ * @param configuredList - raw list value; non-arrays mean the user did not provide a usable list
  * @param path - config path shown to the user; empty would make the error hard to fix
  * @param errors - error accumulator shown to the user
  * @returns nothing; invalid entries append errors with item indexes
  */
 function validateStringArray(
-  value: unknown,
+  configuredList: unknown,
   path: string,
   errors: ValidationIssue[],
 ): void {
   // Non-array lists cannot be rendered or iterated as user commands/items.
-  if (!Array.isArray(value)) {
+  if (!Array.isArray(configuredList)) {
     pushError(errors, path, "must be an array");
     return;
   }
   // Each configured item must be visible and actionable.
-  for (const [index, item] of value.entries()) {
+  for (const [index, item] of configuredList.entries()) {
     // Blank strings would show as empty commands or acknowledgements.
     if (typeof item !== "string" || item.trim().length === 0) {
       pushError(errors, `${path}[${index}]`, "must be a non-empty string");
+    }
+  }
+}
+
+/** Return whether one scan root stays lexically relative to its project. */
+function isContainedHookScanRoot(scanRoot: string): boolean {
+  const portablePath = scanRoot.replace(/\\/gu, "/");
+  const normalizedPath = posix.normalize(portablePath);
+  const isAbsolutePath =
+    portablePath.startsWith("/") || /^[A-Za-z]:/u.test(portablePath);
+  const escapesProject =
+    normalizedPath === ".." ||
+    normalizedPath.startsWith("../") ||
+    portablePath.includes("\0");
+  return !isAbsolutePath && !escapesProject;
+}
+
+/**
+ * Validate explicit post-turn roots without consulting the selected filesystem.
+ * Use here for exact config-key diagnostics; existence and Git ownership stay registrar facts.
+ *
+ * @param rawScanRoots - raw `scan-roots` field; absent fields are handled by the owning hook validator
+ * @param path - exact hook config key shown beside every malformed list item
+ * @param errors - blocking validation issues accumulated for the config result
+ * @returns nothing; invalid shape or lexical escapes append exact-key errors
+ */
+function validateHookScanRoots(
+  rawScanRoots: unknown,
+  path: string,
+  errors: ValidationIssue[],
+): void {
+  if (!Array.isArray(rawScanRoots)) {
+    pushError(errors, path, "must be an array");
+    return;
+  }
+  if (rawScanRoots.length === 0) {
+    pushError(errors, path, "must contain at least one project-relative path");
+    return;
+  }
+  for (const [index, scanRoot] of rawScanRoots.entries()) {
+    const itemPath = `${path}[${index}]`;
+    if (typeof scanRoot !== "string" || scanRoot.trim().length === 0) {
+      pushError(errors, itemPath, "must be a non-empty string");
+      continue;
+    }
+    if (!isContainedHookScanRoot(scanRoot)) {
+      pushError(errors, itemPath, "must be a contained project-relative path");
     }
   }
 }
@@ -212,16 +316,16 @@ function validateLegacyAgentsField(
  * Use so instruction-file budget checks show meaningful warning and failure thresholds.
  *
  * @param raw - parsed config object; missing line-limits uses defaults
- * @param _warnings - unused warning accumulator kept for validator signature consistency
+ * @param warnings - accumulator this block's unrecognized nested keys are appended to
  * @param errors - error accumulator shown to the user
  * @returns nothing; invalid fields append errors
  */
 function validateLineLimitsField(
   raw: RawConfig,
-  _warnings: ValidationIssue[],
+  warnings: ValidationIssue[],
   errors: ValidationIssue[],
 ): void {
-  validateObjectField(raw, "line-limits", errors, (value) => {
+  validateObjectField(raw, "line-limits", warnings, errors, (value) => {
     // Target controls the soft budget the user sees in instruction audits.
     if ("target" in value)
       validatePositiveNumber(value.target, "line-limits.target", errors);
@@ -244,16 +348,16 @@ function validateLineLimitsField(
  * Use so generated prompts and setup guidance do not show malformed command entries.
  *
  * @param raw - parsed config object; missing toolchain leaves command lists empty
- * @param _warnings - unused warning accumulator kept for validator signature consistency
+ * @param warnings - accumulator this block's unrecognized nested keys are appended to
  * @param errors - error accumulator shown to the user
  * @returns nothing; invalid command lists append errors
  */
 function validateToolchainField(
   raw: RawConfig,
-  _warnings: ValidationIssue[],
+  warnings: ValidationIssue[],
   errors: ValidationIssue[],
 ): void {
-  validateObjectField(raw, "toolchain", errors, (value) => {
+  validateObjectField(raw, "toolchain", warnings, errors, (value) => {
     // Each optional command family must be a list of commands the user can run.
     if ("test" in value)
       validateStringArray(value.test, "toolchain.test", errors);
@@ -325,16 +429,16 @@ function validateUserRoleField(
  * Use so setup/install can trust the user's skill selection and review defaults.
  *
  * @param raw - parsed config object; missing skills block keeps install-all defaults
- * @param _warnings - unused warning accumulator kept for validator signature consistency
+ * @param warnings - accumulator this block's unrecognized nested keys are appended to
  * @param errors - error accumulator shown to the user
  * @returns nothing; invalid fields append errors
  */
 function validateSkillsField(
   raw: RawConfig,
-  _warnings: ValidationIssue[],
+  warnings: ValidationIssue[],
   errors: ValidationIssue[],
 ): void {
-  validateObjectField(raw, "skills", errors, (value) => {
+  validateObjectField(raw, "skills", warnings, errors, (value) => {
     // Install policy controls which skills the user gets during setup.
     if ("install" in value) {
       const { install } = value;
@@ -355,6 +459,12 @@ function validateSkillsField(
         pushError(errors, "skills.goat-review", "must be an object");
         return;
       }
+      warnUnrecognizedKeys(
+        goatReview,
+        new Set(["local_pr_base"]),
+        "skills.goat-review",
+        warnings,
+      );
       // Local PR base, when present, becomes visible review context.
       if ("local_pr_base" in goatReview) {
         const localPrBase = goatReview.local_pr_base;
@@ -379,16 +489,16 @@ function validateSkillsField(
  * Use so acknowledged audit gaps are explicit strings users can review.
  *
  * @param raw - parsed config object; missing harness block keeps no acknowledgements
- * @param _warnings - unused warning accumulator kept for validator signature consistency
+ * @param warnings - accumulator this block's unrecognized nested keys are appended to
  * @param errors - error accumulator shown to the user
  * @returns nothing; invalid acknowledge entries append errors
  */
 function validateHarnessField(
   raw: RawConfig,
-  _warnings: ValidationIssue[],
+  warnings: ValidationIssue[],
   errors: ValidationIssue[],
 ): void {
-  validateObjectField(raw, "harness", errors, (value) => {
+  validateObjectField(raw, "harness", warnings, errors, (value) => {
     // Missing acknowledge list means the user has not muted any known harness caveats.
     if (!("acknowledge" in value)) return;
     validateStringArray(value.acknowledge, "harness.acknowledge", errors);
@@ -400,16 +510,16 @@ function validateHarnessField(
  * Use so dashboard hook switches and hook scripts read explicit, well-shaped config.
  *
  * @param raw - parsed config object; missing hooks block keeps registry defaults
- * @param _warnings - unused warning accumulator kept for validator signature consistency
+ * @param warnings - accumulator this block's unrecognized nested keys are appended to
  * @param errors - error accumulator shown to the user
  * @returns nothing; invalid hook rows append errors
  */
 function validateHooksField(
   raw: RawConfig,
-  _warnings: ValidationIssue[],
+  warnings: ValidationIssue[],
   errors: ValidationIssue[],
 ): void {
-  validateObjectField(raw, "hooks", errors, (value) => {
+  validateObjectField(raw, "hooks", warnings, errors, (value) => {
     // Each hook row configures one dashboard-visible guardrail.
     for (const [hookId, hookValue] of Object.entries(value)) {
       // Hook ids must match registry-style names so dashboard rows can find them.
@@ -422,6 +532,13 @@ function validateHooksField(
         pushError(errors, `hooks.${hookId}`, "must be an object");
         continue;
       }
+      // The row key is a hook id, but the fields inside one row are a fixed set.
+      warnUnrecognizedKeys(
+        hookValue,
+        HOOK_ROW_KEYS,
+        `hooks.${hookId}`,
+        warnings,
+      );
       // Enabled must be explicit so ambiguous strings do not flip a guardrail.
       if (typeof hookValue.enabled !== "boolean") {
         pushError(errors, `hooks.${hookId}.enabled`, "must be a boolean");
@@ -434,33 +551,44 @@ function validateHooksField(
           errors,
         );
       }
+      if ("scan-roots" in hookValue) {
+        const scanRootsPath = `hooks.${hookId}.scan-roots`;
+        if (hookId !== "post-turn-safety") {
+          pushError(
+            errors,
+            scanRootsPath,
+            "is only supported for post-turn-safety",
+          );
+        } else {
+          validateHookScanRoots(hookValue["scan-roots"], scanRootsPath, errors);
+        }
+      }
     }
   });
 }
 
 /**
- * Validate a hook `binaries` override block: an object mapping language
- * suffixes to non-empty string paths. The hook script enforces the
- * repo-relative and executability rules at runtime; config validation only
- * guards the YAML shape so typos surface in `config-parses`.
+ * Validate a hook `binaries` override block: an object mapping language suffixes to non-empty string paths.
+ * The hook script enforces the repo-relative and executability rules at runtime; config validation only guards the YAML shape so typos surface in
+ * `config-parses`.
  *
- * @param value - raw `hooks.<id>.binaries` value; missing/non-object values cannot configure binaries
+ * @param configuredBinaries - raw `hooks.<id>.binaries` value; missing/non-object values cannot configure binaries
  * @param path - dot-separated config path used in emitted issues; empty would hide the bad block
  * @param errors - error accumulator shown to the user; empty means this may be the first binary error
  * @returns nothing; invalid binary entries append errors
  */
 function validateHookBinaries(
-  value: unknown,
+  configuredBinaries: unknown,
   path: string,
   errors: ValidationIssue[],
 ): void {
   // Binary overrides must be a map so each language can name one executable.
-  if (!isRecord(value)) {
+  if (!isRecord(configuredBinaries)) {
     pushError(errors, path, "must be an object");
     return;
   }
   // Each configured language override must point at a non-empty path.
-  for (const [lang, binaryPath] of Object.entries(value)) {
+  for (const [lang, binaryPath] of Object.entries(configuredBinaries)) {
     // Empty binary paths would hide default discovery without providing a replacement.
     if (typeof binaryPath !== "string" || binaryPath.trim() === "") {
       pushError(errors, `${path}.${lang}`, "must be a non-empty string path");
@@ -495,16 +623,16 @@ function validateTelemetryField(
  * Use so future automatic writes only target known durable learning buckets.
  *
  * @param raw - parsed config object; missing learning-loop block keeps auto-capture disabled
- * @param _warnings - unused warning accumulator kept for validator signature consistency
+ * @param warnings - accumulator this block's unrecognized nested keys are appended to
  * @param errors - error accumulator shown to the user
  * @returns nothing; invalid auto-capture fields append errors
  */
 function validateLearningLoopField(
   raw: RawConfig,
-  _warnings: ValidationIssue[],
+  warnings: ValidationIssue[],
   errors: ValidationIssue[],
 ): void {
-  validateObjectField(raw, "learning-loop", errors, (value) => {
+  validateObjectField(raw, "learning-loop", warnings, errors, (value) => {
     // Missing auto-capture block keeps the writer disabled.
     if (!("auto-capture" in value)) return;
     const autoCapture = value["auto-capture"];
@@ -513,6 +641,7 @@ function validateLearningLoopField(
       pushError(errors, "learning-loop.auto-capture", "must be an object");
       return;
     }
+    warnUnknownNestedKeys(autoCapture, "learning-loop.auto-capture", warnings);
 
     // Enabled must be boolean so text values do not accidentally enable writes.
     if ("enabled" in autoCapture && typeof autoCapture.enabled !== "boolean") {
@@ -595,16 +724,16 @@ function validateSkillOverridesField(
  * Use so the dashboard terminal idle timeout is explicit and safe.
  *
  * @param raw - parsed config object; missing terminal block keeps the default idle timeout
- * @param _warnings - unused warning accumulator kept for validator signature consistency
+ * @param warnings - accumulator this block's unrecognized nested keys are appended to
  * @param errors - error accumulator shown to the user
  * @returns nothing; invalid terminal fields append errors
  */
 function validateTerminalField(
   raw: RawConfig,
-  _warnings: ValidationIssue[],
+  warnings: ValidationIssue[],
   errors: ValidationIssue[],
 ): void {
-  validateObjectField(raw, "terminal", errors, (value) => {
+  validateObjectField(raw, "terminal", warnings, errors, (value) => {
     // Missing timeout means the dashboard uses the default session cleanup window.
     if (!("idle-timeout" in value)) return;
     const timeout = value["idle-timeout"];
@@ -621,6 +750,88 @@ function validateTerminalField(
       );
     }
   });
+}
+
+/**
+ * Warn about misspelled keys anywhere in the quality block's documented vocabulary.
+ * Use so a mistyped scoring override is distinguishable from an omission instead of silently scoring with shipped defaults.
+ *
+ * Every issue here stays a warning: each quality section already degrades to its default independently, so one bad key
+ * must not invalidate the rest of the user's config the way a structural error would.
+ *
+ * @param raw - parsed config object; a missing quality block keeps shipped scoring defaults
+ * @param warnings - accumulator this block's unrecognized or unusable keys are appended to
+ * @returns nothing; unrecognized keys append warnings in place
+ */
+function validateQualityField(
+  raw: RawConfig,
+  warnings: ValidationIssue[],
+): void {
+  if (!("quality" in raw)) return;
+  const quality = raw.quality;
+  // A non-object block cannot carry overrides, and the quality reader will ignore it without saying so.
+  if (!isRecord(quality)) {
+    pushWarning(warnings, "quality", "must be an object; the block is ignored");
+    return;
+  }
+  warnUnknownNestedKeys(quality, "quality", warnings);
+  for (const blockKey of [
+    "walk-roots",
+    "composition",
+    "gate-vocabulary",
+  ] as const) {
+    const blockValue = quality[blockKey];
+    if (isRecord(blockValue)) {
+      warnUnknownNestedKeys(blockValue, `quality.${blockKey}`, warnings);
+    }
+  }
+  const subtypes = quality.subtypes;
+  // No subtypes block means the shipped subtype rows apply unchanged, so there is nothing further to spell-check.
+  if (!isRecord(subtypes)) return;
+  warnUnknownNestedKeys(subtypes, "quality.subtypes", warnings);
+  warnUnknownQualitySubtypeKeys(subtypes, warnings);
+}
+
+/**
+ * Warn about misspelled fields inside each known `quality.subtypes.<name>` row, including its `detection` and `profile` blocks.
+ * Use after the subtype names themselves have been swept, so an unknown name is reported once and not again for every field inside it.
+ *
+ * @param subtypes - the user's `quality.subtypes` object; a row that is not an object is skipped because the reader ignores it anyway
+ * @param warnings - accumulator the misspelled-field warnings are appended to
+ * @returns nothing; warnings are appended in place
+ */
+function warnUnknownQualitySubtypeKeys(
+  subtypes: Record<string, unknown>,
+  warnings: ValidationIssue[],
+): void {
+  const knownSubtypeNames = KNOWN_NESTED_KEYS.get("quality.subtypes");
+  for (const [subtypeName, subtypeValue] of Object.entries(subtypes)) {
+    // Unknown subtype names were reported by the sweep above; misspelled fields inside them would double-report.
+    if (!knownSubtypeNames?.has(subtypeName) || !isRecord(subtypeValue))
+      continue;
+    warnUnrecognizedKeys(
+      subtypeValue,
+      QUALITY_SUBTYPE_ROW_KEYS,
+      `quality.subtypes.${subtypeName}`,
+      warnings,
+    );
+    if (isRecord(subtypeValue.detection)) {
+      warnUnrecognizedKeys(
+        subtypeValue.detection,
+        QUALITY_SUBTYPE_DETECTION_KEYS,
+        `quality.subtypes.${subtypeName}.detection`,
+        warnings,
+      );
+    }
+    if (isRecord(subtypeValue.profile)) {
+      warnUnrecognizedKeys(
+        subtypeValue.profile,
+        QUALITY_PROFILE_METRIC_KEYS,
+        `quality.subtypes.${subtypeName}.profile`,
+        warnings,
+      );
+    }
+  }
 }
 
 /** Ordered list of field-level validators applied during config validation. */
@@ -662,6 +873,8 @@ export function validateConfig(raw: unknown): ValidationResult {
   for (const validator of CONFIG_VALIDATORS) {
     validator(raw, warnings, errors);
   }
+  // Quality issues are warnings-only by design, so the block validates outside the error-capable list.
+  validateQualityField(raw, warnings);
 
   return { valid: errors.length === 0, warnings, errors };
 }

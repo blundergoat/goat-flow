@@ -58,6 +58,8 @@ The setup audit requires these phrases. Paste or adapt them with the required wo
 READ step:
 
 > Before declaring any tool or capability unavailable, read the matching playbook in `.goat-flow/skill-docs/playbooks/` (e.g. `browser-use.md`, `page-capture.md`) and run that doc's "Availability Check" section verbatim - project-local CLI tools at `~/.local/bin/` are valid; do not conflate "no harness/MCP tool" with "no tool".
+>
+> Before creating, changing, reviewing, consolidating, moving, or pruning tests, read `.goat-flow/skill-docs/playbooks/test-selection.md`.
 
 Router Table row:
 
@@ -89,6 +91,7 @@ After writing/updating the instruction file:
 - [ ] Examples and boundaries reference real project files
 - [ ] Workspace boundary guidance distinguishes controlling goat-flow workspace from selected target project without hardcoded absolute paths
 - [ ] READ step keeps the canonical skill-docs/playbooks phrases: "Before declaring any tool or capability unavailable", `.goat-flow/skill-docs/playbooks/`, and "Availability Check"
+- [ ] READ step routes creating, changing, reviewing, consolidating, moving, or pruning tests through `test-selection.md`
 - [ ] Router table includes the canonical `.goat-flow/skill-docs/playbooks/` tool playbooks row
 - [ ] Router table keeps `.goat-flow/skill-docs/skill-quality-testing/` as the sibling skill-authoring methodology path
 - [ ] Commit guidance matches target applicability: without `.git`, neither guide nor a `## Commit Messages` bridge is required; with `.git`, the preferred guide exists, the instruction file references it, a former-only guide was renamed without collision, and pre-existing dual guides were preserved

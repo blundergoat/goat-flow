@@ -55,6 +55,8 @@ type HomeModel = {
   harnessPillTone(): string;
   /** Return the Home harness pill headline value. */
   harnessPillValue(): string;
+  /** Build the repair prompt from scope-failing check rows. */
+  harnessFixPrompt(): string;
   /** Return true when the regenerate-index button should be disabled. */
   learningIndexButtonDisabled(): boolean;
   /** Return true when the learning-loop panel shows real data instead of the NA state. */
@@ -117,6 +119,7 @@ type SetupPromptHelpers = {
     _qualityContext: SetupPromptContext,
     mode: { id: string },
   ): string;
+  /** Generate the setup prompt for one agent, as the Home card's button does. */
   dashboardGenerateSetupPromptForAgent(
     ctx: SetupPromptContext,
     targetAgent: string,
@@ -552,7 +555,14 @@ describe("Home harness summary", () => {
             agent: { status: "pass", checks: [] },
             harness: {
               status: "fail",
-              checks: [{ id: "verification", status: "fail" }],
+              checks: [
+                {
+                  id: "verification",
+                  status: "fail",
+                  impact: "scope-fail",
+                  failure: { message: "Codex verification hook missing" },
+                },
+              ],
             },
             concerns: {
               context: concern("pass", 100),
@@ -589,6 +599,67 @@ describe("Home harness summary", () => {
       launchPresetCalls[0]!.prompt,
       /Codex verification hook missing/,
     );
+  });
+
+  it("builds harness repair prompts only from scope-failing check rows", () => {
+    const passingEvidence = "Claude secret deny coverage is complete";
+    const scoreOnlyAdvisory = "Write permission rule is inert";
+    const blockingFailure = "Claude deny hook is not registered";
+    const home = loadHomeModel({
+      scopes: {
+        setup: {
+          status: "pass",
+          checks: [{ id: "config-parses", status: "pass" }],
+        },
+      },
+      agentScores: [
+        {
+          id: "claude",
+          name: "Claude Code",
+          agent: { status: "pass", checks: [] },
+          harness: {
+            status: "fail",
+            checks: [
+              {
+                id: "deny-covers-secrets",
+                status: "pass",
+                type: "integrity",
+                impact: "none",
+              },
+              {
+                id: "settings-rules-matched",
+                status: "fail",
+                type: "advisory",
+                impact: "score-only",
+                failure: { message: scoreOnlyAdvisory },
+              },
+              {
+                id: "deny-hook-registered",
+                status: "fail",
+                type: "integrity",
+                impact: "scope-fail",
+                failure: { message: blockingFailure },
+              },
+            ],
+          },
+          concerns: {
+            context: concern("pass", 100),
+            constraints: concern("fail", 60, {
+              findings: [passingEvidence, scoreOnlyAdvisory],
+            }),
+            verification: concern("pass", 100),
+            recovery: concern("pass", 100),
+            feedback_loop: concern("pass", 100),
+          },
+        },
+      ],
+    });
+
+    const prompt = home.harnessFixPrompt();
+
+    assert.match(prompt, new RegExp(blockingFailure, "u"));
+    assert.doesNotMatch(prompt, new RegExp(scoreOnlyAdvisory, "u"));
+    assert.doesNotMatch(prompt, new RegExp(passingEvidence, "u"));
   });
 
   // Fixture purpose: writes high-score agent data because hard harness failures override averages.
@@ -756,7 +827,10 @@ describe("Home learning loop", () => {
     });
     assert.equal(home.learningLoopReady(), true);
     assert.equal(home.learningPillValue(), "Fresh");
-    assert.equal(home.learningPillDetail(), "5 footguns, 7 lessons");
+    assert.equal(
+      home.learningPillDetail(),
+      "5 footgun records, 7 lesson records",
+    );
     assert.equal(home.learningIndexButtonDisabled(), false);
   });
 

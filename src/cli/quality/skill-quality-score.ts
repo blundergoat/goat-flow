@@ -1,12 +1,11 @@
 /**
- * Top-level orchestration of the skill-quality scoring pipeline. Wires the stages together -
- * classify the artifact, detect its semantic shape, compose its scoring surface, run every metric,
- * then derive a recommendation - and returns the assembled SkillQualityReport.
+ * Top-level orchestration of the skill-quality scoring pipeline.
+ * Wires the stages together - classify the artifact, detect its semantic shape, compose its scoring surface, run every metric, then derive a
+ * recommendation - and returns the assembled SkillQualityReport.
  *
- * Three entry points sit at different I/O levels: `scoreContent` is pure (content passed in, no
- * disk read) for uploads and pastes; `scoreArtifact` reads one artifact from disk first; and
- * `scoreAllArtifacts` walks the inventory and scores everything. Keep `scoreContent` the shared
- * core so disk-backed and in-memory scoring stay identical.
+ * Three entry points sit at different I/O levels: `scoreContent` is pure (content passed in, no disk read) for uploads and pastes; `scoreArtifact`
+ * reads one artifact from disk first; and `scoreAllArtifacts` walks the inventory and scores everything.
+ * Keep `scoreContent` the shared core so disk-backed and in-memory scoring stay identical.
  */
 import {
   loadQualityConfig,
@@ -103,8 +102,7 @@ function findVagueLanguageAdvisories(content: string): string[] {
 
 /**
  * Score raw content against the rubric without reading any file from disk.
- * Used by both `scoreArtifact` (which reads first) and `evaluateContent`
- * (which gets content from an upload or paste).
+ * Used by both `scoreArtifact` (which reads first) and `evaluateContent` (which gets content from an upload or paste).
  *
  * @param projectRoot - absolute project root; used for path-relative composition, not as a read key.
  * @param artifact - inventory record being scored; its kind/path drive classification and composition.

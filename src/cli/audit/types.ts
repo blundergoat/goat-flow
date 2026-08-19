@@ -1,7 +1,6 @@
 /**
  * Types for the `goat-flow audit` command.
- * Audit validates setup correctness (build checks) and optionally checks
- * AI harness completeness (--harness) grouped by harness concerns.
+ * Audit validates setup correctness (build checks) and optionally checks AI harness completeness (--harness) grouped by harness concerns.
  *
  * Wording: audit = deterministic integrity/completeness. Never "quality" or "score".
  */
@@ -31,7 +30,7 @@ export interface CheckResult {
   id: string;
   name: string;
   status: "pass" | "fail" | "skipped";
-  /** UI-oriented status. Metric and acknowledged failures render as warnings, not hard failures. */
+  /** UI-oriented status. Score-only, metric, and acknowledged failures render as warnings. */
   displayStatus: CheckDisplayStatus;
   /** Whether this result affects audit status, concern score only, or neither. */
   impact: CheckImpact;
@@ -121,7 +120,7 @@ export interface AuditReport extends AuditHarnessJsonField {
   enforcement: AgentEnforcementCapability[];
   /** Effective hook chain; its own status stays non-green while required links are missing. */
   hookCoverage: AuditHookCoverageReport;
-  /** Drift section, populated when --check-drift is set. */
+  /** Managed-artifact and peer-instruction drift, populated explicitly or for multi-agent targets. */
   drift: DriftReport | null;
   /** Content-lint section, populated when --check-content is set. */
   content: ContentReport | null;
@@ -146,14 +145,14 @@ export type CheckAssurance = "full" | "limited";
 
 type DriftFindingKind = "content" | "missing" | "orphan" | "deprecated";
 
-/** One installed-vs-template skill drift finding. */
+/** One managed-artifact or peer-instruction drift finding. */
 export interface DriftFinding {
   kind: DriftFindingKind;
   path: string;
   message: string;
 }
 
-/** Optional drift section populated only when `--check-drift` runs. */
+/** Drift section populated explicitly or automatically for multi-agent targets. */
 export interface DriftReport {
   status: "pass" | "fail";
   findings: DriftFinding[];
@@ -259,7 +258,7 @@ export interface BuildCheck {
  * Harness check classification:
  * - `integrity`: drift from install state; failing integrity gates concern status.
  * - `advisory`: best practice; failing advisory gates concern status unless
- *   the check id is listed in `harness.acknowledge` in config.yaml.
+ *   acknowledged or the check explicitly declares score-only impact.
  * - `metric`: workflow maturity signal; never affects status.
  */
 export type HarnessCheckType = "integrity" | "advisory" | "metric";
@@ -270,6 +269,8 @@ export interface HarnessCheck {
   name: string;
   concern: AuditConcernKey;
   type: HarnessCheckType;
+  /** Make a failed advisory lower its concern score without failing audit status. */
+  failureImpact?: "score-only";
   provenance: CheckEvidence;
   /** Evidence strength label exposed to dashboard/detail renderers. */
   evidenceKind?: CheckEvidenceKind;
@@ -296,6 +297,15 @@ export interface HarnessCheckResult {
    *  the parent `HarnessCheck.id`; each consuming page reads the keys it knows.
    *  Plain-text and markdown audit renderers ignore this block. */
   details?: HarnessCheckDetails;
+}
+
+/** One inert Claude permission rule exposed without requiring consumers to parse prose. */
+export interface HarnessPermissionRuleDetail {
+  array: "deny" | "allow" | "ask";
+  rule: string;
+  tool: string;
+  reason: string;
+  display: string;
 }
 
 /** Structured per-check detail union. Keyed by `HarnessCheck.id`.
@@ -341,7 +351,7 @@ export interface HarnessCheckDetails {
   denyMatrix?: {
     agent: AgentId;
     missingPatterns: string[];
-    extraPatterns: string[];
+    extraPatterns: HarnessPermissionRuleDetail[];
     hookRegistered: boolean;
   }[];
   /** hooks-registered / commit-guidance / evidence-before-claims / post-turn-hook-integrity */

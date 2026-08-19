@@ -613,6 +613,7 @@ describe("scanContentQuality: stale skill-playbooks path", () => {
   });
 
   it("allows historical legacy path references in learning-loop records", () => {
+    // A historical record naming a removed path is legitimate, so the scanner must not report it as a stale reference.
     const assertHistoricalPathAllowed = (path: string): void => {
       const findings = scanContentQuality(
         path,

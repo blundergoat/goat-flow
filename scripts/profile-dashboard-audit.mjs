@@ -148,10 +148,10 @@ function createProfiler() {
   return {
     spans,
     /** Run a synchronous span and record its rounded duration even when the callback throws. */
-    span(name, fn) {
+    span(name, block) {
       const start = performance.now();
       try {
-        return fn();
+        return block();
       } finally {
         spans.push({
           name,
@@ -254,23 +254,23 @@ function summarizeSpans(spans) {
 }
 
 /** Measure a synchronous operation and return the label, result value, and elapsed milliseconds. */
-function timeSync(label, fn) {
+function timeSync(label, block) {
   const start = performance.now();
-  const value = fn();
+  const result = block();
   return {
     label,
-    value,
+    result,
     durationMs: Number((performance.now() - start).toFixed(3)),
   };
 }
 
 /** Measure an async operation and return the label, awaited value, and elapsed milliseconds. */
-async function timeAsync(label, fn) {
+async function timeAsync(label, block) {
   const start = performance.now();
-  const value = await fn();
+  const result = await block();
   return {
     label,
-    value,
+    result,
     durationMs: Number((performance.now() - start).toFixed(3)),
   };
 }

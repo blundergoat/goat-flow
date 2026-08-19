@@ -1,7 +1,8 @@
 /**
  * Builds the redacted local artifact emitted by `goat-flow diagnostics bundle`.
- * Use this when a maintainer needs one shareable view of setup, audit, quality,
- * runtime-event, stack, and environment state without raw project or prompt data.
+ *
+ * Use this when a maintainer needs one shareable view of setup, audit, quality, runtime-event, stack, and environment state without raw project or
+ * prompt data.
  * Collection composes existing read-only facts; renderers never write the target.
  */
 import { existsSync } from "node:fs";
@@ -113,8 +114,7 @@ interface SupportEventMetadata {
 
 /**
  * Successful-bundle schema containing only allowlisted summaries and hashes.
- * Keep raw source bodies outside this contract; `sections: null` is reserved
- * for collection errors so support consumers can branch without guessing.
+ * Keep raw source bodies outside this contract; `sections: null` is reserved for collection errors so support consumers can branch without guessing.
  */
 interface SupportBundleSections {
   manifest: {
@@ -248,20 +248,22 @@ interface RedactionCounter {
 
 /** Scrub one display string and count when the support user receives a placeholder. */
 function scrubSupportString(
-  value: string,
+  text: string,
   redactions: RedactionCounter,
 ): string {
-  const scrubbedValue = scrubDurableText(value);
+  const scrubbedValue = scrubDurableText(text);
   // A changed string tells the recipient that readable metadata was intentionally reduced.
-  if (scrubbedValue !== value) redactions.applied += 1;
+  if (scrubbedValue !== text) redactions.applied += 1;
   return scrubbedValue;
 }
 
 /** Hash text for same/different comparisons while omitting its readable body. */
-function fingerprintText(value: string | null): SupportFileFingerprint | null {
+function fingerprintText(
+  fileText: string | null,
+): SupportFileFingerprint | null {
   // Missing files have no bytes to compare, so the UI shows an explicit null fingerprint.
-  if (value === null) return null;
-  const redactedValue = redactEvidenceText("support file", value);
+  if (fileText === null) return null;
+  const redactedValue = redactEvidenceText("support file", fileText);
   return { sha256: redactedValue.sha256, bytes: redactedValue.length };
 }
 
@@ -368,7 +370,10 @@ function summarizeAgentSetup(
   };
 }
 
-/** Select and summarize the newest comparable quality run. */
+/**
+ * Select and summarize the newest comparable quality run.
+ * Comparability is the contract here: an agent-scoped bundle never borrows another runner's history.
+ */
 function summarizeQuality(
   history: BuildSupportBundleInput["qualityHistory"],
   selectedAgent: AgentId | null,
@@ -452,7 +457,10 @@ function summarizeStack(
   };
 }
 
-/** Build all allowlisted sections from existing collectors without raw body fields. */
+/**
+ * Build all allowlisted sections from existing collectors.
+ * The allowlist is the contract that keeps raw project and prompt text out of a bundle a user may share.
+ */
 function buildSupportSections(
   input: BuildSupportBundleInput,
   redactions: RedactionCounter,
@@ -566,6 +574,8 @@ export function buildSupportBundleError(
 
 /**
  * Collect one support bundle from existing read-only fact, audit, history, and event APIs.
+ * It reports a missing or unreadable target inside the bundle rather than throwing, so automation always receives structured JSON.
+ *
  * @param projectPath - selected local project; an absent directory returns a target-not-found bundle
  * @param selectedAgent - one agent mirror, or null to summarize all installed mirrors
  * @returns a support bundle; null sections mean collection could not provide safe evidence

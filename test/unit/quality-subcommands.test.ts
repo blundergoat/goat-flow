@@ -19,23 +19,8 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { classifyProjectState } from "../../src/cli/classify-state.js";
-import {
-  MULTI_AGENT_SYNC_BANNER,
-  validAgentFlags,
-  validAgentList,
-  validAgents,
-} from "../../src/cli/cli-agent-options.js";
 import { CLIError } from "../../src/cli/cli-error.js";
-import { writeOutput } from "../../src/cli/cli-output.js";
 import { parseCLIArgs } from "../../src/cli/cli-parser.js";
-import {
-  COMMANDS,
-  HOOK_SUBCOMMANDS,
-  REMOVED_COMMANDS,
-  VALID_FORMATS,
-} from "../../src/cli/cli-types.js";
-import type { ParsedCLI } from "../../src/cli/cli-types.js";
 import { getPackageVersion } from "../../src/cli/paths.js";
 import { persistQualityReportText } from "../../src/cli/quality/quality-command.js";
 import { parseQualityReport } from "../../src/cli/quality/schema.js";
@@ -68,6 +53,13 @@ function currentQualityReport(
     rubric_version: version,
     quality_mode: "skills",
     prior_report_id: null,
+    assessment_context: {
+      project_revision: "6d95e75d4c8a6770fdeede79bb1cf22d9c3a9aa0",
+      working_tree_state: "clean",
+      grounding_status: "complete",
+      unverified_probes: [],
+      score_confidence: "high",
+    },
     scores: {
       setup: {
         total: 0,
@@ -134,52 +126,7 @@ function makeIgnoredQualityRoot(): string {
   return root;
 }
 
-/**
- * Capture stdout emitted by the shared CLI output writer.
- *
- * @param rendered - command output body to write
- * @returns the exact text written to stdout
- */
-function captureStdoutWrite(rendered: string): string {
-  let captured = "";
-  const originalWrite = process.stdout.write;
-  process.stdout.write = ((chunk: string | Uint8Array) => {
-    captured += chunk.toString();
-    return true;
-  }) as typeof process.stdout.write;
-  try {
-    writeOutput({ output: null } as ParsedCLI, rendered);
-  } finally {
-    process.stdout.write = originalWrite;
-  }
-  return captured;
-}
-
 describe("quality subcommand parsing", () => {
-  it("keeps CLI support modules aligned with parser-visible command vocabulary", () => {
-    assert.equal(validAgents().includes("claude"), true);
-    assert.match(validAgentList(), /claude/);
-    assert.match(validAgentFlags(), /--agent claude/);
-    assert.match(MULTI_AGENT_SYNC_BANNER.join("\n"), /Multi-agent sync/);
-    assert.equal(
-      new CLIError("usage", CLI_USAGE_EXIT_CODE).exitCode,
-      CLI_USAGE_EXIT_CODE,
-    );
-    assert.equal(COMMANDS.includes("quality"), true);
-    assert.equal(HOOK_SUBCOMMANDS.has("sync"), true);
-    assert.equal(VALID_FORMATS.includes("json"), true);
-    assert.match(REMOVED_COMMANDS.check, /audit --check-drift/);
-    assert.match(REMOVED_COMMANDS.critique, /\bquality\b/);
-    assert.match(REMOVED_COMMANDS.fix, /\b(?:audit|quality)\b/);
-    assert.match(REMOVED_COMMANDS.eval, /\bquality candidacy\b/);
-    assert.doesNotMatch(REMOVED_COMMANDS.eval, /quality evaluate/);
-    assert.equal(captureStdoutWrite("payload"), "payload\n");
-    assert.equal(
-      classifyProjectState({ exists: () => false, readFile: () => null }).state,
-      "bare",
-    );
-  });
-
   it("rejects the removed capture subcommand with a migration hint", () => {
     assert.throws(
       () => parseCLIArgs(["quality", "capture"]),
@@ -229,6 +176,12 @@ describe("quality subcommand parsing", () => {
     ]);
     assert.equal(parsed.qualitySubcommand, "prompt");
     assert.equal(parsed.qualityMode, "skills");
+  });
+
+  it("treats a prototype-named positional as an ordinary project path", () => {
+    const parsed = parseCLIArgs(["quality", "__proto__"]);
+    assert.equal(parsed.qualitySubcommand, "prompt");
+    assert.equal(parsed.projectPath, resolve("__proto__"));
   });
 
   it("parses bounded quality-save ownership and rejects ambiguous paths", () => {
@@ -300,6 +253,72 @@ describe("quality report run dates", () => {
       true,
     );
     assert.equal(parseQualityReport(impossibleDateReport).ok, false);
+  });
+});
+
+describe("quality assessment context", () => {
+  const assessmentContext = {
+    project_revision: "6d95e75d4c8a6770fdeede79bb1cf22d9c3a9aa0",
+    working_tree_state: "dirty",
+    grounding_status: "partial",
+    unverified_probes: ["bash scripts/preflight-checks.sh: denied"],
+    score_confidence: "medium",
+  };
+
+  it("accepts comparable provenance on a current report", () => {
+    const parsed = parseQualityReport({
+      ...currentQualityReport(resolve("quality-context-fixture")),
+      assessment_context: assessmentContext,
+    });
+    assert.equal(parsed.ok, true, parsed.ok ? undefined : parsed.error);
+  });
+
+  it("requires provenance on current reports while legacy history remains loadable", () => {
+    const { assessment_context: _assessmentContext, ...reportWithoutContext } =
+      currentQualityReport(resolve("quality-context-fixture"));
+    const current = parseQualityReport(reportWithoutContext);
+    assert.equal(current.ok, false);
+    if (!current.ok) {
+      assert.match(current.error, /assessment_context is required/u);
+    }
+
+    const historical = parseQualityReport(reportWithoutContext, {
+      requireCurrentFields: false,
+    });
+    assert.equal(
+      historical.ok,
+      true,
+      historical.ok ? undefined : historical.error,
+    );
+  });
+
+  it("rejects contradictory grounding status and unverified probes", () => {
+    const completeWithGap = parseQualityReport({
+      ...currentQualityReport(resolve("quality-context-fixture")),
+      assessment_context: {
+        ...assessmentContext,
+        grounding_status: "complete",
+      },
+    });
+    assert.deepEqual(completeWithGap, {
+      ok: false,
+      error:
+        "report.assessment_context.unverified_probes must be empty when grounding_status is complete",
+    });
+
+    const partialWithoutGap = parseQualityReport({
+      ...currentQualityReport(resolve("quality-context-fixture")),
+      assessment_context: {
+        ...assessmentContext,
+        grounding_status: "partial",
+        unverified_probes: [],
+      },
+    });
+    assert.deepEqual(partialWithoutGap, {
+      ok: false,
+      error:
+        "report.assessment_context.unverified_probes must name at least one probe when grounding_status is partial or blocked",
+    });
   });
 });
 

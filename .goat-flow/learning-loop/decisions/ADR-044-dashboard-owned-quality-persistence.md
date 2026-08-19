@@ -52,7 +52,8 @@ before server-side redaction. Mitigations bound the window: the staging director
 persistence across server processes, stale owners fail closed with rejection receipts, the staging
 path is never inside a tracked directory, and final reports keep `0600` exclusive-create semantics.
 An incomplete unclaimed draft may outlive one server process rather than being deleted by a process
-that cannot prove ownership. As with ADR-041, this is a declared boundary, not a silent gap.
+that cannot prove ownership. As with ADR-052's interpreter-heredoc boundary, this is a declared
+boundary, not a silent gap.
 
 ## Failure Mode Comparison
 
@@ -78,4 +79,4 @@ that cannot prove ownership. As with ADR-041, this is a declared boundary, not a
 Two-way door: the overlay, prompt, and server changes revert with git, and the headless-spawn
 fallback is pre-identified. Revisit if a future Claude Code release makes heredoc commands
 matchable by settings rules - re-probe using the positive-control method recorded in
-`.goat-flow/learning-loop/lessons/test-execution-environment.md` (search: `Nested Claude permission probes`) before trusting any new matcher behaviour.
+`.goat-flow/learning-loop/lessons/test-shell-environment.md` (search: `Nested Claude permission probes`) before trusting any new matcher behaviour.

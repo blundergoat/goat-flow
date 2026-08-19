@@ -1,7 +1,8 @@
 /**
  * Replays configured Gruff and post-turn commands with fixed offline payloads.
- * Use when a user verifies whether the exact command in agent config returns a
- * recognized result without launching a provider model or retaining hook output.
+ *
+ * Use when a user verifies whether the exact command in agent config returns a recognized result without launching a provider model or retaining hook
+ * output.
  * Shared report contracts remain in the deny-runtime evidence module.
  */
 import { spawnSync } from "node:child_process";
@@ -16,7 +17,11 @@ import {
   type CreateEvidenceEnvelopeInput,
 } from "./evidence/envelope.js";
 import { HOOK_VERIFICATION_CONTRACTS } from "./hook-verification-contracts.js";
-import { buildAgentHookCommand } from "./server/agent-hook-writer.js";
+import {
+  buildAgentHookDescriptor,
+  type AgentHookHandlerDescriptor,
+} from "./server/agent-hook-command.js";
+import type { AgentHookRegistrationIssue } from "./server/agent-hook-writer.js";
 import { readAllHookStates } from "./server/hook-registrar.js";
 import { getHookSpec } from "./server/hooks-registry.js";
 import type { AgentId } from "./types.js";
@@ -44,6 +49,8 @@ export type HookRuntimeReasonCode =
   | "agent-hook-unsupported"
   | "hook-disabled"
   | "hook-not-installed"
+  | "event-mismatch"
+  | "matcher-mismatch"
   | "target-marked-untrusted"
   | "hook-registry-missing"
   | "probe-timed-out"
@@ -117,23 +124,40 @@ export interface HookRuntimeReport {
  * Use before either proof path decides whether a hook may run.
  *
  * @param isSupported - false means the selected provider cannot host this hook
- * @param enabled - false means the user intentionally disabled the hook
+ * @param isEnabled - false means the user intentionally disabled the hook
  * @param installed - false means no exact registration and managed files are ready
  * @param scriptPath - managed script path; null means no runnable local target
  * @returns first stable reason code, or null when local execution may continue
  */
 export function managedHookReasonCode(
   isSupported: boolean,
-  enabled: boolean,
+  isEnabled: boolean,
   installed: boolean,
   scriptPath: string | null,
 ): HookRuntimeReasonCode | null {
   // Unsupported agents cannot receive this managed PreToolUse hook.
   if (!isSupported) return "agent-hook-unsupported";
   // A disabled hook is intentionally absent from the user's active policy.
-  if (!enabled) return "hook-disabled";
+  if (!isEnabled) return "hook-disabled";
   // Missing registration, script, or policy files means no checkout proof can run.
   if (!installed || scriptPath === null) return "hook-not-installed";
+  return null;
+}
+
+/** Preserve exact configured registration drift when it prevents a replay. */
+function configuredRegistrationReasonCode(
+  isSupported: boolean,
+  isEnabled: boolean,
+  registrationIssue: AgentHookRegistrationIssue | null,
+): HookRuntimeReasonCode | null {
+  // Provider support and user intent take precedence over stale registration detail.
+  if (!isSupported || !isEnabled) return null;
+  if (
+    registrationIssue === "event-mismatch" ||
+    registrationIssue === "matcher-mismatch"
+  ) {
+    return registrationIssue;
+  }
   return null;
 }
 
@@ -220,7 +244,7 @@ interface ConfiguredHookScenario {
   acceptedObservations: HookProbeObserved[];
 }
 
-/** Local state required before an exact registered feedback command may run. */
+/** Local state required before an exact registered feedback handler may run. */
 interface ManagedConfiguredHookState {
   isSupported: boolean;
   enabled: boolean;
@@ -228,7 +252,7 @@ interface ManagedConfiguredHookState {
   isCurrentVersionInstalled: boolean;
   isTrusted: boolean;
   scriptPath: string | null;
-  configuredCommand: string | null;
+  configuredHandler: AgentHookHandlerDescriptor | null;
   probeTimeoutMs: number;
   reasonCode: HookRuntimeReasonCode | null;
 }
@@ -334,15 +358,15 @@ function readManagedConfiguredHookState(
       isCurrentVersionInstalled: false,
       isTrusted: false,
       scriptPath: null,
-      configuredCommand: null,
+      configuredHandler: null,
       probeTimeoutMs: PROBE_TIMEOUT_MS,
       reasonCode: "hook-registry-missing",
     };
   }
   const agentHookState = hookState.agents[request.agent];
-  const configuredCommand =
+  const configuredHandler =
     agentHookState.installed && agentProfile.hooksDir !== null
-      ? buildAgentHookCommand(request.agent, agentProfile.hooksDir, hookSpec)
+      ? buildAgentHookDescriptor(request.agent, agentProfile.hooksDir, hookSpec)
       : null;
   return {
     isSupported: agentHookState.supported,
@@ -351,31 +375,42 @@ function readManagedConfiguredHookState(
     isCurrentVersionInstalled: agentHookState.isCurrentVersionInstalled,
     isTrusted: agentHookState.isTrusted,
     scriptPath: agentHookState.scriptPath,
-    configuredCommand,
+    configuredHandler,
     // The hook's own registered deadline is the budget its script was written against; the fast
     // classifier cap would fail a Gruff or post-turn scan that is still legitimately working.
     probeTimeoutMs:
       hookSpec.timeoutSec === undefined
         ? PROBE_TIMEOUT_MS
         : hookSpec.timeoutSec * 1000,
-    reasonCode: managedHookReasonCode(
-      agentHookState.supported,
-      hookState.enabled,
-      agentHookState.installed,
-      agentHookState.scriptPath,
-    ),
+    reasonCode:
+      configuredRegistrationReasonCode(
+        agentHookState.supported,
+        hookState.enabled,
+        agentHookState.registrationIssue,
+      ) ??
+      managedHookReasonCode(
+        agentHookState.supported,
+        hookState.enabled,
+        agentHookState.installed,
+        agentHookState.scriptPath,
+      ),
   };
 }
 
-/** Execute one fixed payload through the exact command the selected agent configuration names. */
+/** Spawns one fixed payload through the exact handler the selected agent configuration names, so verification exercises the user's real command. */
 function executeConfiguredFeedbackProbe(
   projectPath: string,
-  configuredCommand: string,
+  configuredHandler: AgentHookHandlerDescriptor,
   scenario: ConfiguredHookScenario,
   timeoutMs: number,
 ): HookProbeExecution {
   const startedAt = performance.now();
-  const execution = spawnSync("bash", ["-c", configuredCommand], {
+  // Argv handlers run exactly as the provider spawns them; shell handlers keep Bash parsing.
+  const [probeExecutable, probeArguments] =
+    configuredHandler.form === "argv"
+      ? [configuredHandler.command, configuredHandler.args]
+      : ["bash", ["-c", configuredHandler.command]];
+  const execution = spawnSync(probeExecutable, probeArguments, {
     cwd: projectPath,
     encoding: "utf-8",
     env: managedHookEnvironment(projectPath),
@@ -561,22 +596,24 @@ function recordConfiguredScenarioEvidence(
 }
 
 /**
- * Check whether local setup is complete enough to run the user's configured command.
+ * Check whether local setup is complete enough to run the user's configured handler.
  * Use before replay so partial installs stay visible as not configured.
  *
- * @param hookState - current local hook links; a null command means no runnable registration
- * @returns true only when every local link and the configured command are ready
+ * @param hookState - current local hook links; a null handler means no runnable registration
+ * @returns true only when every local link and the configured handler are ready
  */
 function configuredHookCanRun(
   hookState: ManagedConfiguredHookState,
-): hookState is ManagedConfiguredHookState & { configuredCommand: string } {
-  // Every local link and the command itself must be present before user-requested proof can run.
+): hookState is ManagedConfiguredHookState & {
+  configuredHandler: AgentHookHandlerDescriptor;
+} {
+  // Every local link and the handler itself must be present before user-requested proof can run.
   return (
     hookState.enabled &&
     hookState.installed &&
     hookState.isCurrentVersionInstalled &&
     hookState.isTrusted &&
-    hookState.configuredCommand !== null
+    hookState.configuredHandler !== null
   );
 }
 
@@ -585,7 +622,7 @@ function configuredHookCanRun(
  * Use so the public command keeps one clear reason for every unavailable state.
  *
  * @param request - selected provider and trust choice; never null
- * @param hookState - inspected registration state; a null command cannot execute
+ * @param hookState - inspected registration state; a null handler cannot execute
  * @param scenarios - fixed user-visible scenarios; empty input returns no rows
  * @returns complete scenario rows, including skipped outcomes when execution is unsafe
  */
@@ -594,7 +631,7 @@ function selectConfiguredScenarioResults(
   hookState: ManagedConfiguredHookState,
   scenarios: readonly ConfiguredHookScenario[],
 ): HookRuntimeScenarioResult[] {
-  // An untrusted checkout never executes its hook command or writes target-local evidence.
+  // Without explicit trusted-target approval, the checkout command and evidence writes stay blocked.
   if (request.isTargetUntrusted) {
     return skippedConfiguredScenarioResults(
       scenarios,
@@ -627,15 +664,15 @@ function selectConfiguredScenarioResults(
     );
   }
 
-  const configuredCommand = hookState.configuredCommand;
-  // Every fixed payload reaches the exact command the selected agent will invoke.
+  const configuredHandler = hookState.configuredHandler;
+  // Every fixed payload reaches the exact handler the selected agent will invoke.
   return scenarios.map((scenario) =>
     completedConfiguredScenarioResult(
       request.scenarioGroup,
       scenario,
       executeConfiguredFeedbackProbe(
         request.projectPath,
-        configuredCommand,
+        configuredHandler,
         scenario,
         hookState.probeTimeoutMs,
       ),
@@ -651,7 +688,7 @@ function selectConfiguredScenarioResults(
  * @param hookId - registry hook id; empty text would produce unusable evidence
  * @param scriptPath - managed script path; null records proof without a target-file anchor
  * @param scenarioResults - completed or skipped rows; empty input writes no events
- * @returns rows with durable-evidence flags; unchanged when the target is untrusted
+ * @returns rows with durable-evidence flags; unchanged when runtime approval is withheld
  */
 function recordConfiguredScenarioResults(
   request: ConfiguredHookRuntimeRequest,
@@ -659,7 +696,7 @@ function recordConfiguredScenarioResults(
   scriptPath: string | null,
   scenarioResults: HookRuntimeScenarioResult[],
 ): HookRuntimeScenarioResult[] {
-  // An untrusted target suppresses every target-local write, including evidence events.
+  // With runtime approval withheld, suppress every target-local write, including evidence events.
   if (request.isTargetUntrusted) return scenarioResults;
   return scenarioResults.map((scenarioResult) =>
     recordConfiguredScenarioEvidence(

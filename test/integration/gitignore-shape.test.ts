@@ -1,0 +1,176 @@
+/**
+ * Integration tests for the shipped `.goat-flow/.gitignore` shape (`workflow/setup/reference/goat-flow-gitignore`).
+ *
+ * The template opens with `*` and re-includes committed surfaces with `!` rules. Ignore-aware search tools (Claude Code's
+ * embedded ugrep) match slash-containing rules against the operand-prefixed path, so every slash-containing rule carries a
+ * double-star-slash prefix; Git then needs the LOGS_SUBDIRECTORY_GUARD rule so a directory named like a committed surface
+ * inside a re-included `logs/<x>/` directory stays ignored. These tests pin Git's decisions over an explicit path table in a real temporary repository and
+ * prove that both the guard and the leading `*` are load-bearing.
+ */
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
+
+const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
+const TEMPLATE_DIR = join(PROJECT_ROOT, "workflow", "setup", "reference");
+const GOAT_FLOW_TEMPLATE = readFileSync(
+  join(TEMPLATE_DIR, "goat-flow-gitignore"),
+  "utf8",
+);
+const PLANS_TEMPLATE = readFileSync(
+  join(TEMPLATE_DIR, "plans-gitignore"),
+  "utf8",
+);
+const SCRATCHPAD_TEMPLATE = readFileSync(
+  join(TEMPLATE_DIR, "scratchpad-gitignore"),
+  "utf8",
+);
+const LOGS_SUBDIRECTORY_GUARD = "**/logs/*/*/";
+
+const LOG_DIRECTORIES = [
+  "sessions",
+  "quality",
+  "events",
+  "critiques",
+  "review",
+  "security",
+] as const;
+const COMMITTED_SURFACE_NAMES = [
+  "hooks",
+  "learning-loop",
+  "plans",
+  "scratchpad",
+  "skill-docs",
+] as const;
+
+/** Every probed path (relative to `.goat-flow/`) with the decision Git must make: `??` visible (untracked), `!!` ignored. */
+const EXPECTED_DECISIONS: ReadonlyArray<
+  readonly [path: string, decision: "??" | "!!"]
+> = [
+  // Committed top-level files and directories stay visible.
+  ["config.yaml", "??"],
+  ["architecture.md", "??"],
+  ["learning-loop/footguns/new.md", "??"],
+  ["skill-docs/playbooks/new.md", "??"],
+  ["hooks/new.sh", "??"],
+  // Anchors that keep local-workspace paths present in a clone.
+  ["plans/README.md", "??"],
+  ["scratchpad/README.md", "??"],
+  ["logs/sessions/.gitkeep", "??"],
+  ...LOG_DIRECTORIES.map((name) => [`logs/${name}/README.md`, "??"] as const),
+  // Local-only content stays ignored.
+  ["plans/1.16.0/M99.md", "!!"],
+  ["scratchpad/x/y.md", "!!"],
+  ["logs/sessions/2026.md", "!!"],
+  ["logs/quality/r.json", "!!"],
+  ["logs/review/r.txt", "!!"],
+  ["logs/quality/nested/x.md", "!!"],
+  ["stray.md", "!!"],
+  // A directory named like a committed surface inside a re-included logs directory must not be re-included by the prefixed rules.
+  ...LOG_DIRECTORIES.flatMap((log) =>
+    COMMITTED_SURFACE_NAMES.map(
+      (name) => [`logs/${log}/${name}/x.md`, "!!"] as const,
+    ),
+  ),
+];
+
+/**
+ * Build a temporary Git repository holding the probe table under `.goat-flow/` and return Git's decision for every probed
+ * path, sorted by path.
+ *
+ * @param goatFlowGitignore Content written to `.goat-flow/.gitignore`; callers pass the shipped template or a mutated copy.
+ * @returns `"<decision> <path>"` lines for every probed path, sorted, with the `.gitignore` files themselves excluded.
+ */
+function gitDecisions(goatFlowGitignore: string): string[] {
+  const root = mkdtempSync(join(tmpdir(), "goat-flow-gitignore-shape-"));
+  try {
+    const init = spawnSync("git", ["init", "-q"], {
+      cwd: root,
+      encoding: "utf8",
+    });
+    assert.equal(init.status, 0, init.stderr);
+    const goatFlow = join(root, ".goat-flow");
+    mkdirSync(join(goatFlow, "plans"), { recursive: true });
+    mkdirSync(join(goatFlow, "scratchpad"), { recursive: true });
+    writeFileSync(join(goatFlow, ".gitignore"), goatFlowGitignore);
+    writeFileSync(join(goatFlow, "plans", ".gitignore"), PLANS_TEMPLATE);
+    writeFileSync(
+      join(goatFlow, "scratchpad", ".gitignore"),
+      SCRATCHPAD_TEMPLATE,
+    );
+    for (const [path] of EXPECTED_DECISIONS) {
+      mkdirSync(dirname(join(goatFlow, path)), { recursive: true });
+      writeFileSync(join(goatFlow, path), "");
+    }
+    const status = spawnSync(
+      "git",
+      ["status", "--porcelain", "--ignored", "-uall", ".goat-flow/"],
+      {
+        cwd: root,
+        encoding: "utf8",
+      },
+    );
+    assert.equal(status.status, 0, status.stderr);
+    return status.stdout
+      .split("\n")
+      .filter((line) => line.length > 0 && !line.endsWith(".gitignore"))
+      .sort();
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+const EXPECTED_LINES = EXPECTED_DECISIONS.map(
+  ([path, decision]) => `${decision} .goat-flow/${path}`,
+).sort();
+
+describe("goat-flow gitignore shape", () => {
+  // Pins Git's decision for every probed path so a re-anchored or reordered rule fails here, not in a consumer's `git add .`.
+  it("keeps every recorded ignore decision for the shipped template", () => {
+    assert.deepEqual(gitDecisions(GOAT_FLOW_TEMPLATE), EXPECTED_LINES);
+  });
+
+  // The guard is what keeps the prefixed re-includes from reaching collision directories under logs/<x>/; prove it is present and load-bearing.
+  it("carries the logs subdirectory guard and depends on it", () => {
+    const lines = GOAT_FLOW_TEMPLATE.split(/\r?\n/u).map((line) => line.trim());
+    assert.ok(
+      lines.includes(LOGS_SUBDIRECTORY_GUARD),
+      `template must contain the ${LOGS_SUBDIRECTORY_GUARD} guard before the logs re-includes`,
+    );
+    const withoutGuard = lines
+      .filter((line) => line !== LOGS_SUBDIRECTORY_GUARD)
+      .join("\n");
+    const decisions = gitDecisions(withoutGuard);
+    assert.notDeepEqual(decisions, EXPECTED_LINES);
+    assert.ok(
+      decisions.includes("?? .goat-flow/logs/quality/hooks/x.md"),
+      "without the guard a collision directory under logs/quality/ becomes visible to Git",
+    );
+  });
+
+  // Deny-by-default is the safety property of the whole file; prove removing it leaks a stray root file.
+  it("depends on the leading ignore-everything rule", () => {
+    const lines = GOAT_FLOW_TEMPLATE.split(/\r?\n/u);
+    const first = lines.findIndex((line) => line.trim() === "*");
+    assert.ok(first >= 0, "template must open with a bare * rule");
+    const withoutStar = [
+      ...lines.slice(0, first),
+      ...lines.slice(first + 1),
+    ].join("\n");
+    const decisions = gitDecisions(withoutStar);
+    assert.notDeepEqual(decisions, EXPECTED_LINES);
+    assert.ok(
+      decisions.includes("?? .goat-flow/stray.md"),
+      "without * a stray root file becomes visible to Git",
+    );
+  });
+});

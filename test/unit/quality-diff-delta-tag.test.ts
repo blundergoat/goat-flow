@@ -14,7 +14,7 @@ import type {
   SavedQualityReport,
 } from "../../src/cli/quality/schema.js";
 
-/** Build one saved finding row with sane defaults. */
+/** Build one saved finding row with sane defaults; the id is what the diff contract matches on, so tests set it deliberately. */
 function finding(
   id: string,
   deltaTag: "new" | "persisted" | null,
@@ -229,4 +229,73 @@ describe("quality diff stuck-finding continuity", () => {
       assert.equal(countStuckFindings(runDates), 0);
     });
   }
+});
+
+describe("quality diff absent-bucket honesty", () => {
+  /**
+   * A finding missing from the newer report is not evidence it was fixed, which is the contract this suite holds.
+   *
+   * It also disappears when the newer run never examined that artifact, or when a line-based id shifted. Measured
+   * 2026-07-31: two findings were reported resolved while the defects were still present in the cited files.
+   */
+  it("names the bucket by absence and warns against reading it as a fix", () => {
+    const older = entry(
+      FROM_ID,
+      "2026-06-01",
+      [finding("gone-from-newer-run", null), finding("still-there", null)],
+      null,
+    );
+    const newer = entry(
+      TO_ID,
+      "2026-06-15",
+      [finding("still-there", null)],
+      FROM_ID,
+    );
+
+    const result = buildQualityDiff([newer, older], {
+      agent: "claude",
+      pair: `${FROM_ID}:${TO_ID}`,
+    });
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+
+    // The bucket still reports set difference; only its meaning is stated honestly.
+    assert.deepEqual(
+      result.diff.absent.map((row) => row.id),
+      ["gone-from-newer-run"],
+    );
+
+    const rendered = renderQualityDiffText(result.diff);
+    assert.match(rendered, /Absent from newer report \(1\)/u);
+    assert.match(rendered, /Not proof of a fix/u);
+    // "Resolved" asserted the defect was gone, which the set difference cannot show.
+    assert.doesNotMatch(rendered, /^Resolved \(/mu);
+  });
+
+  /** The caveat is noise on an empty bucket, so it must appear only alongside rows. */
+  it("omits the caveat when nothing went absent", () => {
+    const older = entry(
+      FROM_ID,
+      "2026-06-01",
+      [finding("still-there", null)],
+      null,
+    );
+    const newer = entry(
+      TO_ID,
+      "2026-06-15",
+      [finding("still-there", null)],
+      FROM_ID,
+    );
+
+    const result = buildQualityDiff([newer, older], {
+      agent: "claude",
+      pair: `${FROM_ID}:${TO_ID}`,
+    });
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+
+    const rendered = renderQualityDiffText(result.diff);
+    assert.match(rendered, /Absent from newer report \(0\)/u);
+    assert.doesNotMatch(rendered, /Not proof of a fix/u);
+  });
 });

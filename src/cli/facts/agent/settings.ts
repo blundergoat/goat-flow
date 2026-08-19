@@ -1,5 +1,9 @@
 /**
- * Agent settings fact extraction - parses settings.json for deny patterns and read-deny coverage.
+ * Reads what an agent's settings file actually blocks, so the audit can tell the user whether their guardrails are real.
+ *
+ * This is the difference between "a deny rule is written down" and "commit and push are genuinely blocked for this agent".
+ *
+ * The facts gathered here feed the audit's constraints concern, which is what a user sees fail when their guardrails have drifted.
  */
 import type { AgentProfile, AgentFacts, ReadonlyFS } from "../../types.js";
 
@@ -69,8 +73,68 @@ export function checkDenyPatterns(
   };
 }
 
-/** Extract settings facts from supported agent config formats. */
-// eslint-disable-next-line complexity -- intentional multi-format settings extraction requires branching.
+/**
+ * Parse a Codex `config.toml` into the flattened dotted-key object the audit inspects.
+ *
+ * Only what the audit reads is supported: section headers, key/value pairs, and comments. Nested tables and arrays of
+ * tables are deliberately out of scope, because flattening to dotted keys is what lets the deny-rule checks match by prefix.
+ *
+ * @param tomlContent - raw file contents
+ * @returns the flattened object; empty means the file held no readable key/value pairs, which the caller treats as invalid
+ */
+function parseFlatToml(tomlContent: string): Record<string, unknown> {
+  const flattened: Record<string, unknown> = {};
+  let currentSection = "";
+  for (const line of tomlContent.split("\n")) {
+    const trimmed = line.trim();
+    // Blank lines and comments carry no settings the audit can act on.
+    if (trimmed.startsWith("#") || trimmed === "") continue;
+    const sectionMatch = trimmed.match(/^\[(.+)\]$/);
+    // A section header changes the prefix every following key is stored under.
+    if (sectionMatch?.[1]) {
+      currentSection = normalizeTomlDottedKey(sectionMatch[1]);
+      continue;
+    }
+    const kvMatch = trimmed.match(
+      /^((?:"(?:\\.|[^"\\])*")|[\w.-]+)\s*=\s*(.+)$/,
+    );
+    if (kvMatch?.[1] && kvMatch[2]) {
+      const key = currentSection
+        ? `${currentSection}.${normalizeTomlKey(kvMatch[1])}`
+        : normalizeTomlKey(kvMatch[1]);
+      flattened[key] = parseTomlScalar(kvMatch[2]);
+    }
+  }
+  return flattened;
+}
+
+/**
+ * Report whether parsed settings declare at least one deny rule.
+ *
+ * An empty deny array is treated the same as none at all, because a rule list with nothing in it protects the user from nothing.
+ *
+ * @param parsed - parsed settings object; null or a non-object means nothing could be read
+ * @returns true only when a non-empty deny list is present
+ */
+function hasNonEmptyDenyList(parsed: unknown): boolean {
+  if (!parsed || typeof parsed !== "object") return false;
+  const permissions = (parsed as Record<string, unknown>).permissions as
+    Record<string, unknown> | undefined;
+  const denyRules = permissions?.deny;
+  return Array.isArray(denyRules) && denyRules.length > 0;
+}
+
+/**
+ * Read one agent's settings file and report what it actually protects, in whatever format that agent stores it.
+ *
+ * This feeds the audit's constraints concern, so it answers the user's real question: are my guardrails in force
+ * for this agent, or merely written down?
+ *
+ * @param fs - read-only project filesystem adapter
+ * @param agent - agent whose settings are read; JSON and Codex TOML are both supported, and a profile with no
+ *   settings file reports everything as absent rather than erroring
+ * @returns whether the file exists and parses, its parsed contents, and whether deny rules cover the secret-bearing paths
+ */
 export function extractSettingsFacts(
   fs: ReadonlyFS,
   agent: AgentProfile,
@@ -82,46 +146,18 @@ export function extractSettingsFacts(
   let hasDenyPatterns = false;
   if (agent.settingsFile) {
     if (agent.settingsFile.endsWith(".toml")) {
-      // TOML (Codex config.toml) -- parse key=value pairs into a flattened object
       const tomlContent = fs.readFile(agent.settingsFile);
-      if (tomlContent) {
-        const tomlObj: Record<string, unknown> = {};
-        let currentSection = "";
-        for (const line of tomlContent.split("\n")) {
-          const trimmed = line.trim();
-          if (trimmed.startsWith("#") || trimmed === "") continue;
-          const sectionMatch = trimmed.match(/^\[(.+)\]$/);
-          if (sectionMatch?.[1]) {
-            currentSection = normalizeTomlDottedKey(sectionMatch[1]);
-            continue;
-          }
-          const kvMatch = trimmed.match(
-            /^((?:"(?:\\.|[^"\\])*")|[\w.-]+)\s*=\s*(.+)$/,
-          );
-          if (kvMatch?.[1] && kvMatch[2]) {
-            const key = currentSection
-              ? `${currentSection}.${normalizeTomlKey(kvMatch[1])}`
-              : normalizeTomlKey(kvMatch[1]);
-            const val = parseTomlScalar(kvMatch[2]);
-            tomlObj[key] = val;
-          }
-        }
-        isSettingsValid = Object.keys(tomlObj).length > 0;
-        parsed = tomlObj;
+      const tomlObject = tomlContent ? parseFlatToml(tomlContent) : null;
+      // An unreadable or entirely empty config leaves the agent with no settings the audit can trust.
+      if (tomlObject) {
+        isSettingsValid = Object.keys(tomlObject).length > 0;
+        parsed = tomlObject;
       }
     } else {
       parsed = fs.readJson(agent.settingsFile);
       isSettingsValid = parsed !== null;
     }
-    if (isSettingsValid && parsed) {
-      /** Permissions object from the parsed settings */
-      const perms = (parsed as Record<string, unknown>).permissions as
-        Record<string, unknown> | undefined;
-      /** Raw deny array from permissions */
-      const denyArr = perms?.deny;
-      hasDenyPatterns =
-        Array.isArray(denyArr) && (denyArr as string[]).length > 0;
-    }
+    hasDenyPatterns = isSettingsValid && hasNonEmptyDenyList(parsed);
   }
 
   // Require deny coverage for the common secret-bearing paths goat-flow cares about.
@@ -154,12 +190,13 @@ function normalizeTomlDottedKey(rawKey: string): string {
 
 /** Parse the simple scalar values used in Codex config.toml. */
 function parseTomlScalar(rawValue: string): unknown {
-  const value = rawValue.trim();
-  if (value === "true") return true;
-  if (value === "false") return false;
-  if (/^-?\d+$/u.test(value)) return Number(value);
-  if (value.startsWith('"') && value.endsWith('"')) return value.slice(1, -1);
-  return value;
+  const trimmedFlag = rawValue.trim();
+  if (trimmedFlag === "true") return true;
+  if (trimmedFlag === "false") return false;
+  if (/^-?\d+$/u.test(trimmedFlag)) return Number(trimmedFlag);
+  if (trimmedFlag.startsWith('"') && trimmedFlag.endsWith('"'))
+    return trimmedFlag.slice(1, -1);
+  return trimmedFlag;
 }
 
 /** Require settings-based read denies for the main secret and credential path families. */
@@ -224,23 +261,43 @@ export interface CodexWorkspaceRootEntry {
   mode: string;
 }
 
+/**
+ * Turn one Codex config key into workspace-root rules, covering both shapes a user's config can be written in.
+ *
+ * @param key - config key being read
+ * @param entryValue - value at that key; anything other than a string is not a rule and yields nothing
+ * @param inlineTableKey - key whose value holds every rule on one line
+ * @param prefix - key prefix used when each rule is its own dotted key
+ * @returns the rules this key contributes; an empty array means the key is unrelated to workspace roots
+ */
 function collectCodexWorkspaceRootEntry(
   key: string,
-  value: unknown,
+  entryValue: unknown,
   inlineTableKey: string,
   prefix: string,
 ): CodexWorkspaceRootEntry[] {
-  if (key === inlineTableKey && typeof value === "string") {
-    return parseTomlInlineStringTable(value).map(([pattern, mode]) => ({
+  // The whole table written on one line, so every rule is parsed out of this single value.
+  if (key === inlineTableKey && typeof entryValue === "string") {
+    return parseTomlInlineStringTable(entryValue).map(([pattern, mode]) => ({
       pattern,
       mode,
     }));
   }
-  if (typeof value !== "string" || !key.startsWith(prefix)) return [];
+  // Any other key belongs to a different setting, so it contributes no rule.
+  if (typeof entryValue !== "string" || !key.startsWith(prefix)) return [];
   const pattern = key.slice(prefix.length);
-  return pattern ? [{ pattern, mode: value }] : [];
+  return pattern ? [{ pattern, mode: entryValue }] : [];
 }
 
+/**
+ * Read the workspace-root deny rules out of a Codex config, so the audit can report what that agent is actually allowed to touch.
+ *
+ * Codex stores these as flattened dotted keys rather than a nested table, so they are gathered by key prefix rather than by walking an object.
+ *
+ * @param parsed - parsed Codex config; anything that is not an object means nothing could be read, and the caller reports no rules configured
+ * @param profileName - permission profile to read, since a project may define more than one
+ * @returns the deny entries found; empty means this profile restricts no workspace roots at all
+ */
 export function collectCodexWorkspaceRootEntries(
   parsed: unknown,
   profileName: string,
@@ -255,6 +312,13 @@ export function collectCodexWorkspaceRootEntries(
   );
 }
 
+/**
+ * Narrow the workspace-root rules to the ones that actually deny access, which is the set the guardrail audit scores.
+ *
+ * @param parsed - parsed Codex config; anything that is not an object yields an empty set
+ * @param profileName - permission profile to read
+ * @returns denied patterns; an empty set means this profile blocks nothing, not that the config failed to parse
+ */
 function collectCodexDeniedWorkspaceRootPatterns(
   parsed: unknown,
   profileName: string,
@@ -264,6 +328,7 @@ function collectCodexDeniedWorkspaceRootPatterns(
     parsed,
     profileName,
   )) {
+    // Read and ask modes still grant access, so only outright denials count as a guardrail.
     if (isCodexDenyMode(mode)) denied.add(pattern);
   }
   return denied;
@@ -271,11 +336,11 @@ function collectCodexDeniedWorkspaceRootPatterns(
 
 /** Parse the single-line TOML inline string table shape Codex accepts. */
 function parseTomlInlineStringTable(rawValue: string): Array<[string, string]> {
-  const value = rawValue.trim();
-  if (!value.startsWith("{") || !value.endsWith("}")) return [];
+  const trimmedTable = rawValue.trim();
+  if (!trimmedTable.startsWith("{") || !trimmedTable.endsWith("}")) return [];
   const entries: Array<[string, string]> = [];
   const entryPattern = /"((?:\\.|[^"\\])*)"\s*=\s*"((?:\\.|[^"\\])*)"/gu;
-  for (const match of value.matchAll(entryPattern)) {
+  for (const match of trimmedTable.matchAll(entryPattern)) {
     const [, key, mode] = match;
     if (key && mode) entries.push([key, mode]);
   }

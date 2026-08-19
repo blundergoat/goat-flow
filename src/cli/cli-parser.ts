@@ -1,11 +1,12 @@
 /**
  * Turns raw `process.argv` into the fully-resolved ParsedCLI object that command dispatch consumes.
- * It owns the whole front door: positional command detection, per-flag validation, per-command
- * positional grammars (quality/skill/events/hooks each have their own arity rules), and cross-flag
- * checks that strict parseArgs can't express. The deliberate contract is fail-fast for malformed
- * commands, flags, values, or combinations, throwing CLIError with exit code 2 (usage error) and a
- * human-readable message, so the entry point can print it and exit without a stack trace. Path
- * positionals are resolved to absolute paths here so downstream handlers never see relative input.
+ *
+ * It owns the whole front door: positional command detection, per-flag validation, per-command positional grammars (quality/skill/events/hooks each
+ * have their own arity rules), and cross-flag checks that strict parseArgs can't express.
+ *
+ * The deliberate contract is fail-fast for malformed commands, flags, values, or combinations, throwing CLIError with exit code 2 (usage error) and a
+ * human-readable message, so the entry point can print it and exit without a stack trace.
+ * Path positionals are resolved to absolute paths here so downstream handlers never see relative input.
  */
 
 import { parseArgs } from "node:util";
@@ -74,36 +75,48 @@ function parseCommand(argv: string[]): {
 }
 
 /** Parse the `--format` flag; throws CLIError for invalid values before command dispatch. */
-function parseFormatArg(value: string | undefined): CLIOptions["format"] {
+function parseFormatArg(rawFormat: string | undefined): CLIOptions["format"] {
   const defaultFormat: CLIOptions["format"] = process.stdout.isTTY
     ? "text"
     : "json";
-  if (!value) return defaultFormat;
-  if (!VALID_FORMATS.includes(value as (typeof VALID_FORMATS)[number])) {
+  if (!rawFormat) return defaultFormat;
+  if (!VALID_FORMATS.includes(rawFormat as (typeof VALID_FORMATS)[number])) {
     throw new CLIError(
-      `Invalid format: ${value}. Use: json, text, markdown, sarif`,
+      `Invalid format: ${rawFormat}. Use: json, text, markdown, sarif`,
       2,
     );
   }
-  return value as CLIOptions["format"];
+  return rawFormat as CLIOptions["format"];
 }
 
 /** Parse the `--agent` flag; throws CLIError for invalid or deprecated aggregate values. */
-function parseAgentArg(value: string | undefined): AgentId | null {
-  if (!value) return null;
-  if (value === "all") {
+function parseAgentArg(rawAgent: string | undefined): AgentId | null {
+  if (!rawAgent) return null;
+  if (rawAgent === "all") {
     throw new CLIError(
       `--agent all is no longer supported. Run setup separately for each agent: ${validAgentFlags()}`,
       2,
     );
   }
-  if (!validAgents().includes(value as AgentId)) {
-    throw new CLIError(`Invalid agent: ${value}. Use: ${validAgentList()}`, 2);
+  if (!validAgents().includes(rawAgent as AgentId)) {
+    throw new CLIError(
+      `Invalid agent: ${rawAgent}. Use: ${validAgentList()}`,
+      2,
+    );
   }
-  return value as AgentId;
+  return rawAgent as AgentId;
 }
 
-/** Validate flags shared across commands. */
+/**
+ * Reject a flag the user placed on a command it does not belong to.
+ * Error behavior: throws CLIError with exit code 2 naming the flag and its owning command.
+ *
+ * @param command - command the user actually invoked
+ * @param expectedCommand - the only command this flag is valid for
+ * @param flag - flag name as the user typed it, echoed verbatim in the message
+ * @param isSet - whether the user supplied the flag; false always passes
+ * @returns nothing; returning at all means the placement is valid
+ */
 function rejectFlagOutsideCommand(
   command: Command,
   expectedCommand: Command,
@@ -117,6 +130,18 @@ function rejectFlagOutsideCommand(
   );
 }
 
+/** Read one repeatable string option as a list; an absent option yields an empty list. */
+function parsedStringList(
+  values: ParsedArgValues,
+  name: string,
+): readonly string[] {
+  const raw = values[name];
+  // `parseArgs` omits the key entirely until the user supplies the option at least once.
+  return Array.isArray(raw)
+    ? raw.filter((entry): entry is string => typeof entry === "string")
+    : [];
+}
+
 /** Return whether a raw `parseArgs` boolean flag was explicitly set. */
 function parsedFlag(values: ParsedArgValues, name: string): boolean {
   return values[name] === true;
@@ -127,8 +152,8 @@ function parsedString(
   values: ParsedArgValues,
   name: string,
 ): string | undefined {
-  const value = values[name];
-  return typeof value === "string" ? value : undefined;
+  const parsedEntry = values[name];
+  return typeof parsedEntry === "string" ? parsedEntry : undefined;
 }
 
 /** Supply ignored, valid namespace positionals while help or version short-circuits dispatch. */
@@ -186,7 +211,16 @@ function validateCommonFlags(command: Command, values: ParsedArgValues): void {
   );
 }
 
-/** Reject runtime scenario flags outside the explicit hooks verification route. */
+/**
+ * Reject runtime scenario flags outside the explicit hooks verification route.
+ * Error behavior: throws CLIError with exit code 2; a scenario name has no meaning for listing, toggling, or syncing, so accepting it silently would
+ * imply a check that never ran.
+ *
+ * @param command - command the user invoked
+ * @param values - parsed flag map; only `--scenario` is inspected here
+ * @param hookSubcommand - hooks subcommand, or null when the command is not `hooks`
+ * @returns nothing; returning means no misplaced scenario flag was supplied
+ */
 function validateHookFlags(
   command: Command,
   values: ParsedArgValues,
@@ -218,7 +252,15 @@ function validatePlansFlags(
   validatePlansForceFlag(command, values, plansSubcommand);
 }
 
-/** Keep strict accounting on the read-only check route. */
+/**
+ * Keep strict plan accounting on the read-only check route.
+ * Error behavior: throws CLIError with exit code 2 when `--strict` appears anywhere else.
+ *
+ * @param command - command the user invoked
+ * @param values - parsed flag map; only `--strict` is inspected here
+ * @param plansSubcommand - plans subcommand, or null when the command is not `plans`
+ * @returns nothing; returning means the flag is on its only valid route
+ */
 function validatePlansStrictFlag(
   command: Command,
   values: ParsedArgValues,
@@ -232,7 +274,17 @@ function validatePlansStrictFlag(
   }
 }
 
-/** Require a valid category only on timing starts. */
+/**
+ * Require a category on timing starts and reject it everywhere else.
+ * Error behavior: throws CLIError with exit code 2 in both directions, because a start with no category would record time that no later report can
+ * attribute.
+ *
+ * @param command - command the user invoked
+ * @param values - parsed flag map; only `--category` is inspected here
+ * @param plansSubcommand - plans subcommand, or null when the command is not `plans`
+ * @param plansTimeAction - timing action, or null when the subcommand is not `time`
+ * @returns nothing; returning means the category is present exactly where it is required
+ */
 function validatePlansCategoryFlag(
   command: Command,
   values: ParsedArgValues,
@@ -252,7 +304,17 @@ function validatePlansCategoryFlag(
   }
 }
 
-/** Keep pause recovery/finalization flags on timing stops and mutually exclusive. */
+/**
+ * Keep pause recovery and finalization flags on timing stops, and mutually exclusive.
+ * Error behavior: throws CLIError with exit code 2 for a misplaced flag and again for the combined pair, because finalizing and discarding open
+ * entries are opposite resolutions of the same state.
+ *
+ * @param command - command the user invoked
+ * @param values - parsed flag map; `--finalize` and `--discard-open` are inspected here
+ * @param plansSubcommand - plans subcommand, or null when the command is not `plans`
+ * @param plansTimeAction - timing action, or null when the subcommand is not `time`
+ * @returns nothing; returning means at most one stop flag is set, on the stop route
+ */
 function validatePlansStopFlags(
   command: Command,
   values: ParsedArgValues,
@@ -277,7 +339,16 @@ function validatePlansStopFlags(
   }
 }
 
-/** Keep plan-force semantics limited to generated export replacement. */
+/**
+ * Keep plan-force semantics limited to generated export replacement.
+ * Error behavior: throws CLIError with exit code 2 when `--force` is used on another plans route, so force can never mean "overwrite" for a command
+ * that was not designed to replace a file.
+ *
+ * @param command - command the user invoked; non-plans commands are left to their own validators
+ * @param values - parsed flag map; only `--force` is inspected here
+ * @param plansSubcommand - plans subcommand, or null when the command is not `plans`
+ * @returns nothing; returning means force is absent or on the export route
+ */
 function validatePlansForceFlag(
   command: Command,
   values: ParsedArgValues,
@@ -292,23 +363,35 @@ function validatePlansForceFlag(
   }
 }
 
-/** Parse a start category after route validation has rejected misplaced flags. */
+/**
+ * Parse a start category after route validation has rejected misplaced flags.
+ * Error behavior: throws CLIError with exit code 2 for an unrecognised category name.
+ *
+ * @param rawCategory - flag text as typed; undefined is only valid on a non-start action
+ * @param action - timing action; anything but `start` yields null without inspecting the text
+ * @returns the category, or null when this action does not carry one
+ */
 function parsePlansTimeCategoryArg(
-  value: string | undefined,
+  rawCategory: string | undefined,
   action: PlansTimeAction | null,
 ): PlansTimeCategory | null {
-  if (action !== "start" || value === undefined) return null;
-  if (value !== "product" && value !== "proof" && value !== "other") {
+  if (action !== "start" || rawCategory === undefined) return null;
+  if (
+    rawCategory !== "product" &&
+    rawCategory !== "proof" &&
+    rawCategory !== "other"
+  ) {
     throw new CLIError("--category must be product, proof, or other.", 2);
   }
-  return value;
+  return rawCategory;
 }
 
-/** Returns true when the command resolves to a deterministic install/apply path. */
+/** Returns true when the command resolves to a deterministic install or setup preview/apply path. */
 function isInstallCommand(command: Command, values: ParsedArgValues): boolean {
   return (
     command === "install" ||
-    (command === "setup" && parsedFlag(values, "apply"))
+    (command === "setup" &&
+      (parsedFlag(values, "apply") || parsedFlag(values, "dry-run")))
   );
 }
 /** Validate managed-preview combinations; throws CLIError before ignored write flags confuse users. */
@@ -319,14 +402,44 @@ function validateDryRunFlag(command: Command, values: ParsedArgValues): void {
   if (shouldDryRun && !commandSupportsDryRun) {
     throw new CLIError("--dry-run is only valid for install or setup.", 2);
   }
-  const hasIgnoredWriteFlag =
-    parsedFlag(values, "force") ||
-    parsedFlag(values, "update-config-version") ||
-    parsedFlag(values, "clean-deprecated");
-  // Force and migration flags mutate broader surfaces and cannot change a read-only preview.
-  if (shouldDryRun && hasIgnoredWriteFlag) {
+  // Authority and migration flags change what apply would do, so a preview that
+  // rejected them could not answer the question the user is actually asking.
+}
+
+/**
+ * Reject authority combinations that would widen a write past what the user named.
+ *
+ * Error behavior: throws CLIError with exit code 2 for a force flag outside install/setup, and again for `--force-user-owned` with no `--force-path`,
+ * because replacing user-owned content is never a broad choice; every such file must be named explicitly.
+ *
+ * @param command - command the user invoked; only install and setup routes may carry force flags
+ * @param values - parsed flag map; the three force flags are inspected here
+ * @returns nothing; returning means no force flag widens the write beyond the named paths
+ */
+function validateAuthorityFlags(
+  command: Command,
+  values: ParsedArgValues,
+): void {
+  const authorityFlags: Array<[string, boolean]> = [
+    ["--force-managed", parsedFlag(values, "force-managed")],
+    ["--force-user-owned", parsedFlag(values, "force-user-owned")],
+    ["--force-path", parsedStringList(values, "force-path").length > 0],
+  ];
+  for (const [flag, isSupplied] of authorityFlags) {
+    if (isSupplied && !isInstallCommand(command, values)) {
+      throw new CLIError(
+        `${flag} is only valid for install or setup --apply/--dry-run.`,
+        2,
+      );
+    }
+  }
+  // Replacing user-owned content is never a broad choice; it names each path it touches.
+  if (
+    parsedFlag(values, "force-user-owned") &&
+    parsedStringList(values, "force-path").length === 0
+  ) {
     throw new CLIError(
-      "--dry-run cannot be combined with --force, --update-config-version, or --clean-deprecated. Preview first, then run the chosen write command separately.",
+      "--force-user-owned requires at least one --force-path <path>. Name each user-owned file to replace; there is no broad user-owned override.",
       2,
     );
   }
@@ -335,6 +448,7 @@ function validateDryRunFlag(command: Command, values: ParsedArgValues): void {
 /** Validate deterministic install/setup flags; throws CLIError when flags target the wrong command. */
 function validateInstallFlags(command: Command, values: ParsedArgValues): void {
   validateDryRunFlag(command, values);
+  validateAuthorityFlags(command, values);
   if (command !== "setup" && parsedFlag(values, "apply")) {
     throw new CLIError("--apply is only valid for the setup command.", 2);
   }
@@ -356,14 +470,85 @@ function validateInstallFlags(command: Command, values: ParsedArgValues): void {
   for (const [flag, set] of installOnly) {
     if (set === true && !isInstallCommand(command, values)) {
       throw new CLIError(
-        `${flag} is only valid for install or setup --apply.`,
+        `${flag} is only valid for install or setup --apply/--dry-run.`,
         2,
       );
     }
   }
 }
 
-/** Validate quality mode flags against the selected quality subcommand. */
+/** Return the one target-trust choice supplied by the user, if any. */
+function suppliedTargetTrustFlag(values: ParsedArgValues): string | null {
+  if (parsedFlag(values, "trusted-target")) return "--trusted-target";
+  if (parsedFlag(values, "untrusted-target")) return "--untrusted-target";
+  return null;
+}
+
+/** Return whether this route can execute code from the selected target. */
+function routeCanExecuteTarget(
+  command: Command,
+  values: ParsedArgValues,
+  qualitySubcommand: QualitySubcommand,
+  hookSubcommand: HookSubcommand | null,
+): boolean {
+  if (
+    command === "audit" ||
+    (command === "quality" && qualitySubcommand === "prompt") ||
+    (command === "hooks" && hookSubcommand === "verify")
+  ) {
+    return true;
+  }
+  return (
+    command === "setup" &&
+    !parsedFlag(values, "apply") &&
+    !parsedFlag(values, "dry-run")
+  );
+}
+
+/** Restrict target-code trust choices to executing routes; throws CLIError for every inert route. */
+function validateTargetTrustFlags(
+  command: Command,
+  values: ParsedArgValues,
+  qualitySubcommand: QualitySubcommand,
+  hookSubcommand: HookSubcommand | null,
+): void {
+  const suppliedFlag = suppliedTargetTrustFlag(values);
+  if (suppliedFlag === null) return;
+
+  if (
+    !routeCanExecuteTarget(command, values, qualitySubcommand, hookSubcommand)
+  ) {
+    throw new CLIError(
+      `${suppliedFlag} is only valid for audit, setup prompt, quality prompt, or hooks verify.`,
+      2,
+    );
+  }
+
+  // Trusted audit raises deny-mechanism evidence to `full`, but the runtime deny probe only runs
+  // for a selected agent. Without one the report would claim runtime proof that nothing produced,
+  // so the omission is refused here rather than allowed to reach the audit.
+  if (
+    command === "audit" &&
+    suppliedFlag === "--trusted-target" &&
+    typeof values["agent"] !== "string"
+  ) {
+    throw new CLIError(
+      "audit --trusted-target requires --agent <id> so the runtime deny check has an agent to execute.",
+      2,
+    );
+  }
+}
+
+/**
+ * Validate quality mode flags against the selected quality subcommand.
+ * Error behavior: throws CLIError with exit code 2 for `--mode` off its three routes, and for `--output` on save, which owns its report destination
+ * and must not be redirected.
+ *
+ * @param command - command the user invoked; non-quality commands pass through untouched
+ * @param values - parsed flag map; `--mode` and `--output` are inspected here
+ * @param qualitySubcommand - selected quality subcommand
+ * @returns nothing; returning means both flags are on routes that honour them
+ */
 function validateQualityFlags(
   command: Command,
   values: ParsedArgValues,
@@ -391,7 +576,21 @@ function validateQualityFlags(
   }
 }
 
-/** Validate flag combinations after strict parseArgs accepts their shapes. */
+/**
+ * Validate flag combinations after strict parseArgs has accepted their individual shapes.
+ *
+ * This is the single ordering point for every per-command validator, so a user with several misplaced flags always sees the same first complaint
+ * rather than a parse-order accident.
+ *
+ * @param command - command the user invoked
+ * @param values - parsed flag map handed to each validator in turn
+ * @param qualitySubcommand - selected quality subcommand
+ * @param skillSubcommand - skill subcommand, or null when the command is not `skill`
+ * @param hookSubcommand - hooks subcommand, or null when the command is not `hooks`
+ * @param plansSubcommand - plans subcommand, or null when the command is not `plans`
+ * @param plansTimeAction - timing action, or null when the subcommand is not `time`
+ * @returns nothing; returning means every combination check passed. It throws the first CLIError raised by any validator, all with exit code 2.
+ */
 function validateFlagCombinations(
   command: Command,
   values: ParsedArgValues,
@@ -401,6 +600,16 @@ function validateFlagCombinations(
   plansSubcommand: PlansSubcommand | null,
   plansTimeAction: PlansTimeAction | null,
 ): void {
+  if (
+    parsedFlag(values, "trusted-target") &&
+    parsedFlag(values, "untrusted-target")
+  ) {
+    throw new CLIError(
+      "--trusted-target and --untrusted-target cannot be used together.",
+      2,
+    );
+  }
+  validateTargetTrustFlags(command, values, qualitySubcommand, hookSubcommand);
   validateCommonFlags(command, values);
   validateInstallFlags(command, values);
   validateQualityFlags(command, values, qualitySubcommand);
@@ -410,10 +619,10 @@ function validateFlagCombinations(
 }
 
 /** Parse the events tail limit; throws CLIError for invalid values before clamping to the display cap. */
-function parseEventsLimitArg(value: string | undefined): number {
-  if (value === undefined) return 20;
-  const parsed = Number.parseInt(value, 10);
-  if (!Number.isFinite(parsed) || parsed <= 0 || String(parsed) !== value) {
+function parseEventsLimitArg(rawLimit: string | undefined): number {
+  if (rawLimit === undefined) return 20;
+  const parsed = Number.parseInt(rawLimit, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0 || String(parsed) !== rawLimit) {
     throw new CLIError("--limit must be a positive integer.", 2);
   }
   return Math.min(parsed, 500);
@@ -462,12 +671,16 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
       harness: { type: "boolean", default: false },
       "check-drift": { type: "boolean", default: false },
       "check-content": { type: "boolean", default: false },
+      "trusted-target": { type: "boolean", default: false },
       "untrusted-target": { type: "boolean", default: false },
       "no-audit-details": { type: "boolean", default: false },
       check: { type: "boolean", default: false },
       apply: { type: "boolean", default: false },
       "dry-run": { type: "boolean", default: false },
       force: { type: "boolean", default: false },
+      "force-managed": { type: "boolean", default: false },
+      "force-user-owned": { type: "boolean", default: false },
+      "force-path": { type: "string", multiple: true },
       "update-config-version": { type: "boolean", default: false },
       "clean-deprecated": { type: "boolean", default: false },
       dev: { type: "boolean", default: false },
@@ -581,12 +794,16 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
     includeHarness: parsedFlag(parsedValues, "harness"),
     checkDrift: parsedFlag(parsedValues, "check-drift"),
     checkContent: parsedFlag(parsedValues, "check-content"),
+    isTargetTrusted: parsedFlag(parsedValues, "trusted-target"),
     isTargetUntrusted: parsedFlag(parsedValues, "untrusted-target"),
     auditDetails: !parsedFlag(parsedValues, "no-audit-details"),
     shouldCheck: parsedFlag(parsedValues, "check"),
     shouldApply: parsedFlag(parsedValues, "apply"),
     shouldDryRun: parsedFlag(parsedValues, "dry-run"),
     shouldForce: parsedFlag(parsedValues, "force"),
+    shouldForceManaged: parsedFlag(parsedValues, "force-managed"),
+    shouldForceUserOwned: parsedFlag(parsedValues, "force-user-owned"),
+    forcePaths: parsedStringList(parsedValues, "force-path"),
     updateConfigVersion: parsedFlag(parsedValues, "update-config-version"),
     cleanDeprecated: parsedFlag(parsedValues, "clean-deprecated"),
     qualitySubcommand: qualityPositionals.qualitySubcommand,

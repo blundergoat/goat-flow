@@ -1,7 +1,8 @@
 /**
  * Validate quality reports before the CLI saves, compares, or shows them.
- * Use when an agent hands back JSON from a quality run, so the user gets a precise schema error
- * instead of a corrupt history entry or a misleading dashboard comparison.
+ *
+ * Use when an agent hands back JSON from a quality run, so the user gets a precise schema error instead of a corrupt history entry or a misleading
+ * dashboard comparison.
  * The parser keeps legacy-read options explicit while current emissions stay strict.
  */
 import { isAbsolute } from "node:path";
@@ -13,15 +14,19 @@ import {
   QUALITY_EVIDENCE_QUALITIES,
   QUALITY_FINDING_SEVERITIES,
   QUALITY_FINDING_TYPES,
+  QUALITY_GROUNDING_STATUSES,
   QUALITY_MODES,
   QUALITY_REPORT_KIND,
+  QUALITY_SCORE_CONFIDENCES,
   QUALITY_SCOPES,
+  QUALITY_WORKTREE_STATES,
   type ParseResult,
+  type QualityAssessmentContext,
   type QualityDeltaTag,
   type QualityEvidenceMethod,
   type QualityFinding,
-  type QualityMode,
   type QualityReport,
+  type QualityMode,
   type QualityReportParseOptions,
   type QualityScope,
   type QualityScores,
@@ -256,7 +261,266 @@ function parseScores(
  * @param options - strictness for current versus legacy reports; missing options keep legacy rows readable
  * @returns parsed finding row, or a path-specific error that blocks the report
  */
-// eslint-disable-next-line complexity -- intentional because finding validation stays explicit so every rejected field gets a precise path-specific error.
+/** A parsed value, or the first path-specific error that should stop the whole report. */
+type FieldResult<T> = { ok: true; value: T } | { ok: false; error: string };
+
+/** The finding fields every report must carry, whatever version wrote it. */
+interface FindingCoreFields {
+  type: QualityFinding["type"];
+  severity: QualityFinding["severity"];
+  file: string | null;
+  line: number | null;
+  summary: string;
+  detail: string;
+  evidenceQuality: QualityFinding["evidence_quality"];
+}
+
+/**
+ * Parse the optional source location a finding points at.
+ *
+ * Both fields are nullable because a finding can legitimately describe a whole project rather than one line, and a null
+ * line with a file still reads correctly as "somewhere in this file".
+ *
+ * @param raw - the raw finding object
+ * @param path - error path prefix identifying which finding failed
+ * @returns the file and line, either of which may be null
+ */
+function parseFindingLocation(
+  raw: Record<string, unknown>,
+  path: string,
+): FieldResult<{ file: string | null; line: number | null }> {
+  const file = expectNullableString(raw.file ?? null, `${path}.file`);
+  // Invalid file text would point the user at a bogus source location.
+  if (!file.ok) return file;
+  const line = expectNullablePositiveInteger(raw.line ?? null, `${path}.line`);
+  // Invalid line numbers would make source evidence misleading.
+  if (!line.ok) return line;
+  return { ok: true, value: { file: file.value, line: line.value } };
+}
+
+/**
+ * Parse the finding fields the issue list cannot render without.
+ *
+ * The summary length cap exists because the issue row is compact: anything longer belongs in `detail`, where the user can
+ * actually read it.
+ *
+ * @param raw - the raw finding object, already confirmed to be a record
+ * @param path - error path prefix identifying which finding failed
+ * @returns the core fields, or the first field error
+ */
+function parseFindingCore(
+  raw: Record<string, unknown>,
+  path: string,
+): FieldResult<FindingCoreFields> {
+  const type = expectEnumValue(raw.type, `${path}.type`, QUALITY_FINDING_TYPES);
+  // Unknown finding types have no stable grouping in the quality issue list.
+  if (!type.ok) return type;
+  const severity = expectEnumValue(
+    raw.severity,
+    `${path}.severity`,
+    QUALITY_FINDING_SEVERITIES,
+  );
+  // Unknown severities cannot be sorted or styled reliably for the user.
+  if (!severity.ok) return severity;
+  const location = parseFindingLocation(raw, path);
+  if (!location.ok) return location;
+  const summary = expectNonEmptyString(raw.summary, `${path}.summary`);
+  // A finding without summary text leaves the issue list unreadable.
+  if (!summary.ok) return summary;
+  // Long summaries overflow the compact issue row, so force detail into the detail field.
+  if (summary.value.length > 200) {
+    return {
+      ok: false,
+      error: `${path}.summary must be 200 characters or fewer`,
+    };
+  }
+  const detail = expectNonEmptyString(raw.detail, `${path}.detail`);
+  // The detail text is the user's explanation of the issue, so it cannot be blank.
+  if (!detail.ok) return detail;
+  const evidenceQuality = expectEnumValue(
+    raw.evidence_quality,
+    `${path}.evidence_quality`,
+    QUALITY_EVIDENCE_QUALITIES,
+  );
+  // Evidence quality drives trust labels, so unknown labels cannot be displayed.
+  if (!evidenceQuality.ok) return evidenceQuality;
+
+  return {
+    ok: true,
+    value: {
+      type: type.value,
+      severity: severity.value,
+      file: location.value.file,
+      line: location.value.line,
+      summary: summary.value,
+      detail: detail.value,
+      evidenceQuality: evidenceQuality.value,
+    },
+  };
+}
+
+/** The optional evidence fields, each absent when the report did not supply it. */
+interface FindingEvidenceFields {
+  method: QualityEvidenceMethod;
+  command: string | undefined;
+  exitCode: number | undefined;
+  summary: string | undefined;
+  warningCount: number | undefined;
+  excerpt: string | undefined;
+}
+
+/**
+ * Parse how a finding's evidence was gathered, plus the optional proof fields that back it up.
+ *
+ * Current reports must declare the method so the user can judge how much to trust the finding. Legacy reports predate the
+ * field, so they open with the safest visible default rather than failing and hiding the user's history.
+ *
+ * @param raw - the raw finding object
+ * @param path - error path prefix identifying which finding failed
+ * @param options - strictness selector; `requireCurrentFields` makes the method mandatory
+ * @returns the evidence fields, or the first field error
+ */
+function parseFindingEvidence(
+  raw: Record<string, unknown>,
+  path: string,
+  options: QualityReportParseOptions,
+): FieldResult<FindingEvidenceFields> {
+  let method: QualityEvidenceMethod = "static-analysis";
+  // Current reports must say how evidence was gathered so users can judge trust level.
+  if (
+    options.requireCurrentFields === true &&
+    !Object.hasOwn(raw, "evidence_method")
+  ) {
+    return {
+      ok: false,
+      error: `${path}.evidence_method is required for current quality reports`,
+    };
+  }
+  // Legacy reports lacked this field, so old history opens with the safest visible default.
+  if (Object.hasOwn(raw, "evidence_method")) {
+    const parsedMethod = expectEnumValue(
+      raw.evidence_method,
+      `${path}.evidence_method`,
+      QUALITY_EVIDENCE_METHODS,
+    );
+    // Unknown evidence methods cannot be labelled in the report details.
+    if (!parsedMethod.ok) return parsedMethod;
+    method = parsedMethod.value;
+  }
+
+  const command = expectOptionalNonEmptyString(
+    raw.evidence_command,
+    `${path}.evidence_command`,
+  );
+  // Bad optional command text is rejected instead of showing an empty evidence row.
+  if (!command.ok) return command;
+  const exitCode = expectOptionalNonNegativeInteger(
+    raw.evidence_exit_code,
+    `${path}.evidence_exit_code`,
+  );
+  // Bad optional exit codes make command evidence misleading.
+  if (!exitCode.ok) return exitCode;
+  const summary = expectOptionalNonEmptyString(
+    raw.evidence_summary,
+    `${path}.evidence_summary`,
+  );
+  // Bad optional evidence summaries would create an unexplained evidence block.
+  if (!summary.ok) return summary;
+  const warningCount = expectOptionalNonNegativeInteger(
+    raw.evidence_warning_count,
+    `${path}.evidence_warning_count`,
+  );
+  // Bad warning counts would distort analyzer evidence in the UI.
+  if (!warningCount.ok) return warningCount;
+  const excerpt = expectOptionalNonEmptyString(
+    raw.evidence_excerpt,
+    `${path}.evidence_excerpt`,
+  );
+  // Bad optional excerpts would show a blank or invalid proof snippet.
+  if (!excerpt.ok) return excerpt;
+
+  return {
+    ok: true,
+    value: {
+      method,
+      command: command.value,
+      exitCode: exitCode.value,
+      summary: summary.value,
+      warningCount: warningCount.value,
+      excerpt: excerpt.value,
+    },
+  };
+}
+
+/**
+ * Collect only the evidence fields the report actually supplied.
+ *
+ * Absent fields are left off the object rather than written as undefined, so a saved report never records a key the user's
+ * agent never emitted.
+ *
+ * @param evidence - the parsed evidence fields
+ * @returns an object carrying just the fields that were present
+ */
+function optionalEvidenceFields(
+  evidence: FindingEvidenceFields,
+): Partial<QualityFinding> {
+  return {
+    ...(evidence.command !== undefined
+      ? { evidence_command: evidence.command }
+      : {}),
+    ...(evidence.exitCode !== undefined
+      ? { evidence_exit_code: evidence.exitCode }
+      : {}),
+    ...(evidence.summary !== undefined
+      ? { evidence_summary: evidence.summary }
+      : {}),
+    ...(evidence.warningCount !== undefined
+      ? { evidence_warning_count: evidence.warningCount }
+      : {}),
+    ...(evidence.excerpt !== undefined
+      ? { evidence_excerpt: evidence.excerpt }
+      : {}),
+  };
+}
+
+/**
+ * Parse the delta tag that says whether this finding is new since the compared report.
+ *
+ * @param raw - the raw finding object
+ * @param path - error path prefix identifying which finding failed
+ * @returns the tag, or null when no prior report comparison exists for this finding
+ */
+function parseFindingDeltaTag(
+  raw: Record<string, unknown>,
+  path: string,
+): FieldResult<QualityDeltaTag | null> {
+  const deltaTagRaw = Object.hasOwn(raw, "delta_tag") ? raw.delta_tag : null;
+  // Null delta tags mean no prior report comparison exists for this finding.
+  if (deltaTagRaw === null) return { ok: true, value: null };
+  const parsedDeltaTag = expectEnumValue(
+    deltaTagRaw,
+    `${path}.delta_tag`,
+    QUALITY_DELTA_TAGS,
+  );
+  // Unknown delta labels cannot be grouped as new or persisted for the user.
+  if (!parsedDeltaTag.ok) return parsedDeltaTag;
+  return { ok: true, value: parsedDeltaTag.value };
+}
+
+/**
+ * Parse one finding row from an agent-emitted quality report.
+ *
+ * Every rejection names the exact field path, because the user's next action is fixing that field in the report their
+ * agent produced.
+ *
+ * The accepted key set is a closed schema: unknown keys and a caller-supplied `id` are both refused, because hidden fields would make the saved
+ * report differ from what the user can inspect, and identity belongs to history rather than the emitting agent.
+ *
+ * @param raw - raw finding value; anything that is not an object cannot be displayed as a row
+ * @param index - zero-based position, used only to point the user at the broken row
+ * @param options - strictness for current versus legacy reports
+ * @returns the parsed finding, or the first path-specific error that blocks the report
+ */
 function parseFinding(
   raw: unknown,
   index: number,
@@ -292,139 +556,324 @@ function parseFinding(
     };
   }
 
-  const type = expectEnumValue(raw.type, `${path}.type`, QUALITY_FINDING_TYPES);
-  // Unknown finding types have no stable grouping in the quality issue list.
-  if (!type.ok) return type;
-  const severity = expectEnumValue(
-    raw.severity,
-    `${path}.severity`,
-    QUALITY_FINDING_SEVERITIES,
-  );
-  // Unknown severities cannot be sorted or styled reliably for the user.
-  if (!severity.ok) return severity;
-  const file = expectNullableString(raw.file ?? null, `${path}.file`);
-  // Invalid file text would point the user at a bogus source location.
-  if (!file.ok) return file;
-  const line = expectNullablePositiveInteger(raw.line ?? null, `${path}.line`);
-  // Invalid line numbers would make source evidence misleading.
-  if (!line.ok) return line;
-  const summary = expectNonEmptyString(raw.summary, `${path}.summary`);
-  // A finding without summary text leaves the issue list unreadable.
-  if (!summary.ok) return summary;
-  // Long summaries overflow the compact issue row, so force detail into the detail field.
-  if (summary.value.length > 200) {
-    return {
-      ok: false,
-      error: `${path}.summary must be 200 characters or fewer`,
-    };
-  }
-  const detail = expectNonEmptyString(raw.detail, `${path}.detail`);
-  // The detail text is the user's explanation of the issue, so it cannot be blank.
-  if (!detail.ok) return detail;
-  const evidenceQuality = expectEnumValue(
-    raw.evidence_quality,
-    `${path}.evidence_quality`,
-    QUALITY_EVIDENCE_QUALITIES,
-  );
-  // Evidence quality drives trust labels, so unknown labels cannot be displayed.
-  if (!evidenceQuality.ok) return evidenceQuality;
-
-  let evidenceMethod: QualityEvidenceMethod = "static-analysis";
-  // Current reports must say how evidence was gathered so users can judge trust level.
-  if (
-    options.requireCurrentFields === true &&
-    !Object.hasOwn(raw, "evidence_method")
-  ) {
-    return {
-      ok: false,
-      error: `${path}.evidence_method is required for current quality reports`,
-    };
-  }
-  // Legacy reports lacked this field, so old history opens with the safest visible default.
-  if (Object.hasOwn(raw, "evidence_method")) {
-    const parsedMethod = expectEnumValue(
-      raw.evidence_method,
-      `${path}.evidence_method`,
-      QUALITY_EVIDENCE_METHODS,
-    );
-    // Unknown evidence methods cannot be labelled in the report details.
-    if (!parsedMethod.ok) return parsedMethod;
-    evidenceMethod = parsedMethod.value;
-  }
-
-  const evidenceCommand = expectOptionalNonEmptyString(
-    raw.evidence_command,
-    `${path}.evidence_command`,
-  );
-  // Bad optional command text is rejected instead of showing an empty evidence row.
-  if (!evidenceCommand.ok) return evidenceCommand;
-  const evidenceExitCode = expectOptionalNonNegativeInteger(
-    raw.evidence_exit_code,
-    `${path}.evidence_exit_code`,
-  );
-  // Bad optional exit codes make command evidence misleading.
-  if (!evidenceExitCode.ok) return evidenceExitCode;
-  const evidenceSummary = expectOptionalNonEmptyString(
-    raw.evidence_summary,
-    `${path}.evidence_summary`,
-  );
-  // Bad optional evidence summaries would create an unexplained evidence block.
-  if (!evidenceSummary.ok) return evidenceSummary;
-  const evidenceWarningCount = expectOptionalNonNegativeInteger(
-    raw.evidence_warning_count,
-    `${path}.evidence_warning_count`,
-  );
-  // Bad warning counts would distort analyzer evidence in the UI.
-  if (!evidenceWarningCount.ok) return evidenceWarningCount;
-  const evidenceExcerpt = expectOptionalNonEmptyString(
-    raw.evidence_excerpt,
-    `${path}.evidence_excerpt`,
-  );
-  // Bad optional excerpts would show a blank or invalid proof snippet.
-  if (!evidenceExcerpt.ok) return evidenceExcerpt;
-
-  const deltaTagRaw = Object.hasOwn(raw, "delta_tag") ? raw.delta_tag : null;
-  let deltaTag: QualityDeltaTag | null = null;
-  // Null delta tags mean no prior report comparison exists for this finding.
-  if (deltaTagRaw !== null) {
-    const parsedDeltaTag = expectEnumValue(
-      deltaTagRaw,
-      `${path}.delta_tag`,
-      QUALITY_DELTA_TAGS,
-    );
-    // Unknown delta labels cannot be grouped as new or persisted for the user.
-    if (!parsedDeltaTag.ok) return parsedDeltaTag;
-    deltaTag = parsedDeltaTag.value;
-  }
+  const core = parseFindingCore(raw, path);
+  if (!core.ok) return core;
+  const evidence = parseFindingEvidence(raw, path, options);
+  if (!evidence.ok) return evidence;
+  const deltaTag = parseFindingDeltaTag(raw, path);
+  if (!deltaTag.ok) return deltaTag;
 
   const findingBase: QualityFinding = {
-    type: type.value,
-    severity: severity.value,
-    file: file.value,
-    line: line.value,
-    summary: summary.value,
-    detail: detail.value,
-    evidence_quality: evidenceQuality.value,
-    evidence_method: evidenceMethod,
-    ...(evidenceCommand.value !== undefined
-      ? { evidence_command: evidenceCommand.value }
-      : {}),
-    ...(evidenceExitCode.value !== undefined
-      ? { evidence_exit_code: evidenceExitCode.value }
-      : {}),
-    ...(evidenceSummary.value !== undefined
-      ? { evidence_summary: evidenceSummary.value }
-      : {}),
-    ...(evidenceWarningCount.value !== undefined
-      ? { evidence_warning_count: evidenceWarningCount.value }
-      : {}),
-    ...(evidenceExcerpt.value !== undefined
-      ? { evidence_excerpt: evidenceExcerpt.value }
-      : {}),
-    delta_tag: deltaTag,
+    type: core.value.type,
+    severity: core.value.severity,
+    file: core.value.file,
+    line: core.value.line,
+    summary: core.value.summary,
+    detail: core.value.detail,
+    evidence_quality: core.value.evidenceQuality,
+    evidence_method: evidence.value.method,
+    ...optionalEvidenceFields(evidence.value),
+    delta_tag: deltaTag.value,
   };
 
   return { ok: true, finding: findingBase };
+}
+
+/** The report fields that identify which run this is, all mandatory in every schema version. */
+interface ReportIdentity {
+  version: string;
+  agent: QualityReport["agent"];
+  projectPath: string;
+  runDate: string;
+  auditStatus: QualityReport["audit_status"];
+}
+
+/**
+ * Parse the fields that say which project, agent, and day a report describes.
+ *
+ * The project path must be absolute because saved history is keyed on it: a relative path would attach the report
+ * to whichever directory happened to be current when it was read back.
+ *
+ * @param raw - the raw report object
+ * @param options - strictness selector; `requireCurrentFields` enables the real-date check
+ * @returns the identity fields, or the first path-specific error. The date is format-checked for everyone so
+ *   history sorts, but only newly saved reports must name a real calendar day, which keeps older history readable
+ *   rather than rejecting it on a rule it predates.
+ */
+function parseReportIdentity(
+  raw: Record<string, unknown>,
+  options: QualityReportParseOptions,
+): FieldResult<ReportIdentity> {
+  const version = expectNonEmptyString(
+    raw.goat_flow_version,
+    "report.goat_flow_version",
+  );
+  // The version anchors how the user interprets report shape and scoring rules.
+  if (!version.ok) return version;
+  const agent = expectEnumValue(raw.agent, "report.agent", KNOWN_AGENT_IDS);
+  // Unknown agents cannot be grouped under the dashboard runner tabs.
+  if (!agent.ok) return agent;
+  const projectPath = expectNonEmptyString(
+    raw.project_path,
+    "report.project_path",
+  );
+  // Missing project path would leave history detached from the project being reviewed.
+  if (!projectPath.ok) return projectPath;
+  // Relative paths cannot safely identify the project in saved history.
+  if (!isAbsolute(projectPath.value)) {
+    return { ok: false, error: "report.project_path must be an absolute path" };
+  }
+  const runDate = expectNonEmptyString(raw.run_date, "report.run_date");
+  // Missing run date prevents the user from ordering quality history.
+  if (!runDate.ok) return runDate;
+  // The date must sort predictably in history lists and comparisons.
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(runDate.value)) {
+    return { ok: false, error: "report.run_date must be YYYY-MM-DD" };
+  }
+  // Newly saved reports must name a real day; legacy history stays readable under format-only rules.
+  if (
+    options.requireCurrentFields === true &&
+    !isRealCalendarDate(runDate.value)
+  ) {
+    return {
+      ok: false,
+      error: "report.run_date must be a real calendar date in YYYY-MM-DD",
+    };
+  }
+  const auditStatus = expectEnumValue(
+    raw.audit_status,
+    "report.audit_status",
+    QUALITY_AUDIT_STATUSES,
+  );
+  // Unknown audit status cannot be represented in the quality run summary.
+  if (!auditStatus.ok) return auditStatus;
+
+  return {
+    ok: true,
+    value: {
+      version: version.value,
+      agent: agent.value,
+      projectPath: projectPath.value,
+      runDate: runDate.value,
+      auditStatus: auditStatus.value,
+    },
+  };
+}
+
+/**
+ * Parse a field that current reports must carry but older ones are allowed to omit.
+ *
+ * Current report fields that retain historical compatibility follow this rule, so the
+ * "required now, optional then" policy lives here once instead of being restated per
+ * field, where the copies could drift apart.
+ *
+ * @param raw - the raw report object
+ * @param key - report field name, used for both lookup and the error path
+ * @param options - strictness selector; `requireCurrentFields` makes the field mandatory
+ * @param parseValue - how to validate the value once it is known to be present
+ * @returns the parsed value, undefined when a legacy report omitted it, or the field's error
+ */
+function parseOptionalCurrentField<T>(
+  raw: Record<string, unknown>,
+  key: string,
+  options: QualityReportParseOptions,
+  parseValue: (value: unknown, path: string) => FieldResult<T>,
+): FieldResult<T | undefined> {
+  const isPresent = Object.hasOwn(raw, key);
+  // A current report that omits the field leaves the user unable to tell what was judged.
+  if (options.requireCurrentFields === true && !isPresent) {
+    return {
+      ok: false,
+      error: `report.${key} is required for current quality reports`,
+    };
+  }
+  // Legacy reports predate the field, so their history still opens without it.
+  if (!isPresent) return { ok: true, value: undefined };
+  const parsed = parseValue(raw[key], `report.${key}`);
+  if (!parsed.ok) return parsed;
+  return { ok: true, value: parsed.value };
+}
+
+/** Parse the commands or probes whose absence limits one report's evidence coverage. */
+function parseUnverifiedProbes(
+  raw: unknown,
+  path: string,
+): FieldResult<string[]> {
+  if (!Array.isArray(raw)) {
+    return { ok: false, error: `${path} must be an array` };
+  }
+  const probes: string[] = [];
+  for (const [index, probe] of raw.entries()) {
+    const parsedProbe = expectNonEmptyString(probe, `${path}[${index}]`);
+    if (!parsedProbe.ok) return parsedProbe;
+    probes.push(parsedProbe.value);
+  }
+  return { ok: true, value: probes };
+}
+
+/** Reject provenance states whose coverage label contradicts their skipped-probe list. */
+function validateAssessmentGrounding(
+  groundingStatus: QualityAssessmentContext["grounding_status"],
+  unverifiedProbes: string[],
+  path: string,
+): FieldResult<true> {
+  if (groundingStatus === "complete" && unverifiedProbes.length > 0) {
+    return {
+      ok: false,
+      error: `${path}.unverified_probes must be empty when grounding_status is complete`,
+    };
+  }
+  if (groundingStatus !== "complete" && unverifiedProbes.length === 0) {
+    return {
+      ok: false,
+      error: `${path}.unverified_probes must name at least one probe when grounding_status is partial or blocked`,
+    };
+  }
+  return { ok: true, value: true };
+}
+
+/** Parse the bounded provenance object that makes independent assessment runs comparable. */
+function parseAssessmentContext(
+  raw: unknown,
+  path: string,
+): FieldResult<QualityAssessmentContext> {
+  if (!isRecord(raw)) return { ok: false, error: `${path} must be an object` };
+  const unknownKeyError = rejectUnknownKeys(
+    raw,
+    [
+      "project_revision",
+      "working_tree_state",
+      "grounding_status",
+      "unverified_probes",
+      "score_confidence",
+    ],
+    path,
+  );
+  if (unknownKeyError) return { ok: false, error: unknownKeyError };
+
+  const projectRevision = expectNullableString(
+    raw.project_revision,
+    `${path}.project_revision`,
+  );
+  if (!projectRevision.ok) return projectRevision;
+  const workingTreeState = expectEnumValue(
+    raw.working_tree_state,
+    `${path}.working_tree_state`,
+    QUALITY_WORKTREE_STATES,
+  );
+  if (!workingTreeState.ok) return workingTreeState;
+  const groundingStatus = expectEnumValue(
+    raw.grounding_status,
+    `${path}.grounding_status`,
+    QUALITY_GROUNDING_STATUSES,
+  );
+  if (!groundingStatus.ok) return groundingStatus;
+  const unverifiedProbes = parseUnverifiedProbes(
+    raw.unverified_probes,
+    `${path}.unverified_probes`,
+  );
+  if (!unverifiedProbes.ok) return unverifiedProbes;
+  const grounding = validateAssessmentGrounding(
+    groundingStatus.value,
+    unverifiedProbes.value,
+    path,
+  );
+  if (!grounding.ok) return grounding;
+  const scoreConfidence = expectEnumValue(
+    raw.score_confidence,
+    `${path}.score_confidence`,
+    QUALITY_SCORE_CONFIDENCES,
+  );
+  if (!scoreConfidence.ok) return scoreConfidence;
+
+  return {
+    ok: true,
+    value: {
+      project_revision: projectRevision.value,
+      working_tree_state: workingTreeState.value,
+      grounding_status: groundingStatus.value,
+      unverified_probes: unverifiedProbes.value,
+      score_confidence: scoreConfidence.value,
+    },
+  };
+}
+
+/**
+ * Collect only the report fields that were actually supplied.
+ *
+ * Absent fields are left off rather than written as undefined, so a legacy report re-saved through this parser does not
+ * gain keys its original run never emitted.
+ *
+ * @param fields - the optional values, each undefined when the report omitted it
+ * @returns an object carrying just the fields that were present
+ */
+function optionalReportFields(fields: {
+  scope: QualityScope | undefined;
+  rubricVersion: string | undefined;
+  qualityMode: QualityMode | undefined;
+  priorReportId: string | null | undefined;
+  assessmentContext: QualityAssessmentContext | undefined;
+}): Partial<QualityReport> {
+  return {
+    ...(fields.scope !== undefined ? { scope: fields.scope } : {}),
+    ...(fields.rubricVersion !== undefined
+      ? { rubric_version: fields.rubricVersion }
+      : {}),
+    ...(fields.qualityMode !== undefined
+      ? { quality_mode: fields.qualityMode }
+      : {}),
+    ...(fields.priorReportId !== undefined
+      ? { prior_report_id: fields.priorReportId }
+      : {}),
+    ...(fields.assessmentContext !== undefined
+      ? { assessment_context: fields.assessmentContext }
+      : {}),
+  };
+}
+
+/**
+ * Parse every finding row, and confirm a compared report labelled all of them.
+ *
+ * It reports the first bad row and blocks the whole report, because saved history that mixed valid and dropped findings would understate what
+ * the run actually found.
+ *
+ * @param rawFindings - the raw findings value; anything other than an array cannot render as an issue list
+ * @param options - strictness selector, passed through to each row
+ * @param priorReportId - the compared report, when one was named; its presence requires every delta tag to be set
+ * @returns the parsed findings in emitted order, or the first row error. It findings keep their emitted order, so the index in an error path
+ *   always names the row the user must fix.
+ */
+function parseReportFindings(
+  rawFindings: unknown,
+  options: QualityReportParseOptions,
+  priorReportId: string | null | undefined,
+): FieldResult<QualityFinding[]> {
+  // Findings must be an array so the issue list can render in report order.
+  if (!Array.isArray(rawFindings)) {
+    return { ok: false, error: "report.findings must be an array" };
+  }
+
+  const findings: QualityFinding[] = [];
+  // Parse findings in emitted order so validation paths match the row the user can fix.
+  for (const [index, item] of rawFindings.entries()) {
+    const parsedFinding = parseFinding(item, index, options);
+    // One invalid row blocks the report so history never mixes good and bad findings.
+    if (!parsedFinding.ok) return parsedFinding;
+    findings.push(parsedFinding.finding);
+  }
+
+  // Compared reports must label every finding as new or persisted for the diff view.
+  if (options.requireCurrentFields && typeof priorReportId === "string") {
+    const nullDeltaIndex = findings.findIndex((f) => f.delta_tag === null);
+    // A missing delta tag would leave the comparison row uncategorised.
+    if (nullDeltaIndex !== -1) {
+      return {
+        ok: false,
+        error: `findings[${nullDeltaIndex}].delta_tag must be "new" or "persisted" when prior_report_id is set`,
+      };
+    }
+  }
+  return { ok: true, value: findings };
 }
 
 /**
@@ -457,6 +906,7 @@ function parseReportInternal(
       "rubric_version",
       "quality_mode",
       "prior_report_id",
+      "assessment_context",
       "scores",
       "findings",
     ],
@@ -473,117 +923,37 @@ function parseReportInternal(
     };
   }
 
-  const version = expectNonEmptyString(
-    raw.goat_flow_version,
-    "report.goat_flow_version",
-  );
-  // The version anchors how the user interprets report shape and scoring rules.
-  if (!version.ok) return version;
-  const agent = expectEnumValue(raw.agent, "report.agent", KNOWN_AGENT_IDS);
-  // Unknown agents cannot be grouped under the dashboard runner tabs.
-  if (!agent.ok) return agent;
-  const projectPath = expectNonEmptyString(
-    raw.project_path,
-    "report.project_path",
-  );
-  // Missing project path would leave history detached from the project being reviewed.
-  if (!projectPath.ok) return projectPath;
-  // Relative paths cannot safely identify the project in saved history.
-  if (!isAbsolute(projectPath.value)) {
-    return {
-      ok: false,
-      error: "report.project_path must be an absolute path",
-    };
-  }
-  const runDate = expectNonEmptyString(raw.run_date, "report.run_date");
-  // Missing run date prevents the user from ordering quality history.
-  if (!runDate.ok) return runDate;
-  // The date must sort predictably in history lists and comparisons.
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(runDate.value)) {
-    return { ok: false, error: "report.run_date must be YYYY-MM-DD" };
-  }
-  // Newly saved reports must name a real day; legacy history stays readable under format-only rules.
-  if (
-    options.requireCurrentFields === true &&
-    !isRealCalendarDate(runDate.value)
-  ) {
-    return {
-      ok: false,
-      error: "report.run_date must be a real calendar date in YYYY-MM-DD",
-    };
-  }
-  const auditStatus = expectEnumValue(
-    raw.audit_status,
-    "report.audit_status",
-    QUALITY_AUDIT_STATUSES,
-  );
-  // Unknown audit status cannot be represented in the quality run summary.
-  if (!auditStatus.ok) return auditStatus;
+  const identity = parseReportIdentity(raw, options);
+  if (!identity.ok) return identity;
 
-  let scope: QualityScope | undefined;
-  // Current reports must name the reviewed scope so users know what was judged.
-  if (options.requireCurrentFields === true && !Object.hasOwn(raw, "scope")) {
-    return {
-      ok: false,
-      error: "report.scope is required for current quality reports",
-    };
-  }
-  // Legacy reports may omit scope; when absent, older history opens without a scope badge.
-  if (Object.hasOwn(raw, "scope")) {
-    const parsedScope = expectEnumValue(
-      raw.scope,
-      "report.scope",
-      QUALITY_SCOPES,
-    );
-    // Unknown scope text cannot be mapped to the user's setup/system view.
-    if (!parsedScope.ok) return parsedScope;
-    scope = parsedScope.value;
-  }
-
-  let rubricVersion: string | undefined;
-  // Current reports must state the rubric so users know which scoring contract produced the result.
-  if (
-    options.requireCurrentFields === true &&
-    !Object.hasOwn(raw, "rubric_version")
-  ) {
-    return {
-      ok: false,
-      error: "report.rubric_version is required for current quality reports",
-    };
-  }
-  // Legacy reports may omit rubric version; current ones show it for auditability.
-  if (Object.hasOwn(raw, "rubric_version")) {
-    const parsedRubric = expectNonEmptyString(
-      raw.rubric_version,
-      "report.rubric_version",
-    );
-    // Blank rubric text would make the report provenance unclear.
-    if (!parsedRubric.ok) return parsedRubric;
-    rubricVersion = parsedRubric.value;
-  }
-
-  let qualityMode: QualityMode | undefined;
-  // Current reports must name the mode so users do not compare different review types blindly.
-  if (
-    options.requireCurrentFields === true &&
-    !Object.hasOwn(raw, "quality_mode")
-  ) {
-    return {
-      ok: false,
-      error: "report.quality_mode is required for current quality reports",
-    };
-  }
-  // Legacy reports may omit mode; when present it still has to match a visible mode label.
-  if (Object.hasOwn(raw, "quality_mode")) {
-    const parsedQualityMode = expectEnumValue(
-      raw.quality_mode,
-      "report.quality_mode",
-      QUALITY_MODES,
-    );
-    // Unknown modes cannot be filtered or compared in quality history.
-    if (!parsedQualityMode.ok) return parsedQualityMode;
-    qualityMode = parsedQualityMode.value;
-  }
+  const scope = parseOptionalCurrentField(
+    raw,
+    "scope",
+    options,
+    (value, path) => expectEnumValue(value, path, QUALITY_SCOPES),
+  );
+  if (!scope.ok) return scope;
+  const rubricVersion = parseOptionalCurrentField(
+    raw,
+    "rubric_version",
+    options,
+    (value, path) => expectNonEmptyString(value, path),
+  );
+  if (!rubricVersion.ok) return rubricVersion;
+  const qualityMode = parseOptionalCurrentField(
+    raw,
+    "quality_mode",
+    options,
+    (value, path) => expectEnumValue(value, path, QUALITY_MODES),
+  );
+  if (!qualityMode.ok) return qualityMode;
+  const assessmentContext = parseOptionalCurrentField(
+    raw,
+    "assessment_context",
+    options,
+    parseAssessmentContext,
+  );
+  if (!assessmentContext.ok) return assessmentContext;
 
   let priorReportId: string | null | undefined;
   // A prior report id means the user expects new/persisted labels in the finding list.
@@ -600,52 +970,30 @@ function parseReportInternal(
   const scores = parseScores(raw.scores, "report.scores");
   // Score errors stop the report before any headline metrics are shown.
   if (!scores.ok) return scores;
-  // Findings must be an array so the issue list can render in report order.
-  if (!Array.isArray(raw.findings)) {
-    return { ok: false, error: "report.findings must be an array" };
-  }
 
-  const findings: QualityFinding[] = [];
-  // Parse findings in emitted order so validation paths match the row the user can fix.
-  for (const [index, item] of raw.findings.entries()) {
-    const parsedFinding = parseFinding(item, index, options);
-    // One invalid row blocks the report so history never mixes good and bad findings.
-    if (!parsedFinding.ok) return parsedFinding;
-    findings.push(parsedFinding.finding);
-  }
-
-  // Compared reports must label every finding as new or persisted for the diff view.
-  if (options.requireCurrentFields && typeof priorReportId === "string") {
-    const nullDeltaIndex = findings.findIndex((f) => f.delta_tag === null);
-    // A missing delta tag would leave the comparison row uncategorised.
-    if (nullDeltaIndex !== -1) {
-      return {
-        ok: false,
-        error: `findings[${nullDeltaIndex}].delta_tag must be "new" or "persisted" when prior_report_id is set`,
-      };
-    }
-  }
+  const findings = parseReportFindings(raw.findings, options, priorReportId);
+  if (!findings.ok) return findings;
 
   const reportBase: Omit<QualityReport, "findings"> = {
     report_kind: QUALITY_REPORT_KIND,
-    goat_flow_version: version.value,
-    agent: agent.value,
-    project_path: projectPath.value,
-    run_date: runDate.value,
-    audit_status: auditStatus.value,
-    ...(scope !== undefined ? { scope } : {}),
-    ...(rubricVersion !== undefined ? { rubric_version: rubricVersion } : {}),
-    ...(qualityMode !== undefined ? { quality_mode: qualityMode } : {}),
-    ...(priorReportId !== undefined ? { prior_report_id: priorReportId } : {}),
+    goat_flow_version: identity.value.version,
+    agent: identity.value.agent,
+    project_path: identity.value.projectPath,
+    run_date: identity.value.runDate,
+    audit_status: identity.value.auditStatus,
+    ...optionalReportFields({
+      scope: scope.value,
+      rubricVersion: rubricVersion.value,
+      qualityMode: qualityMode.value,
+      priorReportId,
+      assessmentContext: assessmentContext.value,
+    }),
     scores: scores.scores,
   };
 
   return {
     ok: true,
-    report: {
-      ...reportBase,
-      findings,
-    },
+    report: { ...reportBase, findings: findings.value },
   };
 }
 

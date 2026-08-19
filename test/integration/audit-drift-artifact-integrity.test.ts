@@ -18,7 +18,7 @@ import {
 } from "./audit-drift.helpers.ts";
 
 /**
- * Write one matching skill contract to the canonical source and every installed mirror.
+ * Writes one matching skill contract to the canonical source and every installed mirror.
  * Use when a fixture must isolate identity or reference integrity from ordinary content drift.
  *
  * @param fixtureRoot - temporary project root; an empty path is invalid because no fixture exists
@@ -449,6 +449,7 @@ describe("checkDrift: artifact integrity", () => {
     }
   });
 
+  // Regression fixture: writes a glossary sentence carrying the old harness count, which once survived a green audit; the count is a contract.
   it("reports a stale harness count in the glossary's exact phrasing", () => {
     // Regression: the glossary previously received only removed-command
     // scanning, so "17 checks across 5 concerns" survived a green audit
@@ -481,6 +482,7 @@ describe("checkDrift: artifact integrity", () => {
     }
   });
 
+  // Regression fixture: writes the same stale count adjectivally, which the earlier exact-phrase scan missed; the count is a contract.
   it("reports a stale harness count in the code map's adjectival phrasing", () => {
     // Regression: "N advisory/integrity/metric checks across the 5 harness
     // concerns" evaded the count regex, which required the digit directly
@@ -513,6 +515,7 @@ describe("checkDrift: artifact integrity", () => {
     }
   });
 
+  // Regression fixture: writes the audit guide repeating the stale count, so every document carrying that contract number is covered.
   it("reports a stale harness count in the audit guide's exact phrasing", () => {
     // Regression: docs/audit-checks.md bolds the number and describes
     // "deterministic harness-completeness checks" without a concern-count
@@ -571,7 +574,7 @@ describe("checkDrift: artifact integrity", () => {
   });
 
   // Covers a project still on the old commit-guidance filename: writes it; the audit must not fail it.
-  it("accepts the ADR-043 commit-guidance compatibility path", () => {
+  it("accepts the ADR-051 commit-guidance compatibility path", () => {
     const fixtureRoot = setupFixture();
     try {
       const guidePath = join(fixtureRoot, "docs", "audit-checks.md");

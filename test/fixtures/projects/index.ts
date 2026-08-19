@@ -30,10 +30,14 @@ const HEALTHY_STANDALONE_PLAYBOOK_FILENAMES = [
   "code-comments.md",
   "gruff-code-quality.md",
   "hook-policy-testing.md",
+  "naming-and-placement.md",
   "observability.md",
   "page-capture.md",
   "release-notes.md",
   "skill-playbook-authoring-sync.md",
+  "test-selection.md",
+  "writing-sentence-diagnostics.md",
+  "writing-structure-diagnostics.md",
   "writing-style.md",
 ] as const;
 
@@ -70,6 +74,7 @@ Fixture capability is available.
 // .goat-flow/.gitignore, everything else empty/present). Pass overrides to
 // simulate the specific filesystem condition a check is meant to detect.
 export function stubFS(overrides: Partial<ReadonlyFS> = {}): ReadonlyFS {
+  // Stands in for the committed goat-flow files an audit user would really have on disk.
   const defaultReadFile = (path: string): string | null => {
     // The default project keeps committed goat-flow files visible to audit users.
     if (path === ".goat-flow/.gitignore") return HEALTHY_GOAT_FLOW_GITIGNORE;
@@ -118,6 +123,14 @@ export function stubFS(overrides: Partial<ReadonlyFS> = {}): ReadonlyFS {
   };
 }
 
+/**
+ * Build a fully valid loaded config so a test can override just the field it is exercising.
+ *
+ * Starting from valid means a test that changes one key is testing that key, not accidentally testing a missing-config path.
+ *
+ * @param overrides - fields to replace; an empty object yields the healthy baseline every audit check expects
+ * @returns a loaded config already marked existing and valid
+ */
 export function stubConfig(
   overrides: Partial<GoatFlowConfig> = {},
 ): LoadedConfig {
@@ -171,6 +184,14 @@ export const STUB_AGENT_PROFILE: AgentProfile = {
   hookEvents: { preTool: "PreToolUse", postTurn: "Stop" },
 };
 
+/**
+ * Build a healthy set of agent facts so a test can override only the fact it is exercising.
+ *
+ * The baseline represents a correctly installed agent, so any check that fails against it is failing for the reason the test intended.
+ *
+ * @param overrides - facts to replace; an empty object yields the fully healthy agent
+ * @returns agent facts ready to drop into an audit context
+ */
 export function stubAgentFacts(
   overrides: Partial<AgentFacts> = {},
 ): AgentFacts {

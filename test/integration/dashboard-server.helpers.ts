@@ -86,30 +86,49 @@ export let dashboardToken = "";
 export let originalDashboardState: string | null = null;
 export let originalLegacyProjectsList: string | null = null;
 
+/**
+ * Fail a pending promise with a named error instead of letting the suite hang.
+ *
+ * Dashboard tests await real HTTP and WebSocket traffic, so a server that never answers should report which wait expired.
+ *
+ * @param promise - work being awaited
+ * @param timeoutMs - milliseconds to wait before rejecting
+ * @param label - name used in the timeout error, so the failure says which step stalled
+ * @returns the original promise's result, or a rejection naming the label once the deadline passes
+ */
 export function withTimeout<T>(
   promise: Promise<T>,
-  ms: number,
+  timeoutMs: number,
   label: string,
 ): Promise<T> {
   return Promise.race([
     promise,
     new Promise<T>((_, reject) => {
       setTimeout(
-        () => reject(new Error(`${label} timed out after ${ms}ms`)),
-        ms,
+        () => reject(new Error(`${label} timed out after ${timeoutMs}ms`)),
+        timeoutMs,
       );
     }),
   ]);
 }
 
+/**
+ * Assert an API payload is a plain object and narrow it, so a test can read fields without casting.
+ *
+ * Rejecting arrays and null explicitly means a malformed response fails on its actual shape rather than later on a missing key.
+ *
+ * @param candidate - parsed response body
+ * @param context - label used in each assertion message, so a failure names the endpoint under test
+ * @returns the same value narrowed to a record
+ */
 export function expectRecord(
-  value: unknown,
+  candidate: unknown,
   context: string,
 ): Record<string, unknown> {
-  assert.equal(typeof value, "object", `${context} should be an object`);
-  assert.notEqual(value, null, `${context} should not be null`);
-  assert.ok(!Array.isArray(value), `${context} should not be an array`);
-  return value as Record<string, unknown>;
+  assert.equal(typeof candidate, "object", `${context} should be an object`);
+  assert.notEqual(candidate, null, `${context} should not be null`);
+  assert.ok(!Array.isArray(candidate), `${context} should not be an array`);
+  return candidate as Record<string, unknown>;
 }
 
 /**
@@ -144,14 +163,14 @@ export function extractDashboardToken(html: string): string {
  * Assert that a check provenance payload preserves the audit evidence contract: a valid source
  * type, a source_urls array, a verified_on string, and an allowed normative level.
  *
- * @param value - the provenance object from one rendered audit check, of unknown runtime shape
+ * @param check - the provenance object from one rendered audit check, of unknown runtime shape
  * @param context - label woven into assertion messages to identify which check's provenance failed
  */
 export function assertAuditCheckProvenance(
-  value: unknown,
+  check: unknown,
   context: string,
 ): void {
-  const provenance = expectRecord(value, context);
+  const provenance = expectRecord(check, context);
   assert.match(
     String(provenance.source_type),
     /^(spec|vendor_docs|paper|incident|community|unknown)$/,
@@ -174,11 +193,11 @@ export function assertAuditCheckProvenance(
  * Assert one rendered audit scope has a pass/fail status, a checks array (each with valid
  * provenance), a failures array, and a string-valued summary map.
  *
- * @param value - one scope object (setup/agent/harness) from the dashboard report, unknown shape
+ * @param candidate - one scope object (setup/agent/harness) from the dashboard report, unknown shape
  * @param context - label woven into assertion messages to identify which scope failed
  */
-export function assertAuditScope(value: unknown, context: string): void {
-  const scope = expectRecord(value, context);
+export function assertAuditScope(candidate: unknown, context: string): void {
+  const scope = expectRecord(candidate, context);
   assert.match(
     String(scope.status),
     /^(pass|fail)$/,
@@ -211,11 +230,13 @@ export function assertAuditScope(value: unknown, context: string): void {
  * target, agentScores, the setup/agent (and optional harness) scopes, overall status, and the
  * learningLoop and recentLessons sections - so a contract drift fails the test, not the UI.
  *
- * @param value - the parsed dashboard report response body, of unknown runtime shape
+ * @param candidate - the parsed dashboard report response body, of unknown runtime shape
  * @returns the same payload narrowed to a record, for callers that read further fields
  */
-export function assertDashboardReport(value: unknown): Record<string, unknown> {
-  const report = expectRecord(value, "Dashboard report");
+export function assertDashboardReport(
+  candidate: unknown,
+): Record<string, unknown> {
+  const report = expectRecord(candidate, "Dashboard report");
   assert.match(
     String(report.status),
     /^(pass|fail)$/,
@@ -314,6 +335,15 @@ export function assertDashboardReport(value: unknown): Record<string, unknown> {
   return report;
 }
 
+/**
+ * Call a dashboard endpoint the way the browser does, with the per-run token attached, and parse the JSON reply.
+ *
+ * Every dashboard integration test goes through here, so authentication and content-type checking are applied consistently.
+ *
+ * @param path - endpoint path relative to the running server
+ * @param init - optional fetch options; headers are merged so callers never have to re-add the token
+ * @returns the response together with its parsed body
+ */
 export async function fetchJson(
   path: string,
   init?: RequestInit,
@@ -325,7 +355,12 @@ export async function fetchJson(
   return { res, body: await res.json() };
 }
 
-/** Read emitted evidence envelopes with a stable empty-array fallback when the temp log directory is absent. */
+/**
+ * Read emitted evidence envelopes with a stable empty-array fallback when the temp log directory is absent.
+ *
+ * @param root - fixture project root whose event log is read
+ * @returns the envelopes in file order; an empty array means nothing was recorded, which several tests assert deliberately
+ */
 export async function readEventEnvelopes(
   root: string,
 ): Promise<EvidenceEnvelope[]> {
@@ -363,6 +398,14 @@ export function assertValidEmittedEnvelope(envelope: EvidenceEnvelope): void {
   );
 }
 
+/**
+ * Writes one file into a fixture project, creating parent directories as needed.
+ *
+ * @param root - fixture project root
+ * @param relativePath - path within the project; missing parent directories are created rather than failing
+ * @param content - file contents to write
+ * @returns nothing; the file exists once this resolves
+ */
 export async function writeProjectFile(
   root: string,
   relativePath: string,
@@ -408,7 +451,11 @@ export function commitDashboardCacheProject(root: string): void {
   ]);
 }
 
-/** Writes a minimal committed goat-flow fixture project for dashboard cache tests. */
+/**
+ * Writes a minimal committed goat-flow fixture project for dashboard cache tests.
+ *
+ * @returns the project root plus the cleanup the test must call to remove the temporary directory
+ */
 export async function makeDashboardCacheProject(): Promise<{
   root: string;
   cleanup: () => Promise<void>;
@@ -521,6 +568,15 @@ Route lessons, footguns, decisions, and tasks to their goat-flow artifact direct
 `;
 }
 
+/**
+ * Build a temporary project shaped for the setup-prompt tests, and hand back its cleanup function.
+ *
+ * The options control the two conditions those tests distinguish, so one helper covers both the installed and not-yet-installed cases.
+ * It writes a temporary directory on disk, which the returned cleanup removes.
+ *
+ * @param options - `decisionsDir` adds a decisions directory, `installSkills` installs skill files
+ * @returns the project root and a cleanup function the test must call
+ */
 export async function makeDashboardSetupPromptProject(options: {
   decisionsDir: boolean;
   installSkills?: boolean;
@@ -646,6 +702,7 @@ skills:
       "goat-critique",
       "goat-security",
       "goat-qa",
+      "goat-clarity",
     ]) {
       await writeProjectFile(
         root,

@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.15.1"
+goat-flow-reference-version: "1.16.0"
 ---
 # Hook Policy Testing
 
@@ -69,6 +69,16 @@ Record the literal summary line and exit status. A failing baseline is an
 existing regression, not evidence caused by the proposed change.
 
 ### 2. Reproduce the policy grammar
+
+When this step runs inside an agent session, provider Bash settings may match guarded text in the
+quoted `--check` operand before this hook starts. A settings-layer denial with no `BLOCKED:` policy
+output is not a hook classifier result. Record that denial separately; do not split or reconstruct
+guarded text to evade it.
+
+Use the sanctioned self-test for corpus coverage. If an exact one-off shape still needs classification,
+write the provider event to a gitignored JSON payload file with a non-Bash file tool, then pass that
+file on stdin using a command line that contains only its path. This keeps the guarded phrase in stdin,
+not provider-matched command text, so the resulting hook output has a truthful attribution boundary.
 
 For each policy behaviour, test a denied shape and a neighbouring allowed
 control. This prevents a broad matcher from making ordinary terminal work
@@ -192,7 +202,7 @@ and classifier behavior. The CLI must be available, and the selected agent must
 have the installed deny hook configured in a trusted checkout.
 
 ```bash
-goat-flow hooks verify . --agent <id> --scenario deny-hook
+goat-flow hooks verify . --agent <id> --scenario deny-hook --trusted-target
 ```
 
 The command passes four fixed inert classifier operands to the managed script as
@@ -201,9 +211,11 @@ exits `0`, reports `pass` for all four scenarios, and records one local
 `hook.verify` event per scenario. `fail`, `unsupported`, `not-configured`,
 `error`, or a missing evidence event means the requested proof is incomplete.
 
-The selected checkout's hook code runs during this command. For an untrusted
-checkout, add `--untrusted-target`; the CLI returns explicit `unsupported`
-results without starting the hook, so that safe result is not classifier proof.
+The selected checkout's hook code runs only with `--trusted-target`. Omit that
+flag until you have inspected and trust the checkout; the CLI then returns
+explicit `unsupported` results without starting the hook, so the safe default
+is not classifier proof. The deprecated `--untrusted-target` flag remains an
+explicit static alias throughout v1.16.x.
 
 This command proves only the selected checkout's managed script, registration
 state, and four fixed decisions. It does not launch the external coding agent

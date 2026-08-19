@@ -85,6 +85,7 @@ interface DashboardTerminalContext extends Record<
   ): boolean;
   /** Rehydrate a server-active terminal session into the browser UI. */
   openServerSession(serverSession: ServerSessionInfo): Promise<void>;
+  /** Open a new terminal for the user with this prompt already delivered, optionally naming the runner and access mode. */
   launchInTerminal(
     prompt: string,
     runner?: RunnerId,
@@ -106,6 +107,7 @@ interface DashboardTerminalContext extends Record<
   updateSessionCount(): Promise<void>;
   /** Remove one session id from persisted reconnect state. */
   _forgetSavedSession(sessionId: string): void;
+  /** Keep the title a session reported, so its tab keeps a meaningful label after a reconnect; a null title leaves the current one alone. */
   rememberSessionTitle(
     sessionId: string,
     title: string | null | undefined,
@@ -221,12 +223,12 @@ function dashboardPlainTerminalText(text: string): string {
         " ".repeat(Math.min(Number.parseInt(count, 10), 240)),
       )
       .replace(/\x1b\[C/g, " ")
-      // CUP / HVP (cursor position). Codex lays out every word with `ESC[r;cH`
-      // and never emits `\r\n` between rows; without this normalisation those
-      // positionings collapse `1. Yes\x1b[9;3H2. No` onto one line, breaking
-      // the numbered-choices regex that requires a newline between options.
-      // Replace with `\n ` so cross-row positionings produce line breaks and
-      // intra-row positionings still leave a token boundary.
+      // CUP / HVP (cursor position).
+      // Codex lays out every word with `ESC[r;cH` and never emits `\r\n` between rows; without this normalisation those positionings collapse `1.
+      // Yes\x1b[9;3H2.
+      //
+      // No` onto one line, breaking the numbered-choices regex that requires a newline between options.
+      // Replace with `\n ` so cross-row positionings produce line breaks and intra-row positionings still leave a token boundary.
       .replace(/\x1b\[\d*(?:;\d*)?[Hf]/g, "\n ")
       // CHA (cursor horizontal absolute). Replace with a single space so
       // column-laid words (Claude Code's "Esc to cancel · Tab to amend" footer
@@ -301,10 +303,8 @@ function dashboardOutputTailEndsWithAwaitingInputStart(text: string): boolean {
 }
 
 /**
- * Footer pattern that signals "we are parked on a confirmation prompt."
- * Covers Claude Code's trust dialog (`Enter to confirm`), Codex's trust dialog
- * (`Press enter to continue`), and Copilot's selection menu
- * (`↑/↓ to navigate · enter to select · esc to cancel`).
+ * Footer pattern that signals "we are parked on a confirmation prompt." Covers Claude Code's trust dialog (`Enter to confirm`), Codex's trust dialog
+ * (`Press enter to continue`), and Copilot's selection menu (`↑/↓ to navigate · enter to select · esc to cancel`).
  */
 function dashboardOutputHasConfirmFooter(plain: string): boolean {
   return (
@@ -361,12 +361,11 @@ function dashboardOutputLooksTransientStatusRedraw(text: string): boolean {
   const plain = dashboardPlainTerminalText(text).trim();
   if (!plain) return true;
   if (/^\r[^\n\r]*$/u.test(text)) return true;
-  // Bare spinner-glyph frame emitted ~2 Hz while a prompt is visible. Claude
-  // Code paints `●` (U+25CF), Codex paints `◦` (U+25E6), other runners use
-  // braille patterns (U+2800–U+28FF). Without this branch every other spinner
-  // tick fell through the classifier and killed the 1200ms reveal timer, so
-  // the badge never fired. Match the glyph in isolation, optionally repeated,
-  // with no other text.
+  // Bare spinner-glyph frame emitted ~2 Hz while a prompt is visible.
+  // Claude Code paints `●` (U+25CF), Codex paints `◦` (U+25E6), other runners use braille patterns (U+2800–U+28FF).
+  // Without this branch every other spinner tick fell through the classifier and killed the 1200ms reveal timer, so the badge never fired.
+  //
+  // Match the glyph in isolation, optionally repeated, with no other text.
   if (/^[●✻✢✳✶*•·◦◯○◎⊙◌⠀-⣿]+$/u.test(plain)) return true;
   return /^[●✻✢✳✶*•·◦◯○◎⊙◌]?\s*(?:Thinking|Processing|Checking|Reading|Searching|Working|Loading|Generating)\b/iu.test(
     plain,
@@ -388,13 +387,13 @@ function dashboardOutputLooksReadyForLaunchPrompt(
 ): boolean {
   const tail = dashboardPlainTerminalText(text).slice(-5000);
   if (dashboardOutputLooksRunnerStartupFailure(tail, runner)) return false;
-  // Antigravity composer-ready signal verified live against `agy` 1.0.1
-  // (2026-05-24 browser-use smoke against dashboard PTY). Two anchors:
-  //   1. "Antigravity CLI <version>" — identity line present from launch.
-  //   2. "? for shortcuts" — composer hint shown only after the box border
-  //      and model row are drawn.
-  // Combined the two patterns are uniquely Antigravity and don't collide with
-  // Claude's `/effort`-keyed composer.
+  // Antigravity composer-ready signal, verified live against `agy` 1.0.1 by a 2026-05-24 browser-use smoke run.
+  //
+  // Both anchors must appear:
+  // - "Antigravity CLI <version>", the identity line present from launch.
+  // - "? for shortcuts", the composer hint shown only after the box border and model row are drawn.
+  //
+  // Together they are uniquely Antigravity and do not collide with Claude's `/effort`-keyed composer.
   const antigravityReady =
     /Antigravity CLI [0-9]/i.test(tail) &&
     /\?[\s\S]{0,80}for[\s\S]{0,80}shortcuts\b/i.test(tail);
@@ -425,10 +424,9 @@ function dashboardOutputLooksRunnerStartupFailure(
 }
 
 /**
- * Extract a one-line summary of the runner startup error captured in `text`
- * so we can attach the real cause to the loading-overlay banner instead of
- * the bare generic message. Returns the trimmed first line of the matched
- * error, or null if no recognised error pattern is present.
+ * Extract a one-line summary of the runner startup error captured in `text` so we can attach the real cause to the loading-overlay banner instead of
+ * the bare generic message.
+ * Returns the trimmed first line of the matched error, or null if no recognised error pattern is present.
  */
 function dashboardExtractRunnerStartupError(text: string): string | null {
   const tail = dashboardPlainTerminalText(text).slice(-5000);
@@ -464,11 +462,11 @@ function dashboardOutputLooksCommittedPaste(text: string): boolean {
 }
 
 /** Return true for xterm-generated protocol replies, not deliberate user input. */
-function dashboardTerminalDataLooksProtocolResponse(data: string): boolean {
+function dashboardTerminalDataLooksProtocolResponse(output: string): boolean {
   return (
-    /^\x1b\[(?:I|O)$/.test(data) ||
-    /^\x1b\[(?:\?|>)?[0-9;]*c$/.test(data) ||
-    /^\x1b\[\d+(?:;\d+)*[Rn]$/.test(data)
+    /^\x1b\[(?:I|O)$/.test(output) ||
+    /^\x1b\[(?:\?|>)?[0-9;]*c$/.test(output) ||
+    /^\x1b\[\d+(?:;\d+)*[Rn]$/.test(output)
   );
 }
 
@@ -487,7 +485,7 @@ function dashboardOutputStillAtCommittedPaste(text: string): boolean {
 
 /** Decide whether a new output chunk should leave a session waiting. */
 function dashboardNextAwaitingInputState(
-  previousAwaiting: boolean,
+  wasAwaitingInput: boolean,
   previousTail: string,
   outputChunk: string,
 ): boolean {
@@ -496,17 +494,17 @@ function dashboardNextAwaitingInputState(
     dashboardPlainTerminalText(outputChunk).trim().length > 0;
   if (dashboardOutputLooksAwaitingInput(outputChunk)) return true;
   const tailStillAwaiting = dashboardOutputLooksAwaitingInput(nextTail);
-  if (!chunkHasText) return previousAwaiting && tailStillAwaiting;
+  if (!chunkHasText) return wasAwaitingInput && tailStillAwaiting;
   if (
     tailStillAwaiting &&
-    (previousAwaiting ||
+    (wasAwaitingInput ||
       dashboardOutputTailEndsWithAwaitingInputStart(previousTail)) &&
     dashboardOutputLooksAwaitingInputContinuation(outputChunk)
   ) {
     return true;
   }
   if (
-    previousAwaiting &&
+    wasAwaitingInput &&
     tailStillAwaiting &&
     dashboardOutputLooksTransientStatusRedraw(outputChunk)
   ) {

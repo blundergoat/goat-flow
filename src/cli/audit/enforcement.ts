@@ -98,7 +98,12 @@ function classifyEnforcementAssurance(
   return "not-observed";
 }
 
-/** Reject empty or contradictory sources before they become a user-visible capability claim. */
+/**
+ * Reject empty or contradictory evidence before it becomes a user-visible capability claim.
+ * It throws in both cases, so returning normally is the caller's proof that the claim rests on real evidence.
+ *
+ * @param sources - evidence backing one enforcement capability
+ */
 function validateEnforcementSources(
   sources: readonly EnforcementCapabilitySource[],
 ): void {
@@ -114,7 +119,13 @@ function validateEnforcementSources(
   }
 }
 
-/** Reject a strength badge when its proof class would mislead the user about protection. */
+/**
+ * Reject a strength badge whose proof class would overstate the protection a user actually has.
+ * It throws on a mismatch, so returning normally is the caller's proof that badge and evidence agree.
+ *
+ * @param status - the badge about to be shown
+ * @param assurance - how strongly that status was proven
+ */
 function validateEnforcementStatus(
   status: EnforcementCapabilityStatus,
   assurance: EnforcementCapabilityAssurance,
@@ -214,7 +225,7 @@ function hasActiveMechanicalDeny(agentFacts: AgentFacts): boolean {
 function shellCapability(
   agentFacts: AgentFacts,
   capabilityId: "shell-dangerous" | "shell-pipe-to-shell",
-  dangerousPatternIsCovered: boolean,
+  isDangerousPatternCovered: boolean,
   protectedUserSummary: string,
   missingUserSummary: string,
 ): EnforcementCapability {
@@ -231,7 +242,7 @@ function shellCapability(
     );
   }
   // A present deny surface still reports missing when its local facts do not cover the pattern.
-  if (!dangerousPatternIsCovered) {
+  if (!isDangerousPatternCovered) {
     return capability(
       capabilityId,
       "missing",
@@ -414,11 +425,8 @@ function hookSelfTestCapability(
       ["agent-guardrails"],
     );
   }
-  // Full evidence mode executes the managed self-test and earns runtime-local assurance.
-  if (
-    options.denyMechanismEvidenceLevel === "full" ||
-    options.denyMechanismEvidenceLevel === undefined
-  ) {
+  // Only explicit full evidence executes the managed self-test and earns runtime-local assurance.
+  if (options.denyMechanismEvidenceLevel === "full") {
     return capability(
       "hook-self-test",
       "hard",
@@ -431,7 +439,7 @@ function hookSelfTestCapability(
     "hook-self-test",
     "limited",
     ["local-hook"],
-    `Deny hook static checks passed, but runtime self-test was skipped in ${options.denyMechanismEvidenceLevel} evidence mode`,
+    `Deny hook static checks passed, but runtime self-test was skipped in ${options.denyMechanismEvidenceLevel ?? "static"} evidence mode`,
     ["agent-guardrails"],
   );
 }

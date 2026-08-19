@@ -1,7 +1,9 @@
 ---
 category: audit-contracts
-last_reviewed: 2026-08-10
+last_reviewed: 2026-08-14
 ---
+
+**Scope:** The audit's own contracts - skip semantics, renderer defaults for new report fields, repair paths sourced from target evidence, and boundary behaviour of inverse metrics. Tests that pin wording and serialization are [contract-testing.md](contract-testing.md); the CLI surface is [cli-contracts.md](cli-contracts.md).
 
 ## Lesson: Artifact scanners need explicit mirror maps and command grammar controls
 
@@ -129,4 +131,4 @@ last_reviewed: 2026-08-10
 
 **Root cause:** The word `required` supplied urgency without an executable orchestration contract. Agents filled the four missing decisions differently under release pressure, so the same prose permitted both false independence and unnecessary blocking.
 
-**Prevention:** Put admission and failure behavior next to every mandatory orchestration trigger: independent tool/reviewer, named failure class, structured return, current-session authorization, bounded attempts, and an explicit unavailable outcome that preserves uncertainty without waiting. Evidence: `workflow/skills/goat-security/SKILL.md` (search: `An admissible specialist`; search: `specialist-unavailable`), `test/contract/skill-hardening-skills-2.test.ts` (search: `defines goat-security specialist admission and unavailable fallback`), and local receipt `.goat-flow/logs/sessions/2026-07-18-goat-security-tdd.md`.
+**Prevention:** Put admission and failure behavior next to every mandatory orchestration trigger: independent tool/reviewer, named failure class, structured return, current-session authorization, bounded attempts, and an explicit unavailable outcome that preserves uncertainty without waiting. Evidence: `workflow/skills/goat-security/SKILL.md` (search: `An admissible specialist`; search: `specialist-unavailable`), `test/contract/skill-hardening-security-1.test.ts` (search: `defines goat-security specialist admission and unavailable fallback`), and local receipt `.goat-flow/logs/sessions/2026-07-18-goat-security-tdd.md`.

@@ -1,74 +1,170 @@
 {
   "skill:goat": {
-    "minPct": 87,
+    "minPct": 98,
     "maxPct": 100,
     "recommendation": "keep-skill",
     "subtype": "dispatcher"
   },
-  "skill:goat-debug": {
-    "minPct": 90,
+  "skill:goat-clarity": {
+    "minPct": 98,
     "maxPct": 100,
     "recommendation": "keep-skill",
     "subtype": "workflow"
   },
   "skill:goat-critique": {
-    "minPct": 90,
+    "minPct": 98,
+    "maxPct": 100,
+    "recommendation": "keep-skill",
+    "subtype": "workflow"
+  },
+  "skill:goat-debug": {
+    "minPct": 98,
     "maxPct": 100,
     "recommendation": "keep-skill",
     "subtype": "workflow"
   },
   "skill:goat-plan": {
-    "minPct": 90,
+    "minPct": 98,
     "maxPct": 100,
     "recommendation": "keep-skill",
     "subtype": "workflow"
   },
   "skill:goat-qa": {
-    "minPct": 85,
+    "minPct": 98,
     "maxPct": 100,
     "recommendation": "keep-skill",
     "subtype": "workflow"
   },
   "skill:goat-review": {
-    "minPct": 90,
-    "maxPct": 100,
+    "minPct": 95,
+    "maxPct": 99,
     "recommendation": "keep-skill",
     "subtype": "workflow"
   },
   "skill:goat-security": {
-    "minPct": 90,
-    "maxPct": 100,
-    "recommendation": "keep-skill",
+    "minPct": 95,
+    "maxPct": 99,
+    "recommendation": "consider-reclassifying",
     "subtype": "report"
   },
+  "reference:skill-conventions": {
+    "minPct": 98,
+    "maxPct": 100,
+    "recommendation": "reference-playbook",
+    "subtype": "meta"
+  },
+  "reference:skill-preamble": {
+    "minPct": 98,
+    "maxPct": 100,
+    "recommendation": "reference-playbook",
+    "subtype": "meta"
+  },
   "reference:browser-use": {
-    "minPct": 85,
+    "minPct": 84,
+    "maxPct": 88,
+    "recommendation": "reference-playbook",
+    "subtype": "playbook"
+  },
+  "reference:changelog": {
+    "minPct": 72,
+    "maxPct": 76,
+    "recommendation": "needs-human-review",
+    "subtype": "playbook"
+  },
+  "reference:code-comments": {
+    "minPct": 81,
+    "maxPct": 85,
+    "recommendation": "reference-playbook",
+    "subtype": "playbook"
+  },
+  "reference:gruff-code-quality": {
+    "minPct": 76,
+    "maxPct": 80,
+    "recommendation": "needs-human-review",
+    "subtype": "playbook"
+  },
+  "reference:hook-policy-testing": {
+    "minPct": 86,
+    "maxPct": 90,
+    "recommendation": "needs-human-review",
+    "subtype": "playbook"
+  },
+  "reference:naming-and-placement": {
+    "minPct": 72,
+    "maxPct": 76,
+    "recommendation": "needs-human-review",
+    "subtype": "playbook"
+  },
+  "reference:observability": {
+    "minPct": 91,
     "maxPct": 95,
     "recommendation": "reference-playbook",
     "subtype": "playbook"
   },
   "reference:page-capture": {
-    "minPct": 85,
-    "maxPct": 95,
+    "minPct": 88,
+    "maxPct": 92,
     "recommendation": "reference-playbook",
     "subtype": "playbook"
   },
-  "reference:skill-preamble": {
-    "minPct": 85,
-    "maxPct": 100,
-    "recommendation": "reference-playbook",
-    "subtype": "meta"
+  "reference:release-notes": {
+    "minPct": 72,
+    "maxPct": 76,
+    "recommendation": "needs-human-review",
+    "subtype": "playbook"
   },
-  "reference:skill-conventions": {
-    "minPct": 85,
-    "maxPct": 100,
+  "reference:skill-playbook-authoring-sync": {
+    "minPct": 81,
+    "maxPct": 85,
     "recommendation": "reference-playbook",
-    "subtype": "meta"
+    "subtype": "playbook"
+  },
+  "reference:test-selection": {
+    "minPct": 87,
+    "maxPct": 91,
+    "recommendation": "reference-playbook",
+    "subtype": "playbook"
+  },
+  "reference:writing-sentence-diagnostics": {
+    "minPct": 68,
+    "maxPct": 72,
+    "recommendation": "needs-human-review",
+    "subtype": "playbook"
+  },
+  "reference:writing-structure-diagnostics": {
+    "minPct": 73,
+    "maxPct": 77,
+    "recommendation": "reference-playbook",
+    "subtype": "playbook"
+  },
+  "reference:writing-style": {
+    "minPct": 76,
+    "maxPct": 80,
+    "recommendation": "reference-playbook",
+    "subtype": "playbook"
   },
   "reference:skill-quality-testing": {
-    "minPct": 70,
-    "maxPct": 95,
+    "minPct": 86,
+    "maxPct": 90,
     "recommendation": "reference-playbook",
     "subtype": "index"
+  },
+  "reference:adversarial-framing": {
+    "minPct": 52,
+    "maxPct": 56,
+    "recommendation": "consider-reclassifying",
+    "subtype": "playbook"
+  },
+  "reference:deployment": {
+    "minPct": 64,
+    "maxPct": 68,
+    "recommendation": "consider-reclassifying",
+    "subtype": "playbook"
+  },
+  "reference:tdd-iteration": {
+    "minPct": 64,
+    "maxPct": 68,
+    "recommendation": "needs-human-review",
+    "subtype": "playbook"
   }
 }

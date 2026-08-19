@@ -1,16 +1,12 @@
 /**
  * Manifest schema for goat-flow's single source of truth (M06a).
  *
- * `workflow/manifest.json` is the on-disk form. `loadManifest()` returns a
- * resolved `Manifest` where every `facts` field has been computed against
- * canonical code sources (SETUP_CHECKS, AGENT_CHECKS, HARNESS_CHECKS,
- * getSkillNames(), preset catalog JSON) or validated against observed on-disk
- * state (dashboard views).
+ * `workflow/manifest.json` is the on-disk form.
+ * `loadManifest()` returns a resolved `Manifest` where every `facts` field has been computed against canonical code sources (SETUP_CHECKS,
+ * AGENT_CHECKS, HARNESS_CHECKS, getSkillNames(), preset catalog JSON) or validated against observed on-disk state (dashboard views).
  *
- * Derived values are never written into the JSON - they are computed at load
- * time so `facts` cannot drift from code. Static values are written into the
- * JSON and validated against observed reality on load; a mismatch raises a
- * `ManifestValidationError`.
+ * Derived values are never written into the JSON - they are computed at load time so `facts` cannot drift from code.
+ * Static values are written into the JSON and validated against observed reality on load; a mismatch raises a `ManifestValidationError`.
  */
 
 /** Manifest hook event names for one runtime. */
@@ -86,10 +82,29 @@ interface ManifestFileOwnershipSpec {
  *  the canonical list of hot-path headings each agent instruction file must
  *  carry; harness checks build their regex patterns from these labels so the
  *  harness cannot drift from the manifest. */
+interface ManifestInstructionParityRule {
+  label: string;
+  section: string;
+  phrases: string[];
+}
+
+/**
+ * The shape every agent instruction file declares in `workflow/manifest.json`: `CLAUDE.md`, `AGENTS.md`, and the
+ * Copilot file.
+ *
+ * Two fields are load-bearing. `required_sections` is read by manifest-json to build the label and pattern pairs
+ * section checks match on, and `parity_phrases` is read by the drift check, so this block rather than the check
+ * source is what keeps the three instruction files saying the same thing.
+ *
+ * `line_target`, `line_limit`, and `version_header_pattern` are declared and typed for passthrough, but no check
+ * reads them: treat them as the documented budget authors aim at, target 125 and hard limit 150, rather than
+ * something enforced at audit time.
+ */
 interface ManifestInstructionFile {
   line_target: number;
   line_limit: number;
   required_sections: string[];
+  parity_phrases: ManifestInstructionParityRule[];
   version_header_pattern: string;
 }
 
@@ -187,6 +202,12 @@ export interface ObservedFacts {
 
 /** Raised when the on-disk manifest's static facts disagree with observed reality. */
 class ManifestValidationError extends Error {
+  /**
+   * Carry every finding alongside the summary line, so a caller can show the whole repair list instead of one problem at a time.
+   *
+   * @param message - summary line shown to the user, naming how many findings were collected
+   * @param findings - every drift or schema problem found in one pass, so the user can repair them together
+   */
   constructor(
     message: string,
     public readonly findings: string[],

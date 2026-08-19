@@ -38,6 +38,19 @@ function writeSkill(projectRoot: string, name: string, content: string): void {
 }
 
 describe("loadQualityConfig", () => {
+  it("keeps the default composition window large enough for current full skill context", () => {
+    const expectedCompleteCompositionBytes = 128 * 1024;
+    assert.equal(
+      DEFAULT_QUALITY_CONFIG.composition.maxComposedBytes,
+      expectedCompleteCompositionBytes,
+    );
+    assert.ok(
+      DEFAULT_QUALITY_CONFIG.composition.maxComposedBytes <
+        DEFAULT_QUALITY_CONFIG.maxArtifactBytes,
+      "composition must remain bounded below the per-artifact safety ceiling",
+    );
+  });
+
   it("returns goat-flow defaults when no config file exists", () => {
     const projectRoot = makeTempProject();
     const config = loadQualityConfig(projectRoot);
@@ -249,7 +262,7 @@ describe("mergeQualityConfig", () => {
     const config = cloneQualityConfig(DEFAULT_QUALITY_CONFIG);
     assert.equal(profileMaxForSubtype(config, "workflow"), 100);
     assert.equal(profileMaxForSubtype(config, "dispatcher"), 70);
-    assert.equal(profileMaxForSubtype(config, "report"), 85);
+    assert.equal(profileMaxForSubtype(config, "report"), 95);
     assert.equal(profileMaxForSubtype(config, "playbook"), 80);
     assert.equal(profileMaxForSubtype(config, "meta"), 50);
     assert.equal(profileMaxForSubtype(config, "index"), 60);

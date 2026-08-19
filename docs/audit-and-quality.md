@@ -73,8 +73,8 @@ Sample harness output:
 
 ```
 GOAT Flow Setup:          PASS
-  Skills:                 7/7 installed
-  Config:                 valid, version 1.15.1
+  Skills:                 8/8 installed
+  Config:                 valid, version 1.16.0
   InstructionFile:        118 lines
 
 Agent Setup:              PASS
@@ -91,9 +91,9 @@ AI Harness Completeness:  PASS
 Result: FAIL (Constraints)
 ```
 
-### Skill-template drift (`--check-drift` and multi-agent auto-run)
+### Managed-artifact and instruction drift (`--check-drift` and multi-agent auto-run)
 
-The `--check-drift` flag compares workflow skill templates against their installed copies and reports `content | missing | orphan | deprecated` findings. Any finding makes the drift scope fail, which fails the overall audit.
+The `--check-drift` flag compares workflow-managed artifacts against their installed copies and reports `content | missing | orphan | deprecated` findings. It also compares manifest-declared shared phrases across every distinct sibling instruction file present in the target. A peer mismatch reports the affected file, section, and phrase without choosing a canonical winner or proposing a rewrite. The sibling comparison still runs with `--agent <id>` because parity requires evidence from the other present instruction files. Any finding makes the drift scope fail, which fails the overall audit.
 
 For single-agent projects the check is opt-in via the flag. For multi-agent projects (more than one agent instruction file - CLAUDE.md, AGENTS.md, or `.github/copilot-instructions.md` - present on disk) it runs automatically without the flag. Rationale: when a single-agent migration completes, the satellite agents' skill dirs (`.agents/skills/`, `.github/skills/`, etc.) are left with pre-v1.2 skill names flagged as `deprecated`. The auto-run surfaces this so `audit` doesn't exit "pass" while the satellite agents are stale. When deprecated findings are present the renderer also emits a one-line hint to run `goat-flow install . --agent <agent>` for each stale agent.
 
@@ -109,13 +109,13 @@ npx @blundergoat/goat-flow@latest quality . --agent antigravity
 
 The generated prompt asks the agent to:
 
-1. **Assess each of the 7 skills** - `/goat` (dispatcher), `/goat-debug`, `/goat-plan`, `/goat-review`, `/goat-critique`, `/goat-security`, `/goat-qa`. Preferred method is file analysis (read each SKILL.md and evaluate structure, constraints, and coherence against the codebase); live invocation on real code when context budget allows.
+1. **Assess each of the 8 skills** - `/goat` (dispatcher), `/goat-debug`, `/goat-plan`, `/goat-review`, `/goat-critique`, `/goat-security`, `/goat-qa`, `/goat-clarity`. Preferred method is file analysis (read each SKILL.md and evaluate structure, constraints, and coherence against the codebase); live invocation on real code when context budget allows. Run mutation-capable probes only against a disposable copy with a frozen write boundary.
 2. **Evaluate setup quality** - was the instruction file adapted or generic?
 3. **Find contradictions** across instruction file, skill files, and `.goat-flow/` docs
 4. **Identify false paths** - references to files that don't exist, stale concepts, dead modes
 5. **Rate the system** - setup accuracy/relevance/completeness/friction + system usefulness/signal-to-noise/adaptability/learnability
 
-**Time and cost expectation:** A full assessment evaluates all 7 skills (file analysis by default; live invocation when context allows - `goat-critique` alone spawns 3 sub-agents if invoked). Expect 15-60 minutes depending on depth, with moderate token usage. If context is limited, the generated prompt requires at minimum testing `/goat` (routing), `/goat-review` (most common use), and `/goat-critique` (highest-cost skill).
+**Time and cost expectation:** A full assessment evaluates all 8 skills (file analysis by default; live invocation when context allows - `goat-critique` alone spawns 3 sub-agents if invoked). Expect 15-60 minutes depending on depth, with moderate token usage. If context is limited, the generated prompt requires at minimum testing `/goat` (routing), `/goat-review` (most common use), and `/goat-critique` (highest-cost skill).
 
 The prompt includes the current `audit` summary so the agent knows what's
 already passing or failing. If audit is failing, the prompt explicitly asks the
@@ -136,7 +136,7 @@ npx @blundergoat/goat-flow@latest quality . --agent claude --mode harness   # Ha
 npx @blundergoat/goat-flow@latest quality . --agent claude --mode skills    # Skills mode
 npx @blundergoat/goat-flow@latest quality history --agent antigravity            # List saved reports + same-agent score deltas
 npx @blundergoat/goat-flow@latest quality history --mode process            # Filter history to one quality mode
-npx @blundergoat/goat-flow@latest quality diff --agent antigravity               # Derive resolved / new / persisted / stuck vs prior run
+npx @blundergoat/goat-flow@latest quality diff --agent antigravity               # Derive absent / new / persisted / stuck vs prior run
 npx @blundergoat/goat-flow@latest quality diff --mode skills                # Compare within one mode only
 ```
 
@@ -154,8 +154,8 @@ The `--mode` flag selects a focused quality assessment. Each mode generates a di
 `history` and `diff` compare within the same mode by default. Cross-mode comparison is not supported since the scoring rubrics differ.
 
 - `quality` composes a structured prompt with a bounded persistence contract. Positional finding IDs are computed at load time by `history` / `diff`.
-- `quality history` lists saved reports and same-agent setup/system score deltas.
-- `quality diff` derives `resolved`, `new`, `persisted`, and `stuck` from saved same-agent report ids.
+- `quality history` lists saved reports and same-agent setup/system score deltas. New reports also retain revision, worktree, grounding, unverified-probe, and score-confidence context so readers can identify non-comparable runs without changing the scores.
+- `quality diff` derives `absent`, `new`, `persisted`, and `stuck` from saved same-agent report ids.
 
 The two commands stay separated in storage as well as terminology: audit output goes to stdout or `--output`, while quality reports land in a gitignored log directory for local trend analysis.
 

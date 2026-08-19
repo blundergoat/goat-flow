@@ -158,7 +158,7 @@ function installPackedCliExecutable(): PackedCliInstallation {
 }
 
 /**
- * Run the disposable npm-style command exactly where a package user would run it.
+ * Spawns the disposable npm-style command exactly where a package user would run it.
  * Use for version, fresh-install, and hook-sync checks against archived CLI bytes.
  *
  * @param packedCliExecutablePath - non-empty `.bin/goat-flow` path; empty cannot start the package
@@ -275,7 +275,7 @@ function assertInstalledCodexPolicy(targetProjectPath: string): void {
 }
 
 /**
- * Install only packed hook bytes and one stalling analyzer into a disposable consumer.
+ * Writes only packed hook bytes and one stalling analyzer into a disposable consumer.
  * Use to prove the canary cannot fall back to source-checkout launcher modules.
  *
  * @param packedPackageRoot - non-empty extracted package root; empty has no archived hooks
@@ -319,7 +319,7 @@ function installPackedCanaryBytes(
 }
 
 /**
- * Run packed launcher bytes with a short test-only deadline and capture Codex output.
+ * Spawns packed launcher bytes with a short test-only deadline and captures Codex output.
  * Use to compare archived behavior with the source consumer's user-visible result.
  *
  * @param disposableConsumerPath - non-empty installed consumer root; empty cannot resolve hooks
@@ -457,7 +457,7 @@ describe("packaged hook installation canary", () => {
         0,
         packedVersionResult.stderr || packedVersionResult.stdout,
       );
-      assert.equal(packedVersionResult.stdout.trim(), "goat-flow v1.15.1");
+      assert.equal(packedVersionResult.stdout.trim(), "goat-flow v1.16.0");
 
       const freshProjectPath = makeDisposablePackageWorkspace("fresh-non-git");
       const freshInstallResult = runPackedCli(

@@ -10,6 +10,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import {
   chmodSync,
+  copyFileSync,
   existsSync,
   mkdirSync,
   readFileSync,
@@ -43,6 +44,20 @@ const HOOK_RUNNER = join(
 after(cleanupHookTestDirs);
 
 describe("gruff-code-quality hook (gruff.hook.v1 contract)", () => {
+  it("routes naming guidance to the naming and placement owner", () => {
+    const hookSource = readFileSync(
+      join(PROJECT_ROOT, "workflow", "hooks", "gruff-code-quality.sh"),
+      "utf8",
+    );
+    const namingGuidance = hookSource.match(
+      /printf 'gruff-code-quality: naming findings[^']+'/u,
+    );
+
+    assert.ok(namingGuidance?.[0], "hook must retain focused naming guidance");
+    assert.match(namingGuidance[0], /naming-and-placement\.md/u);
+    assert.doesNotMatch(namingGuidance[0], /code-comments\.md/u);
+  });
+
   // Fixture purpose: writes a hook-envelope mock to cover finding and suppression rendering.
   it("renders gruff.hook.v1 output when the analyzer advertises the contract", () => {
     const root = makeRoot();
@@ -89,6 +104,34 @@ describe("gruff-code-quality hook (gruff.hook.v1 contract)", () => {
     const hookArgs = readFileSync(join(root, "gruff-hook-args.log"), "utf-8");
     assert.match(hookArgs, /hook --format json src\/sample\.ts/);
     assert.doesNotMatch(hookArgs, /--changed-ranges/);
+  });
+
+  // Fixture purpose: emits a symbol span whose declaration starts above the edited line so the
+  // consumer must test interval overlap instead of only the finding's anchor line.
+  it("surfaces a symbol finding when its span overlaps the changed range", () => {
+    const root = makeRoot();
+    writeContractGruffBinary(
+      root,
+      '{"contractVersion":"gruff.hook.v1","findings":[{"ruleId":"complexity.cyclomatic","pillar":"complexity","severity":"warning","scope":"symbol","file":"src/sample.ts","line":1,"endLine":5,"symbol":"sample","message":"symbol is complex","remediation":"split it"}],"suppressed":{"count":0},"ignored":{"paths":[]},"config":{"schemaOk":true,"error":null}}',
+    );
+    writeFileSync(join(root, ".gruff-ts.yaml"), "rules: {}\n");
+    mkdirSync(join(root, "src"), { recursive: true });
+    writeFileSync(join(root, "src", "sample.ts"), "a\nb\nc\nd\ne\n");
+
+    const result = runHook(
+      root,
+      {
+        tool_name: "Edit",
+        tool_input: {
+          file_path: "src/sample.ts",
+          changed_ranges: [{ startLine: 3, endLine: 3 }],
+        },
+      },
+      "/usr/bin:/bin",
+    );
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /complexity\.cyclomatic - symbol is complex/u);
   });
 
   // Fixture purpose: mutates a committed file to cover the regression where --diff hid edited lines.
@@ -195,7 +238,7 @@ describe("gruff-code-quality hook (gruff.hook.v1 contract)", () => {
 
   // Cross-analyzer hardening: the five gruff ports (Go/Rust/TS/PHP/Py) may emit
   // subtly different gruff.hook.v1 envelopes. The hook's contract reader matches
-  // the legacy reader's tolerance so any conforming port renders identically.
+  // the legacy reader's tolerance so any conforming port renders identically. The fixture writes that mock binary into a temporary project.
   it("renders a gruff.hook.v1 finding that reports its location under `path` instead of `file`", () => {
     const root = makeRoot();
     writeContractGruffBinary(
@@ -423,6 +466,44 @@ describe("gruff-code-quality hook (gruff.hook.v1 contract)", () => {
     assert.equal(
       readFileSync(join(packageRoot, "gruff-hook-args.log"), "utf8"),
       "hook --format json src/sample.ts\n",
+    );
+  });
+
+  // Fixture purpose: writes two untracked files and runs one analyzer process so the capability
+  // handshake count distinguishes a caller-shell cache from a command-substitution subshell.
+  it("probes one analyzer once while analysing every file in a multi-file payload", () => {
+    const projectRoot = makeRoot();
+    initGit(projectRoot);
+    writeContractGruffBinary(projectRoot, CLEAN_GRUFF_CONTRACT_ENVELOPE);
+    writeFileSync(join(projectRoot, ".gruff-ts.yaml"), "rules: {}\n");
+    mkdirSync(join(projectRoot, "src"), { recursive: true });
+    writeFileSync(join(projectRoot, "src", "one.ts"), "one\n");
+    writeFileSync(join(projectRoot, "src", "two.ts"), "two\n");
+
+    const result = readMigratedGruffResult(
+      runMigratedHook(
+        projectRoot,
+        {
+          tool_name: "multi_replace_file_content",
+          tool_input: {
+            edits: [{ file_path: "src/one.ts" }, { file_path: "src/two.ts" }],
+          },
+        },
+        "/usr/bin:/bin",
+      ),
+    );
+
+    assert.equal(
+      (result.coverage as Record<string, unknown>).status,
+      "complete",
+    );
+    assert.equal(
+      readFileSync(join(projectRoot, "gruff-capabilities.log"), "utf8"),
+      "capabilities\n",
+    );
+    assert.equal(
+      readFileSync(join(projectRoot, "gruff-hook-args.log"), "utf8"),
+      "hook --format json src/one.ts\nhook --format json src/two.ts\n",
     );
   });
 
@@ -684,5 +765,69 @@ describe("gruff-code-quality hook (gruff.hook.v1 contract)", () => {
     );
     readMigratedGruffResult(reusedSessionResult);
     assert.match(reusedSessionResult.stderr, /verified analyzer exchange/u);
+  });
+
+  // Fixture purpose: writes two analyzer fixtures and runs TypeScript, Python, then TypeScript
+  // again so health markers retain one stable record per analyzer instead of overwriting one.
+  it("announces health once per analyzer across an A to B to A sequence", () => {
+    const projectRoot = makeRoot();
+    const binDirectory = writeContractGruffBinary(
+      projectRoot,
+      CLEAN_GRUFF_CONTRACT_ENVELOPE,
+    );
+    copyFileSync(
+      join(binDirectory, "gruff-ts"),
+      join(binDirectory, "gruff-py"),
+    );
+    chmodSync(join(binDirectory, "gruff-py"), 0o755);
+    writeFileSync(join(projectRoot, ".gruff-ts.yaml"), "rules: {}\n");
+    writeFileSync(join(projectRoot, ".gruff-py.yaml"), "rules: {}\n");
+    mkdirSync(join(projectRoot, "src"), { recursive: true });
+    writeFileSync(join(projectRoot, "src", "sample.ts"), "a\nb\nc\n");
+    writeFileSync(join(projectRoot, "src", "sample.py"), "a\nb\nc\n");
+    const healthEnvironment = {
+      GRUFF_CODE_QUALITY_HEALTH_DAY: "2026-08-11",
+    };
+    /** Build one same-session edit payload for the analyzer selected by its file extension. */
+    const payloadFor = (path: string) => ({
+      session_id: "alternating-analyzers",
+      tool_name: "Edit",
+      tool_input: {
+        file_path: path,
+        changed_ranges: [{ startLine: 3, endLine: 3 }],
+      },
+    });
+
+    const firstA = runMigratedHook(
+      projectRoot,
+      payloadFor("src/sample.ts"),
+      "/usr/bin:/bin",
+      healthEnvironment,
+    );
+    const firstB = runMigratedHook(
+      projectRoot,
+      payloadFor("src/sample.py"),
+      "/usr/bin:/bin",
+      healthEnvironment,
+    );
+    const repeatedA = runMigratedHook(
+      projectRoot,
+      payloadFor("src/sample.ts"),
+      "/usr/bin:/bin",
+      healthEnvironment,
+    );
+    readMigratedGruffResult(firstA);
+    readMigratedGruffResult(firstB);
+    readMigratedGruffResult(repeatedA);
+
+    assert.match(firstA.stderr, /verified analyzer exchange \(gruff-ts\)/u);
+    assert.match(firstB.stderr, /verified analyzer exchange \(gruff-py\)/u);
+    assert.doesNotMatch(repeatedA.stderr, /verified analyzer exchange/u);
+    assert.equal(
+      readdirSync(join(projectRoot, ".goat-flow", "logs", "events")).filter(
+        (entryName) => entryName.startsWith(".gruff-hook-health."),
+      ).length,
+      2,
+    );
   });
 });

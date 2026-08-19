@@ -1,9 +1,9 @@
 /**
- * Context-free Markdown sections of the agent-setup quality prompt: the finding
- * rules, intentional-design notes, skill-testing protocol, template-integrity
- * checklist, rating rubrics/bands, and the closing reminder. Every helper here is
- * pure string assembly over a shared line buffer and needs no prompt context;
- * context-dependent sections stay in compose-quality-agent-setup.ts.
+ * Context-free Markdown sections of the agent-setup quality prompt: the finding rules, intentional-design notes, skill-testing protocol,
+ * template-integrity checklist, rating rubrics/bands, and the closing reminder.
+ *
+ * Every helper here is pure string assembly over a shared line buffer and needs no prompt context; context-dependent sections stay in
+ * compose-quality-agent-setup.ts.
  */
 
 /**
@@ -48,9 +48,8 @@ export function appendRules(lines: string[]): void {
 }
 
 /**
- * Append the intentional-design notes the reviewer must NOT flag - gitignored
- * local state, the advisory `.active` pointer, unchecked task boxes, and the
- * lean post-ADR-014 config - so known-good shapes are not reported as findings.
+ * Append the intentional-design notes the reviewer must NOT flag - gitignored local state, the advisory `.active` pointer, unchecked task boxes, and
+ * the lean post-ADR-014 config - so known-good shapes are not reported as findings.
  *
  * @param lines - prompt line buffer; appended to in place
  */
@@ -73,13 +72,15 @@ export function appendDesignNotes(lines: string[]): void {
   lines.push(
     "- Goat-flow coding agents are prohibited from running `git commit` or `git push`; shipped deny hooks enforce that workflow. A commit that breaks an instruction-file drafting convention is not, by itself, a `framework_flaw` or self-violation. Establish agent authorship or an agent-facing mechanism that caused the violation before reporting it.",
   );
+  lines.push(
+    '- The deterministic audit checks hook installation, registration, and (only with `--trusted-target`) launcher execution; it cannot observe provider-side hook delivery during live agent tool use, and its `limits` say so. That boundary is a documented, accepted design limit. Do NOT report "audit cannot prove end-to-end runtime enforcement" as a `framework_flaw` or MAJOR finding; report only a concrete case where the audit claims more than it verified.',
+  );
   lines.push("");
 }
 
 /**
- * Append Part 3 skill-testing instructions: the file-analysis vs live-invocation
- * options and the per-skill reporting-only probes, including the stop-and-report
- * rule when a probe attempts a tracked-file write or implementation.
+ * Append Part 3 skill-testing instructions: the file-analysis vs live-invocation options and the per-skill reporting-only probes, including the
+ * stop-and-report rule when a probe attempts a tracked-file write or implementation.
  *
  * @param lines - prompt line buffer; appended to in place
  */
@@ -96,7 +97,7 @@ export function appendSkillTesting(lines: string[]): void {
     "**Option A (preferred): File analysis.** Read each SKILL.md and evaluate its structure, constraints, routing logic, cross-references, and coherence against the codebase. This is safe for reporting-only assessment and covers most quality signals.",
   );
   lines.push(
-    "**Option B (if context allows): Live invocation.** Invoke the skill through the agent's normal slash-command/runtime path on a real target. Monitor for committed-file changes or implementation attempts - stop immediately if the skill tries to modify tracked files or code. Gitignored reporting/local-state writes are allowed under reporting-only probes. This tests runtime behavior but costs significant context.",
+    "**Option B (if context allows): Live invocation.** Invoke reporting-only skills through the agent's normal slash-command/runtime path on a real target. Run mutation-capable skills only against a disposable copy of current project evidence with a frozen write boundary. Stop immediately on writes outside that boundary or on any attempt to modify the assessed checkout. Gitignored reporting/local-state writes are allowed under reporting-only probes. This tests runtime behavior but costs significant context.",
   );
   lines.push("");
   lines.push("Either approach is acceptable. State which you used.");
@@ -122,12 +123,15 @@ export function appendSkillTesting(lines: string[]): void {
   lines.push(
     "7. **`/goat-qa`** - find testing gaps in recent changes or audit coverage for a module without creating new tests",
   );
+  lines.push(
+    "8. **`/goat-clarity`** - inspect the four selector contracts, frozen write-set rules, naming-before-comments order, and receipt completeness. Prefer file analysis; if live invocation is available, use only a disposable copy of current project source and verify that compliant bytes and out-of-scope paths stay unchanged.",
+  );
   lines.push("");
   lines.push(
     "For each skill report: (a) what worked, (b) what was confusing or failed, (c) what was useless ceremony. Cite file + semantic anchor where possible.",
   );
   lines.push(
-    "If any skill attempts to edit tracked files, implement code, or write outside the allowed gitignored local-state/reporting paths, stop that probe immediately and report it as a finding.",
+    "If any reporting-only skill attempts to edit tracked files or implement code, stop that probe immediately and report it as a finding. For `/goat-clarity`, stop on any write outside its disposable frozen target or any mutation of the assessed checkout.",
   );
   lines.push("");
   lines.push(
@@ -243,7 +247,7 @@ function appendRatingBands(lines: string[]): void {
   lines.push("");
   lines.push("### Top 5 Improvements");
   lines.push(
-    "Do NOT recommend adding quick/lite/reduced modes to any skill. Skill mode decisions (e.g. goat-critique being full-delegated-only) are ADR-decided architectural choices, not gaps to fill. See `.goat-flow/learning-loop/decisions/ADR-021-goat-critique-full-mode-only.md`.",
+    'Do NOT recommend adding quick/lite/reduced modes to any skill. Skill mode decisions (e.g. goat-critique being full-delegated-only) are ADR-decided architectural choices, not gaps to fill. See ADR-021, "goat-critique is a core feature, full delegated mode only".',
   );
   lines.push("For each:");
   lines.push("1. What to change");

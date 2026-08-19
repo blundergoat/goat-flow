@@ -38,7 +38,7 @@ If a destination has no ownership record, stop instead of guessing. Never treat 
 A framework that gives AI coding agents structured planning (with multi-perspective critique via `/goat-critique`), durable project knowledge, local continuity notes, and mechanical safety guardrails. Three layers:
 
 1. **Instruction file** (CLAUDE.md / AGENTS.md / `.github/copilot-instructions.md`) - The execution loop, autonomy tiers, definition of done, and router table. Loaded every turn.
-2. **Skills** (6 functional + 1 dispatcher) - Plan (milestone task files), critique (`/goat-critique` multi-perspective analysis), QA, review, secure, debug. Feature briefs are handled by the dispatcher's Planning Route. Loaded on demand via slash commands. Install verbatim from templates - do NOT adapt, compress, or rewrite skill content.
+2. **Skills** (7 functional + 1 dispatcher) - Plan (milestone task files), critique (`/goat-critique` multi-perspective analysis), QA, review, secure, debug, and bounded clarity remediation through `/goat-clarity`. Feature briefs are handled by the dispatcher's Planning Route. Loaded on demand via slash commands. Install verbatim from templates - do NOT adapt, compress, or rewrite skill content.
 3. **.goat-flow/ learning loop** - Footguns (architectural traps with file evidence), lessons (behavioural mistakes), decisions (ADRs), patterns (successful approaches), generated per-bucket `INDEX.md` files for fast retrieval, and optional local instruction files. Durable project knowledge lives in committed files; session logs and task files stay local to the checkout. Re-run `goat-flow index` after adding, editing, renaming, or resolving entries; `goat-flow stats --check` fails while the index is stale. See `docs/cli.md` for the lifecycle reference.
 
 Every project gets the full system. The components are lightweight infrastructure, not ceremony proportional to codebase size.
@@ -48,7 +48,7 @@ Every project gets the full system. The components are lightweight infrastructur
 Create `.goat-flow/logs/sessions/` if it doesn't exist, then use one shared local file for the whole setup: `.goat-flow/logs/sessions/YYYY-MM-DD-setup.md`
 
 - If resuming after compaction, read the latest setup session log first and continue from the next incomplete step.
-- After each numbered step, append one progress marker line (for example: `Step 03 complete: 7 skills installed`).
+- After each numbered step, append one progress marker line (for example: `Step 03 complete: 8 skills installed`).
 - Step 06 finalises the same local continuity file with the audit result, file manifest, time spent, and tokens if available.
 
 ## File ownership

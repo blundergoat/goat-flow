@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.15.1"
+goat-flow-reference-version: "1.16.0"
 ---
 # Skill Docs
 
@@ -18,7 +18,7 @@ These are meta because they describe the *shape* of skills, not how to use a spe
 
 ## Why a separate directory (and not duplicated into each skill)
 
-Putting these inside every `.claude/skills/<name>/references/` would mean 7-fold duplication and 7-fold drift risk on every preamble change. The shared dir says "every skill inherits this" by construction. Skill-specific references still live in each skill's own `references/` subdir.
+Putting these inside every `.claude/skills/<name>/references/` would mean 8-fold duplication and 8-fold drift risk on every preamble change. The shared dir says "every skill inherits this" by construction. Skill-specific references still live in each skill's own `references/` subdir.
 
 ## How goat-flow uses these files
 

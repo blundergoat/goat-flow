@@ -40,7 +40,7 @@ The embedded terminal needs the optional `node-pty` package to compile. See [Tro
 | Component | What it prevents |
 |---|---|
 | **Execution loop** (READ → SCOPE → ACT → VERIFY) | Guessing at unread code or shipping without checks |
-| **Seven skills** (six `/goat-*` workflows plus dispatcher) | Free-form prompting that drifts mid-task |
+| **Eight skills** (seven `/goat-*` workflows, including direct `/goat-clarity`, plus dispatcher) | Free-form prompting that drifts mid-task |
 | **Enforcement hooks** | Destructive commands, repository publication, and direct secret-path access |
 | **Learning loop** | The same mistake recurring in later sessions |
 | **Autonomy tiers** | Agent overreach and missed approval boundaries |
@@ -83,7 +83,7 @@ Use an instruction file for rules the agent should remember. Use GOAT Flow when 
 
 ## Getting started
 
-Requires Node.js 20+.
+Requires Node.js 20.11+.
 
 ### 1. Start with the menu
 
@@ -148,10 +148,12 @@ npx @blundergoat/goat-flow@latest install . --agent claude     # Copy/update sys
 npx @blundergoat/goat-flow@latest setup . --agent claude       # Generate setup prompt
 npx @blundergoat/goat-flow@latest quality . --agent claude     # Generate quality-assessment prompt
 npx @blundergoat/goat-flow@latest redact --output .goat-flow/logs/sessions/handoff.md
-npx @blundergoat/goat-flow@latest plans export .goat-flow/plans/1.15.0 --format markdown
+npx @blundergoat/goat-flow@latest plans export .goat-flow/plans/<version> --format markdown
 npx @blundergoat/goat-flow@latest status .                     # Project state (bare/partial/v0.9/outdated/current/error)
 npx @blundergoat/goat-flow@latest manifest                     # Agent support matrix
 ```
+
+Audit-backed CLI commands inspect checkout hook configuration statically by default. Add `--trusted-target` to a selected-agent audit, setup prompt, quality prompt, or `hooks verify` only after confirming that the checkout's configured hook launcher and managed scripts are safe to execute. The dashboard never runs target hook code.
 
 Use `redact` before saving a session, handoff, review, quality, security, or export draft. It replaces common credential shapes while preserving useful continuation context; it is not perfect DLP or a substitute for reviewing the output.
 
@@ -202,7 +204,7 @@ Regenerate from the dashboard Setup page, which shows detected stack info alongs
 | [Deterministic Audit Checks](docs/audit-checks.md) | Stable check IDs, scopes, and command matrix |
 | [Harness Engineering](docs/harness-engineering.md) | The five-concern model and its sources |
 | [Harness Audit](docs/harness-audit.md) | Harness scoring, evidence limits, and check semantics |
-| [Skills](docs/skills.md) | All seven skills, their modes, gates, and outputs |
+| [Skills](docs/skills.md) | All eight skills, their modes, gates, and outputs |
 | [Skill Authoring](docs/skill-authoring.md) | Candidacy, RED evidence, scaffolding, and draft validation |
 | [Guardrails](docs/guardrails.md) | Runtime command-safety surfaces and limitations |
 | [Coding Standards](docs/coding-standards/conventions.md) | Repository architecture, commands, and implementation conventions |

@@ -63,14 +63,17 @@ describe("dashboard /api/agents/installed", () => {
     const { res, body } = await fetchJson("/api/agents/installed");
     assert.equal(res.status, 200);
 
-    const data = expectRecord(body, "Agent detection response");
-    assert.ok(Array.isArray(data.agents));
-    assert.equal((data.agents as unknown[]).length, getKnownAgentIds().length);
-    const ids = (data.agents as Array<Record<string, unknown>>).map((agent) =>
-      String(agent.id),
+    const payload = expectRecord(body, "Agent detection response");
+    assert.ok(Array.isArray(payload.agents));
+    assert.equal(
+      (payload.agents as unknown[]).length,
+      getKnownAgentIds().length,
     );
-    const names = (data.agents as Array<Record<string, unknown>>).map((agent) =>
-      String(agent.name),
+    const ids = (payload.agents as Array<Record<string, unknown>>).map(
+      (agent) => String(agent.id),
+    );
+    const names = (payload.agents as Array<Record<string, unknown>>).map(
+      (agent) => String(agent.name),
     );
     assert.deepEqual(ids.sort(), [...getKnownAgentIds()].sort());
     assert.deepEqual(

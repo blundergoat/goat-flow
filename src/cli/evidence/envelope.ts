@@ -1,10 +1,9 @@
 /**
  * Shared evidence envelope for local runtime producers.
  *
- * The envelope adapts the existing CheckEvidence provenance contract instead
- * of inventing a parallel event schema. Producers add the small runtime field
- * set needed to answer "what happened locally?" while payloads stay redacted by
- * default and writes remain non-fatal.
+ * The envelope adapts the existing CheckEvidence provenance contract instead of inventing a parallel event schema.
+ * Producers add the small runtime field set needed to answer "what happened locally?" while payloads stay redacted by default and writes remain
+ * non-fatal.
  */
 import {
   appendFileSync,
@@ -212,27 +211,27 @@ function isRecord(candidate: unknown): candidate is Record<string, unknown> {
 /** Recursively require redaction markers for sensitive payload keys. */
 function validatePayloadValue(
   key: string,
-  value: EvidencePayloadValue,
+  payloadValue: EvidencePayloadValue,
   path: string,
 ): string[] {
-  if (isRedactedEvidenceValue(value)) return [];
+  if (isRedactedEvidenceValue(payloadValue)) return [];
   if (SENSITIVE_PAYLOAD_KEY.test(key)) {
     return [`${path} must be a redacted evidence value`];
   }
   if (
-    value === null ||
-    typeof value === "string" ||
-    typeof value === "number" ||
-    typeof value === "boolean"
+    payloadValue === null ||
+    typeof payloadValue === "string" ||
+    typeof payloadValue === "number" ||
+    typeof payloadValue === "boolean"
   ) {
     return [];
   }
-  if (Array.isArray(value)) {
-    return value.flatMap((item, index) =>
+  if (Array.isArray(payloadValue)) {
+    return payloadValue.flatMap((item, index) =>
       validatePayloadValue(key, item, `${path}[${index}]`),
     );
   }
-  return Object.entries(value).flatMap(([childKey, childValue]) =>
+  return Object.entries(payloadValue).flatMap(([childKey, childValue]) =>
     validatePayloadValue(childKey, childValue, `${path}.${childKey}`),
   );
 }
@@ -246,6 +245,12 @@ function validatePayload(payload: EvidencePayload | undefined): string[] {
   );
 }
 
+/**
+ * Copy across only the optional fields a producer actually supplied, so an absent field stays absent instead of becoming a null in the record.
+ *
+ * @param envelope - envelope under construction, extended in place
+ * @param input - producer-supplied values; every field here is optional
+ */
 function applyEnvelopeOptionalFields(
   envelope: EvidenceEnvelope,
   input: CreateEvidenceEnvelopeInput,
@@ -324,6 +329,12 @@ export function validateEvidenceEnvelope(
   return errors;
 }
 
+/**
+ * Surface a non-fatal evidence-writing problem through the caller's own reporter, since evidence must never take down the work it describes.
+ *
+ * @param options - write options carrying the reporter; `undefined` means the caller wanted no warnings at all
+ * @param message - what could not be recorded
+ */
 function warn(
   options: EvidenceEnvelopeWriteOptions | undefined,
   message: string,
@@ -419,8 +430,8 @@ function parseEnvelopeLine(line: string): EvidenceEnvelope | null {
 /**
  * Read the newest local event envelopes, preserving chronological order.
  *
- * Pass `eventKind` whenever a caller needs the newest events *of one kind*: the window is applied
- * after the filter, so unrelated activity can never push the caller's own events out of the tail.
+ * Pass `eventKind` whenever a caller needs the newest events *of one kind*: the window is applied after the filter, so unrelated activity can never
+ * push the caller's own events out of the tail.
  * Reading a global window and filtering afterwards silently discards still-valid records.
  *
  * @param projectRoot - Project root whose gitignored event logs should be tailed.

@@ -16,13 +16,13 @@ The Agent Enforcement Matrix is an advisory comparison of evidence observed by t
 
 | Assurance | What it proves | What it does not prove |
 |-----------|----------------|------------------------|
-| `runtime-local` | This audit executed the managed local self-test surface. | The external coding agent delivered or obeyed the hook end to end. |
+| `runtime-local` | An explicit `--trusted-target` audit executed the managed local self-test surface. | The external coding agent delivered or obeyed the hook end to end. |
 | `static-local` | Local settings, hook registration, or extracted facts match the capability contract. | The configured path executed during a real agent action. |
 | `manifest-declared` | goat-flow declares the integration shape for that runner. | Provider-native behavior or current runtime enforcement. |
 | `provider-documented` | Cited provider documentation supports the named capability. | This checkout configured or exercised that capability. |
 | `not-observed` | The audit has no stronger evidence source for the row. | Absence or presence beyond what the audit inspected. |
 
-`hard`, `limited`, and `soft` are positive local strength labels; `missing` means the inspected local surface is absent or failed; `unknown` means the audit cannot infer the broader capability. A `hard` row is rejected unless local static or runtime evidence exists. Static test fixtures prove this contract shape only, never runtime agent behavior. For deeper configured-command proof, use `goat-flow hooks verify . --agent <id> --scenario <deny-hook|post-turn-hook|gruff-hook>`. It runs fixed offline inputs through that agent's exact registered command, but does not exercise external-agent hook delivery or model visibility.
+`hard`, `limited`, and `soft` are positive local strength labels; `missing` means the inspected local surface is absent or failed; `unknown` means the audit cannot infer the broader capability. A `hard` row is rejected unless local static or runtime evidence exists. Static test fixtures prove this contract shape only, never runtime agent behavior. Audit is static by default. For deeper configured-command proof after inspecting and trusting the checkout, use `goat-flow hooks verify . --agent <id> --scenario <deny-hook|post-turn-hook|gruff-hook> --trusted-target`. It runs fixed offline inputs through that agent's exact registered command, but does not exercise external-agent hook delivery or model visibility.
 
 Every audit also returns a `hookCoverage` section and renders Effective Hook Coverage in terminal and Markdown output. It reports the first unmet link for each selected agent: provider evidence, exact registration, current installed bytes, trusted paths, observed execution, delivered result, or configured scenario. The section has its own `pass` or `fail` status; consumers must not use the top-level audit status alone to claim effective hooks. Repair commands are read-only guidance until the user runs them.
 
@@ -72,8 +72,8 @@ Provenance remains JSON-only. Terminal and Markdown output stays focused on stat
 
 ### The 18 checks by type
 
-- **integrity (10):** `doc-paths-resolve`, `deny-covers-secrets`, `deny-blocks-dangerous`, `deny-hook-registered`, `settings-rules-matched`, `hooks-registered`, `milestone-tracking`, `session-logs`, `feedback-loop-active`, `decisions-tracked`
-- **advisory (6):** `instruction-line-count`, `execution-loop-present`, `instruction-sections-present`, `boundary-guidance-present`, `deny-blocks-pipe-to-shell`, `commit-guidance`
+- **integrity (9):** `doc-paths-resolve`, `deny-covers-secrets`, `deny-blocks-dangerous`, `deny-hook-registered`, `hooks-registered`, `milestone-tracking`, `session-logs`, `feedback-loop-active`, `decisions-tracked`
+- **advisory (7):** `instruction-line-count`, `execution-loop-present`, `instruction-sections-present`, `boundary-guidance-present`, `deny-blocks-pipe-to-shell`, `settings-rules-matched`, `commit-guidance`
 - **metric (2):** `evidence-before-claims`, `post-turn-hook-integrity`
 
 ---
@@ -108,7 +108,7 @@ Constraints run before model judgment and can prevent covered failure classes wi
 - `deny-blocks-dangerous` - each agent's deny configuration blocks broad recursive deletion, all git push (ADR-025), and `chmod`
 - `deny-blocks-pipe-to-shell` - each agent's deny configuration blocks `curl | bash` / `wget | sh` pipe-to-shell patterns
 - `deny-hook-registered` - hook registrations and hook files are in sync (registered hooks exist on disk, existing hooks are registered)
-- `settings-rules-matched` - JSON permission-rule settings (`.claude/settings.json`) carry only rule forms the agent actually matches, across `deny`, `allow`, and `ask`. `MultiEdit(...)` rules (removed tool) and `Write`/`NotebookEdit`/`Glob` path rules (never matched - `Edit`/`Read` cover file access) warn at launch and enforce nothing, so they read as protection that does not exist. Re-running goat-flow setup/install for the agent repairs them: removed-tool rules are dropped and unmatched forms are rewritten to their matched `Edit`/`Read` equivalents.
+- `settings-rules-matched` - JSON permission-rule settings (`.claude/settings.json`) are checked across `deny`, `allow`, and `ask`. The [Claude Code permissions documentation](https://code.claude.com/docs/en/permissions) says file permissions consult `Edit(path)` and `Read(path)`, while path rules for `Write`, `NotebookEdit`, `Glob`, and legacy `MultiEdit` are accepted but not consulted and warn at startup. The audit reports these inert forms as a score-only advisory rather than a scope failure. They MAY remain as defense-in-depth markers or be removed deliberately after project-owner review; goat-flow does not rewrite them automatically.
 
 **Not checked here:** Ask First boundary counts, linter registration cross-reference, static-analysis tool detection. Those were earlier designs that were dropped as either low signal or out-of-scope for a structural audit.
 

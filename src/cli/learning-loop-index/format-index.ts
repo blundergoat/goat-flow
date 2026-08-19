@@ -1,12 +1,12 @@
 /**
- * Renders parsed learning-loop entries into the generated INDEX.md content. The output is a pure
- * function of the entry list: fixed frontmatter (`generated: true`, no `last_reviewed`), a fixed
- * header that points maintainers at `goat-flow index` and `goat-flow stats --check`, and one row
- * per entry in the shared `- [Title](file) (search: "...") - hook` schema (with
- * quote-aware wrapping - see {@link quoteAnchor}). No counts, dates, or other
- * clock-derived values may appear here - `index-fresh` string-compares a
- * regeneration against the on-disk file, so any nondeterminism reads as
- * permanent staleness.
+ * Renders parsed learning-loop entries into the generated INDEX.md content.
+ *
+ * The output is a pure function of the entry list: fixed frontmatter (`generated: true`, no `last_reviewed`), a fixed header that points maintainers
+ * at `goat-flow index` and `goat-flow stats --check`, and one row per entry in the shared `- [Title](file) (search: "...") - hook` schema (with
+ * quote-aware wrapping - see {@link quoteAnchor}).
+ *
+ * No counts, dates, or other clock-derived values may appear here - `index-fresh` string-compares a regeneration against the on-disk file, so any
+ * nondeterminism reads as permanent staleness.
  */
 import type { IndexBucket, IndexEntry } from "./parse-bucket.js";
 
@@ -60,11 +60,9 @@ export function formatIndex(
 }
 
 /**
- * Wrap one anchor for its `(search: ...)` slot: double quotes normally, single
- * quotes when the anchor itself contains only double quotes (quote-first titles
- * keep their full heading - M04, 1.13.0), and escaped double quotes when both
- * quote types appear. Without this, a title like `"Don't trust me"` would pick
- * a single-quote wrapper and the apostrophe would prematurely close the payload.
+ * Wrap one anchor for its `(search: ...)` slot: double quotes normally, single quotes when the anchor itself contains only double quotes (quote-first
+ * titles keep their full heading - M04, 1.13.0), and escaped double quotes when both quote types appear.
+ * Without this, a title like `"Don't trust me"` would pick a single-quote wrapper and the apostrophe would prematurely close the payload.
  *
  * @param anchor - grep needle from {@link IndexEntry.anchor}
  * @returns the quoted `(search: ...)` payload

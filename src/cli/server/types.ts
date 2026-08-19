@@ -1,6 +1,9 @@
 /**
- * Shared wire types for dashboard terminal sessions.
- * Both the HTTP/WebSocket server and the frontend rely on these discriminated unions staying in sync.
+ * The wire contract between the dashboard server and the browser: terminal session shapes plus the audit payloads the views render.
+ *
+ * Both sides compile against these types, so a change here that only lands on one side shows up as a blank panel rather than a type error.
+ *
+ * Invariant: the discriminated unions must stay exhaustive, because the frontend switches on them to decide what the user sees.
  */
 import type { CheckEvidence } from "../audit/provenance-types.js";
 import type {

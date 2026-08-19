@@ -11,6 +11,7 @@ import { parseCLIArgs } from "../../src/cli/cli-parser.js";
 import { maskNonRenderedMarkdown } from "../../src/cli/rendered-markdown.js";
 
 describe("plans export: source masking", () => {
+  // Fixture: a comment that opens a fence and a fence that opens a comment, so masking must resolve the overlap without shifting any offset.
   it("masks comments and fences without changing source offsets", () => {
     // Fixture: a comment that opens a fence and a fence that opens a comment, so masking must
     // resolve the overlap without shifting any offset the caller reports back to the author.

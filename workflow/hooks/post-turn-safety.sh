@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # post-turn-safety.sh
-# goat-flow-hook-version: 1.15.1
+# goat-flow-hook-version: 1.16.0
 #
 # Purpose:
 #   Universal Stop-event safety guard for supported agents. This hook checks
@@ -52,8 +52,9 @@ fallback_temp_sequence=0
 fallback_max_seconds="${GOAT_FLOW_POST_TURN_SAFETY_MAX_SECONDS:-60}"
 fallback_max_bytes="${GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES:-1048576}"
 fallback_max_findings="${GOAT_FLOW_POST_TURN_SAFETY_MAX_FINDINGS:-20}"
+post_turn_native_workspace=""
 post_turn_action="scan"
-post_turn_hook_version="1.15.1"
+post_turn_hook_version="1.16.0"
 post_turn_result_schema="goat-flow.hook-result.v1"
 post_turn_migrated_result_mode=0
 post_turn_result_records_path=""
@@ -337,6 +338,29 @@ try {
   return 0
 }
 
+# Resolve the verified managed installation root when Git cannot provide a scan root.
+# The launcher starts Bash from this directory, and the installed hook shape prevents a
+# direct invocation in an arbitrary non-Git directory from creating continuation state.
+resolve_stop_reentry_root_without_git() {
+  local managed_root=""
+
+  # Only a validated provider Stop can participate in a bounded continuation cycle.
+  if [ "$stop_payload_present" -eq 0 ] || [ -z "$stop_session_fingerprint" ]; then
+    return 1
+  fi
+  if ! managed_root="$(pwd -P 2>/dev/null)" || [ -z "$managed_root" ]; then
+    return 1
+  fi
+  # State ownership requires a complete, non-symlinked managed hook installation.
+  if [ -L "$managed_root/.goat-flow" ] || [ ! -d "$managed_root/.goat-flow/hooks" ] || \
+    [ -L "$managed_root/.goat-flow/hooks" ] || \
+    [ ! -f "$managed_root/.goat-flow/hooks/post-turn-safety.sh" ] || \
+    [ -L "$managed_root/.goat-flow/hooks/post-turn-safety.sh" ]; then
+    return 1
+  fi
+  printf '%s\n' "$managed_root"
+}
+
 # Resolve the ignored owner-local state file used to bound a repeated Stop failure.
 # The path contains hashes only, so it never stores the user's session ID or changed content.
 # The record is session-specific, so the filename must be too: two sessions working in one
@@ -496,6 +520,614 @@ finish_infrastructure_failure() {
     printf 'post-turn-safety: repeated-Stop state unavailable; keeping the turn blocked.\n' >&2
   fi
   return 2
+}
+
+# Bound an early Git-root failure using the managed installation rather than a Git root.
+# If the launch boundary cannot be re-established, keep the user's turn blocked.
+finish_repository_root_failure() {
+  local failure_identity="$1"
+  local managed_root=""
+
+  if ! managed_root="$(resolve_stop_reentry_root_without_git)"; then
+    return 2
+  fi
+  finish_infrastructure_failure "$managed_root" "$failure_identity"
+}
+
+# Scan only the explicit Git roots configured for a managed non-Git controller.
+# Each child emits the existing provider-neutral envelope, so aggregation never parses human stderr
+# or reimplements detector decisions. Exit 3 means the complete configured root contract could not
+# be established and preserves the bounded single-project root failure below.
+run_controller_child_scans() {
+  local controller_root=""
+  local controller_result=""
+  local controller_status=0
+  local hook_script="${BASH_SOURCE[0]}"
+
+  # A child whose Git commands fail must report that failure instead of recursively widening scope.
+  if [ "${GOAT_FLOW_POST_TURN_CONTROLLER_CHILD:-0}" = 1 ]; then
+    return 3
+  fi
+  if ! command -v node >/dev/null 2>&1 || \
+    ! controller_root="$(pwd -P 2>/dev/null)" || [ -z "$controller_root" ]; then
+    return 3
+  fi
+
+  # shellcheck disable=SC2016 # Literal JavaScript must not expand shell or provider text.
+  controller_result="$(
+    GOAT_FLOW_CONTROLLER_PARENT_MIGRATED="$post_turn_migrated_result_mode" \
+      GOAT_FLOW_CONTROLLER_SESSION_FINGERPRINT="$stop_session_fingerprint" \
+      GOAT_FLOW_CONTROLLER_STOP_ACTIVE="$stop_hook_active" \
+      POST_TURN_HOOK_VERSION="$post_turn_hook_version" \
+      node -e '
+const { readFileSync, realpathSync, statSync } = require("node:fs");
+const { spawnSync } = require("node:child_process");
+const path = require("node:path");
+
+const hookScript = path.resolve(process.argv[1], process.argv[2]);
+const controllerRoot = realpathSync(process.argv[1]);
+const startedAt = Date.now();
+const resultSchema = "goat-flow.hook-result.v1";
+const provider = process.env.GOAT_FLOW_HOOK_PROVIDER || "claude";
+const hookVersion = process.env.POST_TURN_HOOK_VERSION || "unknown";
+const adapterVersion = process.env.GOAT_FLOW_HOOK_ADAPTER_VERSION || "1";
+const parentMigrated = process.env.GOAT_FLOW_CONTROLLER_PARENT_MIGRATED === "1";
+const sessionFingerprint = process.env.GOAT_FLOW_CONTROLLER_SESSION_FINGERPRINT || "";
+const stopHookActive = process.env.GOAT_FLOW_CONTROLLER_STOP_ACTIVE === "1";
+const configuredSeconds = Number(process.env.GOAT_FLOW_POST_TURN_SAFETY_MAX_SECONDS || "60");
+const maximumMilliseconds = Number.isInteger(configuredSeconds) && configuredSeconds > 0
+  ? configuredSeconds * 1000
+  : 60_000;
+const allowedOutcomes = new Set(["pass", "block", "advisory", "incomplete", "unavailable"]);
+const allowedCoverage = new Set(["complete", "partial", "none"]);
+
+function syntheticResult(reasonCode, message) {
+  return {
+    schema: resultSchema,
+    hookId: "post-turn-safety",
+    event: "turn-stop",
+    outcome: reasonCode === "hook-unavailable" || reasonCode === "execution-timeout"
+      ? "unavailable"
+      : "incomplete",
+    coverage: { status: "none", attemptedUnits: 1, completedUnits: 0, skippedUnits: 1 },
+    reasonCode,
+    // Whole-child scope uses the same target a real child reports, so aggregation prefixes it once.
+    findings: [{ code: reasonCode, message, target: "project" }],
+    execution: {
+      hookVersion,
+      provider,
+      providerMode: "controller-child",
+      adapterName: `${provider}-turn-stop`,
+      adapterVersion,
+      durationMs: 0,
+    },
+  };
+}
+
+function validChildResult(value) {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+  if (value.schema !== resultSchema || value.hookId !== "post-turn-safety" || value.event !== "turn-stop") return false;
+  if (!allowedOutcomes.has(value.outcome) || typeof value.reasonCode !== "string") return false;
+  const coverage = value.coverage;
+  if (coverage === null || typeof coverage !== "object" || Array.isArray(coverage)) return false;
+  if (!allowedCoverage.has(coverage.status)) return false;
+  if (![coverage.attemptedUnits, coverage.completedUnits, coverage.skippedUnits].every(Number.isInteger)) return false;
+  if (coverage.attemptedUnits !== 1 || coverage.completedUnits < 0 || coverage.skippedUnits < 0) return false;
+  if (coverage.completedUnits + coverage.skippedUnits > coverage.attemptedUnits) return false;
+  if (!Array.isArray(value.findings) || value.findings.length > 20) return false;
+  if (!value.findings.every((finding) => finding !== null && typeof finding === "object" && !Array.isArray(finding) &&
+    typeof finding.code === "string" && finding.code.trim().length > 0 &&
+    typeof finding.message === "string" && finding.message.trim().length > 0 &&
+    (finding.target === undefined || (typeof finding.target === "string" && finding.target.trim().length > 0)))) return false;
+  const execution = value.execution;
+  return execution !== null && typeof execution === "object" && !Array.isArray(execution) &&
+    execution.provider === provider && execution.hookVersion === hookVersion;
+}
+
+function prefixTarget(childName, target) {
+  if (typeof target !== "string" || target === "project") return childName;
+  return `${childName}/${target}`;
+}
+
+const singleQuote = String.fromCharCode(39);
+
+function stripYamlComment(text) {
+  let inSingle = false;
+  let inDouble = false;
+  let escaped = false;
+  for (let index = 0; index < text.length; index += 1) {
+    const character = text[index];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (inDouble && character === "\\") {
+      escaped = true;
+      continue;
+    }
+    if (!inDouble && character === singleQuote) {
+      if (inSingle && text[index + 1] === singleQuote) {
+        index += 1;
+        continue;
+      }
+      inSingle = !inSingle;
+      continue;
+    }
+    if (!inSingle && character === "\"") {
+      inDouble = !inDouble;
+      continue;
+    }
+    if (!inSingle && !inDouble && character === "#" &&
+      (index === 0 || /\s/u.test(text[index - 1]))) {
+      return text.slice(0, index).trimEnd();
+    }
+  }
+  return text.trimEnd();
+}
+
+function yamlStringScalar(rawValue) {
+  const value = stripYamlComment(rawValue).trim();
+  if (value.length === 0) return null;
+  if (value.startsWith(singleQuote) && value.endsWith(singleQuote)) {
+    return value.slice(1, -1).split(singleQuote + singleQuote).join(singleQuote);
+  }
+  if (value.startsWith("\"") && value.endsWith("\"")) {
+    try {
+      const decoded = JSON.parse(value);
+      return typeof decoded === "string" ? decoded : null;
+    } catch {
+      return null;
+    }
+  }
+  if (/^(?:null|~|true|false)$/iu.test(value) || /^[-+]?\d+(?:\.\d+)?$/u.test(value)) {
+    return null;
+  }
+  return value;
+}
+
+function yamlMappingValue(line, expectedKey) {
+  const separatorIndex = line.indexOf(":");
+  if (separatorIndex < 0) return null;
+  const parsedKey = yamlStringScalar(line.slice(0, separatorIndex));
+  return parsedKey === expectedKey
+    ? line.slice(separatorIndex + 1).trim()
+    : null;
+}
+
+function yamlFlowStringList(rawValue) {
+  const value = stripYamlComment(rawValue).trim();
+  if (!value.startsWith("[") || !value.endsWith("]")) return null;
+  const body = value.slice(1, -1);
+  if (body.trim().length === 0) return [];
+  const rawItems = [];
+  let item = "";
+  let inSingle = false;
+  let inDouble = false;
+  let escaped = false;
+  for (let index = 0; index < body.length; index += 1) {
+    const character = body[index];
+    if (escaped) {
+      item += character;
+      escaped = false;
+      continue;
+    }
+    if (inDouble && character === "\\") {
+      item += character;
+      escaped = true;
+      continue;
+    }
+    if (!inDouble && character === singleQuote) {
+      item += character;
+      if (inSingle && body[index + 1] === singleQuote) {
+        item += body[index + 1];
+        index += 1;
+        continue;
+      }
+      inSingle = !inSingle;
+      continue;
+    }
+    if (!inSingle && character === "\"") {
+      item += character;
+      inDouble = !inDouble;
+      continue;
+    }
+    if (!inSingle && !inDouble && character === ",") {
+      rawItems.push(item);
+      item = "";
+      continue;
+    }
+    item += character;
+  }
+  if (inSingle || inDouble || escaped) return null;
+  rawItems.push(item);
+  const parsedItems = rawItems.map(yamlStringScalar);
+  return parsedItems.every((candidate) => typeof candidate === "string")
+    ? parsedItems
+    : null;
+}
+
+// Return the raw value text for one key of a single-line flow mapping, or null when the
+// text is not a balanced flow mapping. Registration accepts these shapes, so the runtime
+// parser must read them too instead of silently dropping configured child scans.
+function yamlFlowMappingValue(rawValue, expectedKey) {
+  const value = stripYamlComment(rawValue).trim();
+  if (!value.startsWith("{") || !value.endsWith("}")) return null;
+  const body = value.slice(1, -1);
+  const rawEntries = [];
+  let entry = "";
+  let depth = 0;
+  let inSingle = false;
+  let inDouble = false;
+  let escaped = false;
+  for (let index = 0; index < body.length; index += 1) {
+    const character = body[index];
+    if (escaped) {
+      entry += character;
+      escaped = false;
+      continue;
+    }
+    if (inDouble && character === "\\") {
+      entry += character;
+      escaped = true;
+      continue;
+    }
+    if (!inDouble && character === singleQuote) {
+      entry += character;
+      if (inSingle && body[index + 1] === singleQuote) {
+        entry += body[index + 1];
+        index += 1;
+        continue;
+      }
+      inSingle = !inSingle;
+      continue;
+    }
+    if (!inSingle && character === "\"") {
+      entry += character;
+      inDouble = !inDouble;
+      continue;
+    }
+    if (!inSingle && !inDouble) {
+      if (character === "{" || character === "[") depth += 1;
+      if (character === "}" || character === "]") depth -= 1;
+      if (depth < 0) return null;
+      if (character === "," && depth === 0) {
+        rawEntries.push(entry);
+        entry = "";
+        continue;
+      }
+    }
+    entry += character;
+  }
+  if (inSingle || inDouble || escaped || depth !== 0) return null;
+  rawEntries.push(entry);
+  for (const rawEntry of rawEntries) {
+    let separatorIndex = -1;
+    let keySingle = false;
+    let keyDouble = false;
+    let keyEscaped = false;
+    for (let index = 0; index < rawEntry.length; index += 1) {
+      const character = rawEntry[index];
+      if (keyEscaped) {
+        keyEscaped = false;
+        continue;
+      }
+      if (keyDouble && character === "\\") {
+        keyEscaped = true;
+        continue;
+      }
+      if (!keyDouble && character === singleQuote) {
+        keySingle = !keySingle;
+        continue;
+      }
+      if (!keySingle && character === "\"") {
+        keyDouble = !keyDouble;
+        continue;
+      }
+      if (keySingle || keyDouble) continue;
+      if (character === "{" || character === "[") break;
+      if (character === ":") {
+        separatorIndex = index;
+        break;
+      }
+    }
+    if (separatorIndex < 0) continue;
+    const parsedKey = yamlStringScalar(rawEntry.slice(0, separatorIndex));
+    if (parsedKey === expectedKey) return rawEntry.slice(separatorIndex + 1).trim();
+  }
+  return null;
+}
+
+function lineIndent(line) {
+  if (line.includes("\t")) return -1;
+  return line.length - line.trimStart().length;
+}
+
+function configuredScanRoots() {
+  let configText;
+  try {
+    configText = readFileSync(path.join(controllerRoot, ".goat-flow", "config.yaml"), "utf8");
+  } catch {
+    return null;
+  }
+  const lines = configText.replace(/\r\n?/gu, "\n").split("\n");
+  let hooksInlineValue = null;
+  const hooksIndex = lines.findIndex((line) => {
+    if (lineIndent(line) !== 0) return false;
+    const value = yamlMappingValue(stripYamlComment(line).trim(), "hooks");
+    if (value === null) return false;
+    hooksInlineValue = value;
+    return true;
+  });
+  if (hooksIndex < 0) return null;
+  // A flow-style hooks mapping carries the whole hook table on one line.
+  if (hooksInlineValue !== "") {
+    const hookValue = yamlFlowMappingValue(hooksInlineValue, "post-turn-safety");
+    if (hookValue === null) return null;
+    const rootsValue = yamlFlowMappingValue(hookValue, "scan-roots");
+    if (rootsValue === null) return null;
+    return yamlFlowStringList(rootsValue);
+  }
+  let hooksEnd = lines.length;
+  for (let index = hooksIndex + 1; index < lines.length; index += 1) {
+    const cleanLine = stripYamlComment(lines[index]);
+    if (cleanLine.trim().length > 0 && lineIndent(lines[index]) <= 0) {
+      hooksEnd = index;
+      break;
+    }
+  }
+  let hookIndex = -1;
+  let hookIndent = -1;
+  let hookInlineValue = null;
+  for (let index = hooksIndex + 1; index < hooksEnd; index += 1) {
+    const indent = lineIndent(lines[index]);
+    if (indent <= 0) continue;
+    const value = yamlMappingValue(
+      stripYamlComment(lines[index]).trim(),
+      "post-turn-safety",
+    );
+    if (value === null) continue;
+    if (value === "") {
+      hookIndex = index;
+      hookIndent = indent;
+    } else {
+      hookInlineValue = value;
+    }
+    break;
+  }
+  // A flow-style hook entry keeps its scan roots inline beneath a block hooks mapping.
+  if (hookIndex < 0 && hookInlineValue !== null) {
+    const rootsValue = yamlFlowMappingValue(hookInlineValue, "scan-roots");
+    if (rootsValue === null) return null;
+    return yamlFlowStringList(rootsValue);
+  }
+  if (hookIndex < 0) return null;
+  for (let index = hookIndex + 1; index < hooksEnd; index += 1) {
+    const cleanLine = stripYamlComment(lines[index]);
+    const trimmedLine = cleanLine.trim();
+    if (trimmedLine.length === 0) continue;
+    const indent = lineIndent(lines[index]);
+    if (indent <= hookIndent) break;
+    const inlineValue = yamlMappingValue(trimmedLine, "scan-roots");
+    if (inlineValue === null) continue;
+    if (inlineValue.length > 0) return yamlFlowStringList(inlineValue);
+    const roots = [];
+    for (let rootIndex = index + 1; rootIndex < hooksEnd; rootIndex += 1) {
+      const rootLine = stripYamlComment(lines[rootIndex]);
+      if (rootLine.trim().length === 0) continue;
+      if (lineIndent(lines[rootIndex]) <= indent) break;
+      const itemMatch = /^-\s+(.+)$/u.exec(rootLine.trim());
+      if (!itemMatch) return null;
+      const root = yamlStringScalar(itemMatch[1]);
+      if (root === null) return null;
+      roots.push(root);
+    }
+    return roots;
+  }
+  return null;
+}
+
+const configuredRoots = configuredScanRoots();
+if (!Array.isArray(configuredRoots) || configuredRoots.length === 0) process.exit(3);
+
+const scanUnits = [];
+for (const configuredRoot of configuredRoots) {
+  if (configuredRoot.length === 0 || path.isAbsolute(configuredRoot) ||
+    /^[A-Za-z]:[\\/]/u.test(configuredRoot) || /^\\\\/u.test(configuredRoot)) {
+    process.exit(3);
+  }
+  const childPath = path.resolve(controllerRoot, configuredRoot);
+  const lexicalRelative = path.relative(controllerRoot, childPath);
+  if (lexicalRelative === ".." || lexicalRelative.startsWith(`..${path.sep}`) || path.isAbsolute(lexicalRelative)) {
+    process.exit(3);
+  }
+  let childRealPath;
+  try {
+    childRealPath = realpathSync(childPath);
+    if (!statSync(childRealPath).isDirectory()) process.exit(3);
+  } catch {
+    process.exit(3);
+  }
+  const physicalRelative = path.relative(controllerRoot, childRealPath);
+  if (physicalRelative === ".." || physicalRelative.startsWith(`..${path.sep}`) || path.isAbsolute(physicalRelative)) {
+    process.exit(3);
+  }
+  const rootLookup = spawnSync("git", ["-C", childRealPath, "rev-parse", "--show-toplevel"], {
+    encoding: "utf8",
+    timeout: Math.min(maximumMilliseconds, 5000),
+    windowsHide: true,
+  });
+  if (rootLookup.error || rootLookup.status !== 0 || typeof rootLookup.stdout !== "string" || rootLookup.stdout.trim().length === 0) {
+    process.exit(3);
+  }
+  let gitRoot;
+  try {
+    gitRoot = realpathSync(rootLookup.stdout.trim());
+  } catch {
+    process.exit(3);
+  }
+  if (gitRoot !== childRealPath) process.exit(3);
+  scanUnits.push({
+    name: physicalRelative.split(path.sep).join("/"),
+    root: childRealPath,
+  });
+}
+
+const childPayload = sessionFingerprint.length > 0
+  ? JSON.stringify({ session_id: sessionFingerprint, hook_event_name: "Stop", stop_hook_active: stopHookActive })
+  : "";
+const childResults = [];
+for (const scanUnit of scanUnits) {
+  if (scanUnit.failure) {
+    childResults.push({ name: scanUnit.name, result: scanUnit.failure });
+    continue;
+  }
+  const elapsedMilliseconds = Date.now() - startedAt;
+  const remainingMilliseconds = maximumMilliseconds - elapsedMilliseconds;
+  if (remainingMilliseconds <= 0) {
+    childResults.push({ name: scanUnit.name, result: syntheticResult("execution-timeout", "Controller safety-scan budget expired before this child ran") });
+    continue;
+  }
+  const childEnvironment = {
+    ...process.env,
+    GOAT_FLOW_HOOK_PROVIDER: provider,
+    GOAT_FLOW_HOOK_EVENT: "turn-stop",
+    GOAT_FLOW_HOOK_PROVIDER_MODE: "controller-child",
+    GOAT_FLOW_HOOK_ADAPTER_VERSION: adapterVersion,
+    GOAT_FLOW_HOOK_RESULT_PROTOCOL: resultSchema,
+    GOAT_FLOW_POST_TURN_CONTROLLER_CHILD: "1",
+    GOAT_FLOW_POST_TURN_SAFETY_MAX_SECONDS: String(Math.max(1, Math.ceil(remainingMilliseconds / 1000))),
+  };
+  const childExecution = spawnSync("bash", [hookScript], {
+    cwd: scanUnit.root,
+    encoding: "utf8",
+    input: childPayload,
+    env: childEnvironment,
+    timeout: remainingMilliseconds,
+    windowsHide: true,
+    maxBuffer: 20_000,
+  });
+  if (childExecution.error) {
+    const reasonCode = childExecution.error.code === "ETIMEDOUT" ? "execution-timeout" : "hook-unavailable";
+    const message = reasonCode === "execution-timeout"
+      ? "Child safety scan exceeded the controller deadline"
+      : "Child safety scan could not start";
+    childResults.push({ name: scanUnit.name, result: syntheticResult(reasonCode, message) });
+    continue;
+  }
+  let childResult;
+  try {
+    childResult = JSON.parse((childExecution.stdout || "").trim());
+  } catch {
+    childResult = null;
+  }
+  if (childExecution.status !== 0 || !validChildResult(childResult)) {
+    childResults.push({ name: scanUnit.name, result: syntheticResult("hook-unavailable", "Child safety scan did not return a valid result") });
+    continue;
+  }
+  childResults.push({ name: scanUnit.name, result: childResult });
+}
+
+const coverage = childResults.reduce((total, child) => ({
+  attemptedUnits: total.attemptedUnits + child.result.coverage.attemptedUnits,
+  completedUnits: total.completedUnits + child.result.coverage.completedUnits,
+  skippedUnits: total.skippedUnits + child.result.coverage.skippedUnits,
+}), { attemptedUnits: 0, completedUnits: 0, skippedUnits: 0 });
+const coverageStatus = coverage.completedUnits === coverage.attemptedUnits && coverage.skippedUnits === 0
+  ? "complete"
+  : coverage.completedUnits === 0 ? "none" : "partial";
+const nonPassResults = childResults.filter((child) => child.result.outcome !== "pass");
+const everyNonPassBounded = nonPassResults.length > 0 && nonPassResults.every((child) =>
+  child.result.outcome === "incomplete" && child.result.reasonCode === "bounded-reentry-ended");
+let outcome = "pass";
+let reasonCode = "completed-clean";
+if (childResults.some((child) => child.result.outcome === "block")) {
+  outcome = "block";
+  reasonCode = "policy-blocked";
+} else if (childResults.some((child) => child.result.outcome === "unavailable")) {
+  outcome = "unavailable";
+  reasonCode = "hook-unavailable";
+} else if (nonPassResults.length > 0) {
+  outcome = nonPassResults.some((child) => child.result.outcome === "incomplete")
+    ? "incomplete"
+    : "advisory";
+  reasonCode = everyNonPassBounded ? "bounded-reentry-ended" : outcome === "advisory" ? "findings-reported" : "coverage-incomplete";
+}
+// The retained window must include what decided the aggregate outcome, so findings from
+// outcome-deciding children fill the cap first and the rest keep their deterministic order.
+const collectedFindings = childResults.flatMap((child) => child.result.findings.map((finding) => ({
+  isDecisive: child.result.outcome === outcome,
+  finding: {
+    code: finding.code,
+    message: finding.message,
+    target: prefixTarget(child.name, finding.target),
+  },
+})));
+const findings = [
+  ...collectedFindings.filter((entry) => entry.isDecisive),
+  ...collectedFindings.filter((entry) => !entry.isDecisive),
+].slice(0, 20).map((entry) => entry.finding);
+const aggregateResult = {
+  schema: resultSchema,
+  hookId: "post-turn-safety",
+  event: "turn-stop",
+  outcome,
+  coverage: { status: coverageStatus, ...coverage },
+  reasonCode,
+  findings,
+  execution: {
+    hookVersion,
+    provider,
+    providerMode: "managed-controller",
+    adapterName: `${provider}-turn-stop`,
+    adapterVersion,
+    durationMs: Date.now() - startedAt,
+  },
+};
+
+if (parentMigrated) {
+  process.stdout.write(`${JSON.stringify(aggregateResult)}\n`);
+  process.exit(0);
+}
+if (outcome === "pass") process.exit(0);
+for (const finding of findings) {
+  process.stderr.write(`post-turn-safety: ${finding.target}: ${finding.message}\n`);
+}
+// A legacy host has no adapter to read `bounded-reentry-ended`, so the controller must end the
+// exhausted cycle itself. Without this the turn can never stop: every later Stop repeats the same
+// unchanged child failure, while the single-project path ends that cycle after one replay.
+if (reasonCode === "bounded-reentry-ended") {
+  process.stderr.write("post-turn-safety: ending repeated Stop after unchanged infrastructure failure; no clean scan was recorded.\n");
+  process.exit(0);
+}
+if (outcome === "block") {
+  process.stderr.write("post-turn-safety: fix or remove the flagged changed content before stopping.\n");
+} else {
+  process.stderr.write("post-turn-safety: controller scan incomplete.\n");
+}
+process.exit(2);
+' "$controller_root" "$hook_script"
+  )"
+  controller_status=$?
+
+  # An absent or invalid explicit list leaves the bounded fail-closed Git-root path authoritative.
+  if [ "$controller_status" -eq 3 ]; then
+    return 3
+  fi
+  # Once child scope is established, stale single-root failure state cannot affect this topology.
+  clear_stop_reentry_state "$controller_root" >/dev/null 2>&1
+  if [ -n "$controller_result" ]; then
+    printf '%s\n' "$controller_result"
+  fi
+  # Only the controller's own release and block decisions may reach the user's coding agent.
+  # A crashed or killed controller would otherwise exit non-blocking, silently skipping every child.
+  case "$controller_status" in
+    0 | 2) ;;
+    *)
+      printf 'post-turn-safety: controller scan could not complete.\n' >&2
+      controller_status=2
+      ;;
+  esac
+  return "$controller_status"
 }
 
 # Detector shapes are shared by the Bash 3 compatibility and optimized paths.
@@ -885,13 +1517,13 @@ fallback_scan_literal_assignment() {
 fallback_scan_assignment() {
   local path="$1"
   local line="$2"
-  local assignment_re='^[[:space:]]*(export[[:space:]]+)?([A-Za-z_][A-Za-z0-9_-]*)[[:space:]]*[:=][[:space:]]*(.+)$'
+  local assignment_re='^[[:space:]]*((export|EXPORT)[[:space:]]+)?([A-Za-z_][A-Za-z0-9_-]*)[[:space:]]*[:=][[:space:]]*(.+)$'
 
   case "$line" in
     [Ee][Nn][Vv]\ * | [Aa][Rr][Gg]\ *) line="${line#* }" ;;
   esac
   [[ "$line" =~ $assignment_re ]] || return 0
-  fallback_scan_literal_assignment "$path" "${BASH_REMATCH[2]}" "${BASH_REMATCH[3]}"
+  fallback_scan_literal_assignment "$path" "${BASH_REMATCH[3]}" "${BASH_REMATCH[4]}"
 }
 
 # Scan Docker ARG and ENV forms so container users receive the same secret warning.
@@ -1245,6 +1877,7 @@ post_turn_self_test() (
   local self_test_root
   local self_test_script="${BASH_SOURCE[0]}"
   local synthetic_aws_token="AKIA${POST_TURN_SELF_TEST_TOKEN_SUFFIX:-1234567890ABCDEF}"
+  local synthetic_assignment_secret="Abcdef1234567890"
 
   # A relative invocation must remain callable after the fixture changes working directory.
   case "$self_test_script" in
@@ -1287,12 +1920,44 @@ post_turn_self_test() (
     fi
 
     printf 'AWS_ACCESS_KEY_ID=%s\n' "$synthetic_aws_token" >"$self_test_root/settings.env"
+    GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES=invalid \
+      GOAT_FLOW_POST_TURN_SAFETY_FORCE_BASH3_FALLBACK="$scanner_setting" \
+      bash "$self_test_script" </dev/null >/dev/null 2>&1
+    hook_result=$?
+    # Invalid byte-limit text must fall back without suppressing a real finding.
+    if [ "$hook_result" -ne 2 ]; then
+      printf 'post-turn-safety self-test: invalid byte limit failed on scanner %s\n' "$scanner_setting" >&2
+      return 2
+    fi
+
+    printf 'API_KEY=your_api_key_here\n' >"$self_test_root/settings.env"
+    GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES=0001 \
+      GOAT_FLOW_POST_TURN_SAFETY_FORCE_BASH3_FALLBACK="$scanner_setting" \
+      bash "$self_test_script" </dev/null >/dev/null 2>&1
+    hook_result=$?
+    # A leading-zero limit is invalid and must not turn safe changed text into a coverage failure.
+    if [ "$hook_result" -ne 0 ]; then
+      printf 'post-turn-safety self-test: leading-zero byte limit failed on scanner %s\n' "$scanner_setting" >&2
+      return 2
+    fi
+
+    printf 'AWS_ACCESS_KEY_ID=%s\n' "$synthetic_aws_token" >"$self_test_root/settings.env"
     GOAT_FLOW_POST_TURN_SAFETY_FORCE_BASH3_FALLBACK="$scanner_setting" \
       bash "$self_test_script" </dev/null >/dev/null 2>&1
     hook_result=$?
     # A high-confidence changed token should block the user's turn.
     if [ "$hook_result" -ne 2 ]; then
       printf 'post-turn-safety self-test: finding case failed on scanner %s\n' "$scanner_setting" >&2
+      return 2
+    fi
+
+    printf 'EXPORT TOKEN=%s\n' "$synthetic_assignment_secret" >"$self_test_root/settings.env"
+    GOAT_FLOW_POST_TURN_SAFETY_FORCE_BASH3_FALLBACK="$scanner_setting" \
+      bash "$self_test_script" </dev/null >/dev/null 2>&1
+    hook_result=$?
+    # Uppercase shell export syntax must block identically in native and Bash 3 scanners.
+    if [ "$hook_result" -ne 2 ]; then
+      printf 'post-turn-safety self-test: EXPORT finding case failed on scanner %s\n' "$scanner_setting" >&2
       return 2
     fi
 
@@ -1320,21 +1985,23 @@ fallback_main() {
   local head_status
 
   case "$fallback_max_seconds" in '' | *[!0-9]*) fallback_max_seconds=60 ;; esac
-  case "$fallback_max_bytes" in '' | *[!0-9]*) fallback_max_bytes=1048576 ;; esac
+  case "$fallback_max_bytes" in '' | *[!0-9]* | 0[0-9]*) fallback_max_bytes=1048576 ;; esac
   case "$fallback_max_findings" in '' | *[!0-9]*) fallback_max_findings=20 ;; esac
 
   # Without a Git root, the hook cannot identify the project changes for this turn.
   if ! root=$(git rev-parse --show-toplevel 2>/dev/null) || [ -z "$root" ]; then
     post_turn_result_detail="The selected Git repository root could not be opened"
     printf 'post-turn-safety: scan incomplete (git repository root unavailable).\n' >&2
-    return 2
+    finish_repository_root_failure "fallback:git repository root unavailable"
+    return $?
   fi
 
   # A root the process cannot enter cannot be scanned on the user's behalf.
   if ! cd "$root" 2>/dev/null; then
     post_turn_result_detail="The selected Git repository root could not be entered"
     printf 'post-turn-safety: scan incomplete (repository root cannot be entered).\n' >&2
-    return 2
+    finish_repository_root_failure "fallback:repository root cannot be entered"
+    return $?
   fi
 
   # Temporary scan output is required before Git content can be inspected safely.
@@ -1449,6 +2116,26 @@ if ! read_stop_context; then
   exit 2
 fi
 
+current_directory_is_git_top_level() {
+  local selected_root=""
+  local discovered_root=""
+  selected_root="$(pwd -P 2>/dev/null)" || return 1
+  discovered_root="$(git rev-parse --show-toplevel 2>/dev/null)" || return 1
+  discovered_root="$(cd "$discovered_root" 2>/dev/null && pwd -P)" || return 1
+  [ -n "$selected_root" ] && [ "$selected_root" = "$discovered_root" ]
+}
+
+# A managed controller outside its own Git top level scans only its explicit, wholly valid roots.
+# Status 3 means the list was absent or invalid, so bounded root-failure recovery remains authoritative.
+if [ "${GOAT_FLOW_POST_TURN_CONTROLLER_CHILD:-0}" != 1 ] && \
+  ! current_directory_is_git_top_level; then
+  run_controller_child_scans
+  controller_scan_status=$?
+  if [ "$controller_scan_status" -ne 3 ]; then
+    exit "$controller_scan_status"
+  fi
+fi
+
 # Stock macOS Bash uses the compatibility implementation with the same Stop context.
 if ((BASH_VERSINFO[0] < 4)) || [ "${GOAT_FLOW_POST_TURN_SAFETY_FORCE_BASH3_FALLBACK:-0}" = 1 ]; then
   finish_post_turn_scan "fallback" fallback_main "$@"
@@ -1461,6 +2148,9 @@ shopt -s extglob
 
 MAX_FILE_BYTES="${GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES:-1048576}"
 MAX_FINDINGS="${GOAT_FLOW_POST_TURN_SAFETY_MAX_FINDINGS:-20}"
+case "$MAX_FILE_BYTES" in
+  '' | *[!0-9]* | 0[0-9]*) MAX_FILE_BYTES=1048576 ;;
+esac
 # Wall-clock budget for the whole scan. The registered agent-side hook timeout
 # must stay above this so the incomplete-scan diagnostic below prints before
 # the runner kills the process (same layering as gruff-code-quality.sh).
@@ -2519,6 +3209,11 @@ collect_z() {
 }
 
 # Run the optimized scan and return the coding agent's final Stop decision.
+cleanup_post_turn_native_workspace() {
+  [ -n "${post_turn_native_workspace:-}" ] || return 0
+  rm -rf -- "$post_turn_native_workspace"
+}
+
 main() {
   local root
   local WORKDIR
@@ -2527,14 +3222,16 @@ main() {
   if ! root="$(repo_root)" || [ -z "$root" ]; then
     post_turn_result_detail="The selected Git repository root could not be opened"
     printf 'post-turn-safety: scan incomplete (git repository root unavailable).\n' >&2
-    return 2
+    finish_repository_root_failure "native:git repository root unavailable"
+    return $?
   fi
 
-  cd "$root" 2>/dev/null || {
+  if ! cd "$root" 2>/dev/null; then
     post_turn_result_detail="The selected Git repository root could not be entered"
     printf 'post-turn-safety: scan incomplete (repository root cannot be entered).\n' >&2
-    return 2
-  }
+    finish_repository_root_failure "native:repository root cannot be entered"
+    return $?
+  fi
 
   WORKDIR="$(mktemp -d 2>/dev/null)" || WORKDIR=""
   # Temporary scan output is required before Git content can be inspected safely.
@@ -2544,8 +3241,8 @@ main() {
     finish_infrastructure_failure "$root" "native:scan workspace unavailable"
     return $?
   fi
-  # shellcheck disable=SC2064
-  trap "rm -rf '$WORKDIR'" EXIT
+  post_turn_native_workspace="$WORKDIR"
+  trap cleanup_post_turn_native_workspace EXIT
   post_turn_result_records_path="$WORKDIR/hook-result-records"
 
   local head_present=0

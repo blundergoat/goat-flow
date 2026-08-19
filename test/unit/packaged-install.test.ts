@@ -37,12 +37,12 @@ import type {
 } from "../../src/cli/manifest/types.js";
 
 /** Run `fn` with `GOAT_FLOW_PACKAGED_MODE=1` set, restoring on exit. */
-function withPackagedMode<T>(fn: () => T): T {
+function withPackagedMode<T>(block: () => T): T {
   const prior = process.env["GOAT_FLOW_PACKAGED_MODE"];
   process.env["GOAT_FLOW_PACKAGED_MODE"] = "1";
   resetManifestCache();
   try {
-    return fn();
+    return block();
   } finally {
     if (prior === undefined) delete process.env["GOAT_FLOW_PACKAGED_MODE"];
     else process.env["GOAT_FLOW_PACKAGED_MODE"] = prior;

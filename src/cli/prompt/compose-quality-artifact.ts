@@ -1,17 +1,19 @@
 /**
  * Composer for the artifact (skill / reference) quality-assessment prompt.
  *
- * Builds the prompt that scores a single skill or reference document against the
- * five semantic dimensions, applying per-subtype weighting: playbook and index
- * subtypes weight Examples higher, while the meta subtype may mark Examples `n/a`
- * with justification. Pure string assembly over the passed SkillQualityReport.
+ * Builds the prompt that scores a single skill or reference document against the five semantic dimensions, applying per-subtype weighting: playbook
+ * and index subtypes weight Examples higher, while the meta subtype may mark Examples `n/a` with justification.
+ * Pure string assembly over the passed SkillQualityReport.
  */
 import type { SkillQualityReport } from "../quality/skill-quality.js";
 import { markdownTableCell } from "./compose-quality-common.js";
 
-/** Render the per-subtype Examples dimension criteria for the Semantic
- *  Dimensions section. Playbook/index subtypes weight Examples higher; meta
- *  subtype permits an explicit `n/a` with justification. */
+/**
+ * Render the Examples criteria the reviewer scores against, tuned to the kind of artifact they opened.
+ *
+ * @param subtype - artifact subtype resolved by the scoring engine
+ * @returns the criteria lines; the shared three always appear, with at most one subtype line after them
+ */
 function renderExamplesDimensionCriteria(subtype: string): string[] {
   const lines: string[] = [];
   lines.push(
@@ -21,14 +23,17 @@ function renderExamplesDimensionCriteria(subtype: string): string[] {
   lines.push(
     "  - Are BAD/GOOD pairs, labelled counter-examples, or expected-output annotations present where the artifact enforces a convention?",
   );
+  // A workflow artifact is judged on whether one phase is walked end to end, not on scattered snippets.
   if (subtype === "workflow") {
     lines.push(
       "  - Workflow subtype: is at least one full phase walked through with real artifacts (file path + action + expected outcome)?",
     );
+    // Playbooks and indexes are mostly examples, so thin coverage costs marks even when everything else reads well.
   } else if (subtype === "playbook" || subtype === "index") {
     lines.push(
       `  - **${subtype} subtype: weight Examples HIGHER.** Playbooks and indexes live or die by examples; treat thin example coverage as a deduction even if other dimensions are strong.`,
     );
+    // A meta artifact is a contract other skills load, so the reviewer may score Examples as not applicable with a reason.
   } else if (subtype === "meta") {
     lines.push(
       "  - Meta subtype: Examples may legitimately be `n/a`. If you mark it n/a, justify why (the artifact is a contract loaded by skills, not a procedure that needs runnable examples) and exclude it from `semanticMax`.",
@@ -37,12 +42,20 @@ function renderExamplesDimensionCriteria(subtype: string): string[] {
   return lines;
 }
 
+/**
+ * Tell the reviewer exactly which files to read before scoring, so a composed artifact is judged whole rather than one fragment at a time.
+ *
+ * @param lines - prompt line buffer; appended to in place
+ * @param report - scoring report supplying the artifact path and the files the engine composed with it
+ * @param kindLower - artifact noun used in the sentence, such as skill or reference
+ */
 function appendComposedFromInstruction(
   lines: string[],
   report: SkillQualityReport,
   kindLower: string,
 ): void {
   const { artifact, composedFrom } = report;
+  // Single-file scoring, so the reviewer is told to read just this file and nothing is implied about missing context.
   if (composedFrom.length === 0) {
     lines.push(
       `Assess the ${kindLower} artifact at \`${artifact.path}\`. The engine composed no additional files (single-file scoring path); read this file in full before scoring.`,

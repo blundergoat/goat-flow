@@ -1,12 +1,12 @@
 /**
  * The map between goat-flow's shipped guidance files and the copies installed in a project.
- * Every "your installed docs drifted from the package" finding traces back to this registry:
- * it names each canonical workflow source, the installed path a user actually opens, and the
- * reading helpers the drift checks use to compare the two.
  *
- * Reads here never throw. A missing or unreadable package file comes back as `null` so the
- * check that owns the comparison can turn it into one precise, repairable finding, rather
- * than aborting an audit halfway and leaving the user with no report at all.
+ * Every "your installed docs drifted from the package" finding traces back to this registry: it names each canonical workflow source, the installed
+ * path a user actually opens, and the reading helpers the drift checks use to compare the two.
+ *
+ * Reads here never throw.
+ * A missing or unreadable package file comes back as `null` so the check that owns the comparison can turn it into one precise, repairable finding,
+ * rather than aborting an audit halfway and leaving the user with no report at all.
  */
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { posix as pathPosix, relative, resolve, sep } from "node:path";
@@ -57,11 +57,15 @@ export const SHARED_ARTIFACT_MIRRORS: readonly ArtifactMirrorSpec[] = [
       "code-comments.md",
       "gruff-code-quality.md",
       "hook-policy-testing.md",
+      "naming-and-placement.md",
       "observability.md",
       "changelog.md",
       "page-capture.md",
       "release-notes.md",
       "skill-playbook-authoring-sync.md",
+      "test-selection.md",
+      "writing-sentence-diagnostics.md",
+      "writing-structure-diagnostics.md",
       "writing-style.md",
     ],
   ),
@@ -78,7 +82,7 @@ export const SHARED_ARTIFACT_MIRRORS: readonly ArtifactMirrorSpec[] = [
 
 /**
  * Read one canonical UTF-8 source without aborting the wider audit.
- * Use when a missing or unreadable resource should become a precise finding.
+ * It swallows a missing or unreadable file into a null result, so the caller reports it as one precise finding instead of ending the run.
  *
  * @param templateRoot - package or fixture root; empty means no source root is available
  * @param relativePath - canonical repo-relative path; empty means no file was selected
@@ -102,7 +106,7 @@ export function readTemplateText(
 
 /**
  * List canonical Markdown below one workflow directory with stable POSIX paths.
- * Use when comparing the complete source set with declared install mappings.
+ * It swallows an unreadable directory into an empty list, so a partial package produces findings rather than a crashed audit.
  *
  * @param templateRoot - package or fixture root; empty means no source tree can be listed
  * @param relativeRoot - workflow directory to scan; empty means the package root itself

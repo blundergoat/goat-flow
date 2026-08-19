@@ -82,6 +82,8 @@ rm_is_safely_scoped() {
 find_has_destructive_action() {
   local c
   local depth="${2:-0}"
+  local saved_cmd_trimmed saved_cmd_normalized saved_cmd_verb saved_cmd_unquoted saved_cmd_lower
+  local saved_has_redirect saved_has_pipe nested_status
   c=$(normalize_command_candidate "$1")
   c="${c#"${c%%[![:space:]]*}"}"
   [[ "$(first_word_base "$c")" == "find" ]] || return 1
@@ -112,7 +114,23 @@ find_has_destructive_action() {
       exec_cmd="${exec_cmd% }"
       # A non-empty exec payload receives every policy module before find can run it.
       if [[ -n "$exec_cmd" ]]; then
-        check_command_segments "$exec_cmd" $((depth + 1)) || return $?
+        saved_cmd_trimmed="$CMD_TRIMMED"
+        saved_cmd_normalized="$CMD_NORMALIZED"
+        saved_cmd_verb="$CMD_VERB"
+        saved_cmd_unquoted="$CMD_UNQUOTED"
+        saved_cmd_lower="$CMD_LOWER"
+        saved_has_redirect="$HAS_REDIRECT"
+        saved_has_pipe="$HAS_PIPE"
+        nested_status=0
+        check_command_segments "$exec_cmd" $((depth + 1)) || nested_status=$?
+        CMD_TRIMMED="$saved_cmd_trimmed"
+        CMD_NORMALIZED="$saved_cmd_normalized"
+        CMD_VERB="$saved_cmd_verb"
+        CMD_UNQUOTED="$saved_cmd_unquoted"
+        CMD_LOWER="$saved_cmd_lower"
+        HAS_REDIRECT="$saved_has_redirect"
+        HAS_PIPE="$saved_has_pipe"
+        [[ "$nested_status" -eq 0 ]] || return "$nested_status"
       fi
       # Recursive deletion remains a destructive find action even with a scoped target.
       if rm_has_recursive "$exec_cmd"; then
@@ -637,7 +655,7 @@ check_destructive_segment() {
     block "Direct lockfile modification. Use the package manager (npm install, composer update, etc.)." || return $?
   fi
 
-  if [[ "$CMD_UNQUOTED" =~ ^eval[[:space:]] ]] || [[ "$CMD_UNQUOTED" =~ [[:space:]]eval[[:space:]] ]]; then
+  if [[ "$CMD_VERB" == "eval" ]]; then
     block "eval hides commands from safety checks. Write the command directly." || return $?
   fi
 

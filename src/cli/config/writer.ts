@@ -8,11 +8,15 @@ import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { dump, load } from "js-yaml";
 import { writeFileAtomic } from "../server/safe-exec.js";
-import { readHookBinaries } from "./reader.js";
+import { readHookBinaries, readHookScanRootList } from "./reader.js";
 
 type HookConfigMap = Record<
   string,
-  { enabled: boolean; binaries?: Record<string, string> }
+  {
+    enabled: boolean;
+    binaries?: Record<string, string>;
+    "scan-roots"?: string[];
+  }
 >;
 
 const HOOK_IDENTIFIER_ALIASES = new Map([
@@ -33,11 +37,11 @@ const REMOVED_TOP_LEVEL_BLOCK_COMMENTS = new Map([
 ]);
 
 /** Narrow parsed YAML values before reading the hooks block. */
-function isRecord(value: unknown): value is Record<string, unknown> {
+function isRecord(candidate: unknown): candidate is Record<string, unknown> {
   return (
-    value !== null &&
-    typeof value === "object" &&
-    Array.isArray(value) === false
+    candidate !== null &&
+    typeof candidate === "object" &&
+    Array.isArray(candidate) === false
   );
 }
 
@@ -66,25 +70,28 @@ function normalizeHookIdentifier(hookIdentifier: string): string {
 
 /**
  * Parse one raw `hooks.<id>` YAML entry into its canonical id and state.
- * Returns null for malformed entries (no boolean `enabled`) so the caller
- * can skip them - a user's hand-edited config never crashes a toggle write.
+ * Returns null for malformed entries (no boolean `enabled`) so the caller can skip them - a user's hand-edited config never crashes a toggle write.
  *
  * @param hookId - raw hook key as written in config.yaml (may be a legacy alias)
- * @param value - raw YAML value under that key
+ * @param hookEntry - raw YAML value under that key
  * @returns canonical id plus validated state, or null when the entry is malformed
  */
 function readHookEntry(
   hookId: string,
-  value: unknown,
+  hookEntry: unknown,
 ): { id: string; state: HookConfigMap[string] } | null {
   // Entry without a boolean `enabled` is malformed -> ignore it entirely.
-  if (!isRecord(value) || typeof value.enabled !== "boolean") return null;
-  const binaries = readHookBinaries(value.binaries);
+  if (!isRecord(hookEntry) || typeof hookEntry.enabled !== "boolean")
+    return null;
+  const binaries = readHookBinaries(hookEntry.binaries);
+  const scanRoots = readHookScanRootList(hookEntry["scan-roots"]);
   return {
     id: normalizeHookIdentifier(hookId),
-    state: binaries
-      ? { enabled: value.enabled, binaries }
-      : { enabled: value.enabled },
+    state: {
+      enabled: hookEntry.enabled,
+      ...(binaries ? { binaries } : {}),
+      ...(scanRoots ? { "scan-roots": scanRoots } : {}),
+    },
   };
 }
 
@@ -161,6 +168,13 @@ function replaceTopLevelHooksBlock(text: string, block: string): string {
     .concat("\n");
 }
 
+/**
+ * Find the line range one top-level config block occupies, so a toggle can replace only that block and leave the user's comments alone.
+ *
+ * @param lines - config file split into lines
+ * @param key - top-level key to locate
+ * @returns the block's start and end lines, or null when the key is not in the file yet
+ */
 function topLevelBlockRange(
   lines: string[],
   key: string,
@@ -179,6 +193,14 @@ function topLevelBlockRange(
   return { start, end };
 }
 
+/**
+ * Work out how far above a block its own comment header reaches, so replacing the block takes its header with it.
+ *
+ * @param lines - config file split into lines
+ * @param start - first line of the block itself
+ * @param key - top-level key being replaced
+ * @returns the first line to remove, which equals `start` when the block has no header of its own
+ */
 function removablePrefixStart(
   lines: string[],
   start: number,
@@ -229,33 +251,131 @@ function readHookConfig(projectPath: string): HookConfigMap {
  *
  * @param projectPath - project whose goat-flow config stores hook overrides
  * @param hookId - canonical hook id to read
- * @param defaultEnabled - registry default to use when config omits the hook
+ * @param isEnabledByDefault - registry default to use when config omits the hook
  * @returns configured enabled state, or the registry default when absent
  */
 export function readHookEnabled(
   projectPath: string,
   hookId: string,
-  defaultEnabled: boolean,
+  isEnabledByDefault: boolean,
 ): boolean {
-  return readHookConfig(projectPath)[hookId]?.enabled ?? defaultEnabled;
+  return readHookConfig(projectPath)[hookId]?.enabled ?? isEnabledByDefault;
+}
+
+/**
+ * Return one hook's explicit project-relative post-turn roots.
+ *
+ * @param projectPath - selected project whose goat-flow config owns the hook row
+ * @param hookId - canonical hook id; hooks without `scan-roots` return no list
+ * @returns copied configured roots, or `null` when the hook has no valid explicit list
+ */
+export function readHookScanRoots(
+  projectPath: string,
+  hookId: string,
+): string[] | null {
+  const scanRoots = readHookConfig(projectPath)[hookId]?.["scan-roots"];
+  return scanRoots ? [...scanRoots] : null;
+}
+
+/** Return a YAML value with any trailing comment removed; quotes are not tracked because scan roots never need a literal `#`. */
+function yamlValueWithoutComment(rawValue: string): string {
+  return rawValue.replace(/\s+#.*$/u, "").trim();
+}
+
+/** Return true for `*roots`, `&roots ...`, or a flow list such as `[*api_root, packages/web]` written on the `scan-roots:` line. */
+function scanRootInlineValueUsesYamlAlias(inlineValue: string): boolean {
+  if (/^[*&]/u.test(inlineValue)) return true;
+  return inlineValue.startsWith("[") && /[[,]\s*[*&]/u.test(inlineValue);
+}
+
+/**
+ * Return true when the block list under a `scan-roots:` key has an item written as `- *name` or `- &name`.
+ * Every deeper `- item` line belongs to scan-roots until the indent returns to the key's level or above.
+ *
+ * @param lines - config text split into lines
+ * @param keyLineIndex - index of the `scan-roots:` line; items are searched below it
+ * @param keyIndent - indent of that key; a line at this indent or shallower ends the list
+ * @returns true on the first alias or anchor item; false when the list ends without one
+ */
+function scanRootBlockListUsesYamlAlias(
+  lines: string[],
+  keyLineIndex: number,
+  keyIndent: number,
+): boolean {
+  for (
+    let itemIndex = keyLineIndex + 1;
+    itemIndex < lines.length;
+    itemIndex += 1
+  ) {
+    const itemLine = lines[itemIndex] ?? "";
+    if (itemLine.trim().length === 0) continue;
+    const itemIndent = itemLine.length - itemLine.trimStart().length;
+    if (itemIndent <= keyIndent) break;
+    if (/^\s*-\s*[*&]/u.test(itemLine)) return true;
+  }
+  return false;
+}
+
+/**
+ * Tell whether the project's `scan-roots` entry is written with a YAML anchor or alias in any shape the hook runtime cannot read.
+ * Use before registering post-turn scan roots: js-yaml resolves `*name` and `&name` for the CLI, but the hook's own parser inside
+ * post-turn-safety.sh does not, so a registration that accepts them would fail closed at Stop time with a misleading message.
+ *
+ * @param projectPath - selected project whose `.goat-flow/config.yaml` is inspected as text; a missing file has no scan roots
+ * @returns true when a `scan-roots` value, flow list item, or block list item starts with `*` or `&`
+ */
+export function hookScanRootsUseYamlAliases(projectPath: string): boolean {
+  const lines = readConfigText(projectPath).split(/\r?\n/u);
+  return lines.some((line, index) =>
+    scanRootLineUsesYamlAlias(lines, line, index),
+  );
+}
+
+/**
+ * Tell whether one config line is a `scan-roots:` key whose value, inline or in the block list below it, uses a YAML alias or anchor.
+ *
+ * @param lines - whole config text split into lines, needed to read a block list beneath the key
+ * @param line - the line being inspected
+ * @param index - its position in `lines`
+ * @returns true for an alias or anchor in this key's value; false for other lines, comments, and plain lists
+ */
+function scanRootLineUsesYamlAlias(
+  lines: string[],
+  line: string,
+  index: number,
+): boolean {
+  // A commented-out example such as `# scan-roots: *roots` configures nothing.
+  if (line.trimStart().startsWith("#")) return false;
+  // The key may sit mid-line inside a flow mapping, `post-turn-safety: { scan-roots: *roots }`, so match it anywhere.
+  const keyMatch = /scan-roots\s*:(.*)$/u.exec(line);
+  if (!keyMatch) return false;
+  const inlineValue = yamlValueWithoutComment(keyMatch[1] ?? "");
+  if (scanRootInlineValueUsesYamlAlias(inlineValue)) return true;
+  // Only a key that starts its line can own a block list beneath it.
+  const blockKeyMatch = /^(\s*)scan-roots\s*:/u.exec(line);
+  return (
+    blockKeyMatch !== null &&
+    scanRootBlockListUsesYamlAlias(lines, index, blockKeyMatch[1]?.length ?? 0)
+  );
 }
 
 /**
  * Set one hook's desired enabled state in `.goat-flow/config.yaml`.
+ * It writes the file in place, replacing only the hook block so the rest of the user's config, including their comments, survives the toggle.
  *
  * @param projectPath - project whose goat-flow config should be written
  * @param hookId - canonical hook id to update
- * @param enabled - desired enabled state to persist
+ * @param isEnabled - desired enabled state to persist
  */
 export function setHookEnabled(
   projectPath: string,
   hookId: string,
-  enabled: boolean,
+  isEnabled: boolean,
 ): void {
   const path = configPath(projectPath);
   const text = readConfigText(projectPath);
   const hooks = readRawHooks(text);
-  hooks[hookId] = { ...hooks[hookId], enabled };
+  hooks[hookId] = { ...hooks[hookId], enabled: isEnabled };
   mkdirSync(dirname(path), { recursive: true });
   writeFileAtomic(
     path,
@@ -292,6 +412,17 @@ export function removeHookConfig(projectPath: string, hookId: string): void {
   );
 }
 
+/**
+ * Remove one top-level block from the project's `.goat-flow/config.yaml`, leaving the rest of the user's config untouched.
+ *
+ * Used when a feature is switched off in the dashboard and its settings should disappear rather than linger as dead configuration.
+ *
+ * Side effect: rewrites the config file atomically, and does nothing when the file or the block is already absent.
+ *
+ * @param projectPath - selected project whose config is edited
+ * @param key - top-level key to remove; a key that is not present is a no-op rather than an error
+ * @returns nothing; an unchanged file is left alone entirely, so no needless write or mtime change occurs
+ */
 export function removeTopLevelConfigBlock(
   projectPath: string,
   key: string,

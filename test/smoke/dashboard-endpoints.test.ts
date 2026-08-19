@@ -30,7 +30,7 @@ type TerminalWebSocket = Parameters<TerminalManager["attachWebSocket"]>[1];
 /** Minimal PTY surface TerminalManager needs for endpoint smoke tests. */
 interface TestPty {
   /** Writes terminal input sent through the fake PTY. */
-  write(data: string): void;
+  write(chunk: string): void;
   /** Record terminal resize requests without opening a real PTY. */
   resize(cols: number, rows: number): void;
   /** Terminate the fake PTY lifecycle used by shutdown assertions. */
@@ -55,6 +55,7 @@ interface TestTerminalSession {
   idleTimer: ReturnType<typeof setTimeout> | null;
   detachBuffer: string[];
   detachBufferSize: number;
+  /** Capture stubs the test can close, standing in for the real quality-draft watchers. */
   qualityCaptures: Array<{ dispose(): void }>;
 }
 
@@ -181,19 +182,23 @@ function makeSession(overrides: Partial<TestTerminalSession> = {}): {
 /** Create the fake spawned PTY used by prompt-delivery timing tests. */
 function makeSpawnedPty(): {
   pty: TestPty & {
+    /** Register the handler the fake PTY calls when it emits output. */
     onData(handler: (data: string) => void): void;
+    /** Register the handler the fake PTY calls when the session ends. */
     onExit(
       handler: (event: { exitCode: number; signal?: number | string }) => void,
     ): void;
   };
   writes: string[];
   /** Emit fake runner output into TerminalManager's PTY data handler. */
-  emitData(data: string): void;
+  emitData(chunk: string): void;
   /** Emit runner exit independently from kill for teardown-order tests. */
   emitExit(): void;
 } {
   const writes: string[] = [];
+  // Handlers start as no-ops so a test that never wires them up cannot fail on an undefined call.
   let dataHandler: (data: string) => void = () => undefined;
+  // Same no-op default for the exit path, so a test that only exercises output still runs cleanly.
   let exitHandler: (event: {
     exitCode: number;
     signal?: number | string;
@@ -217,8 +222,8 @@ function makeSpawnedPty(): {
       },
     },
     /** Emit fake runner output into TerminalManager's PTY data handler. */
-    emitData(data: string): void {
-      dataHandler(data);
+    emitData(chunk: string): void {
+      dataHandler(chunk);
     },
     /** Emit one synthetic PTY exit so endpoint tests can observe terminal teardown. */
     emitExit(): void {

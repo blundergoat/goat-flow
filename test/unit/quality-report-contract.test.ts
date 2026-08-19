@@ -16,6 +16,9 @@ import {
   QUALITY_EVIDENCE_METHODS,
   QUALITY_FINDING_SEVERITIES,
   QUALITY_FINDING_TYPES,
+  QUALITY_GROUNDING_STATUSES,
+  QUALITY_SCORE_CONFIDENCES,
+  QUALITY_WORKTREE_STATES,
 } from "../../src/cli/quality/schema-types.js";
 
 /** Top-level JSON keys every contract render must show in its body shape. */
@@ -30,6 +33,7 @@ const REQUIRED_TOP_LEVEL_FIELDS = [
   '"rubric_version"',
   '"quality_mode"',
   '"prior_report_id"',
+  '"assessment_context"',
   '"scores"',
   '"findings"',
 ] as const;
@@ -58,6 +62,14 @@ const VERSION_FINDING_AUTHORITY =
   "Raise version findings only when repository-owned declarations or managed target artifacts disagree.";
 const FAST_CACHE_AUDIT_PLACEHOLDER =
   'The pre-filled `audit_status: "unavailable"` is a placeholder superseded by any live audit completed during this assessment.';
+const ASSESSMENT_CONTEXT_GUIDANCE = [
+  "project_revision",
+  "working_tree_state",
+  "grounding_status",
+  "unverified_probes",
+  "score_confidence",
+  "does not change or cap the rubric scores",
+] as const;
 const REPOSITORY_ROOT = resolve(import.meta.dirname, "..", "..");
 const QUALITY_MODES = ["agent-setup", "process", "harness", "skills"] as const;
 const FOCUSED_QUALITY_MODES = ["process", "harness", "skills"] as const;
@@ -238,13 +250,25 @@ function assertCarriesContract(surface: string, text: string): void {
       `${surface}: missing finding field ${field}`,
     );
   }
+  for (const guidance of ASSESSMENT_CONTEXT_GUIDANCE) {
+    assert.ok(
+      text.includes(guidance),
+      `${surface}: missing assessment-context guidance ${guidance}`,
+    );
+  }
   // Allowed enum values must match the parser's lists verbatim.
-  for (const value of [
+  for (const candidate of [
     ...QUALITY_FINDING_TYPES,
     ...QUALITY_FINDING_SEVERITIES,
     ...QUALITY_EVIDENCE_METHODS,
+    ...QUALITY_WORKTREE_STATES,
+    ...QUALITY_GROUNDING_STATUSES,
+    ...QUALITY_SCORE_CONFIDENCES,
   ]) {
-    assert.ok(text.includes(value), `${surface}: missing enum value ${value}`);
+    assert.ok(
+      text.includes(candidate),
+      `${surface}: missing enum value ${candidate}`,
+    );
   }
   // One bounded saver owns redaction, validation, destination choice, and existence proof.
   assert.ok(
@@ -355,6 +379,16 @@ describe("quality report contract: CLI surfaces", () => {
     }
   });
 
+  it("names framework decisions without consumer-relative ADR paths", () => {
+    const prompt = composeQuality(makeInput("agent-setup")).prompt;
+
+    assert.match(
+      prompt,
+      /ADR-021, "goat-critique is a core feature, full delegated mode only"/u,
+    );
+    assert.doesNotMatch(prompt, /\.goat-flow\/learning-loop\/decisions\/ADR-/u);
+  });
+
   // Reviewers with denied probes still receive an honest evidence path in every relevant mode.
   it("defines degraded grounding without weakening the skills fallback", () => {
     const agentSetupPrompt = composeQuality(makeInput("agent-setup")).prompt;
@@ -377,10 +411,37 @@ describe("quality report contract: CLI surfaces", () => {
     assert.ok(harnessPrompt.includes('evidence_method: "static-analysis"'));
     assert.ok(
       skillsPrompt.includes(
-        "Method rule: prefer live skill invocation only when the runner supports it safely. If live invocation or delegated/sub-agent calls are unavailable, perform a file-grounded protocol run against SKILL.md and label the evidence limit. Never imply a dry run is bulletproof TDD evidence.",
+        "Method rule: prefer live skill invocation only when the runner supports it safely.",
       ),
     );
+    assert.ok(
+      skillsPrompt.includes(
+        "never let a quality probe edit the assessed checkout",
+      ),
+    );
+    assert.ok(
+      skillsPrompt.includes("file-grounded protocol run against SKILL.md"),
+    );
     assert.equal(skillsPrompt.includes(focusedDenialRule), false);
+  });
+
+  it("skills mode names all eight skills and requires eight sections", () => {
+    const skillsPrompt = composeQuality(makeInput("skills")).prompt;
+    const agentSetupPrompt = composeQuality(makeInput("agent-setup")).prompt;
+    const canonicalSkills =
+      "/goat,/goat-debug,/goat-plan,/goat-review,/goat-critique,/goat-security,/goat-qa,/goat-clarity".split(
+        ",",
+      );
+
+    assert.match(skillsPrompt, /Assess all eight goat-flow skills/u);
+    assert.match(skillsPrompt, /After the eight sections/u);
+    for (const skillName of canonicalSkills) {
+      assert.ok(skillsPrompt.includes(skillName), `missing ${skillName}`);
+    }
+    assert.equal(
+      agentSetupPrompt.match(/^\d+\. \*\*`\/goat[^`]*`\*\*/gmu)?.length,
+      canonicalSkills.length,
+    );
   });
 
   it("focused (harness) prompt carries the full contract", () => {
@@ -616,6 +677,13 @@ describe("quality report contract: CLI surfaces", () => {
     assert.ok(withPrior.includes("`What You Did Not Verify`"));
     assert.ok(withPrior.includes("literal denied or unavailable probe"));
     assert.ok(withPrior.includes("omission is not verified resolution"));
+    assert.ok(
+      withPrior.includes(
+        "Do NOT emit `absent` in current findings - absence is derived later",
+      ),
+    );
+    assert.ok(withPrior.includes("the diff's derived `absent` bucket"));
+    assert.equal(withPrior.includes("derived `resolved`"), false);
     assert.ok(
       withPrior.includes("absent from the later report, not proven fixed"),
     );

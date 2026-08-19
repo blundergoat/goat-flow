@@ -47,7 +47,7 @@ Manage shipped guardrails and quality hooks for the selected project. Each agent
 
 ### Projects
 
-Multi-project browser. Lists registered projects with their latest audit status. Project titles and favorites follow a stable identity when possible: git remote hash first, then a local `.goat-flow/project-id` marker for non-git goat-flow projects, then absolute path fallback. The marker is local dashboard state and remains gitignored by the default `.goat-flow/.gitignore`. "Audit All" re-audits every project in one click. Select a project to switch context and view its results on the Home view.
+Multi-project browser. Lists immediate non-hidden folders beside the launch project plus paths registered through Add Project. `Refresh Status` updates lightweight setup/version state without creating project identity markers. `Open audit` switches to Home for the full report. Archive hides a project from the active table while retaining its checkout-local identity, title, and aliases; expand Archived to Restore it. Explicitly registered projects follow a stable identity where possible: git remote hash first, then a local `.goat-flow/project-id` marker for non-git goat-flow projects, then absolute path fallback. The marker and archive state remain gitignored local dashboard state.
 
 ### Prompts
 

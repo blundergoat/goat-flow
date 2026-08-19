@@ -1,7 +1,7 @@
 /**
  * Runs explicit, bounded deny-hook classifier probes for one selected checkout.
- * Use this module when a user asks whether the managed local hook blocks fixed
- * scenarios; reports and events omit command operands and captured process text.
+ * Use this module when a user asks whether the managed local hook blocks fixed scenarios; reports and events omit command operands and captured
+ * process text.
  */
 import { spawnSync } from "node:child_process";
 import { realpathSync } from "node:fs";
@@ -33,7 +33,10 @@ import {
 import type { AgentId } from "./types.js";
 import { readAllHookStates } from "./server/hook-registrar.js";
 import { getAgentProfiles } from "./agents/registry.js";
-import { buildAgentHookCommand } from "./server/agent-hook-writer.js";
+import {
+  buildAgentHookDescriptor,
+  type AgentHookHandlerDescriptor,
+} from "./server/agent-hook-command.js";
 import { getHookSpec } from "./server/hooks-registry.js";
 
 export type {
@@ -57,7 +60,7 @@ export interface ManagedDenyHookState {
   enabled: boolean;
   installed: boolean;
   scriptPath: string | null;
-  configuredCommand: string | null;
+  configuredHandler: AgentHookHandlerDescriptor | null;
   reasonCode: HookRuntimeReasonCode | null;
 }
 
@@ -82,7 +85,7 @@ export interface HookRuntimeDependencies {
   ) => HookProbeExecution;
   executeConfiguredProbe?: (
     projectPath: string,
-    configuredCommand: string,
+    configuredHandler: AgentHookHandlerDescriptor,
     agent: AgentId,
     scenario: HookProbeScenario,
   ) => HookProbeExecution;
@@ -133,7 +136,7 @@ function readManagedDenyHookState(
       enabled: false,
       installed: false,
       scriptPath: null,
-      configuredCommand: null,
+      configuredHandler: null,
       reasonCode: "hook-registry-missing",
     };
   }
@@ -142,19 +145,19 @@ function readManagedDenyHookState(
   const agentProfile = getAgentProfiles().find(
     (knownAgent) => knownAgent.id === agent,
   );
-  const configuredCommand =
+  const configuredHandler =
     agentState.installed &&
     denyHookSpec !== null &&
     agentProfile?.hooksDir !== null &&
     agentProfile?.hooksDir !== undefined
-      ? buildAgentHookCommand(agent, agentProfile.hooksDir, denyHookSpec)
+      ? buildAgentHookDescriptor(agent, agentProfile.hooksDir, denyHookSpec)
       : null;
   return {
     isSupported: agentState.supported,
     enabled: denyHook.enabled,
     installed: agentState.installed,
     scriptPath: agentState.scriptPath,
-    configuredCommand,
+    configuredHandler,
     reasonCode: managedHookReasonCode(
       agentState.supported,
       denyHook.enabled,
@@ -189,8 +192,8 @@ function rejectedProbeExecution(): HookProbeExecution {
 }
 
 /**
- * Execute one inert classifier operand through Bash without a shell interpolation layer.
- * Exported so containment tests can prove redirected script paths never run.
+ * Spawns one inert classifier operand through Bash, with no shell interpolation layer in between.
+ * Exported so containment tests can prove redirected script paths never run; it reports containment and startup failures as a rejected result.
  *
  * @param projectPath - selected project checkout; empty or unresolved paths return a rejected probe result
  * @param scriptPath - managed hook path inside the checkout; missing or escaped paths are never executed
@@ -271,23 +274,28 @@ function configuredDenyHookPayload(
 }
 
 /**
- * Replay one inert policy input through the exact command setup registered.
- * Use when deny verification checks the same launcher the user's agent invokes.
+ * Replay one inert policy input through the exact handler setup the user registered.
+ * It spawns that registered launcher, so verification proves the same path the user's agent takes rather than an equivalent one.
  *
  * @param projectPath - selected checkout; empty text cannot provide a safe working directory
- * @param configuredCommand - exact managed command; empty text produces a bounded spawn error
+ * @param configuredHandler - exact managed handler; a missing executable produces a bounded spawn error
  * @param agent - selected provider used to shape the fixed policy payload
  * @param scenario - fixed inert command and expected decision; never null
- * @returns bounded execution evidence; null exit means the configured command did not complete
+ * @returns bounded execution evidence; null exit means the configured handler did not complete
  */
 function executeManagedConfiguredHookProbe(
   projectPath: string,
-  configuredCommand: string,
+  configuredHandler: AgentHookHandlerDescriptor,
   agent: AgentId,
   scenario: HookProbeScenario,
 ): HookProbeExecution {
   const startedAt = performance.now();
-  const execution = spawnSync("bash", ["-c", configuredCommand], {
+  // Argv handlers run exactly as the provider spawns them; shell handlers keep Bash parsing.
+  const [probeExecutable, probeArguments] =
+    configuredHandler.form === "argv"
+      ? [configuredHandler.command, configuredHandler.args]
+      : ["bash", ["-c", configuredHandler.command]];
+  const execution = spawnSync(probeExecutable, probeArguments, {
     cwd: projectPath,
     encoding: "utf-8",
     env: managedHookEnvironment(projectPath),
@@ -471,7 +479,7 @@ function selectHookScenarioResults(
   hookState: ManagedDenyHookState,
   dependencies: HookRuntimeDependencies,
 ): HookRuntimeScenarioResult[] {
-  // Users can explicitly suppress execution when they do not trust checkout-owned hook code.
+  // Without explicit trusted-target approval, checkout-owned hook code cannot run.
   if (request.isTargetUntrusted) {
     return DENY_HOOK_SCENARIOS.map((scenario) =>
       skippedScenarioResult(scenario, "unsupported", "target-marked-untrusted"),
@@ -509,11 +517,11 @@ function selectHookScenarioResults(
   return DENY_HOOK_SCENARIOS.map((scenario) =>
     completedScenarioResult(
       scenario,
-      // Production replays the exact registered command; injected tests retain the direct seam.
-      configuredProbe && hookState.configuredCommand !== null
+      // Production replays the exact registered handler; injected tests retain the direct seam.
+      configuredProbe && hookState.configuredHandler !== null
         ? configuredProbe(
             request.projectPath,
-            hookState.configuredCommand,
+            hookState.configuredHandler,
             request.agent,
             scenario,
           )
@@ -548,7 +556,7 @@ export function verifyManagedDenyHook(
     dependencies,
   );
 
-  // An untrusted-target choice suppresses every target-local side effect, including event writes.
+  // With runtime approval withheld, suppress every target-local side effect, including event writes.
   const recordedScenarios = request.isTargetUntrusted
     ? scenarioResults
     : scenarioResults.map((scenario) =>

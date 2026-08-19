@@ -23,7 +23,7 @@ last_reviewed: 2026-08-10
 
 **Root cause:** `naming.short-variable` is intentionally syntax-local. It cannot distinguish a throwaway `r` from a conventional `ws` WebSocket handle or `md` Markdown renderer without project vocabulary.
 
-**Prevention:** Keep `.gruff-ts.yaml` `acceptedAbbreviations` limited to domain-standard two-letter terms, and rename concentrated one-letter locals where a clearer name is obvious. Do not add broad one-letter names such as `r`, `a`, `b`, or `m` to the allowlist. Evidence anchors: `.gruff-ts.yaml` (search: `repo-standard short names`).
+**Prevention:** Keep `.gruff-ts.yaml` `acceptedAbbreviations` limited to domain-standard two-letter terms, and rename concentrated one-letter locals where a clearer name is obvious. Do not add broad one-letter names such as `r`, `a`, `b`, or `m` to the allowlist. Evidence anchors: `.gruff-ts.yaml` (search: `acceptedAbbreviations:`).
 
 ---
 
@@ -47,7 +47,7 @@ last_reviewed: 2026-08-10
 
 **Root cause:** `naming.boolean-prefix` enforces an `is/has/can`-style grammar, but goat-flow has two other boolean naming grammars: UI state (`show*`, `loading*`, `selected*`, `terminal*`) and CLI/API flag names that intentionally match query params, JSON fields, or argv switches. Renaming those mechanically would make boundary code less traceable.
 
-**Prevention:** Keep `.gruff-ts.yaml` `booleanPrefixes` extended for camelCase state and protocol prefixes used across dashboard and CLI surfaces. Do not use the prefix list to hide exact lowercase flag names; those remain fix-or-baseline candidates because gruff's prefix matcher requires an uppercase boundary after the prefix. Evidence anchors: `.gruff-ts.yaml` (search: `dashboard state and CLI option DTOs`).
+**Prevention:** Use `.gruff-ts.yaml` `acceptedBooleanNames` for exact boundary flags and reserve `booleanPrefixes` for genuine project-wide prefix grammar. Do not use the prefix list to hide exact lowercase flag names because gruff requires an uppercase boundary after a prefix. Evidence anchors: `.gruff-ts.yaml` (search: `acceptedBooleanNames:`), `.gruff-ts.yaml` (search: `booleanPrefixes:`).
 
 ---
 
@@ -62,8 +62,9 @@ last_reviewed: 2026-08-10
 **Prevention:** After renaming identifiers inside test files, run a focused test for the touched file before the full suite, and grep the local block for the old identifier when it is not too generic. Evidence anchor: `test/unit/audit-command/json-contract.test.ts` (search: `has correct shape for harness mode`).
 
 **Recurrence 2026-08-02:** A gruff `test-quality.loop-in-test` cleanup renamed fixture tables (`LOCAL_STATE_README_PAIRS`→`LOCAL_STATE_README_ENTRIES`) and split looped assertions into per-case `it()` names. Typecheck, the touched focused tests, and gruff were all green, but `npm test` failed one unrelated test: `diagnostics bundle` exited 1 because the harness `feedback_loop` concern dropped to 50. `stats --check` named the real cause - two learning-loop entries carried `(search: ...)` anchors pointing at the old constant and the old test name. The rename sweep is not finished when the code is green; the loop indexes code by those exact strings.
+**Recurrence 2026-08-18:** The same failure hit twice in one session, once from a comment rewrite and once from a rename. Clearing `docs.missing-side-effect-doc` reworded `test/integration/audit-drift.helpers.ts` from "Write canonical skill stubs" to "Writes…", and the `naming.identifier-quality` sweep renamed `data`→`payload` in `test/integration/dashboard-server-dashboard-terminal-endpoints.test.ts`. Both times typecheck, focused gruff, and the touched tests were green, and both times `npm test` failed only `test/unit/support-bundle.test.ts` ("emits clean JSON through the CLI", exit 1), because `diagnostics bundle` embeds the harness audit whose `feedback-loop-active` check runs `stats --check`. A cited comment string and a cited identifier are both durable artifacts. For a comment, keep the cited substring and add new wording in a second sentence; for a rename, update the citing entry in the same change. Run `stats --check` at the end of any batch that rewrites existing comments or identifiers, not only the targeted gruff rerun.
 
-**Prevention:** After any rename or test-name change, run `node --import tsx src/cli/cli.ts stats --check` alongside the focused tests. A green typecheck plus green touched tests cannot see a stale learning-loop anchor, and the failure surfaces far away - as an audit concern score inside an unrelated diagnostics test. Evidence anchors: `.goat-flow/learning-loop/footguns/quality.md` (search: `does not let unscoped npx resolve the deprecated package in`), `.goat-flow/learning-loop/lessons/gruff-cleanup.md` (search: `LOCAL_STATE_README_ENTRIES`).
+**Prevention:** After any rename or test-name change, run `node --import tsx src/cli/cli.ts stats --check` alongside the focused tests. A green typecheck plus green touched tests cannot see a stale learning-loop anchor, and the failure surfaces far away - as an audit concern score inside an unrelated diagnostics test. Evidence anchors: `.goat-flow/learning-loop/footguns/quality-reporting.md` (search: `does not let unscoped npx resolve the deprecated package in`), `.goat-flow/learning-loop/lessons/refactor-fallout.md` (search: `LOCAL_STATE_README_ENTRIES`).
 
 ---
 

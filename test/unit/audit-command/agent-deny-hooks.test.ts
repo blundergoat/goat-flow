@@ -11,7 +11,7 @@ import {
   assert,
   describe,
   it,
-  makeCtx,
+  makeCtx as makeAuditContext,
   readFileSync,
   resolve,
   stubAgentFacts,
@@ -25,6 +25,16 @@ const childProcess =
   require("node:child_process") as typeof import("node:child_process");
 const originalExecFileSync = childProcess.execFileSync;
 const originalSpawnSync = childProcess.spawnSync;
+
+/** Build this runtime-focused suite's contexts with the explicit full-evidence choice. */
+function makeCtx(
+  overrides: Parameters<typeof makeAuditContext>[0],
+): ReturnType<typeof makeAuditContext> {
+  return makeAuditContext({
+    ...overrides,
+    denyMechanismEvidenceLevel: "full",
+  });
+}
 
 afterEach(() => {
   childProcess.execFileSync = originalExecFileSync;
@@ -130,8 +140,8 @@ describe("agent deny hook template comparison", () => {
     };
   }
 
+  // Assemble the installed guardrail file set this scenario reads, applying the overrides that make one file stale or absent.
   function installedGuardrailContent(
-    hooksDir: string,
     templates: ReturnType<typeof guardrailTemplates>,
     overrides: Record<string, string | null> = {},
   ) {
@@ -150,6 +160,35 @@ describe("agent deny hook template comparison", () => {
     };
     return readInstalledGuardrail;
   }
+
+  /**
+   * The aggregate audit (the form CI and preflight run) pins the dispatcher and launchers to their templates through drift,
+   * but the deny-dangerous/ policy modules are compared only in selected-agent mode, so a module mirror that drifted from
+   * workflow/hooks/ would pass CI while this checkout's agents ran a different policy than the one that ships.
+   */
+  it("keeps the installed deny-hook mirrors byte-identical to their workflow templates", () => {
+    const templates = guardrailTemplates();
+    const mirrorsByTemplate: Record<string, string> = {
+      ".goat-flow/hooks/deny-dangerous.sh": templates.dispatcher,
+      ".goat-flow/hooks/deny-dangerous/patterns-shell.sh": templates.shell,
+      ".goat-flow/hooks/deny-dangerous/patterns-paths.sh": templates.paths,
+      ".goat-flow/hooks/deny-dangerous/patterns-writes.sh": templates.writes,
+      ".goat-flow/hooks/deny-dangerous/deny-dangerous-self-test.sh":
+        templates.selfTest,
+    };
+    const driftedMirrors = Object.entries(mirrorsByTemplate)
+      .filter(
+        ([mirrorPath, templateContent]) =>
+          readFileSync(resolve(PROJECT_ROOT, mirrorPath), "utf-8") !==
+          templateContent,
+      )
+      .map(([mirrorPath]) => mirrorPath);
+    assert.deepEqual(
+      driftedMirrors,
+      [],
+      `installed deny-hook mirrors differ from workflow/hooks/ templates; copy the template over each listed mirror: ${driftedMirrors.join(", ")}`,
+    );
+  });
 
   /**
    * Exercise the configured Codex launcher with quoted evidence and a real
@@ -201,7 +240,12 @@ describe("agent deny hook template comparison", () => {
       0,
       quotedEvidenceResult.stderr || "quoted evidence should be allowed",
     );
-    assert.equal(quotedEvidenceResult.stderr, "");
+    // This case has flaked under a loaded coverage run; keep the observed streams so a rerun can name the cause.
+    assert.equal(
+      quotedEvidenceResult.stderr,
+      "",
+      `quoted evidence produced stderr; stdout=${JSON.stringify(quotedEvidenceResult.stdout)} stderr=${JSON.stringify(quotedEvidenceResult.stderr)}`,
+    );
 
     const blockedRepositoryWritePayload = JSON.stringify({
       tool_name: "Bash",
@@ -216,7 +260,11 @@ describe("agent deny hook template comparison", () => {
         encoding: "utf-8",
       },
     );
-    assert.equal(blockedRepositoryWriteResult.status, 2);
+    assert.equal(
+      blockedRepositoryWriteResult.status,
+      2,
+      `repository write was not blocked; stdout=${JSON.stringify(blockedRepositoryWriteResult.stdout)} stderr=${JSON.stringify(blockedRepositoryWriteResult.stderr)}`,
+    );
     assert.match(blockedRepositoryWriteResult.stderr, /Policy repository/);
   });
 
@@ -248,7 +296,7 @@ describe("agent deny hook template comparison", () => {
         }),
       ],
       fs: stubFS({
-        readFile: installedGuardrailContent(".codex/hooks", templates),
+        readFile: installedGuardrailContent(templates),
         listDir: (path) =>
           path === ".codex/hooks" ? ["deny-dangerous.sh"] : [],
       }),
@@ -293,7 +341,7 @@ describe("agent deny hook template comparison", () => {
         }),
       ],
       fs: stubFS({
-        readFile: installedGuardrailContent(".codex/hooks", templates),
+        readFile: installedGuardrailContent(templates),
         listDir: (path) =>
           path === ".codex/hooks" ? ["deny-dangerous.sh"] : [],
       }),
@@ -364,7 +412,7 @@ describe("agent deny hook template comparison", () => {
         }),
       ],
       fs: stubFS({
-        readFile: installedGuardrailContent(".codex/hooks", templates),
+        readFile: installedGuardrailContent(templates),
         listDir: (path) =>
           path === ".codex/hooks" ? ["deny-dangerous.sh"] : [],
       }),
@@ -416,7 +464,7 @@ describe("agent deny hook template comparison", () => {
         }),
       ],
       fs: stubFS({
-        readFile: installedGuardrailContent(".codex/hooks", templates, {
+        readFile: installedGuardrailContent(templates, {
           ".codex/hooks.json": JSON.stringify({
             hooks: {
               PreToolUse: [
@@ -484,7 +532,7 @@ describe("agent deny hook template comparison", () => {
         }),
       ],
       fs: stubFS({
-        readFile: installedGuardrailContent(".codex/hooks", templates, {
+        readFile: installedGuardrailContent(templates, {
           ".codex/hooks.json": JSON.stringify({
             hooks: {
               PreToolUse: [
@@ -535,7 +583,7 @@ describe("agent deny hook template comparison", () => {
     }) as typeof childProcess.spawnSync;
     syncBuiltinESMExports();
 
-    const readFile = installedGuardrailContent(".codex/hooks", templates, {
+    const readFile = installedGuardrailContent(templates, {
       ".codex/hooks.json": JSON.stringify({
         hooks: {
           PreToolUse: [
@@ -617,7 +665,7 @@ describe("agent deny hook template comparison", () => {
         }),
       ],
       fs: stubFS({
-        readFile: installedGuardrailContent(".codex/hooks", templates, {
+        readFile: installedGuardrailContent(templates, {
           ".codex/hooks.json": JSON.stringify({
             hooks: {
               PreToolUse: [
@@ -671,7 +719,7 @@ describe("agent deny hook template comparison", () => {
         }),
       ],
       fs: stubFS({
-        readFile: installedGuardrailContent(".codex/hooks", templates, {
+        readFile: installedGuardrailContent(templates, {
           ".codex/hooks.json": JSON.stringify({
             hooks: {
               PreToolUse: [
@@ -724,7 +772,7 @@ describe("agent deny hook template comparison", () => {
         }),
       ],
       fs: stubFS({
-        readFile: installedGuardrailContent(".codex/hooks", templates, {
+        readFile: installedGuardrailContent(templates, {
           ".codex/hooks/guard-repository-writes.sh": "# old split hook\n",
         }),
       }),

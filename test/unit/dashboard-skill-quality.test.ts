@@ -26,7 +26,10 @@ interface SkillEvaluatorVerdict {
 interface SkillQualityHelpers {
   /** Render the banner that exposes composition limits beside a skill score. */
   dashboardSkillSummaryBanner(
-    ctx: { skillReportPct(report: Record<string, unknown>): number },
+    ctx: {
+      /** Percentage the Skills tab shows for one report. */
+      skillReportPct(report: Record<string, unknown>): number;
+    },
     report: Record<string, unknown>,
   ): { title: string; desc: string; severity: string };
   /** Return the report-list helper used to count skills with visible warnings. */

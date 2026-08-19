@@ -228,7 +228,7 @@ describe("path-integrity script: docs cross-references", () => {
     }
   });
 
-  // Covers two artifacts goat-flow documents but never ships: writes refs to ISSUE.md and the ADR-043 guide.
+  // Covers two artifacts goat-flow documents but never ships: writes refs to ISSUE.md and the ADR-051 guide.
   it("allows docs refs to artifacts that live outside this repo by design", () => {
     const dir = makeTempProject();
     try {

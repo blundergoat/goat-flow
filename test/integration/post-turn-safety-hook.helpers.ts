@@ -76,33 +76,96 @@ export const TEST_JWT_TOKEN = [
 export const TEST_DOCUMENTED_AWS_PLACEHOLDER = `AKIA${"IOSFODNN7EXAMPLE"}`;
 export const TEST_DOCUMENTED_SLACK_PLACEHOLDER = `xoxb-${"test-1234567890-1234567890"}`;
 
-/** Run one committed-repository scenario that mirrors a user's edited project.
+/** Run one committed-repository scenario that mirrors a user's edited project; it writes and then removes a temporary repository.
  *
- * @param fn - required scenario callback; absence means there is no user action to verify
+ * @param scenario - required scenario callback; absence means there is no user action to verify
  * @returns nothing; the fixture repository is removed even when the scenario throws
  */
-export function withTempRepo(fn: (root: string) => void): void {
+export function withTempRepo(scenario: (root: string) => void): void {
   const root = mkdtempSync(join(tmpdir(), "goat-flow-post-turn-safety-"));
   try {
-    runGit(root, ["init", "-q"]);
-    writeFile(root, "README.md", "# fixture\n");
-    commitAll(root, "initial");
-    fn(root);
+    createCommittedRepo(root);
+    scenario(root);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
 }
 
-/** Run one unborn-repository scenario that mirrors a user's first commit.
+/** Writes one committed fixture repository at an already selected directory.
  *
- * @param fn - required callback given a repo with no HEAD; absence means no scenario
+ * @param root - non-empty directory that becomes an independent Git top level
+ * @returns nothing; the caller owns fixture cleanup
+ */
+export function createCommittedRepo(root: string): void {
+  mkdirSync(root, { recursive: true });
+  runGit(root, ["init", "-q"]);
+  writeFile(root, "README.md", "# fixture\n");
+  commitAll(root, "initial");
+}
+
+/** Write the explicit post-turn roots a non-Git controller is allowed to scan.
+ * Side effects: writes the disposable controller's Goat Flow config.
+ *
+ * @param root - non-empty controller directory that owns `.goat-flow/config.yaml`
+ * @param scanRoots - project-relative roots; an empty list removes the explicit contract
+ * @returns nothing; the caller owns the disposable controller fixture
+ */
+export function writePostTurnScanRoots(
+  root: string,
+  scanRoots: string[],
+): void {
+  if (scanRoots.length === 0) return;
+  writeFile(
+    root,
+    ".goat-flow/config.yaml",
+    [
+      "version: 1",
+      "hooks:",
+      "  post-turn-safety:",
+      "    enabled: true",
+      "    scan-roots:",
+      ...scanRoots.map((scanRoot) => `      - ${scanRoot}`),
+      "",
+    ].join("\n"),
+  );
+}
+
+/** Run one non-Git controller scenario with explicitly configured child repositories.
+ * Side effects: writes repositories and controller config, then deletes the fixture tree.
+ *
+ * @param childNames - repository names also written as the controller's explicit scan roots
+ * @param scenario - required callback given the controller and child roots
+ * @returns nothing; every controller and child path is removed after the scenario
+ */
+export function withTempController(
+  childNames: string[],
+  scenario: (root: string, childRoots: Record<string, string>) => void,
+): void {
+  const root = mkdtempSync(join(tmpdir(), "goat-flow-post-turn-controller-"));
+  const childRoots: Record<string, string> = {};
+  try {
+    for (const childName of childNames) {
+      const childRoot = join(root, childName);
+      createCommittedRepo(childRoot);
+      childRoots[childName] = childRoot;
+    }
+    writePostTurnScanRoots(root, childNames);
+    scenario(root, childRoots);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+/** Run one unborn-repository scenario that mirrors a user's first commit; it writes and then removes a temporary repository.
+ *
+ * @param scenario - required callback given a repo with no HEAD; absence means no scenario
  * @returns nothing; the fixture repository is removed even when the scenario throws
  */
-export function withUnbornTempRepo(fn: (root: string) => void): void {
+export function withUnbornTempRepo(scenario: (root: string) => void): void {
   const root = mkdtempSync(join(tmpdir(), "goat-flow-post-turn-safety-"));
   try {
     runGit(root, ["init", "-q"]);
-    fn(root);
+    scenario(root);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -244,17 +307,17 @@ function runHookProcess(
 /** Build the supported Stop payload a coding agent sends after the user's turn.
  *
  * @param sessionId - stable provider session; empty is intentionally invalid
- * @param stopHookActive - true means this is a continuation caused by the prior block
+ * @param isStopHookActive - true means this is a continuation caused by the prior block
  * @returns bounded JSON consumed on stdin; never null or empty
  */
 export function buildStopPayload(
   sessionId: string,
-  stopHookActive: boolean,
+  isStopHookActive: boolean,
 ): string {
   return JSON.stringify({
     session_id: sessionId,
     hook_event_name: "Stop",
-    stop_hook_active: stopHookActive,
+    stop_hook_active: isStopHookActive,
   });
 }
 
@@ -265,13 +328,13 @@ export function buildStopPayload(
  *
  * @param command - required command name; empty cannot produce a usable shim
  * @param scriptBody - failure predicate; empty delegates every call to the real command
- * @param fn - required scenario callback given the shim environment; absence runs no proof
+ * @param scenario - required scenario callback given the shim environment; absence runs no proof
  * @returns nothing; the temporary shim is removed after the scenario
  */
 export function withCommandShim(
   command: string,
   scriptBody: string,
-  fn: (env: Record<string, string>) => void,
+  scenario: (env: Record<string, string>) => void,
 ): void {
   const shimRoot = mkdtempSync(join(tmpdir(), "goat-flow-post-turn-shim-"));
   // A missing PATH represents a user environment where only the test shim is discoverable.
@@ -289,7 +352,7 @@ export function withCommandShim(
       ].join("\n"),
     );
     chmodSync(commandPath, 0o755);
-    fn({
+    scenario({
       PATH: `${shimRoot}${delimiter}${originalPath}`,
       GOAT_FLOW_TEST_ORIGINAL_PATH: originalPath,
     });

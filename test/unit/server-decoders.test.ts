@@ -43,12 +43,12 @@ describe("decodeTerminalCreateBody", () => {
       }),
       { validRunners: RUNNERS, defaultRunner: "claude" },
     );
-    const value = assertDecodeOk(result);
-    assert.equal(value.prompt, "hi");
-    assert.equal(value.projectPath, "/tmp/goat-flow");
-    assert.equal(value.targetPath, "/tmp/a");
-    assert.equal(value.runner, "codex");
-    assert.equal(value.accessMode, "reporting");
+    const decoded = assertDecodeOk(result);
+    assert.equal(decoded.prompt, "hi");
+    assert.equal(decoded.projectPath, "/tmp/goat-flow");
+    assert.equal(decoded.targetPath, "/tmp/a");
+    assert.equal(decoded.runner, "codex");
+    assert.equal(decoded.accessMode, "reporting");
   });
 
   it("defaults runner and access mode only when absent", () => {
@@ -238,10 +238,10 @@ describe("decodeProjectsListBody", () => {
         projectTitles: { "/a": "Alpha", "/b/c": "  Beta  " },
       }),
     );
-    const value = assertDecodeOk(result);
-    assert.deepStrictEqual(value.paths, ["/a", "/b/c"]);
-    assert.deepStrictEqual(value.favorites, ["goat-review", "goat-qa"]);
-    assert.deepStrictEqual(value.projectTitles, {
+    const decoded = assertDecodeOk(result);
+    assert.deepStrictEqual(decoded.paths, ["/a", "/b/c"]);
+    assert.deepStrictEqual(decoded.favorites, ["goat-review", "goat-qa"]);
+    assert.deepStrictEqual(decoded.projectTitles, {
       "/a": "Alpha",
       "/b/c": "Beta",
     });
@@ -249,9 +249,9 @@ describe("decodeProjectsListBody", () => {
 
   it("defaults favorites and projectTitles to empty when omitted", () => {
     const result = decodeProjectsListBody(JSON.stringify({ paths: ["/a"] }));
-    const value = assertDecodeOk(result);
-    assert.deepStrictEqual(value.favorites, []);
-    assert.deepStrictEqual(value.projectTitles, {});
+    const decoded = assertDecodeOk(result);
+    assert.deepStrictEqual(decoded.favorites, []);
+    assert.deepStrictEqual(decoded.projectTitles, {});
   });
 
   it("drops empty-string project titles so clearing round-trips cleanly", () => {
@@ -310,9 +310,9 @@ describe("decodeClientMessage", () => {
     const result = decodeClientMessage(
       JSON.stringify({ type: "input", data: "x" }),
     );
-    const value = assertDecodeOk(result);
-    assert.equal(value.type, "input");
-    assert.equal((value as { type: "input"; data: string }).data, "x");
+    const decoded = assertDecodeOk(result);
+    assert.equal(decoded.type, "input");
+    assert.equal((decoded as { type: "input"; data: string }).data, "x");
   });
 
   it("decodes resize messages with numeric cols/rows", () => {
@@ -325,9 +325,9 @@ describe("decodeClientMessage", () => {
         rows: expectedRows,
       }),
     );
-    const value = assertDecodeOk(result);
-    assert.equal(value.type, "resize");
-    const resize = value as { type: "resize"; cols: number; rows: number };
+    const decoded = assertDecodeOk(result);
+    assert.equal(decoded.type, "resize");
+    const resize = decoded as { type: "resize"; cols: number; rows: number };
     assert.equal(resize.cols, expectedColumns);
     assert.equal(resize.rows, expectedRows);
   });
@@ -342,6 +342,21 @@ describe("decodeClientMessage", () => {
       JSON.stringify({ type: "input", data: 42 }),
     );
     assert.equal(assertDecodeError(result).path, "message.data");
+  });
+
+  it("accepts a bracketed paste only through the input data field", () => {
+    const bracketedPaste = "\x1b[200~line1\nline2\x1b[201~";
+    const decoded = assertDecodeOk(
+      decodeClientMessage(
+        JSON.stringify({ type: "input", data: bracketedPaste }),
+      ),
+    );
+    assert.deepEqual(decoded, { type: "input", data: bracketedPaste });
+    // The same paste under any other field name never reaches the terminal.
+    const rejected = decodeClientMessage(
+      JSON.stringify({ type: "input", bracketedPaste }),
+    );
+    assert.equal(assertDecodeError(rejected).path, "message.data");
   });
 
   it("rejects non-numeric cols on resize", () => {

@@ -1,10 +1,14 @@
 /**
- * Gruff warning-debt ratchet: the checker fails closed on analyzer
- * operational errors, malformed or drifted JSON, new or duplicated warnings,
- * worsened size/process metadata, stale accepted debt, shell-enabled process
- * execution, and coverage loss, while unchanged or reduced reviewed debt
- * passes. Also pins the preflight Gruff Policy wiring and the dedicated
- * Node 22 CI ratchet job so neither gate silently disappears.
+ * Gruff warning-debt ratchet.
+ *
+ * The checker must fail closed on every way debt can grow unnoticed:
+ *
+ * - analyzer operational errors, and malformed or drifted JSON
+ * - new or duplicated warnings, worsened size and process metadata, and stale accepted debt
+ * - shell-enabled process execution, and coverage loss
+ *
+ * Unchanged or reduced reviewed debt passes. The suite also pins the preflight Gruff Policy wiring and the
+ * dedicated Node 22 CI ratchet job, so neither gate can silently disappear.
  */
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
@@ -26,9 +30,9 @@ const FAKE_ANALYZER = join(
 
 /**
  * Reviewed-debt manifest fixture mirroring the real baseline shape.
- * Invariant: always kept in exact agreement with {@link scanFixture} so the
- * unchanged-debt case passes; regression tests never edit this shared shape
- * and instead mutate a fresh copy per test.
+ *
+ * Invariant: it stays in exact agreement with {@link scanFixture} so the unchanged-debt case passes, and a
+ * regression test mutates a fresh copy rather than editing this shared shape.
  */
 function baselineFixture(): Record<string, unknown> {
   return {
@@ -80,9 +84,9 @@ function warning(overrides: Record<string, unknown>): Record<string, unknown> {
 
 /**
  * Analyzer scan fixture that exactly matches {@link baselineFixture}.
- * Invariant: this baseline agreement must always hold so every regression
- * fixture is a single deliberate mutation of a fresh copy, never an edit to
- * the shared pass-case shape.
+ *
+ * Invariant: that agreement must always hold, so every regression fixture is one deliberate mutation of a fresh
+ * copy rather than an edit to the shared pass-case shape.
  */
 function scanFixture(): Record<string, unknown> {
   return {
@@ -132,12 +136,11 @@ interface RatchetRun {
 }
 
 /**
- * Per-test knobs for one checker run: the manifest to write (or a path to a
- * deliberately missing one), the fake analyzer's JSON scan or raw stdout,
- * and its exit code and stderr for operational-failure fixtures.
- * Contract invariants: `baselinePath` always wins over `baseline`, and
- * `rawStdout` always wins over `scan`; unset fields never mean "empty" -
- * they fall back to the shared pass-case fixtures.
+ * Per-test knobs for one checker run: the manifest to write or a path to a deliberately missing one, the fake
+ * analyzer's JSON scan or raw stdout, and its exit code and stderr for operational-failure fixtures.
+ *
+ * Contract: `baselinePath` always wins over `baseline` and `rawStdout` always wins over `scan`. An unset field
+ * never means empty; it falls back to the shared pass-case fixture.
  */
 interface RatchetRunOptions {
   baseline?: unknown;
@@ -162,12 +165,13 @@ describe("gruff warning ratchet", () => {
 
   /**
    * Run the real checker against the fake analyzer and a fixture manifest.
-   * Side effects: writes the fixture manifest into the suite's temp
-   * directory and spawns one synchronous checker child process whose
-   * environment routes analyzer resolution to the fake entry. Contract:
-   * always returns the child's exit status and both decoded streams and
-   * never throws on a failing checker - pass/fail assertions belong to the
-   * calling test.
+   *
+   * It writes the fixture manifest into the suite's temp directory and spawns one synchronous checker child whose
+   * environment routes analyzer resolution to the fake entry.
+   *
+   * @param options - per-run knobs for the manifest, analyzer output, and exit status
+   * @returns the child's exit status and both decoded streams. The contract is that it never throws on a failing
+   *   checker, because pass and fail assertions belong to the calling test.
    */
   async function runRatchet(options: RatchetRunOptions): Promise<RatchetRun> {
     runSerial += 1;
@@ -347,11 +351,43 @@ describe("gruff warning ratchet", () => {
     );
   });
 
-  it("fails when the manifest file is missing", async () => {
+  it("treats a missing manifest as zero accepted debt, so any warning is a regression", async () => {
+    const scan = { ...scanFixture(), paths: { analysedFiles: 494 } };
     const run = await runRatchet({
       baselinePath: join(fixtureRoot, "missing-baseline.json"),
+      scan,
     });
-    assertFailure(run, /invalid manifest:/);
+    // No manifest is the intended steady state: this project fixes warnings instead of accepting them,
+    // so the scan's warnings must be reported as new rather than as an unusable gate.
+    assertFailure(run, /new warning:/);
+    assert.doesNotMatch(run.stderr, /invalid manifest:/);
+  });
+
+  it("retains reviewed scan coverage when the warning manifest is missing", async () => {
+    const scan = {
+      ...scanFixture(),
+      paths: { analysedFiles: 1 },
+      findings: [],
+    };
+    const run = await runRatchet({
+      baselinePath: join(fixtureRoot, "missing-baseline.json"),
+      scan,
+    });
+    assertFailure(run, /coverage regression:.*1.*494/s);
+  });
+
+  it("passes with no manifest when the scan reports no warnings at all", async () => {
+    const scan = {
+      ...scanFixture(),
+      paths: { analysedFiles: 494 },
+      findings: [],
+    };
+    const run = await runRatchet({
+      baselinePath: join(fixtureRoot, "missing-baseline.json"),
+      scan,
+    });
+    assert.equal(run.status, 0, `expected pass, got:\n${run.stderr}`);
+    assert.match(run.stdout, /analysedFiles 494 >= floor 494/);
   });
 
   it("fails on stale accepted debt so the manifest ratchets down", async () => {

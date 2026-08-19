@@ -1,7 +1,6 @@
 /**
  * Browser-side Alpine.js data model for the GOAT Flow dashboard.
- * This stays as a classic script because the dashboard shell loads it with a
- * plain `<script>` tag rather than an ES module import.
+ * This stays as a classic script because the dashboard shell loads it with a plain `<script>` tag rather than an ES module import.
  */
 
 type ProjectSortKey = "name" | "state" | "action" | "details";
@@ -81,9 +80,9 @@ function showTerminalUploadResult(
 
 /**
  * Alpine.js data factory for the dashboard shell.
- * Fragments merge into one classic-script object because Alpine binds methods by
- * property name from server-rendered HTML. The descriptor-preserving merge keeps
- * getters/setters intact while letting large view clusters live in smaller files.
+ *
+ * Fragments merge into one classic-script object because Alpine binds methods by property name from server-rendered HTML.
+ * The descriptor-preserving merge keeps getters/setters intact while letting large view clusters live in smaller files.
  */
 function app() {
   const supportedAgents = readInjectedSupportedAgents();
@@ -109,12 +108,17 @@ function app() {
     dashboardTerminalImageUploadFragment(),
     dashboardAuditAndNavigationActionsFragment(),
     dashboardAgentPlanHookLoadersFragment(supportedAgents),
+    dashboardTaskDisplayFragment(),
     dashboardHookSetupActionsFragment(supportedAgents),
+    dashboardHookSummaryFragment(),
+    dashboardHookFilterActionsFragment(),
     dashboardSetupQualityLoadersFragment(),
     dashboardSkillQualityInventoryLoadersFragment(),
     dashboardSkillQualityReportFragment(),
     dashboardSkillEvaluatorResultFragment(),
+    dashboardSkillEvaluatorLabelsFragment(),
     dashboardSkillEvaluatorClipboardFragment(),
+    dashboardSkillEvaluatorInputActionsFragment(),
     dashboardSkillEvaluatorInputFragment(),
     dashboardProjectActionsFragment(),
     dashboardUtilityActionsFragment(),

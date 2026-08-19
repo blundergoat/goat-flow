@@ -40,9 +40,9 @@ describe("dashboard /api/quality/analyse (deprecated alias)", () => {
       String(res.headers.get("link") ?? ""),
       /\/api\/quality\/evaluate.*successor-version/,
     );
-    const data = expectRecord(body, "Alias evaluate result");
-    assert.equal(typeof data.totalScore, "number");
-    assert.ok(Array.isArray(data.metrics));
+    const payload = expectRecord(body, "Alias evaluate result");
+    assert.equal(typeof payload.totalScore, "number");
+    assert.ok(Array.isArray(payload.metrics));
   });
 
   it("emits the Deprecation header on alias 400 responses too", async () => {

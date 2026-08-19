@@ -1,10 +1,10 @@
 /**
- * The `index-fresh` collector behind `goat-flow stats --check`: detects when a generated
- * learning-loop INDEX.md no longer matches its bucket content. Freshness is decided by re-running
- * the generator in memory and string-comparing against the on-disk file - content comparison, not
- * mtimes, because mtimes false-stale after checkout/restore and are not portable. A missing
- * INDEX.md is reported as `missing` (advisory - a fresh install must not fail CI before the first
- * `goat-flow index` run); a missing bucket directory is `no-bucket` and never reported.
+ * The `index-fresh` collector behind `goat-flow stats --check`: detects when a generated learning-loop INDEX.md no longer matches its bucket content.
+ * Freshness is decided by re-running the generator in memory and string-comparing against the on-disk file - content comparison, not mtimes, because
+ * mtimes false-stale after checkout/restore and are not portable.
+ *
+ * A missing INDEX.md is reported as `missing` (advisory - a fresh install must not fail CI before the first `goat-flow index` run); a missing bucket
+ * directory is `no-bucket` and never reported.
  */
 import { formatIndex } from "../learning-loop-index/format-index.js";
 import {
@@ -15,9 +15,8 @@ import {
 import type { ReadonlyFS } from "../types.js";
 
 /**
- * Freshness verdict for one bucket index: `fresh` (on-disk matches regeneration), `stale`
- * (content drift - blocking), `missing` (bucket exists, INDEX.md absent - advisory), or
- * `no-bucket` (directory absent - skipped entirely).
+ * Freshness verdict for one bucket index: `fresh` (on-disk matches regeneration), `stale` (content drift - blocking), `missing` (bucket exists,
+ * INDEX.md absent - advisory), or `no-bucket` (directory absent - skipped entirely).
  */
 type IndexFreshnessState = "fresh" | "stale" | "missing" | "no-bucket";
 

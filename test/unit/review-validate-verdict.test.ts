@@ -117,6 +117,38 @@ describe("review output validation: ledger, sections, and verdict", () => {
     );
   });
 
+  // Fixture purpose: writes a temporary eight-record ledger to model the consumer failure that
+  // logged all nine suspicions; the surviving confirmation belongs in Findings, not in the ledger.
+  it("accepts eight REFUTED ledger records alongside one surfaced confirmation", (testContext) => {
+    const projectRoot = createReviewedProject(testContext);
+    const ledgerRoot = join(projectRoot, ".goat-flow", "logs", "review");
+    mkdirSync(ledgerRoot, { recursive: true });
+    const ledgerPath =
+      ".goat-flow/logs/review/goat-review-refutations.mixed.txt";
+    writeFileSync(
+      join(projectRoot, ledgerPath),
+      Array.from(
+        { length: 8 },
+        (_, index) =>
+          `- R-${String(index + 2).padStart(3, "0")} | Suspicion: candidate ${index + 1} | Evidence: guard ${index + 1} removes reachability | Rationale: disproved`,
+      ).join("\n") + "\n",
+      "utf-8",
+    );
+
+    const report = validReview(undefined, undefined, 8, ledgerPath)
+      .replace("- Evidence: 4 OBSERVED", "- Evidence: 1 OBSERVED")
+      .replace("- Verdicts: 4/0/8/0", "- Verdicts: 1/0/8/0")
+      .replace(
+        "- Automated-review provenance: overlap-confirmed=0, local-only=4, bot-only-locally-verified=0, disputed-match=0; automated findings the local review missed: none; local findings every bot missed: R-001, R-002, R-003, R-004",
+        "- Automated-review provenance: overlap-confirmed=0, local-only=1, bot-only-locally-verified=0, disputed-match=0; automated findings the local review missed: none; local findings every bot missed: R-001",
+      )
+      .replace(/- R-002[^\n]+\n/u, "")
+      .replace(/- R-003[^\n]+\n/u, "")
+      .replace(/\n## Systemic Patterns\n- R-004[^\n]+\n/u, "");
+
+    assert.deepEqual(validateReviewReport(report, projectRoot).violations, []);
+  });
+
   it("rejects stale unrelated ledgers and declared count mismatches", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
     const ledgerRoot = join(projectRoot, ".goat-flow", "logs", "review");

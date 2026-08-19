@@ -1,6 +1,10 @@
 /**
- * Custom prompt-library helpers for the dashboard Alpine app.
- * Custom prompts stay browser-local and separate from the built-in JSON catalog.
+ * Manages the prompts a user writes themselves, kept alongside but separate from the built-in catalog.
+ *
+ * Custom prompts live in browser storage rather than the project, so:
+ * - a user can keep private prompts without committing them to a repository
+ * - they follow the person across projects instead of being tied to one workspace
+ * - clearing browser data loses them, which is why the editor never treats them as a backup
  */
 
 const CUSTOM_PROMPT_STORAGE_KEY = "goat-flow-custom-prompts";
@@ -13,6 +17,7 @@ const CUSTOM_PROMPT_ROUTES = new Set([
   "goat-qa",
   "goat-review",
   "goat-security",
+  "goat-clarity",
 ]);
 
 const DEFAULT_CUSTOM_PROMPT_ROUTE: CustomPromptRouteOption = {
@@ -57,6 +62,11 @@ const CUSTOM_PROMPT_ROUTE_OPTIONS: CustomPromptRouteOption[] = [
     id: "goat-security",
     label: "goat-security",
     desc: "Assess security implications, supply-chain risk, and agent surfaces.",
+  },
+  {
+    id: "goat-clarity",
+    label: "goat-clarity",
+    desc: "Improve comments, names, and private placement within one frozen target.",
   },
 ];
 
@@ -218,6 +228,12 @@ function dashboardCustomPromptFlagGroups(): CustomPromptFlagGroup[] {
   return CUSTOM_PROMPT_FLAG_GROUPS;
 }
 
+/**
+ * Resolve which launch route the editor should show as selected for the open draft.
+ *
+ * @param draft - the custom prompt being edited
+ * @returns the matching route, falling back to the default so the picker is never left blank
+ */
 function dashboardSelectedCustomPromptRoute(
   draft: CustomPromptDraft,
 ): CustomPromptRouteOption {
@@ -345,6 +361,11 @@ function dashboardLoadCustomPrompts(ctx: DashboardCustomPromptsContext): void {
   }
 }
 
+/**
+ * Writes the user's whole custom-prompt list to browser storage, which is the only place these prompts live.
+ *
+ * @param ctx - live Alpine custom-prompt context supplying the current list
+ */
 function dashboardPersistCustomPrompts(
   ctx: DashboardCustomPromptsContext,
 ): void {
@@ -383,6 +404,12 @@ function dashboardCustomPromptToPreset(custom: CustomPrompt): Preset {
   };
 }
 
+/**
+ * Load a built-in preset into the editor form, so a user can start from something that already works.
+ *
+ * @param preset - preset the user chose to copy
+ * @returns the editable draft; the source id is deliberately left out so saving creates a new prompt
+ */
 function dashboardCustomPromptDraftFromPreset(
   preset: Preset,
 ): CustomPromptDraft {
@@ -415,6 +442,12 @@ function dashboardCustomPromptDraftFromPreset(
   };
 }
 
+/**
+ * Load one of the user's saved prompts back into the editor form for another pass.
+ *
+ * @param custom - saved prompt the user chose to edit
+ * @returns the editable draft matching what they saved
+ */
 function dashboardCustomPromptDraftFromCustom(
   custom: CustomPrompt,
 ): CustomPromptDraft {
@@ -440,6 +473,12 @@ function dashboardCustomPromptDraftFromCustom(
   };
 }
 
+/**
+ * Check the open draft and say what is wrong with it, keeping each problem tied to the field the user must fix.
+ *
+ * @param ctx - live Alpine custom-prompt context supplying the draft and the existing saved prompts
+ * @returns one entry per problem, each naming its field and anchor; empty means the draft is ready to save
+ */
 function dashboardValidateCustomPromptDraftDetails(
   ctx: DashboardCustomPromptsContext,
 ): CustomPromptValidationError[] {
@@ -448,6 +487,7 @@ function dashboardValidateCustomPromptDraftDetails(
   const name = draft.name.trim();
   const prompt = draft.prompt.trim();
   const editing = ctx.editingCustomPromptId;
+  // A prompt with no name cannot be found again in the list, so the name field is required before anything else is checked.
   if (!name) {
     errors.push({
       field: "name",
@@ -515,6 +555,12 @@ function dashboardValidateCustomPromptDraftDetails(
   return errors;
 }
 
+/**
+ * Reduce the draft's problems to plain messages, for the toast shown when the user clicks Save on an invalid form.
+ *
+ * @param ctx - live Alpine custom-prompt context supplying the draft
+ * @returns the messages in field order; empty means the draft is ready to save
+ */
 function dashboardValidateCustomPromptDraft(
   ctx: DashboardCustomPromptsContext,
 ): string[] {
@@ -523,6 +569,13 @@ function dashboardValidateCustomPromptDraft(
   );
 }
 
+/**
+ * Give one form field the message shown under it, so an error appears beside the input that caused it.
+ *
+ * @param ctx - live Alpine custom-prompt context supplying the draft
+ * @param field - field being rendered
+ * @returns the message for that field, or an empty string so the template renders nothing
+ */
 function dashboardCustomPromptFieldError(
   ctx: DashboardCustomPromptsContext,
   field: string,
@@ -534,16 +587,30 @@ function dashboardCustomPromptFieldError(
   );
 }
 
+/**
+ * Warn about a suspiciously short prompt body without blocking the user, since a short prompt is odd rather than invalid.
+ *
+ * @param ctx - live Alpine custom-prompt context supplying the draft
+ * @returns the warning text, or an empty string when the body is empty or long enough to look deliberate
+ */
 function dashboardCustomPromptPromptWarning(
   ctx: DashboardCustomPromptsContext,
 ): string {
   const prompt = ctx.customPromptDraft.prompt.trim();
+  // Something was typed, but not enough to be a real instruction; an empty box is left alone because the user has not started yet.
   if (prompt.length > 0 && prompt.length < 20) {
     return "Prompt is short; make sure it is not a placeholder.";
   }
   return "";
 }
 
+/**
+ * Turn the validated draft into the record that gets saved, reusing the existing id when the user is editing rather than creating.
+ *
+ * @param ctx - live Alpine custom-prompt context supplying the draft
+ * @param existing - prompt being replaced; omitting it mints a new id so a copy never overwrites its source
+ * @returns the prompt to store
+ */
 function dashboardBuildCustomPrompt(
   ctx: DashboardCustomPromptsContext,
   existing?: CustomPrompt,

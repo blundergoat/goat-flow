@@ -202,7 +202,7 @@ describe("bounded hook verification guidance", () => {
 
       assert.ok(
         content.includes(
-          "goat-flow hooks verify . --agent <id> --scenario deny-hook",
+          "goat-flow hooks verify . --agent <id> --scenario deny-hook --trusted-target",
         ),
         `${relativePath} must show the bounded managed-hook proof command`,
       );
@@ -514,10 +514,10 @@ describe("audit text output has no scan references", () => {
   });
 
   it("renderAuditMarkdown does not mention scan", () => {
-    const md = renderAuditMarkdown(makePassingReport());
+    const markdown = renderAuditMarkdown(makePassingReport());
     assert.ok(
-      !/ scan /i.test(md),
-      `Audit markdown should not reference "scan": ${md}`,
+      !/ scan /i.test(markdown),
+      `Audit markdown should not reference "scan": ${markdown}`,
     );
   });
 });
@@ -670,6 +670,12 @@ describe("setup-facing learning-loop retrieval", () => {
     "workflow/setup/agents/antigravity.md",
     "workflow/setup/agents/copilot.md",
   ] as const;
+  const allInstructionPaths = [
+    ...agentTemplatePaths,
+    "AGENTS.md",
+    "CLAUDE.md",
+    ".github/copilot-instructions.md",
+  ] as const;
 
   // One named case per agent template, so a failure names the agent whose setup drifted.
   for (const relativePath of agentTemplatePaths) {
@@ -696,6 +702,30 @@ describe("setup-facing learning-loop retrieval", () => {
         relativePath,
       );
       assert.doesNotMatch(content, /Use grep-first retrieval/u, relativePath);
+    });
+  }
+
+  for (const relativePath of allInstructionPaths) {
+    it(`keeps ignored-state search semantics harness-specific in ${relativePath}`, () => {
+      const content = readFileSync(
+        resolve(PROJECT_ROOT, relativePath),
+        "utf-8",
+      );
+      assert.match(
+        content,
+        /\.goat-flow\/learning-loop\/decisions\/INDEX\.md/u,
+        relativePath,
+      );
+      assert.match(
+        content,
+        /Claude Code's session grep shim and `git grep` omit ignored local state/u,
+        relativePath,
+      );
+      assert.doesNotMatch(
+        content,
+        /(?:^|[^A-Za-z])the session grep shim/u,
+        relativePath,
+      );
     });
   }
 

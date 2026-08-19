@@ -1,8 +1,9 @@
 /**
  * Ambient audit and hook contracts consumed by dashboard browser scripts.
+ *
  * Use when Audit, Home, or Hooks UI payloads add fields users can inspect.
- * These declarations stay import-free so every classic dashboard script shares
- * the same API shapes without pulling CLI-only code into the browser build.
+ * These declarations stay import-free so every classic dashboard script shares the same API shapes without pulling CLI-only code into the browser
+ * build.
  */
 
 type AuditStatus = "pass" | "fail" | "skipped";
@@ -198,6 +199,7 @@ type HookEffectiveStatus =
 type HookEffectiveSeverity = "neutral" | "warning" | "danger" | "success";
 type HookRegistrationIssue =
   | "registration-missing"
+  | "duplicate-registration"
   | "retired-registration"
   | "event-mismatch"
   | "matcher-mismatch"

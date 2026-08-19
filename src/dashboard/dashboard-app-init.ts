@@ -1,18 +1,32 @@
 /**
- * Alpine watcher registration for the dashboard app.
+ * Wires up the dashboard's Alpine watchers, the reactions that fire when the user changes project, tab, or terminal layout.
+ *
+ * This is the glue that makes the UI respond: without it a user could switch project and the panels would keep showing the old one.
+ *
+ * Watchers are registered once at startup and deliberately kept thin, so the work they trigger lives in the feature modules they call.
  */
 
 type DashboardAlpineContext = DashboardAppContext &
   AlpineMagics<DashboardAppContext>;
 
+/**
+ * Refit one terminal to its panel and tell the server the new size, so wrapped output matches what the user sees.
+ *
+ * @param sessionId - session whose panel is being resized
+ * @param refs - live socket references for that session
+ * @param xterm - terminal instance to refit
+ * @returns true when the resize applied; false means the panel is hidden and the caller should try again later
+ */
 function dashboardResizeTerminalRef(
   sessionId: string,
   refs: TerminalRefs,
   xterm: XTermInstance,
 ): boolean {
   const container = document.getElementById(`gf-terminal-${sessionId}`);
+  // The panel is not on screen yet, so measuring it now would size the terminal to zero columns.
   if (!container || container.offsetWidth === 0) return false;
   xterm._addonFit?.fit();
+  // Only a live socket can carry the new size; a reconnect sends it again on open.
   if (refs.ws?.readyState === WebSocket.OPEN) {
     refs.ws.send(
       JSON.stringify({ type: "resize", cols: xterm.cols, rows: xterm.rows }),
@@ -29,7 +43,13 @@ function dashboardShouldWarmXterm(
   return (view === "workspace" || view === "setup") && ctx.terminalAvailable;
 }
 
-/** Fire-and-forget xterm warmup keeps navigation responsive; terminal overlays report failures. */
+/**
+ * Start loading the terminal engine in the background when the user moves toward a view that will need it.
+ * It swallows a failed warmup, because the terminal overlay reports the real failure when the user actually opens a session.
+ *
+ * @param ctx - live Alpine dashboard context
+ * @param view - view the user is switching to
+ */
 function dashboardWarmXtermForView(
   ctx: DashboardAlpineContext,
   view: string,
@@ -48,11 +68,11 @@ function dashboardRefitCapableXterm(
 
 /** Send the current xterm dimensions over an open backend WebSocket. */
 function dashboardSendTerminalResize(
-  ws: WebSocket | undefined,
+  socket: WebSocket | undefined,
   xterm: XTermInstance,
 ): void {
-  if (ws?.readyState !== WebSocket.OPEN) return;
-  ws.send(
+  if (socket?.readyState !== WebSocket.OPEN) return;
+  socket.send(
     JSON.stringify({
       type: "resize",
       cols: xterm.cols,
@@ -64,10 +84,10 @@ function dashboardSendTerminalResize(
 /** Fit a terminal and notify the backend of its new dimensions. */
 function dashboardFitTerminalWithResize(
   xterm: XTermInstance,
-  ws: WebSocket | undefined,
+  socket: WebSocket | undefined,
 ): void {
   xterm._addonFit?.fit();
-  dashboardSendTerminalResize(ws, xterm);
+  dashboardSendTerminalResize(socket, xterm);
 }
 
 /** Retry active-view refits until the freshly-shown terminal container has layout width. */
@@ -132,9 +152,10 @@ function dashboardRefitSelectedTerminal(
 
 /**
  * Reset all skill-quality view state to empty, aborting any in-flight evaluation request first.
- * Called when the runner or project changes so a stale report/inventory never lingers across a
- * switch. Bumps skillQualityPrefetchGeneration so any prefetch that resolves after this reset is
- * recognised as stale by its generation check and discarded rather than applied.
+ *
+ * Called when the runner or project changes so a stale report/inventory never lingers across a switch.
+ * Bumps skillQualityPrefetchGeneration so any prefetch that resolves after this reset is recognised as stale by its generation check and discarded
+ * rather than applied.
  */
 function dashboardResetSkillQualityState(ctx: DashboardAppContext): void {
   ctx.skillQualityAbortController?.abort();
@@ -152,12 +173,15 @@ function dashboardResetSkillQualityState(ctx: DashboardAppContext): void {
 
 /**
  * Register the Alpine watchers that keep the xterm terminal sized and focused as the view changes.
- * Watches activeView/workspacePanel/activeSessionId and, on each relevant change, refits the active
- * terminal and pushes the new cols/rows to the backend over the open WebSocket. The refit is done
- * inside requestAnimationFrame (and a bounded retry poll for activeView) because a freshly-shown
- * panel has zero width until the browser lays it out; measuring too early yields a 0-size fit. The
- * lazy `loadXterm()` triggered on view entry swallows its rejection - a failed asset load must not
- * break view switching, and the terminal's own loading overlay reports the failure to the user.
+ *
+ * Watches activeView/workspacePanel/activeSessionId and, on each relevant change, refits the active terminal and pushes the new cols/rows to the
+ * backend over the open WebSocket.
+ *
+ * The refit is done inside requestAnimationFrame (and a bounded retry poll for activeView) because a freshly-shown panel has zero width until the
+ * browser lays it out; measuring too early yields a 0-size fit.
+ *
+ * The lazy `loadXterm()` triggered on view entry swallows its rejection - a failed asset load must not break view switching, and the terminal's own
+ * loading overlay reports the failure to the user.
  */
 function dashboardRegisterTerminalWatchers(ctx: DashboardAlpineContext): void {
   ctx.$watch("activeView", (view: string) => {
@@ -173,12 +197,12 @@ function dashboardRegisterTerminalWatchers(ctx: DashboardAlpineContext): void {
 }
 
 /**
- * Register the watchers that lazy-load each view's data when the user navigates to it and react to
- * the quality filters. Entering a view triggers its loader (audit/quality/skills/setup/plans/hooks);
- * the per-view fan-out is intentional because data is fetched on demand rather than all at once on
- * boot, keeping the initial render cheap. The workspace view additionally starts a 10s session-count
- * poll that is cleared on every activeView change, because leaving the workspace must stop the
- * interval so only one poll is ever live and a backgrounded view does not keep hitting the server.
+ * Register the watchers that lazy-load each view's data when the user navigates to it and react to the quality filters.
+ * Entering a view triggers its loader (audit/quality/skills/setup/plans/hooks); the per-view fan-out is intentional because data is fetched on demand
+ * rather than all at once on boot, keeping the initial render cheap.
+ *
+ * The workspace view additionally starts a 10s session-count poll that is cleared on every activeView change, because leaving the workspace must stop
+ * the interval so only one poll is ever live and a backgrounded view does not keep hitting the server.
  */
 function dashboardRegisterViewWatchers(ctx: DashboardAlpineContext): void {
   ctx.$watch("activeView", (view: string) => {
@@ -221,6 +245,12 @@ function dashboardRegisterViewWatchers(ctx: DashboardAlpineContext): void {
   });
 }
 
+/**
+ * Register the watchers that keep the page in step when the user switches runner or project.
+ * Without these, changing project would leave the previous project's summaries and skill lists on screen.
+ *
+ * @param ctx - live Alpine dashboard context whose watchers are registered in place
+ */
 function dashboardRegisterRunnerAndProjectWatchers(
   ctx: DashboardAlpineContext,
 ): void {
@@ -234,6 +264,7 @@ function dashboardRegisterRunnerAndProjectWatchers(
   ctx.$watch("sessionsCollapsed", (value: boolean) => {
     localStorage.setItem("gf-sessions-collapsed", String(value));
   });
+  // Keeps the browser tab title on the current project, so a user with several dashboards open can tell them apart.
   const updateTitle = (): void => {
     document.title = `${ctx.projectName} | GOAT Flow`;
   };
@@ -263,10 +294,18 @@ function dashboardRegisterRunnerAndProjectWatchers(
   updateTitle();
 }
 
+/**
+ * Handle the keyboard shortcuts that work anywhere in the dashboard, before any view-specific handler sees the key.
+ *
+ * @param ctx - live Alpine dashboard context
+ * @param event - the key the user pressed
+ * @returns true when the shortcut was handled and no other handler should act on it
+ */
 function dashboardHandleGlobalShortcut(
   ctx: DashboardAlpineContext,
   event: KeyboardEvent,
 ): boolean {
+  // Escape always closes the directory picker, wherever the user opened it from.
   if (event.key === "Escape") ctx.showBrowser = false;
   if (
     event.key === "D" &&
@@ -303,42 +342,72 @@ function dashboardHandleGlobalShortcut(
   return false;
 }
 
+/**
+ * Drive the prompt list from the keyboard: arrows move the selection, Enter launches it.
+ *
+ * Enter only launches when a preset is selected, no launch is already in flight, and the user is below their session
+ * limit, so a held key cannot open a queue of terminals they never asked for.
+ *
+ * @param ctx - dashboard state supplying the selection, launch flag, and session counts
+ * @param event - the keydown being handled; keys other than the three navigation keys are ignored
+ * @returns nothing; the effect is the moved selection or the started launch. It may call preventDefault and start a terminal launch.
+ */
+function handlePromptListNavigation(
+  ctx: DashboardAlpineContext,
+  event: KeyboardEvent,
+): void {
+  if (event.key === "ArrowDown") {
+    event.preventDefault();
+    ctx.selectPresetByOffset(1);
+    return;
+  }
+  if (event.key === "ArrowUp") {
+    event.preventDefault();
+    ctx.selectPresetByOffset(-1);
+    return;
+  }
+  if (event.key !== "Enter") return;
+
+  const canLaunchNow =
+    ctx.selectedPreset &&
+    !ctx.launching &&
+    Math.max(ctx.sessions.length, ctx.serverSessions.length) <
+      ctx.serverMaxSessions;
+  // Nothing selected, a launch already running, or the session limit reached each mean Enter must do nothing.
+  if (!canLaunchNow || !ctx.selectedPreset) return;
+
+  event.preventDefault();
+  void ctx.launchPreset(
+    ctx.selectedPreset.prompt,
+    ctx.activeRunner,
+    ctx.selectedPreset.name,
+    { presetId: ctx.selectedPreset.id },
+  );
+}
+
+/**
+ * Handle the shortcuts that only apply while the user is on the Prompts view.
+ *
+ * @param ctx - live Alpine dashboard context
+ * @param event - the key the user pressed
+ */
 function dashboardHandlePromptShortcut(
   ctx: DashboardAlpineContext,
   event: KeyboardEvent,
 ): void {
+  // The user is somewhere else, so these keys belong to that view instead.
   if (ctx.activeView !== "prompts") return;
+  // Escape closes the editor first, which is what a user expects before it starts affecting anything behind it.
   if (event.key === "Escape" && ctx.showCustomPromptEditor) {
     event.preventDefault();
     ctx.cancelCustomPromptEdit();
     return;
   }
-  const inputFocused = ["INPUT", "TEXTAREA", "SELECT"].includes(
+  const isTypingInField = ["INPUT", "TEXTAREA", "SELECT"].includes(
     document.activeElement?.tagName ?? "",
   );
-  if (!inputFocused) {
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      ctx.selectPresetByOffset(1);
-    } else if (event.key === "ArrowUp") {
-      event.preventDefault();
-      ctx.selectPresetByOffset(-1);
-    } else if (
-      event.key === "Enter" &&
-      ctx.selectedPreset &&
-      !ctx.launching &&
-      Math.max(ctx.sessions.length, ctx.serverSessions.length) <
-        ctx.serverMaxSessions
-    ) {
-      event.preventDefault();
-      void ctx.launchPreset(
-        ctx.selectedPreset.prompt,
-        ctx.activeRunner,
-        ctx.selectedPreset.name,
-        { presetId: ctx.selectedPreset.id },
-      );
-    }
-  }
+  // While the user is typing, arrow keys and Enter belong to the field they are in, not the prompt list.
+  if (!isTypingInField) handlePromptListNavigation(ctx, event);
   if (event.key === "Escape") {
     if (ctx.presetSearch) ctx.presetSearch = "";
     else if (ctx.selectedPreset) ctx.selectedPreset = null;
@@ -347,9 +416,10 @@ function dashboardHandlePromptShortcut(
 
 /**
  * Wire the single document-level keydown listener that drives the dashboard's keyboard shortcuts.
- * Global shortcuts are tried first and, when one handles the event, the prompt-view shortcuts are
- * skipped (the global handler returning true short-circuits) so the two sets never both fire for
- * one keypress. One listener for the whole app, registered once during init.
+ *
+ * Global shortcuts are tried first and, when one handles the event, the prompt-view shortcuts are skipped (the global handler returning true
+ * short-circuits) so the two sets never both fire for one keypress.
+ * One listener for the whole app, registered once during init.
  */
 function dashboardRegisterKeyboardShortcuts(ctx: DashboardAlpineContext): void {
   document.addEventListener("keydown", (event: KeyboardEvent) => {
@@ -359,11 +429,12 @@ function dashboardRegisterKeyboardShortcuts(ctx: DashboardAlpineContext): void {
 }
 
 /**
- * One-shot bootstrap run once when the Alpine app initialises: register every watcher and keyboard
- * shortcut, apply the persisted dark-mode class, load saved custom prompts and dashboard state, and
- * kick off the first audit/agent/terminal-availability fetches. The initial network calls are
- * guarded behind an http(s) protocol check so opening the built HTML from `file://` (no server)
- * loads the UI without firing requests that would only fail. Side-effecting; returns nothing.
+ * One-shot bootstrap run once when the Alpine app initialises: register every watcher and keyboard shortcut, apply the persisted dark-mode class,
+ * load saved custom prompts and dashboard state, and kick off the first audit/agent/terminal-availability fetches.
+ *
+ * The initial network calls are guarded behind an http(s) protocol check so opening the built HTML from `file://` (no server) loads the UI without
+ * firing requests that would only fail.
+ * Side-effecting; returns nothing.
  */
 function dashboardInit(ctx: DashboardAlpineContext): void {
   ctx.$watch("darkMode", (value: boolean) => {

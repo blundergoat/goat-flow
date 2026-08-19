@@ -1,6 +1,9 @@
 /**
- * Programmatic entry point for goat-flow as a library.
- * Re-exports the stable audit, prompt, config, and utility APIs used by tests and external consumers.
+ * The programmatic entry point for using goat-flow as a library rather than a command.
+ *
+ * Re-exports the stable audit, prompt, config, and utility APIs that tests and external consumers are allowed to depend on.
+ *
+ * Anything absent from this barrel is internal and may move between releases, so importing around it is what breaks on upgrade.
  */
 
 export type {

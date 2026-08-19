@@ -51,6 +51,7 @@ export function createVersionedReviewedProject(testContext: TestContext): {
   projectRoot: string;
 } {
   const projectRoot = createReviewedProject(testContext);
+  // Spawns git inside the fixture repository, because anchor validation is judged against real Git objects rather than a stub.
   const runGit = (args: string[], input?: string): string => {
     const result = spawnSync("git", ["-C", projectRoot, ...args], {
       encoding: "utf-8",

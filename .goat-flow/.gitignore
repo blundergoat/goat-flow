@@ -1,4 +1,8 @@
-# Ignore everything by default
+# Ignore everything by default. Re-includes below are spelled `**/name/**` on purpose: ignore-aware search tools read this file too, and
+# Claude Code's session `grep` (an embedded ugrep with --ignore-files) matches slash-anchored rules against the operand-prefixed path, so an
+# anchored `!name/**` never matches `.goat-flow/name/...` and the whole subtree vanishes from search results. Git treats `**/name/**` and the
+# anchored form identically here because a directory excluded by `*` cannot have children re-included. Gitignored plans/ and logs/ content is
+# still invisible to ignore-aware tools by design; use `command grep` for sweeps that must reach it.
 *
 
 # Committed goat-flow files
@@ -11,47 +15,50 @@
 
 # Committed goat-flow directories
 !learning-loop/
-!learning-loop/**
+!**/learning-loop/**
 !skill-docs/
-!skill-docs/**
+!**/skill-docs/**
 !hooks/
-!hooks/**
+!**/hooks/**
 # Keep the local-workspace directories themselves committed so tools can rely on the paths.
 # Their own nested .gitignore files decide which contents stay local-only.
 !plans/
-!plans/**
+!**/plans/**
 !scratchpad/
-!scratchpad/**
+!**/scratchpad/**
+# No committed content lives two levels below a logs directory. This guard keeps the `**/` re-includes above from reaching a nested
+# directory that happens to share a committed name (logs/quality/plans/, logs/review/hooks/, ...); test/integration/gitignore-shape.test.ts pins it.
+**/logs/*/*/
 # Keep the session-log path and anchor file, but ignore the actual markdown logs.
 # `logs/sessions/*.md` is workspace-local continuity state for the current checkout.
 !logs/
-!logs/sessions/
-!logs/sessions/.gitkeep
-logs/sessions/*.md
-!logs/sessions/README.md
+!**/logs/sessions/
+!**/logs/sessions/.gitkeep
+**/logs/sessions/*.md
+!**/logs/sessions/README.md
 # Keep the quality-history path and README committed, but ignore captured reports.
 # Order matters: the `logs/quality/*.md` rule must come BEFORE the README re-include
 # so the last matching pattern keeps `README.md` tracked.
-!logs/quality/
-logs/quality/*.json
-logs/quality/*.md
-!logs/quality/README.md
+!**/logs/quality/
+**/logs/quality/*.json
+**/logs/quality/*.md
+!**/logs/quality/README.md
 # Keep the evidence-event path and README committed, but ignore runtime JSONL.
-!logs/events/
-logs/events/*.jsonl
-!logs/events/README.md
+!**/logs/events/
+**/logs/events/*.jsonl
+!**/logs/events/README.md
 # Keep the critique-history path and README committed, but ignore run snapshots.
-!logs/critiques/
-logs/critiques/*.md
-!logs/critiques/README.md
+!**/logs/critiques/
+**/logs/critiques/*.md
+!**/logs/critiques/README.md
 # Keep the review-artifact path and README committed, but ignore run artifacts.
-!logs/review/
-logs/review/*.txt
-logs/review/*.json
-logs/review/*.md
-!logs/review/README.md
+!**/logs/review/
+**/logs/review/*.txt
+**/logs/review/*.json
+**/logs/review/*.md
+!**/logs/review/README.md
 # Keep the security-log path and README, but ignore captured reports.
-!logs/security/
-logs/security/*.md
-logs/security/*.json
-!logs/security/README.md
+!**/logs/security/
+**/logs/security/*.md
+**/logs/security/*.json
+!**/logs/security/README.md

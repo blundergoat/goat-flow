@@ -1,8 +1,8 @@
 # ADR-005: No implementation skill - extend existing skills instead
 
-**Status:** Accepted (partial). Core decision stands - no implementation skill was added. Phase 5 (Execute) in goat-plan and the `persona` config field in the "Consequences" section were never shipped. Implementation is handled in the ordinary ACT step per the execution loop; goat-plan remains planning-only and can deliver inline/read-only or file-based milestones without an execution phase.
+**Status:** Accepted
 **Date:** 2026-04-03
-**Updated:** 2026-07-18 - encoded dispatcher-to-plan carry-through while keeping implementation in ordinary ACT.
+**Updated:** 2026-08-20 - status normalised to the README vocabulary; partial shipment recorded here: the core decision stands (no implementation skill was added), while Phase 5 (Execute) in goat-plan and the `persona` config field named in Consequences were never shipped. Implementation is handled in the ordinary ACT step per the execution loop; goat-plan remains planning-only and can deliver inline/read-only or file-based milestones without an execution phase. The 2026-07-18 dispatcher-to-plan carry-through remains unchanged (noted 2026-08-15).
 
 ## Context
 
@@ -36,7 +36,7 @@ Three changes:
 
 ## Consequences
 
-- Supersedes the earlier dispatcher-counting split that now lives inside ADR-009. Dispatcher is now "6 skills + dispatcher" (7 total: goat-debug, goat-plan, goat-review, goat-critique, goat-security, goat-qa + goat dispatcher).
+- Supersedes the earlier dispatcher-counting split that now lives inside ADR-009. The canonical set is now 7 specialized skills plus the dispatcher (8 total: goat-debug, goat-plan, goat-review, goat-critique, goat-security, goat-qa, goat-clarity, and goat). `goat-clarity` is a bounded remediation workflow, not a general implementation destination.
 - Dispatcher routing table gains implementation-intent rows (shipped).
 - goat-plan **did not** gain Phase 5 (Execute). After Phase 2, `return-to-implement` hands authorized build/change work to ordinary ACT; plan-only routes stop, and new Ask First boundaries still gate. Bug fixes use `/goat-debug` D3/D4.
 - `.goat-flow/config.yaml` **did not** gain a `persona` field. Persona-based mode locking was scoped out; CLAUDE.md `Autonomy Tiers` plus `Ask First` boundaries cover the same ground without a machine-readable lockout.

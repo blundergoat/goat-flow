@@ -33,7 +33,7 @@ export function readProjectFile(projectRelativePath: string): string {
 }
 
 /**
- * Extracts one Markdown H2 section so a UI-facing rule cannot pass by matching an example elsewhere.
+ * Reads one Markdown H2 section so a UI-facing rule cannot pass by matching an example elsewhere.
  * A missing section means the installed workflow can no longer orient the user as documented.
  *
  * @param projectRelativePath - installed file to read, exactly as a user's agent would
@@ -88,6 +88,78 @@ export function readMarkdownSection(
 }
 
 /**
+ * Assert every required pattern against one installed guidance surface.
+ *
+ * @param content - installed guidance text to inspect
+ * @param patterns - required patterns that must all match
+ * @param sourcePath - assertion label naming the inspected source
+ */
+export function assertMatchesAll(
+  content: string,
+  patterns: readonly RegExp[],
+  sourcePath: string,
+): void {
+  for (const pattern of patterns) {
+    assert.match(content, pattern, `${sourcePath}: missing ${pattern}`);
+  }
+}
+
+/**
+ * Extract one Markdown H3 subsection from an already isolated section body.
+ *
+ * @param sectionBody - Markdown H2 body that contains the subsection
+ * @param subsectionHeading - H3 heading to isolate, without leading hashes
+ * @param sourcePath - assertion label naming the inspected source
+ * @returns subsection body up to the next H3 heading
+ */
+export function readMarkdownSubsection(
+  sectionBody: string,
+  subsectionHeading: string,
+  sourcePath: string,
+): string {
+  const marker = `### ${subsectionHeading}`;
+  const start = sectionBody.indexOf(marker);
+  assert.notEqual(start, -1, `${sourcePath} missing ${marker}`);
+  const remainder = sectionBody.slice(start + marker.length);
+  const nextHeading = remainder.search(/\n###\s+/u);
+  return nextHeading === -1 ? remainder : remainder.slice(0, nextHeading);
+}
+
+/**
+ * Read one string field from a dashboard preset without crossing preset boundaries.
+ *
+ * @param presetId - exact dashboard preset identifier
+ * @param field - supported string field to read
+ * @returns the preset-scoped field value
+ */
+export function readPresetStringField(
+  presetId: string,
+  field: "desc" | "prompt",
+): string {
+  const presets = JSON.parse(
+    readProjectFile("src/dashboard/preset-prompts.json"),
+  ) as Array<Record<string, unknown>>;
+  const preset = presets.find((candidate) => candidate.id === presetId);
+  assert.ok(preset, `missing dashboard preset ${presetId}`);
+  assert.equal(
+    typeof preset[field],
+    "string",
+    `dashboard preset ${presetId} is missing ${field}`,
+  );
+  return preset[field] as string;
+}
+
+/**
+ * Read dashboard prompt copy through the preset-scoped field guard.
+ *
+ * @param presetId - exact dashboard preset identifier
+ * @returns prompt copy for the selected preset
+ */
+export function readPresetPrompt(presetId: string): string {
+  return readPresetStringField(presetId, "prompt");
+}
+
+/**
  * Builds every installed path for a skill so each supported agent sees the same workflow.
  * Use this whenever a safety rule must remain identical across agent integrations.
  *
@@ -121,6 +193,9 @@ export function installedSkillReferencePaths(
 /**
  * Applies one contract to every user-facing target while preserving its failure label.
  * Use this for mirror parity rather than accepting one correct installation as enough.
+ *
+ * @param contractTargets - installed targets to check, one per mirror a user could be reading
+ * @param verifyTarget - contract applied to each target; its failure label names the mirror that failed
  */
 export function assertForEachTarget<T>(
   contractTargets: readonly T[],
@@ -150,11 +225,11 @@ export const TIMING_OBLIGATION_CHECKS = [
 
 /**
  * Resolve every `path` (search: `anchor`) citation in a skill bundle against its target file.
- * Use when a skill points a reader at another document: a citation that no longer matches
+ * Use when a skill points a reader at another document, because a citation that no longer matches
  * sends the agent to text that is not there, which reads as a missing instruction.
  *
- * Anchors naming `<target-project>` are consumer-project placeholders, not files in this
- * checkout, so they are counted and skipped rather than resolved.
+ * Anchors whose path starts with an angle-bracket token are consumer-project placeholders,
+ * not files in this checkout, so they are counted and skipped rather than resolved.
  *
  * @param reviewRoot - bundle root used to resolve `SKILL.md` and `references/` citations
  * @param bundlePaths - files to scan; an empty list returns zero counts and proves nothing,
@@ -175,7 +250,7 @@ export function verifyNamedAnchorsResolve(
       const citedPath = anchorMatch[1];
       const anchor = anchorMatch[2];
       // A consumer-project placeholder cannot resolve here, so it is exempted, not failed.
-      if (citedPath.includes("<target-project>")) {
+      if (/^<[^>]+>(?:\/.*)?$/u.test(citedPath)) {
         placeholderAnchors += 1;
         continue;
       }

@@ -28,10 +28,14 @@ const standalonePlaybookPaths = [
   ".goat-flow/skill-docs/playbooks/code-comments.md",
   ".goat-flow/skill-docs/playbooks/gruff-code-quality.md",
   ".goat-flow/skill-docs/playbooks/hook-policy-testing.md",
+  ".goat-flow/skill-docs/playbooks/naming-and-placement.md",
   ".goat-flow/skill-docs/playbooks/observability.md",
   ".goat-flow/skill-docs/playbooks/page-capture.md",
   ".goat-flow/skill-docs/playbooks/release-notes.md",
   ".goat-flow/skill-docs/playbooks/skill-playbook-authoring-sync.md",
+  ".goat-flow/skill-docs/playbooks/test-selection.md",
+  ".goat-flow/skill-docs/playbooks/writing-sentence-diagnostics.md",
+  ".goat-flow/skill-docs/playbooks/writing-structure-diagnostics.md",
   ".goat-flow/skill-docs/playbooks/writing-style.md",
 ] as const;
 
@@ -119,7 +123,7 @@ function readRegistrationCommand(playbookPath: string): string {
 }
 
 /**
- * Run the copied command inside an isolated project shaped like a user's checkout.
+ * Spawns the copied command inside an isolated project shaped like a user's checkout.
  * @param playbookPath - shipped command source; empty cannot identify user guidance
  * @param registrationFiles - project files; empty models no supported registration surface
  * @returns exit and output; either output stream may be empty for a quiet result
@@ -234,6 +238,34 @@ describe("standalone playbook audit contract", () => {
     );
   });
 
+  it("distinguishes settings-layer denials from hook classifier results", () => {
+    for (const playbookPath of hookPolicyPlaybookPaths) {
+      const guidance = readFileSync(
+        join(process.cwd(), playbookPath),
+        "utf8",
+      ).replace(/\s+/gu, " ");
+      for (const requiredPhrase of [
+        "settings-layer denial",
+        "no `BLOCKED:` policy output",
+        "not a hook classifier result",
+        "do not split or reconstruct guarded text",
+        "JSON payload file",
+        "keeps the guarded phrase in stdin",
+        "not provider-matched command text",
+      ]) {
+        assert.ok(
+          guidance.includes(requiredPhrase),
+          `${playbookPath}: missing ${requiredPhrase}`,
+        );
+      }
+      assert.doesNotMatch(
+        guidance,
+        /\.goat-flow\/learning-loop\/(?:footguns|lessons|patterns|decisions)\/[\w.-]+\.md/u,
+        `${playbookPath}: shipped playbooks must not cite framework-only learning-loop files`,
+      );
+    }
+  });
+
   it("registers writing-style.md for audit and consumer discovery", () => {
     assert.ok(
       STANDALONE_PLAYBOOK_FILES.some(
@@ -241,6 +273,41 @@ describe("standalone playbook audit contract", () => {
           playbookPath === ".goat-flow/skill-docs/playbooks/writing-style.md",
       ),
       "writing-style.md must be registered before users can discover it",
+    );
+  });
+
+  it("registers both routed writing diagnostics for audit and discovery", () => {
+    for (const playbookFilename of [
+      "writing-sentence-diagnostics.md",
+      "writing-structure-diagnostics.md",
+    ]) {
+      assert.ok(
+        STANDALONE_PLAYBOOK_FILES.some((playbookPath) =>
+          playbookPath.endsWith(`/${playbookFilename}`),
+        ),
+        `${playbookFilename} must be registered before users can discover it`,
+      );
+    }
+  });
+
+  it("registers naming-and-placement.md for audit and consumer discovery", () => {
+    assert.ok(
+      STANDALONE_PLAYBOOK_FILES.some(
+        (playbookPath) =>
+          playbookPath ===
+          ".goat-flow/skill-docs/playbooks/naming-and-placement.md",
+      ),
+      "naming-and-placement.md must be registered before users can discover it",
+    );
+  });
+
+  it("registers test-selection.md for audit and consumer discovery", () => {
+    assert.ok(
+      STANDALONE_PLAYBOOK_FILES.some(
+        (playbookPath) =>
+          playbookPath === ".goat-flow/skill-docs/playbooks/test-selection.md",
+      ),
+      "test-selection.md must be registered before users can discover it",
     );
   });
 

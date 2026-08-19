@@ -1,6 +1,5 @@
 /**
- * Verification concern: Can the agent verify its own work honestly?
- * 4 checks: hooks-registered, commit-guidance, evidence-before-claims,
+ * Verification concern: Can the agent verify its own work honestly? 4 checks: hooks-registered, commit-guidance, evidence-before-claims,
  * post-turn-hook-integrity.
  */
 import type {
@@ -23,6 +22,13 @@ const RED_FLAG_CLAUSES = [
 const RATIONALISATIONS_PATH = ".goat-flow/skill-docs/skill-preamble.md";
 const RATIONALISATIONS_HEADING = "Rationalisations to reject";
 
+/**
+ * Build the per-agent evidence table behind one verification check, so a user sees exactly which runner is missing what.
+ *
+ * @param ctx - audit context supplying the agents in scope
+ * @param reasonForAgent - callback returning the reason, and any expected and actual values, for one agent
+ * @returns the details shown beside the check result
+ */
 function verificationDetails(
   ctx: AuditContext,
   reasonForAgent: (agent: AuditContext["agents"][number]) => {
@@ -119,6 +125,14 @@ function postTurnHookReason(agentFacts: AgentFacts): {
   };
 }
 
+/**
+ * Judge one agent's post-turn hook and reports what the user needs to fix, separating a missing hook from a safety-only one.
+ *
+ * @param agentFacts - facts for the agent being judged
+ * @param findings - findings appended to in place
+ * @param safetyOnlyAgents - agents recorded as carrying safety coverage only, appended to in place
+ * @returns true when this agent has complete post-turn coverage
+ */
 function collectPostTurnHookFinding(
   agentFacts: AgentFacts,
   findings: string[],
@@ -356,6 +370,13 @@ function hasRationalisationsPointer(section: string): boolean {
     );
 }
 
+/**
+ * Build the evidence table for the check that asks whether the agent must show proof before claiming success.
+ *
+ * @param ctx - audit context supplying the agents in scope
+ * @param preambleProblem - what is wrong with the shared preamble; null means that part passed
+ * @returns the details shown beside the check result
+ */
 function evidenceBeforeClaimsDetails(
   ctx: AuditContext,
   preambleProblem: string | null,

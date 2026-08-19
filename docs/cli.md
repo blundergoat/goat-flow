@@ -20,9 +20,10 @@ Validate setup correctness. The base audit runs two deterministic scopes (all pa
 |------|-------------|
 | `--agent <id>` | Filter to one manifest-backed agent id. Run `npx @blundergoat/goat-flow@latest manifest` to inspect the current registry. |
 | `--harness` | Add AI Harness Completeness scope (18 checks, installed/not-installed per concern) |
-| `--check-drift` | Add skill template-vs-installed drift detection (orphan directories, byte-level divergence) |
+| `--check-drift` | Add managed-artifact and peer-instruction drift detection |
 | `--check-content` | Add cold-path content lint (vague terms, generic instructions, factual-claim drift) |
-| `--untrusted-target` | Skip executing the target's deny-hook code (its configured launcher string and managed script). By default the audit runs that code for runtime proof; pass this when auditing a checkout you don't trust so the deny-mechanism check stays static (no execution). |
+| `--trusted-target` | Execute the selected checkout's configured deny-hook handler and managed script for runtime proof. Omit this flag for static inspection. |
+| `--untrusted-target` | Deprecated compatibility alias for the static, non-executing default. It remains accepted throughout v1.16.x and will not be removed before v1.17.0. It cannot be combined with `--trusted-target`. |
 | `--format <type>` | Output: json, text, markdown, sarif (default: auto) |
 | `--verbose` | Show per-check details |
 | `--output <file>` | Write to file instead of stdout |
@@ -31,12 +32,17 @@ Validate setup correctness. The base audit runs two deterministic scopes (all pa
 npx @blundergoat/goat-flow@latest audit .                      # Audit current directory
 npx @blundergoat/goat-flow@latest audit . --harness            # Include AI harness completeness checks
 npx @blundergoat/goat-flow@latest audit . --agent claude       # Audit scoped to Claude
+npx @blundergoat/goat-flow@latest audit . --agent claude --trusted-target # Add trusted checkout runtime proof
 npx @blundergoat/goat-flow@latest audit . --format json        # JSON output for CI
 npx @blundergoat/goat-flow@latest audit . --format sarif       # SARIF output for CI/code scanning upload
 npx @blundergoat/goat-flow@latest audit . --output report.json # Write to file
 ```
 
 The enforcement matrix is deliberately conservative. It reports local facts such as deny-hook registration, secret-path file-read coverage, secret shell-read blocking, deny-hook self-test evidence, and runtime-shaped blocked-payload smoke evidence. General file read/write restriction capability remains `unknown` unless goat-flow has explicit evidence; it is not inferred from setup success or from a perfect constraints score.
+
+Audit, setup-prompt generation, and quality-prompt generation inspect target hook configuration statically by default. `--trusted-target` opts the selected-agent audit inside those commands into target-controlled runtime execution. The dashboard remains static and has no target-execution flag.
+
+When drift checking is active, the audit compares managed workflow artifacts with their installed copies and checks manifest-declared shared phrases across every distinct sibling instruction file present in the target. The sibling comparison still runs with `--agent <id>` because parity is a relationship between instruction files, not a property of one selected agent. A mismatch names the affected file, section, and phrase without choosing a canonical winner or proposing a rewrite. Multi-agent targets enable drift checking automatically; single-agent targets require `--check-drift`.
 
 `--format sarif` exports the same deterministic audit findings as SARIF 2.1.0. It is an interchange format for CI and SARIF-aware tools; goat-flow is still reporting harness/setup integrity findings, not source-code vulnerabilities. Failing setup, agent, and harness checks become SARIF results. `--check-drift` and `--check-content` findings are included when those audit sections are enabled. Checks without target-file evidence are emitted without fabricated locations; GitHub code scanning accepts SARIF without annotations, but it only displays code annotations for results that include `locations[]`.
 
@@ -52,7 +58,7 @@ npx @blundergoat/goat-flow@latest quality . --agent codex          # Quality pro
 
 The saver derives the date/time and a random suffix so parallel runs do not collide. If prior same-agent, same-mode quality history exists, the generated prompt embeds the latest saved report so the new review can mark current findings as `new` or `persisted`.
 
-The CLI command composes the prompt with fresh audit context. The dashboard
+The CLI command composes the prompt with fresh, static audit context by default; add `--trusted-target` only after confirming the selected checkout may execute local hook code. The dashboard
 Quality page may use cached audit enrichment for passive page loads, but its
 Regenerate action follows the same fresh-audit path.
 
@@ -113,7 +119,7 @@ For each selected agent and skill, the report shows:
 - Static blockers for missing/unreadable files, malformed or empty discovery frontmatter, canonical-name mismatch, and duplicate installed names.
 - Existing `install` and `audit --check-drift` commands that can repair or verify the artifact.
 
-The status is `pass` when all selected skills are statically eligible and current, `warn` when eligibility remains but source/version/mirror evidence is incomplete or stale, and `fail` when at least one installed contract has a static blocker. `fail` exits 1; invalid agent or skill filters exit 2. JSON exposes `reportKind`, `status`, `target`, `evidenceLimit`, `summary`, and per-agent `skills` arrays.
+The status is `static-pass` when all selected skills are statically eligible and current, `warn` when eligibility remains but source/version/mirror evidence is incomplete or stale, and `fail` when at least one installed contract has a static blocker. `fail` exits 1; invalid agent or skill filters exit 2. JSON exposes `reportKind`, `status`, `target`, `evidenceLimit`, `summary`, and per-agent `skills` arrays. The summary reports `staticallyEligible` and `runtimeRegistration: "unverified"`; it never turns file eligibility into a runtime-availability verdict.
 
 **Evidence limit:** this command checks files and manifest metadata. It cannot prove that a model will auto-trigger a skill, and it does not claim host behavior for unfamiliar invocation-control fields. Use the displayed explicit invocation when you want the skill deliberately.
 
@@ -136,7 +142,7 @@ npx @blundergoat/goat-flow@latest quality diff --agent claude
 npx @blundergoat/goat-flow@latest quality diff 2026-04-01-0900-claude-aaaaa:2026-04-15-1000-claude-bbbbb --format json
 ```
 
-`quality diff` derives `resolved`, `new`, `persisted`, and `stuck` from positional finding ids - those ids are the source of truth. The agent-reported `delta_tag` on each finding is consumed as a cross-check, not a classification: when the diff pair matches the newer report's `prior_report_id` baseline, findings whose `delta_tag` contradicts the deterministic class are listed in a `Delta-tag disagreements` section (`deltaTagDisagreements` in JSON output) as a methodology signal about the agent's continuity claims. `stuck` is a subset of persisted high-severity findings and resets after history gaps longer than 30 days.
+`quality diff` derives `absent`, `new`, `persisted`, and `stuck` from positional finding ids - those ids are the source of truth. An absent finding is missing from the later report; that alone does not prove it was fixed. The agent-reported `delta_tag` on each finding is consumed as a cross-check, not a classification: when the diff pair matches the newer report's `prior_report_id` baseline, findings whose `delta_tag` contradicts the deterministic class are listed in a `Delta-tag disagreements` section (`deltaTagDisagreements` in JSON output) as a methodology signal about the agent's continuity claims. `stuck` is a subset of persisted high-severity findings and resets after history gaps longer than 30 days.
 
 ### `goat-flow quality validate <path-to-report>`
 
@@ -148,11 +154,11 @@ npx @blundergoat/goat-flow@latest quality validate .goat-flow/logs/quality/2026-
 
 ### `goat-flow quality save <project>`
 
-Persist one current quality report supplied as JSON on stdin. The command strictly accepts the report shape in memory, scrubs accepted string values, revalidates the report, verifies its project and goat-flow versions, chooses an exclusive file under the selected project's `.goat-flow/logs/quality/`, and prints `OK <absolute-report-path>`. It rejects caller-selected output paths and redirected report directories.
+Persist one current quality report supplied as JSON on stdin. The command strictly accepts the report shape in memory, scrubs accepted string values, revalidates the report, verifies its project and goat-flow versions, chooses an exclusive file under the selected project's `.goat-flow/logs/quality/`, and prints `OK <absolute-report-path>`. Current reports include `assessment_context`: the assessed revision, worktree state, runtime-grounding coverage, unverified probes, and score confidence. This metadata explains comparability limits but does not alter rubric scores. Historical reports that predate it remain loadable through validate, history, and diff. The saver rejects caller-selected output paths and redirected report directories.
 
 ```bash
 npx @blundergoat/goat-flow@latest quality save . <<'JSON'
-{"report_kind":"goat-flow-quality-report","goat_flow_version":"<current-version>","agent":"claude","project_path":"<absolute-project-path>","run_date":"YYYY-MM-DD","audit_status":"pass","scope":"framework-self","rubric_version":"<current-version>","quality_mode":"skills","prior_report_id":null,"scores":{"setup":{"total":0,"accuracy":0,"relevance":0,"completeness":0,"friction":0},"system":{"total":0,"usefulness":0,"signal_to_noise":0,"adaptability":0,"learnability":0}},"findings":[]}
+{"report_kind":"goat-flow-quality-report","goat_flow_version":"<current-version>","agent":"claude","project_path":"<absolute-project-path>","run_date":"YYYY-MM-DD","audit_status":"pass","scope":"framework-self","rubric_version":"<current-version>","quality_mode":"skills","prior_report_id":null,"assessment_context":{"project_revision":"<git-head>","working_tree_state":"clean","grounding_status":"complete","unverified_probes":[],"score_confidence":"high"},"scores":{"setup":{"total":0,"accuracy":0,"relevance":0,"completeness":0,"friction":0},"system":{"total":0,"usefulness":0,"signal_to_noise":0,"adaptability":0,"learnability":0}},"findings":[]}
 JSON
 ```
 
@@ -343,6 +349,8 @@ npx @blundergoat/goat-flow@latest events tail . --limit 50 --format json
 
 Generate a setup prompt adapted to the project's current state. An existing goat-flow installation routes to the upgrade path instead.
 
+Setup's selected-agent audit is static by default. Add `--trusted-target` only when the setup prompt should include runtime deny-hook proof from a checkout whose hook configuration you have inspected and trust.
+
 Supported agent ids are read from `workflow/manifest.json` via `src/cli/agents/registry.ts`, so the CLI help and validation stay aligned with the machine-readable support matrix.
 
 ```bash
@@ -366,13 +374,24 @@ npx @blundergoat/goat-flow@latest install . --agent codex --dry-run
 npx @blundergoat/goat-flow@latest install . --agent codex --force
 ```
 
-`--dry-run` prints a read-only managed-file preview as text or stable `goat-flow.managed-setup-preview.v1` JSON. Each exact repository-relative path is classified as `unchanged`, `local-edited`, `template-changed`, `both-changed`, `added`, `adopted`, `removed`, `missing`, or `unmanaged`, with the proposed action and reason. A blocked preview exits 1; invalid flags exit 2. `--output` is the only optional dry-run write and writes the requested report, not setup state or installed files.
+`--dry-run` prints a read-only preview of the install write set as text or stable `goat-flow.managed-setup-preview.v2` JSON. Every row carries a repository-relative path, its manifest ownership, a state, and the proposed action and reason. Exact-copy `system-owned` templates are classified as `unchanged`, `template-changed`, `local-preserved`, `both-changed`, `added`, `adopted`, `removed`, `missing`, or `unmanaged`. Destinations with no package template use four further states: `user-seeded` for a user-owned file install may create once, `user-preserved` for user-owned content install keeps, `user-migrated` for a user-owned file install edits in place, and `regenerated` for a generated file install rewrites from project state. Every row also carries an `authority` decision - `not-required`, `granted-managed`, `granted-path`, `granted-user-owned`, `withheld`, or `refused-path-safety` - resolved against the same flags apply would use, so dry-run accepts every authority and migration flag and still writes nothing. A blocked preview exits 1; invalid flags exit 2. `--output` is the only optional dry-run write and writes the requested report, not setup state or installed files.
 
 The comparison uses SHA-256 hashes only. After a successful CLI install, `.goat-flow/install-state/<agent>.json` records the package version, relative managed paths, and expected hashes for the next run; the installed `.goat-flow/.gitignore` keeps this state local. Missing state is safe for absent files and files already matching the current package. An existing differing regular file without a trusted baseline is `adopted`: targets installed before install-state existed legitimately hold older-package bytes, so the upgrade refreshes them exactly like the installer always did for system-owned templates, shows a `warning` verdict listing every adopted path, and records a baseline so later upgrades get full three-way drift protection. Malformed state, local edits, and deletions block by default. Symlinked, non-regular, or unreadable target components are path-safety failures (`unmanaged`) and stay blocked even with `--force`.
 
-The preview covers source-backed `system-owned` manifest records and the selected agent's canonical skill mirror. It deliberately does not simulate config migrations, deprecated cleanup, generated commit guidance, generated indexes, or direct `workflow/install-goat-flow.sh` execution. Run the public CLI when you need the admission gate.
+The preview lists every path an approved install may write: source-backed `system-owned` manifest records, the selected agent's canonical skill mirror, `.goat-flow/config.yaml`, the agent's settings and hook config, the project root `.gitignore`, seeded policy and decision guidance, the active-plan marker, commit guidance, install state, and the generated learning-loop indexes. Some of those rows are conditional, so the preview is a superset: `.goat-flow/plans/.active` is written only when exactly one version-named plan directory exists, and commit guidance only in a Git project. Removals are the one thing it does not enumerate - retired templates, deprecated skills, legacy hook copies, and pre-1.9 path migrations are cleanup rather than writes. Direct `workflow/install-goat-flow.sh` execution skips this admission gate; run the public CLI when you need it.
 
-If the preview blocks, inspect the listed paths before choosing a write. `--force` is a broad existing content override: it permits managed conflict replacement and may also replace user-owned settings, config, policies, or seeded guidance, but it never bypasses path-safety failures. The preview itself needs no rollback because it changes nothing. Before a forced install, preserve the listed files with version control or a separate backup; after apply, use that same VCS/backup evidence to restore them if the result is not wanted.
+A locally edited managed file no longer blocks an upgrade on its own. When your bytes differ but this package ships the same template as your last install, the row reads `local-preserved` and install leaves the file alone while every unrelated write proceeds. Only a genuine template change over your edit becomes `both-changed`, which is a conflict you decide.
+
+If the preview blocks, inspect the listed paths, then choose the narrowest authority that covers them:
+
+| Authority | Admits |
+|---|---|
+| `--force-path <path>` | one named `system-owned` conflict; repeat the flag per path |
+| `--force-managed` | every inspected `system-owned` conflict |
+| `--force` | alias for `--force-managed` |
+| `--force-user-owned` plus a matching `--force-path` | replaces exactly the named user-owned file from its template |
+
+`--force-user-owned` on its own exits 2: replacing your content is never a broad choice. A `--force-path` that matches no row in the preview also fails, naming why - a typo, or a user-owned path that still needs `--force-user-owned`. No authority reaches a symlinked, non-regular, or unreadable destination; those stay blocked until you repair the path. The preview itself needs no rollback because it changes nothing. Before an authorized replacement, preserve the listed files with version control or a separate backup; after apply, use that same VCS/backup evidence to restore them if the result is not wanted.
 
 ### Atomic installer writes
 
@@ -411,16 +430,16 @@ npx @blundergoat/goat-flow@latest hooks list --json                 # Machine-re
 npx @blundergoat/goat-flow@latest hooks enable gruff-code-quality   # Enable one hook and sync agent configs
 npx @blundergoat/goat-flow@latest hooks disable gruff-code-quality  # Disable one hook and sync agent configs
 npx @blundergoat/goat-flow@latest hooks sync                         # Re-apply config.yaml hook state to agent configs
-npx @blundergoat/goat-flow@latest hooks verify . --agent claude --scenario deny-hook
-npx @blundergoat/goat-flow@latest hooks verify . --agent claude --scenario post-turn-hook
-npx @blundergoat/goat-flow@latest hooks verify . --agent claude --scenario gruff-hook
+npx @blundergoat/goat-flow@latest hooks verify . --agent claude --scenario deny-hook --trusted-target
+npx @blundergoat/goat-flow@latest hooks verify . --agent claude --scenario post-turn-hook --trusted-target
+npx @blundergoat/goat-flow@latest hooks verify . --agent claude --scenario gruff-hook --trusted-target
 ```
 
 Goat Flow 1.15.1 registers Codex project hooks for `PostToolUse` on `apply_patch` and for `Stop`, with a 75-second launcher deadline inside Codex's 90-second host timeout. Live delivery was captured on Codex CLI 0.147.0 in interactive and exec modes with a trusted project layer. That evidence expires at 2026-09-09T00:00:00Z, or sooner after a relevant provider, mode, trust, event, adapter, or registration change; `hooks list` then reports stale evidence. Project-layer trust and handler trust remain separate. App-server, remote execution, and other provider combinations are unclaimed. See the [hook runtime matrix](../workflow/hooks/README.md#agent-event-name-mapping) for registered and disabled combinations.
 
 `enable` and `disable` require a `<hook-id>` (exit 2 if omitted). `sync` re-applies the `.goat-flow/config.yaml` hook state to every agent's hook config without changing which hooks are enabled.
 
-`hooks verify` requires `--agent <id>` and one explicit scenario group: `deny-hook`, `post-turn-hook`, or `gruff-hook`. It sends fixed provider-shaped inputs through the exact command generated for the selected agent, with a five-second timeout and bounded output capture. The deny group checks three blocked commands and one read-only control. The post-turn group checks a valid Stop result and an invalid event. The Gruff group checks unsupported input, a non-source edit, and a source edit whose analyzer result may be clean, advisory, incomplete, or unavailable. The inputs are inspected; their command operands are never executed. Because the selected checkout's hook code does execute, use this only for a checkout you trust or pass `--untrusted-target` to return explicit `unsupported` results without starting it.
+`hooks verify` requires `--agent <id>` and one explicit scenario group: `deny-hook`, `post-turn-hook`, or `gruff-hook`. Without `--trusted-target`, it returns explicit `unsupported` results and does not start the selected checkout's hook code. After you confirm the checkout is trusted, `--trusted-target` sends fixed provider-shaped inputs through the exact command generated for the selected agent, with a five-second timeout and bounded output capture. The deny group checks three blocked commands and one read-only control. The post-turn group checks a valid Stop result and an invalid event. The Gruff group checks unsupported input, a non-source edit, and a source edit whose analyzer result may be clean, advisory, incomplete, or unavailable. The inputs are inspected; their command operands are never executed. The deprecated `--untrusted-target` flag remains an explicit alias for the safe default during the v1.16.x compatibility window.
 
 Each scenario reports `pass`, `fail`, `unsupported`, `not-configured`, or `error`. Only an accepted expected/observed match with a successfully written local event counts as `pass`; any other result makes the report exit 1. JSON uses `goat-flow.hook-runtime-report.v1`. Reports and `hook.verify` events carry hook and scenario ids, verdict metadata, evidence level, duration, and reason codes - never input payloads, command operands, findings, stdout, or stderr.
 

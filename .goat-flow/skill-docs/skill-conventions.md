@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.15.1"
+goat-flow-reference-version: "1.16.0"
 ---
 # Skill Conventions
 
@@ -89,7 +89,7 @@ If 3 consecutive file reads produce no new signal relevant to the current questi
 2. State what you were looking for and didn't find
 3. Ask the human to redirect, narrow scope, or close
 
-**Sub-agent mode:** When invoked as a sub-agent (forked context), most BLOCKING GATEs become CHECKPOINTs (logged, not paused). Step 0 proceeds with auto-detected scope. **Exception:** the goat-debug D2→D3 "human decides before fixing" safety gate MUST remain blocking even in sub-agent mode - it prevents auto-fixing without human review.
+**Sub-agent mode:** When invoked as a sub-agent (forked context), most BLOCKING GATEs become CHECKPOINTs (logged, not paused). Step 0 proceeds with auto-detected scope. **Exception:** the goat-debug D2→D3 "human decides before fixing" safety gate and the goat-clarity Scope v2 approval gate MUST remain blocking even in sub-agent mode - they prevent unreviewed fixes or authority expansion.
 
 ## Task Tracking
 
@@ -197,4 +197,4 @@ boundaries. If the proposed change crosses an Ask First boundary, flag it:
 
 ## Authoring a Skill
 
-For new or materially hardened goat-* skills, load `.goat-flow/skill-docs/skill-quality-testing/README.md`, then its topical files: `tdd-iteration.md` first, `adversarial-framing.md` for review-class skills, and `deployment.md` before release. Run the pressure tests and verify skill/reference versions match `AUDIT_VERSION` before publishing.
+For new or materially hardened goat-* skills, load `.goat-flow/skill-docs/skill-quality-testing/README.md`, then its topical files: `tdd-iteration.md` first, `adversarial-framing.md` for review-class skills, and `deployment.md` before release. Run the pressure tests and verify skill/reference version stamps match `goat-flow --version` before publishing.

@@ -1,12 +1,12 @@
 /**
  * Builds the summary a user reads at the end of `plans check`.
- * Where the checkers answer "is anything wrong", this answers "how is the plan going": one
- * line per milestone, the effort split totalled across the plan, and - once there is enough
- * history - how the author's estimates have been comparing to reality.
  *
- * Calibration is deliberately quiet until a plan has enough finished milestones to say
- * anything honest. Reporting a ratio from one or two samples would tell an author their
- * estimating is off when all it really shows is noise, so the summary stays silent instead.
+ * Where the checkers answer "is anything wrong", this answers "how is the plan going": one line per milestone, the effort split totalled across the
+ * plan, and - once there is enough history - how the author's estimates have been comparing to reality.
+ *
+ * Calibration is deliberately quiet until a plan has enough finished milestones to say anything honest.
+ * Reporting a ratio from one or two samples would tell an author their estimating is off when all it really shows is noise, so the summary stays
+ * silent instead.
  */
 import {
   countAgentWorkUnits,
@@ -42,7 +42,7 @@ function renderSplit(split: PlanEffortSplit): string {
  * Build one stdout report line for a milestone that declared effort data.
  * Gives the plan author a per-milestone estimate/actual overview at a glance.
  *
- * @param record - parsed milestone
+ * @param record - parsed milestone; one without effort fields produces no line
  * @returns the line, or null when the milestone has no effort fields to show
  */
 export function renderMilestoneLine(record: PlanExportRecord): string | null {
@@ -88,8 +88,8 @@ function sumPlanSplits(records: PlanExportRecord[]): PlanEffortSplit {
 
 /**
  * Render the plan summary plus the drift advisory when the mix leaves tolerance.
- * The advisory never fails the check: the 70/20/10 target is a prior to reason
- * against, and a spike-heavy plan may be right to drift with a stated reason.
+ * The advisory never fails the check: the 70/20/10 target is a prior to reason against, and a spike-heavy plan may be right to drift with a stated
+ * reason.
  *
  * @param records - parsed milestones
  * @returns summary lines; empty means no milestone declared a split to summarise
@@ -146,11 +146,11 @@ interface WorkUnitCalibrationSample {
 /**
  * Turn one milestone into a calibration sample, or nothing when it is ineligible.
  *
- * Eligibility is deliberately narrow. `complete` is the existing human
- * ratification signal, so `human-verification-pending` never qualifies however
- * good its receipt is; `measured` is the only Actual state backed by
- * system-stamped spans, so retrospective guesses, unavailable, and incomplete
- * states stay out rather than dragging a median toward invented numbers.
+ * Eligibility is deliberately narrow.
+ *
+ * `complete` is the existing human ratification signal, so `human-verification-pending` never qualifies however good its receipt is; `measured` is
+ * the only Actual state backed by system-stamped spans, so retrospective guesses, unavailable, and incomplete states stay out rather than dragging a
+ * median toward invented numbers.
  *
  * @param record - one parsed milestone
  * @returns the sample; undefined means this milestone cannot calibrate anything
@@ -264,7 +264,7 @@ interface LocalWorkUnitRates {
   highMinutesPerUnit: number;
 }
 
-/** Convert sorted receipt samples into the local rates used for the next forecast. */
+/** Convert sorted receipt samples into the local rates used for the next forecast; the sort is what makes the low, middle, and high values stable. */
 function readLocalWorkUnitRates(
   workUnitSamples: WorkUnitCalibrationSample[],
 ): LocalWorkUnitRates {
@@ -393,11 +393,11 @@ function renderWorkUnitCalibrationSummary(
 /**
  * Render the informational calibration block.
  *
- * Contract: this block is advisory-only. It must never contribute errors and
- * must never change a forecast: it reports how
- * past measured milestones landed against their estimates and leaves the
- * judgement to the author. Below three eligible samples it says `uncalibrated`
- * rather than offering a multiplier one or two data points cannot support.
+ * Contract: this block is advisory-only.
+ * It must never contribute errors and must never change a forecast: it reports how past measured milestones landed against their estimates and leaves
+ * the judgement to the author.
+ *
+ * Below three eligible samples it says `uncalibrated` rather than offering a multiplier one or two data points cannot support.
  *
  * @param records - every parsed milestone in the plan directory
  * @returns report lines; always at least the count line once the plan has milestones

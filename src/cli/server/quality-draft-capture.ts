@@ -51,6 +51,12 @@ const DEFAULT_CLAIM_STALE_MS = 5 * 60 * 1000;
  * The error message is later reduced to a bounded, secret-free receipt diagnostic.
  */
 class QualityCaptureError extends Error {
+  /**
+   * Carry the exit code beside the message so a failed capture ends the process the way the caller expects.
+   *
+   * @param message - explanation written into the rejection receipt the user reads
+   * @param exitCode - process exit code this failure should produce
+   */
   constructor(
     message: string,
     public readonly exitCode: number,
@@ -83,9 +89,9 @@ export interface QualityDraftCapture {
   /** Absolute staging directory this capture watches. */
   stagingDir: string;
   /**
-   * Release this session's hold; safe to call more than once. The poller keeps
-   * running until every in-process holder releases it. Teardown never removes
-   * unowned shared drafts, so another server process keeps its pending state.
+   * Release this session's hold; safe to call more than once.
+   * The poller keeps running until every in-process holder releases it.
+   * Teardown never removes unowned shared drafts, so another server process keeps its pending state.
    */
   dispose(): void;
   /** Process eligible drafts immediately; exposed for deterministic tests. */
@@ -224,7 +230,7 @@ function readStableDraft(
   return { path, ...observation };
 }
 
-/** Confirm a draft did not change between its eligibility stat and completed read. */
+/** Confirm a draft did not change between its eligibility stat and completed read; it swallows a vanished file as a simple no-match. */
 function draftStillMatches(
   state: RootCaptureState,
   draftName: string,
@@ -251,7 +257,7 @@ function draftStillMatches(
 
 /**
  * Reserve a draft receipt destination before persistence.
- * A collision removes the draft and records the bounded rejection instead of overwriting local state.
+ * It swallows the collision error and reports a bounded rejection, because overwriting another owner's completed outcome would lose their result.
  */
 function reserveCaptureReceipt(
   context: RootCaptureContext,
@@ -494,7 +500,7 @@ function rejectOwnedOversizedDraft(
   state.observations.delete(draftName);
 }
 
-/** Read and fence one normal-sized owned draft immediately before persistence. */
+/** Read and fence one normal-sized owned draft immediately before persistence; it swallows an unreadable draft by returning null. */
 function prepareOwnedDraftText(
   context: RootCaptureContext,
   state: RootCaptureState,
@@ -517,7 +523,7 @@ function prepareOwnedDraftText(
   return rawText;
 }
 
-/** Persist or reject a prepared draft, then retire its stability observation. */
+/** Persist or reject a prepared draft, then retire its stability observation; it reports a failed write as a rejection receipt the user can read. */
 function persistPreparedDraft(
   context: RootCaptureContext,
   state: RootCaptureState,
@@ -659,7 +665,7 @@ function createRootCapture(options: QualityDraftCaptureOptions): RootCapture {
     ownedClaims: new Map(),
   };
 
-  /** Process eligible drafts immediately through the root-owned single-poller state. */
+  /** Process eligible drafts through the root-owned single-poller state; it reports any failure as a rejected promise rather than throwing inline. */
   const processNow = (): Promise<void> => {
     try {
       processCaptureSnapshot(context, state);
@@ -701,11 +707,11 @@ function createRootCapture(options: QualityDraftCaptureOptions): RootCapture {
 /**
  * Acquire a capture for one project root, starting the poller on first use.
  *
- * The staging directory is a property of the project root, not of a session:
- * two dashboard sessions on the same project resolve to the same directory. One
- * in-process poller avoids duplicate local work, while filesystem `wx` claims
- * serialize independent server processes. Holders are counted only to stop the
- * local timer; teardown never sweeps the project-wide staging directory.
+ * The staging directory is a property of the project root, not of a session: two dashboard sessions on the same project resolve to the same
+ * directory.
+ * One in-process poller avoids duplicate local work, while filesystem `wx` claims serialize independent server processes.
+ *
+ * Holders are counted only to stop the local timer; teardown never sweeps the project-wide staging directory.
  *
  * Timing overrides come from whichever holder starts the poller; later holders
  * on the same root share that cadence.

@@ -530,7 +530,11 @@ describe("skill hardening contracts: shared surfaces (3/3)", () => {
     ]) {
       const gitignore = readProjectFile(gitignorePath);
       assert.match(gitignore, /logs\/sessions\/\*\.md/u, gitignorePath);
-      assert.match(gitignore, /!logs\/sessions\/README\.md/u, gitignorePath);
+      assert.match(
+        gitignore,
+        /!\*\*\/logs\/sessions\/README\.md/u,
+        gitignorePath,
+      );
     }
   });
 

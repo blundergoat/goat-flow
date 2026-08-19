@@ -1,13 +1,10 @@
 /**
- * Reads each agent's hook config and reports which goat-flow guard hooks are
- * registered, normalizing the many per-agent settings shapes (Claude, Antigravity,
- * and others) into simple registered/path facts the audit can compare.
+ * Reads each agent's hook config and reports which goat-flow guard hooks are registered, normalizing the many per-agent settings shapes (Claude,
+ * Antigravity, and others) into simple registered/path facts the audit can compare.
  *
- * Parsing is deliberately defensive: unknown agents, missing hook objects, and
- * malformed entries resolve to "not registered" rather than throwing, because a
- * fact extractor must survive any settings file a user hands it. Antigravity is
- * special-cased - its deny hook lives in a top-level keyed definition with its own
- * enabled flag, not under the shared `hooks` object.
+ * Parsing is deliberately defensive: unknown agents, missing hook objects, and malformed entries resolve to "not registered" rather than throwing,
+ * because a fact extractor must survive any settings file a user hands it.
+ * Antigravity is special-cased - its deny hook lives in a top-level keyed definition with its own enabled flag, not under the shared `hooks` object.
  */
 import type { AgentProfile, ReadonlyFS } from "../../types.js";
 import { pushUniquePath } from "./routing.js";
@@ -24,10 +21,9 @@ function normalizeHookPath(candidate: string): string | null {
   let path = candidate.trim();
   if (!path) return null;
   path = path.replace(/^['"`]|['"`]$/g, "");
-  // Hook launchers prefix the script path with a resolved repo root, either as
-  // an inline substitution ($(git rev-parse --show-toplevel)/...sh) or a shell
-  // variable ($root/...sh, $REPO/...sh) populated earlier in the command. Strip
-  // either prefix so callers see a repo-relative script path.
+  // Hook launchers prefix the script path with a resolved repo root, either as an inline substitution ($(git rev-parse --show-toplevel)/...sh) or a
+  // shell variable ($root/...sh, $REPO/...sh) populated earlier in the command.
+  // Strip either prefix so callers see a repo-relative script path.
   const substitutionMatch = path.match(/\$(?:\([^)]*\)|\{?\w+\}?)\/(.*\.sh)$/);
   if (substitutionMatch && substitutionMatch[1]) {
     path = substitutionMatch[1];
@@ -141,9 +137,18 @@ function hasSupportedHookType(hookObj: Record<string, unknown>): boolean {
   );
 }
 
-/** Read one shell command field from a normalized hook object. */
+/** Read one hook entry's runnable text: a shell command field or exec-form argv operands. */
 function readHookCommand(hookObj: Record<string, unknown>): string | null {
   if (typeof hookObj.bash === "string") return hookObj.bash;
+  // Structured exec-form entries list their script operands in args, not one shell string.
+  if (typeof hookObj.command === "string" && Array.isArray(hookObj.args)) {
+    return hookObj.args
+      .filter(
+        (argumentValue): argumentValue is string =>
+          typeof argumentValue === "string",
+      )
+      .join("\n");
+  }
   if (typeof hookObj.command === "string") return hookObj.command;
   const nestedCommand = hookObj.command;
   if (!nestedCommand || typeof nestedCommand !== "object") return null;
@@ -203,36 +208,34 @@ function normalizeEventConfig(
 }
 
 /**
- * Resolve the parsed hook config for one agent, reusing the already-parsed
- * settings file when the agent stores hooks there and only reading a separate
- * file otherwise - this avoids parsing the same file twice.
+ * Resolve the parsed hook config for one agent, reusing the already-parsed settings file when the agent stores hooks there and only reading a
+ * separate file otherwise - this avoids parsing the same file twice.
  *
  * @param fs - read-only filesystem adapter used only when hooks live in a separate file
  * @param agent - agent profile naming its settings and hook-config files
  * @param settingsParsed - already-parsed settings content, reused when it doubles as the hook config
- * @param settingsValid - whether that pre-parsed settings content parsed successfully
+ * @param hasValidSettings - whether that pre-parsed settings content parsed successfully
  * @returns the parsed hook config and its validity; both default to null/false when the agent declares no hook file
  */
 export function readHookConfig(
   fs: ReadonlyFS,
   agent: AgentProfile,
   settingsParsed: unknown,
-  settingsValid: boolean,
+  hasValidSettings: boolean,
 ): { parsed: unknown; valid: boolean } {
   if (!agent.hookConfigFile) {
     return { parsed: null, valid: false };
   }
   if (agent.hookConfigFile === agent.settingsFile) {
-    return { parsed: settingsParsed, valid: settingsValid };
+    return { parsed: settingsParsed, valid: hasValidSettings };
   }
   const parsed = fs.readJson(agent.hookConfigFile);
   return { parsed, valid: parsed !== null };
 }
 
 /**
- * Report whether the agent's post-turn (learning-loop) hook is registered and
- * which script it points at. Returns the not-registered shape for agents that
- * declare no hook events or whose config has no usable `hooks` object.
+ * Report whether the agent's post-turn (learning-loop) hook is registered and which script it points at.
+ * Returns the not-registered shape for agents that declare no hook events or whose config has no usable `hooks` object.
  *
  * @param agent - agent profile naming its post-turn hook event, if any
  * @param hookConfigParsed - parsed hook config from readHookConfig, or null/invalid content
@@ -275,10 +278,9 @@ export function buildHookRegistration(
 }
 
 /**
- * Report whether the dangerous-command deny guard is registered as a pre-tool
- * hook, and its script path. Antigravity is handled separately because its deny
- * hook is a top-level keyed definition with its own `enabled` flag, so an
- * explicit `enabled: false` there counts as not registered.
+ * Report whether the dangerous-command deny guard is registered as a pre-tool hook, and its script path.
+ * Antigravity is handled separately because its deny hook is a top-level keyed definition with its own `enabled` flag, so an explicit `enabled:
+ * false` there counts as not registered.
  *
  * @param agent - agent profile naming its pre-tool hook event and identifying Antigravity
  * @param hookConfigParsed - parsed hook config from readHookConfig, or null/invalid content

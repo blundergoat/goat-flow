@@ -17,6 +17,7 @@ import {
   buildContextReport,
   renderContextReportJson,
 } from "../../src/cli/diagnostics/context-report.js";
+import { DISPATCHER_SKILL_WORD_LIMIT } from "../../src/cli/constants.js";
 import { makeSharedFacts, stubAgentFacts } from "../fixtures/projects/index.js";
 
 const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
@@ -86,12 +87,12 @@ function contextFacts(
 describe("static context report", () => {
   // Covers every normative pressure source together, ordered by measured budget ratio, as a user sees them.
   it("reports oversized instruction, skill, reference, and learning-loop surfaces", () => {
-    const expectedDispatcherWords = 556;
+    const expectedDispatcherWords = DISPATCHER_SKILL_WORD_LIMIT + 1;
     const oversizedInstruction = Array.from(
       { length: 151 },
       (_, index) => `instruction ${index}`,
     ).join("\n");
-    const oversizedDispatcher = `---\ndescription: "${"metadata ".repeat(50)}"\n---\n${"route ".repeat(556)}\n`;
+    const oversizedDispatcher = `---\ndescription: "${"metadata ".repeat(50)}"\n---\n${"route ".repeat(expectedDispatcherWords)}\n`;
     const oversizedSharedReference = `${"guidance ".repeat(1500)}\n`;
     const projectFiles = {
       "CLAUDE.md": oversizedInstruction,
@@ -140,6 +141,10 @@ describe("static context report", () => {
       EXPECTED_OVER_BUDGET_SURFACE_COUNT,
     );
     assert.equal(report.surfaces.skills[0]?.words, expectedDispatcherWords);
+    assert.equal(
+      report.surfaces.skills[0]?.budget.limit,
+      DISPATCHER_SKILL_WORD_LIMIT,
+    );
     assert.deepEqual(
       report.topPressure.map((surface) => surface.path),
       [

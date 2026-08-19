@@ -1,10 +1,11 @@
 /**
  * Aggregator for the dashboard's non-terminal HTTP route handlers.
  *
- * Builds the shared route context once and merges the handler bags from each route group (shell,
- * audit, quality, skill-quality, projects) into one flat object the server matches requests against.
- * This is the single entry point the HTTP server imports for non-terminal routes; terminal/WebSocket
- * routing lives elsewhere. Also re-exports normalizeAgentVersionOutput for the server's agent probes.
+ * Builds the shared route context once and merges the handler bags from each route group (shell, audit, quality, skill-quality, projects) into one
+ * flat object the server matches requests against.
+ * This is the single entry point the HTTP server imports for non-terminal routes; terminal/WebSocket routing lives elsewhere.
+ *
+ * Also re-exports normalizeAgentVersionOutput for the server's agent probes.
  */
 import { createAuditRouteHandlers } from "./dashboard-audit-routes.js";
 import { createIndexRouteHandlers } from "./dashboard-index-routes.js";

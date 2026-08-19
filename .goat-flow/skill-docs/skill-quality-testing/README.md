@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.15.1"
+goat-flow-reference-version: "1.16.0"
 ---
 # Skill Quality Testing
 
@@ -18,6 +18,10 @@ Non-runnable authoring methodology - no CLI check applies. Load when creating or
 | `tdd-iteration.md` | Iron law, RED/GREEN/REFACTOR loop, pressure scenarios, rationalisations, bulletproofing | Creating or hardening any skill. Load first. |
 | `adversarial-framing.md` | Cynical-reviewer role, zero-findings HALT, parallel reviewer pattern, finding schema | Authoring or hardening review-class skills. |
 | `deployment.md` | Deployment checklist, verification claim evidence, consumer/API skill guardrails, STOP rule | Finalising before merge. |
+
+## Evaluation contract
+
+Match fixtures and controls to the skill's capability and risk in `tdd-iteration.md`. Every fixture names an already-correct control and scores application, not citation. Load `adversarial-framing.md` only for review-class specialisation; it does not own the universal fixture or scoring rules.
 
 ## The iron law (always-loaded anchor)
 

@@ -1,6 +1,6 @@
 ---
 category: verification
-last_reviewed: 2026-08-01
+last_reviewed: 2026-08-20
 ---
 
 ## Pattern: Cross-runner quality-report triage by convergence
@@ -118,6 +118,7 @@ else:
 ## Pattern: Refactors need typecheck before preflight
 **Context:** After a large extraction or restructuring pass.
 **Approach:** Run `npx tsc --noEmit` before relying on preflight. Complexity-only verification can miss callback type drift, helper return narrowing, and small unused-parameter regressions that only show up once TypeScript checks the whole tree.
+**Evidence:** During M53, the extracted `reconcileSupportedAgentHook` helper declared its profile list `readonly` while the existing callee required a mutable array. File-level ESLint passed, then `npm run typecheck` rejected the mismatch before behavioral tests or preflight. Evidence anchor: `src/cli/server/hook-registrar.ts` (search: `function reconcileSupportedAgentHook`).
 
 ## Pattern: Non-gating audit gaps belong in explicit limits
 **Context:** A deterministic audit check passes by design, but review evidence shows a reader could over-interpret the PASS as complete assurance.
@@ -133,10 +134,10 @@ else:
 
 **Evidence (external — promptfoo PR #9345):** Alongside the SQL injection fix in `buildSafeJsonPath()`, the PR added `test/database/sqlSafety.test.ts` which walks `src/` and asserts no production file contains `sql.raw(`. The hand-rolled escape that caused the bug can never come back via a different file because the test catches it before review.
 
-**Goat-flow application:**
+**Goat-flow application (candidate bans - no guardrail test ships yet):** As of 2026-08-20 nothing in `test/` walks `src/` for banned patterns, so the list below is the starting inventory for whoever ships the first guardrail test, not a description of enforced checks:
 - Ban `Math.random()` in `src/cli/server/` (where session IDs live) — `randomUUID()` is already the convention (`src/cli/server/terminal.ts` search: `randomUUID`, `src/cli/server/dashboard-routes.ts` search: `randomUUID`). The grep test prevents regression.
 - Ban `console.log` in MCP server code (when added) — see `.goat-flow/learning-loop/footguns/cli.md` (search: `Diagnostic logs to stdout corrupt structured-output modes`).
-- Ban `JSON.stringify` as a `Set<string>` dedupe key in merge functions — see `.goat-flow/learning-loop/footguns/config.md` (search: `as a dedupe key silently drops function values`).
+- Ban `JSON.stringify` as a `Set<string>` dedupe key in merge functions — the failure mode and its three-PR calibration arc are in `.goat-flow/learning-loop/patterns/external-lessons.md` (search: `Bug-fix clusters arc fix`).
 - Ban bare `setTimeout` / `setInterval` without an associated `clearTimeout` / `clearInterval` in the same file (dashboard server long-running handlers in `src/cli/server/`).
 
 **Shape of the test (TypeScript, Node's built-in test runner):**

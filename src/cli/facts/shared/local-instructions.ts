@@ -1,7 +1,6 @@
 /**
- * Local instruction fact extraction - detects existing project-specific
- * guidance under `.github/instructions/`.
- * `.goat-flow/coding-standards/` is user-owned, not framework-managed - ignored here.
+ * Local instruction fact extraction - detects existing project-specific guidance under `.github/instructions/`. `.goat-flow/coding-standards/` is
+ * user-owned, not framework-managed - ignored here.
  */
 import type { SharedFacts, ReadonlyFS } from "../../types.js";
 
@@ -31,9 +30,9 @@ const GITHUB_INSTRUCTIONS_DIR = ".github/instructions";
 
 /** Resolve the active local instruction directory. */
 function resolveLocalInstructionDir(
-  githubDirExists: boolean,
+  hasGithubDirectory: boolean,
 ): LocalInstructionDir | null {
-  if (githubDirExists)
+  if (hasGithubDirectory)
     return { location: "github", dir: GITHUB_INSTRUCTIONS_DIR };
   return null;
 }

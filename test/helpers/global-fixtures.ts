@@ -47,16 +47,16 @@ export function setEnv(overrides: Record<string, string>): () => void {
  * short block, so restore can't be forgotten.
  *
  * @param overrides - env keys to set for the duration of `fn`.
- * @param fn - work to run under the overrides; may be synchronous or async.
+ * @param block - work to run under the overrides; may be synchronous or async.
  * @returns whatever `fn` resolves to, after env has been restored.
  */
 export async function withEnv<T>(
   overrides: Record<string, string>,
-  fn: () => T | Promise<T>,
+  block: () => T | Promise<T>,
 ): Promise<T> {
   const restore = setEnv(overrides);
   try {
-    return await fn();
+    return await block();
   } finally {
     restore();
   }
@@ -67,14 +67,14 @@ export async function withEnv<T>(
  * the real `Date`. Use for tests that pin "now" or calendar getters.
  *
  * @param fake - stand-in `Date` constructor, typically a local `class extends Date`.
- * @param fn - synchronous work to run while the stub is installed.
+ * @param block - synchronous work to run while the stub is installed.
  * @returns whatever `fn` returns, after the real `Date` has been restored.
  */
-export function withStubbedDate<T>(fake: DateConstructor, fn: () => T): T {
+export function withStubbedDate<T>(fake: DateConstructor, block: () => T): T {
   const real = globalThis.Date;
   globalThis.Date = fake;
   try {
-    return fn();
+    return block();
   } finally {
     globalThis.Date = real;
   }

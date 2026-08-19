@@ -1,6 +1,5 @@
 /**
- * Feedback Loop concern: Are feedback loop directories in place?
- * 2 checks: feedback-loop-active (directory existence), decisions-tracked.
+ * Feedback Loop concern: Are feedback loop directories in place? 2 checks: feedback-loop-active (directory existence), decisions-tracked.
  * A fresh install with zero entries is a valid PASS.
  */
 import type {

@@ -2,7 +2,7 @@
 # shellcheck disable=SC2034,SC2317,SC2319
 
 # deny-dangerous.sh
-# goat-flow-hook-version: 1.15.1
+# goat-flow-hook-version: 1.16.0
 #
 # Checks an agent's proposed shell command before the developer lets it run.
 # Use this dispatcher from an agent hook to keep safe evidence gathering available
@@ -406,10 +406,11 @@ goat_flow_cli_consumes_heredoc_as_data() {
   arguments="${command#"$word"}"
   arguments="${arguments#"${arguments%%[![:space:]]*}"}"
 
-  # These two CLI surfaces parse stdin as report/prose data. Keep the match
+  # These three CLI surfaces parse stdin as report/prose data. Keep the match
   # command-shaped: other goat-flow subcommands may mutate projects or launch
   # runtimes, so the executable itself must never enter the broad inert list.
   [[ "$arguments" =~ ^quality[[:space:]]+save([[:space:]]|$) ]] && return 0
+  [[ "$arguments" =~ ^review[[:space:]]+validate([[:space:]]|$) ]] && return 0
   [[ "$arguments" =~ ^redact([[:space:]]|$) ]] && return 0
   return 1
 }
@@ -624,16 +625,24 @@ check_command_substitutions() {
   local in_double=0
   local escaped=0
 
+  # `residual_unquoted` is built here rather than re-derived afterwards. A
+  # line-oriented strip cannot see a single-quoted span that crosses a newline
+  # and mis-pairs the '\'' escape idiom, so it reported inert text as
+  # executable. This walk already knows the exact quote state of every
+  # character. Single-quoted content is dropped; double-quoted content is kept,
+  # because backticks and $( still execute inside double quotes.
   for ((i = 0; i < ${#remaining}; i++)); do
     char="${remaining:i:1}"
 
     if [[ "$escaped" -eq 1 ]]; then
       residual+="$char"
+      residual_unquoted+="$char"
       escaped=0
       continue
     fi
     if [[ "$in_single" -eq 0 && "$char" == "\\" ]]; then
       residual+="$char"
+      residual_unquoted+="$char"
       escaped=1
       continue
     fi
@@ -653,6 +662,7 @@ check_command_substitutions() {
         in_double=1
       fi
       residual+="$char"
+      residual_unquoted+="$char"
       continue
     fi
 
@@ -664,6 +674,7 @@ check_command_substitutions() {
           inner="${remaining:i+3:close_index-i-3}"
           check_command_substitutions "$inner" "$depth" || return $?
           residual+="__goat_arith__"
+          residual_unquoted+="__goat_arith__"
           i="$close_index"
           continue
         fi
@@ -674,6 +685,7 @@ check_command_substitutions() {
             check_command_segments "$inner" $((depth + 1)) || return $?
           fi
           residual+="__goat_subst__"
+          residual_unquoted+="__goat_subst__"
           i="$close_index"
           continue
         fi
@@ -684,6 +696,7 @@ check_command_substitutions() {
             check_command_segments "$inner" $((depth + 1)) || return $?
           fi
           residual+="__goat_proc_subst__"
+          residual_unquoted+="__goat_proc_subst__"
           i="$close_index"
           continue
         fi
@@ -691,24 +704,18 @@ check_command_substitutions() {
     fi
 
     residual+="$char"
+    if [[ "$in_single" -eq 0 ]]; then
+      residual_unquoted+="$char"
+    fi
   done
-
-  residual_unquoted="$residual"
-  if [[ "$residual" == *\'* ]]; then
-    # shellcheck disable=SC2001  # ERE pattern; parameter expansion uses globs
-    residual_unquoted=$(sed -E "s/'[^']*'//g" <<<"$residual")
-  fi
 
   if [[ "$residual_unquoted" =~ \$\( || "$residual_unquoted" =~ [\<\>]\( ]]; then
     block "Complex command substitution. Write the expanded command directly." || return $?
   fi
 
-  local remaining_unquoted="$remaining"
-  if [[ "$remaining" == *\'* ]]; then
-    # shellcheck disable=SC2001  # ERE pattern; parameter expansion uses globs
-    remaining_unquoted=$(sed -E "s/'[^']*'//g" <<<"$remaining")
-  fi
-  remaining_unquoted="${remaining_unquoted//\\\`/}"
+  # An escaped backtick is literal text, so drop those pairs before the scan.
+  # Substitution bodies already left as placeholders were checked recursively.
+  local remaining_unquoted="${residual_unquoted//\\\`/}"
 
   if [[ "$remaining_unquoted" == *\`* ]]; then
     block "Backtick command substitution hides nested execution. Use a direct command instead, or for an inline script run it from a file (e.g. node script.js)." || return $?
@@ -941,13 +948,13 @@ strip_xargs_payload_command() {
         xargs_word_index=$((xargs_word_index + 1))
         break
         ;;
-      -0|--null|-r|--no-run-if-empty|-t|--verbose|-p|--interactive|-x|--exit|--show-limits)
+      -0|--null|-r|--no-run-if-empty|-t|--verbose|-p|--interactive|-x|--exit|--show-limits|-e|-i|-l|--eof|--replace|--max-lines)
         xargs_word_index=$((xargs_word_index + 1))
         continue
         ;;
       # A separated value must be skipped with its option; otherwise the value itself looks like
       # the payload and hides the real command, as `--process-slot-var VAR git push` once did.
-      -a|--arg-file|-I|-i|-L|-l|-n|-P|-s|-E|-e|-d|--replace|--max-lines|--max-args|--max-procs|--max-chars|--eof|--delimiter|--process-slot-var)
+      -a|--arg-file|-I|-L|-n|-P|-s|-E|-d|--max-args|--max-procs|--max-chars|--delimiter|--process-slot-var)
         xargs_word_index=$((xargs_word_index + 2))
         continue
         ;;
@@ -1085,7 +1092,7 @@ __goat_git_strip_globals() {
         ;;
       -c|-C|--git-dir|--work-tree|--namespace|--exec-path|--config-env)
         val="${words[$((i + 1))]:-}"
-        if [[ "$opt" == "-c" && "$val" =~ ^alias\.[a-zA-Z0-9_-]+=[\'\"]?(push|!) ]]; then
+        if [[ "$opt" == "-c" ]] && is_git_publication_alias_config "$val"; then
           __goat_git_aliased_push=1
         fi
         i=$((i + 2))
@@ -1093,7 +1100,7 @@ __goat_git_strip_globals() {
         ;;
       -c?*)
         val="${opt#-c}"
-        if [[ "$val" =~ ^alias\.[a-zA-Z0-9_-]+=[\'\"]?(push|!) ]]; then
+        if is_git_publication_alias_config "$val"; then
           __goat_git_aliased_push=1
         fi
         i=$((i + 1))
@@ -2168,6 +2175,7 @@ main() {
   OUTPUT_MODE="stderr-exit"
   SELF_TEST_MODE=""
   CHECK_COMMAND=""
+  local check_command_source=""
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -2179,14 +2187,17 @@ main() {
         ;;
       --check=*)
         CHECK_COMMAND="${1#--check=}"
+        check_command_source="check-flag"
         ;;
       --check)
         shift
         CHECK_COMMAND="${1:-}"
+        check_command_source="check-flag"
         ;;
       *)
         if [[ -z "$CHECK_COMMAND" ]]; then
           CHECK_COMMAND="$1"
+          check_command_source="positional"
         fi
         ;;
     esac
@@ -2200,6 +2211,15 @@ main() {
   fi
 
   local payload structured_input payload_trimmed tool_name command command_policy extraction_status
+  if [[ "$check_command_source" == "positional" && ! -t 0 ]]; then
+    local competing_payload competing_payload_trimmed
+    competing_payload="$(cat || true)"
+    competing_payload_trimmed="${competing_payload#"${competing_payload%%[![:space:]]*}"}"
+    if [[ -n "$competing_payload_trimmed" ]]; then
+      OUTPUT_MODE="$(detect_output_mode "$competing_payload")"
+      block "Hook received both positional command and stdin payload. Submit exactly one command source."
+    fi
+  fi
   JSON_EXTRACTION_UNSAFE=0
   payload="$(read_payload)"
   structured_input=0

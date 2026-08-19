@@ -35,7 +35,7 @@ function applyRunnerOption(options, optionName, optionValue) {
     case "--heartbeat-seconds":
       options.heartbeatSeconds = Number(optionValue);
       return;
-    // The label tells the developer whether the first run or retry is active.
+    // The label names the bounded verification command shown in progress output.
     case "--label":
       options.progressLabel = optionValue;
       return;
@@ -188,9 +188,10 @@ function stopChildProcessGroup(childProcess, stopSignal) {
 /**
  * Write one out-of-band heartbeat for the developer watching an interactive preflight.
  * Use only with an inherited descriptor; null means CI receives no progress noise.
+ * It swallows a failed write, so a closed progress pipe cannot end the run.
  *
  * @param {number | null} progressFileDescriptor - inherited operator channel; null hides progress
- * @param {string} progressLabel - Tests or Tests retry, matching the work the user is waiting on
+ * @param {string} progressLabel - label matching the verification work the user is waiting on
  * @param {number} elapsedMilliseconds - measured liveness duration; zero means the command just started
  * @param {number} heartbeatSeconds - production interval; sub-second values are for focused tests
  * @returns {boolean} true when the heartbeat was written; false when the channel is absent or closed
@@ -325,7 +326,7 @@ function deliverCapturedCommandResult(
   state,
   childExitCode,
   childExitSignal,
-  cleanupDeadlineReached = false,
+  hasCleanupDeadlinePassed = false,
 ) {
   // A prior close or deadline already gave the developer a result.
   if (state.hasReturnedResultToPreflight) return;
@@ -337,7 +338,7 @@ function deliverCapturedCommandResult(
     state.runnerOptions.childArguments,
   );
   // Escaped descendants can retain pipes after the child group has been killed.
-  if (cleanupDeadlineReached) {
+  if (hasCleanupDeadlinePassed) {
     releaseEscapedOutputHandles(state, renderedCommand);
   }
 

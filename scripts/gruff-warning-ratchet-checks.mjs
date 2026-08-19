@@ -1,11 +1,12 @@
 /**
  * The rules that decide whether Gruff warning debt regressed, kept apart from running the analyzer.
- * Loaded by scripts/check-gruff-warning-ratchet.mjs, which supplies a fresh scan and prints whatever
- * this module reports. Everything here is a pure comparison against the reviewed list in
- * scripts/gruff-warning-baseline.json: read that list, confirm the scan is the report we know how to
- * read, then judge every warning against what a reviewer signed off. A maintainer changes rules here
- * when the definition of "this got worse" changes, and changes the sibling file when the way the
- * analyzer is launched changes. Failure lines are collected by RatchetFailureReport from
+ *
+ * Loaded by scripts/check-gruff-warning-ratchet.mjs, which supplies a fresh scan and prints whatever this module
+ * reports. It confirms the scan still meets the reviewed coverage floor, then compares warnings with
+ * scripts/gruff-warning-baseline.json when that accepted-debt manifest exists.
+ *
+ * A maintainer changes rules here when the definition of "this got worse" changes, and changes the sibling file
+ * when the way the analyzer is launched changes. Failure lines are collected by RatchetFailureReport from
  * ratchet-failure-report.mjs, which every check here writes into.
  */
 import { readFileSync } from "node:fs";
@@ -13,11 +14,18 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-// Tests point this at a fixture manifest; a normal run reads the reviewed list beside this script.
+// Tests point this at a fixture manifest; a normal run looks for the reviewed list beside this script.
 const MANIFEST_PATH =
   process.env.GOAT_FLOW_GRUFF_RATCHET_BASELINE ??
   join(REPO_ROOT, "scripts", "gruff-warning-baseline.json");
 export const EXPECTED_SCHEMA = "gruff.analysis.v2";
+/**
+ * Coverage threshold retained when no accepted warning-debt manifest exists.
+ *
+ * The last reviewed manifest before warning debt reached zero recorded 494 analysed files. Removing
+ * accepted findings does not revoke that coverage approval: a lower count still needs human review.
+ */
+const REVIEWED_MINIMUM_ANALYSED_FILES = 494;
 /**
  * Build a stable text key for one occurrence so equal shapes compare equal whatever the key order.
  * Used when matching scanned occurrences against the reviewed ones for the same identity.
@@ -187,21 +195,39 @@ function collectAcceptedEntriesByIdentity(parsedManifest, failures) {
  * Read the reviewed debt list a maintainer maintains by hand and confirm it is usable.
  * Runs before the scan so an unreviewable manifest stops the gate immediately instead of appearing
  * to approve whatever the analyzer reports.
- * Error behavior: never throws - a missing file, unreadable file, or JSON syntax error is reported
- * as an "invalid manifest" line and answered with null.
  * Invariant: once anything is recorded, null is always returned, so a broken manifest can never
  * accept a single warning.
  *
  * @param failures - collector the caller prints; nothing is added when the manifest is sound
- * @returns the coverage floor and accepted entries, or null when the manifest cannot be trusted and
- *   the maintainer must fix it before any debt comparison is meaningful
+ * @returns the coverage floor and accepted entries, or null when the manifest cannot be trusted and the maintainer must fix it before any debt
+ *   comparison is meaningful. It never throws - a missing file, unreadable file, or JSON syntax error is reported as an "invalid manifest" line and
+ *   answered with null.
  */
 export function loadReviewedDebtManifest(failures) {
+  let manifestText;
+  try {
+    manifestText = readFileSync(MANIFEST_PATH, "utf8");
+  } catch (error) {
+    // No manifest at all is the intended steady state: this project fixes warnings rather than accepting them,
+    // so there is nothing to review and every warning the scan reports counts as a regression.
+    if (error.code === "ENOENT") {
+      return {
+        minimumAnalysedFiles: REVIEWED_MINIMUM_ANALYSED_FILES,
+        acceptedEntriesByIdentity: new Map(),
+      };
+    }
+    // Present but unreadable is a different story - for example a permission problem on the file.
+    failures.addFailure(
+      "invalid manifest",
+      `${MANIFEST_PATH}: ${error.message}`,
+    );
+    return null;
+  }
   let parsedManifest;
   try {
-    parsedManifest = JSON.parse(readFileSync(MANIFEST_PATH, "utf8"));
+    parsedManifest = JSON.parse(manifestText);
   } catch (error) {
-    // Unreadable or half-edited manifest - for example a merge conflict left markers in the JSON.
+    // Half-edited manifest - for example a merge conflict left markers in the JSON.
     failures.addFailure(
       "invalid manifest",
       `${MANIFEST_PATH}: ${error.message}`,

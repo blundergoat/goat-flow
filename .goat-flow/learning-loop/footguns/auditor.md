@@ -1,45 +1,47 @@
 ---
 category: auditor
-last_reviewed: 2026-08-07
+last_reviewed: 2026-08-20
 ---
 
 ## Footgun: Audit does not prove end-to-end deny enforcement at runtime
 
 **Status:** active | **Created:** 2026-04-05 | **Updated:** 2026-07-26 | **Evidence:** ACTUAL_MEASURED
 
-The selected-agent audit validates hook syntax, self-test behavior, registration, and a runtime-shaped blocked Bash payload through the registered hook path. It still does not prove that the external agent runtime itself delivered the hook payload for a real Bash tool invocation. A hook that passes every local check can still fail at the provider/runtime boundary if the agent ignores the configured hook event or changes its payload contract.
+The selected-agent audit with explicit `--trusted-target` validates hook syntax, self-test behavior, registration, and a runtime-shaped blocked Bash payload through the registered hook path. It still does not prove that the external agent runtime itself delivered the hook payload for a real Bash tool invocation. A hook that passes every local check can still fail at the provider/runtime boundary if the agent ignores the configured hook event or changes its payload contract.
 
-**Residual scope** (after the selected-agent guardrail check started invoking the hook's `--self-test` and a runtime-shaped blocked payload):
+**Residual scope** (after an explicitly trusted selected-agent guardrail check started invoking the hook's `--self-test` and a runtime-shaped blocked payload):
 
 1. Hook registration cross-check (file exists ↔ registered in settings). The `deny-hook-registered` check in `harness/check-constraints.ts` covers this, and the selected-agent guardrail check now exercises the registered hook path with a runtime-shaped payload. Neither launches the external agent binary to prove provider-side delivery.
-2. `goat-flow hooks verify --agent <id> --scenario deny-hook` shipped in 1.14.0 and closes only the checkout-local half: it drives the fixed deny scenarios through the managed hook and returns a per-scenario verdict at `evidenceLevel: managed-hook-classifier`. Its evidence budget explicitly forbids an external-agent delivery claim, so a smoke-test that launches the real agent binary and proves the provider delivered the hook event is still not built. Do not read this item as "no verify surface exists".
+2. `goat-flow hooks verify --agent <id> --scenario deny-hook --trusted-target` closes only the checkout-local half: it drives the fixed deny scenarios through the managed hook and returns a per-scenario verdict at `evidenceLevel: managed-hook-classifier`. Its evidence budget explicitly forbids an external-agent delivery claim, so a smoke-test that launches the real agent binary and proves the provider delivered the hook event is still not built. Do not read this item as "no verify surface exists".
 3. Static fact extraction can drift from the deny hook when hook regexes are generalized. On 2026-04-27, `detectBashDenyCoversSecrets` still expected older `/.ssh/` and `/.aws/` regex text after the hook moved to relative/home-root normalization, causing a false harness failure until the detector and unit coverage were updated.
 
 **Evidence:**
 - `src/cli/audit/harness/check-constraints.ts` (search: `deny-hook-registered`) - cross-checks hook file existence against settings.json registration.
-- `src/cli/audit/check-agent-deny-mechanism.ts` (search: `checkHookSelfTest`) - invokes the hook's `--self-test` so quoted-alternation false positives and pipe-to-shell bypass attempts are exercised, not just parsed.
+- `src/cli/audit/check-agent-deny-mechanism.ts` (search: `checkHookSelfTest`) - explicit full evidence invokes the hook's `--self-test` so quoted-alternation false positives and pipe-to-shell bypass attempts are exercised, not just parsed.
 - `src/cli/audit/check-agent-deny-runtime.ts` (search: `checkHookRuntimeSmoke`) - sends a runtime-shaped structured Bash payload through the registered deny hook path and expects a deny result for `git push origin main`. This is local hook execution, not proof that the external agent binary delivered the hook event.
 - `src/cli/facts/agent/hooks.ts` (search: `detectBashDenyCoversSecrets`) - derives the harness secret-coverage fact from static markers in the hook file; it must stay aligned with `workflow/hooks/deny-dangerous/patterns-paths.sh` (search: `is_secret_path_touch`).
 - `test/unit/audit-command/hook-facts.test.ts` (search: `detects current deny hook secret coverage from generalized path matcher`) - regression coverage for the static detector against the canonical hook template.
-- `src/cli/hooks-command.ts` (search: `handleHookVerification`) - the 1.14.0 `hooks verify` entry point; requires `--agent` and the fixed `deny-hook` scenario group and exits 1 when any scenario lacks matching recorded proof.
+- `src/cli/hooks-command.ts` (search: `handleHookVerification`) - the `hooks verify` entry point; requires `--agent`, the fixed `deny-hook` scenario group, and `--trusted-target` before execution, then exits 1 when any scenario lacks matching recorded proof.
 - `src/cli/hooks-runtime-evidence.ts` (search: `verifyManagedDenyHook`) - runs every fixed deny scenario against the managed script and returns the local-evidence report. Confirmed 2026-07-26: three scenarios (secret read, repository push, read-only control) all `pass`, all local.
 
 ---
 
 ## Footgun: The deny-mechanism runtime smoke executes the target checkout's own hook command
 
-**Status:** active | **Created:** 2026-06-14 | **Corrected:** 2026-08-07 | **Evidence:** ACTUAL_MEASURED
+**Status:** active | **Created:** 2026-06-14 | **Corrected:** 2026-08-16 | **Evidence:** ACTUAL_MEASURED
 
-**Trap:** The runtime evidence level of the agent deny-mechanism audit does not only run goat-flow's own managed script - it executes the *target project's* configured launcher string through `bash -c`. `src/cli/audit/check-agent-deny-runtime.ts` (search: `verifyConfiguredHookRuntime`, `pipeRuntimeProbeTo(configured.command)`) pipes a blocked payload into `configured.command` taken verbatim from the checkout's `.claude/settings.json` / `.codex/hooks.json` / `.agents/hooks.json`. So `goat-flow audit --agent <id>` without `--untrusted-target` against a checkout you do not control is arbitrary-shell-execution-on-audit: a hostile or compromised hook config that merely wraps the managed script in other shell still runs that shell before the smoke can classify anything. This is deliberate (it validates the real `$root` resolution and `cd` glue, which a sanitized re-invocation would skip), but the exec surface is easy to widen by accident.
+**Original trap:** The runtime evidence level of the agent deny-mechanism audit does not only run goat-flow's own managed script - it executes the *target project's* configured launcher string through `bash -c`. `src/cli/audit/check-agent-deny-runtime.ts` (search: `verifyConfiguredHookRuntime`, `pipeRuntimeProbeTo(configured.command)`) pipes a blocked payload into `configured.command` taken verbatim from the checkout's `.claude/settings.json` / `.codex/hooks.json` / `.agents/hooks.json`. Before the 1.16.0 correction, `goat-flow audit --agent <id>` did this unless the user supplied `--untrusted-target`, so auditing a hostile or compromised checkout could run arbitrary shell before the smoke classified anything. Full execution is deliberate because it validates the real `$root` resolution and `cd` glue, which a sanitized re-invocation would skip.
+
+**Current contract:** Omission is static. Only `--trusted-target` enables the configured launcher, managed self-test, and runtime-shaped probes. The deprecated `--untrusted-target` flag remains a static compatibility alias throughout v1.16.x; combining both flags is a usage error.
 
 **Evidence:**
-- `src/cli/audit/check-agent-deny-runtime.ts` (search: `verifyConfiguredHookRuntime`) - the comment above the `spawnSync` documents the trusted-target-only intent; runtime runs when `denyMechanismEvidenceLevel` is `"full"` or unset.
-- `src/cli/cli-handlers.ts` (search: `options.isTargetUntrusted`) - `--untrusted-target` maps to `denyMechanismEvidenceLevel: "static"` so a CLI audit can skip execution.
+- `src/cli/audit/check-agent-deny-runtime.ts` (search: `verifyConfiguredHookRuntime`) - runtime replays the exact configured command; callers reach it only with explicit `denyMechanismEvidenceLevel: "full"`.
+- `src/cli/cli-handlers.ts` (search: `options.isTargetTrusted`) - audit and setup map `--trusted-target` to `"full"`; omission and the deprecated alias map to `"static"`.
 - **Dashboard mitigation, 2026-08-07.** The correction committed at 07:09 accurately recorded that `buildDashboardAuditReport` then selected `"full"`; commit `19046c08` changed that branch to `"static"` at 17:06 the same day. Current `src/cli/server/dashboard-audit-routes.ts` (search: `agentFilter === null ? "present-only" : "static"`) leaves runtime proof to an explicit CLI audit. `test/integration/dashboard-audit-api.test.ts` (search: `does not execute selected-project hook launcher in /api/audit`) installs a marker-writing launcher and proves the selected-agent dashboard endpoint does not run it.
-- **Reach, measured 2026-08-07.** Only a *selected-agent CLI audit using full/default evidence* executes. `src/cli/audit/audit.ts` (search: `function isAggregateAgentSkip`) skips agent-scope checks when no `--agent` is given, and `check-agent-deny-mechanism.ts` (search: `scope: "agent"`) declares no aggregate support. Measured on this repo: `audit .` reports `Agent deny mechanism: skipped`; `audit . --agent claude` reports `pass`. Do not restate this trap as "any `goat-flow audit` executes target code" - it needs `--agent` without the static opt-out. The dashboard per-agent route does not qualify because it requests static evidence.
+- **Reach, measured 2026-08-16.** Only a selected-agent CLI audit using explicit full evidence executes. `test/unit/audit-deny-runtime-flag.test.ts` (search: `does not run a managed self-test or configured launcher`) intercepts both runtime surfaces and records zero calls when the library evidence level is omitted; its explicit-full control records configured launcher calls. `src/cli/audit/audit.ts` (search: `denyMechanismEvidenceLevel`) resolves omission to `"static"`, while aggregate audit still skips agent-scope checks. The dashboard per-agent route remains explicitly static.
 - Inverse concern (audit proving too *little*, not too much): the "Audit does not prove end-to-end deny enforcement at runtime" footgun above. Side-effect cousin: [internal-run-isolation.md](internal-run-isolation.md).
 
-**Prevention:** Keep an execution opt-out reachable. Preserve the dashboard invariant that passive selected-project requests stop at static evidence; runtime proof belongs to a deliberate CLI audit against a trusted checkout. Never make runtime smoke the unconditional default for a surface that can audit untrusted checkouts. Before citing a surface as `"static"` or `"full"`, re-read the call site and its route-level test. Treat any change to the default evidence level as a security decision - and note it can also flip a CI audit gate, because runtime smoke catches launcher / `$root` failures that static checks do not. Do not "harden" this by parsing the launcher and running only the managed script: that reintroduces the stale-path / broken-glue blind spot the full-command smoke exists to catch (see [hooks.md](hooks.md) search: `Hook command strings can fail before guard code starts`).
+**Prevention:** Keep target execution opt-in. Preserve the invariant that passive selected-project requests and omitted library options stop at static evidence; runtime proof belongs to an explicit `--trusted-target` choice. Before citing a surface as `"static"` or `"full"`, re-read the call site and its route-level test. Treat any change to the default evidence level as a security decision - and note it can also flip a CI audit gate, because runtime smoke catches launcher / `$root` failures that static checks do not. Do not "harden" this by parsing the launcher and running only the managed script: that reintroduces the stale-path / broken-glue blind spot the full-command smoke exists to catch (see [hooks.md](hooks.md) search: `Hook command strings can fail before guard code starts`).
 
 ---
 
@@ -76,24 +78,6 @@ Build checks in `src/cli/audit/check-goat-flow.ts` and `src/cli/audit/check-agen
 
 ---
 
-## Footgun: Learning-loop record counts have two grammars that disagree on resolved entries
-
-**Status:** active | **Created:** 2026-06-10 | **Evidence:** ACTUAL_MEASURED
-
-**Symptoms:** Two surfaces show different counts under the same bucket label. Measured 2026-06-10: the dashboard Home LEARNING LOOP pill said `94 footguns` while the Learning loop card's per-bucket bar said `footguns 78`. Both are correct - they use different counting grammars.
-
-**Evidence:**
-- `src/cli/server/dashboard-reporting.ts` (search: `footgunCount: stats.footguns.totalEntries`) - pill counts come from `buildStatsReport`, which counts every entry heading including `Status: resolved` footguns.
-- Same file (search: `entryCount: parseBucket`) - the card's bars use `parseBucket` from `src/cli/learning-loop-index/parse-bucket.ts`, which returns active entries only (the INDEX.md grammar, "active-entry rows" per its doc comment).
-- Measured gap: 94 total vs 78 active footguns (16 resolved); lessons matched at 212 because they have no resolved state, so the mismatch hides on buckets without resolved entries.
-- First Learning loop card draft rendered both numbers on one card; fixed by deriving the card's status line from the same `entryCount` data as its bars (search: `learningLoopStatusDetail` in `src/dashboard/views/home.html`).
-
-**Prevention:**
-1. Match the count source to the surface's concept: retrieval/index surfaces use `parseBucket` active counts; size/health surfaces use stats totals.
-2. Never render counts from both grammars under the same bucket label on one surface; if both must appear, label them distinctly ("active entries" vs total records).
-
----
-
 ## Footgun: Selected-agent drift can leak unselected agent surfaces
 
 **Status:** active | **Created:** 2026-07-12 | **Evidence:** ACTUAL_MEASURED
@@ -110,25 +94,6 @@ Build checks in `src/cli/audit/check-goat-flow.ts` and `src/cli/audit/check-agen
 - `test/integration/audit-drift-checkdrift-hook-templates.test.ts` (search: `limits hook drift to the selected agent`) reproduces the Codex-only consumer and fails if another agent leaks back into the report.
 
 **Prevention:** Any new drift surface must declare whether it is agent-owned or shared. Apply `agentFilter` to agent-owned files and keep shared framework assets global; prove both with a single-agent consumer fixture.
-
----
-
-## Footgun: Extractor diagnostics can encode valid empty state
-
-**Status:** active | **Created:** 2026-07-12 | **Evidence:** ACTUAL_MEASURED
-**Decision changed:** Diagnostic consumers must classify every documented state at their boundary; non-null diagnostic text is not an error flag.
-**Trigger phase:** ACT
-
-**Trap:** A shared diagnostic channel can carry malformed-metadata errors and valid status such as an empty first-run store. Any new consumer that treats every non-null diagnostic as failure can turn a valid fresh installation into a failed harness. The current Feedback Loop consumer classifies the known empty states; new diagnostics or consumers can reintroduce the conflation.
-
-**Original incident:** On 2026-07-12, a fresh consumer with valid but empty footgun and lesson directories failed the Feedback Loop concern because the harness treated the valid messages `Footgun directory exists but contains 0 entries` and `Lesson directory exists but contains 0 entries` as errors.
-
-**Evidence:**
-- `src/cli/audit/harness/check-feedback-loop.ts` (search: `EMPTY_LEARNING_LOOP_DIAGNOSTICS`) distinguishes the two valid first-run messages from actionable format failures.
-- `test/integration/audit-quality.test.ts` (search: `accepts extractor diagnostics that only report zero learning-loop entries`) pins the empty-install behavior without suppressing malformed-bucket diagnostics.
-- `test/integration/setup-quality-lifecycle.test.ts` (search: `consumer setup to quality-report lifecycle`) proves a newly installed consumer reaches a passing selected-agent harness before any incident entries exist.
-
-**Prevention:** Do not interpret a general-purpose diagnostic field as an error flag. Classify each documented diagnostic state at the consuming boundary, and keep a fresh-install fixture beside malformed-metadata coverage.
 
 ---
 
@@ -163,37 +128,11 @@ Build checks in `src/cli/audit/check-goat-flow.ts` and `src/cli/audit/check-agen
 
 > Historical record. These entries are no longer active traps.
 
-## Footgun: Decision meta files must be excluded from every decision extractor
-
-**Status:** resolved | **Created:** 2026-06-04 | **Resolved:** 2026-06-05 | **Evidence:** ACTUAL_MEASURED
-
-**Resolution:** `src/cli/facts/shared/decision-files.ts` (search: `isDecisionRecordMarkdown`) now owns the shared ADR/meta split; `src/cli/facts/shared/index.ts` (search: `filter(isDecisionRecordMarkdown)`) and `src/cli/facts/shared/learning-loop-entries.ts` (search: `isDecisionRecordMarkdown(sourceFilename(decisionFile.path))`) use it. `test/unit/learning-loop.test.ts` (search: `excludes the decisions INDEX from shared decision counts and prompt entries`) pins the inflated-count and prompt-entry regression.
-
-**Original symptoms:** Adding a hand-maintained `.goat-flow/learning-loop/decisions/INDEX.md` could pass `stats --check` filename validation while shared decision facts and prompt learning-loop entries still counted or surfaced it as a real decision. The dashboard, harness, and prompt context then reported inflated decision counts or included a "Decisions Index" entry beside ADR records.
-
-**Why it happened:** Decision validation, decision directory facts, and compact learning-loop entry extraction had separate filters. Updating only the stats validator's meta-file allowlist left `src/cli/facts/shared/index.ts` and the learning-loop entry helpers using the older "exclude README only" rule. In this checkout, `rg --files .goat-flow/learning-loop/decisions | rg '\.md$' | wc -l` returned 34, while `rg --files .goat-flow/learning-loop/decisions | rg '/ADR-[0-9]{3}-.*\.md$' | wc -l` returned 32 and `.goat-flow/learning-loop/decisions/INDEX.md` was present.
-
-**Prevention:** Treat decision meta-file additions like a shared extractor contract change. Update the stats validator, shared decision facts, compact learning-loop entries, prompt filters, and tests in one patch; assert both the failing gate (`stats --check`) and the non-gating facts (`decisions.fileCount`, decision entry titles) so meta files cannot leak into user-facing counts.
-
----
-
-## Footgun: Learning-loop stale-ref detection misses bare-path `Evidence anchors:` entries
-
-**Status:** resolved | **Created:** 2026-06-01 | **Resolved:** 2026-06-03 | **Evidence:** ACTUAL_MEASURED
-
-**Resolution:** `src/cli/facts/shared/learning-loop-common.ts` (search: `scanBareEvidenceAnchors`) now existence-checks non-glob bare backtick paths on `Evidence anchors:` lines, while leaving line refs and search anchors to their existing scanners. `test/unit/learning-loop.test.ts` (search: `flags bare Evidence anchors paths`) pins the stale-path regression.
-
-**Original symptoms:** `goat-flow stats --check` existence-checked a learning-loop file reference in only three anchor shapes: `` `file:line` ``, `` `file` (search: `needle`) ``, and `(search: "needle")`. A bare backtick path with no line number and no `(search: ...)` suffix - the `Evidence anchors: \`path/to/file.ts\`` convention - was never checked. `Evidence anchors:` lines appeared in 15 learning-loop files as of 2026-06-01, so a whole class of anchor silently bypassed the integrity gate.
-
-The miss kept `stats --check` green while `.goat-flow/learning-loop/lessons/gruff-cleanup.md` cited two deleted tests (`test/unit/audit-command/harness.test.ts`, `test/unit/dashboard-toast.test.ts`) and `.goat-flow/learning-loop/lessons/verification.md` cited a deleted task milestone under `.goat-flow/plans/1.8.0/`; a Codex quality run found them by hand, not the detector.
-
-**Invariant:** durable learning-loop evidence should use the sanctioned `(search: "needle")` form when content identity matters. Never anchor to `.goat-flow/plans/**` milestone files - they are gitignored WIP and get cleaned up.
-
 ## Footgun: Audit howToFix emits commands the deny hook blocks
 
 **Status:** resolved | **Created:** 2026-04-15 | **Resolved:** 2026-04-16 | **Evidence:** ACTUAL_MEASURED
 
-**Resolution:** `check-agent-setup.ts` (search: `howToFix.*deprecated`) now emits text guidance ("Delete the SKILL.md inside each, then remove the empty directory") instead of shell commands. No longer triggers deny hook blocks.
+**Resolution:** `src/cli/audit/check-agent-setup.ts` (search: `Remove the deprecated`) now emits text guidance ("Delete the SKILL.md inside each, then remove the empty directory") instead of shell commands. No longer triggers deny hook blocks.
 
 **Original symptoms:** Running `goat-flow audit` and following its fix suggestions triggered deny-hook blocks because howToFix emitted `rm -rf ${path}` for deprecated skill directories.
 
@@ -203,7 +142,7 @@ The miss kept `stats --check` green while `.goat-flow/learning-loop/lessons/gruf
 
 **Status:** resolved | **Created:** 2026-04-15 | **Resolved:** 2026-04-16 | **Evidence:** ACTUAL_MEASURED
 
-**Resolution:** `check-constraints.ts` (search: `deny-hook-registered`) now verifies PreToolUse/pre-tool deny hook registration via `af.hooks.denyIsRegistered`. Added in commit 708b1af. The `check-verification.ts` hooks-registered check correctly remains scoped to post-turn hooks only.
+**Resolution:** `src/cli/audit/harness/check-constraints.ts` (search: `deny-hook-registered`) now verifies PreToolUse/pre-tool deny hook registration via `af.hooks.denyIsRegistered`. Added in commit 708b1af. The `check-verification.ts` hooks-registered check correctly remains scoped to post-turn hooks only.
 
 **Original symptoms:** A project could pass the harness audit without the deny hook being wired to PreToolUse.
 
@@ -216,13 +155,3 @@ The miss kept `stats --check` green while `.goat-flow/learning-loop/lessons/gruf
 **Resolution:** M05 defined the `CheckEvidence` schema and M11 back-filled it onto all 33 live audit checks. `BuildCheck` and `HarnessCheck` now require `provenance`, `runAudit()` validates every registered record via `validateProvenance()`, and per-check JSON output carries the full provenance object. CONTRIBUTING now requires new checks to ship provenance in the same change.
 
 **Original symptoms:** The live registry had deterministic checks, but no per-check machine-readable record of why each one existed, which source justified it, or whether a rule was MUST/SHOULD/BEST_PRACTICE. Reviewers had to infer rationale from code, stale milestone text, or repo history.
-
----
-
-## Footgun: Preflight node-to-grep pipeline passes unsanitized stdout into regex patterns
-
-**Status:** resolved | **Created:** 2026-04-21 | **Resolved:** 2026-04-21 | **Evidence:** ACTUAL_MEASURED
-
-**Resolution:** Node output piped through `grep -oE '^[0-9]+$' | tail -1` to extract only numeric lines. Architecture doc matching switched from `grep -q` (BRE) to `grep -Fq` (fixed strings). `setup_count` initialized before the conditional block to prevent `set -u` crash. Commit on `dev` branch, `scripts/preflight-checks.sh` (search: `grep -oE '^[0-9]+$'`).
-
-**Original symptoms:** `npm publish` failed: the round-trip fixture test (`test/integration/audit-drift.test.ts`, search: `installs fixture-backed references`) intermittently crashed with `grep: Unmatched [, [^, [:, [., or [=` in the Doc/Code Drift section. Root cause: `node --input-type=module` commands that compute check counts (`build_count`, `quality_count`, `setup_count`, `agent_count`) captured raw stdout including stray node diagnostic lines containing `[` characters. These were then interpolated into `grep -q "${build_count} build"` where grep interpreted `[` as a regex character class. The first fix (output sanitization) introduced a second failure: when the sanitized pipeline returned empty in the temp fixture (node imports fail without a working `dist/`), `setup_count` was never set because it was assigned inside the `if [[ -n "$build_count" ]]` block but referenced unconditionally on line 526 - crashing with `set -u` (`unbound variable`).

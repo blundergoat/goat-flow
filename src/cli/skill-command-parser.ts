@@ -1,7 +1,8 @@
 /**
  * Lightweight positional and flag rules for the `skill` CLI namespace.
- * Use during argv parsing so `skill new` and read-only `skill doctor` remain
- * isolated without importing their heavier authoring or diagnostic runtimes.
+ *
+ * Use during argv parsing so `skill new` and read-only `skill doctor` remain isolated without importing their heavier authoring or diagnostic
+ * runtimes.
  * Every failure is a user-facing CLI usage error with exit code 2.
  */
 import { resolve } from "node:path";
@@ -26,8 +27,8 @@ function parsedString(
   values: ParsedArgValues,
   name: string,
 ): string | undefined {
-  const value = values[name];
-  return typeof value === "string" ? value : undefined;
+  const parsedValue = values[name];
+  return typeof parsedValue === "string" ? parsedValue : undefined;
 }
 
 /** Return whether one raw boolean flag was explicitly selected by the user. */
@@ -36,16 +37,16 @@ function parsedFlag(values: ParsedArgValues, name: string): boolean {
 }
 
 /** Detect path-shaped authoring values so free-form descriptions stay intact. */
-function isPathShapedSkillProject(value: string): boolean {
-  const normalizedPath = value.replace(/\\/gu, "/");
+function isPathShapedSkillProject(projectArg: string): boolean {
+  const normalizedPath = projectArg.replace(/\\/gu, "/");
   return (
-    value === "." ||
-    value === ".." ||
+    projectArg === "." ||
+    projectArg === ".." ||
     normalizedPath.startsWith("./") ||
     normalizedPath.startsWith("../") ||
     normalizedPath.startsWith("/") ||
-    /^[a-zA-Z]:[\\/]/u.test(value) ||
-    value.startsWith("\\\\")
+    /^[a-zA-Z]:[\\/]/u.test(projectArg) ||
+    projectArg.startsWith("\\\\")
   );
 }
 
@@ -89,7 +90,7 @@ function parseSkillNewPositionals(
   return null;
 }
 
-/** Parse either supported project-path placement for read-only `skill doctor`. */
+/** Parse either supported project-path placement for read-only `skill doctor`; it throws a usage error when extra positionals are supplied. */
 function parseSkillDoctorPositionals(
   positionals: string[],
 ): SkillPositionals | null {
@@ -168,7 +169,7 @@ export function parseSkillPositionals(positionals: string[]): SkillPositionals {
   );
 }
 
-/** Validate draft input against candidacy and skill-new modes. */
+/** Validate draft input against candidacy and skill-new modes; it throws a usage error when `--draft` is passed to a command that ignores it. */
 function validateDraftFlag(
   command: Command,
   values: ParsedArgValues,
@@ -191,7 +192,7 @@ function validateDraftFlag(
   }
 }
 
-/** Validate the three write-capable authoring flags through one rule table. */
+/** Validate the write-capable authoring flags through one rule table; it throws a usage error when one is used outside `skill new`. */
 function validateAuthoringOnlyFlags(
   values: ParsedArgValues,
   isSkillNew: boolean,
@@ -211,7 +212,7 @@ function validateAuthoringOnlyFlags(
   }
 }
 
-/** Validate the read-only canonical skill filter. */
+/** Validate the read-only canonical skill filter; it throws a usage error when `--skill` is passed to anything but `skill doctor`. */
 function validateDoctorFilter(
   values: ParsedArgValues,
   isSkillDoctor: boolean,
@@ -254,8 +255,8 @@ function resolvedSkillPath(
   basePath = ".",
 ): string | null {
   if (!isSkillCommand) return null;
-  const value = parsedString(values, name);
-  return value === undefined ? null : resolve(basePath, value);
+  const parsedValue = parsedString(values, name);
+  return parsedValue === undefined ? null : resolve(basePath, parsedValue);
 }
 
 /**

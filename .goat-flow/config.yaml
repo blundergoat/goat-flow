@@ -1,7 +1,7 @@
 # .goat-flow/config.yaml - project configuration
 # Docs: https://github.com/blundergoat/goat-flow
 
-version: "1.15.1"
+version: "1.16.0"
 
 # ── Project Setup ───────────────────────────────
 skills:
@@ -13,6 +13,7 @@ skills:
     - goat-critique
     - goat-security
     - goat-qa
+    - goat-clarity
   # Optional: local PR reviews use this base before remote default-branch discovery.
   # goat-review:
   #   local_pr_base: deploy

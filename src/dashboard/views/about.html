@@ -232,9 +232,9 @@
                 class="gf-text-muted"
                 style="font-size: 13px; margin: 0; line-height: 1.55"
               >
-                Seven slash commands with structure. Debug, plan, review,
-                critique, security, QA, dispatch. Each one a workflow, not a
-                suggestion.
+                Eight slash commands with structure. Debug, plan, review,
+                critique, security, QA, clarity, dispatch. Each one a workflow,
+                not a suggestion.
               </p>
               <span
                 style="
@@ -486,7 +486,7 @@
               letter-spacing: -0.01em;
             "
           >
-            Seven skills, one dispatcher
+            Eight skills, one default entry point
           </h2>
           <p
             class="gf-text-muted"
@@ -494,7 +494,7 @@
           >
             Free-form prompting is how agents get lost. Skills are structured
             slash commands with defined phases, named artifacts, and clear
-            stopping points. Seven ship with goat-flow. Use
+            stopping points. Eight ship with goat-flow. Use
             <span class="mono" style="color: var(--accent); font-weight: 500"
               >/goat</span
             >
@@ -543,7 +543,8 @@
                 { cmd: '/goat-review', desc: 'Review diffs, audit code quality with negative verification', badge: 'review' },
                 { cmd: '/goat-critique', desc: 'Multi-lens critique to surface blind spots before shipping', badge: 'critique' },
                 { cmd: '/goat-security', desc: 'Threat model, dependency audit, compliance checks', badge: 'security' },
-                { cmd: '/goat-qa', desc: 'Generate test plans with automated, AI-verified, and manual steps', badge: 'qa' }
+                { cmd: '/goat-qa', desc: 'Generate test plans with automated, AI-verified, and manual steps', badge: 'qa' },
+                { cmd: '/goat-clarity', desc: 'Improve comments and names within one frozen source target', badge: 'clarity' }
               ]"
               :key="row.cmd"
             >
@@ -1117,7 +1118,7 @@
             x-for="item in [
               { id: 'concepts', label: 'The four pieces' },
               { id: 'audit', label: 'How the audit works' },
-              { id: 'skills', label: 'Seven skills' },
+              { id: 'skills', label: 'Eight skills' },
               { id: 'hooks', label: 'Safety-net hooks' },
               { id: 'learning-loop', label: 'Learning loop' },
               { id: 'execution-loop', label: 'Execution loop' },

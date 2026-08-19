@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.15.1"
+goat-flow-reference-version: "1.16.0"
 ---
 # Observability
 
@@ -17,6 +17,10 @@ This is a discipline reference, not a runnable tool. Load it when:
 - A dashboard query, alert rule, or trace lookup keeps returning unusable signal.
 
 No CLI check applies; correctness is verified at review time using the **Verification Gate** below, not by running a command.
+
+## Project Authority
+
+Project observability standards govern signal vocabulary, namespaces, field names, severity mappings, and cardinality limits. Without a designated project convention, these generic examples are the fallback. Explicit current instructions and accepted architecture remain authoritative. Project patterns and playbook defaults cannot override safety, verified facts, evidence requirements, or verification gates.
 
 ## Intent
 

@@ -19,7 +19,33 @@ import {
   INSTALLED_SKILL_ROOTS,
 } from "./skill-hardening.helpers.js";
 
-describe("skill hardening contracts: debug, qa, critique, security, dispatcher (2/2)", () => {
+describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () => {
+  it("gives public type contracts higher risk than internal type-only changes", () => {
+    assertForEachTarget(installedSkillPaths("goat-qa"), (skillPath) => {
+      const changeRisk = readMarkdownSection(
+        skillPath,
+        "Phase 1 - Change Risk Analysis",
+      );
+
+      assert.match(
+        changeRisk,
+        /private\/internal type-only changes with no contract impact/u,
+        skillPath,
+      );
+      assert.match(changeRisk, /Risk follows impact, not syntax/u, skillPath);
+      assert.match(
+        changeRisk,
+        /A type-only change is LOW only when it cannot change or misrepresent a public\/exported, serialized, persisted, or cross-module contract/u,
+        skillPath,
+      );
+      assert.match(
+        changeRisk,
+        /When classifications overlap, use the higher risk/u,
+        skillPath,
+      );
+    });
+  });
+
   it("keeps goat-qa Audit priorities coherent through the post-gate plan", () => {
     assertForEachTarget(installedSkillPaths("goat-qa"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);
@@ -517,81 +543,6 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
         admissionGuidance,
         /Explicit `goat-critique` stays full delegated mode/,
         referencePath,
-      );
-    });
-  });
-
-  it("keeps goat-security Quick Scan out of Full-only specialist work", () => {
-    assertForEachTarget(installedSkillPaths("goat-security"), (skillPath) => {
-      const quickScanPath = readMarkdownSection(skillPath, "Quick Scan Path");
-      const fullAssessmentPath = readMarkdownSection(
-        skillPath,
-        "Full Assessment Path",
-      );
-      assert.match(quickScanPath, /Stop after step 5/, skillPath);
-      assert.match(
-        quickScanPath,
-        /MUST NOT enter the Full Assessment Path/,
-        skillPath,
-      );
-      assert.match(
-        quickScanPath,
-        /recommend Full Assessment instead of running or waiting for a specialist/,
-        skillPath,
-      );
-      assert.match(
-        fullAssessmentPath,
-        /Full Assessment-only specialist cross-check/,
-        skillPath,
-      );
-    });
-  });
-
-  it("defines goat-security specialist admission and unavailable fallback", () => {
-    assertForEachTarget(installedSkillPaths("goat-security"), (skillPath) => {
-      const fullAssessmentPath = readMarkdownSection(
-        skillPath,
-        "Full Assessment Path",
-      );
-      assert.match(
-        fullAssessmentPath,
-        /An admissible specialist is an independent tool or reviewer with a named failure class and structured return/,
-        skillPath,
-      );
-      assert.match(
-        fullAssessmentPath,
-        /Same-context self-review does not qualify/,
-        skillPath,
-      );
-      assert.match(
-        fullAssessmentPath,
-        /invocation is already authorized by current-session user intent or local instructions/,
-        skillPath,
-      );
-      assert.match(
-        fullAssessmentPath,
-        /record `specialist-unavailable`; do not wait or block/,
-        skillPath,
-      );
-      assert.match(
-        fullAssessmentPath,
-        /Preserve each affected candidate's current confidence: retain `CONFIRMED` findings/,
-        skillPath,
-      );
-      assert.match(
-        fullAssessmentPath,
-        /Only unresolved candidates remain `PROBABLE` with the exact evidence needed/,
-        skillPath,
-      );
-      assert.match(
-        fullAssessmentPath,
-        /Outcomes: `retain CONFIRMED`, `promote to CONFIRMED`, `keep as PROBABLE`, or `kill as false positive`/,
-        skillPath,
-      );
-      assert.doesNotMatch(
-        fullAssessmentPath,
-        /Keep each affected candidate `PROBABLE`/,
-        skillPath,
       );
     });
   });

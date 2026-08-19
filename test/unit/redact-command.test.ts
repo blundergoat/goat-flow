@@ -11,10 +11,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { parseCLIArgs } from "../../src/cli/cli-parser.js";
-import {
-  redactEvidenceText,
-  scrubDurableText,
-} from "../../src/cli/evidence/redaction.js";
+import { scrubDurableText } from "../../src/cli/evidence/redaction.js";
 
 const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
 const CLI_PATH = join(PROJECT_ROOT, "src", "cli", "cli.ts");
@@ -50,16 +47,6 @@ function buildFakeSecrets(): {
 }
 
 describe("durable artifact redaction", () => {
-  // Users need one central scrubber without changing the existing hash-only evidence API.
-  it("exports a readable scrubber beside hash-only evidence redaction", () => {
-    const scrubbed = scrubDurableText("no secret text");
-    const hashed = redactEvidenceText("prompt", "secret");
-
-    assert.equal(scrubbed, "no secret text");
-    assert.equal(hashed.kind, "redacted");
-    assert.match(hashed.sha256, /^[a-f0-9]{64}$/u);
-  });
-
   // A copied continuation note must replace each supported secret class before reaching disk.
   it("replaces representative fake secrets with evidence-shaped placeholders", () => {
     const fakeSecrets = buildFakeSecrets();

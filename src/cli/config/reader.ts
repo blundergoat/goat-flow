@@ -1,5 +1,6 @@
 /**
  * Load and validate `.goat-flow/config.yaml` for CLI and dashboard flows.
+ *
  * Use when audit, setup, hooks, quality, or prompt builders need one normalized config object.
  * Missing config gives users safe defaults; malformed config returns structured errors that audit can show.
  * Downstream callers never receive partially merged invalid YAML.
@@ -111,14 +112,14 @@ function readConfigText(projectRoot: string, fs?: ReadonlyFS): string | null {
  * Apply a valid config version override.
  * Use so audit output can reflect the version declared by the user's config.
  *
- * @param value - raw version field; missing or non-string values keep the default version
+ * @param rawVersion - raw version field; missing or non-string values keep the default version
  * @param merged - config being built; empty defaults remain unchanged when the value is invalid
  * @returns nothing; the merged config is updated in place
  */
-function mergeVersion(value: unknown, merged: GoatFlowConfig): void {
+function mergeVersion(rawVersion: unknown, merged: GoatFlowConfig): void {
   // Only strings can be shown safely as the config version.
-  if (typeof value === "string") {
-    merged.version = value;
+  if (typeof rawVersion === "string") {
+    merged.version = rawVersion;
   }
 }
 
@@ -126,19 +127,19 @@ function mergeVersion(value: unknown, merged: GoatFlowConfig): void {
  * Apply the configured skill install policy.
  * Use when setup/install decides whether to install all skills or a user-chosen subset.
  *
- * @param value - raw `skills` block; missing or non-object values keep the default install-all policy
+ * @param rawSkills - raw `skills` block; missing or non-object values keep the default install-all policy
  * @param merged - config being built; invalid nested values are ignored after validation reports them
  * @returns nothing; valid skill settings update the merged config in place
  */
-function mergeSkills(value: unknown, merged: GoatFlowConfig): void {
+function mergeSkills(rawSkills: unknown, merged: GoatFlowConfig): void {
   // Missing skills config means users get the default "install all" behavior.
-  if (!isRecord(value)) return;
-  const { install } = value;
+  if (!isRecord(rawSkills)) return;
+  const { install } = rawSkills;
   // Valid install policy controls which skills setup places into agent mirrors.
   if (install === "all" || Array.isArray(install)) {
     merged.skills.install = install as string[] | "all";
   }
-  const goatReview = value["goat-review"];
+  const goatReview = rawSkills["goat-review"];
   // Missing goat-review config means review uses its built-in local PR base behavior.
   if (!isRecord(goatReview)) return;
   const localPrBase = goatReview.local_pr_base;
@@ -152,13 +153,13 @@ function mergeSkills(value: unknown, merged: GoatFlowConfig): void {
  * Normalize a raw toolchain command list.
  * Use so prompts and audit output only show executable-looking command strings from config.
  *
- * @param value - raw command list; missing or non-array values mean no commands were configured
+ * @param rawCommands - raw command list; missing or non-array values mean no commands were configured
  * @returns non-empty command strings; empty array means the user has no commands for that toolchain slot
  */
-function normalizeCommandList(value: unknown): string[] {
+function normalizeCommandList(rawCommands: unknown): string[] {
   // Non-arrays mean the user did not provide a valid command list.
-  if (!Array.isArray(value)) return [];
-  return value.filter(
+  if (!Array.isArray(rawCommands)) return [];
+  return rawCommands.filter(
     (item): item is string =>
       typeof item === "string" && item.trim().length > 0,
   );
@@ -168,32 +169,32 @@ function normalizeCommandList(value: unknown): string[] {
  * Apply configured toolchain command arrays.
  * Use when setup and prompts need the user's test, lint, build, package, and format commands.
  *
- * @param value - raw `toolchain` block; missing or non-object values keep every command list empty
+ * @param rawToolchain - raw `toolchain` block; missing or non-object values keep every command list empty
  * @param merged - config being built; command arrays update in place
  * @returns nothing; invalid command entries are filtered out after validation reports them
  */
-function mergeToolchain(value: unknown, merged: GoatFlowConfig): void {
+function mergeToolchain(rawToolchain: unknown, merged: GoatFlowConfig): void {
   // Missing toolchain config means generated prompts do not recommend project commands.
-  if (!isRecord(value)) return;
-  merged.toolchain.test = normalizeCommandList(value.test);
-  merged.toolchain.lint = normalizeCommandList(value.lint);
-  merged.toolchain.build = normalizeCommandList(value.build);
-  merged.toolchain.package = normalizeCommandList(value.package);
-  merged.toolchain.format = normalizeCommandList(value.format);
+  if (!isRecord(rawToolchain)) return;
+  merged.toolchain.test = normalizeCommandList(rawToolchain.test);
+  merged.toolchain.lint = normalizeCommandList(rawToolchain.lint);
+  merged.toolchain.build = normalizeCommandList(rawToolchain.build);
+  merged.toolchain.package = normalizeCommandList(rawToolchain.package);
+  merged.toolchain.format = normalizeCommandList(rawToolchain.format);
 }
 
 /**
  * Apply a valid user role override.
  * Use so generated guidance can adapt to developer, investigator, or tester workflows.
  *
- * @param value - raw `userRole`; missing or unknown roles keep the default developer perspective
+ * @param rawUserRole - raw `userRole`; missing or unknown roles keep the default developer perspective
  * @param merged - config being built; role updates in place when valid
  * @returns nothing; invalid roles are ignored after validation reports them
  */
-function mergeUserRole(value: unknown, merged: GoatFlowConfig): void {
+function mergeUserRole(rawUserRole: unknown, merged: GoatFlowConfig): void {
   // Unknown roles are ignored so prompts keep a supported user perspective.
-  if (typeof value === "string" && KNOWN_USER_ROLES.has(value)) {
-    merged.userRole = value as GoatFlowConfig["userRole"];
+  if (typeof rawUserRole === "string" && KNOWN_USER_ROLES.has(rawUserRole)) {
+    merged.userRole = rawUserRole as GoatFlowConfig["userRole"];
   }
 }
 
@@ -201,14 +202,17 @@ function mergeUserRole(value: unknown, merged: GoatFlowConfig): void {
  * Apply learning-loop auto-capture policy.
  * Use when future flows decide which durable learning buckets may be written automatically.
  *
- * @param value - raw `learning-loop` block; missing or non-object values keep auto-capture disabled
+ * @param rawLearningLoop - raw `learning-loop` block; missing or non-object values keep auto-capture disabled
  * @param merged - config being built; valid policy updates in place
  * @returns nothing; invalid targets are filtered out after validation reports them
  */
-function mergeLearningLoop(value: unknown, merged: GoatFlowConfig): void {
+function mergeLearningLoop(
+  rawLearningLoop: unknown,
+  merged: GoatFlowConfig,
+): void {
   // Missing learning-loop config keeps auto-capture off.
-  if (!isRecord(value)) return;
-  const autoCapture = value["auto-capture"];
+  if (!isRecord(rawLearningLoop)) return;
+  const autoCapture = rawLearningLoop["auto-capture"];
   // Missing auto-capture block keeps the default disabled policy.
   if (!isRecord(autoCapture)) return;
   // Explicit booleans are required so strings like "false" do not enable a writer accidentally.
@@ -227,19 +231,19 @@ function mergeLearningLoop(value: unknown, merged: GoatFlowConfig): void {
  * Apply positive line-limit overrides.
  * Use so instruction-file audits can respect the user's configured target and hard limit.
  *
- * @param value - raw `line-limits` block; missing or non-object values keep default limits
+ * @param rawLineLimits - raw `line-limits` block; missing or non-object values keep default limits
  * @param merged - config being built; valid numeric limits update in place
  * @returns nothing; invalid limits are ignored after validation reports them
  */
-function mergeLineLimits(value: unknown, merged: GoatFlowConfig): void {
+function mergeLineLimits(rawLineLimits: unknown, merged: GoatFlowConfig): void {
   // Missing line-limit config keeps the default instruction budget.
-  if (!isRecord(value)) return;
+  if (!isRecord(rawLineLimits)) return;
   // Positive target values set the warning threshold users see in audits.
-  if (typeof value.target === "number" && value.target > 0)
-    merged.lineLimits.target = value.target;
+  if (typeof rawLineLimits.target === "number" && rawLineLimits.target > 0)
+    merged.lineLimits.target = rawLineLimits.target;
   // Positive limit values set the hard threshold users see in audits.
-  if (typeof value.limit === "number" && value.limit > 0)
-    merged.lineLimits.limit = value.limit;
+  if (typeof rawLineLimits.limit === "number" && rawLineLimits.limit > 0)
+    merged.lineLimits.limit = rawLineLimits.limit;
 }
 
 /**
@@ -305,44 +309,68 @@ function mergeConfig(raw: unknown): GoatFlowConfig {
  * Apply hook toggle state from raw config.
  * Use when the dashboard and hook CLI need the user's desired enabled/disabled guardrail state.
  *
- * @param value - raw `hooks` block; missing or non-object values mean no hook overrides are configured
+ * @param rawHooks - raw `hooks` block; missing or non-object values mean no hook overrides are configured
  * @param merged - config being built; valid hook settings replace the default empty hook map
  * @returns nothing; invalid hook rows are ignored after validation reports them
  */
-function mergeHooks(value: unknown, merged: GoatFlowConfig): void {
+function mergeHooks(rawHooks: unknown, merged: GoatFlowConfig): void {
   // Missing hook config means the hook registry controls default state.
-  if (!isRecord(value)) return;
+  if (!isRecord(rawHooks)) return;
   const hooks: GoatFlowConfig["hooks"] = {};
   // Unknown hook ids are preserved for the registry to interpret or ignore consistently.
-  for (const [hookId, hookValue] of Object.entries(value)) {
+  for (const [hookId, hookValue] of Object.entries(rawHooks)) {
     // Non-object hook rows cannot describe an enabled state.
     if (!isRecord(hookValue)) continue;
     // Enabled must be explicit so strings like "false" do not flip guardrails.
     if (typeof hookValue.enabled !== "boolean") continue;
     const binaries = readHookBinaries(hookValue.binaries);
-    hooks[hookId] = binaries
-      ? { enabled: hookValue.enabled, binaries }
-      : { enabled: hookValue.enabled };
+    const scanRoots = readHookScanRootList(hookValue["scan-roots"]);
+    hooks[hookId] = {
+      enabled: hookValue.enabled,
+      ...(binaries ? { binaries } : {}),
+      ...(scanRoots ? { scanRoots } : {}),
+    };
   }
   merged.hooks = hooks;
 }
 
 /**
- * Narrow a hook `binaries` override block to non-empty string values; entries of
- * any other shape are dropped. Returns null when nothing valid remains so
- * callers can omit the key entirely instead of carrying an empty object.
+ * Narrow a raw post-turn `scan-roots` field to one non-empty string list.
+ * Use in both config normalization and toggle writes so the YAML key round-trips unchanged.
  *
- * @param value - raw `hooks.<id>.binaries` value; absent or non-object means no binary overrides exist
+ * @param rawScanRoots - raw `hooks.post-turn-safety.scan-roots` value; absent or malformed input has no usable roots
+ * @returns copied path list, or `null` when the field cannot define a complete root contract
+ */
+export function readHookScanRootList(rawScanRoots: unknown): string[] | null {
+  // An empty or partial list cannot safely opt a non-Git workspace into post-turn scanning.
+  if (
+    !Array.isArray(rawScanRoots) ||
+    rawScanRoots.length === 0 ||
+    rawScanRoots.some(
+      (scanRoot) =>
+        typeof scanRoot !== "string" || scanRoot.trim().length === 0,
+    )
+  ) {
+    return null;
+  }
+  return [...rawScanRoots] as string[];
+}
+
+/**
+ * Narrow a hook `binaries` override block to non-empty string values; entries of any other shape are dropped.
+ * Returns null when nothing valid remains so callers can omit the key entirely instead of carrying an empty object.
+ *
+ * @param rawBinaries - raw `hooks.<id>.binaries` value; absent or non-object means no binary overrides exist
  * @returns validated language-to-path map, or `null` when the user has no valid binary overrides
  */
 export function readHookBinaries(
-  value: unknown,
+  rawBinaries: unknown,
 ): Record<string, string> | null {
   // Missing or non-object binaries mean the hook should use its default binary discovery.
-  if (!isRecord(value)) return null;
+  if (!isRecord(rawBinaries)) return null;
   const binaries: Record<string, string> = {};
   // Keep only language entries with a non-empty binary path the user intentionally set.
-  for (const [lang, binaryPath] of Object.entries(value)) {
+  for (const [lang, binaryPath] of Object.entries(rawBinaries)) {
     // Empty binary paths are ignored so they do not hide the hook's default discovery.
     if (typeof binaryPath !== "string" || binaryPath.trim() === "") continue;
     binaries[lang] = binaryPath;
@@ -354,30 +382,30 @@ export function readHookBinaries(
  * Pass through the raw quality config block.
  * Use so quality-specific readers can validate and interpret their own settings.
  *
- * @param value - raw `quality` block; missing or non-object values mean no quality overrides are configured
+ * @param rawQuality - raw `quality` block; missing or non-object values mean no quality overrides are configured
  * @param merged - config being built; valid raw quality object is copied in place
  * @returns nothing; deep quality validation happens in the quality config reader
  */
-function mergeQuality(value: unknown, merged: GoatFlowConfig): void {
+function mergeQuality(rawQuality: unknown, merged: GoatFlowConfig): void {
   // Missing quality config means quality commands use their own defaults.
-  if (!isRecord(value)) return;
-  merged.quality = { ...value };
+  if (!isRecord(rawQuality)) return;
+  merged.quality = { ...rawQuality };
 }
 
 /**
  * Apply acknowledged harness gaps from raw config.
  * Use so audit can treat explicitly acknowledged non-gating gaps consistently.
  *
- * @param value - raw `harness` block; missing or non-object values keep an empty acknowledge list
+ * @param rawHarness - raw `harness` block; missing or non-object values keep an empty acknowledge list
  * @param merged - config being built; valid acknowledgements update in place
  * @returns nothing; invalid entries are filtered after validation reports them
  */
-function mergeHarness(value: unknown, merged: GoatFlowConfig): void {
+function mergeHarness(rawHarness: unknown, merged: GoatFlowConfig): void {
   // Missing harness config means the user has not acknowledged any gaps.
-  if (!isRecord(value)) return;
+  if (!isRecord(rawHarness)) return;
   // Acknowledge entries are optional; absent list leaves the audit fully strict.
-  if (Array.isArray(value.acknowledge)) {
-    merged.harness.acknowledge = value.acknowledge.filter(
+  if (Array.isArray(rawHarness.acknowledge)) {
+    merged.harness.acknowledge = rawHarness.acknowledge.filter(
       (item): item is string =>
         typeof item === "string" && item.trim().length > 0,
     );

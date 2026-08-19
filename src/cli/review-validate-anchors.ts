@@ -1,12 +1,12 @@
 /**
  * Proves that a review's evidence anchors point at code that really exists.
- * A finding is only trustworthy if a reader can open the file and see the cited text, so every
- * `(search: "...")` anchor is resolved against the reviewed project - either the working tree
- * or a pinned git object, depending on what the report claims as its authority.
  *
- * Paths are confined to the reviewed project on purpose. A report that cites something outside
- * it is rejected rather than resolved, because a reviewer following that anchor would be
- * reading a file the review was never authorised to look at.
+ * A finding is only trustworthy if a reader can open the file and see the cited text, so every `(search: "...")` anchor is resolved against the
+ * reviewed project - either the working tree or a pinned git object, depending on what the report claims as its authority.
+ *
+ * Paths are confined to the reviewed project on purpose.
+ * A report that cites something outside it is rejected rather than resolved, because a reviewer following that anchor would be reading a file the
+ * review was never authorised to look at.
  */
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
@@ -47,7 +47,10 @@ export function isWithinProject(
   );
 }
 
-/** Resolve an anchor from one immutable Git commit or tree. */
+/**
+ * Resolve an anchor from one immutable Git commit or tree.
+ * It spawns git to read the pinned bytes, and reports an unreadable object as a violation.
+ */
 function validateGitObjectAnchor(
   projectRoot: string,
   candidatePath: string,
@@ -88,7 +91,7 @@ function validateGitObjectAnchor(
   }
 }
 
-/** Resolve an anchor from the declared live worktree without following escapes. */
+/** Resolve an anchor from the declared live worktree without following escapes; it reports a missing file or absent text as a violation. */
 function validateWorktreeAnchor(
   projectRoot: string,
   candidatePath: string,
@@ -144,7 +147,8 @@ function validateWorktreeAnchor(
  * Resolve one literal semantic anchor without reading outside the reviewed project.
  *
  * @param projectRoot - reviewed project root; anchors are confined to it so a report cannot cite files it was never authorised to read
- * @param authority - what the report claims as its source of truth - the live worktree or a pinned git object; this decides where anchors are resolved from
+ * @param authority - what the report claims as its source of truth, the live worktree or a pinned git object;
+ *   this decides where anchors are resolved from
  * @param filePath - repo-relative file an anchor cites; empty means the anchor named no file and cannot be resolved
  * @param searchText - literal an anchor claims to find; empty means the anchor named no text to verify
  * @param line - report line the issue belongs to; null means the issue is about the report as a whole
@@ -241,7 +245,8 @@ function validateFindingFields(
  *
  * @param locatedLine - one report line with its number, so a violation can point at it
  * @param projectRoot - reviewed project root; anchors are confined to it so a report cannot cite files it was never authorised to read
- * @param authority - what the report claims as its source of truth - the live worktree or a pinned git object; this decides where anchors are resolved from
+ * @param authority - what the report claims as its source of truth, the live worktree or a pinned git object;
+ *   this decides where anchors are resolved from
  * @param violations - shared violation list, appended in report order so a reader sees issues top-down; a violation makes the report fail
  */
 function validateFindingAnchors(
@@ -290,8 +295,10 @@ function readFindingEvidence(text: string): FindingDefinition["evidence"] {
  * @param section - one located report section; null means the heading was absent entirely
  * @param isAreaAudit - whether the report declared itself an area audit, which relaxes some coverage expectations
  * @param projectRoot - reviewed project root; anchors are confined to it so a report cannot cite files it was never authorised to read
- * @param authority - what the report claims as its source of truth - the live worktree or a pinned git object; this decides where anchors are resolved from
+ * @param authority - what the report claims as its source of truth, the live worktree or a pinned git object;
+ *   this decides where anchors are resolved from
  * @param violations - shared violation list, appended in report order so a reader sees issues top-down; a violation makes the report fail
+ * @returns nothing; every problem is added to that shared list rather than returned
  */
 export function validateFindingLine(
   locatedLine: LocatedLine,

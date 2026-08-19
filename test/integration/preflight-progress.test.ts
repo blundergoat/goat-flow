@@ -1,11 +1,11 @@
 /**
  * Exercises the command runner that keeps preflight users informed during long Tests phases.
- * Use when changing timeout, capture, retry, or heartbeat behavior so interactive progress
+ * Use when changing timeout, capture, or heartbeat behavior so interactive progress
  * remains visible without contaminating the deterministic CI report.
  * The fixtures execute harmless child processes and never run the repository test suite.
  */
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import {
   existsSync,
   mkdtempSync,
@@ -30,6 +30,7 @@ const PREFLIGHT_RUNNER_PATH = join(
   "scripts",
   "preflight-command-runner.mjs",
 );
+const TEST_RUNNER_PATH = join(PROJECT_ROOT, "scripts", "run-tests.mjs");
 const CHILD_FAILURE_STATUS = 7;
 const fixtureProcessIds = new Set<number>();
 const fixtureTemporaryDirectories = new Set<string>();
@@ -59,7 +60,7 @@ interface PreflightRunnerFixture {
 }
 
 /**
- * Run the production preflight command runner and capture its three operator-visible channels.
+ * Spawns the production preflight command runner and captures its three operator-visible channels.
  * Omitted fixture values select a short successful child; empty output means the child stayed silent.
  *
  * @param fixture - harmless child and timing choices; omitted progress uses a dedicated descriptor
@@ -254,14 +255,13 @@ afterEach(() => {
 });
 
 describe("preflight Tests-phase progress", () => {
-  it("shows retry progress before close while keeping child output captured", async () => {
+  it("shows test progress before close while keeping child output captured", async () => {
     const progressTemporaryDirectory = mkdtempSync(
       join(tmpdir(), "goat-flow-preflight-progress-"),
     );
     fixtureTemporaryDirectories.add(progressTemporaryDirectory);
     const progressReadyFile = join(progressTemporaryDirectory, "ready");
     const runnerResult = await runPreflightRunnerFixture({
-      progressLabel: "Tests retry",
       heartbeatSeconds: 0.04,
       progressReadyFile,
       childSource: String.raw`
@@ -276,7 +276,7 @@ describe("preflight Tests-phase progress", () => {
     });
 
     assert.equal(runnerResult.status, 0);
-    assert.match(runnerResult.operatorProgress, /Tests retry still running/u);
+    assert.match(runnerResult.operatorProgress, /Tests still running/u);
     assert.ok(
       runnerResult.firstProgressAfterMs !== null,
       "expected a heartbeat timestamp",
@@ -492,19 +492,103 @@ describe("preflight Tests-phase progress", () => {
     assert.equal(await waitForFixtureProcessExit(workerProcessId), true);
   });
 
-  it("pins the production heartbeat to interactive Tests runs at ten seconds", () => {
+  it("pins one bounded coverage run to interactive ten-second heartbeats", () => {
     const preflightSource = readFileSync(PREFLIGHT_SCRIPT_PATH, "utf-8");
+    const fastSelectionIndex = preflightSource.indexOf('"test:fast"');
+    const coverageSelectionIndex = preflightSource.indexOf('"test:coverage"');
 
     assert.match(preflightSource, /preflight_test_heartbeat_seconds=10/u);
     assert.match(preflightSource, /\[\[ "\$_is_tty" -eq 1 \]\]/u);
     assert.match(preflightSource, /"Tests" "\$\{test_command\[@\]\}"/u);
-    assert.match(preflightSource, /"Tests retry"/u);
+    assert.match(
+      preflightSource,
+      /GOAT_FLOW_PREFLIGHT_TEST_TIMEOUT_SECONDS:-600/u,
+    );
+    assert.ok(fastSelectionIndex >= 0);
+    assert.ok(coverageSelectionIndex < fastSelectionIndex);
+    assert.doesNotMatch(preflightSource, /Tests retry/u);
     assert.doesNotMatch(preflightSource, /GOAT_FLOW_PREFLIGHT_TEST_COMMAND/u);
     assert.equal(
       [...preflightSource.matchAll(/run_command_capture_with_timeout/gu)]
         .length,
-      3,
-      "expected one helper definition plus first-run and retry call sites",
+      2,
+      "expected one helper definition plus one bounded Tests call site",
     );
+  });
+
+  it("keeps fast concurrency bounded and isolates observed subprocess-heavy suites", () => {
+    const runnerSource = readFileSync(TEST_RUNNER_PATH, "utf-8");
+
+    assert.match(
+      runnerSource,
+      /mode === "slow" \? "1" : mode === "fast" \? "8" : "8"/u,
+    );
+    assert.match(
+      runnerSource,
+      /test\/integration\/hook-effective-state\.test\.ts/u,
+    );
+    assert.match(
+      runnerSource,
+      /test\/integration\/setup-quality-lifecycle\.test\.ts/u,
+    );
+  });
+});
+
+describe("run-tests --shard grammar", () => {
+  /**
+   * Spawn the real runner with an unknown mode: a shard value that passes the parser stops at mode dispatch with a different
+   * error, so the probe can tell "accepted" from "rejected" without ever running a test file.
+   */
+  function probeShard(shardValue: string) {
+    const result = spawnSync(
+      process.execPath,
+      [TEST_RUNNER_PATH, "shard-grammar-probe", "--shard=" + shardValue],
+      { cwd: PROJECT_ROOT, encoding: "utf-8" },
+    );
+    return {
+      status: result.status,
+      stdout: result.stdout,
+      stderr: result.stderr,
+    };
+  }
+
+  it("rejects malformed and out-of-range shard values with the usage message", () => {
+    const malformed = [
+      "1x/5",
+      "1.5/5",
+      "",
+      "/5",
+      "1/",
+      "1/5/2",
+      " 1/5",
+      "0/5",
+      "6/5",
+      "1/0",
+    ];
+    for (const shardValue of malformed) {
+      const result = probeShard(shardValue);
+      assert.equal(result.status, 2, shardValue);
+      assert.match(result.stderr, /Invalid --shard value/u, shardValue);
+      assert.match(
+        result.stderr,
+        /Expected --shard=<index>\/<total>/u,
+        shardValue,
+      );
+      assert.doesNotMatch(result.stderr, /Unknown test mode/u, shardValue);
+      assert.equal(result.stdout, "", shardValue);
+    }
+  });
+
+  it("still hands a well-formed shard to mode selection", () => {
+    for (const shardValue of ["1/5", "5/5", "1/1"]) {
+      const result = probeShard(shardValue);
+      assert.equal(result.status, 2, shardValue);
+      assert.match(
+        result.stderr,
+        /Unknown test mode "shard-grammar-probe"/u,
+        shardValue,
+      );
+      assert.doesNotMatch(result.stderr, /Invalid --shard value/u, shardValue);
+    }
   });
 });

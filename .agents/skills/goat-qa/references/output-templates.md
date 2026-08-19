@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.15.1"
+goat-flow-reference-version: "1.16.0"
 ---
 # goat-qa Output Templates
 
@@ -10,6 +10,10 @@ Read this reference only when rendering the final response. Select the template 
 ```markdown
 ## Regression Guards
 | Invariant | Current Coverage | Recommended Guard | Owner | Proof Class |
+
+**Test-selection record**
+| Disposition | Regression and impact | Current overlap | Stable contract | Level | Evidence status | Owner or path and semantic anchor | Handoff invariant and next check |
+|-------------|-----------------------|-----------------|-----------------|-------|-----------------|-----------------------------------|----------------------------------|
 
 ## Verification Integrity
 - Prior fix evidence: [file, command output, or human-approved record]
@@ -34,6 +38,10 @@ Read this reference only when rendering the final response. Select the template 
 ### Misaligned Effort  <!-- test cases that don't match code changes in this branch -->
 | Test Case | Maps to Change | Assessment | Proof Class |
 
+**Test-selection record**
+| Disposition | Regression and impact | Current overlap | Stable contract | Level | Evidence status | Owner or path and semantic anchor | Handoff invariant and next check |
+|-------------|-----------------------|-----------------|-----------------|-------|-----------------|-----------------------------------|----------------------------------|
+
 ## Verification Integrity
 - Intent spec: [PR/issue/test plan URL or `no-intent-spec`]
 - Tests read: [list]
@@ -55,6 +63,10 @@ Read this reference only when rendering the final response. Select the template 
 ### Must test before shipping  <!-- Matrix Blocking pairs; include manual steps, failure symptoms, time, proof class -->
 ### Should test if time allows  <!-- Matrix High-value pairs; include proof class -->
 ### Safe to skip  <!-- Matrix Defer pairs; include rationale and proof class -->
+
+**Test-selection record**
+| Disposition | Regression and impact | Current overlap | Stable contract | Level | Evidence status | Owner or path and semantic anchor | Handoff invariant and next check |
+|-------------|-----------------------|-----------------|-----------------|-------|-----------------|-----------------------------------|----------------------------------|
 
 ## Verification Integrity
 
@@ -87,6 +99,10 @@ Read this reference only when rendering the final response. Select the template 
 ### Defer  <!-- Matrix Defer pairs; each item includes proof class -->
 ### Misaligned effort  <!-- Evidence-backed test-to-risk mismatches, or `none found` -->
 
+**Test-selection record**
+| Disposition | Regression and impact | Current overlap | Stable contract | Level | Evidence status | Owner or path and semantic anchor | Handoff invariant and next check |
+|-------------|-----------------------|-----------------|-----------------|-------|-----------------|-----------------------------------|----------------------------------|
+
 ## Verification Integrity
 - Intent spec: [audit scope rationale or `no-intent-spec`]
 - Tests read: [list]
@@ -110,6 +126,10 @@ Read this reference only when rendering the final response. Select the template 
 ### High-value additions
 ### Defer
 ### Misaligned effort
+
+**Test-selection record**
+| Disposition | Regression and impact | Current overlap | Stable contract | Level | Evidence status | Owner or path and semantic anchor | Handoff invariant and next check |
+|-------------|-----------------------|-----------------|-----------------|-------|-----------------|-----------------------------------|----------------------------------|
 
 ## Verification Integrity
 <!-- Preserve A4 evidence limits; name test executors. -->

@@ -1,6 +1,9 @@
 /**
- * Install project-local commit guidance from the reviewed workflow template.
- * Git projects receive one deterministic standard; non-Git targets stay untouched.
+ * Installs the project's commit-message guidance from the reviewed workflow template.
+ *
+ * A user gets this during setup, and it is what gives their agent one consistent commit convention to follow.
+ *
+ * Non-Git targets are left untouched, because commit conventions are meaningless in a directory with no version control.
  */
 import {
   constants,
@@ -30,9 +33,12 @@ interface CommitGuidanceWriteResult {
 }
 
 /**
- * Move the former guide to the preferred path without an overwrite window.
- * An exclusive copy fails if the destination appears after the caller's existence check; unlinking
- * only after that copy succeeds preserves the former guide when either operation fails.
+ * Move the former guide to the preferred path with no window in which a user could lose it.
+ * The copy is exclusive so it throws rather than overwriting a file that appeared since the caller looked, and the delete runs only once that copy
+ * succeeded, which leaves the old guide in place whenever either write fails.
+ *
+ * @param legacyPath - absolute path of the guide written under the former filename
+ * @param outputPath - absolute path of the preferred filename to write
  */
 function renameLegacyGuide(legacyPath: string, outputPath: string): void {
   copyFileSync(legacyPath, outputPath, constants.COPYFILE_EXCL);
@@ -40,14 +46,12 @@ function renameLegacyGuide(legacyPath: string, outputPath: string): void {
 }
 
 /**
- * Apply commit-guidance setup to one target project.
+ * Give one project its commit-message guide, writing at most one file into the target and never overwriting a guide the user already has.
  *
- * Targets without a `.git` entry receive no commit guide. Git targets preserve an existing preferred
- * guide, migrate the former filename when it is the only accepted guide, or copy the reviewed
- * workflow template when neither guide exists. A preferred-path collision is never overwritten.
+ * Reads the target for `.git` and an existing guide first, then either keeps what is there, renames the former filename, or copies the template.
  *
- * @param targetRoot - Project root to inspect and, when applicable, update.
- * @returns The applied or skipped result and its project-relative path.
+ * @param targetRoot - project root to inspect and, when applicable, write into
+ * @returns which of the four outcomes applied plus the project-relative guide path, which is reported even when nothing was written
  */
 function ensureGitCommitInstructions(
   targetRoot: string,
@@ -56,6 +60,7 @@ function ensureGitCommitInstructions(
   const outputPath = join(root, GIT_COMMIT_INSTRUCTIONS_PATH);
   const legacyPath = join(root, LEGACY_GIT_COMMIT_INSTRUCTIONS_PATH);
 
+  // No version control here, so a commit convention would have nothing to apply to and the project is left untouched.
   if (!existsSync(join(root, ".git"))) {
     return {
       status: "skipped-no-git",
@@ -63,6 +68,7 @@ function ensureGitCommitInstructions(
     };
   }
 
+  // The user already has a guide at the preferred path, and their wording wins over the shipped template.
   if (existsSync(outputPath)) {
     return {
       status: "skipped-existing",
@@ -71,6 +77,7 @@ function ensureGitCommitInstructions(
   }
 
   mkdirSync(dirname(outputPath), { recursive: true });
+  // Only the former filename exists, so the user keeps their own content and simply finds it under the current name.
   if (existsSync(legacyPath)) {
     renameLegacyGuide(legacyPath, outputPath);
     return {
@@ -91,11 +98,10 @@ function ensureGitCommitInstructions(
 }
 
 /**
- * Print commit-guide setup status after an install that already succeeded.
- * Use as the final install step; it never rethrows, because guidance is additive and a
- * completed, recorded install must not be reported to the user as a crash.
+ * Print the commit-guide result as the last line of an install that already succeeded.
+ * It swallows every failure from the guide step, because the guide is an extra and a completed install must not be reported to the user as a crash.
  *
- * @param projectPath - selected project root; a non-Git target prints nothing
+ * @param projectPath - selected project root; a non-Git target prints nothing at all
  */
 export function emitCommitGuidanceInstallResult(projectPath: string): void {
   let result: CommitGuidanceWriteResult;
@@ -110,6 +116,7 @@ export function emitCommitGuidanceInstallResult(projectPath: string): void {
     console.log(`  ! skipped (${reason})`);
     return;
   }
+  // Nothing was written, so the install output stays quiet rather than reporting a no-op to the user.
   if (result.status !== "copied" && result.status !== "renamed") return;
   console.log("");
   console.log("Git commit instructions:");

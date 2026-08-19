@@ -179,6 +179,14 @@ function dashboardSendTerminalSubmit(
   return true;
 }
 
+/**
+ * Wait a moment before pressing Enter on a pasted prompt, so the runner has finished accepting the text first.
+ * Submitting immediately after a large paste is the case where a runner receives half a prompt and answers the wrong question.
+ *
+ * @param ctx - live Alpine terminal context holding this session's refs
+ * @param sessionId - session the paste belongs to
+ * @returns nothing; a session whose pane has already closed is left alone
+ */
 function dashboardArmPasteSubmitTimer(
   ctx: DashboardTerminalContext,
   sessionId: string,
@@ -216,11 +224,18 @@ function dashboardArmPasteSubmitTimer(
   }, delayMs);
 }
 
+/**
+ * Stop waiting on a paste that has now been accepted, and let the next queued paste go.
+ *
+ * @param ctx - live Alpine terminal context holding this session's refs
+ * @param sessionId - session whose pending paste was accepted
+ */
 function dashboardReleaseFallbackPasteSubmit(
   ctx: DashboardTerminalContext,
   sessionId: string,
 ): void {
   const refs = ctx._terminalRefs[sessionId];
+  // Nothing is waiting on this session, so there is no queue to release.
   if (!refs?.pasteSubmitAwaitingCommit) return;
   refs.pasteSubmitTimer = undefined;
   refs.pasteSubmitAwaitingCommit = false;
@@ -228,6 +243,14 @@ function dashboardReleaseFallbackPasteSubmit(
   dashboardSendNextQueuedPaste(ctx, sessionId);
 }
 
+/**
+ * Schedule one more submit attempt for a runner that shows the pasted text but has not acted on it yet.
+ *
+ * @param ctx - live Alpine terminal context holding this session's refs
+ * @param sessionId - session whose paste is still sitting uncommitted
+ * @param retryCount - how many attempts have already been made, which bounds the retrying
+ * @returns true when a retry was scheduled; false means the session or its output is gone and the caller stops
+ */
 function dashboardArmPasteSubmitRetryIfStillCommitted(
   ctx: DashboardTerminalContext,
   sessionId: string,
@@ -235,6 +258,7 @@ function dashboardArmPasteSubmitRetryIfStillCommitted(
 ): boolean {
   const refs = ctx._terminalRefs[sessionId];
   const target = ctx.sessions.find((session) => session.id === sessionId);
+  // Without a pane or captured output there is nothing to compare against, so no retry can be judged.
   if (!refs || typeof target?.outputTail !== "string") {
     return false;
   }
@@ -264,12 +288,19 @@ function dashboardArmPasteSubmitRetryIfStillCommitted(
   return true;
 }
 
+/**
+ * Send the next paste the user queued while an earlier one was still settling.
+ *
+ * @param ctx - live Alpine terminal context holding this session's refs
+ * @param sessionId - session whose queue is being drained
+ */
 function dashboardSendNextQueuedPaste(
   ctx: DashboardTerminalContext,
   sessionId: string,
 ): void {
   const refs = ctx._terminalRefs[sessionId];
   const next = refs?.pasteSubmitQueue?.shift();
+  // Nothing queued, so the session simply goes idle until the user pastes again.
   if (!refs || !next) return;
   if (refs.pasteSubmitQueue?.length === 0) refs.pasteSubmitQueue = undefined;
   dashboardSendBracketedPaste(ctx, sessionId, next);
@@ -312,14 +343,23 @@ function dashboardSubmitPendingPaste(
   return submitted;
 }
 
+/**
+ * Send one paste to the runner and decide how its Enter key is delivered, since runners differ in how they accept pasted text.
+ *
+ * @param ctx - live Alpine terminal context holding this session's refs
+ * @param sessionId - session receiving the paste
+ * @param paste - the text plus whether its submit should be delayed
+ */
 function dashboardSendBracketedPaste(
   ctx: DashboardTerminalContext,
   sessionId: string,
   paste: DashboardQueuedPaste,
 ): void {
   const refs = ctx._terminalRefs[sessionId];
+  // A closed socket means the pane is gone or reconnecting, and sending now would lose the text silently.
   if (!refs?.ws || refs.ws.readyState !== WebSocket.OPEN) return;
   refs.ws.send(JSON.stringify({ type: "input", data: paste.data }));
+  // The runner needs a moment before Enter, so the submit is armed on a timer instead of sent now.
   if (paste.shouldDelaySubmit) {
     const target = ctx.sessions.find((session) => session.id === sessionId);
     const claudeNoMarkerFallback = target?.runner === "claude";
@@ -342,13 +382,22 @@ function dashboardSendBracketedPaste(
   }
 }
 
+/**
+ * Send a paste now, or hold it until the previous one has been accepted, so two fast pastes cannot interleave in the runner's input.
+ *
+ * @param ctx - live Alpine terminal context holding this session's refs
+ * @param sessionId - session receiving the paste
+ * @param paste - the text plus whether its submit should be delayed
+ */
 function dashboardSendOrQueueBracketedPaste(
   ctx: DashboardTerminalContext,
   sessionId: string,
   paste: DashboardQueuedPaste,
 ): void {
   const refs = ctx._terminalRefs[sessionId];
+  // The pane is gone, so there is nowhere to send the text.
   if (!refs) return;
+  // An earlier paste is still settling, so this one waits its turn rather than arriving mid-prompt.
   if (refs.pasteSubmitTimer || refs.pasteSubmitAwaitingCommit) {
     refs.pasteSubmitQueue = [...(refs.pasteSubmitQueue ?? []), paste];
     return;
@@ -380,10 +429,9 @@ function dashboardHandlePasteSubmitOutput(
     refs.pasteSubmitAwaitingCommit = false;
     if (alreadySubmitted) return;
     refs.pasteSubmitFallbackSubmitted = false;
-    // A "[Pasted text]" marker echoed back when nothing is awaiting submit
-    // means the paste was already submitted (e.g. immediate-submit path for
-    // single-line pastes) or originated outside the dashboard. Don't fire a
-    // spurious extra Enter.
+    // A "[Pasted text]" marker echoed back when nothing is awaiting submit means the paste was already submitted (e.g. immediate-submit path for
+    // single-line pastes) or originated outside the dashboard.
+    // Don't fire a spurious extra Enter.
     if (!hasPendingPaste) return;
     if (target?.runner === "claude" || target?.runner === "antigravity") {
       dashboardArmPasteSubmitTimer(ctx, sessionId, {
@@ -492,16 +540,15 @@ function dashboardSendToTerminalSession(
   const prepared = dashboardPreparePasteBody(
     adapt ? ctx.adaptPrompt(text, target.runner) : text,
   );
-  // Bracketed paste prevents shells and REPLs from treating multi-line prompts as
-  // a stream of independent keystrokes. Claude Code commits long pastes
-  // asynchronously, so submit on its pasted-text echo or fall back after a short
-  // bounded delay for CLIs that do not echo that state.
+  // Bracketed paste prevents shells and REPLs from treating multi-line prompts as a stream of independent keystrokes.
+  // Claude Code commits long pastes asynchronously, so submit on its pasted-text echo or fall back after a short bounded delay for CLIs that do not
+  // echo that state.
   const pasteData = "\x1b[200~" + prepared + "\x1b[201~";
-  // Claude/Antigravity only compress MULTI-LINE pastes into the "[Pasted text]"
-  // marker we detect to submit fast. Single-line pastes render inline with no
-  // marker, so waiting hits the 15s fallback. Submit those immediately to
-  // match the existing single-line/non-Claude semantics. Verify this
-  // assumption against captured `agy` PTY output before changing it.
+  // Claude/Antigravity only compress MULTI-LINE pastes into the "[Pasted text]" marker we detect to submit fast.
+  // Single-line pastes render inline with no marker, so waiting hits the 15s fallback.
+  // Submit those immediately to match the existing single-line/non-Claude semantics.
+  //
+  // Verify this assumption against captured `agy` PTY output before changing it.
   const isMultiLinePaste = prepared.includes("\n");
   const delayedSubmit =
     (target.runner === "claude" || target.runner === "antigravity") &&
@@ -632,12 +679,12 @@ function dashboardArmLaunchPromptNoOutputFallback(
 }
 
 /**
- * Arm a short cap once runner output proves the PTY stream is live. The cap
- * is unconditional by design: it exists for runners that emit output but never
- * surface a known readiness marker (custom prompts, alternate CLIs). Gating
- * the force-send on a readiness check would stall those sessions forever; the
- * sibling quiet-window path covers the more common "output settles then send"
- * case.
+ * Arm a short cap once runner output proves the PTY stream is live.
+ * The cap is unconditional by design: it exists for runners that emit output but never surface a known readiness marker (custom prompts, alternate
+ * CLIs).
+ *
+ * Gating the force-send on a readiness check would stall those sessions forever; the sibling quiet-window path covers the more common "output settles
+ * then send" case.
  */
 function dashboardArmLaunchPromptAfterOutputFallback(
   ctx: DashboardTerminalContext,

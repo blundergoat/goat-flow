@@ -97,6 +97,7 @@ describe("dashboard terminal launch flow", () => {
     const ctx = makeContext({
       allPresets: [],
       userRole: "builder",
+      // Record the launch the click produced, so the test asserts on the prompt, runner, and options the dashboard passed.
       async launchInTerminal(
         prompt: string,
         runner: string,
@@ -134,6 +135,7 @@ describe("dashboard terminal launch flow", () => {
     const ctx = makeContext({
       allPresets: [],
       userRole: "builder",
+      // Record the launch the click produced, so the test asserts on the prompt, runner, and options the dashboard passed.
       async launchInTerminal(
         prompt: string,
         runner: string,

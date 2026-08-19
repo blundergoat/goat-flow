@@ -1,7 +1,7 @@
 /**
  * Builds the advisory target-readiness report shown before an agent starts project work.
- * Use this diagnostic to compare static project evidence across goat-flow's five concerns,
- * identify the first repair blockers, and display inferred commands without executing them.
+ * Use this diagnostic to compare static project evidence across goat-flow's five concerns, identify the first repair blockers, and display inferred
+ * commands without executing them.
  */
 import type { AgentId, StackInfo } from "../types.js";
 import { getAgentProfile } from "../agents/registry.js";

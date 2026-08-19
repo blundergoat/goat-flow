@@ -1,7 +1,8 @@
 /**
- * Semantic-drift scanners for high-trust cold-path docs (code-map, glossary, ADRs). Where the
- * factual-claims checks compare exact strings, these read live source - classifier state unions,
- * server constants, the manifest - and flag the curated docs that quietly fall out of sync with it.
+ * Semantic-drift scanners for high-trust cold-path docs (code-map, glossary, ADRs).
+ * Where the factual-claims checks compare exact strings, these read live source - classifier state unions, server constants, the manifest - and flag
+ * the curated docs that quietly fall out of sync with it.
+ *
  * Runs only under `--check-content` because reading source on every audit would be too expensive.
  */
 import { AUDIT_VERSION } from "../constants.js";
@@ -156,10 +157,14 @@ function driftSkillPlaybookInventory(
   ];
 }
 
-/** Drift: docs/dashboard.md session-cap claims don't match MAX_SESSIONS.
- *  Matches both the rail phrasing (`up to N`) and the hard-cap phrasing
- *  (`Maximum N concurrent sessions`). Every claim that disagrees with the live
- *  constant is reported separately so same-doc contradictions surface too. */
+/**
+ * Catch session-cap numbers in the dashboard docs that no longer match the live limit a user would actually hit.
+ * It reports each disagreeing claim separately, so two contradictory sentences in one document both surface instead of one masking the other.
+ *
+ * @param dashboard - the dashboard document text being checked
+ * @param ctx - audit context supplying the live constant to compare against
+ * @returns one finding per stale claim; empty means the document matches the code
+ */
 function driftDashboardSessions(
   dashboard: string,
   ctx: AuditContext,
@@ -225,7 +230,14 @@ function driftDashboardViewNames(dashboard: string): ContentFinding[] {
   ];
 }
 
-/** Drift: docs/dashboard.md idle-timeout claims don't match terminal defaults. */
+/**
+ * Catch idle-timeout numbers in the dashboard docs that no longer match the terminal default.
+ * It reports each stale claim as a finding; an unreadable default yields no findings rather than a false accusation.
+ *
+ * @param dashboard - the dashboard document text being checked
+ * @param ctx - audit context supplying the live default to compare against
+ * @returns one finding per stale claim; empty means the document matches the code
+ */
 function driftDashboardIdleTimeout(
   dashboard: string,
   ctx: AuditContext,
@@ -384,10 +396,9 @@ function driftSkillsDoc(skillsDoc: string): ContentFinding[] {
 /**
  * Drift: glossary.md contains agent-specific or stale canonical pointers.
  *
- * Returns an empty finding list when no stale phrase is present; stale prose
- * reports as content findings rather than treated as a parser error.
- * The caller supplies already-read text, so this helper performs no IO and has
- * no recover path beyond returning every matched stale phrase as a finding.
+ * Returns an empty finding list when no stale phrase is present; stale prose reports as content findings rather than treated as a parser error.
+ * The caller supplies already-read text, so this helper performs no IO and has no recover path beyond returning every matched stale phrase as a
+ * finding.
  */
 function driftGlossary(glossary: string): ContentFinding[] {
   const findings: ContentFinding[] = [];
@@ -418,10 +429,11 @@ function driftGlossary(glossary: string): ContentFinding[] {
 /**
  * Drift: setup/01-system-overview.md oversells session logs as durable memory.
  *
- * Returns an empty finding list when neither retired phrase is present; matches
- * report warnings because setup prose is the source of future install behavior.
- * The caller supplies already-read text, so this helper performs no IO and has
- * no recover path beyond returning every matched stale phrase as a finding.
+ * Returns an empty finding list when neither retired phrase is present; matches report warnings because setup prose is the source of future install
+ * behavior.
+ *
+ * The caller supplies already-read text, so this helper performs no IO and has no recover path beyond returning every matched stale phrase as a
+ * finding.
  */
 function driftSetupOverview(setupOverview: string): ContentFinding[] {
   const findings: ContentFinding[] = [];

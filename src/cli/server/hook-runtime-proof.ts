@@ -1,7 +1,8 @@
 /**
  * Reads metadata-only results from the user's explicit offline hook verification.
- * Use when CLI, audit, or dashboard status decides whether the current release passed
- * every required scenario without executing checkout hooks during the read-only view.
+ *
+ * Use when CLI, audit, or dashboard status decides whether the current release passed every required scenario without executing checkout hooks during
+ * the read-only view.
  * Only latest matching verdicts count; unrelated, partial, or old-version events stay non-green.
  */
 import { AUDIT_VERSION } from "../constants.js";
@@ -63,7 +64,7 @@ function recordedScenarioVerdict(
 
 /**
  * Check the newest current-release verdict for every scenario required by one hook.
- * Use after local install and trust checks pass; false means the UI keeps its verify action.
+ * Use after local install and trust checks pass; it swallows unreadable proof files as absent proof, so the UI keeps its verify action.
  *
  * @param projectPath - selected project; empty or unreadable paths provide no local proof
  * @param agentId - selected provider; an unknown provider cannot match recorded proof

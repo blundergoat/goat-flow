@@ -1,6 +1,11 @@
 /**
- * Project stack detector for languages, frameworks, and workflow signals.
- * The setup pipeline and audit checks rely on this file to infer commands and template routing from repository contents.
+ * Works out what a project is built from, its languages, frameworks, and the test, lint, build, and format commands it already has.
+ *
+ * This runs the moment a user selects a project, and it is what pre-fills the Setup form instead of asking them to type it all in.
+ *
+ * Detection reads what is actually in the repository rather than trusting configuration, so:
+ * - a dependency present only in devDependencies does not make its language look like something the project ships
+ * - placeholder scripts such as the npm-init test stub are ignored rather than offered as a real command
  */
 import type { StackInfo, ReadonlyFS } from "../types.js";
 import {
@@ -100,7 +105,6 @@ function extractNodeCommands(
   "buildCommand" | "testCommand" | "lintCommand" | "formatCommand"
 > {
   /** Drop empty or intentionally placeholder script commands from detection output. */
-  /** Keep only real script commands that should survive stack detection. */
   const filterPlaceholder = (cmd: string | undefined): string | null => {
     if (!cmd || isPlaceholderScript(cmd)) return null;
     return cmd;
@@ -204,7 +208,21 @@ function collectNodeLanguages(
   return languages;
 }
 
-/** Detect root node stack. */
+/**
+ * Turn the repository-root `package.json` into the languages and commands setup reports.
+ *
+ * Use for the root manifest only; monorepo subdirectory manifests are detected separately.
+ *
+ * Runtime and dev dependencies are passed on separately as well as merged, because a package present only in
+ * `devDependencies` should not make its language look like something the project ships.
+ *
+ * @param fs - readonly project filesystem, used for language markers the manifest only implies
+ *   (`tsconfig.json`, Node source files)
+ * @param pkg - parsed root `package.json`; missing `dependencies`, `devDependencies`, or `scripts`
+ *   keys each degrade to empty rather than throwing
+ * @returns detected languages plus any build/test/lint/format commands; placeholder scripts such as
+ *   the npm-init default test stub are filtered out and come back as null
+ */
 function detectRootNodeStack(
   fs: ReadonlyFS,
   pkg: Record<string, unknown>,
@@ -563,9 +581,8 @@ function applyMarkdownFallback(fs: ReadonlyFS, languages: string[]): void {
 /**
  * Detect languages and workflow commands from manifests and source files.
  *
- * Detector order intentionally preserves command priority: the first detector
- * that supplies a build/test/lint/format command wins, while language labels are
- * merged across all detectors.
+ * Detector order intentionally preserves command priority: the first detector that supplies a build/test/lint/format command wins, while language
+ * labels are merged across all detectors.
  *
  * @param fs Read-only project filesystem abstraction.
  * @returns Canonical stack info, source count, and richer project signals.

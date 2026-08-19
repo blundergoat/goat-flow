@@ -23,6 +23,7 @@ import { buildInstallerInvocation } from "../../src/cli/install-invocation.js";
 import {
   buildManagedSetupPreview,
   classifyManagedSetupFile,
+  managedSetupChangeDirection,
   managedSetupPreviewForInstallerLaunch,
   managedInstallStatePath,
   writeManagedInstallState,
@@ -53,11 +54,11 @@ const CLASSIFICATION_FIXTURES: ClassificationFixture[] = [
     expectedState: "unchanged",
   },
   {
-    name: "local-edited",
+    name: "local-preserved",
     oldExpectedSha256: OLD_EXPECTED_HASH,
     currentSha256: CURRENT_FILE_HASH,
     newExpectedSha256: OLD_EXPECTED_HASH,
-    expectedState: "local-edited",
+    expectedState: "local-preserved",
   },
   {
     name: "template-changed",
@@ -118,6 +119,14 @@ describe("managed setup classification", () => {
     });
   }
 
+  it("maps M02 states to one behind-versus-diverged repair direction", () => {
+    assert.equal(managedSetupChangeDirection("template-changed"), "behind");
+    assert.equal(managedSetupChangeDirection("both-changed"), "diverged");
+    assert.equal(managedSetupChangeDirection("local-preserved"), "diverged");
+    assert.equal(managedSetupChangeDirection("unchanged"), "current");
+    assert.equal(managedSetupChangeDirection("adopted"), "unclassified");
+  });
+
   it("treats an already-converged target as unchanged without baseline state", () => {
     assert.equal(
       classifyManagedSetupFile({
@@ -163,8 +172,8 @@ describe("managed setup prerequisites", () => {
   /** Contract: preview and install share the blocker while the input stays unchanged. */
   it("blocks dry-run with the same launch failure the real install would report", () => {
     const preview: ManagedSetupPreview = {
-      schemaVersion: "goat-flow.managed-setup-preview.v1",
-      coverage: "managed-template-files",
+      schemaVersion: "goat-flow.managed-setup-preview.v2",
+      coverage: "install-write-set",
       agent: "claude",
       goatFlowVersion: "1.15.0",
       baselineStatus: "missing",
@@ -203,8 +212,8 @@ describe("managed install state", () => {
   it("writes only relative paths and hashes for the next user preview", () => {
     const projectPath = mkdtempSync(join(tmpdir(), "goat-flow-preview-state-"));
     const preview: ManagedSetupPreview = {
-      schemaVersion: "goat-flow.managed-setup-preview.v1",
-      coverage: "managed-template-files",
+      schemaVersion: "goat-flow.managed-setup-preview.v2",
+      coverage: "install-write-set",
       agent: "codex",
       goatFlowVersion: "1.13.1",
       baselineStatus: "missing",
@@ -245,8 +254,8 @@ describe("managed install state", () => {
       join(tmpdir(), "goat-flow-preview-redirect-"),
     );
     const preview: ManagedSetupPreview = {
-      schemaVersion: "goat-flow.managed-setup-preview.v1",
-      coverage: "managed-template-files",
+      schemaVersion: "goat-flow.managed-setup-preview.v2",
+      coverage: "install-write-set",
       agent: "codex",
       goatFlowVersion: "1.13.1",
       baselineStatus: "missing",
@@ -285,8 +294,8 @@ describe("managed install state", () => {
       "victim.json",
     );
     const preview: ManagedSetupPreview = {
-      schemaVersion: "goat-flow.managed-setup-preview.v1",
-      coverage: "managed-template-files",
+      schemaVersion: "goat-flow.managed-setup-preview.v2",
+      coverage: "install-write-set",
       agent: "codex",
       goatFlowVersion: "1.13.1",
       baselineStatus: "missing",
@@ -382,7 +391,7 @@ describe("managed install state", () => {
   });
 });
 
-/** Write one target-controlled baseline body for invalid-state preview tests. */
+/** Writes one target-controlled baseline body for invalid-state preview tests. */
 function writeInvalidStateFixture(
   projectPath: string,
   serializedState: string,

@@ -1,8 +1,9 @@
 /**
  * Read-only filesystem adapter over Node's `fs` APIs.
+ *
  * Audit checks use it to inspect a selected project without changing user files.
- * Stable false/null/empty results keep platform errors out of user-facing reports,
- * while explicit directory readability prevents unusable storage from passing.
+ * Stable false/null/empty results keep platform errors out of user-facing reports, while explicit directory readability prevents unusable storage
+ * from passing.
  */
 import {
   readFileSync,
@@ -281,7 +282,8 @@ interface DirectoryReadResult {
 
 /**
  * Cache directory readability and entries from one filesystem operation.
- * Use when audit users need to distinguish an empty directory from an unusable path.
+ * Use when audit users need to distinguish an empty directory from an unusable path; it swallows a failed read into a cached unreadable result
+ * rather than raising it, so one bad path cannot end the whole audit.
  *
  * @param resolvePath - roots a project-relative path inside the selected project
  * @returns non-mutating directory readiness and listing helpers
@@ -374,8 +376,8 @@ function createGlobHelpers(
 
 /**
  * Create a read-only filesystem abstraction rooted at the given path.
- * The adapter centralizes defensive filesystem handling because audit callers need stable null,
- * false, or empty-list results instead of platform-specific errno throws.
+ * The adapter centralizes defensive filesystem handling because audit callers need stable null, false, or empty-list results instead of
+ * platform-specific errno throws.
  *
  * @param rootPath Directory that relative fact reads resolve against.
  * @returns Cached, non-mutating filesystem helpers for audit and fact extraction.

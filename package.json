@@ -1,6 +1,6 @@
 {
   "name": "@blundergoat/goat-flow",
-  "version": "1.15.1",
+  "version": "1.16.0",
   "description": "AI coding agent harness and local dashboard for Claude Code, OpenAI Codex, Google Antigravity, and GitHub Copilot - setup audits, guardrails, structured skills, deny hooks, and persistent learning loops.",
   "author": "Matthew Hansen (https://www.blundergoat.com)",
   "license": "MIT",
@@ -49,11 +49,12 @@
     ]
   },
   "scripts": {
-    "build": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true });\" && tsc && node -e \"require('node:fs').chmodSync('dist/cli/cli.js', 0o755);\" && npm run build:dashboard",
+    "build": "npm run check:managed-hook-contract && node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true });\" && tsc && node -e \"require('node:fs').chmodSync('dist/cli/cli.js', 0o755);\" && npm run build:dashboard",
     "build:dashboard": "tsc -p tsconfig.dashboard.json && node scripts/build-dashboard-assets.mjs",
     "test": "npm run test:fast",
     "test:fast": "node scripts/run-tests.mjs fast",
     "test:slow": "npm run build && node scripts/run-tests.mjs slow",
+    "test:slow:ci": "node scripts/run-tests.mjs slow",
     "test:full": "npm run test:fast && npm run test:slow",
     "test:performance": "npm run build && node scripts/run-tests.mjs performance",
     "test:coverage": "node scripts/run-tests.mjs coverage",
@@ -72,6 +73,8 @@
     "check-instruction-parity": "node scripts/check-instruction-parity.mjs",
     "check-versions": "node scripts/check-versions.mjs",
     "check-package-links": "node scripts/check-package-readme-links.mjs",
+    "generate:managed-hook-contract": "node --import tsx scripts/generate-managed-hook-desired-state.mjs --write",
+    "check:managed-hook-contract": "node --import tsx scripts/generate-managed-hook-desired-state.mjs --check",
     "format": "prettier --write --no-error-on-unmatched-pattern \"src/**/*.{ts,js,html}\" \"test/**/*.ts\" \"scripts/**/*.mjs\"",
     "format:check": "prettier --check --no-error-on-unmatched-pattern \"src/**/*.{ts,js,html}\" \"test/**/*.ts\" \"scripts/**/*.mjs\"",
     "prepublishOnly": "npm run publish:check",
@@ -116,7 +119,7 @@
     "node-pty": "1.1.0"
   },
   "devDependencies": {
-    "@blundergoat/gruff-ts": "^0.4.0",
+    "@blundergoat/gruff-ts": "^0.5.0",
     "@stryker-mutator/core": "^9.6.1",
     "@tailwindcss/browser": "^4.3.2",
     "@types/js-yaml": "^4.0.9",

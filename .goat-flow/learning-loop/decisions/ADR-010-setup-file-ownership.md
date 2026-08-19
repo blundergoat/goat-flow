@@ -2,13 +2,15 @@
 
 **Status:** Accepted
 **Date:** 2026-04-06
-**Updated:** 2026-08-08 - ADR-051 adds a Git-only commit-guidance seed and former-path migration.
+**Updated:** 2026-08-08 - ADR-051 adds a Git-only commit-guidance seed and former-path migration. 2026-08-15 - absorbed ADR-003 (reference-based setup prompts). What setup may write and how its prompts obtain content are one contract: both exist to stop setup from generating a second, drifting copy of something the project or the package already owns.
 
 ## Context
 
 goat-flow v1.0.0 setups caused damage to existing projects. The worst case: ambient-scribe's AGENTS.md (447 lines of real repo guidance) was replaced with a 104-line goat-flow mirror. The setup agent treated the instruction file as something goat-flow "owned" and could rewrite freely.
 
 Users also don't typically want every supported agent set up at once. A Claude setup that rewrites AGENTS.md or Copilot instructions disrupts workflows the user hasn't asked to change.
+
+Setup prompts had the mirror-image problem. They inlined skeleton content for each skill, so every prompt carried a copy of a template that the package also shipped. The copies drifted from their sources, and a template fix did not reach a project whose prompt had already been generated.
 
 ## Decision
 
@@ -32,6 +34,14 @@ Users also don't typically want every supported agent set up at once. A Claude s
 - Claude setup: CLAUDE.md, `.claude/`, and shared `.goat-flow/`. Does NOT touch AGENTS.md, `.agents/`, `.github/copilot-instructions.md`, `.github/`, or their skills.
 - Codex setup: AGENTS.md, `.agents/`, `.codex/`, and shared folders. Does NOT touch CLAUDE.md or `.claude/`.
 - Users scan and fix each agent setup separately.
+
+### Prompts reference templates, never inline them
+
+`goat-flow setup` generates prompts containing a template path table (skill name to its `workflow/skills/goat-<name>/SKILL.md` path) plus adaptation guidance. The agent reads each template from disk at setup time, so it gets the canonical current version and no inline copy exists to drift.
+
+- A language-to-coding-standards mapper auto-selects the backend, frontend, and security templates from the detected stack.
+- Setup takes one agent per run via `--agent <id>`, using the canonical agent set from ADR-020. The former `--agent all` tried to generate one prompt covering every agent and produced confused output.
+- The inline fragment renderer and its `GOAT_FLOW_INLINE_SETUP` rollback env var were deleted in v0.10.0. There is no inline-generation path to fall back to.
 
 ## Consequences
 

@@ -38,7 +38,7 @@ describe("skill hardening contracts: goat-review (3/3)", () => {
       );
       assert.match(
         output,
-        /Machine-valid anchors use `<target-project>\/path` \(search: `literal`\)[^\n]+Findings[^\n]+Systemic Patterns[^\n]+Top 5 Risks/u,
+        /Machine-valid anchors use repo-relative paths such as `<repo-relative-path>` \(search: `literal`\)[^\n]+Findings[^\n]+Systemic Patterns[^\n]+Top 5 Risks/u,
         skillPath,
       );
     });

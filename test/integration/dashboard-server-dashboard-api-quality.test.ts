@@ -34,24 +34,24 @@ describe("dashboard /api/quality", () => {
     );
     assert.equal(res.status, 200);
 
-    const data = expectRecord(body, "Quality mode response");
-    assert.equal(data.command, "quality");
-    assert.equal(data.agent, "claude");
+    const payload = expectRecord(body, "Quality mode response");
+    assert.equal(payload.command, "quality");
+    assert.equal(payload.agent, "claude");
     assert.match(
-      String(data.prompt),
+      String(payload.prompt),
       /# GOAT Flow Skills Assessment - Claude Code/,
     );
-    assert.match(String(data.prompt), /"quality_mode": "skills"/);
+    assert.match(String(payload.prompt), /"quality_mode": "skills"/);
     assert.match(
-      String(data.auditSummary),
+      String(payload.auditSummary),
       /did not execute project build, test, lint, typecheck, or format commands/,
     );
     assert.match(
-      String(data.prompt),
+      String(payload.prompt),
       /did not execute project build, test, lint, typecheck, or format commands/,
     );
-    assert.match(String(data.auditSummary), /end-to-end resumability/);
-    assert.match(String(data.prompt), /end-to-end resumability/);
+    assert.match(String(payload.auditSummary), /end-to-end resumability/);
+    assert.match(String(payload.prompt), /end-to-end resumability/);
   });
 
   it("uses cache-only audit enrichment when fast=true is requested", async () => {
@@ -62,12 +62,12 @@ describe("dashboard /api/quality", () => {
       );
       assert.equal(res.status, 200);
 
-      const data = expectRecord(body, "Fast quality response");
-      assert.equal(data.command, "quality");
-      assert.equal(data.agent, "claude");
-      assert.equal(data.auditStatus, "unavailable");
-      assert.match(String(data.prompt), /Audit: NOT LOADED/);
-      assert.match(String(data.prompt), /fast quality prompt/);
+      const payload = expectRecord(body, "Fast quality response");
+      assert.equal(payload.command, "quality");
+      assert.equal(payload.agent, "claude");
+      assert.equal(payload.auditStatus, "unavailable");
+      assert.match(String(payload.prompt), /Audit: NOT LOADED/);
+      assert.match(String(payload.prompt), /fast quality prompt/);
     } finally {
       await rm(root, { recursive: true, force: true });
     }
@@ -80,8 +80,8 @@ describe("dashboard /api/quality", () => {
         `/api/quality?path=${encodeURIComponent(root)}&agent=claude&fast=true`,
       );
       assert.equal(res.status, 200);
-      const data = expectRecord(body, "Quality event response");
-      const prompt = String(data.prompt);
+      const payload = expectRecord(body, "Quality event response");
+      const prompt = String(payload.prompt);
 
       const envelopes = await readEventEnvelopes(root);
       const event = envelopes.find(
@@ -91,9 +91,9 @@ describe("dashboard /api/quality", () => {
       assertValidEmittedEnvelope(event);
       assert.equal(JSON.stringify(event).includes(prompt), false);
 
-      const payload = expectRecord(event.payload, "Quality event payload");
+      const eventPayload = expectRecord(event.payload, "Quality event payload");
       const redactedPrompt = expectRecord(
-        payload.prompt,
+        eventPayload.prompt,
         "Quality event payload.prompt",
       );
       assert.equal(redactedPrompt.kind, "redacted");
@@ -106,6 +106,7 @@ describe("dashboard /api/quality", () => {
   });
 
   it("reuses cached quality audits unless fresh=true is requested", async () => {
+    // Issue one quality request and hand back its parsed body for assertions.
     const runQualityRequest = async (
       suffix: string,
     ): Promise<Record<string, unknown>> => {
@@ -161,6 +162,7 @@ describe("dashboard /api/quality", () => {
         }),
       );
 
+      // Issue one quality request against this server and hand back its parsed body.
       const requestQuality = async (
         suffix: string,
       ): Promise<Record<string, unknown>> => {
@@ -211,12 +213,12 @@ describe("dashboard /api/quality", () => {
     );
     assert.equal(res.status, 200);
 
-    const data = expectRecord(body, "Quality response");
-    assert.equal(data.command, "quality");
-    assert.equal(data.agent, "claude");
-    assert.match(String(data.auditStatus), /^(pass|fail|unavailable)$/);
-    assert.equal(typeof data.auditSummary, "string");
-    assert.equal(typeof data.prompt, "string");
-    assert.ok(String(data.prompt).length > 100);
+    const payload = expectRecord(body, "Quality response");
+    assert.equal(payload.command, "quality");
+    assert.equal(payload.agent, "claude");
+    assert.match(String(payload.auditStatus), /^(pass|fail|unavailable)$/);
+    assert.equal(typeof payload.auditSummary, "string");
+    assert.equal(typeof payload.prompt, "string");
+    assert.ok(String(payload.prompt).length > 100);
   });
 });

@@ -1,9 +1,9 @@
 /**
  * Terminal image upload validation and storage.
  *
- * Pure helpers used by the dashboard upload handler. Kept out of the HTTP
- * handler module so file-level constants, MIME tables, sanitization, and
- * containment checks can be unit-tested without spinning up an HTTP server.
+ * Pure helpers used by the dashboard upload handler.
+ * Kept out of the HTTP handler module so file-level constants, MIME tables, sanitization, and containment checks can be unit-tested without spinning
+ * up an HTTP server.
  */
 import { mkdirSync, realpathSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -116,8 +116,8 @@ export function detectImageExtension(bytes: Uint8Array): string | null {
 
 /**
  * Compose the upload directory path for one terminal session.
- * Always under `<targetPath>/.goat-flow/logs/uploads/<sessionId>/` and asserted to remain inside
- * `targetPath` to prevent path traversal via the session id.
+ * Always under `<targetPath>/.goat-flow/logs/uploads/<sessionId>/` and asserted to remain inside `targetPath` to prevent path traversal via the
+ * session id.
  *
  * @param targetPath Selected target project path that owns upload evidence.
  * @param sessionId Terminal session id used as the upload subdirectory.
@@ -157,10 +157,12 @@ function buildSavedName(
 
 /**
  * Validate one base64 image payload and decode it to bytes.
+ * It reports an unsupported type, an oversized file, or unreadable base64 as a rejection reason rather than throwing, so one bad file does not
+ * fail the user's whole drop.
  *
- * @param rawName Browser-provided filename used for extension and saved-name hints.
- * @param base64 Base64 file body from the upload request.
- * @returns Decoded bytes with sanitized filename metadata, or a caller-safe rejection reason.
+ * @param rawName - browser-provided filename used for extension and saved-name hints
+ * @param base64 - base64 file body from the upload request
+ * @returns decoded bytes with sanitized filename metadata, or a caller-safe rejection reason
  */
 export function decodeUploadFile(
   rawName: string,
@@ -211,12 +213,12 @@ export function decodeUploadFile(
 }
 
 /**
- * Persist accepted uploads to disk and return their saved metadata.
- * Caller is responsible for upstream session/path validation.
+ * Writes accepted uploads into the session directory and returns what was saved.
+ * Saved names are unique by contract, so two files dropped with the same name both survive instead of one silently replacing the other.
  *
- * @param uploadDir Validated session upload directory.
- * @param files Browser-provided file payloads from one upload request.
- * @param options Test seams for deterministic saved filenames.
+ * @param uploadDir - validated session upload directory; the caller owns that validation
+ * @param files - browser-provided file payloads from one upload request
+ * @param options - test seams for deterministic saved filenames
  * @returns Accepted file metadata and per-file rejection reasons.
  * @throws Error when the created upload directory escapes the real target root.
  */

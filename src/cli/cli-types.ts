@@ -1,9 +1,11 @@
 /**
  * Command and option type vocabulary shared between the CLI parser and the command handlers.
- * Centralising the subcommand unions, the parsed-option shape, and the removed-command map here
- * keeps the parser (which produces these values) and dispatch (which consumes them) agreeing on
- * one source of truth, so adding a command means touching the union once rather than hunting
- * string literals across files. Pure type/const declarations only; no runtime behaviour lives here.
+ *
+ * Centralising the subcommand unions, the parsed-option shape, and the removed-command map here keeps the parser (which produces these values) and
+ * dispatch (which consumes them) agreeing on one source of truth, so adding a command means touching the union once rather than hunting string
+ * literals across files.
+ *
+ * Pure type/const declarations only; no runtime behaviour lives here.
  */
 
 import type { CLIOptions } from "./types.js";
@@ -76,19 +78,20 @@ export const HOOK_SUBCOMMANDS = new Set<string>([
 export type HookScenario = "deny-hook" | "post-turn-hook" | "gruff-hook";
 
 /**
- * The mutually exclusive modes of the `quality` command. `prompt` (the default when no subcommand
- * positional is given) emits an assessment prompt; `history`/`diff` read prior runs; `save`
- * redacts, validates, and persists an in-memory report; `validate` schema-checks a written report;
- * `candidacy` scores a skill/playbook idea. The parser maps the first positional to one of these,
- * and dispatch routes on the chosen member.
+ * The mutually exclusive modes of the `quality` command.
+ * `prompt` (the default when no subcommand positional is given) emits an assessment prompt; `history`/`diff` read prior runs; `save` redacts,
+ * validates, and persists an in-memory report; `validate` schema-checks a written report; `candidacy` scores a skill/playbook idea.
+ *
+ * The parser maps the first positional to one of these, and dispatch routes on the chosen member.
  */
 export type QualitySubcommand =
   "prompt" | "history" | "diff" | "save" | "validate" | "candidacy";
 
 /**
  * One resolved input to `quality candidacy`, distinguishing the two ways a caller can supply it.
- * `mode: "draft"` means `value` is a resolved filesystem path to an existing draft to score;
- * `mode: "description"` means `value` is the free-form text describing the proposed artifact.
+ *
+ * `mode: "draft"` means `value` is a resolved filesystem path to an existing draft to score; `mode: "description"` means `value` is the free-form
+ * text describing the proposed artifact.
  * The two are mutually exclusive at the CLI; the parser rejects supplying both.
  */
 export interface CandidacyInputArg {
@@ -96,8 +99,13 @@ export interface CandidacyInputArg {
   value: string;
 }
 
-/** Raw values returned by Node's `parseArgs`; keys intentionally mirror CLI flag names. */
-export type ParsedArgValues = Partial<Record<string, string | boolean>>;
+/**
+ * Raw values returned by Node's `parseArgs`; keys intentionally mirror CLI flag names.
+ * Repeatable options such as `--force-path` arrive as string lists.
+ */
+export type ParsedArgValues = Partial<
+  Record<string, string | boolean | string[]>
+>;
 
 export const COMMANDS: Command[] = [
   "setup",
@@ -141,12 +149,16 @@ export interface ParsedCLI extends CLIOptions {
   includeHarness: boolean;
   checkDrift: boolean;
   checkContent: boolean;
+  isTargetTrusted: boolean;
   isTargetUntrusted: boolean;
   auditDetails: boolean;
   shouldCheck: boolean;
   shouldApply: boolean;
   shouldDryRun: boolean;
   shouldForce: boolean;
+  shouldForceManaged: boolean;
+  shouldForceUserOwned: boolean;
+  forcePaths: readonly string[];
   updateConfigVersion: boolean;
   cleanDeprecated: boolean;
   qualitySubcommand: QualitySubcommand;
@@ -180,10 +192,11 @@ export interface ParsedCLI extends CLIOptions {
 }
 
 /**
- * The slice of ParsedCLI that the `skill` command path populates, projected out so the parser can
- * build and spread just the skill-authoring fields without restating each one. Every member is
- * meaningful only when the command is `skill`; for any other command the parser fills these with
- * their null/false defaults, so the subcommand identifies authoring versus read-only diagnosis.
+ * The slice of ParsedCLI that the `skill` command path populates, projected out so the parser can build and spread just the skill-authoring fields
+ * without restating each one.
+ *
+ * Every member is meaningful only when the command is `skill`; for any other command the parser fills these with their null/false defaults, so the
+ * subcommand identifies authoring versus read-only diagnosis.
  */
 export type SkillCLIFields = Pick<
   ParsedCLI,

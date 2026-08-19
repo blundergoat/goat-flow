@@ -1,7 +1,8 @@
 /**
  * Validates the skill-doc discovery contract used by `goat-flow audit`.
- * Use it when an operator needs instruction routing and installed playbooks
- * checked without mixing Markdown parsing into the main setup-check registry.
+ *
+ * Use it when an operator needs instruction routing and installed playbooks checked without mixing Markdown parsing into the main setup-check
+ * registry.
  * It reads project files only and returns user-facing failures without writes.
  */
 import { AUDIT_VERSION } from "../constants.js";
@@ -24,10 +25,14 @@ export const STANDALONE_PLAYBOOK_FILES = [
   ".goat-flow/skill-docs/playbooks/code-comments.md",
   ".goat-flow/skill-docs/playbooks/gruff-code-quality.md",
   ".goat-flow/skill-docs/playbooks/hook-policy-testing.md",
+  ".goat-flow/skill-docs/playbooks/naming-and-placement.md",
   ".goat-flow/skill-docs/playbooks/observability.md",
   ".goat-flow/skill-docs/playbooks/page-capture.md",
   ".goat-flow/skill-docs/playbooks/release-notes.md",
   ".goat-flow/skill-docs/playbooks/skill-playbook-authoring-sync.md",
+  ".goat-flow/skill-docs/playbooks/test-selection.md",
+  ".goat-flow/skill-docs/playbooks/writing-sentence-diagnostics.md",
+  ".goat-flow/skill-docs/playbooks/writing-structure-diagnostics.md",
   ".goat-flow/skill-docs/playbooks/writing-style.md",
 ] as const;
 

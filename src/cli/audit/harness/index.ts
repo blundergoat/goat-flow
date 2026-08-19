@@ -1,6 +1,9 @@
 /**
- * Harness completeness checks index.
- * Re-exports all 5 concern check arrays as a single HARNESS_CHECKS array.
+ * Assembles every harness check into the single list the audit runs, grouped by the five concerns a user sees scored.
+ *
+ * Those concerns are Context, Constraints, Verification, Recovery, and Feedback Loop, and they are what `goat-flow audit --harness` reports.
+ *
+ * Adding a check to its concern file is enough to include it here, so no check can be written and then silently never run.
  */
 import type { HarnessCheck } from "../types.js";
 import { CONTEXT_CHECKS } from "./check-context.js";

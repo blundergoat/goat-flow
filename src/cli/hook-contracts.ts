@@ -1,8 +1,9 @@
 /**
  * Defines the hook evidence and result contracts used by CLI and dashboard surfaces.
+ *
  * Use before a screen claims provider support or an adapter translates a hook result.
- * Documentation, live delivery, installed state, and scenario proof stay separate so
- * users never see an unavailable or incomplete hook presented as clean coverage.
+ * Documentation, live delivery, installed state, and scenario proof stay separate so users never see an unavailable or incomplete hook presented as
+ * clean coverage.
  */
 import type { AgentId } from "./types.js";
 
@@ -84,9 +85,9 @@ export interface HookProviderEvidenceAssessment {
  * Decide whether dated evidence can still back a support label shown to users.
  * Use before documentation or capture advances a hook toward effective coverage.
  *
- * Both dates are enforced. `expiresAt` alone is author-supplied, so a record claiming a decade
- * of validity would otherwise pin a stale support badge forever; the observation date caps every
- * record at the window ADR-052 documents, whatever expiry its author wrote.
+ * Both dates are enforced.
+ * `expiresAt` alone is author-supplied, so a record claiming a decade of validity would otherwise pin a stale support badge forever; the observation
+ * date caps every record at the window ADR-052 documents, whatever expiry its author wrote.
  *
  * @param observedAt - ISO date the record was checked or captured; empty or invalid text is stale
  * @param expiresAt - ISO expiry from the evidence record; empty or invalid text means users see stale evidence

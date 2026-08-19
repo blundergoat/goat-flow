@@ -1,8 +1,8 @@
 /**
  * Checks that a review report has the sections a reader expects, populated as promised.
- * Findings must live under recognised headings, ids must be unique so they can be referenced,
- * cross-section pointers such as Top 5 Risks and refuter citations must resolve, and optional
- * sections that were started must not be left empty.
+ *
+ * Findings must live under recognised headings, ids must be unique so they can be referenced, cross-section pointers such as Top 5 Risks and refuter
+ * citations must resolve, and optional sections that were started must not be left empty.
  *
  * The bias is toward warnings rather than violations for shape problems: a slightly odd Top 5
  * is worth flagging to the author, but it does not make the review's findings untrue.
@@ -37,7 +37,8 @@ import {
  * @param lines - the report split into lines; an empty report fails earlier than this
  * @param isAreaAudit - whether the report declared itself an area audit, which relaxes some coverage expectations
  * @param projectRoot - reviewed project root; anchors are confined to it so a report cannot cite files it was never authorised to read
- * @param authority - what the report claims as its source of truth - the live worktree or a pinned git object; this decides where anchors are resolved from
+ * @param authority - what the report claims as its source of truth, the live worktree or a pinned git object;
+ *   this decides where anchors are resolved from
  * @param violations - shared violation list, appended in report order so a reader sees issues top-down; a violation makes the report fail
  * @returns findings parsed from every recognised section; empty means the report surfaced none
  */
@@ -174,6 +175,7 @@ export function validateIntegrityCounts(
 
 /**
  * Read either documented Top 5 heading and reject multiple risk summaries.
+ * One risk summary per report is the contract: two would leave a reader unsure which set of risks the review actually stands behind.
  *
  * @param lines - the report split into lines; an empty report fails earlier than this
  * @param violations - shared violation list, appended in report order so a reader sees issues top-down; a violation makes the report fail
@@ -206,7 +208,8 @@ export function readTopFiveSection(
  *
  * @param section - one located report section; null means the heading was absent entirely
  * @param projectRoot - reviewed project root; anchors are confined to it so a report cannot cite files it was never authorised to read
- * @param authority - what the report claims as its source of truth - the live worktree or a pinned git object; this decides where anchors are resolved from
+ * @param authority - what the report claims as its source of truth, the live worktree or a pinned git object;
+ *   this decides where anchors are resolved from
  * @param violations - shared violation list, appended in report order so a reader sees issues top-down; a violation makes the report fail
  */
 export function validateSectionAnchors(

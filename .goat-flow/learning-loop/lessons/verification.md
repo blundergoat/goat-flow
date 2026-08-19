@@ -1,6 +1,22 @@
 ---
 category: verification
-last_reviewed: 2026-08-10
+last_reviewed: 2026-08-18
+---
+
+**Scope:** General verification discipline - what counts as proof, reading before claiming, and checking the thing you actually changed. Siblings own the narrower surfaces: [verification-validators.md](verification-validators.md) for getting a checker right, [verification-scanners.md](verification-scanners.md) for proving a guard guards, [verification-testing.md](verification-testing.md) for what a test must establish, [verification-preflight.md](verification-preflight.md) and [verification-formatting.md](verification-formatting.md) for repo-wide gates, and [verification-gruff.md](verification-gruff.md) for the analyzer.
+
+## Lesson: Read a validator's pattern before reshaping text to satisfy it
+
+**Status:** active | **Created:** 2026-08-18
+**Decision changed:** On a validator rejection, open the assertion and read its pattern before editing the input a second time.
+**Trigger phase:** VERIFY
+
+**What happened:** `plans check --strict` rejected an M01 `Actual:` line with `measured Actual reason must name receipt <seconds> recorded-unpaused seconds`. The line already contained that exact phrase, so I assumed the trailing clause I had appended needed reordering, moved it ahead of the phrase, and reran. It failed identically. Only then did I read the rule: `src/cli/plans-check.ts` (search: `recorded-unpaused seconds`) anchors the reason with `/^receipt\s+(\d+)\s+recorded-unpaused seconds$/u`, so the reason must be that string and nothing else. Two edits and two runs were spent on a guess the source answered in one read.
+
+**Root cause:** The error message named a required substring, and I read "must name" as "must contain". An anchored regex was the likelier reading for a machine-parsed field, and the file was one grep away.
+
+**Prevention:** When a validator rejects text that appears to satisfy its message, grep the emitting message in source and read the pattern before the next edit. Error copy describes intent, not grammar; only the pattern is authoritative. Where the caveat is genuinely worth keeping, put it in adjacent prose the validator does not parse rather than bending the pinned field - here the split caveat moved into the milestone's Timing Receipt section.
+
 ---
 
 ## Lesson: I edited a dead code path because I assumed one implementation
@@ -17,36 +33,6 @@ last_reviewed: 2026-08-10
 
 ---
 
-## Lesson: Permission wildcards must stay separate from escaped literal paths
-
-**Status:** active | **Created:** 2026-08-05 | **Incident count:** 2 | **Latest occurrence:** 2026-08-05
-**Decision changed:** Build permission patterns by escaping the literal directory first, then append deliberate wildcard grammar and assert the serialized rule. | **Trigger phase:** ACT
-
-**What happened:** While denying Claude reporting-agent writes to server-owned quality result and claim receipts, the first implementation passed each wildcard-bearing filename through `claudePermissionPath`. The focused terminal-profile test failed because that helper correctly escaped `*` as a literal path character, so the deny rule matched no receipt family.
-
-**Recurrence 2026-08-05:** The corrected wildcard construction still enumerated only result and claim markers. Full branch review of the adjacent quality-claim implementation found the separate `goat-quality-reap-*` server-owned fence, which the reporting agent could still edit. The permission inventory now names result, claim, and reaper families together.
-
-**Root cause:** I used a literal-path escaping helper to encode a permission pattern. The directory and the wildcard suffix have different grammars even though they appear in one rule string.
-
-**Prevention:** Pass only literal filesystem components through path escaping. Append reviewed permission wildcards afterward, then assert every server-owned filename family in the serialized deny rules. Evidence anchors: `src/cli/server/terminal-reporting-profile.ts` (search: `stagingServerFileDenies`), `test/unit/terminal-spawn.test.ts` (search: `launches Claude reporting sessions with a restrictive settings overlay`).
-
----
-
-## Lesson: Input/output alias guards must compare resolved filesystem paths
-
-**Status:** active | **Created:** 2026-08-05 | **Incident count:** 2 | **Latest occurrence:** 2026-08-05
-**Decision changed:** Before a forced writer runs, compare every existing destination with every source after filesystem resolution, then test an alternate path spelling. | **Trigger phase:** VERIFY
-
-**What happened:** Full branch review reproduced `plans export --format json --output <source milestone> --force` exiting 0 and replacing the milestone with generated JSON. The first guard compared `resolve()` strings and blocked that direct spelling.
-
-**Recurrence 2026-08-05:** A follow-up reproduction selected the plan through a directory symlink while naming the same source through its real path. The lexical guard again exited 0 and changed the source. The correction compares `realpathSync` results for existing sources and destinations before any export write.
-
-**Root cause:** I treated normalized path strings as filesystem identity. A symlink gives one file multiple normalized absolute names, so lexical equality cannot prove that input and output are distinct.
-
-**Prevention:** For commands that read source files and later honor `--force`, canonicalize existing source and destination paths before collision checks, while retaining separate symlink and hardlink write guards. Re-run the destructive reproduction through a second path spelling before accepting the fix. Evidence anchors: `src/cli/plans-export-output.ts` (search: `assertOutputPathsDoNotAliasSources`), `test/unit/plans-export-writes.test.ts` (search: `refuses forced JSON output that aliases a source through the selected plan path`).
-
----
-
 ## Lesson: Stryker sandboxes need local-state ignores and mutation-safe test selection
 
 **Status:** active | **Created:** 2026-05-15 | **Merged during:** M11 learning-loop consolidation
@@ -59,48 +45,9 @@ last_reviewed: 2026-08-10
 
 ---
 
-## Lesson: RegExp constructor assertions need a real escape helper
-
-**Status:** active | **Created:** 2026-05-28
-
-**Incident count:** 2 | **Latest occurrence:** 2026-08-01
-
-**What happened:** While adding a hook smoke test for extension-based gruff binary selection, the first assertion escaped path separators for a `RegExp` constructor with `replaceAll("/", "\\\\/")`. The hook output used the expected slash-separated PHP fixture path, but the generated regex expected an extra backslash and the focused test failed.
-
-**Root cause:** I treated slash escaping for regex literals and `RegExp` constructor strings as the same problem. In constructor strings, `/` is not a delimiter and does not need escaping; only regex metacharacters do.
-
-**Recurrence (2026-08-01):** An M04 contract built a dynamic `RegExp` with a template literal that also contained escaped Markdown backticks. The TypeScript transform failed before any behavioural test ran. String concatenation produced the intended pattern and exposed the genuine three-failure RED.
-
-**Prevention:** When asserting dynamic paths or rule IDs through `new RegExp(...)`, use a small `escapeRegex` helper for regex metacharacters instead of ad hoc slash replacement. If the pattern includes Markdown backticks, avoid nesting them in a template literal; concatenate the literal delimiters around the dynamic value. Evidence anchors: `test/integration/gruff-code-quality-smoke.helpers.ts` (search: `function escapeRegex`), `test/integration/gruff-code-quality-smoke.test.ts` (search: `selects the gruff binary from the edited file extension`), and `test/contract/skill-hardening-review-2.test.ts` (search: `conditionalSection`).
-
-## Lesson: Harness fixture counts must match the reported unit
-
-**Status:** active | **Created:** 2026-05-25
-**Incident count:** 2 | **Latest occurrence:** 2026-08-10
-
-**What happened:** During the gruff documentation pass on `src/cli/audit/harness/check-verification.ts`, the focused evidence-before-claims test failed because the fixture expected `4 present instruction file` even though Codex and Antigravity both pointed at the same `AGENTS.md`. The harness reported the correct deduplicated count: 3 unique present instruction files.
-
-**Root cause:** The assertion counted agent profiles, while the check reports unique instruction-file paths. Shared instruction files make those units diverge.
-
-**Prevention:** In harness tests, name and assert the reported unit explicitly: profiles, unique files, findings, or checks. When a fixture deliberately maps multiple agents to the same instruction file, document that duplicate-path case next to the fixture helper. Evidence anchors: `test/unit/audit-harness/check-evidence-before-claims.test.ts` (search: `unique present instruction files`), `src/cli/audit/harness/check-verification.ts` (search: `instructionFilePaths`), `test/fixtures/evidence-before-claims.ts` (search: `antigravity: "AGENTS.md"`).
-
-**Recurrence (2026-08-10):** A migrated Gruff result fixture asserted only the first finding code. Replacing that partial check with the complete user-visible code list failed because the analyzer envelope also carries `naming.short`. The expected result now enumerates both findings, so a missing or extra detail row is visible. Evidence anchors: `test/integration/hook-provider-contracts.test.ts` (search: `expectedFindingCodes`) and `test/integration/gruff-code-quality-smoke.helpers.ts` (search: `FINDING_GRUFF_CONTRACT_ENVELOPE`).
-
-## Lesson: Validators can require explicit inventories and phrases despite README pointers
-
-**Status:** active | **Created:** 2026-05-24
-
-**What happened:** Replacing explicit playbook filenames in `.goat-flow/architecture.md` with a README pointer failed `skill-playbook-inventory-drift`; replacing instruction Key Resources examples with only an index pointer then failed `Instruction parity`.
-
-**Root cause:** I optimized for low-drift prose before reading the validators that require direct filenames and phrases.
-
-**Prevention:** Before replacing explicit inventories or required phrases with index pointers, grep content-quality, factual-drift, parity, and preflight checks. If a validator checks direct filename or phrase inclusion, keep the explicit text and add the index pointer around it. Evidence anchors: `src/cli/audit/check-factual-semantic-drift.ts` (search: `driftSkillPlaybookInventory`), `scripts/check-instruction-parity.mjs` (search: `tool-playbook Key Resources`).
-
----
-
 ## Lesson: Header-only edits leave bodies contradicting the new scope
 
-**Status:** active | **Created:** 2026-05-16 | **Incident count:** 3 | **Latest occurrence:** 2026-08-09
+**Status:** active | **Created:** 2026-05-16 | **Incident count:** 4 | **Latest occurrence:** 2026-08-16
 
 **What happened:** I updated status/dependency headers across several milestone files and reframed M11, but left body sections, deferred items, field names, and one filename contradicting the new scope. Review caught doc-only milestones still requiring code helpers, stale dependencies, an old `confidence` field, and an abandoned filename.
 
@@ -110,7 +57,9 @@ last_reviewed: 2026-08-10
 
 **Recurrence 2026-08-09:** The revised analysis-derived roadmap passed strict plan validation with zero exporter warnings, but a cold-start path-and-anchor audit found that M06 named `runConfiguredHookCommandSmoke`, which does not exist in the current deny-runtime source. The plan now uses the live `verifyConfiguredHookRuntime` anchor. The first lesson draft then failed learning-loop validation because it cited the gitignored roadmap as durable evidence; the retained evidence points only to tracked source. Evidence anchor: `src/cli/audit/check-agent-deny-runtime.ts` (search: `verifyConfiguredHookRuntime`).
 
-**Prevention:** After adding or changing a milestone, re-read the whole file, grep old-scope keywords, check the filename, compare every named field with its live schema, resolve shared write paths into dependency headers, and require every command to be literal or name the task that creates it. Re-verify time-sensitive platform premises against current primary documentation and the installed version. Run structural plan validation last; it proves shape and arithmetic, not semantic executability. In closeout, list what changed in each touched milestone so reviewers can target the same surfaces. Evidence anchors: `.goat-flow/skill-docs/skill-conventions.md` (search: `Task Tracking`), `src/cli/quality/schema-types.ts` (search: `QUALITY_EVIDENCE_METHODS`), and `workflow/skills/reference/skill-preamble.md` (search: `Report-Only Skill Contract`). External platform evidence: [Claude Code hooks reference](https://code.claude.com/docs/en/hooks) (search: `Hooks in skills and agents`).
+**Recurrence 2026-08-16:** Reforecasting M04 changed its calibrated centre from 45 to 47 minutes in `Forecast basis` and `Forecast range`, but left the `Effort estimate` and checklist totals at 45. Strict plan validation rejected the two conflicting centres before product work began. Aligning the headline split and one product and proof estimate restored one auditable forecast. Evidence anchor: `src/cli/plans-check.ts` (search: `must equal the Effort estimate total`).
+
+**Prevention:** After adding or changing a milestone, re-read the whole file, grep old-scope keywords, check the filename, compare every named field with its live schema, resolve shared write paths into dependency headers, and require every command to be literal or name the task that creates it. A reforecast updates the basis, range, headline split, and per-item estimates together before strict validation. Re-verify time-sensitive platform premises against current primary documentation and the installed version. Run structural plan validation last; it proves shape and arithmetic, not semantic executability. In closeout, list what changed in each touched milestone so reviewers can target the same surfaces. Evidence anchors: `.goat-flow/skill-docs/skill-conventions.md` (search: `Task Tracking`), `src/cli/plans-check.ts` (search: `must equal the Effort estimate total`), `src/cli/quality/schema-types.ts` (search: `QUALITY_EVIDENCE_METHODS`), and `workflow/skills/reference/skill-preamble.md` (search: `Report-Only Skill Contract`). External platform evidence: [Claude Code hooks reference](https://code.claude.com/docs/en/hooks) (search: `Hooks in skills and agents`).
 
 ---
 
@@ -128,28 +77,6 @@ last_reviewed: 2026-08-10
 
 ---
 
-## Lesson: Behavior-scope changes need assertion updates before the first focused run
-
-**Status:** active | **Created:** 2026-05-04
-
-**What happened:** Behavior changes left adjacent assertions pinned to old flags, phrases, counts, routes, or errors, so focused checks failed only after implementation.
-
-**Root cause:** I changed the contract and obvious test without grepping every encoded form of the old behavior.
-
-**Prevention:** Before the first focused run, grep implementation and adjacent tests for old flags, phrases, counts, routes, and errors; include install/round-trip suites when generated config shape changes. Update those assertions with the behavior. Evidence anchors: `src/cli/server/terminal.ts` (search: `initialInput`), `test/integration/audit-drift.test.ts` (search: `expectedDeprecatedHookComparisons`), `test/contract/skill-hardening-shared-1.test.ts` (search: `carries explicit build intent through planning into ordinary ACT`), `test/unit/evidence-envelope.test.ts` (search: `keeps append failures non-fatal`).
-
-**Recurrence (2026-07-19):** A path-safe evidence diagnostic replaced raw OS errors, but the adjacent non-fatal assertion still accepted only the old error forms; the first focused GREEN run stopped at 117/118.
-
-**Latest recurrence (2026-07-29):** A newly authored contract regex pinned capitalized `Honor \`Depends on\`` from memory after an edit earlier in the same session had folded it to lowercase `honor`; the first full run failed the new test. Grep current file text before encoding an assertion, even for text written earlier the same session.
-
-**Latest recurrence (2026-08-01):** M03's first RED used heading helpers at the wrong Markdown levels, and a later GREEN assertion treated `same-file` capitalization as semantic. Re-reading the helper contract produced the genuine four-failure RED; matching prose case-insensitively removed the false GREEN failure. Validate assertion machinery before accepting RED, and copy exact source text unless case is intentionally irrelevant.
-
-**Latest recurrence (2026-08-03):** The active Timing Receipt regression correctly failed strict validation, but its new assertion guessed `duplicate segment id M01-S01` instead of copying the parser's emitted `timing receipt segment ids must be unique`. The focused run stopped at 62/63 despite correct product behaviour. Run the reproduction once or inspect the parser warning before pinning diagnostic text; do not invent a more specific contract than the implementation emits.
-
-**Latest recurrence (2026-08-06):** Replacing Copilot's `Get-Command bash` fallback with the shared Node launcher cleared the focused registrar and drift suites, but the full installer matrix still required the retired PowerShell marker in two cases. The corrected assertion now requires `run-with-bash.mjs` and rejects `Get-Command bash`. Evidence anchors: `test/integration/setup-install-agent-matrix.test.ts` (search: `must use the managed Bash resolver`) and `src/cli/server/agent-hook-writer.ts` (search: `powershell: crossPlatformCommand`).
-
----
-
 ## Lesson: Defensive session rechecks can conflict with TypeScript narrowing
 
 **Status:** active | **Created:** 2026-05-09
@@ -158,7 +85,7 @@ last_reviewed: 2026-08-10
 
 **Root cause:** Treated a defensive runtime status check as free inside a narrowed synchronous scope. TypeScript correctly rejected a comparison that could not happen in that scope.
 
-**Fix:** Capture stable session resources after the initial guard (`const pty = session.pty`) and keep the synchronous chunk write loop free of repeated status predicates. Evidence anchors: `src/cli/server/terminal.ts` (search: `const pty = session.pty`), `src/cli/server/terminal.ts` (search: `chunkTerminalInput`).
+**Fix:** Capture stable session resources after the initial guard (`const pty = this.session.pty`) and keep the synchronous chunk write loop free of repeated status predicates. Evidence anchors: `src/cli/server/terminal.ts` (search: `class InitialPromptDelivery`), `src/cli/server/terminal.ts` (search: `chunkTerminalInput`).
 
 ---
 
@@ -177,27 +104,6 @@ last_reviewed: 2026-08-10
 
 ---
 
-## Lesson: New validators must run against the live repo before closeout
-
-**Status:** active | **Created:** 2026-04-29
-**Incident count:** 5 | **Latest occurrence:** 2026-08-05
-
-**What happened:** M06 added decision-file validation and the fixture tests passed, but the first live `node --import tsx src/cli/cli.ts stats . --check` run failed against existing ADR files and one stale lesson reference.
-
-**Root cause:** Treated fixture coverage as enough proof for a repository-wide validator. The new rule was correct, but the live repo contained older records that predated the stricter contract.
-
-**Fix:** After adding any validator that scans a project-wide artifact directory, run it against the live repository before the milestone gate and budget time for the live cleanup it exposes.
-
-**Recurrence (2026-07-13):** M07 ownership fixtures passed focused manifest tests, but full preflight found three packaged-mode `ManifestJson` fixtures that omitted the new required `file_ownership` contract. It also caught ESLint complexity and Knip exports outside the focused commands. After a manifest schema change, grep every `ManifestJson` fixture and run the full static/test gate, not only the new validator suite. Evidence anchors: `test/unit/packaged-install.test.ts` (search: `file_ownership`), `src/cli/manifest/manifest-json.ts` (search: `OWNERSHIP_EVIDENCE_FINDERS`).
-
-**Recurrence (2026-08-03):** Compact-review, config, and version regressions reported 75 passing focused tests, but repository preflight still failed because `validateIntegrity` exceeded the ESLint complexity limit and three touched TypeScript files were not Prettier-clean. The compact branch moved to `validateCompactIntegrity`, and only the three reported files were formatted before rerunning the focused and full gates. Evidence anchors: `src/cli/review-validate-integrity.ts` (search: `function validateCompactIntegrity`) and `scripts/preflight-checks.sh` (search: `TypeScript`).
-
-**Recurrence (2026-08-05):** Focused validator suites passed before direct ESLint found three touched functions above the complexity ceiling. After extracting the parsing helpers, the full formatter still rejected the new Setext regression layout, and the live content audit found two stale semantic anchors in the learning-loop edits. The work returned to implementation after each failure and reran the failed gate before continuing. Evidence anchors: `src/cli/audit/check-content-quality.ts` (search: `parseAtxHeading`), `test/unit/check-content-quality.test.ts` (search: `closes readiness before scanning a setext heading title`), and `scripts/preflight-checks.sh` (search: `TypeScript`).
-
-**Recurrence (2026-08-05):** The first final goat-review draft summarized adjudication totals in its Review Integrity evidence and verdict fields, but the live `review validate` command correctly rejected those counts because only one current finding was visible. It also rejected `source=PR#57` because the canonical authority grammar requires `source=PR #57`. The report returned to drafting with visible-finding counts and the canonical scope spelling before delivery. Evidence anchors: `src/cli/review-validate-integrity.ts` (search: `Counts are cross-checked against the findings actually present`) and `src/cli/review-validate-common.ts` (search: `export const SCOPE_SNAPSHOT`).
-
----
-
 ## Lesson: Agent doesn't tick milestone checkboxes (recurrence x4, unresolved)
 
 **Status:** active | **Created:** 2026-03-31 | **Recurrences:** M1 (2026-03-31), M29 (2026-04-04), M32 (2026-04-05), M08 (2026-04-07)
@@ -208,31 +114,23 @@ last_reviewed: 2026-08-10
 
 **Why stronger rules haven't worked:** Each recurrence added a stronger prevention rule. M1: "tick immediately." M29: "FIRST action must be editing the milestone file." M32: "before doing anything else." All failed because documentation-level enforcement does not work for this pattern - the forcing function competes with whatever the agent wants to do next, and loses.
 
-**Mechanical enforcement was tried and withdrawn (do not re-propose it blind).** ADR-038 (search: `Plan Checkbox Guard`) shipped `plan-checkbox-guard.sh` as a Claude-only Stop hook in v1.12.0 - exactly the "hook or gate" this lesson asks for. ADR-039 (search: `Remove Plan Checkbox Guard`) removed it one day later in v1.12.1: the reminder cost default Stop surface, dashboard hook list, installer/config schema, manifest, and audit fixtures, while non-Claude Stop delivery stayed unverified and stale registrations could keep invoking a deleted script. ADR-039 also explicitly rejected swapping in a replacement reminder immediately, because that "risks rebuilding the same plan-state heuristics under a new name" - a replacement needs its own plan.
+**Mechanical enforcement was tried and withdrawn (do not re-propose it blind).** ADR-037 (search: `shipped and reverted`) shipped `plan-checkbox-guard.sh` as a Claude-only Stop hook in v1.12.0 - exactly the "hook or gate" this lesson asks for. ADR-037 (search: `tombstone only`) removed it one day later in v1.12.1: the reminder cost default Stop surface, dashboard hook list, installer/config schema, manifest, and audit fixtures, while non-Claude Stop delivery stayed unverified and stale registrations could keep invoking a deleted script. ADR-037 also explicitly rejects swapping in a replacement reminder immediately, because that "risks rebuilding the same plan-state heuristics under a new name" - a replacement needs its own plan.
 
-**Status:** Unresolved, and deliberately so. The gap is real but the obvious fix has already been paid for once and reverted. Any new proposal must start from ADR-039's rejection list and show what it does differently - not restate "needs a hook."
-
----
-
-## Lesson: Heading regexes can silently truncate router-table checks
-
-**Status:** active | **Created:** 2026-04-03 | **Last recurrence:** 2026-07-18
-
-**What happened:** Tightened `2.4.3` to parse the Router Table directly, but the first extractor used a multiline regex with `$` in the lookahead. In JavaScript regexes, `$` under `/m` matches end-of-line, so the match stopped after the `## Router Table` heading and never included the rows below it. The new regression also referenced an undefined fixture constant, so the first focused test run broke twice before the real logic was verified.
-**Root cause:** Reached for a compact heading regex instead of reusing the repo’s line-based section parsing style, then wrote a regression that depended on a fixture helper that did not exist in that file.
-**Recurrence:** A goat-review regression read the `## Constraints` section with `readMarkdownSection`, but that helper treated a `## Constraints` heading inside the skill's fenced output template as the next real section. The test therefore reported a missing rule after the production fix was already present. Reading the full skill document exposed the false failure. Evidence anchor: `test/contract/skill-hardening-review-3.test.ts` (search: `keeps an unselected optional Spec Drift pass out of review degradation`).
-
-**Fix:** For markdown section extraction, prefer a line-based parser that tracks fenced-code state over multiline heading regexes with `$`. When the invariant is file-wide, assert against the full document instead of a section helper. For new regressions, build the smallest self-contained fixture possible unless the shared fixture object is already in scope.
+**Status:** Unresolved, and deliberately so. The gap is real but the obvious fix has already been paid for once and reverted. Any new proposal must start from ADR-037's rejection list and show what it does differently - not restate "needs a hook."
 
 ---
 
-## Lesson: Path normalization can invalidate later path-shape heuristics
+## Lesson: A full-suite result is not attributable when another session is mutating the tree
 
-**Status:** historical | **Created:** 2026-04-03 | **Reason:** Rubric check 2.4.3 no longer exists (ADR-013); normalization-invariant principle applies to any parser
+**Status:** active | **Created:** 2026-08-18
+**Decision changed:** In a checkout a second session is writing to, prove attribution from the change set and the failure message before reporting a suite result as yours or as pre-existing. Scope the claim you make to the contracts covering your files.
+**Trigger phase:** VERIFY
 
-**What happened:** After normalizing router references by trimming trailing slashes, the follow-up `2.4.3` filter still looked for the literal substring `/skills/`. That turned `.claude/skills/` into `.claude/skills`, so the canonical passing fixture dropped from `100` to `99` even though the router row was correct.
-**Root cause:** Mixed two phases of logic without rechecking the invariant after normalization. The filter assumed the original slash shape still existed after the normalizer had deliberately removed it.
-**Fix:** When a parser normalizes paths, downstream checks must use shape tests that still hold after normalization, such as segment-boundary regexes (`/\/skills(?:\/|$)/`) instead of raw substring checks that depend on trailing separators.
+**What happened:** `npm test` reported 2066 pass / 0 fail after a playbook edit, then 2069 tests with 3 failures a few minutes later. The suite had grown by three tests and gained failures without my change set growing. `git diff --name-only test/` was useless for attribution because it returned the union of my one edited test file and eleven the other session had modified. Reading the failure messages settled it: both traceable failures asserted `REQUIRED_GOAT_FLOW_GITIGNORE_PATTERNS must match workflow/setup/reference/goat-flow-gitignore`, and both that template and `.goat-flow/.gitignore` were modified in the tree by the other session's ignore-aware-search work. My six-file change set touched no gitignore.
+
+**Root cause:** I reached for a whole-repo gate as the proof of a scoped change. In a shared checkout the suite measures the tree, not the diff, so its result carries another session's in-flight state. `git status` and `git diff` describe the working tree the same way, so neither separates authorship.
+
+**Prevention:** Keep a written list of the files you actually edited; that list, not `git diff`, is your change set. Prove a failure is not yours by reading its assertion and showing it names a file outside that list - a filename overlap is not proof either way, since one test file can hold both a failing gitignore assertion and an unrelated reference to your files. Run the focused contracts covering your change as the gate you claim, and report the full-suite number separately with its attribution stated. Never `git stash` to isolate; a second session can commit between the stash and the pop. Related: [[Parallel sessions need concurrency-safe file patterns]] covers write contention on the same files, which is a different failure from this one.
 
 ---
 
@@ -251,14 +149,53 @@ last_reviewed: 2026-08-10
 
 ---
 
-## Lesson: Expected classifier statuses must be captured around `set -e`
+## Lesson: Skill RED baselines must retain current owner guidance
 
-**Status:** active | **Created:** 2026-08-10
-**Decision changed:** Capture expected nonzero helper statuses before restoring shell fail-fast mode.
+**Status:** active | **Created:** 2026-08-14
+**Decision changed:** Before treating an unskilled run as evidence for a new skill, include every current owner and classify each failure against those owners before crediting the candidate.
+**Trigger phase:** VERIFY
+**Incident count:** 6
+**Latest occurrence:** 2026-08-15
+
+**What happened:** Goat-clarity candidacy runs reproduced compliant-comment churn after receiving a short project preservation rule. The first interpretation treated repetition as evidence for a code-clarity skill. The baseline had omitted the current comment and naming playbooks, including their stronger incumbent-tie rule and existing ledger/report contract, so the runs measured reduced-context instruction adherence rather than whether a new skill outperformed ordinary ACT plus its owners.
+
+**Root cause:** “Without the candidate skill” was treated as “with only a distilled fixture rule.” That removed both the proposed artifact and the existing alternative, making the counterfactual unfair. Repeated failure cannot establish artifact need when the comparison baseline is weaker than the shipped route.
+
+**Recurrence (2026-08-15, complete-owner transport):** A compact PR baseline moved fixture sealing out of the evaluator but placed all nine current owners into one orchestration result. Both fresh evaluators received a truncated `gruff-code-quality.md` and omitted outputs for the remaining five owners, even though the nested reads requested larger output budgets. They stopped before reading either PR. The two runs were transport failures, not RED: configuring complete reads is not evidence that the evaluator received them.
+
+**Recurrence (2026-08-15, immutable PR range):** A merged-pull-request fixture trusted the live `base.sha` in closed-PR metadata after the base branch had advanced. The resulting local range contained hundreds of paths while the pull request's `/files` endpoint contained only the original handful, so the first seal described the branch's later history instead of the reviewed change. The fixture was rejected and rebuilt from immutable commit-graph evidence; its sorted local path manifest then matched `/files` exactly.
+
+**Recurrence (2026-08-15, end-to-end context capacity):** Immediate per-file delivery proved that every owner reached a fresh evaluator without truncation, but one complete run still exhausted the model context during its fifth call after adding the selected diff, full source, learning entries, consumers, and verification output. Transport completeness is not end-to-end evaluability. After a probe passes, the worst-case RED fixture must still finish inside the same context and call budget before its result can count.
+
+**Recurrence (2026-08-15, mixed score ledgers):** Two isolated U-selector baselines received all nine owners and completed within their call caps. Both actors selected, contained, and reconciled the intended paths, but they also rewrote a compliant control. Their verifiers placed preservation beside candidate workflow rows and returned one overall failure. The host initially recorded candidate reproduction `1/2`; re-reading the frozen classification showed that comment churn was owner noncompliance and every candidate-only row had passed. Work stopped before recording `2/2`, and the receipt was corrected to `0/2`.
+
+**Prevention:** Freeze the baseline-owner manifest before RED. Give evaluators the same current instructions, playbooks, and routing an ordinary run would receive; remove only the candidate artifact. Prove delivery with per-file completion markers at the exact baseline volume before dispatch; a requested output budget or successful nested command is not proof that the parent evaluator received every byte. Then run one end-to-end capacity probe with the full diff, source, learning, consumer, and verification volume; owner-only transport proof is insufficient. For pull-request fixtures, freeze immutable comparison commits and require the sorted local diff-path manifest to equal the authenticated `/files` result before dispatch; a closed PR's current base-branch pointer is not sufficient evidence. If the five-call constraint cannot carry the complete baseline through a separately verified end-to-end run, stop candidacy instead of scoring reduced context. Before scoring, map every failed row back to that manifest: violating an already-loaded owner's gate or output remains owner noncompliance even when it repeats. Preserve omitted-owner or loaded-owner noncompliance as fixture evidence, but credit only a candidate-owned failure toward candidacy. Require separate owner, candidate, and infrastructure verdicts before any overall result. A candidate verdict must cite one exact candidate-only clause; a generic failure is insufficient. Evidence anchors: `AGENTS.md` (search: `Sub-agents: ONE objective`), `.goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md` (search: `Current constraints`), `.goat-flow/skill-docs/playbooks/code-comments.md` (search: `tie goes to the incumbent`), `.goat-flow/skill-docs/playbooks/naming-and-placement.md` (search: `Reconcile work using one unit per equation`), and `.goat-flow/learning-loop/decisions/ADR-009-skill-consolidation.md` (search: `prefer modes inside an existing skill`).
+
+---
+
+## Lesson: Finalized timing receipts require their parsed summaries
+
+**Status:** active | **Created:** 2026-08-14
+**Decision changed:** Finalize milestone timing through the plans-time command; when repairing a receipt manually, reconcile both summary lines before claiming measured Actual.
 **Trigger phase:** VERIFY
 
-**What happened:** Gruff range classification correctly returned distinct statuses for deletion-only and unavailable hunks, but the legacy caller assigned the result under `set -e`. The shell exited with status 10 or 11 before the existing fail-soft skip branch ran.
+**What happened:** A milestone's segment table, receipt state, and measured Actual were finalized by hand, but the first strict completion check rejected them. The receipt omitted the `Recorded seconds` and `Allocated minutes` lines, so the parser had no summary object against which to validate the Actual claim. After those lines were added, the next check rejected a manually rounded category split that did not follow the canonical largest-remainder allocation.
 
-**Root cause:** I added meaningful nonzero returns to a shared helper without auditing every caller for shell error-mode semantics. A command substitution assignment is still a failing command under `set -e`.
+**Root cause:** The visible segment arithmetic was treated as the whole embedded receipt, then category minutes were rounded by intuition. The strict checker requires both canonical parsed summaries and its deterministic allocation; a complete-looking table alone is insufficient evidence for measured Actual.
 
-**Prevention:** When a shell helper uses nonzero statuses as data, wrap each call in `set +e`, capture `$?` immediately, restore `set -e`, and test the top-level script exit as well as its message. Evidence anchors: `workflow/hooks/gruff-code-quality.sh` (search: `range_status=$?`) and `test/integration/gruff-code-quality-smoke.test.ts` (search: `does not print whole-file findings when no changed range is available`).
+**Prevention:** Use `plans time stop <milestone> --finalize` for normal closure. If manual recovery is necessary, compare the receipt with the canonical rendered shape, derive rather than eyeball the largest-remainder split, and rerun strict validation after the terminal status change. Evidence anchors: `docs/cli.md` (search: `plans time stop .goat-flow/plans/<active>/M01-example.md --finalize`), `src/cli/plans-time-receipt.ts` (search: `Compare rounded total, category sum, and largest-remainder allocation`), and `src/cli/plans-check.ts` (search: `measured Actual requires a finalized embedded Timing Receipt`).
+
+---
+
+## Lesson: Proof gates must distinguish execution, mode, and semantic outcome
+
+**Status:** active | **Created:** 2026-08-17
+**Decision changed:** Accept a verification result only after confirming the command executed, selected the intended mode, and asserted the behavior rather than a shared keyword.
+**Trigger phase:** VERIFY
+**Incident count:** 1 | **Latest occurrence:** 2026-08-17
+
+**What happened:** M39 verification exposed three false-proof shapes in one pass. A negative regex for the unsafe rewrite instruction also rejected the safe sentence “does not rewrite them automatically.” A command that piped audit JSON into inline Node was blocked before either parallel check ran. The direct retry exited zero but omitted `--harness`; its JSON explicitly said `"harness": false` and carried no harness scope, so it had not exercised `settings-rules-matched`.
+
+**Root cause:** I treated a matched token and a zero exit as proof without first checking whether the assertion distinguished safe from unsafe prose, whether the hook allowed the command to execute, or whether the output identified the intended CLI mode.
+
+**Prevention:** Pin negative assertions to the complete unsafe instruction while positively requiring the safe replacement. Treat a hook block as no execution evidence and switch to an allowed data tool or file-redirection shape before rerunning. For mode-gated CLI proof, assert the mode sentinel and the target result row before accepting exit zero. Evidence anchors: `test/unit/audit-harness/settings-rules-matched.test.ts` (search: `offers deliberate review instead of an automatic rewrite`), `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Pipe to interpreter`), `src/cli/cli.ts` (search: `--harness`), and `src/cli/audit/audit.ts` (search: `harness: options.harness`).

@@ -1,8 +1,8 @@
 /**
  * Context concern: Is the agent's map accurate and structurally complete?
- * 5 deterministic checks (instruction size, execution loop, doc paths,
- * instruction sections, boundary guidance). Content-quality judgments (e.g. footgun evidence
- * currency) live in the `quality` assessment prompt, not here.
+ *
+ * 5 deterministic checks (instruction size, execution loop, doc paths, instruction sections, boundary guidance).
+ * Content-quality judgments (e.g. footgun evidence currency) live in the `quality` assessment prompt, not here.
  */
 import type {
   AuditContext,
@@ -57,9 +57,8 @@ interface DocPathResolution {
 /**
  * Mutable aggregate carried across router, architecture, and core-doc checks.
  *
- * Contract: counts and finding lists only accumulate as doc sources are scanned -
- * nothing resets between checks - and `hasHardFailure` latches true to force a
- * failing result even when every counted path resolves.
+ * Contract: counts and finding lists only accumulate as doc sources are scanned - nothing resets between checks - and `hasHardFailure` latches true
+ * to force a failing result even when every counted path resolves.
  */
 interface DocPathAccumulator {
   totalPaths: number;
@@ -314,8 +313,8 @@ function isGitignoredLocalStatePath(path: string): boolean {
 /**
  * Resolve one backtick path reference from a documentation file.
  *
- * Line-number tokens report as unresolved even when the base file exists
- * because semantic anchors are the durable contract for learning-loop docs.
+ * It reads the target project to test each reference, and reports a line-number token as unresolved even when the base file exists, because
+ * semantic anchors are the durable contract for learning-loop docs.
  */
 function resolveDocPath(
   ctx: AuditContext,
@@ -342,6 +341,7 @@ function resolveDocPath(
 
 /**
  * Count resolved paths from one source file while preserving all diagnostics.
+ * It reports every unresolved reference by name rather than summarising them, because the contract is that a user can act on each broken path.
  *
  * @param ctx - audit context whose filesystem resolves the target project
  * @param source - file that contained the backtick path references
@@ -370,7 +370,13 @@ function countResolvedPaths(
   return { resolved, findings, unresolved };
 }
 
-/** Mutate the doc-path accumulator with one source file's resolution result. */
+/**
+ * Fold one source file's resolution result into the running totals, and reports its unresolved references alongside them.
+ *
+ * @param accumulator - running doc-path totals and findings, mutated in place
+ * @param pathCount - how many references that source file contained
+ * @param resolution - resolution outcome for those references
+ */
 function addDocPathResolution(
   accumulator: DocPathAccumulator,
   pathCount: number,
@@ -382,7 +388,12 @@ function addDocPathResolution(
   accumulator.unresolved.push(...resolution.unresolved);
 }
 
-/** Mutate the accumulator with router-table paths already collected from agent facts. */
+/**
+ * Fold the router-table paths already gathered per agent into the running totals, and reports each unresolved entry.
+ *
+ * @param ctx - audit context supplying the per-agent facts
+ * @param accumulator - running doc-path totals and findings, mutated in place
+ */
 function collectRouterDocPaths(
   ctx: AuditContext,
   accumulator: DocPathAccumulator,
@@ -403,7 +414,12 @@ function collectRouterDocPaths(
   }
 }
 
-/** Mutate the accumulator with architecture.md path checks and its pass diagnostic. */
+/**
+ * Fold the architecture document's path references into the running totals, and reports a missing architecture file as a hard failure.
+ *
+ * @param ctx - audit context supplying the target filesystem and facts
+ * @param accumulator - running doc-path totals and findings, mutated in place
+ */
 function collectArchitectureDocPaths(
   ctx: AuditContext,
   accumulator: DocPathAccumulator,
@@ -446,11 +462,11 @@ function collectCoreDocPaths(
 /**
  * Consolidate router, architecture, and core-doc path validation.
  *
- * This reads only the audited project's filesystem and reports diagnostics
- * instead of throwing because context integrity should return every stale path
- * in one pass. The shape is branch-heavy to preserve the old check boundaries:
- * router-table paths, architecture presence, architecture refs, and curated
- * docs all feed one dashboard detail payload.
+ * This reads only the audited project's filesystem and reports diagnostics instead of throwing because context integrity should return every stale
+ * path in one pass.
+ *
+ * The shape is branch-heavy to preserve the old check boundaries: router-table paths, architecture presence, architecture refs, and curated docs all
+ * feed one dashboard detail payload.
  */
 function checkAllDocPaths(ctx: AuditContext) {
   const accumulator: DocPathAccumulator = {

@@ -1,7 +1,6 @@
 /**
  * Dashboard shell and static-asset loaders.
- * These helpers keep file-resolution and asset-shape validation out of the
- * main HTTP server so route code can stay focused on request handling.
+ * These helpers keep file-resolution and asset-shape validation out of the main HTTP server so route code can stay focused on request handling.
  */
 import { readFileSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -35,8 +34,8 @@ const dashboardAssetCache = new Map<string, CachedDashboardAsset>();
 
 /**
  * Replace `<!-- include: path -->` markers with fragment file contents.
- * Uses a recover fallback for missing fragments by embedding an HTML error comment so the
- * dashboard shell still loads and the broken include is visible in source.
+ * Uses a recover fallback for missing fragments by embedding an HTML error comment so the dashboard shell still loads and the broken include is
+ * visible in source.
  *
  * @param shellPath - dashboard shell HTML file to assemble
  * @returns assembled dashboard HTML with one-level includes expanded

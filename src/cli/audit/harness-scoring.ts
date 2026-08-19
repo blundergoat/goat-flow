@@ -1,13 +1,14 @@
 /**
  * Turns individual harness check results into the five concern scores a user reads.
- * This is the scoring model behind an audit report: it decides whether a failed check blocks
- * the concern or merely lowers its score, folds in repair steps, and records the caveats that
- * stop a green concern from being mistaken for a stronger guarantee than it is.
  *
- * The distinction that matters to the reader is check type. Integrity checks are required
- * setup and a failure means something is genuinely missing; advisory checks can be knowingly
- * acknowledged and stay visible without failing; metric checks only move the number. Keeping
- * that split here means the report can never quietly promote a score-only gap into a failure.
+ * This is the scoring model behind an audit report: it decides whether a failed check blocks the concern or merely lowers its score, folds in repair
+ * steps, and records the caveats that stop a green concern from being mistaken for a stronger guarantee than it is.
+ *
+ * The distinction that matters to the reader is check type.
+ * Integrity checks are required setup and a failure means something is genuinely missing; advisory checks can be knowingly acknowledged and stay
+ * visible without failing; metric checks only move the number.
+ *
+ * Keeping that split here means the report can never quietly promote a score-only gap into a failure.
  */
 import { labelEvidencePathBases } from "./audit-provenance.js";
 import type {
@@ -21,19 +22,21 @@ import type {
 
 /**
  * Decide how one check result should look on screen and whether it blocks the audit.
- * Use for every row the dashboard and CLI render, so the colour a user sees matches the
- * consequence: a red row is something that failed their audit, an amber one is not.
+ * Use for every row the dashboard and CLI render, so the colour a user sees matches the consequence: a red row is something that failed their audit,
+ * an amber one is not.
  *
  * @param status - what the check reported for this project
  * @param type - the check's kind; metric checks only move the score, never the verdict
  * @param acknowledged - whether the user opted out of this advisory in their config;
  *   defaults to false, meaning an unacknowledged failure still blocks
+ * @param failureImpact - explicit score-only override for a non-blocking advisory
  * @returns the display status and impact used to render and score the row
  */
 export function classifyCheckImpact(
   status: CheckResult["status"],
   type: CheckResult["type"],
   acknowledged = false,
+  failureImpact?: HarnessCheck["failureImpact"],
 ): Pick<CheckResult, "displayStatus" | "impact"> {
   if (status === "skipped") return { displayStatus: "skipped", impact: "none" };
   if (status === "pass") {
@@ -42,7 +45,7 @@ export function classifyCheckImpact(
       impact: "none",
     };
   }
-  if (type === "metric" || acknowledged) {
+  if (type === "metric" || acknowledged || failureImpact === "score-only") {
     return { displayStatus: "warn", impact: "score-only" };
   }
   return { displayStatus: "fail", impact: "scope-fail" };
@@ -63,6 +66,14 @@ function explainHarnessFailure(
     };
   }
   if (check.type !== "advisory") return failure;
+  if (check.failureImpact === "score-only") {
+    return {
+      ...failure,
+      evidence: acknowledged
+        ? `Advisory (acknowledged via harness.acknowledge: [${check.id}]; score-only and does not fail audit status).`
+        : "Advisory (score-only; lowers the concern score but does not fail audit status).",
+    };
+  }
   return {
     ...failure,
     evidence: acknowledged
@@ -73,8 +84,8 @@ function explainHarnessFailure(
 
 /**
  * Convert a harness check and its result into the row a user sees in the report.
- * Use when building scope output, so each check carries its own display status and, when it
- * failed, wording that says whether the failure actually blocks them.
+ * Use when building scope output, so each check carries its own display status and, when it failed, wording that says whether the failure actually
+ * blocks them.
  *
  * @param check - the registered check being reported
  * @param result - what that check found on this project
@@ -98,7 +109,12 @@ export function toCheckResult(
       : undefined;
 
   const failure = explainHarnessFailure(check, baseFailure, acknowledged);
-  const impact = classifyCheckImpact(result.status, check.type, acknowledged);
+  const impact = classifyCheckImpact(
+    result.status,
+    check.type,
+    acknowledged,
+    check.failureImpact,
+  );
 
   return {
     id: check.id,
@@ -118,8 +134,7 @@ export function toCheckResult(
 
 /**
  * Start one concern at zero before any check has reported into it.
- * Use once per concern at the top of a run, so a project with no applicable checks scores
- * zero rather than inheriting a passing look it never earned.
+ * Use once per concern at the top of a run, so a project with no applicable checks scores zero rather than inheriting a passing look it never earned.
  *
  * @returns a fresh concern with empty finding, limit, and remediation lists; empty lists mean
  *   nothing has been observed yet, not that the concern was proven clean
@@ -165,8 +180,8 @@ export function addUniqueConcernLimit(
 
 /**
  * Explain what perfect structural scores still did not prove for the audit reader.
- * Use at the end of a run, so a user seeing five green concerns is told plainly that the
- * audit inspected configuration rather than running their build, tests, or recovery flow.
+ * Use at the end of a run, so a user seeing five green concerns is told plainly that the audit inspected configuration rather than running their
+ * build, tests, or recovery flow.
  *
  * @param concerns - the five concerns about to be shown; each gains the caveats that apply
  *   to it, and a concern that already failed keeps its findings as the louder signal
@@ -235,8 +250,8 @@ function applyAdvisoryCheck(
 
 /**
  * Fold one check result into the concern score the user reads.
- * This is where a finding either blocks the concern or only moves its number, so it decides
- * whether the user is told "this is missing" or "this could be better".
+ * This is where a finding either blocks the concern or only moves its number, so it decides whether the user is told "this is missing" or "this could
+ * be better". It reports a blocking failure by marking the concern failed, never by throwing.
  *
  * @param concern - the concern accumulating this check's outcome
  * @param check - the check being applied; its type decides whether a failure can block
@@ -267,17 +282,17 @@ export function applyCheckToConcern(
   } else {
     applyAdvisoryCheck(concern, result, acknowledged);
   }
-  // Unacknowledged failures stop a user from treating the concern as configured correctly.
+  // Unacknowledged failures keep their remediation visible even when they are score-only.
   if (result.status === "fail" && !acknowledged) {
-    concern.status = "fail";
     addRemediation(concern, result);
+    if (check.failureImpact !== "score-only") concern.status = "fail";
   }
 }
 
 /**
  * Render a check that did not apply to this project rather than hiding it.
- * Use when scope rules exclude a check, so the user sees it was considered and skipped
- * instead of wondering why their report is shorter than someone else's.
+ * Use when scope rules exclude a check, so the user sees it was considered and skipped instead of wondering why their report is shorter than someone
+ * else's.
  *
  * @param check - the check being reported as not applicable here
  * @returns a skipped row with no impact on the concern's pass or fail state

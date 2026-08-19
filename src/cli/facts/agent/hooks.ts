@@ -1,7 +1,6 @@
 /**
  * Extracts the hook facts shown by audit and dashboard status screens.
- * Use these readers when a user needs to know whether local hook files,
- * registrations, and executable policy rules provide the claimed coverage.
+ * Use these readers when a user needs to know whether local hook files, registrations, and executable policy rules provide the claimed coverage.
  */
 import type { AgentProfile, AgentFacts, ReadonlyFS } from "../../types.js";
 import {
@@ -241,17 +240,27 @@ function resolveDenyMechanismPath(agent: AgentProfile): string | null {
   return null;
 }
 
+/**
+ * List the policy files that must sit beside a deny hook for its protection to be real, so the audit reports partial guardrails as absent.
+ *
+ * @param fs - read-only view of the target project
+ * @param denyHookPath - project-relative deny hook path; null means no hook is configured and there is nothing to support
+ * @returns every required sibling, or an empty list when any one is missing, because a partial set gives the user no working policy
+ */
 function siblingGuardrailPaths(
   fs: ReadonlyFS,
   denyHookPath: string | null,
 ): string[] {
+  // Nothing registered, so there are no supporting files to report either way.
   if (!denyHookPath) return [];
+  // The current deny hook keeps its policy files at fixed paths shared by every agent.
   if (denyHookPath.endsWith("/deny-dangerous.sh")) {
     return DENY_DANGEROUS_POLICY_FILES.every((path) => fs.exists(path))
       ? DENY_DANGEROUS_POLICY_FILES
       : [];
   }
   const slash = denyHookPath.lastIndexOf("/");
+  // A bare filename gives no directory to search, so no sibling set can be confirmed.
   if (slash === -1) return [];
   const dir = denyHookPath.slice(0, slash);
   const paths = LEGACY_GUARDRAIL_HOOK_FILES.map((file) => `${dir}/${file}`);
@@ -259,9 +268,9 @@ function siblingGuardrailPaths(
 }
 
 /** Build the empty deny-hook fact object used when no deny hook is available. */
-function createEmptyDenyFacts(denyExists: boolean): HookDenyFacts {
+function createEmptyDenyFacts(hasDenyHook: boolean): HookDenyFacts {
   return {
-    denyExists,
+    denyExists: hasDenyHook,
     denyHasBlocks: false,
     denyIsConfigBased: false,
     denyUsesJq: false,
@@ -410,7 +419,7 @@ function findAbsolutePathHooks(
  * @param agent - agent profile whose hook locations and event model are being read
  * @param settingsParsed - parsed agent settings object, or null/unknown when parsing failed
  * @param hasDenyPatterns - whether settings-level deny patterns cover dangerous operations
- * @param settingsValid - whether the agent settings file parsed cleanly
+ * @param hasValidSettings - whether the agent settings file parsed cleanly
  * @returns hook facts excluding secret-pattern coverage, which settings extraction owns
  */
 export function extractHookFacts(
@@ -418,9 +427,14 @@ export function extractHookFacts(
   agent: AgentProfile,
   settingsParsed: unknown,
   hasDenyPatterns: boolean,
-  settingsValid: boolean,
+  hasValidSettings: boolean,
 ): Omit<AgentFacts["hooks"], "readDenyCoversSecrets"> {
-  const hookConfig = readHookConfig(fs, agent, settingsParsed, settingsValid);
+  const hookConfig = readHookConfig(
+    fs,
+    agent,
+    settingsParsed,
+    hasValidSettings,
+  );
   const registration = buildHookRegistration(agent, hookConfig.parsed);
   const denyHookPath = resolveDenyHookPath(fs, agent);
   const hook = analyzeDenyHookPath(fs, denyHookPath);

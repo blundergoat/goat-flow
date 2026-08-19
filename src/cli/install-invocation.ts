@@ -1,7 +1,7 @@
 /**
  * Builds the Bash command used after a user previews or starts installation.
- * Use this boundary so native Windows selects Git Bash instead of the WSL shim
- * while macOS, Linux, and WSL keep their existing installer command.
+ *
+ * Use this boundary so native Windows selects Git Bash instead of the WSL shim while macOS, Linux, and WSL keep their existing installer command.
  * Failed discovery becomes actionable admission feedback before files change.
  */
 
@@ -337,8 +337,7 @@ function standardWindowsGitBashLocations(
 
 /**
  * Find Windows-compatible Bash choices before setup reports whether installation can run.
- * PATH choices keep user preference; adjacent and standard Git installs rescue machines
- * where Windows exposes only the WSL shim.
+ * PATH choices keep user preference; adjacent and standard Git installs rescue machines where Windows exposes only the WSL shim.
  *
  * @param options - optional test inputs; empty uses the user's environment, filesystem, and PATH
  * @returns Bash paths in preference order; empty means setup must show a blocked admission result

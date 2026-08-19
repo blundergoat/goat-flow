@@ -60,6 +60,14 @@ const INSTALLED_CODE_COMMENTS = resolve(
   PROJECT_ROOT,
   ".goat-flow/skill-docs/playbooks/code-comments.md",
 );
+const TEMPLATE_NAMING_AND_PLACEMENT = resolve(
+  PROJECT_ROOT,
+  "workflow/skills/playbooks/naming-and-placement.md",
+);
+const INSTALLED_NAMING_AND_PLACEMENT = resolve(
+  PROJECT_ROOT,
+  ".goat-flow/skill-docs/playbooks/naming-and-placement.md",
+);
 const TEMPLATE_GRUFF_CODE_QUALITY = resolve(
   PROJECT_ROOT,
   "workflow/skills/playbooks/gruff-code-quality.md",
@@ -108,6 +116,14 @@ const INSTALLED_PLAYBOOK_AUTHORING_SYNC = resolve(
   PROJECT_ROOT,
   ".goat-flow/skill-docs/playbooks/skill-playbook-authoring-sync.md",
 );
+const TEMPLATE_TEST_SELECTION = resolve(
+  PROJECT_ROOT,
+  "workflow/skills/playbooks/test-selection.md",
+);
+const INSTALLED_TEST_SELECTION = resolve(
+  PROJECT_ROOT,
+  ".goat-flow/skill-docs/playbooks/test-selection.md",
+);
 const TEMPLATE_WRITING_STYLE = resolve(
   PROJECT_ROOT,
   "workflow/skills/playbooks/writing-style.md",
@@ -116,6 +132,14 @@ const INSTALLED_WRITING_STYLE = resolve(
   PROJECT_ROOT,
   ".goat-flow/skill-docs/playbooks/writing-style.md",
 );
+const ROUTED_WRITING_DIAGNOSTIC_PAIRS = [
+  "writing-sentence-diagnostics.md",
+  "writing-structure-diagnostics.md",
+].map((filename) => ({
+  filename,
+  template: resolve(PROJECT_ROOT, "workflow/skills/playbooks", filename),
+  installed: resolve(PROJECT_ROOT, ".goat-flow/skill-docs/playbooks", filename),
+}));
 const TEMPLATE_CHANGELOG = resolve(
   PROJECT_ROOT,
   "workflow/skills/playbooks/changelog.md",
@@ -237,6 +261,19 @@ describe("preamble/conventions sync: current state", () => {
     );
   });
 
+  it("template and installed naming-and-placement.md match", () => {
+    assertMirrorExists(
+      TEMPLATE_NAMING_AND_PLACEMENT,
+      INSTALLED_NAMING_AND_PLACEMENT,
+      "naming-and-placement.md",
+    );
+    assert.equal(
+      diffQuiet(TEMPLATE_NAMING_AND_PLACEMENT, INSTALLED_NAMING_AND_PLACEMENT),
+      0,
+      "naming-and-placement.md: template and installed should match",
+    );
+  });
+
   it("template and installed gruff-code-quality.md match", () => {
     assertMirrorExists(
       TEMPLATE_GRUFF_CODE_QUALITY,
@@ -319,6 +356,19 @@ describe("preamble/conventions sync: current state", () => {
     );
   });
 
+  it("template and installed test-selection.md match", () => {
+    assertMirrorExists(
+      TEMPLATE_TEST_SELECTION,
+      INSTALLED_TEST_SELECTION,
+      "test-selection.md",
+    );
+    assert.equal(
+      diffQuiet(TEMPLATE_TEST_SELECTION, INSTALLED_TEST_SELECTION),
+      0,
+      "test-selection.md: template and installed should match",
+    );
+  });
+
   // Prose-style guidance ships to consumers, so the installed copy must not drift.
   it("template and installed writing-style.md match", () => {
     assertMirrorExists(
@@ -332,6 +382,17 @@ describe("preamble/conventions sync: current state", () => {
       "writing-style.md: template and installed should match",
     );
   });
+
+  for (const pair of ROUTED_WRITING_DIAGNOSTIC_PAIRS) {
+    it(`template and installed ${pair.filename} match`, () => {
+      assertMirrorExists(pair.template, pair.installed, pair.filename);
+      assert.equal(
+        diffQuiet(pair.template, pair.installed),
+        0,
+        `${pair.filename}: template and installed should match`,
+      );
+    });
+  }
 
   it("template and installed changelog.md match", () => {
     assertMirrorExists(TEMPLATE_CHANGELOG, INSTALLED_CHANGELOG, "changelog.md");
@@ -420,9 +481,9 @@ describe("preamble/conventions sync: regression detection", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Proof Gate heading is present in both template and installed preamble (ADR-018)
+// Proof Gate heading is present in both template and installed preamble (ADR-009)
 // ---------------------------------------------------------------------------
-describe("preamble/conventions sync: Proof Gate presence (ADR-018)", () => {
+describe("preamble/conventions sync: Proof Gate presence (ADR-009)", () => {
   it("template skill-preamble.md contains '## Proof Gate' heading", () => {
     assert.equal(
       existsSync(TEMPLATE_PREAMBLE),

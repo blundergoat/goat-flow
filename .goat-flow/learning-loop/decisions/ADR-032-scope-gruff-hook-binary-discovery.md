@@ -5,7 +5,7 @@
 **Author(s):** Matthew Hansen
 **Ticket/Context:** 1.8.0 user report "F7" - gruff hook auto-executes repo-local binaries
 **Updated:** 2026-06-09 - explicit per-language analyzer binary overrides accepted for non-standard monorepos
-**Updated:** 2026-07-03 - repo-owned config override `hooks.gruff-code-quality.binaries.<lang>` in `.goat-flow/config.yaml` accepted alongside the env override (field report: healthkit's `strands_agents/.venv/bin/gruff-py` required every session to export `GRUFF_PY_BIN`)
+**Updated:** 2026-07-03 - repo-owned config override `hooks.gruff-code-quality.binaries.<lang>` in `.goat-flow/config.yaml` accepted alongside the env override because a repository-local virtual-environment analyzer otherwise required every session to export `GRUFF_PY_BIN`
 
 ## Context
 

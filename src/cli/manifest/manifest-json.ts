@@ -1,8 +1,11 @@
 /**
  * Raw manifest reader and skill-artifact schema guard.
- * Use before setup, audit, or harness code consumes workflow metadata so users
- * get precise duplicate/path errors instead of incomplete installed skills.
- * This leaf module stays outside the harness import cycle. (search: "design.circular-import")
+ *
+ * Use before setup, audit, or harness code consumes workflow metadata so users get precise duplicate/path errors instead of incomplete installed
+ * skills.
+ * This leaf module stays outside the harness import cycle.
+ *
+ * (search: "design.circular-import")
  */
 import { readFileSync } from "node:fs";
 
@@ -19,13 +22,17 @@ const FILE_OWNERSHIP_CLASSES = new Set<ManifestFileOwnership>([
 ]);
 
 /** Narrow JSON values before ownership fields are read for user-facing validation. */
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
+function isRecord(candidate: unknown): candidate is Record<string, unknown> {
+  return (
+    candidate !== null &&
+    typeof candidate === "object" &&
+    !Array.isArray(candidate)
+  );
 }
 
 /** Require visible source or generator text so operators can reproduce an ownership action. */
-function isNonEmptyString(value: unknown): value is string {
-  return typeof value === "string" && value.trim().length > 0;
+function isNonEmptyString(candidate: unknown): candidate is string {
+  return typeof candidate === "string" && candidate.trim().length > 0;
 }
 
 /** Accept only normalized repository-relative paths for managed artifact identities. */
@@ -39,10 +46,12 @@ function isSafeManifestPath(path: string): boolean {
 }
 
 /** Narrow a JSON value to one behavior the installer and manifest report understand. */
-function isFileOwnership(value: unknown): value is ManifestFileOwnership {
+function isFileOwnership(
+  candidate: unknown,
+): candidate is ManifestFileOwnership {
   return (
-    typeof value === "string" &&
-    FILE_OWNERSHIP_CLASSES.has(value as ManifestFileOwnership)
+    typeof candidate === "string" &&
+    FILE_OWNERSHIP_CLASSES.has(candidate as ManifestFileOwnership)
   );
 }
 
@@ -104,7 +113,16 @@ function ownershipSourceFinding(
   return null;
 }
 
-/** Explain missing source/generator evidence for one otherwise valid ownership record. */
+/**
+ * Explain missing source or generator evidence for one otherwise valid ownership record.
+ * Each ownership class carries its own evidence contract, so a record that names a class must also prove where the file comes from.
+ *
+ * @param artifactPath - repository-relative path named in the finding
+ * @param ownership - declared ownership class for that path
+ * @param source - declared source value; anything unusable becomes a finding rather than a silent default
+ * @param generator - declared generator value, required only by the classes whose files are produced rather than shipped
+ * @returns one finding per missing piece of evidence; empty means the record proves its own origin
+ */
 function ownershipEvidenceFindings(
   artifactPath: string,
   ownership: ManifestFileOwnership,
@@ -117,7 +135,14 @@ function ownershipEvidenceFindings(
   ].filter((finding): finding is string => finding !== null);
 }
 
-/** Validate one path record and return user-actionable schema findings. */
+/**
+ * Reports what a user must repair in one file-ownership record, so setup never acts on a record it cannot interpret.
+ *
+ * @param artifactPath - repository-relative path being described
+ * @param rawSpec - raw record from manifest JSON; a non-object cannot describe how setup should treat the file
+ * @param declaredPaths - every path the manifest currently requires or offers
+ * @returns findings for this record; empty means the record is safe to install from
+ */
 function ownershipEntryFindings(
   artifactPath: string,
   rawSpec: unknown,
@@ -227,10 +252,10 @@ function duplicateValues(values: readonly string[]): string[] {
   const duplicates = new Set<string>();
 
   // Each repeated declaration would make the installer or command owner ambiguous.
-  for (const value of values) {
+  for (const candidate of values) {
     // A second occurrence creates a duplicate users cannot distinguish during setup.
-    if (seen.has(value)) duplicates.add(value);
-    seen.add(value);
+    if (seen.has(candidate)) duplicates.add(candidate);
+    seen.add(candidate);
   }
   return [...duplicates].sort();
 }
@@ -254,7 +279,7 @@ function isCommittedSkillReference(referencePath: string): boolean {
 
 /**
  * Validate one skill's declared reference-pack entry.
- * Use so setup copies a unique, committed set of files for the named skill.
+ * Use so setup copies a unique, committed set of files for the named skill; it reports every problem as a finding and never throws.
  *
  * @param canonical - valid skill names; empty means every reference key is unknown
  * @param skillName - manifest key; empty means no skill can own the references
@@ -465,10 +490,9 @@ function instructionSectionRegex(label: string): RegExp {
  * Resolved (label, pattern) pairs built from the manifest's required_sections.
  * Harness checks import this instead of hand-rolling their own section list.
  *
- * Reads the raw manifest JSON rather than the validated/cached `loadManifest`
- * result: `required_sections` is a straight passthrough field, so the value is
- * identical, and reading it here keeps this module free of the harness-check
- * import that would re-form the cycle described in the file header.
+ * Reads the raw manifest JSON rather than the validated/cached `loadManifest` result: `required_sections` is a straight passthrough field, so the
+ * value is identical, and reading it here keeps this module free of the harness-check import that would re-form the cycle described in the file
+ * header.
  *
  * @returns One entry per required section - its manifest label and the
  *   case-insensitive heading regex used to detect it in instruction files.

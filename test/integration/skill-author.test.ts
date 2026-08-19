@@ -25,7 +25,7 @@ function makeTempProject(): string {
   return mkdtempSync(join(tmpdir(), "goat-flow-skill-author-"));
 }
 
-/** Create a symlink or skip when the host cannot build the security fixture. */
+/** Create a symlink or skip when the host cannot build the security fixture; it swallows that platform failure into a skip rather than a red test. */
 function symlinkOrSkip(
   testContext: TestContext,
   target: string,

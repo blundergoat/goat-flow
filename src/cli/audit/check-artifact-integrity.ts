@@ -1,7 +1,8 @@
 /**
  * Deterministic integrity checks for workflow skills and shared skill documents.
- * Use during `audit --check-drift` so operators see missing resources, duplicate
- * identities, and stale installed files before an agent loads incomplete guidance.
+ *
+ * Use during `audit --check-drift` so operators see missing resources, duplicate identities, and stale installed files before an agent loads
+ * incomplete guidance.
  * The checker compares canonical workflow sources with the selected project mirrors.
  */
 import { posix as pathPosix } from "node:path";
@@ -79,8 +80,10 @@ function readSkillFrontmatterName(skillMarkdown: string): string | null {
 
 /**
  * Identify an explicitly consumer-owned installed playbook.
- * Use so local playbooks created by `goat-flow skill new` do not masquerade as
- * stale package artifacts, while unmarked leftovers still fail drift checks.
+ * Use so that a playbook the user created with `goat-flow skill new` is not reported as a stale package artifact, while unmarked leftovers still
+ * fail drift checks.
+ *
+ * It swallows unreadable files and malformed frontmatter as a plain false, so a broken playbook is treated as package-owned and still audited.
  *
  * @param fs - audited project filesystem; unreadable files are not trusted as user-owned
  * @param installedPath - project-relative installed Markdown path; non-playbooks never qualify
@@ -124,8 +127,8 @@ function isUserOwnedConsumerPlaybook(
 }
 
 /**
- * Report duplicate values with all canonical locations in one actionable message.
- * Use for command or skill registries where one identifier must select one user action.
+ * Reports duplicate values with all canonical locations in one actionable message.
+ * Use for command or skill registries where one identifier must select exactly one user action.
  *
  * @param identifiers - registry values to compare; empty means there are no IDs to validate
  * @param registryPath - canonical registry shown to the operator; empty weakens evidence but remains valid text
@@ -208,8 +211,8 @@ function readCanonicalSkillIdentities(
 }
 
 /**
- * Report frontmatter names claimed by more than one canonical skill source.
- * Use after per-skill alignment so one user command never selects competing guidance.
+ * Reports frontmatter names claimed by more than one canonical skill source.
+ * Use after per-skill alignment so that one user command never selects competing guidance.
  *
  * @param identities - readable skill identities; empty means there are no names to compare
  * @returns collision findings with every canonical source; empty means all usable names are unique
@@ -261,8 +264,9 @@ function checkSkillIdentities(templateRoot: string): DriftFinding[] {
 }
 
 /**
- * Compare declared skill packs with canonical and installed Markdown file sets.
- * Use after renames/removals so neither unshipped source nor stale user guidance survives.
+ * Compare declared skill packs with canonical and installed Markdown file sets, and reports every mismatch as a finding.
+ * The three-way comparison exists because a rename can leave unshipped source on one side and stale installed guidance on the other, and only
+ * checking all three sets catches both.
  *
  * @param fs - audited project filesystem; empty mirrors produce no stale-file findings
  * @param templateRoot - package or fixture root; empty means no canonical set can be listed
@@ -325,8 +329,8 @@ function checkSkillFileSets(
 }
 
 /**
- * Compare all shared source/install Markdown with the explicit mirror map.
- * Use so adding or removing a playbook cannot leave source-only or stale installed guidance.
+ * Compare all shared source and installed Markdown with the explicit mirror map, and reports every mismatch as a finding.
+ * Use so that adding or removing a playbook cannot leave source-only or stale installed guidance behind.
  *
  * @param fs - audited project filesystem; an empty installed tree yields no stale extras
  * @param templateRoot - package or fixture root; empty means no canonical shared files can be listed

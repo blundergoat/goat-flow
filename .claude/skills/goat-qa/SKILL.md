@@ -1,7 +1,7 @@
 ---
 name: goat-qa
 description: "Use when evaluating test coverage gaps, planning test strategy, or assessing testing risk for code changes."
-goat-flow-skill-version: "1.15.1"
+goat-flow-skill-version: "1.16.0"
 ---
 # /goat-qa
 
@@ -29,8 +29,8 @@ goat-qa maps changed code or a codebase area to coverage and prioritized must/sh
 
 | Level | Meaning |
 |-------|---------|
-| NONE | No matching test file or manual plan |
-| STRUCTURAL | Imports, constructs, or snapshots only - no behaviour assertion |
+| NONE | No current automated assertion or manual plan found for the named behaviour after a bounded search |
+| STRUCTURAL | Imports, constructs, snapshots, or collaborator choreography only - no behaviour assertion |
 | PARTIAL-BEHAVIOURAL | Happy path or narrow behaviour only; error/edge paths untested |
 | BEHAVIOURAL | Meaningful output, side-effect, error-path, or invariant coverage |
 
@@ -46,6 +46,14 @@ Use this matrix in Standard and Audit modes so every risk/coverage pair lands in
 | LOW | Defer | Defer | Defer | Defer |
 
 Standard maps Blocking to Must test, High-value to Should test, and Defer to Safe to skip. Audit uses the matrix labels directly.
+
+## Test Selection Contract
+
+Before assessing a proposed or existing test, read `.goat-flow/skill-docs/playbooks/test-selection.md`. Apply its four-part value gate: plausible regression, user or business impact, current overlap and why other coverage is insufficient, and a stable observable contract. Priority and disposition are separate: the matrix says when evidence matters; the playbook says what to do with a candidate.
+
+Creation dispositions are `ADD UNIT`, `ADD INTEGRATION`, `ADD END-TO-END/MANUAL`, `SKIP`, or `UNRESOLVED`. Existing-test dispositions are `KEEP`, `CONSOLIDATE`, `MOVE LEVEL`, `PRUNE CANDIDATE`, or `UNRESOLVED`. Failing the creation gate never authorizes deletion. Unresolved evidence keeps an existing test in place and names the next check. `CONSOLIDATE` and `MOVE LEVEL` retain the original until trustworthy replacement coverage passes; `PRUNE CANDIDATE` explains why no replacement is required.
+
+Mock collaborator call counts, call order, non-calls, and simulated cooperation remain `STRUCTURAL` unless the interaction is a named public protocol; they earn no integration confidence. Prefer consolidation when nearby cases lack distinct regression stories. Every recommendation carries the playbook's compact record. goat-qa stays report-only: ordinary ACT must re-read current code and coverage before any separately approved add, move, consolidation, or prune action.
 
 ## Step 0 - Intake
 
@@ -83,7 +91,9 @@ Classify each change:
 | CRITICAL | If this breaks, users are directly affected or security is compromised | Auth logic, payment flow, data mutation, permission checks, API contracts |
 | HIGH | Business logic or integration that affects correctness | Calculations, state transitions, cross-service calls, database queries |
 | MEDIUM | Internal logic with limited blast radius | Utilities, validators, formatters, isolated components |
-| LOW | Cosmetic, config, or changes with no behavioural impact | Styling, copy, constants, type-only changes |
+| LOW | Cosmetic, config, or changes with no behavioural impact | Styling, copy, constants, private/internal type-only changes with no contract impact |
+
+**Risk precedence:** Risk follows impact, not syntax. A type-only change is LOW only when it cannot change or misrepresent a public/exported, serialized, persisted, or cross-module contract. When classifications overlap, use the higher risk.
 
 For each CRITICAL/HIGH change, trace callers, consumers, user-visible flows, downstream services, and matched footguns/lessons.
 
@@ -101,6 +111,7 @@ Compare risk and coverage bidirectionally:
 - Without one, map every changed behaviour to automated tests and flag gaps.
 - Read each matched test file and classify coverage depth; record unavailable tests in Verification Integrity.
 - Apply the exhaustive priority matrix to every changed behaviour. Blocking/High-value gaps are **Undertested risk**; evidence-backed test-to-risk mismatches are **Misaligned effort**.
+- Apply the test-selection value gate and record one creation or existing-test disposition for every recommendation; incomplete evidence is `UNRESOLVED`, not omission.
 
 For CRITICAL items with no coverage, annotate why: new path / missed coverage on existing path / hard-to-test.
 
@@ -120,10 +131,10 @@ Map each stated expectation to the code path that implements it. Gaps between in
 
 Based on the gaps, produce a focused plan and order by risk.
 
-**Must test (matrix Blocking):** table with what breaks and grounded effort estimate; if effort is unknown, write `unknown - needs harness/project context`
-**Should test if time allows (matrix High-value):** same format, lower priority
-**Safe to skip this round (matrix Defer):** name considered areas and why they can wait
-**Misaligned effort:** deprioritise plan cases not mapped to current changes
+**Must test (matrix Blocking):** value-gated recommendations with dispositions, what breaks, and grounded effort estimate; if effort is unknown, write `unknown - needs harness/project context`
+**Should test if time allows (matrix High-value):** same record, lower priority
+**Safe to skip this round (matrix Defer):** name considered areas, disposition, and why they can wait
+**Misaligned effort:** assign an evidence-backed existing-test disposition; do not turn mismatch into deletion authority
 
 **CHECKPOINT:** "Targeted testing plan ready. Want a flow diagram for any CRITICAL item?"
 
@@ -166,7 +177,7 @@ For each in-scope file:
 1. Inventory named behaviours/invariants with a code anchor and risk before coverage; CRITICAL/HIGH/MEDIUM inventory must be exhaustive.
 2. Create one row per named behaviour; files may have multiple rows/labels.
 3. Search all tests and exported-symbol references. No matching test/manual plan → coverage `NONE`.
-4. Read matches; classify assertions for that behaviour. Flag mocks/skipped integrations.
+4. Read matches; classify assertions for that behaviour. Mock choreography stays STRUCTURAL and skipped real boundaries stay explicit.
 
 A file summary cannot promote a row. BEHAVIOURAL applies only to the named behaviour/invariant actually asserted.
 
@@ -176,10 +187,10 @@ Misaligned effort is an observed test-to-risk mismatch. Evidence must show dupli
 
 Rank each behaviour row by `Risk × uncovered fraction`: CRITICAL=4, HIGH=3, MEDIUM=2, LOW=1; NONE=1.0, STRUCTURAL=0.66, PARTIAL-BEHAVIOURAL=0.33, BEHAVIOURAL=0. Output:
 
-- **Blocking gaps** - every matrix Blocking pair: CRITICAL with any coverage gap, plus HIGH with NONE or STRUCTURAL. One line per behaviour/invariant: file + code anchor, missing assertion, and test to add.
-- **High-value additions** - every matrix High-value pair: HIGH with PARTIAL-BEHAVIOURAL, plus MEDIUM with any coverage gap. Describe the untested path.
-- **Defer** - every matrix Defer pair: LOW-risk rows or a named behaviour with BEHAVIOURAL coverage. A BEHAVIOURAL row never defers uncovered sibling behaviours in the same file.
-- **Misaligned effort** - evidence-backed test-to-risk mismatches, or `none found` with named comparison.
+- **Blocking gaps** - every matrix Blocking pair: CRITICAL with any coverage gap, plus HIGH with NONE or STRUCTURAL. One line per behaviour/invariant: file + code anchor, missing assertion, value-gated disposition, and intended owning surface or next evidence check.
+- **High-value additions** - every matrix High-value pair: HIGH with PARTIAL-BEHAVIOURAL, plus MEDIUM with any coverage gap. Describe the untested path and value-gated disposition.
+- **Defer** - every matrix Defer pair: LOW-risk rows or a named behaviour with BEHAVIOURAL coverage. Record `SKIP`, `KEEP`, or another evidence-backed disposition as applicable. A BEHAVIOURAL row never defers uncovered sibling behaviours in the same file.
+- **Misaligned effort** - evidence-backed test-to-risk mismatches with an existing-test disposition, or `none found` with named comparison.
 
 **Illustrative scenario - input/output shape only; never evidence.**
 
@@ -189,7 +200,7 @@ Rank each behaviour row by `Risk × uncovered fraction`: CRITICAL=4, HIGH=3, MED
 
 ## Regression Guard Mode
 
-After a verified fix, cite its source; define 1-2 human-readable invariants; compare existing tests/manual coverage; emit the standalone template plus Verification Integrity. Do NOT verify the fix. This mode replaces the phase flow; skip Phases 1-3.
+After a verified fix, cite its source; define the human-readable invariants; compare existing tests/manual coverage; apply the value gate and disposition set; emit the standalone template plus Verification Integrity. Do NOT verify the fix. This mode replaces the phase flow; skip Phases 1-3.
 
 ## Constraints
 
@@ -200,6 +211,7 @@ After a verified fix, cite its source; define 1-2 human-readable invariants; com
 - MUST include Verification Integrity section
 - MUST apply the Proof Gate from `skill-preamble.md` to every claim made in the gap analysis or testing plan
 - MUST tag every finding/claim row with proof class `RUNTIME | CONTRACT-GREP | STATIC | NOT-REPRODUCED`
+- MUST apply `test-selection.md` before recommending an addition or an existing-test change; priority never substitutes for disposition
 - MUST NOT generate test code - hand off to the coding agent
 - Universal constraints from skill-preamble.md apply; per-mode MUSTs live in the phase bodies (Phase 1 diff/risk/blast-radius; Audit A2/A4), not restated here.
 - If flow diagrams are requested, use Mermaid flowcharts (8-15 nodes, happy path first, annotate gap status per node).

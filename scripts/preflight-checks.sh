@@ -324,7 +324,6 @@ details_pipe() {
 }
 
 # Run one Tests command while retaining final diagnostics and showing bounded TTY liveness.
-# Use the same helper for first-run and retry paths so users receive one timeout contract.
 run_command_capture_with_timeout() {
     local __output_var="$1"
     local __status_var="$2"
@@ -421,7 +420,7 @@ collapsed_desc_for() {
         "Cross-Agent Consistency") printf 'execution loop · router table' ;;
         "Instruction Parity Contract") printf 'agent files share contract' ;;
         "Instruction File Quality") printf 'within line budget · no encyclopedia' ;;
-        "Tests") printf 'fast suite + coverage' ;;
+        "Tests") printf 'coverage suite · bounded to 600s' ;;
         "Dependency Audit") printf 'npm audit' ;;
         "GOAT Flow Audit") printf 'all checks' ;;
         "Learning-Loop Schema") printf 'footguns + lessons valid' ;;
@@ -860,6 +859,16 @@ function collect(value, out = []) {
     return out;
   }
   if (!value || typeof value !== "object") return out;
+  // Structured exec-form rows (ADR-053) name the guard script as an argv element.
+  if (typeof value.command === "string" && Array.isArray(value.args)) {
+    const argumentOperands = value.args.filter(
+      (argumentValue) => typeof argumentValue === "string",
+    );
+    const script = guardScripts.find((name) =>
+      argumentOperands.some((argumentValue) => argumentValue.includes(name)),
+    );
+    if (script) out.push({ command: value.command, args: argumentOperands, script });
+  }
   for (const key of ["command", "bash"]) {
     if (typeof value[key] !== "string") continue;
     const script = guardScripts.find((name) => value[key].includes(name));
@@ -880,8 +889,17 @@ function smokeCwds(agent) {
   return cwds;
 }
 
-function runCommand(command, input, cwd) {
-  return spawnSync("bash", ["-c", `printf %s "$GOAT_HOOK_SMOKE_PAYLOAD" | { ${command}; }`], {
+function runCommand(entry, input, cwd) {
+  // Exec-form handlers replay their exact argv with the payload on stdin, as the provider runs them.
+  if (entry.args) {
+    return spawnSync(entry.command, entry.args, {
+      cwd,
+      encoding: "utf8",
+      input,
+      timeout: 5000,
+    });
+  }
+  return spawnSync("bash", ["-c", `printf %s "$GOAT_HOOK_SMOKE_PAYLOAD" | { ${entry.command}; }`], {
     cwd,
     encoding: "utf8",
     env: { ...process.env, GOAT_HOOK_SMOKE_PAYLOAD: input },
@@ -912,7 +930,8 @@ for (const config of configs) {
   }
   const seen = new Set();
   const commands = collect(parsed).filter((entry) => {
-    const key = `${entry.command}\0${entry.script}`;
+    // Args join the identity so two handlers sharing one executable stay distinct.
+    const key = [entry.command, ...(entry.args ?? []), entry.script].join("\0");
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
@@ -925,7 +944,7 @@ for (const config of configs) {
     checked += 1;
     const smoke = payloadFor(config.mode, entry.script);
     for (const smokeCwd of smokeCwds(config.agent)) {
-      const result = runCommand(entry.command, smoke.input, smokeCwd.cwd);
+      const result = runCommand(entry, smoke.input, smokeCwd.cwd);
       const spawnFailure = spawnFailureMessage(
         result,
         `${config.agent}: ${entry.script} configured command`,
@@ -936,7 +955,8 @@ for (const config of configs) {
       }
       const status = result.status ?? (result.error ? -1 : 0);
       if (status === 126 || status === 127) {
-        emit("FAIL", `${config.agent}: ${entry.script} configured command exited ${status} from ${smokeCwd.label}: ${entry.command}`);
+        const shownCommand = entry.args ? [entry.command, ...entry.args].join(" ") : entry.command;
+        emit("FAIL", `${config.agent}: ${entry.script} configured command exited ${status} from ${smokeCwd.label}: ${shownCommand}`);
         continue;
       }
       const stream = smoke.stream === "stdout" ? result.stdout : result.stderr;
@@ -1438,10 +1458,14 @@ const files = [
       "code-comments.md",
       "gruff-code-quality.md",
       "hook-policy-testing.md",
+      "naming-and-placement.md",
       "observability.md",
       "page-capture.md",
       "release-notes.md",
       "skill-playbook-authoring-sync.md",
+      "test-selection.md",
+      "writing-sentence-diagnostics.md",
+      "writing-structure-diagnostics.md",
       "writing-style.md",
     ].flatMap((name) => [
       `workflow/skills/playbooks/${name}`,
@@ -1613,8 +1637,12 @@ fi
 section "Instruction File Quality"
 
 # Line-count check (thresholds from manifest, not hard-coded)
-line_target=$(node -e "console.log(require('./workflow/manifest.json').instruction_file.line_target)" 2>/dev/null || echo "125")
-line_limit=$(node -e "console.log(require('./workflow/manifest.json').instruction_file.line_limit)" 2>/dev/null || echo "150")
+#
+# String() is load-bearing: console.log of a bare number is inspected, and Node colourizes inspected numbers when
+# FORCE_COLOR is set, which injects ANSI codes into the arithmetic comparisons below and silently skips every
+# per-file verdict.
+line_target=$(node -e "console.log(String(require('./workflow/manifest.json').instruction_file.line_target))" 2>/dev/null || echo "125")
+line_limit=$(node -e "console.log(String(require('./workflow/manifest.json').instruction_file.line_limit))" 2>/dev/null || echo "150")
 
 for ifile in "${agent_files[@]}"; do
     count=$(wc -l < "$ifile")
@@ -1693,8 +1721,13 @@ if [[ -f tsconfig.json ]]; then
 
     # Knip (unused exports, dead code - breaking error). The project graph exceeds
     # Node's default 4 GiB heap on the supported Node 20 runtime.
+    # --no-gitignore keeps Knip from walking the whole checkout to collect every nested .gitignore.
+    #
+    # That walk, not the analysis, is what exhausts the heap when a developer keeps large gitignored trees under
+    # .goat-flow/scratchpad, and Knip's own `ignore` option cannot help because it filters the report rather than the
+    # file walk. Nothing under src/, test/, or scripts/ is gitignored, so the analysed set is unchanged.
     if command -v npx >/dev/null 2>&1 && npx knip --version >/dev/null 2>&1; then
-        knip_output=$(node --max-old-space-size=5120 node_modules/knip/bin/knip.js --no-progress 2>&1) && knip_exit=0 || knip_exit=$?
+        knip_output=$(node --max-old-space-size=5120 node_modules/knip/bin/knip.js --no-progress --no-gitignore 2>&1) && knip_exit=0 || knip_exit=$?
         if [[ "$knip_exit" -eq 0 ]]; then
             pass "Knip (no unused exports or deps)"
         else
@@ -1731,17 +1764,14 @@ fi
 if [[ -f package.json ]] && grep -q '"test"' package.json; then
     section "Tests"
     test_reports_coverage=false
-    test_retryable=false
     coverage_output=""
     if grep -q '"test:coverage"' package.json; then
         test_command=(npm run test:coverage)
         test_label="Tests + coverage"
         test_reports_coverage=true
-        test_retryable=true
     elif grep -q '"test:fast"' package.json; then
         test_command=(npm run test:fast)
         test_label="Fast suite"
-        test_retryable=true
     else
         test_command=(npm test)
         test_label="All"
@@ -1770,31 +1800,9 @@ if [[ -f package.json ]] && grep -q '"test"' package.json; then
     elif [[ "$test_exit" -eq 124 ]]; then
         fail "$test_label timed out after ${test_timeout_seconds}s"
         printf '%s\n' "$test_output" | tail -20 | details_pipe || true
-    elif [[ "$test_retryable" == true ]]; then
-        retry_output=""
-        retry_exit=1
-        run_command_capture_with_timeout \
-            retry_output retry_exit "$test_timeout_seconds" "Tests retry" "${test_command[@]}"
-        retry_test_count=$(echo "$retry_output" | grep '# tests' | grep -oE '[0-9]+' || echo "?")
-        retry_pass_count=$(echo "$retry_output" | grep '# pass' | grep -oE '[0-9]+' || echo "?")
-        retry_fail_count=$(echo "$retry_output" | grep '# fail' | grep -oE '[0-9]+' || echo "0")
-
-        if [[ "$retry_exit" -eq 0 ]] && [[ "$retry_test_count" != "0" ]] && [[ "$retry_test_count" != "?" ]]; then
-            warn "$test_label passed on retry after initial failure ($retry_pass_count/$retry_test_count); investigate transient test isolation"
-            coverage_output="$retry_output"
-            printf '%s\n' "$test_output" | grep 'not ok' | head -5 | sed 's/^/initial: /' | details_pipe || true
-        elif [[ "$retry_exit" -eq 124 ]]; then
-            fail "Tests timed out after retry (initial $fail_count/$test_count failures, retry timed out after ${test_timeout_seconds}s)"
-            printf '%s\n' "$test_output" | grep 'not ok' | head -5 | sed 's/^/initial: /' | details_pipe || true
-            printf '%s\n' "$retry_output" | tail -20 | sed 's/^/retry: /' | details_pipe || true
-        else
-            fail "Tests failed after retry (initial $fail_count/$test_count failures, retry $retry_fail_count/$retry_test_count failures)"
-            printf '%s\n' "$test_output" | grep 'not ok' | head -5 | sed 's/^/initial: /' | details_pipe || true
-            printf '%s\n' "$retry_output" | grep 'not ok' | head -5 | sed 's/^/retry: /' | details_pipe || true
-        fi
     else
         fail "Tests failed ($fail_count/$test_count failures)"
-        printf '%s\n' "$test_output" | grep 'not ok' | head -5 | details_pipe || true
+        grep -m 5 'not ok' <<< "$test_output" | details_pipe || true
     fi
 
     if [[ "$test_reports_coverage" == true && -n "$coverage_output" ]]; then
@@ -2166,6 +2174,15 @@ if [[ -f workflow/skills/playbooks/gruff-code-quality.md ]] && [[ -f .goat-flow/
 else
     skip "gruff-code-quality.md sync (one or both files missing)"
 fi
+if [[ -f workflow/skills/playbooks/naming-and-placement.md ]] && [[ -f .goat-flow/skill-docs/playbooks/naming-and-placement.md ]]; then
+    if diff -q workflow/skills/playbooks/naming-and-placement.md .goat-flow/skill-docs/playbooks/naming-and-placement.md >/dev/null 2>&1; then
+        pass "naming-and-placement.md: template and installed copy match"
+    else
+        fail "naming-and-placement.md: template (workflow/skills/playbooks/) and installed (.goat-flow/skill-docs/playbooks/) differ"
+    fi
+else
+    skip "naming-and-placement.md sync (one or both files missing)"
+fi
 if [[ -f workflow/skills/playbooks/observability.md ]] && [[ -f .goat-flow/skill-docs/playbooks/observability.md ]]; then
     if diff -q workflow/skills/playbooks/observability.md .goat-flow/skill-docs/playbooks/observability.md >/dev/null 2>&1; then
         pass "observability.md: template and installed copy match"
@@ -2202,6 +2219,25 @@ if [[ -f workflow/skills/playbooks/release-notes.md ]] && [[ -f .goat-flow/skill
 else
     skip "release-notes.md sync (one or both files missing)"
 fi
+# Routed writing diagnostics must match the installed copies users load on demand.
+if [[ -f workflow/skills/playbooks/writing-sentence-diagnostics.md ]] && [[ -f .goat-flow/skill-docs/playbooks/writing-sentence-diagnostics.md ]]; then
+    if diff -q workflow/skills/playbooks/writing-sentence-diagnostics.md .goat-flow/skill-docs/playbooks/writing-sentence-diagnostics.md >/dev/null 2>&1; then
+        pass "writing-sentence-diagnostics.md: template and installed copy match"
+    else
+        fail "writing-sentence-diagnostics.md: template (workflow/skills/playbooks/) and installed (.goat-flow/skill-docs/playbooks/) differ"
+    fi
+else
+    skip "writing-sentence-diagnostics.md sync (one or both files missing)"
+fi
+if [[ -f workflow/skills/playbooks/writing-structure-diagnostics.md ]] && [[ -f .goat-flow/skill-docs/playbooks/writing-structure-diagnostics.md ]]; then
+    if diff -q workflow/skills/playbooks/writing-structure-diagnostics.md .goat-flow/skill-docs/playbooks/writing-structure-diagnostics.md >/dev/null 2>&1; then
+        pass "writing-structure-diagnostics.md: template and installed copy match"
+    else
+        fail "writing-structure-diagnostics.md: template (workflow/skills/playbooks/) and installed (.goat-flow/skill-docs/playbooks/) differ"
+    fi
+else
+    skip "writing-structure-diagnostics.md sync (one or both files missing)"
+fi
 # Consumers receive prose-style guidance; a drifted copy teaches the wrong scope gate.
 if [[ -f workflow/skills/playbooks/writing-style.md ]] && [[ -f .goat-flow/skill-docs/playbooks/writing-style.md ]]; then
     if diff -q workflow/skills/playbooks/writing-style.md .goat-flow/skill-docs/playbooks/writing-style.md >/dev/null 2>&1; then
@@ -2233,6 +2269,16 @@ if [[ -f workflow/skills/playbooks/skill-playbook-authoring-sync.md ]] && [[ -f 
     fi
 else
     skip "skill-playbook-authoring-sync.md sync (one or both files missing)"
+fi
+# Test decisions must not differ between maintainers and installed consumers.
+if [[ -f workflow/skills/playbooks/test-selection.md ]] && [[ -f .goat-flow/skill-docs/playbooks/test-selection.md ]]; then
+    if diff -q workflow/skills/playbooks/test-selection.md .goat-flow/skill-docs/playbooks/test-selection.md >/dev/null 2>&1; then
+        pass "test-selection.md: template and installed copy match"
+    else
+        fail "test-selection.md: template (workflow/skills/playbooks/) and installed (.goat-flow/skill-docs/playbooks/) differ"
+    fi
+else
+    skip "test-selection.md sync (one or both files missing)"
 fi
 if [[ -f workflow/skills/playbooks/skill-quality-testing.md ]] && [[ -f .goat-flow/skill-docs/skill-quality-testing/README.md ]]; then
     if diff -q workflow/skills/playbooks/skill-quality-testing.md .goat-flow/skill-docs/skill-quality-testing/README.md >/dev/null 2>&1; then

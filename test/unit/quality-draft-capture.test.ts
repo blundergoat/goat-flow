@@ -82,6 +82,13 @@ function validReport(projectRoot: string): string {
     rubric_version: PACKAGE_VERSION,
     quality_mode: "skills",
     prior_report_id: null,
+    assessment_context: {
+      project_revision: null,
+      working_tree_state: "unavailable",
+      grounding_status: "blocked",
+      unverified_probes: ["fixture does not run project grounding"],
+      score_confidence: "low",
+    },
     scores: {
       setup: {
         total: 0,
@@ -628,6 +635,7 @@ describe("quality draft capture", () => {
     );
   });
 
+  // Fixture: writes two server processes sharing one staging directory, because shutdown must never clear work another process is still holding.
   it("does not remove another process's live claim or draft on child shutdown", async () => {
     const root = makeRoot();
     const stagingDir = ensureQualityDraftStagingDirectory(root);

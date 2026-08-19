@@ -5,12 +5,19 @@
  * Every case builds a real project and reads back what the registrar actually wrote.
  */
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import { PROFILES } from "../../src/cli/detect/agents.js";
 import { AUDIT_VERSION } from "../../src/cli/constants.js";
 import {
+  deriveManagedHookDesiredState,
   readAgentHookState,
   writeAgentHookState,
 } from "../../src/cli/server/agent-hook-writer.js";
@@ -19,6 +26,7 @@ import {
   HookRegistrarError,
   syncHookStates,
 } from "../../src/cli/server/hook-registrar.js";
+import { managedAgentHookDescriptor } from "../../src/cli/server/agent-hook-command.js";
 import {
   getHookSpec,
   isValidHookIdShape,
@@ -44,6 +52,8 @@ import {
   runClaudeLauncher,
   assertLauncherAllows,
   runCodexLauncher,
+  SUPPORTED_PROVIDER_HOOK_CASES,
+  countOwnedCommandRows,
 } from "./hook-registrar.helpers.js";
 
 describe("hook registrar: launchers and installation", () => {
@@ -169,6 +179,374 @@ describe("hook registrar: launchers and installation", () => {
     });
   });
 
+  it("covers every supported provider and hook in the desired-state fixtures", () => {
+    const coveredProviderHooks = SUPPORTED_PROVIDER_HOOK_CASES.map(
+      ({ agent, hookId }) => `${agent.id}:${hookId}`,
+    );
+    const registryProviderHooks = Object.values(PROFILES).flatMap((agent) =>
+      listHookSpecs()
+        .filter((hookSpec) => !hookSpec.unsupportedAgents?.[agent.id])
+        .map((hookSpec) => `${agent.id}:${hookSpec.id}`),
+    );
+    assert.deepEqual(coveredProviderHooks.sort(), registryProviderHooks.sort());
+  });
+
+  // Separate TAP cases identify the provider and lifecycle whose desired-state contract drifted.
+  for (const desiredStateCase of SUPPORTED_PROVIDER_HOOK_CASES) {
+    it(`${desiredStateCase.agent.id}:${desiredStateCase.hookId} derives enabled and disabled targets`, () => {
+      const hookSpec = getHookSpec(desiredStateCase.hookId);
+      assert.ok(hookSpec);
+
+      assert.deepEqual(
+        deriveManagedHookDesiredState(desiredStateCase.agent, hookSpec, true),
+        {
+          managedScriptFiles: hookSpec.scriptFiles,
+          registrationTargets: desiredStateCase.registrationTargets,
+        },
+      );
+      assert.deepEqual(
+        deriveManagedHookDesiredState(desiredStateCase.agent, hookSpec, false),
+        {
+          managedScriptFiles: hookSpec.scriptFiles,
+          registrationTargets: [],
+        },
+      );
+    });
+
+    it(`${desiredStateCase.agent.id}:${desiredStateCase.hookId} repairs a duplicate registration`, () => {
+      withTempProject((root) => {
+        const hookSpec = getHookSpec(desiredStateCase.hookId);
+        assert.ok(hookSpec);
+        writeAgentHookState(root, desiredStateCase.agent, hookSpec, true);
+        assert.ok(desiredStateCase.agent.hookConfigFile);
+        const hookConfigPath = join(
+          root,
+          desiredStateCase.agent.hookConfigFile,
+        );
+        const hookConfig = JSON.parse(
+          readFileSync(hookConfigPath, "utf-8"),
+        ) as Record<string, unknown>;
+        const firstRegistrationTarget = desiredStateCase.registrationTargets[0];
+        assert.ok(firstRegistrationTarget);
+
+        // Antigravity nests event rows below the hook id; other providers share a hooks object.
+        const eventEntries =
+          desiredStateCase.agent.id === "antigravity"
+            ? (hookConfig[hookSpec.id] as Record<string, unknown[]>)[
+                firstRegistrationTarget.event
+              ]
+            : (hookConfig.hooks as Record<string, unknown[]>)[
+                firstRegistrationTarget.event
+              ];
+        assert.ok(Array.isArray(eventEntries));
+        assert.ok(eventEntries[0]);
+        eventEntries.push(structuredClone(eventEntries[0]));
+        // A neighbouring user hook in the same event array must survive the repair.
+        const userHookRow =
+          desiredStateCase.agent.id === "copilot"
+            ? {
+                type: "command",
+                bash: "./scripts/team-audit.sh",
+                powershell: "./scripts/team-audit.ps1",
+                timeoutSec: 10,
+              }
+            : {
+                matcher: firstRegistrationTarget.matcher ?? undefined,
+                hooks: [
+                  { type: "command", command: "./scripts/team-audit.sh" },
+                ],
+              };
+        eventEntries.push(structuredClone(userHookRow));
+        hookConfig.userOwnedMarker = "preserve";
+        writeFileSync(
+          hookConfigPath,
+          `${JSON.stringify(hookConfig, null, 2)}\n`,
+        );
+
+        // The seeded duplicate is executable state, not metadata: one extra owned row exists.
+        assert.equal(
+          countOwnedCommandRows(
+            JSON.parse(readFileSync(hookConfigPath, "utf-8")),
+            hookSpec,
+          ),
+          desiredStateCase.registrationTargets.length + 1,
+        );
+        assert.equal(
+          readAgentHookState(root, desiredStateCase.agent, hookSpec)
+            .registrationIssue,
+          "duplicate-registration",
+        );
+
+        writeAgentHookState(root, desiredStateCase.agent, hookSpec, true);
+        const repairedConfig = JSON.parse(
+          readFileSync(hookConfigPath, "utf-8"),
+        ) as Record<string, unknown>;
+        assert.equal(
+          readAgentHookState(root, desiredStateCase.agent, hookSpec).installed,
+          true,
+        );
+        // Installed state alone cannot prove convergence; count the physical rows.
+        assert.equal(
+          countOwnedCommandRows(repairedConfig, hookSpec),
+          desiredStateCase.registrationTargets.length,
+        );
+        assert.equal(repairedConfig.userOwnedMarker, "preserve");
+        const repairedEventEntries =
+          desiredStateCase.agent.id === "antigravity"
+            ? (repairedConfig[hookSpec.id] as Record<string, unknown[]>)[
+                firstRegistrationTarget.event
+              ]
+            : (repairedConfig.hooks as Record<string, unknown[]>)[
+                firstRegistrationTarget.event
+              ];
+        assert.ok(Array.isArray(repairedEventEntries));
+        // Antigravity definitions are replaced wholesale, so the user row lives elsewhere.
+        if (desiredStateCase.agent.id !== "antigravity") {
+          assert.ok(
+            repairedEventEntries.some(
+              (eventEntry) =>
+                JSON.stringify(eventEntry) === JSON.stringify(userHookRow),
+            ),
+            "the neighbouring user hook row must survive duplicate repair",
+          );
+        }
+      });
+    });
+  }
+
+  it("converges duplicate and mixed stale and current rows across three CLI syncs", () => {
+    withTempProject((root) => {
+      runGit(root, ["init", "-q"]);
+      const denySpec = getHookSpec("deny-dangerous");
+      const postTurnSpec = getHookSpec("post-turn-safety");
+      assert.ok(denySpec);
+      assert.ok(postTurnSpec);
+      const staleShellRow = {
+        matcher: "Bash",
+        hooks: [
+          {
+            type: "command",
+            command: "bash .goat-flow/hooks/deny-dangerous.sh",
+          },
+        ],
+      };
+      const userShellRow = {
+        matcher: "Bash",
+        hooks: [{ type: "command", command: "./scripts/team-audit.sh" }],
+      };
+      // The reported consumer state: two byte-identical stale Stop groups.
+      const staleStopGroup = {
+        hooks: [
+          {
+            type: "command",
+            command: [
+              "node",
+              "-e",
+              JSON.stringify("process.exit(0);"),
+              JSON.stringify(".goat-flow/hooks/post-turn-safety.sh"),
+              JSON.stringify("post-turn"),
+              JSON.stringify("CLAUDE_PROJECT_DIR"),
+              JSON.stringify(".claude/settings.json"),
+              JSON.stringify(".goat-flow/hooks/run-with-bash.mjs"),
+            ].join(" "),
+            timeout: 90,
+          },
+        ],
+      };
+
+      // Seed every provider surface with its current rows first.
+      mkdirSync(join(root, ".claude"), { recursive: true });
+      writeFileSync(join(root, ".claude", "settings.json"), "{}\n");
+      mkdirSync(join(root, ".codex"), { recursive: true });
+      writeFileSync(join(root, ".codex", "config.toml"), "\n");
+      mkdirSync(join(root, ".agents"), { recursive: true });
+      writeFileSync(join(root, ".agents", "hooks.json"), "{}\n");
+      mkdirSync(join(root, ".github", "hooks"), { recursive: true });
+      writeFileSync(join(root, ".github", "hooks", "hooks.json"), "{}\n");
+      writeAgentHookState(root, PROFILES.claude, denySpec, true);
+      writeAgentHookState(root, PROFILES.codex, denySpec, true);
+      writeAgentHookState(root, PROFILES.antigravity, denySpec, true);
+      writeAgentHookState(root, PROFILES.copilot, denySpec, true);
+
+      // Pollute each provider with duplicate, stale, and user-owned rows.
+      const claudeSettingsPath = join(root, ".claude", "settings.json");
+      const claudeSettings = JSON.parse(
+        readFileSync(claudeSettingsPath, "utf-8"),
+      ) as { hooks: { PreToolUse: unknown[]; Stop: unknown[] } };
+      const claudeDenyRow = claudeSettings.hooks.PreToolUse[0];
+      assert.ok(claudeDenyRow);
+      claudeSettings.hooks.PreToolUse.push(
+        structuredClone(claudeDenyRow),
+        structuredClone(staleShellRow),
+        structuredClone(userShellRow),
+      );
+      claudeSettings.hooks.Stop = [
+        structuredClone(staleStopGroup),
+        structuredClone(staleStopGroup),
+      ];
+      writeFileSync(
+        claudeSettingsPath,
+        `${JSON.stringify(claudeSettings, null, 2)}\n`,
+      );
+
+      const codexHooksPath = join(root, ".codex", "hooks.json");
+      const codexHooks = JSON.parse(readFileSync(codexHooksPath, "utf-8")) as {
+        hooks: { PreToolUse: unknown[] };
+      };
+      const codexDenyRow = codexHooks.hooks.PreToolUse[0];
+      assert.ok(codexDenyRow);
+      codexHooks.hooks.PreToolUse.push(
+        structuredClone(codexDenyRow),
+        structuredClone(staleShellRow),
+        structuredClone(userShellRow),
+      );
+      writeFileSync(codexHooksPath, `${JSON.stringify(codexHooks, null, 2)}\n`);
+
+      const antigravityHooksPath = join(root, ".agents", "hooks.json");
+      const antigravityHooks = JSON.parse(
+        readFileSync(antigravityHooksPath, "utf-8"),
+      ) as { "deny-dangerous": { PreToolUse: unknown[] } } & Record<
+        string,
+        unknown
+      >;
+      const antigravityDenyGroup =
+        antigravityHooks["deny-dangerous"].PreToolUse[0];
+      assert.ok(antigravityDenyGroup);
+      antigravityHooks["deny-dangerous"].PreToolUse.push(
+        structuredClone(antigravityDenyGroup),
+      );
+      antigravityHooks["team-audit"] = {
+        enabled: true,
+        PreToolUse: [
+          {
+            matcher: "run_command",
+            hooks: [{ type: "command", command: "./scripts/team-audit.sh" }],
+          },
+        ],
+      };
+      writeFileSync(
+        antigravityHooksPath,
+        `${JSON.stringify(antigravityHooks, null, 2)}\n`,
+      );
+
+      const copilotHooksPath = join(root, ".github", "hooks", "hooks.json");
+      const copilotHooks = JSON.parse(
+        readFileSync(copilotHooksPath, "utf-8"),
+      ) as { hooks: { preToolUse: unknown[] } };
+      const copilotDenyRow = copilotHooks.hooks.preToolUse[0];
+      assert.ok(copilotDenyRow);
+      copilotHooks.hooks.preToolUse.push(
+        structuredClone(copilotDenyRow),
+        {
+          type: "command",
+          bash: "bash .goat-flow/hooks/deny-dangerous.sh",
+          powershell: "bash .goat-flow/hooks/deny-dangerous.sh",
+          timeoutSec: 30,
+        },
+        {
+          type: "command",
+          bash: "./scripts/team-audit.sh",
+          powershell: "./scripts/team-audit.ps1",
+          timeoutSec: 10,
+        },
+      );
+      writeFileSync(
+        copilotHooksPath,
+        `${JSON.stringify(copilotHooks, null, 2)}\n`,
+      );
+
+      // Three consecutive syncs must converge once and then hold exact bytes.
+      const providerConfigPaths = [
+        claudeSettingsPath,
+        codexHooksPath,
+        antigravityHooksPath,
+        copilotHooksPath,
+      ];
+      const configBytesPerRun: string[][] = [];
+      for (let syncRun = 0; syncRun < 3; syncRun += 1) {
+        syncHookStates(root);
+        configBytesPerRun.push(
+          providerConfigPaths.map((configPath) =>
+            readFileSync(configPath, "utf-8"),
+          ),
+        );
+      }
+      assert.deepEqual(configBytesPerRun[1], configBytesPerRun[0]);
+      assert.deepEqual(configBytesPerRun[2], configBytesPerRun[0]);
+
+      // Each provider ends with exactly one owned deny row and no stale text.
+      for (const [configIndex, configPath] of providerConfigPaths.entries()) {
+        const convergedText = configBytesPerRun[0]![configIndex]!;
+        assert.equal(
+          countOwnedCommandRows(JSON.parse(convergedText), denySpec),
+          1,
+          `${configPath} must keep exactly one owned deny row`,
+        );
+        assert.ok(
+          !convergedText.includes("bash .goat-flow/hooks/deny-dangerous.sh"),
+          `${configPath} must drop the stale managed row`,
+        );
+        assert.ok(
+          convergedText.includes("team-audit"),
+          `${configPath} must preserve the user's own hook row`,
+        );
+      }
+
+      // The duplicated stale Stop groups converge to one current structured row.
+      const convergedClaude = JSON.parse(configBytesPerRun[0]![0]!) as {
+        hooks: {
+          Stop: Array<{ hooks: Array<{ command?: string; args?: string[] }> }>;
+        };
+      };
+      assert.equal(
+        countOwnedCommandRows(convergedClaude, postTurnSpec),
+        1,
+        "the reported duplicate Stop state must converge to one row",
+      );
+      assert.equal(convergedClaude.hooks.Stop.length, 1);
+      assert.equal(convergedClaude.hooks.Stop[0]!.hooks[0]!.command, "node");
+      assert.ok(Array.isArray(convergedClaude.hooks.Stop[0]!.hooks[0]!.args));
+      assert.ok(
+        !configBytesPerRun[0]![0]!.includes("process.exit(0);"),
+        "stale inline Stop commands must not survive the sync",
+      );
+    });
+  });
+
+  it("keeps current managed files while a user leaves a hook disabled", () => {
+    withTempProject((root) => {
+      mkdirSync(join(root, ".codex"), { recursive: true });
+      writeFileSync(join(root, ".codex", "config.toml"), "");
+
+      applyHookState(HOOK_IDENTIFIER, false, root);
+
+      const managedHookPath = join(
+        root,
+        ".goat-flow",
+        "hooks",
+        "deny-dangerous.sh",
+      );
+      assert.equal(existsSync(managedHookPath), true);
+      assert.equal(existsSync(join(root, ".codex", "hooks.json")), false);
+
+      // For example, the user may restore a checkout after its managed hook file was deleted.
+      rmSync(managedHookPath);
+      syncHookStates(root);
+
+      const denyDangerousSpec = getHookSpec(HOOK_IDENTIFIER);
+      assert.ok(denyDangerousSpec);
+      assert.equal(existsSync(managedHookPath), true);
+      const disabledState = readAgentHookState(
+        root,
+        PROFILES.codex,
+        denyDangerousSpec,
+      );
+      assert.equal(disabledState.registrationIssue, undefined);
+      assert.equal(disabledState.configMissing, true);
+      assert.equal(existsSync(join(root, ".codex", "hooks.json")), false);
+    });
+  });
+
   it("uses policy-hook startup copy in generated launcher failures", () => {
     withTempProject((root) => {
       const denySpec = getHookSpec("deny-dangerous");
@@ -228,6 +606,204 @@ describe("hook registrar: launchers and installation", () => {
     });
   });
 
+  it("migrates a historical inline Claude row to the structured descriptor without touching user hooks", () => {
+    withTempProject((root) => {
+      const denySpec = getHookSpec(HOOK_IDENTIFIER);
+      assert.ok(denySpec);
+      // Historical registrations carried one shell string whose operands name the managed scripts.
+      const historicalInlineCommand = [
+        "node",
+        "-e",
+        JSON.stringify("process.exit(0);"),
+        JSON.stringify(".goat-flow/hooks/deny-dangerous.sh"),
+        JSON.stringify("policy"),
+        JSON.stringify("CLAUDE_PROJECT_DIR"),
+        JSON.stringify(".claude/settings.json"),
+        JSON.stringify(".goat-flow/hooks/run-with-bash.mjs"),
+      ].join(" ");
+      const userHook = {
+        type: "command",
+        command: "./scripts/custom-audit.sh --strict",
+        timeout: 15,
+      };
+      mkdirSync(join(root, ".claude"), { recursive: true });
+      writeFileSync(
+        join(root, ".claude", "settings.json"),
+        `${JSON.stringify(
+          {
+            permissions: { deny: ["Bash(*sudo *)"] },
+            hooks: {
+              PreToolUse: [
+                { matcher: "Bash", hooks: [userHook] },
+                {
+                  matcher: "Bash",
+                  hooks: [
+                    {
+                      type: "command",
+                      command: historicalInlineCommand,
+                      timeout: 30,
+                    },
+                  ],
+                },
+              ],
+            },
+          },
+          null,
+          2,
+        )}\n`,
+      );
+
+      writeAgentHookState(root, PROFILES.claude, denySpec, true);
+      const migratedText = readFileSync(
+        join(root, ".claude", "settings.json"),
+        "utf-8",
+      );
+      const migrated = JSON.parse(migratedText) as {
+        permissions?: unknown;
+        hooks: {
+          PreToolUse: Array<{
+            matcher?: string;
+            hooks: Array<Record<string, unknown>>;
+          }>;
+        };
+      };
+
+      // The user's own hook row and unrelated settings survive migration untouched.
+      assert.deepEqual(migrated.hooks.PreToolUse[0], {
+        matcher: "Bash",
+        hooks: [userHook],
+      });
+      assert.deepEqual(migrated.permissions, { deny: ["Bash(*sudo *)"] });
+
+      // Exactly one managed row remains, carrying the complete structured descriptor.
+      const managedRows = migrated.hooks.PreToolUse.slice(1);
+      assert.equal(managedRows.length, 1);
+      const expectedDescriptor = managedAgentHookDescriptor(
+        PROFILES.claude,
+        denySpec,
+      );
+      if (expectedDescriptor.form !== "argv") {
+        assert.fail("Claude must register the approved argv handler");
+      }
+      assert.deepEqual(managedRows[0], {
+        matcher: "Bash",
+        hooks: [
+          {
+            type: "command",
+            command: expectedDescriptor.command,
+            args: expectedDescriptor.args,
+            timeout: denySpec.timeoutSec,
+          },
+        ],
+      });
+
+      // A second enable write is byte-identical, so migration cannot oscillate.
+      writeAgentHookState(root, PROFILES.claude, denySpec, true);
+      assert.equal(
+        readFileSync(join(root, ".claude", "settings.json"), "utf-8"),
+        migratedText,
+      );
+    });
+  });
+
+  it("keeps deferred provider deny descriptors byte-identical to the committed installer contract", () => {
+    const denySpec = getHookSpec(HOOK_IDENTIFIER);
+    assert.ok(denySpec);
+    const contract = JSON.parse(
+      readFileSync(
+        join(
+          import.meta.dirname,
+          "..",
+          "..",
+          "workflow",
+          "hooks",
+          "agent-config",
+          "managed-hook-desired-state.json",
+        ),
+        "utf-8",
+      ),
+    ) as {
+      agents: Record<
+        string,
+        { hooks: Record<string, { config: Record<string, never> }> }
+      >;
+    };
+    // Read one agent's deny-hook config out of the contract snapshot.
+    const denyContractConfig = (agentId: string): Record<string, never> =>
+      contract.agents[agentId]!.hooks["deny-dangerous"]!.config;
+
+    // Codex and Antigravity store one deferred shell command each; bytes must not move.
+    const codexDescriptor = managedAgentHookDescriptor(
+      PROFILES.codex,
+      denySpec,
+    );
+    if (codexDescriptor.form !== "shell") {
+      assert.fail("Codex stays on its deferred shell registration");
+    }
+    const codexContractRow = (
+      denyContractConfig("codex") as {
+        hooks: { PreToolUse: Array<{ hooks: Array<{ command: string }> }> };
+      }
+    ).hooks.PreToolUse[0]!.hooks[0]!;
+    assert.equal(codexContractRow.command, codexDescriptor.command);
+
+    const antigravityDescriptor = managedAgentHookDescriptor(
+      PROFILES.antigravity,
+      denySpec,
+    );
+    if (antigravityDescriptor.form !== "shell") {
+      assert.fail("Antigravity stays on its deferred shell registration");
+    }
+    const antigravityContractRow = (
+      denyContractConfig("antigravity") as {
+        "deny-dangerous": {
+          PreToolUse: Array<{ hooks: Array<{ command: string }> }>;
+        };
+      }
+    )["deny-dangerous"].PreToolUse[0]!.hooks[0]!;
+    assert.equal(antigravityContractRow.command, antigravityDescriptor.command);
+
+    // Copilot's deferred registration keeps the same command in both shell fields.
+    const copilotDescriptor = managedAgentHookDescriptor(
+      PROFILES.copilot,
+      denySpec,
+    );
+    if (copilotDescriptor.form !== "shell") {
+      assert.fail("Copilot stays on its deferred shell registration");
+    }
+    const copilotContractRow = (
+      denyContractConfig("copilot") as {
+        hooks: {
+          preToolUse: Array<{ bash: string; powershell: string }>;
+        };
+      }
+    ).hooks.preToolUse[0]!;
+    assert.equal(copilotContractRow.bash, copilotDescriptor.command);
+    assert.equal(copilotContractRow.powershell, copilotDescriptor.command);
+
+    // Claude's approved argv handler is the only migrated fragment in the contract.
+    const claudeDescriptor = managedAgentHookDescriptor(
+      PROFILES.claude,
+      denySpec,
+    );
+    if (claudeDescriptor.form !== "argv") {
+      assert.fail("Claude must register the approved argv handler");
+    }
+    const claudeContractRow = (
+      denyContractConfig("claude") as {
+        hooks: {
+          PreToolUse: Array<{
+            hooks: Array<{ command: string; args: string[] }>;
+          }>;
+        };
+      }
+    ).hooks.PreToolUse[0]!.hooks[0]!;
+    assert.equal(claudeContractRow.command, claudeDescriptor.command);
+    assert.deepEqual(claudeContractRow.args, claudeDescriptor.args);
+  });
+
+  // Fixture: writes four repository shapes a user can really be sitting in.
+  // A launcher that resolves the wrong root silently protects nothing.
   it("generated Claude launchers resolve active worktrees, submodules, bare repos, and outside-repo cwd", () => {
     withTempProject((root) => {
       const main = join(root, "main");
@@ -240,9 +816,14 @@ describe("hook registrar: launchers and installation", () => {
 
       const mainLauncher = installClaudeDenyHook(main);
       commitAll(main, "install central hooks");
-      assert.match(mainLauncher, /run-with-bash\.mjs/u);
-      assert.match(mainLauncher, /--show-toplevel/u);
-      assert.doesNotMatch(mainLauncher, /git-common-dir/u);
+      // The registered handler is exec-form, so its contract lives in the argv tuple.
+      const mainLauncherText = [
+        mainLauncher.command,
+        ...mainLauncher.args,
+      ].join("\n");
+      assert.match(mainLauncherText, /run-with-bash\.mjs/u);
+      assert.match(mainLauncherText, /--show-toplevel/u);
+      assert.doesNotMatch(mainLauncherText, /git-common-dir/u);
       runGit(main, [
         "worktree",
         "add",
@@ -269,9 +850,13 @@ describe("hook registrar: launchers and installation", () => {
       runGit(subSource, ["init", "-q"]);
       writeFileSync(join(subSource, "README.md"), "# submodule\n");
       const sourceLauncher = installClaudeDenyHook(subSource);
-      assert.match(sourceLauncher, /run-with-bash\.mjs/u);
-      assert.match(sourceLauncher, /--show-toplevel/u);
-      assert.doesNotMatch(sourceLauncher, /git-common-dir/u);
+      const sourceLauncherText = [
+        sourceLauncher.command,
+        ...sourceLauncher.args,
+      ].join("\n");
+      assert.match(sourceLauncherText, /run-with-bash\.mjs/u);
+      assert.match(sourceLauncherText, /--show-toplevel/u);
+      assert.doesNotMatch(sourceLauncherText, /git-common-dir/u);
       commitAll(subSource, "initial submodule with central hooks");
 
       const parent = join(root, "parent");
@@ -296,9 +881,10 @@ describe("hook registrar: launchers and installation", () => {
         runGit(subWorktree, ["rev-parse", "--git-common-dir"]),
         /\.git\/modules\/sub$/u,
       );
+      // Git prints forward-slash paths on Windows, so compare in one slash style.
       assert.equal(
         runGit(subWorktree, ["rev-parse", "--show-toplevel"]),
-        subWorktree,
+        subWorktree.replaceAll("\\", "/"),
       );
       assertLauncherAllows(subLauncher, subWorktree);
 

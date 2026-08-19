@@ -1,11 +1,12 @@
 /**
  * Quality-prompt and quality-history HTTP route handlers for the dashboard server.
  *
- * Backs `/api/quality` (compose a quality review prompt for one agent, optionally reusing a short-TTL
- * in-memory audit cache) and `/api/quality/history` (return persisted history rows plus the latest
- * trend summary). Query parameters are validated up front, with invalid agent/mode/limit values
- * answered as 400 JSON; downstream audit or filesystem failures are reported as JSON status bodies
- * rather than thrown. Report shaping lives in dashboard-reporting.ts; history loading in quality/history.ts.
+ * Backs `/api/quality` (compose a quality review prompt for one agent, optionally reusing a short-TTL in-memory audit cache) and
+ * `/api/quality/history` (return persisted history rows plus the latest trend summary).
+ *
+ * Query parameters are validated up front, with invalid agent/mode/limit values answered as 400 JSON; downstream audit or filesystem failures are
+ * reported as JSON status bodies rather than thrown.
+ * Report shaping lives in dashboard-reporting.ts; history loading in quality/history.ts.
  */
 import type { ServerResponse } from "node:http";
 import { runAudit } from "../audit/audit.js";
@@ -46,6 +47,13 @@ function parseQualityModeParam(param: string | null): QualityMode | null {
   return VALID_QUALITY_MODES.has(param) ? (param as QualityMode) : null;
 }
 
+/**
+ * Decide whether one saved run belongs in the history list the user is currently looking at.
+ *
+ * @param entry - saved run being considered
+ * @param filters - agent and mode the user selected; a null filter means that dimension is not being narrowed
+ * @returns true when the run should appear in the table
+ */
 function qualityHistoryEntryMatchesFilters(
   entry: { agent: AgentId; report: { quality_mode?: QualityMode } },
   agent: AgentId | null,
@@ -57,9 +65,9 @@ function qualityHistoryEntryMatchesFilters(
 }
 
 /**
- * Validated `/api/quality/history` query filters. A null `agent` or `qualityMode` means "no filter"
- * (return all), while `limit` is always a clamped positive count so callers cannot request an unbounded
- * or zero-row window.
+ * Validated `/api/quality/history` query filters.
+ * A null `agent` or `qualityMode` means "no filter" (return all), while `limit` is always a clamped positive count so callers cannot request an
+ * unbounded or zero-row window.
  */
 interface QualityHistoryFilters {
   agent: AgentId | null;
@@ -67,6 +75,14 @@ interface QualityHistoryFilters {
   qualityMode: QualityMode | null;
 }
 
+/**
+ * Read and check the history filters from the query string before any file is opened.
+ *
+ * @param ctx - dashboard route context supplying the response helpers
+ * @param url - request URL carrying the agent, mode, and limit parameters
+ * @param res - response already answered with a 400 when a parameter is rejected
+ * @returns the accepted filters, or null once an error response has been sent and the caller should stop
+ */
 function readQualityHistoryFilters(
   ctx: DashboardRouteContext,
   url: URL,
@@ -100,6 +116,14 @@ function readQualityHistoryFilters(
   };
 }
 
+/**
+ * Read and check the parameters for composing a quality prompt, before any audit work starts.
+ *
+ * @param ctx - dashboard route context supplying the response helpers
+ * @param url - request URL carrying the agent, mode, and freshness parameters
+ * @param res - response already answered with a 400 when a parameter is rejected
+ * @returns the accepted parameters, or null once an error response has been sent and the caller should stop
+ */
 function parseQualityRequestParams(
   ctx: DashboardRouteContext,
   url: URL,
@@ -129,13 +153,22 @@ function parseQualityRequestParams(
   };
 }
 
+/**
+ * Reuse a recent audit for this project and agent, so composing a prompt does not re-audit on every click.
+ *
+ * @param ctx - dashboard route context supplying the short-lived cache
+ * @param projectPath - validated project the user selected
+ * @param agent - agent the prompt is being composed for
+ * @param isFresh - true when the user asked for live results and the cache must be ignored
+ * @returns the cached report, or null when nothing recent enough was stored
+ */
 function readQualityAuditCache(
   ctx: DashboardRouteContext,
   projectPath: string,
   agent: AgentId,
-  fresh: boolean,
+  isFresh: boolean,
 ): AuditReport | null {
-  if (fresh) return null;
+  if (isFresh) return null;
   const cached = ctx.qualityAuditCache.get(
     buildQualityAuditCacheKey(projectPath, agent),
   );
@@ -147,6 +180,14 @@ function readQualityAuditCache(
   return cached.report;
 }
 
+/**
+ * Keep a just-computed audit in memory so the next prompt for the same project and agent is instant.
+ *
+ * @param ctx - dashboard route context supplying the short-lived cache
+ * @param projectPath - validated project the user selected
+ * @param agent - agent the report was produced for
+ * @param report - audit result to reuse until it expires
+ */
 function writeQualityAuditCache(
   ctx: DashboardRouteContext,
   projectPath: string,
@@ -159,6 +200,15 @@ function writeQualityAuditCache(
   });
 }
 
+/**
+ * Return the audit a quality prompt needs, reusing the cached one when it is still good and running a fresh audit otherwise.
+ * A failed audit throws through to the route handler, which reports it to the user as a JSON status body.
+ *
+ * @param ctx - dashboard route context supplying the cache and audit entry points
+ * @param projectPath - validated project the user selected
+ * @param agent - agent the prompt is being composed for
+ * @returns the audit report to embed in the prompt
+ */
 function getOrRunQualityAudit(
   ctx: DashboardRouteContext,
   projectPath: string,
@@ -179,11 +229,11 @@ function getOrRunQualityAudit(
     const report = runAudit(fs, projectPath, {
       agentFilter: agent,
       harness: true,
-      // Generating a quality prompt is a read, whether the user is assessing goat-flow itself or a
-      // project they selected, so it stops at static evidence and never runs the project's own hook
-      // command. Every path that fills qualityAuditCache must keep this one static contract, because
-      // the cache key does not record the evidence level and a full report could otherwise be served
-      // to a passive request later.
+      // Generating a quality prompt is a read, whether the user is assessing goat-flow itself or a project they selected, so it stops at static
+      // evidence and never runs the project's own hook command.
+      //
+      // Every path that fills qualityAuditCache must keep this one static contract, because the cache key does not record the evidence level and a
+      // full report could otherwise be served to a passive request later.
       denyMechanismEvidenceLevel: "static",
     });
     writeQualityAuditCache(ctx, projectPath, agent, report);
@@ -239,10 +289,8 @@ function handleQualityRequest(
       sharedFacts,
     };
     const result = composeQuality(composeInput);
-    // Enforced Claude reporting launches cannot run the Bash saver (ADR-044),
-    // and the runner is chosen client-side after this response, so both
-    // persistence variants ship: `prompt` for copy/manual runs, `launchPrompt`
-    // for staged-draft dashboard sessions.
+    // Enforced Claude reporting launches cannot run the Bash saver (ADR-044), and the runner is chosen client-side after this response, so both
+    // persistence variants ship: `prompt` for copy/manual runs, `launchPrompt` for staged-draft dashboard sessions.
     const launchResult = composeQuality({
       ...composeInput,
       persistence: "staged-draft",
@@ -266,7 +314,15 @@ function handleQualityRequest(
   return true;
 }
 
-/** Return persisted quality-history rows and latest trend summary for dashboard UI rendering. */
+/**
+ * Answer the Quality tab with the user's saved runs plus the latest trend summary.
+ * It reports a rejected filter or an unreadable history directory as a JSON status body rather than throwing at the server.
+ *
+ * @param ctx - dashboard route context supplying path validation and response helpers
+ * @param url - request URL carrying the project path and filters
+ * @param res - JSON response target
+ * @returns true once this route has answered; false means the URL belongs to another handler
+ */
 async function handleQualityHistoryRequest(
   ctx: DashboardRouteContext,
   url: URL,

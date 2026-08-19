@@ -1,4 +1,4 @@
-// goat-flow-hook-version: 1.15.1
+// goat-flow-hook-version: 1.16.0
 /**
  * Cross-platform launcher for goat-flow's Bash hook scripts.
  * Agent hook commands use Node so native Windows avoids the System32 WSL shim.
@@ -17,6 +17,7 @@ import {
 import { fileURLToPath } from "node:url";
 import {
   captureHookProcessUntilDeadline,
+  describeInvalidHookLaunchTimeout,
   prepareProviderLauncherUnavailableDelivery,
   resolveHookLaunchTimeoutMs,
 } from "./hook-launch-runtime.mjs";
@@ -520,145 +521,110 @@ function runHookProcessUntilDeadline(
 }
 
 /**
- * Run a managed project hook through Bash while preserving its host-facing result.
+ * Resolve one legacy deadline or load the migrated provider launch contract.
+ * Side effect: dynamically loads the provider adapter only for namespaced modes.
+ * Error behavior: never throws for contract or adapter failures; returns a failure reason instead.
  *
- * @param {string} hookScriptArgument - Project-relative hook path; empty is rejected.
- * @param {string} hookResponseMode - Agent response protocol; empty uses policy behavior.
- * @param {object} launchOptions - Test/platform overrides; omitted values use the live project.
- * @returns {Promise<number>} Hook exit status, or the protocol-specific unavailable result.
+ * @param {string} hookResponseMode - Registered response mode; empty text is invalid policy input.
+ * @param {NodeJS.ProcessEnv} initialHookEnvironment - Host environment passed to the managed hook.
+ * @returns {Promise<object>} Prepared runtime fields, or a failure reason with no runnable contract.
  */
-export async function runHookWithBash(
-  hookScriptArgument,
-  hookResponseMode = "policy",
-  launchOptions = {},
+async function prepareHookLaunchRuntime(
+  hookResponseMode,
+  initialHookEnvironment,
 ) {
-  // A normal hook starts in the selected project; tests can provide a fixture root.
-  const projectRoot = launchOptions.root ?? process.cwd();
-  const hookScriptPath = resolve(projectRoot, hookScriptArgument);
-  const projectRelativeHookPath = relative(projectRoot, hookScriptPath);
-  // An empty or escaping path could make an agent execute outside the user's project.
-  if (
-    projectRelativeHookPath.length === 0 ||
-    projectRelativeHookPath === ".." ||
-    projectRelativeHookPath.startsWith(`..${win32.sep}`) ||
-    projectRelativeHookPath.startsWith("../") ||
-    projectRelativeHookPath.startsWith("..\\")
-  ) {
-    return reportUnavailable(
-      hookResponseMode,
-      "hook script path escaped the project root",
-    );
-  }
-  // For example, a partial install may register a hook whose script was never copied.
-  if (!existsSync(hookScriptPath)) {
-    return reportUnavailable(hookResponseMode, "hook script was not found");
-  }
-  const hookScriptShapeReason = hookScriptShapeFailure(
-    projectRoot,
-    hookScriptPath,
-  );
-  if (hookScriptShapeReason !== null) {
-    return reportUnavailable(hookResponseMode, hookScriptShapeReason);
-  }
-
-  // Normal launches follow the host platform; tests can model native Windows.
-  const hostPlatform = launchOptions.platform ?? process.platform;
-  let bashExecutable = "bash";
-  // Native Windows must avoid the WSL shim and use a discovered Git Bash path.
-  if (hostPlatform === "win32") {
-    // Tests can provide candidates; normal hooks repeat the install-time discovery.
-    const windowsBashCandidates =
-      launchOptions.windowsBashCandidates ??
-      discoverWindowsBashCandidates(launchOptions.discoveryOptions);
-    bashExecutable = pickWindowsBashPath(windowsBashCandidates);
-  }
-  // No native candidate means the user needs Git for Windows before hooks can run.
-  if (bashExecutable === null) {
-    return reportUnavailable(
-      hookResponseMode,
-      "Windows-compatible Bash was not found; install Git for Windows",
-    );
-  }
-
-  let hookEnvironment = launchOptions.environment ?? process.env;
-  // A discovered Git Bash needs its own bin folder first so child tools resolve consistently.
-  if (bashExecutable !== "bash") {
-    // A missing PATH is valid in a restricted agent host and starts as an empty suffix.
-    const existingPath = hookEnvironment.PATH ?? "";
-    hookEnvironment = {
-      ...process.env,
-      ...hookEnvironment,
-      PATH: `${dirname(bashExecutable)}${delimiter}${existingPath}`,
-    };
-  }
   const legacyHookDeadline =
     LEGACY_HOOK_DEADLINES_MS.get(hookResponseMode) ?? null;
-  let launchContract = null;
-  let providerAdapterRuntime = null;
-  // Only migrated hooks load the adapter; current legacy installs keep their existing dependency set.
-  if (legacyHookDeadline === null) {
-    // A non-empty namespaced mode distinguishes a migrated contract from an unknown legacy value.
-    if (!hookResponseMode.includes(":")) {
-      return reportUnavailable(
-        hookResponseMode,
-        "hook launch contract is invalid",
-      );
+  // Legacy hooks keep direct streams and do not load the migrated provider adapter.
+  if (legacyHookDeadline !== null) {
+    const launchTimeout = resolveHookLaunchTimeoutMs(
+      legacyHookDeadline,
+      initialHookEnvironment,
+    );
+    // A malformed override cannot bound the user's wait; name it so one setting can be repaired.
+    if (launchTimeout === null) {
+      return {
+        failureReason: describeInvalidHookLaunchTimeout(
+          legacyHookDeadline,
+          initialHookEnvironment,
+        ),
+      };
     }
-    try {
-      providerAdapterRuntime = await import("./hook-provider-adapters.mjs");
-      launchContract =
-        providerAdapterRuntime.decodeHookLaunchContract(hookResponseMode);
-    } catch {
-      // For example, setup may register a migrated hook before its adapter file finishes syncing.
-      return reportUnavailable(
-        hookResponseMode,
-        "hook provider adapter could not load",
-      );
-    }
-    // Missing or malformed fields cannot identify a safe provider response or deadline.
-    if (launchContract === null) {
-      return reportUnavailable(
-        hookResponseMode,
-        "hook launch contract is invalid",
-      );
-    }
-  }
-  // Migrated hooks receive the decoded identity they must echo in their neutral result.
-  if (launchContract !== null) {
-    hookEnvironment = {
-      ...hookEnvironment,
-      GOAT_FLOW_HOOK_PROVIDER: launchContract.providerIdentifier,
-      GOAT_FLOW_HOOK_EVENT: launchContract.hookEvent,
-      GOAT_FLOW_HOOK_PROVIDER_MODE: "managed",
-      GOAT_FLOW_HOOK_ADAPTER_VERSION: launchContract.adapterVersion,
-      GOAT_FLOW_HOOK_RESULT_PROTOCOL: launchContract.resultProtocol,
+    return {
+      failureReason: null,
+      hookEnvironment: initialHookEnvironment,
+      launchContract: null,
+      providerAdapterRuntime: null,
+      launchTimeout,
     };
   }
-  const timeoutCeiling =
-    launchContract?.launcherDeadlineMs ?? legacyHookDeadline;
-  const launchTimeout = resolveHookLaunchTimeoutMs(
-    timeoutCeiling,
-    hookEnvironment,
-  );
-  // Invalid or empty timeout configuration cannot safely bound the user's wait.
-  if (launchTimeout === null) {
-    return reportUnavailable(
-      hookResponseMode,
-      "hook timeout configuration is invalid",
-    );
+  // A non-empty namespaced mode distinguishes a migrated contract from an unknown legacy value.
+  if (!hookResponseMode.includes(":")) {
+    return { failureReason: "hook launch contract is invalid" };
   }
-  // A null writer preserves direct legacy streams; migrated hooks capture bounded output.
-  const appendCapturedHookOutput =
-    providerAdapterRuntime?.appendBoundedHookOutput ?? null;
-  const hookExecution = await runHookProcessUntilDeadline(
-    bashExecutable,
-    hookScriptPath,
-    projectRoot,
+  let providerAdapterRuntime;
+  let launchContract;
+  try {
+    providerAdapterRuntime = await import("./hook-provider-adapters.mjs");
+    launchContract =
+      providerAdapterRuntime.decodeHookLaunchContract(hookResponseMode);
+  } catch {
+    // For example, setup may register a migrated hook before its adapter file finishes syncing.
+    return { failureReason: "hook provider adapter could not load" };
+  }
+  // Missing or malformed fields cannot identify a safe provider response or deadline.
+  if (launchContract === null) {
+    return { failureReason: "hook launch contract is invalid" };
+  }
+  // Migrated hooks receive the decoded identity they must echo in their neutral result.
+  const hookEnvironment = {
+    ...initialHookEnvironment,
+    GOAT_FLOW_HOOK_PROVIDER: launchContract.providerIdentifier,
+    GOAT_FLOW_HOOK_EVENT: launchContract.hookEvent,
+    GOAT_FLOW_HOOK_PROVIDER_MODE: "managed",
+    GOAT_FLOW_HOOK_ADAPTER_VERSION: launchContract.adapterVersion,
+    GOAT_FLOW_HOOK_RESULT_PROTOCOL: launchContract.resultProtocol,
+  };
+  const launchTimeout = resolveHookLaunchTimeoutMs(
+    launchContract.launcherDeadlineMs,
     hookEnvironment,
-    launchTimeout,
-    hostPlatform,
-    appendCapturedHookOutput,
   );
+  // A malformed override cannot bound the user's wait; name it so one setting can be repaired.
+  if (launchTimeout === null) {
+    return {
+      failureReason: describeInvalidHookLaunchTimeout(
+        launchContract.launcherDeadlineMs,
+        hookEnvironment,
+      ),
+    };
+  }
+  return {
+    failureReason: null,
+    hookEnvironment,
+    launchContract,
+    providerAdapterRuntime,
+    launchTimeout,
+  };
+}
+
+/**
+ * Render one completed hook execution through its legacy or migrated host contract.
+ * Side effects: writes bounded provider output to stdout/stderr when delivery succeeds or fails.
+ *
+ * @param {string} hookResponseMode - Registered host response mode for unavailable fallbacks.
+ * @param {object | null} providerAdapterRuntime - Loaded adapter, or null for legacy hooks.
+ * @param {object | null} launchContract - Decoded provider contract, or null for legacy hooks.
+ * @param {object} hookExecution - Completed process result with bounded output and status.
+ * @param {number} launchTimeout - Applied deadline in milliseconds for timeout evidence.
+ * @returns {number} Exit status the registered host treats as handled, blocked, or advisory.
+ */
+function renderHookExecutionResult(
+  hookResponseMode,
+  providerAdapterRuntime,
+  launchContract,
+  hookExecution,
+  launchTimeout,
+) {
   // A deadline means the hook tree was stopped before the user-facing response is rendered.
   if (hookExecution.timedOut) {
     return reportLauncherUnavailable(
@@ -720,13 +686,138 @@ export async function runHookWithBash(
   );
 }
 
+/**
+ * Run a managed project hook through Bash while preserving its host-facing result.
+ * Error behavior: expected validation, adapter, launch, and delivery failures return host-specific status.
+ *
+ * @param {string} hookScriptArgument - Project-relative hook path; empty is rejected.
+ * @param {string} hookResponseMode - Agent response protocol; empty uses policy behavior.
+ * @param {object} launchOptions - Test/platform overrides; omitted values use the live project.
+ * @returns {Promise<number>} Hook exit status, or the protocol-specific unavailable result.
+ */
+export async function runHookWithBash(
+  hookScriptArgument,
+  hookResponseMode = "policy",
+  launchOptions = {},
+) {
+  // A normal hook starts in the selected project; tests can provide a fixture root.
+  const projectRoot = launchOptions.root ?? process.cwd();
+  const hookScriptPath = resolve(projectRoot, hookScriptArgument);
+  let containmentProjectRoot;
+  let containmentHookScriptPath;
+  // Existing paths are compared by physical identity so a symlinked spelling of the selected
+  // project stays inside it. A path that cannot resolve retains the lexical fail-closed check.
+  try {
+    containmentProjectRoot = realpathSync(projectRoot);
+    containmentHookScriptPath = realpathSync(hookScriptPath);
+  } catch {
+    // The existence and shape checks below retain their more specific unavailable reason.
+    containmentProjectRoot = resolve(projectRoot);
+    containmentHookScriptPath = resolve(hookScriptPath);
+  }
+  const projectRelativeHookPath = relative(
+    containmentProjectRoot,
+    containmentHookScriptPath,
+  );
+  // An empty or escaping path could make an agent execute outside the user's project.
+  if (
+    projectRelativeHookPath.length === 0 ||
+    projectRelativeHookPath === ".." ||
+    projectRelativeHookPath.startsWith(`..${win32.sep}`) ||
+    projectRelativeHookPath.startsWith("../") ||
+    projectRelativeHookPath.startsWith("..\\") ||
+    isAbsolute(projectRelativeHookPath)
+  ) {
+    return reportUnavailable(
+      hookResponseMode,
+      "hook script path escaped the project root",
+    );
+  }
+  // For example, a partial install may register a hook whose script was never copied.
+  if (!existsSync(hookScriptPath)) {
+    return reportUnavailable(hookResponseMode, "hook script was not found");
+  }
+  const hookScriptShapeReason = hookScriptShapeFailure(
+    projectRoot,
+    hookScriptPath,
+  );
+  if (hookScriptShapeReason !== null) {
+    return reportUnavailable(hookResponseMode, hookScriptShapeReason);
+  }
+
+  // Normal launches follow the host platform; tests can model native Windows.
+  const hostPlatform = launchOptions.platform ?? process.platform;
+  let bashExecutable = "bash";
+  // Native Windows must avoid the WSL shim and use a discovered Git Bash path.
+  if (hostPlatform === "win32") {
+    // Tests can provide candidates; normal hooks repeat the install-time discovery.
+    const windowsBashCandidates =
+      launchOptions.windowsBashCandidates ??
+      discoverWindowsBashCandidates(launchOptions.discoveryOptions);
+    bashExecutable = pickWindowsBashPath(windowsBashCandidates);
+  }
+  // No native candidate means the user needs Git for Windows before hooks can run.
+  if (bashExecutable === null) {
+    return reportUnavailable(
+      hookResponseMode,
+      "Windows-compatible Bash was not found; install Git for Windows",
+    );
+  }
+
+  let hookEnvironment = launchOptions.environment ?? process.env;
+  // A discovered Git Bash needs its own bin folder first so child tools resolve consistently.
+  if (bashExecutable !== "bash") {
+    // A missing PATH is valid in a restricted agent host and starts as an empty suffix.
+    const existingPath = hookEnvironment.PATH ?? "";
+    hookEnvironment = {
+      ...process.env,
+      ...hookEnvironment,
+      PATH: `${dirname(bashExecutable)}${delimiter}${existingPath}`,
+    };
+  }
+  const launchRuntime = await prepareHookLaunchRuntime(
+    hookResponseMode,
+    hookEnvironment,
+  );
+  if (launchRuntime.failureReason !== null) {
+    return reportUnavailable(hookResponseMode, launchRuntime.failureReason);
+  }
+  hookEnvironment = launchRuntime.hookEnvironment;
+  const { launchContract, providerAdapterRuntime, launchTimeout } =
+    launchRuntime;
+  // A null writer preserves direct legacy streams; migrated hooks capture bounded output.
+  const appendCapturedHookOutput =
+    providerAdapterRuntime?.appendBoundedHookOutput ?? null;
+  const hookExecution = await runHookProcessUntilDeadline(
+    bashExecutable,
+    hookScriptPath,
+    projectRoot,
+    hookEnvironment,
+    launchTimeout,
+    hostPlatform,
+    appendCapturedHookOutput,
+  );
+  return renderHookExecutionResult(
+    hookResponseMode,
+    providerAdapterRuntime,
+    launchContract,
+    hookExecution,
+    launchTimeout,
+  );
+}
+
 const launchedModuleArgument = process.argv[1];
 let launchedModulePath = "";
 // Import-only tests omit an invoked path; direct hook execution supplies one.
 if (launchedModuleArgument) {
-  launchedModulePath = resolve(launchedModuleArgument);
+  const resolvedLaunchPath = resolve(launchedModuleArgument);
+  try {
+    launchedModulePath = realpathSync(resolvedLaunchPath);
+  } catch {
+    launchedModulePath = resolvedLaunchPath;
+  }
 }
-const currentModulePath = fileURLToPath(import.meta.url);
+const currentModulePath = realpathSync(fileURLToPath(import.meta.url));
 let launchedAsProgram = launchedModulePath === currentModulePath;
 // Windows paths are case-insensitive from the user's shell even when strings differ.
 if (process.platform === "win32") {

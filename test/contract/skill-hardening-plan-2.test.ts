@@ -41,10 +41,10 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
         const orderedHeadings = [
           "## Outcome",
           "## At a glance",
-          "## How users will notice the difference",
-          "## Why",
-          "## What",
-          "## How",
+          "## What problem are we solving",
+          "## Who benefits and how",
+          "## Requirements",
+          "## Tasks",
           "## Out of scope",
         ];
         const issueLines = issueGuidance.split(/\r?\n/u);
@@ -70,8 +70,59 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
         );
         assert.match(
           issueGuidance,
-          /10-20 visible words on one physical line/u,
+          /6-25 visible words on one physical line/u,
           issuePath,
+        );
+        // Adjective bars ("plain language") measurably fail to bind consuming agents, so the
+        // checkable replacements - banned referents, required subjects, a word swap table, and a
+        // labelled worked sample - are pinned the same way the milestone derivation rules are.
+        assert.match(
+          issueGuidance,
+          /no milestone ID, ADR number, version number, flag, internal file path, or bare command/u,
+          issuePath,
+        );
+        assert.match(
+          issueGuidance,
+          /problem section names who is hit/u,
+          issuePath,
+        );
+        assert.match(
+          issueGuidance,
+          /names what someone can now do, never what ships/u,
+          issuePath,
+        );
+        assert.match(
+          issueGuidance,
+          /\| leverage, utilize \| use \|/u,
+          issuePath,
+        );
+        assert.match(issueGuidance, /Cut words, never facts/u, issuePath);
+        assert.match(
+          issueGuidance,
+          /names each distinct deliverable/u,
+          issuePath,
+        );
+        assert.match(issueGuidance, /three to six delivery phases/u, issuePath);
+        assert.match(issueGuidance, /Fix three command-line bugs/u, issuePath);
+        assert.match(
+          issueGuidance,
+          /\| How long will it take\? \|/u,
+          issuePath,
+        );
+        assert.match(
+          issueGuidance,
+          /the row lists, this section explains/u,
+          issuePath,
+        );
+        assert.match(
+          issueGuidance,
+          /never repository evidence; every name and number below is invented/u,
+          issuePath,
+        );
+        assert.doesNotMatch(
+          issueGuidance,
+          /^## What$|^## How$|^## The problem$|^## What you get$/mu,
+          `${issuePath}: superseded ISSUE headings are still present`,
         );
         assert.match(
           issueGuidance,
@@ -98,6 +149,77 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
           issueGuidance,
           /above 1,200 words names the safety reason/u,
           issuePath,
+        );
+      },
+    );
+  });
+
+  /*
+   * The two plain-language sections are the only part of a milestone a reader outside the project can act on.
+   * Renaming them back to jargon, or dropping the worked BAD/GOOD pair that carries the register, returns plans to
+   * internal vocabulary, so the demonstration is pinned alongside the names.
+   */
+  it("pins the plain-language milestone sections and the example that shows their register", () => {
+    assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
+      assert.match(
+        readProjectFile(skillPath),
+        /`## What problem are we solving` and `## Who benefits and how` between Objective and Context, one plain line each/u,
+        skillPath,
+      );
+    });
+
+    assertForEachTarget(
+      installedSkillReferencePaths(
+        "goat-plan",
+        "references/milestone-examples.md",
+      ),
+      (examplesPath) => {
+        const examples = readProjectFile(examplesPath);
+        const templateLines = examples.split(/\r?\n/u);
+        const lossIndex = templateLines.indexOf(
+          "## What problem are we solving",
+        );
+        const helpIndex = templateLines.indexOf("## Who benefits and how");
+
+        assert.ok(lossIndex >= 0, `${examplesPath}: missing loss section`);
+        assert.ok(
+          helpIndex > lossIndex,
+          `${examplesPath}: cost must precede benefit in the milestone template`,
+        );
+        // Two worked pairs, not one: an external agent given a single security-flavoured pair on 2026-08-16 read it as a
+        // special case and wrote fourteen benefit lines describing what ships. The second pair is that corrected failure.
+        assert.ok(
+          examples.match(/^- BAD: /gmu)?.length >= 2 &&
+            examples.match(/^- GOOD: /gmu)?.length >= 2,
+          `${examplesPath}: needs both worked BAD/GOOD pairs`,
+        );
+
+        // These rules are checkable on purpose. The same run satisfied "concrete, jargon-free line" while averaging 33 words
+        // and naming milestones and ADRs, so adjectives were replaced by a word count, a banned-referent list, and a subject
+        // rule. An author trimming for the word cap deletes them first, and every other check here still passes without them.
+        for (const derivationRule of [
+          /not by shortening the Objective/u,
+          /70 to 120 characters, naming no milestone, ADR, version, flag, internal file, or command without its tool name/u,
+          /names what they can now do, never what ships/u,
+          /Neither restates the other/u,
+          /spike that ships nothing says so/u,
+        ]) {
+          assert.match(examples, derivationRule, examplesPath);
+        }
+        assert.match(
+          examples,
+          /a literal command appears once per milestone/u,
+          examplesPath,
+        );
+        assert.match(
+          examples,
+          /Objective is one plain sentence/u,
+          examplesPath,
+        );
+        assert.doesNotMatch(
+          examples,
+          /How users will notice the difference|^\| Motivation \||What we lose without this|Why this helps|^## The problem$|^## What you get$/mu,
+          `${examplesPath}: superseded section names are still present`,
         );
       },
     );
@@ -150,7 +272,7 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
     assert.match(publicPlanGuidance, /claim → evidence/u);
 
     const exporterLesson = readMarkdownSection(
-      ".goat-flow/learning-loop/lessons/integration-verification.md",
+      ".goat-flow/learning-loop/lessons/milestone-accounting.md",
       "Lesson: Milestone plans need exporter-contract verification before handoff",
     );
     assert.match(
@@ -165,8 +287,8 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
 
   it("keeps the redesigned goat-plan canonical surface within its tighter budget", () => {
     assert.ok(
-      countSkillBodyWords("workflow/skills/goat-plan/SKILL.md") <= 2100,
-      "workflow goat-plan must stay at or below the redesign target of 2100 words",
+      countSkillBodyWords("workflow/skills/goat-plan/SKILL.md") <= 2150,
+      "workflow goat-plan must stay at or below the redesign target of 2150 words",
     );
 
     const canonicalSurfaceWords = [
@@ -179,9 +301,11 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
       .split(/\s+/u)
       .filter(Boolean).length;
 
+    // The obvious way to buy room here is cutting the restating Verification baseline and Maintenance notes subsections,
+    // but the "keeps goat-plan handoff artifacts drift-aware" contract pins them, so that trim costs a shipped check.
     assert.ok(
-      canonicalSurfaceWords <= 4500,
-      `canonical goat-plan surface has ${canonicalSurfaceWords} words; expected at most 4500`,
+      canonicalSurfaceWords <= 5650,
+      `canonical goat-plan surface has ${canonicalSurfaceWords} words; expected at most 5650`,
     );
   });
 

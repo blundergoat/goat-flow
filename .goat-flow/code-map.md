@@ -1,6 +1,6 @@
 # Code Map
 
-Every path below exists at the repo root of the **goat-flow** Node/TypeScript project. Dependency/build/local outputs (`node_modules/`, `dist/`, `_temp/`, agent worktrees, and runtime logs) are summarized rather than expanded.
+Every path below exists at the repo root of the **goat-flow** Node/TypeScript project. This is a responsibility map, not an exhaustive file inventory: wildcard rows cover cohesive module families. Dependency/build/local outputs (`node_modules/`, `dist/`, `_temp/`, agent worktrees, and runtime logs) are summarized rather than expanded.
 
 ## src/cli/ -- TypeScript CLI auditor and dashboard
 
@@ -31,12 +31,19 @@ src/cli/                         = Node CLI, audit engine, dashboard server, pro
 ├── managed-setup-command.ts     = managed preview request validation, report output, and blocked exit status
 ├── managed-setup-preview.ts     = hash-only three-way managed template classification and dry-run rendering
 ├── managed-setup-state.ts       = validated local install baselines for later managed setup comparisons
+├── managed-setup-write-set.ts   = user-owned and generated install destinations plus symlink-safe target inspection
+├── managed-setup-authority.ts   = per-path replace authority from --force-path/--force-managed/--force-user-owned
+├── managed-setup-admission.ts   = pre-write admission gate; names the narrowest authority that clears each conflict
+├── install-command.ts           = install flow: preview, admission, installer launch, post-install verification
 ├── hooks-command.ts             = CLI entry for hook state, toggles, sync, and explicit runtime proof
 ├── hooks-runtime-evidence.ts    = bounded managed deny-hook scenarios, verdicts, renderers, and local events
 ├── install-invocation.ts        = install/setup invocation parsing plus Windows-compatible Bash discovery
 ├── skill-author.ts              = `goat-flow skill new` authoring flow
 ├── skill-command-parser.ts      = lightweight `skill new|doctor` positional and flag rules
 ├── skill-doctor.ts              = read-only installed skill path, invocation, frontmatter, and mirror diagnosis
+├── review-command-parser.ts     = `review validate` positional and flag rules
+├── review-validate*.ts          = review Proof Gate parsing, evidence anchors, ledgers, integrity, sections, and verdicts
+├── version-compare.ts           = semantic release-version comparison shared by setup and compatibility decisions
 │
 ├── agents/                      = manifest-backed agent registry
 │   └── registry.ts              = typed runtime facade for agent metadata
@@ -187,8 +194,9 @@ workflow/                        = packaged template source copied into target p
 │   ├── goat-security/SKILL.md   = security assessment skill template
 │   ├── goat-qa/SKILL.md         = testing-gap analysis skill template
 │   ├── goat-qa/references/       = progressive output templates loaded only when rendering QA results
+│   ├── goat-clarity/SKILL.md    = bounded comment, naming, and private-placement remediation template
 │   ├── reference/               = skill-preamble.md and skill-conventions.md templates
-│   └── playbooks/               = browser-use, changelog, code-comments, gruff-code-quality, hook-policy-testing, observability, page-capture, release-notes, skill-playbook-authoring-sync, skill-quality-testing, writing-style
+│   └── playbooks/               = browser-use, changelog, code-comments, gruff-code-quality, hook-policy-testing, naming-and-placement, observability, page-capture, release-notes, skill-playbook-authoring-sync, skill-quality-testing, test-selection, writing-sentence-diagnostics, writing-structure-diagnostics, writing-style
 │
 ├── hooks/                       = hook templates and agent hook config templates
 │   ├── run-with-bash.mjs        = cross-platform Git Bash discovery and managed shell launcher
@@ -221,6 +229,7 @@ scripts/                         = development, release, test, and maintenance s
 ├── dependency-install.sh        = guarded npm install wrapper
 ├── dependency-update.sh         = guarded dependency update wrapper
 ├── deploy-landing.sh            = docs/site deployment helper
+├── generate-managed-hook-desired-state.mjs = regenerates the standalone installer's managed-hook contract from the TypeScript writer
 ├── gruff-ts.sh                  = gruff-ts static-analysis wrapper; args pass through, bare run prints the digest
 ├── install-browser-tools.sh     = browser-use and Playwright install helper
 ├── mutation-test.sh             = opt-in Stryker mutation-testing helper
@@ -295,11 +304,15 @@ docs/                            = user and maintainer documentation
 │       ├── code-comments.md     = inline comments, docstrings, TODO/FIXME/HACK rules
 │       ├── gruff-code-quality.md = gruff analyzer triage/fix/verification loop
 │       ├── hook-policy-testing.md = deny-hook policy, mirror, and registration verification
+│       ├── naming-and-placement.md = responsibility-first placement, truthful naming, and verification
 │       ├── observability.md     = logs, metrics, spans, and sensitive-data instrumentation rules
 │       ├── page-capture.md      = Playwright/browser page-capture usage tiers
 │       ├── release-notes.md     = per-release narrative surfaces derived from changelog
 │       ├── skill-playbook-authoring-sync.md = built-in playbook enrollment and verification contract
-│       └── writing-style.md     = prose style for human-read artifacts incl. learning-loop entry bodies; agent-read control text exempt
+│       ├── test-selection.md    = value-led test placement, dispositions, and safe mutation handoff
+│       ├── writing-sentence-diagnostics.md = sentence-level reader-cost diagnostics after the writing core
+│       ├── writing-structure-diagnostics.md = document-level assembly diagnostics before sentence work
+│       └── writing-style.md     = compact correctness router for human-read prose; agent-read control text exempt
 ├── logs/                        = local session, quality, events, critique, review, security, upload history
 ├── plans/                       = local milestone/plan files; gitignored except anchors
 └── scratchpad/                  = local ephemeral working notes

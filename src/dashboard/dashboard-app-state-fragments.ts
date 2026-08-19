@@ -1,15 +1,16 @@
 /**
- * Core state fragments for the dashboard Alpine app. dashboardMergeAppFragments stitches them into
- * one app object via descriptor merge (so getters and method `this` survive). These fragments seed
- * the injected audit report, selected project path, theme, per-session/terminal UI flags, and the
- * state used by projects, tasks, hooks, quality, and the skill evaluator. Order matters: fields here
- * must exist before later fragments' methods read them.
+ * Core state fragments for the dashboard Alpine app. dashboardMergeAppFragments stitches them into one app object via descriptor merge (so getters
+ * and method `this` survive).
+ *
+ * These fragments seed the injected audit report, selected project path, theme, per-session/terminal UI flags, and the state used by projects, tasks,
+ * hooks, quality, and the skill evaluator.
+ * Order matters: fields here must exist before later fragments' methods read them.
  */
 
 /**
  * Build the core-state fragment: audit report, project path, theme, and session/terminal UI flags.
- * The returned object is one input to dashboardMergeAppFragments, not a standalone app; its fields
- * are the reactive baseline later fragments' getters and methods assume already exist.
+ * The returned object is one input to dashboardMergeAppFragments, not a standalone app; its fields are the reactive baseline later fragments' getters
+ * and methods assume already exist.
  *
  * @param supportedAgents - agents the server reports as launchable, used to seed runner UI options
  * @param defaultRunner - runner pre-selected in the launcher until the user picks another
@@ -249,9 +250,8 @@ function terminalRefFor(
 /**
  * Build active terminal-session getters.
  *
- * These are intentional getters rather than methods, because they must recompute reactively from raw
- * state and the merge step preserves them. Loading/transport getters and session-list ordering live
- * in companion fragments so each fragment keeps one responsibility.
+ * These are intentional getters rather than methods, because they must recompute reactively from raw state and the merge step preserves them.
+ * Loading/transport getters and session-list ordering live in companion fragments so each fragment keeps one responsibility.
  */
 function dashboardActiveTerminalSessionFragment(): DashboardAppFragment {
   return {
@@ -291,10 +291,9 @@ function dashboardActiveTerminalSessionFragment(): DashboardAppFragment {
 function dashboardTerminalStatusAccessorsFragment(): DashboardAppFragment {
   return {
     /**
-     * True when the active terminal is connected but the runner has not
-     * produced any output yet. Surfaces the gap between WebSocket attach
-     * (~100 ms) and Claude Code's first PTY paint (~5 s observed locally) so
-     * users see in-place progress instead of a silent terminal.
+     * True when the active terminal is connected but the runner has not produced any output yet.
+     * Surfaces the gap between WebSocket attach (~100 ms) and Claude Code's first PTY paint (~5 s observed locally) so users see in-place progress
+     * instead of a silent terminal.
      */
     get terminalWaitingForRunner(): boolean {
       return isTerminalWaitingForRunner(this._activeSession);
@@ -337,9 +336,8 @@ function dashboardTerminalStatusAccessorsFragment(): DashboardAppFragment {
 /**
  * Build session-list getters plus Projects, Tasks, and Hooks state.
  *
- * The list getters hold a stable ordering contract the templates depend on: current-project
- * sessions sort newest-first, and other-project sessions sort by project name then newest-first, so
- * the rendered order is deterministic across re-renders rather than reflecting array insertion order.
+ * The list getters hold a stable ordering contract the templates depend on: current-project sessions sort newest-first, and other-project sessions
+ * sort by project name then newest-first, so the rendered order is deterministic across re-renders rather than reflecting array insertion order.
  */
 function dashboardWorkspaceCollectionsStateFragment(): DashboardAppFragment {
   return {
@@ -385,7 +383,7 @@ function dashboardWorkspaceCollectionsStateFragment(): DashboardAppFragment {
     // --- Projects state ---
     projectsList: [] as ProjectEntry[],
 
-    projectsAuditing: false,
+    projectsRefreshing: false,
 
     showAddProject: false,
 
@@ -421,6 +419,14 @@ function dashboardWorkspaceCollectionsStateFragment(): DashboardAppFragment {
   };
 }
 
+/**
+ * Seed the Quality and Setup views with the state they open on, before any request has returned.
+ *
+ * @param supportedAgents - agents this build knows about, shown in the runner pickers
+ * @param defaultRunner - runner selected until the user picks another
+ * @param defaultSetupAgents - setup rows rendered before the first audit response arrives
+ * @returns the fragment merged into the dashboard app
+ */
 function dashboardQualitySetupStateFragment(
   supportedAgents: SupportedAgent[],
   defaultRunner: RunnerId,

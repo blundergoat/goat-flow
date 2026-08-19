@@ -1,13 +1,14 @@
 /**
  * Shell and infrastructure HTTP route handlers for the dashboard server.
  *
- * Backs the HTML shell (`/`, with the bootstrap injection), static asset serving (`/assets/`, with
- * ETag/304 handling), the directory picker (`/api/browse`), hook state read/toggle (`/api/hooks`),
- * and agent-availability detection (`/api/agents/installed`). Agent detection spawns `which`/`where`
- * and `--version` probes with short timeouts and caches the result per handler set, refreshing only
- * on an explicit `fresh=true`. Filesystem and probe failures are reported as JSON error bodies or
- * recorded as "not installed" rather than thrown. Asset loading lives in dashboard-assets.ts; hook
- * mutation in hook-registrar.ts.
+ * Backs the HTML shell (`/`, with the bootstrap injection), static asset serving (`/assets/`, with ETag/304 handling), the directory picker
+ * (`/api/browse`), hook state read/toggle (`/api/hooks`), and agent-availability detection (`/api/agents/installed`).
+ *
+ * Agent detection spawns `which`/`where` and `--version` probes with short timeouts and caches the result per handler set, refreshing only on an
+ * explicit `fresh=true`.
+ * Filesystem and probe failures are reported as JSON error bodies or recorded as "not installed" rather than thrown.
+ *
+ * Asset loading lives in dashboard-assets.ts; hook mutation in hook-registrar.ts.
  */
 import { execFileSync } from "node:child_process";
 import { readdirSync } from "node:fs";
@@ -47,7 +48,15 @@ function handleHtmlRequest(
   return true;
 }
 
-/** Serve bundled dashboard assets from the compiled `dist/dashboard/` output. */
+/**
+ * Serve the bundled dashboard assets a browser asks for after loading the shell page.
+ * It writes the response itself, and reports a missing or unreadable asset as a 404 so one bad request cannot end the server.
+ *
+ * @param req - incoming request, whose ETag header decides whether a 304 is enough
+ * @param url - request URL under `/assets/`
+ * @param res - response written directly by this handler
+ * @returns true once this route has answered; false means the URL belongs to another handler
+ */
 function handleAssetRequest(
   req: IncomingMessage,
   url: URL,
@@ -131,7 +140,16 @@ function hookErrorStatus(ctx: DashboardRouteContext, err: unknown): number {
   return ctx.responseStatusForError(err, 500);
 }
 
-/** Return hook state or mutate one hook toggle for the selected project. */
+/**
+ * Answer the Hooks card, either reading current hook state or applying the toggle the user just clicked.
+ * It reports a bad body or a failed install as a JSON status body rather than throwing at the server.
+ *
+ * @param ctx - dashboard route context supplying path validation and response helpers
+ * @param req - incoming request; a POST carries the toggle the user chose
+ * @param url - request URL carrying the project path
+ * @param res - JSON response target
+ * @returns true once this route has answered; false means the URL belongs to another handler
+ */
 async function handleHooksRequest(
   ctx: DashboardRouteContext,
   req: IncomingMessage,
@@ -228,7 +246,15 @@ type AgentDetectionState = {
   cached: ReturnType<typeof detectInstalledAgents> | null;
 };
 
-/** Return cached agent availability unless the dashboard explicitly requests a fresh probe. */
+/**
+ * Tell the dashboard which agents are actually installed on this machine, reusing the cached answer unless the user asked to re-check.
+ * A fresh probe spawns the platform lookup and version commands, which is why the result is cached rather than recomputed per request.
+ *
+ * @param state - per-server detection cache
+ * @param url - request URL, where `fresh=true` forces a new probe
+ * @param res - JSON response target
+ * @returns true once this route has answered; false means the URL belongs to another handler
+ */
 function handleAgentDetectRequest(
   state: AgentDetectionState,
   url: URL,

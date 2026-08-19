@@ -44,10 +44,12 @@ type HelperContext = {
   dashboardInferPromptRoute(prompt: string): string;
   /** Open a blank custom-prompt editor in the test context. */
   dashboardOpenNewCustomPrompt(ctx: TestContext): void;
+  /** Open the editor on an existing custom prompt, as the Edit button does. */
   dashboardOpenEditCustomPrompt(
     ctx: TestContext,
     preset: TestPreset | null,
   ): void;
+  /** Open the editor on a copy of any preset, as the Duplicate button does. */
   dashboardDuplicateCustomPrompt(
     ctx: TestContext,
     preset: TestPreset | null,
@@ -72,6 +74,7 @@ type HelperContext = {
   dashboardRemoveCustomPromptSurface(ctx: TestContext, surface: string): void;
   /** Return user-facing validation messages for the current draft. */
   dashboardValidateCustomPromptDraft(ctx: TestContext): string[];
+  /** Return one entry per problem with the open draft, each tied to the field the user must fix. */
   dashboardValidateCustomPromptDraftDetails(
     ctx: TestContext,
   ): Array<Record<string, unknown>>;
@@ -109,6 +112,7 @@ type TestContext = {
   showToast(msg: string, isError?: boolean): void;
 };
 
+// Load the dashboard helper bundle in a VM, because these are classic browser scripts rather than importable modules.
 function loadHelpers(
   runnerIds = ["claude", "codex", "antigravity", "copilot"],
 ): {
@@ -120,7 +124,7 @@ function loadHelpers(
     readFileSync(CUSTOM_PROMPTS_PATH, "utf-8"),
     readFileSync(CUSTOM_PROMPTS_ACTIONS_PATH, "utf-8"),
   ].join("\n");
-  const js = transpileModule(source, {
+  const compiled = transpileModule(source, {
     compilerOptions: { target: ScriptTarget.ES2023 },
   }).outputText;
   const context = createContext({
@@ -145,7 +149,7 @@ function loadHelpers(
         : [],
   });
   runInContext(
-    `${js}
+    `${compiled}
 globalThis.__helpers = {
   dashboardDefaultCustomPromptDraft,
   dashboardInferPromptRoute,
@@ -225,6 +229,10 @@ describe("custom prompt helpers", () => {
     assert.equal(
       helpers.dashboardInferPromptRoute("$goat-qa audit coverage"),
       "goat-qa",
+    );
+    assert.equal(
+      helpers.dashboardInferPromptRoute("/goat-clarity uncommitted files"),
+      "goat-clarity",
     );
   });
 
@@ -368,6 +376,11 @@ describe("custom prompt helpers", () => {
       helpers
         .dashboardCustomPromptRouteOptions()
         .some((route) => route.id === "goat-security"),
+    );
+    assert.ok(
+      helpers
+        .dashboardCustomPromptRouteOptions()
+        .some((route) => route.id === "goat-clarity"),
     );
     assert.deepEqual(
       Array.from(

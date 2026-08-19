@@ -1,13 +1,14 @@
 /**
  * Validates the Codex-specific settings a project needs for goat-flow to run safely.
- * Codex configures hooks and filesystem access differently from the other agents, so its
- * settings get their own checks: a retired feature flag left enabled, hooks silently switched
- * off, and workspace-root globs that do not mean what the person who typed them expected.
  *
- * The workspace-root checks matter most in practice. A pattern that looks like it grants
- * access to one directory can quietly grant far more, or nothing at all, and the user has no
- * way to see that from their config file. These turn that into a message naming the exact
- * pattern and what it actually does.
+ * Codex configures hooks and filesystem access differently from the other agents, so its settings get their own checks: a retired feature flag left
+ * enabled, hooks silently switched off, and workspace-root globs that do not mean what the person who typed them expected.
+ *
+ * The workspace-root checks matter most in practice.
+ * A pattern that looks like it grants access to one directory can quietly grant far more, or nothing at all, and the user has no way to see that from
+ * their config file.
+ *
+ * These turn that into a message naming the exact pattern and what it actually does.
  */
 import type { AuditContext, AuditFailure, BuildCheck } from "./types.js";
 import { collectCodexWorkspaceRootEntries } from "../facts/agent/settings.js";
@@ -55,8 +56,8 @@ function booleanSetting(parsed: unknown, key: string): boolean | null {
   const settings = settingsObject(parsed);
   // Missing settings mean the audit cannot prove the user enabled the feature.
   if (!settings) return null;
-  const value = settings[key];
-  return typeof value === "boolean" ? value : null;
+  const settingValue = settings[key];
+  return typeof settingValue === "boolean" ? settingValue : null;
 }
 
 /**
@@ -201,7 +202,7 @@ function codexFilesystemPatternFromKey(
  * Use so audit can report both invalid globs and legacy anchors in one user-facing finding.
  *
  * @param key - flattened settings key; empty means this entry is ignored
- * @param value - flattened setting value; non-string values cannot contain inline glob entries
+ * @param entryValue - flattened setting value; non-string values cannot contain inline glob entries
  * @param filesystemPrefix - current permission-profile prefix; empty would match unrelated settings
  * @param legacyAnchor - legacy project-root anchor; empty would match unrelated settings
  * @param invalidGlobs - mutable list of invalid patterns; empty means no glob migration found yet
@@ -210,7 +211,7 @@ function codexFilesystemPatternFromKey(
  */
 function collectCodexFilesystemEntryFindings(
   key: string,
-  value: unknown,
+  entryValue: unknown,
   filesystemPrefix: string,
   legacyAnchor: string,
   invalidGlobs: string[],
@@ -223,13 +224,13 @@ function collectCodexFilesystemEntryFindings(
     legacyAnchors.push(":project_roots");
   }
   // Non-string values cannot be parsed for inline permission patterns.
-  if (typeof value !== "string") return;
+  if (typeof entryValue !== "string") return;
 
   const isInlineRoot =
     key === `${filesystemPrefix}:workspace_roots` || key === legacyAnchor;
   // Inline root tables may hold several user-denied patterns in one TOML value.
   if (isInlineRoot) {
-    collectInvalidCodexInlineGlobs(value, invalidGlobs);
+    collectInvalidCodexInlineGlobs(entryValue, invalidGlobs);
     return;
   }
 
@@ -239,7 +240,7 @@ function collectCodexFilesystemEntryFindings(
     `${legacyAnchor}.`,
   );
   // Non-pattern entries or non-`none` modes do not produce invalid deny-glob findings.
-  if (pattern === null || value !== "none") return;
+  if (pattern === null || entryValue !== "none") return;
   // Invalid none-mode globs make Codex reject the permission profile.
   if (isCodexInvalidNoneGlob(pattern)) {
     invalidGlobs.push(pattern);
@@ -292,13 +293,13 @@ function collectCodexFilesystemFindings(
 function parseTomlInlineStringTableForKey(
   rawValue: string,
 ): Array<[string, string]> {
-  const value = rawValue.trim();
+  const trimmedTable = rawValue.trim();
   // Only inline table text can carry the compact workspace-root permission shape.
-  if (!value.startsWith("{") || !value.endsWith("}")) return [];
+  if (!trimmedTable.startsWith("{") || !trimmedTable.endsWith("}")) return [];
   const entries: Array<[string, string]> = [];
   const entryPattern = /"((?:\\.|[^"\\])*)"\s*=\s*"((?:\\.|[^"\\])*)"/gu;
   // Each quoted key/value pair maps a workspace pattern to an access mode.
-  for (const match of value.matchAll(entryPattern)) {
+  for (const match of trimmedTable.matchAll(entryPattern)) {
     const [, key, mode] = match;
     // Empty keys or modes cannot produce an actionable Codex migration finding.
     if (key && mode) entries.push([key, mode]);

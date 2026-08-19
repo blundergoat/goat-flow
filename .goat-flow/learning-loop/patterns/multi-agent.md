@@ -1,6 +1,6 @@
 ---
 category: multi-agent
-last_reviewed: 2026-07-16
+last_reviewed: 2026-08-20
 ---
 
 ## Pattern: Multi-agent critique - how to run it effectively
@@ -10,7 +10,7 @@ last_reviewed: 2026-07-16
 
 **How to run:**
 1. Give each reviewer the same prompt. Don't share prior reviews - contamination defeats independence.
-2. Use different models, not just different instances. Codex and Gemini have different systematic blind spots than Claude. One of each covers more ground than three Claudes.
+2. Use different models, not just different instances. Different model families have different systematic blind spots than Claude - among the current supported runners, Codex, Antigravity, and Copilot. One of each covers more ground than three Claudes.
 3. Synthesize and verify after each review. Track first-discovery per finding. Dispute false claims with source evidence before accepting them. ~15-20% of claims per review will need verification.
 4. Stop when score variance drops. If several consecutive reviews cluster within a tight score band, coverage is probably adequate. If scores still vary widely, major categories are still being missed.
 

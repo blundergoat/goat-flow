@@ -67,11 +67,14 @@ describe("artifact discovery", () => {
     const artifacts = getRepoArtifacts();
     const skills = artifacts.filter((a) => a.kind === "skill");
     assert.ok(
-      skills.length >= 7,
-      `expected at least 7 skills, got ${skills.length}`,
+      skills.length >= 8,
+      `expected at least 8 skills, got ${skills.length}`,
     );
     assert.ok(skills.some((s) => s.id === "skill:goat-plan"));
     assert.ok(skills.some((s) => s.id === "skill:goat-review"));
+    const clarityArtifact = skills.find((s) => s.id === "skill:goat-clarity");
+    assert.ok(clarityArtifact);
+    assert.deepEqual(clarityArtifact.missingMirrors, []);
   });
 
   it("discovers shared references and playbooks", () => {
@@ -228,6 +231,42 @@ describe("artifact discovery", () => {
     );
     assert.ok(triggerClarity, "expected trigger-clarity metric");
     assert.equal(triggerClarity.score, 15);
+  });
+
+  /*
+   * A skill may scope a boundary command to one of its modes, the way goat-debug binds its ALWAYS command to
+   * Diagnose mode so Investigate mode stays free of a diagnosis-only rule.
+   *
+   * All three commands are still present, so the triplet is complete. Scoring only the bare label pushed authors
+   * toward adding a second, separately retired exclusion system to recover the lost credit.
+   */
+  it("credits a mode-qualified boundary command as a complete triplet", () => {
+    // Frontmatter description, When to Use, and the boundary triplet each earn 5.
+    const fullTriggerClarityScore = 15;
+    const report = evaluateContent(PROJECT_ROOT, {
+      kind: "skill",
+      suggestedName: "qualified-boundary-probe",
+      content: [
+        "---",
+        "name: qualified-boundary-probe",
+        'description: "Use when checking qualified boundary behavior."',
+        'goat-flow-skill-version: "1.15.1"',
+        "---",
+        "# /qualified-boundary-probe",
+        "## When to Use",
+        "Use when the user needs a bounded workflow.",
+        "## Boundary Commands",
+        "- **NEVER:** Implement adjacent work inside this workflow.",
+        "- **ALWAYS in Diagnose mode:** Trace the live path before proposing a fix.",
+        "- **DEFER TO:** `/goat-review` for code-quality review.",
+      ].join("\n"),
+    });
+    const triggerClarity = report.metrics.find(
+      (metric) => metric.metric === "trigger-clarity",
+    );
+    assert.ok(triggerClarity, "expected trigger-clarity metric");
+    assert.equal(triggerClarity.score, fullTriggerClarityScore);
+    assert.doesNotMatch(triggerClarity.detail, /NOT this skill/u);
   });
 
   it("reports unconditioned vague prose without changing score or recommendation", () => {

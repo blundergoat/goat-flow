@@ -1,8 +1,9 @@
 /**
  * Hook-focused Alpine fragments: agent/plan/hook loaders and the Hooks/Setup view actions.
- * Use when the user opens the Hooks view, flips a hook switch, or launches setup repairs -
- * every method here either loads the hook state a view renders or applies a toggle the user
- * just confirmed. Split from the data-loading fragments so each file stays reviewable.
+ *
+ * Use when the user opens the Hooks view, flips a hook switch, or launches setup repairs - every method here either loads the hook state a view
+ * renders or applies a toggle the user just confirmed.
+ * Split from the data-loading fragments so each file stays reviewable.
  *
  * Toggling a guarded safety hook always confirms with the user first, and a failed toggle
  * recovers into a toast plus a reload of true server state rather than a half-applied switch.
@@ -55,7 +56,7 @@ function dashboardApplyHookToggleResult(
  * @param ctx - dashboard state; missing current project means stale responses are ignored
  * @param hook - hook row being saved; non-togglable hooks leave the row unchanged
  * @param shouldEnable - desired hook state; `false` may require user confirmation
- * @returns nothing; failures show in the Hooks banner/toast and keep rows visible
+ * @returns nothing; it reports a failed toggle in the Hooks banner and toast while leaving every row visible
  */
 async function dashboardToggleHookState(
   ctx: DashboardAppContext,
@@ -102,8 +103,8 @@ async function dashboardToggleHookState(
 
 /**
  * Build the agent-detection / plans / hooks fragment of the app's async data-loading methods.
- * One input to dashboardMergeAppFragments; the methods delegate to shared helpers that own the
- * fetch and its recover-on-failure handling, so this fragment only wires names to those helpers.
+ * One input to dashboardMergeAppFragments; the methods delegate to shared helpers that own the fetch and its recover-on-failure handling, so this
+ * fragment only wires names to those helpers.
  *
  * @param supportedAgents - agents the server can launch, used to scope installed-agent detection
  * @returns the fragment object of agent/plans/hooks loader methods merged into the Alpine app
@@ -285,7 +286,18 @@ function dashboardAgentPlanHookLoadersFragment(
         }
       }
     },
+  };
+}
 
+/**
+ * Build the Tasks view's display helpers: progress labels, progress percentages, and modified-time text.
+ *
+ * These only format what the loaders already fetched, so they stay apart from the loading actions and it reports no failures of its own.
+ *
+ * @returns dashboard fragment merged into the app alongside the plan loaders
+ */
+function dashboardTaskDisplayFragment(): DashboardAppFragment {
+  return {
     /**
      * Format completed and total task counts for one milestone row.
      * Use in the task-plan table so users can scan progress at a glance.
@@ -316,13 +328,13 @@ function dashboardAgentPlanHookLoadersFragment(
      * Format a milestone modified timestamp for the plan table.
      * Use so users can tell whether task files changed recently.
      *
-     * @param value - timestamp string; empty or invalid values display as unknown
+     * @param isoTimestamp - timestamp string; empty or invalid values display as unknown
      * @returns localized timestamp label, or `unknown` when the date cannot be trusted
      */
-    taskModifiedLabel(value: string): string {
+    taskModifiedLabel(isoTimestamp: string): string {
       // Empty timestamps mean the plan reader could not prove when the file changed.
-      if (!value) return "unknown";
-      const date = new Date(value);
+      if (!isoTimestamp) return "unknown";
+      const date = new Date(isoTimestamp);
       // Invalid timestamps are hidden behind a neutral label instead of showing `Invalid Date`.
       if (Number.isNaN(date.getTime())) return "unknown";
       return date.toLocaleString();
@@ -495,7 +507,19 @@ function dashboardHookSetupActionsFragment(
           state.supported && state.effectiveState.status !== "effective",
       );
     },
+  };
+}
 
+/**
+ * Build the Hooks view's roll-up counters and the agent lists behind each hook row's disclosure.
+ *
+ * These answer "how many hooks are actually effective across my agents", which is the summary a user reads before opening
+ * any individual hook row.
+ *
+ * @returns dashboard fragment merged into the app alongside the hook actions
+ */
+function dashboardHookSummaryFragment(): DashboardAppFragment {
+  return {
     /**
      * List unsupported agent surfaces that explain why a hook is unavailable.
      * Use so the hook row can disclose unsupported runners instead of looking broken.
@@ -557,7 +581,18 @@ function dashboardHookSetupActionsFragment(
         this.hookHasIneffectiveCoverage(hook),
       ).length;
     },
+  };
+}
 
+/**
+ * Build the Hooks view's filtering, grouping, and per-row actions.
+ *
+ * A user reaches these by clicking a filter chip, expanding a section, or toggling or resyncing one hook.
+ *
+ * @returns dashboard fragment merged into the app alongside the hook summary counters
+ */
+function dashboardHookFilterActionsFragment(): DashboardAppFragment {
+  return {
     /**
      * Test one hook against a selected filter chip.
      * Use before search so the Hooks list reflects enabled/disabled/drift tabs.

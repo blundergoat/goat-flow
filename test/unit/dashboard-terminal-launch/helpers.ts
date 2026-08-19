@@ -102,7 +102,12 @@ type LaunchContext = Record<"launching", boolean> & {
     string,
     {
       cleanup?: () => void;
-      ws?: { readyState: number; send(payload: string): void };
+      ws?: {
+        readyState: number;
+        /** Record one outbound socket message, standing in for the real WebSocket. */
+        send(payload: string): void;
+      };
+      /** Terminal stub whose focus call the test asserts on. */
       xterm?: { focus(): void };
       awaitingInputTimer?: ReturnType<typeof setTimeout>;
       pasteSubmitTimer?: ReturnType<typeof setTimeout>;
@@ -233,6 +238,7 @@ type HelperContext = {
   TERMINAL_CLAUDE_PASTE_NO_MARKER_FALLBACK_DELAY_MS: number;
   TERMINAL_PASTE_SUBMIT_RETRY_CADENCE_MS: number;
   TERMINAL_PASTE_SUBMIT_MAX_RETRIES: number;
+  /** Resolve the access mode a launch should use for this preset and role. */
   dashboardTerminalAccessMode(
     preset: { mayWriteFiles?: boolean } | null,
     userRole: string,
@@ -271,6 +277,17 @@ type HelperContext = {
     ctx: LaunchContext,
     sessionId: string,
     wsUrl: string,
+  ): void;
+  /**
+   * Reads the clipboard on Ctrl+V and sends it to the runner as one bracketed-paste input frame.
+   */
+  dashboardSendClipboardPaste(
+    socket: {
+      readyState: number;
+      /** Receives the serialized input frame the browser would put on the WebSocket. */
+      send(frame: string): void;
+    },
+    markUserInputSent: () => void,
   ): void;
   /**
    * Rehydrates a server-active terminal session into the browser session list.
@@ -322,7 +339,7 @@ type HelperContext = {
    * Updates awaiting-input state from a new PTY output chunk and prior tail.
    */
   dashboardNextAwaitingInputState(
-    previousAwaiting: boolean,
+    wasAwaitingInput: boolean,
     previousTail: string,
     outputChunk: string,
   ): boolean;
@@ -439,6 +456,15 @@ function loadFixture(name: string): string {
   );
 }
 
+/**
+ * Load the dashboard terminal helpers with fetch and timers replaced, so launch flows run without a real server or real waiting.
+ *
+ * Injecting timers is what lets these tests assert on debounce and retry behaviour without sleeping for it.
+ *
+ * @param fetchImpl - stand-in for global fetch, supplying scripted responses
+ * @param timers - timer controls; the default uses the real ones, which only suits a test that does not exercise scheduling
+ * @returns the loaded helper surface bound to those substitutes
+ */
 function loadHelpers(
   fetchImpl: typeof fetch,
   timers: TimerControls = {
@@ -450,7 +476,7 @@ function loadHelpers(
   extraGlobals: Record<string, unknown> = {},
 ): HelperContext {
   const source = readDashboardTerminalSource();
-  const js = transpileModule(source, {
+  const compiled = transpileModule(source, {
     compilerOptions: { target: ScriptTarget.ES2023 },
   }).outputText;
   const context = createContext({
@@ -476,7 +502,7 @@ function loadHelpers(
     ...extraGlobals,
   });
   runInContext(
-    `${js}
+    `${compiled}
 globalThis.__helpers = {
   TERMINAL_PASTE_MARKER_SETTLE_DELAY_MS,
   TERMINAL_CLAUDE_PASTE_NO_MARKER_FALLBACK_DELAY_MS,
@@ -487,6 +513,7 @@ globalThis.__helpers = {
   dashboardSendToTerminalSession,
   dashboardLaunchInTerminal,
   dashboardConnectTerminal,
+  dashboardSendClipboardPaste,
   dashboardOpenServerSession,
   dashboardReconnectTerminal,
   dashboardDetachTerminal,
@@ -513,6 +540,14 @@ globalThis.__helpers = {
   return (context as typeof context & { __helpers: HelperContext }).__helpers;
 }
 
+/**
+ * Build a launch context that starts in a realistic dashboard state, plus a captured list of the toasts a user would have seen.
+ *
+ * Capturing toasts is how these tests assert what the user was actually told, rather than only what the state became.
+ *
+ * @param overrides - context fields to replace; an empty object yields the default project and Home view
+ * @returns the context together with the recorded toasts
+ */
 function makeContext(
   overrides: Partial<LaunchContext> = {},
 ): LaunchContext & { toasts: Array<{ msg: string; isError: boolean }> } {

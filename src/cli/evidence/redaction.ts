@@ -1,10 +1,9 @@
 /**
  * Redaction helpers for local evidence and user-readable durable artifacts.
  *
- * Sensitive runtime values are recorded as hashes plus byte length so local
- * continuity can compare values without storing raw tool bodies. Copyable
- * session, review, quality, and export text uses a separate pattern scrubber
- * so users retain useful context while common credential shapes disappear.
+ * Sensitive runtime values are recorded as hashes plus byte length so local continuity can compare values without storing raw tool bodies.
+ * Copyable session, review, quality, and export text uses a separate pattern scrubber so users retain useful context while common credential shapes
+ * disappear.
  */
 import { createHash } from "node:crypto";
 
@@ -72,14 +71,14 @@ export interface RedactedEvidenceValue {
  * Return a deterministic hash/length summary for sensitive text.
  *
  * @param label - human-readable evidence field name; an empty label remains empty metadata
- * @param value - sensitive text to hash; empty text produces a stable zero-length summary
+ * @param evidenceText - sensitive text to hash; empty text produces a stable zero-length summary
  * @returns hash metadata for same/different comparison without readable source content
  */
 export function redactEvidenceText(
   label: string,
-  value: string,
+  evidenceText: string,
 ): RedactedEvidenceValue {
-  const buffer = Buffer.from(value, "utf-8");
+  const buffer = Buffer.from(evidenceText, "utf-8");
   return {
     kind: "redacted",
     label,
@@ -92,31 +91,31 @@ export function redactEvidenceText(
  * Replace common credential shapes while preserving readable continuation context.
  * Use before session, review, quality, security, or export text reaches disk.
  *
- * @param value - candidate durable text; an empty string remains empty
+ * @param durableText - candidate durable text; an empty string remains empty
  * @returns scrubbed readable text, or the original text when no rule matches
  */
-export function scrubDurableText(value: string): string {
+export function scrubDurableText(durableText: string): string {
   return DURABLE_TEXT_REDACTION_RULES.reduce(
     (scrubbedText, redactionRule) =>
       scrubbedText.replace(redactionRule.pattern, redactionRule.replacement),
-    value,
+    durableText,
   );
 }
 
 /**
  * Check whether an envelope value already uses hash-only redaction metadata.
  *
- * @param value - unknown payload value; null, empty, arrays, and primitives return false
+ * @param candidate - unknown payload value; null, empty, arrays, and primitives return false
  * @returns true only for a complete redacted evidence object
  */
 export function isRedactedEvidenceValue(
-  value: unknown,
-): value is RedactedEvidenceValue {
+  candidate: unknown,
+): candidate is RedactedEvidenceValue {
   // Missing or non-record values cannot represent safe evidence in the user's event history.
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
     return false;
   }
-  const record = value as Record<string, unknown>;
+  const record = candidate as Record<string, unknown>;
   return (
     record.kind === "redacted" &&
     typeof record.label === "string" &&

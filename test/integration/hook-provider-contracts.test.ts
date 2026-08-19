@@ -42,6 +42,7 @@ import {
 } from "./gruff-code-quality-smoke.helpers.js";
 import {
   FORCE_BASH3_ENV_KEY,
+  HOOK_PATH,
   TEST_API_TOKEN,
   buildStopPayload,
   runHook,
@@ -467,6 +468,74 @@ describe("hook provider contracts", () => {
   });
 
   describe("configured Stop result delivery", () => {
+    for (const scannerVariant of STOP_SCANNER_VARIANTS) {
+      it(`bounds a managed non-Git Stop root with the ${scannerVariant.displayName}`, () => {
+        const forceBash3Fallback = scannerVariant.forceBash3Fallback;
+        const projectRoot = makeRoot();
+        const sessionIdentifier = `non-git-session-${forceBash3Fallback}`;
+        const stateDirectory = join(projectRoot, ".goat-flow", "scratchpad");
+        // List the state files present right now, so an assertion reads current disk truth rather than a cached snapshot.
+        const statePaths = (): string[] =>
+          existsSync(stateDirectory)
+            ? readdirSync(stateDirectory)
+                .filter((entry) =>
+                  entry.startsWith("post-turn-safety-reentry-v1"),
+                )
+                .map((entry) => join(stateDirectory, entry))
+            : [];
+        const managedEnvironment = {
+          GOAT_FLOW_HOOK_RESULT_PROTOCOL: "goat-flow.hook-result.v1",
+          GOAT_FLOW_HOOK_PROVIDER: "codex",
+          GOAT_FLOW_HOOK_EVENT: "turn-stop",
+          GOAT_FLOW_HOOK_PROVIDER_MODE: "managed",
+          GOAT_FLOW_HOOK_ADAPTER_VERSION: "1",
+          [FORCE_BASH3_ENV_KEY]: forceBash3Fallback,
+        };
+
+        writeFile(
+          projectRoot,
+          ".goat-flow/hooks/post-turn-safety.sh",
+          readFileSync(HOOK_PATH, "utf8"),
+        );
+
+        const directResult = runHook(
+          projectRoot,
+          { [FORCE_BASH3_ENV_KEY]: forceBash3Fallback },
+          "",
+        );
+        assert.equal(directResult.status, 2, directResult.stderr);
+        assert.deepEqual(statePaths(), []);
+
+        const firstResult = runHook(
+          projectRoot,
+          managedEnvironment,
+          buildStopPayload(sessionIdentifier, false),
+        );
+        assert.equal(firstResult.status, 0, firstResult.stderr);
+        const firstEnvelope = JSON.parse(firstResult.stdout);
+        assert.equal(firstEnvelope.outcome, "incomplete");
+        assert.equal(firstEnvelope.reasonCode, "coverage-incomplete");
+        const writtenStatePaths = statePaths();
+        assert.equal(writtenStatePaths.length, 1);
+        assert.equal(
+          statSync(writtenStatePaths[0] as string).mode & 0o777,
+          0o600,
+        );
+
+        const reentryResult = runHook(
+          projectRoot,
+          managedEnvironment,
+          buildStopPayload(sessionIdentifier, true),
+        );
+        assert.equal(reentryResult.status, 0, reentryResult.stderr);
+        const reentryEnvelope = JSON.parse(reentryResult.stdout);
+        assert.equal(reentryEnvelope.outcome, "incomplete");
+        assert.equal(reentryEnvelope.reasonCode, "bounded-reentry-ended");
+        assert.match(reentryResult.stderr, /no clean scan was recorded/iu);
+        assert.deepEqual(statePaths(), []);
+      });
+    }
+
     // Each named case creates a temporary Git repo and runs the selected shell scanner.
     for (const scannerVariant of STOP_SCANNER_VARIANTS) {
       // This case writes user files and re-entry state while hook subprocesses exercise recovery.

@@ -1,13 +1,14 @@
 /**
  * Decides which file references in a user's learning-loop entry are worth checking at all.
- * Every staleness check in the audit starts here: it separates real repository paths from
- * URLs, hostnames, and shorthand, and it knows which trees are deliberately local so a clean
- * checkout is never told its own notes are broken.
  *
- * The bias is deliberately conservative. A false "stale reference" on a fresh clone teaches
- * users to distrust the whole content audit, so anything ambiguous is skipped rather than
- * reported. `search-anchors.ts` and `learning-loop-common.ts` both build on these rules so the
- * same citation is judged identically wherever it appears.
+ * Every staleness check in the audit starts here: it separates real repository paths from URLs, hostnames, and shorthand, and it knows which trees
+ * are deliberately local so a clean checkout is never told its own notes are broken.
+ *
+ * The bias is deliberately conservative.
+ * A false "stale reference" on a fresh clone teaches users to distrust the whole content audit, so anything ambiguous is skipped rather than
+ * reported.
+ *
+ * `search-anchors.ts` and `learning-loop-common.ts` both build on these rules so the same citation is judged identically wherever it appears.
  */
 import type { ReadonlyFS } from "../../types.js";
 
@@ -24,9 +25,8 @@ export interface ReferenceValidationOptions {
 }
 
 /**
- * Decide whether a backtick-wrapped reference names a real file path rather than a
- * URL or hostname (which share the `host:port` shape). Used to gate staleness
- * checks so a `localhost:3000`-style token is never treated as a missing file.
+ * Decide whether a backtick-wrapped reference names a real file path rather than a URL or hostname (which share the `host:port` shape).
+ * Used to gate staleness checks so a `localhost:3000`-style token is never treated as a missing file.
  *
  * @param filePath - candidate reference text with any trailing `:line` already split off
  * @returns true for paths with a slash or a root-level filename extension; false for URLs, hostnames, and bare extensionless names

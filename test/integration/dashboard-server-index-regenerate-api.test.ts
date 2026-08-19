@@ -20,6 +20,7 @@ import {
   writeFile,
 } from "./dashboard-server.helpers.js";
 
+// Writes one fixture file, creating the directories a real project would already have.
 async function writeFixtureFile(
   root: string,
   relativePath: string,
@@ -30,6 +31,7 @@ async function writeFixtureFile(
   await writeFile(fullPath, content);
 }
 
+// Writes a temporary project carrying only the named learning-loop buckets, so a test can prove regeneration touches just those.
 async function makeIndexFixture(
   buckets: Array<"footguns" | "lessons" | "patterns" | "decisions">,
 ): Promise<{ root: string; cleanup: () => Promise<void> }> {
@@ -122,9 +124,9 @@ async function makeIndexFixture(
 }
 
 /** Narrow one JSON field to an array before row-level response assertions. */
-function expectArray(value: unknown, context: string): unknown[] {
-  assert.ok(Array.isArray(value), `${context} should be an array`);
-  return value;
+function expectArray(candidate: unknown, context: string): unknown[] {
+  assert.ok(Array.isArray(candidate), `${context} should be an array`);
+  return candidate;
 }
 
 describe("dashboard index regenerate API", () => {

@@ -102,19 +102,19 @@ function readUniqueReceiptField(
 }
 
 /** Return whether a category string belongs to the timing contract. */
-function isTimingCategory(value: string): value is PlanTimeCategory {
-  return TIMING_CATEGORIES.some((category) => category === value);
+function isTimingCategory(candidate: string): candidate is PlanTimeCategory {
+  return TIMING_CATEGORIES.some((category) => category === candidate);
 }
 
 /** Parse a bounded non-negative integer without precision loss. */
-function readSafeInteger(value: string): number | null {
-  const parsed = Number(value);
+function readSafeInteger(candidate: string): number | null {
+  const parsed = Number(candidate);
   return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null;
 }
 
 /** Parse and cross-check one `UTC / epoch` table cell. */
-function parseStamp(value: string): TimingStamp | null {
-  const match = value.match(/^(.+?)\s*\/\s*(\d+)$/u);
+function parseStamp(numberText: string): TimingStamp | null {
+  const match = numberText.match(/^(.+?)\s*\/\s*(\d+)$/u);
   const iso = match?.[1]?.trim();
   const epochSeconds = match?.[2] ? readSafeInteger(match[2]) : null;
   if (!iso || epochSeconds === null) return null;
@@ -609,12 +609,14 @@ function parseReceiptState(
 }
 
 /** Narrow a parsed field to the receipt-state vocabulary. */
-function isReceiptState(value: string): value is PlanTimingReceiptState {
+function isReceiptState(
+  candidate: string,
+): candidate is PlanTimingReceiptState {
   return (
-    value === "active" ||
-    value === "paused" ||
-    value === "finalized" ||
-    value === "incomplete"
+    candidate === "active" ||
+    candidate === "paused" ||
+    candidate === "finalized" ||
+    candidate === "incomplete"
   );
 }
 

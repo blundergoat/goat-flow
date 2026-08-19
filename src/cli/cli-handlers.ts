@@ -7,7 +7,6 @@ import { resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
 import type { AgentId, ProjectFacts } from "./types.js";
 import type { AuditReport, AuditScope, CheckResult } from "./audit/types.js";
-import { classifyProjectState } from "./classify-state.js";
 import { CLIError } from "./cli-error.js";
 import { writeOutput } from "./cli-output.js";
 import { handleDiagnosticsCommand } from "./diagnostics-command.js";
@@ -18,35 +17,24 @@ import {
   validAgents,
 } from "./cli-agent-options.js";
 import type { Command, ParsedCLI } from "./cli-types.js";
-import { createFS } from "./facts/fs.js";
 import { handleHooksCommand } from "./hooks-command.js";
+import { handleInstallCommand } from "./install-command.js";
 import { handleReviewCommand } from "./review-validate.js";
-import {
-  buildInstallerInvocation,
-  buildInstallerSpawnSpec,
-} from "./install-invocation.js";
-import {
-  buildManagedSetupPreview,
-  managedSetupPreviewForInstallerLaunch,
-  managedSetupAdmissionFailure,
-  recordManagedInstallAfterVerification,
-} from "./managed-setup-preview.js";
-import {
-  emitManagedSetupDryRun,
-  validateManagedSetupRequest,
-} from "./managed-setup-command.js";
-import { getPackageVersion, getTemplatePath } from "./paths.js";
-import {
-  emitIndexGenerationInstallResult,
-  handleIndexCommand,
-} from "./learning-loop-index/command.js";
-import { emitCommitGuidanceInstallResult } from "./prompt/commit-guidance.js";
+import { getPackageVersion } from "./paths.js";
+import { handleIndexCommand } from "./learning-loop-index/command.js";
 import type { CandidacyResult } from "./quality/candidacy.js";
 import { handleQualityCommand as runQualityCommand } from "./quality/quality-command.js";
 import { handleRedactCommand } from "./redact-command.js";
 import { handlePlansCommand } from "./plans-check.js";
 import type { runSkillNew } from "./skill-author.js";
 const PACKAGE_VERSION = getPackageVersion();
+
+/**
+ * Render one candidacy recommendation as the short label the CLI prints.
+ *
+ * @param recommendation - what the candidacy check decided the draft should become
+ * @returns a human-readable label naming the artifact kind and its subtype or reason
+ */
 function formatCandidacyArtifact(
   recommendation: CandidacyResult["recommendedArtifact"],
 ): string {
@@ -172,19 +160,21 @@ function findMenuAction(input: string): MenuAction | null {
 
 /** Ask for a project path, defaulting to the current working directory. */
 async function promptProjectPath(
-  rl: ReturnType<typeof createInterface>,
+  readlineInterface: ReturnType<typeof createInterface>,
 ): Promise<string> {
-  const answer = await rl.question("Project path [.] ");
+  const answer = await readlineInterface.question("Project path [.] ");
   return resolve(answer.trim() || ".");
 }
 
 /** Ask for one supported agent id. */
 async function promptAgent(
-  rl: ReturnType<typeof createInterface>,
+  readlineInterface: ReturnType<typeof createInterface>,
 ): Promise<AgentId> {
   const agents = validAgents();
   for (;;) {
-    const answer = await rl.question(`Agent (${agents.join("/")}) `);
+    const answer = await readlineInterface.question(
+      `Agent (${agents.join("/")}) `,
+    );
     const selected = answer.trim();
     if (agents.includes(selected as AgentId)) return selected as AgentId;
     console.log(`Use one of: ${agents.join(", ")}`);
@@ -193,30 +183,40 @@ async function promptAgent(
 
 /** Ask whether install should overwrite settings/config. */
 async function promptForce(
-  rl: ReturnType<typeof createInterface>,
+  readlineInterface: ReturnType<typeof createInterface>,
 ): Promise<boolean> {
-  const answer = await rl.question(
+  const answer = await readlineInterface.question(
     "Overwrite existing settings/config? [y/N] ",
   );
   return /^y(?:es)?$/iu.test(answer.trim());
 }
 
-/** Read all menu answers and build the command options to run. */
+/**
+ * Read all menu answers and build the command options to run.
+ * Error behavior: throws CLIError with exit code 2 for an unrecognised menu choice, before any further question is asked, so the user is not walked
+ * through a flow that cannot run.
+ *
+ * @param options - parsed CLI options the answers are layered onto
+ * @param readlineInterface - open readline interface used for every question
+ * @returns the options to dispatch, with command, project path, agent, and force filled in
+ */
 async function promptMenuCommand(
   options: ParsedCLI,
-  rl: ReturnType<typeof createInterface>,
+  readlineInterface: ReturnType<typeof createInterface>,
 ): Promise<ParsedCLI> {
   console.log(renderMenuText());
-  const choice = await rl.question("\nChoice [1] ");
+  const choice = await readlineInterface.question("\nChoice [1] ");
   const action = findMenuAction(choice || "1");
   if (!action) {
     throw new CLIError("Unknown menu choice.", 2);
   }
 
-  const projectPath = await promptProjectPath(rl);
-  const agent = action.needsAgent ? await promptAgent(rl) : options.agent;
+  const projectPath = await promptProjectPath(readlineInterface);
+  const agent = action.needsAgent
+    ? await promptAgent(readlineInterface)
+    : options.agent;
   const shouldForce =
-    action.command === "install" ? await promptForce(rl) : false;
+    action.command === "install" ? await promptForce(readlineInterface) : false;
 
   return {
     ...options,
@@ -235,15 +235,15 @@ async function handleMenuCommand(options: ParsedCLI): Promise<void> {
     return;
   }
 
-  const rl = createInterface({
+  const readlineInterface = createInterface({
     input: process.stdin,
     output: process.stdout,
   });
   let nextOptions: ParsedCLI;
   try {
-    nextOptions = await promptMenuCommand(options, rl);
+    nextOptions = await promptMenuCommand(options, readlineInterface);
   } finally {
-    rl.close();
+    readlineInterface.close();
   }
   await dispatchCommand(nextOptions);
 }
@@ -306,6 +306,22 @@ function getSetupAgentIds(options: ParsedCLI, facts: ProjectFacts): AgentId[] {
     : facts.agents.map((af) => af.agent.id);
 }
 
+/**
+ * Return full setup evidence only when the trusted runtime probe named this exact agent.
+ *
+ * @param options - Parsed trust choice and optional agent bound to the setup audit.
+ * @param agentId - Agent whose setup prompt is being rendered.
+ * @returns Full evidence for an exact trusted-agent match; otherwise static evidence.
+ */
+export function setupDenyMechanismEvidenceLevel(
+  options: Pick<ParsedCLI, "agent" | "isTargetTrusted">,
+  agentId: AgentId,
+): "full" | "static" {
+  return options.isTargetTrusted && options.agent === agentId
+    ? "full"
+    : "static";
+}
+
 /** Print the banner that warns multi-agent setup output must stay in sync. */
 function writeMultiAgentSyncBanner(withDivider: boolean): void {
   const lines = withDivider
@@ -314,7 +330,11 @@ function writeMultiAgentSyncBanner(withDivider: boolean): void {
   process.stdout.write(lines.join("\n"));
 }
 
-/** Handle the setup command: compose and render setup prompts per agent */
+/**
+ * Handle the setup command: compose and render setup prompts per agent.
+ * Error behavior: throws CLIError when the selected agent has no composable setup, so a user asking for an unsupported agent gets that message rather
+ * than an empty prompt.
+ */
 async function handleSetupCommand(
   options: ParsedCLI,
   auditReport: AuditReport,
@@ -336,133 +356,17 @@ async function handleSetupCommand(
 
   const parts: string[] = [];
   for (const agentId of agentIds) {
-    const output = composeSetup(auditReport, facts, agentId);
+    const output = composeSetup(auditReport, facts, agentId, {
+      denyMechanismEvidenceLevel: setupDenyMechanismEvidenceLevel(
+        options,
+        agentId,
+      ),
+    });
     if (output) parts.push(output);
   }
   if (parts.length > 0) {
     writeOutput(options, parts.join("\n\n---\n\n"));
   }
-}
-
-/** Derive installer flags from the project's adoption state. */
-function deriveInstallFlags(
-  projectPath: string,
-  agentId: string,
-  options: ParsedCLI,
-): string[] {
-  if (options.shouldForce) return [];
-  try {
-    const projectFS = createFS(projectPath);
-    const state = classifyProjectState(projectFS, agentId);
-    const flags: string[] = [];
-    if (
-      !options.updateConfigVersion &&
-      (state.state === "outdated" || state.state === "v0.9")
-    ) {
-      flags.push("--update-config-version");
-    }
-    if (!options.cleanDeprecated && state.state === "v0.9") {
-      flags.push("--clean-deprecated");
-    }
-    return flags;
-  } catch {
-    return [];
-  }
-}
-
-/** Build the user-supplied installer flag list for the bundled bash script. */
-function collectInstallerFlags(options: ParsedCLI, agent: AgentId): string[] {
-  const flags: string[] = [];
-  if (options.shouldForce) flags.push("--force");
-  if (options.updateConfigVersion) flags.push("--update-config-version");
-  if (options.cleanDeprecated) flags.push("--clean-deprecated");
-  flags.push(...deriveInstallFlags(options.projectPath, agent, options));
-  return flags;
-}
-
-/**
- * Run a managed preview or deterministic install after the user chooses an agent.
- * Use for install or setup dry-run/apply; it throws CLI errors or preserves a non-zero child exit.
- *
- * @param options - parsed user choices; a missing agent is rejected before preview or installation
- * @returns completion after preview or install; no value means output and exit state already describe the result
- */
-async function handleInstallCommand(options: ParsedCLI): Promise<void> {
-  const selectedAgent = validateManagedSetupRequest(options);
-  const installPreview = buildManagedSetupPreview(
-    options.projectPath,
-    selectedAgent,
-  );
-  const installerLaunch = buildInstallerInvocation({
-    scriptPath: getTemplatePath("workflow/install-goat-flow.sh"),
-    projectPath: options.projectPath,
-    agent: selectedAgent,
-    installerFlags: collectInstallerFlags(options, selectedAgent),
-    platform: process.platform,
-  });
-  // A dry-run reports the exact managed-template result and exits before installer side effects.
-  if (options.shouldDryRun) {
-    emitManagedSetupDryRun(
-      options,
-      managedSetupPreviewForInstallerLaunch(installPreview, installerLaunch),
-    );
-    return;
-  }
-
-  const overwriteBlocker = managedSetupAdmissionFailure(
-    installPreview,
-    options.shouldForce,
-  );
-  // A conflict report is returned before Bash starts, so the user's target remains unchanged.
-  if (overwriteBlocker !== null) throw new CLIError(overwriteBlocker, 1);
-
-  // Invalid launch arguments stop before Bash can change the selected target.
-  if (!installerLaunch.ok) {
-    throw new CLIError(installerLaunch.error, 1);
-  }
-
-  const { spawnInheritedSync } = await import("./server/safe-exec.js");
-  const installerProcess = buildInstallerSpawnSpec(installerLaunch);
-  const installResult = spawnInheritedSync({
-    command: installerProcess.command,
-    args: installerProcess.args,
-    allowedBasenames: ["bash", "bash.exe"],
-    env: installerProcess.env,
-  });
-  // A spawn failure means the installer never started, so users receive the operating-system error.
-  if (installResult.error) {
-    throw new CLIError(
-      `Could not run installer with ${installerProcess.command}: ${installResult.error.message}`,
-      1,
-    );
-  }
-  // A signal means installation ended mid-flow and cannot be recorded as a verified baseline.
-  if (installResult.signal) {
-    throw new CLIError(
-      `Installer terminated by signal ${installResult.signal}`,
-      1,
-    );
-  }
-  // A non-zero or missing child status is preserved as failure instead of running post-install writes.
-  if (installResult.status !== 0) {
-    // Missing numeric status still maps to exit 1 so scripts never mistake it for success.
-    process.exitCode = installResult.status ?? 1;
-    return;
-  }
-
-  const installationMismatches = recordManagedInstallAfterVerification(
-    options.projectPath,
-    selectedAgent,
-  );
-  // A successful process exit is insufficient when managed bytes still differ from their templates.
-  if (installationMismatches.length > 0) {
-    throw new CLIError(
-      `Installer exited successfully, but ${installationMismatches.length} managed file(s) do not match their templates. Install state was not recorded.`,
-      1,
-    );
-  }
-  emitCommitGuidanceInstallResult(options.projectPath);
-  emitIndexGenerationInstallResult(options.projectPath);
 }
 
 /** Handle the removed info command; throws CLIError with the current audit replacement. */
@@ -501,15 +405,9 @@ async function handleAuditCommand(options: ParsedCLI): Promise<void> {
     harness: options.includeHarness,
     checkDrift: options.checkDrift,
     checkContent: options.checkContent,
-    // The deny-mechanism runtime smoke executes the target checkout's own hook
-    // code (configured launcher string and managed script) and runs by default.
-    // `--untrusted-target` keeps the deny check static for a checkout you do not
-    // trust; otherwise the property is omitted, leaving the default unchanged.
-    // This trusted CLI audit is the only runtime-proof path: passive dashboard
-    // audit and quality routes stay at "static" or weaker evidence.
-    ...(options.isTargetUntrusted
-      ? { denyMechanismEvidenceLevel: "static" as const }
-      : {}),
+    // Runtime proof executes the target checkout's configured launcher and
+    // managed script, so only an affirmative trust choice may enable it.
+    denyMechanismEvidenceLevel: options.isTargetTrusted ? "full" : "static",
   });
 
   const reportForRender = options.auditDetails
@@ -546,8 +444,8 @@ async function handleQualityCommand(options: ParsedCLI): Promise<void> {
 
 /**
  * Handle `events tail`, reading the most recent local evidence-envelope events for the project.
- * Throws a usage CLIError (exit 2) for any subcommand other than `tail`. Emits the events as a
- * JSON array under `--format json`, otherwise one compact JSON object per line (JSONL) for piping.
+ * Throws a usage CLIError (exit 2) for any subcommand other than `tail`.
+ * Emits the events as a JSON array under `--format json`, otherwise one compact JSON object per line (JSONL) for piping.
  */
 async function handleEventsCommand(options: ParsedCLI): Promise<void> {
   if (options.eventsSubcommand !== "tail") {
@@ -617,6 +515,8 @@ async function runSetupPipeline(options: ParsedCLI): Promise<void> {
   const auditReport = runAudit(fs, options.projectPath, {
     agentFilter: options.agent ?? null,
     harness: false,
+    denyMechanismEvidenceLevel:
+      options.isTargetTrusted && options.agent !== null ? "full" : "static",
   });
   await handleSetupCommand(options, auditReport, facts);
 }
@@ -680,9 +580,9 @@ function skillNewRequest(options: ParsedCLI) {
 /** Render one authoring result in the caller's selected JSON or human-readable contract. */
 function renderSkillNewResult(
   result: SkillNewCommandResult,
-  asJson: boolean,
+  shouldRenderJson: boolean,
 ): string {
-  if (!asJson) return result.output.join("\n");
+  if (!shouldRenderJson) return result.output.join("\n");
   return JSON.stringify(
     {
       candidacy: result.candidacy,
@@ -717,7 +617,14 @@ async function handleSkillNewCommand(options: ParsedCLI): Promise<void> {
   writeOutput(options, renderSkillNewResult(result, options.format === "json"));
 }
 
-/** Dispatch one parsed CLI command to its handler. */
+/**
+ * Dispatch one parsed CLI command to its handler.
+ * The handler table is consulted first; setup preview and apply are routed separately because both use the deterministic install path rather than
+ * prompt composition.
+ *
+ * @param options - fully parsed and validated CLI options selecting the command to run
+ * @returns nothing; the selected handler owns all output and exit behaviour
+ */
 export async function dispatchCommand(options: ParsedCLI): Promise<void> {
   const handler = COMMAND_HANDLERS[options.command];
   if (handler) {

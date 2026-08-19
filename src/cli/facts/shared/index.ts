@@ -1,6 +1,9 @@
 /**
- * Project-wide shared fact extractor - composes sub-extractors for learning-loop,
- * local instructions, and project-level metadata into a single SharedFacts object.
+ * Gathers the facts that belong to the project rather than to any one agent: the learning loop, local instructions, and project metadata.
+ *
+ * These are the facts a user sees on the dashboard Home card, which describes the workspace regardless of which agent they selected.
+ *
+ * It only composes; each kind of fact is read by a focused sibling module so one unreadable bucket cannot blank the whole card.
  */
 import type { SharedFacts, ReadonlyFS } from "../../types.js";
 import type { LoadedConfig } from "../../config/types.js";
@@ -74,12 +77,13 @@ function extractDecisionsFacts(
 /**
  * Resolve the project-local commit guidance location.
  *
- * Preferred home is docs/coding-standards/git-commit-message.md: one file serves both humans and
- * agents. The former docs/coding-standards/git-commit.md path remains accepted for existing
- * projects, while fresh installs use the preferred path. IDEs auto-read
- * .github/copilot-instructions.md (which points to either accepted guide), not a bespoke .github
- * commit file, so only the legacy .github locations are reported as misplaced. The check is
- * repo-wide and intentionally does not depend on a .github/ directory existing.
+ * Preferred home is docs/coding-standards/git-commit-message.md: one file serves both humans and agents.
+ * The former docs/coding-standards/git-commit.md path remains accepted for existing projects, while fresh installs use the preferred path.
+ *
+ * IDEs auto-read .github/copilot-instructions.md (which points to either accepted guide), not a bespoke .github commit file, so only the legacy
+ * .github locations are reported as misplaced.
+ *
+ * The check is repo-wide and intentionally does not depend on a .github/ directory existing.
  *
  * @param fs - Read-only filesystem used to probe the preferred, compatible, and misplaced commit-doc locations.
  * @returns Commit-guidance facts: existence, resolved path, the preferred remediation path, and any misplaced legacy copies.

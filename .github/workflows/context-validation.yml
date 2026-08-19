@@ -18,6 +18,11 @@ on:
       - "scripts/**"
       - ".agents/**"
 
+# A new commit on a PR branch cancels this workflow's in-flight run for that branch instead of queueing a second one behind it.
+concurrency:
+  group: context-validation-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   validate:
     runs-on: ubuntu-latest
@@ -57,7 +62,7 @@ jobs:
 
       - name: Check skills exist
         run: |
-          EXPECTED_SKILLS="goat goat-debug goat-review goat-plan goat-critique goat-security goat-qa"
+          EXPECTED_SKILLS="goat goat-debug goat-review goat-plan goat-critique goat-security goat-qa goat-clarity"
           # Check Claude Code skills
           if [ -d ".claude/skills" ]; then
             for skill in $EXPECTED_SKILLS; do
@@ -66,7 +71,7 @@ jobs:
                 exit 1
               fi
             done
-            echo "All 7 Claude skills present"
+            echo "All 8 Claude skills present"
           fi
           # Check shared skills (Codex + Antigravity)
           if [ -d ".agents/skills" ]; then
@@ -76,7 +81,7 @@ jobs:
                 exit 1
               fi
             done
-            echo "All 7 shared skills present"
+            echo "All 8 shared skills present"
           fi
           # Check Copilot skills
           if [ -d ".github/skills" ]; then
@@ -86,7 +91,7 @@ jobs:
                 exit 1
               fi
             done
-            echo "All 7 Copilot skills present"
+            echo "All 8 Copilot skills present"
           fi
 
       - name: Check local CLAUDE.md file sizes
@@ -108,7 +113,7 @@ jobs:
 
       - name: Validate settings.json
         run: |
-          # Current agent hook/settings JSON surfaces (Gemini retired, ADR-030)
+          # Current agent hook/settings JSON surfaces (Gemini retired, ADR-020)
           for f in .claude/settings.json .codex/hooks.json .github/hooks/hooks.json; do
             if [ -f "$f" ]; then
               python3 -c "import json; json.load(open('$f'))" 2>&1 || {

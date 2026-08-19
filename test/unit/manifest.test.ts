@@ -16,10 +16,8 @@ import {
   loadManifest,
   checkManifest,
   getSkillFiles,
-  getRequiredInstructionSections as getRequiredInstructionSectionsFromManifest,
   renderManifestMarkdown,
   resetManifestCache,
-  validateSkillReferenceSchema as validateSkillReferenceSchemaFromManifest,
 } from "../../src/cli/manifest/manifest.js";
 import {
   getRequiredInstructionSections,
@@ -70,6 +68,7 @@ function fixtureJson(
         "Artifact Routing",
         "Router Table",
       ],
+      parity_phrases: [],
       version_header_pattern: "# {FILE} - v{VERSION} ({DATE})",
     },
     facts: {
@@ -79,6 +78,7 @@ function fixtureJson(
   };
 }
 
+// Build the observed facts a manifest is validated against, so each test overrides only the value it is about.
 function fixtureObserved(
   overrides: Partial<ObservedFacts> = {},
 ): ObservedFacts {
@@ -94,6 +94,7 @@ function fixtureObserved(
   };
 }
 
+// Build one manifest agent entry with valid defaults, so each test states only the field it is exercising.
 function fixtureAgent(
   overrides: Partial<ManifestJson["agents"][string]> = {},
 ): ManifestJson["agents"][string] {
@@ -290,13 +291,6 @@ describe("validateManifest (agent capability metadata)", () => {
 });
 
 describe("validateSkillReferenceSchema", () => {
-  it("keeps the manifest facade validator export aligned with manifest-json", () => {
-    assert.equal(
-      validateSkillReferenceSchemaFromManifest,
-      validateSkillReferenceSchema,
-    );
-  });
-
   it("accepts an omitted references map", () => {
     const json = fixtureJson();
     const validationResult = validateSkillReferenceSchema(json);
@@ -519,6 +513,7 @@ describe("checkManifest (real repo)", () => {
 });
 
 describe("manifest snapshot coverage (real repo)", () => {
+  // Fixture: the real CHANGELOG, because a release without a readable snapshot cannot have its historical claims checked later.
   it("provides a readable snapshot for every changelog release from v1.1.0", () => {
     const changelog = readFileSync(getTemplatePath("CHANGELOG.md"), "utf8");
     const releaseVersions = Array.from(
@@ -564,10 +559,22 @@ describe("manifest snapshot coverage (real repo)", () => {
 // getRequiredInstructionSections: manifest-sourced harness input (T1 pinning)
 // ---------------------------------------------------------------------------
 describe("getRequiredInstructionSections (real repo)", () => {
-  it("keeps the manifest facade section export aligned with manifest-json", () => {
-    assert.equal(
-      getRequiredInstructionSectionsFromManifest,
-      getRequiredInstructionSections,
+  it("owns the existing shared instruction-parity phrase contract", () => {
+    resetManifestCache();
+    const rules = loadManifest().instruction_file.parity_phrases;
+
+    assert.equal(rules.length, 8);
+    assert.deepEqual(
+      rules.find((rule) => rule.label === "prose-surface READ routing"),
+      {
+        label: "prose-surface READ routing",
+        section: "Execution Loop",
+        phrases: [
+          "Prose surfaces route the same way before writing",
+          "need `writing-style.md`",
+          "the trigger is touching the surface, not the request naming it",
+        ],
+      },
     );
   });
 
@@ -606,14 +613,17 @@ describe("getRequiredInstructionSections (real repo)", () => {
 describe("renderManifestMarkdown", () => {
   it("produces markdown with a facts table and skill list", () => {
     resetManifestCache();
-    const md = renderManifestMarkdown(loadManifest());
-    assert.match(md, /^# goat-flow manifest/im);
-    assert.match(md, /\| Setup checks \|/);
-    assert.match(md, /\| Skills \(total\) \|/);
-    assert.match(md, /\*\*Agent registry authority:\*\*/);
-    assert.match(md, /^## Agents$/im);
-    assert.match(md, /\| Agent \| Instruction \| Settings \| Hook config \|/);
-    assert.match(md, /\*\*Skills:\*\*/);
-    assert.match(md, /\*\*Dashboard views:\*\*/);
+    const markdown = renderManifestMarkdown(loadManifest());
+    assert.match(markdown, /^# goat-flow manifest/im);
+    assert.match(markdown, /\| Setup checks \|/);
+    assert.match(markdown, /\| Skills \(total\) \|/);
+    assert.match(markdown, /\*\*Agent registry authority:\*\*/);
+    assert.match(markdown, /^## Agents$/im);
+    assert.match(
+      markdown,
+      /\| Agent \| Instruction \| Settings \| Hook config \|/,
+    );
+    assert.match(markdown, /\*\*Skills:\*\*/);
+    assert.match(markdown, /\*\*Dashboard views:\*\*/);
   });
 });

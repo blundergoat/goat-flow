@@ -1,5 +1,9 @@
 /**
- * CLI command helpers for regenerating generated learning-loop bucket indexes.
+ * Backs `goat-flow index`, the command that regenerates the learning loop's generated bucket indexes.
+ *
+ * A user runs this after adding, editing, or removing a footgun or lesson, because `stats --check` fails while an index is stale.
+ *
+ * Indexes are always regenerated from the bucket files rather than edited by hand, so retrieval reflects what is actually stored.
  */
 import type { ParsedCLI } from "../cli-types.js";
 import { writeOutput } from "../cli-output.js";
@@ -9,26 +13,30 @@ import { generateIndexes } from "./generate.js";
 import { resolveIndexBucketPaths } from "./parse-bucket.js";
 
 /**
- * Regenerate learning-loop INDEX.md files after a successful install so new projects start with
- * fresh indexes (and `stats --check` index freshness) without a separate manual `goat-flow index`
- * run. The installer has just created the bucket directories, so this never creates them itself.
+ * Regenerate learning-loop INDEX.md files after a successful install so new projects start with fresh indexes (and `stats --check` index freshness)
+ * without a separate manual `goat-flow index` run.
+ * The installer has just created the bucket directories, so this never creates them itself.
  *
  * @param projectPath - target project root whose existing bucket indexes should be regenerated
  */
 export function emitIndexGenerationInstallResult(projectPath: string): void {
   const fs = createFS(projectPath);
   const configState = loadConfig(projectPath, fs);
-  const written = generateIndexes(
+  const results = generateIndexes(
     projectPath,
     fs,
     resolveIndexBucketPaths(configState.config),
-  ).filter((result) => result.entryCount !== null);
+  );
+  const written = results.filter((result) => result.entryCount !== null);
   if (written.length === 0) return;
   console.log("");
   console.log("Learning-loop indexes:");
   console.log(
     `  ✓ ${written.length} INDEX.md file(s) regenerated (re-run \`goat-flow index\` after editing entries)`,
   );
+  for (const diagnostic of results.flatMap((result) => result.diagnostics)) {
+    console.warn(`  ! ${diagnostic}`);
+  }
 }
 
 /**
@@ -45,10 +53,15 @@ export function handleIndexCommand(options: ParsedCLI): void {
     fs,
     resolveIndexBucketPaths(configState.config),
   );
-  const lines = results.map((result) =>
-    result.entryCount === null
-      ? `- ${result.bucket}: skipped (${result.indexRelPath} directory missing)`
-      : `✓ ${result.indexRelPath} (${result.entryCount} entries)`,
-  );
+  const lines = [
+    ...results.map((result) =>
+      result.entryCount === null
+        ? `- ${result.bucket}: skipped (${result.indexRelPath} directory missing)`
+        : `✓ ${result.indexRelPath} (${result.entryCount} entries)`,
+    ),
+    ...results.flatMap((result) =>
+      result.diagnostics.map((diagnostic) => `! ${diagnostic}`),
+    ),
+  ];
   writeOutput(options, lines.join("\n"));
 }

@@ -1,12 +1,10 @@
 /**
- * Derives the secondary project signals that enrich setup prompts and audit
- * policy: code-generation and deployment tooling, LLM integration, static-analysis
- * tools, compliance-sensitive docs, and per-language formatter gaps.
+ * Derives the secondary project signals that enrich setup prompts and audit policy: code-generation and deployment tooling, LLM integration,
+ * static-analysis tools, compliance-sensitive docs, and per-language formatter gaps.
  *
- * These are advisory signals, not hard facts - compliance detection in particular
- * is signal-only and audit policy decides whether a hit matters. Detector tables
- * come from project-stack-data.js; file matching goes through the read-only fs
- * adapter so a missing or unreadable file is a non-match, never a throw.
+ * These are advisory signals, not hard facts - compliance detection in particular is signal-only and audit policy decides whether a hit matters.
+ * Detector tables come from project-stack-data.js; file matching goes through the read-only fs adapter so a missing or unreadable file is a
+ * non-match, never a throw.
  */
 import type { ProjectSignals, ReadonlyFS } from "../types.js";
 import {
@@ -21,9 +19,8 @@ import {
 import { hasAnyGlob, hasAnyPath } from "./project-stack-files.js";
 
 /**
- * Count distinct source files under the conventional code roots, used as a coarse
- * project-size signal. Globs only src/lib/app/packages, so generated, vendor, and
- * build output outside those trees is excluded by construction rather than filtered.
+ * Count distinct source files under the conventional code roots, used as a coarse project-size signal.
+ * Globs only src/lib/app/packages, so generated, vendor, and build output outside those trees is excluded by construction rather than filtered.
  *
  * @param fs - read-only filesystem adapter for the target project
  * @returns the de-duplicated file count across the code roots; 0 when none match
@@ -85,90 +82,129 @@ function detectLLMIntegration(fs: ReadonlyFS): boolean {
   );
 }
 
-/** Detect static-analysis tooling from project files. */
-// eslint-disable-next-line complexity -- intentional: detection covers many tool/config combos; extracting would fragment the detector.
-function detectStaticAnalysis(
-  fs: ReadonlyFS,
-): Array<{ tool: string; level: string | null }> {
-  const staticAnalysis: Array<{ tool: string; level: string | null }> = [];
+/** One detected static-analysis tool, with its configured strictness when the tool records one. */
+interface StaticAnalysisEntry {
+  tool: string;
+  level: string | null;
+}
 
-  // PHP: PHPStan
-  const phpstanConfig =
+const ESLINT_CONFIG_FILES = [
+  "eslint.config.js",
+  "eslint.config.mjs",
+  "eslint.config.cjs",
+  "eslint.config.ts",
+  ".eslintrc.json",
+  ".eslintrc.js",
+  ".eslintrc.yml",
+  ".eslintrc",
+] as const;
+
+const RUFF_CONFIG_FILES = ["ruff.toml", ".ruff.toml"] as const;
+
+/**
+ * Tools whose presence is decided purely by finding one of their config files, with no strictness level to read.
+ *
+ * Clippy is keyed on `Cargo.toml` because it ships with rustup, so any Cargo project already has it available.
+ */
+const CONFIG_FILE_ANALYSERS: ReadonlyArray<{
+  tool: string;
+  configFiles: readonly string[];
+}> = [
+  { tool: "biome", configFiles: ["biome.json", "biome.jsonc"] },
+  {
+    tool: "golangci-lint",
+    configFiles: [".golangci.yml", ".golangci.yaml", ".golangci.toml"],
+  },
+  { tool: "clippy", configFiles: ["Cargo.toml"] },
+  { tool: "rubocop", configFiles: [".rubocop.yml", ".rubocop.yaml"] },
+  { tool: "pylint", configFiles: [".pylintrc", "pylintrc"] },
+];
+
+/**
+ * Detect PHPStan and the strictness level the project configured.
+ *
+ * @param fs - read-only filesystem adapter for the target project
+ * @returns the entry, or null when neither PHPStan config file is present; a present config with no level reports a null level
+ */
+function detectPhpstan(fs: ReadonlyFS): StaticAnalysisEntry | null {
+  const config =
     fs.readFile("phpstan.neon") ?? fs.readFile("phpstan.neon.dist");
-  if (phpstanConfig) {
-    const levelMatch = phpstanConfig.match(/level:\s*(\d+|max)/);
-    staticAnalysis.push({ tool: "phpstan", level: levelMatch?.[1] ?? null });
-  }
+  if (!config) return null;
+  return {
+    tool: "phpstan",
+    level: config.match(/level:\s*(\d+|max)/)?.[1] ?? null,
+  };
+}
 
-  // Python: mypy
-  const mypyConfig = fs.readFile("mypy.ini") ?? fs.readFile("setup.cfg");
-  if (mypyConfig && /\[mypy\]/i.test(mypyConfig)) {
-    const strictMatch = mypyConfig.match(/strict\s*=\s*(true|false)/i);
-    staticAnalysis.push({
-      tool: "mypy",
-      level: strictMatch?.[1] === "true" ? "strict" : null,
-    });
-  }
+/**
+ * Detect mypy, which needs a `[mypy]` section rather than just a file, because `setup.cfg` exists in many non-mypy projects.
+ *
+ * @param fs - read-only filesystem adapter for the target project
+ * @returns the entry, or null when no config carries a `[mypy]` section; a non-strict config reports a null level
+ */
+function detectMypy(fs: ReadonlyFS): StaticAnalysisEntry | null {
+  const config = fs.readFile("mypy.ini") ?? fs.readFile("setup.cfg");
+  if (!config || !/\[mypy\]/i.test(config)) return null;
+  const strictMatch = config.match(/strict\s*=\s*(true|false)/i);
+  return { tool: "mypy", level: strictMatch?.[1] === "true" ? "strict" : null };
+}
 
-  // Python: ruff
-  if (
-    fs.exists("ruff.toml") ||
-    fs.exists(".ruff.toml") ||
-    fs.readFile("pyproject.toml")?.includes("[tool.ruff")
-  ) {
-    staticAnalysis.push({ tool: "ruff", level: null });
-  }
+/**
+ * Detect ruff from its own config files or from a `[tool.ruff` section inside `pyproject.toml`.
+ *
+ * @param fs - read-only filesystem adapter for the target project
+ * @returns the entry, or null when ruff is configured nowhere
+ */
+function detectRuff(fs: ReadonlyFS): StaticAnalysisEntry | null {
+  const isConfigured =
+    hasAnyPath(fs, RUFF_CONFIG_FILES) ||
+    (fs.readFile("pyproject.toml")?.includes("[tool.ruff") ?? false);
+  return isConfigured ? { tool: "ruff", level: null } : null;
+}
 
-  // JS/TS: eslint (config files or package.json devDependencies)
-  const hasEslintConfig =
-    fs.exists("eslint.config.js") ||
-    fs.exists("eslint.config.mjs") ||
-    fs.exists("eslint.config.cjs") ||
-    fs.exists("eslint.config.ts") ||
-    fs.exists(".eslintrc.json") ||
-    fs.exists(".eslintrc.js") ||
-    fs.exists(".eslintrc.yml") ||
-    fs.exists(".eslintrc");
-  if (!hasEslintConfig) {
-    const pkg = fs.readJson("package.json") as Record<string, unknown> | null;
-    const devDeps = (pkg?.devDependencies ?? {}) as Record<string, unknown>;
-    if (devDeps["eslint"]) {
-      staticAnalysis.push({ tool: "eslint", level: null });
-    }
-  } else {
-    staticAnalysis.push({ tool: "eslint", level: null });
-  }
+/**
+ * Detect eslint from any of its config shapes, falling back to a devDependency entry.
+ *
+ * The dependency fallback matters because a project can rely on a shared config package and keep no config file of its own.
+ *
+ * @param fs - read-only filesystem adapter for the target project
+ * @returns the entry, or null when neither a config file nor the devDependency is present
+ */
+function detectEslint(fs: ReadonlyFS): StaticAnalysisEntry | null {
+  if (hasAnyPath(fs, ESLINT_CONFIG_FILES))
+    return { tool: "eslint", level: null };
+  const packageJson = fs.readJson("package.json") as Record<
+    string,
+    unknown
+  > | null;
+  const devDependencies = (packageJson?.devDependencies ?? {}) as Record<
+    string,
+    unknown
+  >;
+  return devDependencies["eslint"] ? { tool: "eslint", level: null } : null;
+}
 
-  // JS/TS: biome
-  if (fs.exists("biome.json") || fs.exists("biome.jsonc")) {
-    staticAnalysis.push({ tool: "biome", level: null });
-  }
+/**
+ * Report every static-analysis tool the project has configured, in a stable order.
+ *
+ * This feeds the setup prompt, so the user is told which linters they already have rather than being advised to add one they run daily.
+ *
+ * @param fs - read-only filesystem adapter for the target project
+ * @returns the detected tools; empty means the project configures none, which the prompt treats as a gap worth mentioning
+ */
+function detectStaticAnalysis(fs: ReadonlyFS): StaticAnalysisEntry[] {
+  const levelledDetections = [
+    detectPhpstan(fs),
+    detectMypy(fs),
+    detectRuff(fs),
+    detectEslint(fs),
+  ].filter((entry): entry is StaticAnalysisEntry => entry !== null);
 
-  // Go: golangci-lint
-  if (
-    fs.exists(".golangci.yml") ||
-    fs.exists(".golangci.yaml") ||
-    fs.exists(".golangci.toml")
-  ) {
-    staticAnalysis.push({ tool: "golangci-lint", level: null });
-  }
+  const configFileDetections = CONFIG_FILE_ANALYSERS.filter((analyser) =>
+    hasAnyPath(fs, analyser.configFiles),
+  ).map((analyser) => ({ tool: analyser.tool, level: null }));
 
-  // Rust: clippy (detected via Cargo.toml presence - clippy ships with rustup)
-  if (fs.exists("Cargo.toml")) {
-    staticAnalysis.push({ tool: "clippy", level: null });
-  }
-
-  // Ruby: rubocop
-  if (fs.exists(".rubocop.yml") || fs.exists(".rubocop.yaml")) {
-    staticAnalysis.push({ tool: "rubocop", level: null });
-  }
-
-  // Python: pylint
-  if (fs.exists(".pylintrc") || fs.exists("pylintrc")) {
-    staticAnalysis.push({ tool: "pylint", level: null });
-  }
-
-  return staticAnalysis;
+  return [...levelledDetections, ...configFileDetections];
 }
 
 /** Compliance-sensitive docs are signal-only; audit policy decides whether they matter. */
@@ -194,7 +230,20 @@ function shouldCheckFormatter(lang: string, languages: string[]): boolean {
   );
 }
 
-/** Detect formatter gaps. */
+/**
+ * List the detected languages that the project's format command does not appear to cover.
+ *
+ * Use when building setup signals, so the prompt names the specific languages missing a formatter rather than a
+ * generic nudge. Matching is a substring test, so a formatter invoked through a wrapper script reads as a gap.
+ *
+ * @param languages - detected languages, most significant first; the first entry drives the bash rule, which only
+ *   applies when bash is primary or one of at most two languages, because a repo carrying a few shell scripts
+ *   should not be told to adopt a shell formatter
+ * @param formatCommand - the project's format script; `null` is treated as no formatter configured,
+ *   so every language with a known formatter counts as a gap
+ * @returns gap languages in `languages` order; empty means every language with a known formatter is
+ *   covered, and languages absent from the formatter map are never reported either way
+ */
 function detectFormatterGaps(
   languages: string[],
   formatCommand: string | null,
@@ -215,9 +264,8 @@ function detectFormatterGaps(
 }
 
 /**
- * Aggregate every secondary signal into one ProjectSignals record for the setup
- * and audit pipelines. The single entry point so callers run detection once and
- * read a complete picture rather than invoking each detector piecemeal.
+ * Aggregate every secondary signal into one ProjectSignals record for the setup and audit pipelines.
+ * The single entry point so callers run detection once and read a complete picture rather than invoking each detector piecemeal.
  *
  * @param fs - read-only filesystem adapter for the target project
  * @param languages - detected languages in precedence order; gates per-language formatter checks

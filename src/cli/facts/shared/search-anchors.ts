@@ -1,14 +1,16 @@
 /**
  * Checks the `(search: "...")` citations a user writes into learning-loop entries.
- * These anchors are how a lesson or footgun points at real code, so this module answers the
- * question the content audit exists to ask: does the text a user cited still exist where they
- * said it does, or has the code moved on and left the note lying?
  *
- * Reading is deliberately layered. Struck-through text and fenced examples are blanked out
- * first - without that, an author writing *about* an anchor inside a code sample would be
- * accused of a broken citation - and the blanking preserves line positions so any finding
- * still points at the line the user is looking at in their editor. Path policy lives in
- * `reference-paths.ts`; this module owns extraction and verdicts.
+ * These anchors are how a lesson or footgun points at real code, so this module answers the question the content audit exists to ask: does the text a
+ * user cited still exist where they said it does, or has the code moved on and left the note lying?
+ *
+ * Reading is deliberately layered.
+ *
+ * Struck-through text and fenced examples are blanked out first - without that, an author writing *about* an anchor inside a code sample would be
+ * accused of a broken citation - and the blanking preserves line positions so any finding still points at the line the user is looking at in their
+ * editor.
+ *
+ * Path policy lives in `reference-paths.ts`; this module owns extraction and verdicts.
  */
 import { posix as pathPosix } from "node:path";
 import type { ReadonlyFS } from "../../types.js";
@@ -35,8 +37,8 @@ export interface SearchAnchorEvaluation {
 
 /**
  * One `(search: ...)` citation exactly as the user wrote it, before anything is checked.
- * This is the raw shape lifted from their entry text; `SearchAnchorEvaluation` is the same
- * citation after we look on disk and decide whether it still points at anything real.
+ * This is the raw shape lifted from their entry text; `SearchAnchorEvaluation` is the same citation after we look on disk and decide whether it still
+ * points at anything real.
  */
 interface SearchAnchorCitation {
   filePath: string;
@@ -77,8 +79,8 @@ function closesMarkdownFence(
 
 /**
  * Track whether we are inside a fenced example while reading a user's entry line by line.
- * Use when scanning entry text for citations, so an example the user opened with ``` keeps
- * everything beneath it out of the scan until they close it again.
+ * Use when scanning entry text for citations, so an example the user opened with ``` keeps everything beneath it out of the scan until they close it
+ * again.
  *
  * @param line - the next line of the user's entry, exactly as they wrote it
  * @param activeFence - fence currently holding the scan open; `null` means we are in the
@@ -306,11 +308,11 @@ function evaluateSearchAnchor(
 /**
  * Validate visible `(search: ...)` citations against the selected project.
  *
- * Callers that accept evidence from external repositories may ignore missing
- * files while still detecting a moved literal in any target present locally.
- * Placeholder and glob paths are skipped because they do not identify one
- * concrete file. Every selected source document, including accepted ADRs, uses
- * the same literal-resolution contract.
+ * Callers that accept evidence from external repositories may ignore missing files while still detecting a moved literal in any target present
+ * locally.
+ * Placeholder and glob paths are skipped because they do not identify one concrete file.
+ *
+ * Every selected source document, including accepted ADRs, uses the same literal-resolution contract.
  *
  * @param fs - read-only filesystem used to open the files the user cited
  * @param content - the user's entry text; content with no citations is not an error and

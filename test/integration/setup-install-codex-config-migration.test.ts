@@ -87,9 +87,9 @@ describe("codex config migration", () => {
         /git repository root unavailable/u,
       );
       assert.match(installedHookConfig, /managed root unavailable/u);
-      assert.match(installedHookConfig, /"Stop"/u);
-      assert.match(installedHookConfig, /"timeout": 90/u);
-      assert.match(
+      assert.doesNotMatch(installedHookConfig, /"Stop"/u);
+      assert.doesNotMatch(installedHookConfig, /"timeout": 90/u);
+      assert.doesNotMatch(
         installedHookConfig,
         /codex:post-turn:goat-flow\.hook-result\.v1:turn-stop:1:75000/u,
       );
@@ -471,6 +471,7 @@ describe("codex config migration", () => {
     assert.doesNotMatch(result.stdout, /migrated:.*Codex permission profile/);
   });
 
+  // Fixture: writes a valid case where 'none' appears in a table the validator does not own, so a false positive there would block a clean install.
   it("post-install validator does not flag a glob 'none' entry in an unrelated table", () => {
     const root = makeTempProject();
     const codexDir = join(root, ".codex");

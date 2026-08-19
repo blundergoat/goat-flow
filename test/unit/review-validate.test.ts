@@ -33,6 +33,70 @@ What I Didn't Examine: none.
     assert.deepEqual(validateReviewReport(compact, projectRoot).violations, []);
   });
 
+  it("accepts a full local review that omits inapplicable integrity rows", (testContext) => {
+    const projectRoot = createReviewedProject(testContext);
+    const resolvedOnlyReport = validReview()
+      .replace("- Refutation ledger: n/a\n", "")
+      .replace(/^- Automated-review provenance:.*\n/mu, "")
+      .replace(/^- Refuter pass:.*\n/mu, "")
+      .replace("- Spec drift: checked M05\n", "")
+      .replaceAll(" [local-only]", "")
+      .replace(" [CONFIRMED-CROSS-MODEL]", "")
+      .replace(/\n## Spec Drift\n[\s\S]*?(?=\n## Ship Verdict)/u, "");
+
+    assert.deepEqual(
+      validateReviewReport(resolvedOnlyReport, projectRoot).violations,
+      [],
+    );
+  });
+
+  it("rejects omitted integrity rows when the report makes them applicable", (testContext) => {
+    const projectRoot = createReviewedProject(testContext);
+    const missingLedger = validateReviewReport(
+      validReview(
+        "src/example.ts",
+        "loadConfig",
+        "1 (persist-skipped)",
+        "persist-skipped",
+      ).replace("- Refutation ledger: persist-skipped\n", ""),
+      projectRoot,
+    );
+    const missingRefuter = validateReviewReport(
+      validReview().replace(/^- Refuter pass:.*\n/mu, ""),
+      projectRoot,
+    );
+    const missingSpecDrift = validateReviewReport(
+      validReview().replace("- Spec drift: checked M05\n", ""),
+      projectRoot,
+    );
+
+    const versioned = createVersionedReviewedProject(testContext);
+    const prScope = `- Scope snapshot: source=PR #57, base=${versioned.head}, head=${versioned.head}, authority=immutable Git objects, drift=verified, uncommitted=no, signals=1, bundle=.goat-flow/logs/review/goat-review-bundle.fixture.diff, chunking=none`;
+    const missingAutomatedReview = validateReviewReport(
+      validReview("src/example.ts", "committedAnchor")
+        .replace(/^- Scope snapshot:.*$/mu, prScope)
+        .replace(/^- Automated-review provenance:.*\n/mu, ""),
+      versioned.projectRoot,
+    );
+
+    assert.equal(hasViolation(missingLedger, "refutation-ledger"), true);
+
+    for (const [result, field] of [
+      [missingRefuter, "Refuter pass"],
+      [missingSpecDrift, "Spec drift"],
+      [missingAutomatedReview, "Automated-review provenance"],
+    ] as const) {
+      assert.equal(
+        result.violations.some(
+          (violation) =>
+            violation.message === `Review Integrity is missing ${field}`,
+        ),
+        true,
+        `${field}: ${JSON.stringify(result.violations)}`,
+      );
+    }
+  });
+
   it("reads closing-ATX H2 headings the way CommonMark renders them", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
     // `## Review Integrity ##` renders as the heading "Review Integrity", so

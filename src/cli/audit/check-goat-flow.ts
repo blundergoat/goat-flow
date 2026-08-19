@@ -1,7 +1,8 @@
 /**
  * Defines the 16 setup-scope checks shown by `goat-flow audit`.
- * Use them to tell a project owner whether required learning-loop, workspace,
- * skill, config, and hook surfaces are structurally usable and version-current.
+ *
+ * Use them to tell a project owner whether required learning-loop, workspace, skill, config, and hook surfaces are structurally usable and
+ * version-current.
  * These checks inspect the selected project but never execute its application.
  */
 import type { BuildCheck } from "./types.js";
@@ -89,13 +90,13 @@ const REQUIRED_SKILL_DOC_FILES = [
   ".goat-flow/skill-docs/skill-quality-testing/deployment.md",
 ];
 
-// Effective (non-comment) lines the goat-flow-gitignore template installs
-// into `.goat-flow/.gitignore`: the ignore-everything default, every
-// re-include of a committed surface, and the local-log content ignores.
-// Stale installs silently hide committed docs, hook policy, top-level guides,
-// or workspace anchors from git even though the files exist on disk.
-// Keep in sync with workflow/setup/reference/goat-flow-gitignore - a parity
-// test derives the expected list from that template, so drift fails CI.
+// Effective (non-comment) lines the goat-flow-gitignore template installs into `.goat-flow/.gitignore`: the ignore-everything default, every
+// re-include of a committed surface, the `**/logs/*/*/` guard, and the local-log content ignores. Slash-containing rules carry a `**/` prefix
+// because ignore-aware search tools (Claude Code's embedded ugrep) match anchored rules against the operand-prefixed path and would otherwise
+// hide the committed subtrees; Git treats both spellings alike here, and test/integration/gitignore-shape.test.ts pins its decisions.
+// Stale installs silently hide committed docs, hook policy, top-level guides, or workspace anchors from git even though the files exist on disk.
+//
+// Keep in sync with workflow/setup/reference/goat-flow-gitignore - a parity test derives the expected list from that template, so drift fails CI.
 export const REQUIRED_GOAT_FLOW_GITIGNORE_PATTERNS = [
   "*",
   "!.gitignore",
@@ -105,39 +106,40 @@ export const REQUIRED_GOAT_FLOW_GITIGNORE_PATTERNS = [
   "!glossary.md",
   "!security-policy.md",
   "!learning-loop/",
-  "!learning-loop/**",
+  "!**/learning-loop/**",
   "!skill-docs/",
-  "!skill-docs/**",
+  "!**/skill-docs/**",
   "!hooks/",
-  "!hooks/**",
+  "!**/hooks/**",
   "!plans/",
-  "!plans/**",
+  "!**/plans/**",
   "!scratchpad/",
-  "!scratchpad/**",
+  "!**/scratchpad/**",
+  "**/logs/*/*/",
   "!logs/",
-  "!logs/sessions/",
-  "!logs/sessions/.gitkeep",
-  "logs/sessions/*.md",
-  "!logs/sessions/README.md",
-  "!logs/quality/",
-  "logs/quality/*.json",
-  "logs/quality/*.md",
-  "!logs/quality/README.md",
-  "!logs/events/",
-  "logs/events/*.jsonl",
-  "!logs/events/README.md",
-  "!logs/critiques/",
-  "logs/critiques/*.md",
-  "!logs/critiques/README.md",
-  "!logs/review/",
-  "logs/review/*.txt",
-  "logs/review/*.json",
-  "logs/review/*.md",
-  "!logs/review/README.md",
-  "!logs/security/",
-  "logs/security/*.md",
-  "logs/security/*.json",
-  "!logs/security/README.md",
+  "!**/logs/sessions/",
+  "!**/logs/sessions/.gitkeep",
+  "**/logs/sessions/*.md",
+  "!**/logs/sessions/README.md",
+  "!**/logs/quality/",
+  "**/logs/quality/*.json",
+  "**/logs/quality/*.md",
+  "!**/logs/quality/README.md",
+  "!**/logs/events/",
+  "**/logs/events/*.jsonl",
+  "!**/logs/events/README.md",
+  "!**/logs/critiques/",
+  "**/logs/critiques/*.md",
+  "!**/logs/critiques/README.md",
+  "!**/logs/review/",
+  "**/logs/review/*.txt",
+  "**/logs/review/*.json",
+  "**/logs/review/*.md",
+  "!**/logs/review/README.md",
+  "!**/logs/security/",
+  "**/logs/security/*.md",
+  "**/logs/security/*.json",
+  "!**/logs/security/README.md",
 ];
 
 // === Named structure checks (10) ===

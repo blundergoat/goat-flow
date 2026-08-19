@@ -37,7 +37,7 @@ NODE_VERSION=$(node -e "console.log(process.versions.node.split('.')[0])")
 if (( NODE_VERSION < 20 )); then
     fail "Node.js v20+ required, found v$NODE_VERSION"
 fi
-info "Node.js v$(node --version)"
+info "Node.js $(node --version)"
 
 # 2. Clean install from lockfile
 if [[ -f package-lock.json ]]; then

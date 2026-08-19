@@ -1,17 +1,21 @@
 ---
 category: refactoring
-last_reviewed: 2026-08-06
+last_reviewed: 2026-08-20
 ---
 
 ## Pattern: Hold the file-length line continuously, not in a cleanup pass
 
-**Context:** A size gate (`size.file-length`, threshold 750 in `.gruff-ts.yaml`) accumulates violations quietly because no single commit crosses it — each edit adds twenty lines to an already-large file and nothing fails. The bill arrives all at once as a cleanup project.
+**Context:** A size gate (`size.file-length` in `.gruff-ts.yaml` - threshold 750/warning when the evidence below was measured, 1000/error since 2026-08-16) accumulates violations quietly because no single commit crosses it — each edit adds twenty lines to an already-large file and nothing fails. The bill arrives all at once as a cleanup project.
 
 **Approach:** Treat a file nearing the threshold as the trigger to split, at the moment you are already editing it, while you hold the context needed to find the seam. Splitting is cheap then and expensive later: doing it retroactively means re-deriving every dependency, and a seam that looked like one module often turns out to be two once you check which private helpers are used on both sides.
 
 **Evidence (ACTUAL_MEASURED, 2026-08-04):** A goat-flow gruff sweep found 35 files over the 750-line gate totalling ~13,200 lines above threshold, topped by a 5,069-line contract test and a 2,069-line source file. Splitting the first one, `src/cli/facts/shared/learning-loop-common.ts` (836 lines), took roughly 15 tool calls and produced three modules rather than the two originally planned, because `isFileRef`, `isIntentionallyGitignored`, and `isCheckableForStaleness` were each used on both sides of the intended seam and had to become a third shared module. Evidence anchors: `src/cli/facts/shared/reference-paths.ts` (search: `isCheckableForStaleness`), `src/cli/facts/shared/search-anchors.ts` (search: `evaluateSearchAnchors`).
 
 Three second-order effects make deferral worse than it looks. Doc-comment rules and the size gate pull against each other - adding required documentation pushed one test file from 749 to 753 lines and *created* a size finding. Clearing an entire pillar can lower the reported composite, so a long deferred cleanup shows the score sagging while the codebase improves; judge progress on per-pillar finding counts instead.
+
+**Recurrence 2026-08-13:** M01's provider migration fixture reached 751 lines after formatting; the focused behavior suite was green, but Gruff stopped closeout. Removing one non-semantic blank line restored the ceiling. Measure the formatted file, not the pre-format draft. Evidence anchor: `test/integration/setup-install-migrations.test.ts` (search: `keeps disabled hooks installed and inert`).
+
+**Recurrence 2026-08-16:** A non-Git controller fan-out suite left `test/integration/post-turn-safety-hook.test.ts` at 891 formatted lines. Its 59 focused tests and the full 2,083-test run passed, but preflight correctly rejected the new `size.file-length` warning. The controller-only cases now live in `test/integration/post-turn-safety-controller.test.ts` (search: `explicit non-Git controller roots`), leaving both test modules below the 750-line threshold. Treat a green behavior suite as incomplete proof until the size ratchet also runs.
 
 Most dangerous: **moving a symbol silently breaks every learning-loop anchor that cites it by path.** Four entries pointed at symbols that still existed but no longer lived where the anchor said. Typecheck and focused tests stayed green throughout - nothing in the compiler can see a Markdown citation - and it surfaced only as `support-bundle` exiting 1 through the `feedback-loop-active` harness check. After any extraction, run `goat-flow stats --check` and re-run `goat-flow index`, and treat a passing typecheck as no evidence at all about artifact references. Evidence anchors: `.goat-flow/learning-loop/lessons/audit-contracts.md` (search: `function toCheckResult`), `.goat-flow/learning-loop/footguns/hook-installation.md` (search: `checkCodexWorkspaceRootExactPaths`).
 
@@ -42,7 +46,7 @@ Most dangerous: **moving a symbol silently breaks every learning-loop anchor tha
 A canary path — apply to `LocalEnvironment` only first, run mini against a real task for a week, then propagate to `DockerEnvironment` / `SingularityEnvironment` / `BubblewrapEnvironment` / configs / tests — would have surfaced the failure mode against a 1-file revert surface instead of 15.
 
 **Goat-flow application:**
-- Cross-file contracts that share this shape: `CheckResult` / `HarnessCheckResult` in `src/cli/audit/types.ts`, manifest schema in `workflow/manifest.json`, skill composition contract in `src/cli/audit/check-drift.ts`, hook event naming (per `.goat-flow/plans/1.45.0/M01-hook-programme-foundation.md`).
+- Cross-file contracts that share this shape: `CheckResult` / `HarnessCheckResult` in `src/cli/audit/types.ts`, manifest schema in `workflow/manifest.json`, skill composition contract in `src/cli/audit/check-drift.ts`, hook event naming (per `.goat-flow/plans/1.60.0/M01-hook-programme-foundation.md`).
 - "Smallest canary" usually means: one audit check (not all of them), one environment-style class (not all), one skill (not all six), one agent harness config (not all four).
 - The canary's PR description must name *why* this consumer is representative. If the canary doesn't share the failure mode with peers, it's not a canary — it's just a smaller change.
 - Reverting a breadth-first contract change is structurally expensive even when the per-file revert is trivial — the diff is wide, parity has to be re-proven across the same surface, and reviewers can't tell which file's symptom motivated the revert. The canary caps that downside.

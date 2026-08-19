@@ -1,12 +1,12 @@
 /**
- * Subtype classification for skill-quality scoring: given an artifact and its content, score it
- * against every candidate subtype (name patterns, heading patterns, must-not-have vetoes) and pick
- * the dominant match, with a confidence figure that signals how clearly it won.
+ * Subtype classification for skill-quality scoring: given an artifact and its content, score it against every candidate subtype (name patterns,
+ * heading patterns, must-not-have vetoes) and pick the dominant match, with a confidence figure that signals how clearly it won.
  *
- * Two independent passes live here. The scoring pass (`classifyArtifact`) selects the profile that
- * drives the rubric; a separate semantic shape pass exists to catch misfiled artifacts whose
- * content does not match the profile they were scored under. Detection order is fixed per kind so
- * higher-priority subtypes win ties deterministically.
+ * Two independent passes live here.
+ * The scoring pass (`classifyArtifact`) selects the profile that drives the rubric; a separate semantic shape pass exists to catch misfiled artifacts
+ * whose content does not match the profile they were scored under.
+ *
+ * Detection order is fixed per kind so higher-priority subtypes win ties deterministically.
  */
 import type {
   ArtifactSubtype,
@@ -44,6 +44,13 @@ function isFallbackOnlyMatch(match: SubtypeMatchScore): boolean {
   );
 }
 
+/**
+ * Say how clearly the winning subtype beat the runner-up, which is what tells a reviewer whether to trust the classification.
+ *
+ * @param top - highest-scoring subtype match
+ * @param second - next-best match; `undefined` means nothing else scored at all, which reads as an unopposed win
+ * @returns confidence between 0 and 1, shown beside the subtype in the Skills tab
+ */
 function subtypeConfidence(
   top: SubtypeMatchScore,
   second: SubtypeMatchScore | undefined,
@@ -64,7 +71,57 @@ function subtypeConfidence(
  *  - Empty rules (fallback subtype): SUBTYPE_FALLBACK_SCORE so the fallback
  *    always matches with low confidence.
  */
-// eslint-disable-next-line complexity -- intentional because subtype match scoring exhausts kind compatibility, fallback rules, name-vs-heading scoring, and mustNotHave veto in one place to keep priority semantics local
+
+/**
+ * Add up the score for every detection heading present in the artifact.
+ *
+ * Each matching heading counts, so an artifact carrying several of a subtype's hallmark sections scores higher than one
+ * carrying a single heading by coincidence.
+ *
+ * @param headingPatterns - the subtype's heading patterns
+ * @param content - raw artifact text
+ * @param reasoning - accumulator appended to in place
+ * @returns the total heading score; zero means no hallmark heading was found. It appends one reasoning line per match, which is what the Skills
+ *   tab shows as evidence for the classification.
+ */
+function scoreHeadingMatches(
+  headingPatterns: readonly string[],
+  content: string,
+  reasoning: string[],
+): number {
+  let score = 0;
+  for (const pattern of headingPatterns) {
+    if (new RegExp(pattern, "i").test(content)) {
+      score += SUBTYPE_HEADING_MATCH_SCORE;
+      reasoning.push(`heading "${pattern}" present`);
+    }
+  }
+  return score;
+}
+
+/**
+ * Find the first must-not-have pattern present in the artifact, which disqualifies a heading-only match.
+ *
+ * @param vetoes - the subtype's must-not-have patterns
+ * @param content - raw artifact text
+ * @returns the matching veto pattern, or null when none applies
+ */
+function findMatchingVeto(
+  vetoes: readonly string[],
+  content: string,
+): string | null {
+  return vetoes.find((veto) => new RegExp(veto, "i").test(content)) ?? null;
+}
+
+/**
+ * Score how well one artifact matches a single candidate subtype, from its name, its headings, and the shapes that rule the subtype out.
+ *
+ * @param artifact - artifact being classified, supplying the name hints
+ * @param content - artifact text, which carries the heading evidence
+ * @param detection - signals configured for this subtype
+ * @param subtype - subtype being scored
+ * @returns the score plus the reasons behind it; a vetoed subtype scores zero rather than a weak positive
+ */
 function scoreSubtypeMatch(
   artifact: ArtifactEntry,
   content: string,
@@ -84,30 +141,29 @@ function scoreSubtypeMatch(
     return { subtype, score: SUBTYPE_FALLBACK_SCORE, reasoning };
   }
 
+  const nameMatched = detection.namePatterns.includes(artifact.name);
   let score = 0;
-  if (detection.namePatterns.includes(artifact.name)) {
+  if (nameMatched) {
     score += SUBTYPE_NAME_MATCH_SCORE;
     reasoning.push(`name "${artifact.name}" in name-patterns`);
   }
 
-  let headingMatched = false;
-  for (const pattern of detection.headingPatterns) {
-    if (new RegExp(pattern, "i").test(content)) {
-      score += SUBTYPE_HEADING_MATCH_SCORE;
-      headingMatched = true;
-      reasoning.push(`heading "${pattern}" present`);
-    }
-  }
+  const headingScore = scoreHeadingMatches(
+    detection.headingPatterns,
+    content,
+    reasoning,
+  );
+  score += headingScore;
 
+  // Nothing matched, so this subtype is simply not a candidate for the artifact.
   if (score === 0) return { subtype, score: 0, reasoning };
 
-  const nameMatched = detection.namePatterns.includes(artifact.name);
-  if (!nameMatched && headingMatched) {
-    for (const veto of detection.mustNotHave) {
-      if (new RegExp(veto, "i").test(content)) {
-        reasoning.push(`vetoed by must-not-have "${veto}"`);
-        return { subtype, score: 0, reasoning };
-      }
+  // A heading-only match is the weak case, so a must-not-have veto is allowed to overturn it.
+  if (!nameMatched && headingScore > 0) {
+    const veto = findMatchingVeto(detection.mustNotHave, content);
+    if (veto !== null) {
+      reasoning.push(`vetoed by must-not-have "${veto}"`);
+      return { subtype, score: 0, reasoning };
     }
   }
 
@@ -126,9 +182,8 @@ const SKILL_DETECTION_ORDER: ArtifactSubtype[] = [
 ];
 
 /**
- * Classify an artifact across all candidate subtypes. The detected subtype
- * is the highest-scoring match; confidence is `top / (top + second)` to
- * communicate how dominant the leading subtype is.
+ * Classify an artifact across all candidate subtypes.
+ * The detected subtype is the highest-scoring match; confidence is `top / (top + second)` to communicate how dominant the leading subtype is.
  *
  * @param artifact - inventory record; its `kind` selects the fixed subtype detection order.
  * @param content - raw artifact text matched against name/heading patterns and must-not-have vetoes.
@@ -218,6 +273,13 @@ function countRegexMatches(content: string, pattern: RegExp): number {
   return Array.from(content.matchAll(pattern)).length;
 }
 
+/**
+ * Add up the signals that fired for one subtype and keep their labels, so the reviewer can see why a file was classified the way it was.
+ *
+ * @param subtype - subtype these signals belong to
+ * @param signals - triples of whether the signal fired, its weight, and its reader-facing label
+ * @returns the summed score with one reason per fired signal; no fired signal yields a zero score and no reasons
+ */
 function scoreFromSignals(
   subtype: ArtifactSubtype,
   signals: Array<[boolean, number, string]>,
@@ -363,6 +425,17 @@ function scoreShapeMatch(
   ]);
 }
 
+/**
+ * Work out what kind of artifact a file actually is, so the Skills tab scores it against the right profile.
+ *
+ * A user can paste or install anything, so the shape is inferred from the content rather than trusted from the filename or directory.
+ *
+ * Ranking is a stable contract: candidates below the minimum score are dropped before sorting, so a weak partial match never wins by default.
+ *
+ * @param artifact - the discovered artifact, supplying its path and kind as weak hints
+ * @param content - the artifact's text, which is the real evidence for the decision
+ * @returns the detected shape and its confidence; no confident match falls back to the generic shape rather than guessing
+ */
 export function detectArtifactShape(
   artifact: ArtifactEntry,
   content: string,
@@ -374,6 +447,7 @@ export function detectArtifactShape(
     .sort((a, b) => b.score - a.score);
 
   const top = matches[0];
+  // Nothing scored above the floor, so the artifact keeps a neutral shape rather than being labelled from a guess.
   if (!top) {
     const fallback =
       artifact.kind === "shared-reference" ? "playbook" : "workflow";

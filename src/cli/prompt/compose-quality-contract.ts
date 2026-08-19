@@ -1,13 +1,13 @@
 /**
  * Writes the contract an agent must follow when it produces a quality report.
- * A quality assessment is written by a language model, so the prompt has to state exactly what
- * a valid report looks like: which fields exist, which values each one accepts, and what the
- * agent is forbidden from inventing. This module renders that contract into the prompt.
  *
- * The vocabulary is pulled from the same constants the parser validates against, so the
- * instructions an agent reads and the rules its output is checked by can never drift apart. A
- * contract that allowed a value the parser rejects would fail the user at save time, after the
- * expensive part of the work was already done.
+ * A quality assessment is written by a language model, so the prompt has to state exactly what a valid report looks like: which fields exist, which
+ * values each one accepts, and what the agent is forbidden from inventing.
+ * This module renders that contract into the prompt.
+ *
+ * The vocabulary is pulled from the same constants the parser validates against, so the instructions an agent reads and the rules its output is
+ * checked by can never drift apart.
+ * A contract that allowed a value the parser rejects would fail the user at save time, after the expensive part of the work was already done.
  */
 import type { AgentId } from "../types.js";
 import type { QualityHistoryEntry } from "../quality/history.js";
@@ -17,6 +17,9 @@ import {
   QUALITY_EVIDENCE_METHODS,
   QUALITY_FINDING_SEVERITIES,
   QUALITY_FINDING_TYPES,
+  QUALITY_GROUNDING_STATUSES,
+  QUALITY_SCORE_CONFIDENCES,
+  QUALITY_WORKTREE_STATES,
 } from "../quality/schema-types.js";
 import {
   inferQualityScope,
@@ -61,20 +64,19 @@ function backtickList(values: readonly (string | number)[]): string {
 /**
  * THE single authoritative renderer for the quality report JSON contract.
  *
- * Every surface that asks an agent to write a quality report - the CLI's
- * agent-setup and focused prompts today - appends this block, so a user
- * running `goat-flow quality --agent claude` and one clicking Launch in the
- * dashboard's Quality page get reports that `goat-flow quality validate`,
- * `history`, and `diff` all parse identically. Field lists come from
- * `quality/schema-types.ts`, so prompt text cannot drift from the parser.
- * (The dashboard's browser-side mirror cannot import this module - it is
- * pinned to the same required fields by `test/unit/quality-report-contract.test.ts`.)
+ * Every surface that asks an agent to write a quality report - the CLI's agent-setup and focused prompts today - appends this block, so a user
+ * running `goat-flow quality --agent claude` and one clicking Launch in the dashboard's Quality page get reports that `goat-flow quality validate`,
+ * `history`, and `diff` all parse identically.
+ *
+ * Field lists come from `quality/schema-types.ts`, so prompt text cannot drift from the parser.
+ * (The dashboard's browser-side mirror cannot import this module - it is pinned to the same required fields by
+ * `test/unit/quality-report-contract.test.ts`.)
  *
  * @param lines - prompt line buffer; appended to in place
  * @param input - run facts embedded into the contract (agent, paths, prior report, mode)
  * @param opts - per-surface presentation switches (detail level, separator, sample type)
  */
-// eslint-disable-next-line complexity -- Intentional because mutually exclusive saver contracts require one ordered renderer.
+
 export function appendQualityReportContract(
   lines: string[],
   input: ReportContractInput,
@@ -82,9 +84,8 @@ export function appendQualityReportContract(
 ): void {
   const full = opts.detail === "full";
   /**
-   * Push the full-detail or compact wording of one line. The detail branch
-   * lives in this arrow's own scope, so it does not add to the enclosing
-   * function's complexity budget - just its readability.
+   * Push the full-detail or compact wording of one line.
+   * The detail branch lives in this arrow's own scope, so it does not add to the enclosing function's complexity budget - just its readability.
    */
   const pushVariant = (fullText: string, compactText: string): void => {
     lines.push(full ? fullText : compactText);
@@ -146,6 +147,15 @@ export function appendQualityReportContract(
   lines.push(
     `  "prior_report_id": ${input.priorReport ? jsonString(input.priorReport.id) : "null"},`,
   );
+  lines.push('  "assessment_context": {');
+  lines.push('    "project_revision": null,');
+  lines.push('    "working_tree_state": "unavailable",');
+  lines.push('    "grounding_status": "blocked",');
+  lines.push(
+    '    "unverified_probes": ["runtime grounding not yet recorded"],',
+  );
+  lines.push('    "score_confidence": "low"');
+  lines.push("  },");
   lines.push('  "scores": {');
   lines.push(
     '    "setup": { "total": 0, "accuracy": 0, "relevance": 0, "completeness": 0, "friction": 0 },',
@@ -177,6 +187,29 @@ export function appendQualityReportContract(
   lines.push("}");
   lines.push("```");
   lines.push("");
+  appendReportJsonRules(lines, input, usesStagedDraft, pushVariant, pushFull);
+}
+
+/**
+ * Append the rules the agent must follow when filling in the JSON template above it.
+ *
+ * These are the constraints a saved report is actually validated against, so wording that drifts from the parser is how a
+ * user ends up with a report their own CLI rejects.
+ *
+ * @param lines - prompt lines appended to in place
+ * @param input - the quality request, supplying mode and any prior report being compared
+ * @param isStagedDraftMode - true when the dashboard stages the draft, which changes how the report must be handed back
+ * @param pushVariant - emit the full-detail or compact wording of one rule
+ * @param pushFull - emit lines only the full-detail prompt carries
+ * @returns nothing; the rules are appended to `lines`
+ */
+function appendReportJsonRules(
+  lines: string[],
+  input: ReportContractInput,
+  isStagedDraftMode: boolean,
+  pushVariant: (fullText: string, compactText: string) => void,
+  pushFull: (...texts: string[]) => void,
+): void {
   lines.push("JSON rules:");
   lines.push(
     "- `scores.*` axis values must use exact `0 | 5 | 10 | 15 | 20 | 25` increments and each axis sum must equal its `total` exactly.",
@@ -213,6 +246,10 @@ export function appendQualityReportContract(
   lines.push(
     `- \`quality_mode\` is REQUIRED for new reports generated from this prompt. Use \`${jsonString(input.qualityMode)}\` for this ${qualityModeLabel(input.qualityMode)} assessment.`,
   );
+  pushVariant(
+    `- \`assessment_context\` is REQUIRED for new reports. Set \`project_revision\` to the assessed Git HEAD or \`null\`; set \`working_tree_state\` to ${backtickList(QUALITY_WORKTREE_STATES)}; set \`grounding_status\` to ${backtickList(QUALITY_GROUNDING_STATUSES)}; list every skipped, denied, or unavailable command or skill probe in \`unverified_probes\`; and set \`score_confidence\` to ${backtickList(QUALITY_SCORE_CONFIDENCES)}. Use an empty \`unverified_probes\` array only when grounding is complete. This metadata does not change or cap the rubric scores.`,
+    `- \`assessment_context\` is REQUIRED: record \`project_revision\`; \`working_tree_state\` as ${backtickList(QUALITY_WORKTREE_STATES)}; \`grounding_status\` as ${backtickList(QUALITY_GROUNDING_STATUSES)}; \`unverified_probes\`; and \`score_confidence\` as ${backtickList(QUALITY_SCORE_CONFIDENCES)}. This metadata does not change or cap the rubric scores.`,
+  );
   // Same prior-report id in both wordings - compute once so the branch doesn't
   // sit inline in each variant string.
   const priorIdText = input.priorReport
@@ -248,13 +285,13 @@ export function appendQualityReportContract(
   pushFull(
     "- `summary` and `detail` MUST be single-line strings. No literal newlines, tabs, or other control characters. If you need to reference multi-line command output, summarise the outcome in prose - do NOT paste raw terminal blocks into JSON string fields. Pasted multi-line content produces unparseable JSON and the report is lost.",
   );
-  if (!usesStagedDraft) {
+  if (!isStagedDraftMode) {
     pushFull(
       "- QUOTE the persistence delimiter (`<<'JSON'`, not `<<JSON`). Unquoted delimiters make the shell interpret `$`, backticks, and escapes inside the report.",
     );
   }
   lines.push("");
-  if (usesStagedDraft) {
+  if (isStagedDraftMode) {
     appendStagedDraftPersistence(lines, input);
     return;
   }
@@ -364,8 +401,7 @@ function appendStagedDraftPersistence(
 }
 
 /**
- * Focused-mode wrapper over {@link appendQualityReportContract}: compact
- * wording, trailing-section separator, framework-flavoured sample finding.
+ * Focused-mode wrapper over {@link appendQualityReportContract}: compact wording, trailing-section separator, framework-flavoured sample finding.
  * Kept as a named export so focused composers read naturally.
  *
  * @param lines - prompt line buffer; appended to in place

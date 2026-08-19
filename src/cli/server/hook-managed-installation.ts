@@ -1,8 +1,9 @@
 /**
  * Installs, removes, and inspects the hook files behind CLI and dashboard status.
+ *
  * Use when a user enables, disables, syncs, or reviews one managed hook.
- * It keeps filesystem trust and version checks separate from provider support,
- * so local repair guidance reflects the files the selected agent can run.
+ * It keeps filesystem trust and version checks separate from provider support, so local repair guidance reflects the files the selected agent can
+ * run.
  */
 import {
   chmodSync,
@@ -15,8 +16,15 @@ import {
 } from "node:fs";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { AUDIT_VERSION } from "../constants.js";
+import {
+  classifyManagedSetupFile,
+  managedSetupChangeDirection,
+  type ManagedSetupChangeDirection,
+} from "../managed-setup-preview.js";
+import { readManagedInstallBaseline } from "../managed-setup-state.js";
+import { hashFile } from "../managed-setup-write-set.js";
 import { getTemplatePath } from "../paths.js";
-import type { AgentProfile } from "../types.js";
+import { KNOWN_AGENT_IDS, type AgentProfile } from "../types.js";
 import { projectIsAheadOfCli } from "../version-compare.js";
 import type { HookSpec } from "./hooks-registry.js";
 import { writeFileAtomic } from "./safe-exec.js";
@@ -68,12 +76,77 @@ export interface ManagedHookInstallationFacts {
   hasAllRequiredFiles: boolean;
   hasCurrentRequiredFiles: boolean;
   hasTrustedRequiredFiles: boolean;
+  changeDirection: ManagedSetupChangeDirection;
+  changedPaths: string[];
 }
 
 /** One installed hook file and the bundled source users expect it to match. */
 interface ManagedHookFileContract {
   installedPath: string;
   templatePath: string;
+}
+
+/** Convert one managed destination into the portable path stored in install state. */
+function managedHookRelativePath(
+  projectPath: string,
+  managedHookFile: ManagedHookFileContract,
+): string {
+  return relative(projectPath, managedHookFile.installedPath).replaceAll(
+    "\\",
+    "/",
+  );
+}
+
+/**
+ * Derive one hook file's repair direction from M02's canonical classifier.
+ * Use after existence checks; unreadable evidence remains unclassified and never authorizes sync.
+ *
+ * @param projectPath - selected project used to derive the baseline's relative path
+ * @param managedHookFile - installed/template pair whose exact bytes are compared
+ * @param expectedHashes - trusted prior hashes; null keeps a differing file unclassified
+ * @returns shared repair direction; unreadable files return unclassified
+ * @throws Never; filesystem read failures are converted into unclassified evidence
+ */
+function managedHookFileDirection(
+  projectPath: string,
+  managedHookFile: ManagedHookFileContract,
+  expectedHashSets: readonly Map<string, string>[],
+): ManagedSetupChangeDirection {
+  const managedPath = managedHookRelativePath(projectPath, managedHookFile);
+  try {
+    const currentSha256 = hashFile(managedHookFile.installedPath);
+    const newExpectedSha256 = hashFile(managedHookFile.templatePath);
+    const oldExpectedHashes = expectedHashSets.flatMap((expectedHashes) => {
+      const expectedHash = expectedHashes.get(managedPath);
+      return expectedHash === undefined ? [] : [expectedHash];
+    });
+    // Shared files are safe to advance when any installed agent baseline exactly names current bytes.
+    const oldExpectedSha256 =
+      oldExpectedHashes.find(
+        (expectedHash) => expectedHash === currentSha256,
+      ) ??
+      oldExpectedHashes[0] ??
+      null;
+    const state = classifyManagedSetupFile({
+      oldExpectedSha256,
+      currentSha256,
+      newExpectedSha256,
+    });
+    return managedSetupChangeDirection(state);
+  } catch {
+    // For example, permissions may change between the existence check and the byte read.
+    return "unclassified";
+  }
+}
+
+/** Collapse per-file direction without allowing one unknown or diverged path to look sync-safe. */
+function managedHookChangeDirection(
+  directions: readonly ManagedSetupChangeDirection[],
+): ManagedSetupChangeDirection {
+  if (directions.includes("diverged")) return "diverged";
+  if (directions.includes("unclassified")) return "unclassified";
+  if (directions.includes("behind")) return "behind";
+  return "current";
 }
 
 type AgentProfilePathKey =
@@ -130,7 +203,7 @@ function assertWithinProject(projectPath: string, targetPath: string): void {
 
 /**
  * Resolve one managed hook file inside the agent folder shown in setup.
- * Use whenever status or sync needs the same installed path.
+ * Use whenever status or sync needs the same installed path; it throws for an agent with no hook surface rather than inventing a location.
  * @param projectPath - selected project; empty text cannot identify an owned destination
  * @param agent - selected agent profile; a null hook directory means that agent has no hook surface
  * @param hookScriptName - managed filename; empty text cannot identify an installable script
@@ -224,7 +297,7 @@ function managedPathEntriesAreTrusted(
 
 /**
  * Verify one managed file and its parents use the launcher's trusted shape.
- * Use before a status screen presents installed bytes as safe to execute.
+ * Use before a status screen presents installed bytes as safe to execute; it reports every doubtful case as untrusted rather than throwing.
  * @param projectPath - selected project root; empty or redirected roots are untrusted
  * @param managedFilePath - installed hook/config file; missing or empty paths are untrusted
  * @returns true only for one regular file under real directories; false covers missing or redirected paths
@@ -282,7 +355,7 @@ export function managedFileIsTrusted(
 
 /**
  * Classify the files one installed hook needs before users rely on it.
- * Use when CLI, audit, or dashboard builds the local effective-state chain.
+ * Use when CLI, audit, or dashboard builds the local effective-state chain; it reports each gap as a false fact instead of throwing.
  * @param projectPath - selected project; empty text produces missing installation facts
  * @param agent - selected agent; an absent hook surface cannot produce complete facts
  * @param hookSpec - registry contract; an empty script set cannot establish runnable coverage
@@ -301,6 +374,20 @@ export function managedHookInstallationFacts(
   // A missing file means the user does not yet have a complete runnable hook.
   const hasAllRequiredFiles = managedHookFiles.every((managedHookFile) =>
     existsSync(managedHookFile.installedPath),
+  );
+  const expectedHashSets = KNOWN_AGENT_IDS.flatMap((agentId) => {
+    const baseline = readManagedInstallBaseline(projectPath, agentId);
+    return baseline.status === "loaded" ? [baseline.expectedHashes] : [];
+  });
+  const fileDirections = managedHookFiles.map((managedHookFile) =>
+    existsSync(managedHookFile.installedPath)
+      ? managedHookFileDirection(projectPath, managedHookFile, expectedHashSets)
+      : "unclassified",
+  );
+  const changedPaths = managedHookFiles.flatMap((managedHookFile, index) =>
+    fileDirections[index] === "current"
+      ? []
+      : [managedHookRelativePath(projectPath, managedHookFile)],
   );
   // Current bytes matter only after every required file exists.
   const hasCurrentRequiredFiles =
@@ -327,6 +414,8 @@ export function managedHookInstallationFacts(
     hasAllRequiredFiles,
     hasCurrentRequiredFiles,
     hasTrustedRequiredFiles,
+    changeDirection: managedHookChangeDirection(fileDirections),
+    changedPaths,
   };
 }
 
@@ -472,7 +561,7 @@ export function hookConfigExists(
 
 /**
  * Add one required managed path to the project-local ignore policy.
- * Use while enabling hooks so files needed after clone stay tracked.
+ * Use while enabling hooks so files needed after clone stay tracked; it writes the project ignore file only when the entry is not already there.
  * @param projectPath - selected project; empty text cannot own a safe ignore file
  * @param gitignoreEntry - exact negation shown in the ignore file; empty text adds no useful rule
  * @returns nothing; an existing entry leaves the file unchanged
@@ -511,18 +600,21 @@ function ensureGoatFlowGitignoreEntry(
 
 /**
  * Keep the shared deny policy store tracked for fresh-clone protection.
- * Use after installing any managed hook files into `.goat-flow/hooks/`.
+ * Use after installing any managed hook files into `.goat-flow/hooks/`. The spelling must match the shipped template
+ * (`workflow/setup/reference/goat-flow-gitignore` and `REQUIRED_GOAT_FLOW_GITIGNORE_PATTERNS`): the double-star-slash
+ * prefixed form is what ignore-aware search tools honour, and the older anchored spelling would add an extra effective line
+ * that fails the goat-flow-gitignore audit order check on every hook-enabled install.
  * @param projectPath - selected project; empty text cannot own the ignore policy
  * @returns nothing; both required negations are present when setup finishes
  */
 function ensureHookGitignoreEntries(projectPath: string): void {
   ensureGoatFlowGitignoreEntry(projectPath, "!hooks/");
-  ensureGoatFlowGitignoreEntry(projectPath, "!hooks/**");
+  ensureGoatFlowGitignoreEntry(projectPath, "!**/hooks/**");
 }
 
 /**
  * Remove one old per-agent script when an upgrade centralizes hook files.
- * Use during enable, disable, and sync migrations.
+ * Use during enable, disable, and sync migrations; it swallows a missing file, because an already-clean project is the expected outcome.
  * @param projectPath - selected project; empty text cannot own a safe removal
  * @param legacyHookDirectory - old agent hook folder; empty text resolves to the project root and is rejected
  * @param hookScriptName - managed filename; empty text cannot identify intended residue
@@ -621,7 +713,7 @@ function installedHookIsNewer(installedHookPath: string): boolean {
 
 /**
  * Remove one current managed script by exact name.
- * Use for disable and migration cleanup while preserving user scripts.
+ * Use only when migration retires a hook while preserving user scripts; it swallows a missing file so repeated syncs stay quiet.
  * @param projectPath - selected project; empty text cannot own a safe removal
  * @param agent - selected agent; a null hook directory cannot resolve a script
  * @param hookScriptName - exact managed filename; empty text is rejected by target validation
@@ -646,29 +738,22 @@ function removeScriptIfPresent(
 }
 
 /**
- * Install current managed bytes and prune obsolete per-agent copies.
- * Use when a user enables a hook or syncs an existing agent surface.
- * @param projectPath - selected project; empty text cannot own safe destinations
- * @param agent - selected agent; a null hook directory leaves setup unchanged
- * @param hookSpec - hook files to install; an empty list writes no runnable hook
- * @returns nothing; successful completion leaves current executable managed files
+ * Copy and chmod declared scripts while preserving inert files during disabled reconciliation.
+ * @throws HookManagedInstallationError when an installed script comes from a newer Goat Flow release
  */
-export function copyHookScripts(
+function copyDeclaredHookScripts(
   projectPath: string,
   agent: AgentProfile,
   hookSpec: HookSpec,
+  shouldOverwriteExisting: boolean,
 ): void {
-  // An agent without a hook directory has no install destination for the user.
-  if (!agent.hooksDir) return;
-
-  mkdirSync(join(projectPath, agent.hooksDir), { recursive: true });
-  // Every declared script receives the exact bytes from this Goat Flow release.
   for (const hookScriptName of hookSpec.scriptFiles) {
     const installedHookPath = installedHookTarget(
       projectPath,
       agent,
       hookScriptName,
     );
+    if (!shouldOverwriteExisting && existsSync(installedHookPath)) continue;
     // A newer installed guard must not be silently downgraded by an older CLI.
     if (installedHookIsNewer(installedHookPath)) {
       throw new HookManagedInstallationError(
@@ -683,46 +768,82 @@ export function copyHookScripts(
     );
     chmodSync(installedHookPath, 0o755);
   }
+}
+
+/**
+ * Install and chmod current deny-policy modules, then remove their exact retired script names.
+ * Side effects: creates the policy directory and mutates only Goat Flow-owned hook files.
+ */
+function copyDenyDangerousSupportFiles(
+  projectPath: string,
+  agent: AgentProfile,
+  shouldOverwriteExisting: boolean,
+): void {
+  const installedPolicyDirectory = join(
+    projectPath,
+    ".goat-flow",
+    "hooks",
+    "deny-dangerous",
+  );
+  mkdirSync(installedPolicyDirectory, { recursive: true });
+  for (const policyFileName of DENY_DANGEROUS_POLICY_FILES) {
+    const policyTemplatePath = getTemplatePath(
+      `workflow/hooks/deny-dangerous/${policyFileName}`,
+    );
+    const installedPolicyPath = join(installedPolicyDirectory, policyFileName);
+    assertWithinProject(projectPath, installedPolicyPath);
+    if (!shouldOverwriteExisting && existsSync(installedPolicyPath)) continue;
+    writeFileAtomic(
+      installedPolicyPath,
+      readFileSync(policyTemplatePath, "utf-8"),
+      projectPath,
+    );
+    chmodSync(installedPolicyPath, 0o755);
+  }
+  for (const legacyDenyScriptName of LEGACY_DENY_DANGEROUS_SCRIPT_NAMES) {
+    removeScriptIfPresent(projectPath, agent, legacyDenyScriptName);
+  }
+}
+
+/**
+ * Install current managed bytes and prune obsolete per-agent copies.
+ * Use whenever sync reconciles an installed agent, including intentionally disabled hooks.
+ * @param projectPath - selected project; empty text cannot own safe destinations
+ * @param agent - selected agent; a null hook directory leaves setup unchanged
+ * @param hookSpec - hook files to install; an empty list writes no runnable hook
+ * @param shouldOverwriteExisting - false fills missing inert files without refreshing existing bytes
+ * @returns nothing; missing files are filled, while default mode also refreshes existing files
+ */
+export function copyHookScripts(
+  projectPath: string,
+  agent: AgentProfile,
+  hookSpec: HookSpec,
+  shouldOverwriteExisting = true,
+): void {
+  // An agent without a hook directory has no install destination for the user.
+  if (!agent.hooksDir) return;
+
+  mkdirSync(join(projectPath, agent.hooksDir), { recursive: true });
+  // Every declared script receives the exact bytes from this Goat Flow release.
+  copyDeclaredHookScripts(
+    projectPath,
+    agent,
+    hookSpec,
+    shouldOverwriteExisting,
+  );
 
   ensureHookGitignoreEntries(projectPath);
   // The deny dispatcher needs its separately owned policy modules after a fresh clone.
   if (hookSpec.id === "deny-dangerous") {
-    const installedPolicyDirectory = join(
-      projectPath,
-      ".goat-flow",
-      "hooks",
-      "deny-dangerous",
-    );
-    mkdirSync(installedPolicyDirectory, { recursive: true });
-    // Copy each policy module from the same release as the dispatcher.
-    for (const policyFileName of DENY_DANGEROUS_POLICY_FILES) {
-      const policyTemplatePath = getTemplatePath(
-        `workflow/hooks/deny-dangerous/${policyFileName}`,
-      );
-      const installedPolicyPath = join(
-        installedPolicyDirectory,
-        policyFileName,
-      );
-      assertWithinProject(projectPath, installedPolicyPath);
-      writeFileAtomic(
-        installedPolicyPath,
-        readFileSync(policyTemplatePath, "utf-8"),
-        projectPath,
-      );
-      chmodSync(installedPolicyPath, 0o755);
-    }
-    // Exact retired deny filenames are managed residue, not user scripts.
-    for (const legacyDenyScriptName of LEGACY_DENY_DANGEROUS_SCRIPT_NAMES) {
-      removeScriptIfPresent(projectPath, agent, legacyDenyScriptName);
-    }
+    copyDenyDangerousSupportFiles(projectPath, agent, shouldOverwriteExisting);
   }
 
   removeLegacyAgentHookScripts(projectPath, hookSpec);
 }
 
 /**
- * Remove current and legacy managed files for one disabled hook.
- * Use when a user disables coverage or setup prunes an unsupported provider.
+ * Remove current and legacy managed files for one retired hook.
+ * Use when an upgrade prunes a registry tombstone; active disabled hooks keep current inert bytes.
  * @param projectPath - selected project; empty text cannot own safe removals
  * @param agent - selected agent; a null hook directory cannot resolve current files
  * @param hookSpec - managed files to remove; empty scripts leave only the primary exact-name attempt

@@ -1,8 +1,8 @@
 /**
  * Reads and writes the hook registrations users run in supported coding agents.
+ *
  * Use when setup, hook toggles, or sync must show the same enabled state everywhere.
- * The registrar owns script files; this module owns the Claude, Codex,
- * Antigravity, and Copilot configuration shapes.
+ * The registrar owns script files; this module owns the Claude, Codex, Antigravity, and Copilot configuration shapes.
  */
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -18,6 +18,7 @@ import {
   entryReferencesSpec,
   isAgentHookJsonObject,
   managedAgentHookCommand,
+  managedAgentHookDescriptor,
   matcherForAgent,
   type AgentHookJsonObject,
 } from "./agent-hook-command.js";
@@ -37,11 +38,24 @@ export interface AgentHookReadState {
 /** First registry-owned registration link a Hooks screen can ask the user to repair. */
 export type AgentHookRegistrationIssue =
   | "registration-missing"
+  | "duplicate-registration"
   | "retired-registration"
   | "event-mismatch"
   | "matcher-mismatch"
   | "command-or-response-mismatch"
   | "timeout-mismatch";
+
+/** One provider event and matcher where the user expects one managed command. */
+interface ManagedHookRegistrationTarget {
+  event: string;
+  matcher: string | null;
+}
+
+/** Current script files and provider registrations derived from one user toggle. */
+export interface ManagedHookDesiredState {
+  managedScriptFiles: string[];
+  registrationTargets: ManagedHookRegistrationTarget[];
+}
 
 /**
  * Resolve the config file that stores one agent's user-visible hook state.
@@ -147,6 +161,76 @@ function matcherParts(matcher: string): string[] {
 }
 
 /**
+ * Derive the complete managed state for one supported agent and hook.
+ * Use so sync, status, and config writes interpret the user's toggle identically.
+ *
+ * @param agent - supported provider; a missing hook surface is rejected before this derivation
+ * @param spec - registry hook; an empty script list produces an empty managed-file target
+ * @param isEnabled - true targets one command per provider event/matcher; false targets no registrations
+ * @returns current script filenames plus exact provider registration targets; disabled keeps current files
+ */
+export function deriveManagedHookDesiredState(
+  agent: AgentProfile,
+  spec: HookSpec,
+  isEnabled: boolean,
+): ManagedHookDesiredState {
+  const managedScriptFiles = [...spec.scriptFiles];
+  // A disabled hook keeps current inert files but gives the user's agent nothing to run.
+  if (!isEnabled) return { managedScriptFiles, registrationTargets: [] };
+
+  const event = hookEventKey(agent, spec);
+  // Stop and Copilot use one matcherless registration for the user's lifecycle event.
+  if (spec.event === "Stop" || agent.id === "copilot") {
+    return {
+      managedScriptFiles,
+      registrationTargets: [{ event, matcher: null }],
+    };
+  }
+
+  const providerMatcher = matcherForAgent(agent, spec);
+  // Antigravity keeps its provider matcher in one registration rather than one row per tool.
+  if (agent.id === "antigravity") {
+    return {
+      managedScriptFiles,
+      registrationTargets: [{ event, matcher: providerMatcher }],
+    };
+  }
+
+  return {
+    managedScriptFiles,
+    registrationTargets: matcherParts(providerMatcher).map((matcher) => ({
+      event,
+      matcher,
+    })),
+  };
+}
+
+/**
+ * Remove a managed command while retaining user commands in the same matcher group.
+ * Use during toggle and sync repairs so a shared provider row keeps the user's other hooks.
+ *
+ * @param entry - provider row; null or primitive values remain untouched
+ * @param spec - managed hook contract; empty script metadata removes nothing
+ * @returns retained row, or undefined when the row contained only this managed hook
+ */
+function withoutManagedHookCommand(entry: unknown, spec: HookSpec): unknown {
+  // A direct managed command is the exact registration setup owns and may replace.
+  if (commandEntryReferencesSpec(entry, spec)) return undefined;
+  // Null, primitive, and non-group objects cannot contain a nested managed command.
+  if (!isAgentHookJsonObject(entry) || !Array.isArray(entry.hooks))
+    return entry;
+
+  const retainedHooks = entry.hooks
+    .map((nestedHook) => withoutManagedHookCommand(nestedHook, spec))
+    .filter((nestedHook) => nestedHook !== undefined);
+  // An unchanged group stays semantically identical when the config is serialized again.
+  if (retainedHooks.length === entry.hooks.length) return entry;
+  // A group emptied by managed removal should not leave a dead row in the user's config.
+  if (retainedHooks.length === 0) return undefined;
+  return { ...entry, hooks: retainedHooks };
+}
+
+/**
  * Remove only rows that launch the selected managed hook.
  * Use before disable or replacement so user-authored hooks remain untouched.
  *
@@ -161,7 +245,9 @@ function removeHookEntries(
   spec: HookSpec,
 ) {
   const entries = eventEntries(config, event);
-  const next = entries.filter((entry) => !entryReferencesSpec(entry, spec));
+  const next = entries
+    .map((entry) => withoutManagedHookCommand(entry, spec))
+    .filter((entry) => entry !== undefined);
   const hooks = ensureHooksObject(config);
   // No retained rows means the user should not see an empty provider event group.
   if (next.length === 0) {
@@ -173,8 +259,8 @@ function removeHookEntries(
 
 /**
  * Drop every managed row this spec owns, whatever lifecycle event now holds it.
- * Use before appending the canonical row so a registration that drifted to another event
- * cannot survive a sync or a disable and keep firing on user actions it no longer covers.
+ * Use before appending the canonical row so a registration that drifted to another event cannot survive a sync or a disable and keep firing on user
+ * actions it no longer covers.
  *
  * @param config - parsed agent config; a missing hooks container yields nothing to remove
  * @param spec - managed hook contract whose owned rows are removed from every event
@@ -202,13 +288,18 @@ function removeOwnedHookEntriesEverywhere(
 function claudeCodexEntries(
   agent: AgentProfile,
   spec: HookSpec,
+  registrationTargets: ManagedHookRegistrationTarget[],
 ): AgentHookJsonObject[] {
-  // Stop runs after the user's turn and therefore has no tool matcher row.
-  if (spec.event === "Stop") {
+  return registrationTargets.map((registrationTarget) => {
+    const handlerDescriptor = managedAgentHookDescriptor(agent, spec);
     const command: AgentHookJsonObject = {
       type: "command",
-      command: managedAgentHookCommand(agent, spec),
+      command: handlerDescriptor.command,
     };
+    // Approved argv handlers register exact operands the host passes without a shell.
+    if (handlerDescriptor.form === "argv") {
+      command.args = [...handlerDescriptor.args];
+    }
     // An owned host deadline gives the migrated hook time to return model-visible Stop feedback.
     if (
       agentRegistersHostTimeout(agent, spec) &&
@@ -218,26 +309,12 @@ function claudeCodexEntries(
     }
     // Codex displays this name while the user's hook is running.
     if (agent.id === "codex") command.statusMessage = spec.displayName;
-    return [{ hooks: [command] }];
-  }
-  return matcherParts(matcherForAgent(agent, spec)).map((matcher) => {
-    const command: AgentHookJsonObject = {
-      type: "command",
-      command: managedAgentHookCommand(agent, spec),
-    };
-    // An owned host deadline stays above the launcher's internal response ceiling.
-    if (
-      agentRegistersHostTimeout(agent, spec) &&
-      spec.timeoutSec !== undefined
-    ) {
-      command.timeout = spec.timeoutSec;
+    const registrationEntry: AgentHookJsonObject = { hooks: [command] };
+    // A null matcher means the provider runs this once after the user's completed lifecycle.
+    if (registrationTarget.matcher !== null) {
+      registrationEntry.matcher = registrationTarget.matcher;
     }
-    // Codex displays the same hook name for each matched user edit tool.
-    if (agent.id === "codex") command.statusMessage = spec.displayName;
-    return {
-      matcher,
-      hooks: [command],
-    };
+    return registrationEntry;
   });
 }
 
@@ -273,17 +350,18 @@ function copilotEntry(
 function antigravityHookDefinition(
   agent: AgentProfile,
   spec: HookSpec,
+  registrationTarget: ManagedHookRegistrationTarget,
 ): AgentHookJsonObject {
   const command = {
     type: "command",
     command: managedAgentHookCommand(agent, spec),
     timeout: spec.timeoutSec ?? 30,
   };
-  // Stop definitions omit matchers because they run after the user's complete turn.
-  if (spec.event === "Stop") {
+  // Matcherless definitions run after the user's complete lifecycle rather than one tool.
+  if (registrationTarget.matcher === null) {
     return {
       enabled: true,
-      [hookEventKey(agent, spec)]: [
+      [registrationTarget.event]: [
         {
           hooks: [command],
         },
@@ -292,9 +370,9 @@ function antigravityHookDefinition(
   }
   return {
     enabled: true,
-    [hookEventKey(agent, spec)]: [
+    [registrationTarget.event]: [
       {
-        matcher: matcherForAgent(agent, spec),
+        matcher: registrationTarget.matcher,
         hooks: [command],
       },
     ],
@@ -314,14 +392,21 @@ function appendHookEntries(
   config: AgentHookJsonObject,
   agent: AgentProfile,
   spec: HookSpec,
+  desiredState: ManagedHookDesiredState,
 ): void {
+  const firstRegistrationTarget = desiredState.registrationTargets[0];
+  // An empty target is the user's disabled state, so there is no provider row to append.
+  if (!firstRegistrationTarget) return;
   // Antigravity stores each hook as a named top-level definition instead of a shared event array.
   if (agent.id === "antigravity") {
-    config[spec.id] = antigravityHookDefinition(agent, spec);
+    config[spec.id] = antigravityHookDefinition(
+      agent,
+      spec,
+      firstRegistrationTarget,
+    );
     return;
   }
-  const event = hookEventKey(agent, spec);
-  const entries = eventEntries(config, event);
+  const entries = eventEntries(config, firstRegistrationTarget.event);
   // Copilot stores one dual-shell row for the user's lifecycle event.
   if (agent.id === "copilot") {
     // A missing or non-numeric schema version is normalized before Copilot reads the new row.
@@ -329,84 +414,70 @@ function appendHookEntries(
     entries.push(copilotEntry(agent, spec));
     return;
   }
-  entries.push(...claudeCodexEntries(agent, spec));
+  entries.push(
+    ...claudeCodexEntries(agent, spec, desiredState.registrationTargets),
+  );
 }
 
 /**
- * Check whether Antigravity has the exact active row setup owns.
- * Use when the Hooks screen decides whether local registration is current.
+ * Count direct managed commands across every provider config shape.
+ * Use so duplicate or misplaced rows cannot look installed merely because one exact row exists.
  *
- * @param config - parsed provider config; empty means the hook is unregistered
- * @param agent - selected Antigravity profile
- * @param spec - expected managed hook; empty script metadata cannot match a command
- * @returns true for the exact event, matcher, command, and timeout; false names repairable drift
+ * @param registrationNode - parsed config value; null, empty, or primitive values contain no commands
+ * @param spec - managed hook contract; empty script metadata matches no command
+ * @returns physical managed command count; zero means the user has no registration for this hook
  */
-function hasAntigravityExpectedEntries(
-  config: AgentHookJsonObject,
-  agent: AgentProfile,
+function managedRegistrationCommandCount(
+  registrationNode: unknown,
+  spec: HookSpec,
+): number {
+  // Every array item may contain one direct command or another provider wrapper.
+  if (Array.isArray(registrationNode)) {
+    return registrationNode.reduce<number>(
+      (count, nestedValue) =>
+        count + managedRegistrationCommandCount(nestedValue, spec),
+      0,
+    );
+  }
+  // Null and primitive values cannot contain a managed command.
+  if (!isAgentHookJsonObject(registrationNode)) return 0;
+  const directManagedCommandCount = commandEntryReferencesSpec(
+    registrationNode,
+    spec,
+  )
+    ? 1
+    : 0;
+  return (
+    directManagedCommandCount +
+    Object.values(registrationNode).reduce<number>(
+      (count, nestedValue) =>
+        count + managedRegistrationCommandCount(nestedValue, spec),
+      0,
+    )
+  );
+}
+
+/**
+ * Check whether one provider row belongs to an exact desired event/matcher slot.
+ * Use before command and timeout checks so each user action has its own registration.
+ *
+ * @param entry - provider event row; null or primitive values cannot match
+ * @param target - desired provider slot; a null matcher requires a matcherless row
+ * @param spec - managed hook contract; empty script metadata matches no owned row
+ * @returns true when the row contains this hook under the exact matcher shape
+ */
+function entryMatchesRegistrationTarget(
+  entry: unknown,
+  target: ManagedHookRegistrationTarget,
   spec: HookSpec,
 ): boolean {
-  const definition = config[spec.id];
-  // Missing, malformed, or disabled definitions cannot protect the user's action.
-  if (!isAgentHookJsonObject(definition) || definition.enabled === false)
+  // A non-object or unrelated row belongs to the user, not this managed target.
+  if (!isAgentHookJsonObject(entry) || !entryReferencesSpec(entry, spec)) {
     return false;
-  const entries = definition[hookEventKey(agent, spec)];
-  // A non-array lifecycle value contains no runnable managed rows.
-  if (!Array.isArray(entries)) return false;
-  // Stop rows match only the exact managed command because they carry no tool matcher.
-  if (spec.event === "Stop") {
-    return entries.some(
-      (entry) =>
-        isAgentHookJsonObject(entry) &&
-        entryMatchesSpecRegistration(entry, agent, spec),
-    );
   }
-  return entries.some(
-    (entry) =>
-      isAgentHookJsonObject(entry) &&
-      entry.matcher === matcherForAgent(agent, spec) &&
-      entryMatchesSpecRegistration(entry, agent, spec),
-  );
-}
-
-/**
- * Check a shared provider event for every exact managed row users need.
- * Use for Claude, Codex, and Copilot status reporting.
- *
- * @param config - parsed provider config; empty means no managed event rows
- * @param agent - selected provider profile
- * @param spec - expected hook contract; empty matchers cannot satisfy tool-triggered coverage
- * @returns true when all provider-specific rows match; false exposes registration drift
- */
-function hasEventExpectedEntries(
-  config: AgentHookJsonObject,
-  agent: AgentProfile,
-  spec: HookSpec,
-): boolean {
-  const hooks = isAgentHookJsonObject(config.hooks) ? config.hooks : {};
-  const entries = hooks[hookEventKey(agent, spec)];
-  // A missing or malformed event array means the user's hook is not registered.
-  if (!Array.isArray(entries)) return false;
-  // Stop needs one exact command and no matcher expansion.
-  if (spec.event === "Stop") {
-    return entries.some((entry) =>
-      entryMatchesSpecRegistration(entry, agent, spec),
-    );
-  }
-  // Copilot also stores one direct dual-shell row for each event.
-  if (agent.id === "copilot") {
-    return entries.some((entry) =>
-      entryMatchesSpecRegistration(entry, agent, spec),
-    );
-  }
-  return matcherParts(matcherForAgent(agent, spec)).every((matcher) =>
-    entries.some(
-      (entry) =>
-        isAgentHookJsonObject(entry) &&
-        entry.matcher === matcher &&
-        entryMatchesSpecRegistration(entry, agent, spec),
-    ),
-  );
+  // A null matcher means the provider contract requires the matcher field to be absent.
+  if (target.matcher === null) return entry.matcher === undefined;
+  return entry.matcher === target.matcher;
 }
 
 /**
@@ -423,35 +494,24 @@ function hasAllExpectedEntries(
   agent: AgentProfile,
   spec: HookSpec,
 ): boolean {
-  // Antigravity uses a named definition rather than the shared hooks object.
-  if (agent.id === "antigravity") {
-    return hasAntigravityExpectedEntries(config, agent, spec);
+  const desiredState = deriveManagedHookDesiredState(agent, spec, true);
+  // Extra or missing managed commands mean at least one user action lacks exactly one row.
+  if (
+    managedRegistrationCommandCount(config, spec) !==
+    desiredState.registrationTargets.length
+  ) {
+    return false;
   }
-  return hasEventExpectedEntries(config, agent, spec);
-}
-
-/**
- * Search parsed config recursively for one current or retired managed command.
- * Use to distinguish missing registration from event or command drift.
- *
- * @param value - parsed config value; null, empty, or primitive values contain no command
- * @param spec - managed hook contract; empty script metadata matches nothing
- * @returns true when setup owns a nested command; false preserves unrelated user config
- */
-function configurationReferencesSpec(value: unknown, spec: HookSpec): boolean {
-  // Each array member may hold an event group or direct managed command.
-  if (Array.isArray(value)) {
-    return value.some((nestedValue) =>
-      configurationReferencesSpec(nestedValue, spec),
+  const entries = expectedEventEntries(config, agent, spec);
+  return desiredState.registrationTargets.every((registrationTarget) => {
+    const exactTargetEntries = entries.filter((entry) =>
+      entryMatchesRegistrationTarget(entry, registrationTarget, spec),
     );
-  }
-  // Primitive or null JSON cannot contain a managed command entry.
-  if (!isAgentHookJsonObject(value)) return false;
-  // A direct command match identifies setup-owned registration bytes.
-  if (commandEntryReferencesSpec(value, spec)) return true;
-  return Object.values(value).some((nestedValue) =>
-    configurationReferencesSpec(nestedValue, spec),
-  );
+    return (
+      exactTargetEntries.length === 1 &&
+      entryMatchesSpecRegistration(exactTargetEntries[0], agent, spec)
+    );
+  });
 }
 
 /**
@@ -487,32 +547,34 @@ function expectedEventEntries(
  * Use so the Hooks screen can name matcher drift as the user's first repair.
  *
  * @param entries - expected lifecycle rows; empty cannot cover a tool matcher
- * @param agent - selected provider profile
- * @param spec - expected hook; empty matchers are valid only for Stop or Copilot rows
+ * @param registrationTargets - provider slots; empty means the user requested no registrations
+ * @param spec - expected hook; empty script metadata matches no owned row
  * @returns true when all required matchers are present; false means some user actions are uncovered
  */
 function expectedMatchersArePresent(
   entries: unknown[],
-  agent: AgentProfile,
+  registrationTargets: ManagedHookRegistrationTarget[],
   spec: HookSpec,
 ): boolean {
-  // Stop and Copilot event rows do not carry registry matchers.
-  if (spec.event === "Stop" || agent.id === "copilot") return true;
-  // Antigravity translates generic tool names into its one provider matcher.
-  if (agent.id === "antigravity") {
-    return entries.some(
-      (entry) =>
-        isAgentHookJsonObject(entry) &&
-        entry.matcher === matcherForAgent(agent, spec) &&
-        entryReferencesSpec(entry, spec),
-    );
-  }
-  return matcherParts(matcherForAgent(agent, spec)).every((expectedMatcher) =>
+  return registrationTargets.every((registrationTarget) =>
+    entries.some((entry) =>
+      entryMatchesRegistrationTarget(entry, registrationTarget, spec),
+    ),
+  );
+}
+
+/** Check every desired matcher slot for a current command or timeout link. */
+function everyRegistrationTargetMatches(
+  entries: unknown[],
+  registrationTargets: ManagedHookRegistrationTarget[],
+  spec: HookSpec,
+  matchesEntry: (entry: unknown) => boolean,
+): boolean {
+  return registrationTargets.every((registrationTarget) =>
     entries.some(
       (entry) =>
-        isAgentHookJsonObject(entry) &&
-        entry.matcher === expectedMatcher &&
-        entryReferencesSpec(entry, spec),
+        entryMatchesRegistrationTarget(entry, registrationTarget, spec) &&
+        matchesEntry(entry),
     ),
   );
 }
@@ -552,13 +614,17 @@ function registrationIssue(
   agent: AgentProfile,
   spec: HookSpec,
 ): AgentHookRegistrationIssue | undefined {
+  const desiredState = deriveManagedHookDesiredState(agent, spec, true);
+  const managedCommandCount = managedRegistrationCommandCount(config, spec);
   // A complete exact registration has no repair issue.
   if (hasAllExpectedEntries(config, agent, spec)) return undefined;
   // Retired split policy entries need migration rather than a generic missing message.
   if (hasRetiredDenyRegistration(config, spec)) return "retired-registration";
   // No managed command anywhere means this hook was never registered or was removed.
-  if (!configurationReferencesSpec(config, spec)) {
-    return "registration-missing";
+  if (managedCommandCount === 0) return "registration-missing";
+  // More physical commands than desired can run the same managed hook twice for one user action.
+  if (managedCommandCount > desiredState.registrationTargets.length) {
+    return "duplicate-registration";
   }
   const eventEntries = expectedEventEntries(config, agent, spec);
   // A command under another lifecycle event cannot protect the intended user action.
@@ -566,18 +632,34 @@ function registrationIssue(
     return "event-mismatch";
   }
   // Wrong or incomplete tool matchers leave some user actions outside the hook.
-  if (!expectedMatchersArePresent(eventEntries, agent, spec)) {
+  if (
+    !expectedMatchersArePresent(
+      eventEntries,
+      desiredState.registrationTargets,
+      spec,
+    )
+  ) {
     return "matcher-mismatch";
   }
   // A stale generated command can carry the wrong response adapter or launcher contract.
   if (
-    !eventEntries.some((entry) => entryMatchesSpecCommand(entry, agent, spec))
+    !everyRegistrationTargetMatches(
+      eventEntries,
+      desiredState.registrationTargets,
+      spec,
+      (entry) => entryMatchesSpecCommand(entry, agent, spec),
+    )
   ) {
     return "command-or-response-mismatch";
   }
   // A stale host deadline can kill the hook before its own result reaches the user.
   if (
-    !eventEntries.some((entry) => entryMatchesSpecTimeout(entry, agent, spec))
+    !everyRegistrationTargetMatches(
+      eventEntries,
+      desiredState.registrationTargets,
+      spec,
+      (entry) => entryMatchesSpecTimeout(entry, agent, spec),
+    )
   ) {
     return "timeout-mismatch";
   }
@@ -618,7 +700,7 @@ export function readAgentHookState(
  * @param projectPath - selected project; empty text cannot own a safe config write
  * @param agent - selected provider; a null config path throws before writing
  * @param spec - managed hook contract; empty metadata cannot produce a useful command
- * @param enabled - true installs current rows; false removes only setup-owned rows
+ * @param isEnabled - true installs current rows; false removes only setup-owned rows
  * @returns nothing; successful completion leaves unrelated user hooks unchanged
  * @throws when existing config is invalid JSON or the agent lacks a writable surface
  */
@@ -626,10 +708,11 @@ export function writeAgentHookState(
   projectPath: string,
   agent: AgentProfile,
   spec: HookSpec,
-  enabled: boolean,
+  isEnabled: boolean,
 ): void {
   const path = configPath(projectPath, agent);
   const config = readJsonFile(path);
+  const desiredState = deriveManagedHookDesiredState(agent, spec, isEnabled);
   // Invalid user JSON cannot be safely merged, so setup asks the user to repair it first.
   if (config.invalid) {
     throw new Error(
@@ -638,7 +721,15 @@ export function writeAgentHookState(
   }
   // Antigravity keeps managed hooks as top-level definitions with provider-specific migration ids.
   if (agent.id === "antigravity") {
-    Reflect.deleteProperty(config.value, spec.id);
+    // Ownership follows the exact managed command, even when an older install used a different sibling id.
+    for (const [definitionId, definition] of Object.entries(config.value)) {
+      if (
+        definitionId === spec.id ||
+        managedRegistrationCommandCount(definition, spec) > 0
+      ) {
+        Reflect.deleteProperty(config.value, definitionId);
+      }
+    }
     // The current deny hook replaces every earlier split Antigravity policy id.
     if (spec.id === "deny-dangerous") {
       // Each exact retired id is Goat Flow-owned and safe to remove from the user's config.
@@ -646,8 +737,10 @@ export function writeAgentHookState(
         Reflect.deleteProperty(config.value, legacyId);
       }
     }
-    // Enabling adds the current definition; disabling leaves the owned definition absent.
-    if (enabled) appendHookEntries(config.value, agent, spec);
+    // A non-empty target adds the current definition; disabled state leaves it absent.
+    if (desiredState.registrationTargets.length > 0) {
+      appendHookEntries(config.value, agent, spec, desiredState);
+    }
     writeFileAtomic(
       path,
       `${JSON.stringify(config.value, null, 2)}\n`,
@@ -658,8 +751,10 @@ export function writeAgentHookState(
   // A row moved to another lifecycle event still belongs to this spec and must not outlive
   // the sync that reinstates the canonical row, nor survive the user disabling the hook.
   removeOwnedHookEntriesEverywhere(config.value, spec);
-  // Enabling appends exact current rows after stale managed rows are removed.
-  if (enabled) appendHookEntries(config.value, agent, spec);
+  // Enabled state appends exact current rows after stale managed rows are removed.
+  if (desiredState.registrationTargets.length > 0) {
+    appendHookEntries(config.value, agent, spec, desiredState);
+  }
   writeFileAtomic(
     path,
     `${JSON.stringify(config.value, null, 2)}\n`,

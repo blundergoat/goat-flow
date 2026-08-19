@@ -68,21 +68,21 @@ describe("dashboard /api/plans", () => {
         `/api/plans?path=${encodeURIComponent(root)}`,
       );
       assert.equal(res.status, 200);
-      const data = expectRecord(body, "Plans response");
-      assert.equal(data.planRoot, join(root, ".goat-flow", "plans"));
-      assert.equal(data.taskRoot, data.planRoot);
-      assert.equal(data.exists, true);
-      assert.equal(data.active, "current");
-      assert.equal(data.activeExists, true);
-      assert.equal(data.selectedPlan, "current");
-      assert.ok(Array.isArray(data.plans));
-      assert.ok(Array.isArray(data.milestones));
-      const plans = data.plans as Record<string, unknown>[];
+      const payload = expectRecord(body, "Plans response");
+      assert.equal(payload.planRoot, join(root, ".goat-flow", "plans"));
+      assert.equal(payload.taskRoot, payload.planRoot);
+      assert.equal(payload.exists, true);
+      assert.equal(payload.active, "current");
+      assert.equal(payload.activeExists, true);
+      assert.equal(payload.selectedPlan, "current");
+      assert.ok(Array.isArray(payload.plans));
+      assert.ok(Array.isArray(payload.milestones));
+      const plans = payload.plans as Record<string, unknown>[];
       assert.equal(plans[0]?.name, "current");
       assert.equal(plans[0]?.milestoneCount, CURRENT_PLAN_MILESTONE_COUNT);
       assert.equal(plans[0]?.active, true);
 
-      const milestones = data.milestones as Record<string, unknown>[];
+      const milestones = payload.milestones as Record<string, unknown>[];
       const sideMenuMilestone = milestoneByFilename(
         milestones,
         "Milestone-side-menu-navigation.md",
@@ -164,8 +164,8 @@ describe("dashboard /api/plans", () => {
         `/api/plans?path=${encodeURIComponent(root)}`,
       );
       assert.equal(res.status, 200);
-      const data = expectRecord(body, "Plans response");
-      const milestones = data.milestones as Record<string, unknown>[];
+      const payload = expectRecord(body, "Plans response");
+      const milestones = payload.milestones as Record<string, unknown>[];
       const sectionObjective = milestoneByFilename(
         milestones,
         "M01-session-refresh.md",
@@ -207,11 +207,11 @@ describe("dashboard /api/plans", () => {
         `/api/plans?path=${encodeURIComponent(root)}`,
       );
       assert.equal(res.status, 200);
-      const data = expectRecord(body, "Plans response");
-      assert.equal(data.active, "missing");
-      assert.equal(data.activeExists, false);
-      assert.equal(data.selectedPlan, "current");
-      const plans = data.plans as Record<string, unknown>[];
+      const payload = expectRecord(body, "Plans response");
+      assert.equal(payload.active, "missing");
+      assert.equal(payload.activeExists, false);
+      assert.equal(payload.selectedPlan, "current");
+      const plans = payload.plans as Record<string, unknown>[];
       assert.equal(plans[0]?.active, false);
     } finally {
       await rm(root, { recursive: true, force: true });
@@ -266,13 +266,13 @@ describe("dashboard /api/plans", () => {
         `/api/plans?path=${encodeURIComponent(root)}`,
       );
       assert.equal(res.status, 200);
-      const data = expectRecord(body, "Plans response");
-      assert.equal(data.exists, false);
-      assert.equal(data.active, null);
-      assert.equal(data.activeExists, false);
-      assert.equal(data.selectedPlan, null);
-      assert.deepEqual(data.plans, []);
-      assert.deepEqual(data.milestones, []);
+      const payload = expectRecord(body, "Plans response");
+      assert.equal(payload.exists, false);
+      assert.equal(payload.active, null);
+      assert.equal(payload.activeExists, false);
+      assert.equal(payload.selectedPlan, null);
+      assert.deepEqual(payload.plans, []);
+      assert.deepEqual(payload.milestones, []);
       await assert.rejects(
         readFile(join(root, ".goat-flow", "plans", ".active")),
       );
@@ -305,11 +305,11 @@ describe("dashboard /api/plans", () => {
         },
       );
       assert.equal(res.status, 200);
-      const data = expectRecord(body, "Plans response");
-      assert.equal(data.active, "two");
-      assert.equal(data.activeExists, true);
-      assert.equal(data.selectedPlan, "two");
-      const plans = data.plans as Record<string, unknown>[];
+      const payload = expectRecord(body, "Plans response");
+      assert.equal(payload.active, "two");
+      assert.equal(payload.activeExists, true);
+      assert.equal(payload.selectedPlan, "two");
+      const plans = payload.plans as Record<string, unknown>[];
       assert.equal(plans.find((plan) => plan.name === "two")?.active, true);
       assert.equal(
         await readFile(join(root, ".goat-flow", "plans", ".active"), "utf-8"),
@@ -334,10 +334,10 @@ describe("dashboard /api/plans", () => {
         `/api/plans?path=${encodeURIComponent(root)}`,
       );
       assert.equal(res.status, 200);
-      const data = expectRecord(body, "Plans response");
-      assert.equal(data.planRoot, join(root, ".goat-flow", "plans"));
-      assert.equal(data.selectedPlan, "target");
-      const milestones = data.milestones as Record<string, unknown>[];
+      const payload = expectRecord(body, "Plans response");
+      assert.equal(payload.planRoot, join(root, ".goat-flow", "plans"));
+      assert.equal(payload.selectedPlan, "target");
+      const milestones = payload.milestones as Record<string, unknown>[];
       assert.equal(milestones.length, 1);
       assert.equal(milestones[0]?.filename, "Milestone-target.md");
       assert.equal(
@@ -363,10 +363,10 @@ describe("dashboard /api/plans", () => {
         `/api/tasks?path=${encodeURIComponent(root)}`,
       );
       assert.equal(res.status, 200);
-      const data = expectRecord(body, "Tasks alias response");
-      assert.equal(data.planRoot, join(root, ".goat-flow", "plans"));
-      assert.equal(data.taskRoot, data.planRoot);
-      assert.equal(data.selectedPlan, "current");
+      const payload = expectRecord(body, "Tasks alias response");
+      assert.equal(payload.planRoot, join(root, ".goat-flow", "plans"));
+      assert.equal(payload.taskRoot, payload.planRoot);
+      assert.equal(payload.selectedPlan, "current");
     } finally {
       await rm(root, { recursive: true, force: true });
     }

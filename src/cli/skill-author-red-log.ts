@@ -1,11 +1,12 @@
 /**
  * Checks the RED evidence a user must supply before scaffolding a hardened skill.
- * Skill TDD asks an author to first document how the skill fails - the pressure applied, the
- * rationalisation quoted verbatim, the concrete failure seen - and only then scaffold. This
- * module is the gate that decides whether what they wrote is real evidence or a placeholder.
  *
- * The checks look pedantic on purpose. A log saying "the agent might refuse" proves nothing
- * and would let an author scaffold a skill whose hardening was never tested, so vague values,
+ * Skill TDD asks an author to first document how the skill fails - the pressure applied, the rationalisation quoted verbatim, the concrete failure
+ * seen - and only then scaffold.
+ * This module is the gate that decides whether what they wrote is real evidence or a placeholder.
+ *
+ * The checks look pedantic on purpose.
+ * A log saying "the agent might refuse" proves nothing and would let an author scaffold a skill whose hardening was never tested, so vague values,
  * negated assertions, and absent quotes are all rejected with a message naming what to add.
  */
 import { readFileSync, statSync } from "node:fs";
@@ -37,8 +38,7 @@ interface RedLogValidation {
 
 /**
  * Tell an author what to do next when their RED evidence is missing or too weak.
- * Nothing is written in this case, so this is the whole of what they see: the steps that
- * would let them come back and scaffold successfully.
+ * Nothing is written in this case, so this is the whole of what they see: the steps that would let them come back and scaffold successfully.
  *
  * @param name - skill name they were trying to create, used in the suggested log path
  * @returns ordered steps to follow; never empty, because a blocked author always needs a
@@ -97,8 +97,8 @@ function redField(section: string, label: string): string {
 }
 
 /** Reject empty values and the placeholders shipped by the authoring template. */
-function isConcreteRedValue(value: string): boolean {
-  const normalized = value.trim();
+function isConcreteRedValue(evidenceText: string): boolean {
+  const normalized = evidenceText.trim();
   return (
     normalized.length > 0 &&
     !/^(?:\[.*\]|<.*>|none|n\/a|unknown|tbd)$/iu.test(normalized)
@@ -106,8 +106,10 @@ function isConcreteRedValue(value: string): boolean {
 }
 
 /** Detect a direct denial immediately after a field's positive classification. */
-function startsWithNegatedAssertion(value: string): boolean {
-  const normalized = value.trim().replace(/^[?:;,.\u2013\u2014-]+\s*/u, "");
+function startsWithNegatedAssertion(assertionText: string): boolean {
+  const normalized = assertionText
+    .trim()
+    .replace(/^[?:;,.\u2013\u2014-]+\s*/u, "");
   return /^(?:(?:no|not|none|never|false|absent|without|unknown|tbd|n\/a|zero|0)\b|(?:did|does|was|were)\s+not\b)/iu.test(
     normalized,
   );
@@ -115,9 +117,9 @@ function startsWithNegatedAssertion(value: string): boolean {
 
 /** Map one pressure description to the documented pressure taxonomy. */
 function documentedPressure(
-  value: string,
+  pressureText: string,
 ): (typeof RED_PRESSURE_TYPES)[number] | null {
-  const normalized = value
+  const normalized = pressureText
     .toLowerCase()
     .replace(/[-_]+/gu, " ")
     .replace(/\s+/gu, " ")
@@ -165,17 +167,18 @@ function hasExplicitFailureOutcome(section: string): boolean {
 function verbatimRationalisationValue(line: string): string | null {
   const bullet = line.trim();
   if (!bullet.startsWith("- ")) return null;
-  const value = bullet.slice(2).trim();
+  const bulletText = bullet.slice(2).trim();
   const quotePair = VERBATIM_QUOTE_PAIRS.find(
-    ([open, close]) => value.startsWith(open) && value.endsWith(close),
+    ([open, close]) =>
+      bulletText.startsWith(open) && bulletText.endsWith(close),
   );
-  if (quotePair === undefined || value.length <= 2) return null;
-  return value.slice(quotePair[0].length, -quotePair[1].length);
+  if (quotePair === undefined || bulletText.length <= 2) return null;
+  return bulletText.slice(quotePair[0].length, -quotePair[1].length);
 }
 
 /** Reject quoted prose that explicitly reports an absent rationalisation. */
-function isAbsentRationalisation(value: string): boolean {
-  const normalized = value.trim().replace(/\s+/gu, " ");
+function isAbsentRationalisation(rationalisationText: string): boolean {
+  const normalized = rationalisationText.trim().replace(/\s+/gu, " ");
   return /^(?:(?:none|nothing)\s+(?:(?:(?:was|were)\s+)?(?:observed|captured|recorded|provided|available|said|heard|offered)|occurred|to\s+(?:capture|record|quote|say|provide|offer))|no\s+(?:rationali[sz]ations?|quotes?|excuses?)\s+(?:(?:(?:was|were)\s+)?(?:observed|captured|recorded|provided|available|given|made)|occurred)|(?:(?:the\s+)?agent\s+)?(?:did\s+not|never)\s+(?:rationali[sz]e|say|provide|offer|give))\b/iu.test(
     normalized,
   );
@@ -235,9 +238,9 @@ function validateRedLogContent(content: string): string[] {
 
 /**
  * Decide whether an author's RED log really documents a failure, or only claims one.
- * This is the gate before scaffolding: it checks the log sits in the expected place and that
- * its pressures, quoted rationalisation, and failure outcome are concrete rather than
- * placeholder text.
+ *
+ * This is the gate before scaffolding: it reports every problem it finds in the log rather than throwing, and checks that the pressures, quoted
+ * rationalisation, and failure outcome are concrete rather than placeholder text.
  *
  * @param projectRoot - project the author is working in, used to keep the log inside it
  * @param name - skill name being created, used in path and message text

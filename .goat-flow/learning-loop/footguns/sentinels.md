@@ -1,6 +1,6 @@
 ---
 category: sentinels
-last_reviewed: 2026-07-17
+last_reviewed: 2026-08-15
 ---
 
 ## Footgun: Sentinel-position policy is invisible until the LM tries trailing output
@@ -23,10 +23,9 @@ last_reviewed: 2026-07-17
       submission = "".join(lines[1:])
   ```
 
-**Goat-flow applicability:** Goat-flow doesn't currently parse a magic-string submit signal, but any future signal it consumes from agent output is exposed to the same trap. Candidate surfaces:
-- Hook stderr emission from a session-state hook (a session-state-hooks improvement idea in a local gitignored plan note) — when the hook emits `<budget-pressure>...</budget-pressure>` and the agent reads it in its next observation, the block markers' position relative to other hook output matters.
-- Dashboard terminal traces that look for protocol markers in PTY output (`src/cli/server/terminal.ts` search: `looksLikePromptSend`).
-- Any future evidence-envelope sentinels.
+**Goat-flow applicability:** One live surface already pattern-matches a marker out of a stream it does not control. `src/cli/server/terminal-spawn.ts` (search: `export function looksLikePromptSend`) classifies dashboard terminal input, and `src/cli/server/terminal.ts` (search: `looksLikePromptSend(msg.data)`) branches on it mid-session. PTY output carries shell prompts, TUI redraws, and terminal-reset escapes exactly like the upstream case, so position and anchoring assumptions there are load-bearing today, not hypothetically.
+
+Goat-flow does not parse a submit sentinel out of agent output, and this entry does not claim it does. The rule below applies when a parser is introduced; the existing PTY matcher is what makes it a present concern rather than a filed-away idea.
 
 **Prevention:**
 1. When introducing a marker the framework parses out of agent output, document the position policy as an ADR at the same time you write the parser. The ADR must name the rejected alternative explicitly so it survives a refactor.

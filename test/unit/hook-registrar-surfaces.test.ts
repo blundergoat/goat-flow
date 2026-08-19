@@ -5,11 +5,21 @@
  * Every case builds a real project and reads back what the registrar actually wrote.
  */
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join, win32 } from "node:path";
 import { describe, it } from "node:test";
 import {
   applyHookState,
+  filesystemPathsAreEquivalent,
   syncHookStates,
 } from "../../src/cli/server/hook-registrar.js";
 import {
@@ -17,6 +27,7 @@ import {
   writeAgentHookState,
 } from "../../src/cli/server/agent-hook-writer.js";
 import { getHookSpec } from "../../src/cli/server/hooks-registry.js";
+import { REQUIRED_GOAT_FLOW_GITIGNORE_PATTERNS } from "../../src/cli/audit/check-goat-flow.js";
 import { PROFILES } from "../../src/cli/detect/agents.js";
 import {
   HOOK_IDENTIFIER,
@@ -29,12 +40,324 @@ import {
   readAntigravitySafetyCommand,
   writePostTurnCapableSurfaces,
   verifyAgentHookRegistrationMatrix,
+  runGit,
   installCodexDenyHook,
   MANAGED_SHAPE_MUTATIONS,
   runCodexLauncher,
 } from "./hook-registrar.helpers.js";
 
 describe("hook registrar: surface detection, toggles, and sync", () => {
+  it("treats Windows case and separator variants as the same physical root", () => {
+    assert.equal(
+      filesystemPathsAreEquivalent(
+        "C:\\Work\\HealthKit",
+        "c:/work/healthkit",
+        win32.relative,
+      ),
+      true,
+    );
+    const installerSource = readFileSync(
+      join(import.meta.dirname, "..", "..", "workflow", "install-goat-flow.sh"),
+      "utf-8",
+    );
+    assert.match(
+      installerSource,
+      /function filesystemPathsAreEquivalent[\s\S]*pathModule\.relative\(leftDirectory, rightDirectory\)[\s\S]*pathModule\.relative\(rightDirectory, leftDirectory\)/u,
+    );
+    assert.doesNotMatch(installerSource, /gitTopLevel\([^\n]+\) === [^\n]+/u);
+  });
+
+  it("uses directory identity when Windows aliases have different spellings", () => {
+    const shortPath = "C:\\Users\\RUNNER~1\\AppData\\Local\\Temp\\project";
+    const longPath = "C:\\Users\\runneradmin\\AppData\\Local\\Temp\\project";
+    // Both spellings represent one simulated Windows directory object.
+    const sharedIdentity = () => ({ device: 7n, inode: 42n });
+
+    assert.notEqual(win32.relative(shortPath, longPath), "");
+    assert.equal(
+      filesystemPathsAreEquivalent(
+        shortPath,
+        longPath,
+        win32.relative,
+        sharedIdentity,
+      ),
+      true,
+    );
+    assert.equal(
+      filesystemPathsAreEquivalent(
+        shortPath,
+        longPath,
+        win32.relative,
+        (directoryPath) => ({
+          device: 7n,
+          inode: directoryPath === shortPath ? 42n : 43n,
+        }),
+      ),
+      false,
+    );
+
+    const installerSource = readFileSync(
+      join(import.meta.dirname, "..", "..", "workflow", "install-goat-flow.sh"),
+      "utf-8",
+    );
+    assert.match(
+      installerSource,
+      /function filesystemDirectoryIdentity[\s\S]*fs\.statSync\(directoryPath, \{ bigint: true \}\)[\s\S]*stats\.ino === 0n/u,
+    );
+    assert.match(
+      installerSource,
+      /leftIdentity\.device === rightIdentity\.device[\s\S]*leftIdentity\.inode === rightIdentity\.inode/u,
+    );
+  });
+
+  it("publishes cleanup metadata for hooks unsupported by one provider", () => {
+    const contract = JSON.parse(
+      readFileSync(
+        join(
+          import.meta.dirname,
+          "..",
+          "..",
+          "workflow",
+          "hooks",
+          "agent-config",
+          "managed-hook-desired-state.json",
+        ),
+        "utf-8",
+      ),
+    ) as {
+      agents: Record<
+        string,
+        {
+          hooks: Record<
+            string,
+            {
+              supported: boolean;
+              cleanup: {
+                hookIds: string[];
+                commandScriptNames: string[];
+              };
+            }
+          >;
+        }
+      >;
+    };
+    const antigravityContract = contract.agents.antigravity;
+    assert.ok(antigravityContract);
+    assert.deepEqual(antigravityContract.hooks["gruff-code-quality"], {
+      supported: false,
+      cleanup: {
+        hookIds: ["gruff-code-quality"],
+        commandScriptNames: ["gruff-code-quality.sh"],
+      },
+    });
+  });
+
+  it("uses the selected Git project as the implicit post-turn scan root", () => {
+    withTempProject((root) => {
+      runGit(root, ["init", "-q"]);
+      mkdirSync(join(root, ".codex"), { recursive: true });
+      writeFileSync(join(root, ".codex", "config.toml"), "");
+
+      const state = applyHookState("post-turn-safety", true, root);
+
+      assert.deepEqual(state.scanRoots, {
+        status: "implicit",
+        roots: ["."],
+        issue: null,
+      });
+      assert.equal(state.agents.codex.installed, true);
+    });
+  });
+
+  // Fixture purpose: creates two child Git repositories, writes config, and registers them atomically.
+  it("registers every valid explicit child repository as one post-turn contract", () => {
+    withTempProject((root) => {
+      const configuredRoots = ["services/api", "packages/web"];
+      for (const configuredRoot of configuredRoots) {
+        const childRoot = join(root, configuredRoot);
+        mkdirSync(childRoot, { recursive: true });
+        runGit(childRoot, ["init", "-q"]);
+      }
+      mkdirSync(join(root, ".codex"), { recursive: true });
+      mkdirSync(join(root, ".goat-flow"), { recursive: true });
+      writeFileSync(join(root, ".codex", "config.toml"), "");
+      writeFileSync(
+        join(root, ".goat-flow", "config.yaml"),
+        [
+          "hooks:",
+          "  post-turn-safety:",
+          "    enabled: true",
+          "    scan-roots:",
+          ...configuredRoots.map((scanRoot) => `      - ${scanRoot}`),
+          "",
+        ].join("\n"),
+      );
+
+      const state = applyHookState("post-turn-safety", true, root);
+
+      assert.deepEqual(state.scanRoots, {
+        status: "configured",
+        roots: configuredRoots,
+        issue: null,
+      });
+      assert.equal(state.agents.codex.installed, true);
+    });
+  });
+
+  for (const rootCase of [
+    { name: "absent", roots: null, expectedStatus: "missing" },
+    { name: "escaping", roots: ["../outside"], expectedStatus: "invalid" },
+    { name: "missing", roots: ["missing"], expectedStatus: "invalid" },
+    { name: "non-Git", roots: ["not-git"], expectedStatus: "invalid" },
+    {
+      name: "mixed valid and invalid",
+      roots: ["valid-repo", "not-git"],
+      expectedStatus: "invalid",
+    },
+  ] as const) {
+    it(`keeps ${rootCase.name} non-Git root state wholly unregistered`, () => {
+      withTempProject((root) => {
+        mkdirSync(join(root, ".codex"), { recursive: true });
+        mkdirSync(join(root, ".goat-flow"), { recursive: true });
+        mkdirSync(join(root, "not-git"), { recursive: true });
+        mkdirSync(join(root, "valid-repo"), { recursive: true });
+        runGit(join(root, "valid-repo"), ["init", "-q"]);
+        writeFileSync(join(root, ".codex", "config.toml"), "");
+        writeFileSync(
+          join(root, ".goat-flow", "config.yaml"),
+          [
+            "hooks:",
+            "  post-turn-safety:",
+            "    enabled: true",
+            ...(rootCase.roots === null
+              ? []
+              : [
+                  "    scan-roots:",
+                  ...rootCase.roots.map((scanRoot) => `      - ${scanRoot}`),
+                ]),
+            "",
+          ].join("\n"),
+        );
+
+        const state = applyHookState("post-turn-safety", true, root);
+
+        assert.equal(state.scanRoots?.status, rootCase.expectedStatus);
+        assert.deepEqual(state.scanRoots?.roots, rootCase.roots ?? []);
+        assert.equal(state.agents.codex.installed, false);
+        assert.equal(state.agents.codex.isRegistered, false);
+        assert.equal(
+          state.agents.codex.effectiveState.status,
+          "not-registered",
+        );
+        assert.equal(state.agents.codex.repairCommand, null);
+        assert.match(
+          state.agents.codex.repairSummary,
+          /configure valid scan roots or disable this hook/iu,
+        );
+        assert.equal(existsSync(join(root, ".codex", "hooks.json")), false);
+      });
+    });
+  }
+
+  // js-yaml resolves anchors and aliases, but the hook's own runtime parser cannot, so a registration that accepted one would fail
+  // closed at Stop time with a misleading "git repository root unavailable" message. Each shape below names a real child repository.
+  const postTurnHookLines = [
+    "hooks:",
+    "  post-turn-safety:",
+    "    enabled: true",
+  ];
+  for (const aliasCase of [
+    {
+      name: "a scalar alias for the whole list",
+      anchorLines: ["controller-roots: &controller_roots", "  - services/api"],
+      scanRootLines: ["    scan-roots: *controller_roots"],
+    },
+    {
+      name: "an alias inside a flow list",
+      anchorLines: ["api-root: &api_root services/api"],
+      scanRootLines: ["    scan-roots: [*api_root]"],
+    },
+    {
+      name: "an alias as a block list item",
+      anchorLines: ["api-root: &api_root services/api"],
+      scanRootLines: ["    scan-roots:", "      - *api_root"],
+    },
+    {
+      name: "an anchor on the scan-roots value itself",
+      anchorLines: [],
+      scanRootLines: ["    scan-roots: &roots", "      - services/api"],
+    },
+  ]) {
+    it(`refuses post-turn scan roots written as ${aliasCase.name}`, () => {
+      withTempProject((root) => {
+        const childRoot = join(root, "services", "api");
+        mkdirSync(childRoot, { recursive: true });
+        runGit(childRoot, ["init", "-q"]);
+        mkdirSync(join(root, ".codex"), { recursive: true });
+        mkdirSync(join(root, ".goat-flow"), { recursive: true });
+        writeFileSync(join(root, ".codex", "config.toml"), "");
+        writeFileSync(
+          join(root, ".goat-flow", "config.yaml"),
+          [
+            ...aliasCase.anchorLines,
+            ...postTurnHookLines,
+            ...aliasCase.scanRootLines,
+            "",
+          ].join("\n"),
+        );
+
+        // Hand-edited config reaches the registrar through sync; the toggle path rewrites the block first and loses the alias.
+        const state = syncHookStates(root).find(
+          (hookState) => hookState.id === "post-turn-safety",
+        );
+
+        assert.equal(state?.scanRoots?.status, "invalid");
+        assert.match(state?.scanRoots?.issue ?? "", /anchor|alias/iu);
+        assert.equal(state?.agents.codex.isRegistered, false);
+        assert.equal(
+          state?.agents.codex.effectiveState.status,
+          "not-registered",
+        );
+      });
+    });
+  }
+
+  // Fixture purpose: creates and later removes an external Git repo, symlinks it, writes config, and attempts registration.
+  it("rejects a scan root that escapes through a symlink", () => {
+    const externalRoot = mkdtempSync(
+      join(tmpdir(), "goat-flow-external-scan-root-"),
+    );
+    try {
+      runGit(externalRoot, ["init", "-q"]);
+      withTempProject((root) => {
+        symlinkSync(externalRoot, join(root, "linked-repo"), "dir");
+        mkdirSync(join(root, ".codex"), { recursive: true });
+        mkdirSync(join(root, ".goat-flow"), { recursive: true });
+        writeFileSync(join(root, ".codex", "config.toml"), "");
+        writeFileSync(
+          join(root, ".goat-flow", "config.yaml"),
+          [
+            "hooks:",
+            "  post-turn-safety:",
+            "    enabled: true",
+            "    scan-roots:",
+            "      - linked-repo",
+            "",
+          ].join("\n"),
+        );
+
+        const state = applyHookState("post-turn-safety", true, root);
+
+        assert.equal(state.scanRoots?.status, "invalid");
+        assert.match(state.scanRoots?.issue ?? "", /escapes/iu);
+        assert.equal(state.agents.codex.installed, false);
+        assert.equal(existsSync(join(root, ".codex", "hooks.json")), false);
+      });
+    } finally {
+      rmSync(externalRoot, { force: true, recursive: true });
+    }
+  });
+
   it("does not scaffold uninstalled agent surfaces on clean target toggles", () => {
     withTempProject((root) => {
       applyHookState(HOOK_IDENTIFIER, false, root);
@@ -146,6 +469,7 @@ describe("hook registrar: surface detection, toggles, and sync", () => {
 
   it("generates only the approved Codex lifecycle hooks", () => {
     withTempProject((root) => {
+      runGit(root, ["init", "-q"]);
       mkdirSync(join(root, ".codex"), { recursive: true });
       writeFileSync(join(root, ".codex", "config.toml"), "");
 
@@ -178,6 +502,7 @@ describe("hook registrar: surface detection, toggles, and sync", () => {
   // Covers a project with stale managed Codex entries: writes them because upgrade must replace only Goat Flow-owned fields.
   it("migrates stale managed Codex post-tool and Stop entries", () => {
     withTempProject((root) => {
+      runGit(root, ["init", "-q"]);
       mkdirSync(join(root, ".codex"), { recursive: true });
       mkdirSync(join(root, ".goat-flow"), { recursive: true });
       writeFileSync(join(root, ".codex", "config.toml"), "");
@@ -275,8 +600,29 @@ describe("hook registrar: surface detection, toggles, and sync", () => {
         join(root, ".goat-flow", ".gitignore"),
         "utf-8",
       );
+      // The appended rules must use the shipped template's spelling: an anchored `!hooks/**` would be a 43rd effective line that
+      // fails the goat-flow-gitignore audit order check and is invisible to ignore-aware search tools.
       assert.match(gitignore, /^!hooks\/$/m);
-      assert.match(gitignore, /^!hooks\/\*\*$/m);
+      assert.match(gitignore, /^!\*\*\/hooks\/\*\*$/m);
+      assert.doesNotMatch(gitignore, /^!hooks\/\*\*$/m);
+    });
+  });
+
+  // A consumer already on the shipped template must not gain any line from a hook toggle, or the audit's order check fails.
+  it("leaves a template-spelled goat-flow gitignore byte-identical when enabling deny-dangerous", () => {
+    withTempProject((root) => {
+      mkdirSync(join(root, ".codex"), { recursive: true });
+      mkdirSync(join(root, ".goat-flow"), { recursive: true });
+      writeFileSync(join(root, ".codex", "config.toml"), "");
+      const shipped = `${REQUIRED_GOAT_FLOW_GITIGNORE_PATTERNS.join("\n")}\n`;
+      writeFileSync(join(root, ".goat-flow", ".gitignore"), shipped);
+
+      applyHookState(HOOK_IDENTIFIER, true, root);
+
+      assert.equal(
+        readFileSync(join(root, ".goat-flow", ".gitignore"), "utf-8"),
+        shipped,
+      );
     });
   });
 
@@ -310,8 +656,9 @@ describe("hook registrar: surface detection, toggles, and sync", () => {
     });
   });
 
-  it("sync installs the remaining post-turn safety hook without project validation", () => {
+  it("sync installs the remaining post-turn safety hook at an implicit Git root", () => {
     withTempProject((root) => {
+      runGit(root, ["init", "-q"]);
       writePostTurnCapableSurfaces(root);
 
       const states = syncHookStates(root);
@@ -376,6 +723,7 @@ describe("hook registrar: surface detection, toggles, and sync", () => {
   // Covers sync pruning removed plan-checkbox-guard entries: writes stale config, because sync must clear it.
   it("sync prunes stale removed plan-checkbox-guard entries and config", () => {
     withTempProject((root) => {
+      runGit(root, ["init", "-q"]);
       writePostTurnCapableSurfaces(root);
       mkdirSync(join(root, ".goat-flow", "hooks"), { recursive: true });
       writeFileSync(
@@ -530,6 +878,7 @@ describe("hook registrar: surface detection, toggles, and sync", () => {
   // Covers the same prune driven by a direct toggle: writes stale config, because a toggle must clear it too.
   it("direct hook toggles prune stale removed plan-checkbox-guard entries and config", () => {
     withTempProject((root) => {
+      runGit(root, ["init", "-q"]);
       writePostTurnCapableSurfaces(root);
       mkdirSync(join(root, ".goat-flow", "hooks"), { recursive: true });
       writeFileSync(

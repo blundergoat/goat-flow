@@ -1,8 +1,11 @@
 /**
- * Local contract checker behind `plans check`. Default mode preserves legacy
- * effort arithmetic; strict mode additionally validates current-plan structure,
- * local dependencies, and lifecycle snapshots. Plan-level 70/20/10 mix drift
- * stays advisory. User-invoked only - never part of audit or quality gates.
+ * Local contract checker behind `plans check`.
+ * Default mode preserves legacy effort arithmetic; strict mode additionally validates current-plan structure, local dependencies, and lifecycle
+ * snapshots.
+ *
+ * Plan-level 70/20/10 mix drift stays advisory.
+ *
+ * User-invoked only - never part of audit or quality gates.
  */
 import { CLIError } from "./cli-error.js";
 import { writeOutput } from "./cli-output.js";
@@ -58,8 +61,7 @@ const STRICT_STRUCTURAL_WARNINGS = new Set([
 
 /**
  * Render `(18 product / 5 proof / 2 other)`-style split text for report lines.
- * Use wherever the report echoes a split back in the same notation the plan
- * author wrote, so the fix is a copy-edit away.
+ * Use wherever the report echoes a split back in the same notation the plan author wrote, so the fix is a copy-edit away.
  *
  * @param split - minutes per category; zeros render literally so gaps stay visible
  * @returns the parenthesised split text
@@ -71,28 +73,28 @@ function renderSplit(split: PlanEffortSplit): string {
 /**
  * Decide which warnings are fatal once strict mode is already established.
  *
- * Split out of {@link isValidationWarning} so each function stays inside the
- * project complexity budget; callers should reach the strict rules through
- * that entry point rather than calling this directly. Receipt-shape warnings
- * stay advisory unless a claim or a live clock depends on the receipt, so a
- * hand-written historical receipt beside a retrospective Actual passes here.
+ * Split out of {@link isValidationWarning} so each function stays inside the project complexity budget; callers should reach the strict rules through
+ * that entry point rather than calling this directly.
+ *
+ * Receipt-shape warnings stay advisory unless a claim or a live clock depends on the receipt, so a hand-written historical receipt beside a
+ * retrospective Actual passes here.
  *
  * @param warning - one parser warning from the milestone record
- * @param receiptIsClaimed - whether an Actual derives its authority from the receipt
- * @param receiptIsActive - whether the receipt currently controls an executing clock
+ * @param isReceiptClaimed - whether an Actual derives its authority from the receipt
+ * @param isReceiptActive - whether the receipt currently controls an executing clock
  * @returns true when the warning should become a check error under strict mode
  */
 function isStrictValidationWarning(
   warning: string,
-  receiptIsClaimed: boolean,
-  receiptIsActive: boolean,
+  isReceiptClaimed: boolean,
+  isReceiptActive: boolean,
 ): boolean {
   // A summary claims a final total even when no Actual cites it and no clock is open.
   if (warning === "timing receipt summary requires finalized state")
     return true;
   return (
     warning.includes("actual effort not parseable") ||
-    ((receiptIsClaimed || receiptIsActive) &&
+    ((isReceiptClaimed || isReceiptActive) &&
       warning.startsWith("timing receipt")) ||
     /^multiple .+ values supplied$/u.test(warning) ||
     STRICT_STRUCTURAL_WARNINGS.has(warning) ||
@@ -104,16 +106,16 @@ function isStrictValidationWarning(
  * Decide which parser warnings are fatal under the selected compatibility mode.
  *
  * @param warning - one parser warning from the milestone record
- * @param strict - whether strict current-plan validation is selected
- * @param receiptIsClaimed - whether an Actual derives its authority from the receipt
- * @param receiptIsActive - whether the receipt currently controls an executing clock
+ * @param isStrict - whether strict current-plan validation is selected
+ * @param isReceiptClaimed - whether an Actual derives its authority from the receipt
+ * @param isReceiptActive - whether the receipt currently controls an executing clock
  * @returns true when the warning should become a check error
  */
 function isValidationWarning(
   warning: string,
-  strict: boolean,
-  receiptIsClaimed: boolean,
-  receiptIsActive: boolean,
+  isStrict: boolean,
+  isReceiptClaimed: boolean,
+  isReceiptActive: boolean,
 ): boolean {
   if (warning.includes("estimate not parseable")) return true;
 
@@ -121,33 +123,32 @@ function isValidationWarning(
   if (warning === "forecast range not parseable") return true;
   // An unreadable basis hides the work-unit count and provenance behind the headline.
   if (warning === "forecast basis not parseable") return true;
-  if (!strict) return false;
-  return isStrictValidationWarning(warning, receiptIsClaimed, receiptIsActive);
+  if (!isStrict) return false;
+  return isStrictValidationWarning(warning, isReceiptClaimed, isReceiptActive);
 }
 
 /**
  * Convert fatal parser warnings into source-labelled check errors.
  *
- * A receipt is evidence for a claim or a live clock, so its shape is fatal when
- * an Actual claims authority from it or its state is active. Hand-written
- * historical receipts beside retrospective Actuals remain advisory because
- * neither a measurement claim nor executing workflow depends on them.
- * `measured` Actuals still fail twice over - here and in the reconciliation
- * check that compares their minutes against the receipt allocation.
+ * A receipt is evidence for a claim or a live clock, so its shape is fatal when an Actual claims authority from it or its state is active.
+ * Hand-written historical receipts beside retrospective Actuals remain advisory because neither a measurement claim nor executing workflow depends on
+ * them.
+ *
+ * `measured` Actuals still fail twice over - here and in the reconciliation check that compares their minutes against the receipt allocation.
  *
  * @param record - one parsed milestone
- * @param strict - whether strict current-plan validation is selected
+ * @param isStrict - whether strict current-plan validation is selected
  * @returns error lines naming the milestone; empty means no warning was fatal
  */
 function collectWarningErrors(
   record: PlanExportRecord,
-  strict: boolean,
+  isStrict: boolean,
 ): string[] {
   const receiptIsClaimed = record.effort?.actual?.state === "measured";
   const receiptIsActive = record.timingReceipt?.state === "active";
   return record.warnings
     .filter((warning) =>
-      isValidationWarning(warning, strict, receiptIsClaimed, receiptIsActive),
+      isValidationWarning(warning, isStrict, receiptIsClaimed, receiptIsActive),
     )
     .map((warning) => `${record.sourceFile}: ${warning}`);
 }
@@ -165,13 +166,13 @@ function categoryMinutes(
 function collectCategoryErrors(
   record: PlanExportRecord,
   split: PlanEffortSplit,
-  strict: boolean,
+  isStrict: boolean,
 ): string[] {
   const errors: string[] = [];
   for (const category of CATEGORIES) {
     const taskMinutes = categoryMinutes(record.taskEstimateTotals, category);
     const countedMinutes = categoryMinutes(record.workEstimateTotals, category);
-    if (strict) {
+    if (isStrict) {
       if (countedMinutes !== split[category]) {
         errors.push(
           `${record.sourceFile}: ${category} counted work (${countedMinutes} min) does not equal the split component (${split[category]} min)`,
@@ -191,14 +192,14 @@ function collectCategoryErrors(
 /** Check a declared headline split against its total and counted work. */
 function collectSplitErrors(
   record: PlanExportRecord,
-  strict: boolean,
+  isStrict: boolean,
 ): string[] {
   const errors: string[] = [];
   const effort = record.effort;
   if (!effort) return errors;
   const split = effort.split;
   if (!split) {
-    if (strict) {
+    if (isStrict) {
       errors.push(
         `${record.sourceFile}: strict mode requires a product/proof/other split`,
       );
@@ -212,15 +213,14 @@ function collectSplitErrors(
       `${record.sourceFile}: split ${renderSplit(split)} sums to ${splitSum} min but the headline says ${effort.totalMinutes} min`,
     );
   }
-  errors.push(...collectCategoryErrors(record, split, strict));
+  errors.push(...collectCategoryErrors(record, split, isStrict));
   return errors;
 }
 
 /**
  * Check an optional forecast band against its own ordering and the headline.
  *
- * Validation exists only when the band does: a milestone that forecasts one
- * point stays valid, so this returns nothing rather than demanding notation
+ * Validation exists only when the band does: a milestone that forecasts one point stays valid, so this returns nothing rather than demanding notation
  * legacy and in-flight plans were never written with.
  */
 function collectForecastRangeErrors(record: PlanExportRecord): string[] {
@@ -275,7 +275,7 @@ function collectForecastBasisErrors(record: PlanExportRecord): string[] {
 /** Require estimates on every work item that participates in the selected mode. */
 function collectCoverageErrors(
   record: PlanExportRecord,
-  strict: boolean,
+  isStrict: boolean,
 ): string[] {
   const errors: string[] = [];
   const unestimatedTasks = record.tasks.filter(
@@ -286,7 +286,7 @@ function collectCoverageErrors(
       `${record.sourceFile}: ${unestimatedTasks} task(s) missing an (est: ...) entry under a declared effort line`,
     );
   }
-  if (!strict) return errors;
+  if (!isStrict) return errors;
 
   const unestimatedTestingItems = record.testingGateItems.filter(
     (item) => item.estimateMinutes === undefined,
@@ -433,9 +433,9 @@ function countOpenItems(
 
 /** Human ownership is explicit metadata, never inferred from prose or checkbox state. */
 function isHumanOwnedItem(
-  item: PlanExportRecord["testingGateItems"][number],
+  gateItem: PlanExportRecord["testingGateItems"][number],
 ): boolean {
-  return /^\s*\[human\](?:\s|$)/iu.test(item.text);
+  return /^\s*\[human\](?:\s|$)/iu.test(gateItem.text);
 }
 
 /** Validate the executor-owned snapshot before a human receives the milestone. */
@@ -601,27 +601,26 @@ function collectLifecycleErrors(record: PlanExportRecord): string[] {
 
 /**
  * Collect deterministic structure, lifecycle, and arithmetic errors for one milestone.
- * Branches gate on what the author declared because each declaration creates
- * its own obligation: notation errors always apply, split-sum errors need a
- * declared split, task-coverage errors need declared tasks - which is why a
- * legacy milestone falls through every check untouched.
  *
- * @param record - parsed milestone
- * @param strict - whether current-format authoring obligations are mandatory
+ * Branches gate on what the author declared because each declaration creates its own obligation: notation errors always apply, split-sum errors need
+ * a declared split, task-coverage errors need declared tasks - which is why a legacy milestone falls through every check untouched.
+ *
+ * @param record - parsed milestone; one declaring nothing reaches no check and returns clean
+ * @param isStrict - whether current-format authoring obligations are mandatory
  * @returns error lines naming the milestone; empty means its arithmetic holds up
  */
 function collectMilestoneErrors(
   record: PlanExportRecord,
-  strict: boolean,
+  isStrict: boolean,
 ): string[] {
-  const errors = collectWarningErrors(record, strict);
-  if (strict) {
+  const errors = collectWarningErrors(record, isStrict);
+  if (isStrict) {
     errors.push(...collectLifecycleErrors(record));
   }
 
   // Default mode preserves legacy plans; strict authoring requires the current notation.
   if (!record.effort) {
-    if (strict) {
+    if (isStrict) {
       errors.push(
         `${record.sourceFile}: strict mode requires an Effort estimate with a product/proof/other split`,
       );
@@ -629,11 +628,11 @@ function collectMilestoneErrors(
     return errors;
   }
 
-  errors.push(...collectSplitErrors(record, strict));
-  errors.push(...collectCoverageErrors(record, strict));
+  errors.push(...collectSplitErrors(record, isStrict));
+  errors.push(...collectCoverageErrors(record, isStrict));
   errors.push(...collectForecastRangeErrors(record));
   errors.push(...collectForecastBasisErrors(record));
-  if (strict) {
+  if (isStrict) {
     errors.push(...collectActualErrors(record));
   }
   return errors;
@@ -641,9 +640,9 @@ function collectMilestoneErrors(
 
 /**
  * Reject flags that have no meaning for the read-only check report.
- * `--format` is deliberately ignored rather than rejected: its default value is
- * TTY-dependent, so rejecting it would break piped invocations that never
- * passed the flag.
+ *
+ * `--format` is deliberately ignored rather than rejected: its default value is TTY-dependent, so rejecting it would break piped invocations that
+ * never passed the flag.
  *
  * @param options - parsed CLI options
  * @throws CLIError when a write-oriented flag reaches the check
@@ -668,8 +667,8 @@ function assertCheckUsage(options: ParsedCLI): void {
 
 /**
  * Check one plan directory and report to stdout.
- * Exit code 1 signals deterministic contract or arithmetic errors; mix drift
- * and default-mode legacy absence never fail. Records are redacted before use.
+ * Exit code 1 signals deterministic contract or arithmetic errors; mix drift and default-mode legacy absence never fail.
+ * Records are redacted before use.
  *
  * @param options - parsed plan path plus global flags
  * @returns nothing; the report goes to stdout and the exit code carries the verdict
@@ -728,8 +727,7 @@ function handlePlansCheckCommand(options: ParsedCLI): void {
 
 /**
  * Route local plan subcommands between the export bundler and the effort check.
- * The single `plans` dispatch entry - every `goat-flow plans ...` invocation
- * lands here first.
+ * The single `plans` dispatch entry - every `goat-flow plans ...` invocation lands here first.
  *
  * @param options - parsed CLI options carrying the chosen subcommand
  * @returns nothing; the chosen subcommand owns all output and exit codes

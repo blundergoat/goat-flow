@@ -4,14 +4,15 @@
  * Validates numeric claims inside release-frozen documents against the
  * matching `workflow/manifest-snapshots/vX.Y.Z.json` snapshot. Two surfaces:
  *
- * 1. `CHANGELOG.md` - parsed section-by-section via `## vX.Y.Z` headers; each
- *    section validated against its own snapshot (sections without a snapshot
- *    are skipped).
- * 2. The gitignored release-notes draft at .goat-flow/scratchpad/release.md -
- *    single-version draft notes that exist only while a release is being
- *    prepared, so this surface is skipped whenever the draft is absent. The
- *    version comes from the `# GOAT Flow vX.Y.Z Release Notes` H1 and is
- *    validated against that version's snapshot.
+ * 1.
+ * `CHANGELOG.md` - parsed section-by-section via `## vX.Y.Z` headers; each section validated against its own snapshot (sections without a snapshot
+ * are skipped).
+ *
+ * 2.
+ * The gitignored release-notes draft at .goat-flow/scratchpad/release.md - single-version draft notes that exist only while a release is being
+ * prepared, so this surface is skipped whenever the draft is absent.
+ *
+ * The version comes from the `# GOAT Flow vX.Y.Z Release Notes` H1 and is validated against that version's snapshot.
  *
  * This stays in TypeScript so snapshot-claim checks share the audit fact model
  * and avoid a separate shell parser for release-note text.
@@ -171,11 +172,13 @@ function isFenceLine(line: string): boolean {
 
 /**
  * Scan one CHANGELOG section body against its matching snapshot.
+ * The snapshot is the contract: a released section is checked against the numbers frozen at release time, because later code changes must not
+ * silently rewrite what a past release claimed. It reports each disagreement as a finding rather than throwing.
  *
- * @param section Parsed CHANGELOG section or whole-file release notes wrapper.
- * @param snapshot Frozen facts for the section version.
- * @param path Display path used in content findings.
- * @returns Content findings for numeric claims that disagree with the snapshot.
+ * @param section - parsed CHANGELOG section, or the whole-file wrapper used for release notes
+ * @param snapshot - frozen facts for that version
+ * @param path - display path shown in content findings
+ * @returns findings for numeric claims that disagree with the snapshot; empty means the section still tells the truth
  */
 function scanSectionAgainstSnapshot(
   section: ChangelogSection,
@@ -252,8 +255,8 @@ function scanWholeFileAgainstSnapshot(
 
 /**
  * Scan release-note surfaces against available manifest snapshots.
- * Reports mismatched numeric claims as content findings and skips missing inputs because historical
- * release text can exist before a matching snapshot catalog entry.
+ * Reports mismatched numeric claims as content findings and skips missing inputs because historical release text can exist before a matching snapshot
+ * catalog entry.
  *
  * @param ctx Audit context whose filesystem is rooted at the target project.
  * @returns Findings plus the number of release-note files that were actually scanned.

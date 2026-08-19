@@ -1,12 +1,12 @@
 /**
  * Persistent identity and on-disk state model for the dashboard's recent-projects list.
  *
- * Resolves a stable identity for each checkout (git remote hash, then a gitignored `.goat-flow`
- * marker, then the absolute path) so the same project is recognised after it moves on disk, and
- * hydrates/normalises the JSON state file into a deduplicated, deterministically ordered shape.
- * Reads and writes the local marker file and shells out to `git config` with a short timeout; all
- * filesystem and git failures are swallowed into path-based fallbacks so a read-only or non-git
- * project still loads. Consumed by dashboard-project-routes.ts.
+ * Resolves a stable identity for each checkout (git remote hash, then a gitignored `.goat-flow` marker, then the absolute path) so the same project
+ * is recognised after it moves on disk, and hydrates/normalises the JSON state file into a deduplicated, deterministically ordered shape.
+ *
+ * Reads and writes the local marker file and shells out to `git config` with a short timeout; all filesystem and git failures are swallowed into
+ * path-based fallbacks so a read-only or non-git project still loads.
+ * Consumed by dashboard-project-routes.ts.
  */
 import { execFileSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
@@ -30,9 +30,10 @@ export interface DashboardProjectIdentity {
 /**
  * Persistent dashboard project entry, including every known local path for the identity.
  */
-interface DashboardProjectRecord extends DashboardProjectIdentity {
+export interface DashboardProjectRecord extends DashboardProjectIdentity {
   paths: string[];
   title?: string | undefined;
+  archivedAt?: string | undefined;
 }
 
 /**
@@ -46,25 +47,27 @@ export interface DashboardStateData {
 }
 
 /** Hash cache and identity inputs without storing raw remote URLs in keys. */
-function hashString(value: string): string {
-  return createHash("sha256").update(value).digest("hex");
+function hashString(inputText: string): string {
+  return createHash("sha256").update(inputText).digest("hex");
 }
 
 const PROJECT_MARKER_COMMENT =
   "# Local goat-flow dashboard project identity. Gitignored by default.";
 
 /** Accept only persisted identity-source values understood by this dashboard build. */
-function identitySourceFrom(value: unknown): ProjectIdentitySource | null {
-  return value === "git-remote" || value === "goat-marker" || value === "path"
-    ? value
+function identitySourceFrom(candidate: unknown): ProjectIdentitySource | null {
+  return candidate === "git-remote" ||
+    candidate === "goat-marker" ||
+    candidate === "path"
+    ? candidate
     : null;
 }
 
 /** Preserve first-seen path order while removing duplicate project paths. */
 function dedupeStrings(values: string[]): string[] {
   const result: string[] = [];
-  for (const value of values) {
-    if (value && !result.includes(value)) result.push(value);
+  for (const candidate of values) {
+    if (candidate && !result.includes(candidate)) result.push(candidate);
   }
   return result;
 }
@@ -175,6 +178,13 @@ function writeProjectMarkerIdentifier(markerPath: string): string | null {
   }
 }
 
+/**
+ * Identify a project by its normalised Git remote, the most portable identity available.
+ * The remote URL is hashed rather than stored, so a private host name never reaches local state.
+ *
+ * @param currentPath - realpath-normalised project root
+ * @returns the remote-backed identity, or null when the project has no usable remote
+ */
 function resolveGitRemoteIdentity(
   currentPath: string,
 ): DashboardProjectIdentity | null {
@@ -191,6 +201,15 @@ function resolveGitRemoteIdentity(
   };
 }
 
+/**
+ * Identify a project by its local `.goat-flow` marker file, the fallback when no remote exists.
+ * Error behavior: throws only when a marker write was requested and the state path is unsafe; in read-only mode the same failure reports as a null
+ * identity so a preview cannot be blocked by it.
+ *
+ * @param currentPath - realpath-normalised project root
+ * @param allowMarkerWrite - true permits creating a missing marker; false keeps the call read-only
+ * @returns the marker-backed identity, or null when no marker exists and none may be written
+ */
 function resolveMarkerIdentity(
   currentPath: string,
   allowMarkerWrite: boolean,
@@ -217,6 +236,17 @@ function resolveMarkerIdentity(
   };
 }
 
+/**
+ * Resolve the stable identity the dashboard uses to recognise one project across path changes.
+ *
+ * Sources are tried in descending durability: Git remote, then local marker, then the path itself.
+ *
+ * @param projectPath - project root as the user selected it; normalised to a realpath first
+ * @param options - `allowMarkerWrite` true permits creating a missing marker file
+ * @returns the resolved identity, never null because the path fallback always succeeds. Path identity is
+ *   deliberately last: it stops matching as soon as the user moves the directory, which is exactly what the other
+ *   two sources exist to survive.
+ */
 export function resolveProjectIdentity(
   projectPath: string,
   options: { allowMarkerWrite?: boolean } = {},
@@ -234,16 +264,16 @@ export function resolveProjectIdentity(
 
 /** Read one optional string array property from a parsed dashboard state file. */
 function readOptionalStringArrayProperty(
-  value: Record<string, unknown>,
+  stateRecord: Record<string, unknown>,
   key: string,
 ): string[] | null {
-  const raw = value[key];
+  const raw = stateRecord[key];
   if (raw === undefined) return [];
   if (!Array.isArray(raw)) return null;
   const items: string[] = [];
-  for (const item of raw) {
-    if (typeof item !== "string") return null;
-    items.push(item);
+  for (const entry of raw) {
+    if (typeof entry !== "string") return null;
+    items.push(entry);
   }
   return items;
 }
@@ -252,10 +282,10 @@ function readOptionalStringArrayProperty(
  *  Invalid entries are dropped rather than failing the whole load so one bad
  *  title can't wipe the user's `paths` / `favorites`. */
 function readOptionalStringMapProperty(
-  value: Record<string, unknown>,
+  stateRecord: Record<string, unknown>,
   key: string,
 ): Record<string, string> {
-  const raw = value[key];
+  const raw = stateRecord[key];
   if (raw === undefined) return {};
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
   const result: Record<string, string> = {};
@@ -274,14 +304,33 @@ function normalizeProjectRecordPaths(record: Record<string, unknown>) {
     : [];
 }
 
+/**
+ * Read one non-empty string field from an untrusted project record.
+ *
+ * @param record - parsed record from local state; any field may be missing or wrongly typed
+ * @param key - field to read
+ * @returns the string, or null when the field is absent, not a string, or empty
+ */
 function readRecordString(
   record: Record<string, unknown>,
   key: string,
 ): string | null {
-  const value = record[key];
-  return typeof value === "string" && value.length > 0 ? value : null;
+  const fieldValue = record[key];
+  return typeof fieldValue === "string" && fieldValue.length > 0
+    ? fieldValue
+    : null;
 }
 
+/**
+ * Copy the optional identity and title fields onto a normalised record.
+ *
+ * Absent fields are left unset rather than written as empty, so a later merge can still take the value from another record for the same project.
+ * Side effect: mutates `normalized` in place.
+ *
+ * @param normalized - record being built; only present fields are assigned
+ * @param record - untrusted parsed record supplying the optional values
+ * @returns nothing; the result is the fields assigned to `normalized`
+ */
 function applyOptionalProjectRecordFields(
   normalized: DashboardProjectRecord,
   record: Record<string, unknown>,
@@ -289,19 +338,30 @@ function applyOptionalProjectRecordFields(
   const remoteUrlHash = readRecordString(record, "remoteUrlHash");
   const markerId = readRecordString(record, "markerId");
   const title = readRecordString(record, "title")?.trim();
+  const archivedAt = readRecordString(record, "archivedAt");
   if (remoteUrlHash) normalized.remoteUrlHash = remoteUrlHash;
   if (markerId) normalized.markerId = markerId;
   if (title) normalized.title = title.slice(0, 120);
+  if (archivedAt) normalized.archivedAt = archivedAt;
 }
 
+/**
+ * Validate one untrusted project record into the shape the dashboard can trust.
+ * A record missing identity, source, or current path is rejected outright, because a partial record would let the dashboard claim it recognises a
+ * project it cannot actually locate.
+ *
+ * @param identity - map key used as the identity when the record does not carry its own
+ * @param candidate - untrusted parsed value; anything that is not a plain object is rejected
+ * @returns the normalised record, or null when required fields are missing or malformed
+ */
 function normalizeDashboardProjectRecord(
   identity: string,
-  value: unknown,
+  candidate: unknown,
 ): DashboardProjectRecord | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+  if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
     return null;
   }
-  const record = value as Record<string, unknown>;
+  const record = candidate as Record<string, unknown>;
   const identityValue = readRecordString(record, "identity") ?? identity;
   const identitySource = identitySourceFrom(record.identitySource);
   const currentPath = readRecordString(record, "currentPath");
@@ -320,10 +380,17 @@ function normalizeDashboardProjectRecord(
   return normalized;
 }
 
+/**
+ * Read and validate the `projects` map from parsed dashboard state.
+ * Invalid records are dropped individually rather than failing the load, so one corrupt entry cannot wipe every project the user has added.
+ *
+ * @param stateRecord - parsed state object; a missing or non-object `projects` yields an empty map
+ * @returns validated records keyed by their own identity; empty when none survive validation
+ */
 function readOptionalProjectRecordsProperty(
-  value: Record<string, unknown>,
+  stateRecord: Record<string, unknown>,
 ): Record<string, DashboardProjectRecord> {
-  const raw = value.projects;
+  const raw = stateRecord.projects;
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
   const records: Record<string, DashboardProjectRecord> = {};
   for (const [identity, record] of Object.entries(raw)) {
@@ -333,6 +400,16 @@ function readOptionalProjectRecordsProperty(
   return records;
 }
 
+/**
+ * Merge one project record into the accumulating identity map.
+ *
+ * An existing entry keeps its optional fields unless the incoming record supplies them, so re-adding a project by a new path never discards the title
+ * or marker learned earlier.
+ *
+ * @param records - accumulator keyed by identity
+ * @param next - record to merge; its `currentPath` always wins as the most recent location
+ * @returns nothing; the result is the merged entry in `records`. It mutates the `records` map in place.
+ */
 function addProjectRecord(
   records: Map<string, DashboardProjectRecord>,
   next: DashboardProjectRecord,
@@ -352,9 +429,19 @@ function addProjectRecord(
     title: next.title ?? existing.title,
     remoteUrlHash: next.remoteUrlHash ?? existing.remoteUrlHash,
     markerId: next.markerId ?? existing.markerId,
+    archivedAt: next.archivedAt ?? existing.archivedAt,
   });
 }
 
+/**
+ * Rebuild full project records from persisted state, re-resolving each path's identity.
+ * Legacy state carries only paths, so every path is resolved again and merged into the record map.
+ * That also repairs state written before a project gained a Git remote.
+ *
+ * @param state - parsed state, possibly from an older schema carrying only `paths`
+ * @param options - `allowMarkerWrite` true permits creating missing marker files while resolving
+ * @returns fully hydrated state with deduplicated paths and per-identity records
+ */
 export function hydrateDashboardState(
   state: DashboardStateData,
   options: { allowMarkerWrite: boolean },
@@ -393,7 +480,9 @@ export function hydrateDashboardState(
     [...records.entries()].sort(([a], [b]) => a.localeCompare(b)),
   );
   const paths = dedupeStrings(
-    Object.values(projects).flatMap((record) => record.paths),
+    Object.values(projects)
+      .filter((record) => !record.archivedAt)
+      .flatMap((record) => record.paths),
   );
   return {
     paths,
@@ -403,12 +492,171 @@ export function hydrateDashboardState(
   };
 }
 
+/**
+ * Tell whether a path is one of the saved project rows, so a row whose folder was deleted can still be archived by the exact path the user
+ * saved. Use before acting on a path that failed folder validation.
+ *
+ * @param state - saved dashboard state loaded from disk; an empty `projects` map means no row can match
+ * @param projectPath - path as the user saved it; resolved to its real location when the folder still exists, else to its absolute form
+ * @returns true when some row's current path or alias list contains that path
+ */
+export function dashboardStateHasProjectPath(
+  state: DashboardStateData,
+  projectPath: string,
+): boolean {
+  const currentPath = normalizeProjectPath(projectPath);
+  return Object.values(state.projects).some(
+    (record) =>
+      record.currentPath === currentPath || record.paths.includes(currentPath),
+  );
+}
+
+/**
+ * Find the freshly resolved identity a saved row should move to, when its folder now resolves differently than the key it was saved under.
+ * Use during a whole-list save, where every posted path has just been resolved, so a checkout whose git remote changed is not treated as a
+ * different project.
+ *
+ * @param record - one saved row; its current path and known paths are what the match runs on
+ * @param resolvedIdentities - identities resolved for the posted paths, in posted order
+ * @returns the identity to move the row to, or null when no posted path names this row or its key already matches
+ */
+export function freshIdentityForSavedRecord(
+  record: DashboardProjectRecord,
+  resolvedIdentities: readonly DashboardProjectIdentity[],
+): DashboardProjectIdentity | null {
+  const fresh = resolvedIdentities.find(
+    (candidate) =>
+      record.currentPath === candidate.currentPath ||
+      record.paths.includes(candidate.currentPath),
+  );
+  return fresh && fresh.identity !== record.identity ? fresh : null;
+}
+
+/**
+ * Move a saved row onto a freshly resolved identity in place, so the Projects list never shows the same checkout twice.
+ * Use after the folder has been proven to exist and resolve to that identity.
+ *
+ * @param record - the row to move; its title and known paths stay as they were
+ * @param identity - identity the folder resolves to now; its fields replace the row's identity, remote hash, and marker id
+ * @returns nothing; the row is mutated in place
+ */
+export function moveProjectRecordToIdentity(
+  record: DashboardProjectRecord,
+  identity: DashboardProjectIdentity,
+): void {
+  // Clear the old key's identity fields before copying the new identity in, so a stale remote hash or marker id cannot survive the move.
+  Reflect.deleteProperty(record, "remoteUrlHash");
+  Reflect.deleteProperty(record, "markerId");
+  Object.assign(record, identity);
+}
+
+/**
+ * Decide whether a row that was found only by its path must move to the folder's freshly resolved identity.
+ * Use while archiving or restoring, after the row has been matched, so the Projects list never shows the same checkout twice.
+ *
+ * @param matchedRecord - the saved row the click landed on; undefined means the folder was never saved and nothing can move
+ * @param wasIdentityMatch - true when the row was found under the folder's current identity, so it already sits at the right key
+ * @param identity - identity the folder resolves to right now, for example a new `git-remote:` key after the user added a remote
+ * @param currentPath - folder of the row; a folder that no longer exists cannot prove a new identity
+ * @returns the old key to drop after re-keying, or null when the row keeps the key it was saved under
+ */
+function obsoleteIdentityAfterRekey(
+  matchedRecord: DashboardProjectRecord | undefined,
+  wasIdentityMatch: boolean,
+  identity: DashboardProjectIdentity,
+  currentPath: string,
+): string | null {
+  // A row found only by path may now resolve to a different identity, for example the folder gained a git remote while it was archived.
+  //
+  // Move it to that key, or the list would show the same checkout twice after restore.
+  // A folder that no longer exists cannot prove a new identity, so a stale row being archived keeps the key it was saved under.
+  return matchedRecord &&
+    !wasIdentityMatch &&
+    matchedRecord.identity !== identity.identity &&
+    directoryExists(currentPath)
+    ? matchedRecord.identity
+    : null;
+}
+
+/**
+ * Archive or restore one dashboard project without losing its identity, known paths, or title.
+ * Use for the Archive and Restore buttons on the Projects page, so an older whole-list save cannot erase a row the user may want back.
+ *
+ * @param state - saved dashboard state loaded from disk
+ * @param projectPath - folder of the row the user clicked; for archive it may be a saved path whose folder no longer exists
+ * @param archivedAt - archive timestamp, or `null` to restore the project
+ * @returns rebuilt state with the row kept and the active path list derived from what is archived
+ */
+export function setDashboardProjectArchived(
+  state: DashboardStateData,
+  projectPath: string,
+  archivedAt: string | null,
+): DashboardStateData {
+  const currentPath = normalizeProjectPath(projectPath);
+  const identity = resolveProjectIdentity(currentPath, {
+    allowMarkerWrite: false,
+  });
+  // Prefer the row saved under this folder's current identity; otherwise any row that lists the folder among its known paths,
+  // which is how a project saved before it gained a git remote is found again.
+  const identityMatchedRecord = state.projects[identity.identity];
+  const matchedRecord =
+    identityMatchedRecord ??
+    Object.values(state.projects).find(
+      (record) =>
+        record.currentPath === currentPath ||
+        record.paths.includes(currentPath),
+    );
+  // A known row keeps its title and known paths; a folder never saved before becomes a fresh row.
+  const record: DashboardProjectRecord = matchedRecord
+    ? {
+        ...matchedRecord,
+        currentPath,
+        paths: dedupeStrings([...matchedRecord.paths, currentPath]),
+      }
+    : { ...identity, paths: [currentPath] };
+
+  const obsoleteIdentity = obsoleteIdentityAfterRekey(
+    matchedRecord,
+    identityMatchedRecord !== undefined,
+    identity,
+    currentPath,
+  );
+  if (obsoleteIdentity !== null) moveProjectRecordToIdentity(record, identity);
+
+  // Archive keeps the complete row; restore removes only the archive marker.
+  if (archivedAt === null) {
+    Reflect.deleteProperty(record, "archivedAt");
+  } else {
+    record.archivedAt = archivedAt;
+  }
+
+  const projects = { ...state.projects, [record.identity]: record };
+  // Without this the old key would come back as a second row when the state is rebuilt below.
+  if (obsoleteIdentity !== null) {
+    Reflect.deleteProperty(projects, obsoleteIdentity);
+  }
+  // Restore puts the folder back in the active list; archive takes every spelling of it out.
+  const paths =
+    archivedAt === null
+      ? dedupeStrings([...state.paths, currentPath])
+      : state.paths.filter(
+          (path) => normalizeProjectPath(path) !== currentPath,
+        );
+
+  return hydrateDashboardState(
+    { ...state, paths, projects },
+    { allowMarkerWrite: false },
+  );
+}
+
 /** Normalize parsed dashboard state JSON into the server's expected shape. */
-function normalizeDashboardState(value: unknown): DashboardStateData | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
+function normalizeDashboardState(
+  candidate: unknown,
+): DashboardStateData | null {
+  if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
     return null;
   }
-  const record = value as Record<string, unknown>;
+  const record = candidate as Record<string, unknown>;
   const paths = readOptionalStringArrayProperty(record, "paths");
   if (paths === null) return null;
   const favorites = readOptionalStringArrayProperty(record, "favorites");
@@ -429,6 +677,10 @@ function normalizeDashboardState(value: unknown): DashboardStateData | null {
  * Read dashboard state from the new file first, then the legacy projects-only file.
  *
  * Swallows malformed or missing state files so the dashboard can recover to empty state.
+ *
+ * @param dashboardStateFile - current state file path, tried first
+ * @param legacyProjectsListFile - older projects-only file, tried when the current one is unusable
+ * @returns loaded state, or empty state when neither file yields a usable document
  */
 export async function loadDashboardState(
   dashboardStateFile: string,

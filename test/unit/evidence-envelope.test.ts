@@ -108,16 +108,19 @@ function frameworkPathExists(path: string): boolean {
 }
 
 /** Run one filesystem scenario in an isolated project and remove it afterward. */
-function withTempProject<T>(fn: (root: string) => T): T {
+function withTempProject<T>(scenario: (root: string) => T): T {
   const root = mkdtempSync(join(tmpdir(), "goat-flow-evidence-"));
   try {
-    return fn(root);
+    return scenario(root);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
 }
 
-/** Create a symlink, or skip when the host blocks unprivileged link fixtures. */
+/**
+ * Create a symlink, or skip when the host blocks unprivileged link fixtures.
+ * It swallows that platform failure into a skip rather than a red test.
+ */
 function symlinkOrSkip(
   testContext: TestContext,
   target: string,

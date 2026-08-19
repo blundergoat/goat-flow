@@ -1,14 +1,20 @@
 /**
- * Manage the Projects screen, project browser, saved project list, and dashboard state.
- * Use when a user adds a project, switches between workspaces, edits a display title, or refreshes status.
- * The helpers keep Alpine methods thin while preserving the path, title, and identity data users see.
+ * Powers the Projects screen: the folder browser, the saved project table, display titles, and the state that survives a reload.
+ *
+ * This is where a user starts a session, adding a workspace, switching between them, renaming one, or refreshing their status.
+ *
+ * The helpers keep Alpine methods thin while protecting what the user can see, so:
+ * - saved order is never rewritten just by sorting or viewing the table
+ * - a project keeps its identity across path changes, so a renamed folder does not lose its title
+ * - server state wins, with browser localStorage kept only as a migration fallback
  */
 
 /**
- * Dashboard state required by project-list, browser, title, and persistence helpers.
- * Use when a Projects action needs the same state that the user sees on screen.
- * Empty strings mean a field is not currently visible or selected in the UI.
- * Invariant: these method names must match the Alpine fragments that call them.
+ * The Projects screen state shared by the list, browser, title-editing, and persistence helpers.
+ *
+ * Every field here is something the user can see or has chosen, so an empty string means "not currently selected or visible".
+ *
+ * Invariant: these method names must match the Alpine fragments that call them, or the template silently binds to nothing.
  */
 interface DashboardProjectsContext {
   projectPath: string;
@@ -17,7 +23,7 @@ interface DashboardProjectsContext {
   browserParent: string;
   browserDirs: BrowseDir[];
   projectsList: ProjectEntry[];
-  projectsAuditing: boolean;
+  projectsRefreshing: boolean;
   showAddProject: boolean;
   projectsSortKey: ProjectSortKey;
   projectsSortAsc: boolean;
@@ -167,6 +173,11 @@ function dashboardReadProjectRecord(
   // A marker id keeps local-only projects recognizable after the folder is moved.
   if (markerId) entry.markerId = markerId;
 
+  const archivedAt = readString(storedProject.archivedAt);
+
+  // Archived records stay recoverable but are rendered outside the active table.
+  if (archivedAt) entry.archivedAt = archivedAt;
+
   return entry;
 }
 
@@ -221,12 +232,13 @@ async function dashboardOpenBrowser(
 }
 
 /**
- * Load child directories for the requested project-browser path.
- * Use when a user navigates folders before selecting a project.
+ * Loads the folder rows the user sees while drilling down to pick a project.
  *
- * @param ctx - dashboard state that receives browser rows; empty state means rows replace the current panel
- * @param path - directory requested by the user; empty means the server will return an error toast path
- * @returns promise that settles after rows or an error toast are visible
+ * Error behavior: never throws; a rejected path reports as a toast and leaves the user on the folder they were already viewing.
+ *
+ * @param ctx - dashboard state that receives the browser rows
+ * @param path - directory the user clicked; an empty path comes back as a server error toast rather than a blank panel
+ * @returns promise that settles once either new rows or an error toast are on screen
  */
 async function dashboardBrowseTo(
   ctx: DashboardProjectsContext,
@@ -253,7 +265,7 @@ async function dashboardBrowseTo(
           .filter((dir): dir is BrowseDir => dir !== null)
       : [];
   } catch {
-    // A failed browse keeps the user on the current folder list and explains that loading failed.
+    // For example, the user clicked into a folder they lack permission to read, or an external drive was unplugged mid-browse.
     ctx.showToast("Browse failed", true);
   }
 }
@@ -274,7 +286,26 @@ function dashboardSelectDir(
   if (dir.isProject) {
     ctx.projectPath = dir.path;
     ctx.showBrowser = false;
-    void ctx.runAudit();
+    const existingProject = ctx.projectsList.find(
+      (project) =>
+        project.path === dir.path || project.paths?.includes(dir.path),
+    );
+
+    // Choosing a discovered row is an explicit registration, so it may now be persisted.
+    if (existingProject) {
+      Reflect.deleteProperty(existingProject, "discovered");
+      if (existingProject.archivedAt) {
+        void dashboardSetProjectArchived(ctx, dir.path, false).then(() =>
+          ctx.runAudit(),
+        );
+      } else {
+        ctx._saveProjectsList();
+        void ctx.runAudit();
+      }
+    } else {
+      ctx.newProjectPath = dir.path;
+      void dashboardAddProject(ctx).then(() => ctx.runAudit());
+    }
   } else {
     // Folder rows keep the browser open so the user can keep drilling down.
     void ctx.browseTo(dir.path);
@@ -282,11 +313,14 @@ function dashboardSelectDir(
 }
 
 /**
- * Add one project path to the saved Projects list and fetch its first status.
- * Use when the user types a path and clicks Add.
+ * Adds the path the user typed to the saved Projects table and fetches its first audit status.
  *
- * @param ctx - dashboard state holding the draft path; empty draft means the user has not chosen a project
- * @returns promise that settles after the row is added, refreshed, and saved
+ * The row appears immediately showing "Auditing...", so the user gets feedback before the server has answered.
+ *
+ * Error behavior: never throws; a failed status leaves the placeholder row in place rather than removing the project the user just added.
+ *
+ * @param ctx - dashboard state holding the draft path; an empty draft means the user clicked Add without choosing anything, so nothing happens
+ * @returns promise that settles once the row is added, refreshed, and persisted
  */
 async function dashboardAddProject(
   ctx: DashboardProjectsContext,
@@ -294,10 +328,23 @@ async function dashboardAddProject(
   // Nothing was entered, so the Projects view stays open without adding a blank row.
   if (!ctx.newProjectPath) return;
 
-  // Existing projects are not duplicated; the add panel simply closes for the user.
-  if (ctx.projectsList.some((project) => project.path === ctx.newProjectPath)) {
+  const existingProject = ctx.projectsList.find(
+    (project) =>
+      project.path === ctx.newProjectPath ||
+      project.paths?.includes(ctx.newProjectPath),
+  );
+
+  // Adding an existing discovered or archived row explicitly registers or restores it.
+  if (existingProject) {
+    const projectPath = ctx.newProjectPath;
     ctx.showAddProject = false;
     ctx.newProjectPath = "";
+    if (existingProject.archivedAt) {
+      await dashboardSetProjectArchived(ctx, projectPath, false);
+    } else if (existingProject.discovered) {
+      Reflect.deleteProperty(existingProject, "discovered");
+      ctx._saveProjectsList();
+    }
     return;
   }
 
@@ -337,22 +384,38 @@ async function dashboardAddProject(
 }
 
 /**
- * Remove a project from the saved Projects list.
- * Use when the user confirms removal from the Projects table.
+ * Archive or restore a project through the server-owned dashboard state.
+ * Use when the user wants to hide an active row or return a retained archived record.
  *
- * @param ctx - dashboard state being updated; empty project list stays empty after removal
- * @param path - project path to remove; empty means no visible row can match
- * @returns nothing; the updated list is saved for the next dashboard load
+ * @param ctx - dashboard state being refreshed after the server action
+ * @param path - project path selected by the user
+ * @param isArchived - `true` archives the record; `false` restores it
+ * @returns promise that settles after state and visible status rows are refreshed; it reports a failed server action as a toast
  */
-function dashboardRemoveProject(
+async function dashboardSetProjectArchived(
   ctx: DashboardProjectsContext,
   path: string,
-): void {
-  // Only rows with a different path stay visible after the user removes a project.
-  ctx.projectsList = ctx.projectsList.filter(
-    (project) => project.path !== path,
-  );
-  ctx._saveProjectsList();
+  isArchived: boolean,
+): Promise<void> {
+  const action = isArchived ? "archive" : "restore";
+  try {
+    const res = await dashboardFetch(`/api/projects/${action}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path }),
+    });
+    const payload = readRecord(await res.json(), "Project archive response");
+    const error = readErrorMessage(payload);
+    if (!res.ok || error) {
+      throw new Error(error || `Server returned ${res.status}`);
+    }
+    await dashboardLoadSavedDashboardState(ctx);
+    await dashboardRefreshProjectStatuses(ctx);
+    ctx.showToast(isArchived ? "Project archived" : "Project restored");
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    ctx.showToast(message || `Project ${action} failed`, true);
+  }
 }
 
 /**
@@ -378,11 +441,12 @@ function dashboardSortProjects(
 }
 
 /**
- * Return Projects table rows in the user's selected sort order.
- * Use whenever the table renders after a sort, audit refresh, add, or remove action.
+ * Returns the Projects rows in whichever order the user last clicked a column header.
  *
- * @param ctx - dashboard state with rows and sort choice; empty rows produce an empty table
- * @returns sorted copy of project rows, leaving saved order untouched
+ * Invariant: this sorts a copy, so simply viewing or re-sorting the table never rewrites the saved project order.
+ *
+ * @param ctx - dashboard state with the rows and the user's sort choice; no rows means the table renders empty
+ * @returns a sorted copy of the rows, leaving the persisted order untouched
  */
 function dashboardSortedProjectsList(
   ctx: DashboardProjectsContext,
@@ -405,105 +469,233 @@ function dashboardSortedProjectsList(
 }
 
 /**
- * Refresh audit status for every saved project row.
- * Use when the user clicks Audit All on the Projects screen.
+ * Refreshes lightweight adoption status for every active project row when the user clicks Refresh Status.
  *
- * @param ctx - dashboard state with project rows; empty rows produce a no-op refresh
- * @returns promise that settles after statuses are refreshed or the existing rows are left intact
+ * Error behavior: never throws; a failure reports to the console and leaves the existing rows visible, so the table never blanks out mid-refresh.
+ *
+ * @param ctx - dashboard state with active and archived rows; empty active rows produce a no-op
+ * @returns promise that settles after statuses are refreshed or existing rows are left intact
  */
-async function dashboardAuditAllProjects(
+async function dashboardRefreshProjectStatuses(
   ctx: DashboardProjectsContext,
 ): Promise<void> {
-  ctx.projectsAuditing = true;
+  const activeProjects = ctx.projectsList.filter(
+    (project) => !project.archivedAt,
+  );
+  if (activeProjects.length === 0) return;
+
+  ctx.projectsRefreshing = true;
   try {
-    // The server receives the visible project paths in the same batch the user asked to audit.
-    const paths = ctx.projectsList.map((project) => project.path).join(",");
+    // The server receives active paths only; archived rows remain retained and untouched.
+    const paths = activeProjects.map((project) => project.path).join(",");
     const res = await dashboardFetch(
       `/api/projects/status?paths=${encodeURIComponent(paths)}`,
     );
     const payload = readRecord(await res.json(), "Project status response");
 
-    // A valid response replaces every row so the Projects table reflects current audit status.
+    // A valid response refreshes active rows while retaining archive and discovery metadata.
     if (Array.isArray(payload.projects)) {
-      ctx.projectsList = payload.projects
+      const refreshedProjects = payload.projects
         .map((project) => readProjectEntry(project))
-        .filter((project): project is ProjectEntry => project !== null);
+        .filter((project): project is ProjectEntry => project !== null)
+        .map((project) => {
+          const previous = activeProjects.find(
+            (candidate) =>
+              candidate.path === project.path ||
+              candidate.paths?.includes(project.path),
+          );
+          return previous?.discovered
+            ? { ...project, discovered: true }
+            : project;
+        });
+      ctx.projectsList = [
+        ...refreshedProjects,
+        ...ctx.projectsList.filter((project) => Boolean(project.archivedAt)),
+      ];
       dashboardRememberProjectIdentities(ctx, ctx.projectsList);
     }
   } catch (err) {
-    // Surface, don't swallow: stale rows remain visible, so the user needs a retry signal.
+    // For example, the user clicked Refresh Status with a saved project whose folder has since been deleted or moved off the machine.
+    // Surface, don't swallow: stale rows stay visible, so the user needs a retry signal rather than silence.
     console.warn("[goat-flow] Failed to refresh project statuses:", err);
   }
-  ctx.projectsAuditing = false;
+  ctx.projectsRefreshing = false;
 }
 
 /**
- * Load saved dashboard state from the server, with localStorage as a migration fallback.
- * Use on dashboard startup so users return to their saved projects, favorites, and titles.
+ * Picks whichever saved list the user would rather keep when server state and browser storage disagree.
  *
- * @param ctx - dashboard state being hydrated; empty saved state leaves the startup project visible
- * @returns promise that settles after saved state has been applied and re-saved if needed
+ * Server state normally wins, but a failed load must never silently shrink the projects or favorites the user already had on this machine.
+ *
+ * @param serverList - list restored from the server; empty means the server had nothing saved for this user yet
+ * @param localList - list restored from browser storage, kept only as a migration fallback for older builds
+ * @param wasLoadedFromServer - false when the server request failed, which promotes the larger local list instead
+ * @returns the list to show; never shorter than what the user already had locally
  */
-async function dashboardLoadSavedDashboardState(
-  ctx: DashboardProjectsContext,
-): Promise<void> {
-  let savedPaths: string[] = [];
-  let savedFavorites: string[] = [];
-  let savedProjectTitles: Record<string, string> = {};
-  let savedProjectRecords: ProjectEntry[] = [];
-  let loadedFromServer = false;
+function dashboardPreferredSavedList(
+  serverList: string[],
+  localList: string[],
+  wasLoadedFromServer: boolean,
+): string[] {
+  // The server had nothing saved, so browser storage is the only place the user's earlier choices still exist.
+  if (serverList.length === 0) return localList;
+
+  // The server request failed, so a longer local list is more likely to be what the user actually had.
+  if (!wasLoadedFromServer && localList.length > serverList.length) {
+    return localList;
+  }
+  return serverList;
+}
+
+/**
+ * Reads whatever saved dashboard state the server holds, so startup has a single place that talks to the projects store.
+ *
+ * Error behavior: never throws. An unreachable or pre-projects-store server reports `wasLoadedFromServer` false
+ * with empty lists, which is the caller's signal to fall back to browser storage.
+ *
+ * @returns saved paths, favorites, titles, identity-aware records, and discovered siblings; a false
+ *   `wasLoadedFromServer` means every list is empty because the request or its parse failed
+ */
+async function dashboardReadSavedServerState(): Promise<{
+  savedPaths: string[];
+  savedFavorites: string[];
+  savedProjectTitles: Record<string, string>;
+  savedProjectRecords: ProjectEntry[];
+  discoveredPaths: string[];
+  wasLoadedFromServer: boolean;
+}> {
   try {
     const res = await dashboardFetch("/api/projects/list");
     const payload = readRecord(await res.json(), "Dashboard state response");
     const paths = readStringArray(payload.paths);
-    const favorites = readStringArray(payload.favorites);
     const projectRecords = dashboardReadProjectRecords(payload.projects);
 
-    // Server paths restore the Projects table before falling back to browser local storage.
-    if (paths.length > 0) {
-      savedPaths = paths;
-    }
-
-    // Server favorites restore the Prompts shortcuts the user previously chose.
-    if (favorites.length > 0) {
-      savedFavorites = favorites;
-    }
-    savedProjectTitles = readStringMap(payload.projectTitles);
-
-    // Identity-aware records are richer than raw paths, so they become the source of visible rows.
-    if (projectRecords.length > 0) {
-      savedProjectRecords = projectRecords;
-      savedPaths = projectRecords.map((project) => project.path);
-    }
-    loadedFromServer = true;
+    // Identity-aware records include retained archives, so only the unarchived subset seeds active rows.
+    const activeRecordPaths = projectRecords
+      .filter((project) => !project.archivedAt)
+      .map((project) => project.path);
+    return {
+      // Server paths restore the Projects table before falling back to browser local storage.
+      savedPaths: paths.length > 0 ? paths : activeRecordPaths,
+      // Server favorites restore the Prompts shortcuts the user previously chose.
+      savedFavorites: readStringArray(payload.favorites),
+      savedProjectTitles: readStringMap(payload.projectTitles),
+      savedProjectRecords: projectRecords,
+      discoveredPaths: readStringArray(payload.discoveredPaths),
+      wasLoadedFromServer: true,
+    };
   } catch {
-    // Server storage may be unavailable during migration; localStorage can still restore the UI.
-    loadedFromServer = false;
+    // For example, the user is on a build whose server predates the projects store, so nothing answers and localStorage restores the screen instead.
+    return {
+      savedPaths: [],
+      savedFavorites: [],
+      savedProjectTitles: {},
+      savedProjectRecords: [],
+      discoveredPaths: [],
+      wasLoadedFromServer: false,
+    };
   }
+}
+
+/**
+ * Builds the rows the Projects table shows, combining the user's saved state with the siblings the server discovered.
+ *
+ * Invariant: discovered rows are appended as unregistered entries only, so browsing them never turns into a saved registration.
+ *
+ * @param savedProjectRecords - identity-aware saved rows including archives; empty falls back to raw saved paths
+ * @param savedPaths - raw saved paths used when no identity-aware records exist; empty leaves discovery as the only source of rows
+ * @param discoveredPaths - sibling folders the server found; paths already listed are skipped
+ * @returns the rows to display, saved rows first and discovered siblings appended
+ */
+function dashboardBuildProjectRows(
+  savedProjectRecords: ProjectEntry[],
+  savedPaths: string[],
+  discoveredPaths: string[],
+): ProjectEntry[] {
+  // Identity-aware rows preserve saved display names, archives, and path aliases.
+  // Raw saved paths still give the user selectable rows until audit status is refreshed.
+  const projectRows: ProjectEntry[] =
+    savedProjectRecords.length > 0
+      ? savedProjectRecords
+      : savedPaths.map((path) => ({
+          path,
+          state: "...",
+          action: "...",
+          details: "Not audited",
+        }));
+
+  // Discovered siblings are visible without becoming persisted registrations or writing markers.
+  for (const path of discoveredPaths) {
+    if (dashboardContainsProjectPath(projectRows, path)) continue;
+    projectRows.push({
+      path,
+      discovered: true,
+      state: "...",
+      action: "...",
+      details: "Not refreshed",
+    });
+  }
+  return projectRows;
+}
+
+/**
+ * Restores the user's projects, favorites, and titles on dashboard startup so they reopen where they left off.
+ *
+ * Server state is authoritative; browser localStorage is read only as a migration fallback for users upgrading from an older build.
+ *
+ * The comparisons below deliberately keep the larger of the two lists, because:
+ * - a half-written server response must never silently shrink the user's saved project list
+ * - a user who added projects before the server store existed keeps them on first load
+ * - Error behavior: never throws; an unreachable endpoint falls back to localStorage instead of opening an empty dashboard
+ *
+ * @param ctx - dashboard state being hydrated; no saved state leaves just the launch project visible
+ * @returns promise that settles once saved state has been applied, and re-saved when a migration happened
+ */
+async function dashboardLoadSavedDashboardState(
+  ctx: DashboardProjectsContext,
+): Promise<void> {
+  const serverState = await dashboardReadSavedServerState();
+  const {
+    savedProjectTitles,
+    savedProjectRecords,
+    discoveredPaths,
+    wasLoadedFromServer,
+  } = serverState;
+  let savedPaths = serverState.savedPaths;
+  let savedFavorites = serverState.savedFavorites;
+  let requiresServerMigration = false;
   ctx.projectTitles = savedProjectTitles;
   ctx.projectIdentities = {};
   dashboardRememberProjectIdentities(ctx, savedProjectRecords);
   const localPaths = readStoredStringArray("goat-flow-projects");
   const localFavorites = readStoredStringArray("goat-flow-preset-favorites");
 
-  // Local project paths fill the list when the server has no saved rows yet.
-  if (savedPaths.length === 0 && localPaths.length > 0) {
-    savedPaths = localPaths;
-  }
+  const serverHadProjects =
+    savedPaths.length > 0 || savedProjectRecords.length > 0;
+  const serverHadFavorites = savedFavorites.length > 0;
+  const serverHasOnlyArchivedProjects =
+    savedPaths.length === 0 && savedProjectRecords.length > 0;
 
-  // Local favorites fill prompt shortcuts when the server has no saved favorites yet.
-  if (savedFavorites.length === 0 && localFavorites.length > 0) {
-    savedFavorites = localFavorites;
+  // An all-archived server response is still saved state, so browser storage must not resurrect those rows as active.
+  if (!serverHasOnlyArchivedProjects) {
+    savedPaths = dashboardPreferredSavedList(
+      savedPaths,
+      localPaths,
+      wasLoadedFromServer,
+    );
   }
+  savedFavorites = dashboardPreferredSavedList(
+    savedFavorites,
+    localFavorites,
+    wasLoadedFromServer,
+  );
 
-  // If server storage failed, keep the larger local path list the user already had.
-  if (!loadedFromServer && localPaths.length > savedPaths.length) {
-    savedPaths = localPaths;
-  }
-
-  // If server storage failed, keep the larger local favorites list the user already had.
-  if (!loadedFromServer && localFavorites.length > savedFavorites.length) {
-    savedFavorites = localFavorites;
+  // Browser storage that filled empty server state predates the projects store, so it is written back once.
+  if (
+    (!serverHadProjects && savedPaths.length > 0) ||
+    (!serverHadFavorites && savedFavorites.length > 0)
+  ) {
+    requiresServerMigration = wasLoadedFromServer;
   }
   const launchPath = window.__GOAT_FLOW_DEFAULT_PATH__;
 
@@ -520,25 +712,19 @@ async function dashboardLoadSavedDashboardState(
       action: "...",
       details: "Not audited",
     });
+    requiresServerMigration = wasLoadedFromServer;
   }
   ctx.presetFavorites = [...new Set(savedFavorites)];
 
-  // Identity-aware rows preserve saved display names and path aliases in the Projects table.
-  if (savedProjectRecords.length > 0) {
-    ctx.projectsList = savedProjectRecords;
-  } else if (savedPaths.length > 0) {
-    // Raw saved paths still give the user selectable rows until audit status is refreshed.
-    ctx.projectsList = savedPaths.map((path) => ({
-      path,
-      state: "...",
-      action: "...",
-      details: "Not audited",
-    }));
-  }
+  ctx.projectsList = dashboardBuildProjectRows(
+    savedProjectRecords,
+    savedPaths,
+    discoveredPaths,
+  );
   dashboardRememberProjectIdentities(ctx, ctx.projectsList);
 
-  // Any restored rows or favorites are persisted back through the current server-backed format.
-  if (savedPaths.length > 0 || ctx.presetFavorites.length > 0) {
+  // Only legacy/local fallback or the launch-path seed is written back; discovery stays read-only.
+  if (requiresServerMigration) {
     ctx._saveDashboardState();
   }
 }
@@ -552,10 +738,14 @@ async function dashboardLoadSavedDashboardState(
  * @returns nothing; server failures are logged while local state remains available
  */
 function dashboardSaveDashboardState(ctx: DashboardProjectsContext): void {
-  // Path aliases are saved so moved projects still resolve to the same visible title later.
+  const savedActiveProjects = ctx.projectsList.filter(
+    (project) => !project.archivedAt && !project.discovered,
+  );
+
+  // Only explicitly registered active aliases are saved; discovery and archives remain server-owned.
   const paths = [
     ...new Set(
-      ctx.projectsList.flatMap((project) =>
+      savedActiveProjects.flatMap((project) =>
         project.paths && project.paths.length > 0
           ? project.paths
           : [project.path],

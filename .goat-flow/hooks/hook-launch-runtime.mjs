@@ -1,4 +1,4 @@
-// goat-flow-hook-version: 1.15.1
+// goat-flow-hook-version: 1.16.0
 /**
  * Owns the bounded lifecycle result for an already-started managed hook.
  * The launcher uses it to capture output, enforce deadlines, and render failures.
@@ -15,28 +15,44 @@ const MANAGED_HOOK_IDENTIFIERS_BY_RESPONSE_KIND = new Map([
 /**
  * Select a safe user wait below the registered host deadline.
  * Use before launch so invalid overrides cannot leave the coding agent waiting indefinitely.
+ * Rejection is a session-wide outage for a policy hook, so only a value that cannot bound
+ * the wait at all is rejected; an empty or oversized override still yields a usable wait.
  *
  * @param {number} timeoutCeiling - validated host deadline; zero or missing values are rejected earlier
- * @param {NodeJS.ProcessEnv} hookEnvironment - hook settings; an empty override uses the registered ceiling
- * @returns {number | null} timeout in milliseconds, or null when the user override is invalid
+ * @param {NodeJS.ProcessEnv} hookEnvironment - hook settings; a missing or empty override uses the registered ceiling, and a larger override is clamped to it
+ * @returns {number | null} timeout in milliseconds, or null when the user override is not a whole number of milliseconds of at least 1
  */
 export function resolveHookLaunchTimeoutMs(timeoutCeiling, hookEnvironment) {
   const configuredUserTimeout =
     hookEnvironment.GOAT_FLOW_HOOK_LAUNCH_TIMEOUT_MS;
-  // Missing configuration uses the mode ceiling, which remains below supported host limits.
-  if (configuredUserTimeout === undefined) return timeoutCeiling;
-  // Only a plain positive decimal can lower the ceiling; signs, spaces, and fractions are ambiguous.
+  // `export VAR=` arrives as "" rather than undefined; both mean "use the mode ceiling", which stays below host limits.
+  if (configuredUserTimeout === undefined || configuredUserTimeout === "") {
+    return timeoutCeiling;
+  }
+  // Only a plain decimal is a wait; signs, spaces, and fractions are ambiguous.
   if (!/^[0-9]+$/u.test(configuredUserTimeout)) return null;
   const configuredTimeoutMilliseconds = Number(configuredUserTimeout);
-  // An unsafe or out-of-range value cannot replace the user's bounded host contract.
-  if (
-    !Number.isSafeInteger(configuredTimeoutMilliseconds) ||
-    configuredTimeoutMilliseconds < 1 ||
-    configuredTimeoutMilliseconds > timeoutCeiling
-  ) {
-    return null;
-  }
-  return configuredTimeoutMilliseconds;
+  // Zero would time out before the hook starts, so it cannot bound the user's wait.
+  if (configuredTimeoutMilliseconds < 1) return null;
+  // A larger override cannot exceed the bounded host contract; the ceiling is the closest safe wait.
+  return Math.min(configuredTimeoutMilliseconds, timeoutCeiling);
+}
+
+/**
+ * Explain a rejected timeout override so the user can repair one setting instead of reading launcher source.
+ * Use only after resolveHookLaunchTimeoutMs returned null for the same ceiling and environment.
+ *
+ * @param {number} timeoutCeiling - validated host deadline named as the accepted maximum
+ * @param {NodeJS.ProcessEnv} hookEnvironment - hook settings whose override was rejected; a missing value is reported as ""
+ * @returns {string} failure reason naming the variable, the supplied value, and the accepted range
+ */
+export function describeInvalidHookLaunchTimeout(
+  timeoutCeiling,
+  hookEnvironment,
+) {
+  const configuredUserTimeout =
+    hookEnvironment.GOAT_FLOW_HOOK_LAUNCH_TIMEOUT_MS ?? "";
+  return `hook timeout configuration is invalid: GOAT_FLOW_HOOK_LAUNCH_TIMEOUT_MS=${JSON.stringify(configuredUserTimeout)} must be a whole number of milliseconds from 1 to ${timeoutCeiling}`;
 }
 
 /**

@@ -1,7 +1,8 @@
 /**
  * Read-only diagnostics for goat-flow skill discovery and installed mirrors.
- * Use `skill doctor` when users need paths, invocation text, static blockers,
- * and existing repair commands without asking an AI runtime to trigger a skill.
+ *
+ * Use `skill doctor` when users need paths, invocation text, static blockers, and existing repair commands without asking an AI runtime to trigger a
+ * skill.
  * Renderers keep text, Markdown, and JSON views on one stable report contract.
  */
 import { existsSync, readFileSync } from "node:fs";
@@ -18,7 +19,7 @@ import { createFS } from "./facts/fs.js";
 import { getTemplatePath } from "./paths.js";
 import type { AgentProfile, ReadonlyFS } from "./types.js";
 
-type DoctorStatus = "pass" | "warn" | "fail";
+type DoctorStatus = "static-pass" | "warn" | "fail";
 type SkillFileState = "readable" | "missing" | "unreadable";
 type SkillMirrorStatus = "match" | "drift" | "unavailable";
 type FrontmatterStatus =
@@ -75,9 +76,12 @@ export interface SkillDoctorReport {
   summary: {
     agents: number;
     checked: number;
-    eligible: number;
+    staticallyEligible: number;
+    runtimeRegistration: "unverified";
     blocked: number;
+    mirrorDrift: number;
     warnings: number;
+    countScope: string;
   };
   agents: AgentSkillDoctorResult[];
 }
@@ -118,8 +122,14 @@ class SkillDoctorInputError extends Error {
 }
 
 /** Check whether parsed YAML is an object whose fields can describe discovery. */
-function isFrontmatterRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+function isFrontmatterRecord(
+  candidate: unknown,
+): candidate is Record<string, unknown> {
+  return (
+    typeof candidate === "object" &&
+    candidate !== null &&
+    !Array.isArray(candidate)
+  );
 }
 
 /**
@@ -191,8 +201,9 @@ function blockedFrontmatterInspection(
 }
 
 /** Normalize a YAML discovery value into non-empty text or null. */
-function frontmatterText(value: unknown): string | null {
-  const text = typeof value === "string" ? value.trim() : null;
+function frontmatterText(frontmatterValue: unknown): string | null {
+  const text =
+    typeof frontmatterValue === "string" ? frontmatterValue.trim() : null;
   return text?.length ? text : null;
 }
 
@@ -388,13 +399,16 @@ function compareSkillMirror(
 function skillRemediation(
   agentProfile: AgentProfile,
   hasProblems: boolean,
+  mirrorStatus: SkillMirrorStatus,
 ): string[] {
   const commands: string[] = [];
 
-  // Installation is offered only when the report found something users may need to restore.
+  // A known mirror difference is previewed first because direct install may discard local guidance.
   if (hasProblems) {
     commands.push(
-      `goat-flow install <project-path> --agent ${agentProfile.id}`,
+      mirrorStatus === "drift"
+        ? `goat-flow install <project-path> --agent ${agentProfile.id} --dry-run`
+        : `goat-flow install <project-path> --agent ${agentProfile.id}`,
     );
   }
   commands.push(
@@ -437,6 +451,7 @@ function inspectSkill(
   const remediation = skillRemediation(
     agentProfile,
     blockingReasons.length > 0 || warnings.length > 0,
+    mirrorStatus,
   );
 
   return {
@@ -493,8 +508,8 @@ function applyDuplicateNameBlockers(skills: MutableSkillDoctorEntry[]): void {
 
 /**
  * Validate the canonical skill filter users asked to focus on.
- * The filter narrows only the rendered rows: duplicate-name evidence is always
- * collected across the complete canonical inventory first.
+ * It throws when the named skill is not canonical.
+ * The filter narrows only the rendered rows, because duplicate-name evidence is collected across the whole inventory first.
  */
 function selectedSkillNames(
   canonicalSkillNames: readonly string[],
@@ -573,8 +588,11 @@ export function runSkillDoctor(options: SkillDoctorOptions): SkillDoctorReport {
     (warningCount, skill) => warningCount + skill.warnings.length,
     0,
   );
+  const mirrorDrift = allSkills.filter(
+    (skill) => skill.mirrorStatus === "drift",
+  ).length;
   const status: DoctorStatus =
-    blocked > 0 ? "fail" : warnings > 0 ? "warn" : "pass";
+    blocked > 0 ? "fail" : warnings > 0 ? "warn" : "static-pass";
 
   return {
     reportKind: "goat-flow-skill-doctor",
@@ -585,9 +603,13 @@ export function runSkillDoctor(options: SkillDoctorOptions): SkillDoctorReport {
     summary: {
       agents: agents.length,
       checked: allSkills.length,
-      eligible: allSkills.length - blocked,
+      staticallyEligible: allSkills.length - blocked,
+      runtimeRegistration: "unverified",
       blocked,
+      mirrorDrift,
       warnings,
+      countScope:
+        "One SKILL.md mirror is counted per agent-skill row; warning totals count messages. Audit may select one agent and also checks declared reference files.",
     },
     agents,
   };
@@ -615,6 +637,7 @@ export function renderSkillDoctorText(report: SkillDoctorReport): string {
     "Skill doctor",
     `Target: ${report.target}`,
     `Evidence limit: ${report.evidenceLimit}`,
+    `Count scope: ${report.summary.countScope}`,
   ];
 
   // Each agent group explains the exact path and invocation syntax users selected.
@@ -661,7 +684,7 @@ export function renderSkillDoctorText(report: SkillDoctorReport): string {
   }
   lines.push("");
   lines.push(
-    `${report.status.toUpperCase()} skill doctor: ${report.summary.checked} checked · ${report.summary.eligible} eligible · ${report.summary.blocked} blocked · ${report.summary.warnings} warnings`,
+    `${report.status.toUpperCase()} skill doctor: ${report.summary.checked} checked · ${report.summary.staticallyEligible} statically eligible · runtime registration ${report.summary.runtimeRegistration} · ${report.summary.blocked} blocked · ${report.summary.mirrorDrift} mirror drift · ${report.summary.warnings} warnings`,
   );
   return lines.join("\n");
 }
@@ -680,6 +703,8 @@ function renderSkillDoctorMarkdown(report: SkillDoctorReport): string {
     `**Target:** \`${report.target}\``,
     "",
     `**Evidence limit:** ${report.evidenceLimit}`,
+    "",
+    `**Count scope:** ${report.summary.countScope}`,
   ];
 
   // Each agent table preserves user-facing invocation and exact filesystem evidence.
@@ -711,7 +736,7 @@ function renderSkillDoctorMarkdown(report: SkillDoctorReport): string {
   }
   lines.push("");
   lines.push(
-    `**${report.status.toUpperCase()} skill doctor:** ${report.summary.checked} checked · ${report.summary.eligible} eligible · ${report.summary.blocked} blocked · ${report.summary.warnings} warnings`,
+    `**${report.status.toUpperCase()} skill doctor:** ${report.summary.checked} checked · ${report.summary.staticallyEligible} statically eligible · runtime registration ${report.summary.runtimeRegistration} · ${report.summary.blocked} blocked · ${report.summary.mirrorDrift} mirror drift · ${report.summary.warnings} warnings`,
   );
   return lines.join("\n");
 }

@@ -1,6 +1,9 @@
 /**
- * Prompt-library helpers for the dashboard Alpine app.
- * These keep filtering, grouping, and prompt text transforms out of app.ts.
+ * Drives the dashboard's Prompts library: the search box, the category grouping, and the text a user copies or launches.
+ *
+ * A user lands here to find a prepared prompt rather than writing one, then either copies it or sends it straight to a terminal.
+ *
+ * Filtering, grouping, and text transforms live here so the Alpine methods in app.ts stay thin bindings.
  */
 
 type PresetCategory = { id: string; label: string };

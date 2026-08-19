@@ -26,6 +26,9 @@ const LIVE_FILES = [
 
 const ALL_FILES = [...SETUP_FILES, ...LIVE_FILES];
 
+// A newline-only budget can hide several independent rules in one unreadable physical line.
+const MAX_INSTRUCTION_LINE_CHARACTERS = 800;
+
 const CANONICAL_SECTIONS = [
   "Truth Order",
   "Autonomy Tiers",
@@ -41,79 +44,9 @@ const CANONICAL_SECTIONS = [
 
 const H3_LOOP_SECTIONS = ["READ", "SCOPE", "ACT", "VERIFY"];
 
-const SHARED_PHRASES = [
-  {
-    label: "learning-loop Key Resources",
-    section: "Key Resources",
-    phrases: [
-      ".goat-flow/learning-loop/footguns/",
-      ".goat-flow/learning-loop/lessons/",
-      ".goat-flow/learning-loop/patterns/",
-      ".goat-flow/learning-loop/decisions/",
-    ],
-  },
-  {
-    label: "tool-playbook Key Resources",
-    section: "Key Resources",
-    phrases: [
-      ".goat-flow/skill-docs/playbooks/browser-use.md",
-      ".goat-flow/skill-docs/playbooks/page-capture.md",
-      "read BEFORE declaring a tool unavailable",
-    ],
-  },
-  {
-    label: "tool availability READ rule",
-    section: "Execution Loop",
-    phrases: [
-      "Before declaring any tool or capability unavailable",
-      ".goat-flow/skill-docs/playbooks/",
-      "Availability Check",
-    ],
-  },
-  {
-    label: "hallucination red flags",
-    section: "Execution Loop",
-    phrases: [
-      "Hallucination red-flags",
-      "Checks passed.",
-      "Completion.",
-      "Fix verification.",
-      "Hedged claims.",
-      "Stop-the-line",
-    ],
-  },
-  {
-    label: "artifact routing destinations",
-    section: "Artifact Routing",
-    phrases: [
-      ".goat-flow/learning-loop/footguns/",
-      ".goat-flow/learning-loop/lessons/",
-      ".goat-flow/learning-loop/decisions/",
-      ".goat-flow/learning-loop/patterns/",
-    ],
-  },
-  {
-    label: "router table cold-path resources",
-    section: "Router Table",
-    phrases: [
-      ".goat-flow/skill-docs/",
-      ".goat-flow/skill-docs/playbooks/",
-      ".goat-flow/learning-loop/footguns/",
-      ".goat-flow/learning-loop/lessons/",
-      ".goat-flow/learning-loop/patterns/",
-      ".goat-flow/learning-loop/decisions/",
-    ],
-  },
-  {
-    label: "prose-surface READ routing",
-    section: "Execution Loop",
-    phrases: [
-      "Prose surfaces route the same way before writing",
-      "need `writing-style.md`",
-      "the trigger is touching the surface, not the request naming it",
-    ],
-  },
-];
+const SHARED_PHRASES = JSON.parse(
+  readFileSync(resolve(ROOT, "workflow/manifest.json"), "utf8"),
+).instruction_file.parity_phrases;
 
 /** Render a repository-relative path for deterministic failure messages. */
 function pathLabel(path) {
@@ -121,8 +54,8 @@ function pathLabel(path) {
 }
 
 /** Escape a package version before matching its exact CHANGELOG heading. */
-function escapeRegExp(value) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+function escapeRegExp(literalText) {
+  return literalText.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 /**
@@ -243,6 +176,12 @@ function validateInstructionFile(
   }
 
   const content = readFileSync(abs, "utf8");
+  content.split("\n").forEach((line, lineIndex) => {
+    if (line.length <= MAX_INSTRUCTION_LINE_CHARACTERS) return;
+    failures.push(
+      `${label}:${lineIndex + 1}: instruction line has ${line.length} characters; limit ${MAX_INSTRUCTION_LINE_CHARACTERS}`,
+    );
+  });
   const sections = h2Sections(content);
   const sectionBodies = splitSections(content);
 
@@ -360,11 +299,11 @@ function validateLiveInstructionFile(
   }
   if (
     !content.includes(
-      "except explicitly labelled placeholder scenarios in shipped skill references",
+      "except explicitly labelled placeholder scenarios in shipped skills, skill references, and playbooks",
     )
   ) {
     failures.push(
-      `${label}: real-evidence rule must carry the architecture-approved shipped-skill example exception`,
+      `${label}: real-evidence rule must carry the architecture-approved placeholder-scenario exception for shipped skills, skill references, and playbooks`,
     );
   }
 }

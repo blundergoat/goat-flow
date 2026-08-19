@@ -123,6 +123,14 @@ function fillTemplate(template: string, vars: Record<string, string>): string {
   );
 }
 
+/**
+ * Map a candidacy recommendation onto the scaffold template that should be generated.
+ * Only skills and playbook references have templates; every other recommendation returns null so the caller reports guidance instead of scaffolding a
+ * file the project has no shape for.
+ *
+ * @param recommendation - what the candidacy check decided the draft should become
+ * @returns the template key and whether it is a reference, or null when nothing is scaffoldable
+ */
 function templateForRecommendation(
   recommendation: CandidacyResult["recommendedArtifact"],
 ): { templateKey: string; isReference: boolean } | null {
@@ -138,6 +146,17 @@ function templateForRecommendation(
   return null;
 }
 
+/**
+ * Resolve the destination path and rendered template for one recommendation.
+ * A recommendation with no template, or a template key the project does not ship, yields null rather than a partial scaffold, so the caller never
+ * writes a file it could not fully render.
+ *
+ * @param projectRoot - project the scaffold would be written into
+ * @param name - validated artifact name used in the path and template variables
+ * @param recommendation - what the candidacy check decided the draft should become
+ * @param skillsDirectory - agent-specific skills directory the scaffold belongs under
+ * @returns the resolved path and rendered scaffold, or null when nothing should be scaffolded
+ */
 function resolveScaffold(
   projectRoot: string,
   name: string,
@@ -186,13 +205,22 @@ function isValidSkillName(name: string): boolean {
   return /^[a-z][a-z0-9-]{1,40}$/.test(name);
 }
 
+/**
+ * Ask one interactive question, or return the preset answer without prompting.
+ * A preset short-circuits the prompt entirely, which is how non-interactive runs and tests supply answers without a terminal.
+ *
+ * @param readlineInterface - open readline interface used when no preset is supplied
+ * @param question - prompt text shown to the user
+ * @param preset - pre-supplied answer; `undefined` means actually ask
+ * @returns the trimmed answer, or the preset verbatim
+ */
 async function promptLine(
-  rl: Interface,
+  readlineInterface: Interface,
   question: string,
   preset: string | undefined,
 ): Promise<string> {
   if (preset !== undefined) return preset;
-  return (await rl.question(question)).trim();
+  return (await readlineInterface.question(question)).trim();
 }
 
 /** Prompt adapter lets tests drive interactive flows without touching real stdin. */
@@ -257,6 +285,15 @@ function readlinePrompts(): InteractivePrompts {
   };
 }
 
+/**
+ * Choose the artifact name, preferring the most explicit source the user gave.
+ * An explicit `--name` wins, then the draft filename, then a slug of the description; each candidate must still pass name validation, so an unusable
+ * one falls through rather than producing a bad path.
+ *
+ * @param options - CLI options carrying any explicit name, draft path, or description
+ * @param candidacy - candidacy result used only for the last-resort generated name
+ * @returns a filesystem-safe kebab-case name; never empty
+ */
 function suggestName(
   options: SkillNewOptions,
   candidacy: CandidacyResult,
@@ -285,6 +322,12 @@ function draftNameForPath(draftPath: string): string {
     : filename.replace(/\.md$/iu, "");
 }
 
+/**
+ * Render one recommendation as the short label the CLI shows the user.
+ *
+ * @param recommendation - what the candidacy check decided the draft should become
+ * @returns a human-readable label naming the artifact kind and its subtype or reason
+ */
 function describeArtifact(
   recommendation: CandidacyResult["recommendedArtifact"],
 ): string {
@@ -398,6 +441,15 @@ async function writeResolvedScaffold(
   };
 }
 
+/**
+ * Run the description-driven flow: assess the description, scaffold it, then score the result.
+ * Side effect: may create the scaffold file when the user confirms or confirmation is skipped.
+ *
+ * @param description - natural-language description of the intended artifact
+ * @param options - CLI options controlling project root, agent, and confirmation behaviour
+ * @param prompts - prompt adapter, so tests can drive the flow without a terminal
+ * @returns the candidacy verdict, proposed path, scaffold text, and whether a file was written
+ */
 async function runDescriptionMode(
   description: string,
   options: SkillNewOptions,
@@ -470,6 +522,16 @@ async function runDescriptionMode(
   );
 }
 
+/**
+ * Score a scaffold that was just written, so the user immediately sees its starting quality.
+ * Returns undefined rather than a zero score when discovery cannot find the new artifact, because a missing artifact means the score is unknown
+ * rather than bad.
+ *
+ * @param projectRoot - project the artifact was written into
+ * @param name - skill name used to build the artifact id
+ * @param absolutePath - absolute path of the file just written
+ * @returns the score, or undefined when the new artifact is not discoverable yet
+ */
 function scoreFreshSkill(
   projectRoot: string,
   name: string,
@@ -511,7 +573,17 @@ function lstatIfPresent(path: string): Stats | null {
   }
 }
 
-/** Reject redirected or non-directory parent entries before creating a scaffold. */
+/**
+ * Reject redirected or non-directory parent entries before creating a scaffold.
+ *
+ * Every parent component is walked rather than only the immediate one, because a symlink anywhere in the chain could redirect the write outside the
+ * selected project.
+ *
+ * @param projectRoot - project the scaffold must stay inside
+ * @param proposedPath - absolute destination the caller wants to create
+ * @returns nothing; returning means the destination is safe to create. It throws SkillNewInputError for a destination outside the project or a
+ *   symlinked or non-directory parent; walking stops at the first component that does not exist yet.
+ */
 function assertSafeScaffoldDestination(
   projectRoot: string,
   proposedPath: string,
@@ -550,6 +622,21 @@ function assertSafeScaffoldDestination(
   }
 }
 
+/**
+ * Write the scaffold once the destination is proved safe and the user has agreed.
+ *
+ * An existing file is never overwritten; the call reports false instead, so re-running the command cannot destroy work already in the destination.
+ * Side effect: creates the parent directory and writes the scaffold file.
+ *
+ * Error behavior: throws SkillNewInputError when the destination is unsafe, before any write.
+ *
+ * @param projectRoot - project the scaffold must stay inside
+ * @param proposedPath - absolute destination to create
+ * @param scaffold - rendered file contents
+ * @param options - CLI options; `shouldSkipConfirm` bypasses the confirmation prompt
+ * @param prompts - prompt adapter used to ask for confirmation
+ * @returns true when a file was written; false when it already existed or the user declined
+ */
 async function maybeWrite(
   projectRoot: string,
   proposedPath: string,
@@ -568,6 +655,16 @@ async function maybeWrite(
   return true;
 }
 
+/**
+ * Run the draft-file flow: read an existing draft, assess it, and report where it should live.
+ *
+ * This mode never writes; it reports the expected path so the user can move the draft themselves.
+ * A missing draft reports a do-not-create verdict rather than throwing, because a mistyped path is ordinary user error rather than a fault.
+ *
+ * @param draftPath - path to the draft file to assess
+ * @param options - CLI options controlling project root and agent
+ * @returns the candidacy verdict, expected path, and any post-scaffold score
+ */
 function runDraftMode(
   draftPath: string,
   options: SkillNewOptions,
@@ -666,6 +763,14 @@ function runDraftMode(
   };
 }
 
+/**
+ * Ask the user to describe the artifact, then hand off to the description flow.
+ * An empty description aborts with a do-not-create verdict rather than scaffolding from nothing.
+ *
+ * @param options - CLI options controlling project root, agent, and confirmation behaviour
+ * @param prompts - prompt adapter, so tests can drive the flow without a terminal
+ * @returns the description flow's result, or an abort verdict when nothing was entered
+ */
 async function runInteractiveMode(
   options: SkillNewOptions,
   prompts: InteractivePrompts,
@@ -691,6 +796,15 @@ async function runInteractiveMode(
   return runDescriptionMode(description, options, prompts);
 }
 
+/**
+ * Entry point for `skill new`, selecting the draft, interactive, or description flow.
+ *
+ * Exactly one input mode is accepted, and the prompt adapter is closed on every exit path so an aborted run never leaves stdin held open.
+ * Error behavior: throws SkillNewInputError when more than one input mode is supplied, or when a scaffold destination is unsafe.
+ *
+ * @param options - CLI options selecting input mode, project root, agent, and confirmation behaviour
+ * @returns the candidacy verdict, proposed path, scaffold text, and whether a file was written
+ */
 export async function runSkillNew(
   options: SkillNewOptions,
 ): Promise<SkillNewResult> {

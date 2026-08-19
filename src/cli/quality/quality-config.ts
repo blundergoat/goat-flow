@@ -1,12 +1,10 @@
 /**
  * Configuration layer for the deterministic skill-quality scoring engine.
  *
- * Goat-flow ships with `DEFAULT_QUALITY_CONFIG` calibrated against the in-tree
- * 12-artifact corpus. Consumer projects override pieces via
- * `.goat-flow/config.yaml` under the top-level `quality` section.
+ * Goat-flow ships with `DEFAULT_QUALITY_CONFIG` calibrated against the in-tree 12-artifact corpus.
+ * Consumer projects override pieces via `.goat-flow/config.yaml` under the top-level `quality` section.
  *
- * Zero-config behaviour (no `quality` section in config) is identical to the
- * older hardcoded defaults; fixtures still pass without any project
+ * Zero-config behaviour (no `quality` section in config) is identical to the older hardcoded defaults; fixtures still pass without any project
  * override.
  */
 import { loadConfig } from "../config/reader.js";
@@ -138,7 +136,10 @@ const DEFAULT_PROFILES: Record<ArtifactSubtype, Record<MetricName, number>> = {
     "cold-start": 10,
     "token-cost": 10,
     "tool-deps": 10,
-    "write-risk": 0,
+    // Report-only does not mean write-free: these skills persist redacted
+    // findings and gate target-controlled execution, so how well they bound
+    // their own write authority is scored, not skipped.
+    "write-risk": 10,
     "skill-reference-fit": 10,
   },
   playbook: {
@@ -176,7 +177,7 @@ const DEFAULT_PROFILES: Record<ArtifactSubtype, Record<MetricName, number>> = {
   },
 };
 
-/** Goat-flow's calibrated defaults. Mirrors the legacy hardcoded values exactly. */
+/** Goat-flow's calibrated defaults. */
 export const DEFAULT_QUALITY_CONFIG: QualityConfig = {
   walkRoots: {
     skills: [
@@ -198,7 +199,9 @@ export const DEFAULT_QUALITY_CONFIG: QualityConfig = {
     skillPreamblePath: ".goat-flow/skill-docs/skill-preamble.md",
     skillConventionsPath: ".goat-flow/skill-docs/skill-conventions.md",
     skillReferencePattern: "references\\/([^\\s)`\"']+\\.md)",
-    maxComposedBytes: 32 * 1024,
+    // Current full functional contexts measure 40.5-79.1 KiB; 128 KiB preserves
+    // complete evidence while remaining below the 256 KiB per-artifact ceiling.
+    maxComposedBytes: 128 * 1024,
   },
   maxArtifactBytes: 256 * 1024,
   gateVocabulary: {
@@ -355,10 +358,18 @@ function mergeWalkRoot(rawRoots: unknown, fallback: WalkRoot[]): WalkRoot[] {
   return result.length > 0 ? result : fallback;
 }
 
+/**
+ * Fold a project's `composition` overrides onto the shipped defaults, keeping each shipped value whenever the override is missing or unusable.
+ *
+ * @param rawComposition - the `quality.composition` value from the project config; anything that is not a mapping leaves the defaults intact
+ * @param fallback - shipped composition defaults
+ * @returns the resolved composition settings; an explicit null path is honoured and means the user turned that file off
+ */
 function mergeComposition(
   rawComposition: unknown,
   fallback: CompositionConfig,
 ): CompositionConfig {
+  // Not a mapping at all, so the project said nothing usable and the shipped defaults stand.
   if (!isRecord(rawComposition)) return fallback;
   return {
     skillPreamblePath:
@@ -386,10 +397,18 @@ function mergeComposition(
   };
 }
 
+/**
+ * Fold a project's gate-vocabulary overrides onto the shipped word lists, so a team can score against its own terminology.
+ *
+ * @param rawVocabulary - the `quality.gate-vocabulary` value from the project config; anything that is not a mapping leaves the defaults intact
+ * @param fallback - shipped vocabulary defaults
+ * @returns the resolved word lists used when scoring artifacts
+ */
 function mergeGateVocabulary(
   rawVocabulary: unknown,
   fallback: GateVocabularyConfig,
 ): GateVocabularyConfig {
+  // Not a mapping at all, so the project said nothing usable and the shipped defaults stand.
   if (!isRecord(rawVocabulary)) return fallback;
   return {
     verificationGate: regexArray(
@@ -404,6 +423,13 @@ function mergeGateVocabulary(
   };
 }
 
+/**
+ * Fold a project's subtype-detection overrides onto the shipped signals that decide what kind of artifact a file is.
+ *
+ * @param rawDetection - the `detection` value for one subtype; anything that is not a mapping leaves the defaults intact
+ * @param fallback - shipped detection signals for that subtype
+ * @returns the resolved detection signals
+ */
 function mergeSubtypeDetection(
   rawDetection: unknown,
   fallback: SubtypeDetection,
@@ -425,6 +451,13 @@ function mergeSubtypeDetection(
   };
 }
 
+/**
+ * Fold one subtype's overrides onto its shipped profile, which is what sets that subtype's weights and detection rules.
+ *
+ * @param rawProfile - one subtype entry from the project config; anything that is not a mapping leaves the defaults intact
+ * @param fallback - shipped profile for that subtype
+ * @returns the resolved profile used when scoring artifacts of this subtype
+ */
 function mergeSubtypeProfile(
   rawProfile: unknown,
   fallback: SubtypeProfile,
@@ -447,6 +480,13 @@ function mergeSubtypeProfile(
   };
 }
 
+/**
+ * Fold every subtype override onto the shipped set, so a project can retune one subtype without restating the rest.
+ *
+ * @param rawSubtypes - the `quality.subtypes` value from the project config; anything that is not a mapping leaves the defaults intact
+ * @param fallback - shipped profiles for all subtypes
+ * @returns a complete profile for every known subtype
+ */
 function mergeSubtypes(
   rawSubtypes: unknown,
   fallback: Record<ArtifactSubtype, SubtypeProfile>,
@@ -569,9 +609,8 @@ export function cloneQualityConfig(config: QualityConfig): QualityConfig {
 }
 
 /**
- * Load `.goat-flow/config.yaml` and return its merged `quality` section,
- * falling back to `DEFAULT_QUALITY_CONFIG` if the file is missing or has
- * no `quality` block.
+ * Load `.goat-flow/config.yaml` and return its merged `quality` section, falling back to `DEFAULT_QUALITY_CONFIG` if the file is missing or has no
+ * `quality` block.
  *
  * @param projectRoot - Project root that may contain `.goat-flow/config.yaml`.
  * @returns Normalized quality config for the project.

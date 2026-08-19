@@ -10,8 +10,8 @@ import { join, resolve } from "node:path";
 const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
 
 /** Escape a deny glob before embedding it in a regex that checks template parity. */
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+function escapeRegExp(literalText: string): string {
+  return literalText.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }
 
 describe("agent config template parity", () => {

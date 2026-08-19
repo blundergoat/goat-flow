@@ -46,8 +46,8 @@ interface DashboardServerHandle {
 }
 
 /** Scale performance budgets from one env-controlled multiplier. */
-function budget(ms: number): number {
-  return ms * performanceBudgetMultiplier;
+function budget(milliseconds: number): number {
+  return milliseconds * performanceBudgetMultiplier;
 }
 
 /** Summarize repeated timings with a stable p95 contract used by assertions. */
@@ -82,6 +82,7 @@ function assertUnderBudget(label: string, actualMs: number, budgetMs: number) {
   );
 }
 
+// Time one labelled operation after warmups, so a reported number reflects steady state rather than first-run cost.
 async function measure(
   label: string,
   options: { warmups: number; samples: number },
@@ -131,6 +132,7 @@ function runCli(args: string[]): string {
   return result.stdout;
 }
 
+// Fetch one endpoint and fail loudly on a non-OK status, so a timing run never measures an error page.
 async function fetchOk(
   baseUrl: string,
   path: string,

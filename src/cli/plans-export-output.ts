@@ -1,13 +1,12 @@
 /**
  * Turns parsed milestones into the files a user gets from `plans export`.
- * This is the write half of the command: it redacts anything that should not leave the
- * author's machine, renders each milestone as readable Markdown, and refuses to write when a
- * destination would clobber something or cannot be created.
  *
- * Redaction runs before rendering rather than after, so a value that should never be shared
- * cannot reach a rendered string in the first place. Destination checks all happen up front
- * too: a partial export that wrote three files and then failed would leave the user with a
- * directory they have to reason about, so nothing is written until every path is proven safe.
+ * This is the write half of the command: it redacts anything that should not leave the author's machine, renders each milestone as readable Markdown,
+ * and refuses to write when a destination would clobber something or cannot be created.
+ *
+ * Redaction runs before rendering rather than after, so a value that should never be shared cannot reach a rendered string in the first place.
+ * Destination checks all happen up front too: a partial export that wrote three files and then failed would leave the user with a directory they have
+ * to reason about, so nothing is written until every path is proven safe.
  */
 import {
   existsSync,
@@ -159,8 +158,8 @@ function renderEffortMetadata(record: PlanExportRecord): string[] {
 }
 
 /** Substitute the export placeholder only when a source field is empty. */
-function providedOrMissing(value: string, missingText: string): string {
-  return value.length > 0 ? value : missingText;
+function providedOrMissing(fieldText: string, missingText: string): string {
+  return fieldText.length > 0 ? fieldText : missingText;
 }
 
 /**
@@ -224,7 +223,7 @@ export function renderPlanExportMarkdown(record: PlanExportRecord): string {
   return lines.join("\n");
 }
 
-/** Refuse implicit regeneration when any generated destination already exists. */
+/** Refuse implicit regeneration when any generated destination already exists; it throws on the first collision so nothing is part-written. */
 function assertOutputPathsAvailable(
   outputPaths: string[],
   shouldForce: boolean,
@@ -243,8 +242,9 @@ function assertOutputPathsAvailable(
 
 /**
  * Require every export destination to be a single-link regular file or absent before writing.
- * Runs even under force: replacement authorizes new content, never writing
- * through a symlink, hardlink, or directory that shadows a generated filename.
+ *
+ * Runs even under force: replacement authorizes new content, never writing through a symlink, hardlink, or directory that shadows a generated
+ * filename.
  * Throws a usage-safe error naming the first unsafe destination so nothing is written.
  */
 function assertWritableDestinations(outputPaths: string[]): void {
@@ -267,7 +267,7 @@ function assertWritableDestinations(outputPaths: string[]): void {
   }
 }
 
-/** Require every existing export-directory component to be a real directory. */
+/** Require every existing export-directory component to be a real directory; it throws on a symlink or file where a directory must be. */
 function assertRealDirectoryPathOrAbsent(
   directoryPath: string,
   outputLabel: string,
@@ -312,7 +312,7 @@ function assertUniqueOutputPaths(outputPaths: string[]): void {
   );
 }
 
-/** Reject any existing destination that resolves to one of the source milestones. */
+/** Reject any existing destination that resolves to one of the source milestones; it throws rather than let an export overwrite its own input. */
 function assertOutputPathsDoNotAliasSources(
   outputPaths: string[],
   sourceFiles: readonly string[],
@@ -341,7 +341,8 @@ function assertOutputPathsDoNotAliasSources(
 }
 
 /**
- * Write one Markdown file per milestone after every destination passes collision checks.
+ * Writes one Markdown file per milestone, but only after every destination has passed its collision checks.
+ * It throws before writing anything when a destination is taken or unsafe, so the user never ends up with a half-finished export directory.
  *
  * @param records - milestones to write, already redacted
  * @param outputDirectory - directory the user passed to `--output`
@@ -380,7 +381,8 @@ export function writeMarkdownExports(
 }
 
 /**
- * Write one JSON array after preserving an existing file unless force is explicit.
+ * Writes one JSON array, preserving any existing file unless the user passed force.
+ * It throws before writing when the destination is taken or would alias a source milestone.
  *
  * @param records - milestones to serialise, already redacted
  * @param outputPath - file the user passed to `--output`

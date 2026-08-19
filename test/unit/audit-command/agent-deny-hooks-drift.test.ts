@@ -9,6 +9,7 @@ import {
   PROFILES,
   PROJECT_ROOT,
   assert,
+  createFS,
   describe,
   it,
   makeCtx,
@@ -19,14 +20,63 @@ import {
 } from "./helpers.js";
 import { existsSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { createFS } from "../../../src/cli/facts/fs.js";
-import { checkHookRuntimeSmoke } from "../../../src/cli/audit/check-agent-deny-runtime.js";
-import { applyHookState } from "../../../src/cli/server/hook-registrar.js";
+import { applyHookState, checkHookRuntimeSmoke } from "../../src.js";
 import { withTempProject } from "../hook-registrar.helpers.js";
+
+/** Build a context that deliberately crosses the trusted runtime-evidence boundary. */
+function makeRuntimeCtx(
+  overrides: Parameters<typeof makeCtx>[0],
+): ReturnType<typeof makeCtx> {
+  return makeCtx({
+    ...overrides,
+    denyMechanismEvidenceLevel: "full",
+  });
+}
+
+/** Extract one Claude permission tool's path operands; sorted output makes set parity deterministic. */
+function permissionDenyPaths(denyRules: string[], tool: "Read" | "Edit") {
+  const prefix = `${tool}(`;
+  return denyRules
+    .filter((rule) => rule.startsWith(prefix) && rule.endsWith(")"))
+    .map((rule) => rule.slice(prefix.length, -1))
+    .sort((left, right) => left.localeCompare(right));
+}
+
+/** Assert that every denied read path has the Edit counterpart needed for NotebookEdit parity. */
+function assertClaudeReadEditParity(denyRules: string[]): void {
+  assert.deepEqual(
+    permissionDenyPaths(denyRules, "Edit"),
+    permissionDenyPaths(denyRules, "Read"),
+  );
+}
+
+describe("Claude agent-config deny parity", () => {
+  it("keeps Read and Edit path sets identical and detects a removed Edit rule", () => {
+    const config = JSON.parse(
+      readFileSync(
+        resolve(PROJECT_ROOT, "workflow/hooks/agent-config/claude.json"),
+        "utf-8",
+      ),
+    ) as { permissions: { deny: string[] } };
+    assertClaudeReadEditParity(config.permissions.deny);
+
+    const firstEditRule = config.permissions.deny.find((rule) =>
+      rule.startsWith("Edit("),
+    );
+    assert.ok(firstEditRule, "fixture requires at least one Edit deny rule");
+    assert.throws(
+      () =>
+        assertClaudeReadEditParity(
+          config.permissions.deny.filter((rule) => rule !== firstEditRule),
+        ),
+      /Expected values to be strictly deep-equal/u,
+    );
+  });
+});
 
 /**
  * Build a real non-Git Codex install and pass it to one runtime-audit assertion.
- * Use when the configured launcher itself, rather than a direct script substitute, matters.
+ * It writes the hook files and configuration into a temporary project, because the configured launcher itself is what this assertion exercises.
  */
 function withRealCodexAudit(
   runAuditAssertion: (
@@ -38,7 +88,7 @@ function withRealCodexAudit(
     mkdirSync(join(targetProjectPath, ".codex"), { recursive: true });
     writeFileSync(join(targetProjectPath, ".codex", "config.toml"), "");
     applyHookState("deny-dangerous", true, targetProjectPath);
-    const auditContext = makeCtx({
+    const auditContext = makeRuntimeCtx({
       agentFilter: "codex",
       projectPath: targetProjectPath,
       agents: [
@@ -127,8 +177,8 @@ describe("agent deny hook template comparison", () => {
     };
   }
 
+  // Assemble the installed guardrail file set this scenario reads, applying the overrides that make one file stale or absent.
   function installedGuardrailContent(
-    hooksDir: string,
     templates: ReturnType<typeof guardrailTemplates>,
     overrides: Record<string, string | null> = {},
   ) {
@@ -203,7 +253,7 @@ describe("agent deny hook template comparison", () => {
   it("fails when an exact configured hook command points at a stale path", () => {
     assert.ok(denyCheck, "agent deny check should exist");
     const templates = guardrailTemplates();
-    const ctx = makeCtx({
+    const ctx = makeRuntimeCtx({
       agentFilter: "codex",
       projectPath: PROJECT_ROOT,
       agents: [
@@ -223,7 +273,7 @@ describe("agent deny hook template comparison", () => {
         }),
       ],
       fs: stubFS({
-        readFile: installedGuardrailContent(".codex/hooks", templates, {
+        readFile: installedGuardrailContent(templates, {
           ".codex/hooks.json": JSON.stringify({
             hooks: {
               PreToolUse: [
@@ -252,7 +302,7 @@ describe("agent deny hook template comparison", () => {
   it("runs the configured launcher string instead of bypassing it with bash script path", () => {
     assert.ok(denyCheck, "agent deny check should exist");
     const templates = guardrailTemplates();
-    const ctx = makeCtx({
+    const ctx = makeRuntimeCtx({
       agentFilter: "codex",
       projectPath: PROJECT_ROOT,
       agents: [
@@ -272,7 +322,7 @@ describe("agent deny hook template comparison", () => {
         }),
       ],
       fs: stubFS({
-        readFile: installedGuardrailContent(".codex/hooks", templates, {
+        readFile: installedGuardrailContent(templates, {
           ".codex/hooks.json": JSON.stringify({
             hooks: {
               PreToolUse: [
@@ -305,7 +355,7 @@ describe("agent deny hook template comparison", () => {
   it("ignores unrelated hooks whose names merely contain a managed script name", () => {
     assert.ok(denyCheck, "agent deny check should exist");
     const templates = guardrailTemplates();
-    const ctx = makeCtx({
+    const ctx = makeRuntimeCtx({
       agentFilter: "codex",
       projectPath: PROJECT_ROOT,
       agents: [
@@ -325,7 +375,7 @@ describe("agent deny hook template comparison", () => {
         }),
       ],
       fs: stubFS({
-        readFile: installedGuardrailContent(".codex/hooks", templates, {
+        readFile: installedGuardrailContent(templates, {
           ".codex/hooks.json": JSON.stringify({
             hooks: {
               PreToolUse: [
@@ -359,7 +409,7 @@ describe("agent deny hook template comparison", () => {
   it("fails when a configured hook command points at a legacy per-agent mirror", () => {
     assert.ok(denyCheck, "agent deny check should exist");
     const templates = guardrailTemplates();
-    const ctx = makeCtx({
+    const ctx = makeRuntimeCtx({
       agentFilter: "codex",
       projectPath: PROJECT_ROOT,
       agents: [
@@ -379,7 +429,7 @@ describe("agent deny hook template comparison", () => {
         }),
       ],
       fs: stubFS({
-        readFile: installedGuardrailContent(".codex/hooks", templates, {
+        readFile: installedGuardrailContent(templates, {
           ".codex/hooks.json": JSON.stringify({
             hooks: {
               PreToolUse: [
@@ -451,8 +501,8 @@ describe("agent deny hook template comparison", () => {
     };
   }
 
+  // Assemble the installed guardrail file set this scenario reads, applying the overrides that make one file stale or absent.
   function installedGuardrailContent(
-    hooksDir: string,
     templates: ReturnType<typeof guardrailTemplates>,
     overrides: Record<string, string | null> = {},
   ) {
@@ -479,7 +529,7 @@ describe("agent deny hook template comparison", () => {
       agentFilter: "claude",
       projectPath: PROJECT_ROOT,
       fs: stubFS({
-        readFile: installedGuardrailContent(".claude/hooks", templates, {
+        readFile: installedGuardrailContent(templates, {
           ".goat-flow/hooks/deny-dangerous.sh": `${templates.dispatcher}\n# local drift\n`,
         }),
       }),
@@ -533,8 +583,8 @@ describe("agent deny hook template comparison", () => {
     };
   }
 
+  // Assemble the installed guardrail file set this scenario reads, applying the overrides that make one file stale or absent.
   function installedGuardrailContent(
-    hooksDir: string,
     templates: ReturnType<typeof guardrailTemplates>,
     overrides: Record<string, string | null> = {},
   ) {
@@ -561,7 +611,7 @@ describe("agent deny hook template comparison", () => {
       agentFilter: "claude",
       projectPath: PROJECT_ROOT,
       fs: stubFS({
-        readFile: installedGuardrailContent(".claude/hooks", templates, {
+        readFile: installedGuardrailContent(templates, {
           ".goat-flow/hooks/deny-dangerous/deny-dangerous-self-test.sh": null,
         }),
       }),
@@ -618,8 +668,8 @@ describe("agent deny hook template comparison", () => {
     };
   }
 
+  // Assemble the installed guardrail file set this scenario reads, applying the overrides that make one file stale or absent.
   function installedGuardrailContent(
-    hooksDir: string,
     templates: ReturnType<typeof guardrailTemplates>,
     overrides: Record<string, string | null> = {},
   ) {
@@ -662,7 +712,7 @@ describe("agent deny hook template comparison", () => {
         }),
       ],
       fs: stubFS({
-        readFile: installedGuardrailContent(".github/hooks", templates),
+        readFile: installedGuardrailContent(templates),
       }),
     });
 
@@ -712,8 +762,8 @@ describe("agent deny hook template comparison", () => {
     };
   }
 
+  // Assemble the installed guardrail file set this scenario reads, applying the overrides that make one file stale or absent.
   function installedGuardrailContent(
-    hooksDir: string,
     templates: ReturnType<typeof guardrailTemplates>,
     overrides: Record<string, string | null> = {},
   ) {
@@ -740,7 +790,7 @@ describe("agent deny hook template comparison", () => {
       agentFilter: "claude",
       projectPath: PROJECT_ROOT,
       fs: stubFS({
-        readFile: installedGuardrailContent(".claude/hooks", templates),
+        readFile: installedGuardrailContent(templates),
       }),
     });
     assert.equal(denyCheck.run(ctx), null);

@@ -456,7 +456,7 @@ describe("buildTerminalSpawnSpec", () => {
     }
   });
 
-  // Covers all quality modes when the target owner has not created its local log tree yet.
+  // Covers all quality modes when the target owner has not created its local log tree yet; the fixture writes those temporary project roots.
   it("grants Codex log writes only to each quality mode's report owner", () => {
     const tempRoot = mkdtempSync(join(tmpdir(), "goat-terminal-profile-"));
     const controllerPath = join(tempRoot, "controller");

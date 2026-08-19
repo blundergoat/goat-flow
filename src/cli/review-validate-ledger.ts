@@ -1,8 +1,8 @@
 /**
  * Checks the refutation ledger a review cites when it says suspicions were disproved.
- * "I considered this and ruled it out" is only meaningful if the reasoning was written down,
- * so a report claiming refutations must point at a real local ledger with records in the
- * expected grammar - not just assert a number.
+ *
+ * "I considered this and ruled it out" is only meaningful if the reasoning was written down, so a report claiming refutations must point at a real
+ * local ledger with records in the expected grammar - not just assert a number.
  *
  * An empty or skipped ledger is legitimate and handled explicitly; what is refused is a report
  * that claims refutations while pointing at nothing a reader could go and check.
@@ -57,7 +57,7 @@ function validateSkippedRefutationLedger(
   );
 }
 
-/** Read one exact, non-symlink ledger that resolves inside the reviewed project. */
+/** Read one exact, non-symlink ledger that resolves inside the reviewed project; it throws when the path escapes, is absent, or is redirected. */
 function readDeclaredLedgerLines(
   projectRoot: string,
   ledgerClaim: string,
@@ -106,7 +106,7 @@ function validateLedgerRecordGrammar(
   return false;
 }
 
-/** Validate the path, grammar, and exact record count of a persisted ledger. */
+/** Validate the path, grammar, and exact record count of a persisted ledger; it reports each problem as a violation rather than throwing. */
 function validatePersistedRefutationLedger(
   projectRoot: string,
   integrity: IntegrityResult,

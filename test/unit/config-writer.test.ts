@@ -14,16 +14,17 @@ import { join } from "node:path";
 import { describe, it } from "node:test";
 import {
   readHookEnabled,
+  readHookScanRoots,
   removeTopLevelConfigBlock,
   setHookEnabled,
 } from "../../src/cli/config/writer.js";
 
 /** Writes a cleaned temporary project for each config-writer assertion. */
-function withTempProject(fn: (root: string) => void): void {
+function withTempProject(scenario: (root: string) => void): void {
   const root = mkdtempSync(join(tmpdir(), "goat-flow-config-writer-"));
   try {
     mkdirSync(join(root, ".goat-flow"), { recursive: true });
-    fn(root);
+    scenario(root);
   } finally {
     rmSync(root, { force: true, recursive: true });
   }
@@ -113,6 +114,54 @@ describe("config writer", () => {
         next,
         /binaries:\n {6}py: strands_agents\/\.venv\/bin\/gruff-py/u,
       );
+    });
+  });
+
+  // Fixture purpose: writes a multi-root YAML block, toggles it, and reads the preserved paths back.
+  it("preserves post-turn scan roots through toggle writes", () => {
+    withTempProject((root) => {
+      const configPath = join(root, ".goat-flow", "config.yaml");
+      writeFileSync(
+        configPath,
+        [
+          'version: "1.8.0"',
+          "hooks:",
+          "  post-turn-safety:",
+          "    enabled: true",
+          "    scan-roots:",
+          "      - services/api",
+          "      - packages/web",
+          "",
+        ].join("\n"),
+      );
+
+      setHookEnabled(root, "post-turn-safety", false);
+
+      const next = readFileSync(configPath, "utf-8");
+      assert.match(next, /post-turn-safety:\n {4}enabled: false/u);
+      assert.match(
+        next,
+        /scan-roots:\n {6}- services\/api\n {6}- packages\/web/u,
+      );
+      assert.deepEqual(readHookScanRoots(root, "post-turn-safety"), [
+        "services/api",
+        "packages/web",
+      ]);
+    });
+  });
+
+  // Fixture purpose: writes a flow-style mapping and reads it back, pinning the registrar parity target for the runtime hook parser.
+  it("reads scan roots from flow-style hook mappings", () => {
+    withTempProject((root) => {
+      const configPath = join(root, ".goat-flow", "config.yaml");
+      writeFileSync(
+        configPath,
+        'hooks: { "post-turn-safety": { enabled: true, "scan-roots": ["services/api"] } }\n',
+      );
+
+      assert.deepEqual(readHookScanRoots(root, "post-turn-safety"), [
+        "services/api",
+      ]);
     });
   });
 

@@ -1,12 +1,12 @@
 /**
- * Builds the managed-template preview users see before installing goat-flow updates.
- * It compares the last installed hash, the selected target file, and the current
- * package template without exposing file contents or absolute project paths.
+ * Builds the install write-set preview users see before installing goat-flow updates.
+ *
+ * For managed templates it compares the last installed hash, the selected target file, and the current package template without exposing file
+ * contents or absolute project paths; for user-owned and generated destinations it reports the seed-or-preserve action instead.
+ *
  * Install handlers use the same result to block ambiguous overwrites and record recovery state.
  */
-import { createHash } from "node:crypto";
-import { lstatSync, readFileSync } from "node:fs";
-import { join, posix } from "node:path";
+import { posix } from "node:path";
 
 import { getPackageVersion, getTemplatePath } from "./paths.js";
 import { getSkillFiles, loadManifest } from "./manifest/manifest.js";
@@ -14,6 +14,20 @@ import {
   readManagedInstallBaseline,
   writeManagedInstallState,
 } from "./managed-setup-state.js";
+import {
+  collectProjectWriteDefinitions,
+  hashFile,
+  type ManagedTargetEvidence,
+  type ManagedTargetStatus,
+  type ProjectWriteDefinition,
+  readManagedTargetEvidence,
+} from "./managed-setup-write-set.js";
+import {
+  NO_MANAGED_SETUP_AUTHORITY,
+  resolveAuthorityDecision,
+  type ManagedSetupAuthority,
+  type ManagedSetupAuthorityDecision,
+} from "./managed-setup-authority.js";
 import type {
   InstallerInvocation,
   InstallerInvocationError,
@@ -26,34 +40,55 @@ export {
 } from "./managed-setup-state.js";
 
 const MANAGED_SETUP_PREVIEW_SCHEMA =
-  "goat-flow.managed-setup-preview.v1" as const;
+  "goat-flow.managed-setup-preview.v2" as const;
 const BLOCKING_STATES = new Set<ManagedSetupFileState>([
-  "local-edited",
   "both-changed",
   "missing",
   "unmanaged",
 ]);
 
 const PREVIEW_LIMITS = [
-  "Config migrations, deprecated cleanup, commit-guidance generation, and index generation are outside this managed-template preview.",
+  "Removals - retired templates, deprecated skills, legacy hook copies, and pre-1.9 path migrations - are cleanup rather than writes and are not enumerated here.",
   "Direct workflow/install-goat-flow.sh execution does not use this CLI admission gate.",
 ] as const;
 
-/** User-visible three-way comparison outcomes for one managed template. */
+/**
+ * User-visible outcome for one destination.
+ *
+ * The first nine values are the three-way template comparison; the last three describe destinations with no exact-copy template, where install seeds,
+ * preserves, or regenerates rather than matching bytes.
+ *
+ * `local-preserved` replaced the former `local-edited`: divergent local bytes under a template this package did not change are kept rather than
+ * blocked, so no state now describes "the user edited a managed file" without also saying what the package wants.
+ */
 export type ManagedSetupFileState =
   | "unchanged"
-  | "local-edited"
   | "template-changed"
   | "both-changed"
   | "added"
   | "adopted"
   | "removed"
   | "missing"
-  | "unmanaged";
+  | "unmanaged"
+  | "local-preserved"
+  | "user-seeded"
+  | "user-preserved"
+  | "user-migrated"
+  | "regenerated";
+
+/** Repair-facing direction derived from M02's three-way managed-file state. */
+export type ManagedSetupChangeDirection =
+  "current" | "behind" | "diverged" | "unclassified";
 
 /** Action shown beside one path so users know what an approved install would do. */
 type ManagedSetupAction =
-  "none" | "create" | "replace" | "preserve" | "protect";
+  | "none"
+  | "create"
+  | "replace"
+  | "preserve"
+  | "protect"
+  | "regenerate"
+  | "migrate";
 
 /** Overall preview outcome used by the CLI before it starts the installer. */
 type ManagedSetupVerdict = "ready" | "warning" | "blocked";
@@ -61,8 +96,8 @@ type ManagedSetupVerdict = "ready" | "warning" | "blocked";
 /** Whether a usable previous-install baseline was available for comparison. */
 export type ManagedSetupBaselineStatus = "loaded" | "missing" | "invalid";
 
-/** Filesystem evidence shown for a managed destination without following target symlinks. */
-type ManagedTargetStatus = "regular" | "missing" | "non-regular" | "unreadable";
+/** Update policy for one destination; only system-owned rows carry an exact-copy template. */
+type ManagedSetupOwnership = "system-owned" | "user-owned" | "generated";
 
 /** Hash inputs for classifying one path without reading user content. */
 export interface ManagedSetupClassificationInput {
@@ -74,7 +109,7 @@ export interface ManagedSetupClassificationInput {
 /** One path row shown in JSON or plain-English preview output. */
 interface ManagedSetupPreviewFile {
   path: string;
-  ownership: "system-owned";
+  ownership: ManagedSetupOwnership;
   state: ManagedSetupFileState;
   action: ManagedSetupAction;
   reason: string;
@@ -82,6 +117,7 @@ interface ManagedSetupPreviewFile {
   currentStatus: ManagedTargetStatus;
   currentSha256: string | null;
   newExpectedSha256: string | null;
+  authority: ManagedSetupAuthorityDecision;
 }
 
 /**
@@ -90,7 +126,7 @@ interface ManagedSetupPreviewFile {
  */
 export interface ManagedSetupPreview {
   schemaVersion: typeof MANAGED_SETUP_PREVIEW_SCHEMA;
-  coverage: "managed-template-files";
+  coverage: "install-write-set";
   agent: AgentId;
   goatFlowVersion: string;
   baselineStatus: ManagedSetupBaselineStatus;
@@ -130,12 +166,6 @@ interface ManagedTemplateDefinition {
   sourcePath: string;
 }
 
-/** One target path's safe status and optional regular-file hash for three-way comparison. */
-interface ManagedTargetEvidence {
-  status: ManagedTargetStatus;
-  sha256: string | null;
-}
-
 /** User-facing action and explanation paired with one deterministic drift state. */
 interface ManagedSetupStatePresentation {
   action: ManagedSetupAction;
@@ -150,10 +180,10 @@ const STATE_PRESENTATION: Record<
     action: "none",
     reason: "The installed file already matches this goat-flow package.",
   },
-  "local-edited": {
-    action: "protect",
+  "local-preserved": {
+    action: "none",
     reason:
-      "The target changed after the last install, so goat-flow will not overwrite it by default.",
+      "The target changed after the last install, but this goat-flow package did not change the file. Install keeps your local content; an explicit full-file replacement would discard it.",
   },
   "template-changed": {
     action: "replace",
@@ -163,7 +193,7 @@ const STATE_PRESENTATION: Record<
   "both-changed": {
     action: "protect",
     reason:
-      "The target and goat-flow template both changed since the last install.",
+      "The target and goat-flow template both changed since the last install. Automatic replacement is blocked because it would discard current target content.",
   },
   added: {
     action: "create",
@@ -189,7 +219,43 @@ const STATE_PRESENTATION: Record<
     reason:
       "The target path cannot be verified safely, so goat-flow will not write it.",
   },
+  "user-seeded": {
+    action: "create",
+    reason: "This user-owned file is absent, so install may seed it once.",
+  },
+  "user-preserved": {
+    action: "preserve",
+    reason:
+      "This user-owned file already exists, so install keeps your content.",
+  },
+  "user-migrated": {
+    action: "migrate",
+    reason:
+      "Install edits declared parts of this user-owned file in place and leaves the rest byte-stable.",
+  },
+  regenerated: {
+    action: "regenerate",
+    reason: "Install rewrites this generated file from current project state.",
+  },
 };
+
+/**
+ * Convert one canonical managed-file state into the repair direction shared by install, audit, and hook status.
+ * This consumes M02's classifier result so downstream surfaces never invent their own old/current/new comparison.
+ *
+ * @param state - canonical three-way state; non-content states have no proven drift direction
+ * @returns current, safely behind, locally diverged, or unclassified repair evidence
+ */
+export function managedSetupChangeDirection(
+  state: ManagedSetupFileState,
+): ManagedSetupChangeDirection {
+  if (state === "unchanged") return "current";
+  if (state === "template-changed") return "behind";
+  if (state === "both-changed" || state === "local-preserved") {
+    return "diverged";
+  }
+  return "unclassified";
+}
 
 /**
  * Classify one path from old, current, and new hashes.
@@ -207,10 +273,10 @@ export function classifyManagedSetupFile(
   // Matching current and new bytes require no write, even when old state is unavailable.
   if (input.currentSha256 === input.newExpectedSha256) return "unchanged";
 
-  // Without an old baseline, a missing destination is created and an existing
-  // differing regular file is adopted: pre-install-state targets legitimately
-  // hold older-package bytes, and the managed refresh matches what the
-  // installer always did for system-owned templates before baselines existed.
+  // Without an old baseline, a missing destination is created and an existing differing regular file is adopted: pre-install-state targets
+  // legitimately hold older-package bytes, and the managed refresh matches what the installer always did for system-owned templates before baselines
+  // existed.
+  //
   // The verdict stays "warning" so users see every adopted path before Bash runs.
   if (input.oldExpectedSha256 === null) {
     return input.currentSha256 === null ? "added" : "adopted";
@@ -219,9 +285,11 @@ export function classifyManagedSetupFile(
   // A deleted destination may represent deliberate user intent, so setup pauses.
   if (input.currentSha256 === null) return "missing";
 
-  // When the package stayed stable, the target alone contains the local edit.
+  // The package has nothing new to deliver here, so the local bytes are simply
+  // kept. Blocking would refuse every unrelated write over a file goat-flow does
+  // not need to touch, and replacing would destroy content it never authored.
   if (input.newExpectedSha256 === input.oldExpectedSha256) {
-    return "local-edited";
+    return "local-preserved";
   }
 
   // When the target stayed stable, only the package template needs refreshing.
@@ -233,68 +301,8 @@ export function classifyManagedSetupFile(
 }
 
 /**
- * Hash one package or target file for the managed comparison.
- * Use when users need byte-level evidence without storing or displaying file contents.
- *
- * @param filePath - package or target file to hash; empty is invalid upstream and cannot be read
- * @returns lowercase SHA-256 text; never null or empty after a successful read
- */
-function hashFile(filePath: string): string {
-  return createHash("sha256").update(readFileSync(filePath)).digest("hex");
-}
-
-/**
- * Inspect one managed target without following symlinked path components.
- * Use before preview or install so users never authorize writes redirected outside their project.
- *
- * @param projectPath - selected project root; empty is invalid upstream and cannot contain a target
- * @param managedPath - safe manifest or baseline-relative path; empty is rejected before this helper
- * @returns target status and hash; null hash means missing, non-regular, or unreadable bytes
- */
-function readManagedTargetEvidence(
-  projectPath: string,
-  managedPath: string,
-): ManagedTargetEvidence {
-  const pathSegments = managedPath.split("/");
-  let inspectedPath = projectPath;
-  // Every parent must remain a real directory so setup cannot escape through a nested symlink.
-  for (const directorySegment of pathSegments.slice(0, -1)) {
-    inspectedPath = join(inspectedPath, directorySegment);
-    try {
-      const parentStats = lstatSync(inspectedPath);
-      // A symlink or file parent redirects or blocks the managed destination, so install must pause.
-      if (!parentStats.isDirectory()) {
-        return { status: "non-regular", sha256: null };
-      }
-    } catch (error) {
-      // For example, a first install has no `.goat-flow` parent yet, so the destination is simply missing.
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-        return { status: "missing", sha256: null };
-      }
-      return { status: "unreadable", sha256: null };
-    }
-  }
-
-  const targetFilePath = join(projectPath, managedPath);
-  try {
-    const targetStats = lstatSync(targetFilePath);
-    // Symlinks and directories must never look equal to a regular managed template.
-    if (!targetStats.isFile()) {
-      return { status: "non-regular", sha256: null };
-    }
-    return { status: "regular", sha256: hashFile(targetFilePath) };
-  } catch (error) {
-    // For example, a user deleted this managed file; absence is evidence and unreadable bytes stay blocked.
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-      return { status: "missing", sha256: null };
-    }
-    return { status: "unreadable", sha256: null };
-  }
-}
-
-/**
  * Add one exact-copy template while rejecting conflicting manifest destinations.
- * Use while building the path list users inspect before install; collisions throw instead of guessing.
+ * Use while building the path list users inspect before install; it throws on a collision instead of guessing which template wins.
  */
 function addManagedTemplate(
   definitions: Map<string, ManagedTemplateDefinition>,
@@ -361,7 +369,26 @@ function collectManagedTemplates(agent: AgentId): ManagedTemplateDefinition[] {
 }
 
 /**
- * Turn one hash comparison into the concise path row shown to users.
+ * Decide whether a loaded baseline leaves an existing, non-package target outside installer ownership.
+ * Use to protect developer-owned bytes while still adopting an existing target that matches the package.
+ */
+function loadedBaselineProtectsExistingDifferentTarget(
+  baselineStatus: ManagedSetupBaselineStatus,
+  oldExpectedSha256: string | null,
+  currentTarget: ManagedTargetEvidence,
+  newExpectedSha256: string | null,
+): boolean {
+  return (
+    baselineStatus === "loaded" &&
+    oldExpectedSha256 === null &&
+    currentTarget.status === "regular" &&
+    newExpectedSha256 !== null &&
+    currentTarget.sha256 !== newExpectedSha256
+  );
+}
+
+/**
+ * Turn one hash comparison and baseline status into the concise path row shown to users.
  * Use for every managed destination so text and JSON explain the same action and reason.
  */
 function buildPreviewFile(
@@ -369,19 +396,29 @@ function buildPreviewFile(
   oldExpectedSha256: string | null,
   currentTarget: ManagedTargetEvidence,
   newExpectedSha256: string | null,
+  baselineStatus: ManagedSetupBaselineStatus,
+  authority: ManagedSetupAuthority,
 ): ManagedSetupPreviewFile {
   const unsafeCurrentTarget =
     newExpectedSha256 !== null &&
     (currentTarget.status === "non-regular" ||
       currentTarget.status === "unreadable");
-  // A path that could redirect or hide an install is always unmanaged and blocked while still managed.
-  const state = unsafeCurrentTarget
-    ? "unmanaged"
-    : classifyManagedSetupFile({
-        oldExpectedSha256,
-        currentSha256: currentTarget.sha256,
-        newExpectedSha256,
-      });
+  const loadedBaselineDoesNotOwnExistingTarget =
+    loadedBaselineProtectsExistingDifferentTarget(
+      baselineStatus,
+      oldExpectedSha256,
+      currentTarget,
+      newExpectedSha256,
+    );
+  // Unsafe paths and existing files absent from a loaded baseline stay protected from default writes.
+  const state =
+    unsafeCurrentTarget || loadedBaselineDoesNotOwnExistingTarget
+      ? "unmanaged"
+      : classifyManagedSetupFile({
+          oldExpectedSha256,
+          currentSha256: currentTarget.sha256,
+          newExpectedSha256,
+        });
   const presentation = STATE_PRESENTATION[state];
   let reason = presentation.reason;
   // Symlinked or non-directory components block with the exact repair clue the user needs.
@@ -394,6 +431,11 @@ function buildPreviewFile(
     reason =
       "The target path could not be read safely, so goat-flow cannot verify an overwrite.";
   }
+  // A loaded baseline proves the prior install never owned this existing destination.
+  if (loadedBaselineDoesNotOwnExistingTarget) {
+    reason =
+      "The loaded install baseline does not own this existing path, so goat-flow will not overwrite it by default.";
+  }
   return {
     path: managedPath,
     ownership: "system-owned",
@@ -404,7 +446,119 @@ function buildPreviewFile(
     currentStatus: currentTarget.status,
     currentSha256: currentTarget.sha256,
     newExpectedSha256,
+    authority: resolveAuthorityDecision(
+      {
+        path: managedPath,
+        ownership: "system-owned",
+        isConflict: BLOCKING_STATES.has(state),
+        isPathUnsafe: unsafeCurrentTarget,
+        isReplaceable: true,
+      },
+      authority,
+    ),
   };
+}
+
+/**
+ * Turn one non-template destination into the row users read beside managed templates.
+ * Use for user-owned and generated paths, where install seeds, preserves, or rewrites from project state and there is no package template to compare
+ * bytes against.
+ */
+function buildProjectWriteFile(
+  definition: ProjectWriteDefinition,
+  currentTarget: ManagedTargetEvidence,
+  authority: ManagedSetupAuthority,
+  pendingMigrations: ReadonlyMap<string, string>,
+): ManagedSetupPreviewFile {
+  const unsafeCurrentTarget =
+    currentTarget.status === "non-regular" ||
+    currentTarget.status === "unreadable";
+  // A redirected or unreadable destination is reported and skipped rather than seeded blindly.
+  const state: ManagedSetupFileState = unsafeCurrentTarget
+    ? "unmanaged"
+    : projectWriteState(definition, currentTarget, pendingMigrations);
+  const presentation = STATE_PRESENTATION[state];
+  return {
+    path: definition.path,
+    ownership: definition.ownership,
+    state,
+    action: presentation.action,
+    // A migration row names the exact edits; otherwise the definition's reason names the condition.
+    reason: migrationRowReason(
+      definition,
+      state,
+      unsafeCurrentTarget,
+      presentation.reason,
+      pendingMigrations,
+    ),
+    oldExpectedSha256: null,
+    currentStatus: currentTarget.status,
+    currentSha256: currentTarget.sha256,
+    newExpectedSha256: null,
+    authority: resolveAuthorityDecision(
+      {
+        path: definition.path,
+        ownership: definition.ownership,
+        // A user-owned row is never a blocking conflict; replacing it is an explicit request.
+        isConflict: false,
+        isPathUnsafe: unsafeCurrentTarget,
+        isReplaceable: definition.replaceable,
+      },
+      authority,
+    ),
+  };
+}
+
+/**
+ * Choose the sentence one non-template row shows.
+ * A migration row names the exact edits install will make, because "this file may change" is not something a user can check afterwards, while a named
+ * list is.
+ */
+function migrationRowReason(
+  definition: ProjectWriteDefinition,
+  state: ManagedSetupFileState,
+  isCurrentTargetUnsafe: boolean,
+  presentationReason: string,
+  pendingMigrations: ReadonlyMap<string, string>,
+): string {
+  if (isCurrentTargetUnsafe) return presentationReason;
+  const migrationSummary = pendingMigrations.get(definition.path);
+  // A pending migration always carries its own summary; the fallback keeps the row honest if not.
+  if (state === "user-migrated") {
+    return migrationSummary ?? presentationReason;
+  }
+  return definition.reason;
+}
+
+/**
+ * Select the state for one safe non-template destination from ownership and current evidence.
+ * A non-seedable user file stays `user-preserved` while absent, because install never creates it.
+ */
+function projectWriteState(
+  definition: ProjectWriteDefinition,
+  currentTarget: ManagedTargetEvidence,
+  pendingMigrations: ReadonlyMap<string, string>,
+): ManagedSetupFileState {
+  // Generated files are rewritten from project state, so presence changes nothing users must decide.
+  if (definition.ownership === "generated") return "regenerated";
+  if (currentTarget.status === "missing") {
+    return definition.seedable ? "user-seeded" : "user-preserved";
+  }
+  // A declared migration is a real write, so it must not read as an untouched file.
+  return pendingMigrations.has(definition.path)
+    ? "user-migrated"
+    : "user-preserved";
+}
+
+/**
+ * Report whether one row must stop the installer before any mutation.
+ * Only exact-copy templates qualify, so a user-owned or generated path never withholds an unrelated managed refresh.
+ *
+ * @param file - one previewed destination with its ownership and classified state
+ * @returns true when this row needs explicit authority before any install may run
+ */
+export function isBlockingManagedFile(file: ManagedSetupPreviewFile): boolean {
+  return file.ownership === "system-owned" && BLOCKING_STATES.has(file.state);
 }
 
 /**
@@ -417,8 +571,13 @@ function previewVerdict(
 ): ManagedSetupVerdict {
   // Corrupt baseline data cannot authorize an overwrite even if current bytes happen to look safe.
   if (baselineStatus === "invalid") return "blocked";
-  // Any ambiguous target state pauses the installer until the user supplies explicit force.
-  if (files.some((file) => BLOCKING_STATES.has(file.state))) return "blocked";
+  // Every destination belongs to the install write set, so an unsafe path blocks before Bash starts.
+  if (
+    files.some(
+      (file) => isBlockingManagedFile(file) || file.state === "unmanaged",
+    )
+  )
+    return "blocked";
   // Retired paths are preserved and pre-baseline adoptions replace bytes, so
   // both still deserve user attention before the installer runs.
   if (
@@ -435,11 +594,15 @@ function previewVerdict(
  *
  * @param projectPath - selected target root; empty is invalid upstream and produces no useful files
  * @param agent - selected agent whose canonical skill mirror is included; never null after CLI validation
+ * @param authority - overwrite permissions the user granted by flag; the default grants none, so conflicts stay blocked
+ * @param pendingMigrations - path-to-summary rows naming in-place edits install will make; empty means none
  * @returns deterministic path-sorted preview; files is empty only when no managed templates exist
  */
 export function buildManagedSetupPreview(
   projectPath: string,
   agent: AgentId,
+  authority: ManagedSetupAuthority = NO_MANAGED_SETUP_AUTHORITY,
+  pendingMigrations: ReadonlyMap<string, string> = new Map(),
 ): ManagedSetupPreview {
   const baseline = readManagedInstallBaseline(projectPath, agent);
   const currentTemplates = collectManagedTemplates(agent);
@@ -458,6 +621,8 @@ export function buildManagedSetupPreview(
         oldExpectedSha256,
         readManagedTargetEvidence(projectPath, template.path),
         hashFile(getTemplatePath(template.sourcePath)),
+        baseline.status,
+        authority,
       ),
     );
   }
@@ -472,6 +637,22 @@ export function buildManagedSetupPreview(
         expectedSha256,
         readManagedTargetEvidence(projectPath, managedPath),
         null,
+        baseline.status,
+        authority,
+      ),
+    );
+  }
+
+  // User-owned and generated destinations complete the write set an approved install may touch.
+  for (const definition of collectProjectWriteDefinitions(projectPath, agent)) {
+    // An exact-copy template already classified this path, so the seed rule must not restate it.
+    if (currentTemplatePaths.has(definition.path)) continue;
+    files.push(
+      buildProjectWriteFile(
+        definition,
+        readManagedTargetEvidence(projectPath, definition.path),
+        authority,
+        pendingMigrations,
       ),
     );
   }
@@ -485,7 +666,7 @@ export function buildManagedSetupPreview(
   }
   return {
     schemaVersion: MANAGED_SETUP_PREVIEW_SCHEMA,
-    coverage: "managed-template-files",
+    coverage: "install-write-set",
     agent,
     goatFlowVersion: getPackageVersion(),
     baselineStatus: baseline.status,
@@ -510,83 +691,18 @@ export function renderManagedSetupPreviewText(
     `Coverage: ${preview.coverage}`,
     `Baseline: ${preview.baselineStatus}`,
     "",
-    "Managed files:",
+    "Files install may write:",
   ];
   // Every row stays grep-friendly while explaining the action in user language.
   for (const file of preview.files) {
     lines.push(
-      `  ${file.action.padEnd(8)} ${file.path} [${file.state}] - ${file.reason}`,
+      `  ${file.action.padEnd(10)} ${file.ownership.padEnd(12)} ${file.path} [${file.state}] - ${file.reason}`,
     );
   }
   lines.push("", "Limits:");
   // Limits prevent users from mistaking this focused preview for a full migration simulation.
   for (const limit of preview.limits) lines.push(`  - ${limit}`);
   return lines.join("\n");
-}
-
-/**
- * Return concise conflict rows for the normal install error shown before any mutation.
- *
- * @param preview - managed report to summarize; no blocking files yields an empty list
- * @returns user-facing conflict lines; empty means the managed admission gate can proceed
- */
-function managedSetupBlockingSummary(preview: ManagedSetupPreview): string[] {
-  // Only states requiring user intent belong in the blocking error.
-  const blockingFiles = preview.files.filter((file) =>
-    BLOCKING_STATES.has(file.state),
-  );
-  // Each path stays on one line so users can inspect or copy it directly.
-  const lines = blockingFiles.map(
-    (file) => `${file.path} [${file.state}]: ${file.reason}`,
-  );
-  // Invalid state may block without producing a path-specific classification row.
-  if (preview.baselineStatus === "invalid") {
-    lines.push(
-      "Install state is invalid; inspect the preview limits for repair evidence.",
-    );
-  }
-  return lines;
-}
-
-/**
- * Detect target paths that cannot safely receive any managed write.
- * Use before honoring force so explicit conflict replacement never becomes path redirection.
- */
-function hasUnsafeManagedTarget(preview: ManagedSetupPreview): boolean {
-  // Only current templates can be written; retired unsafe paths remain preserved without installer access.
-  return preview.files.some(
-    (file) =>
-      file.newExpectedSha256 !== null &&
-      (file.currentStatus === "non-regular" ||
-        file.currentStatus === "unreadable"),
-  );
-}
-
-/**
- * Return a complete pre-write error when managed conflicts need explicit force.
- *
- * @param preview - current managed report; a ready or warning report produces null
- * @param shouldForce - explicit broad overwrite choice; false preserves every ambiguous file
- * @returns error text for the CLI, or null when the installer may proceed
- */
-export function managedSetupAdmissionFailure(
-  preview: ManagedSetupPreview,
-  shouldForce: boolean,
-): string | null {
-  const unsafeManagedTarget =
-    preview.baselineStatus === "invalid" || hasUnsafeManagedTarget(preview);
-  // A ready or warning preview needs no override and can continue to the installer.
-  if (preview.verdict !== "blocked") return null;
-  // Force resolves content conflicts, but never symlink redirection or unreadable target evidence.
-  if (shouldForce && !unsafeManagedTarget) return null;
-  // Every conflict stays on its own bullet so the user can inspect the exact paths first.
-  const conflicts = managedSetupBlockingSummary(preview)
-    .map((line) => `  - ${line}`)
-    .join("\n");
-  const nextAction = unsafeManagedTarget
-    ? "Repair symlinked, non-regular, or unreadable target paths first; --force cannot bypass path safety."
-    : "Use --force only after inspecting these content conflicts.";
-  return `Managed setup blocked before changes:\n${conflicts}\nRun with --dry-run for the full report. ${nextAction}`;
 }
 
 /**
@@ -601,9 +717,15 @@ export function recordManagedInstallAfterVerification(
   agent: AgentId,
 ): string[] {
   const installedPreview = buildManagedSetupPreview(projectPath, agent);
-  // Only current package templates are verified; retired paths are preserved and excluded.
+  // Only current package templates are verified; retired paths are preserved and excluded, and user-owned or generated rows legitimately differ from
+  // any template.
+  //
+  // A preserved row is intentionally divergent - the package delivered nothing for it - so demanding a template match there would fail an install
+  // that behaved correctly.
   const installationMismatches = installedPreview.files.filter(
     (file) =>
+      file.ownership === "system-owned" &&
+      file.state !== "local-preserved" &&
       file.newExpectedSha256 !== null &&
       file.currentSha256 !== file.newExpectedSha256,
   );
