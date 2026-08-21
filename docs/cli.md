@@ -378,7 +378,15 @@ npx @blundergoat/goat-flow@latest install . --agent codex --force
 
 The comparison uses SHA-256 hashes only. After a successful CLI install, `.goat-flow/install-state/<agent>.json` records the package version, relative managed paths, and expected hashes for the next run; the installed `.goat-flow/.gitignore` keeps this state local. Missing state is safe for absent files and files already matching the current package. An existing differing regular file without a trusted baseline is `adopted`: targets installed before install-state existed legitimately hold older-package bytes, so the upgrade refreshes them exactly like the installer always did for system-owned templates, shows a `warning` verdict listing every adopted path, and records a baseline so later upgrades get full three-way drift protection. Malformed state, local edits, and deletions block by default. Symlinked, non-regular, or unreadable target components are path-safety failures (`unmanaged`) and stay blocked even with `--force`.
 
-The preview lists every path an approved install may write: source-backed `system-owned` manifest records, the selected agent's canonical skill mirror, `.goat-flow/config.yaml`, the agent's settings and hook config, the project root `.gitignore`, seeded policy and decision guidance, the active-plan marker, commit guidance, install state, and the generated learning-loop indexes. Some of those rows are conditional, so the preview is a superset: `.goat-flow/plans/.active` is written only when exactly one version-named plan directory exists, and commit guidance only in a Git project. Removals are the one thing it does not enumerate - retired templates, deprecated skills, legacy hook copies, and pre-1.9 path migrations are cleanup rather than writes. Direct `workflow/install-goat-flow.sh` execution skips this admission gate; run the public CLI when you need it.
+The preview lists every path an approved install may write: source-backed `system-owned` manifest records and the selected agent's canonical skill
+mirror. It also lists `.goat-flow/config.yaml`, the agent's settings and hook config, the project root `.gitignore`, seeded policy and decision
+guidance, the active-plan marker, commit guidance, install state, and the generated learning-loop indexes. Some rows are conditional, so the preview
+is a superset: `.goat-flow/plans/.active` is written only when exactly one version-named plan directory exists, and commit guidance only in a Git
+project. It does not enumerate removals: retired templates, deprecated skills, legacy hook copies, and pre-1.9 path migrations are cleanup rather
+than writes.
+
+Direct `workflow/install-goat-flow.sh` execution is a low-level copy helper. It skips CLI admission, post-write verification, and install-state
+recording. Use the public CLI when you need a verified baseline.
 
 A locally edited managed file no longer blocks an upgrade on its own. When your bytes differ but this package ships the same template as your last install, the row reads `local-preserved` and install leaves the file alone while every unrelated write proceeds. Only a genuine template change over your edit becomes `both-changed`, which is a conflict you decide.
 
@@ -522,5 +530,12 @@ npx @blundergoat/goat-flow@latest dashboard .
 
 | Flag | Description |
 |------|-------------|
-| `--help, -h` | Show help |
+| `--help, -h` | Show global or contextual help without running a project command |
 | `--version, -v` | Show version |
+
+Global `goat-flow --help` stays concise so you can choose a workflow quickly.
+Run `goat-flow <command> --help` for contextual help with that command's usage, subcommands, flags, and examples.
+
+Help uses static CLI metadata and returns before command dispatch, so it remains available when the target project is missing, incomplete, or drifted.
+Help does not route nested subcommand requests separately: `goat-flow hooks verify --help` shows the top-level `hooks` topic.
+Use this reference for the full subcommand grammar.

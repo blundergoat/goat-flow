@@ -102,6 +102,7 @@ describe("managed setup preview", () => {
       coverage: string;
       verdict: string;
       files: PreviewRow[];
+      limits: string[];
     };
     assert.equal(report.schemaVersion, "goat-flow.managed-setup-preview.v2");
     assert.equal(report.coverage, "install-write-set");
@@ -111,6 +112,13 @@ describe("managed setup preview", () => {
       true,
     );
     assert.equal(report.files.every(isSafeFreshTargetRow), true);
+    // The preview tells users which guarantees they lose when they bypass the public CLI.
+    assert.equal(
+      report.limits.includes(
+        "Direct workflow/install-goat-flow.sh execution skips CLI admission, post-write verification, and install-state recording.",
+      ),
+      true,
+    );
     // Every exact-copy template on a fresh target is a create backed by a package hash.
     assert.equal(
       report.files
@@ -182,6 +190,11 @@ describe("managed setup preview", () => {
     const result = runCliInstaller(projectPath, "--agent", "codex");
 
     assert.equal(result.status, 0, result.stderr || result.stdout);
+    // The helper announces the remaining CLI work before this public path records the user's verified baseline.
+    assert.match(
+      result.stdout,
+      /The public goat-flow CLI verifies managed files and records install state after this helper exits\./u,
+    );
     const statePath = join(
       projectPath,
       ".goat-flow",

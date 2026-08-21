@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # =============================================================================
-# install-goat-flow.sh installs canonical goat-flow files into a selected project.
+# install-goat-flow.sh is the low-level helper that copies canonical goat-flow files into a selected project.
 # Use it through `goat-flow install` or `setup --apply` when refreshing one agent.
+# Direct use skips CLI preview, post-write verification, and the verified install-state receipt.
 # Each file is completed beside its destination before becoming user-visible.
 # System files refresh after managed preflight; user-owned settings and config remain authoritative.
 # `--force` admits inspected system-owned conflicts but never resets user content or bypasses path safety.
@@ -14,6 +15,27 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GOAT_FLOW_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 MANIFEST_PATH="$GOAT_FLOW_ROOT/workflow/manifest.json"
+REQUIRED_INLINE_NODE_PACKAGES=("js-yaml")
+
+# Confirm every third-party package used by inline Node transforms is available from this goat-flow package.
+# Use before entering the selected project so CLI and direct users fail before any project file can change.
+preflight_installer_dependencies() {
+  local required_package_name
+
+  # Each declared package is resolved from the shipped framework root, matching the later user-config transforms.
+  for required_package_name in "${REQUIRED_INLINE_NODE_PACKAGES[@]}"; do
+    # A missing package stops here so the user's target stays empty instead of receiving a partial setup.
+    if ! node - "$required_package_name" "$GOAT_FLOW_ROOT" >/dev/null 2>&1 <<'NODE'
+const [requiredPackageName, frameworkRoot] = process.argv.slice(2);
+require.resolve(requiredPackageName, { paths: [frameworkRoot] });
+NODE
+    then
+      echo "ERROR: installer dependency '$required_package_name' is missing from goat-flow root '$GOAT_FLOW_ROOT'; run npm install in that root" \
+        "or reinstall @blundergoat/goat-flow, then retry." >&2
+      return 1
+    fi
+  done
+}
 
 manifest_eval() {
   node - "$MANIFEST_PATH" "$@" <<'NODE'
@@ -262,6 +284,9 @@ if [[ -z "$VERSION" ]]; then
   echo "ERROR: could not determine goat-flow version from package.json"
   exit 1
 fi
+
+# Dependency errors must reach the user before migrations, directory scaffolding, or staged file writes begin.
+preflight_installer_dependencies
 
 COPIED=0
 SKIPPED=0
@@ -3060,7 +3085,9 @@ echo ""
 # Summary
 # ==========================================================================
 echo "─────────────────────────────────────────"
-echo "DONE: $COPIED files installed, $SKIPPED skipped, $REMOVED stale removed"
+echo "HELPER DONE: $COPIED files copied, $SKIPPED skipped, $REMOVED stale removed"
+echo "The public goat-flow CLI verifies managed files and records install state after this helper exits."
+echo "Direct script use does not perform those CLI steps."
 echo ""
 
 # Warn when deny hook is installed but settings file was skipped (hook may not be registered)

@@ -1,20 +1,8 @@
 /**
- * Regression tests for M03 (1.13.0): manifest drift must not brick the CLI's
- * diagnostic commands.
+ * Prove diagnostic commands remain available when installed skills drift from the manifest.
  *
- * The user story: someone's install grows a stray folder under
- * `workflow/skills/` (a half-finished upgrade, a hand-made experiment).
- * When they type `goat-flow --help` or `goat-flow --version` to orient
- * themselves, those commands MUST still answer - only commands that truly
- * need the canonical skill list (like `goat-flow manifest --check`) may
- * fail, and they must fail with the actionable drift message, not a stack
- * trace at import time.
- *
- * Mechanism under test: `constants.ts` exposes lazy `getSkillNames()` /
- * `getStaleSkillNames()` accessors and `classify-state.ts` derives agent
- * profiles lazily, so importing the CLI module graph performs no manifest
- * reads. These tests spawn the real CLI from a drifted temp copy of the
- * repo to prove that end to end.
+ * Use these process tests for a user seeking help before repair.
+ * The fixture adds one unlisted skill; `manifest --check` remains responsible for reporting it.
  */
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
@@ -31,81 +19,146 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 
-const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
+const repositoryRoot = fileURLToPath(new URL("../..", import.meta.url));
 
 describe("CLI diagnostics under manifest drift", () => {
-  let driftedRoot = "";
+  // An empty path means the suite has not created its drifted user installation yet.
+  let driftedRepositoryRoot = "";
 
   before(() => {
-    // Build a minimal runnable copy of the repo, then drift it by adding a
-    // skill directory the manifest does not list.
-    driftedRoot = mkdtempSync(join(tmpdir(), "goat-cli-drift-"));
-    for (const dir of ["src", "workflow"]) {
-      cpSync(join(repoRoot, dir), join(driftedRoot, dir), { recursive: true });
+    // A user can reach this state after an incomplete upgrade, so the fixture starts with a runnable CLI and adds one unlisted skill.
+    driftedRepositoryRoot = mkdtempSync(join(tmpdir(), "goat-cli-drift-"));
+    // Copy only the runtime folders needed to reproduce the user's drifted installation.
+    for (const sourceDirectory of ["src", "workflow"]) {
+      cpSync(
+        join(repositoryRoot, sourceDirectory),
+        join(driftedRepositoryRoot, sourceDirectory),
+        { recursive: true },
+      );
     }
-    for (const file of ["package.json", "tsconfig.json"]) {
-      cpSync(join(repoRoot, file), join(driftedRoot, file));
+    // Copy the package and compiler inputs that make the user's installed CLI runnable.
+    for (const sourceFile of ["package.json", "tsconfig.json"]) {
+      cpSync(
+        join(repositoryRoot, sourceFile),
+        join(driftedRepositoryRoot, sourceFile),
+      );
     }
-    // Reuse the real node_modules so tsx and dependencies resolve.
+    // Reuse installed dependencies so the fixture tests CLI behavior without duplicating the user's package installation.
     symlinkSync(
-      join(repoRoot, "node_modules"),
-      join(driftedRoot, "node_modules"),
+      join(repositoryRoot, "node_modules"),
+      join(driftedRepositoryRoot, "node_modules"),
       "junction",
     );
-    const fakeSkillDir = join(driftedRoot, "workflow", "skills", "goat-fake");
-    mkdirSync(fakeSkillDir, { recursive: true });
-    writeFileSync(join(fakeSkillDir, "SKILL.md"), "# fake drift skill\n");
+    const unlistedSkillDirectory = join(
+      driftedRepositoryRoot,
+      "workflow",
+      "skills",
+      "goat-fake",
+    );
+    mkdirSync(unlistedSkillDirectory, { recursive: true });
+    writeFileSync(
+      join(unlistedSkillDirectory, "SKILL.md"),
+      "# fake drift skill\n",
+    );
   });
 
   after(() => {
-    // Temp copy only exists for this suite -> always clean it up.
-    if (driftedRoot) rmSync(driftedRoot, { recursive: true, force: true });
+    // A populated path means the suite created a temporary installation that no user needs after the proof ends.
+    if (driftedRepositoryRoot)
+      rmSync(driftedRepositoryRoot, { recursive: true, force: true });
   });
 
   /**
-   * Spawns the drifted copy's CLI with the given args.
+   * Spawn the copied CLI after its installed skills have drifted.
    *
-   * @param args - CLI arguments, e.g. `["--help"]`
-   * @returns spawnSync result with utf8 stdout/stderr
+   * Use it to verify the output and exit status a user receives before repair.
+   * Side effect: starts a child process inside the temporary installation.
+   *
+   * @param commandArguments - arguments entered after `goat-flow`; empty follows the no-command menu route
+   * @returns captured child-process status, stdout, and stderr
    */
-  function runDriftedCli(args: string[]) {
+  function runCommandInDriftedInstallation(commandArguments: string[]) {
     return spawnSync(
       process.execPath,
-      ["--import", "tsx", join("src", "cli", "cli.ts"), ...args],
-      { cwd: driftedRoot, encoding: "utf8" },
+      ["--import", "tsx", join("src", "cli", "cli.ts"), ...commandArguments],
+      { cwd: driftedRepositoryRoot, encoding: "utf8" },
     );
   }
 
-  it("--help exits 0 and renders usage despite skill-dir drift", () => {
-    const res = runDriftedCli(["--help"]);
-    assert.equal(res.status, 0, `stderr: ${res.stderr}`);
-    assert.match(res.stdout, /goat-flow/i);
+  it("root help exits 0 and renders usage despite skill-dir drift", () => {
+    const rootHelpProcess = runCommandInDriftedInstallation(["--help"]);
+    assert.equal(
+      rootHelpProcess.status,
+      0,
+      `stderr: ${rootHelpProcess.stderr}`,
+    );
+    assert.match(rootHelpProcess.stdout, /goat-flow/i);
+  });
+
+  it("audit help exits 0 without dispatch despite skill-dir drift", () => {
+    const auditHelpProcess = runCommandInDriftedInstallation([
+      "audit",
+      "--help",
+    ]);
+    assert.equal(
+      auditHelpProcess.status,
+      0,
+      `stderr: ${auditHelpProcess.stderr}`,
+    );
+    assert.match(auditHelpProcess.stdout, /^goat-flow audit$/mu);
+    assert.match(auditHelpProcess.stdout, /--harness/u);
+  });
+
+  it("hooks help exits 0 without dispatch despite skill-dir drift", () => {
+    const hooksHelpProcess = runCommandInDriftedInstallation([
+      "hooks",
+      "--help",
+    ]);
+    assert.equal(
+      hooksHelpProcess.status,
+      0,
+      `stderr: ${hooksHelpProcess.stderr}`,
+    );
+    assert.match(hooksHelpProcess.stdout, /^goat-flow hooks$/mu);
+    assert.match(hooksHelpProcess.stdout, /^Subcommands:$/mu);
   });
 
   it("--version exits 0 despite skill-dir drift", () => {
-    const res = runDriftedCli(["--version"]);
-    assert.equal(res.status, 0, `stderr: ${res.stderr}`);
-    assert.match(res.stdout, /\d+\.\d+\.\d+/);
+    const versionProcess = runCommandInDriftedInstallation(["--version"]);
+    assert.equal(versionProcess.status, 0, `stderr: ${versionProcess.stderr}`);
+    assert.match(versionProcess.stdout, /\d+\.\d+\.\d+/);
   });
 
   it("status exits 0 with an error state instead of crashing under skill-dir drift", () => {
-    const res = runDriftedCli(["status", ".", "--format", "json"]);
-    assert.equal(res.status, 0, `stderr: ${res.stderr}`);
-    const payload = JSON.parse(res.stdout) as {
+    const statusProcess = runCommandInDriftedInstallation([
+      "status",
+      ".",
+      "--format",
+      "json",
+    ]);
+    assert.equal(statusProcess.status, 0, `stderr: ${statusProcess.stderr}`);
+    const statusReport = JSON.parse(statusProcess.stdout) as {
       state?: string;
       details?: string;
     };
-    assert.equal(payload.state, "error");
+    assert.equal(statusReport.state, "error");
     // Missing details would leave users with an error badge and no next clue.
-    assert.match(payload.details ?? "", /manifest|drift/i);
+    assert.match(statusReport.details ?? "", /manifest|drift/i);
   });
 
   it("manifest --check still fails loudly with the actionable drift error", () => {
-    const res = runDriftedCli(["manifest", "--check"]);
-    // The command that exists to catch drift must keep catching it.
-    assert.notEqual(res.status, 0, "manifest --check must fail under drift");
+    const manifestCheckProcess = runCommandInDriftedInstallation([
+      "manifest",
+      "--check",
+    ]);
+    // A user explicitly checking manifest integrity must still receive a failing status for this drift.
+    assert.notEqual(
+      manifestCheckProcess.status,
+      0,
+      "manifest --check must fail under drift",
+    );
     assert.match(
-      `${res.stdout}${res.stderr}`,
+      `${manifestCheckProcess.stdout}${manifestCheckProcess.stderr}`,
       /drifted from workflow\/skills|skills\.canonical/,
       "drift error must name the offending surface",
     );

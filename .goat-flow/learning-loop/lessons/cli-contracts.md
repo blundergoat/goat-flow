@@ -1,6 +1,6 @@
 ---
 category: cli-contracts
-last_reviewed: 2026-08-15
+last_reviewed: 2026-08-22
 ---
 
 **Scope:** The CLI's own surface contract - parser headroom before refactoring, omission tests for required choices, output shape across one and many selections, and what an id-based comparison actually compares. Cooperation between separately-correct components is [integration-verification.md](integration-verification.md).
@@ -46,8 +46,9 @@ last_reviewed: 2026-08-15
 ## Lesson: Required CLI choices need omission tests
 
 **Status:** active | **Created:** 2026-07-13
-**Decision changed:** Test valid, invalid, and omitted forms for every required CLI choice; omission must not silently select a default. | **Trigger phase:** VERIFY
-**Incident count:** 3 | **Latest occurrence:** 2026-08-01
+**Decision changed:** Test valid, invalid, omitted, and explicit fallback forms; preserve invocation shape when omission selects a fallback.
+**Trigger phase:** VERIFY
+**Incident count:** 5 | **Latest occurrence:** 2026-08-22
 
 **What happened:** M17's plan and handler required `--scenario deny-hook`, but the parser returned that value when the flag was absent. Positive, invalid-value, and live explicit-command checks all passed, so only a final omission probe exposed the false choice.
 
@@ -55,9 +56,36 @@ A second incident added a required quality-report owner whenever staged draft ca
 
 A third incident added a Claude/reporting-only relationship ahead of the owner relationship. The first missing-owner fixture omitted `accessMode`, so it exercised the new mode guard instead of the intended owner guard.
 
-**Root cause:** I treated omitted/defaulted fields as harmless while testing one relationship, even though an earlier relationship could legitimately reject the same payload first.
+**Recurrence update (2026-08-22):** M40's first contextual-help GREEN rendered `menu` help for global `--help`.
+The parser deliberately normalizes that request to the fallback `menu` command.
+Command-topic tests passed, but the existing root-help contract failed.
+Passing explicit invocation-shape evidence from the CLI entry point restored global navigation without changing parser grammar.
+Evidence: `src/cli/cli-parser.ts` (search: `GLOBAL_INFORMATIONAL_FLAGS`), `src/cli/cli.ts` (search: `requestedHelpCommand`), and
+`test/integration/cli-help.test.ts` (search: `shows exactly four executable examples`).
 
-**Fix and prevention:** Add omission RED tests before implementation. Required values must fail when absent; optional transport metadata must be omitted rather than converted to a new sentinel value. In each relationship test, make every preceding prerequisite explicit and valid so the assertion proves the intended error path. Cover capture enabled with and without an owner, owner present with and without capture for each supported runner and mode, wrong-runner/mode, and retry payload presence/absence. Evidence anchors: `src/cli/cli-parser.ts` (search: `parseHookScenarioArg`), `src/cli/server/decoders.ts` (search: `is supported only for Claude reporting sessions`), `src/dashboard/dashboard-terminal-connect.ts` (search: `qualityReportProjectPath ?`), and `test/unit/dashboard-terminal-launch/launch-flow-03.test.ts` (search: `carries staged-draft capture through a retried launch`).
+**Second recurrence update (2026-08-22):** Shared contextual help kept the `review` usage, subcommand, options, and examples.
+It dropped the command's exit-code guidance.
+The generic topic test passed because it checked shared sections; the existing review test caught the missing contract during the full suite.
+When moving bespoke help into shared metadata, preserve command-specific operating details.
+Grep existing command tests before treating generic coverage as complete.
+Evidence: `src/cli/help.ts` (search: `Structural failures exit 1`) and `test/unit/review-validate-verdict.test.ts`
+(search: `advisory warnings.*exit 0`).
+
+**Root cause:** I treated omitted/defaulted fields as harmless while testing one relationship.
+An earlier relationship could still reject the same payload first.
+The same assumption erased the difference between an omitted command and an explicitly selected fallback command.
+
+**Fix and prevention:** Add omission RED tests before implementation.
+Required values must fail when absent; optional transport metadata must be omitted rather than converted to a new sentinel value.
+When the parser maps omission to a fallback, test omitted and explicit fallback forms separately.
+Preserve the invocation evidence needed by downstream behavior.
+In relationship tests, make every preceding prerequisite explicit and valid so the assertion proves the intended error path.
+Cover capture enabled with and without an owner, plus owner present with and without capture for each supported runner and mode.
+Also cover wrong-runner/mode and retry payload presence/absence.
+Evidence anchors: `src/cli/cli-parser.ts` (search: `parseHookScenarioArg`), `src/cli/server/decoders.ts`
+(search: `is supported only for Claude reporting sessions`),
+`src/dashboard/dashboard-terminal-connect.ts` (search: `qualityReportProjectPath ?`), and `test/unit/dashboard-terminal-launch/launch-flow-03.test.ts`
+(search: `carries staged-draft capture through a retried launch`).
 
 ---
 
@@ -75,4 +103,3 @@ A third incident added a Claude/reporting-only relationship ahead of the owner r
 **Prevention:** When a documented command selects optional files, execute its literal body with one, many, and zero inputs. Require explicit path-labelled output when users need to identify the source, and require a named failure for empty selection. Evidence: `test/unit/playbook-contract.test.ts` (search: `runs the documented registration command in a consumer checkout`).
 
 ---
-

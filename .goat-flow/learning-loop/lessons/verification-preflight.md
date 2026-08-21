@@ -1,6 +1,6 @@
 ---
 category: verification-preflight
-last_reviewed: 2026-08-17
+last_reviewed: 2026-08-22
 ---
 
 **Scope:** Adding, tuning, and trusting a repo-wide gate - dependency-audit baselines, count locks and provenance dates, what a PASS line does and does not prove, and the shell mechanics of the commands a gate runs. Formatter and lint debt is [verification-formatting.md](verification-formatting.md).
@@ -76,6 +76,9 @@ last_reviewed: 2026-08-17
 ## Lesson: Hook renames must include learning-loop and router-table drift
 
 **Status:** active | **Created:** 2026-05-25
+**Decision changed:** Before accepting a file or symbol rename, grep durable references and ignored working plans for the old name, then run `stats --check`.
+**Trigger phase:** VERIFY
+**Incident count:** 5 | **Latest occurrence:** 2026-08-22
 
 **What happened:** The M10 split from the old command-safety hook to three guardrail hooks passed focused hook self-tests and the fast test suite, but `bash scripts/preflight-checks.sh` still failed. The failures were not in hook execution: stale learning-loop evidence pointed at deleted files, `.goat-flow/code-map.md` listed hook scripts under `scripts/`, `.goat-flow/architecture.md` omitted the new `hooks` dashboard view from the exact view inventory, and `.github/copilot-instructions.md` still routed to the old Copilot hook path.
 
@@ -85,7 +88,14 @@ last_reviewed: 2026-08-17
 
 **Recurrence update (2026-08-14):** Moving the final-gate lesson from `.goat-flow/learning-loop/lessons/verification-preflight.md` to `.goat-flow/learning-loop/lessons/agent-evidence-claims.md` cleared the bucket-size failure, but `stats --check` then found `.goat-flow/learning-loop/lessons/verification-testing.md` still cited the old file for the moved Prevention anchor. Update tracked semantic-anchor references in the same edit as an entry move. Evidence anchors: `.goat-flow/learning-loop/lessons/verification-testing.md` (search: `A predecessor may exempt one named RED fixture`) and `.goat-flow/learning-loop/lessons/agent-evidence-claims.md` (search: `A predecessor may exempt one named RED fixture`).
 
-**Prevention:** After hook file renames, run the full preflight before declaring the rename done and treat drift failures as part of the hook change, not documentation cleanup. For the final old-name proof, use the milestone's exact `git grep` command over tracked files, then optionally run `rg --hidden --no-ignore` only to find local ignored residue. Evidence anchors: `scripts/preflight-checks.sh` (search: `Learning-loop schema`), `scripts/preflight-checks.sh` (search: `Dashboard view names drift`), `.github/copilot-instructions.md` (search: `deny-dangerous.sh --self-test=smoke`).
+**Recurrence update (2026-08-22):** During M40, an optional private rename from `isMainModule` to `isDirectCliLaunch` passed focused help, drift, typecheck, and Gruff checks.
+`stats --check` then found that the ESM-launch footgun still used `isMainModule` as its durable source anchor. Restoring the stable symbol fixed the reference without widening scope.
+Evidence anchors: `src/cli/cli.ts` (search: `function isMainModule`) and `.goat-flow/learning-loop/footguns/cli.md` (search: `isMainModule`).
+
+**Prevention:** After a file or code-symbol rename, run the full preflight and treat drift failures as part of the rename, not documentation cleanup.
+Use the milestone's exact tracked-file grep, run `stats --check`, then use the required ignored-state search for active plans and local artifacts.
+Evidence anchors: `scripts/preflight-checks.sh` (search: `Learning-loop schema`), `scripts/preflight-checks.sh` (search: `Dashboard view names drift`), and
+`.github/copilot-instructions.md` (search: `deny-dangerous.sh --self-test=smoke`).
 
 ---
 

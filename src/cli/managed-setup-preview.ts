@@ -49,7 +49,7 @@ const BLOCKING_STATES = new Set<ManagedSetupFileState>([
 
 const PREVIEW_LIMITS = [
   "Removals - retired templates, deprecated skills, legacy hook copies, and pre-1.9 path migrations - are cleanup rather than writes and are not enumerated here.",
-  "Direct workflow/install-goat-flow.sh execution does not use this CLI admission gate.",
+  "Direct workflow/install-goat-flow.sh execution skips CLI admission, post-write verification, and install-state recording.",
 ] as const;
 
 /**
