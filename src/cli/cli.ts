@@ -9,11 +9,10 @@
 import { realpathSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { QUALITY_MODES } from "./quality/schema.js";
 import { getPackageVersion } from "./paths.js";
-import { validAgentList } from "./cli-agent-options.js";
 import { CLIError } from "./cli-error.js";
 import { dispatchCommand } from "./cli-handlers.js";
+import { renderHelp } from "./help.js";
 import { parseCLIArgs } from "./cli-parser.js";
 
 export { dispatchCommand } from "./cli-handlers.js";
@@ -22,143 +21,6 @@ export type { ParsedCLI } from "./cli-types.js";
 
 /** Current package version used in --version output. */
 const PACKAGE_VERSION = getPackageVersion();
-
-/** Show terminal users the available commands, flags, and examples. */
-function printHelp(): void {
-  console.log(`
-goat-flow - GOAT Flow CLI Auditor
-
-Usage:
-  goat-flow [command] [project-path] [flags]
-
-Commands:
-  menu              Interactive command picker (default when run with no args)
-  audit             Deterministic pass/fail: GOAT Flow Setup + Agent Setup (add --harness for AI Harness Completeness)
-  quality           Agent-driven quality prompt plus save/history/diff surfaces
-  setup             Generate setup prompt (adapts to project state)
-  install           Deterministically copy/update goat-flow system files
-  status            Show project state (bare/partial/v0.9/outdated/current)
-  dashboard         Launch browser dashboard with audit, setup, and terminal
-  manifest          Print the resolved single-source-of-truth manifest (--check validates consistency)
-  stats             Learning-loop health report (live entry counts, stale refs, freshness). Use --check for CI.
-  diagnostics context  Measure static local context pressure without runner telemetry
-  diagnostics readiness  Show advisory five-concern preparedness without running target code
-  diagnostics bundle   Create redacted local setup and runtime support evidence
-  diagnostics threat-model  Show static agent/tool posture without executing target hooks
-  index             Regenerate the generated learning-loop INDEX.md files (footguns, lessons, patterns, decisions)
-  redact            Scrub durable text from stdin before stdout or --output persistence
-  review validate [report-file] [--output <path>]  Validate goat-review Markdown; structural failures exit 1, advisory warnings stay at exit 0
-  plans export      Preview or write redacted local milestone bundles
-  plans check       Check milestone effort arithmetic; report rough 70/20/10 mix drift
-  plans time        System-stamp start/stop/status timing receipts in one milestone
-  events tail       Read local gitignored evidence-envelope events
-  skill new         Author a new skill or playbook from a description, draft, or interactive prompt.
-  skill doctor      Explain installed skill paths, invocation syntax, and static load blockers.
-  hooks list        List registered hook state for this project
-  hooks enable      Enable one registered hook and sync agent configs
-  hooks disable     Disable one registered hook and sync agent configs
-  hooks sync        Re-apply config.yaml hook truth to agent configs
-  hooks verify      Request bounded configured-command proof for one agent
-Arguments:
-  project-path    Target project directory (default: .)
-  report-file     Saved goat-review Markdown for review validate (omit to read stdin)
-
-Flags:
-  --format <type>   Output format: json, text, markdown, sarif (omit for auto-detect: text in terminal, json otherwise)
-  --agent <id>      Filter to one agent: ${validAgentList()}
-  --mode <mode>     Quality prompt/history/diff mode: ${QUALITY_MODES.join(", ")}
-  --all             Quality history: lift the default 20-run limit
-  --limit <n>       Events tail: number of newest envelopes to read (default: 20, max: 500)
-  --harness         Audit: add AI Harness Completeness scope (pass/fail checks across 5 concerns)
-  --check-drift     Audit: detect managed-artifact and peer-instruction drift
-  --check-content   Audit: cold-path content lint (vague terms, generic instructions, factual drift)
-  --trusted-target  Audit/setup/quality/hooks verify: execute selected target hook code for runtime proof
-  --untrusted-target Deprecated through v1.16.x: explicit alias for the static, non-executing default
-  --no-audit-details Audit JSON: omit structured harness detail payloads
-  --check           Manifest: validate static-vs-observed consistency (exits non-zero on drift)
-  --json            Emit machine-readable JSON (alias for --format json)
-  --skill <name>    Skill doctor: limit diagnostics to one canonical goat-flow skill
-  --red-log <file>  Skill new: failing RED receipt required before a skill write
-  --scenario <name> Hooks verify: deny-hook, post-turn-hook, or gruff-hook
-  --strict          Plans check: require fully derived current-format estimates and completed Actuals
-  --category <kind> Plans time start: product, proof, or other
-  --finalize        Plans time stop: close the open span and finalize a measured receipt
-  --discard-open    Plans time stop: discard an interrupted span without inventing an end
-  --apply           Setup: copy/update deterministic system files instead of generating a prompt
-  --dry-run         Install/setup: preview every path apply may write, changing nothing
-  --force           Alias for --force-managed; plans export: regenerate output
-  --force-managed   Install/setup --apply: authorize every inspected system-owned conflict
-  --force-path <p>  Install/setup --apply: authorize one conflict by project-relative path (repeatable)
-  --force-user-owned  Install/setup --apply: with matching --force-path, replace that user-owned file
-  --update-config-version  Install: update only the version field in existing config.yaml
-  --clean-deprecated       Install: remove deprecated skill directories
-  --verbose         Show per-check details
-  --output <file>   Write output to file instead of stdout
-  --dev             Dashboard: live reload on file changes
-  --help, -h        Show this help
-  --version, -v     Show version
-
-Examples:
-  goat-flow                            Open the interactive menu
-  goat-flow .                          Audit current directory
-  goat-flow audit . --harness          Audit with AI harness completeness checks
-  goat-flow audit . --agent claude     Audit scoped to Claude
-  goat-flow audit . --agent claude --trusted-target  Include trusted checkout runtime proof
-  goat-flow audit . --format json      JSON output for CI
-  goat-flow audit . --format sarif     SARIF output for CI/code scanning upload
-  goat-flow install . --agent claude   Copy/update goat-flow system files
-  goat-flow install . --agent claude --dry-run
-  goat-flow setup . --agent claude --apply
-  goat-flow setup --agent claude       Setup prompt for Claude
-  goat-flow quality . --agent claude   Quality assessment prompt for Claude
-  goat-flow quality . --agent claude --mode skills
-  goat-flow quality history --agent claude
-  goat-flow quality history --agent codex --mode skills
-  goat-flow quality diff --agent claude --mode agent-setup
-  goat-flow quality save .             Redact, validate, and persist one report from stdin
-  goat-flow quality validate <path>    Schema-check a freshly written report (exit 2 on any error)
-  goat-flow manifest                   Print the resolved manifest
-  goat-flow manifest --check           Verify the manifest is consistent with code
-  goat-flow hooks list --json          Print hook state as JSON
-  goat-flow hooks enable gruff-code-quality
-  goat-flow hooks sync                 Re-apply hook toggles from config.yaml
-  goat-flow hooks verify . --agent codex --scenario deny-hook --trusted-target
-  goat-flow hooks verify . --agent claude --scenario post-turn-hook --trusted-target
-  goat-flow hooks verify . --agent claude --scenario gruff-hook --trusted-target
-  goat-flow stats                      Learning-loop health report
-  goat-flow stats --check              Fail if any bucket is missing last_reviewed or has stale refs
-  goat-flow diagnostics context . --agent codex
-  goat-flow diagnostics context . --agent codex --format json
-  goat-flow diagnostics readiness . --agent codex
-  goat-flow diagnostics readiness . --agent codex --format json
-  goat-flow diagnostics bundle . --agent codex --format json
-  goat-flow diagnostics bundle . --format json --output support-bundle.json
-  goat-flow diagnostics threat-model . --agent codex
-  goat-flow diagnostics threat-model . --agent codex --format json
-  goat-flow index                      Regenerate learning-loop INDEX.md files after editing entries
-  goat-flow redact --output .goat-flow/logs/sessions/handoff.md
-  goat-flow review validate saved-review.md
-  goat-flow plans export .goat-flow/plans/1.15.0 --format markdown
-  goat-flow plans export .goat-flow/plans/1.15.0 --format json --output .goat-flow/plans/exports/1.15.0.json
-  goat-flow plans check .goat-flow/plans/1.15.0
-  goat-flow plans check .goat-flow/plans/1.15.0 --strict
-  goat-flow plans time start .goat-flow/plans/1.15.0/example/M01-example.md --category product
-  goat-flow plans time stop .goat-flow/plans/1.15.0/example/M01-example.md
-  goat-flow plans time stop .goat-flow/plans/1.15.0/example/M01-example.md --finalize
-  goat-flow plans time status .goat-flow/plans/1.15.0/example/M01-example.md
-  goat-flow events tail . --limit 20   Print local evidence-envelope events as JSONL
-  goat-flow skill new "<description>" --red-log <file>
-                                      Scaffold a skill after failing RED evidence
-  goat-flow skill ./repo new "<description>" --red-log <file>
-  goat-flow skill new --draft <path>   Validate an existing draft against the candidacy check
-  goat-flow skill new --interactive --red-log <file>
-                                      Prompt for description and name, then scaffold after RED
-  goat-flow skill doctor . --agent codex
-  goat-flow skill doctor . --agent codex --skill goat --format json
-  goat-flow --format markdown          PR-comment friendly output
-  goat-flow --output report.json       Write results to file
-`);
-}
 
 /** Print the current package version to stdout */
 function printVersion(): void {
@@ -180,12 +42,12 @@ async function main(): Promise<void> {
 
   const rawArgs = process.argv.slice(2);
 
-  // Empty argv opens the menu; path-only argv still uses the audit shorthand.
+  // Empty argv opens the menu; every project action requires an explicit command.
   const options = parseCLIArgs(rawArgs);
 
   // Help requests show guidance without running a project command.
   if (options.showHelp) {
-    printHelp();
+    console.log(renderHelp(options.command));
     return;
   }
   // Version requests give package identity without reading the target project.

@@ -617,7 +617,7 @@ describe("review validate CLI", () => {
     assert.match(help.stdout, /structural failures exit 1/iu);
     assert.match(help.stdout, /advisory warnings.*exit 0/iu);
 
-    const report = validReview("src/cli/cli.ts", "printHelp");
+    const report = validReview("src/cli/help.ts", "renderHelp");
     const valid = spawnSync(
       process.execPath,
       ["--import", "tsx", CLI_PATH, "review", "validate"],
@@ -643,7 +643,7 @@ describe("review validate CLI", () => {
   });
 
   it("keeps warning-only CLI results at exit zero", () => {
-    const report = validReview("src/cli/cli.ts", "printHelp").replace(
+    const report = validReview("src/cli/help.ts", "renderHelp").replace(
       "- Degradation flags: gates-not-run",
       "- Degradation flags: gates-not-run, mystery-degradation",
     );
@@ -664,7 +664,7 @@ describe("review validate CLI", () => {
       rmSync(outputRoot, { recursive: true, force: true }),
     );
     const outputPath = join(outputRoot, "validation.txt");
-    const report = validReview("src/cli/cli.ts", "printHelp");
+    const report = validReview("src/cli/help.ts", "renderHelp");
     const result = spawnSync(
       process.execPath,
       [

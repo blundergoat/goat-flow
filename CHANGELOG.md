@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **BREAKING: audits require `audit`** - Use `goat-flow audit <path>`; bare `goat-flow` still opens the menu, and unknown commands exit `2`.
+
 ## v1.16.0 - 2026-08-20
 
 1.16.0 adds `/goat-clarity`, makes audits static by default, preserves local setup edits during upgrades, strengthens hooks across Windows and non-Git workspaces, and sharpens review, QA, planning, and security workflows.

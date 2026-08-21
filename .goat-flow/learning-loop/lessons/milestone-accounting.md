@@ -1,6 +1,6 @@
 ---
 category: milestone-accounting
-last_reviewed: 2026-08-18
+last_reviewed: 2026-08-21
 ---
 
 **Scope:** Milestone state and effort accounting - activation order, where human gates belong, what a task section may contain, and why estimates counted from work units beat estimates written as durations. Multi-agent council coordination is [coordination.md](coordination.md).
@@ -163,10 +163,12 @@ last_reviewed: 2026-08-18
 **Status:** active | **Created:** 2026-08-14
 **Decision changed:** Set exactly one active milestone status before starting its first timing segment; lifecycle state precedes measurement.
 **Trigger phase:** ACT
-**Incident count:** 1
-**Latest occurrence:** 2026-08-14
+**Incident count:** 2
+**Latest occurrence:** 2026-08-21
 
 **What happened:** While starting code-quality-upstream M04, I ran `plans time start` while its rendered `Status` was still `not-started`. The CLI refused with `Timing Start requires exactly one rendered Status field set to in-progress or testing-gate`; I then changed the status and reran the command successfully.
+
+**Recurrence 2026-08-21:** While activating the 1.17.0 CLI-help M39, I repeated the same order: `plans time start` ran before `Status` changed from `not-started` to `in-progress`. The guard rejected the command without opening a segment; changing lifecycle state first made the prospective start succeed.
 
 **Root cause:** I treated receipt creation as the transition that made the milestone active. The CLI instead treats active lifecycle state as a precondition for opening a clock, so my operation order was inverted.
 

@@ -1,6 +1,6 @@
 ---
 category: test-execution-environment
-last_reviewed: 2026-08-16
+last_reviewed: 2026-08-21
 ---
 
 **Scope:** Choosing and invoking the right runner - which binary and loader actually execute, why a file argument may not narrow the suite, and when proof needs the published invocation path rather than source mode. Shell and process behaviour is [test-shell-environment.md](test-shell-environment.md).
@@ -77,7 +77,7 @@ last_reviewed: 2026-08-16
 
 ## Lesson: Focused TypeScript tests need verified paths and the `tsx` loader
 
-**Status:** active | **Created:** 2026-04-29 | **Incident count:** 4 | **Latest occurrence:** 2026-08-16
+**Status:** active | **Created:** 2026-04-29 | **Incident count:** 5 | **Latest occurrence:** 2026-08-21
 
 **What happened:** `node --test test/smoke/dashboard-endpoints.test.ts` failed resolving source `.js` specifiers because the focused command omitted this repo's `tsx` loader.
 
@@ -89,7 +89,9 @@ last_reviewed: 2026-08-16
 
 **Recurrence 2026-08-16 (ignored build output):** A direct `npm test` run reached all 2,043 tests but failed only `dashboard preset source/dist parity`. The source preset named all eight skills while the ignored local `dist/` artifact still named seven; neither parity input had a tracked working-tree change. Running the canonical preflight path rebuilds `dist/` with `tsc` before its test phase, so a direct fast-suite result from an old build is not source-regression evidence until the build output is refreshed.
 
-**Prevention:** Resolve focused paths with `rg --files`, then use `node --import tsx --test <specific-file.test.ts>` as declared by `package.json` (search: `"test:fast": "node scripts/run-tests.mjs fast"`). Before using it across Windows and WSL, verify that the runtime platform matches both the installed native dependencies and any subprocess paths in the suite. For WSL tests that require POSIX shell paths, keep the Linux runtime and use `ESBUILD_BINARY_PATH` only with a platform-correct binary from a same-version, same-lockfile dependency tree. Before treating a source/dist parity failure as a code regression, run the repository gate that rebuilds ignored `dist/` output (`scripts/preflight-checks.sh`, search: `Typecheck + build (dist/ produced)`) and rerun the test. A missing target, source-resolution error, native-package mismatch, stale ignored build artifact, or cross-platform subprocess failure is an invocation failure until the resolved command also fails.
+**Recurrence 2026-08-21:** The first concise-help integration test spawned the source CLI with `--import tsx` while setting the child cwd to an empty temp project. Node resolved the package-name import from that cwd and failed with `ERR_MODULE_NOT_FOUND` before the CLI started. Keeping the child cwd at the repository, while using the temp path only as the no-write sentinel, restored the intended public-behavior proof. Evidence anchor: `test/integration/cli-help.test.ts` (search: `audit-output.json`).
+
+**Prevention:** Resolve focused paths with `rg --files`, then use `node --import tsx --test <specific-file.test.ts>` as declared by `package.json` (search: `"test:fast": "node scripts/run-tests.mjs fast"`). When a spawned Node process names `tsx` as a package import, keep its cwd inside the dependency tree or pass a resolved loader location; a source entry point at an absolute path does not relocate package resolution. Before using the runner across Windows and WSL, verify that the runtime platform matches both the installed native dependencies and any subprocess paths in the suite. For WSL tests that require POSIX shell paths, keep the Linux runtime and use `ESBUILD_BINARY_PATH` only with a platform-correct binary from a same-version, same-lockfile dependency tree. Before treating a source/dist parity failure as a code regression, run the repository gate that rebuilds ignored `dist/` output (`scripts/preflight-checks.sh`, search: `Typecheck + build (dist/ produced)`) and rerun the test. A missing target, source-resolution error, native-package mismatch, stale ignored build artifact, or cross-platform subprocess failure is an invocation failure until the resolved command also fails.
 
 ---
 

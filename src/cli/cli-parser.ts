@@ -51,27 +51,30 @@ import {
   type SkillPositionals,
 } from "./skill-command-parser.js";
 
-/** Parse the positional subcommand from raw CLI args; throws CLIError for removed commands with migration help. */
+const GLOBAL_INFORMATIONAL_FLAGS = new Set(["--help", "-h", "--version", "-v"]);
+
+/** Parse the positional subcommand from raw CLI args; throws CLIError for removed or unknown commands. */
 function parseCommand(argv: string[]): {
   command: Command;
   filteredArgs: string[];
 } {
   const filteredArgs = [...argv];
-  if (filteredArgs.length === 0) {
-    return { command: "menu", filteredArgs };
-  }
   const first = filteredArgs[0];
-  if (first !== undefined && Object.hasOwn(REMOVED_COMMANDS, first)) {
+  if (first === undefined) return { command: "menu", filteredArgs };
+  if (Object.hasOwn(REMOVED_COMMANDS, first)) {
     const message = REMOVED_COMMANDS[first];
     if (message !== undefined) throw new CLIError(message, 2);
   }
-  if (
-    filteredArgs.length > 0 &&
-    COMMANDS.includes(filteredArgs[0] as Command)
-  ) {
+  if (COMMANDS.includes(first as Command)) {
     return { command: filteredArgs.shift() as Command, filteredArgs };
   }
-  return { command: "audit", filteredArgs };
+  if (GLOBAL_INFORMATIONAL_FLAGS.has(first)) {
+    return { command: "menu", filteredArgs };
+  }
+  throw new CLIError(
+    `Unknown command: "${first}". Run "goat-flow --help" to list commands.`,
+    2,
+  );
 }
 
 /** Parse the `--format` flag; throws CLIError for invalid values before command dispatch. */
