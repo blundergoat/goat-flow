@@ -72,7 +72,7 @@ function createRegisteredHostileProject(
     join(tmpdir(), "goat-flow-spawn-matrix-"),
   );
   disposableParents.push(disposableParent);
-  const projectRoot = join(disposableParent, "goat flow & (matrix) [m03]");
+  const projectRoot = join(disposableParent, "goat's flow & (matrix) [m03]");
   mkdirSync(join(projectRoot, ".goat-flow", "hooks", "deny-dangerous"), {
     recursive: true,
   });
@@ -172,11 +172,13 @@ function registeredCodexHandler(
     >;
   };
   const registeredHook = settings.hooks[lifecycleEvent]![0]!.hooks[0]!;
-  assert.equal(typeof registeredHook.command, "string");
-  assert.equal(typeof registeredHook.commandWindows, "string");
+  const command = registeredHook.command;
+  const commandWindows = registeredHook.commandWindows;
+  assert.equal(typeof command, "string");
+  assert.equal(typeof commandWindows, "string");
   return {
-    command: registeredHook.command as string,
-    commandWindows: registeredHook.commandWindows as string,
+    command,
+    commandWindows,
   };
 }
 
@@ -299,6 +301,49 @@ describe("hook command spawn matrix", () => {
           !String(blocked.stderr).includes(ENV_CANARY),
         "the canary secret must never appear in a Codex handler stream",
       );
+    },
+  );
+
+  it(
+    "fails when node.exe cannot start instead of reusing an empty native status",
+    { skip: process.platform !== "win32" },
+    () => {
+      const projectRoot = createRegisteredHostileProject("codex");
+      const denyHandler = registeredCodexHandler(projectRoot, "PreToolUse");
+      const selected = agentHookSpawnDescriptor({
+        form: "shell",
+        ...denyHandler,
+      });
+      assert.equal(selected.command, "powershell.exe");
+
+      const windowsRoot = process.env.SystemRoot ?? process.env.WINDIR;
+      assert.ok(windowsRoot, "Windows must expose SystemRoot or WINDIR");
+      const powershellPath = join(
+        windowsRoot,
+        "System32",
+        "WindowsPowerShell",
+        "v1.0",
+        "powershell.exe",
+      );
+      const emptyExecutablePath = join(projectRoot, "empty-executable-path");
+      mkdirSync(emptyExecutablePath);
+
+      const nodeUnavailableEnvironment = { ...process.env };
+      for (const environmentName of Object.keys(nodeUnavailableEnvironment)) {
+        if (environmentName.toUpperCase() === "PATH") {
+          delete nodeUnavailableEnvironment[environmentName];
+        }
+      }
+      nodeUnavailableEnvironment.PATH = emptyExecutablePath;
+
+      const result = spawnSync(powershellPath, selected.args, {
+        cwd: projectRoot,
+        encoding: "utf8",
+        env: nodeUnavailableEnvironment,
+        input: denyPayload("git status"),
+        timeout: 60_000,
+      });
+      assert.equal(result.status, 1, handlerDiagnostics(result));
     },
   );
 

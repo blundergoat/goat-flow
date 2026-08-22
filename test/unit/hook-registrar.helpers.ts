@@ -24,6 +24,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { TestContext } from "node:test";
 import { PROFILES } from "../../src/cli/detect/agents.js";
 import { applyHookState } from "../../src/cli/server/hook-registrar.js";
 import { writeAgentHookState } from "../../src/cli/server/agent-hook-writer.js";
@@ -586,9 +587,46 @@ export function installCodexDenyHook(root: string): CodexReplayHandler {
   return readCodexDenyLauncher(root);
 }
 
+/** Return whether an unknown thrown value carries one exact Node-style error code. */
+function errorHasCode(error: unknown, code: string): boolean {
+  return error instanceof Error && Reflect.get(error, "code") === code;
+}
+
+/**
+ * Create one symlink fixture, skipping when the host refuses unprivileged links.
+ * The registrar under test is platform-independent; only the fixture is unreachable.
+ *
+ * @param testContext - active test context used to register a host-specific skip
+ * @param target - filesystem path the link points to
+ * @param link - filesystem path where the link is created
+ * @param type - optional Node symlink type
+ * @returns true when the fixture exists; false when `EPERM` caused a skip
+ * @throws any fixture error other than `EPERM`
+ */
+export function symlinkOrSkip(
+  testContext: TestContext,
+  target: string,
+  link: string,
+  type?: "dir" | "file" | "junction",
+): boolean {
+  try {
+    symlinkSync(target, link, type);
+    return true;
+  } catch (error) {
+    if (errorHasCode(error, "EPERM")) {
+      testContext.skip(
+        "Skipped: host blocks unprivileged symlinks (Windows without Developer Mode)",
+      );
+      return false;
+    }
+    throw error;
+  }
+}
+
 /** Corrupt one trusted launcher surface while retaining enough trace to select the candidate. */
 export const MANAGED_SHAPE_MUTATIONS: Array<{
   name: string;
+  skipOnEperm?: boolean;
   mutate: (root: string) => void;
 }> = [
   {
@@ -617,6 +655,7 @@ export const MANAGED_SHAPE_MUTATIONS: Array<{
   },
   {
     name: "symlinked registration",
+    skipOnEperm: true,
     mutate: (root) => {
       const registration = join(root, ".codex", "hooks.json");
       const target = join(root, "registration-target.json");
@@ -627,6 +666,7 @@ export const MANAGED_SHAPE_MUTATIONS: Array<{
   },
   {
     name: "hard-linked registration",
+    skipOnEperm: true,
     mutate: (root) =>
       linkSync(
         join(root, ".codex", "hooks.json"),
@@ -635,6 +675,7 @@ export const MANAGED_SHAPE_MUTATIONS: Array<{
   },
   {
     name: "symlinked launcher",
+    skipOnEperm: true,
     mutate: (root) => {
       const launcher = join(root, ".goat-flow", "hooks", "run-with-bash.mjs");
       const target = join(root, "launcher-target.mjs");
@@ -645,6 +686,7 @@ export const MANAGED_SHAPE_MUTATIONS: Array<{
   },
   {
     name: "hard-linked launcher",
+    skipOnEperm: true,
     mutate: (root) =>
       linkSync(
         join(root, ".goat-flow", "hooks", "run-with-bash.mjs"),
@@ -666,6 +708,7 @@ export const MANAGED_SHAPE_MUTATIONS: Array<{
   },
   {
     name: "symlinked requested script",
+    skipOnEperm: true,
     mutate: (root) => {
       const script = join(root, ".goat-flow", "hooks", "deny-dangerous.sh");
       const target = join(root, "script-target.sh");
@@ -676,6 +719,7 @@ export const MANAGED_SHAPE_MUTATIONS: Array<{
   },
   {
     name: "hard-linked requested script",
+    skipOnEperm: true,
     mutate: (root) =>
       linkSync(
         join(root, ".goat-flow", "hooks", "deny-dangerous.sh"),
@@ -696,6 +740,35 @@ export const MANAGED_SHAPE_MUTATIONS: Array<{
     },
   },
 ];
+
+/**
+ * Apply one managed-shape mutation. Only link-dependent rows may skip when the host refuses
+ * their privileged fixture; ordinary mutation failures remain visible.
+ *
+ * @param testContext - active test context used to register a host-specific skip
+ * @param fixture - mutation plus its explicit `EPERM` skip eligibility
+ * @param root - fixture project root to mutate
+ * @returns true when the mutation ran; false when an eligible `EPERM` caused a skip
+ * @throws any ordinary mutation error or non-`EPERM` link-fixture error
+ */
+export function mutateOrSkip(
+  testContext: TestContext,
+  fixture: (typeof MANAGED_SHAPE_MUTATIONS)[number],
+  root: string,
+): boolean {
+  try {
+    fixture.mutate(root);
+    return true;
+  } catch (error) {
+    if (fixture.skipOnEperm === true && errorHasCode(error, "EPERM")) {
+      testContext.skip(
+        "Skipped: host blocks the link fixture required by this test",
+      );
+      return false;
+    }
+    throw error;
+  }
+}
 
 /** One hook entry as the registrar writes it into an agent's config file. */
 export type GeneratedHookEntry = {
@@ -810,9 +883,9 @@ export function writePostTurnCapableSurfaces(root: string): void {
   writeFileSync(join(root, ".github", "hooks", "hooks.json"), "{}\n");
 }
 
-/** Execute the generated Claude launcher with a runtime-shaped payload.
+/** Execute a generated shell launcher with a runtime-shaped payload.
  *
- * @param handler - generated default and Windows launcher commands
+ * @param command - generated shell command line to execute
  * @param cwd - working directory the process runs in
  * @param payload - hook JSON delivered on stdin, as an agent host would send it
  * @param env - extra environment merged onto the process env; absent means the plain env
@@ -898,7 +971,7 @@ export function assertLauncherAllows(
 
 /** Execute the generated Codex launcher with a runtime-shaped payload.
  *
- * @param command - generated launcher command line to execute
+ * @param handler - generated default and Windows launcher commands
  * @param cwd - working directory the process runs in
  * @param payload - hook JSON delivered on stdin; defaults to the safe Codex payload
  * @param env - extra environment for the launcher process; omitted inherits the test environment unchanged

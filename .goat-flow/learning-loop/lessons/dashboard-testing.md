@@ -1,6 +1,6 @@
 ---
 category: dashboard-testing
-last_reviewed: 2026-08-10
+last_reviewed: 2026-08-22
 ---
 
 **Scope:** Testing the dashboard as a built, served application - stale dist copies, servers needing a restart after template edits, Knip registration for classic scripts, route-scoped verification, and performance probes that need the real shell. Asserting against source and VM-loaded helpers is [dashboard-unit-tests.md](dashboard-unit-tests.md).

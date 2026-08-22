@@ -1,6 +1,6 @@
 ---
 category: hook-testing
-last_reviewed: 2026-08-15
+last_reviewed: 2026-08-22
 ---
 
 **Scope:** Hook test coverage strategy - what a self-test actually exercised, matrices that interfere with the live guard, fixtures that must not carry real secrets, and splits that only look like coverage. The script under test is [hook-script-authoring.md](hook-script-authoring.md); driving it with payloads is [hook-probe-testing.md](hook-probe-testing.md).

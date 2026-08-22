@@ -1,6 +1,6 @@
 ---
 category: test-platform-compat
-last_reviewed: 2026-08-20
+last_reviewed: 2026-08-22
 ---
 
 **Scope:** Platform and runtime differences that break tests - CI Node versions older than local, Windows path/URL shapes and symlink privileges, filesystem-clock skew, and npm scripts that assume a POSIX shell. Choosing and invoking the runner is [test-execution-environment.md](test-execution-environment.md); shell and process behaviour under a test is [test-shell-environment.md](test-shell-environment.md).
@@ -70,7 +70,9 @@ function symlinkOrSkip(t: TestContext, target: string, link: string): boolean {
 ```
 Each test that uses `symlinkSync` accepts a `TestContext` arg (`(t) => { ... }`) and bails early when the helper returns false. Evidence: `test/integration/main-guard.test.ts` (search: `symlinkOrSkip`), `test/unit/skill-quality/helpers.ts` (search: `symlinkOrSkip`), `test/unit/terminal-uploads.test.ts` (search: `symlinkOrSkip`).
 
-**Recurrence 2026-08-22 (ACTUAL_MEASURED):** The ADR-053 Codex Windows work added three managed-shape fixtures (`symlinked registration`, `symlinked launcher`, `symlinked requested script`) that call `symlinkSync` through a shared data table, with no guard. All three threw `EPERM` on this host, alongside the pre-existing `rejects a scan root that escapes through a symlink`, turning four tests red for a fixture limitation rather than a defect. Measured directly: `node -e "require('fs').symlinkSync(...)"` returns `EPERM: operation not permitted`. The guard belongs at the point that owns the `TestContext`, not inside the data table: the mutation table is pure data, and one `mutateOrSkip` wrapper covers every present and future privileged fixture in it. Hard-linked variants still execute, so `linkSync` coverage is unaffected. Anchors: `test/unit/hook-registrar-surfaces.test.ts` (search: `mutateOrSkip`), `test/unit/hook-registrar.helpers.ts` (search: `MANAGED_SHAPE_MUTATIONS`).
+**Recurrence 2026-08-22 (ACTUAL_MEASURED):** The ADR-053 Codex Windows work added three managed-shape fixtures (`symlinked registration`, `symlinked launcher`, `symlinked requested script`) that call `symlinkSync` through a shared data table, with no guard. All three threw `EPERM` on this host, alongside the pre-existing `rejects a scan root that escapes through a symlink`, turning four tests red for a fixture limitation rather than a defect. Measured directly: `node -e "require('fs').symlinkSync(...)"` returns `EPERM: operation not permitted`. The guard belongs at the point that owns the `TestContext`, while each link-dependent mutation explicitly opts into `EPERM` skipping. Ordinary mutations must rethrow `EPERM` so unrelated fixture failures stay visible. Hard-linked variants executed on this host, so `linkSync` coverage remained active. Anchors: `test/unit/hook-registrar-surfaces.test.ts` (search: `mutateOrSkip`), `test/unit/hook-registrar.helpers.ts` (search: `MANAGED_SHAPE_MUTATIONS`).
+
+**Second recurrence 2026-08-22 (ACTUAL_MEASURED):** The focused ADR-053 hook suites passed on Windows, but the repository-wide fast suite still exited 1 on existing platform assumptions outside that patch. Unguarded symlink fixtures raised `EPERM`, and the direct hook probe passed an OS-native `C:\...` script path to Bash, which stripped the backslashes and returned 127. A focused pass is therefore not evidence of repository-wide Windows readiness. Anchors: `test/unit/hook-launcher.test.ts` (search: `fails closed when the managed hook script is a symlink`), `test/unit/hooks-runtime-evidence.test.ts` (search: `still executes a regular in-checkout hook script`).
 
 **Prevention:**
 1. Any new test that calls `symlinkSync`, `linkSync`, or any privileged fs op must guard against `EPERM` with a `t.skip(...)`.

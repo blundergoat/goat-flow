@@ -11,13 +11,11 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
-  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, win32 } from "node:path";
 import { describe, it } from "node:test";
-import type { TestContext } from "node:test";
 import {
   applyHookState,
   filesystemPathsAreEquivalent,
@@ -44,62 +42,10 @@ import {
   runGit,
   installCodexDenyHook,
   MANAGED_SHAPE_MUTATIONS,
+  mutateOrSkip,
   runCodexLauncher,
+  symlinkOrSkip,
 } from "./hook-registrar.helpers.js";
-
-/**
- * Create one symlink fixture, skipping when the host refuses unprivileged links.
- * The registrar under test is platform-independent; only the fixture is unreachable.
- */
-function symlinkOrSkip(
-  testContext: TestContext,
-  target: string,
-  link: string,
-  type?: "dir" | "file" | "junction",
-): boolean {
-  try {
-    symlinkSync(target, link, type);
-    return true;
-  } catch (err) {
-    if (
-      err instanceof Error &&
-      (err as NodeJS.ErrnoException).code === "EPERM"
-    ) {
-      testContext.skip(
-        "Skipped: host blocks unprivileged symlinks (Windows without Developer Mode)",
-      );
-      return false;
-    }
-    throw err;
-  }
-}
-
-/**
- * Apply one managed-shape mutation, skipping when the host refuses its privileged link fixture.
- * Symlink and hard-link mutations need a privilege this host may withhold, which leaves the
- * fixture - not the launcher under test - unreachable.
- */
-function mutateOrSkip(
-  testContext: TestContext,
-  mutate: (root: string) => void,
-  root: string,
-): boolean {
-  try {
-    mutate(root);
-    return true;
-  } catch (err) {
-    if (
-      err instanceof Error &&
-      (err as NodeJS.ErrnoException).code === "EPERM"
-    ) {
-      testContext.skip(
-        "Skipped: host blocks unprivileged symlinks (Windows without Developer Mode)",
-      );
-      return false;
-    }
-    throw err;
-  }
-}
 
 describe("hook registrar: surface detection, toggles, and sync", () => {
   it("treats Windows case and separator variants as the same physical root", () => {
@@ -386,14 +332,8 @@ describe("hook registrar: surface detection, toggles, and sync", () => {
     try {
       runGit(externalRoot, ["init", "-q"]);
       withTempProject((root) => {
-        if (
-          !symlinkOrSkip(
-            testContext,
-            externalRoot,
-            join(root, "linked-repo"),
-            "dir",
-          )
-        ) {
+        const linkedRepo = join(root, "linked-repo");
+        if (!symlinkOrSkip(testContext, externalRoot, linkedRepo, "dir")) {
           return;
         }
         mkdirSync(join(root, ".codex"), { recursive: true });
@@ -1085,7 +1025,7 @@ describe("hook registrar: managed surface preservation", () => {
     it(`rejects a ${fixture.name} without exposing its root`, (testContext) => {
       withTempProject((fixtureProjectPath) => {
         const installedLauncher = installCodexDenyHook(fixtureProjectPath);
-        if (!mutateOrSkip(testContext, fixture.mutate, fixtureProjectPath)) {
+        if (!mutateOrSkip(testContext, fixture, fixtureProjectPath)) {
           return;
         }
         const launcherResult = runCodexLauncher(
