@@ -1,6 +1,6 @@
 ---
 category: milestone-accounting
-last_reviewed: 2026-08-21
+last_reviewed: 2026-08-23
 ---
 
 **Scope:** Milestone state and effort accounting - activation order, where human gates belong, what a task section may contain, and why estimates counted from work units beat estimates written as durations. Multi-agent council coordination is [coordination.md](coordination.md).
@@ -41,20 +41,22 @@ last_reviewed: 2026-08-21
 ## Lesson: Final human gates belong in Proof, not implementation Tasks
 
 **Status:** active | **Created:** 2026-08-01
-**Decision changed:** Before setting `human-verification-pending`, keep every implementation Task checked, separate agent handoff work from human execution, and prefix each open human-owned Proof item with `[HUMAN]`.
+**Decision changed:** Before setting `human-verification-pending`, keep every implementation Task checked, separate agent handoff work from human execution, prefix each open human-owned Proof item with `[HUMAN]`, and assign it zero agent minutes.
 **Trigger phase:** VERIFY
-**Incident count:** 2
-**Latest occurrence:** 2026-08-10
+**Incident count:** 3
+**Latest occurrence:** 2026-08-23
 
 **What happened:** A release milestone had finished implementation and automated proof, but I added the final human approval checkbox under Tasks while changing the status to `human-verification-pending`. Strict plan validation rejected the snapshot as having an open implementation task.
 
 **Recurrence 2026-08-10:** A later release proof put `[manual, HUMAN-PENDING]` at the end of one open item that mixed agent handoff preparation with human execution. The checker treated it as executor-owned because human ownership requires the leading `[HUMAN]` marker. Splitting the checked handoff from the zero-agent-minute human gate preserved the original forecast and left the required human work open.
 
+**Recurrence 2026-08-23:** The concurrent-session spike described its open ADR review with trailing `HUMAN-PENDING` prose but omitted the leading `[HUMAN]` ownership marker. Strict validation rejected the pending transition, then correctly exposed stale forecast accounting when the marker reduced the count from seven to six agent work units. Moving the marker to the front, assigning the human check zero agent minutes, and reconciling the six-unit forecast restored a valid handoff. The milestone is gitignored local state; durable enforcement anchors are `src/cli/plans-check.ts` (search: `Human ownership is explicit metadata`) and `src/cli/plans-effort.ts` (search: `keeps approval time outside coding-agent forecasts`).
+
 **Root cause:** I treated human ownership as readable prose instead of positional machine metadata. The checker treats every open Task as executor work and recognizes human ownership only at the start of a Proof item's text.
 
-**Fix:** Keep the gate under Proof, prefix it with `[HUMAN]`, and rerun strict plan validation.
+**Fix:** Keep the gate under Proof, prefix it with `[HUMAN]`, assign it zero agent minutes, reconcile the work-unit forecast, and rerun strict plan validation.
 
-**Prevention:** Before a pending transition, confirm Tasks has no unchecked boxes, agent handoff preparation has its own checked Proof item, and every open human-owned Proof item starts with `[HUMAN]`. Evidence anchor: `src/cli/plans-check.ts` (search: `collectHumanPendingErrors`).
+**Prevention:** Before a pending transition, confirm Tasks has no unchecked boxes, agent handoff preparation has its own checked Proof item, every open human-owned Proof item starts with `[HUMAN]` and carries zero agent minutes, and the declared work-unit count still matches. Evidence anchors: `src/cli/plans-check.ts` (search: `collectHumanPendingErrors`) and `src/cli/plans-effort.ts` (search: `countAgentWorkUnits`).
 
 ---
 
@@ -222,5 +224,21 @@ last_reviewed: 2026-08-21
 **Root cause:** I validated the authoring layout I had produced instead of the repository's consumer contract. A Markdown reader could infer the intended fields, while `parseMilestoneMarkdown` intentionally recognizes a narrower portable schema.
 
 **Fix and prevention:** Treat the canonical example as an executable consumer fixture, not prose. Cover compact and expanded representations through `parseMilestoneMarkdown`, run `goat-flow plans check <plan-path> --strict`, require exporter records to have zero warnings, and resolve every cited path plus exact semantic search string before handoff. Dry-run executable plan commands against disposable inputs, including every directory or file precondition they rely on. Parser changes also run scoped ESLint before full preflight. Current objective parsing accepts a bold field, an `## Objective` section, or the outcome title. Other portable anchors are Status, compact or section Scope, Tasks, Proof, Exit/Exit criteria, and Stop/rescope. Evidence anchors: `src/cli/plans-export.ts` (search: `readFieldOrSectionMarkdown`), `src/cli/plans-export.ts` (search: `readStopMarkdown`), and `test/unit/plans-check.test.ts` (search: `accepts the compact Small rendering in strict mode`).
+
+---
+
+## Lesson: A milestone added to an existing train must be wired into its terminal node and ISSUE bands
+
+**Status:** active | **Created:** 2026-08-23
+**Decision changed:** When goat-plan File-Write adds a milestone to a plan directory that already has a terminal release milestone, the same batch adds the new ID to that node's `Depends on` and re-derives the ISSUE task band and totals; a milestone file alone is not "in the plan".
+**Trigger phase:** ACT
+
+**What happened:** M47 was created in the 1.17.0 train with valid structure and a passing strict check, but the train's terminal node (M37, whose `Depends on` list closes the release) did not list it, so the release cut would have closed without M47. The ISSUE.md band and totals were updated only because the user asked for the ISSUE reference separately. The gap surfaced on a "double check that plan" pass, not on validation, because `plans check` validates each file and the ISSUE arithmetic, not membership in the terminal node.
+
+**Root cause:** goat-plan's File-Write path describes creating and validating files in `.goat-flow/plans/<active>/`; it does not say that an existing train's dependency graph and ISSUE bands are part of the artifact, so "wrote M47" felt complete.
+
+**Evidence:** Both files are local gitignored plan files (the 1.17.0 terminal milestone M37 and the new M47), so no durable repository anchor exists; the strict check passed before and after the fix, which is the point.
+
+**Prevention:** When adding a milestone to an existing plan directory, read the terminal node (the milestone whose `Depends on` closes the train), add the new ID there, re-derive the ISSUE.md band and the "How long" totals from the new forecast, and only then run the strict check. Treat a passing per-file check as necessary, not sufficient.
 
 ---

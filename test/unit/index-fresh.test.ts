@@ -9,6 +9,7 @@ import assert from "node:assert/strict";
 import {
   mkdtempSync,
   mkdirSync,
+  readFileSync,
   writeFileSync,
   appendFileSync,
   rmSync,
@@ -114,6 +115,14 @@ describe("collectIndexFreshness", () => {
   it("reports fresh for every bucket immediately after generation", () => {
     const states = collectIndexFreshness(fs, BUCKET_PATHS).map((e) => e.state);
     assert.deepEqual(states, ["fresh", "fresh", "fresh", "fresh"]);
+    assert.match(
+      readFileSync(join(root, BUCKET_PATHS.patterns, "INDEX.md"), "utf8"),
+      /A pattern.*\(~\d+ tok\)$/m,
+    );
+    assert.match(
+      readFileSync(join(root, BUCKET_PATHS.decisions, "INDEX.md"), "utf8"),
+      /Accepted - Do the thing\. \(2026-05-01; ~\d+ tok\)$/m,
+    );
   });
 
   // Fixture purpose: mutates one bucket per temp repo, because each bucket must be able to report stale on its own rather than only in a group.

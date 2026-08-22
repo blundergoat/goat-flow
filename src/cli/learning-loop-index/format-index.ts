@@ -2,11 +2,11 @@
  * Renders parsed learning-loop entries into the generated INDEX.md content.
  *
  * The output is a pure function of the entry list: fixed frontmatter (`generated: true`, no `last_reviewed`), a fixed header that points maintainers
- * at `goat-flow index` and `goat-flow stats --check`, and one row per entry in the shared `- [Title](file) (search: "...") - hook` schema (with
- * quote-aware wrapping - see {@link quoteAnchor}).
+ * at `goat-flow index` and `goat-flow stats --check`, and one row per entry in the shared
+ * `- [Title](file) (search: "...") - hook (date; ~tokens)` schema (with quote-aware wrapping - see {@link quoteAnchor}).
  *
- * No counts, dates, or other clock-derived values may appear here - `index-fresh` string-compares a regeneration against the on-disk file, so any
- * nondeterminism reads as permanent staleness.
+ * No clock-derived values may appear here - `index-fresh` string-compares a regeneration against the on-disk file, so any nondeterminism reads as
+ * permanent staleness. Dates and costs are parsed from entry text.
  */
 import type { IndexBucket, IndexEntry } from "./parse-bucket.js";
 
@@ -54,9 +54,15 @@ export function formatIndex(
       ? ["_No active entries._"]
       : entries.map(
           (entry) =>
-            `- [${entry.title}](${entry.sourceFile}) (search: ${quoteAnchor(entry.anchor)}) - ${entry.hook}`,
+            `- [${entry.title}](${entry.sourceFile}) (search: ${quoteAnchor(entry.anchor)}) - ${entry.hook}${formatRowSuffix(entry)}`,
         );
   return [...header, ...rows].join("\n") + "\n";
+}
+
+/** Render the fixed row suffix, omitting only an undeclared date. */
+function formatRowSuffix(entry: IndexEntry): string {
+  const date = entry.createdDate === null ? "" : `${entry.createdDate}; `;
+  return ` (${date}~${entry.approxTokenEstimate} tok)`;
 }
 
 /**

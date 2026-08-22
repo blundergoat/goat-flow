@@ -5,7 +5,7 @@
  * `**Status:** resolved` entries), while decisions derive one entry per ADR file.
  *
  * Hooks are extracted mechanically - first sentence of the bucket-specific lead paragraph - so regeneration stays deterministic and never needs
- * hand-curated metadata.
+ * hand-curated metadata. Declared dates and approximate reading costs come from the same entry text.
  * Nothing here reads the clock; `index-fresh` re-runs this parser and diffs, so any time-derived output would break freshness detection.
  */
 import type { ReadonlyFS } from "../types.js";
@@ -43,6 +43,10 @@ export interface IndexEntry {
   anchor: string;
   /** One-sentence routing hook extracted mechanically from the entry body. */
   hook: string;
+  /** Declared date shown in the row suffix: `Created` for bucket entries, the index date for ADRs. */
+  createdDate: string | null;
+  /** Stable reading-cost heuristic: UTF-8 bytes divided by four, rounded to the nearest ten. */
+  approxTokenEstimate: number;
 }
 
 /** Heading keyword per entry-style bucket (`## Footgun:` / `## Lesson:` / `## Pattern:`). */
@@ -77,6 +81,11 @@ const ADR_FILE = /^ADR-\d{3}-.+\.md$/;
  * 100 keeps the routing sentence intact while roughly halving that cost.
  */
 const HOOK_MAX_CHARS = 100;
+
+/** Deterministic approximation used only to compare entry reading costs. */
+function approximateTokenEstimate(content: string): number {
+  return Math.round(Buffer.byteLength(content, "utf8") / 40) * 10;
+}
 
 /**
  * The patterns bucket has no config.yaml key (unlike footguns/lessons/decisions), so the path is
@@ -222,6 +231,8 @@ function parseEntryFile(
         paragraphAfter(section.content, HOOK_MARKER[bucket]) ??
           firstBodyParagraph(section.content),
       ),
+      createdDate: metadataDate(section.content, "Created"),
+      approxTokenEstimate: approximateTokenEstimate(section.content),
     }));
 }
 
@@ -229,7 +240,10 @@ function parseEntryFile(
 function metadataDate(body: string, label: string): string | null {
   return (
     body.match(
-      new RegExp(`^\\*\\*${label}:\\*\\*\\s*(\\d{4}-\\d{2}-\\d{2})`, "m"),
+      new RegExp(
+        `(?:^|\\|\\s*)\\*\\*${label}:\\*\\*\\s*(\\d{4}-\\d{2}-\\d{2})`,
+        "m",
+      ),
     )?.[1] ?? null
   );
 }
@@ -242,13 +256,11 @@ function decisionIndexDate(body: string, status: string): string | null {
   return metadataDate(body, "Date");
 }
 
-/** Read the status/date prefix for one ADR index hook. */
-function decisionStatusPart(body: string): string {
-  const status = firstSentence(
+/** Read the status prefix for one ADR index hook. */
+function decisionStatus(body: string): string {
+  return firstSentence(
     body.match(/^\*\*Status:\*\*\s*(.+)$/m)?.[1]?.trim() ?? "Unknown status",
   );
-  const date = decisionIndexDate(body, status);
-  return date === null ? status : `${status}, ${date}`;
 }
 
 /** Read the first ADR decision sentence, falling back to body prose for older ADR shapes. */
@@ -263,13 +275,16 @@ function parseDecisionFile(file: MarkdownEntry): IndexEntry | null {
   const { body } = parseMarkdownFrontmatter(file.content);
   const titleMatch = body.match(/^#\s+(.+)$/m);
   if (!titleMatch) return null;
+  const status = decisionStatus(body);
   // ADR shapes vary: status/date lines are mandatory in current records, but older records may put
   // status prose in paragraphs, so the parser composes a compact hook from whichever stable parts exist.
   return {
     title: (titleMatch[1] ?? "").trim(),
     sourceFile: baseName(file.path),
     anchor: searchNeedle(titleMatch[0]),
-    hook: `${decisionStatusPart(body)} - ${decisionSummary(body)}`,
+    hook: `${status} - ${decisionSummary(body)}`,
+    createdDate: decisionIndexDate(body, status),
+    approxTokenEstimate: approximateTokenEstimate(body),
   };
 }
 

@@ -1,6 +1,6 @@
 ---
 category: verification-testing
-last_reviewed: 2026-08-19
+last_reviewed: 2026-08-23
 ---
 
 **Scope:** What a test must actually establish - observable contracts over incidental shape, deadlines independent of the thing under test, telling a transient failure apart from a regression, and the ways a passing suite still fails to prove its claim. Proving a guard or scanner works is [verification-scanners.md](verification-scanners.md); building fixtures is [test-fixtures.md](test-fixtures.md).
@@ -96,13 +96,15 @@ last_reviewed: 2026-08-19
 ## Lesson: Coverage classification by filename misjudges in both directions
 
 **Status:** active | **Created:** 2026-06-14
-**Updated:** 2026-07-19
+**Updated:** 2026-08-23
 **Decision changed:** Search the whole test tree and classify each named behaviour/invariant; a file-level label cannot promote uncovered siblings.
 **Trigger phase:** VERIFY
-**Incident count:** 2
-**Latest occurrence:** 2026-07-19
+**Incident count:** 3
+**Latest occurrence:** 2026-08-23
 
 **What happened:** A shipped Audit example classified coverage from same-name unit files and made three NONE/untested claims that integration suites disproved or later invalidated. On 2026-07-19, goat-qa A3's single label per file could likewise let one covered behaviour hide an uncovered sibling; the first correction required only CRITICAL/HIGH rows, leaving MEDIUM/LOW matrix rows ambiguous until manual verification.
+
+**Recurrence 2026-08-23:** M04's first quality-diff consumer inventory searched the implementation symbols `QualityDiffResult`, `buildQualityDiff`, `renderQualityDiffText`, and `.absent`, then inferred the complete test-owner set from those matches. The later shipped-contract phrase sweep exposed `test/unit/quality-report-contract.test.ts` (search: `prior-report runs re-test claims while fresh runs keep the no-prior contract`), which separately pins the prompt rule in `src/cli/prompt/compose-quality-common.ts` (search: `omission is not verified resolution`). Task 1 was reopened, the prompt-contract owner was added as a distinct KEEP row, and its focused run reported 54/54 tests passing.
 
 **Root cause:** Filename and file-level summaries are lossy coverage proxies. Tests cross filenames, and one source file can contain behaviours with different coverage depths.
 

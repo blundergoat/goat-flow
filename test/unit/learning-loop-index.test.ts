@@ -85,8 +85,6 @@ last_reviewed: 2026-06-01
 
 ## Lesson: Heading-only paragraphs are not summaries
 
-**Created:** 2026-05-13
-
 ### Evidence
 
 The generated hook must use this meaningful prose.
@@ -185,6 +183,35 @@ describe("parseBucket", () => {
     assert.equal(entry?.anchor, "## Footgun: Active trap with symptoms");
   });
 
+  it("extracts declared dates and byte-derived reading costs", () => {
+    const [footgun] = parseBucket(fs, FOOTGUNS_DIR, "footguns");
+    const lessons = parseBucket(fs, LESSONS_DIR, "lessons");
+    const datedLesson = lessons.find(
+      (entry) => entry.title === "Agents must read before writing",
+    );
+    const undatedLesson = lessons.find(
+      (entry) => entry.title === "Heading-only paragraphs are not summaries",
+    );
+    const [decision] = parseBucket(fs, DECISIONS_DIR, "decisions");
+
+    assert.deepEqual(
+      [footgun?.createdDate, footgun?.approxTokenEstimate],
+      ["2026-05-01", 60],
+    );
+    assert.deepEqual(
+      [datedLesson?.createdDate, datedLesson?.approxTokenEstimate],
+      ["2026-05-10", 50],
+    );
+    assert.deepEqual(
+      [undatedLesson?.createdDate, undatedLesson?.approxTokenEstimate],
+      [null, 30],
+    );
+    assert.deepEqual(
+      [decision?.createdDate, decision?.approxTokenEstimate],
+      ["2026-06-01", 70],
+    );
+  });
+
   it("cuts the search anchor before an embedded double quote", () => {
     const entries = parseBucket(fs, FOOTGUNS_DIR, "footguns");
     assert.equal(entries[1]?.anchor, "## Footgun: Second active trap with a");
@@ -254,7 +281,7 @@ describe("parseBucket", () => {
     assert.equal(entries[0]?.anchor, "# ADR-001: Adopt the sentinel merge");
     assert.equal(
       entries[0]?.hook,
-      "Superseded by ADR-002, 2026-06-01 - Adopt the UNSET sentinel merge for every config layer.",
+      "Superseded by ADR-002 - Adopt the UNSET sentinel merge for every config layer.",
     );
   });
 
@@ -302,9 +329,10 @@ describe("formatIndex", () => {
   after(() => rmSync(root, { recursive: true, force: true }));
 
   // Anchors normally wrap in double quotes; quote-first titles keep their
-  // embedded quotes and switch/escape wrappers as needed (M04, 1.13.0).
+  // embedded quotes and switch/escape wrappers as needed (M04, 1.13.0). Every row ends with
+  // byte-derived cost; the declared date occupies the first suffix slot when present.
   const ROW_SCHEMA =
-    /^- \[[^\]]+\]\([^)]+\.md\) \(search: ("(?:[^"\\]|\\.)+"|'[^']*"[^']*')\) - .+$/;
+    /^- \[[^\]]+\]\([^)]+\.md\) \(search: ("(?:[^"\\]|\\.)+"|'[^']*"[^']*')\) - .+ \((?:\d{4}-\d{2}-\d{2}; )?~\d+ tok\)$/;
 
   it("renders the unified row schema with generated frontmatter for every bucket", () => {
     const buckets: Array<[IndexBucket, string]> = [
@@ -368,6 +396,25 @@ describe("formatIndex", () => {
       content,
       /\(search: "## Lesson: \\"Don't say 'trust me'\\" keeps anchors safe"\)/,
     );
+  });
+
+  it("renders declared dates without inventing one for an undated entry", () => {
+    const content = formatIndex(
+      "lessons",
+      parseBucket(fs, LESSONS_DIR, "lessons"),
+    );
+    const datedRow = content
+      .split("\n")
+      .find((line) => line.includes("Agents must read before writing"));
+    const undatedRow = content
+      .split("\n")
+      .find((line) =>
+        line.includes("Heading-only paragraphs are not summaries"),
+      );
+
+    assert.match(datedRow ?? "", /\(2026-05-10; ~50 tok\)$/);
+    assert.match(undatedRow ?? "", /\(~30 tok\)$/);
+    assert.doesNotMatch(undatedRow ?? "", /\(\d{4}-\d{2}-\d{2};/);
   });
 
   it("is deterministic across repeated parse+format runs", () => {
