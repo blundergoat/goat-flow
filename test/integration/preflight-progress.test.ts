@@ -516,6 +516,21 @@ describe("preflight Tests-phase progress", () => {
     );
   });
 
+  it("selects Codex's Windows override for native configured-hook smokes", () => {
+    const preflightSource = readFileSync(PREFLIGHT_SCRIPT_PATH, "utf-8");
+
+    assert.match(preflightSource, /typeof value\.commandWindows === "string"/u);
+    assert.match(
+      preflightSource,
+      /process\.platform === "win32" && entry\.commandWindows/u,
+    );
+    assert.match(
+      preflightSource,
+      /\["-NoProfile", "-NonInteractive", "-Command", entry\.commandWindows\]/u,
+    );
+    assert.match(preflightSource, /entry\.commandWindows \?\? ""/u);
+  });
+
   it("keeps fast concurrency bounded and isolates observed subprocess-heavy suites", () => {
     const runnerSource = readFileSync(TEST_RUNNER_PATH, "utf-8");
 

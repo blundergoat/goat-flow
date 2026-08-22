@@ -4,6 +4,8 @@
 
 - **BREAKING: audits require `audit`** - Use `goat-flow audit <path>`; bare `goat-flow` still opens the menu, and unknown commands exit `2`.
 - **Installer dependencies fail before writes** - Missing `js-yaml` gives one repair message; direct Bash does not verify or record install state.
+- **Codex hooks handle apostrophes in Windows paths** - Native preflight replays `commandWindows`; docs separate local checks from delivery proof.
+- **Hook tests expose real fixture failures** - Symlink skips require a confirmed Windows host restriction, and missing `node.exe` stays a failure.
 
 ## v1.16.0 - 2026-08-20
 

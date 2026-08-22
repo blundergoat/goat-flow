@@ -363,6 +363,10 @@ function codexWindowsHookCommand(
 /**
  * Select the exact platform registration a local configured-hook probe must replay.
  * Windows Codex shell handlers use `commandWindows`; other command strings retain their Bash contract.
+ *
+ * @param descriptor - Registered handler whose current-platform command is selected.
+ * @param platform - Host platform used for selection; defaults to the running Node process.
+ * @returns Executable and ordered arguments that replay the registered handler.
  */
 export function agentHookSpawnDescriptor(
   descriptor: AgentHookHandlerDescriptor,
@@ -440,7 +444,7 @@ export function buildAgentHookDescriptor(
       JSON.stringify(bashLauncherPath),
     ].join(" "),
   };
-  if (agentId === "codex" && shellDescriptor.form === "shell") {
+  if (agentId === "codex") {
     shellDescriptor.commandWindows = codexWindowsHookCommand(bootstrapSource, [
       hookScriptPath,
       hookResponseMode,

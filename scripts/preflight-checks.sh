@@ -869,7 +869,19 @@ function collect(value, out = []) {
     );
     if (script) out.push({ command: value.command, args: argumentOperands, script });
   }
-  for (const key of ["command", "bash"]) {
+  // Shell rows retain the provider's default command and any Windows-only override as one descriptor.
+  if (typeof value.command === "string" && !Array.isArray(value.args)) {
+    const commandWindows =
+      typeof value.commandWindows === "string" ? value.commandWindows : undefined;
+    const script = guardScripts.find((name) =>
+      [value.command, commandWindows].some(
+        (commandText) =>
+          typeof commandText === "string" && commandText.includes(name),
+      ),
+    );
+    if (script) out.push({ command: value.command, commandWindows, script });
+  }
+  for (const key of ["bash"]) {
     if (typeof value[key] !== "string") continue;
     const script = guardScripts.find((name) => value[key].includes(name));
     if (script) out.push({ command: value[key], script });
@@ -898,6 +910,19 @@ function runCommand(entry, input, cwd) {
       input,
       timeout: 5000,
     });
+  }
+  // Codex documents commandWindows as the native Windows replacement for its default shell command.
+  if (process.platform === "win32" && entry.commandWindows) {
+    return spawnSync(
+      "powershell.exe",
+      ["-NoProfile", "-NonInteractive", "-Command", entry.commandWindows],
+      {
+        cwd,
+        encoding: "utf8",
+        input,
+        timeout: 5000,
+      },
+    );
   }
   return spawnSync("bash", ["-c", `printf %s "$GOAT_HOOK_SMOKE_PAYLOAD" | { ${entry.command}; }`], {
     cwd,
@@ -931,7 +956,12 @@ for (const config of configs) {
   const seen = new Set();
   const commands = collect(parsed).filter((entry) => {
     // Args join the identity so two handlers sharing one executable stay distinct.
-    const key = [entry.command, ...(entry.args ?? []), entry.script].join("\0");
+    const key = [
+      entry.command,
+      entry.commandWindows ?? "",
+      ...(entry.args ?? []),
+      entry.script,
+    ].join("\0");
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
