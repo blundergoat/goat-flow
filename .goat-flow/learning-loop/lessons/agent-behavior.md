@@ -1,6 +1,6 @@
 ---
 category: agent-behavior
-last_reviewed: 2026-08-20
+last_reviewed: 2026-08-23
 ---
 
 **Scope:** Reading the request and retrieving memory - parsing what was asked, honouring an explicit next step, retrieval terms that name the real failure class, and treating end-of-task rules as deliverables. Using tools and the environment is [agent-tooling.md](agent-tooling.md); what an explicit skill invocation obliges is [skill-invocation.md](skill-invocation.md).
@@ -149,5 +149,23 @@ Related: `feedback_gruff_never_disable` (auto-memory, 2026-05-25).
 **Prevention:** When rerunning a fresh-eyes critique after leak-scan discard, instruct the sub-agent to cite section titles or neutral labels only. Do not include repository-local paths in the output unless the phase permits them.
 
 **Recurrence update (2026-07-12):** M33's first structural leak matcher treated the generic noun `tests` as repository navigation and nearly discarded a clean Fresh Eyes result. The orchestrator reran a path/config/anchor-only scan and kept the agent output. Leak scans must match traceable navigation tokens, not ordinary review vocabulary.
+
+---
+
+## Lesson: Scope expansion must rerun prose-surface routing before edits
+
+**Created:** 2026-08-23
+
+**Decision changed:** When companion edits expand a task onto a prose surface, rerun READ routing and load its required playbook before drafting or patching that surface.
+
+**Trigger phase:** READ
+
+**What happened:** While re-homing the native Windows hook milestone, the agent correctly expanded scope to update live dependency and roadmap references, but edited `.goat-flow/plans/1.17.0/ISSUE.md` before reading the writing-style playbook required for `ISSUE.md` prose. The miss was caught before final verification, and the edited wording was then checked against the playbook's minimum pass.
+
+**Root cause:** The first READ pass classified the request as a file move. When cross-reference evidence expanded the work into companion prose edits, the agent updated the file list but did not rerun surface routing before the combined patch.
+
+**Why it matters:** A late prose check can catch residue, but it cannot make the required source-of-truth, meaning-preservation, and audience checks shape the first edit. On a larger change, that ordering can turn a factual plan adjustment into an avoidable rewrite.
+
+**Prevention:** Before the first write after any scope expansion, inventory each newly admitted surface and rerun its READ route. For `ISSUE.md`, milestone narrative, documentation, or learning-loop prose, read `.goat-flow/skill-docs/playbooks/writing-style.md` (search: `## Scope Gate`) before drafting. Keep exempt control rows and commands out of style-only rewrites.
 
 ---

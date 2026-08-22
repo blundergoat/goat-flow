@@ -13,6 +13,7 @@ import {
   join,
   mkdtemp,
   readFile,
+  readdir,
   rm,
   tmpdir,
   writeProjectFile,
@@ -314,6 +315,12 @@ describe("dashboard /api/plans", () => {
       assert.equal(
         await readFile(join(root, ".goat-flow", "plans", ".active"), "utf-8"),
         "two\n",
+      );
+      assert.deepEqual(
+        (await readdir(join(root, ".goat-flow", "plans"))).filter(
+          (name) => name.startsWith("..active.") && name.endsWith(".tmp"),
+        ),
+        [],
       );
     } finally {
       await rm(root, { recursive: true, force: true });

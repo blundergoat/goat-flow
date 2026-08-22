@@ -9,10 +9,11 @@
  *
  * Consumed by dashboard-project-routes.ts.
  */
-import { readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { maskNonRenderedMarkdown } from "../rendered-markdown.js";
 import { resolveLocalStatePath } from "./local-paths.js";
+import { writeFileAtomic } from "./safe-exec.js";
 
 /**
  * Milestone row parsed from an `M*.md` task file without sending full Markdown to the UI.
@@ -423,8 +424,9 @@ export function writeActiveTaskPlan(
   if (!planNames.includes(planName)) {
     throw new Error(`plan not found: ${planName}`);
   }
-  writeFileSync(
+  writeFileAtomic(
     resolveLocalStatePath(projectPath, "plans/.active"),
     `${planName}\n`,
+    projectPath,
   );
 }

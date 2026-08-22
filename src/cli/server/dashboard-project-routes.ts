@@ -30,6 +30,7 @@ import {
   writeActiveTaskPlan,
 } from "./dashboard-task-state.js";
 import { LocalPathValidationError, validateLocalPath } from "./local-paths.js";
+import { writeFileAtomic } from "./safe-exec.js";
 
 /**
  * Load the persisted recent-projects state, preferring the current state file and falling back to the legacy projects-only file.
@@ -106,9 +107,12 @@ async function writeDashboardState(
   ctx: DashboardRouteContext,
   state: DashboardStateData,
 ): Promise<void> {
-  const { mkdir, rm: remove, writeFile } = await import("node:fs/promises");
-  await mkdir(dirname(ctx.dashboardStateFile), { recursive: true });
-  await writeFile(ctx.dashboardStateFile, JSON.stringify(state, null, 2));
+  const { rm: remove } = await import("node:fs/promises");
+  writeFileAtomic(
+    ctx.dashboardStateFile,
+    JSON.stringify(state, null, 2),
+    ctx.absDefault,
+  );
   await remove(ctx.legacyProjectsListFile, { force: true });
 }
 

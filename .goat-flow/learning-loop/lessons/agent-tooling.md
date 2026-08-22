@@ -1,6 +1,6 @@
 ---
 category: agent-tooling
-last_reviewed: 2026-08-16
+last_reviewed: 2026-08-22
 ---
 
 **Scope:** How the agent uses its tools and environment - resolving install-copy against source paths, recovering rather than bypassing a blocked command, shell quoting under `set -u`, and which artifact is the source of truth. Reading instructions and retrieving memory is [agent-behavior.md](agent-behavior.md).
@@ -44,6 +44,8 @@ last_reviewed: 2026-08-16
 **Recurrence 2026-07-19:** A `node -e` dry-run summarizer embedded `child_process`, so the hook blocked it before execution. Piping the direct CLI output to `jq` produced the same assertion without a shell-execution wrapper. Evidence: `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Interpreter -c/-e with shell-execution primitive`).
 
 **Recurrence 2026-08-16:** A final controller smoke piped a known JSON Stop payload into `bash .goat-flow/hooks/post-turn-safety.sh`, so the deny hook correctly blocked the pipe-to-shell shape before any checks ran. The corrected smoke created an inspected temporary payload with `apply_patch` and redirected that local file into the hook. Preserve this distinction in hook testing: the payload may be trusted, but a shell pipe is still the prohibited execution shape. Evidence: `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Pipe to shell`).
+
+**Recurrence 2026-08-22:** While planning 1.17.0 M42-M46, two research batches were blocked in turn: a long `;`-chained read batch hit the segment cap, and a quoted heredoc carrying milestone text was blocked because its Markdown contained backticks, which the classifier reads as command substitution even inside a quoted heredoc body. The fix was not to retry variants: split read batches to well under 50 segments, and persist durable text by writing the draft to the scratchpad with the file tool and redirecting that file into `goat-flow redact --output <destination>`, so no backtick ever appears on the command line. Evidence: `workflow/hooks/deny-dangerous.sh` (search: `Backtick command substitution hides nested execution`) and (search: `Command has more than 50 chained segments`).
 
 **Root cause:** Agent defaulted to `rm -rf` out of habit and treated the block as a dead end instead of considering alternatives.
 **Fix:** When a command is blocked, find the unblocked equivalent. `rm -rf dir/` → `rm dir/file && rmdir dir/`. `mv old new` → `mv -n old new`. The deny hook blocks dangerous patterns, not all file ops.

@@ -4,7 +4,14 @@
 import { strict as assert } from "node:assert";
 import { describe, it } from "node:test";
 import { tmpdir } from "node:os";
-import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { join } from "node:path";
 
 import { withEnv } from "../helpers/global-fixtures.js";
@@ -14,7 +21,46 @@ import {
   SafeExecRejection,
   sideEffectfulRouteKey,
   spawnInheritedSync,
+  writeFileAtomic,
 } from "../../src/cli/server/safe-exec.js";
+
+describe("safe-exec/writeFileAtomic", () => {
+  it("replaces the complete destination", async () => {
+    const root = await mkdtemp(join(tmpdir(), "goat-flow-atomic-write-"));
+    const targetPath = join(root, "state.json");
+    try {
+      await writeFile(targetPath, "before\n", "utf-8");
+
+      writeFileAtomic(targetPath, "after\n", root);
+
+      assert.equal(await readFile(targetPath, "utf-8"), "after\n");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("preserves the destination when replacement fails after staging", async () => {
+    const root = await mkdtemp(join(tmpdir(), "goat-flow-atomic-failure-"));
+    const targetPath = join(root, "state.json");
+    try {
+      await mkdir(targetPath);
+      await writeFile(join(targetPath, "sentinel"), "before\n", "utf-8");
+
+      assert.throws(() => writeFileAtomic(targetPath, "after\n", root));
+
+      assert.equal(
+        await readFile(join(targetPath, "sentinel"), "utf-8"),
+        "before\n",
+      );
+      const stagedFiles = (await readdir(root)).filter(
+        (name) => name.startsWith(".state.json.") && name.endsWith(".tmp"),
+      );
+      assert.deepEqual(stagedFiles, []);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+});
 
 describe("safe-exec/spawnInheritedSync", () => {
   it("rejects a command whose basename is not allow-listed", () => {

@@ -10,9 +10,10 @@
  */
 import { execFileSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
+import { readFileSync, realpathSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { resolveLocalStatePath } from "./local-paths.js";
+import { writeFileAtomic } from "./safe-exec.js";
 
 type ProjectIdentitySource = "git-remote" | "goat-marker" | "path";
 
@@ -162,15 +163,16 @@ function readProjectMarkerIdentifier(markerPath: string): string | null {
 }
 
 /** Writes a gitignored project marker; swallows read-only projects as `null`. */
-function writeProjectMarkerIdentifier(markerPath: string): string | null {
+function writeProjectMarkerIdentifier(
+  markerPath: string,
+  projectRoot: string,
+): string | null {
   try {
     const markerIdentifier = `gf_${randomUUID()}`;
-    writeFileSync(
+    writeFileAtomic(
       markerPath,
       `${PROJECT_MARKER_COMMENT}\n${markerIdentifier}\n`,
-      {
-        encoding: "utf-8",
-      },
+      projectRoot,
     );
     return markerIdentifier;
   } catch {
@@ -226,7 +228,9 @@ function resolveMarkerIdentity(
     markerPath === null
       ? null
       : (readProjectMarkerIdentifier(markerPath) ??
-        (allowMarkerWrite ? writeProjectMarkerIdentifier(markerPath) : null));
+        (allowMarkerWrite
+          ? writeProjectMarkerIdentifier(markerPath, currentPath)
+          : null));
   if (!markerIdentifier) return null;
   return {
     identity: `goat-marker:${markerIdentifier}`,
