@@ -19,6 +19,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { after, describe, it } from "node:test";
 import { PROFILES } from "../../src/cli/detect/agents.js";
+import { agentHookSpawnDescriptor } from "../../src/cli/server/agent-hook-command.js";
 import { writeAgentHookState } from "../../src/cli/server/agent-hook-writer.js";
 import { getHookSpec } from "../../src/cli/server/hooks-registry.js";
 
@@ -59,12 +60,14 @@ interface RegisteredHandler {
 
 /**
  * Build a Git project whose name carries spaces and shell metacharacters, with
- * the shipped hook files installed and all three Claude hooks registered.
+ * the shipped hook files installed and all three selected-provider hooks registered.
  * It writes one temporary tree, recorded for suite cleanup.
  *
  * @returns hostile-named project root ready for exact handler replay
  */
-function createRegisteredHostileProject(): string {
+function createRegisteredHostileProject(
+  agentId: "claude" | "codex" = "claude",
+): string {
   const disposableParent = mkdtempSync(
     join(tmpdir(), "goat-flow-spawn-matrix-"),
   );
@@ -73,8 +76,13 @@ function createRegisteredHostileProject(): string {
   mkdirSync(join(projectRoot, ".goat-flow", "hooks", "deny-dangerous"), {
     recursive: true,
   });
-  mkdirSync(join(projectRoot, ".claude"), { recursive: true });
-  writeFileSync(join(projectRoot, ".claude", "settings.json"), "{}\n");
+  if (agentId === "claude") {
+    mkdirSync(join(projectRoot, ".claude"), { recursive: true });
+    writeFileSync(join(projectRoot, ".claude", "settings.json"), "{}\n");
+  } else {
+    mkdirSync(join(projectRoot, ".codex"), { recursive: true });
+    writeFileSync(join(projectRoot, ".codex", "config.toml"), "\n");
+  }
   // A fake secret proves the block response without ever exposing real content.
   writeFileSync(join(projectRoot, ".env"), `${ENV_CANARY}\n`);
   execFileSync("git", ["init", "-q", projectRoot]);
@@ -111,7 +119,7 @@ function createRegisteredHostileProject(): string {
   ]) {
     const hookSpec = getHookSpec(hookId);
     assert.ok(hookSpec);
-    writeAgentHookState(projectRoot, PROFILES.claude, hookSpec, true);
+    writeAgentHookState(projectRoot, PROFILES[agentId], hookSpec, true);
   }
   return projectRoot;
 }
@@ -148,6 +156,30 @@ function registeredHandler(
   };
 }
 
+/** Read one registered Codex handler whose Windows override is required on this suite's Windows CI lane. */
+function registeredCodexHandler(
+  projectRoot: string,
+  lifecycleEvent: "PreToolUse" | "PostToolUse" | "Stop",
+): { command: string; commandWindows: string } {
+  const settings = JSON.parse(
+    readFileSync(join(projectRoot, ".codex", "hooks.json"), "utf-8"),
+  ) as {
+    hooks: Record<
+      string,
+      Array<{
+        hooks: Array<{ command?: string; commandWindows?: string }>;
+      }>
+    >;
+  };
+  const registeredHook = settings.hooks[lifecycleEvent]![0]!.hooks[0]!;
+  assert.equal(typeof registeredHook.command, "string");
+  assert.equal(typeof registeredHook.commandWindows, "string");
+  return {
+    command: registeredHook.command as string,
+    commandWindows: registeredHook.commandWindows as string,
+  };
+}
+
 /** Provider payload asking the deny hook to review one shell command. */
 function denyPayload(shellCommand: string): string {
   return JSON.stringify({
@@ -174,6 +206,21 @@ function runRegisteredHandler(
 ): ReturnType<typeof spawnSync> {
   return spawnSync(handler.command, handler.args, {
     cwd,
+    encoding: "utf8",
+    input: payload,
+    timeout: 60_000,
+  });
+}
+
+/** Spawn Codex's exact current-platform command field with a provider payload on stdin. */
+function runRegisteredCodexHandler(
+  projectRoot: string,
+  handler: { command: string; commandWindows: string },
+  payload: string,
+): ReturnType<typeof spawnSync> {
+  const selected = agentHookSpawnDescriptor({ form: "shell", ...handler });
+  return spawnSync(selected.command, selected.args, {
+    cwd: projectRoot,
     encoding: "utf8",
     input: payload,
     timeout: 60_000,
@@ -223,6 +270,37 @@ describe("hook command spawn matrix", () => {
     assert.equal(pushBlocked.status, 2, handlerDiagnostics(pushBlocked));
     assert.match(String(pushBlocked.stderr), /BLOCKED: Policy /u);
   });
+
+  it(
+    "delivers allow and exit-2 deny results through Codex's registered Windows override",
+    { skip: process.platform !== "win32" },
+    () => {
+      const projectRoot = createRegisteredHostileProject("codex");
+      const denyHandler = registeredCodexHandler(projectRoot, "PreToolUse");
+
+      const allowed = runRegisteredCodexHandler(
+        projectRoot,
+        denyHandler,
+        denyPayload("git status"),
+      );
+      assert.equal(allowed.status, 0, handlerDiagnostics(allowed));
+      assert.equal(allowed.stdout, "");
+      assert.equal(allowed.stderr, "");
+
+      const blocked = runRegisteredCodexHandler(
+        projectRoot,
+        denyHandler,
+        denyPayload("cat .env"),
+      );
+      assert.equal(blocked.status, 2, handlerDiagnostics(blocked));
+      assert.match(String(blocked.stderr), /BLOCKED: Policy secret/u);
+      assert.ok(
+        !String(blocked.stdout).includes(ENV_CANARY) &&
+          !String(blocked.stderr).includes(ENV_CANARY),
+        "the canary secret must never appear in a Codex handler stream",
+      );
+    },
+  );
 
   it("resolves the managed root from a nested working directory", () => {
     const projectRoot = createRegisteredHostileProject();

@@ -84,6 +84,20 @@ function createClaudeProject(): string {
   return projectPath;
 }
 
+/** Create the smallest Codex project whose generated handlers can be replayed on Windows. */
+function createCodexProject(): string {
+  const projectPath = mkdtempSync(join(tmpdir(), "goat-flow-codex-state-"));
+  disposableProjects.push(projectPath);
+  mkdirSync(join(projectPath, ".goat-flow"), { recursive: true });
+  mkdirSync(join(projectPath, ".codex"), { recursive: true });
+  writeFileSync(
+    join(projectPath, ".goat-flow", "config.yaml"),
+    'version: "1.15.0"\n',
+  );
+  writeFileSync(join(projectPath, ".codex", "config.toml"), "\n");
+  return projectPath;
+}
+
 /**
  * Record previous managed hook bytes for one disposable agent install.
  * Filesystem side effects: writes that fixture's hash-only install-state JSON.
@@ -125,6 +139,11 @@ function requiredHook(hooks: HookState[], hookId: string): HookState {
 /** Return Claude's state for one hook so each assertion names the visible agent surface. */
 function claudeHookState(projectPath: string, hookId: string): HookAgentState {
   return requiredHook(readAllHookStates(projectPath), hookId).agents.claude;
+}
+
+/** Return Codex's state for one hook so Windows replay assertions use its exact registration. */
+function codexHookState(projectPath: string, hookId: string): HookAgentState {
+  return requiredHook(readAllHookStates(projectPath), hookId).agents.codex;
 }
 
 /**
@@ -204,27 +223,43 @@ describe("effective hook state", () => {
     );
   });
 
-  /** Expired Codex proof returns hook screens to an explicit stale-evidence state. */
-  it("expires approved Codex live support after its capture window", () => {
+  /** Current deny proof expires while changed result-hook registrations stay stale. */
+  it("expires exact Codex proof and keeps invalidated result hooks stale", () => {
+    const denySpec = getHookSpec("deny-dangerous");
     const gruffSpec = getHookSpec("gruff-code-quality");
+    const postTurnSpec = getHookSpec("post-turn-safety");
+    assert.ok(denySpec);
     assert.ok(gruffSpec);
-    const codexProviderEvidence = gruffSpec.providerEvidence?.codex;
-    assert.ok(codexProviderEvidence);
+    assert.ok(postTurnSpec);
+    const denyCodexEvidence = denySpec.providerEvidence?.codex;
+    const gruffCodexEvidence = gruffSpec.providerEvidence?.codex;
+    const postTurnCodexEvidence = postTurnSpec.providerEvidence?.codex;
+    assert.ok(denyCodexEvidence);
+    assert.ok(gruffCodexEvidence);
+    assert.ok(postTurnCodexEvidence);
 
     assert.equal(
       currentHookProviderSupportGate(
-        codexProviderEvidence,
-        new Date("2026-09-09T00:00:00.000Z"),
+        denyCodexEvidence,
+        new Date("2026-09-21T02:17:08.834Z"),
       ),
-      "effective",
+      "scenario-unverified",
     );
     assert.equal(
       currentHookProviderSupportGate(
-        codexProviderEvidence,
-        new Date("2026-09-09T00:00:00.001Z"),
+        denyCodexEvidence,
+        new Date("2026-09-21T02:17:08.835Z"),
       ),
       "provider-capture-stale",
     );
+
+    for (const evidence of [gruffCodexEvidence, postTurnCodexEvidence]) {
+      assert.equal(evidence.expiresAt, undefined);
+      assert.equal(
+        currentHookProviderSupportGate(evidence),
+        "provider-capture-stale",
+      );
+    }
   });
 
   // A desired hook with no exact registration is not protected merely because the registry lists it.
@@ -669,6 +704,33 @@ describe("effective hook state", () => {
     );
   });
 
+  it(
+    "replays Codex deny scenarios through the Windows override",
+    { skip: process.platform !== "win32" },
+    () => {
+      const projectPath = createCodexProject();
+      syncHookStates(projectPath);
+
+      const report = verifyManagedDenyHook({
+        projectPath,
+        agent: "codex",
+        scenarioGroup: "deny-hook",
+        isTargetUntrusted: false,
+      });
+
+      assert.equal(report.status, "pass", JSON.stringify(report, null, 2));
+      assert.equal(report.summary.pass, report.scenarios.length);
+      assert.deepEqual(
+        report.scenarios.map((scenario) => scenario.observed),
+        ["blocked", "blocked", "blocked", "allowed"],
+      );
+      assert.deepEqual(
+        codexHookState(projectPath, "deny-dangerous").effectiveState,
+        { status: "effective", severity: "success" },
+      );
+    },
+  );
+
   /**
    * Fixture purpose: prove finding and incomplete output through the user's exact Stop command.
    * Side effects: writes one merge-conflict file in a disposable Git project removed by cleanup.
@@ -707,6 +769,40 @@ describe("effective hook state", () => {
       { status: "effective", severity: "success" },
     );
   });
+
+  it(
+    "replays Codex Stop results without upgrading stale provider proof",
+    { skip: process.platform !== "win32" },
+    () => {
+      const projectPath = createCodexProject();
+      initializeDisposableGitProject(projectPath);
+      mkdirSync(join(projectPath, "src"), { recursive: true });
+      writeFileSync(
+        join(projectPath, "src", "example.txt"),
+        ["<<<<<<< HEAD", "left", "=======", "right", ">>>>>>> branch", ""].join(
+          "\n",
+        ),
+      );
+      syncHookStates(projectPath);
+
+      const report = verifyManagedConfiguredHook({
+        projectPath,
+        agent: "codex",
+        scenarioGroup: "post-turn-hook",
+        isTargetUntrusted: false,
+      });
+
+      assert.equal(report.status, "pass", JSON.stringify(report, null, 2));
+      assert.deepEqual(
+        report.scenarios.map((scenario) => scenario.observed),
+        ["finding", "incomplete"],
+      );
+      assert.deepEqual(
+        codexHookState(projectPath, "post-turn-safety").effectiveState,
+        { status: "provider-capture-stale", severity: "warning" },
+      );
+    },
+  );
 
   // An edited source without a Gruff config is unavailable, while other payload classes stay explicit.
   it("replays incomplete, advisory, and unavailable Gruff results through its configured command", () => {

@@ -18,6 +18,7 @@ import {
 } from "./evidence/envelope.js";
 import { HOOK_VERIFICATION_CONTRACTS } from "./hook-verification-contracts.js";
 import {
+  agentHookSpawnDescriptor,
   buildAgentHookDescriptor,
   type AgentHookHandlerDescriptor,
 } from "./server/agent-hook-command.js";
@@ -170,16 +171,22 @@ function configuredRegistrationReasonCode(
  */
 export function managedHookEnvironment(projectPath: string): NodeJS.ProcessEnv {
   // Missing user environment fields receive inert local defaults rather than secret-bearing fallbacks.
-  const executablePath = process.env.PATH ?? "/usr/bin:/bin";
+  const executablePath =
+    process.env.PATH ?? process.env.Path ?? "/usr/bin:/bin";
   const homeDirectory = process.env.HOME ?? projectPath;
   const temporaryDirectory = process.env.TMPDIR ?? "/tmp";
-  return {
+  const managedEnvironment: NodeJS.ProcessEnv = {
     PATH: executablePath,
     HOME: homeDirectory,
     TMPDIR: temporaryDirectory,
     LANG: "C",
     LC_ALL: "C",
   };
+  // Windows executable lookup needs PATHEXT even when the command names an executable available on PATH.
+  if (process.platform === "win32") {
+    managedEnvironment.PATHEXT = process.env.PATHEXT ?? ".COM;.EXE;.BAT;.CMD";
+  }
+  return managedEnvironment;
 }
 
 /**
@@ -405,12 +412,8 @@ function executeConfiguredFeedbackProbe(
   timeoutMs: number,
 ): HookProbeExecution {
   const startedAt = performance.now();
-  // Argv handlers run exactly as the provider spawns them; shell handlers keep Bash parsing.
-  const [probeExecutable, probeArguments] =
-    configuredHandler.form === "argv"
-      ? [configuredHandler.command, configuredHandler.args]
-      : ["bash", ["-c", configuredHandler.command]];
-  const execution = spawnSync(probeExecutable, probeArguments, {
+  const probe = agentHookSpawnDescriptor(configuredHandler);
+  const execution = spawnSync(probe.command, probe.args, {
     cwd: projectPath,
     encoding: "utf-8",
     env: managedHookEnvironment(projectPath),

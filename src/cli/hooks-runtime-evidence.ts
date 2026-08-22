@@ -34,6 +34,7 @@ import type { AgentId } from "./types.js";
 import { readAllHookStates } from "./server/hook-registrar.js";
 import { getAgentProfiles } from "./agents/registry.js";
 import {
+  agentHookSpawnDescriptor,
   buildAgentHookDescriptor,
   type AgentHookHandlerDescriptor,
 } from "./server/agent-hook-command.js";
@@ -290,12 +291,8 @@ function executeManagedConfiguredHookProbe(
   scenario: HookProbeScenario,
 ): HookProbeExecution {
   const startedAt = performance.now();
-  // Argv handlers run exactly as the provider spawns them; shell handlers keep Bash parsing.
-  const [probeExecutable, probeArguments] =
-    configuredHandler.form === "argv"
-      ? [configuredHandler.command, configuredHandler.args]
-      : ["bash", ["-c", configuredHandler.command]];
-  const execution = spawnSync(probeExecutable, probeArguments, {
+  const probe = agentHookSpawnDescriptor(configuredHandler);
+  const execution = spawnSync(probe.command, probe.args, {
     cwd: projectPath,
     encoding: "utf-8",
     env: managedHookEnvironment(projectPath),

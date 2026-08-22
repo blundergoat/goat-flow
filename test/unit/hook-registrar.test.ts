@@ -26,7 +26,10 @@ import {
   HookRegistrarError,
   syncHookStates,
 } from "../../src/cli/server/hook-registrar.js";
-import { managedAgentHookDescriptor } from "../../src/cli/server/agent-hook-command.js";
+import {
+  agentHookSpawnDescriptor,
+  managedAgentHookDescriptor,
+} from "../../src/cli/server/agent-hook-command.js";
 import {
   getHookSpec,
   isValidHookIdShape,
@@ -706,7 +709,7 @@ describe("hook registrar: launchers and installation", () => {
     });
   });
 
-  it("keeps deferred provider deny descriptors byte-identical to the committed installer contract", () => {
+  it("keeps provider deny descriptors byte-identical to the committed installer contract", () => {
     const denySpec = getHookSpec(HOOK_IDENTIFIER);
     assert.ok(denySpec);
     const contract = JSON.parse(
@@ -732,21 +735,43 @@ describe("hook registrar: launchers and installation", () => {
     const denyContractConfig = (agentId: string): Record<string, never> =>
       contract.agents[agentId]!.hooks["deny-dangerous"]!.config;
 
-    // Codex and Antigravity store one deferred shell command each; bytes must not move.
+    // Codex keeps its deferred command bytes and adds the approved Windows override.
     const codexDescriptor = managedAgentHookDescriptor(
       PROFILES.codex,
       denySpec,
     );
     if (codexDescriptor.form !== "shell") {
-      assert.fail("Codex stays on its deferred shell registration");
+      assert.fail("Codex must retain a shell registration");
     }
     const codexContractRow = (
       denyContractConfig("codex") as {
-        hooks: { PreToolUse: Array<{ hooks: Array<{ command: string }> }> };
+        hooks: {
+          PreToolUse: Array<{
+            hooks: Array<{ command: string; commandWindows: string }>;
+          }>;
+        };
       }
     ).hooks.PreToolUse[0]!.hooks[0]!;
     assert.equal(codexContractRow.command, codexDescriptor.command);
+    assert.equal(
+      codexContractRow.commandWindows,
+      codexDescriptor.commandWindows,
+    );
+    assert.deepEqual(agentHookSpawnDescriptor(codexDescriptor, "linux"), {
+      command: "bash",
+      args: ["-c", codexDescriptor.command],
+    });
+    assert.deepEqual(agentHookSpawnDescriptor(codexDescriptor, "win32"), {
+      command: "powershell.exe",
+      args: [
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        codexDescriptor.commandWindows,
+      ],
+    });
 
+    // Antigravity retains its one deferred command string byte-for-byte.
     const antigravityDescriptor = managedAgentHookDescriptor(
       PROFILES.antigravity,
       denySpec,
@@ -781,7 +806,7 @@ describe("hook registrar: launchers and installation", () => {
     assert.equal(copilotContractRow.bash, copilotDescriptor.command);
     assert.equal(copilotContractRow.powershell, copilotDescriptor.command);
 
-    // Claude's approved argv handler is the only migrated fragment in the contract.
+    // Claude's approved handler remains the provider-native argv form.
     const claudeDescriptor = managedAgentHookDescriptor(
       PROFILES.claude,
       denySpec,
@@ -800,6 +825,29 @@ describe("hook registrar: launchers and installation", () => {
     ).hooks.PreToolUse[0]!.hooks[0]!;
     assert.equal(claudeContractRow.command, claudeDescriptor.command);
     assert.deepEqual(claudeContractRow.args, claudeDescriptor.args);
+  });
+
+  it("reports a stale Codex Windows override as command drift", () => {
+    withTempProject((root) => {
+      installCodexDenyHook(root);
+      const configPath = join(root, ".codex", "hooks.json");
+      const config = JSON.parse(readFileSync(configPath, "utf-8")) as {
+        hooks: {
+          PreToolUse: Array<{
+            hooks: Array<{ commandWindows: string }>;
+          }>;
+        };
+      };
+      config.hooks.PreToolUse[0]!.hooks[0]!.commandWindows += " stale";
+      writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
+
+      const denySpec = getHookSpec(HOOK_IDENTIFIER);
+      assert.ok(denySpec);
+      assert.equal(
+        readAgentHookState(root, PROFILES.codex, denySpec).registrationIssue,
+        "command-or-response-mismatch",
+      );
+    });
   });
 
   // Fixture: writes four repository shapes a user can really be sitting in.
@@ -929,10 +977,12 @@ describe("hook registrar: launchers and installation", () => {
       applyHookState(HOOK_IDENTIFIER, true, root);
 
       const launcher = readCodexDenyLauncher(root);
-      assert.match(launcher, /run-with-bash\.mjs/u);
-      assert.match(launcher, /--show-toplevel/u);
-      assert.doesNotMatch(launcher, /CLAUDE_PROJECT_DIR/u);
-      assert.doesNotMatch(launcher, /^\.goat-flow\/hooks/u);
+      assert.match(launcher.command, /run-with-bash\.mjs/u);
+      assert.match(launcher.command, /--show-toplevel/u);
+      assert.doesNotMatch(launcher.command, /CLAUDE_PROJECT_DIR/u);
+      assert.doesNotMatch(launcher.command, /^\.goat-flow\/hooks/u);
+      assert.match(launcher.commandWindows, /Buffer\.from/u);
+      assert.doesNotMatch(launcher.commandWindows, /--show-toplevel/u);
 
       const nested = join(root, "src", "cli");
       mkdirSync(nested, { recursive: true });
@@ -987,7 +1037,7 @@ describe("hook registrar: launchers and installation", () => {
 
       const inner = join(root, "workspace", "managed-inner");
       const innerLauncher = installCodexDenyHook(inner);
-      assert.equal(typeof innerLauncher, "string");
+      assert.equal(typeof innerLauncher.commandWindows, "string");
       writeFileSync(
         join(inner, ".goat-flow", "hooks", "deny-dangerous.sh"),
         "#!/usr/bin/env bash\nprintf 'INNER_MANAGED_ROOT\\n'\n",
@@ -1043,7 +1093,7 @@ describe("hook registrar: launchers and installation", () => {
         `${partialResult.stdout}\n${partialResult.stderr}`,
       );
       assert.match(partialResult.stderr, /managed root incomplete/iu);
-      assert.doesNotMatch(partialResult.stderr, new RegExp(root, "u"));
+      assert.equal(partialResult.stderr.includes(root), false);
     });
   });
 
@@ -1062,7 +1112,7 @@ describe("hook registrar: launchers and installation", () => {
         [
           "#!/usr/bin/env bash",
           'cat > "$GOAT_FLOW_TEST_PAYLOAD_PATH"',
-          'pwd > "$GOAT_FLOW_TEST_CWD_PATH"',
+          'if pwd -W >/dev/null 2>&1; then pwd -W; else pwd; fi > "$GOAT_FLOW_TEST_CWD_PATH"',
           "",
         ].join("\n"),
       );
@@ -1077,7 +1127,10 @@ describe("hook registrar: launchers and installation", () => {
 
       assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
       assert.equal(readFileSync(payloadPath, "utf8"), payload);
-      assert.equal(readFileSync(cwdPath, "utf8").trim(), root);
+      const capturedCwd = readFileSync(cwdPath, "utf8")
+        .trim()
+        .replaceAll("\\", "/");
+      assert.equal(capturedCwd, root.replaceAll("\\", "/"));
     });
   });
 });

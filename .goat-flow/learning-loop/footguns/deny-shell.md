@@ -1,6 +1,6 @@
 ---
 category: deny-shell
-last_reviewed: 2026-08-18
+last_reviewed: 2026-08-22
 ---
 
 Command-grammar and parser traps in the deny hook: how a command string is split into segments, stages, substitutions, and heredoc bodies before any policy runs. A miss here silently un-guards every policy layered on top.
@@ -169,6 +169,18 @@ Sibling buckets: `deny-secrets.md`, `deny-writes.md`.
 - 2026-06-05 recurrence: stringified Copilot `toolArgs.path` / `file_path` denied safe `view` / `edit` until `extract_path` normalized object and string forms.
 
 ---
+
+## Footgun: Interpreter eval scan matches any identifier ending in the exec word
+
+**Status:** active | **Created:** 2026-08-22 | **Evidence:** ACTUAL_MEASURED
+
+**Symptoms:** A read-only Node `-e` one-liner is denied `Policy destructive: Interpreter -c/-e with shell-execution primitive` purely for calling `RegExp.prototype.exec`. Measured 2026-08-22 against the installed hook with a two-case probe: a payload whose only suspicious token is a regex match call returns status 2, while the identical payload using the `test` method returns 0 - the method name is the only difference. This blocked two benign log-analysis commands in one session while `--self-test=full` stayed green (`executed=481, skipped=0`), so the corpus never saw the case.
+
+**Why it happens:** `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `shell_primitive_re`) lists that word followed by optional whitespace and an open parenthesis with no left boundary, so any identifier whose tail is that word matches - a regex match call, a property access on any object, or a locally named helper. The genuine Node hazard already matches the sibling child-process alternative and the Python hazard already matches the os-prefixed alternatives, so the unqualified entry contributes mostly false positives on the most common regex idiom in JavaScript.
+
+**Related measurement (same session, needs a policy decision):** writing a Markdown file through a *quoted* heredoc was denied `Policy destructive: Backtick command substitution hides nested execution` because the prose contained Markdown code spans. A quoted heredoc delimiter suppresses all shell substitution, so that body is inert text; the scanner does not distinguish quoted from unquoted delimiters. Whether to narrow this is a deliberate call - the existing heredoc-masking footgun in this bucket documents why bodies are scanned at all.
+
+**Prevention:** Guardrail token lists need an explicit left boundary or a qualified receiver, never a bare substring that can also be a method name. When a rule names a language primitive, add an allow case for that same word as used by the language's own standard library: the deny corpus varies shell *structure* but never varies identifier context. Narrowing either pattern is a security-policy change - re-run the full self-test and confirm the child-process and os-prefixed forms still block before shipping. Sibling lesson: `.goat-flow/learning-loop/lessons/hook-testing.md` (search: `deny-dangerous self-test missed a whole false-positive class while green`).
 
 ## Resolved Entries
 

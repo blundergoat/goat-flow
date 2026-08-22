@@ -28,6 +28,7 @@ import { PROFILES } from "../../src/cli/detect/agents.js";
 import { applyHookState } from "../../src/cli/server/hook-registrar.js";
 import { writeAgentHookState } from "../../src/cli/server/agent-hook-writer.js";
 import {
+  agentHookSpawnDescriptor,
   buildAgentHookDescriptor,
   commandEntryReferencesSpec,
   type AgentHookHandlerDescriptor,
@@ -197,6 +198,7 @@ function collectInstalledHookCommandEntries(
   // Any supported command field marks this object as an executable registration.
   if (
     typeof configEntry.command === "string" ||
+    typeof configEntry.commandWindows === "string" ||
     typeof configEntry.bash === "string" ||
     typeof configEntry.powershell === "string"
   ) {
@@ -222,7 +224,12 @@ function installedEntryRunnableText(
           typeof argumentValue === "string",
       )
     : [];
-  return [commandEntry.command, commandEntry.bash, commandEntry.powershell]
+  return [
+    commandEntry.command,
+    commandEntry.commandWindows,
+    commandEntry.bash,
+    commandEntry.powershell,
+  ]
     .filter(
       (commandValue): commandValue is string =>
         typeof commandValue === "string",
@@ -261,6 +268,10 @@ function assertManagedHookRegistration(
     assert.deepEqual(commandEntry.args, expectedDescriptor.args);
   } else {
     assert.equal(commandEntry.command, expectedDescriptor.command);
+    assert.equal(
+      commandEntry.commandWindows,
+      expectedDescriptor.commandWindows,
+    );
     assert.equal(commandEntry.args, undefined);
   }
   // Codex uses the proven 90-second host deadline only for approved feedback and Stop lifecycles.
@@ -487,22 +498,32 @@ export function readClaudeDenyLauncher(root: string): ClaudeReplayHandler {
   };
 }
 
+/** Shell-form Codex handler containing the default command and its required Windows override. */
+export interface CodexReplayHandler {
+  command: string;
+  commandWindows: string;
+}
+
 /** Read the first generated Codex deny launcher because hook arrays are nested by event and matcher.
  *
  * @param root - fixture project root
- * @returns the generated Codex launcher command, proving one was written
+ * @returns both generated Codex launcher commands, proving the platform override was written
  */
-export function readCodexDenyLauncher(root: string): string {
+export function readCodexDenyLauncher(root: string): CodexReplayHandler {
   const settings = readCodexHookConfig(root) as {
     hooks?: {
       PreToolUse?: Array<{
-        hooks?: Array<{ command?: string }>;
+        hooks?: Array<{ command?: string; commandWindows?: string }>;
       }>;
     };
   };
-  const command = settings.hooks?.PreToolUse?.[0]?.hooks?.[0]?.command;
-  assert.equal(typeof command, "string");
-  return command;
+  const registeredHook = settings.hooks?.PreToolUse?.[0]?.hooks?.[0];
+  assert.equal(typeof registeredHook?.command, "string");
+  assert.equal(typeof registeredHook?.commandWindows, "string");
+  return {
+    command: registeredHook.command,
+    commandWindows: registeredHook.commandWindows,
+  };
 }
 
 /** Read generated Codex hook config for event-key assertions.
@@ -556,9 +577,9 @@ export function installClaudeDenyHook(root: string): ClaudeReplayHandler {
 /** Writes a Codex deny hook into the fixture without requiring the root to be a Git repository.
  *
  * @param root - fixture project root
- * @returns generated Codex launcher command, ready for literal execution
+ * @returns generated Codex handler, ready for platform-selected execution
  */
-export function installCodexDenyHook(root: string): string {
+export function installCodexDenyHook(root: string): CodexReplayHandler {
   mkdirSync(join(root, ".codex"), { recursive: true });
   writeFileSync(join(root, ".codex", "config.toml"), "\n");
   applyHookState(HOOK_IDENTIFIER, true, root);
@@ -678,7 +699,11 @@ export const MANAGED_SHAPE_MUTATIONS: Array<{
 
 /** One hook entry as the registrar writes it into an agent's config file. */
 export type GeneratedHookEntry = {
-  hooks?: Array<{ command?: string; args?: string[] }>;
+  hooks?: Array<{
+    command?: string;
+    commandWindows?: string;
+    args?: string[];
+  }>;
 };
 
 /** Flatten generated hook entries into runnable text for fixture assertions.
@@ -690,9 +715,11 @@ export function generatedHookCommands(
   entries: GeneratedHookEntry[] = [],
 ): string[] {
   return entries.flatMap(({ hooks = [] }) =>
-    hooks.map(({ command = "", args }) =>
+    hooks.map(({ command = "", commandWindows, args }) =>
       // Structured rows keep their response program and operands in args elements.
-      Array.isArray(args) ? [command, ...args].join("\n") : command,
+      Array.isArray(args)
+        ? [command, ...args].join("\n")
+        : [command, commandWindows].filter(Boolean).join("\n"),
     ),
   );
 }
@@ -785,7 +812,7 @@ export function writePostTurnCapableSurfaces(root: string): void {
 
 /** Execute the generated Claude launcher with a runtime-shaped payload.
  *
- * @param command - generated launcher command line to execute
+ * @param handler - generated default and Windows launcher commands
  * @param cwd - working directory the process runs in
  * @param payload - hook JSON delivered on stdin, as an agent host would send it
  * @param env - extra environment merged onto the process env; absent means the plain env
@@ -878,12 +905,33 @@ export function assertLauncherAllows(
  * @returns the finished launcher process for the Codex payload shape
  */
 export function runCodexLauncher(
-  command: string,
+  handler: CodexReplayHandler,
   cwd: string,
   payload = CLAUDE_SAFE_PAYLOAD,
   env: NodeJS.ProcessEnv = process.env,
 ): ReturnType<typeof spawnSync> {
-  return runLauncherWithPayload(command, cwd, payload, env);
+  const spawnDescriptor = agentHookSpawnDescriptor({
+    form: "shell",
+    command: handler.command,
+    commandWindows: handler.commandWindows,
+  });
+  const payloadPath = join(
+    tmpdir(),
+    `goat-flow-hook-payload-${process.pid}-${Date.now()}.json`,
+  );
+  writeFileSync(payloadPath, payload);
+  const fileDescriptor = openSync(payloadPath, "r");
+  try {
+    return spawnSync(spawnDescriptor.command, spawnDescriptor.args, {
+      cwd,
+      encoding: "utf8",
+      env,
+      stdio: [fileDescriptor, "pipe", "pipe"],
+    });
+  } finally {
+    closeSync(fileDescriptor);
+    rmSync(payloadPath, { force: true });
+  }
 }
 
 /**

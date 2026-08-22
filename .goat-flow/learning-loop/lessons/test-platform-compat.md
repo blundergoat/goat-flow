@@ -49,7 +49,7 @@ spawnSync(process.execPath, ["--import", TSX_LOADER_URL, CLI_PATH, ...args], ...
 
 ## Lesson: Windows test runs require explicit EPERM handling for symlink fixtures
 
-**Status:** active | **Created:** 2026-05-11
+**Status:** active | **Created:** 2026-05-11 | **Trigger phase:** VERIFY | **Incident count:** 2 | **Latest occurrence:** 2026-08-22
 
 **What happened:** Three tests (`main-module guard via symlink`, `skips symlink entries in skill walk roots`, `rejects upload paths that escape through symlinked components`) call `fs.symlinkSync()` to build fixtures. On Windows without Developer Mode (or admin rights), `symlinkSync` throws `EPERM: operation not permitted`. The tests failed because they treated the fixture setup as guaranteed; the production code under test is correct on all platforms, but the test harness can't reach it.
 
@@ -69,6 +69,8 @@ function symlinkOrSkip(t: TestContext, target: string, link: string): boolean {
 }
 ```
 Each test that uses `symlinkSync` accepts a `TestContext` arg (`(t) => { ... }`) and bails early when the helper returns false. Evidence: `test/integration/main-guard.test.ts` (search: `symlinkOrSkip`), `test/unit/skill-quality/helpers.ts` (search: `symlinkOrSkip`), `test/unit/terminal-uploads.test.ts` (search: `symlinkOrSkip`).
+
+**Recurrence 2026-08-22 (ACTUAL_MEASURED):** The ADR-053 Codex Windows work added three managed-shape fixtures (`symlinked registration`, `symlinked launcher`, `symlinked requested script`) that call `symlinkSync` through a shared data table, with no guard. All three threw `EPERM` on this host, alongside the pre-existing `rejects a scan root that escapes through a symlink`, turning four tests red for a fixture limitation rather than a defect. Measured directly: `node -e "require('fs').symlinkSync(...)"` returns `EPERM: operation not permitted`. The guard belongs at the point that owns the `TestContext`, not inside the data table: the mutation table is pure data, and one `mutateOrSkip` wrapper covers every present and future privileged fixture in it. Hard-linked variants still execute, so `linkSync` coverage is unaffected. Anchors: `test/unit/hook-registrar-surfaces.test.ts` (search: `mutateOrSkip`), `test/unit/hook-registrar.helpers.ts` (search: `MANAGED_SHAPE_MUTATIONS`).
 
 **Prevention:**
 1. Any new test that calls `symlinkSync`, `linkSync`, or any privileged fs op must guard against `EPERM` with a `t.skip(...)`.
