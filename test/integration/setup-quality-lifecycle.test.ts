@@ -16,9 +16,10 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { describe, it } from "node:test";
 
+import { STANDALONE_PLAYBOOK_FILES } from "../../src/cli/audit/skill-docs-contract.js";
 import type { QualityMode } from "../../src/cli/quality/schema-types.js";
 
 const CONTROLLING_WORKSPACE = resolve(import.meta.dirname, "..", "..");
@@ -388,10 +389,11 @@ describe("consumer setup to quality-report lifecycle", () => {
         "codex",
       ]);
       assertCliSucceeded(installResult, "consumer install");
-      for (const playbookFilename of [
-        "writing-sentence-diagnostics.md",
-        "writing-structure-diagnostics.md",
-      ]) {
+      // Iterate the audit registry so a playbook registered there can never skip fresh-install proof;
+      // an installed file the registry misses is caught separately by the stale-artifact audit check.
+      for (const playbookFilename of STANDALONE_PLAYBOOK_FILES.map(
+        (installedPath) => basename(installedPath),
+      )) {
         assert.equal(
           existsSync(
             join(
