@@ -44,7 +44,7 @@ export interface IndexEntry {
   /** One-sentence routing hook extracted mechanically from the entry body. */
   hook: string;
   /** Declared date shown in the row suffix: `Created` for bucket entries, the index date for ADRs. */
-  createdDate: string | null;
+  declaredDate: string | null;
   /** Stable reading-cost heuristic: UTF-8 bytes divided by four, rounded to the nearest ten. */
   approxTokenEstimate: number;
 }
@@ -128,7 +128,7 @@ const DEGENERATE_NEEDLE = /^#{1,2}\s*(?:[A-Za-z-]+:)?$/;
  * Headings with an embedded double quote are cut before the quote to keep the needle copy-pasteable - but for quote-FIRST titles (e.g.
  *
  * `## Lesson: "Double check" means read the files`) that cut collapses to the bare `## Lesson:` prefix shared by every entry.
- * Those keep the full heading line instead, and the renderer wraps them in single quotes (M04, 1.13.0).
+ * Those keep the full heading line instead, and the renderer wraps them in single quotes.
  *
  * @param headingLine - verbatim `## <Kind>: ...` or ADR `# ...` heading line
  * @returns the needle to embed in the row's `(search: ...)` anchor
@@ -231,12 +231,12 @@ function parseEntryFile(
         paragraphAfter(section.content, HOOK_MARKER[bucket]) ??
           firstBodyParagraph(section.content),
       ),
-      createdDate: metadataDate(section.content, "Created"),
+      declaredDate: metadataDate(section.content, "Created"),
       approxTokenEstimate: approximateTokenEstimate(section.content),
     }));
 }
 
-/** Read one `**Label:** YYYY-MM-DD` metadata date from an ADR body. */
+/** Read one declared `**Label:** YYYY-MM-DD` date from an entry body. */
 function metadataDate(body: string, label: string): string | null {
   return (
     body.match(
@@ -276,14 +276,14 @@ function parseDecisionFile(file: MarkdownEntry): IndexEntry | null {
   const titleMatch = body.match(/^#\s+(.+)$/m);
   if (!titleMatch) return null;
   const status = decisionStatus(body);
-  // ADR shapes vary: status/date lines are mandatory in current records, but older records may put
-  // status prose in paragraphs, so the parser composes a compact hook from whichever stable parts exist.
+  // Current ADRs declare status/date metadata. Older shapes may omit either, so the row uses stable
+  // fallbacks instead of inferred values.
   return {
     title: (titleMatch[1] ?? "").trim(),
     sourceFile: baseName(file.path),
     anchor: searchNeedle(titleMatch[0]),
     hook: `${status} - ${decisionSummary(body)}`,
-    createdDate: decisionIndexDate(body, status),
+    declaredDate: decisionIndexDate(body, status),
     approxTokenEstimate: approximateTokenEstimate(body),
   };
 }

@@ -61,13 +61,13 @@ export function formatIndex(
 
 /** Render the fixed row suffix, omitting only an undeclared date. */
 function formatRowSuffix(entry: IndexEntry): string {
-  const date = entry.createdDate === null ? "" : `${entry.createdDate}; `;
+  const date = entry.declaredDate === null ? "" : `${entry.declaredDate}; `;
   return ` (${date}~${entry.approxTokenEstimate} tok)`;
 }
 
 /**
- * Wrap one anchor for its `(search: ...)` slot: double quotes normally, single quotes when the anchor itself contains only double quotes (quote-first
- * titles keep their full heading - M04, 1.13.0), and escaped double quotes when both quote types appear.
+ * Wrap one anchor for its `(search: ...)` slot: double quotes normally, single quotes when the anchor itself contains only double quotes, and
+ * escaped double quotes when both quote types appear.
  * Without this, a title like `"Don't trust me"` would pick a single-quote wrapper and the apostrophe would prematurely close the payload.
  *
  * @param anchor - grep needle from {@link IndexEntry.anchor}

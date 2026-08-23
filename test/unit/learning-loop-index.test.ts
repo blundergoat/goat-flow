@@ -168,7 +168,7 @@ describe("parseBucket", () => {
 
   it("includes active footguns and skips resolved-by-status, resolved-by-position, and README", () => {
     const titles = parseBucket(fs, FOOTGUNS_DIR, "footguns").map(
-      (e) => e.title,
+      (entry) => entry.title,
     );
     assert.deepEqual(titles, [
       "Active trap with symptoms",
@@ -195,19 +195,19 @@ describe("parseBucket", () => {
     const [decision] = parseBucket(fs, DECISIONS_DIR, "decisions");
 
     assert.deepEqual(
-      [footgun?.createdDate, footgun?.approxTokenEstimate],
+      [footgun?.declaredDate, footgun?.approxTokenEstimate],
       ["2026-05-01", 60],
     );
     assert.deepEqual(
-      [datedLesson?.createdDate, datedLesson?.approxTokenEstimate],
+      [datedLesson?.declaredDate, datedLesson?.approxTokenEstimate],
       ["2026-05-10", 50],
     );
     assert.deepEqual(
-      [undatedLesson?.createdDate, undatedLesson?.approxTokenEstimate],
+      [undatedLesson?.declaredDate, undatedLesson?.approxTokenEstimate],
       [null, 30],
     );
     assert.deepEqual(
-      [decision?.createdDate, decision?.approxTokenEstimate],
+      [decision?.declaredDate, decision?.approxTokenEstimate],
       ["2026-06-01", 70],
     );
   });
@@ -329,7 +329,7 @@ describe("formatIndex", () => {
   after(() => rmSync(root, { recursive: true, force: true }));
 
   // Anchors normally wrap in double quotes; quote-first titles keep their
-  // embedded quotes and switch/escape wrappers as needed (M04, 1.13.0). Every row ends with
+  // embedded quotes and switch/escape wrappers as needed. Every row ends with
   // byte-derived cost; the declared date occupies the first suffix slot when present.
   const ROW_SCHEMA =
     /^- \[[^\]]+\]\([^)]+\.md\) \(search: ("(?:[^"\\]|\\.)+"|'[^']*"[^']*')\) - .+ \((?:\d{4}-\d{2}-\d{2}; )?~\d+ tok\)$/;

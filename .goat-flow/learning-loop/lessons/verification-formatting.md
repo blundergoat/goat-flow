@@ -87,6 +87,8 @@ last_reviewed: 2026-08-19
 
 **Recurrence (2026-08-18):** M56 ran shape, parity, contract, typecheck, and the 2071-test fast suite green, then preflight failed on `Prettier (3 unformatted files)` - all three were the milestone's own new or edited test files (`test/integration/gitignore-shape.test.ts`, `test/integration/audit-build.test.ts`, `test/contract/skill-hardening-shared-3.test.ts`). `npx prettier --write` on the exact paths and a rerun gave `PASS 84 checks`; the amendment batch ran `npx prettier --check` on touched paths before its tests and stayed clean.
 
+**Recurrence 2026-08-23:** M09's recurrence-normalisation integration tests passed before the exact-path Prettier check rejected `test/integration/stats-command.test.ts`. Formatting that file made the same check pass, and the focused tests remained green.
+
 Evidence anchors:
 
 - `src/cli/audit/sarif.ts` (search: `buildAuditSarifLog`); `src/cli/prompt/compose-setup.ts` (search: `contentAuditCommand`).
@@ -108,7 +110,7 @@ Evidence anchors:
 
 **Prevention:** Format touched TypeScript before focused proof and retain Prettier in final verification. For goat-clarity, freeze the repository-owned check and write commands before mutation; a receipt without literal formatter proof remains incomplete.
 
-**Decision changed:** Run the repository formatter on touched TypeScript before treating a focused GREEN run as milestone verification. | **Trigger phase:** VERIFY | **Incident count:** 17 | **Latest occurrence:** 2026-08-16
+**Decision changed:** Run the repository formatter on touched TypeScript before treating a focused GREEN run as milestone verification. | **Trigger phase:** VERIFY | **Incident count:** 18 | **Latest occurrence:** 2026-08-23
 
 ---
 

@@ -1,6 +1,6 @@
 ---
 category: quality-reporting
-last_reviewed: 2026-08-16
+last_reviewed: 2026-08-23
 ---
 
 **Scope:** The quality prompt-to-report pipeline - prompt generation, the agent session that runs it, report persistence, and `quality diff` comparison. How audit checks score and temper concerns lives in [quality.md](quality.md).
@@ -45,8 +45,8 @@ See `.goat-flow/learning-loop/patterns/refactoring.md` (search: `Put prompt side
 **Status:** active | **Created:** 2026-07-17 | **Evidence:** ACTUAL_MEASURED
 **Decision changed:** Framework-checkout commands use the source CLI (or a freshly built local CLI) and verify its version instead of trusting a bare PATH binary; generated write instructions retain the package-identity-gated source fallback.
 **Trigger phase:** ACT
-**Incident count:** 5
-**Latest occurrence:** 2026-08-16
+**Incident count:** 6
+**Latest occurrence:** 2026-08-23
 
 **Symptoms:** A prompt generated from the current source tree invokes a newly added CLI command, prints a success-looking write message, but exits non-zero and persists the output of an older command instead of the requested artifact.
 
@@ -61,6 +61,8 @@ See `.goat-flow/learning-loop/patterns/refactoring.md` (search: `Put prompt side
 **Recurrence 2026-08-06:** A pre-release quality assessment compared the installed `goat-flow v1.14.0` on PATH with the v1.15.0 source checkout and called the mismatch a persistent defect, although `package.json`, `.goat-flow/config.yaml`, installed skills, references, and the source CLI all agreed on v1.15.0. `src/cli/prompt/compose-quality-contract.ts` (search: `Version-skew calibration`) now separates saver compatibility from assessment evidence, and the dashboard mirror carries the same rule.
 
 **Recurrence 2026-08-16:** Controller-hook verification first used the global `goat-flow v1.15.1` against locally patched v1.15.1 hook bytes. The published bundle correctly classified those development bytes as `installed-version-mismatch`, so `hooks verify` returned `hook-not-installed` even though `hooks list` proved the Codex registration itself was present. Running `node --import tsx src/cli/cli.ts hooks verify ...` from the patched checkout compared like with like and passed both configured Stop scenarios. A matching version label is insufficient when unreleased bytes differ; the verifier must come from the same build under test.
+
+**Recurrence 2026-08-23:** M07 closeout ran bare `goat-flow index` after both the PATH binary and source entry reported v1.16.0. Uncommitted M05 formatter/parser changes made those same-version bytes different: the global CLI rewrote all four learning-loop indexes with the older format, local `stats --check` marked every index stale, and `git diff --check` found the old formatter's blank-summary whitespace. Regenerating with `node --import tsx src/cli/cli.ts index` restored source-authoritative output and left only the intended lessons index delta. This confirms that matching version labels do not make a published binary authoritative for a dirty framework checkout.
 
 **Prevention:** In the framework checkout, use `node --import tsx src/cli/cli.ts <command>` before build or `npm run goat-flow:cli -- <command>` only after a fresh build, and verify `--version` matches `package.json`; do not use bare `goat-flow` during pre-release work. Consumer examples must name the scoped `@blundergoat/goat-flow` package. When a generated prompt calls a command added in the current release, verify the exact version before any output write and gate source fallbacks on both the expected package name and source entry path. Quality prompts must treat executable version checks as saver selection only: PATH-only skew is not a finding or score input, while repository-owned declarations and managed target artifacts remain version-drift evidence.
 

@@ -113,7 +113,9 @@ describe("collectIndexFreshness", () => {
   after(() => rmSync(root, { recursive: true, force: true }));
 
   it("reports fresh for every bucket immediately after generation", () => {
-    const states = collectIndexFreshness(fs, BUCKET_PATHS).map((e) => e.state);
+    const states = collectIndexFreshness(fs, BUCKET_PATHS).map(
+      (entry) => entry.state,
+    );
     assert.deepEqual(states, ["fresh", "fresh", "fresh", "fresh"]);
     assert.match(
       readFileSync(join(root, BUCKET_PATHS.patterns, "INDEX.md"), "utf8"),

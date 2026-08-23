@@ -65,8 +65,8 @@ last_reviewed: 2026-08-23
 **Status:** active | **Created:** 2026-08-02
 **Decision changed:** Start a timestamped timing receipt before milestone work; never reconstruct Actual from planned task estimates.
 **Trigger phase:** VERIFY
-**Incident count:** 7
-**Latest occurrence:** 2026-08-17
+**Incident count:** 8
+**Latest occurrence:** 2026-08-23
 
 **What happened:** A completed goat-debug planning milestone recorded `~225 min` as Actual by summing reconstructed product/proof/other effort buckets. The user challenged it because the elapsed work felt closer to minutes than hours. No start/end timestamps existed, so neither figure was measurable; replacing one precise-looking number with another would preserve the same error.
 
@@ -80,6 +80,8 @@ last_reviewed: 2026-08-23
 
 **Recurrence 2026-08-17:** M40 was abandoned before timing began, but I wrote its Actual as `unavailable - timing was never started`. Strict plan validation rejected the prose-equivalent separator because Actual is machine-parsed state; changing it to the canonical `unavailable: timing was never started` form passed parsing. Evidence anchor: `test/unit/plans-effort.test.ts` (search: `unavailable: timing was never started`).
 
+**Recurrence 2026-08-23 (premature finalization):** M07 finalized its receipt immediately after the noise stop decision, before strict plan validation and the required learning-loop closeout. Strict validation then rejected an added proof row twice: first because a zero-minute estimate was not parseable, then because explanatory text followed the terminal estimate. The finalized 465-second receipt therefore excludes the correction and generated-index work. M07 now labels Actual incomplete instead of presenting the partial span as the whole milestone.
+
 **Root cause:** Planned effort, active wall-clock time, aggregate multi-agent effort, command duration, and human waiting were treated as one quantity. Task estimates were available, so they were mistakenly reused as observations.
 
 **Prevention:**
@@ -92,6 +94,7 @@ last_reviewed: 2026-08-23
 7. Pass the exact milestone-file path to timing commands; a display identifier is not a file locator.
 8. Set exactly one rendered milestone status to `in-progress` or `testing-gate` before `plans time start`; the lifecycle transition precedes clock opening.
 9. When no receipt exists, copy the canonical `unavailable: <reason>` Actual grammar exactly; punctuation is parser state, not optional prose.
+10. Finalize only after strict plan validation and required learning-loop/index closeout; a finalized segment that excludes later correction work is partial evidence and must be labelled incomplete.
 
 **Evidence anchors:** `workflow/skills/goat-plan/SKILL.md` (search: `Successful AI proof records`) defines the handoff requirement; `src/cli/plans-effort.ts` (search: `renderActualLine`) renders the recorded value but cannot create timing evidence.
 
@@ -165,19 +168,22 @@ last_reviewed: 2026-08-23
 **Status:** active | **Created:** 2026-08-14
 **Decision changed:** Set exactly one active milestone status before starting its first timing segment; lifecycle state precedes measurement.
 **Trigger phase:** ACT
-**Incident count:** 2
-**Latest occurrence:** 2026-08-21
+**Incident count:** 3
+**Latest occurrence:** 2026-08-23
 
 **What happened:** While starting code-quality-upstream M04, I ran `plans time start` while its rendered `Status` was still `not-started`. The CLI refused with `Timing Start requires exactly one rendered Status field set to in-progress or testing-gate`; I then changed the status and reran the command successfully.
 
 **Recurrence 2026-08-21:** While activating the 1.17.0 CLI-help M39, I repeated the same order: `plans time start` ran before `Status` changed from `not-started` to `in-progress`. The guard rejected the command without opening a segment; changing lifecycle state first made the prospective start succeed.
 
-**Root cause:** I treated receipt creation as the transition that made the milestone active. The CLI instead treats active lifecycle state as a precondition for opening a clock, so my operation order was inverted.
+**Recurrence 2026-08-23 (inactive transition):** After M08's corpus gate invalidated its assumption, I changed `Status` from `in-progress` to `blocked` while its product span remained open. Strict validation rejected the inactive milestone with an active Timing Receipt. Stopping the span produced a paused 466-second receipt and restored lifecycle consistency.
+
+**Root cause:** I treated receipt creation as the transition that made a milestone active, then treated an inactive status as though it also stopped the clock. The CLI models lifecycle and timing separately: active state is required before a start, and an open span must end before an inactive state can validate.
 
 **Prevention:**
 1. Change the milestone to `in-progress` or `testing-gate` before the first `plans time start` command.
 2. Confirm the milestone renders exactly one `Status` field, then start the category and inspect the returned open segment.
 3. If start is rejected, correct the state and retry prospectively; never fabricate or backfill the missed interval.
+4. Stop and inspect the open timing span before changing a milestone to `blocked`, `abandoned`, or `complete`; lifecycle text does not close the receipt.
 
 **Evidence anchor:** `src/cli/plans-time.ts` (search: `Timing Start requires exactly one rendered Status field`) rejects missing, competing, empty, or inactive milestone states before opening a receipt.
 
@@ -188,8 +194,8 @@ last_reviewed: 2026-08-23
 **Status:** active | **Created:** 2026-08-07
 **Decision changed:** Reserve Tasks for estimated implementation checkboxes and keep each `(est: ...)` entry at the end of its item.
 **Trigger phase:** VERIFY
-**Incident count:** 3
-**Latest occurrence:** 2026-08-14
+**Incident count:** 5
+**Latest occurrence:** 2026-08-23
 
 **What happened:** M05 recorded a completed test-audit result as another checkbox under `## Tasks`. Strict plan validation counted it as implementation work, then reported one missing `(est: ...)` entry and a 15/20-minute product mismatch.
 
@@ -197,9 +203,13 @@ last_reviewed: 2026-08-23
 
 **Recurrence update (2026-08-14):** A final strict sweep of four completed hook-command-portability milestones found completion notes after terminal estimates in Tasks and Proof, forecast-only `Plan/admin overhead` fields overwritten with measured administrative time, and an Actual reason extended beyond its fixed receipt grammar. The malformed items undercounted work units and category totals even though their intended minutes remained visible to a human. Restoring forecast fields, moving notes before terminal estimates, and keeping variance in a separate field preserved both planning history and measured receipts.
 
+**Recurrence update (2026-08-23):** Closing abandoned M07 added a zero-minute proof row with explanatory text inside its estimate field. Strict validation rejected it as unparseable. Changing the value to one minute still failed because explanatory text followed the terminal estimate. The two-correction rewind removed the redundant proof row because the checked measurement task already owned that evidence. Evidence anchors: `src/cli/plans-effort.ts` (search: `TASK_ESTIMATE_PATTERN`) requires a positive terminal estimate; `src/cli/plans-check.ts` (search: `estimate not parseable`) promotes that parser warning to a strict error.
+
+**Recurrence update (2026-08-23, M08):** A section-wide Task gate paragraph was placed after the final checkbox. `readChecklistItems` owns every continuation line until the next checkbox or heading, so the paragraph became part of Task 4 and its `(est: ...)` token was no longer terminal. Strict validation reported one missing estimate, 11 product minutes against 14 declared, and 7 work units against 8 declared. Moving the gate paragraph above the first checkbox restored all three counts.
+
 **Root cause:** The task section was treated as a convenient narrative checklist without preserving its terminal estimate grammar. Its checkboxes and final `(est: ...)` entries are machine-readable work records that feed estimate coverage and category totals.
 
-**Prevention:** Keep `## Tasks` to estimated work items. Put discoveries in `## Context` and literal gate output in `## Actual evidence`; if a task or proof needs a completion note, place it before the terminal estimate. Keep `Plan/admin overhead` as the forecast input, keep measured variance outside the fixed Actual receipt reason, and rerun strict plan validation after closeout edits.
+**Prevention:** Keep `## Tasks` to estimated work items. Put section-wide guidance before the first checkbox or under its own heading, never after the final estimated item. Put discoveries in `## Context` and literal gate output in `## Actual evidence`; if a task or proof needs a completion note, place it before the terminal estimate. Keep `Plan/admin overhead` as the forecast input, keep measured variance outside the fixed Actual receipt reason, and rerun strict plan validation after closeout edits.
 
 **Evidence anchor:** `src/cli/plans-export.ts` (search: `function readChecklistItems`) converts every task-section checkbox into an estimate-bearing record; `src/cli/plans-effort.ts` (search: `const TASK_ESTIMATE_PATTERN`) requires the estimate at the item's end; `src/cli/plans-check.ts` (search: `function collectCoverageErrors`) rejects records without estimates.
 

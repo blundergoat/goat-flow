@@ -60,17 +60,27 @@ function renderSectionText(name: string, section: BucketSection): string {
 
 /** Format one graduation-candidate row shared by the text and Markdown renderers. */
 function graduationRows(section: BucketSection): string[] {
-  const rows: string[] = [];
-  for (const bucket of section.buckets) {
-    for (const candidate of bucket.graduationCandidates) {
-      const noun =
-        candidate.recurrenceCount === 1 ? "recurrence" : "recurrences";
-      rows.push(
-        `${basename(bucket.path)} :: ${candidate.title} (${candidate.recurrenceCount} ${noun})`,
-      );
-    }
-  }
-  return rows;
+  return section.buckets
+    .flatMap((bucket) =>
+      bucket.graduationCandidates.map((candidate) => ({
+        bucketPath: bucket.path,
+        candidate,
+      })),
+    )
+    .sort(
+      (left, right) =>
+        right.candidate.incidentCount - left.candidate.incidentCount ||
+        left.bucketPath.localeCompare(right.bucketPath) ||
+        left.candidate.title.localeCompare(right.candidate.title),
+    )
+    .map(({ bucketPath, candidate }) => {
+      const incidentNoun =
+        candidate.incidentCount === 1 ? "incident" : "incidents";
+      const divergenceDetails = candidate.hasIncidentCountDivergence
+        ? `; declared ${candidate.declaredIncidentCount}, ${candidate.recurrenceCount} recurrence labels`
+        : "";
+      return `${basename(bucketPath)} :: ${candidate.title} (${candidate.incidentCount} ${incidentNoun}${divergenceDetails})`;
+    });
 }
 
 /** Render graduation candidates only when present, so a clean corpus adds zero noise. */

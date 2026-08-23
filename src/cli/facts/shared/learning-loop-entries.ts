@@ -137,10 +137,10 @@ function entrySortDate(
 }
 
 /**
- * Parse an optional recurrence count for stats and dashboard users.
+ * Parse the optional author-declared incident total for stats and dashboard users.
  * Missing or non-numeric values stay null so malformed metadata never invents incidents.
  */
-function extractIncidentCount(entryContent: string): number | null {
+export function extractIncidentCount(entryContent: string): number | null {
   const incidentCountText = extractEntryMetadata(
     entryContent,
     "Incident count",

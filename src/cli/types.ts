@@ -122,8 +122,14 @@ export interface ProjectSignals {
 export interface GraduationCandidate {
   /** Entry heading text without the `## Footgun:` / `## Lesson:` / `## Pattern:` prefix. */
   title: string;
-  /** Count of line-start `**Recurrence update` markers under this entry's heading. */
+  /** Raw count of recognized line-start recurrence labels under this entry's heading. */
   recurrenceCount: number;
+  /** Optional author-declared total from `**Incident count:**`. */
+  declaredIncidentCount: number | null;
+  /** Effective total: the greater of the declared total and recurrence labels plus the original incident. */
+  incidentCount: number;
+  /** True when recurrence labels prove more incidents than the declared total records. */
+  hasIncidentCountDivergence: boolean;
 }
 
 /** Per-bucket learning-loop freshness + health record used by `goat-flow stats`. */
@@ -149,8 +155,8 @@ export interface BucketFreshness {
   sizeBytes: number;
   /** Total line count of the bucket file. */
   lineCount: number;
-  /** Active entries with `**Recurrence update` markers - the recorded mistake happened
-   *  again, so the prevention should graduate to a structural gate or the entry resolve. */
+  /** Active entries with at least two effective incidents. Their prevention should graduate
+   *  to a structural gate or the entry should resolve. */
   graduationCandidates: GraduationCandidate[];
 }
 
