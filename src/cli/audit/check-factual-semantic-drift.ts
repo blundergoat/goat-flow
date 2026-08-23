@@ -9,93 +9,159 @@ import { AUDIT_VERSION } from "../constants.js";
 import { loadManifest } from "../manifest/manifest.js";
 import type { AuditContext, ContentFinding } from "./types.js";
 
-/** Extract the current classify-state union members from source. */
-function readProjectStates(ctx: AuditContext): string[] {
-  const source = ctx.fs.readFile("src/cli/classify-state.ts");
-  if (source === null) return [];
-  const block = source.match(/type ProjectStateName =([\s\S]*?);/);
-  if (!block || block[1] === undefined) return [];
-  return Array.from(block[1].matchAll(/"([^"]+)"/g)).flatMap((m) =>
-    m[1] === undefined ? [] : [m[1]],
+/**
+ * Read user-visible project state names from the classifier source.
+ * Use when code-map guidance must match the states audit and setup can report.
+ *
+ * @param auditContext - selected-project files; a missing classifier means this audit cannot compare states
+ * @returns classifier union members in source order, or an empty list when the source or union is unavailable
+ */
+function readProjectStates(auditContext: AuditContext): string[] {
+  const classifierSource = auditContext.fs.readFile(
+    "src/cli/classify-state.ts",
+  );
+  // A consumer project may not ship goat-flow source, so missing classifier text suppresses this source-only comparison.
+  if (classifierSource === null) return [];
+  const projectStateUnion = classifierSource.match(
+    /type ProjectStateName =([\s\S]*?);/,
+  );
+  // An unreadable union provides no reliable state choices to compare with the user's code map.
+  if (projectStateUnion?.[1] === undefined) return [];
+  // A malformed regex capture is ignored because it cannot name a state users would see.
+  return Array.from(projectStateUnion[1].matchAll(/"([^"]+)"/g)).flatMap(
+    (stateMatch) => (stateMatch[1] === undefined ? [] : [stateMatch[1]]),
   );
 }
 
-/** Extract the MAX_SESSIONS constant from the terminal server source. */
-function readMaxSessions(ctx: AuditContext): number | null {
-  const source = ctx.fs.readFile("src/cli/server/terminal.ts");
-  if (source === null) return null;
-  const match = source.match(/MAX_SESSIONS\s*=\s*(\d+)/);
-  return match ? Number(match[1]) : null;
+/**
+ * Read the session cap users experience in the dashboard terminal.
+ * Use when content audit checks a documented concurrent-session limit.
+ *
+ * @param auditContext - selected-project files; missing server source means the live cap is unavailable
+ * @returns the configured session cap, or null when source or the constant cannot be read
+ */
+function readMaxSessions(auditContext: AuditContext): number | null {
+  const terminalSource = auditContext.fs.readFile("src/cli/server/terminal.ts");
+  // Installed consumer projects can omit framework source, so no source means no trustworthy session-cap comparison.
+  if (terminalSource === null) return null;
+  const sessionLimitMatch = terminalSource.match(/MAX_SESSIONS\s*=\s*(\d+)/);
+  // A missing constant means no live number exists for a safe user-facing comparison.
+  return sessionLimitMatch ? Number(sessionLimitMatch[1]) : null;
 }
 
-/** Extract the default terminal idle timeout from the terminal server source. */
-function readDefaultIdleTimeout(ctx: AuditContext): number | null {
-  const source = ctx.fs.readFile("src/cli/server/terminal.ts");
-  if (source === null) return null;
-  const match = source.match(/DEFAULT_IDLE_TIMEOUT_MINUTES\s*=\s*(\d+)/);
-  return match ? Number(match[1]) : null;
+/**
+ * Read the idle timeout users experience in a dashboard terminal session.
+ * Use when content audit checks timeout guidance against the live default.
+ *
+ * @param auditContext - selected-project files; missing server source means the live timeout is unavailable
+ * @returns timeout minutes, or null when source or the constant cannot be read
+ */
+function readDefaultIdleTimeout(auditContext: AuditContext): number | null {
+  const terminalSource = auditContext.fs.readFile("src/cli/server/terminal.ts");
+  // Without terminal source, the audit cannot tell a user that their documented timeout is stale.
+  if (terminalSource === null) return null;
+  const idleTimeoutMatch = terminalSource.match(
+    /DEFAULT_IDLE_TIMEOUT_MINUTES\s*=\s*(\d+)/,
+  );
+  // A missing constant means no live duration exists for a safe user-facing comparison.
+  return idleTimeoutMatch ? Number(idleTimeoutMatch[1]) : null;
 }
 
-/** Normalise display names for docs that list runner names. */
-function docAgentNames(): string[] {
-  const docLabels: Record<string, string> = {
+/**
+ * Build the short agent names users see in dashboard guidance.
+ * Use when a prose runner inventory is compared with manifest-backed agents.
+ *
+ * @returns one display name per manifest agent; the list is never empty for a valid manifest
+ */
+function readDocumentAgentNames(): string[] {
+  const documentationLabels: Record<string, string> = {
     claude: "Claude",
     codex: "Codex",
     antigravity: "Antigravity",
     copilot: "Copilot",
   };
   return Object.entries(loadManifest().agents).map(
-    ([id, agent]) => docLabels[id] ?? agent.name.replace(/\s+(Code|CLI)$/u, ""),
+    ([agentId, agent]) =>
+      documentationLabels[agentId] ?? agent.name.replace(/\s+(Code|CLI)$/u, ""),
   );
 }
 
-/** Drift: code-map.md claims classify-state values don't match source. */
+/**
+ * Report when the code map teaches project states that the classifier cannot return.
+ * Use in content audit so contributors see the same state choices in docs and CLI behavior.
+ *
+ * @param codeMap - complete code-map text; empty text has no state claim
+ * @param auditContext - selected-project source used as the state authority
+ * @returns one warning for mismatched states, or an empty list when the claim matches or cannot be compared
+ */
 function driftCodeMapClassifyState(
   codeMap: string,
-  ctx: AuditContext,
+  auditContext: AuditContext,
 ): ContentFinding[] {
-  const states = readProjectStates(ctx);
-  const line = codeMap
+  const sourceStates = readProjectStates(auditContext);
+  const stateSummaryLine = codeMap
     .split(/\r?\n/)
     .find((entry) => entry.includes("classify-state.ts"));
-  const docStates = line?.match(/\(([^)]+)\)/)?.[1]?.split("/") ?? [];
-  if (states.length === 0 || docStates.length === 0) return [];
-  if (docStates.join("|") === states.join("|")) return [];
+  // A missing summary line or parenthesized list becomes an empty claim that this optional check skips.
+  const documentedStates =
+    stateSummaryLine?.match(/\(([^)]+)\)/)?.[1]?.split("/") ?? [];
+  // Missing source states or an absent code-map list gives the user no comparable claim.
+  if (sourceStates.length === 0 || documentedStates.length === 0) return [];
+  // Matching states already describe every choice the classifier can show.
+  if (documentedStates.join("|") === sourceStates.join("|")) return [];
   return [
     {
       severity: "warning",
       rule: "code-map-state-drift",
       path: ".goat-flow/code-map.md",
-      message: `Code map lists classify-state values as ${docStates.join("/")} but source exports ${states.join("/")}.`,
+      message: `Code map lists classify-state values as ${documentedStates.join("/")} but source exports ${sourceStates.join("/")}.`,
       suggestion:
         "Update the classify-state.ts summary in .goat-flow/code-map.md to match the live ProjectStateName union.",
     },
   ];
 }
 
-/** Extract comma-separated dashboard view names from the code-map views line with deterministic sorting. */
+/**
+ * Read the dashboard views explicitly listed in the code map.
+ * Use when users need its navigation summary checked against shipped HTML views.
+ * Invariant: returned names are extension-free and sorted for stable comparisons.
+ *
+ * @param codeMap - complete code-map text; empty text has no dashboard-view claim
+ * @returns sorted view names without extensions, or null when no explicit inventory is present
+ */
 function readCodeMapDashboardViews(codeMap: string): string[] | null {
-  const line = codeMap
+  const dashboardViewLine = codeMap
     .split(/\r?\n/)
     .find((entry) => entry.includes("views/") && entry.includes("HTML view"));
-  const raw = line?.match(/\(([^)]+)\)/)?.[1];
-  if (raw === undefined) return null;
-  return raw
+  const viewInventoryText = dashboardViewLine?.match(/\(([^)]+)\)/)?.[1];
+  // Without a parenthesized view list, the code map makes no explicit navigation promise.
+  if (viewInventoryText === undefined) return null;
+  return viewInventoryText
     .split(",")
     .map((name) => name.trim().replace(/\.html$/u, ""))
     .filter(Boolean)
     .sort();
 }
 
-/** Read live dashboard view files with a stable manifest fallback for filesystem stubs. */
-function readDashboardViewFiles(ctx: AuditContext): string[] {
-  const files = ctx.fs.glob("src/dashboard/views/*.html");
-  if (files.length === 0)
+/**
+ * Read shipped dashboard view names from source, with manifest facts for source-free installations.
+ * Use as the UI navigation authority for code-map and dashboard content checks.
+ * Invariant: returned names are extension-free and sorted by source or manifest validation.
+ *
+ * @param auditContext - selected-project filesystem; an empty view glob uses validated manifest facts
+ * @returns sorted view names without extensions; valid manifests provide a non-empty fallback
+ */
+function readDashboardViewFiles(auditContext: AuditContext): string[] {
+  const dashboardViewFiles = auditContext.fs.glob("src/dashboard/views/*.html");
+  // Installed projects often omit dashboard source, so manifest facts preserve the user's shipped view inventory.
+  if (dashboardViewFiles.length === 0) {
     return [...loadManifest().facts.dashboard_views.names];
-  return files
+  }
+  // A malformed path contributes an empty name, which filtering removes before users see the comparison.
+  return dashboardViewFiles
     .map(
-      (file) =>
-        file
+      (viewFile) =>
+        viewFile
           .split("/")
           .at(-1)
           ?.replace(/\.html$/u, "") ?? "",
@@ -104,55 +170,293 @@ function readDashboardViewFiles(ctx: AuditContext): string[] {
     .sort();
 }
 
-/** Drift: code-map.md dashboard view enumeration doesn't match live view files. */
+/**
+ * Report when the code map lists dashboard views that users cannot open, or omits shipped views.
+ * Use in content audit to keep contributor navigation guidance aligned with the UI.
+ *
+ * @param codeMap - complete code-map text; missing inventory is reported as none
+ * @param auditContext - selected-project files and manifest fallback used as the view authority
+ * @returns one warning for a mismatch, or an empty list when documented and shipped views match
+ */
 function driftCodeMapDashboardViews(
   codeMap: string,
-  ctx: AuditContext,
+  auditContext: AuditContext,
 ): ContentFinding[] {
-  const claimed = readCodeMapDashboardViews(codeMap);
-  const actual = readDashboardViewFiles(ctx);
-  if (claimed !== null && claimed.join("|") === actual.join("|")) return [];
+  const documentedViewNames = readCodeMapDashboardViews(codeMap);
+  const shippedViewNames = readDashboardViewFiles(auditContext);
+  // A non-null inventory with the same names already matches every dashboard view users can open.
+  if (
+    documentedViewNames !== null &&
+    documentedViewNames.join("|") === shippedViewNames.join("|")
+  ) {
+    return [];
+  }
 
   return [
     {
       severity: "warning",
       rule: "code-map-dashboard-view-drift",
       path: ".goat-flow/code-map.md",
-      message: `Code map lists dashboard views as ${claimed?.join(", ") ?? "none"}, but src/dashboard/views has ${actual.join(", ")}.`,
+      message:
+        `Code map lists dashboard views as ${documentedViewNames?.join(", ") ?? "none"}, ` +
+        `but src/dashboard/views has ${shippedViewNames.join(", ")}.`,
       suggestion:
         "Update the src/dashboard/views/ summary in .goat-flow/code-map.md to match the live .html view files.",
     },
   ];
 }
 
-/** Top-level committed playbooks, excluding README.md because it is the index; output is stable sorted. */
-function readTopLevelSkillPlaybooks(ctx: AuditContext): string[] {
-  return ctx.fs
+/**
+ * Read the top-level playbooks agents can open for a user's task, excluding the index.
+ * Use when committed orientation docs promise a complete playbook inventory.
+ * Invariant: returned Markdown filenames are sorted and never include README.md.
+ *
+ * @param auditContext - selected-project filesystem; a missing playbook directory yields an empty list
+ * @returns sorted Markdown filenames, or an empty list when no top-level playbooks are installed
+ */
+function readTopLevelSkillPlaybooks(auditContext: AuditContext): string[] {
+  return auditContext.fs
     .listDir(".goat-flow/skill-docs/playbooks")
     .filter((entry) => entry.endsWith(".md") && entry !== "README.md")
     .sort();
 }
 
-/** Drift: committed skill-playbook inventories omit live top-level playbooks. */
+/**
+ * Report top-level playbooks omitted from a committed user-facing inventory.
+ * Use when architecture or code-map prose claims to enumerate every available playbook.
+ *
+ * @param path - orientation document path shown in the warning
+ * @param text - complete document text; empty text omits every installed playbook
+ * @param auditContext - selected-project files used to read installed playbooks
+ * @returns one warning listing omissions, or an empty list when no playbooks exist or every name is present
+ */
 function driftSkillPlaybookInventory(
   path: ".goat-flow/architecture.md" | ".goat-flow/code-map.md",
   text: string,
-  ctx: AuditContext,
+  auditContext: AuditContext,
 ): ContentFinding[] {
-  const actual = readTopLevelSkillPlaybooks(ctx);
-  if (actual.length === 0) return [];
+  const installedPlaybookNames = readTopLevelSkillPlaybooks(auditContext);
+  // No installed playbooks means the document cannot hide a user-facing workflow.
+  if (installedPlaybookNames.length === 0) return [];
 
-  const missing = actual.filter((name) => !text.includes(name));
-  if (missing.length === 0) return [];
+  const missingPlaybookNames = installedPlaybookNames.filter(
+    (playbookName) => !text.includes(playbookName),
+  );
+  // A complete inventory already points users to every installed playbook.
+  if (missingPlaybookNames.length === 0) return [];
 
   return [
     {
       severity: "warning",
       rule: "skill-playbook-inventory-drift",
       path,
-      message: `${path} omits top-level skill playbook(s): ${missing.join(", ")}. Live playbooks are ${actual.join(", ")}.`,
+      message:
+        `${path} omits top-level skill playbook(s): ${missingPlaybookNames.join(", ")}. ` +
+        `Live playbooks are ${installedPlaybookNames.join(", ")}.`,
       suggestion:
-        "Update the committed skill-docs playbook inventory to include every top-level .goat-flow/skill-docs/playbooks/*.md playbook except README.md.",
+        "Update the committed skill-docs playbook inventory to include every top-level " +
+        ".goat-flow/skill-docs/playbooks/*.md playbook except README.md.",
+    },
+  ];
+}
+
+/** Curated orientation documents that make explicit user-facing skill inventory claims. */
+type SkillInventoryDocumentPath =
+  | ".goat-flow/architecture.md"
+  | ".goat-flow/code-map.md"
+  | ".goat-flow/glossary.md";
+
+/** A document either names each invokable skill or advertises only the total users can expect. */
+type ExplicitSkillInventory =
+  | { kind: "names"; skillNames: string[] }
+  | { kind: "total"; skillTotal: number };
+
+/**
+ * Read skill file rows from the code map's explicit workflow/skills subtree.
+ * Returns null when the document makes no tree-shaped skill inventory claim.
+ *
+ * @param codeMap - complete code-map text; empty text has no explicit skill tree
+ * @returns named skill inventory, or null when users are not shown an exhaustive skill tree
+ */
+function readCodeMapSkillInventory(
+  codeMap: string,
+): ExplicitSkillInventory | null {
+  const codeMapLines = codeMap.split(/\r?\n/u);
+  const declaresSkillTree = codeMapLines.some((line) =>
+    /[├└]──\s+skills\/\s+=.*\bskill templates\b/u.test(line),
+  );
+
+  // A code map without a skill-template tree makes no inventory promise to the user.
+  if (!declaresSkillTree) return null;
+  // For example, an `agent-notes/` row is ignored because users cannot invoke it without a `SKILL.md` row.
+  const skillNames = codeMapLines.flatMap((line) => {
+    const skillRow = line.match(
+      /^[\s│]*[├└]──\s+(goat(?:-[a-z0-9]+)*)\/SKILL\.md\b/u,
+    );
+    // Rows without a captured SKILL.md name describe folders or prose, not invokable user choices.
+    return skillRow?.[1] === undefined ? [] : [skillRow[1]];
+  });
+  return { kind: "names", skillNames: [...new Set(skillNames)] };
+}
+
+/**
+ * Read invokable names from the glossary's explicit Skill row.
+ * Returns null when the row defines the term without claiming a numbered inventory.
+ *
+ * @param glossary - complete glossary text; empty text has no Skill row
+ * @returns named skill inventory, or null when the Skill definition is absent or non-exhaustive
+ */
+function readGlossarySkillInventory(
+  glossary: string,
+): ExplicitSkillInventory | null {
+  const skillRow = glossary
+    .split(/\r?\n/u)
+    .find((line) => /^\|\s*Skill\s*\|/u.test(line));
+
+  // A missing Skill row means this document makes no inventory claim for the audit to enforce.
+  if (skillRow === undefined) return null;
+  const skillDefinition = skillRow.split("|")[2]?.trim();
+
+  // A plain definition without a stated count is useful prose, not an exhaustive user-facing list.
+  if (
+    skillDefinition === undefined ||
+    !/\b\d+\s+(?:specialized|functional|total)\b/u.test(skillDefinition)
+  ) {
+    return null;
+  }
+  const skillNames = Array.from(
+    skillDefinition.matchAll(/\bgoat(?:-[a-z0-9]+)*\b/gu),
+    (match) => match[0],
+  ).filter((skillName) => skillName !== "goat-flow");
+  return { kind: "names", skillNames: [...new Set(skillNames)] };
+}
+
+/**
+ * Read the architecture table's advertised skill-template total.
+ * Returns null when the document does not make a numeric inventory claim.
+ *
+ * @param architecture - complete architecture text; empty text has no template-count claim
+ * @returns count-only inventory, or null when users are not shown a numeric total
+ */
+function readArchitectureSkillInventory(
+  architecture: string,
+): ExplicitSkillInventory | null {
+  const skillTemplateRow = architecture
+    .split(/\r?\n/u)
+    .find((line) => /^\|\s*Skill templates\s*\|/u.test(line));
+
+  // Without the owned table row, architecture makes no explicit skill-template claim.
+  if (skillTemplateRow === undefined) return null;
+  const advertisedTotal = skillTemplateRow.match(
+    /\b(\d+)\s+goat-flow skill templates\b/u,
+  )?.[1];
+
+  // A row without a number describes placement only, so it cannot drift from the manifest total.
+  if (advertisedTotal === undefined) return null;
+  return { kind: "total", skillTotal: Number(advertisedTotal) };
+}
+
+/**
+ * Select the parser owned by each document instead of guessing one prose grammar for every user-facing inventory.
+ * Use when code-map, glossary, and architecture express the same user choice in different formats.
+ *
+ * @param path - curated orientation document whose format selects the parser
+ * @param documentText - complete document text; empty text produces no explicit claim
+ * @returns the document's named or count-only claim, or null when no exhaustive claim is present
+ */
+function readExplicitSkillInventory(
+  path: SkillInventoryDocumentPath,
+  documentText: string,
+): ExplicitSkillInventory | null {
+  // Each path has a deliberately narrow grammar matching what users actually read in that document.
+  switch (path) {
+    case ".goat-flow/code-map.md":
+      return readCodeMapSkillInventory(documentText);
+    case ".goat-flow/glossary.md":
+      return readGlossarySkillInventory(documentText);
+    case ".goat-flow/architecture.md":
+      return readArchitectureSkillInventory(documentText);
+  }
+}
+
+/**
+ * Compare one document's explicit skill claim with the manifest-backed skills users can invoke.
+ * Empty canonical input or a document without an inventory claim produces no warning.
+ *
+ * @param path - curated document whose explicit inventory is shown to the user
+ * @param documentText - complete document text; empty text makes no inventory claim
+ * @param canonicalSkillNames - manifest-backed invokable names; empty input suppresses findings because no authority is available
+ * @returns one actionable warning for a mismatched explicit claim, or an empty list when the claim is current or absent
+ */
+export function findSkillInventoryDrift(
+  path: SkillInventoryDocumentPath,
+  documentText: string,
+  canonicalSkillNames: ReadonlyArray<string>,
+): ContentFinding[] {
+  const expectedSkillNames = [
+    ...new Set(canonicalSkillNames.filter((skillName) => skillName.length > 0)),
+  ];
+
+  // Without canonical names, the audit cannot safely tell a user that their document is stale.
+  if (expectedSkillNames.length === 0) return [];
+  const explicitInventory = readExplicitSkillInventory(path, documentText);
+
+  // Documents that do not promise a complete inventory stay concise and are not forced into boilerplate.
+  if (explicitInventory === null) return [];
+  const suggestion =
+    "Update the document's explicit skill inventory to match workflow/manifest.json skills.canonical.";
+
+  // Architecture advertises only a total, so matching that number is its complete contract.
+  if (explicitInventory.kind === "total") {
+    // The advertised total already tells users how many invokable skills the manifest provides.
+    if (explicitInventory.skillTotal === expectedSkillNames.length) return [];
+    return [
+      {
+        severity: "warning",
+        rule: "skill-inventory-drift",
+        path,
+        message:
+          `${path} advertises ${explicitInventory.skillTotal} skill template(s), but workflow/manifest.json ` +
+          `declares ${expectedSkillNames.length}: ${expectedSkillNames.join(", ")}.`,
+        suggestion,
+      },
+    ];
+  }
+
+  const claimedSkillNames = new Set(explicitInventory.skillNames);
+  const expectedSkillNameSet = new Set(expectedSkillNames);
+  const missingSkillNames = expectedSkillNames.filter(
+    (skillName) => !claimedSkillNames.has(skillName),
+  );
+  const unexpectedSkillNames = explicitInventory.skillNames.filter(
+    (skillName) => !expectedSkillNameSet.has(skillName),
+  );
+
+  // Matching named inventories give users the same skill choices as the manifest.
+  if (missingSkillNames.length === 0 && unexpectedSkillNames.length === 0)
+    return [];
+  const mismatchDescriptions: string[] = [];
+
+  // Missing names identify invokable workflows a user would otherwise never discover in this document.
+  if (missingSkillNames.length > 0) {
+    mismatchDescriptions.push(
+      `omits manifest-canonical skill(s): ${missingSkillNames.join(", ")}.`,
+    );
+  }
+
+  // Unexpected names identify retired or invented workflows that the user cannot invoke from the manifest.
+  if (unexpectedSkillNames.length > 0) {
+    mismatchDescriptions.push(
+      `lists non-canonical skill(s): ${unexpectedSkillNames.join(", ")}.`,
+    );
+  }
+  return [
+    {
+      severity: "warning",
+      rule: "skill-inventory-drift",
+      path,
+      message: `${path} ${mismatchDescriptions.join(" ")}`,
+      suggestion,
     },
   ];
 }
@@ -161,69 +465,95 @@ function driftSkillPlaybookInventory(
  * Catch session-cap numbers in the dashboard docs that no longer match the live limit a user would actually hit.
  * It reports each disagreeing claim separately, so two contradictory sentences in one document both surface instead of one masking the other.
  *
- * @param dashboard - the dashboard document text being checked
- * @param ctx - audit context supplying the live constant to compare against
- * @returns one finding per stale claim; empty means the document matches the code
+ * @param dashboard - complete dashboard guide; empty text contains no session claim
+ * @param auditContext - selected-project source; a missing terminal constant suppresses this comparison
+ * @returns one warning per distinct stale claim, or an empty list when claims match or the live limit is unavailable
  */
 function driftDashboardSessions(
   dashboard: string,
-  ctx: AuditContext,
+  auditContext: AuditContext,
 ): ContentFinding[] {
-  const maxSessions = readMaxSessions(ctx);
-  if (maxSessions === null) return [];
+  const sessionLimit = readMaxSessions(auditContext);
+  // Without a live session cap, the audit cannot tell a dashboard user that a number is stale.
+  if (sessionLimit === null) return [];
 
-  const patterns: { regex: RegExp; label: string }[] = [
+  const sessionClaimPatterns: { regex: RegExp; label: string }[] = [
     { regex: /up to (\d+)/g, label: "rail is up to" },
     { regex: /Maximum (\d+) concurrent sessions?/g, label: "Maximum" },
   ];
 
-  const findings: ContentFinding[] = [];
-  const seen = new Set<string>();
-  for (const { regex, label } of patterns) {
-    for (const match of dashboard.matchAll(regex)) {
-      const claimed = Number(match[1]);
-      if (claimed === maxSessions) continue;
-      const key = `${label}:${claimed}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      findings.push({
+  const sessionFindings: ContentFinding[] = [];
+  const seenSessionClaims = new Set<string>();
+  // Each supported phrase reflects wording users currently see in the dashboard guide.
+  for (const { regex, label } of sessionClaimPatterns) {
+    // One guide can repeat or contradict a session limit, so inspect every matching sentence.
+    for (const claimMatch of dashboard.matchAll(regex)) {
+      const claimedSessionLimit = Number(claimMatch[1]);
+      // A matching number already describes the limit users will encounter.
+      if (claimedSessionLimit === sessionLimit) continue;
+      const claimKey = `${label}:${claimedSessionLimit}`;
+      // Repeated wording should produce one repair instruction instead of UI noise.
+      if (seenSessionClaims.has(claimKey)) continue;
+      seenSessionClaims.add(claimKey);
+      sessionFindings.push({
         severity: "warning",
         rule: "dashboard-sessions-drift",
         path: "docs/dashboard.md",
-        message: `Dashboard docs say ${label} ${claimed}, but terminal.ts uses ${maxSessions}.`,
-        suggestion: `Update docs/dashboard.md to the live session cap (${maxSessions}).`,
+        message: `Dashboard docs say ${label} ${claimedSessionLimit}, but terminal.ts uses ${sessionLimit}.`,
+        suggestion: `Update docs/dashboard.md to the live session cap (${sessionLimit}).`,
       });
     }
   }
-  return findings;
+  return sessionFindings;
 }
 
-/** Drift contract: docs/dashboard.md view headings must match manifest dashboard views. */
+/**
+ * Compare dashboard guide headings with the views users can open from the manifest.
+ * Use when content audit checks that UI navigation guidance is complete and current.
+ * Invariant: headings are normalized and sorted before comparison, so document order does not create drift.
+ *
+ * @param dashboard - complete dashboard guide; empty text has no Views section
+ * @returns one warning for missing or unexpected headings, or an empty list when no section exists or all headings match
+ */
 function driftDashboardViewNames(dashboard: string): ContentFinding[] {
-  const lines = dashboard.split(/\r?\n/);
-  const start = lines.findIndex((line) => /^## Views\s*$/u.test(line));
-  if (start === -1) return [];
+  const dashboardLines = dashboard.split(/\r?\n/);
+  const viewsHeadingIndex = dashboardLines.findIndex((line) =>
+    /^## Views\s*$/u.test(line),
+  );
+  // Without a Views section, the guide makes no explicit navigation inventory claim.
+  if (viewsHeadingIndex === -1) return [];
 
-  const claimed: string[] = [];
-  for (const line of lines.slice(start + 1)) {
+  const documentedViewNames: string[] = [];
+  // Read only third-level headings inside Views so later guide sections cannot become false UI entries.
+  for (const line of dashboardLines.slice(viewsHeadingIndex + 1)) {
+    // The next second-level heading ends the user-facing Views inventory.
     if (/^##\s+/u.test(line)) break;
-    const heading = line.match(/^###\s+(.+?)\s*$/u);
-    if (heading?.[1] === undefined) continue;
-    claimed.push(
-      heading[1].replace(/`/g, "").trim().toLowerCase().replace(/\s+/g, "-"),
+    const viewHeading = line.match(/^###\s+(.+?)\s*$/u);
+    // Ordinary prose and blank lines do not represent dashboard views users can open.
+    if (viewHeading?.[1] === undefined) continue;
+    documentedViewNames.push(
+      viewHeading[1]
+        .replace(/`/g, "")
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, "-"),
     );
   }
 
-  const actual = loadManifest().facts.dashboard_views.names;
-  const claimedSorted = [...claimed].sort();
-  if (claimedSorted.join("|") === actual.join("|")) return [];
+  const shippedViewNames = loadManifest().facts.dashboard_views.names;
+  const sortedDocumentedViewNames = [...documentedViewNames].sort();
+  // Matching headings already guide users to every manifest-backed view.
+  if (sortedDocumentedViewNames.join("|") === shippedViewNames.join("|"))
+    return [];
 
   return [
     {
       severity: "warning",
       rule: "dashboard-view-name-drift",
       path: "docs/dashboard.md",
-      message: `Dashboard docs list view headings as ${claimedSorted.join(", ")}, but manifest-backed views are ${actual.join(", ")}.`,
+      message:
+        `Dashboard docs list view headings as ${sortedDocumentedViewNames.join(", ")}, ` +
+        `but manifest-backed views are ${shippedViewNames.join(", ")}.`,
       suggestion:
         "Update docs/dashboard.md view headings to match workflow/manifest.json dashboard_views.",
     },
@@ -234,79 +564,110 @@ function driftDashboardViewNames(dashboard: string): ContentFinding[] {
  * Catch idle-timeout numbers in the dashboard docs that no longer match the terminal default.
  * It reports each stale claim as a finding; an unreadable default yields no findings rather than a false accusation.
  *
- * @param dashboard - the dashboard document text being checked
- * @param ctx - audit context supplying the live default to compare against
- * @returns one finding per stale claim; empty means the document matches the code
+ * @param dashboard - complete dashboard guide; empty text contains no timeout claim
+ * @param auditContext - selected-project source; a missing terminal default suppresses this comparison
+ * @returns one warning per distinct stale phrase, or an empty list when claims match or the default is unavailable
  */
 function driftDashboardIdleTimeout(
   dashboard: string,
-  ctx: AuditContext,
+  auditContext: AuditContext,
 ): ContentFinding[] {
-  const defaultTimeout = readDefaultIdleTimeout(ctx);
-  if (defaultTimeout === null) return [];
+  const defaultTimeoutMinutes = readDefaultIdleTimeout(auditContext);
+  // Without a live timeout, the audit cannot tell a dashboard user that their guidance is stale.
+  if (defaultTimeoutMinutes === null) return [];
 
-  const patterns: { regex: RegExp; factor: number }[] = [
-    { regex: /(\d+)[-\s]?minute idle timeout/gi, factor: 1 },
-    { regex: /(\d+)[-\s]?hour idle timeout/gi, factor: 60 },
+  const timeoutClaimPatterns: {
+    regex: RegExp;
+    minutesPerUnit: number;
+  }[] = [
+    { regex: /(\d+)[-\s]?minute idle timeout/gi, minutesPerUnit: 1 },
+    { regex: /(\d+)[-\s]?hour idle timeout/gi, minutesPerUnit: 60 },
   ];
-  const findings: ContentFinding[] = [];
-  const seen = new Set<string>();
+  const timeoutFindings: ContentFinding[] = [];
+  const seenTimeoutPhrases = new Set<string>();
 
-  for (const { regex, factor } of patterns) {
-    for (const match of dashboard.matchAll(regex)) {
-      const claimedRaw = match[1];
-      if (claimedRaw === undefined) continue;
-      const claimedMinutes = Number(claimedRaw) * factor;
-      if (claimedMinutes === defaultTimeout) continue;
-      const phrase = match[0];
-      if (seen.has(phrase)) continue;
-      seen.add(phrase);
-      findings.push({
+  // Both minute and hour wording appear in user guidance, so normalize each supported form.
+  for (const { regex, minutesPerUnit } of timeoutClaimPatterns) {
+    // Inspect every timeout phrase because one guide can contain contradictory values.
+    for (const timeoutMatch of dashboard.matchAll(regex)) {
+      const claimedTimeoutText = timeoutMatch[1];
+      // A malformed capture cannot be converted into a trustworthy UI timeout warning.
+      if (claimedTimeoutText === undefined) continue;
+      const claimedTimeoutMinutes = Number(claimedTimeoutText) * minutesPerUnit;
+      // A matching duration already tells users when their terminal will close.
+      if (claimedTimeoutMinutes === defaultTimeoutMinutes) continue;
+      const timeoutPhrase = timeoutMatch[0];
+      // Repeated phrases should produce one repair instruction instead of duplicate UI noise.
+      if (seenTimeoutPhrases.has(timeoutPhrase)) continue;
+      seenTimeoutPhrases.add(timeoutPhrase);
+      timeoutFindings.push({
         severity: "warning",
         rule: "dashboard-idle-timeout-drift",
         path: "docs/dashboard.md",
-        message: `Dashboard docs say "${phrase}" (${claimedMinutes} minutes), but terminal.ts defaults to ${defaultTimeout} minutes.`,
-        suggestion: `Update docs/dashboard.md to the live idle timeout (${defaultTimeout} minutes).`,
+        message:
+          `Dashboard docs say "${timeoutPhrase}" (${claimedTimeoutMinutes} minutes), ` +
+          `but terminal.ts defaults to ${defaultTimeoutMinutes} minutes.`,
+        suggestion: `Update docs/dashboard.md to the live idle timeout (${defaultTimeoutMinutes} minutes).`,
       });
     }
   }
 
-  return findings;
+  return timeoutFindings;
 }
 
-/** Drift: docs/dashboard.md runner list doesn't match manifest. */
+/**
+ * Compare the dashboard guide's runner list with agents users can launch from the manifest.
+ * Use when content audit checks runner availability shown in the UI.
+ *
+ * @param dashboard - complete dashboard guide; empty text has no runner claim
+ * @returns one warning for a mismatched list, or an empty list when no list exists or all runners match
+ */
 function driftDashboardRunners(dashboard: string): ContentFinding[] {
   const runnerLine = dashboard.match(/- Supports (.+?) runners/);
+  // A guide without a supported-runners sentence makes no explicit launch-availability claim.
   if (runnerLine?.[1] === undefined) return [];
-  const actual = docAgentNames();
-  const claimed = runnerLine[1]
+  const supportedAgentNames = readDocumentAgentNames();
+  const documentedAgentNames = runnerLine[1]
     .split(/,\s*|\s+and\s+/u)
     .map((name) => name.trim().replace(/^and\s+/u, ""))
     .filter(Boolean);
-  if (claimed.join("|") === actual.join("|")) return [];
+  // Matching names already tell users every agent they can launch.
+  if (documentedAgentNames.join("|") === supportedAgentNames.join("|"))
+    return [];
   return [
     {
       severity: "warning",
       rule: "dashboard-runner-drift",
       path: "docs/dashboard.md",
-      message: `Dashboard docs list runners as ${claimed.join(", ")}, but manifest-backed runners are ${actual.join(", ")}.`,
+      message:
+        `Dashboard docs list runners as ${documentedAgentNames.join(", ")}, ` +
+        `but manifest-backed runners are ${supportedAgentNames.join(", ")}.`,
       suggestion:
         "Update docs/dashboard.md to match the current manifest-backed runner list.",
     },
   ];
 }
 
-/** Drift: docs/dashboard.md carries a stale release tag in current reference prose. */
+/**
+ * Report a release tag in dashboard guidance that no longer matches the CLI version users run.
+ * Use when current reference prose embeds a version instead of remaining release-neutral.
+ *
+ * @param dashboard - complete dashboard guide; empty text has no version claim
+ * @returns one warning for a stale release tag, or an empty list when absent or current
+ */
 function driftDashboardVersionReference(dashboard: string): ContentFinding[] {
   const runnerLine = dashboard.match(/- Supports .+? runners[^\n]*/u)?.[0];
-  const version = runnerLine?.match(/\bin v(\d+\.\d+\.\d+)\b/u)?.[1];
-  if (version === undefined || version === AUDIT_VERSION) return [];
+  const documentedVersion = runnerLine?.match(/\bin v(\d+\.\d+\.\d+)\b/u)?.[1];
+  // No embedded version or the current version gives users no stale release guidance.
+  if (documentedVersion === undefined || documentedVersion === AUDIT_VERSION) {
+    return [];
+  }
   return [
     {
       severity: "warning",
       rule: "dashboard-version-reference-drift",
       path: "docs/dashboard.md",
-      message: `Dashboard docs reference v${version}, but the current package version is v${AUDIT_VERSION}.`,
+      message: `Dashboard docs reference v${documentedVersion}, but the current package version is v${AUDIT_VERSION}.`,
       suggestion:
         "Remove version-specific wording from docs/dashboard.md or update it during the release bump.",
     },
@@ -323,7 +684,8 @@ const SKILLS_DOC_STALE_PHRASES: Array<{
     needle: "MUST read all files before commenting",
     rule: "skills-review-contract-drift",
     message:
-      "docs/skills.md still claims goat-review must read all files before commenting; the live skill uses diff-first review with explicit files-not-opened reporting.",
+      "docs/skills.md still claims goat-review must read all files before commenting; " +
+      "the live skill uses diff-first review with explicit files-not-opened reporting.",
   },
   {
     needle: "10-category checklist",
@@ -341,69 +703,83 @@ const SKILLS_DOC_STALE_PHRASES: Array<{
     needle: "Announce: Routing to /goat-X",
     rule: "skills-dispatcher-control-flow-drift",
     message:
-      "docs/skills.md still presents every dispatcher request as one inferred routing path; the live skill bypasses classification for explicit skill invocations and bypasses gathering and routing for simple facts.",
+      "docs/skills.md still presents every dispatcher request as one inferred routing path; " +
+      "the live skill bypasses classification for explicit skills and gathering/routing for simple facts.",
   },
   {
     needle: "Footgun matches\\nRecent git",
     rule: "skills-dispatcher-retrieval-drift",
     message:
-      "docs/skills.md still claims the dispatcher pre-reads footguns and recent git; the live dispatcher delegates learning-loop retrieval to routed skills and only retrieves for direct execution.",
+      "docs/skills.md still claims the dispatcher pre-reads footguns and recent git; " +
+      "the live dispatcher delegates routed-skill retrieval and retrieves only for direct execution.",
   },
   {
     needle: "log lessons and footguns after completion",
     rule: "skills-learning-loop-write-drift",
     message:
-      "docs/skills.md still requires unconditional learning-loop writes after completion; the shared contract only writes durable entries after verification failures, course corrections, or explicit requests.",
+      "docs/skills.md still requires unconditional learning-loop writes after completion; " +
+      "the shared contract writes only after verification failures, course corrections, or explicit requests.",
   },
   {
     needle: 'I1 -->|"BLOCKING GATE"| I2',
     rule: "skills-debug-investigate-gate-drift",
     message:
-      "docs/skills.md still blocks every goat-debug investigation at I1; the live skill treats explicit goal and scope as a checkpoint and continues without waiting.",
+      "docs/skills.md still blocks every goat-debug investigation at I1; " +
+      "the live skill treats an explicit goal and scope as a checkpoint and continues.",
   },
   {
     needle: "Severity-Ordered Scan",
     rule: "skills-review-pass-drift",
     message:
-      "docs/skills.md still teaches a single severity-ordered goat-review scan; the live skill requires diff-only Blind Suspicion followed by full-file Grounded Verification.",
+      "docs/skills.md still teaches a single severity-ordered goat-review scan; " +
+      "the live skill requires diff-only Blind Suspicion, then full-file Grounded Verification.",
   },
   {
     needle: "**Threat model mode:**",
     rule: "skills-security-mode-drift",
     message:
-      "docs/skills.md still teaches obsolete goat-security modes; the live skill selects Quick Scan or Full Assessment depth and keeps compliance as an output posture.",
+      "docs/skills.md still teaches obsolete goat-security modes; " +
+      "the live skill selects Quick Scan or Full Assessment and treats compliance as an output posture.",
   },
   {
     needle: 'P2 -->|"BLOCKING GATE"| P3',
     rule: "skills-qa-phase-gate-drift",
     message:
-      "docs/skills.md still makes goat-qa Phase 2 unconditionally blocking; the live Standard path auto-releases explicit test-plan intent while Audit remains blocking.",
+      "docs/skills.md still makes goat-qa Phase 2 unconditionally blocking; " +
+      "the live Standard path auto-releases explicit test-plan intent while Audit stays blocking.",
   },
 ];
 
-/** Drift: docs/skills.md contains stale contract phrases. */
+/**
+ * Report retired workflow promises that would send users through obsolete skill behavior.
+ * Use when content audit checks current `docs/skills.md` against shipped skill contracts.
+ *
+ * @param skillsDoc - complete skills guide; empty text contains no stale phrase
+ * @returns one warning per retired phrase, or an empty list when current guidance is clean
+ */
 function driftSkillsDoc(skillsDoc: string): ContentFinding[] {
-  return SKILLS_DOC_STALE_PHRASES.filter((p) =>
-    skillsDoc.includes(p.needle),
-  ).map((phrase) => ({
+  return SKILLS_DOC_STALE_PHRASES.filter((stalePhrase) =>
+    skillsDoc.includes(stalePhrase.needle),
+  ).map((stalePhrase) => ({
     severity: "warning",
-    rule: phrase.rule,
+    rule: stalePhrase.rule,
     path: "docs/skills.md",
-    message: phrase.message,
+    message: stalePhrase.message,
   }));
 }
 
 /**
- * Drift: glossary.md contains agent-specific or stale canonical pointers.
+ * Report glossary terms that point users to retired agent-specific concepts or files.
+ * Use when content audit checks current definitions without treating ordinary prose as a parser error.
  *
- * Returns an empty finding list when no stale phrase is present; stale prose reports as content findings rather than treated as a parser error.
- * The caller supplies already-read text, so this helper performs no IO and has no recover path beyond returning every matched stale phrase as a
- * finding.
+ * @param glossary - complete glossary text; empty text contains no stale phrase
+ * @returns one warning per matched stale phrase, or an empty list when definitions are current
  */
 function driftGlossary(glossary: string): ContentFinding[] {
-  const findings: ContentFinding[] = [];
+  const glossaryFindings: ContentFinding[] = [];
+  // The old expansion tells users that a shared optimization practice belongs only to Claude.
   if (glossary.includes("Claude Search Optimization")) {
-    findings.push({
+    glossaryFindings.push({
       severity: "warning",
       rule: "glossary-cso-drift",
       path: ".goat-flow/glossary.md",
@@ -411,11 +787,12 @@ function driftGlossary(glossary: string): ContentFinding[] {
         "Glossary still expands CSO as Claude Search Optimization instead of using agent-neutral wording.",
     });
   }
+  // Agent-specific canonical pointers send Codex or Copilot users to the wrong instruction surface.
   if (
     /\|\s*Ceremony\s*\|.*CLAUDE\.md/u.test(glossary) ||
     /\|\s*Router Table\s*\|.*CLAUDE\.md/u.test(glossary)
   ) {
-    findings.push({
+    glossaryFindings.push({
       severity: "warning",
       rule: "glossary-canonical-file-drift",
       path: ".goat-flow/glossary.md",
@@ -423,35 +800,36 @@ function driftGlossary(glossary: string): ContentFinding[] {
         "Glossary still points core concepts through CLAUDE.md instead of an agent-neutral canon.",
     });
   }
-  return findings;
+  return glossaryFindings;
 }
 
 /**
- * Drift: setup/01-system-overview.md oversells session logs as durable memory.
+ * Report setup prose that promises durable memory where users receive local session state.
+ * Use when content audit checks the guidance copied into future installations.
  *
- * Returns an empty finding list when neither retired phrase is present; matches report warnings because setup prose is the source of future install
- * behavior.
- *
- * The caller supplies already-read text, so this helper performs no IO and has no recover path beyond returning every matched stale phrase as a
- * finding.
+ * @param setupOverview - complete setup overview; empty text contains no stale memory claim
+ * @returns one warning per retired phrase, or an empty list when persistence guidance is current
  */
 function driftSetupOverview(setupOverview: string): ContentFinding[] {
-  const findings: ContentFinding[] = [];
+  const setupFindings: ContentFinding[] = [];
+  // Calling session logs persistent memory can make users rely on files that are intentionally gitignored.
   if (setupOverview.includes("persistent memory across sessions")) {
-    findings.push({
+    setupFindings.push({
       severity: "warning",
       rule: "setup-memory-tier-drift",
       path: "workflow/setup/01-system-overview.md",
       message:
-        "Setup overview still sells goat-flow as persistent memory across sessions even though session logs/tasks are local gitignored continuity only.",
+        "Setup overview still sells goat-flow as persistent memory across sessions even though " +
+        "session logs/tasks are local gitignored continuity only.",
     });
   }
+  // Routing durable conclusions into session logs can make a user's learning disappear with local cleanup.
   if (
     setupOverview.includes(
       "preserve any useful content in `.goat-flow/logs/sessions/`",
     )
   ) {
-    findings.push({
+    setupFindings.push({
       severity: "warning",
       rule: "setup-session-log-tier-drift",
       path: "workflow/setup/01-system-overview.md",
@@ -459,18 +837,25 @@ function driftSetupOverview(setupOverview: string): ContentFinding[] {
         "Setup overview still routes durable legacy content into session logs instead of lessons / footguns / decisions.",
     });
   }
-  return findings;
+  return setupFindings;
 }
 
-/** Drift: ADR-020 still says Copilot accepted while manifest excludes it. */
+/**
+ * Report disagreement between the Copilot decision and agents users can configure from the manifest.
+ * Use when content audit checks whether accepted architecture matches shipped runtime support.
+ *
+ * @param decisionText - complete ADR text; empty text is treated as not accepted
+ * @returns one warning for decision/runtime disagreement, or an empty list when both sides match
+ */
 function driftCopilotDecision(decisionText: string): ContentFinding[] {
-  const hasCopilot = Object.prototype.hasOwnProperty.call(
+  const manifestSupportsCopilot = Object.prototype.hasOwnProperty.call(
     loadManifest().agents,
     "copilot",
   );
-  const isAccepted = /\*\*Status:\*\*\s*Accepted/u.test(decisionText);
+  const decisionIsAccepted = /\*\*Status:\*\*\s*Accepted/u.test(decisionText);
 
-  if (isAccepted && !hasCopilot) {
+  // An accepted decision without runtime support promises users a runner they cannot configure.
+  if (decisionIsAccepted && !manifestSupportsCopilot) {
     return [
       {
         severity: "warning",
@@ -484,7 +869,8 @@ function driftCopilotDecision(decisionText: string): ContentFinding[] {
     ];
   }
 
-  if (!isAccepted && hasCopilot) {
+  // Shipped runtime support with an unaccepted decision hides the architecture users actually receive.
+  if (!decisionIsAccepted && manifestSupportsCopilot) {
     return [
       {
         severity: "warning",
@@ -501,8 +887,15 @@ function driftCopilotDecision(decisionText: string): ContentFinding[] {
   return [];
 }
 
-/** Drift: ADR-013 still carries pre-simplification implementation detail. */
+/**
+ * Report pre-simplification scanner details that no longer describe the audit users run.
+ * Use when historical decision rationale still contains current-sounding paths, states, or counts.
+ *
+ * @param decisionText - complete ADR text; empty text contains no stale implementation detail
+ * @returns one warning when any retired detail remains, or an empty list when the decision is durable
+ */
 function driftScannerRemovalDecision(decisionText: string): ContentFinding[] {
+  // None of the retired details means the ADR now explains the decision without misleading current users.
   if (
     !/v0\.9\/v1\.0/u.test(decisionText) &&
     !/agent-setup-checks\.ts/u.test(decisionText) &&
@@ -524,82 +917,127 @@ function driftScannerRemovalDecision(decisionText: string): ContentFinding[] {
 }
 
 /**
- * Targeted semantic drift checks for high-trust cold-path docs.
+ * Run targeted semantic checks over high-trust docs users rely on for orientation.
+ * Missing optional docs are skipped, while every readable document contributes to the coverage count.
  *
- * Missing optional docs recover by being skipped, while readable docs are added
- * to the scanned count so audit output reflects the actual coverage.
- *
- * @param ctx - audit context; its readonly FS reads both the curated docs and the live source files
- *   (classify-state, terminal server, manifest) the docs are checked against
- * @returns the accumulated drift findings and the count of docs actually read, so callers can report
- *   coverage; an empty findings list means no drift was detected among the docs present on disk
+ * @param auditContext - selected-project files and live source facts; missing optional docs are normal for consumer projects
+ * @returns warnings plus the number of readable docs; an empty finding list means no checked document drifted
+ * @throws when manifest validation fails or the filesystem adapter cannot read safely; audit stops instead of showing partial content results
  */
-export function scanSemanticDrift(ctx: AuditContext): {
+export function scanSemanticDrift(auditContext: AuditContext): {
   findings: ContentFinding[];
   filesScanned: number;
 } {
   const findings: ContentFinding[] = [];
-  const scanned = new Set<string>();
+  const scannedDocumentPaths = new Set<string>();
+  const canonicalSkillNames = loadManifest().skills.canonical;
 
-  /** Read one doc and track that it was scanned. */
-  const readAndTrack = (path: string): string | null => {
-    const text = ctx.fs.readFile(path);
-    if (text !== null) scanned.add(path);
-    return text;
+  /**
+   * Read one optional document and count it in the coverage users see.
+   * Returns null when the selected project does not carry that document.
+   *
+   * @param path - project-relative document path; empty input reads no meaningful document
+   * @returns complete document text, including empty text for a present blank file, or null when absent
+   */
+  const readAndTrackDocument = (path: string): string | null => {
+    const documentText = auditContext.fs.readFile(path);
+    // A readable document contributes once even when several semantic rules inspect it.
+    if (documentText !== null) scannedDocumentPaths.add(path);
+    return documentText;
   };
 
-  const codeMap = readAndTrack(".goat-flow/code-map.md");
+  const codeMap = readAndTrackDocument(".goat-flow/code-map.md");
+  // When present, the code map must reflect the project states, dashboard views, playbooks, and skills users can discover.
   if (codeMap !== null) {
-    findings.push(...driftCodeMapClassifyState(codeMap, ctx));
-    findings.push(...driftCodeMapDashboardViews(codeMap, ctx));
+    findings.push(...driftCodeMapClassifyState(codeMap, auditContext));
+    findings.push(...driftCodeMapDashboardViews(codeMap, auditContext));
     findings.push(
-      ...driftSkillPlaybookInventory(".goat-flow/code-map.md", codeMap, ctx),
+      ...driftSkillPlaybookInventory(
+        ".goat-flow/code-map.md",
+        codeMap,
+        auditContext,
+      ),
+    );
+    findings.push(
+      ...findSkillInventoryDrift(
+        ".goat-flow/code-map.md",
+        codeMap,
+        canonicalSkillNames,
+      ),
     );
   }
 
-  const architecture = readAndTrack(".goat-flow/architecture.md");
+  const architecture = readAndTrackDocument(".goat-flow/architecture.md");
+  // When present, architecture must advertise the playbooks and total skill templates users receive.
   if (architecture !== null) {
     findings.push(
       ...driftSkillPlaybookInventory(
         ".goat-flow/architecture.md",
         architecture,
-        ctx,
+        auditContext,
+      ),
+    );
+    findings.push(
+      ...findSkillInventoryDrift(
+        ".goat-flow/architecture.md",
+        architecture,
+        canonicalSkillNames,
       ),
     );
   }
 
-  const dashboard = readAndTrack("docs/dashboard.md");
+  const dashboard = readAndTrackDocument("docs/dashboard.md");
+  // When present, dashboard guidance must match session limits, views, runners, timeout behavior, and release version.
   if (dashboard !== null) {
-    findings.push(...driftDashboardSessions(dashboard, ctx));
+    findings.push(...driftDashboardSessions(dashboard, auditContext));
     findings.push(...driftDashboardViewNames(dashboard));
-    findings.push(...driftDashboardIdleTimeout(dashboard, ctx));
+    findings.push(...driftDashboardIdleTimeout(dashboard, auditContext));
     findings.push(...driftDashboardRunners(dashboard));
     findings.push(...driftDashboardVersionReference(dashboard));
   }
 
-  const skillsDoc = readAndTrack("docs/skills.md");
-  if (skillsDoc !== null) findings.push(...driftSkillsDoc(skillsDoc));
-
-  const glossary = readAndTrack(".goat-flow/glossary.md");
-  if (glossary !== null) {
-    findings.push(...driftGlossary(glossary));
+  const skillsDoc = readAndTrackDocument("docs/skills.md");
+  // A present skills guide must not teach users retired workflow gates or modes.
+  if (skillsDoc !== null) {
+    findings.push(...driftSkillsDoc(skillsDoc));
   }
 
-  const setupOverview = readAndTrack("workflow/setup/01-system-overview.md");
-  if (setupOverview !== null)
-    findings.push(...driftSetupOverview(setupOverview));
+  const glossary = readAndTrackDocument(".goat-flow/glossary.md");
+  // A present glossary must keep canonical pointers and explicit skill choices current for new users.
+  if (glossary !== null) {
+    findings.push(...driftGlossary(glossary));
+    findings.push(
+      ...findSkillInventoryDrift(
+        ".goat-flow/glossary.md",
+        glossary,
+        canonicalSkillNames,
+      ),
+    );
+  }
 
-  const copilotDecision = readAndTrack(
+  const setupOverview = readAndTrackDocument(
+    "workflow/setup/01-system-overview.md",
+  );
+  // A present setup overview must describe session logs as local continuity rather than durable memory.
+  if (setupOverview !== null) {
+    findings.push(...driftSetupOverview(setupOverview));
+  }
+
+  const copilotDecision = readAndTrackDocument(
     ".goat-flow/learning-loop/decisions/ADR-020-add-copilot-cli.md",
   );
-  if (copilotDecision !== null)
+  // A present Copilot decision must agree with the runner support users receive from the manifest.
+  if (copilotDecision !== null) {
     findings.push(...driftCopilotDecision(copilotDecision));
+  }
 
-  const scannerRemovalDecision = readAndTrack(
+  const scannerRemovalDecision = readAndTrackDocument(
     ".goat-flow/learning-loop/decisions/ADR-013-remove-scanner-system.md",
   );
-  if (scannerRemovalDecision !== null)
+  // A present scanner-removal decision must not present retired implementation details as current user behavior.
+  if (scannerRemovalDecision !== null) {
     findings.push(...driftScannerRemovalDecision(scannerRemovalDecision));
+  }
 
-  return { findings, filesScanned: scanned.size };
+  return { findings, filesScanned: scannedDocumentPaths.size };
 }

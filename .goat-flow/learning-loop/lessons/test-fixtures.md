@@ -52,8 +52,8 @@ last_reviewed: 2026-08-23
 ## Lesson: Workflow parser refactors need both fixture coverage and typecheck
 
 **Status:** active | **Created:** 2026-04-03
-**Incident count:** 10
-**Latest occurrence:** 2026-08-16
+**Incident count:** 11
+**Latest occurrence:** 2026-08-23
 
 **What happened:** While tightening CI-validation checks, the first pass on the workflow `run:` parser read the wrong regex capture group and then used a router heuristic that only matched commands containing the word `router`. The focused regression suite and `tsc` both failed before the broader test run finished.
 **Root cause:** Changed parsing and heuristics together without first validating the extracted command shape. The new regression covered the shell pattern, but the implementation still assumed the old capture layout and overfit to existing workflow wording.
@@ -66,8 +66,25 @@ last_reviewed: 2026-08-23
 **Recurrence 2026-08-03 (indented Markdown masking):** The focused validator suite proved that four-space examples stayed hidden, but the first full package run failed `plans export` because the shared masker also hid an indented `(est: ...)` continuation inside a visible checklist item. Indented code cannot interrupt visible prose; carrying whether the prior rendered line was blank preserved wrapped task metadata while keeping standalone examples masked. Evidence anchors: `src/cli/rendered-markdown.ts` (search: `previousRenderedLineWasBlank`), `test/unit/plans-export-parsing.test.ts` (search: `parses est entries at the end of wrapped multi-line tasks`).
 **Recurrence 2026-08-16 (repo-relative review anchors):** The goat-review clean break first replaced `<target-project>/path` with a literal sample path, which the internal-anchor sweep correctly treated as live evidence. Replacing it with `<repo-relative-path>` still failed because the verifier exempted one historical token rather than the placeholder grammar. Rewinding that assumption and recognizing any leading angle-bracket path token kept shipped examples explicit without reviving the invalid prefix. Evidence anchors: `test/contract/skill-hardening.helpers.ts` (search: `angle-bracket token`) and `test/contract/skill-hardening-review-2.test.ts` (search: `documents validator-ready anchors`).
 **Recurrence 2026-08-16 (verification authority):** A full fast-suite run remained active when the changed-file formatting gate found two fixtures. Formatting those files before the suite exited changed its authority mid-run, so its final result was discarded even though each formatted fixture passed in isolation. Evidence anchors: `package.json` (search: `prettier --write`), `test/integration/gruff-code-quality-contract.test.ts` (search: `surfaces a symbol finding when its span overlaps`), and `test/unit/review-validate-verdict.test.ts` (search: `accepts eight REFUTED ledger records`).
+**Recurrence 2026-08-23 (plan warning contract):** M18's focused checker/export command passed 95 tests after parse warnings gained expected grammar and received values, but the first fast suite failed four exact assertions in the shared effort parser's direct unit suite. The focused command covered downstream CLI behavior without including the producer's own warning contract. Future parser-message changes must grep the old diagnostic across tests and include the parser unit file in RED/GREEN proof. Evidence anchors: `src/cli/plans-effort.ts` (search: `formatActionableParseWarning`), `test/unit/plans-effort.test.ts` (search: `warns when a supplied forecast basis cannot be counted`).
 **Decision changed:** Before a prose parser, enumerate every shipped producer shape, validate the nominally valid fixture's relationships, and lock one grammar with focused fixtures. Negative mutations target a unique semantic substring; shipped path examples label placeholders explicitly, and placeholder verifiers recognize the grammar rather than one literal token. At first behavioral GREEN, check whole-file complexity and headroom before adding branches.
 **Fix:** For parser refactors, verify in this order: (1) print/exercise extracted intermediate values and fixture relationships, (2) run the focused regression suite, (3) run `npx tsc --noEmit`, (4) run whole-file ESLint and complexity/size analysis, then (5) freeze writes and run the full test suite. Any later write invalidates that suite result and requires a fresh run. Heuristics should match behavior patterns like `grep ... | while read ... [ ! -e ]`, not just keywords in step names.
+
+---
+
+## Lesson: Nested tests should import production helpers through the test facade
+
+**Status:** active | **Created:** 2026-08-23
+**Decision changed:** Deeply nested tests extend `test/src.ts` and use its shallow import instead of hand-counting parent traversals into `src/`.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+**Incident count:** 1 | **Latest occurrence:** 2026-08-23
+
+**What happened:** M21's first semantic-inventory RED imported two production modules with `../../src/...` from `test/unit/audit-command/`. Node resolved that path under `test/src/` and failed with `ERR_MODULE_NOT_FOUND` before reaching the intentionally missing export. Changing it to `../../../src/...` reached production code, but Gruff then flagged both deep relative imports. Re-exporting the helper through the existing test facade produced the intended RED and kept the nested test's import shallow.
+
+**Root cause:** The test bypassed the repository's facade and treated directory depth as part of the fixture contract. The first failure therefore measured path arithmetic rather than the missing behavior the RED was meant to prove.
+
+**Prevention:** Before adding a production import to a nested test, inspect `test/src.ts`; extend that facade when the helper is intentionally test-visible, then import through the existing `../../src.js` path. Validate that RED fails on the intended missing symbol or assertion, not module resolution. Evidence anchors: `test/src.ts` (search: `findSkillInventoryDrift`) and `test/unit/audit-command/main.test.ts` (search: `warns only for stale explicit skill inventories`).
 
 ---
 

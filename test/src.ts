@@ -1,6 +1,7 @@
 /**
  * Test-only facade for production modules used by deeply nested test fixtures.
  * Keeps audit and quality tests on stable, shallow imports without changing the package export surface.
+ * Use when a nested test needs production behavior without brittle parent-directory traversal.
  */
 export {
   computeHarness,
@@ -27,7 +28,10 @@ export {
 } from "../src/cli/audit/check-agent-common.js";
 export { agentDenyMechanism } from "../src/cli/audit/check-agent-deny-mechanism.js";
 export { checkHookRuntimeSmoke } from "../src/cli/audit/check-agent-deny-runtime.js";
-export { scanSemanticDrift } from "../src/cli/audit/check-factual-semantic-drift.js";
+export {
+  findSkillInventoryDrift,
+  scanSemanticDrift,
+} from "../src/cli/audit/check-factual-semantic-drift.js";
 export { AGENT_CHECKS } from "../src/cli/audit/check-agent-setup.js";
 export {
   REQUIRED_GOAT_FLOW_GITIGNORE_PATTERNS,
