@@ -25,6 +25,7 @@ import {
   type QualityDeltaTag,
   type QualityEvidenceMethod,
   type QualityFinding,
+  type QualityRefutedCandidate,
   type QualityReport,
   type QualityMode,
   type QualityReportParseOptions,
@@ -45,6 +46,7 @@ import {
   isRecord,
   rejectUnknownKeys,
 } from "./schema-expectations.js";
+import { parseReportRefutedCandidates } from "./schema-refuted-candidates.js";
 
 /**
  * Confirm a formatted run date names a real Gregorian calendar day.
@@ -877,6 +879,42 @@ function parseReportFindings(
 }
 
 /**
+ * Parse the actionable findings and disproved-candidate ledger as one report collection boundary.
+ * Use before constructing history output so either invalid list blocks the whole user-visible report.
+ *
+ * @param rawReport - report object carrying both arrays; missing current arrays produce their own schema errors
+ * @param options - strictness for current versus legacy reports; legacy absence is normalized only for the refutation ledger
+ * @param priorReportId - compared report id; null or absent means finding delta tags may remain null
+ * @returns both validated collections, or the first list error the report author must fix
+ */
+function parseReportCollections(
+  rawReport: Record<string, unknown>,
+  options: QualityReportParseOptions,
+  priorReportId: string | null | undefined,
+): FieldResult<{
+  findings: QualityFinding[];
+  refutedCandidates: QualityRefutedCandidate[];
+}> {
+  const findings = parseReportFindings(
+    rawReport.findings,
+    options,
+    priorReportId,
+  );
+  // Invalid findings stop the report before its actionable issue list reaches the user.
+  if (!findings.ok) return findings;
+  const refutedCandidates = parseReportRefutedCandidates(rawReport, options);
+  // Invalid exclusions stop the report before its refutation ledger reaches the user.
+  if (!refutedCandidates.ok) return refutedCandidates;
+  return {
+    ok: true,
+    value: {
+      findings: findings.value,
+      refutedCandidates: refutedCandidates.value,
+    },
+  };
+}
+
+/**
  * Parse the full quality report object.
  * Use before saving or comparing a run so every user-facing summary and finding row is trustworthy.
  *
@@ -909,6 +947,7 @@ function parseReportInternal(
       "assessment_context",
       "scores",
       "findings",
+      "refuted_candidates",
     ],
     "report",
   );
@@ -971,10 +1010,11 @@ function parseReportInternal(
   // Score errors stop the report before any headline metrics are shown.
   if (!scores.ok) return scores;
 
-  const findings = parseReportFindings(raw.findings, options, priorReportId);
-  if (!findings.ok) return findings;
+  const reportCollections = parseReportCollections(raw, options, priorReportId);
+  // Invalid findings or exclusions stop the report before either list reaches history.
+  if (!reportCollections.ok) return reportCollections;
 
-  const reportBase: Omit<QualityReport, "findings"> = {
+  const reportBase: Omit<QualityReport, "findings" | "refuted_candidates"> = {
     report_kind: QUALITY_REPORT_KIND,
     goat_flow_version: identity.value.version,
     agent: identity.value.agent,
@@ -993,7 +1033,11 @@ function parseReportInternal(
 
   return {
     ok: true,
-    report: { ...reportBase, findings: findings.value },
+    report: {
+      ...reportBase,
+      findings: reportCollections.value.findings,
+      refuted_candidates: reportCollections.value.refutedCandidates,
+    },
   };
 }
 

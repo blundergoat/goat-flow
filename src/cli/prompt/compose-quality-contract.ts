@@ -183,7 +183,8 @@ export function appendQualityReportContract(
       `    { "type": "${sampleType}", "severity": "MAJOR", "file": ".goat-flow/architecture.md", "line": null, "summary": "One-line finding summary", "detail": "Why it matters", "evidence_quality": "OBSERVED", "evidence_method": "static-analysis", "delta_tag": ${sampleDelta} }`,
     );
   }
-  lines.push("  ]");
+  lines.push("  ],");
+  lines.push('  "refuted_candidates": []');
   lines.push("}");
   lines.push("```");
   lines.push("");
@@ -234,6 +235,16 @@ function appendReportJsonRules(
   pushVariant(
     "- Runtime-backed findings SHOULD include compact evidence fields when useful: `evidence_command` (the command), `evidence_exit_code` (integer), `evidence_summary` (literal pass/fail or warning summary), `evidence_warning_count` (integer), and `evidence_excerpt` (short single-line excerpt). Do not paste raw terminal blocks into JSON.",
     "- Runtime-backed findings SHOULD include compact evidence fields when useful: `evidence_command`, `evidence_exit_code`, `evidence_summary`, `evidence_warning_count`, and `evidence_excerpt`. Keep these single-line and concise; do not paste raw terminal blocks.",
+  );
+  pushVariant(
+    "- `refuted_candidates` is REQUIRED and may be `[]`. Preserve every candidate you tested and excluded; never repeat those candidates in `findings`. Each row requires `claim`, `why_excluded`, nullable `file` and `line`, `evidence_quality`, `evidence_method`, and `evidence_summary`; `evidence_command`, `evidence_exit_code`, and `evidence_excerpt` are optional unless the method rule below requires them.",
+    "- `refuted_candidates` is REQUIRED and may be `[]`. Each row requires `claim`, `why_excluded`, nullable `file` and `line`, `evidence_quality`, `evidence_method`, and `evidence_summary`; excluded candidates do not belong in `findings`.",
+  );
+  lines.push(
+    "- A `runtime-probe` or `mixed` refuted candidate requires `evidence_command`, `evidence_exit_code`, and `evidence_summary` so the disproval is reproducible.",
+  );
+  lines.push(
+    '- A `static-analysis` refuted candidate requires a non-null `file` and a grep-friendly semantic anchor such as `(search: "pattern")` in `evidence_summary`.',
   );
   pushVariant(
     '- `scope` is REQUIRED at top level. Set `framework-self` if you detect this is the goat-flow repo itself (heuristic: `package.json` contains `"name": "@blundergoat/goat-flow"`). Otherwise set `consumer`.',
@@ -401,16 +412,25 @@ function appendStagedDraftPersistence(
 }
 
 /**
- * Focused-mode wrapper over {@link appendQualityReportContract}: compact wording, trailing-section separator, framework-flavoured sample finding.
- * Kept as a named export so focused composers read naturally.
+ * Append the focused prose ledger followed by the compact shared report contract.
+ * Use for process, harness, and skills assessments so their users see the same disproval evidence as the full assessment.
  *
- * @param lines - prompt line buffer; appended to in place
- * @param input - run facts embedded into the contract
+ * @param lines - prompt line buffer; empty means the ledger starts the remaining focused output instructions
+ * @param input - run facts embedded into the contract; a null prior report keeps finding delta tags unset
+ * @returns nothing; the supplied prompt receives the prose ledger and JSON contract
  */
 export function appendFocusedReportContract(
   lines: string[],
   input: ReportContractInput,
 ): void {
+  lines.push("### Refuted Candidates");
+  lines.push(
+    "List every candidate finding you tested and excluded, why it was excluded, and the source anchor or command result that disproved it. Write `None` when no candidate was ruled out.",
+  );
+  lines.push(
+    "Keep these candidates out of findings and recommendations; the ledger exists so the user and later reviewers do not repeat disproved work.",
+  );
+  lines.push("");
   appendQualityReportContract(lines, input, {
     detail: "compact",
     hasLeadingSeparator: true,

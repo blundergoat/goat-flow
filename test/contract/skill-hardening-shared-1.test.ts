@@ -1,9 +1,8 @@
 /**
- * Contracts for guidance every skill inherits: the preamble, conventions, playbook wiring,
- * and the mirror parity that keeps all four install roots saying the same thing.
+ * Protects the shared guidance users receive through every installed goat-flow skill: preamble, conventions, playbook wiring, and mirror parity.
  *
- * Reads the installed copies rather than sources, so a contract fails when the guidance a user
- * actually receives drifts - not merely when the template does.
+ * Reads installed copies so drift fails at the user's surface, not only in the template.
+ * Use this contract when changing inherited skill doctrine or its installed mirrors.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -46,6 +45,7 @@ describe("skill hardening contracts: shared surfaces (1/3)", () => {
   });
 
   it("enrolls goat-clarity in canonical registry and release owners", () => {
+    // Every release owner must expose goat-clarity so users can discover the same canonical skill.
     for (const ownerPath of [
       "workflow/manifest.json",
       ".goat-flow/config.yaml",
@@ -64,6 +64,7 @@ describe("skill hardening contracts: shared surfaces (1/3)", () => {
   });
 
   it("includes goat-clarity in every setup inventory", () => {
+    // Each setup surface must offer goat-clarity wherever a user chooses or reviews installed skills.
     for (const ownerPath of [
       "workflow/setup/01-system-overview.md",
       "workflow/setup/03-install-skills.md",
@@ -157,6 +158,7 @@ describe("skill hardening contracts: shared surfaces (1/3)", () => {
           /One matching class selects Full regardless of size/u,
           referencePath,
         );
+        // Every user-visible material-risk class must select Full review depth, regardless of diff size.
         for (const riskClass of [
           "Security or trust boundary",
           "Migration or persistence",
@@ -311,21 +313,66 @@ describe("skill hardening contracts: shared surfaces (1/3)", () => {
     });
   });
 
-  it("requires host re-derivation for absence-based findings", () => {
+  it("requires minimum evidence and rejects false proof for every claim type", () => {
+    // Users may request counts, accept check results, or compare timings; every installed preamble must demand evidence that fits each claim.
     for (const preamblePath of [
       "workflow/skills/reference/skill-preamble.md",
       ".goat-flow/skill-docs/skill-preamble.md",
     ]) {
-      const preamble = readMarkdownSection(preamblePath, "Evidence Standard");
-      assert.match(preamble, /load-bearing claim is an absence/u, preamblePath);
+      const evidenceStandard = readMarkdownSection(
+        preamblePath,
+        "Evidence Standard",
+      );
+      const proofGate = readMarkdownSection(preamblePath, "Proof Gate");
+
       assert.match(
-        preamble,
-        /search the exact symbol expecting zero lines/u,
+        evidenceStandard,
+        /exact, untruncated command.*raw total/iu,
         preamblePath,
       );
       assert.match(
-        preamble,
-        /subagent negatives and broad-pattern hits are not evidence/u,
+        evidenceStandard,
+        /Truncated output, sampled scopes, and totals inferred/iu,
+        preamblePath,
+      );
+      assert.match(
+        evidenceStandard,
+        /exact zero-result search.*exact region/iu,
+        preamblePath,
+      );
+      assert.match(
+        evidenceStandard,
+        /Subagent negatives, broad-pattern hits, truncated output/iu,
+        preamblePath,
+      );
+      assert.match(
+        evidenceStandard,
+        /foreground.*process exit code.*per-check result row/iu,
+        preamblePath,
+      );
+      assert.match(
+        evidenceStandard,
+        /clean exit paired with any failing row/iu,
+        preamblePath,
+      );
+      assert.match(
+        evidenceStandard,
+        /RUNTIME.*falsifiable hypothesis.*declared cache state/iu,
+        preamblePath,
+      );
+      assert.match(
+        evidenceStandard,
+        /5\+ iterations.*median plus spread.*byte-identical correctness/iu,
+        preamblePath,
+      );
+      assert.match(
+        evidenceStandard,
+        /One timing, undeclared or mixed cache states, a mean without spread, and timings from changed outputs/iu,
+        preamblePath,
+      );
+      assert.match(
+        proofGate,
+        /all output, the process exit code, and every parsed result row/iu,
         preamblePath,
       );
     }
@@ -348,6 +395,7 @@ describe("skill hardening contracts: shared surfaces (1/3)", () => {
   });
 
   it("names only real safety-critical sub-agent gates", () => {
+    // Every installed convention must keep the same two user-blocking safety gates and no invented third gate.
     for (const conventionsPath of [
       "workflow/skills/reference/skill-conventions.md",
       ".goat-flow/skill-docs/skill-conventions.md",
@@ -472,6 +520,7 @@ describe("skill hardening contracts: shared surfaces (1/3)", () => {
   });
 
   it("defers stale-index regeneration when committed writes are forbidden", () => {
+    // Each installed preamble must keep read-only users from triggering an unauthorized generated-index write.
     for (const preamblePath of [
       "workflow/skills/reference/skill-preamble.md",
       ".goat-flow/skill-docs/skill-preamble.md",

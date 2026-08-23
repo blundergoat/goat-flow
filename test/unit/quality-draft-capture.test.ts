@@ -69,7 +69,13 @@ function skipOnWindows(testContext: TestContext, reason: string): boolean {
   return true;
 }
 
-/** Build one schema-valid minimal report owned by the given project root. */
+/**
+ * Build the smallest current report the dashboard can accept for one selected project.
+ * Use in capture scenarios where empty findings and refutations keep the fixture focused on persistence.
+ *
+ * @param projectRoot - selected project directory; empty or missing paths cannot own a saved report
+ * @returns serialized current report with empty findings and refutation ledgers
+ */
 function validReport(projectRoot: string): string {
   return JSON.stringify({
     report_kind: "goat-flow-quality-report",
@@ -106,6 +112,7 @@ function validReport(projectRoot: string): string {
       },
     },
     findings: [],
+    refuted_candidates: [],
   });
 }
 

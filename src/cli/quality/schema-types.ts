@@ -143,6 +143,24 @@ export interface QualityFinding {
   delta_tag: QualityDeltaTag | null;
 }
 
+/**
+ * One suspected finding the assessor tested and excluded from the user's actionable findings.
+ * The ledger keeps the disproval reason and compact evidence visible, so later reviews do not repeat the same dead end.
+ * File and line are explicit nullable fields because runtime evidence may have no source location.
+ */
+export interface QualityRefutedCandidate {
+  claim: string;
+  why_excluded: string;
+  file: string | null;
+  line: number | null;
+  evidence_quality: QualityEvidenceQuality;
+  evidence_method: QualityEvidenceMethod;
+  evidence_summary: string;
+  evidence_command?: string;
+  evidence_exit_code?: number;
+  evidence_excerpt?: string;
+}
+
 /** Persisted quality finding with a deterministic history/diff ID. */
 export interface SavedQualityFinding extends QualityFinding {
   id: string;
@@ -172,6 +190,7 @@ export interface QualityReport {
   assessment_context?: QualityAssessmentContext;
   scores: QualityScores;
   findings: QualityFinding[];
+  refuted_candidates: QualityRefutedCandidate[];
 }
 
 /** Saved quality report schema after `attachFindingIds` has materialized finding IDs. */

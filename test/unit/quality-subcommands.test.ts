@@ -36,6 +36,23 @@ const INVALID_CURRENT_RUN_DATES = [
   "2026-13-01",
 ] as const;
 
+/** Build a source-backed candidate the assessor disproved before showing the user their findings. */
+function staticRefutedCandidate(
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    claim: "The parser accepts unsupported report keys",
+    why_excluded: "Closed-schema validation rejects the extra key.",
+    file: "src/cli/quality/schema-parser.ts",
+    line: null,
+    evidence_quality: "OBSERVED",
+    evidence_method: "static-analysis",
+    evidence_summary:
+      'The parser calls rejectUnknownKeys before saving (search: "rejectUnknownKeys").',
+    ...overrides,
+  };
+}
+
 /** Build one current report accepted by the strict quality schema. */
 function currentQualityReport(
   projectPath: string,
@@ -89,7 +106,27 @@ function currentQualityReport(
         delta_tag: null,
       },
     ],
+    refuted_candidates: [],
   };
+}
+
+/**
+ * Assert that one disproved-candidate row is rejected before it reaches quality history.
+ * Use for malformed candidate fixtures; an empty expected error would hide the field the user must repair.
+ *
+ * @param candidate - candidate row to validate; an empty object exercises missing required fields
+ * @param expectedError - exact user-facing schema error; empty text would make the assertion ambiguous
+ * @returns nothing; the assertion fails if the report is accepted or rejects a different field
+ */
+function assertRefutedCandidateError(
+  candidate: Record<string, unknown>,
+  expectedError: string,
+): void {
+  const parsed = parseQualityReport({
+    ...currentQualityReport(resolve("quality-refutation-fixture")),
+    refuted_candidates: [candidate],
+  });
+  assert.deepEqual(parsed, { ok: false, error: expectedError });
 }
 
 /** Spawns the public source CLI saver with one raw stdin body. */
@@ -319,6 +356,174 @@ describe("quality assessment context", () => {
       error:
         "report.assessment_context.unverified_probes must name at least one probe when grounding_status is partial or blocked",
     });
+  });
+});
+
+describe("quality refuted candidates", () => {
+  it("accepts an empty current ledger and source-backed disproval", () => {
+    const emptyLedger = parseQualityReport(
+      currentQualityReport(resolve("quality-refutation-fixture")),
+    );
+    assert.equal(
+      emptyLedger.ok,
+      true,
+      emptyLedger.ok ? undefined : emptyLedger.error,
+    );
+
+    const sourceBackedLedger = parseQualityReport({
+      ...currentQualityReport(resolve("quality-refutation-fixture")),
+      refuted_candidates: [staticRefutedCandidate()],
+    });
+    assert.equal(
+      sourceBackedLedger.ok,
+      true,
+      sourceBackedLedger.ok ? undefined : sourceBackedLedger.error,
+    );
+  });
+
+  it("accepts runtime and mixed disprovals with command provenance", () => {
+    const runtimeCandidate = staticRefutedCandidate({
+      file: null,
+      evidence_method: "runtime-probe",
+      evidence_command: "npm test -- --runInBand",
+      evidence_exit_code: 0,
+      evidence_summary: "The focused regression passed with zero failures.",
+      evidence_excerpt: "tests 12; pass 12; fail 0",
+    });
+    const mixedCandidate = staticRefutedCandidate({
+      evidence_method: "mixed",
+      evidence_command: "npm run typecheck",
+      evidence_exit_code: 0,
+      evidence_summary:
+        'Typecheck passed after source inspection (search: "parseQualityReport").',
+    });
+    const parsed = parseQualityReport({
+      ...currentQualityReport(resolve("quality-refutation-fixture")),
+      refuted_candidates: [runtimeCandidate, mixedCandidate],
+    });
+    assert.equal(parsed.ok, true, parsed.ok ? undefined : parsed.error);
+  });
+
+  it("requires the current ledger while normalizing its legacy absence", () => {
+    const { refuted_candidates: _ledger, ...reportWithoutLedger } =
+      currentQualityReport(resolve("quality-refutation-fixture"));
+    const current = parseQualityReport(reportWithoutLedger);
+    assert.deepEqual(current, {
+      ok: false,
+      error:
+        "report.refuted_candidates is required for current quality reports",
+    });
+
+    const historical = parseQualityReport(reportWithoutLedger, {
+      requireCurrentFields: false,
+    });
+    assert.equal(
+      historical.ok,
+      true,
+      historical.ok ? undefined : historical.error,
+    );
+    // An old report has no recorded disprovals, so history exposes an honest empty ledger.
+    assert.ok(historical.ok);
+    assert.deepEqual(historical.report.refuted_candidates, []);
+  });
+
+  it("rejects each missing required candidate field", () => {
+    const withoutClaim = staticRefutedCandidate();
+    delete withoutClaim.claim;
+    assertRefutedCandidateError(
+      withoutClaim,
+      "refuted_candidates[0].claim must be a string",
+    );
+
+    const withoutReason = staticRefutedCandidate();
+    delete withoutReason.why_excluded;
+    assertRefutedCandidateError(
+      withoutReason,
+      "refuted_candidates[0].why_excluded must be a string",
+    );
+
+    const withoutFile = staticRefutedCandidate();
+    delete withoutFile.file;
+    assertRefutedCandidateError(
+      withoutFile,
+      "refuted_candidates[0].file must be a string",
+    );
+
+    const withoutLine = staticRefutedCandidate();
+    delete withoutLine.line;
+    assertRefutedCandidateError(
+      withoutLine,
+      "refuted_candidates[0].line must be a positive integer or null",
+    );
+
+    const withoutEvidenceQuality = staticRefutedCandidate();
+    delete withoutEvidenceQuality.evidence_quality;
+    assertRefutedCandidateError(
+      withoutEvidenceQuality,
+      "refuted_candidates[0].evidence_quality must be one of: OBSERVED, INFERRED",
+    );
+
+    const withoutEvidenceMethod = staticRefutedCandidate();
+    delete withoutEvidenceMethod.evidence_method;
+    assertRefutedCandidateError(
+      withoutEvidenceMethod,
+      "refuted_candidates[0].evidence_method must be one of: runtime-probe, static-analysis, mixed",
+    );
+
+    const withoutEvidenceSummary = staticRefutedCandidate();
+    delete withoutEvidenceSummary.evidence_summary;
+    assertRefutedCandidateError(
+      withoutEvidenceSummary,
+      "refuted_candidates[0].evidence_summary must be a string",
+    );
+  });
+
+  it("rejects unknown keys and unsupported evidence labels", () => {
+    assertRefutedCandidateError(
+      staticRefutedCandidate({ proof_class: "STATIC" }),
+      "refuted_candidates[0] has unknown key(s): proof_class",
+    );
+    assertRefutedCandidateError(
+      staticRefutedCandidate({ evidence_quality: "ACTUAL_MEASURED" }),
+      "refuted_candidates[0].evidence_quality must be one of: OBSERVED, INFERRED",
+    );
+    assertRefutedCandidateError(
+      staticRefutedCandidate({ evidence_method: "browser" }),
+      "refuted_candidates[0].evidence_method must be one of: runtime-probe, static-analysis, mixed",
+    );
+  });
+
+  it("requires runtime command provenance for runtime and mixed evidence", () => {
+    assertRefutedCandidateError(
+      staticRefutedCandidate({
+        file: null,
+        evidence_method: "runtime-probe",
+        evidence_summary: "The focused regression passed.",
+      }),
+      "refuted_candidates[0].evidence_command is required for runtime-probe evidence",
+    );
+    assertRefutedCandidateError(
+      staticRefutedCandidate({
+        evidence_method: "mixed",
+        evidence_command: "npm run typecheck",
+        evidence_summary:
+          'Typecheck passed after source inspection (search: "parseQualityReport").',
+      }),
+      "refuted_candidates[0].evidence_exit_code is required for mixed evidence",
+    );
+  });
+
+  it("requires a file and semantic anchor for static evidence", () => {
+    assertRefutedCandidateError(
+      staticRefutedCandidate({ file: null }),
+      "refuted_candidates[0].file is required for static-analysis evidence",
+    );
+    assertRefutedCandidateError(
+      staticRefutedCandidate({
+        evidence_summary: "The parser calls rejectUnknownKeys before saving.",
+      }),
+      'refuted_candidates[0].evidence_summary must include a semantic anchor such as (search: "pattern") for static-analysis evidence',
+    );
   });
 });
 

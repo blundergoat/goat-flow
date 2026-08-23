@@ -212,10 +212,11 @@ export function appendRatingSections(lines: string[]): void {
 }
 
 /**
- * Append the per-axis rating-band definitions (exact 25/20/15/10/5/0 anchors)
- * and the Top-5-Improvements and What-You-Did-Not-Verify closing sections.
+ * Append the score anchors and closing evidence sections a user reads in the prose assessment.
+ * Use after the ratings shell so improvements, disproved candidates, and remaining uncertainty appear in a stable order.
  *
- * @param lines - prompt line buffer; appended to in place
+ * @param lines - prompt line buffer; empty means the rating bands begin the remaining assessment
+ * @returns nothing; the supplied prompt receives the rating and closing sections
  */
 function appendRatingBands(lines: string[]): void {
   lines.push("### Rating bands");
@@ -253,6 +254,14 @@ function appendRatingBands(lines: string[]): void {
   lines.push("1. What to change");
   lines.push("2. Evidence from your testing (cite file + semantic anchor)");
   lines.push("3. Expected impact on the ratings");
+  lines.push("");
+  lines.push("### Refuted Candidates");
+  lines.push(
+    "List every candidate finding you tested and excluded, why it was excluded, and the source anchor or command result that disproved it. Write `None` when no candidate was ruled out.",
+  );
+  lines.push(
+    "Keep these candidates out of Findings and Top 5 Improvements; the ledger exists so the user and later reviewers do not repeat disproved work.",
+  );
   lines.push("");
   lines.push("### What You Did Not Verify");
   lines.push(

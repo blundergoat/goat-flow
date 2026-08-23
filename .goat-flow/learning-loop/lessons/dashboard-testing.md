@@ -1,6 +1,6 @@
 ---
 category: dashboard-testing
-last_reviewed: 2026-08-22
+last_reviewed: 2026-08-23
 ---
 
 **Scope:** Testing the dashboard as a built, served application - stale dist copies, servers needing a restart after template edits, Knip registration for classic scripts, route-scoped verification, and performance probes that need the real shell. Asserting against source and VM-loaded helpers is [dashboard-unit-tests.md](dashboard-unit-tests.md).
@@ -148,4 +148,10 @@ last_reviewed: 2026-08-22
 
 **Root cause:** I treated the first HTTP request made by the benchmark process as representative endpoint time. That mixed one-time client setup with the route being measured and made the cached path look much slower than the server profile and same-server curl evidence.
 
-**Prevention:** Warm the benchmark client with a cheap request such as `/api/health` before measuring dashboard endpoint latency. Compare client-visible endpoint time with server-side profile spans; if they differ by orders of magnitude, identify unprofiled client/setup overhead before recording the timing. Evidence anchor: `scripts/profile-dashboard-audit.mjs` (search: `await fetch(\`${baseUrl}/api/health\`)`).
+**Prevention:**
+
+1. Declare server cache state (`fresh` or `cached`) and client state (`cold` or `warmed`) separately before sampling; never combine those states into one series.
+2. Warm the client with a cheap request such as `/api/health`, then measure fresh and cached endpoint series independently.
+3. Compare client-visible endpoint time with server-side profile spans. If they differ by orders of magnitude, identify unprofiled client or setup overhead before recording the timing.
+
+This incident establishes the warmup and cache-state controls, not a reusable latency threshold. The shared evidence matrix owns iteration count, median, spread, and correctness requirements. Evidence anchor: `scripts/profile-dashboard-audit.mjs` (search: `await fetch(\`${baseUrl}/api/health\`)`).

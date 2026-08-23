@@ -30,6 +30,7 @@ Order findings by severity, not by file or discovery order.
 
 - NEVER suppress linter warnings or bypass types (e.g., casts) without a same-line `-- rationale` naming the load-bearing reason
 - Read surrounding files; keep updates surgical, idiomatic, and convention-aligned
+- Before editing a file with a declared budget (`line_target`, `line-limits`), state its current count and threshold; if already over target, name the gap before adding content
 - Human-read skill output - reports, `ISSUE.md`, milestone and testing-plan narrative, decision records, learning-loop entry bodies, and release or changelog text - follows `.goat-flow/skill-docs/playbooks/writing-style.md`; fixed schema fields, exact paths, commands, approved requirements and acceptance/proof/verification/exit criteria, task/proof checklists, tables, catalogues, and deliberate control repetition stay exempt
 
 ## Evidence Standard
@@ -37,11 +38,19 @@ Order findings by severity, not by file or discovery order.
 - Live findings and durable learning-loop artifacts MUST cite `file` plus a grep-friendly semantic anchor (`(search: "pattern")`, function name, or unique string); line numbers are navigation hints only.
 - For URL, local HTML, localhost, screenshot, rendered UI, or browser-visible tasks, check `.goat-flow/skill-docs/playbooks/browser-use.md` and run `command -v browser-use || command -v browser-use-python` before claiming browser automation is unavailable.
 - MUST NOT fabricate paths, symbols, or content; re-read every cited file and anchor before presenting findings.
-- Findings whose load-bearing claim is an absence MUST be re-derived by the host: read the region or search the exact symbol expecting zero lines; subagent negatives and broad-pattern hits are not evidence.
 - Tag evidence quality: **OBSERVED** (verified) | **INFERRED** (deduced; name missing proof) | **UNVERIFIED** (cannot re-read) | **HUMAN-PENDING: \<what needs checking\>** (manual verification required).
 - When citing a cross-reference code from another skill's output (e.g. S-03, Q2, A.F3), include the source file path on first use
 - Verify symbols, CLI flags, and config keys against repo search, `--help`, or live config.
 - Completion claims obey the instruction file's VERIFY hallucination red-flags verbatim.
+
+Claim-type controls set minimum evidence without adding proof classes:
+
+| Claim type | Minimum evidence | Reject |
+|---|---|---|
+| Exact count | Run the exact, untruncated command over the declared scope; retain its raw total. | Truncated output, sampled scopes, and totals inferred from presence listings. |
+| Absence | The host runs an exact zero-result search over the scope or reads the exact region. | Subagent negatives, broad-pattern hits, truncated output, or searches outside the claimed scope. |
+| Command or check status | Run in the foreground; retain the process exit code and parse every per-check result row. | Success text without status, a clean exit paired with any failing row, or background/partial logs. |
+| Performance | Use **RUNTIME** evidence with a falsifiable hypothesis and declared cache state; run 5+ iterations, report median plus spread, and prove byte-identical correctness. | One timing, undeclared or mixed cache states, a mean without spread, and timings from changed outputs. |
 
 ## Proof Classification
 
@@ -60,7 +69,7 @@ Before any completion, fix, or "passing" claim:
 
 1. **Identify** the exact command, reproduction, diff, or artifact proving the claim.
 2. **Run** it fresh this session, never from recall or a prior turn.
-3. **Read** all output and the exit code.
+3. **Read** all output, the process exit code, and every parsed result row.
 4. **Verify** it proves this claim, not an adjacent one.
 5. **Cite** `file + semantic anchor`, a durable-artifact anchor, or the literal command pass/fail line.
 

@@ -13,7 +13,8 @@ The generated prompt asks an agent to judge whether the harness is usable, not j
 1. **Ground yourself** - run the project's validation commands (`audit --harness`, `stats --check`), save the output
 2. **Concern-by-concern analysis** - for each of the 5 harness concerns (Context, Constraints, Verification, Recovery, Feedback Loop), assess what works, what fails or is weak, and provide file or semantic-anchor evidence
 3. **False positive and false negative risks** - identify where a structural PASS hides a real gap, and where a FAIL is misleading
-4. **Top 5 improvements** - prioritize actionable fixes with evidence and verification commands
+4. **Refuted candidates** - preserve suspected findings the assessor tested and ruled out, with the reason and source or command evidence
+5. **Top 5 improvements** - prioritize actionable fixes with evidence and verification commands
 
 Findings are severity-ranked (BLOCKER / MAJOR / MINOR) with evidence quality marked (OBSERVED vs INFERRED). The prompt embeds the current audit results so the agent knows what's already passing or failing.
 
@@ -29,7 +30,7 @@ npx @blundergoat/goat-flow@latest quality history --agent claude
 npx @blundergoat/goat-flow@latest quality diff --agent claude
 ```
 
-Saved reports live locally under `.goat-flow/logs/quality/` as validated JSON. New reports record the assessed revision, worktree state, grounding coverage, unverified probes, and score confidence under `assessment_context`; these facts explain evidence gaps without automatically changing a score. `history` and `diff` also keep older reports loadable when that context predates their schema.
+Saved reports live locally under `.goat-flow/logs/quality/` as validated JSON. New reports record run provenance under `assessment_context` and require a `refuted_candidates` array, which may be empty. Each refuted row explains what claim was excluded and the source or command evidence that disproved it, keeping it separate from actionable findings. `history` and `diff` keep older reports loadable when either field predates their schema; a missing legacy ledger is read as `[]`.
 
 ---
 

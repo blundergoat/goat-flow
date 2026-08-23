@@ -67,7 +67,7 @@ BAD: "The project has 20 audit checks" (guessed without reading)
 GOOD: Read the relevant source, config, or generated instruction file before stating exact counts.
 
 ### SCOPE
-Three signals before acting: (1) Intent: question → answer it, directive → act on it. (2) Complexity budget: Hotfix 2 reads/3 turns; Small Feature 3/5; Standard 4/10; System 6/20; Infrastructure 8/25. (3) Mode: Plan / Implement / Explain / Debug / Review. MUST declare before acting: files allowed to change, non-goals, max blast radius. Expanding beyond scope = stop and re-scope with human.
+Three signals before acting: (1) Intent: question → answer it, directive → act on it. (2) Complexity budget: Hotfix 2 reads/3 turns; Small Feature 3/5; Standard 4/10; System 6/20; Infrastructure 8/25. (3) Mode: Plan / Implement / Explain / Debug / Review. MUST declare before acting: files allowed to change, non-goals, max blast radius. Expanding beyond scope = stop and re-scope with human. Before writing, record the write allowlist and starting dirty paths; keep an in-session list of every path this session writes. Reads and searches stay unrestricted.
 
 Over budget = checkpoint and re-classify before continuing. Complexity-class budgets are heuristics, not a hard stop when competent review needs broader coverage.
 
@@ -85,7 +85,7 @@ MUST declare: `State: [MODE] | Goal: [one line] | Exit: [condition]`
 For Claude setup, ACT means updating only Claude-owned surfaces from the shared skeleton and adapting commands, boundaries, and Router Table rows to the target project.
 
 ### VERIFY
-MUST run `shellcheck` on .sh changes. MUST check cross-references after renames. If working from a plan/milestone file, MUST tick `- [x]` on each task as it's completed - not at the end.
+MUST run `shellcheck` on .sh changes. MUST check cross-references after renames. If working from a plan/milestone file, MUST tick `- [x]` on each task as it's completed - not at the end. Reconcile the write allowlist, starting dirty paths, session write paths, and final changed state before delivery. A new in-scope write is deliverable. A new out-of-scope write requires the agent to stop and re-scope before delivery. Do not attribute a starting dirty path to this session unless the session also recorded writing it.
 
 **Hallucination red-flags:**
 1. **Checks passed.** Do not claim tests pass or any check passed (shellcheck, typecheck, preflight, audit) without showing the literal pass/fail line copied verbatim from this session's run. Paraphrase, cached output, or prior-session results do not count.

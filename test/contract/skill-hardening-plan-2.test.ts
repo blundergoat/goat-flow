@@ -285,6 +285,21 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
     );
   });
 
+  it("wires a milestone added to an existing plan into its terminal milestone and ISSUE bands", () => {
+    // RED 2026-08-23: File-Write created M47 in the 1.17.0 train but left the terminal milestone's `Depends on` and the
+    // ISSUE band untouched, so the release cut would have closed without it (lesson: milestone-accounting.md).
+    const rule =
+      /Existing plan: also add the new ID to the terminal milestone's `Depends on` and re-derive any `ISSUE\.md` band and totals\./u;
+    assert.match(
+      readProjectFile("workflow/skills/goat-plan/SKILL.md"),
+      rule,
+      "workflow/skills/goat-plan/SKILL.md",
+    );
+    assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
+      assert.match(readProjectFile(skillPath), rule, skillPath);
+    });
+  });
+
   it("keeps the redesigned goat-plan canonical surface within its tighter budget", () => {
     assert.ok(
       countSkillBodyWords("workflow/skills/goat-plan/SKILL.md") <= 2150,

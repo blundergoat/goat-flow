@@ -298,6 +298,10 @@ function dashboardQualityReportLogPrompt(
   );
   const reportRootShell = dashboardQualityShellQuote(projectPath);
   return [
+    "### Refuted Candidates",
+    "List every candidate finding you tested and excluded, why it was excluded, and the source anchor or command result that disproved it. Write `None` when no candidate was ruled out.",
+    "Keep these candidates out of Findings and Top 5 Improvements; the ledger exists so the user and later reviewers do not repeat disproved work.",
+    "",
     "Quality report log:",
     `- Report owner project_path for this mode: ${projectPath}`,
     "- Persist the final report through the bounded saver. It redacts and validates stdin in memory, then chooses a filename under the owner project's gitignored `.goat-flow/logs/quality/`.",
@@ -328,12 +332,16 @@ function dashboardQualityReportLogPrompt(
     "  },",
     '  "findings": [',
     '    { "type": "setup_quality", "severity": "MAJOR", "file": ".goat-flow/architecture.md", "line": null, "summary": "One-line finding summary", "detail": "Why it matters", "evidence_quality": "OBSERVED", "evidence_method": "static-analysis", "delta_tag": "new" }',
-    "  ]",
+    "  ],",
+    '  "refuted_candidates": []',
     "}",
     "```",
     "- Use exact score axis values `0 | 5 | 10 | 15 | 20 | 25`; each total must equal its axis sum.",
     "- Allowed finding types: `setup_quality`, `skill_flaw`, `contradiction`, `false_path`, `content_quality`, `framework_flaw`.",
     "- Allowed severities: `BLOCKER`, `MAJOR`, `MINOR`. Allowed evidence methods: `runtime-probe`, `static-analysis`, `mixed`.",
+    "- `refuted_candidates` is REQUIRED and may be `[]`. Each row requires `claim`, `why_excluded`, nullable `file` and `line`, `evidence_quality`, `evidence_method`, and `evidence_summary`; excluded candidates do not belong in `findings`.",
+    "- A `runtime-probe` or `mixed` refuted candidate requires `evidence_command`, `evidence_exit_code`, and `evidence_summary` so the disproval is reproducible.",
+    '- A `static-analysis` refuted candidate requires a non-null `file` and a grep-friendly semantic anchor such as `(search: "pattern")` in `evidence_summary`.',
     '- `prior_report_id`: keep `null` unless you can cite a specific prior report id (from `goat-flow quality history`) for this same agent/mode. When it is set, `delta_tag` is REQUIRED on every finding (`"new"` unless the finding materially matches that prior report; then `"persisted"`); when it is `null`, leave `delta_tag` as `null` or omit it.',
     "- `assessment_context`: record `project_revision`, `working_tree_state` (`clean`, `dirty`, `not-git`, or `unavailable`), `grounding_status` (`complete`, `partial`, or `blocked`), every skipped, denied, or unavailable command or skill probe in `unverified_probes`, and `score_confidence` (`high`, `medium`, or `low`). Use an empty probe array only for complete grounding. This metadata does not change or cap the rubric scores.",
     "- Live review findings should cite `file` + semantic anchor after re-reading the cited file and anchor. Durable footguns, lessons, patterns, and decisions must use file paths plus semantic anchors rather than line numbers.",

@@ -249,16 +249,18 @@ last_reviewed: 2026-08-23
 ## Lesson: A milestone added to an existing train must be wired into its terminal node and ISSUE bands
 
 **Status:** active | **Created:** 2026-08-23
+**Incident count:** 2
+**Latest occurrence:** 2026-08-23
 **Decision changed:** When goat-plan File-Write adds a milestone to a plan directory that already has a terminal release milestone, the same batch adds the new ID to that node's `Depends on` and re-derives the ISSUE task band and totals; a milestone file alone is not "in the plan".
 **Trigger phase:** SCOPE
 **Caught at:** ACT
 
-**What happened:** M47 was created in the 1.17.0 train with valid structure and a passing strict check, but the train's terminal node (M37, whose `Depends on` list closes the release) did not list it, so the release cut would have closed without M47. The ISSUE.md band and totals were updated only because the user asked for the ISSUE reference separately. The gap surfaced on a "double check that plan" pass, not on validation, because `plans check` validates each file and the ISSUE arithmetic, not membership in the terminal node.
+**What happened:** Twice on the same day, in two sessions. First, M47 was created in the 1.17.0 train with valid structure and a passing strict check, but the train's terminal node (M37, whose `Depends on` list closes the release) did not list it, so the release cut would have closed without M47. The ISSUE.md band and totals were updated only because the user asked for the ISSUE reference separately. The gap surfaced on a "double check that plan" pass, not on validation, because `plans check` validates each file and the ISSUE arithmetic, not membership in the terminal node. Hours later a parallel session added M48 to the same train, also absent from that node - the fix was already in flight and did not reach the other session.
 
 **Root cause:** goat-plan's File-Write path describes creating and validating files in `.goat-flow/plans/<active>/`; it does not say that an existing train's dependency graph and ISSUE bands are part of the artifact, so "wrote M47" felt complete.
 
 **Evidence:** Both files are local gitignored plan files (the 1.17.0 terminal milestone M37 and the new M47), so no durable repository anchor exists; the strict check passed before and after the fix, which is the point.
 
-**Prevention:** When adding a milestone to an existing plan directory, read the terminal node (the milestone whose `Depends on` closes the train), add the new ID there, re-derive the ISSUE.md band and the "How long" totals from the new forecast, and only then run the strict check. Treat a passing per-file check as necessary, not sufficient.
+**Prevention:** When adding a milestone to an existing plan directory, read the terminal node (the milestone whose `Depends on` closes the train), add the new ID there, re-derive the ISSUE.md band and the "How long" totals from the new forecast, and only then run the strict check. Treat a passing per-file check as necessary, not sufficient. Since 2026-08-23 goat-plan's File Artifact Rules state this for existing plans (TDD log: `2026-08-23-goat-plan-tdd.md`; evidence class partial hardening, one real RED and one GREEN).
 
 ---

@@ -34,7 +34,7 @@ Boundaries: instruction files (`.github/copilot-instructions.md`, `CLAUDE.md`, `
 - MUST maintain cross-file consistency: same concept, same description everywhere.
 - MUST preserve file-level evidence in footguns and examples. Use grep-friendly semantic anchors (function name, unique string, `(search: "pattern")`), not line numbers - they go stale on every edit (per ADR-024).
 - MUST use real incidents, never hypothetical, except explicitly labelled placeholder scenarios in shipped skills, skill references, and playbooks; those placeholders define consumer input/output shape and are never evidence. `.goat-flow/architecture.md` is canonical source of truth.
-- Sub-agents: ONE objective, structured return (paths, evidence, confidence, next step), 5-call budget. Blocked → one question with recommended default.
+- Sub-agents: ONE objective, structured return (paths, evidence, confidence, next step), 5-call budget. Blocked → one question with recommended default. A single-fact lookup that one Read or command can answer is never delegated.
 - No features, abstractions, or error handling beyond what was asked. Gold-plating is scope creep. Ambiguous requirements: present interpretations, don't pick silently.
 - Commit format: see **## Commit Messages** below; full rules in `docs/coding-standards/git-commit-message.md`.
 - Use current Copilot CLI commands (`/agent`, `/review`, `/research`, `/tasks`) when appropriate; use `/fleet` only for explicit or genuinely independent parallel work.
@@ -77,7 +77,7 @@ BAD: "The CLI has 30 audit checks" (guessed without reading)
 GOOD: Read check-goat-flow.ts → 16 setup checks, check-agent-setup.ts → 4 agent checks (20 total)
 
 ### SCOPE
-Three signals before acting: (1) Intent: question → answer it, directive → act on it. (2) Complexity budget: Hotfix 2 reads/3 turns; Small Feature 3/5; Standard 4/10; System 6/20; Infrastructure 8/25. (3) Mode: Plan / Implement / Explain / Debug / Review. MUST declare before acting: files allowed to change, non-goals, max blast radius. Over budget = checkpoint and re-classify; competent review may need broader coverage.
+Three signals before acting: (1) Intent: question → answer it, directive → act on it. (2) Complexity budget: Hotfix 2 reads/3 turns; Small Feature 3/5; Standard 4/10; System 6/20; Infrastructure 8/25. (3) Mode: Plan / Implement / Explain / Debug / Review. MUST declare before acting: files allowed to change, non-goals, max blast radius. Over budget = checkpoint and re-classify; competent review may need broader coverage. Before writing, record the write allowlist and starting dirty paths; keep an in-session list of every path this session writes. Reads and searches stay unrestricted.
 
 ### ACT
 MUST declare: `State: [MODE] | Goal: [one line] | Exit: [condition]`
@@ -85,7 +85,7 @@ MUST declare: `State: [MODE] | Goal: [one line] | Exit: [condition]`
 Modes: Plan = artifact only except selected `/goat-plan` File-Write may create gitignored milestone files; Implement = edit in 2-3 turns, 4th read without writing means checkpoint; Explain = no changes unless asked; Debug = diagnosis with file + semantic anchor before fixes; Review = investigate first, never blindly apply suggestions.
 
 ### VERIFY
-MUST run `shellcheck` on .sh changes. MUST check cross-references after renames. If working from a plan/milestone file, MUST tick `- [x]` on each task as it's completed - not at the end.
+MUST run `shellcheck` on .sh changes. MUST check cross-references after renames. If working from a plan/milestone file, MUST tick `- [x]` on each task as it's completed - not at the end. Reconcile the write allowlist, starting dirty paths, session write paths, and final changed state before delivery. A new in-scope write is deliverable. A new out-of-scope write requires the agent to stop and re-scope before delivery. Do not attribute a starting dirty path to this session unless the session also recorded writing it.
 
 **Hallucination red-flags:**
 1. **Checks passed.** Do not claim tests pass or any check passed (shellcheck, typecheck, preflight, audit) without showing the literal pass/fail line copied verbatim from this session's run. Paraphrase, cached output, or prior-session results do not count.

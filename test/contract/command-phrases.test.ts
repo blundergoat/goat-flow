@@ -37,6 +37,40 @@ const POLICY_SURFACE_PATHS = [
   ".github/copilot-instructions.md",
   "workflow/setup/reference/execution-loop.md",
 ] as const;
+const WRITE_SCOPE_RECONCILIATION_PATHS = [
+  "workflow/setup/reference/execution-loop.md",
+  "workflow/setup/agents/claude.md",
+  "workflow/setup/agents/codex.md",
+  "workflow/setup/agents/antigravity.md",
+  "workflow/setup/agents/copilot.md",
+  "AGENTS.md",
+  "CLAUDE.md",
+  ".github/copilot-instructions.md",
+] as const;
+const WRITE_SCOPE_CAPTURE_RULE =
+  "Before writing, record the write allowlist and starting dirty paths; keep an in-session list of every path this session writes.";
+const WRITE_SCOPE_RECONCILIATION_RULE =
+  "Reconcile the write allowlist, starting dirty paths, session write paths, and final changed state before delivery.";
+const WRITE_SCOPE_DECISION_CASES = [
+  {
+    userSituation: "read-only discovery outside the write allowlist",
+    expectedDecision: "Reads and searches stay unrestricted.",
+  },
+  {
+    userSituation: "a new in-scope write",
+    expectedDecision: "A new in-scope write is deliverable.",
+  },
+  {
+    userSituation: "a new out-of-scope write",
+    expectedDecision:
+      "A new out-of-scope write requires the agent to stop and re-scope before delivery.",
+  },
+  {
+    userSituation: "a dirty path present before the session",
+    expectedDecision:
+      "Do not attribute a starting dirty path to this session unless the session also recorded writing it.",
+  },
+] as const;
 const USER_FACING_CLI_COMMAND_SURFACE_PATHS = [
   ".github/PULL_REQUEST_TEMPLATE.md",
   "README.md",
@@ -661,6 +695,43 @@ describe("setup truth and evidence contracts", () => {
     );
     assert.doesNotMatch(customise, /Use `ACTUAL_MEASURED` evidence labels\./u);
   });
+});
+
+describe("end-of-run write-scope reconciliation", () => {
+  // Each supported instruction surface must capture the same three sets before it can account for the files shown to the user.
+  for (const relativePath of WRITE_SCOPE_RECONCILIATION_PATHS) {
+    it(`reconciles the three write-scope sets in ${relativePath}`, () => {
+      const instructionText = readFileSync(
+        resolve(PROJECT_ROOT, relativePath),
+        "utf-8",
+      );
+      assert.ok(
+        instructionText.includes(WRITE_SCOPE_CAPTURE_RULE),
+        `${relativePath} must capture the write boundary before work starts`,
+      );
+      assert.ok(
+        instructionText.includes(WRITE_SCOPE_RECONCILIATION_RULE),
+        `${relativePath} must reconcile the user's final changed-file view before delivery`,
+      );
+    });
+
+    // One named case per user-visible decision makes failures identify both the situation and the drifting instruction surface.
+    for (const {
+      userSituation,
+      expectedDecision,
+    } of WRITE_SCOPE_DECISION_CASES) {
+      it(`${userSituation} has one decision in ${relativePath}`, () => {
+        const instructionText = readFileSync(
+          resolve(PROJECT_ROOT, relativePath),
+          "utf-8",
+        );
+        assert.ok(
+          instructionText.includes(expectedDecision),
+          `${relativePath} must say: ${expectedDecision}`,
+        );
+      });
+    }
+  }
 });
 
 describe("setup-facing learning-loop retrieval", () => {

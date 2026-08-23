@@ -55,6 +55,16 @@ Creation dispositions are `ADD UNIT`, `ADD INTEGRATION`, `ADD END-TO-END/MANUAL`
 
 Mock collaborator call counts, call order, non-calls, and simulated cooperation remain `STRUCTURAL` unless the interaction is a named public protocol; they earn no integration confidence. Prefer consolidation when nearby cases lack distinct regression stories. Every recommendation carries the playbook's compact record. goat-qa stays report-only: ordinary ACT must re-read current code and coverage before any separately approved add, move, consolidation, or prune action.
 
+## Candidate Disproval Pass
+
+Run this pass immediately before every gated or final output. Re-read the evidence for each candidate and assign exactly one outcome:
+
+- `confirm` - the candidate survives disproval and may enter the gap report or testing plan when it also passes the test-selection gate.
+- `kill as false positive` - current evidence disproves the candidate, so exclude it from gaps and recommendations.
+- `keep with named missing evidence` - the available evidence cannot settle the candidate; keep it `UNRESOLVED` and name the next check.
+
+Preserve every killed candidate under `Refuted Candidates`: claim, why excluded, evidence quality, evidence method, and evidence summary, plus nullable file/line and any command, exit code, or excerpt. Static evidence cites a file and semantic anchor; runtime or mixed evidence names the command and exit code. Write `None` when no candidate was killed. Never promote a killed candidate into a gap or recommendation.
+
 ## Step 0 - Intake
 
 **Mode detection - scope wins over vocabulary:**
@@ -121,7 +131,7 @@ For CRITICAL items with no coverage, annotate why: new path / missed coverage on
 
 Map each stated expectation to the code path that implements it. Gaps between intent and code are undertested-risk candidates.
 
-**BLOCKING GATE (auto-released on explicit test-plan intent):** Present gap analysis plus Verification Integrity, then stop and ask "Continue to Phase 3, or adjust first?" - unless the invocation already gave explicit "what should I test" / "test plan" intent, in which case treat it as a CHECKPOINT and continue through Phase 3 without pausing. Reserve diagrams for Phase 3; then suggest `/goat-plan`.
+**BLOCKING GATE (auto-released on explicit test-plan intent):** Run the Candidate Disproval Pass, then present gap analysis, Refuted Candidates, and Verification Integrity. Stop and ask "Continue to Phase 3, or adjust first?" - unless the invocation already gave explicit "what should I test" / "test plan" intent, in which case treat it as a CHECKPOINT and continue through Phase 3 without pausing. Reserve diagrams for Phase 3; then suggest `/goat-plan`.
 
 **Illustrative scenario - input/output shape only; never evidence.**
 
@@ -196,11 +206,11 @@ Rank each behaviour row by `Risk × uncovered fraction`: CRITICAL=4, HIGH=3, MED
 
 **Worked Audit example:** Read tests, not filenames: integration coverage can make a file PARTIAL-BEHAVIOURAL. Classify `<target-project>/src/content-check.ts` as NONE only after checking unit, integration, and exported-symbol references.
 
-**BLOCKING GATE:** Present gap report; wait for human decision before generating a testing plan response. Create no plan file unless separately approved. After approval, preserve the A4 tiers in the Audit post-gate template in `references/output-templates.md`.
+**BLOCKING GATE:** Run the Candidate Disproval Pass, then present the gap report and Refuted Candidates. Wait for human decision before generating a testing plan response. Create no plan file unless separately approved. After approval, preserve the A4 tiers in the Audit post-gate template in `references/output-templates.md`.
 
 ## Regression Guard Mode
 
-After a verified fix, cite its source; define the human-readable invariants; compare existing tests/manual coverage; apply the value gate and disposition set; emit the standalone template plus Verification Integrity. Do NOT verify the fix. This mode replaces the phase flow; skip Phases 1-3.
+After a verified fix, cite its source; define the human-readable invariants; compare existing tests/manual coverage; apply the value gate and disposition set; run the Candidate Disproval Pass; then emit the standalone template with Refuted Candidates and Verification Integrity. Do NOT verify the fix. This mode replaces the phase flow; skip Phases 1-3.
 
 ## Constraints
 
@@ -209,6 +219,7 @@ After a verified fix, cite its source; define the human-readable invariants; com
 - MUST assess gaps in BOTH directions: undertested risks AND misaligned test effort; report `none found` rather than inventing either
 - MUST use the declared mode's priority tiers: Standard uses "must test / should test / safe to skip"; Audit uses "Blocking / High-value / Defer"
 - MUST include Verification Integrity section
+- MUST run the Candidate Disproval Pass before every gated or final output and preserve killed candidates under Refuted Candidates
 - MUST apply the Proof Gate from `skill-preamble.md` to every claim made in the gap analysis or testing plan
 - MUST tag every finding/claim row with proof class `RUNTIME | CONTRACT-GREP | STATIC | NOT-REPRODUCED`
 - MUST apply `test-selection.md` before recommending an addition or an existing-test change; priority never substitutes for disposition

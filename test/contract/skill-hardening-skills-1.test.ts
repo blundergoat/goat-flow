@@ -16,6 +16,9 @@ import {
   INSTALLED_SKILL_ROOTS,
 } from "./skill-hardening.helpers.js";
 
+// Users can finish goat-qa through five output variants, and each one must show what the agent disproved.
+const GOAT_QA_FINAL_OUTPUT_VARIANT_COUNT = 5;
+
 describe("skill hardening contracts: debug, qa, critique, security, dispatcher (1/2)", () => {
   it("keeps goat-debug bisect reporting-only until explicit approval", () => {
     // Example: a user asks for a regression diagnosis while unrelated edits remain open.
@@ -411,7 +414,12 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
       const skillGuidance = readProjectFile(skillPath);
       assert.match(
         skillGuidance,
-        /gap analysis plus Verification Integrity/,
+        /Run the Candidate Disproval Pass, then present gap analysis, Refuted Candidates, and Verification Integrity/u,
+        skillPath,
+      );
+      assert.match(
+        skillGuidance,
+        /`confirm`[\s\S]+`kill as false positive`[\s\S]+`keep with named missing evidence`/u,
         skillPath,
       );
     });
@@ -422,6 +430,11 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
         assert.match(
           outputTemplates,
           /Intent spec: \[PR\/issue\/test plan URL or `no-intent-spec`\]/,
+          referencePath,
+        );
+        assert.equal(
+          outputTemplates.match(/^## Refuted Candidates$/gmu)?.length,
+          GOAT_QA_FINAL_OUTPUT_VARIANT_COUNT,
           referencePath,
         );
         assert.match(outputTemplates, /Evidence limit:/, referencePath);

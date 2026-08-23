@@ -147,7 +147,7 @@ Write Standard or triggered high-risk artifacts immediately. Do NOT invoke/ask a
 
 ### File Artifact Rules (Modes 3 and 4)
 
-For fresh plans, create a slugged directory, update `.goat-flow/plans/.active` in that batch, and write one zero-padded `M*.md` per milestone.
+For fresh plans, create a slugged directory, update `.goat-flow/plans/.active` in that batch, and write one zero-padded `M*.md` per milestone. Existing plan: also add the new ID to the terminal milestone's `Depends on` and re-derive any `ISSUE.md` band and totals.
 
 **Rendering:** Mode 3 uses compact Small; Mode 4 uses Standard plus triggered high-risk fields. Omit empty and `N/A` sections. Use the Phase 1 core, claim-based Proof, and one command source.
 

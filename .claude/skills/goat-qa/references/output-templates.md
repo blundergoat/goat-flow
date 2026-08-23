@@ -15,6 +15,11 @@ Read this reference only when rendering the final response. Select the template 
 | Disposition | Regression and impact | Current overlap | Stable contract | Level | Evidence status | Owner or path and semantic anchor | Handoff invariant and next check |
 |-------------|-----------------------|-----------------|-----------------|-------|-----------------|-----------------------------------|----------------------------------|
 
+## Refuted Candidates
+| Claim | Why Excluded | File | Line | Evidence Quality | Evidence Method | Evidence Summary | Command | Exit Code | Excerpt |
+|-------|--------------|------|------|------------------|-----------------|------------------|---------|-----------|---------|
+<!-- One row per `kill as false positive`; write `None` when there are no rows. Use `—` for nullable or optional fields. -->
+
 ## Verification Integrity
 - Prior fix evidence: [file, command output, or human-approved record]
 - Code and tests read: [list]
@@ -42,6 +47,11 @@ Read this reference only when rendering the final response. Select the template 
 | Disposition | Regression and impact | Current overlap | Stable contract | Level | Evidence status | Owner or path and semantic anchor | Handoff invariant and next check |
 |-------------|-----------------------|-----------------|-----------------|-------|-----------------|-----------------------------------|----------------------------------|
 
+## Refuted Candidates
+| Claim | Why Excluded | File | Line | Evidence Quality | Evidence Method | Evidence Summary | Command | Exit Code | Excerpt |
+|-------|--------------|------|------|------------------|-----------------|------------------|---------|-----------|---------|
+<!-- One row per `kill as false positive`; write `None` when there are no rows. Use `—` for nullable or optional fields. -->
+
 ## Verification Integrity
 - Intent spec: [PR/issue/test plan URL or `no-intent-spec`]
 - Tests read: [list]
@@ -67,6 +77,11 @@ Read this reference only when rendering the final response. Select the template 
 **Test-selection record**
 | Disposition | Regression and impact | Current overlap | Stable contract | Level | Evidence status | Owner or path and semantic anchor | Handoff invariant and next check |
 |-------------|-----------------------|-----------------|-----------------|-------|-----------------|-----------------------------------|----------------------------------|
+
+## Refuted Candidates
+| Claim | Why Excluded | File | Line | Evidence Quality | Evidence Method | Evidence Summary | Command | Exit Code | Excerpt |
+|-------|--------------|------|------|------------------|-----------------|------------------|---------|-----------|---------|
+<!-- One row per `kill as false positive`; write `None` when there are no rows. Use `—` for nullable or optional fields. -->
 
 ## Verification Integrity
 
@@ -103,6 +118,11 @@ Read this reference only when rendering the final response. Select the template 
 | Disposition | Regression and impact | Current overlap | Stable contract | Level | Evidence status | Owner or path and semantic anchor | Handoff invariant and next check |
 |-------------|-----------------------|-----------------|-----------------|-------|-----------------|-----------------------------------|----------------------------------|
 
+## Refuted Candidates
+| Claim | Why Excluded | File | Line | Evidence Quality | Evidence Method | Evidence Summary | Command | Exit Code | Excerpt |
+|-------|--------------|------|------|------------------|-----------------|------------------|---------|-----------|---------|
+<!-- One row per `kill as false positive`; write `None` when there are no rows. Use `—` for nullable or optional fields. -->
+
 ## Verification Integrity
 - Intent spec: [audit scope rationale or `no-intent-spec`]
 - Tests read: [list]
@@ -130,6 +150,11 @@ Read this reference only when rendering the final response. Select the template 
 **Test-selection record**
 | Disposition | Regression and impact | Current overlap | Stable contract | Level | Evidence status | Owner or path and semantic anchor | Handoff invariant and next check |
 |-------------|-----------------------|-----------------|-----------------|-------|-----------------|-----------------------------------|----------------------------------|
+
+## Refuted Candidates
+| Claim | Why Excluded | File | Line | Evidence Quality | Evidence Method | Evidence Summary | Command | Exit Code | Excerpt |
+|-------|--------------|------|------|------------------|-----------------|------------------|---------|-----------|---------|
+<!-- One row per `kill as false positive`; write `None` when there are no rows. Use `—` for nullable or optional fields. -->
 
 ## Verification Integrity
 <!-- Preserve A4 evidence limits; name test executors. -->

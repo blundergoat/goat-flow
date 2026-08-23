@@ -38,6 +38,7 @@ const REQUIRED_TOP_LEVEL_FIELDS = [
   '"assessment_context"',
   '"scores"',
   '"findings"',
+  '"refuted_candidates"',
 ] as const;
 
 /** Per-finding fields every contract render must require or demonstrate. */
@@ -45,6 +46,15 @@ const REQUIRED_FINDING_FIELDS = [
   "evidence_quality",
   "evidence_method",
   "delta_tag",
+] as const;
+
+/** Per-candidate fields users need to understand why a suspected finding was excluded. */
+const REQUIRED_REFUTED_CANDIDATE_FIELDS = [
+  "claim",
+  "why_excluded",
+  "evidence_quality",
+  "evidence_method",
+  "evidence_summary",
 ] as const;
 
 const PROJECT_VALIDATION_LIMIT =
@@ -211,6 +221,7 @@ function makePriorQualityReport(
         },
       },
       findings: [],
+      refuted_candidates: [],
     },
   };
 }
@@ -274,13 +285,28 @@ function assertCarriesContract(surface: string, text: string): void {
   for (const field of REQUIRED_TOP_LEVEL_FIELDS) {
     assert.ok(text.includes(field), `${surface}: missing ${field}`);
   }
-  // Every per-finding requirement must be spelled out.
-  for (const field of REQUIRED_FINDING_FIELDS) {
+  // Every finding and refutation field must be spelled out so the emitted JSON remains explainable.
+  for (const field of [
+    ...REQUIRED_FINDING_FIELDS,
+    ...REQUIRED_REFUTED_CANDIDATE_FIELDS,
+  ]) {
     assert.ok(
       text.includes(field),
-      `${surface}: missing finding field ${field}`,
+      `${surface}: missing evidence field ${field}`,
     );
   }
+  assert.ok(
+    text.includes("### Refuted Candidates"),
+    `${surface}: missing prose Refuted Candidates section`,
+  );
+  assert.ok(
+    text.includes("runtime-probe") && text.includes("evidence_exit_code"),
+    `${surface}: missing runtime refutation provenance`,
+  );
+  assert.ok(
+    text.includes("static-analysis") && text.includes('(search: "pattern")'),
+    `${surface}: missing static refutation anchor rule`,
+  );
   for (const guidance of ASSESSMENT_CONTEXT_GUIDANCE) {
     assert.ok(
       text.includes(guidance),

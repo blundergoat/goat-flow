@@ -51,7 +51,7 @@ last_reviewed: 2026-08-23
 ## Lesson: Contract tests pin doctrine wording and path semantics
 
 **Status:** active | **Created:** 2026-04-25
-**Incident count:** 10 | **Latest occurrence:** 2026-08-19
+**Incident count:** 12 | **Latest occurrence:** 2026-08-23
 
 **What happened:** While removing one forbidden phrase and changing dashboard quality report ownership, the first full `npm test` run failed two contract-style checks: a skill-hardening contract (now `test/contract/skill-hardening-shared-3.test.ts`, search: `hardening debt`) still required the established "hardening debt" evidence language, and a dashboard prompt-source assertion still expected the old relative quality-report path message.
 
@@ -75,7 +75,33 @@ last_reviewed: 2026-08-23
 
 **Recurrence 2026-08-19:** Shortening the three live instruction files passed instruction parity and line-count checks, but `stats --check` rejected the removed durable anchor `Coding agents never run`. After that phrase was restored, full preflight still failed 3 of 2,122 tests because the rewrite had shortened the exact external-write authorization sentence. Both phrases were restored across the three mirrors before preflight passed. Evidence anchors: `.goat-flow/learning-loop/lessons/agent-behavior.md` (search: `Coding agents never run`) and `test/contract/command-phrases.test.ts` (search: `AUTHORIZATION_POLICY`).
 
+**Recurrence 2026-08-23:** Compressing M14's evidence matrix to restore its word budget changed a phrase cited by the new proof-boundary lesson. `stats --check` rejected the stale reference before closeout; retargeting it to the live `Claim-type controls set minimum evidence` anchor restored loop integrity. Evidence anchor: `.goat-flow/learning-loop/lessons/verification-testing.md` (search: `Mid-implementation proof gates split edit batches`).
+
+**Recurrence 2026-08-23:** M15's focused report-schema tests passed, but the first full fast suite failed nine tests: one goat-qa contract still pinned the old gate sentence, and the shared dashboard capture fixture omitted the newly required `refuted_candidates` field, causing eight persistence scenarios to fail at schema admission. Updating the changed doctrine assertion and the one current-report fixture restored `# pass 2174` and `# fail 0`; legacy fixtures remain intentionally field-optional. Evidence anchors: `test/contract/skill-hardening-skills-1.test.ts` (search: `requires goat-qa Standard-mode gap output`) and `test/unit/quality-draft-capture.test.ts` (search: `function validReport`).
+
 **Prevention:** Search tests and durable semantic anchors for changed prose and adjacent commands; sibling parity proves agreement, not preservation of downstream contracts. Keep fixtures inside their consuming subtest and re-read the block before RED. Update a contract only when product semantics change; preserve unrelated doctrine. Before drafting in a near-cap skill, measure the current word budget; replace or condense existing wording, or move detail into a progressive reference, before GREEN. Before quoting a budget or score outcome to the user, measure the exact sizes involved (moved sections minus the pointer text that replaces them) with the same function the gate uses, and state the measured margin.
+---
+
+## Lesson: Mid-implementation proof gates split edit batches
+
+**Status:** active | **Created:** 2026-08-23
+**Decision changed:** Stop each mutation batch at a declared mid-implementation proof and record its result before applying later-surface edits.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+**Incident count:** 3 | **Latest occurrence:** 2026-08-23
+
+**What happened:** During evidence-doctrine hardening, one approved edit batch grouped the shared evidence matrix, its contract, three instruction files, and a learning-loop consolidation. The milestone required the focused contract after the matrix and test, before the instruction and lesson edits. The test later reported `# tests 16`, `# pass 16`, and `# fail 0`, but the pass was late and could validate only the combined snapshot.
+
+**Same milestone:** The first exact comment-width scan caught a new 152-character context line against the user-required 150-character ceiling. Shortening it and rerunning the same scan restored exit 0 before broader gates.
+
+**Root cause:** I grouped files by one conceptual change and treated the patch boundary as more important than the milestone's temporal proof boundary. That removed the gate's ability to catch a bad shared contract before it propagated into later surfaces. I also judged an explicit width limit visually instead of measuring it directly after the source edit.
+
+**Recurrence 2026-08-23:** M16's first write-scope fixture list included the three local instruction files even though P1 had to run before those files changed. Leaving them in the P1 set would have failed on expected later-stage absence rather than a generated-surface defect. The gate was narrowed to the canonical reference plus four setup templates, which reported `# pass 76` and `# fail 0`; the three local paths joined only after P1, and the final focused run reported `# pass 91` and `# fail 0`. Evidence anchor: `test/contract/command-phrases.test.ts` (search: `WRITE_SCOPE_RECONCILIATION_PATHS`).
+
+**Prevention:** Split mutations at every declared mid-implementation proof. Apply only the prerequisite files, run and record the exact gate with its exit status, then re-read and edit the later surfaces. Run explicit mechanical constraints, including requested line widths, immediately after each source patch. A late pass validates current state but never backfills the missed checkpoint; mark it late and preserve the sequencing correction.
+
+Evidence anchors: `test/contract/skill-hardening-shared-1.test.ts` (search: `requires minimum evidence and rejects false proof for every claim type`) and `workflow/skills/reference/skill-preamble.md` (search: `Claim-type controls set minimum evidence`).
+
 ---
 
 ## Lesson: Split transient preflight test failures from task regressions
@@ -135,7 +161,7 @@ last_reviewed: 2026-08-23
 ## Lesson: A documentation pass can push a file past a size gate it was written to enforce
 
 **Status:** active | **Created:** 2026-08-07
-**Incident count:** 3 | **Latest occurrence:** 2026-08-10
+**Incident count:** 5 | **Latest occurrence:** 2026-08-23
 
 **What happened:** Applying the mandatory comment standard to `scripts/check-gruff-warning-ratchet.mjs` grew it from 626 to 783 lines, past the 750-line `size.file-length` threshold. The warning-debt ratchet then reported its own checker as new debt on the very run that was meant to prove the release clean.
 
@@ -146,6 +172,10 @@ last_reviewed: 2026-08-23
 **Recurrence 2026-08-10 (playbook prose):** Adding a reader-selection section and an anti-template rule to `.goat-flow/skill-docs/playbooks/code-comments.md` took it from 2,856 to 3,180 words against the 3,000-word ADR-023 progressive cap. Trimming duplicate representation - a fractal summary restating the worked example, and a PHP class-file rule stated in four places - restored it to 2,983 with no rule lost. Evidence anchor: `test/contract/skill-hardening-contracts.test.ts` (search: `progressive reference packs stay within`).
 
 **Recurrence 2026-08-12:** Recording two verification corrections pushed `.goat-flow/learning-loop/lessons/verification-preflight.md` to 40,736 bytes. `stats --check` stopped closeout; consolidating the new gate rule into its existing Prevention reduced the bucket to 39,999 bytes without dropping the decision or evidence anchor. Evidence: `.goat-flow/learning-loop/lessons/agent-evidence-claims.md` (search: `A predecessor may exempt one named RED fixture`).
+
+**Recurrence 2026-08-23:** M14's evidence matrix raised the always-loaded skill preamble to 1,507 words against its strict sub-1,500 cap. The focused 16-test doctrine contract passed, but `npm run test:fast` exposed the separate budget regression. Compressing only the new wording to 1,489 words preserved every tested control, and the exact 16-test word-budget contract then reported `# pass 16` and `# fail 0`. Evidence anchors: `workflow/skills/reference/skill-preamble.md` (search: `Claim-type controls set minimum evidence`) and `test/contract/skill-hardening-contracts.test.ts` (search: `always-loaded shared references stay within the 1500-word cap`).
+
+**Recurrence 2026-08-23:** M15 initially placed all refutation-ledger validation inside `schema-parser.ts`, raising it to 1,377 lines and creating the new Gruff identity `design.large-module-concentration`. Moving that responsibility into the focused ledger parser removed the new identity while preserving the exact three-item baseline on the original six-file analysis. Evidence anchors: `src/cli/quality/schema-refuted-candidates.ts` (search: `parseReportRefutedCandidates`) and `src/cli/quality/schema-parser.ts` (search: `parseReportCollections`).
 
 **Prevention:** Before commenting a file that sits within about 20% of its size threshold, check the current count and plan the split first. Splitting by responsibility is the fix, never accepting the new finding: an oversized file created by the same change that added the gate is exactly what the gate exists to stop. Evidence anchors: `scripts/check-gruff-warning-ratchet.mjs` (search: `Release gate that stops reviewed Gruff warning debt`), `scripts/gruff-warning-ratchet-checks.mjs` (search: `The rules that decide whether Gruff warning debt regressed`), `scripts/ratchet-failure-report.mjs` (search: `Collects everything blocking a warning-ratchet run`).
 
