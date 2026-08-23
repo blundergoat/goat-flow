@@ -9,7 +9,7 @@ Managed-file tools previously treated every byte mismatch as the same condition.
 
 The same mismatch has different counting units across tools. `audit --check-drift --agent` checks every declared file for one selected agent, while `skill doctor` checks `SKILL.md` once per selected agent-skill row. `src/cli/skill-doctor.ts` (search: `countScope`) now makes that difference explicit. A durable accepted-delta seam must retain those raw scopes instead of making unlike counts appear interchangeable.
 
-The planned 1.17.0 M20 milestone proposes separating canonical hook bytes, validated policy, and raw divergence for two declared hook needs. M20 is scheduled work, not shipped behaviour. This decision generalises the evidence separation beyond that proposal to arbitrary managed files, including files under `skill-docs/`; it does not claim M20's schema or validation already exists.
+The standalone `.goat-flow/plans/declarative-local-hook-policy/M01-declarative-local-hook-policy.md` milestone proposes separating canonical hook bytes, validated policy, and raw divergence for two declared hook needs. It moved out of 1.17.0 on 2026-08-24 and is unscheduled work, not shipped behavior. This decision generalises the evidence separation beyond that proposal to arbitrary managed files, including files under `skill-docs/`; it does not claim the policy schema or validation already exists.
 
 ADR-052 remains the hook trust boundary. An explanation for local bytes is not proof that those bytes are current, safe to execute, or equivalent to the registry contract.
 
@@ -27,7 +27,7 @@ Invalid paths, missing or non-unique anchors, blank reasons, and declarations fo
 
 For executable hooks, an accepted delta cannot satisfy ADR-052's `installed-current`, `trusted`, `observed-running`, `result-delivered`, or `scenario-verified` gates. A later policy-specific validator may establish stronger evidence, but a general prose reason cannot.
 
-The bounded follow-on slice is limited to one declaration schema and parser, one shared projection of declaration evidence, audit/install/doctor rendering, and focused cross-surface tests. It excludes automatic merging, new force semantics, hook-policy validation, and implementation of the separately planned M20 schema.
+The bounded follow-on slice is limited to one declaration schema and parser, one shared projection of declaration evidence, audit/install/doctor rendering, and focused cross-surface tests. It excludes automatic merging, new force semantics, hook-policy validation, and implementation of the separately planned local-policy schema.
 
 ## Failure Mode Comparison
 
@@ -37,7 +37,7 @@ The bounded follow-on slice is limited to one declaration schema and parser, one
 | Treat a file, anchor, and reason as permission to overwrite or as proof of canonical equivalence | Human context becomes executable authority, extra changes in the file can be hidden, and ADR-052's trust chain is bypassed. | Rejected. |
 | Suppress accepted files from raw audit and doctor counts | Operators cannot reconcile tool scopes or detect new drift around a still-present anchor. | Rejected. |
 | Record accepted-delta evidence while preserving raw divergence and existing write gates | Tools can explain intentional local content without claiming it is canonical, trusted, or safe to replace. | Accepted. |
-| Wait for M20 and keep the seam hook-specific | `skill-docs/` and other managed files retain the same destructive-repair ambiguity, while a planned milestone is mistaken for shipped infrastructure. | Rejected. |
+| Wait for the standalone policy plan and keep the seam hook-specific | `skill-docs/` and other managed files retain the same destructive-repair ambiguity, while a planned milestone is mistaken for shipped infrastructure. | Rejected. |
 
 ## Consequences
 

@@ -177,9 +177,9 @@ anchor: `src/cli/plans-time.ts` (search: `receipt contains a discarded open span
 ## Lesson: Activate a milestone before starting its timing receipt
 
 **Status:** active | **Created:** 2026-08-14
-**Decision changed:** Set exactly one active milestone status before starting its first timing segment; lifecycle state precedes measurement.
+**Decision changed:** Activate before timing starts, and remove the active receipt schema before resetting a milestone to `not-started`.
 **Trigger phase:** ACT
-**Incident count:** 4
+**Incident count:** 6
 **Latest occurrence:** 2026-08-24
 
 **What happened:** While starting code-quality-upstream M04, I ran `plans time start` while its rendered `Status` was still `not-started`. The CLI refused with `Timing Start requires exactly one rendered Status field set to in-progress or testing-gate`; I then changed the status and reran the command successfully.
@@ -194,15 +194,18 @@ anchor: `src/cli/plans-time.ts` (search: `receipt contains a discarded open span
 receipt; changing the status to `in-progress` before retrying opened the segment prospectively. The activation order remains status first, timer
 second, even when every plan task is already approved.
 
-**Root cause:** I treated receipt creation as the transition that made a milestone active, then treated an inactive status as though it also stopped the clock. The CLI models lifecycle and timing separately: active state is required before a start, and an open span must end before an inactive state can validate.
+**Recurrence 2026-08-24 (reset to not-started):** I reset `windows-native-hooks` M01 to `not-started` while preserving its paused Timing Receipt. Strict plan validation rejected `not-started milestone must not include a Timing Receipt`. Moving the exact closed S01 row to Reset history, reopening the checked task, and removing the active receipt section made validation pass without erasing measured effort.
+
+**Root cause:** I treated receipt creation as the transition that made a milestone active, then treated lifecycle text as though it also normalized timing state. The CLI models them separately: active state is required before a start, an open span must end before an inactive state can validate, and `not-started` cannot retain even a paused receipt.
 
 **Prevention:**
 1. Change the milestone to `in-progress` or `testing-gate` before the first `plans time start` command.
 2. Confirm the milestone renders exactly one `Status` field, then start the category and inspect the returned open segment.
 3. If start is rejected, correct the state and retry prospectively; never fabricate or backfill the missed interval.
 4. Stop and inspect the open timing span before changing a milestone to `blocked`, `abandoned`, or `complete`; lifecycle text does not close the receipt.
+5. When resetting to `not-started`, reopen every task and proof, preserve exact closed-segment evidence under Reset history, and remove the active Timing Receipt section.
 
-**Evidence anchor:** `src/cli/plans-time.ts` (search: `Timing Start requires exactly one rendered Status field`) rejects missing, competing, empty, or inactive milestone states before opening a receipt.
+**Evidence anchor:** `src/cli/plans-time.ts` (search: `Timing Start requires exactly one rendered Status field`) rejects missing, competing, empty, or inactive milestone states before opening a receipt. `src/cli/plans-check.ts` (search: `not-started milestone must not include a Timing Receipt`) enforces a clean prospective receipt after reset.
 
 ---
 
