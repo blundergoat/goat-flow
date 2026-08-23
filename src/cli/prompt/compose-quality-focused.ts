@@ -30,16 +30,17 @@ const FOCUSED_DENIED_GROUNDING_GUIDANCE =
  * Return the reporting contract a user receives for one focused quality mode.
  * Use before shared audit and report sections are added to the final prompt.
  *
- * @param mode - selected focused mode; agent-setup is handled by the separate installation composer
+ * @param qualityMode - selected focused mode; agent-setup is handled by the separate installation composer
  * @param agent - selected agent; absent means process commands use aggregate audit scope
  * @returns reporting-only prompt body; never empty for a supported focused mode
  */
 function focusedQualityModePrompt(
-  mode: Exclude<QualityMode, "agent-setup">,
+  qualityMode: Exclude<QualityMode, "agent-setup">,
   agent?: AgentId,
 ): string {
   // Process reviewers need controlling-workspace commands and framework-wide evidence.
-  if (mode === "process") {
+  if (qualityMode === "process") {
+    // Selecting a specific agent adds its harness checks; an aggregate process launch keeps the broader audit command.
     const agentAuditCommand = agent
       ? `node --import tsx src/cli/cli.ts audit . --agent ${agent} --harness --check-drift --format json`
       : "node --import tsx src/cli/cli.ts audit . --check-drift --format json";
@@ -57,7 +58,7 @@ function focusedQualityModePrompt(
   }
 
   // Skill reviewers need the eight-skill RED/GREEN/REFACTOR pressure contract.
-  if (mode === "skills") {
+  if (qualityMode === "skills") {
     return [
       "REPORTING-ONLY ASSESSMENT MODE. Do not edit tracked files. Do not use /goat-critique, /goat-review, or any other goat skill as the wrapper for this assessment; this prompt is the full assessment contract. You may read files, run read-only commands, and write normal gitignored reporting/local-state artifacts if the runner requires them. In this contract, gitignored logs, scratchpad notes, critique snapshots, quality reports, and task-local state do not count as writes; do not report them as read-only violations.",
       "",
@@ -108,8 +109,9 @@ function appendFocusedAuditSummary(
 
   // A completed audit gives the user status, scores, and evidence limits in one prompt section.
   if (input.auditReport) {
-    const overallStatus = input.auditReport.status === "pass" ? "PASS" : "FAIL";
-    lines.push(`**Overall: ${overallStatus}**`);
+    const overallAuditStatusLabel =
+      input.auditReport.status === "pass" ? "PASS" : "FAIL";
+    lines.push(`**Overall: ${overallAuditStatusLabel}**`);
     lines.push("");
     lines.push(auditSummaryText);
     lines.push("");
@@ -125,11 +127,12 @@ function appendFocusedAuditSummary(
     return;
   }
 
-  const unavailableReason = input.auditUnavailableReason ?? "audit-failed";
-  lines.push(renderAuditUnavailableHeading(unavailableReason));
+  // For example, a fast dashboard launch with no cached audit uses cache-miss copy; an unspecified cause uses the failed-audit fallback.
+  const unavailableAuditReason = input.auditUnavailableReason ?? "audit-failed";
+  lines.push(renderAuditUnavailableHeading(unavailableAuditReason));
   lines.push("");
   lines.push(auditSummaryText);
-  lines.push(renderDegradedNote(unavailableReason));
+  lines.push(renderDegradedNote(unavailableAuditReason));
 }
 
 /**
@@ -153,24 +156,28 @@ export function composeFocusedQuality(
     selectedProjectPath,
     runDate = formatLocalDate(),
   } = input;
-  const profile = getAgentProfile(agent);
+  const agentProfile = getAgentProfile(agent);
+  // A launch without audit evidence stays explicitly unavailable instead of presenting an unverified pass or fail.
   const auditStatus: QualityPayload["auditStatus"] = auditReport
     ? auditReport.status
     : "unavailable";
-  const label = qualityModeLabel(qualityMode);
+  const qualityModeHeading = qualityModeLabel(qualityMode);
   const lines: string[] = [];
+  // Missing audit evidence gets reason-specific copy so the user can distinguish a failed run from an empty fast cache.
   const auditSummaryText = auditReport
     ? renderAuditSummary(auditReport)
     : renderAuditUnavailableSummary(auditUnavailableReason);
 
-  lines.push(`# GOAT Flow ${label} Assessment - ${profile.name}`);
+  lines.push(
+    `# GOAT Flow ${qualityModeHeading} Assessment - ${agentProfile.name}`,
+  );
   lines.push("");
   lines.push(focusedQualityModePrompt(qualityMode, agent));
   lines.push("");
   appendFocusedAuditSummary(lines, input, auditSummaryText);
   lines.push("");
   lines.push("Quality mode scope:");
-  lines.push(`- Mode: ${label}`);
+  lines.push(`- Mode: ${qualityModeHeading}`);
   lines.push(`- Project path: \`${projectPath}\``);
   // Cross-project quality runs show both roots so the reviewer does not inspect the wrong checkout.
   if (selectedProjectPath && selectedProjectPath !== projectPath) {
@@ -184,13 +191,14 @@ export function composeFocusedQuality(
   lines.push("");
   lines.push(renderPriorReportContext(priorReport, qualityMode));
   lines.push("");
-  const learningLoopContext = renderBoundedLearningLoopContext(
+  const learningLoopPromptBlock = renderBoundedLearningLoopContext(
     input.sharedFacts,
     qualityMode,
+    input.auditReport,
   );
   // Relevant prior incidents stay bounded and appear only when retrieval found a mode-specific match.
-  if (learningLoopContext) {
-    lines.push(learningLoopContext);
+  if (learningLoopPromptBlock) {
+    lines.push(learningLoopPromptBlock);
     lines.push("");
   }
   appendFocusedReportContract(lines, {

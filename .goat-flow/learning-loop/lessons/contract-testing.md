@@ -1,6 +1,6 @@
 ---
 category: contract-testing
-last_reviewed: 2026-08-17
+last_reviewed: 2026-08-23
 ---
 
 **Scope:** Tests that pin a contract rather than behaviour - exact wording, path semantics, word budgets, and user-visible serialization. When the thing under test is a hook, dashboard surface, or fixture, use the bucket that owns it.
@@ -11,7 +11,8 @@ last_reviewed: 2026-08-17
 
 **Decision changed:** Run the canonical word-budget contract immediately after every skill or shared-reference wording edit.
 
-**Trigger phase:** VERIFY
+**Trigger phase:** ACT
+**Caught at:** VERIFY
 
 **Incident count:** 28
 
@@ -48,7 +49,8 @@ last_reviewed: 2026-08-17
 
 **Decision changed:** Preserve or update indexed and contract anchors during compaction; run focused contracts and `stats --check`.
 
-**Trigger phase:** VERIFY
+**Trigger phase:** ACT
+**Caught at:** VERIFY
 
 **Incident count:** 9
 
@@ -167,7 +169,8 @@ parameter. Evidence anchor: `src/cli/classify-state.ts` (search: `let canonicalS
 
 **Decision changed:** Make semantic wording assertions case-insensitive unless casing is the contract, and bound shared files to the exact owned section, object, or fence.
 
-**Trigger phase:** VERIFY | **Incident count:** 6 | **Latest occurrence:** 2026-08-17
+**Trigger phase:** ACT | **Incident count:** 6 | **Latest occurrence:** 2026-08-17
+**Caught at:** VERIFY
 
 **What happened:** The first partial GREEN for test-selection rejected correct prose because heading and table capitalization differed, stopped a template block at a nested heading before its records, and scanned an entire shared preset catalog instead of the four owned prompts. Evidence anchors: `test/contract/test-selection-playbook-doctrine.test.ts` (search: `function templateBlock`) and (search: `affectedPresetIds`).
 

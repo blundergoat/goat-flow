@@ -1,6 +1,6 @@
 ---
 category: deny-shell
-last_reviewed: 2026-08-22
+last_reviewed: 2026-08-23
 ---
 
 Command-grammar and parser traps in the deny hook: how a command string is split into segments, stages, substitutions, and heredoc bodies before any policy runs. A miss here silently un-guards every policy layered on top.
@@ -125,7 +125,8 @@ Sibling buckets: `deny-secrets.md`, `deny-writes.md`.
 
 **Status:** active | **Created:** 2026-05-26 | **Evidence:** ACTUAL_MEASURED
 **Decision changed:** Reports must use sibling-aware hook facts; a split hook's dispatcher can hide shipped denies.
-**Trigger phase:** VERIFY
+**Trigger phase:** SCOPE
+**Caught at:** VERIFY
 
 **Symptoms:** A hook split looks cleaner because `patterns-shell.sh`, `patterns-paths.sh`, and `patterns-writes.sh` each block the happy-path examples (`rm -rf /`, `cat .env`, `git push`). But the pre-M10 monolith carried much broader parser coverage - wrapper normalization, quoted read-only search literals, `git -C`/`git -c` push forms, global `gh --repo` grammar, split-quoted `.env`, `.envrc`, safe-scoped recursive deletion, structured Copilot/Antigravity payloads - so a small split passes smoke tests while re-opening old bypasses and false positives.
 

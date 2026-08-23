@@ -1,6 +1,6 @@
 ---
 category: verification-scanners
-last_reviewed: 2026-08-15
+last_reviewed: 2026-08-23
 ---
 
 **Scope:** Proving a guard, scanner, or parser actually guards - block-and-allow pairs, false-positive probes, parser-shape fixtures per claimed file family, and self-test fanout. What a test must assert generally is [verification-testing.md](verification-testing.md); Gruff specifics are [verification-gruff.md](verification-gruff.md).
@@ -9,7 +9,8 @@ last_reviewed: 2026-08-15
 
 **Status:** active | **Created:** 2026-06-03
 **Decision changed:** Verify fallback and optimized hook paths against the same adversarial repository configuration, not only the same payload.
-**Trigger phase:** VERIFY
+**Trigger phase:** ACT
+**Caught at:** VERIFY
 **Incident count:** 3 | **Latest occurrence:** 2026-08-03
 
 **What happened:** During PR #47 follow-up fixes, the first deny-dangerous fallback patch set the unsafe JSON status inside helper functions called through command substitution. The focused full self-test still failed the top-level unsupported unicode regression because Bash ran the helpers in subshells and the caller never saw the updated variable. The first gruff staged-hunk patch had a similar over-broad shape: adding cached diff ranges unconditionally widened explicit payload scopes and broke existing changed-range tests before the fallback-only test could be trusted.
@@ -53,12 +54,15 @@ last_reviewed: 2026-08-15
 ## Lesson: Shell metacharacters in verification searches can corrupt source files
 
 **Status:** active | **Created:** 2026-04-26
+**Incident count:** 5 | **Latest occurrence:** 2026-08-23
 
 **What happened:** During M05b verification, a malformed `rg` command accidentally left a literal `>` outside the quoted search pattern. The shell interpreted it as output redirection and truncated `src/dashboard/views/home.html` to an empty file. The mistake was caught by `wc -l`, `git diff`, and the dashboard HTML regression before final verification, then the Home template was restored.
 
 **Recurrence 2026-06-14:** While verifying a `goat-qa` skill-doc edit, an `rg` pattern included Markdown backticks around `initialInput`. The deny-dangerous hook blocked it as command substitution before execution. No files were changed by the blocked command, but the verification pass still had to be rerun with a safer pattern. Evidence anchors: `workflow/skills/goat-qa/SKILL.md` (search: `safe to skip more PTY timing tests`) and `.goat-flow/learning-loop/lessons/verification-scanners.md` (search: `Shell metacharacters in verification searches can corrupt source files`).
 
 **Recurrences 2026-07-17 and 2026-07-19:** Double-quoted `rg` patterns containing Markdown backticks were blocked before execution. Single-quoting the whole pattern fixed both searches without changing files. Evidence: `workflow/hooks/deny-dangerous.sh` (search: `Backtick command substitution hides nested execution`).
+
+**Recurrence 2026-08-23:** While checking whether revised source comments were cited by learning-loop entries, an `rg` pattern put Markdown backticks inside double-quoted shell text. The deny hook stopped the command before execution, so no files changed. Removing the syntax-significant quoting produced the intended read-only search. Evidence anchor: `workflow/hooks/deny-dangerous.sh` (search: `Backtick command substitution hides nested execution`).
 
 **Root cause:** The search pattern contained shell-significant characters (`>` in HTML text, later backticks in Markdown text) and the command was assembled too casually. A read-only verification command stopped being read-only because the shell parsed the pattern before `rg` ever ran.
 
@@ -123,4 +127,3 @@ last_reviewed: 2026-08-15
 **Prevention:** When a scanner scope gate lists file families, add at least one block fixture for each family whose syntax differs from the default parser shape. For Dockerfiles, probe both `ARG KEY=value` / `ENV KEY=value`, `ARG KEY value` / `ENV KEY value`, and multi-assignment `ENV SAFE=x API_TOKEN=...`; for config key classifiers, probe snake_case, uppercase, and camelCase/PascalCase credential names plus excluded suffixes such as `tokenCount`, `secretName`, and `clientSecretId`. Evidence anchors: `workflow/hooks/post-turn-safety.sh` (search: `is_env_assignment_file`), `workflow/hooks/post-turn-safety.sh` (search: `scan_env_assignment`), and `test/integration/post-turn-safety-hook.test.ts` (search: `blocks Dockerfile ARG and ENV credential assignments`).
 
 ---
-

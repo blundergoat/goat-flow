@@ -1,6 +1,6 @@
 ---
 category: hook-scanning
-last_reviewed: 2026-08-16
+last_reviewed: 2026-08-23
 ---
 
 **Scope:** What a hook-driven scanner can and cannot see - changed-file enumeration, diff and rename detection, gitignore and gitattribute interactions, and language/block parsing. Hook registration, launcher runtime, and policy-module behavior live in `hooks.md`; installation and per-agent config live in `hook-installation.md`.
@@ -9,7 +9,8 @@ last_reviewed: 2026-08-16
 
 **Status:** active | **Created:** 2026-08-10 | **Evidence:** ACTUAL_MEASURED
 **Decision changed:** Resolve rename identity before deriving edit ranges from a path-limited diff.
-**Trigger phase:** VERIFY
+**Trigger phase:** ACT
+**Caught at:** VERIFY
 
 A Git diff limited to a rename destination can hide the source path and render an unchanged rename as a full-file addition. Edit-time analysis then treats every line as user-authored and may report a clean scan or unrelated debt instead of a not-applicable rename.
 
@@ -20,7 +21,8 @@ Git rename detection needs both sides of the move. Query full `--name-status --f
 **Status:** active | **Created:** 2026-08-05 | **Evidence:** ACTUAL_MEASURED
 **Incident count:** 5 | **Latest occurrence:** 2026-08-10
 **Decision changed:** Keep edit-time attribution and release-time repository enforcement as separate layers: the hook reports findings attributable to touched files/ranges, while preflight owns a full-repository accepted-debt ratchet.
-**Trigger phase:** VERIFY
+**Trigger phase:** SCOPE
+**Caught at:** VERIFY
 
 A per-edit quality hook that scopes findings to changed lines cannot report any rule that anchors to the file rather than to a line. `size.file-length`, `docs.missing-file-overview`, and `design.circular-import` all report at line 1 with `scope=file`, and passing `--changed-ranges` makes the analyzer drop them before the hook ever sees them. The result reads exactly like success: every edit to an oversized file reports clean, so the file keeps growing and no warning is ever emitted for an agent to ignore.
 
@@ -100,7 +102,8 @@ Prevention has two layers. Keep PostToolUse fast and attributable, but expose in
 
 **Status:** active | **Created:** 2026-08-16 | **Evidence:** ACTUAL_MEASURED
 **Decision changed:** Whether a clean or near-clean `gruff-ts analyse` result counts as evidence that a file's doc comments are attributed to the right symbol and factually true.
-**Trigger phase:** VERIFY
+**Trigger phase:** ACT
+**Caught at:** VERIFY
 
 **Trap:** The documentation rules answer "does a comment exist here" and "does this docblock's tag list match this signature". Neither question asks whether the prose describes the symbol it sits above. A docblock that drifts onto a neighbouring function, or a copy-pasted `@param` line that keeps describing its original donor, satisfies every enabled rule and reads as clean. Two coverage holes widen it: a docblock stacked directly above another docblock still satisfies the presence rule for the symbol below, and `docs.missing-param-tag` / `docs.stale-param-tag` fire only on an `export function` that already carries a `/** */`, so tag accuracy on internal functions is never inspected at all.
 

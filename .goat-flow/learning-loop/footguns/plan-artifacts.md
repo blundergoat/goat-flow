@@ -1,6 +1,6 @@
 ---
 category: plan-artifacts
-last_reviewed: 2026-08-20
+last_reviewed: 2026-08-23
 ---
 
 **Scope:** The grammar and validation of plan, milestone, and review artifacts - evidence fields, proof gates, machine-parsed dependency links, effort accounting, and when a validator runs relative to persistence. CLI process behaviour and output streams live in [cli.md](cli.md).
@@ -9,7 +9,8 @@ last_reviewed: 2026-08-20
 
 **Status:** active | **Created:** 2026-08-15 | **Evidence:** ACTUAL_MEASURED
 **Decision changed:** Keep machine-parsed checklist sections contiguous; put explanatory prose and tables under their own headings outside the checklist.
-**Trigger phase:** VERIFY
+**Trigger phase:** SCOPE
+**Caught at:** VERIFY
 **Incident count:** 3 | **Latest occurrence:** 2026-08-18
 
 **Symptoms:** `plans check --strict` starts failing on a milestone whose checklist was only ticked, with three errors at once: `proof counted work (N min) does not equal the split component`, `N testing gate item(s) missing an (est: ...) entry`, and `forecast basis declares N agent work units but the plan contains N-1`. The arithmetic looks corrupted even though no estimate was edited, and the named item visibly still carries its `(est: ...)`.
@@ -30,7 +31,8 @@ last_reviewed: 2026-08-20
 
 **Status:** active | **Created:** 2026-08-02 | **Evidence:** ACTUAL_MEASURED
 **Decision changed:** Gate an evidence artifact's shape on whether something claims authority from it, not on its mere presence.
-**Trigger phase:** VERIFY
+**Trigger phase:** SCOPE
+**Caught at:** VERIFY
 **Incident count:** 5 | **Latest occurrence:** 2026-08-09
 
 **Symptoms:** A milestone that passed strict validation for weeks starts failing after an unrelated release. The errors name an artifact the milestone does not depend on - here, five `timing receipt ... inconsistent` errors on a completed milestone whose Actual is `retrospective` and cites no receipt at all. Separately, a seven-cell timing row was silently skipped and a receipt containing `S01` plus `S03` allocated `S03` again because the writer used row count as identity authority. In a later change, the receipt parser correctly diagnosed a summary on an active receipt, but strict checking first exited 0 because the new message did not begin with the classifier's `timing receipt` prefix. After that prefix was corrected, paused and incomplete receipts still exited 0 because general receipt warnings become fatal only for a live clock or claimed Actual. Each failure surfaced late because parser behavior was not verified through every policy-owning consumer state.
@@ -53,7 +55,8 @@ last_reviewed: 2026-08-20
 
 **Status:** active | **Created:** 2026-08-03 | **Evidence:** ACTUAL_MEASURED
 **Decision changed:** Validate structural evidence against rendered Markdown semantics and exact documented field values, then pair every exclusion fixture with a visible-content control.
-**Trigger phase:** VERIFY
+**Trigger phase:** ACT
+**Caught at:** VERIFY
 **Incident count:** 7 | **Latest occurrence:** 2026-08-07
 
 **Symptoms:** A review report containing every required field inside a raw `<pre>` block passed validation. A balanced inline-code span containing the literal `<!--` token, and later a visible backslash-escaped `\<!--` opener, entered comment state and hid subsequent fields. The first multiline fix still lost state when one continuation line closed a code span and opened another, so a comment marker on the following line hid the rest of the report. A complete custom tag such as `<x-review>` also opened a blank-terminated raw HTML block under CommonMark type 7, but the masker left its hidden fields authoritative. Four source spaces after a blank line under `- context` were later mistaken for top-level indented code, suppressing a visible `TODO` list continuation. Separately, the compact Review Integrity grammar accepted `risk-depth-declined` in its degradation slot while returning `isRiskDepthDeclined: false`, so a degraded review could claim a stronger conclusion and verdict.
@@ -73,7 +76,8 @@ last_reviewed: 2026-08-20
 
 **Status:** active | **Created:** 2026-08-11 | **Evidence:** ACTUAL_MEASURED
 **Decision changed:** Draft the Review Integrity block and refutation ledger against the validator's field grammar before redacting them to disk, because a rejected ledger has to be rewritten, re-redacted, and re-persisted under a new random path.
-**Trigger phase:** VERIFY
+**Trigger phase:** ACT
+**Caught at:** VERIFY
 
 **Symptoms:** `goat-flow review validate` exits 1 on a finished review whose content is correct. Three rules produced it in one session: a refutation ledger record was rejected for not matching the one-line grammar, the `Verdicts:` counts were rejected as inconsistent with the findings list, and a scope-snapshot value was rejected despite naming every required field.
 
@@ -94,7 +98,8 @@ last_reviewed: 2026-08-20
 
 **Status:** active | **Created:** 2026-08-07 | **Evidence:** ACTUAL_MEASURED
 **Decision changed:** Cross-train dependency pointers go in a separate `**Dependency note:**` line, never in `**Depends on:**`.
-**Trigger phase:** VERIFY
+**Trigger phase:** SCOPE
+**Caught at:** VERIFY
 
 **Symptoms:** Moving a milestone between plan directories and repointing the trains that referenced it makes `plans check <dir> --strict` exit 1 with `dependencies must be \`none\` or comma-separated local milestone IDs`. Measured 2026-08-07 while pulling `1.21.0/M05` and `1.30.0/M09` into `1.16.0`: 1.21.0 was strict-clean beforehand and the only two failures were the two dependency lines just edited. The natural edit - replacing `M05` with the moved file's path, or appending a parenthetical explaining the move - is exactly what breaks it.
 
@@ -112,9 +117,15 @@ last_reviewed: 2026-08-20
 
 **Status:** active | **Created:** 2026-08-19 | **Evidence:** ACTUAL_MEASURED
 **Decision changed:** Reforecast every estimate line together, and when the local likely rate implies fewer minutes than there are work units, keep the planning-time basis and record the local figure in prose.
-**Trigger phase:** VERIFY
+**Trigger phase:** SCOPE
+**Caught at:** VERIFY
+**Incident count:** 3 | **Latest occurrence:** 2026-08-23
 
 **Symptoms:** `plans check --strict` printed `reforecast required: ... use 0.61-0.93-1.04 min/unit before implementation` (advisory, exit 0). Updating only `**Forecast basis:**` and `**Forecast range:**` to those rates - a handoff note said to update "the Forecast basis/range lines" - flipped the plan to exit 1: `forecast range likely (8 min) must equal the Effort estimate total (22 min)`. Measured 2026-08-19 on `.goat-flow/plans/1.16.0-golive` M04 (9 units) and M05 (8 units).
+
+**Recurrence 2026-08-23:** M10's first reforecast used a descriptive `Forecast basis` sentence that omitted the parser's canonical semicolon-delimited low-likely-high shape. `plans check --strict` exited 1 with `forecast basis is not parseable`. Reading `FORECAST_BASIS_PATTERN` and rewriting the forecast fields together restored exit 0 before implementation. Evidence anchor: `src/cli/plans-effort.ts` (search: `FORECAST_BASIS_PATTERN`).
+
+**Recurrence 2026-08-23 (M11 split reconciliation):** M11's pre-implementation reforecast changed the headline from 20 to 21 minutes and the product split from 14 to 15, but left the four product task estimates totaling 14. The first closeout strict check exited 1 with `product counted work (14 min) does not equal the split component (15 min)`. The correction assigned the missing minute to the fixed-evaluation task and recorded that this reconciled the pre-work forecast rather than using observed timing to rewrite it.
 
 **Why it happens:** `src/cli/plans-check-summary.ts` (search: `renderRequiredReforecasts`) advises the new rates, but `src/cli/plans-effort.ts` (search: `forecast basis derives`) requires the range to be derived from the basis, `src/cli/plans-check.ts` (search: `must equal the Effort estimate total`) requires the `**Effort estimate:**` headline to equal the range's likely, and that headline is the sum of the per-item `(est: n min category)` entries whose grammar is integer-only (`plans-effort.ts`, search: `TASK_ESTIMATE_PATTERN`). With a likely rate under 1 min/unit, round(units × rate) is below the unit count and N positive integer items cannot sum to fewer than N minutes, so the strict shape is unsatisfiable rather than merely tedious. `.claude/skills/goat-plan/references/milestone-examples.md` (search: `Reforecast all estimates`) already says "all"; the partial edit ignored it.
 
@@ -131,7 +142,8 @@ last_reviewed: 2026-08-20
 
 **Status:** resolved | **Created:** 2026-08-02 | **Evidence:** OBSERVED
 **Decision changed:** Instrument timing before work; if timing is missing, declare the honest state instead of manufacturing precision.
-**Trigger phase:** VERIFY
+**Trigger phase:** ACT
+**Caught at:** VERIFY
 
 **Symptoms:** A completed or `human-verification-pending` milestone had to contain a numeric Actual total and product/proof/other split even when no clock was started. `_`, `unknown`, or an explanation without a number failed strict validation. An agent under completion pressure could therefore turn task estimates into a precise-looking Actual value with no elapsed-time evidence.
 

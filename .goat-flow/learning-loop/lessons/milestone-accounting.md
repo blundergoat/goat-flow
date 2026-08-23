@@ -9,7 +9,8 @@ last_reviewed: 2026-08-23
 
 **Status:** active | **Created:** 2026-08-09
 **Decision changed:** Compare the recorded baseline tree, current HEAD, and file hashes before attempting recovery when a changed path disappears from `git status`.
-**Trigger phase:** VERIFY
+**Trigger phase:** READ
+**Caught at:** VERIFY
 **Incident count:** 2 | **Latest occurrence:** 2026-08-14
 
 **What happened:** During M03 verification, goat-debug paths disappeared from `git status`, so I paused writes on the assumption that a test process had restored them. The files still had the expected hashes and differed from the recorded M03 baseline tree; current HEAD had advanced to a user-created commit that already contained those changes.
@@ -42,8 +43,9 @@ last_reviewed: 2026-08-23
 
 **Status:** active | **Created:** 2026-08-01
 **Decision changed:** Before setting `human-verification-pending`, keep every implementation Task checked, separate agent handoff work from human execution, prefix each open human-owned Proof item with `[HUMAN]`, and assign it zero agent minutes.
-**Trigger phase:** VERIFY
-**Incident count:** 3
+**Trigger phase:** SCOPE
+**Caught at:** VERIFY
+**Incident count:** 4
 **Latest occurrence:** 2026-08-23
 
 **What happened:** A release milestone had finished implementation and automated proof, but I added the final human approval checkbox under Tasks while changing the status to `human-verification-pending`. Strict plan validation rejected the snapshot as having an open implementation task.
@@ -64,7 +66,8 @@ last_reviewed: 2026-08-23
 
 **Status:** active | **Created:** 2026-08-02
 **Decision changed:** Start a timestamped timing receipt before milestone work; never reconstruct Actual from planned task estimates.
-**Trigger phase:** VERIFY
+**Trigger phase:** ACT
+**Caught at:** VERIFY
 **Incident count:** 8
 **Latest occurrence:** 2026-08-23
 
@@ -105,8 +108,8 @@ last_reviewed: 2026-08-23
 **Status:** active | **Created:** 2026-08-02
 **Decision changed:** Derive an estimate by counting task, proof, and admin units, then converting once. Never write an hours figure first and decompose backwards from it.
 **Trigger phase:** SCOPE
-**Incident count:** 4
-**Latest occurrence:** 2026-08-18
+**Incident count:** 5
+**Latest occurrence:** 2026-08-23
 
 **What happened:** Two plans authored days apart under the same goat-plan guidance produced opposite calibration. goat-debug-improve budgeted 715 minutes; its two receipt-backed milestones measured 273s and 1043s - ratios of 0.05x and 0.13x. Its three earlier milestones show the same shape (180/190/120 minutes estimated against 15/10/4 reported). effort-estimation-timing, estimated by the same author, measured 1.54x, 1.13x, and 0.79x - every milestone inside its declared forecast range.
 
@@ -117,6 +120,8 @@ last_reviewed: 2026-08-23
 **Recurrence 2026-08-10:** A release-identity closeout forecast 103 minutes from 15 units and measured 1,912 recorded-unpaused seconds, rendered as 32 minutes. The 0.31x result fell below the 41-minute low bound because prerequisite work had already absorbed much of the implementation risk; counting every remaining checkbox as fresh work overstated the residual scope.
 
 **Recurrence 2026-08-18:** M55 forecast 28 minutes from 11 units at the 1.16-2.54-8.99 min/unit rates `plans check --strict` emitted from local receipts, and measured 190 recorded seconds - 0.11x, below the 12-minute low bound. The corpus those rates come from is dominated by playbook *authoring* milestones; M55 was prose-only, edited five pre-identified spans, and had its contracts already naming the affected sections. Counting units captured the shape but not the work class. The tool's own rates are still the right default over a hand-picked anchor - an earlier draft of this milestone anchored on one over-running milestone and produced a different wrong number - but a milestone whose spans and assertions are already located should be forecast against comparable located-scope receipts, not the general corpus. The rates and the 15-sample corpus median come from the reforecast advisory in `src/cli/plans-effort.ts` (search: `FORECAST_BASIS_PATTERN`); the milestone carrying the receipt is gitignored local state, so the measured pair (28 forecast, 190 recorded seconds) is recorded here rather than referenced.
+
+**Recurrence 2026-08-23 (M12 reforecast):** I counted seven Tasks and three Proof items but omitted the positive `Plan/admin overhead` unit, so the forecast declared 10 units. Strict validation rejected the mismatch and reported 11. Recounting Tasks, Proof, Mid-proof, and admin entries before applying rates produced the 11-unit 17-39 minute range and 28-minute likely estimate.
 
 **Method comparison:** The nine milestones contained 99 positive agent-owned Task, Proof, Mid-proof, and admin units. Applying a cold `0.5-2.5-10 min/unit` prior produced a 247.5-minute likely total, 10.4% below the measured total, and all nine outcomes landed inside their derived low/high bands. Leave-one-out local rates covered seven of nine outcomes with 36.5% median absolute percentage error. This is a retrospective backtest, not proof that the next forecast will land; its value is showing that countable inputs materially outperform a duration chosen first.
 
@@ -138,7 +143,8 @@ last_reviewed: 2026-08-23
 
 **Status:** active | **Created:** 2026-08-02
 **Decision changed:** Switch the receipt category at the work boundary, not at the milestone boundary; a stale category is a silent data error, not a rounding detail.
-**Trigger phase:** VERIFY
+**Trigger phase:** ACT
+**Caught at:** VERIFY
 **Incident count:** 4
 **Latest occurrence:** 2026-08-14
 
@@ -177,6 +183,8 @@ last_reviewed: 2026-08-23
 
 **Recurrence 2026-08-23 (inactive transition):** After M08's corpus gate invalidated its assumption, I changed `Status` from `in-progress` to `blocked` while its product span remained open. Strict validation rejected the inactive milestone with an active Timing Receipt. Stopping the span produced a paused 466-second receipt and restored lifecycle consistency.
 
+**Recurrence 2026-08-23 (M11 activation order):** I reforecast M11, then tried to open its `other` segment while `Status` was still `not-started`. The guard opened no receipt. I changed the milestone to `in-progress` and the prospective retry opened M11-S01 successfully; no elapsed time was backfilled.
+
 **Root cause:** I treated receipt creation as the transition that made a milestone active, then treated an inactive status as though it also stopped the clock. The CLI models lifecycle and timing separately: active state is required before a start, and an open span must end before an inactive state can validate.
 
 **Prevention:**
@@ -193,7 +201,8 @@ last_reviewed: 2026-08-23
 
 **Status:** active | **Created:** 2026-08-07
 **Decision changed:** Reserve Tasks for estimated implementation checkboxes and keep each `(est: ...)` entry at the end of its item.
-**Trigger phase:** VERIFY
+**Trigger phase:** SCOPE
+**Caught at:** VERIFY
 **Incident count:** 5
 **Latest occurrence:** 2026-08-23
 
@@ -241,7 +250,8 @@ last_reviewed: 2026-08-23
 
 **Status:** active | **Created:** 2026-08-23
 **Decision changed:** When goat-plan File-Write adds a milestone to a plan directory that already has a terminal release milestone, the same batch adds the new ID to that node's `Depends on` and re-derives the ISSUE task band and totals; a milestone file alone is not "in the plan".
-**Trigger phase:** ACT
+**Trigger phase:** SCOPE
+**Caught at:** ACT
 
 **What happened:** M47 was created in the 1.17.0 train with valid structure and a passing strict check, but the train's terminal node (M37, whose `Depends on` list closes the release) did not list it, so the release cut would have closed without M47. The ISSUE.md band and totals were updated only because the user asked for the ISSUE reference separately. The gap surfaced on a "double check that plan" pass, not on validation, because `plans check` validates each file and the ISSUE arithmetic, not membership in the terminal node.
 

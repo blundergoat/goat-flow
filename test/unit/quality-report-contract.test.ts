@@ -12,6 +12,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { composeQuality } from "../../src/cli/prompt/compose-quality.js";
 import type { QualityInput } from "../../src/cli/prompt/compose-quality-common.js";
+import type { LearningLoopEntryFact } from "../../src/cli/types.js";
 import {
   QUALITY_EVIDENCE_METHODS,
   QUALITY_FINDING_SEVERITIES,
@@ -20,6 +21,7 @@ import {
   QUALITY_SCORE_CONFIDENCES,
   QUALITY_WORKTREE_STATES,
 } from "../../src/cli/quality/schema-types.js";
+import { makeSharedFacts } from "../fixtures/projects/index.js";
 
 /** Top-level JSON keys every contract render must show in its body shape. */
 const REQUIRED_TOP_LEVEL_FIELDS = [
@@ -135,6 +137,35 @@ function makeInput(qualityMode: QualityInput["qualityMode"]): QualityInput {
     priorReport: null,
     qualityMode,
     runDate: "2026-07-03",
+  };
+}
+
+/** Build one active learning-loop fact for quality-prompt targeting fixtures. */
+function qualityMemory(
+  title: string,
+  overrides: Partial<LearningLoopEntryFact> = {},
+): LearningLoopEntryFact {
+  return {
+    sourcePath: `.goat-flow/learning-loop/footguns/${title.toLowerCase().replace(/\s+/g, "-")}.md`,
+    kind: "footgun",
+    title,
+    heading: `## Footgun: ${title}`,
+    status: "active",
+    created: "2026-05-01",
+    updated: null,
+    resolved: null,
+    hasDecisionChangedGuidance: true,
+    triggerPhase: null,
+    caughtAt: null,
+    incidentCount: null,
+    latestOccurrence: null,
+    excerpt: `${title} evidence.`,
+    staleRefs: [],
+    invalidLineRefs: [],
+    hasValidAnchor: true,
+    bucketSizeBytes: 1_000,
+    order: 0,
+    ...overrides,
   };
 }
 
@@ -361,6 +392,66 @@ describe("quality report contract: CLI surfaces", () => {
   it("agent-setup prompt carries the full contract", () => {
     const payload = composeQuality(makeInput("agent-setup"));
     assertCarriesContract("agent-setup", payload.prompt);
+  });
+
+  it("targets bounded harness learnings from failing audit checks and affected surfaces", () => {
+    const auditReport = makeLimitedAuditReport();
+    const failure = {
+      check: "Deny covers secrets",
+      message: "workflow/hooks/deny-dangerous.sh did not cover secret reads",
+      evidence: ".github/hooks/hooks.json",
+      howToFix: "Repair the registered deny hook and rerun its smoke probe.",
+    };
+    auditReport.status = "fail";
+    auditReport.overall.status = "fail";
+    auditReport.scopes.harness = {
+      status: "fail",
+      checks: [
+        {
+          id: "deny-covers-secrets",
+          name: "Deny covers secrets",
+          status: "fail",
+          displayStatus: "fail",
+          impact: "scope-fail",
+          provenance: {
+            source_type: "spec",
+            source_urls: [],
+            verified_on: "2026-08-23",
+            normative_level: "MUST",
+          },
+          failure,
+        },
+      ],
+      failures: [failure],
+      summary: {},
+    };
+    const sharedFacts = makeSharedFacts();
+    const matchingTitle =
+      "File-read deny does not bind Bash shell reads of secret files";
+    const unrelatedTitle =
+      "Dashboard terminal prompts can be dropped before browser attachment";
+    sharedFacts.learningLoopEntries = [
+      qualityMemory(unrelatedTitle, { created: "2026-06-03", order: 1 }),
+      qualityMemory(matchingTitle, {
+        sourcePath: ".goat-flow/learning-loop/footguns/deny-secrets.md",
+        excerpt:
+          "The deny-covers-secrets audit exercises workflow/hooks/deny-dangerous.sh.",
+        order: 2,
+      }),
+    ];
+
+    const prompt = composeQuality({
+      ...makeInput("harness"),
+      auditReport,
+      sharedFacts,
+    }).prompt;
+
+    assert.ok(prompt.indexOf(matchingTitle) < prompt.indexOf(unrelatedTitle));
+    assert.match(
+      prompt,
+      /<goat-learning-loop[^>]*selected="2" omitted="0"[^>]*task_matches="1" task_zero_hit="false">/u,
+    );
+    assert.match(prompt, /task match: deny, covers, secrets/u);
   });
 
   it("agent-setup prompt defines finding-validity and accuracy guardrails", () => {

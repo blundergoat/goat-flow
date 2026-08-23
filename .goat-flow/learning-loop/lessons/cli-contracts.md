@@ -1,6 +1,6 @@
 ---
 category: cli-contracts
-last_reviewed: 2026-08-22
+last_reviewed: 2026-08-23
 ---
 
 **Scope:** The CLI's own surface contract - parser headroom before refactoring, omission tests for required choices, output shape across one and many selections, and what an id-based comparison actually compares. Cooperation between separately-correct components is [integration-verification.md](integration-verification.md).
@@ -33,7 +33,8 @@ last_reviewed: 2026-08-22
 
 **Recurrence update (2026-08-07):** Tightening Timing Receipt stamp validation passed 116 focused tests and typecheck before whole-file ESLint rejected `parseStamp` at complexity 11. The first helper extraction then made preflight report five new file-length warnings. Deriving canonical UTC from the epoch inside `parseStamp`, folding regressions into existing test cases, and restoring the accepted `plans-time.ts` size cleared targeted Gruff without weakening the invalid-calendar or rendered-heading checks.
 
-**Decision changed:** Measure whole-file ESLint and gruff immediately after the first parser GREEN, and pay for new branches by removing duplicate parsing rather than adding a late helper alone. | **Trigger phase:** VERIFY | **Incident count:** 4 | **Latest occurrence:** 2026-08-07
+**Decision changed:** Measure whole-file ESLint and gruff immediately after the first parser GREEN, and pay for new branches by removing duplicate parsing rather than adding a late helper alone. | **Trigger phase:** ACT | **Incident count:** 4 | **Latest occurrence:** 2026-08-07
+**Caught at:** VERIFY
 
 **Prevention:**
 1. Before extending a shared parser or dispatcher, measure its line and complexity headroom; near-threshold files need an extraction in the initial GREEN design.
@@ -47,7 +48,8 @@ last_reviewed: 2026-08-22
 
 **Status:** active | **Created:** 2026-07-13
 **Decision changed:** Test valid, invalid, omitted, and explicit fallback forms; preserve invocation shape when omission selects a fallback.
-**Trigger phase:** VERIFY
+**Trigger phase:** ACT
+**Caught at:** VERIFY
 **Incident count:** 5 | **Latest occurrence:** 2026-08-22
 
 **What happened:** M17's plan and handler required `--scenario deny-hook`, but the parser returned that value when the flag was absent. Positive, invalid-value, and live explicit-command checks all passed, so only a final omission probe exposed the false choice.

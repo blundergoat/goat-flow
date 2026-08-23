@@ -1,6 +1,6 @@
 ---
 category: refactor-fallout
-last_reviewed: 2026-08-19
+last_reviewed: 2026-08-23
 ---
 
 **Scope:** What breaks downstream when code is split, renamed, or extracted - browser script load graphs, source-shape tests that pinned the old layout, dist builds, and shared scope a split test no longer imports. Using the Gruff analyzer is [gruff-cleanup.md](gruff-cleanup.md).
@@ -73,7 +73,8 @@ last_reviewed: 2026-08-19
 
 **Status:** active | **Created:** 2026-07-13
 **Decision changed:** Generate one named test per matrix value and keep the assertion in that test callback; shared helpers return evidence instead of hiding assertions.
-**Trigger phase:** VERIFY
+**Trigger phase:** ACT
+**Caught at:** VERIFY
 **Incident count:** 6
 **Latest occurrence:** 2026-08-17
 

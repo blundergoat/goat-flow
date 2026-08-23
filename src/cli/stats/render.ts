@@ -11,6 +11,7 @@ import type {
   StatsCheckReport,
   StatsReport,
 } from "./stats.js";
+import type { LearningLoopEntryFact, LearningLoopEntryKind } from "../types.js";
 
 const BAND_LABEL: Record<string, string> = {
   fresh: "fresh",
@@ -18,6 +19,34 @@ const BAND_LABEL: Record<string, string> = {
   stale: "stale",
   unknown: "unknown",
 };
+
+const TRIGGER_PHASES = ["READ", "SCOPE", "ACT", "VERIFY"] as const;
+
+/** Summarize preventive retrieval phases for one memory kind without hiding malformed values. */
+function triggerPhaseSummary(
+  entries: LearningLoopEntryFact[],
+  kind: LearningLoopEntryKind,
+): string {
+  const matchingEntries = entries.filter((entry) => entry.kind === kind);
+  const phaseCounts = TRIGGER_PHASES.map((phase) => ({
+    phase,
+    count: matchingEntries.filter((entry) => entry.triggerPhase === phase)
+      .length,
+  }));
+  const untaggedCount = matchingEntries.filter(
+    (entry) => entry.triggerPhase === null,
+  ).length;
+  const recognizedCount = phaseCounts.reduce(
+    (total, phaseCount) => total + phaseCount.count,
+    0,
+  );
+  const invalidCount = matchingEntries.length - recognizedCount - untaggedCount;
+  return [
+    ...phaseCounts.map(({ phase, count }) => `${phase} ${count}`),
+    `untagged ${untaggedCount}`,
+    ...(invalidCount > 0 ? [`invalid ${invalidCount}`] : []),
+  ].join(", ");
+}
 
 /** Use `-` for unknown ages so text and Markdown renderers share the same missing-age marker. */
 function formatDays(days: number | null): string {
@@ -30,15 +59,21 @@ function padRight(text: string, width: number): string {
 }
 
 /** Render one learning-loop bucket section with fixed-width rows for scan-friendly terminal output. */
-function renderSectionText(name: string, section: BucketSection): string {
+function renderSectionText(
+  name: string,
+  section: BucketSection,
+  learningLoopEntries: LearningLoopEntryFact[],
+  entryKind: "footgun" | "lesson",
+): string {
   if (!section.exists) {
     return `${name} (${section.path}) - directory missing\n`;
   }
 
   const header = `${name} (${section.path}) - ${section.buckets.length} bucket(s), ${section.totalEntries} entrie(s)`;
   const summary = `  Freshness: ${section.bands.fresh} fresh, ${section.bands.aging} aging, ${section.bands.stale} stale, ${section.bands.unknown} unknown | Refs: ${section.totalStaleRefs} stale, ${section.totalInvalidLineRefs} invalid-line`;
+  const triggerPhases = `  Trigger phases: ${triggerPhaseSummary(learningLoopEntries, entryKind)}`;
   if (section.buckets.length === 0) {
-    return [header, summary, ""].join("\n");
+    return [header, summary, triggerPhases, ""].join("\n");
   }
 
   const nameWidth = Math.max(
@@ -53,9 +88,14 @@ function renderSectionText(name: string, section: BucketSection): string {
     const refs = `${bucket.staleRefs.length}s/${bucket.invalidLineRefs.length}i`;
     return `  ${padRight(display, nameWidth)}  last=${last}  age=${padRight(days, 6)}  band=${padRight(band, 7)}  entries=${bucket.entryCount}  refs=${refs}`;
   });
-  return [header, summary, ...lines, ...renderGraduationText(section), ""].join(
-    "\n",
-  );
+  return [
+    header,
+    summary,
+    triggerPhases,
+    ...lines,
+    ...renderGraduationText(section),
+    "",
+  ].join("\n");
 }
 
 /** Format one graduation-candidate row shared by the text and Markdown renderers. */
@@ -106,9 +146,19 @@ function basename(path: string): string {
  */
 export function renderStatsText(report: StatsReport): string {
   return (
-    renderSectionText("Footguns", report.footguns) +
+    renderSectionText(
+      "Footguns",
+      report.footguns,
+      report.learningLoopEntries,
+      "footgun",
+    ) +
     "\n" +
-    renderSectionText("Lessons", report.lessons) +
+    renderSectionText(
+      "Lessons",
+      report.lessons,
+      report.learningLoopEntries,
+      "lesson",
+    ) +
     (report.decisions ? "\n" + renderDecisionsText(report.decisions) : "")
   );
 }
@@ -131,8 +181,18 @@ export function renderStatsJson(report: StatsReport): string {
  */
 export function renderStatsMarkdown(report: StatsReport): string {
   const sections = [
-    markdownSection("Footguns", report.footguns),
-    markdownSection("Lessons", report.lessons),
+    markdownSection(
+      "Footguns",
+      report.footguns,
+      report.learningLoopEntries,
+      "footgun",
+    ),
+    markdownSection(
+      "Lessons",
+      report.lessons,
+      report.learningLoopEntries,
+      "lesson",
+    ),
     ...(report.decisions ? [markdownDecisions(report.decisions)] : []),
   ];
   return ["# Learning-loop stats", "", ...sections].join("\n");
@@ -185,7 +245,12 @@ function markdownDecisions(section: DecisionsSection): string {
 }
 
 /** Build the markdown section. */
-function markdownSection(name: string, section: BucketSection): string {
+function markdownSection(
+  name: string,
+  section: BucketSection,
+  learningLoopEntries: LearningLoopEntryFact[],
+  entryKind: "footgun" | "lesson",
+): string {
   if (!section.exists) {
     return `## ${name}\n\n_Directory missing: \`${section.path}\`_\n`;
   }
@@ -196,6 +261,7 @@ function markdownSection(name: string, section: BucketSection): string {
     `- Entries: ${section.totalEntries}`,
     `- Freshness: ${section.bands.fresh} fresh / ${section.bands.aging} aging / ${section.bands.stale} stale / ${section.bands.unknown} unknown`,
     `- Refs: ${section.totalStaleRefs} stale, ${section.totalInvalidLineRefs} invalid-line`,
+    `- Trigger phases: ${triggerPhaseSummary(learningLoopEntries, entryKind)}`,
     ``,
   ];
   if (section.buckets.length === 0) return head.join("\n");

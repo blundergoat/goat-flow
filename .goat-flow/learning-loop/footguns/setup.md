@@ -1,6 +1,6 @@
 ---
 category: setup
-last_reviewed: 2026-08-15
+last_reviewed: 2026-08-23
 ---
 
 ## Footgun: A preview-layer classification change is inert until apply consumes the decision
@@ -62,7 +62,8 @@ last_reviewed: 2026-08-15
 
 **Status:** resolved | **Created:** 2026-07-14 | **Resolved:** 2026-07-17 | **Evidence:** ACTUAL_MEASURED
 **Decision changed:** Managed-write admission must inspect every target path component before any file or directory creation and must not let force bypass an unsafe component.
-**Trigger phase:** VERIFY
+**Trigger phase:** ACT
+**Caught at:** VERIFY
 **Incident count:** 3 | **Latest occurrence:** 2026-07-14
 
 **Resolution:** Managed preview, install-state, and installer admission now inspect each existing path component before any directory scaffolding or file write. `--force` cannot bypass a symlinked or non-regular component. The focused preview, state, and atomic-installer regression suite covers the original nested redirects.

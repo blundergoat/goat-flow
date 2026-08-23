@@ -1,6 +1,6 @@
 ---
 category: auditor
-last_reviewed: 2026-08-20
+last_reviewed: 2026-08-23
 ---
 
 ## Footgun: Audit does not prove end-to-end deny enforcement at runtime
@@ -82,7 +82,8 @@ Build checks in `src/cli/audit/check-goat-flow.ts` and `src/cli/audit/check-agen
 
 **Status:** active | **Created:** 2026-07-12 | **Evidence:** ACTUAL_MEASURED
 **Decision changed:** Every new drift surface must declare whether it is agent-owned or shared and carry the caller's agent filter into agent-owned scans.
-**Trigger phase:** ACT
+**Trigger phase:** SCOPE
+**Caught at:** ACT
 
 **Trap:** Agent selection is easy to preserve in the top-level audit and lose inside a nested drift helper. Any helper that rebuilds the manifest-owned agent inventory can silently widen a selected-agent audit, producing phantom missing files for agents the consumer did not install. The current implementation prevents this for known drift surfaces; each new agent-owned surface can reintroduce it if it ignores `agentFilter`.
 
@@ -101,7 +102,8 @@ Build checks in `src/cli/audit/check-goat-flow.ts` and `src/cli/audit/check-agen
 
 **Status:** active | **Created:** 2026-08-03 | **Evidence:** ACTUAL_MEASURED
 **Decision changed:** Any version comparison that drives user-facing remediation or a file write must branch on direction, not on `!==`.
-**Trigger phase:** VERIFY
+**Trigger phase:** ACT
+**Caught at:** VERIFY
 **Incident count:** 2 | **Latest occurrence:** 2026-08-03
 **hallucination-risk:** high
 

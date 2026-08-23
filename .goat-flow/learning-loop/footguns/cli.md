@@ -1,6 +1,6 @@
 ---
 category: cli
-last_reviewed: 2026-08-20
+last_reviewed: 2026-08-23
 ---
 
 ## Footgun: An additive classification rule can silently delete a published state value
@@ -94,7 +94,8 @@ last_reviewed: 2026-08-20
 
 **Status:** resolved | **Created:** 2026-08-03 | **Evidence:** ACTUAL_MEASURED
 **Decision changed:** Handle a zero-duration lease as an explicit immediate-expiry state instead of deriving it from wall-clock subtraction.
-**Trigger phase:** VERIFY
+**Trigger phase:** ACT
+**Caught at:** VERIFY
 
 **Symptoms:** Identical CI runs at the same commit disagree on `rejects an orphaned stale claim when its draft is already gone`. The failing run keeps the claim marker and produces no rejection receipt, while a parallel run passes. A local 10,000-sample probe observed 93 freshly written marker timestamps ahead of `Date.now()`, with the most negative delta at about -0.6 ms.
 

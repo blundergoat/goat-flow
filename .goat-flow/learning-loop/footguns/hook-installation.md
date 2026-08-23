@@ -1,6 +1,6 @@
 ---
 category: hook-installation
-last_reviewed: 2026-08-22
+last_reviewed: 2026-08-23
 ---
 
 **Scope:** Hook install / launch / registration / config-drift plumbing. The `deny-dangerous` guardrail's shell-grammar policy parser (substitution/heredoc handling, secret-path and `git`/`gh` write classification, payload parsing) lives in [deny-shell.md](deny-shell.md) (command grammar), [deny-secrets.md](deny-secrets.md) (secret-path reads), and [deny-writes.md](deny-writes.md) (external writes).
@@ -75,7 +75,8 @@ last_reviewed: 2026-08-22
 
 **Status:** active | **Created:** 2026-08-14 | **Evidence:** ACTUAL_MEASURED
 **Decision changed:** Treat every tracked workflow-hook edit as a source/install mirror change and prove byte parity before provider or repository audits.
-**Trigger phase:** ACT
+**Trigger phase:** SCOPE
+**Caught at:** ACT
 
 **Symptoms:** A focused contract against `workflow/hooks/gruff-code-quality.sh` passed, but the repository audit failed because Claude, Codex, and Copilot still loaded a stale `.goat-flow/hooks/gruff-code-quality.sh`.
 
@@ -151,7 +152,8 @@ last_reviewed: 2026-08-22
 
 **Status:** active | **Created:** 2026-05-19 | **Evidence:** ACTUAL_MEASURED
 **Decision changed:** Admit writable subpaths only after checking their real layout, then exercise the generated profile with an allowed and denied runtime write.
-**Trigger phase:** VERIFY
+**Trigger phase:** READ
+**Caught at:** VERIFY
 
 **Symptoms:** Codex warns or fails before shell startup when the profile names a workspace-root token, access value, base-profile shape, or exact path the runtime can't load. On 0.136.0, the old profile that set `"." = "write"` and `"secrets/**" = "none"` under `:workspace_roots` failed before startup with the `bwrap: execvp ... codex: No such file or directory` error (full string in evidence). On 0.131.0, `:project_roots` was ignored and absent exact entries (`.env.example`, `.docker/config.json`, `.kube/config`) could break startup. On 0.145.0, a generated reporting profile that named absent `.goat-flow/plans` and `.goat-flow/scratchpad` write roots failed every command with `bwrap: Can't create file ... Read-only file system`.
 

@@ -1,13 +1,12 @@
 /**
- * Picks the handful of past incidents worth pasting into a generated prompt, so the next agent starts with the traps this project already hit.
- *
- * The user asked for a setup, quality, or maintenance prompt; this module decides which learning-loop entries ride along inside it:
+ * Selects past project incidents for setup, quality, and maintenance prompts.
+ * Use when a CLI or dashboard user requests a prompt that should carry relevant prior learning.
  *
  * - Active footguns with a working anchor come first, then lessons, patterns, and decisions.
  * - Each kind has its own byte and entry cap, so one noisy bucket cannot crowd out the rest.
  * - Entries are dropped from the end until the rendered block fits the surface budget.
  *
- * Full freshness and stale-reference enforcement stays with `goat-flow stats --check`; nothing here validates the loop.
+ * Selection stays read-only; `goat-flow stats --check` owns freshness and stale-reference validation.
  */
 import type {
   LearningLoopEntryFact,
@@ -36,6 +35,8 @@ export interface LearningLoopContextOptions {
   includeStale?: boolean;
   includeDecisions?: boolean;
   includeOversized?: boolean;
+  /** Concrete audit checks, affected paths, tools, or failure classes used only for this selection. */
+  taskSignals?: readonly string[];
   perKind?: Partial<Record<LearningLoopEntryKind, Partial<KindBudget>>>;
 }
 
@@ -48,16 +49,26 @@ interface SelectedLearningLoopEntry {
   excerpt: string;
   staleRefs: string[];
   invalidLineRefs: string[];
+  matchedTaskTerms?: string[];
 }
 
-/** Final selection plus accounting metadata embedded in the prompt wrapper. */
+/**
+ * Prompt-ready learning entries and the accounting shown to CLI or dashboard users.
+ * The rendering contract keeps this invariant after finalization: `selectedCount` equals `entries.length`, and `budgetUsed` describes the same block
+ * without exceeding `budgetMax`.
+ */
 export interface LearningLoopContextSelection {
   entries: SelectedLearningLoopEntry[];
   budgetUsed: number;
   budgetMax: number;
   selectedCount: number;
   omittedCount: number;
+  /** True when the project supplied no eligible learning entry, so the generated prompt omits the learning-loop block. */
   zeroHit: boolean;
+  /** Selected entries with at least one direct lexical task match; absent when targeting was not requested. */
+  taskMatchedCount?: number;
+  /** True when normalized task terms matched no eligible entry and baseline ranking supplied the fallback. */
+  isTaskZeroHit?: boolean;
 }
 
 /** Options after surface defaults and per-kind overrides have been applied. */
@@ -68,6 +79,13 @@ interface ResolvedLearningLoopOptions {
   budgetMax: number;
   perEntryMaxBytes: number;
   kindBudgets: Record<LearningLoopEntryKind, KindBudget>;
+  taskTerms: string[];
+}
+
+/** One entry's deterministic lexical overlap with the ephemeral task terms. */
+interface TaskMatch {
+  score: number;
+  terms: string[];
 }
 
 const DEFAULT_KIND_BUDGETS: Record<LearningLoopEntryKind, KindBudget> = {
@@ -84,6 +102,40 @@ const KIND_RANK: Record<LearningLoopEntryKind, number> = {
   decision: 3,
 };
 
+/** Generic prompt-routing vocabulary is not concrete enough to make one memory relevant. */
+const TASK_TERM_STOPWORDS = new Set([
+  "agent",
+  "agents",
+  "and",
+  "are",
+  "but",
+  "did",
+  "does",
+  "for",
+  "flow",
+  "from",
+  "goat",
+  "has",
+  "have",
+  "harness",
+  "into",
+  "its",
+  "mode",
+  "must",
+  "not",
+  "only",
+  "path",
+  "project",
+  "quality",
+  "rerun",
+  "setup",
+  "the",
+  "this",
+  "was",
+  "were",
+  "with",
+]);
+
 const OVERSIZED_BUCKET_BYTES = 40_000;
 
 /**
@@ -92,7 +144,7 @@ const OVERSIZED_BUCKET_BYTES = 40_000;
  * @param content - rendered prompt text or excerpt; an empty string measures zero
  * @returns byte length of the encoded text
  */
-function byteLength(content: string): number {
+function utf8ByteLength(content: string): number {
   return Buffer.byteLength(content, "utf8");
 }
 
@@ -103,17 +155,18 @@ function byteLength(content: string): number {
  * @param maxBytes - cap including the trailing ellipsis
  * @returns the original text when it already fits, otherwise a shortened copy ending in an ellipsis
  */
-function truncateBytes(content: string, maxBytes: number): string {
+function truncateToUtf8ByteLimit(content: string, maxBytes: number): string {
   // Already inside the cap, so the reader gets the full excerpt with no ellipsis.
-  if (byteLength(content) <= maxBytes) return content;
-  let out = "";
+  if (utf8ByteLength(content) <= maxBytes) return content;
+  let truncatedText = "";
+  // Add one visible character at a time so a user never receives broken Unicode in a generated prompt.
   for (const char of content) {
-    const next = out + char;
+    const textWithNextCharacter = truncatedText + char;
     // Stop at the last character that still leaves room for the ellipsis, so the cap is never exceeded mid-character.
-    if (byteLength(next + "...") > maxBytes) break;
-    out = next;
+    if (utf8ByteLength(textWithNextCharacter + "...") > maxBytes) break;
+    truncatedText = textWithNextCharacter;
   }
-  return `${out.trimEnd()}...`;
+  return `${truncatedText.trimEnd()}...`;
 }
 
 /**
@@ -122,7 +175,8 @@ function truncateBytes(content: string, maxBytes: number): string {
  * @param entry - learning-loop entry from extracted facts
  * @returns an ISO date string, or empty when the entry carries neither date and therefore sorts last
  */
-function entryDate(entry: LearningLoopEntryFact): string {
+function learningEntryDate(entry: LearningLoopEntryFact): string {
+  // An undated entry returns an empty sort key, which places it behind dated evidence in the user's prompt.
   return entry.updated ?? entry.created ?? "";
 }
 
@@ -133,6 +187,7 @@ function entryDate(entry: LearningLoopEntryFact): string {
  * @returns true when any reference is stale or invalid, which keeps the entry out of every surface except maintenance
  */
 function isStaleOrInvalid(entry: LearningLoopEntryFact): boolean {
+  // Any broken reference makes the entry maintenance-only rather than evidence a reviewer can safely follow.
   return entry.staleRefs.length > 0 || entry.invalidLineRefs.length > 0;
 }
 
@@ -142,9 +197,10 @@ function isStaleOrInvalid(entry: LearningLoopEntryFact): boolean {
  * @param overrides - partial caps supplied by the caller; `undefined` keeps every shipped default
  * @returns a complete cap for all four entry kinds
  */
-function mergedKindBudgets(
+function mergeKindBudgets(
   overrides: LearningLoopContextOptions["perKind"],
 ): Record<LearningLoopEntryKind, KindBudget> {
+  // Missing bucket overrides keep the shipped limits, so callers only specify the prompt space they want to change.
   return {
     footgun: { ...DEFAULT_KIND_BUDGETS.footgun, ...overrides?.footgun },
     lesson: { ...DEFAULT_KIND_BUDGETS.lesson, ...overrides?.lesson },
@@ -159,7 +215,7 @@ function mergedKindBudgets(
  * @param surface - prompt this block is being built for
  * @returns the byte ceiling for the rendered block
  */
-function defaultMaxBytes(surface: LearningLoopContextSurface): number {
+function defaultPromptBudgetBytes(surface: LearningLoopContextSurface): number {
   // Maintenance work is where stale entries get repaired, so that prompt carries the most evidence.
   if (surface === "maintenance") return 3_200;
   // Process assessments reason about the loop itself and need more than a setup prompt does.
@@ -167,8 +223,12 @@ function defaultMaxBytes(surface: LearningLoopContextSurface): number {
   return 2_200;
 }
 
-/** Include ADRs by default because setup and quality prompts both need policy context. */
-function includeDecisionEntries(): boolean {
+/**
+ * Include accepted decisions by default so setup and quality users receive the policy behind current behavior.
+ *
+ * @returns true; callers can still opt out for an incident-only prompt
+ */
+function shouldIncludeDecisionEntriesByDefault(): boolean {
   return true;
 }
 
@@ -178,7 +238,9 @@ function includeDecisionEntries(): boolean {
  * @param surface - prompt this block is being built for
  * @returns true for quality and maintenance prompts, false where an oversized bucket would just be noise
  */
-function allowOversizedBuckets(surface: LearningLoopContextSurface): boolean {
+function shouldIncludeOversizedBuckets(
+  surface: LearningLoopContextSurface,
+): boolean {
   return surface.startsWith("quality-") || surface === "maintenance";
 }
 
@@ -191,16 +253,70 @@ function allowOversizedBuckets(surface: LearningLoopContextSurface): boolean {
 function resolveLearningLoopOptions(
   options: LearningLoopContextOptions,
 ): ResolvedLearningLoopOptions {
+  // A caller that omits the surface receives the agent-setup limits used by the default Quality launch.
   const surface = options.surface ?? "quality-agent-setup";
+  // Unspecified values inherit the selected surface policy, giving a UI launch the same limits as the matching CLI command.
   return {
     includeStale: options.includeStale ?? surface === "maintenance",
-    includeDecisions: options.includeDecisions ?? includeDecisionEntries(),
+    includeDecisions:
+      options.includeDecisions ?? shouldIncludeDecisionEntriesByDefault(),
     includeOversized:
-      options.includeOversized ?? allowOversizedBuckets(surface),
-    budgetMax: options.maxBytes ?? defaultMaxBytes(surface),
+      options.includeOversized ?? shouldIncludeOversizedBuckets(surface),
+    budgetMax: options.maxBytes ?? defaultPromptBudgetBytes(surface),
     perEntryMaxBytes: options.perEntryMaxBytes ?? 360,
-    kindBudgets: mergedKindBudgets(options.perKind),
+    kindBudgets: mergeKindBudgets(options.perKind),
+    taskTerms: normalizeTaskTerms(options.taskSignals),
   };
+}
+
+/**
+ * Reduce caller-owned task signals to stable lexical terms without retaining the source prose.
+ *
+ * Generic mode labels are dropped because they describe the prompt, not the work. The remaining terms preserve first-seen order so reasons are
+ * deterministic and readable.
+ *
+ * @param signals - ephemeral check IDs, paths, tools, or failure-class phrases
+ * @returns unique lowercase terms; empty means the selector must use its original ranking and output
+ */
+function normalizeTaskTerms(signals: readonly string[] | undefined): string[] {
+  const normalizedTerms = new Set<string>();
+  // A launch with no audit-owned signals keeps the original ranking and contributes no stored task text.
+  for (const signal of signals ?? []) {
+    // Split each check, path, or failure message into stable words that can be compared with recorded incidents.
+    for (const token of signal
+      .normalize("NFKC")
+      .toLowerCase()
+      .match(/[\p{L}\p{N}]+/gu) ?? []) {
+      // Short and generic words do not identify the user's failed check, file, tool, or symptom.
+      if (token.length < 3 || TASK_TERM_STOPWORDS.has(token)) continue;
+      normalizedTerms.add(token);
+    }
+  }
+  return [...normalizedTerms];
+}
+
+/**
+ * Find the exact task words shared by one incident and the user's current audit evidence.
+ * Use during prompt selection to explain why a prior incident was shown.
+ *
+ * @param entry - eligible learning-loop incident being considered for the user's prompt
+ * @param taskTerms - normalized audit terms; empty means this entry receives a zero match score
+ * @returns the matched terms and their count; terms is empty when this incident does not overlap the audit
+ */
+function findTaskTermMatch(
+  entry: LearningLoopEntryFact,
+  taskTerms: readonly string[],
+): TaskMatch {
+  const entryTerms = new Set(
+    normalizeTaskTerms([
+      entry.title,
+      entry.heading,
+      entry.sourcePath,
+      entry.excerpt,
+    ]),
+  );
+  const matchedTerms = taskTerms.filter((term) => entryTerms.has(term));
+  return { score: matchedTerms.length, terms: matchedTerms };
 }
 
 /**
@@ -209,7 +325,7 @@ function resolveLearningLoopOptions(
  * @param entry - learning-loop entry chosen for the block
  * @returns the short reason rendered after the entry title; never empty
  */
-function reasonFor(entry: LearningLoopEntryFact): string {
+function describeSelectionReason(entry: LearningLoopEntryFact): string {
   // Only maintenance surfaces admit broken entries, so saying so warns the reader not to trust the anchor.
   if (isStaleOrInvalid(entry)) {
     return "surfaced for learning-loop maintenance despite stale or invalid refs";
@@ -218,10 +334,13 @@ function reasonFor(entry: LearningLoopEntryFact): string {
   if (entry.kind === "footgun" && entry.hasValidAnchor) {
     return "active footgun with valid semantic anchor";
   }
-  // Remaining kinds rank down from durable warnings to softer context.
+  // An unanchored active footgun still warns the reviewer, but without claiming a verified source location.
   if (entry.kind === "footgun") return "active footgun";
+  // A lesson gives the reviewer recent project experience after higher-risk footguns have been considered.
   if (entry.kind === "lesson") return "recent lesson";
+  // A pattern offers reusable guidance only after the incident-focused prompt space has been protected.
   if (entry.kind === "pattern") return "reusable pattern within cap";
+  // The remaining decision entry gives setup and policy reviewers the accepted rule behind the current design.
   return "decision included for setup or policy context";
 }
 
@@ -231,8 +350,10 @@ function reasonFor(entry: LearningLoopEntryFact): string {
  * @param entry - learning-loop entry being ordered
  * @returns a sort key where lower wins; stale entries take a fixed penalty that pushes them behind every healthy one
  */
-function entryRank(entry: LearningLoopEntryFact): number {
+function learningEntryPriority(entry: LearningLoopEntryFact): number {
+  // Stale evidence sorts behind every healthy entry, so ordinary users see guidance they can still follow.
   const staleOffset = isStaleOrInvalid(entry) ? 10 : 0;
+  // A verified footgun anchor removes the secondary penalty because it gives the reviewer a direct place to inspect.
   const anchorBoost = entry.kind === "footgun" && entry.hasValidAnchor ? 0 : 1;
   return staleOffset + KIND_RANK[entry.kind] * 2 + anchorBoost;
 }
@@ -242,21 +363,40 @@ function entryRank(entry: LearningLoopEntryFact): number {
  *
  * @param left - first entry in the comparison
  * @param right - second entry in the comparison
+ * @param taskMatches - optional task overlap by entry; absent preserves the original non-targeted order
  * @returns a negative, zero, or positive sort result; the path and order tiebreaks keep the contract deterministic
  */
 function compareEntries(
   left: LearningLoopEntryFact,
   right: LearningLoopEntryFact,
+  taskMatches?: ReadonlyMap<LearningLoopEntryFact, TaskMatch>,
 ): number {
-  const rankDiff = entryRank(left) - entryRank(right);
+  const priorityDifference =
+    learningEntryPriority(left) - learningEntryPriority(right);
   // Kind and health decide first: a footgun outranks a pattern regardless of when either was written.
-  if (rankDiff !== 0) return rankDiff;
-  const dateDiff = entryDate(right).localeCompare(entryDate(left));
+  if (priorityDifference !== 0) return priorityDifference;
+  // Targeted launches compare direct task overlap only inside the already-safe kind and health tier.
+  if (taskMatches) {
+    // An entry missing from the optional score map behaves as an unmatched entry rather than disappearing from the prompt.
+    const taskMatchDifference =
+      (taskMatches.get(right)?.score ?? 0) -
+      (taskMatches.get(left)?.score ?? 0);
+    // Direct overlap wins inside the existing kind/health tier; recurrence cannot overpower it.
+    if (taskMatchDifference !== 0) return taskMatchDifference;
+    // Incidents without a recorded count are treated as zero recurrences, keeping older entries eligible without overstating them.
+    const recurrenceDifference =
+      (right.incidentCount ?? 0) - (left.incidentCount ?? 0);
+    // Once relevance ties, recurrence is a bounded signal before the existing recency/path fallbacks.
+    if (recurrenceDifference !== 0) return recurrenceDifference;
+  }
+  const dateDifference = learningEntryDate(right).localeCompare(
+    learningEntryDate(left),
+  );
   // Same rank, so the more recently revised incident goes first.
-  if (dateDiff !== 0) return dateDiff;
-  const pathDiff = left.sourcePath.localeCompare(right.sourcePath);
+  if (dateDifference !== 0) return dateDifference;
+  const pathDifference = left.sourcePath.localeCompare(right.sourcePath);
   // Path then declaration order break the remaining ties, so two runs over unchanged facts render identical prompts.
-  if (pathDiff !== 0) return pathDiff;
+  if (pathDifference !== 0) return pathDifference;
   return left.order - right.order;
 }
 
@@ -267,7 +407,7 @@ function compareEntries(
  * @param options - resolved inclusion flags for the surface being rendered
  * @returns true when the entry is eligible; false silently drops it from the candidate list
  */
-function allowedEntry(
+function isLearningEntryAllowed(
   entry: LearningLoopEntryFact,
   options: Required<
     Pick<
@@ -300,14 +440,17 @@ function allowedEntry(
  * @param entry - excerpt already selected for the block
  * @returns a leading-space flag fragment, or an empty string when every reference resolves
  */
-function flagText(entry: SelectedLearningLoopEntry): string {
-  const flags = [
+function renderBrokenReferenceFlags(entry: SelectedLearningLoopEntry): string {
+  // Empty reference lists add no warning; maintenance users only see counts for broken paths that need attention.
+  const brokenReferenceFlags = [
     entry.staleRefs.length > 0 ? `stale refs: ${entry.staleRefs.length}` : "",
     entry.invalidLineRefs.length > 0
       ? `invalid refs: ${entry.invalidLineRefs.length}`
       : "",
   ].filter(Boolean);
-  return flags.length === 0 ? "" : ` Flags: ${flags.join(", ")}.`;
+  return brokenReferenceFlags.length === 0
+    ? ""
+    : ` Flags: ${brokenReferenceFlags.join(", ")}.`;
 }
 
 /**
@@ -317,7 +460,7 @@ function flagText(entry: SelectedLearningLoopEntry): string {
  * @returns one prompt line; never empty
  */
 function renderEntry(entry: SelectedLearningLoopEntry): string {
-  return `- [${entry.kind}] ${entry.title} (\`${entry.sourcePath}\`) - ${entry.reasonSelected}.${flagText(entry)} ${entry.excerpt}`;
+  return `- [${entry.kind}] ${entry.title} (\`${entry.sourcePath}\`) - ${entry.reasonSelected}.${renderBrokenReferenceFlags(entry)} ${entry.excerpt}`;
 }
 
 /**
@@ -325,20 +468,30 @@ function renderEntry(entry: SelectedLearningLoopEntry): string {
  *
  * @param entry - eligible learning-loop entry
  * @param maxExcerptBytes - per-entry excerpt cap for this surface
+ * @param taskMatch - optional lexical overlap; absent means the prompt shows no task-match reason
  * @returns the prompt-ready excerpt; reference lists are copied so later edits cannot reach back into the facts
  */
-function selectedFromEntry(
+function buildSelectedLearningEntry(
   entry: LearningLoopEntryFact,
   maxExcerptBytes: number,
+  taskMatch?: TaskMatch,
 ): SelectedLearningLoopEntry {
+  // An untargeted or unmatched entry carries no task terms, preserving the original prompt wording.
+  const matchedTaskTerms = taskMatch?.terms ?? [];
+  // A direct match is named in the prompt so the reviewing agent can understand why the user was shown this incident.
+  const taskMatchReasonSuffix =
+    matchedTaskTerms.length > 0
+      ? `; task match: ${matchedTaskTerms.join(", ")}`
+      : "";
   return {
     sourcePath: entry.sourcePath,
     kind: entry.kind,
     title: entry.title,
-    reasonSelected: reasonFor(entry),
-    excerpt: truncateBytes(entry.excerpt, maxExcerptBytes),
+    reasonSelected: `${describeSelectionReason(entry)}${taskMatchReasonSuffix}`,
+    excerpt: truncateToUtf8ByteLimit(entry.excerpt, maxExcerptBytes),
     staleRefs: [...entry.staleRefs],
     invalidLineRefs: [...entry.invalidLineRefs],
+    ...(matchedTaskTerms.length > 0 ? { matchedTaskTerms } : {}),
   };
 }
 
@@ -349,6 +502,7 @@ function selectedFromEntry(
  * @param budgetMax - byte ceiling for the whole rendered block
  * @param omittedCount - entries already left out, carried forward into the block header
  * @param isRetrievalMiss - true when nothing matched at all, which the header reports as an explicit retrieval miss
+ * @param isTaskZeroHit - optional targeted-retrieval result; absent means the user did not launch a targeted selection
  * @returns the final selection whose header numbers describe the block it appears in
  */
 function finalizeSelection(
@@ -356,6 +510,7 @@ function finalizeSelection(
   budgetMax: number,
   omittedCount: number,
   isRetrievalMiss: boolean,
+  isTaskZeroHit?: boolean,
 ): LearningLoopContextSelection {
   let selection: LearningLoopContextSelection = {
     entries,
@@ -364,24 +519,34 @@ function finalizeSelection(
     selectedCount: entries.length,
     omittedCount,
     zeroHit: isRetrievalMiss,
+    ...(isTaskZeroHit === undefined
+      ? {}
+      : {
+          // A selected entry without matched terms still counts toward the bounded fallback, not the targeted-match total.
+          taskMatchedCount: entries.filter(
+            (entry) => (entry.matchedTaskTerms?.length ?? 0) > 0,
+          ).length,
+          isTaskZeroHit,
+        }),
   };
   // The header prints the used-byte count, so writing that number changes the block length; three passes settle it.
-  for (let pass = 0; pass < 3; pass++) {
+  for (let budgetSettlePass = 0; budgetSettlePass < 3; budgetSettlePass++) {
     selection = {
       ...selection,
-      budgetUsed: byteLength(renderLearningLoopContext(selection)),
+      budgetUsed: utf8ByteLength(renderLearningLoopContext(selection)),
     };
   }
   // Still over the ceiling, so the lowest-ranked entry is dropped and the count re-settled until the block fits.
   while (
     selection.entries.length > 0 &&
-    byteLength(renderLearningLoopContext(selection)) > budgetMax
+    utf8ByteLength(renderLearningLoopContext(selection)) > budgetMax
   ) {
     selection = finalizeSelection(
       selection.entries.slice(0, -1),
       budgetMax,
       omittedCount + 1,
       isRetrievalMiss,
+      isTaskZeroHit,
     );
   }
   return selection;
@@ -398,50 +563,76 @@ export function selectLearningLoopContext(
   sharedFacts: Pick<SharedFacts, "learningLoopEntries">,
   options: LearningLoopContextOptions = {},
 ): LearningLoopContextSelection {
-  const resolved = resolveLearningLoopOptions(options);
+  const selectionOptions = resolveLearningLoopOptions(options);
   const sourceEntries = sharedFacts.learningLoopEntries;
-  const candidates = sourceEntries
-    .filter((entry) =>
-      allowedEntry(entry, {
-        includeStale: resolved.includeStale,
-        includeDecisions: resolved.includeDecisions,
-        includeOversized: resolved.includeOversized,
-      }),
-    )
-    .sort(compareEntries);
-  const kindBytes: Record<LearningLoopEntryKind, number> = {
+  const eligibleEntries = sourceEntries.filter((entry) =>
+    isLearningEntryAllowed(entry, {
+      includeStale: selectionOptions.includeStale,
+      includeDecisions: selectionOptions.includeDecisions,
+      includeOversized: selectionOptions.includeOversized,
+    }),
+  );
+  const taskMatchByEntry = new Map(
+    eligibleEntries.map((entry) => [
+      entry,
+      findTaskTermMatch(entry, selectionOptions.taskTerms),
+    ]),
+  );
+  const hasAnyTaskMatch = [...taskMatchByEntry.values()].some(
+    (match) => match.score > 0,
+  );
+  // A complete miss uses the original comparator, so targeting cannot perturb the fallback.
+  eligibleEntries.sort((left, right) =>
+    compareEntries(left, right, hasAnyTaskMatch ? taskMatchByEntry : undefined),
+  );
+  const selectedBytesByKind: Record<LearningLoopEntryKind, number> = {
     footgun: 0,
     lesson: 0,
     pattern: 0,
     decision: 0,
   };
-  const kindCounts: Record<LearningLoopEntryKind, number> = {
+  const selectedCountByKind: Record<LearningLoopEntryKind, number> = {
     footgun: 0,
     lesson: 0,
     pattern: 0,
     decision: 0,
   };
-  const selected: SelectedLearningLoopEntry[] = [];
+  const selectedEntries: SelectedLearningLoopEntry[] = [];
 
   // Walk the ranked candidates once, taking each until its kind runs out of entries or bytes.
-  for (const candidate of candidates) {
-    const budget = resolved.kindBudgets[candidate.kind];
+  for (const candidate of eligibleEntries) {
+    const kindBudget = selectionOptions.kindBudgets[candidate.kind];
     // This kind has already filled its slots, so the entry is skipped and a lower-ranked kind keeps its share.
-    if (kindCounts[candidate.kind] >= budget.maxEntries) continue;
-    const next = selectedFromEntry(candidate, resolved.perEntryMaxBytes);
-    const nextBytes = byteLength(renderEntry(next));
+    if (selectedCountByKind[candidate.kind] >= kindBudget.maxEntries) continue;
+    const selectedEntry = buildSelectedLearningEntry(
+      candidate,
+      selectionOptions.perEntryMaxBytes,
+      hasAnyTaskMatch ? taskMatchByEntry.get(candidate) : undefined,
+    );
+    const selectedEntryBytes = utf8ByteLength(renderEntry(selectedEntry));
     // A long excerpt that would blow the kind's byte cap is skipped rather than truncated further.
-    if (kindBytes[candidate.kind] + nextBytes > budget.maxBytes) continue;
-    selected.push(next);
-    kindCounts[candidate.kind]++;
-    kindBytes[candidate.kind] += nextBytes;
+    if (
+      selectedBytesByKind[candidate.kind] + selectedEntryBytes >
+      kindBudget.maxBytes
+    ) {
+      continue;
+    }
+    selectedEntries.push(selectedEntry);
+    selectedCountByKind[candidate.kind]++;
+    selectedBytesByKind[candidate.kind] += selectedEntryBytes;
   }
 
+  // Targeted accounting is absent for an ordinary launch and explicitly marks a zero-hit when audit terms found nothing.
+  const isTaskZeroHit =
+    selectionOptions.taskTerms.length > 0 ? !hasAnyTaskMatch : undefined;
+  // When no project entry is eligible, the caller receives an explicit retrieval miss and renders no empty learning section.
+  const isRetrievalMiss = eligibleEntries.length === 0;
   return finalizeSelection(
-    selected,
-    resolved.budgetMax,
-    sourceEntries.length - selected.length,
-    candidates.length === 0,
+    selectedEntries,
+    selectionOptions.budgetMax,
+    sourceEntries.length - selectedEntries.length,
+    isRetrievalMiss,
+    isTaskZeroHit,
   );
 }
 
@@ -456,8 +647,13 @@ export function renderLearningLoopContext(
 ): string {
   // Nothing survived selection, so the prompt gets no learning-loop section rather than an empty one.
   if (selection.entries.length === 0) return "";
+  // Untargeted prompts keep the original wrapper; targeted prompts show both useful matches and an honest zero-hit.
+  const taskAccounting =
+    selection.isTaskZeroHit === undefined
+      ? ""
+      : ` task_matches="${selection.taskMatchedCount ?? 0}" task_zero_hit="${selection.isTaskZeroHit}"`;
   return [
-    `<goat-learning-loop budget="${selection.budgetMax} bytes" used="${selection.budgetUsed} bytes" selected="${selection.selectedCount}" omitted="${selection.omittedCount}">`,
+    `<goat-learning-loop budget="${selection.budgetMax} bytes" used="${selection.budgetUsed} bytes" selected="${selection.selectedCount}" omitted="${selection.omittedCount}"${taskAccounting}>`,
     "Curated learning-loop context only. Full freshness/stale-ref enforcement remains owned by `goat-flow stats --check`.",
     ...selection.entries.map(renderEntry),
     "</goat-learning-loop>",

@@ -1,6 +1,6 @@
 ---
 category: test-platform-compat
-last_reviewed: 2026-08-22
+last_reviewed: 2026-08-23
 ---
 
 **Scope:** Platform and runtime differences that break tests - CI Node versions older than local, Windows path/URL shapes and symlink privileges, filesystem-clock skew, and npm scripts that assume a POSIX shell. Choosing and invoking the runner is [test-execution-environment.md](test-execution-environment.md); shell and process behaviour under a test is [test-shell-environment.md](test-shell-environment.md).
@@ -49,7 +49,8 @@ spawnSync(process.execPath, ["--import", TSX_LOADER_URL, CLI_PATH, ...args], ...
 
 ## Lesson: Windows test runs require explicit EPERM handling for symlink fixtures
 
-**Status:** active | **Created:** 2026-05-11 | **Trigger phase:** VERIFY | **Incident count:** 2 | **Latest occurrence:** 2026-08-22
+**Status:** active | **Created:** 2026-05-11 | **Trigger phase:** ACT | **Incident count:** 2 | **Latest occurrence:** 2026-08-22
+**Caught at:** VERIFY
 
 **What happened:** Three tests (`main-module guard via symlink`, `skips symlink entries in skill walk roots`, `rejects upload paths that escape through symlinked components`) call `fs.symlinkSync()` to build fixtures. On Windows without Developer Mode (or admin rights), `symlinkSync` throws `EPERM: operation not permitted`. The tests failed because they treated the fixture setup as guaranteed; the production code under test is correct on all platforms, but the test harness can't reach it.
 

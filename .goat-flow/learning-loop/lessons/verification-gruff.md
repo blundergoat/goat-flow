@@ -1,6 +1,6 @@
 ---
 category: verification-gruff
-last_reviewed: 2026-08-18
+last_reviewed: 2026-08-23
 ---
 
 **Scope:** The Gruff analyzer specifically - comment rules, doc-comment complexity, binary discovery, and baseline handling. Other repo-wide gates are [verification-preflight.md](verification-preflight.md).
@@ -10,7 +10,8 @@ last_reviewed: 2026-08-18
 **Status:** active | **Created:** 2026-05-25
 **Incident count:** 12 | **Latest occurrence:** 2026-08-18
 **Decision changed:** Treat a human-readable comment, boolean, compact test, or typed contract as unfinished until targeted and repository-wide analyzers accept the exact source shape.
-**Trigger phase:** VERIFY
+**Trigger phase:** ACT
+**Caught at:** VERIFY
 
 **What happened:** During gruff docs cleanup, comments in `src/cli/server/decoders.ts` made sense to a maintainer but still failed `docs.magic-threshold-without-rationale`, `docs.missing-error-behavior-doc`, and `docs.missing-why-for-complex-code`. In the same cleanup, renaming dashboard terminal paste metadata passed focused tests but left stale ambient and VM-test helper shapes caught by `npm run typecheck`.
 
@@ -78,7 +79,8 @@ last_reviewed: 2026-08-18
 
 **Decision changed:** Run later gruff commands through the exact `$found` path instead of guessing a global install location.
 
-**Trigger phase:** VERIFY
+**Trigger phase:** READ
+**Caught at:** VERIFY
 
 **What happened:** The required availability check found the repo-local `node_modules/.bin/gruff-ts`, but the first analysis command discarded that result and invoked `$HOME/.local/bin/gruff-ts`. Bash reported `No such file or directory`, while the following `jq` stage returned zero and made the failed probe easy to misread as analyzer output.
 
@@ -120,7 +122,8 @@ last_reviewed: 2026-08-18
 
 **Status:** active | **Created:** 2026-08-18
 **Decision changed:** Before rewording an existing comment during a docs pass, grep the learning loop for that exact string; a cited comment is a durable artifact, not free text.
-**Trigger phase:** VERIFY
+**Trigger phase:** READ
+**Caught at:** VERIFY
 
 **What happened:** Clearing `docs.missing-side-effect-doc` across the repo, I rewrote `test/integration/audit-drift.helpers.ts` from "Write canonical skill stubs" to "Writes canonical skill stubs" so the comment carried the rule's exact vocabulary. Gruff went clean, typecheck passed, and the targeted rerun showed the finding removed. The full `npm test` run then failed one case in `test/unit/support-bundle.test.ts` ("emits clean JSON through the CLI", expected exit 0, got 1), because `goat-flow diagnostics bundle` embeds the harness audit, whose `feedback-loop-active` check calls `stats --check`, which found `verification-gruff.md` citing the old wording as a `(search: ...)` anchor. One letter in a test-helper comment turned a green docs pass into a failing CLI contract three layers away.
 

@@ -1,6 +1,6 @@
 ---
 category: docs-and-crossrefs
-last_reviewed: 2026-08-20
+last_reviewed: 2026-08-23
 ---
 
 ## Footgun: Path validators can treat gitignored local-state markers as missing docs
@@ -60,7 +60,8 @@ last_reviewed: 2026-08-20
 
 **Status:** active | **Created:** 2026-05-25 | **Evidence:** ACTUAL_MEASURED
 **Decision changed:** When a behavior fix changes evidence cited by an active footgun, update or resolve that entry in the same change.
-**Trigger phase:** VERIFY
+**Trigger phase:** ACT
+**Caught at:** VERIFY
 **Incident count:** 4
 **Latest occurrence:** 2026-08-10
 
@@ -88,7 +89,8 @@ last_reviewed: 2026-08-20
 
 **Status:** active | **Created:** 2026-03-18 | **Evidence:** ACTUAL_MEASURED
 **Decision changed:** Stage a rename before registering its destination; search all tracked files, not only Markdown, for old paths.
-**Trigger phase:** VERIFY
+**Trigger phase:** SCOPE
+**Caught at:** VERIFY
 **Incident count:** 6
 **Latest occurrence:** 2026-08-09
 

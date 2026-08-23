@@ -1,6 +1,6 @@
 ---
 category: verification-validators
-last_reviewed: 2026-08-17
+last_reviewed: 2026-08-23
 ---
 
 **Scope:** Getting a checker itself right - regex and wildcard construction, path resolution inside guards, what a validator must inventory, and counting contracts between a check and what it reports. Whether a claim was verified at all is [verification.md](verification.md).
@@ -23,7 +23,8 @@ last_reviewed: 2026-08-17
 ## Lesson: Input/output alias guards must compare resolved filesystem paths
 
 **Status:** active | **Created:** 2026-08-05 | **Incident count:** 2 | **Latest occurrence:** 2026-08-05
-**Decision changed:** Before a forced writer runs, compare every existing destination with every source after filesystem resolution, then test an alternate path spelling. | **Trigger phase:** VERIFY
+**Decision changed:** Before a forced writer runs, compare every existing destination with every source after filesystem resolution, then test an alternate path spelling. | **Trigger phase:** ACT
+**Caught at:** VERIFY
 
 **What happened:** Full branch review reproduced `plans export --format json --output <source milestone> --force` exiting 0 and replacing the milestone with generated JSON. The first guard compared `resolve()` strings and blocked that direct spelling.
 
@@ -148,7 +149,8 @@ A relocation also destroys its own evidence: once the inline list was deleted, t
 
 **Status:** active | **Created:** 2026-08-10
 **Decision changed:** Capture expected nonzero helper statuses before restoring shell fail-fast mode.
-**Trigger phase:** VERIFY
+**Trigger phase:** ACT
+**Caught at:** VERIFY
 
 **What happened:** Gruff range classification correctly returned distinct statuses for deletion-only and unavailable hunks, but the legacy caller assigned the result under `set -e`. The shell exited with status 10 or 11 before the existing fail-soft skip branch ran.
 

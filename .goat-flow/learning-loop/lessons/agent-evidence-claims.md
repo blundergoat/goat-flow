@@ -1,6 +1,6 @@
 ---
 category: agent-evidence-claims
-last_reviewed: 2026-08-20
+last_reviewed: 2026-08-23
 ---
 
 **Scope:** What counts as citable evidence - mechanism claims need a read source, absence and exact-count claims need untruncated searches, gitignored paths are never durable anchors, and final verification gates need supported scopes with captured logs. Reading the request and retrieving memory is [agent-behavior.md](agent-behavior.md); using tools and the environment is [agent-tooling.md](agent-tooling.md).
@@ -9,7 +9,8 @@ last_reviewed: 2026-08-20
 
 **Status:** active | **Created:** 2026-08-16
 **Decision changed:** Read a tool's own schema or source before stating why one of its options did not work.
-**Trigger phase:** VERIFY
+**Trigger phase:** READ
+**Caught at:** VERIFY
 **Incident count:** 1 | **Latest occurrence:** 2026-08-16
 
 **What happened:** While diagnosing a Knip out-of-memory failure in preflight, I added the large directory to `knip.json`'s `ignore`, saw the run still exhaust its heap, and reported that "`ignore` filters reported issues, not what it reads." The conclusion was correct, but I had only observed that the symptom persisted. When the user asked whether Knip really could not ignore the folder, I could not defend the claim and had to walk it back, then walk the retraction back again after reading `node_modules/knip/schema.json`, whose `ignore` title is "Files to exclude from the report (any issue type)".

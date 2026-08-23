@@ -1,6 +1,6 @@
 ---
 category: filesystem-io
-last_reviewed: 2026-07-19
+last_reviewed: 2026-08-23
 ---
 
 ## Lesson: UTF-8 punctuation sweeps need post-replacement grep
@@ -31,7 +31,8 @@ last_reviewed: 2026-07-19
 
 **Status:** active | **Created:** 2026-07-19
 **Decision changed:** When a wrapper narrows an overloaded Node filesystem API to one runtime shape, declare that concrete result instead of deriving the union with `ReturnType`.
-**Trigger phase:** VERIFY
+**Trigger phase:** ACT
+**Caught at:** VERIFY
 
 **What happened:** M10 wrapped `lstatSync` as `ReturnType<typeof lstatSync> | null`. The first `npm run typecheck` reported the returned stats as possibly `undefined` because Node's overload set includes the `throwIfNoEntry: false` result, even though the wrapper never calls that overload.
 

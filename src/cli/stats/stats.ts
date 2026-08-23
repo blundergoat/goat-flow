@@ -401,6 +401,10 @@ function describeMemoryQualityIssues(entry: LearningLoopEntryFact): string[] {
   ) {
     issues.push(`invalid Trigger phase "${entry.triggerPhase}"`);
   }
+  // Caught-at metadata uses the same vocabulary but remains optional and advisory.
+  if (entry.caughtAt !== null && !VALID_TRIGGER_PHASES.has(entry.caughtAt)) {
+    issues.push(`invalid Caught at "${entry.caughtAt}"`);
+  }
   // A recurrence before creation makes the user's incident chronology internally impossible.
   if (
     entry.latestOccurrence !== null &&

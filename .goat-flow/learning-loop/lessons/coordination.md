@@ -1,6 +1,6 @@
 ---
 category: coordination
-last_reviewed: 2026-08-20
+last_reviewed: 2026-08-23
 ---
 
 **Scope:** Running work across multiple agents or phases - council findings that need normalising before they create work, where reviewers hallucinate, and phase totals that must derive from their breakdowns. Milestone state and effort accounting is [milestone-accounting.md](milestone-accounting.md).
@@ -9,7 +9,8 @@ last_reviewed: 2026-08-20
 
 **Status:** active | **Created:** 2026-05-25
 **Decision changed:** Test platform-specific admission through injected discovery results, not shared process globals.
-**Trigger phase:** VERIFY
+**Trigger phase:** ACT
+**Caught at:** VERIFY
 **Incident count:** 2
 **Latest occurrence:** 2026-08-06
 
@@ -71,7 +72,8 @@ last_reviewed: 2026-08-20
 
 **Status:** active | **Created:** 2026-05-01
 **Decision changed:** Run the plan arithmetic gate immediately after writing estimates, then independently derive every ISSUE-level roll-up from the validated milestone headlines.
-**Trigger phase:** VERIFY
+**Trigger phase:** SCOPE
+**Caught at:** VERIFY
 **Incident count:** 7
 **Latest occurrence:** 2026-08-17
 

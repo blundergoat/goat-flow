@@ -1,6 +1,6 @@
 ---
 category: test-shell-environment
-last_reviewed: 2026-08-18
+last_reviewed: 2026-08-23
 ---
 
 **Scope:** The shell and process layer under a test - stdin and EOF handling, tools that silently skip paths, inherited permission profiles, and why silent output is not proof a child never ran. Choosing and invoking the runner is [test-execution-environment.md](test-execution-environment.md).
@@ -8,7 +8,8 @@ last_reviewed: 2026-08-18
 ## Lesson: The session shell's `grep` is a ugrep wrapper that silently drops `.goat-flow/` subtrees, committed or ignored
 
 **Status:** active | **Created:** 2026-06-13
-**Trigger phase:** VERIFY
+**Trigger phase:** READ
+**Caught at:** VERIFY
 **Incident count:** 9 | **Latest occurrence:** 2026-08-18
 **Decision changed:** Recursive ripgrep searches over gitignored plan or log trees must use `--no-ignore` or `-uuu` and a known-positive control before a zero-match result is accepted; a session-`grep` search that names `.goat-flow/` as an operand must be rerun as `command grep` whenever it has to reach ignored plans or logs, and always on installs older than the 2026-08-18 `**/` template, which also hide the committed subtrees; a negative-search proof is clean only when the search exits with its documented no-match status, not an invocation error.
 

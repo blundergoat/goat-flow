@@ -105,39 +105,59 @@ export function inferQualityScope(
 ): "framework-self" | "consumer" {
   const packagePath = join(projectPath, "package.json");
   try {
+    // A user can assess a non-Node or incomplete project; without package metadata the prompt uses the safer consumer scope.
     if (!existsSync(packagePath)) return "consumer";
-    const raw = JSON.parse(readFileSync(packagePath, "utf-8")) as {
+    const packageMetadata = JSON.parse(readFileSync(packagePath, "utf-8")) as {
       name?: unknown;
     };
-    return raw.name === "@blundergoat/goat-flow"
+    return packageMetadata.name === "@blundergoat/goat-flow"
       ? "framework-self"
       : "consumer";
   } catch {
+    // For example, a user may launch Quality while `package.json` is half-written or unreadable; the prompt still opens as a consumer review.
     return "consumer";
   }
 }
 
-/** Append setup and agent scope failures to one audit summary. */
+/**
+ * Add setup and agent results to the audit summary shown in a generated quality prompt.
+ * Missing scopes add no rows because that audit did not assess them.
+ *
+ * @param lines - audit-summary line buffer; empty means this helper starts the rendered summary
+ * @param report - completed audit report; missing individual scopes are omitted rather than treated as passing
+ * @returns nothing; available scope rows and failures are appended to the supplied buffer
+ */
 function appendScopeSummary(lines: string[], report: AuditReport): void {
-  const scopes: [string, string][] = [
+  const auditScopes: [string, string][] = [
     ["setup", "GOAT Flow Setup"],
     ["agent", "Agent Setup"],
   ];
-  for (const [scope, label] of scopes) {
-    const scopeReport = report.scopes[scope as keyof typeof report.scopes];
+  // Show each audit surface in the same order users see it elsewhere in Quality.
+  for (const [scopeKey, scopeLabel] of auditScopes) {
+    const scopeReport = report.scopes[scopeKey as keyof typeof report.scopes];
+    // An audit that skipped this surface contributes no misleading pass or fail row.
     if (!scopeReport) continue;
-    const status = scopeReport.status === "pass" ? "PASS" : "FAIL";
-    lines.push(`- **${label}**: ${status}`);
+    const scopeStatusLabel = scopeReport.status === "pass" ? "PASS" : "FAIL";
+    lines.push(`- **${scopeLabel}**: ${scopeStatusLabel}`);
+    // Every failed check remains visible so the reviewing agent can re-test the exact issue the user encountered.
     for (const failure of scopeReport.failures) {
       lines.push(`  - ${failure.check}: ${failure.message}`);
     }
   }
 }
 
-/** Append structural concern scores and evidence limits when harness facts exist. */
+/**
+ * Add harness concern scores and evidence limits to the prompt's audit summary.
+ * Use only when the audit returned concern facts; otherwise the user sees no invented completeness score.
+ *
+ * @param lines - audit-summary line buffer; empty means the concern block becomes its first content
+ * @param report - completed audit report; absent concerns leave the buffer unchanged
+ * @returns nothing; available concern scores and limits are appended to the supplied buffer
+ */
 function appendConcernSummary(lines: string[], report: AuditReport): void {
+  // A setup-only audit has no harness concerns, so its summary ends without an empty section.
   if (!report.concerns) return;
-  const keys: AuditConcernKey[] = [
+  const concernKeys: AuditConcernKey[] = [
     "context",
     "constraints",
     "verification",
@@ -148,41 +168,62 @@ function appendConcernSummary(lines: string[], report: AuditReport): void {
   lines.push(
     "Harness completeness (structural integrity, not quality assessment):",
   );
-  for (const key of keys) {
-    const concern = report.concerns[key];
-    const limits =
+  // Keep the five harness concerns in their user-facing scorecard order.
+  for (const concernKey of concernKeys) {
+    const concern = report.concerns[concernKey];
+    // No evidence limits means the score row stays compact; any limitation is shown beside the score it qualifies.
+    const evidenceLimitsSuffix =
       concern.limits.length > 0
         ? `; limits: ${concern.limits.join(" | ")}`
         : "";
     lines.push(
-      `- ${key}: ${concern.status === "pass" ? "PASS" : "FAIL"} (${concern.score}%; metrics=${concern.metrics}${limits})`,
+      `- ${concernKey}: ${concern.status === "pass" ? "PASS" : "FAIL"} (${concern.score}%; metrics=${concern.metrics}${evidenceLimitsSuffix})`,
     );
   }
 }
 
-/** Append template-drift findings in their deterministic audit order when evidence exists. */
+/**
+ * Add template-drift results in deterministic audit order so users can trace generated files that differ from their source templates.
+ * A report without drift evidence adds no drift section.
+ *
+ * @param lines - audit-summary line buffer; empty means the drift block becomes its first content
+ * @param report - completed audit report; absent drift evidence leaves the buffer unchanged
+ * @returns nothing; the drift status and any findings are appended to the supplied buffer
+ */
 function appendDriftSummary(lines: string[], report: AuditReport): void {
+  // Drift may be disabled for a quick audit, so absence is not rendered as a pass.
   if (!report.drift) return;
   lines.push("");
   lines.push(
     `- **Template Drift**: ${report.drift.status === "pass" ? "PASS" : "FAIL"} (${report.drift.checked} checked)`,
   );
+  // Preserve audit order so repeated prompt launches present the same actionable file list.
   for (const finding of report.drift.findings) {
     lines.push(`  - ${finding.path}: ${finding.message}`);
   }
 }
 
-/** Append content-lint findings without changing the audit report's stable path and rule identity. */
+/**
+ * Add content-lint findings without changing the stable path-and-rule contract a user needs to reproduce them.
+ * A report without content evidence adds no content section.
+ *
+ * @param lines - audit-summary line buffer; empty means the content block becomes its first content
+ * @param report - completed audit report; absent content evidence leaves the buffer unchanged
+ * @returns nothing; the content status and any findings are appended to the supplied buffer
+ */
 function appendContentSummary(lines: string[], report: AuditReport): void {
+  // Content checks are optional, so missing results must not appear as a clean scan.
   if (!report.content) return;
   lines.push("");
   lines.push(
     `- **Content Claims**: ${report.content.status === "pass" ? "PASS" : "FAIL"} (${report.content.filesScanned} files scanned)`,
   );
+  // Keep every finding in audit order so the prompt matches the CLI report the user just ran.
   for (const finding of report.content.findings) {
-    const lineSuffix = finding.line ? `:${finding.line}` : "";
+    // A file-level finding has no line suffix; a line-level finding keeps its exact reproduction location.
+    const sourceLineSuffix = finding.line ? `:${finding.line}` : "";
     lines.push(
-      `  - ${finding.path}${lineSuffix} [${finding.rule}]: ${finding.message}`,
+      `  - ${finding.path}${sourceLineSuffix} [${finding.rule}]: ${finding.message}`,
     );
   }
 }
@@ -212,6 +253,7 @@ export function renderAuditSummary(report: AuditReport): string {
 export function renderAuditUnavailableSummary(
   reason: AuditUnavailableReason,
 ): string {
+  // A dashboard fast launch without cached evidence is a cache miss, not a failed live audit.
   if (reason === "fast-cache-only") {
     return "Audit data not loaded (fast cache-only mode had no cached report).";
   }
@@ -227,6 +269,7 @@ export function renderAuditUnavailableSummary(
 export function renderAuditUnavailableHeading(
   reason: AuditUnavailableReason,
 ): string {
+  // Fast cache-only mode tells the user no audit was loaded rather than implying an attempted audit failed.
   if (reason === "fast-cache-only") {
     return "**Audit: NOT LOADED (FAST CACHE-ONLY MODE)**";
   }
@@ -240,6 +283,7 @@ export function renderAuditUnavailableHeading(
  * @returns a blockquote telling the reviewer not to infer setup failure from the gap
  */
 export function renderDegradedNote(reason: AuditUnavailableReason): string {
+  // A cache miss points the user to Re-audit while preserving the distinction from an actual audit failure.
   if (reason === "fast-cache-only") {
     return [
       "",
@@ -259,9 +303,19 @@ export function renderDegradedNote(reason: AuditUnavailableReason): string {
   ].join("\n");
 }
 
-/** Return the finding severity rank. */
-function findingSeverityRank(severity: "BLOCKER" | "MAJOR" | "MINOR"): number {
+/**
+ * Rank quality finding severities for the three-item prior-report preview.
+ * Lower values appear first in the prompt the user reviews.
+ *
+ * @param severity - saved finding severity; all three supported values receive a deterministic rank
+ * @returns zero for BLOCKER, one for MAJOR, or two for MINOR
+ */
+function qualityFindingSeverityRank(
+  severity: "BLOCKER" | "MAJOR" | "MINOR",
+): number {
+  // Blockers lead because they can prevent work or create safety risk for the user.
   if (severity === "BLOCKER") return 0;
+  // Major findings follow blockers and remain ahead of minor usability weaknesses.
   if (severity === "MAJOR") return 1;
   return 2;
 }
@@ -269,30 +323,36 @@ function findingSeverityRank(severity: "BLOCKER" | "MAJOR" | "MINOR"): number {
 /**
  * Return the operator-facing label for a quality prompt mode.
  *
- * @param mode - quality prompt mode being rendered
+ * @param qualityMode - quality prompt mode being rendered
  * @returns the human-readable label shown to operators (e.g. `Harness Engineering`)
  */
-export function qualityModeLabel(mode: QualityMode): string {
-  if (mode === "process") return "Process";
-  if (mode === "harness") return "Harness Engineering";
-  if (mode === "skills") return "Skills";
+export function qualityModeLabel(qualityMode: QualityMode): string {
+  // Process mode is shown as the framework workflow assessment in the CLI and dashboard.
+  if (qualityMode === "process") return "Process";
+  // Harness mode is labelled as engineering work so users do not confuse it with installation review.
+  if (qualityMode === "harness") return "Harness Engineering";
+  // Skills mode names the focused skill-quality assessment directly.
+  if (qualityMode === "skills") return "Skills";
   return "Agent Installation";
 }
 
 /**
  * Describe which workspace or target the selected quality mode should assess.
  *
- * @param mode - quality prompt mode being rendered
+ * @param qualityMode - quality prompt mode being rendered
  * @returns a sentence naming the workspace or target the mode's assessment covers
  */
-export function qualityModeTargetScope(mode: QualityMode): string {
-  if (mode === "process") {
+export function qualityModeTargetScope(qualityMode: QualityMode): string {
+  // Process reviews begin in the controlling workspace and only include an installed target when relevant.
+  if (qualityMode === "process") {
     return "controlling goat-flow workspace, plus selected target only when it is a goat-flow installation";
   }
-  if (mode === "harness") {
+  // Harness reviews inspect the selected project while retaining the controlling workspace as the source of framework behavior.
+  if (qualityMode === "harness") {
     return "selected target project harness, interpreted from the controlling workspace";
   }
-  if (mode === "skills") {
+  // Skills reviews stay on shared workflow definitions and installed mirrors rather than the selected project's product code.
+  if (qualityMode === "skills") {
     return "controlling goat-flow workspace skills and shared references";
   }
   return "selected project and selected agent installation";
@@ -312,27 +372,51 @@ const LOCAL_ARTIFACT_MARKERS = [
   "task-local",
 ] as const;
 
-// Quality prompts may request semantic anchors for durable follow-up, but
-// automatic tracked learning-loop writes belong to CLI-owned code after opt-in.
-function includesAnyMarker(text: string, markers: readonly string[]): boolean {
+/**
+ * Check whether prior-report prose names any current policy marker.
+ * Used to hide obsolete write-policy findings before a user sees them as current context.
+ *
+ * @param text - normalized prior-finding prose; empty text cannot match a marker
+ * @param markers - policy phrases to find; an empty list produces false
+ * @returns true when at least one marker occurs in the text
+ */
+function containsAnyPolicyMarker(
+  text: string,
+  markers: readonly string[],
+): boolean {
   return markers.some((marker) => text.includes(marker));
 }
 
-/** Return true for legacy prior findings that conflict with the current
- * reporting-only contract, where gitignored local artifacts are not findings. */
+/**
+ * Identify legacy findings that treated allowed local report artifacts as tracked-file writes.
+ * Use before showing prior findings so a user is not asked to re-test a superseded contract.
+ *
+ * @param finding - saved finding whose summary and detail are inspected; both fields are present in the history contract
+ * @returns true only when the finding mentions both write policy and an allowed local artifact
+ */
 function isSupersededLocalArtifactWriteFinding(
   finding: QualityHistoryEntry["report"]["findings"][number],
 ): boolean {
-  const text = `${finding.summary} ${finding.detail}`.toLowerCase();
-  const referencesWritePolicy = includesAnyMarker(text, WRITE_POLICY_MARKERS);
-  const referencesLocalArtifact = includesAnyMarker(
-    text,
+  const normalizedFindingText =
+    `${finding.summary} ${finding.detail}`.toLowerCase();
+  const referencesWritePolicy = containsAnyPolicyMarker(
+    normalizedFindingText,
+    WRITE_POLICY_MARKERS,
+  );
+  const referencesLocalArtifact = containsAnyPolicyMarker(
+    normalizedFindingText,
     LOCAL_ARTIFACT_MARKERS,
   );
   return referencesWritePolicy && referencesLocalArtifact;
 }
 
-/** Rewrite legacy prior-finding phrasing before embedding it in new quality prompts. */
+/**
+ * Rewrite a superseded phrase while carrying an otherwise useful prior finding into a new prompt.
+ * The user sees current tracked-file language without losing the historical evidence.
+ *
+ * @param summary - saved finding summary; empty text remains empty
+ * @returns summary with legacy no-write wording replaced, or the original text when it contains no legacy phrase
+ */
 function renderPriorFindingSummary(summary: string): string {
   return summary.replace(
     /\bstrict no-write\b/gi,
@@ -367,21 +451,26 @@ export function renderPriorReportContext(
   lines.push("");
   lines.push("## Prior report context");
   lines.push("");
+  // A saved same-mode report gives the user concrete claims to re-test; null starts a clean baseline instead.
   if (priorReport) {
+    // Remove findings whose write-policy premise no longer matches the reporting-only user contract.
     const currentContractFindings = priorReport.report.findings.filter(
       (finding) => !isSupersededLocalArtifactWriteFinding(finding),
     );
     const omittedPriorFindingCount =
       priorReport.report.findings.length - currentContractFindings.length;
+    // Count serious prior claims so the new reviewer can compare risk without inheriting their verdict.
     const priorHighSeverityCount = currentContractFindings.filter(
       (finding) =>
         finding.severity === "BLOCKER" || finding.severity === "MAJOR",
     ).length;
+    // Show only the three most important prior claims, with deterministic IDs breaking equal-severity ties.
     const priorTopFindings = [...currentContractFindings]
       .sort((left, right) => {
         const severityDiff =
-          findingSeverityRank(left.severity) -
-          findingSeverityRank(right.severity);
+          qualityFindingSeverityRank(left.severity) -
+          qualityFindingSeverityRank(right.severity);
+        // A more severe claim appears first in the prior-findings preview the user receives.
         if (severityDiff !== 0) return severityDiff;
         return left.id.localeCompare(right.id);
       })
@@ -393,15 +482,18 @@ export function renderPriorReportContext(
     lines.push(`- Setup total: ${priorReport.report.scores.setup.total}/100`);
     lines.push(`- System total: ${priorReport.report.scores.system.total}/100`);
     lines.push(`- Prior BLOCKER + MAJOR count: ${priorHighSeverityCount}`);
+    // Tell the user when obsolete local-artifact claims were intentionally excluded from the new review context.
     if (omittedPriorFindingCount > 0) {
       lines.push(
         `- Omitted ${omittedPriorFindingCount} prior local-artifact write finding(s) that conflict with the current contract: gitignored logs, scratchpad notes, critique snapshots, quality reports, and task-local state do not count as writes.`,
       );
     }
     lines.push("- Top prior findings by severity:");
+    // A prior report with no current-contract findings displays an explicit empty state instead of a blank list.
     if (priorTopFindings.length === 0) {
       lines.push("  - none after applying the current local-artifact contract");
     } else {
+      // Each retained claim stays visible with its stable ID, severity, type, and current-contract summary.
       for (const finding of priorTopFindings) {
         lines.push(
           `  - \`${finding.id}\` | ${finding.severity} | ${finding.type} | ${renderPriorFindingSummary(finding.summary)}`,
@@ -422,9 +514,11 @@ export function renderPriorReportContext(
       'When a prior finding cannot be re-tested, do not carry the unverified claim into the current findings array solely to keep it visible and do not assign it `delta_tag: "persisted"`. List it under `What You Did Not Verify`, include the literal denied or unavailable probe, and state that omission is not verified resolution; the diff\'s derived `absent` bucket means absent from the later report, not proven fixed.',
     );
   } else {
-    const modeText = qualityMode === "agent-setup" ? "" : `${qualityMode} `;
+    // Agent-setup copy reads naturally without a mode prefix; focused modes name which prior report is absent.
+    const qualityModePrefix =
+      qualityMode === "agent-setup" ? "" : `${qualityMode} `;
     lines.push(
-      `No prior same-agent ${modeText}quality report exists for this project.`,
+      `No prior same-agent ${qualityModePrefix}quality report exists for this project.`,
     );
     lines.push(
       "For the final JSON block in this run, omit `delta_tag` or set it to `null` for every finding.",
@@ -444,17 +538,89 @@ export function renderPriorReportContext(
  *
  * @param sharedFacts - project facts holding the learning loop; null or undefined means the project has none to include
  * @param qualityMode - selected mode; any mode outside agent-setup and harness deliberately renders nothing
+ * @param auditReport - completed audit evidence used for task targeting; null keeps the selector's original ranking
  * @returns the context block, or an empty string when this mode or project contributes none
  */
 export function renderBoundedLearningLoopContext(
   sharedFacts: SharedFacts | null | undefined,
   qualityMode: QualityMode,
+  auditReport: AuditReport | null = null,
 ): string {
+  // A project without extracted learning facts adds no empty context block to the prompt the user launches.
   if (!sharedFacts) return "";
+  // Process and skills reviews do not consume this pilot, so those focused prompts retain their existing output.
   if (qualityMode !== "agent-setup" && qualityMode !== "harness") return "";
   const surface =
     qualityMode === "harness" ? "quality-harness" : "quality-agent-setup";
   return renderLearningLoopContext(
-    selectLearningLoopContext(sharedFacts, { surface }),
+    selectLearningLoopContext(sharedFacts, {
+      surface,
+      taskSignals: qualityLearningLoopTaskSignals(auditReport, qualityMode),
+    }),
   );
+}
+
+/**
+ * Collect concrete, audit-owned retrieval signals without accepting or storing user task prose.
+ *
+ * A quality mode is only added when a failed check or finding supplies a concrete check, path, or failure class. A generic mode label by itself
+ * deliberately leaves retrieval on its original ranking.
+ *
+ * @param auditReport - deterministic audit evidence already rendered elsewhere in the quality prompt
+ * @param qualityMode - controlled prompt mode used only as supporting context for concrete evidence
+ * @returns ephemeral signal strings in report order; empty when the audit has no targeted work
+ */
+function qualityLearningLoopTaskSignals(
+  auditReport: AuditReport | null,
+  qualityMode: QualityMode,
+): string[] {
+  // Without audit evidence there is no grounded user problem to target, so selection keeps its original ranking.
+  if (!auditReport) return [];
+  const concreteSignals: string[] = [];
+  /**
+   * Add one non-empty audit-owned phrase to the ephemeral retrieval input; missing optional evidence contributes nothing to the user's prompt.
+   *
+   * @param signal - check, path, or failure text from the audit; undefined or blank text is ignored
+   * @returns nothing; usable text is appended to the in-memory signal list
+   */
+  const addConcreteAuditSignal = (signal: string | undefined): void => {
+    const trimmedSignal = signal?.trim();
+    // Blank optional fields cannot identify the user's task, so they are excluded before stable de-duplication.
+    if (trimmedSignal) concreteSignals.push(trimmedSignal);
+  };
+
+  // Setup, agent, and harness failures are considered in report order so repeated launches explain matches consistently.
+  for (const scope of [
+    auditReport.scopes.setup,
+    auditReport.scopes.agent,
+    auditReport.scopes.harness,
+  ]) {
+    // A scope without checks behaves like an empty list, while each available failed check can target a prior incident.
+    for (const check of scope?.checks ?? []) {
+      // Passing checks do not describe work the user needs help with, so they cannot influence retrieval.
+      if (check.status !== "fail") continue;
+      addConcreteAuditSignal(check.id);
+      addConcreteAuditSignal(check.name);
+      addConcreteAuditSignal(check.failure?.check);
+      addConcreteAuditSignal(check.failure?.message);
+      addConcreteAuditSignal(check.failure?.evidence);
+      addConcreteAuditSignal(check.failure?.howToFix);
+    }
+  }
+  // A user who ran drift checks receives prior incidents matched to each changed generated path or message.
+  for (const finding of auditReport.drift?.findings ?? []) {
+    addConcreteAuditSignal(finding.path);
+    addConcreteAuditSignal(finding.message);
+  }
+  // A user who ran content checks receives prior incidents matched to each rule, path, message, or suggested correction.
+  for (const finding of auditReport.content?.findings ?? []) {
+    addConcreteAuditSignal(finding.rule);
+    addConcreteAuditSignal(finding.path);
+    addConcreteAuditSignal(finding.message);
+    addConcreteAuditSignal(finding.suggestion);
+  }
+
+  // A clean or evidence-free audit keeps prompt bytes and ranking identical to the non-targeted baseline.
+  if (concreteSignals.length === 0) return [];
+  return [qualityMode, ...new Set(concreteSignals)];
 }

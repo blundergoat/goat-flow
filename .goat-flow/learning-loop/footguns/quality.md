@@ -1,6 +1,6 @@
 ---
 category: quality
-last_reviewed: 2026-08-06
+last_reviewed: 2026-08-23
 ---
 
 ## Footgun: Audit score tempering fields must survive every renderer
@@ -74,7 +74,8 @@ Applies to: any goat-flow audit that gates progress on artifact completeness —
 
 **Status:** active | **Created:** 2026-05-27 | **Evidence:** ACTUAL_MEASURED
 **Decision changed:** Optional missing metadata remains visible in structured facts; warnings are reserved for malformed supplied values.
-**Trigger phase:** VERIFY
+**Trigger phase:** SCOPE
+**Caught at:** VERIFY
 **Incident count:** 2
 **Latest occurrence:** 2026-07-17
 

@@ -477,7 +477,7 @@ describe("extractLearningLoopEntries", () => {
     const fs = stubFS(
       {
         ".goat-flow/learning-loop/footguns/quality.md":
-          "---\ncategory: quality\nlast_reviewed: 2026-07-13\n---\n\n## Footgun: metadata-rich trap\n\n**Status:** active | **Created:** 2026-07-01 | **Updated:** 2026-07-12 | **Evidence:** ACTUAL_MEASURED\n**Decision changed:** Verify the live audit before trusting cached quality state.\n**Trigger phase:** VERIFY\n**Incident count:** 3\n**Latest occurrence:** 2026-07-12\n\n- `src/cli/cli.ts` (search: `quality`) - live anchor.\n",
+          "---\ncategory: quality\nlast_reviewed: 2026-07-13\n---\n\n## Footgun: metadata-rich trap\n\n**Status:** active | **Created:** 2026-07-01 | **Updated:** 2026-07-12 | **Evidence:** ACTUAL_MEASURED\n**Decision changed:** Verify the live audit before trusting cached quality state.\n**Trigger phase:** VERIFY\n**Caught at:** ACT\n**Incident count:** 3\n**Latest occurrence:** 2026-07-12\n\n- `src/cli/cli.ts` (search: `quality`) - live anchor.\n",
         ".goat-flow/learning-loop/lessons/legacy.md":
           "---\ncategory: legacy\nlast_reviewed: 2026-07-13\n---\n\n## Lesson: legacy entry\n\n**Created:** 2026-01-10\n\nPreserved without forward metadata.\n",
         "src/cli/cli.ts": "const quality = true;\n",
@@ -501,6 +501,7 @@ describe("extractLearningLoopEntries", () => {
         heading: richEntry.heading,
         hasDecisionChangedGuidance: richEntry.hasDecisionChangedGuidance,
         triggerPhase: richEntry.triggerPhase,
+        caughtAt: richEntry.caughtAt,
         incidentCount: richEntry.incidentCount,
         latestOccurrence: richEntry.latestOccurrence,
       },
@@ -508,6 +509,7 @@ describe("extractLearningLoopEntries", () => {
         heading: "## Footgun: metadata-rich trap",
         hasDecisionChangedGuidance: true,
         triggerPhase: "VERIFY",
+        caughtAt: "ACT",
         incidentCount: 3,
         latestOccurrence: "2026-07-12",
       },
@@ -518,6 +520,7 @@ describe("extractLearningLoopEntries", () => {
         heading: legacyEntry.heading,
         hasDecisionChangedGuidance: legacyEntry.hasDecisionChangedGuidance,
         triggerPhase: legacyEntry.triggerPhase,
+        caughtAt: legacyEntry.caughtAt,
         incidentCount: legacyEntry.incidentCount,
         latestOccurrence: legacyEntry.latestOccurrence,
       },
@@ -525,6 +528,7 @@ describe("extractLearningLoopEntries", () => {
         heading: "## Lesson: legacy entry",
         hasDecisionChangedGuidance: false,
         triggerPhase: null,
+        caughtAt: null,
         incidentCount: null,
         latestOccurrence: null,
       },

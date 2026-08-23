@@ -1,6 +1,6 @@
 ---
 category: verification-preflight
-last_reviewed: 2026-08-22
+last_reviewed: 2026-08-23
 ---
 
 **Scope:** Adding, tuning, and trusting a repo-wide gate - dependency-audit baselines, count locks and provenance dates, what a PASS line does and does not prove, and the shell mechanics of the commands a gate runs. Formatter and lint debt is [verification-formatting.md](verification-formatting.md).
@@ -50,7 +50,8 @@ last_reviewed: 2026-08-22
 ## Lesson: Shared hook refactors need both hook-local proof and repo-wide preflight
 
 **Status:** active | **Created:** 2026-04-21
-**Decision changed:** Update fixture assumptions and exact diagnostics with a hook contract, then use the edit tool's native patch grammar before mirror fanout. | **Trigger phase:** VERIFY
+**Decision changed:** Update fixture assumptions and exact diagnostics with a hook contract, then use the edit tool's native patch grammar before mirror fanout. | **Trigger phase:** ACT
+**Caught at:** VERIFY
 **Incident count:** 8 | **Latest occurrence:** 2026-08-16
 
 **What happened:** A guardrail-hook hardening pass looked correct after the first edit, but the canonical self-test immediately failed because `BASH_REMATCH` was reused after a recursive command-check helper. After fixing that, the hook copies all passed their own `--self-test`, yet full `bash scripts/preflight-checks.sh` still failed because the repo-wide shellcheck profile was stricter than the hook-local path. The installer round-trip fixture failed for the same reason because it clones the current checkout before running temp-repo preflight.

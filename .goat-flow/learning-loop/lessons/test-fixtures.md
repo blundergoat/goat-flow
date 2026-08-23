@@ -1,6 +1,6 @@
 ---
 category: test-fixtures
-last_reviewed: 2026-08-16
+last_reviewed: 2026-08-23
 ---
 
 **Scope:** Building and keeping fixtures true - collision branches, semantic operands, in-memory against disk-backed corpora, and fixtures that drift from the code they model. Runner behaviour is [test-execution-environment.md](test-execution-environment.md).
@@ -9,7 +9,8 @@ last_reviewed: 2026-08-16
 
 **Status:** active | **Created:** 2026-08-15
 **Decision changed:** Preservation fixtures now plant content beside the managed block, and derive its position from the provider's own config shape rather than from the managed row's neighbours.
-**Trigger phase:** VERIFY
+**Trigger phase:** ACT
+**Caught at:** VERIFY
 **Incident count:** 1 | **Latest occurrence:** 2026-08-15
 
 **What happened:** The 1.16.0 M01 round-trip fixture planted an "unrelated user hook row" by cloning the installed deny row and swapping its script name, then pushed it into the array holding the managed row. Claude, Codex, and Copilot preserved it; Antigravity deleted it, and the fixture read that as a preservation defect. Both readings were wrong. The clone still invoked goat-flow's own launcher, and Antigravity keys each hook block by hook id, so the planted row landed *inside* `.agents/hooks.json` → `deny-dangerous` - a block the registrar owns and rewrites wholesale.
@@ -24,7 +25,8 @@ last_reviewed: 2026-08-16
 
 **Status:** active | **Created:** 2026-07-14
 **Decision changed:** Failure-injection wrappers now scan the complete argument vector for the semantic path instead of assuming a fixed position.
-**Trigger phase:** VERIFY
+**Trigger phase:** ACT
+**Caught at:** VERIFY
 **Incident count:** 1 | **Latest occurrence:** 2026-07-14
 
 **What happened:** M28's migration-failure fixture wrapped `mv` and matched the legacy source only at argument one. The hardened installer invoked `mv -n -- <source> <destination>`, so the wrapper delegated to the real command, installation exited 0, and the focused suite reported one failure even though the migration helper was behaving correctly.
@@ -75,7 +77,8 @@ last_reviewed: 2026-08-16
 
 **Decision changed:** Default migration-light fields at every exported consumer boundary, then run the full package suite to find callers outside focused fixtures.
 
-**Trigger phase:** VERIFY
+**Trigger phase:** ACT
+**Caught at:** VERIFY
 
 **Incident count:** 1
 
@@ -103,7 +106,8 @@ last_reviewed: 2026-08-16
 
 **Status:** active | **Created:** 2026-04-27
 **Decision changed:** Before a focused run, enumerate and create every fixture-owned file, browser global, and source input the assertion reaches.
-**Trigger phase:** VERIFY
+**Trigger phase:** ACT
+**Caught at:** VERIFY
 **Incident count:** 10 | **Latest occurrence:** 2026-08-10
 
 **What happened:** While adding ADR-024 enforcement to `stats --check`, the first integration test fixture used `package.json` with a line suffix to trigger an `invalid-line-ref` finding. The temp fixture repo did not contain `package.json`, so the checker correctly reported a stale ref instead and the test failed with "expected an invalid-line-ref finding."
@@ -136,7 +140,8 @@ last_reviewed: 2026-08-16
 
 **Status:** active | **Created:** 2026-07-16
 **Decision changed:** Healthy current-version fixtures now interpolate the package-derived audit version instead of pinning a release literal.
-**Trigger phase:** VERIFY
+**Trigger phase:** ACT
+**Caught at:** VERIFY
 **Incident count:** 1 | **Latest occurrence:** 2026-07-16
 
 **What happened:** After goat-flow was bumped from 1.13.1 to 1.14.0, the full test suite failed two skill-doctor cases. Their shared healthy fixture still emitted goat-flow-skill-version 1.13.1, so the runtime correctly classified the fixture as warn rather than pass.
@@ -151,7 +156,8 @@ last_reviewed: 2026-08-16
 
 **Status:** active | **Created:** 2026-07-12
 **Decision changed:** Validate every pressure fact and evaluator restriction against the loaded contract before launch; non-target constraints must not decide the result.
-**Trigger phase:** VERIFY
+**Trigger phase:** SCOPE
+**Caught at:** VERIFY
 **Incident count:** 6 | **Latest occurrence:** 2026-08-16
 
 **What happened:** The flagship skill-TDD scenario offered `Commit now` as the expected failing choice even though ADR-025 and every installed instruction file categorically forbid coding-agent commits. An agent could reject that option without following test-first discipline, so the scenario could overstate RED/GREEN evidence.

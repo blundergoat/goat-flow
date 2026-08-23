@@ -1,6 +1,6 @@
 ---
 category: skill-authoring
-last_reviewed: 2026-08-20
+last_reviewed: 2026-08-23
 ---
 
 **Scope:** Authoring and editing skill, playbook, and slash-command bodies - candidacy, word-budget and contract-phrase caps, tool-isolation constraints on prescribed commands, and pressure to reword load-bearing language. Keeping workflow templates and installed copies in sync lives in [skills.md](skills.md).
@@ -86,7 +86,8 @@ Applies wherever goat-flow ships a SKILL.md or command body that orchestrates mu
 
 **Status:** active | **Created:** 2026-08-10 | **Evidence:** ACTUAL_MEASURED
 **Decision changed:** Measure the body budget and inventory phrase-pinning contracts, vocabulary consumers, and reconciliation owners before adding or compressing shipped skill guidance.
-**Trigger phase:** ACT
+**Trigger phase:** READ
+**Caught at:** ACT
 **Incident count:** 7 | **Latest occurrence:** 2026-08-18
 
 **Symptoms:** An approved content addition to a shipped playbook passes typecheck, content lint, and the playbook contract test, then fails preflight twice. First on the ADR-023 progressive-pack word cap. Then, after the compression pass that makes room, on skill-hardening assertions pinning exact sentences the compression reworded.

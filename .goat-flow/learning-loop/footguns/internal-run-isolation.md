@@ -1,6 +1,6 @@
 ---
 category: internal-run-isolation
-last_reviewed: 2026-08-11
+last_reviewed: 2026-08-23
 ---
 
 ## Footgun: Internal / intermediate runs against a user target must strip side-effect-bearing config
@@ -29,7 +29,8 @@ last_reviewed: 2026-08-11
 
 **Status:** active | **Created:** 2026-08-11 | **Evidence:** ACTUAL_MEASURED
 **Decision changed:** When a test or script spawns npm from inside a lifecycle script, pin the flags whose side effects it depends on rather than trusting npm's defaults.
-**Trigger phase:** VERIFY
+**Trigger phase:** ACT
+**Caught at:** VERIFY
 
 **Symptoms:** `npm run test:full` passes on its own, and the same suite fails under `npm publish --dry-run`. The failing test spawns `npm pack`, receives a normal `--json` payload naming a tarball, then cannot read that tarball from disk. The surfaced error names `tar`, not npm.
 

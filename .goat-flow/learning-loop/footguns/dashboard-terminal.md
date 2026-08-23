@@ -1,6 +1,6 @@
 ---
 category: dashboard-terminal
-last_reviewed: 2026-08-20
+last_reviewed: 2026-08-23
 ---
 
 <!-- Note: pre-v1.8.0 evidence below may reference "Gemini"; Antigravity replaced Gemini in v1.8.0. Where a trap shape applies equally to Antigravity (box-bordered menus, selection-bullet glyphs, quiet-delay submits), Gemini references are kept as historical evidence; the `gemini-startup.txt` fixture is retained as legacy coverage. Current code behavior anchors already name Antigravity. -->
@@ -124,7 +124,8 @@ last_reviewed: 2026-08-20
 
 **Status:** active | **Created:** 2026-06-14 | **Evidence:** ACTUAL_MEASURED
 **Decision changed:** Preserve separate workspace and reporting launch policies; never collapse every dashboard Codex session onto one sandbox shape.
-**Trigger phase:** ACT
+**Trigger phase:** SCOPE
+**Caught at:** ACT
 
 **Symptoms:** A write-enabled Codex session launched from the Workspace terminal fails `bash scripts/preflight-checks.sh` when it inherits the default restricted sandbox, while a reporting-only session can modify tracked files if it inherits the blanket `danger-full-access` override. The first failure shape looks like product regressions: child-process-heavy tests fail, registry DNS is unavailable, and nested npm spawns report `EPERM`.
 
@@ -143,4 +144,3 @@ last_reviewed: 2026-08-20
 2. For Codex-only preflight failures, run `codex doctor --summary` and a Node `child_process.spawnSync` probe before treating child-process test failures as product regressions.
 3. Test both directions: allowed local artifact writes and blocked tracked-file overwrite/rename/delete attempts. Prompt wording alone is not enforcement.
 4. Preserve `accessMode` through create, session metadata, retry, reconnect, and recent-session projection; a dropped field silently returns the session to workspace access.
-

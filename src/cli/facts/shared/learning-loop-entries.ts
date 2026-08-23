@@ -162,6 +162,7 @@ function extractMemoryQualityMetadata(
   LearningLoopEntryFact,
   | "hasDecisionChangedGuidance"
   | "triggerPhase"
+  | "caughtAt"
   | "incidentCount"
   | "latestOccurrence"
 > {
@@ -171,6 +172,7 @@ function extractMemoryQualityMetadata(
   return {
     hasDecisionChangedGuidance,
     triggerPhase: extractEntryMetadata(entryContent, "Trigger phase"),
+    caughtAt: extractEntryMetadata(entryContent, "Caught at"),
     incidentCount: extractIncidentCount(entryContent),
     latestOccurrence: extractEntryDate(entryContent, "Latest occurrence"),
   };
@@ -357,6 +359,7 @@ function extractDecisionEntries(
       resolved: null,
       hasDecisionChangedGuidance: true,
       triggerPhase: null,
+      caughtAt: null,
       incidentCount: null,
       latestOccurrence: null,
       excerpt: compactEntryExcerpt(decisionFile.content),

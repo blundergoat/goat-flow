@@ -62,7 +62,7 @@ interface AgentSetupPromptContext {
   hooksDir: string | null;
   denyHookFile: string | null;
   skillFacts: SkillFacts;
-  skillList: string;
+  formattedSkillList: string;
 }
 
 /**
@@ -84,9 +84,11 @@ function buildAgentSetupContext(
     priorReport = null,
     runDate = formatLocalDate(),
   } = input;
-  const profile = getAgentProfile(agent);
-  const settingsFile = profile.settingsFile ?? "(no settings file)";
-  const hookConfigFile = profile.hookConfigFile ?? settingsFile;
+  const agentProfile = getAgentProfile(agent);
+  // An agent without a settings path gets honest placeholder copy, while a missing hook config falls back to the same place the user will inspect.
+  const settingsFile = agentProfile.settingsFile ?? "(no settings file)";
+  const hookConfigFile = agentProfile.hookConfigFile ?? settingsFile;
+  // A user can launch Quality without audit evidence; that request must display unavailable rather than silently reading as a pass.
   const auditStatus: QualityPayload["auditStatus"] = auditReport
     ? auditReport.status
     : "unavailable";
@@ -94,8 +96,9 @@ function buildAgentSetupContext(
     ? renderAuditSummary(auditReport)
     : renderAuditUnavailableSummary(auditUnavailableReason);
   const skillFacts = loadManifest().facts.skills;
-  const skillList = skillFacts.names
-    .map((s, i) => `${i + 1}. \`${s}\``)
+  // Number the manifest's skills once so every overview generated for this user carries the same ordered inventory.
+  const formattedSkillList = skillFacts.names
+    .map((skillName, skillIndex) => `${skillIndex + 1}. \`${skillName}\``)
     .join(", ");
 
   return {
@@ -108,15 +111,15 @@ function buildAgentSetupContext(
     runDate,
     auditStatus,
     auditSummaryText,
-    agentLabel: profile.name,
-    skillsDir: profile.skillsDir,
+    agentLabel: agentProfile.name,
+    skillsDir: agentProfile.skillsDir,
     settingsFile,
     hookConfigFile,
-    instructionFile: profile.instructionFile,
-    hooksDir: profile.hooksDir,
-    denyHookFile: profile.denyHookFile,
+    instructionFile: agentProfile.instructionFile,
+    hooksDir: agentProfile.hooksDir,
+    denyHookFile: agentProfile.denyHookFile,
     skillFacts,
-    skillList,
+    formattedSkillList,
   };
 }
 
@@ -124,48 +127,56 @@ function buildAgentSetupContext(
  * Open the prompt with the title, the reporting-only contract, and the orientation sections the reviewer needs before any judgement.
  *
  * @param lines - prompt line buffer; appended to in place
- * @param ctx - resolved prompt context supplying the agent label and target paths
+ * @param promptContext - resolved prompt context supplying the agent label and target paths
+ * @returns nothing; the title, rules, project context, and overview are appended for the user
  */
 function appendIntroAndContext(
   lines: string[],
-  ctx: AgentSetupPromptContext,
+  promptContext: AgentSetupPromptContext,
 ): void {
-  lines.push(`# GOAT Flow Quality Assessment - ${ctx.agentLabel}`);
+  lines.push(`# GOAT Flow Quality Assessment - ${promptContext.agentLabel}`);
   lines.push("");
   lines.push(
     `Assess the quality of the goat-flow v${getPackageVersion()} setup on this project. Be thorough, honest, and specific. Do NOT be polite or generous - I want real problems identified with evidence.`,
   );
   lines.push("");
   lines.push(
-    `REPORTING-ONLY ASSESSMENT MODE. Do NOT edit, create, rename, move, or delete any tracked files. Do NOT apply patches or implement fixes. Do NOT use /goat-review or any goat skill as the wrapper for this assessment; this prompt is the full assessment contract. Gitignored local artifacts written by validation tools or normal reporting workflows (e.g. \`dist/\`, \`node_modules/\`, \`.claude/worktrees/\`, \`.goat-flow/logs/**\`, \`.goat-flow/scratchpad/**\`, \`.goat-flow/plans/**\`) are fine - they don't change the repo's committed state and do not count as writes for this assessment contract. ${ctx.input.persistence === "staged-draft" ? "Hand the final JSON report to the dashboard only through the staging contract below." : "Write the final JSON report to `.goat-flow/logs/quality/<filename>.json` as instructed below."}`,
+    `REPORTING-ONLY ASSESSMENT MODE. Do NOT edit, create, rename, move, or delete any tracked files. Do NOT apply patches or implement fixes. Do NOT use /goat-review or any goat skill as the wrapper for this assessment; this prompt is the full assessment contract. Gitignored local artifacts written by validation tools or normal reporting workflows (e.g. \`dist/\`, \`node_modules/\`, \`.claude/worktrees/\`, \`.goat-flow/logs/**\`, \`.goat-flow/scratchpad/**\`, \`.goat-flow/plans/**\`) are fine - they don't change the repo's committed state and do not count as writes for this assessment contract. ${promptContext.input.persistence === "staged-draft" ? "Hand the final JSON report to the dashboard only through the staging contract below." : "Write the final JSON report to `.goat-flow/logs/quality/<filename>.json` as instructed below."}`,
   );
   lines.push("");
   appendRules(lines);
-  appendContext(lines, ctx);
-  appendGoatFlowOverview(lines, ctx);
+  appendProjectContextSection(lines, promptContext);
+  appendGoatFlowOverview(lines, promptContext);
 }
 
 /**
- * Append the Context section listing the project path, agent, and the resolved
- * instruction/skills/settings/hook locations the reviewer needs to find files.
+ * Add the project and agent paths a reviewer needs after a user launches an installation assessment.
+ * Missing optional hook surfaces are omitted rather than rendered as paths that do not exist.
  *
  * @param lines - prompt line buffer; appended to in place
- * @param ctx - resolved prompt context supplying the agent-relative paths
+ * @param promptContext - resolved prompt context supplying the agent-relative paths
+ * @returns nothing; the user-facing Context section is appended to the prompt
  */
-function appendContext(lines: string[], ctx: AgentSetupPromptContext): void {
+function appendProjectContextSection(
+  lines: string[],
+  promptContext: AgentSetupPromptContext,
+): void {
   lines.push("## Context");
   lines.push("");
-  lines.push(`- **Project:** \`${ctx.projectPath}\``);
-  lines.push(`- **Agent:** ${ctx.agentLabel}`);
-  lines.push(`- **Instruction file:** \`${ctx.instructionFile}\``);
-  lines.push(`- **Skills directory:** \`${ctx.skillsDir}\``);
-  lines.push(`- **Settings file:** \`${ctx.settingsFile}\``);
+  lines.push(`- **Project:** \`${promptContext.projectPath}\``);
+  lines.push(`- **Agent:** ${promptContext.agentLabel}`);
+  lines.push(`- **Instruction file:** \`${promptContext.instructionFile}\``);
+  lines.push(`- **Skills directory:** \`${promptContext.skillsDir}\``);
+  lines.push(`- **Settings file:** \`${promptContext.settingsFile}\``);
   // Some agents register hooks in a separate file, and naming both stops the reviewer hunting for a registration that is not in settings.
-  if (ctx.hookConfigFile !== ctx.settingsFile) {
-    lines.push(`- **Hook registration file:** \`${ctx.hookConfigFile}\``);
+  if (promptContext.hookConfigFile !== promptContext.settingsFile) {
+    lines.push(
+      `- **Hook registration file:** \`${promptContext.hookConfigFile}\``,
+    );
   }
   // An agent with no hooks directory gets no line, rather than a path the reviewer would look for and fail to find.
-  if (ctx.hooksDir) lines.push(`- **Hooks directory:** \`${ctx.hooksDir}\``);
+  if (promptContext.hooksDir)
+    lines.push(`- **Hooks directory:** \`${promptContext.hooksDir}\``);
   lines.push("");
 }
 
@@ -173,11 +184,12 @@ function appendContext(lines: string[], ctx: AgentSetupPromptContext): void {
  * Describe what goat-flow installed here, so the reviewer grades the install against what it was meant to contain.
  *
  * @param lines - prompt line buffer; appended to in place
- * @param ctx - resolved prompt context supplying the instruction path and skill inventory
+ * @param promptContext - resolved prompt context supplying the instruction path and skill inventory
+ * @returns nothing; the installation overview and design notes are appended for the reviewer
  */
 function appendGoatFlowOverview(
   lines: string[],
-  ctx: AgentSetupPromptContext,
+  promptContext: AgentSetupPromptContext,
 ): void {
   lines.push("## What goat-flow is");
   lines.push("");
@@ -186,10 +198,10 @@ function appendGoatFlowOverview(
   );
   lines.push("");
   lines.push(
-    `1. **Instruction file** (\`${ctx.instructionFile}\`) - execution loop, autonomy tiers, definition of done, router table. Loaded every turn.`,
+    `1. **Instruction file** (\`${promptContext.instructionFile}\`) - execution loop, autonomy tiers, definition of done, router table. Loaded every turn.`,
   );
   lines.push(
-    `2. **${ctx.skillFacts.total} skills** (${ctx.skillFacts.functional_count} functional + 1 dispatcher) - ${ctx.skillList}. Loaded on demand via slash commands.`,
+    `2. **${promptContext.skillFacts.total} skills** (${promptContext.skillFacts.functional_count} functional + 1 dispatcher) - ${promptContext.formattedSkillList}. Loaded on demand via slash commands.`,
   );
   lines.push("3. **Hook scripts** - guardrail hooks for command safety.");
   lines.push(
@@ -214,48 +226,57 @@ function appendGoatFlowOverview(
  * Hand over the audit result, the previous report, and a bounded learning-loop excerpt as evidence the reviewer must weigh, not trust.
  *
  * @param lines - prompt line buffer; appended to in place
- * @param ctx - resolved prompt context supplying the audit summary text and prior report
+ * @param promptContext - resolved prompt context supplying the audit summary text and prior report
+ * @returns nothing; available evidence and honest empty states are appended to the prompt
  */
-function appendAuditAndPrior(
+function appendAuditAndPriorEvidence(
   lines: string[],
-  ctx: AgentSetupPromptContext,
+  promptContext: AgentSetupPromptContext,
 ): void {
   lines.push("---");
   lines.push("");
   lines.push("## Audit Summary");
   lines.push("");
-  // The audit ran, so the reviewer gets its verdict plus a warning about what a structural pass does not prove.
-  if (ctx.input.auditReport) {
-    const overallStatus =
-      ctx.input.auditReport.status === "pass" ? "PASS" : "FAIL";
-    lines.push(`**Overall: ${overallStatus}**`);
+  // For example, after a user clicks Re-audit, the reviewer gets that live verdict plus the limits of a structural check.
+  if (promptContext.input.auditReport) {
+    const overallAuditStatusLabel =
+      promptContext.input.auditReport.status === "pass" ? "PASS" : "FAIL";
+    lines.push(`**Overall: ${overallAuditStatusLabel}**`);
     lines.push("");
-    lines.push(ctx.auditSummaryText);
+    lines.push(promptContext.auditSummaryText);
     lines.push("");
     lines.push(
       "> **Note:** The audit checks structural completeness only (pass/fail per concern). PASS means files exist, paths resolve, and patterns are registered. It does NOT mean documentation is accurate, footguns are current, or content is appropriate for this project. Your assessment must judge quality - what the audit cannot.",
     );
     // Known failures are handed over as claims to test, not as accepted findings, so the reviewer still judges them.
-    if (ctx.input.auditReport.status === "fail") {
+    if (promptContext.input.auditReport.status === "fail") {
       lines.push(
         "> The setup has failures. Factor these into your assessment - are they real problems or false positives?",
       );
     }
     // No audit result reached the prompt, so the reviewer is told the ground truth is missing rather than assuming a pass.
   } else {
-    lines.push(renderAuditUnavailableHeading(ctx.auditUnavailableReason));
-    lines.push(renderDegradedNote(ctx.auditUnavailableReason));
+    lines.push(
+      renderAuditUnavailableHeading(promptContext.auditUnavailableReason),
+    );
+    lines.push(renderDegradedNote(promptContext.auditUnavailableReason));
   }
   lines.push("");
-  lines.push(renderPriorReportContext(ctx.priorReport, ctx.qualityMode));
+  lines.push(
+    renderPriorReportContext(
+      promptContext.priorReport,
+      promptContext.qualityMode,
+    ),
+  );
   lines.push("");
-  const learningLoopContext = renderBoundedLearningLoopContext(
-    ctx.input.sharedFacts,
-    ctx.qualityMode,
+  const learningLoopPromptBlock = renderBoundedLearningLoopContext(
+    promptContext.input.sharedFacts,
+    promptContext.qualityMode,
+    promptContext.input.auditReport,
   );
   // Projects with no usable learning-loop entries get no block at all, which keeps an empty heading out of the prompt.
-  if (learningLoopContext) {
-    lines.push(learningLoopContext);
+  if (learningLoopPromptBlock) {
+    lines.push(learningLoopPromptBlock);
     lines.push("");
   }
 }
@@ -265,12 +286,12 @@ function appendAuditAndPrior(
  * Use at assessment start so unavailable runtime evidence becomes an explicit verification gap.
  *
  * @param lines - prompt lines built so far; empty means this section starts the rendered assessment
- * @param ctx - resolved session context; a null deny-hook path means no on-disk hook probe is offered
+ * @param promptContext - resolved session context; a null deny-hook path means no on-disk hook probe is offered
  * @returns nothing; the supplied prompt lines receive the grounding and reading sections
  */
 function appendGroundingAndReadNext(
   lines: string[],
-  ctx: AgentSetupPromptContext,
+  promptContext: AgentSetupPromptContext,
 ): void {
   lines.push("---");
   lines.push("");
@@ -285,25 +306,26 @@ function appendGroundingAndReadNext(
     "# 1. Run read-only validation commands. If the project ships an umbrella script that ties shellcheck/typecheck/tests/audit together (e.g. `bash scripts/preflight-checks.sh`), run it - any writes land in gitignored build directories.",
   );
   lines.push(
-    `#    Otherwise, run shellcheck and bash -n on shell scripts listed in ${ctx.instructionFile}.`,
+    `#    Otherwise, run shellcheck and bash -n on shell scripts listed in ${promptContext.instructionFile}.`,
   );
   lines.push("#    Record: which pass, which fail, which don't exist.");
   lines.push("");
   lines.push(
     "# 2. Hook self-test (if deny-dangerous.sh exists in your hooks directory)",
   );
+  // An agent profile without an on-disk deny hook gives the reviewer a clear no-probe message instead of an unusable command.
   lines.push(
-    ctx.denyHookFile
-      ? `bash ${ctx.denyHookFile} --self-test=smoke`
+    promptContext.denyHookFile
+      ? `bash ${promptContext.denyHookFile} --self-test=smoke`
       : "#    This agent has no on-disk deny hook script to self-test.",
   );
   lines.push("");
   lines.push("# 3. Quick structural checks");
   lines.push(
-    `wc -l ${ctx.instructionFile}                          # target: about 125 lines; hard limit: 150`,
+    `wc -l ${promptContext.instructionFile}                          # target: about 125 lines; hard limit: 150`,
   );
   lines.push(
-    `ls ${ctx.skillsDir}/                                  # expect ${ctx.skillFacts.total} goat-flow skill directories`,
+    `ls ${promptContext.skillsDir}/                                  # expect ${promptContext.skillFacts.total} goat-flow skill directories`,
   );
   lines.push(
     "cat .goat-flow/config.yaml                        # minimal valid config: version and skills; legacy agents is ignored; line-limits/toolchain are optional calibration only",
@@ -314,24 +336,28 @@ function appendGroundingAndReadNext(
     '**Degraded grounding protocol:** If a command above is denied by the session\'s permission profile or unavailable, record the literal denial, do NOT infer pass or fail from it, and do not retry it verbatim or work around the profile. Fall back to static analysis (`evidence_method: "static-analysis"`), keep `audit_status` at `unavailable` unless a live audit completed this run, and list every unexecuted command in "What You Did Not Verify".',
   );
   lines.push("");
-  appendReadNext(lines, ctx);
+  appendReadNext(lines, promptContext);
 }
 
 /**
- * Append the "Read next" reading list - instruction file, config, skill references, architecture, skills - plus the INDEX-first learning-loop
- * retrieval protocol that forbids broad-loading durable learning buckets.
+ * Add the reading order a reviewer follows after grounding, including INDEX-first learning retrieval.
+ * Use before assessment questions so the user receives findings based on the same required evidence.
  *
  * @param lines - prompt line buffer; appended to in place
- * @param ctx - resolved prompt context supplying instruction/skills/hook paths
+ * @param promptContext - resolved prompt context supplying instruction/skills/hook paths
+ * @returns nothing; the ordered reading list is appended to the generated prompt
  */
-function appendReadNext(lines: string[], ctx: AgentSetupPromptContext): void {
+function appendReadNext(
+  lines: string[],
+  promptContext: AgentSetupPromptContext,
+): void {
   lines.push("---");
   lines.push("");
   lines.push("## Read next");
   lines.push("");
   lines.push("After Step 0, read ALL of these before writing any findings:");
   lines.push("");
-  lines.push(`- Your instruction file: \`${ctx.instructionFile}\``);
+  lines.push(`- Your instruction file: \`${promptContext.instructionFile}\``);
   lines.push("- `.goat-flow/config.yaml`");
   lines.push("- `.goat-flow/skill-docs/skill-preamble.md`");
   lines.push("- `.goat-flow/skill-docs/skill-conventions.md`");
@@ -340,15 +366,15 @@ function appendReadNext(lines: string[], ctx: AgentSetupPromptContext): void {
     "- `.goat-flow/code-map.md`, `.goat-flow/glossary.md`, `.goat-flow/learning-loop/patterns/` (if they exist)",
   );
   lines.push(
-    `- All installed skill files in \`${ctx.skillsDir}\` - each \`SKILL.md\` plus any nested \`references/*.md\` packs`,
+    `- All installed skill files in \`${promptContext.skillsDir}\` - each \`SKILL.md\` plus any nested \`references/*.md\` packs`,
   );
-  lines.push(`- Agent settings: \`${ctx.settingsFile}\``);
+  lines.push(`- Agent settings: \`${promptContext.settingsFile}\``);
   // Reading list mirrors the Context section: the registration file is only listed when it is not the settings file itself.
-  if (ctx.hookConfigFile !== ctx.settingsFile) {
-    lines.push(`- Hook registration file: \`${ctx.hookConfigFile}\``);
+  if (promptContext.hookConfigFile !== promptContext.settingsFile) {
+    lines.push(`- Hook registration file: \`${promptContext.hookConfigFile}\``);
   }
   // Only agents that support hooks are asked to read them.
-  if (ctx.hooksDir)
+  if (promptContext.hooksDir)
     lines.push("- All hook scripts in your agent's hooks directory");
   lines.push("");
   lines.push(
@@ -361,11 +387,12 @@ function appendReadNext(lines: string[], ctx: AgentSetupPromptContext): void {
  * Ask the quick structural questions of Part 1, then hand straight on to the Part 2 quality questions.
  *
  * @param lines - prompt line buffer; appended to in place
- * @param ctx - resolved prompt context supplying the expected skill names and counts
+ * @param promptContext - resolved prompt context supplying the expected skill names and counts
+ * @returns nothing; Parts 1 and 2 are appended in the order the reviewer should answer them
  */
 function appendPrecheckAndSetupQuality(
   lines: string[],
-  ctx: AgentSetupPromptContext,
+  promptContext: AgentSetupPromptContext,
 ): void {
   lines.push("---");
   lines.push("");
@@ -375,10 +402,10 @@ function appendPrecheckAndSetupQuality(
   lines.push("");
   lines.push("**Structure:**");
   lines.push(
-    `- Count skill directories - expect exactly ${ctx.skillFacts.total}: ${ctx.skillFacts.names.join(", ")}`,
+    `- Count skill directories - expect exactly ${promptContext.skillFacts.total}: ${promptContext.skillFacts.names.join(", ")}`,
   );
   lines.push(
-    `- If >${ctx.skillFacts.total}, list extras. Known stale names: ${ctx.skillFacts.stale_names.join(", ")}`,
+    `- If >${promptContext.skillFacts.total}, list extras. Known stale names: ${promptContext.skillFacts.stale_names.join(", ")}`,
   );
   lines.push("- `.goat-flow/skill-docs/skill-preamble.md` exists?");
   lines.push("- `.goat-flow/skill-docs/skill-conventions.md` exists?");
@@ -400,18 +427,19 @@ function appendPrecheckAndSetupQuality(
   );
   lines.push("- Does it include `.goat-flow/learning-loop/footguns/`?");
   lines.push("");
-  appendSetupQuality(lines, ctx);
+  appendSetupQuality(lines, promptContext);
 }
 
 /**
  * Ask how well the install was adapted to this project, which is the judgement the deterministic audit cannot make.
  *
  * @param lines - prompt line buffer; appended to in place
- * @param ctx - resolved prompt context supplying the hook registration path
+ * @param promptContext - resolved prompt context supplying the hook registration path
+ * @returns nothing; the project-adaptation questions are appended for the user's reviewer
  */
 function appendSetupQuality(
   lines: string[],
-  ctx: AgentSetupPromptContext,
+  promptContext: AgentSetupPromptContext,
 ): void {
   lines.push("---");
   lines.push("");
@@ -455,7 +483,7 @@ function appendSetupQuality(
     "- Does `.goat-flow/config.yaml` stay lean and accurate for this project? If it includes optional project-calibration fields like `toolchain`, verify the commands are real before treating them as authoritative. If you also run the tool at broader scope (e.g., `npx eslint .` vs a project's scoped command), note whether the project intentionally scopes narrower - that's a design choice, not a finding, unless it hides real problems. Beware that `.claude/worktrees/`, `node_modules/`, and `dist/` can pollute unscoped tool runs.",
   );
   lines.push(
-    `- Were hook scripts installed and registered in \`${ctx.hookConfigFile}\`?`,
+    `- Were hook scripts installed and registered in \`${promptContext.hookConfigFile}\`?`,
   );
   lines.push(
     "- Did deny-dangerous.sh pass the self-test in Step 0? If not, what failed?",
@@ -467,15 +495,16 @@ function appendSetupQuality(
  * Append Parts 3 to 5 in reading order: skill testing, the system assessment, then the contradiction sweep.
  *
  * @param lines - prompt line buffer; appended to in place
- * @param ctx - resolved prompt context supplying the skill inventory
+ * @param promptContext - resolved prompt context supplying the skill inventory
+ * @returns nothing; Parts 3 through 6 are appended in their required reading order
  */
 function appendSkillAndSystemSections(
   lines: string[],
-  ctx: AgentSetupPromptContext,
+  promptContext: AgentSetupPromptContext,
 ): void {
   appendSkillTesting(lines);
-  appendSystemAssessment(lines, ctx);
-  appendContradictions(lines, ctx);
+  appendSystemAssessment(lines, promptContext);
+  appendContradictions(lines, promptContext);
   appendSkillTemplateIntegrity(lines);
 }
 
@@ -483,11 +512,12 @@ function appendSkillAndSystemSections(
  * Ask whether goat-flow itself earns its cost on this project, answered from the reviewer's own Part 3 testing.
  *
  * @param lines - prompt line buffer; appended to in place
- * @param ctx - resolved prompt context supplying the skill inventory
+ * @param promptContext - resolved prompt context supplying the skill inventory
+ * @returns nothing; the framework-value questions are appended after live skill testing
  */
 function appendSystemAssessment(
   lines: string[],
-  ctx: AgentSetupPromptContext,
+  promptContext: AgentSetupPromptContext,
 ): void {
   lines.push("---");
   lines.push("");
@@ -499,7 +529,7 @@ function appendSystemAssessment(
     "- Is the execution loop (READ -> SCOPE -> ACT -> VERIFY) useful or ceremonial overhead? Did you actually follow it during skill testing?",
   );
   lines.push(
-    `- Are ${ctx.skillFacts.total} skills the right number? Which overlap? Which have gaps between them?`,
+    `- Are ${promptContext.skillFacts.total} skills the right number? Which overlap? Which have gaps between them?`,
   );
   lines.push(
     "- Does the dispatcher (`/goat`) add value or just add a routing step?",
@@ -534,11 +564,12 @@ function appendSystemAssessment(
  * Sweep for contradictions, dead paths, and references to concepts this release removed, which are the defects a reader hits first.
  *
  * @param lines - prompt line buffer; appended to in place
- * @param ctx - resolved prompt context supplying the instruction path
+ * @param promptContext - resolved prompt context supplying the instruction path
+ * @returns nothing; the contradiction checklist is appended for the selected agent only
  */
 function appendContradictions(
   lines: string[],
-  ctx: AgentSetupPromptContext,
+  promptContext: AgentSetupPromptContext,
 ): void {
   lines.push("---");
   lines.push("");
@@ -569,21 +600,23 @@ function appendContradictions(
   );
   lines.push("");
   lines.push(
-    `**Note:** Cross-agent consistency checks (deny patterns, skill parity, instruction structure) belong in the deterministic audit, not this per-agent assessment. Focus on ${ctx.agentLabel}'s surfaces only.`,
+    `**Note:** Cross-agent consistency checks (deny patterns, skill parity, instruction structure) belong in the deterministic audit, not this per-agent assessment. Focus on ${promptContext.agentLabel}'s surfaces only.`,
   );
   lines.push("");
 }
 
 /**
- * Append Part 6 skill-template-integrity checks: version-tag presence and match,
- * truncation/corruption signs, and quick-vs-full depth-choice coherence.
+ * Add the response headings and finding fields the user will receive from an agent-setup assessment.
+ * Use after Parts 1 through 6 and before the machine-readable report contract.
  *
  * @param lines - prompt line buffer; appended to in place
+ * @param promptContext - resolved prompt context supplying the expected skill count
+ * @returns nothing; the human-readable output contract is appended to the prompt
  */
 
 function appendOutputFormat(
   lines: string[],
-  ctx: AgentSetupPromptContext,
+  promptContext: AgentSetupPromptContext,
 ): void {
   lines.push("---");
   lines.push("");
@@ -596,7 +629,7 @@ function appendOutputFormat(
   lines.push("");
   lines.push("### Skill Testing Results");
   lines.push(
-    `For each of the ${ctx.skillFacts.total} skills (or subset tested): what worked, what failed, what was ceremony.`,
+    `For each of the ${promptContext.skillFacts.total} skills (or subset tested): what worked, what failed, what was ceremony.`,
   );
   lines.push("");
   lines.push("### Findings");
@@ -634,30 +667,30 @@ export function composeAgentSetupQuality(
   input: QualityInput,
   qualityMode: QualityMode,
 ): QualityPayload {
-  const ctx = buildAgentSetupContext(input, qualityMode);
+  const promptContext = buildAgentSetupContext(input, qualityMode);
   const lines: string[] = [];
-  appendIntroAndContext(lines, ctx);
-  appendAuditAndPrior(lines, ctx);
-  appendGroundingAndReadNext(lines, ctx);
-  appendPrecheckAndSetupQuality(lines, ctx);
-  appendSkillAndSystemSections(lines, ctx);
-  appendOutputFormat(lines, ctx);
+  appendIntroAndContext(lines, promptContext);
+  appendAuditAndPriorEvidence(lines, promptContext);
+  appendGroundingAndReadNext(lines, promptContext);
+  appendPrecheckAndSetupQuality(lines, promptContext);
+  appendSkillAndSystemSections(lines, promptContext);
+  appendOutputFormat(lines, promptContext);
   appendAgentReportContract(lines, {
-    agent: ctx.agent,
-    projectPath: ctx.projectPath,
-    auditStatus: ctx.auditStatus,
+    agent: promptContext.agent,
+    projectPath: promptContext.projectPath,
+    auditStatus: promptContext.auditStatus,
     qualityMode,
-    priorReport: ctx.priorReport,
-    runDate: ctx.runDate,
-    persistence: ctx.input.persistence,
+    priorReport: promptContext.priorReport,
+    runDate: promptContext.runDate,
+    persistence: promptContext.input.persistence,
   });
   appendClosing(lines);
 
   return {
     command: "quality",
-    agent: ctx.agent,
-    auditStatus: ctx.auditStatus,
-    auditSummary: ctx.auditSummaryText,
+    agent: promptContext.agent,
+    auditStatus: promptContext.auditStatus,
+    auditSummary: promptContext.auditSummaryText,
     prompt: lines.join("\n"),
   };
 }

@@ -1,6 +1,6 @@
 ---
 category: learning-loop-extraction
-last_reviewed: 2026-08-20
+last_reviewed: 2026-08-23
 ---
 
 **Scope:** How the CLI reads its own learning loop - entry counting, resolved-vs-active grammars, decision extraction, and stale-reference detection. Audit check semantics and deny-enforcement verification live in [auditor.md](auditor.md).
@@ -31,7 +31,8 @@ last_reviewed: 2026-08-20
 
 **Status:** active | **Created:** 2026-08-20 | **Evidence:** ACTUAL_MEASURED
 **Decision changed:** Write `(search: ...)` needles as literal substrings copied from the target file; when completing a citation's path, treat its needle as unvalidated and re-run `stats --check` in the same change.
-**Trigger phase:** VERIFY
+**Trigger phase:** ACT
+**Caught at:** VERIFY
 
 **Symptoms:** An anchor pairing a bare source basename with a pattern-shaped needle sits green in a bucket for months, then correcting the citation to a full repository path makes the same line fail `stats --check` as a stale ref - even though a regex reading of the needle matches the target file.
 

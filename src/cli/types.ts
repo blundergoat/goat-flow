@@ -179,6 +179,8 @@ export interface LearningLoopEntryFact {
   hasDecisionChangedGuidance: boolean;
   /** Raw READ/SCOPE/ACT/VERIFY value; null means the author omitted this optional field. */
   triggerPhase: string | null;
+  /** Phase where the failure surfaced when it differs from the preventive trigger phase. */
+  caughtAt: string | null;
   /** Parsed recurrence count; null means the optional field is absent or not numeric. */
   incidentCount: number | null;
   /** Latest recurrence date; null means the entry has no recorded recurrence date. */

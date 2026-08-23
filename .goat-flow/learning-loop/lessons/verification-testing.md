@@ -98,7 +98,8 @@ last_reviewed: 2026-08-23
 **Status:** active | **Created:** 2026-06-14
 **Updated:** 2026-08-23
 **Decision changed:** Search the whole test tree and classify each named behaviour/invariant; a file-level label cannot promote uncovered siblings.
-**Trigger phase:** VERIFY
+**Trigger phase:** READ
+**Caught at:** VERIFY
 **Incident count:** 3
 **Latest occurrence:** 2026-08-23
 

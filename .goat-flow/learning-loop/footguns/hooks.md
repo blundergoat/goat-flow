@@ -1,6 +1,6 @@
 ---
 category: hooks
-last_reviewed: 2026-08-18
+last_reviewed: 2026-08-23
 ---
 
 **Scope:** Hook runtime delivery, provider result adapters, policy-module execution, and performance. What a scanner can actually see - changed-file enumeration, diff/rename detection, gitignore and gitattribute blind spots - lives in [hook-scanning.md](hook-scanning.md). Install / launch / registration / config-drift plumbing lives in [hook-installation.md](hook-installation.md). The `deny-dangerous` shell-grammar policy parser lives in [deny-shell.md](deny-shell.md), [deny-secrets.md](deny-secrets.md), and [deny-writes.md](deny-writes.md).
@@ -73,7 +73,8 @@ A child result that ends a bounded cycle is a release decision, not a finding. A
 
 **Status:** active | **Created:** 2026-08-01 | **Evidence:** ACTUAL_MEASURED
 **Decision changed:** Whether a hook may call out to `sed`/`tr`/`awk`/`grep`/`git` once per line, per key, or per file - on Windows that design cannot meet any realistic hook timeout, so batch or use bash builtins instead.
-**Trigger phase:** ACT
+**Trigger phase:** SCOPE
+**Caught at:** ACT
 
 **Symptoms:** A hook is comfortably fast on Linux and unusably slow on Windows Git Bash, with `sys` time near half of wall clock. Claude Code shows the turn parked on `running stop hook · 4m 40s`. Because the runner kills a hook that exceeds its registered timeout, a scan that cannot finish reports nothing and is indistinguishable from a clean pass - the correctness failure is worse than the latency.
 
@@ -96,7 +97,8 @@ A child result that ends a bounded cycle is a release decision, not a finding. A
 
 **Status:** active | **Created:** 2026-08-01 | **Evidence:** ACTUAL_MEASURED
 **Decision changed:** Whether each PreToolUse policy module may prepare its own segment context - it may not; preparation belongs to the dispatcher and adding a policy must not multiply parsing work.
-**Trigger phase:** ACT
+**Trigger phase:** SCOPE
+**Caught at:** ACT
 
 **Symptoms:** Every Bash tool call carries a visible pause before the command runs, scaling with command complexity and the number of policy modules rather than with anything about the repository. The regression signature is more than one `prepare_segment_context` trace for a simple command, or a policy module calling that function directly.
 
@@ -116,6 +118,22 @@ A child result that ends a bounded cycle is a release decision, not a finding. A
 2. Do not assume a `$( )` count predicts wall clock. Substitutions actually executed per invocation are far fewer than a count of traced lines mentioning a function name suggests.
 3. Prepare segment context once in `check_segment`; policy modules consume the shared `CMD_*` and `HAS_*` values. A new module must not call `prepare_segment_context` itself.
 4. This is security-critical parsing: any restructuring needs `--self-test=full` green plus a byte-exact verdict corpus before and after, per `.goat-flow/skill-docs/playbooks/hook-policy-testing.md`.
+
+## Footgun: Copilot combines native and Claude project hook registrations
+
+**Status:** active | **Created:** 2026-08-23 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Treat repository `.claude/settings.json` as a Copilot hook source too; do not register the same lifecycle independently for Claude and Copilot without proven provider routing or deduplication.
+**Trigger phase:** SCOPE
+**Caught at:** VERIFY
+**Incident count:** 1 | **Latest occurrence:** 2026-08-23
+
+An isolated session-start fixture registered one command in `.github/hooks/` and one in `.claude/settings.json`. GitHub Copilot CLI 1.0.80 invoked both for one initial session: the native entry received camelCase fields and the Claude-compatible entry received PascalCase-event snake_case fields. Their privacy-safe markers had the same session fingerprint and landed 32 ms apart. A runner that expected one marker correctly stopped instead of claiming delivery.
+
+This is provider behavior, not duplicate JSON inside one config. GitHub's [hook-locations contract](https://docs.github.com/en/copilot/reference/hooks-reference#hooks-locations) says Copilot combines repository `.github/hooks/*.json` with the inline `hooks` block in `.claude/settings.json`. Goat Flow already owns both potential surfaces: `workflow/manifest.json` (search: `"hook_config_file": ".claude/settings.json"`) and (search: `"hook_config_file": ".github/hooks/hooks.json"`). A hook added to both can therefore run twice for Copilot; a hook added only to Claude can still run under Copilot and bypass a manifest claim that Copilot is unsupported.
+
+Before adding a lifecycle shared by Claude and Copilot, test a mixed-agent fixture containing both real registration shapes. The design must prove one of these outcomes: the handler identifies the actual host from a documented contract, registration coordination leaves only one effective entry, or duplicate invocations are safely deduplicated without stale session state. Source matchers are not enough unless a live mixed-agent capture proves Copilot honors that matcher's event semantics. Until then, keep default-on support narrower than the apparently successful single-provider captures.
+
+---
 
 ## Resolved Entries
 

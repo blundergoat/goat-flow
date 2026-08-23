@@ -1,6 +1,6 @@
 ---
 category: test-snapshots
-last_reviewed: 2026-08-15
+last_reviewed: 2026-08-23
 ---
 
 **Scope:** Keeping asserted values true - snapshot files and tables, metadata contracts beyond the typed shape, which field a check should assert, and the suite/runner selection that decides whether a fixture runs at all. Building the fixtures themselves is [test-fixtures.md](test-fixtures.md).
@@ -59,7 +59,8 @@ last_reviewed: 2026-08-15
 
 **Status:** active | **Created:** 2026-05-06
 **Decision changed:** Assert each public result field according to its declared role before matching prose.
-**Trigger phase:** VERIFY
+**Trigger phase:** ACT
+**Caught at:** VERIFY
 **Incident count:** 3 | **Latest occurrence:** 2026-07-16
 
 **What happened:** While tightening the execution-loop smoke check, the first focused `test/unit/audit-command.test.ts` run failed because the new regression asserted that `CheckResult.failure.message` would contain the raw finding text `inside the section`. The implementation was already failing the check correctly; `failure.message` exposed the public recommendation text (`Add READ, SCOPE, ACT, VERIFY steps under the "Execution Loop" heading...`) instead.
@@ -92,7 +93,8 @@ last_reviewed: 2026-08-15
 
 **Status:** active | **Created:** 2026-07-17
 **Decision changed:** Schema-health and evidence gates validate every parsed value and required relation independently before aggregating counts or declaring presence.
-**Trigger phase:** VERIFY
+**Trigger phase:** ACT
+**Caught at:** VERIFY
 **Incident count:** 3
 **Latest occurrence:** 2026-07-17
 

@@ -44,7 +44,8 @@ See `.goat-flow/learning-loop/patterns/refactoring.md` (search: `Put prompt side
 
 **Status:** active | **Created:** 2026-07-17 | **Evidence:** ACTUAL_MEASURED
 **Decision changed:** Framework-checkout commands use the source CLI (or a freshly built local CLI) and verify its version instead of trusting a bare PATH binary; generated write instructions retain the package-identity-gated source fallback.
-**Trigger phase:** ACT
+**Trigger phase:** READ
+**Caught at:** ACT
 **Incident count:** 6
 **Latest occurrence:** 2026-08-23
 

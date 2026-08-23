@@ -1,6 +1,6 @@
 ---
 category: audit-contracts
-last_reviewed: 2026-08-21
+last_reviewed: 2026-08-23
 ---
 
 **Scope:** The audit's own contracts - skip semantics, renderer defaults for new report fields, repair paths sourced from target evidence, and boundary behaviour of inverse metrics. Tests that pin wording and serialization are [contract-testing.md](contract-testing.md); the CLI surface is [cli-contracts.md](cli-contracts.md).
@@ -22,6 +22,8 @@ last_reviewed: 2026-08-21
 **Gate-tag recurrence 2026-07-31:** M05 added a plain unchecked human-review item at `human-verification-pending`; strict validation correctly treated it as executor proof. Human-owned open proof must carry `[human]`. Evidence: `src/cli/plans-check.ts` (search: `isHumanOwnedItem`).
 
 **Lifecycle-baseline recurrence 2026-08-01:** M12 required its pre-implementation strict error list to remain byte-identical while the same milestone also had to move from `not-started` to an active status. `plans check --strict` correctly added M12 to the existing `multiple active milestones` line, so every product proof passed while the planned equality could not. Decision changed: when a baseline contains lifecycle state, compare invariant errors plus the named transition instead of requiring byte-identical output; after the final status transition, rerun the check and require the temporary delta to disappear. Evidence: `src/cli/plans-check-structure.ts` (search: `collectActiveStateErrors`) builds the error from every milestone in `ACTIVE_STATUSES`, so changing a milestone into or out of that set necessarily changes the line.
+
+**Verification-query recurrence 2026-08-23:** M11's first negative persistence probe searched prompt modules for producer names plus the path phrase `quality/history`. It failed on the existing type-only `QualityHistoryEntry` import even though the touched modules contain no write or event call. The corrected proof searched for actual producer call syntax, then reported the read-only `readFileSync` and type import separately. Decision changed: negative mutation proof must target executable producer calls; module names and concept vocabulary are classification context, not write evidence.
 
 **Prevention:** Artifact reference resolution must consult the exact installed-to-canonical mirror map before applying path conventions. Removed-command checks must distinguish executable code-span/shell grammar from product prose, with paired positive and negative fixtures. Run the live combined audit after focused tests because real documentation supplies exceptions synthetic fixtures miss. Evidence anchors: `src/cli/audit/check-artifact-integrity.ts` (search: `SHARED_ARTIFACT_MIRRORS`), `src/cli/audit/check-factual-claims.ts` (search: `REMOVED_COMMAND_CHECKS`), and `test/integration/audit-drift-artifact-integrity.test.ts` (search: `resolves installed shared-document paths`).
 
@@ -61,7 +63,8 @@ last_reviewed: 2026-08-21
 
 **Status:** active | **Created:** 2026-07-14
 
-**Decision changed:** Resolve repair files from failure copy, selected-agent detail, or one unambiguous target path before generic provenance. | **Trigger phase:** VERIFY
+**Decision changed:** Resolve repair files from failure copy, selected-agent detail, or one unambiguous target path before generic provenance. | **Trigger phase:** ACT
+**Caught at:** VERIFY
 
 **What happened:** M24's first empty-target readiness run displayed `Create AGENTS.md (CLAUDE.md)`. The action named the Codex instruction file, but the citation came from a multi-agent provenance list and pointed at Claude's file.
 
@@ -113,7 +116,8 @@ last_reviewed: 2026-08-21
 
 **Status:** active | **Created:** 2026-07-18
 **Decision changed:** When a score names an inverse quantity such as uncovered fraction, verify both endpoint meaning and monotonic direction before trusting the formula.
-**Trigger phase:** VERIFY
+**Trigger phase:** ACT
+**Caught at:** VERIFY
 
 **What happened:** goat-qa A4 called its multiplier `uncovered fraction` but assigned NONE=0 and BEHAVIOURAL=1.0. The formula therefore ranked a CRITICAL fully covered path above a HIGH path with no coverage. Two isolated RED evaluators preserved the bad result because the explicit arithmetic and release-pressure framing outweighed the contradictory metric name.
 

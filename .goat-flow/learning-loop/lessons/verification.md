@@ -1,6 +1,6 @@
 ---
 category: verification
-last_reviewed: 2026-08-18
+last_reviewed: 2026-08-23
 ---
 
 **Scope:** General verification discipline - what counts as proof, reading before claiming, and checking the thing you actually changed. Siblings own the narrower surfaces: [verification-validators.md](verification-validators.md) for getting a checker right, [verification-scanners.md](verification-scanners.md) for proving a guard guards, [verification-testing.md](verification-testing.md) for what a test must establish, [verification-preflight.md](verification-preflight.md) and [verification-formatting.md](verification-formatting.md) for repo-wide gates, and [verification-gruff.md](verification-gruff.md) for the analyzer.
@@ -9,7 +9,8 @@ last_reviewed: 2026-08-18
 
 **Status:** active | **Created:** 2026-08-18
 **Decision changed:** On a validator rejection, open the assertion and read its pattern before editing the input a second time.
-**Trigger phase:** VERIFY
+**Trigger phase:** READ
+**Caught at:** VERIFY
 
 **What happened:** `plans check --strict` rejected an M01 `Actual:` line with `measured Actual reason must name receipt <seconds> recorded-unpaused seconds`. The line already contained that exact phrase, so I assumed the trailing clause I had appended needed reordering, moved it ahead of the phrase, and reran. It failed identically. Only then did I read the rule: `src/cli/plans-check.ts` (search: `recorded-unpaused seconds`) anchors the reason with `/^receipt\s+(\d+)\s+recorded-unpaused seconds$/u`, so the reason must be that string and nothing else. Two edits and two runs were spent on a guess the source answered in one read.
 
@@ -23,7 +24,8 @@ last_reviewed: 2026-08-18
 
 **Status:** active | **Created:** 2026-08-05
 **Decision changed:** Before changing behaviour in a script with capability detection, prove which branch actually executes for the installed tool.
-**Trigger phase:** ACT
+**Trigger phase:** READ
+**Caught at:** ACT
 
 **What happened:** Fixing the gruff hook's file-scope blind spot, I changed the `--changed-scope` flag in `run_gruff_json` and the behaviour did not move. The hook has two paths: a legacy `analyse` path and a `gruff.hook.v1` contract path selected when the analyzer advertises the contract. gruff-ts 0.4.0 advertises it, so `process_file_contract` runs and my edit was in code that never executes.
 
@@ -94,13 +96,15 @@ last_reviewed: 2026-08-18
 **Status:** active | **Created:** 2026-03-22
 **Decision changed:** A double-check includes strict artifact validation and a source-diff read after focused tests.
 **Trigger phase:** VERIFY
-**Incident count:** 2 | **Latest occurrence:** 2026-08-03
+**Incident count:** 3 | **Latest occurrence:** 2026-08-23
 
 **What happened:** User asked to "double check" multiple times. Each time, re-ran typecheck + tests + scan. Never caught stale shape references, documentation inconsistencies, or content quality issues that three external agents found immediately by reading the actual files.
 **Root cause:** Interpreted verification as "run the pipeline" instead of "read what changed." Tests only cover what they test.
 **Fix:** Added removed-pattern check to preflight. "Double check" should include: (1) run pipeline, (2) grep removed patterns, (3) read 3-5 changed files for content accuracy.
 
 **Recurrence (2026-08-03):** Focused review-validator tests reported 48 passes, but the subsequent scoped-diff read found that `\S.+` required two characters where the declared compact-field contract required only non-empty text. The implementation returned to `in-progress`, changed the quantifier to `\S.*`, and reran the focused suite before the testing gate. Evidence anchors: `src/cli/review-validate-common.ts` (search: `COMPACT_CLEAN_REVIEW_FIELDS`) and `test/unit/review-validate.test.ts` (search: `rejects empty, undefended, or repeated compact disclosures`).
+
+**Recurrence (2026-08-23):** Focused tests, typecheck, formatting, and Gruff were green after a comment and naming pass, but rereading goat-clarity's scope rules found that `zeroHit` belonged to an exported interface. The general request for low-risk naming changes did not satisfy the skill's second, identifier-specific Scope v2 approval gate. The rename was reverted before closeout. Evidence anchors: `.agents/skills/goat-clarity/SKILL.md` (search: `Scope v2 needs second approval`) and `src/cli/prompt/learning-loop-context.ts` (search: `export interface LearningLoopContextSelection`).
 
 ---
 
@@ -153,7 +157,8 @@ last_reviewed: 2026-08-18
 
 **Status:** active | **Created:** 2026-08-14
 **Decision changed:** Before treating an unskilled run as evidence for a new skill, include every current owner and classify each failure against those owners before crediting the candidate.
-**Trigger phase:** VERIFY
+**Trigger phase:** SCOPE
+**Caught at:** VERIFY
 **Incident count:** 6
 **Latest occurrence:** 2026-08-15
 
@@ -192,9 +197,11 @@ last_reviewed: 2026-08-18
 **Status:** active | **Created:** 2026-08-17
 **Decision changed:** Accept a verification result only after confirming the command executed, selected the intended mode, and asserted the behavior rather than a shared keyword.
 **Trigger phase:** VERIFY
-**Incident count:** 1 | **Latest occurrence:** 2026-08-17
+**Incident count:** 2 | **Latest occurrence:** 2026-08-23
 
 **What happened:** M39 verification exposed three false-proof shapes in one pass. A negative regex for the unsafe rewrite instruction also rejected the safe sentence “does not rewrite them automatically.” A command that piped audit JSON into inline Node was blocked before either parallel check ran. The direct retry exited zero but omitted `--harness`; its JSON explicitly said `"harness": false` and carried no harness scope, so it had not exercised `settings-rules-matched`.
+
+**Recurrence 2026-08-23:** An M11 determinism wrapper ran both prompt commands, then failed before producing a verdict because the orchestration isolate reported `ReferenceError: crypto is not defined`. The two zero exits were not accepted as proof. A fresh rerun compared the complete outputs directly and reported an exact match without depending on hashing. Evidence anchor: `.goat-flow/skill-docs/skill-preamble.md` (search: `Proof Gate`).
 
 **Root cause:** I treated a matched token and a zero exit as proof without first checking whether the assertion distinguished safe from unsafe prose, whether the hook allowed the command to execute, or whether the output identified the intended CLI mode.
 

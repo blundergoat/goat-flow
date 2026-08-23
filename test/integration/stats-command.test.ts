@@ -187,11 +187,11 @@ describe("goat-flow stats - happy path", () => {
     const report = loadReport({
       footguns: {
         "hooks.md":
-          "---\ncategory: hooks\nlast_reviewed: 2026-04-18\n---\n\n## Footgun: alpha\n\n**Evidence:** ACTUAL_MEASURED\n\nBody with `src/alpha.ts` ref.\n\n## Footgun: beta\n\n**Evidence:** ACTUAL_MEASURED\n\nBody.\n",
+          "---\ncategory: hooks\nlast_reviewed: 2026-04-18\n---\n\n## Footgun: alpha\n\n**Evidence:** ACTUAL_MEASURED\n**Trigger phase:** READ\n\nBody with `src/alpha.ts` ref.\n\n## Footgun: beta\n\n**Evidence:** ACTUAL_MEASURED\n**Trigger phase:** ACT\n\nBody.\n",
       },
       lessons: {
         "verification.md":
-          "---\ncategory: verification\nlast_reviewed: 2026-03-19\n---\n\n## Lesson: gamma\n\nBody.\n",
+          "---\ncategory: verification\nlast_reviewed: 2026-03-19\n---\n\n## Lesson: gamma\n\n**Trigger phase:** VERIFY\n\nBody.\n",
       },
     });
 
@@ -209,6 +209,23 @@ describe("goat-flow stats - happy path", () => {
     assert.ok(text.includes("Footguns"));
     assert.ok(text.includes("hooks.md"));
     assert.ok(text.includes("verification.md"));
+    assert.ok(
+      text.includes(
+        "Trigger phases: READ 1, SCOPE 0, ACT 1, VERIFY 0, untagged 0",
+      ),
+    );
+    assert.ok(
+      text.includes(
+        "Trigger phases: READ 0, SCOPE 0, ACT 0, VERIFY 1, untagged 0",
+      ),
+    );
+
+    const markdown = renderStatsMarkdown(report);
+    assert.ok(
+      markdown.includes(
+        "- Trigger phases: READ 1, SCOPE 0, ACT 1, VERIFY 0, untagged 0",
+      ),
+    );
 
     const json = JSON.parse(renderStatsJson(report));
     assert.equal(json.footguns.totalEntries, expectedFootgunEntries);
@@ -526,12 +543,12 @@ describe("goat-flow stats --check", () => {
     assert.equal(json.learningLoopEntries[0].hasDecisionChangedGuidance, false);
   });
 
-  it("warns on invalid trigger and occurrence order without failing", () => {
+  it("warns on invalid phase metadata and occurrence order without failing", () => {
     const report = loadReport({
       footguns: {},
       lessons: {
         "verification.md":
-          "---\ncategory: verification\nlast_reviewed: 2026-04-18\n---\n\n## Lesson: invalid recurrence metadata\n\n**Created:** 2026-04-10\n**Decision changed:** Re-run the original reproduction before closing.\n**Trigger phase:** DEPLOY\n**Latest occurrence:** 2026-04-09\n\nBody.\n",
+          "---\ncategory: verification\nlast_reviewed: 2026-04-18\n---\n\n## Lesson: invalid recurrence metadata\n\n**Created:** 2026-04-10\n**Decision changed:** Re-run the original reproduction before closing.\n**Trigger phase:** DEPLOY\n**Caught at:** RELEASE\n**Latest occurrence:** 2026-04-09\n\nBody.\n",
       },
     });
     const verdict = checkStats(report);
@@ -543,11 +560,12 @@ describe("goat-flow stats --check", () => {
         (warning) =>
           warning.rule === "memory-quality" &&
           warning.message.includes('invalid Trigger phase "DEPLOY"') &&
+          warning.message.includes('invalid Caught at "RELEASE"') &&
           warning.message.includes(
             "Latest occurrence 2026-04-09 predates Created 2026-04-10",
           ),
       ),
-      "expected both metadata issues in the bucket warning",
+      "expected all metadata issues in the bucket warning",
     );
   });
 

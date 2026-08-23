@@ -46,6 +46,7 @@ Inside a bucket, add entries as `## Footgun:` blocks. Each entry MUST begin with
 **Status:** active | **Created:** 2026-04-20 | **Evidence:** OBSERVED
 **Decision changed:** [the future agent decision this evidence changes]
 **Trigger phase:** READ | SCOPE | ACT | VERIFY (optional)
+**Caught at:** READ | SCOPE | ACT | VERIFY (optional; use only when different)
 
 <body>
 ```
@@ -58,6 +59,10 @@ Evidence labels are mutually exclusive: `ACTUAL_MEASURED` means reproduced or me
 
 **Prevention items are rules, not work orders.** Write what a future agent must do when it touches this surface. A Prevention that reads "write doc X" or "adopt lint rule Y" is a backlog item parked inside an active entry, where nothing tracks it and it silently ages - the same defect `decisions/README.md` rejects as "TODOs disguised as decisions". If the fix is worth doing, open a plan or an issue and state the rule here in the meantime.
 
-New entries SHOULD include `**Decision changed:**`; stats JSON exposes missing guidance for migration visibility without turning every legacy entry into a `stats --check` warning. Add `**Trigger phase:** READ|SCOPE|ACT|VERIFY` when one execution-loop phase should retrieve the memory. When recurrence is measured, add `**Incident count:** <positive integer>` and `**Latest occurrence:** YYYY-MM-DD`. Record each new incident with the canonical `**Recurrence YYYY-MM-DD:**` prose label. Recurrence prose records individual evidence; Incident count records the total. Keep both current; neither suppresses the other.
+New entries SHOULD include `**Decision changed:**`; stats JSON exposes missing guidance for migration visibility without turning every legacy entry into a `stats --check` warning.
+
+`**Trigger phase:**` names the earliest execution-loop phase where retrieving the entry can prevent the failure; it does not name where the failure surfaced. When those phases differ, add the optional `**Caught at:** READ|SCOPE|ACT|VERIFY` field. For example, `Isolated fixtures must create every dependency they assert` uses `Trigger phase: ACT` because fixture construction prevents the failure and `Caught at: VERIFY` because the missing dependency surfaced during proof.
+
+When recurrence is measured, add `**Incident count:** <positive integer>` and `**Latest occurrence:** YYYY-MM-DD`. Record each new incident with the canonical `**Recurrence YYYY-MM-DD:**` prose label. Recurrence prose records individual evidence; Incident count records the total. Keep both current; neither suppresses the other.
 
 Entries without `**Status:**` cannot be split into active-vs-resolved by the audit scanner. Legacy single-entry files still work during migration, but category buckets with the frontmatter + `**Status:**` contract are the preferred and audited format.
