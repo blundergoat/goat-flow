@@ -1,8 +1,7 @@
 /**
- * How the checker ties claims to evidence: lifecycle snapshots, active-milestone limits,
- * and the timing receipts a measured Actual must reconcile against.
- * Runs the real CLI against written milestone fixtures, so failures read as an author would
- * see them in a terminal rather than as internals.
+ * How the checker ties milestone claims to evidence: lifecycle snapshots, active-slot limits, and receipt-backed Actuals.
+ * Every case runs the real CLI against written milestones, so failures match the guidance users see while moving a plan between workflow states.
+ * Temporary plans isolate each lifecycle transition and are removed after the assertion.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -382,6 +381,40 @@ describe("plans check: lifecycle states and timing receipts", () => {
       assert.equal(result.status, 1);
       assertSourceLabelledErrors(result.stdout);
       assert.match(result.stdout, /multiple active milestones/u);
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
+  /** Fixture purpose: a milestone awaiting the user's decision still owns the active slot, so another implementation cannot begin beside it.
+   * Filesystem/process side effects: writes a two-milestone plan, runs the CLI once, and removes the fixture. */
+  it("keeps human verification in the one-active-milestone rule", () => {
+    const temporaryRoot = mkdtempSync(
+      join(tmpdir(), "goat-flow-plan-human-active-"),
+    );
+    const planPath = writeCheckPlan(temporaryRoot, {
+      "M01-review.md": canonicalMilestoneBody({
+        title: "M01: Await user review",
+        status: "human-verification-pending",
+        isTaskChecked: true,
+        proofLines: [
+          "- [x] Outcome is proven. [automated] (est: 1 min proof)",
+          "- [ ] [human] Approve completion. (est: 1 min proof)",
+        ],
+        includeActual: true,
+      }),
+      "M02-next.md": canonicalMilestoneBody({
+        title: "M02: Start the next outcome",
+        status: "in-progress",
+        dependsOn: "none",
+      }),
+    });
+
+    try {
+      const result = runPlansCheck(planPath, "--strict");
+
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.match(result.stdout, /multiple active milestones: M01, M02/u);
     } finally {
       rmSync(temporaryRoot, { recursive: true, force: true });
     }

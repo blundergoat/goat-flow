@@ -71,13 +71,9 @@ function renderSplit(split: PlanEffortSplit): string {
 }
 
 /**
- * Decide which warnings are fatal once strict mode is already established.
- *
- * Split out of {@link isValidationWarning} so each function stays inside the project complexity budget; callers should reach the strict rules through
- * that entry point rather than calling this directly.
- *
- * Receipt-shape warnings stay advisory unless a claim or a live clock depends on the receipt, so a hand-written historical receipt beside a
- * retrospective Actual passes here.
+ * Decide which warnings are fatal after strict mode is selected.
+ * The public checker routes here to keep complexity bounded; other callers should use {@link isValidationWarning}.
+ * Receipt shape stays advisory unless a measured Actual or live clock depends on it.
  *
  * @param warning - one parser warning from the milestone record
  * @param isReceiptClaimed - whether an Actual derives its authority from the receipt
@@ -117,24 +113,22 @@ function isValidationWarning(
   isReceiptClaimed: boolean,
   isReceiptActive: boolean,
 ): boolean {
+  // A malformed task or admin estimate hides the work value the user intended to validate.
   if (warning.includes("estimate not parseable")) return true;
 
   // Drifted range notation is as fatal as a drifted estimate: both hide real numbers.
-  if (warning === "forecast range not parseable") return true;
+  if (warning.startsWith("forecast range not parseable")) return true;
   // An unreadable basis hides the work-unit count and provenance behind the headline.
-  if (warning === "forecast basis not parseable") return true;
+  if (warning.startsWith("forecast basis not parseable")) return true;
+  // Default mode leaves newer structural rules advisory for archived plans.
   if (!isStrict) return false;
   return isStrictValidationWarning(warning, isReceiptClaimed, isReceiptActive);
 }
 
 /**
  * Convert fatal parser warnings into source-labelled check errors.
- *
- * A receipt is evidence for a claim or a live clock, so its shape is fatal when an Actual claims authority from it or its state is active.
- * Hand-written historical receipts beside retrospective Actuals remain advisory because neither a measurement claim nor executing workflow depends on
- * them.
- *
- * `measured` Actuals still fail twice over - here and in the reconciliation check that compares their minutes against the receipt allocation.
+ * Receipt shape is fatal only when a measured Actual or live clock makes the user depend on it; retrospective historical receipts stay advisory.
+ * Measured Actuals also undergo receipt reconciliation so both the grammar and recorded allocation are visible.
  *
  * @param record - one parsed milestone
  * @param isStrict - whether strict current-plan validation is selected
@@ -158,6 +152,7 @@ function categoryMinutes(
   split: PlanEffortSplit | undefined,
   category: keyof PlanEffortSplit,
 ): number {
+  // A missing optional split contributes zero until the milestone author supplies category totals.
   if (!split) return 0;
   return split[category];
 }
@@ -169,10 +164,13 @@ function collectCategoryErrors(
   isStrict: boolean,
 ): string[] {
   const errors: string[] = [];
+  // Each category receives its own diagnostic so the user can repair every mismatch in one pass.
   for (const category of CATEGORIES) {
     const taskMinutes = categoryMinutes(record.taskEstimateTotals, category);
     const countedMinutes = categoryMinutes(record.workEstimateTotals, category);
+    // Strict plans must account for every task, proof item, and plan-overhead estimate.
     if (isStrict) {
+      // A mismatch means the authored split does not describe all work visible in the milestone.
       if (countedMinutes !== split[category]) {
         errors.push(
           `${record.sourceFile}: ${category} counted work (${countedMinutes} min) does not equal the split component (${split[category]} min)`,
@@ -180,6 +178,7 @@ function collectCategoryErrors(
       }
       continue;
     }
+    // Legacy plans fail only when their task estimates already exceed the declared category budget.
     if (taskMinutes > split[category]) {
       errors.push(
         `${record.sourceFile}: ${category} task estimates (${taskMinutes} min) exceed the split component (${split[category]} min)`,
@@ -196,9 +195,12 @@ function collectSplitErrors(
 ): string[] {
   const errors: string[] = [];
   const effort = record.effort;
+  // A milestone without an Effort line has no headline arithmetic to reconcile here.
   if (!effort) return errors;
   const split = effort.split;
+  // A missing split is mandatory only for a current strict plan.
   if (!split) {
+    // Strict users need all three categories before the report can explain where time goes.
     if (isStrict) {
       errors.push(
         `${record.sourceFile}: strict mode requires a product/proof/other split`,
@@ -208,6 +210,7 @@ function collectSplitErrors(
   }
 
   const splitSum = split.product + split.proof + split.other;
+  // The category total must equal the headline number shown to the user.
   if (splitSum !== effort.totalMinutes) {
     errors.push(
       `${record.sourceFile}: split ${renderSplit(split)} sums to ${splitSum} min but the headline says ${effort.totalMinutes} min`,
@@ -226,9 +229,11 @@ function collectSplitErrors(
 function collectForecastRangeErrors(record: PlanExportRecord): string[] {
   const effort = record.effort;
   const range = effort?.forecastRange;
+  // A point estimate or legacy milestone has no optional range arithmetic to check.
   if (!effort || !range) return [];
 
   const errors: string[] = [];
+  // Reversed bounds would make the displayed low-likely-high forecast misleading.
   if (
     range.lowMinutes > range.likelyMinutes ||
     range.likelyMinutes > range.highMinutes
@@ -281,16 +286,19 @@ function collectCoverageErrors(
   const unestimatedTasks = record.tasks.filter(
     (task) => task.estimateMinutes === undefined,
   ).length;
+  // Every implementation task needs a visible estimate when the milestone declares effort.
   if (unestimatedTasks > 0) {
     errors.push(
       `${record.sourceFile}: ${unestimatedTasks} task(s) missing an (est: ...) entry under a declared effort line`,
     );
   }
+  // Default mode preserves archived plans that predate proof-item estimates.
   if (!isStrict) return errors;
 
   const unestimatedTestingItems = record.testingGateItems.filter(
     (item) => item.estimateMinutes === undefined,
   ).length;
+  // Strict-plan users need estimates on final proof so the forecast includes verification.
   if (unestimatedTestingItems > 0) {
     errors.push(
       `${record.sourceFile}: ${unestimatedTestingItems} testing gate item(s) missing an (est: ...) entry`,
@@ -300,6 +308,7 @@ function collectCoverageErrors(
   const unestimatedMidProofItems = record.midProofItems.filter(
     (item) => item.estimateMinutes === undefined,
   ).length;
+  // Mid-work checkpoints also consume agent time and must be visible in strict forecasts.
   if (unestimatedMidProofItems > 0) {
     errors.push(
       `${record.sourceFile}: ${unestimatedMidProofItems} mid-proof item(s) missing an (est: ...) entry`,
@@ -313,7 +322,9 @@ function collectActualErrors(record: PlanExportRecord): string[] {
   const errors: string[] = [];
   const actual = record.effort?.actual;
   const status = record.status.trim().toLowerCase();
+  // No Actual is expected before work, but finished or handed-off work needs a recorded outcome.
   if (!actual) {
+    // These lifecycle states tell readers execution is over, so missing actuals would hide the result.
     if (status === "complete" || status === "human-verification-pending") {
       errors.push(
         `${record.sourceFile}: ${status} milestone requires a structured Actual with total and product/proof/other split`,
@@ -321,11 +332,13 @@ function collectActualErrors(record: PlanExportRecord): string[] {
     }
     return errors;
   }
+  // A not-started label must not coexist with evidence that work already happened.
   if (status === "not-started") {
     errors.push(
       `${record.sourceFile}: not-started milestone must not include Actual before work begins`,
     );
   }
+  // Unknown or unavailable Actuals carry prose, not numeric split arithmetic.
   if (!isNumericActual(actual)) {
     return errors;
   }
@@ -338,6 +351,7 @@ function collectNumericActualErrors(
   record: PlanExportRecord,
   actual: PlanEffortNumericActual,
 ): string[] {
+  // Numeric Actuals need category totals so users can compare the outcome with the forecast.
   if (!actual.split) {
     return [
       `${record.sourceFile}: structured Actual requires a product/proof/other split`,
@@ -346,11 +360,13 @@ function collectNumericActualErrors(
   const errors: string[] = [];
   const actualSplitSum =
     actual.split.product + actual.split.proof + actual.split.other;
+  // The recorded categories must add up to the Actual headline shown in the milestone.
   if (actualSplitSum !== actual.totalMinutes) {
     errors.push(
       `${record.sourceFile}: Actual split ${renderSplit(actual.split)} sums to ${actualSplitSum} min but Actual says ${actual.totalMinutes} min`,
     );
   }
+  // A measured claim must reconcile with its embedded timing receipt.
   if (actual.state === "measured") {
     errors.push(...collectMeasuredActualErrors(record, actual, actual.split));
   }
@@ -364,6 +380,7 @@ function collectMeasuredActualErrors(
   split: PlanEffortSplit,
 ): string[] {
   const receipt = record.timingReceipt;
+  // Without a finalized summary, the user cannot audit a measured Actual.
   if (receipt?.state !== "finalized" || receipt.summary === undefined) {
     return [
       `${record.sourceFile}: measured Actual requires a finalized embedded Timing Receipt`,
@@ -374,6 +391,7 @@ function collectMeasuredActualErrors(
     actual.reason,
     receipt.summary.totalSeconds,
   );
+  // Minute totals and category allocation must tell the same story as the receipt.
   if (!actualMatchesTimingSummary(actual, split, receipt.summary)) {
     errors.push(
       `${record.sourceFile}: measured Actual total and split must match the Timing Receipt minute allocation`,
@@ -391,12 +409,14 @@ function collectClaimedSecondsErrors(
   const captured = reason.match(
     /^receipt\s+(\d+)\s+recorded-unpaused seconds$/u,
   )?.[1];
+  // Missing seconds make the measured claim impossible for a user to trace back to the receipt.
   if (captured === undefined) {
     return [
       `${sourceFile}: measured Actual reason must name receipt <seconds> recorded-unpaused seconds`,
     ];
   }
   const claimedSeconds = Number(captured);
+  // Unsafe integers cannot represent a trustworthy recorded duration.
   if (!Number.isSafeInteger(claimedSeconds)) {
     return [
       `${sourceFile}: measured Actual reason must name receipt <seconds> recorded-unpaused seconds`,
@@ -444,6 +464,7 @@ function collectHumanPendingErrors(
   openTasks: number,
 ): string[] {
   const errors: string[] = [];
+  // Open implementation work means the milestone is not ready for the user's manual checks.
   if (openTasks > 0) {
     errors.push(
       `${record.sourceFile}: human-verification-pending milestone has open implementation tasks`,
@@ -453,16 +474,19 @@ function collectHumanPendingErrors(
     record.testingGateItems,
     (item) => !isHumanOwnedItem(item),
   );
+  // Executor-owned proof must finish before responsibility passes to the user.
   if (openExecutorProof > 0) {
     errors.push(
       `${record.sourceFile}: executor proof item remains open at human-verification-pending`,
     );
   }
+  // Mid-work proof is agent-owned and cannot remain open at handoff.
   if (countOpenItems(record.midProofItems) > 0) {
     errors.push(
       `${record.sourceFile}: executor mid-proof item remains open at human-verification-pending`,
     );
   }
+  // Exit criteria must be satisfied before the user receives a verification-ready milestone.
   if (countOpenItems(record.exitCriteriaItems) > 0) {
     errors.push(
       `${record.sourceFile}: human-verification-pending milestone has open exit criteria`,
@@ -477,21 +501,25 @@ function collectCompleteSnapshotErrors(
   openTasks: number,
 ): string[] {
   const errors: string[] = [];
+  // A complete label cannot hide unfinished implementation work from the user.
   if (openTasks > 0) {
     errors.push(
       `${record.sourceFile}: complete milestone has open implementation tasks`,
     );
   }
+  // Final proof must be closed before the milestone appears complete.
   if (countOpenItems(record.testingGateItems) > 0) {
     errors.push(
       `${record.sourceFile}: complete milestone has open proof items`,
     );
   }
+  // Mid-work proof must also be closed in the final snapshot.
   if (countOpenItems(record.midProofItems) > 0) {
     errors.push(
       `${record.sourceFile}: complete milestone has open mid-proof items`,
     );
   }
+  // Open exit criteria tell the user the declared outcome is not fully delivered.
   if (countOpenItems(record.exitCriteriaItems) > 0) {
     errors.push(
       `${record.sourceFile}: complete milestone has open exit criteria`,
@@ -506,21 +534,25 @@ function collectNotStartedSnapshotErrors(
   checkedTasks: number,
 ): string[] {
   const errors: string[] = [];
+  // Checked tasks reveal work that conflicts with the not-started label.
   if (checkedTasks > 0) {
     errors.push(
       `${record.sourceFile}: not-started milestone has checked implementation tasks`,
     );
   }
+  // Completed final proof also means execution already began.
   if (record.testingGateItems.some((item) => item.isChecked)) {
     errors.push(
       `${record.sourceFile}: not-started milestone has checked proof items`,
     );
   }
+  // Completed mid-work proof contradicts a milestone that claims no work started.
   if (record.midProofItems.some((item) => item.isChecked)) {
     errors.push(
       `${record.sourceFile}: not-started milestone has checked mid-proof items`,
     );
   }
+  // Completed exit criteria are outcome evidence and cannot belong to a not-started snapshot.
   if (record.exitCriteriaItems.some((item) => item.isChecked)) {
     errors.push(
       `${record.sourceFile}: not-started milestone has checked exit criteria`,
@@ -558,6 +590,7 @@ function collectTestingGateErrors(
   record: PlanExportRecord,
   openTasks: number,
 ): string[] {
+  // Testing can begin only after the implementation checklist is closed.
   if (openTasks === 0) return [];
   return [
     `${record.sourceFile}: testing-gate milestone has open implementation tasks`,
@@ -571,6 +604,7 @@ function collectLifecycleErrors(record: PlanExportRecord): string[] {
 
   // Missing status already has a dedicated structural diagnostic.
   if (status === "unknown" || status.length === 0) return errors;
+  // An unfamiliar label cannot tell the user which lifecycle obligations apply.
   if (!VALID_STATUSES.has(status)) {
     return [`${record.sourceFile}: unsupported status \`${status}\``];
   }
@@ -614,12 +648,14 @@ function collectMilestoneErrors(
   isStrict: boolean,
 ): string[] {
   const errors = collectWarningErrors(record, isStrict);
+  // Strict mode validates the visible status against tasks, proof, and timing evidence.
   if (isStrict) {
     errors.push(...collectLifecycleErrors(record));
   }
 
   // Default mode preserves legacy plans; strict authoring requires the current notation.
   if (!record.effort) {
+    // A current-format plan needs an estimate before users can assess its size.
     if (isStrict) {
       errors.push(
         `${record.sourceFile}: strict mode requires an Effort estimate with a product/proof/other split`,
@@ -632,6 +668,7 @@ function collectMilestoneErrors(
   errors.push(...collectCoverageErrors(record, isStrict));
   errors.push(...collectForecastRangeErrors(record));
   errors.push(...collectForecastBasisErrors(record));
+  // Structured Actual requirements apply only to current strict authoring.
   if (isStrict) {
     errors.push(...collectActualErrors(record));
   }
@@ -694,6 +731,7 @@ function handlePlansCheckCommand(options: ParsedCLI): void {
   const errors = records.flatMap((record) =>
     collectMilestoneErrors(record, options.plansStrict),
   );
+  // Strict mode also checks ordering and dependencies across the whole selected plan.
   if (options.plansStrict) {
     errors.push(...collectPlanStructureErrors(records));
   }
@@ -733,6 +771,7 @@ function handlePlansCheckCommand(options: ParsedCLI): void {
  * @returns nothing; the chosen subcommand owns all output and exit codes
  */
 export function handlePlansCommand(options: ParsedCLI): void {
+  // A timing request owns its receipt lifecycle and never enters read-only plan validation.
   if (options.plansSubcommand === "time") {
     handlePlansTimeCommand(options);
     return;

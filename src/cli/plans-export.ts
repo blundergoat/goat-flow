@@ -77,6 +77,12 @@ interface MarkdownSection {
   body: string;
 }
 
+/** Checkbox prefix used to find every possible task before retaining only the shallowest task level. */
+const CHECKLIST_ITEM_PATTERN = /^([ \t]*)-\s+\[([ xX])\]\s+/gmu;
+
+/** An indented Markdown list item is supporting task prose, not part of the parent's estimate notation. */
+const NESTED_LIST_ITEM_PATTERN = /^[ \t]+(?:[-+*]|\d+[.)])[ \t]+/mu;
+
 /**
  * Read the first visible milestone field and report competing copies.
  * Use while exporting the plan so users see ambiguity instead of a silently chosen value.
@@ -151,6 +157,7 @@ function addRepresentationConflict(
   hasConflict: boolean,
   label: string,
 ): void {
+  // Competing copies leave the user unsure which value an export preserved.
   if (hasConflict) warnings.push(`conflicting ${label} representations`);
 }
 
@@ -171,8 +178,15 @@ function readChecklistItems(
   itemLabel: string,
 ): PlanExportTask[] {
   const maskedMarkdown = maskNonRenderedMarkdown(markdown);
-  const taskStarts = Array.from(
-    maskedMarkdown.matchAll(/^\s*-\s+\[([ xX])\]\s+/gmu),
+  const checkboxMatches = Array.from(
+    maskedMarkdown.matchAll(CHECKLIST_ITEM_PATTERN),
+  );
+  const shallowestTaskIndentation = Math.min(
+    ...checkboxMatches.map((checkboxMatch) => checkboxMatch[1]?.length ?? 0),
+  );
+  const taskStarts = checkboxMatches.filter(
+    (checkboxMatch) =>
+      (checkboxMatch[1]?.length ?? 0) === shallowestTaskIndentation,
   );
 
   // Headings also end an item so nested Testing Gate labels do not swallow its trailing estimate.
@@ -185,14 +199,20 @@ function readChecklistItems(
     const nextHeading =
       nextHeadingOffset >= 0 ? bodyStart + nextHeadingOffset : markdown.length;
     const bodyEnd = Math.min(nextCheckbox, nextHeading);
-    const text = markdown
-      .slice(bodyStart, bodyEnd)
+    const taskBodyMarkdown = markdown.slice(bodyStart, bodyEnd);
+    const text = taskBodyMarkdown.replace(/\s+/gu, " ").trim();
+    const nestedListStart = taskBodyMarkdown.search(NESTED_LIST_ITEM_PATTERN);
+    const estimateSourceMarkdown =
+      nestedListStart < 0
+        ? taskBodyMarkdown
+        : taskBodyMarkdown.slice(0, nestedListStart);
+    const estimateSourceText = estimateSourceMarkdown
       .replace(/\s+/gu, " ")
       .trim();
     return {
-      isChecked: startMatch[1]?.toLowerCase() === "x",
+      isChecked: startMatch[2]?.toLowerCase() === "x",
       text,
-      ...readTaskEstimate(text, taskIndex, warnings, itemLabel),
+      ...readTaskEstimate(estimateSourceText, taskIndex, warnings, itemLabel),
     };
   });
 }
@@ -220,11 +240,15 @@ function addEffortFields(
   planAdminEstimate: TaskEstimateFields,
   workEstimateTotals: PlanEffortSplit | undefined,
 ): void {
+  // An Effort line gives exported readers the milestone's headline forecast.
   if (effort) record.effort = effort;
+  // Task totals appear only when at least one task supplied an estimate.
   if (taskEstimateTotals) record.taskEstimateTotals = taskEstimateTotals;
+  // Plan overhead stays absent when the author did not estimate administrative work.
   if (planAdminEstimate.estimateMinutes !== undefined) {
     record.planAdminEstimate = planAdminEstimate;
   }
+  // Counted work totals let strict-plan users compare every checklist estimate with the headline split.
   if (workEstimateTotals) record.workEstimateTotals = workEstimateTotals;
 }
 
@@ -512,6 +536,7 @@ export function parseMilestoneMarkdown(
     planAdminEstimate,
     workEstimateTotals,
   );
+  // A valid receipt travels with the export so readers can audit measured Actuals.
   if (timingReceipt) record.timingReceipt = timingReceipt;
   return record;
 }

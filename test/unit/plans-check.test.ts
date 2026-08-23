@@ -1,8 +1,7 @@
 /**
- * How the checker treats the numbers an author writes: splits that must sum, estimates
- * tasks must carry, legacy estimate-less plans, and the advisory 70/20/10 mix drift.
- * Runs the real CLI against written milestone fixtures, so failures read as an author would
- * see them in a terminal rather than as internals.
+ * How the checker treats the numbers a plan author writes: required task estimates, category sums, legacy estimate-less plans, and mix drift.
+ * Every case runs the real CLI against a written milestone, so failures match the guidance users see before implementation rather than internals.
+ * Temporary plans are removed after each case, leaving only the asserted terminal contract.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -164,6 +163,84 @@ describe("plans check: effort arithmetic and plan shapes", () => {
         result.stdout,
         /error: M01-fixture\.md: 1 task\(s\) missing an \(est: \.\.\.\) entry/u,
       );
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
+  /** Fixture purpose: a user who mistypes several estimate fields should receive every grammar and received value in the first check run.
+   * Filesystem/process side effects: writes one temporary milestone, runs the CLI once, and removes the fixture. */
+  it("reports every malformed estimate grammar and received value together", () => {
+    const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-errors-"));
+    const planPath = writeCheckFixture(
+      temporaryRoot,
+      estimatedMilestoneBody(
+        "Effort estimate: ~8 min agent-time (3 product / 3 proof / 2 other)",
+        ["- [ ] Build the thing (est: soon)"],
+        {
+          forecastBasisLine:
+            "Forecast basis: 3 agent work units at 0.5-2.5-10 min/unit",
+          forecastRangeLine: "Forecast range: 1-30 minutes; likely 8",
+          planAdminOverhead: "two min other",
+          testingGateLines: ["- [ ] Run typecheck (est: 3 min proof)"],
+        },
+      ),
+    );
+
+    try {
+      const result = runPlansCheck(planPath, "--strict");
+
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.match(
+        result.stdout,
+        /task 1: estimate not parseable; expected "\(est: <minutes> min <product\|proof\|other>\)"; received "\(est: soon\)"/u,
+      );
+      assert.match(
+        result.stdout,
+        /plan\/admin overhead estimate not parseable; expected "<minutes> min other"; received "two min other"/u,
+      );
+      assert.match(
+        result.stdout,
+        /forecast basis not parseable; expected "<units> agent work units; <low>-<likely>-<high> min\/unit low-likely-high; source: <source>"; received "3 agent work units at 0\.5-2\.5-10 min\/unit"/u,
+      );
+      assert.match(
+        result.stdout,
+        /forecast range not parseable; expected "<low>-<high> agent-time minutes on one recorded-unpaused milestone timeline; likely <minutes>\[; <rationale>\]"; received "1-30 minutes; likely 8"/u,
+      );
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
+  /** Fixture purpose: nested rationale remains readable without hiding the estimate that keeps the user's totals and forecast reviewable.
+   * Filesystem/process side effects: writes one temporary milestone, runs the CLI once, and removes the fixture. */
+  it("keeps a parent task estimate when indented prose follows it", () => {
+    const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-nested-"));
+    const planPath = writeCheckFixture(
+      temporaryRoot,
+      estimatedMilestoneBody(
+        "Effort estimate: ~8 min agent-time (3 product / 3 proof / 2 other)",
+        [
+          "- [ ] Build the thing (est: 3 min product)",
+          "  - M01 records why this exact edit was denied.",
+        ],
+        {
+          forecastBasisLine:
+            "Forecast basis: 3 agent work units; 0.5-2.5-10 min/unit low-likely-high; source: cold-start prior",
+          forecastRangeLine:
+            "Forecast range: 1-30 agent-time minutes on one recorded-unpaused milestone timeline; likely 8; uncalibrated",
+          planAdminOverhead: "2 min other",
+          testingGateLines: ["- [ ] Run typecheck (est: 3 min proof)"],
+        },
+      ),
+    );
+
+    try {
+      const result = runPlansCheck(planPath, "--strict");
+
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.doesNotMatch(result.stdout, /missing an \(est: \.+\) entry/u);
+      assert.doesNotMatch(result.stdout, /forecast basis declares/u);
     } finally {
       rmSync(temporaryRoot, { recursive: true, force: true });
     }

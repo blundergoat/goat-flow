@@ -1,8 +1,6 @@
 /**
- * How a written milestone becomes an export record: which fields parse, which absences
- * warn, and how effort, forecast-basis, range, and receipt fields survive the round trip.
- * Runs the real CLI and parser against written fixtures, so failures read as the author's
- * terminal output rather than as internals.
+ * How a written milestone becomes an export record: which fields parse, which absences warn, and which planning fields survive the round trip.
+ * Runs the real CLI and parser against written fixtures, so failures match the terminal guidance an author sees.
  * Lifecycle cases also prove those visible fields govern whether milestone timing can start.
  */
 import { describe, it } from "node:test";
@@ -371,6 +369,32 @@ describe("plans export: milestone parsing", () => {
     assert.ok(!record.warnings.some((warning) => warning.includes("estimate")));
   });
 
+  // A user's nested rationale remains part of exported task text but cannot hide the parent task's estimate or create another work unit.
+  it("preserves nested task prose without counting it as estimated work", () => {
+    const record = parseMilestoneMarkdown(
+      [
+        "# M04: Explain risky work",
+        "Status: not-started",
+        "Effort estimate: ~3 min agent-time (3 product / 0 proof / 0 other)",
+        "",
+        "## Tasks",
+        "- [ ] [RISKY] Attempt the settings edit. (est: 3 min product)",
+        "  - M01 records why this exact edit was denied.",
+        "",
+      ].join("\n"),
+      "M04-nested-prose.md",
+    );
+
+    assert.equal(record.tasks.length, 1);
+    assert.match(record.tasks[0]?.text ?? "", /M01 records why/u);
+    assert.equal(record.tasks[0]?.estimateMinutes, 3);
+    assert.deepEqual(record.taskEstimateTotals, {
+      product: 3,
+      proof: 0,
+      other: 0,
+    });
+  });
+
   // Estimate-less plans predate the notation and must stay entirely noise-free.
   it("keeps legacy milestones free of effort fields and warnings", () => {
     const record = parseMilestoneMarkdown(
@@ -402,9 +426,38 @@ describe("plans export: milestone parsing", () => {
 
     assert.ok(!("effort" in record));
     assert.ok(record.warnings.includes("effort estimate not parseable"));
-    assert.ok(record.warnings.includes("task 1: estimate not parseable"));
-    assert.ok(record.warnings.includes("task 2: estimate not parseable"));
+    assert.ok(
+      record.warnings.includes(
+        'task 1: estimate not parseable; expected "(est: <minutes> min <product|proof|other>)"; received "(est: soon)"',
+      ),
+    );
+    assert.ok(
+      record.warnings.includes(
+        'task 2: estimate not parseable; expected "(est: <minutes> min <product|proof|other>)"; received "(est: 5 min docs)"',
+      ),
+    );
     assert.ok(record.tasks.every((task) => !("estimateMinutes" in task)));
+  });
+
+  // JSON-safe diagnostics show the received text without passing a pasted terminal escape sequence through to the user's terminal.
+  it("escapes terminal control characters in received estimate values", () => {
+    const record = parseMilestoneMarkdown(
+      [
+        "# M03: Control-safe diagnostics",
+        "Status: not-started",
+        "Effort estimate: ~1 min agent-time (0 product / 0 proof / 1 other)",
+        "Plan/admin overhead: \u001b[31mtwo min other",
+        "",
+      ].join("\n"),
+      "M03-control-safe.md",
+    );
+    const adminWarning =
+      record.warnings.find((warning) =>
+        warning.startsWith("plan/admin overhead estimate not parseable"),
+      ) ?? "";
+
+    assert.doesNotMatch(adminWarning, /\u001b/u);
+    assert.match(adminWarning, /\\u001b\[31m/u);
   });
 
   it("ignores fenced metadata, headings, and checklist examples", () => {
@@ -682,6 +735,47 @@ describe("plans export: milestone parsing", () => {
       assert.doesNotMatch(markdownPreview.stdout, new RegExp(fakeToken, "u"));
       assert.match(jsonPreview.stdout, /\[REDACTED:token\]/u);
       assert.match(markdownPreview.stdout, /\[REDACTED:token\]/u);
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
+  /**
+   * Fixture purpose: a malformed forecast may echo pasted text, but previews must still redact a token before it reaches the user or a file.
+   * Process/filesystem side effects: spawns both preview formats and writes only one temporary source milestone.
+   */
+  it("redacts received values inside malformed-field warnings", () => {
+    const temporaryRoot = mkdtempSync(
+      join(tmpdir(), "goat-flow-plan-warning-"),
+    );
+    const planPath = join(temporaryRoot, "1.15.0");
+    const fakeToken = ["ghp", "w".repeat(36)].join("_");
+    const milestoneBody = completeMilestoneBody().replace(
+      "## Scope Discipline",
+      [
+        `**Forecast basis:** 10 agent work units at 0.5-2.5-10 min/unit; source: ${fakeToken}`,
+        "",
+        "## Scope Discipline",
+      ].join("\n"),
+    );
+    writePlanFixture(planPath, milestoneBody);
+
+    try {
+      const jsonPreview = runPlansExport(planPath, "--format", "json");
+      const markdownPreview = runPlansExport(planPath, "--format", "markdown");
+
+      assert.equal(jsonPreview.status, 0, jsonPreview.stderr);
+      assert.equal(markdownPreview.status, 0, markdownPreview.stderr);
+      assert.doesNotMatch(jsonPreview.stdout, new RegExp(fakeToken, "u"));
+      assert.doesNotMatch(markdownPreview.stdout, new RegExp(fakeToken, "u"));
+      assert.match(
+        jsonPreview.stdout,
+        /forecast basis not parseable.*\[REDACTED:token\]/u,
+      );
+      assert.match(
+        markdownPreview.stdout,
+        /forecast basis not parseable.*\[REDACTED:token\]/u,
+      );
     } finally {
       rmSync(temporaryRoot, { recursive: true, force: true });
     }
