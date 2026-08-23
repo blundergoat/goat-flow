@@ -42,7 +42,7 @@ last_reviewed: 2026-08-23
 **Status:** active | **Created:** 2026-05-26 | **Evidence:** ACTUAL_MEASURED
 **Decision changed:** Re-check each provider, event, and result channel instead of carrying agent-level support forward.
 **Trigger phase:** READ
-**Incident count:** 3 | **Latest occurrence:** 2026-08-10
+**Incident count:** 4 | **Latest occurrence:** 2026-08-23
 
 **Symptoms:** Hook support can drift independently by event and response channel. Antigravity's 2026-05-26 correction proved PreToolUse config, and its 2026-05-28 Gruff correction proved PostToolUse input through file matchers and a changed-file fallback. On 2026-08-10, those input paths were still cited as full Gruff support after provider evidence showed their output could not reach the active model.
 
@@ -53,6 +53,8 @@ last_reviewed: 2026-08-23
 - `src/cli/server/agent-hook-command.ts` (search: `spec.id === "gruff-code-quality"`) proves Antigravity input routing only.
 - `src/cli/server/hooks-registry.ts` (search: `cannot deliver Gruff feedback to the active model`) records the current delivery limit.
 - `test/unit/hook-registrar-surfaces.test.ts` (search: `keeps gruff-code-quality unregistered for Antigravity without result delivery`) proves the desired toggle does not create unusable registration.
+
+**Recurrence on 2026-08-23:** M13's first report-only compatibility matrix said Claude subagents could not spawn subagents. The current [Claude Code subagent reference](https://code.claude.com/docs/en/sub-agents) says they can delegate up to three layers by default, and the installed CLI was 2.1.240. Rechecking before the ADR draft removed that false blocker; separate direct-invocation, human-gate, authority, and receipt constraints still rejected the wrapper.
 
 **Prevention:** Check current primary docs and the local binary, then prove the exact event, payload, command, response, continuation, and model visibility separately. Treat config, matchers, and fallbacks as feasibility evidence. After a correction, grep every product, prose, template, and test consumer for the superseded claim.
 

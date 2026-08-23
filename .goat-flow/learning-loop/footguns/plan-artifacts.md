@@ -119,13 +119,15 @@ last_reviewed: 2026-08-23
 **Decision changed:** Reforecast every estimate line together, and when the local likely rate implies fewer minutes than there are work units, keep the planning-time basis and record the local figure in prose.
 **Trigger phase:** SCOPE
 **Caught at:** VERIFY
-**Incident count:** 3 | **Latest occurrence:** 2026-08-23
+**Incident count:** 4 | **Latest occurrence:** 2026-08-23
 
 **Symptoms:** `plans check --strict` printed `reforecast required: ... use 0.61-0.93-1.04 min/unit before implementation` (advisory, exit 0). Updating only `**Forecast basis:**` and `**Forecast range:**` to those rates - a handoff note said to update "the Forecast basis/range lines" - flipped the plan to exit 1: `forecast range likely (8 min) must equal the Effort estimate total (22 min)`. Measured 2026-08-19 on `.goat-flow/plans/1.16.0-golive` M04 (9 units) and M05 (8 units).
 
 **Recurrence 2026-08-23:** M10's first reforecast used a descriptive `Forecast basis` sentence that omitted the parser's canonical semicolon-delimited low-likely-high shape. `plans check --strict` exited 1 with `forecast basis is not parseable`. Reading `FORECAST_BASIS_PATTERN` and rewriting the forecast fields together restored exit 0 before implementation. Evidence anchor: `src/cli/plans-effort.ts` (search: `FORECAST_BASIS_PATTERN`).
 
 **Recurrence 2026-08-23 (M11 split reconciliation):** M11's pre-implementation reforecast changed the headline from 20 to 21 minutes and the product split from 14 to 15, but left the four product task estimates totaling 14. The first closeout strict check exited 1 with `product counted work (14 min) does not equal the split component (15 min)`. The correction assigned the missing minute to the fixed-evaluation task and recorded that this reconciled the pre-work forecast rather than using observed timing to rewrite it.
+
+**Recurrence 2026-08-23 (M13 split reconciliation):** M13's first reforecast changed the headline from 20 to 21 minutes and the product split from 14 to 15 while its four product tasks still totaled 14. The activation strict check exited 1 with the same counted-work error. The correction kept product and proof aligned with their checklist estimates and changed plan/admin overhead from 2 to 3 minutes, which made the headline, split, and likely forecast agree before implementation continued.
 
 **Why it happens:** `src/cli/plans-check-summary.ts` (search: `renderRequiredReforecasts`) advises the new rates, but `src/cli/plans-effort.ts` (search: `forecast basis derives`) requires the range to be derived from the basis, `src/cli/plans-check.ts` (search: `must equal the Effort estimate total`) requires the `**Effort estimate:**` headline to equal the range's likely, and that headline is the sum of the per-item `(est: n min category)` entries whose grammar is integer-only (`plans-effort.ts`, search: `TASK_ESTIMATE_PATTERN`). With a likely rate under 1 min/unit, round(units × rate) is below the unit count and N positive integer items cannot sum to fewer than N minutes, so the strict shape is unsatisfiable rather than merely tedious. `.claude/skills/goat-plan/references/milestone-examples.md` (search: `Reforecast all estimates`) already says "all"; the partial edit ignored it.
 
