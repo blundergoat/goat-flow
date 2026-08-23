@@ -194,12 +194,12 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
           `${examplesPath}: needs both worked BAD/GOOD pairs`,
         );
 
-        // These rules are checkable on purpose. The same run satisfied "concrete, jargon-free line" while averaging 33 words
-        // and naming milestones and ADRs, so adjectives were replaced by a word count, a banned-referent list, and a subject
-        // rule. An author trimming for the word cap deletes them first, and every other check here still passes without them.
+        // These rules are checkable on purpose. One external run satisfied adjective-only guidance while averaging 33 words and naming internal IDs.
+        // The checker now owns length and identifier enforcement; this delivery contract keeps its reference pointer and human-only subject rules.
         for (const derivationRule of [
           /not by shortening the Objective/u,
-          /70 to 120 characters, naming no milestone, ADR, version, flag, internal file, or command without its tool name/u,
+          /`goat-flow plans check --strict` enforces current-heading length and internal identifiers/u,
+          /Name commands with their tool/u,
           /names what they can now do, never what ships/u,
           /Neither restates the other/u,
           /spike that ships nothing says so/u,
@@ -344,6 +344,7 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
       );
     });
 
+    // Both installed convention copies must give plan authors the same boundary.
     for (const conventionsPath of [
       "workflow/skills/reference/skill-conventions.md",
       ".goat-flow/skill-docs/skill-conventions.md",
@@ -505,6 +506,7 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
   });
 
   it("routes planning narrative through writing style without styling plan mechanics", () => {
+    // Each installed preamble must route user-facing narrative without styling fixed plan controls.
     for (const referencePath of [
       "workflow/skills/reference/skill-preamble.md",
       ".goat-flow/skill-docs/skill-preamble.md",
@@ -520,11 +522,16 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
       );
       assert.match(
         engineeringStandards,
-        /fixed schema fields, exact paths, commands, approved requirements and acceptance\/proof\/verification\/exit criteria, task\/proof checklists, tables, catalogues, and deliberate control repetition stay exempt/u,
+        new RegExp(
+          "fixed schema fields, exact paths, commands, approved requirements and acceptance/proof/verification/exit criteria, " +
+            "task/proof checklists, tables, catalogues, and deliberate control repetition stay exempt",
+          "u",
+        ),
         referencePath,
       );
     }
 
+    // Both writing-style copies must expose the same plan-authoring scope gate.
     for (const playbookPath of [
       "workflow/skills/playbooks/writing-style.md",
       ".goat-flow/skill-docs/playbooks/writing-style.md",
@@ -537,7 +544,11 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
       );
       assert.match(
         scopeGate,
-        /fixed schema fields, task\/proof checklists, commands, approved requirements and acceptance\/proof\/verification\/exit criteria, tables, INDEX and catalogue formats\s*\|\s*No/u,
+        new RegExp(
+          "fixed schema fields, task/proof checklists, commands, approved requirements and acceptance/proof/verification/exit criteria, " +
+            "tables, INDEX and catalogue formats\\s*\\|\\s*No",
+          "u",
+        ),
         playbookPath,
       );
       assert.match(scopeGate, /Mixed planning artifacts/u, playbookPath);

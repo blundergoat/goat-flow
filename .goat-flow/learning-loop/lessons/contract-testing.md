@@ -1,6 +1,6 @@
 ---
 category: contract-testing
-last_reviewed: 2026-08-23
+last_reviewed: 2026-08-24
 ---
 
 **Scope:** Tests that pin a contract rather than behaviour - exact wording, path semantics, word budgets, and user-visible serialization. When the thing under test is a hook, dashboard surface, or fixture, use the bucket that owns it.
@@ -14,9 +14,9 @@ last_reviewed: 2026-08-23
 **Trigger phase:** ACT
 **Caught at:** VERIFY
 
-**Incident count:** 28
+**Incident count:** 29
 
-**Latest occurrence:** 2026-08-17
+**Latest occurrence:** 2026-08-24
 
 **What happened:** Repeated wording edits and learning captures crossed caps. Unless noted, the gate is `test/contract/skill-hardening-contracts.test.ts`:
 
@@ -36,6 +36,9 @@ last_reviewed: 2026-08-23
 - **2026-08-06 writing-style scope extension:** Adding a learning-loop Scope Gate row plus a Why paragraph pushed `writing-style.md` to 3,026 words; the fix trimmed the just-added paragraph, never pre-existing load-bearing text (search: `progressive reference packs stay within the 3000-word cap per file`). A same-day review-pass register edit then broke the pinned literal `Reports and reviews` because the pin grep ran before Stage A but not before the follow-up edit (search: `keeps writing-style edits truth-preserving and source-aware`); restoring the literal and attaching the addition as an unpinned clause returned both focused contracts to green.
 - **2026-08-09 v1.15.1 goat-plan:** Correcting the ISSUE write target raised the 2,100-word redesign surface to 2,103. Trimming three words from an unpinned fresh-plan sentence returned it to exactly 2,100 without changing the artifact rule. Evidence: `test/contract/skill-hardening-plan-2.test.ts` (search: `redesigned goat-plan canonical surface`) and `.goat-flow/logs/sessions/2026-08-09-goat-plan-tdd.md`.
 - **2026-08-17 M43 goat-review:** Resolved-only integrity guidance raised the skill to 2,560 words. Compressing only the new guidance restored the cap but removed three pinned semantics: diff-path disclosure, verdict grammar, and explicit gate-evidence classification. The word-budget contract, all goat-review shards, and the shared-surface shard had to pass together. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `functional skills stay within the 2500-word cap across all mirrors`), `test/contract/skill-hardening-review-1.test.ts` (search: `keeps area audits independent of diff-only metadata and verdicts`), and `test/contract/skill-hardening-shared-1.test.ts` (search: `classifies gate evidence without inventing changed-code causality`).
+- **2026-08-24 M22 goat-plan:** The first checker-pointer rewrite added three words to the near-full canonical surface. Measuring the combined reference
+  pack immediately led to a tighter sentence that removed the duplicated identifier list and freed seven words without weakening the contract.
+  Evidence anchor: `test/contract/skill-hardening-plan-2.test.ts` (search: `enforces current-heading length and internal identifiers`).
 
 **Root cause:** Treated capped prose as tiny.
 

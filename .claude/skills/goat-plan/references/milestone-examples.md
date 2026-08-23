@@ -87,7 +87,7 @@ Use this Standard shape for multi-milestone or cold-start work. Target at most 9
 
 Put each literal command in one Commands source; a literal command appears once per milestone. Proof, tasks, and exit criteria reference its purpose rather than repeating it. Add Mid-implementation proof only before switching modules or after a bounded edit batch. The Objective is one plain sentence; commit ids, finding ids, and file paths belong in Context and Scope. Write each done condition as the plain claim; the case list lives in the test or the Commands row.
 
-Write from the incident in Context, not by shortening the Objective - that sentence is for the implementer. One sentence each, 70 to 120 characters, naming no milestone, ADR, version, flag, internal file, or command without its tool name; a surface the reader types or sees is not internal. The problem sentence names who hits it. The benefit sentence names what they can now do, never what ships. Neither restates the other. A spike that ships nothing says so.
+Write from the incident in Context, not by shortening the Objective - that sentence is for the implementer. One sentence each. `goat-flow plans check --strict` enforces current-heading length and internal identifiers. Name commands with their tool; visible user surfaces are not internal. The problem sentence names who hits it. The benefit sentence names what they can now do, never what ships. Neither restates the other. A spike that ships nothing says so.
 
 - BAD: "Runtime proof executing target-controlled launchers needs a trusted-target choice."
 - GOOD: "Looking at a stranger's repo can't run their code on your machine."

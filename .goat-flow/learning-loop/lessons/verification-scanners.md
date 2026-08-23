@@ -1,6 +1,6 @@
 ---
 category: verification-scanners
-last_reviewed: 2026-08-23
+last_reviewed: 2026-08-24
 ---
 
 **Scope:** Proving a guard, scanner, or parser actually guards - block-and-allow pairs, false-positive probes, parser-shape fixtures per claimed file family, and self-test fanout. What a test must assert generally is [verification-testing.md](verification-testing.md); Gruff specifics are [verification-gruff.md](verification-gruff.md).
@@ -125,5 +125,10 @@ last_reviewed: 2026-08-23
 **Root cause:** I verified the path gate broadly but did not pair every newly claimed file family and naming convention with a syntax-shaped fixture. The gate said "Dockerfile" while the parser still only understood shell/env assignment syntax, and the key classifier said "credential-shaped keys" without proving common config casing.
 
 **Prevention:** When a scanner scope gate lists file families, add at least one block fixture for each family whose syntax differs from the default parser shape. For Dockerfiles, probe both `ARG KEY=value` / `ENV KEY=value`, `ARG KEY value` / `ENV KEY value`, and multi-assignment `ENV SAFE=x API_TOKEN=...`; for config key classifiers, probe snake_case, uppercase, and camelCase/PascalCase credential names plus excluded suffixes such as `tokenCount`, `secretName`, and `clientSecretId`. Evidence anchors: `workflow/hooks/post-turn-safety.sh` (search: `is_env_assignment_file`), `workflow/hooks/post-turn-safety.sh` (search: `scan_env_assignment`), and `test/integration/post-turn-safety-hook.test.ts` (search: `blocks Dockerfile ARG and ENV credential assignments`).
+
+**Recurrence 2026-08-24:** M22's first code-spanned path matcher treated `n/a` as an internal file path. The focused block fixtures passed;
+only the archived-plan allow case exposed the false positive. The matcher now requires a known file extension, and the unit fixture keeps `n/a` as a
+negative control. When adding a token family, pair its positive examples with ambiguous shorthand that shares its punctuation. Evidence anchor:
+`test/unit/plans-check-structure.test.ts` (search: `slash shorthand such as \`n/a\` stays clean`).
 
 ---

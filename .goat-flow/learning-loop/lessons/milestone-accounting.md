@@ -1,6 +1,6 @@
 ---
 category: milestone-accounting
-last_reviewed: 2026-08-23
+last_reviewed: 2026-08-24
 ---
 
 **Scope:** Milestone state and effort accounting - activation order, where human gates belong, what a task section may contain, and why estimates counted from work units beat estimates written as durations. Multi-agent council coordination is [coordination.md](coordination.md).
@@ -68,8 +68,8 @@ last_reviewed: 2026-08-23
 **Decision changed:** Start a timestamped timing receipt before milestone work; never reconstruct Actual from planned task estimates.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
-**Incident count:** 8
-**Latest occurrence:** 2026-08-23
+**Incident count:** 9
+**Latest occurrence:** 2026-08-24
 
 **What happened:** A completed goat-debug planning milestone recorded `~225 min` as Actual by summing reconstructed product/proof/other effort buckets. The user challenged it because the elapsed work felt closer to minutes than hours. No start/end timestamps existed, so neither figure was measurable; replacing one precise-looking number with another would preserve the same error.
 
@@ -84,6 +84,11 @@ last_reviewed: 2026-08-23
 **Recurrence 2026-08-17:** M40 was abandoned before timing began, but I wrote its Actual as `unavailable - timing was never started`. Strict plan validation rejected the prose-equivalent separator because Actual is machine-parsed state; changing it to the canonical `unavailable: timing was never started` form passed parsing. Evidence anchor: `test/unit/plans-effort.test.ts` (search: `unavailable: timing was never started`).
 
 **Recurrence 2026-08-23 (premature finalization):** M07 finalized its receipt immediately after the noise stop decision, before strict plan validation and the required learning-loop closeout. Strict validation then rejected an added proof row twice: first because a zero-minute estimate was not parseable, then because explanatory text followed the terminal estimate. The finalized 465-second receipt therefore excludes the correction and generated-index work. M07 now labels Actual incomplete instead of presenting the partial span as the whole milestone.
+
+**Recurrence 2026-08-24:** M22's proof span stayed open across an inactive gap and a normal stop initially counted 30,762 seconds. The last observed
+pre-stop receipt state was restored, then `plans time stop --discard-open` preserved the valid 933 seconds and marked the receipt incomplete. A timer
+must be stopped before yielding control; once waiting and work share a span, discard it instead of subtracting an inferred idle duration. Evidence
+anchor: `src/cli/plans-time.ts` (search: `receipt contains a discarded open span`).
 
 **Root cause:** Planned effort, active wall-clock time, aggregate multi-agent effort, command duration, and human waiting were treated as one quantity. Task estimates were available, so they were mistakenly reused as observations.
 
@@ -174,8 +179,8 @@ last_reviewed: 2026-08-23
 **Status:** active | **Created:** 2026-08-14
 **Decision changed:** Set exactly one active milestone status before starting its first timing segment; lifecycle state precedes measurement.
 **Trigger phase:** ACT
-**Incident count:** 3
-**Latest occurrence:** 2026-08-23
+**Incident count:** 4
+**Latest occurrence:** 2026-08-24
 
 **What happened:** While starting code-quality-upstream M04, I ran `plans time start` while its rendered `Status` was still `not-started`. The CLI refused with `Timing Start requires exactly one rendered Status field set to in-progress or testing-gate`; I then changed the status and reran the command successfully.
 
@@ -184,6 +189,10 @@ last_reviewed: 2026-08-23
 **Recurrence 2026-08-23 (inactive transition):** After M08's corpus gate invalidated its assumption, I changed `Status` from `in-progress` to `blocked` while its product span remained open. Strict validation rejected the inactive milestone with an active Timing Receipt. Stopping the span produced a paused 466-second receipt and restored lifecycle consistency.
 
 **Recurrence 2026-08-23 (M11 activation order):** I reforecast M11, then tried to open its `other` segment while `Status` was still `not-started`. The guard opened no receipt. I changed the milestone to `in-progress` and the prospective retry opened M11-S01 successfully; no elapsed time was backfilled.
+
+**Recurrence 2026-08-24 (M22 activation order):** I tried to start M22's first segment while its status was still `not-started`. The guard wrote no
+receipt; changing the status to `in-progress` before retrying opened the segment prospectively. The activation order remains status first, timer
+second, even when every plan task is already approved.
 
 **Root cause:** I treated receipt creation as the transition that made a milestone active, then treated an inactive status as though it also stopped the clock. The CLI models lifecycle and timing separately: active state is required before a start, and an open span must end before an inactive state can validate.
 

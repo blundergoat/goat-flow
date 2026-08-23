@@ -28,6 +28,7 @@ import {
   parseTimingReceiptMarkdown,
   type PlanTimingReceipt,
 } from "./plans-time.js";
+import { PLAN_STRUCTURE_SECTIONS } from "./plans-check-structure.js";
 import {
   redactPlanExportRecord,
   renderPlanExportMarkdown,
@@ -46,6 +47,8 @@ interface PlanExportTask extends TaskEstimateFields {
 
 /** Portable milestone fields shared by JSON and Markdown renderers. */
 export interface PlanExportRecord {
+  /** Parsed H2 sections for local validation; symbol-keyed content never enters JSON or Markdown exports. */
+  [PLAN_STRUCTURE_SECTIONS]?: MarkdownSection[];
   sourceFile: string;
   title: string;
   status: string;
@@ -510,6 +513,7 @@ export function parseMilestoneMarkdown(
   addMissingFieldWarning(warnings, stopMarkdown, "stop/rescope");
 
   const record: PlanExportRecord = {
+    [PLAN_STRUCTURE_SECTIONS]: sections,
     sourceFile,
     title,
     status: firstPopulated(status, "unknown"),

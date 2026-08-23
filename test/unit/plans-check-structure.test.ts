@@ -17,7 +17,229 @@ import {
   canonicalMilestoneBody,
 } from "./plans-check.helpers.js";
 
+type PlainLanguageHeadingStyle = "current" | "legacy" | null;
+
+const VALID_PROBLEM_STATEMENT =
+  "Plan authors can leave reader-facing sections vague because no checker rejects them.";
+const VALID_BENEFIT_STATEMENT =
+  "You can fix unclear plan summaries before another person has to review them.";
+
+/**
+ * Add the reader-facing section pair an author sees in a milestone.
+ * Use to vary current, legacy, or omitted headings without rebuilding the plan fixture.
+ *
+ * @param milestoneBody - valid milestone Markdown; empty input remains empty apart from inserted sections
+ * @param headingStyle - current or legacy heading pair; null models an older plan with neither section
+ * @param problemStatement - problem text to validate; empty text models a visible section with no useful explanation
+ * @param benefitStatement - benefit text to validate; empty text models a visible section with no useful explanation
+ * @returns milestone Markdown with the chosen pair before Scope, or the unchanged body when headings are omitted
+ */
+function withPlainLanguageSections(
+  milestoneBody: string,
+  headingStyle: PlainLanguageHeadingStyle,
+  problemStatement = VALID_PROBLEM_STATEMENT,
+  benefitStatement = VALID_BENEFIT_STATEMENT,
+): string {
+  // A legacy milestone may omit both reader-facing sections and should receive guidance without becoming invalid.
+  if (headingStyle === null) return milestoneBody;
+  const problemHeading =
+    headingStyle === "current" ? "What problem are we solving" : "The problem";
+  const benefitHeading =
+    headingStyle === "current" ? "Who benefits and how" : "What you get";
+  return milestoneBody.replace(
+    "## Scope",
+    [
+      `## ${problemHeading}`,
+      "",
+      problemStatement,
+      "",
+      `## ${benefitHeading}`,
+      "",
+      benefitStatement,
+      "",
+      "## Scope",
+    ].join("\n"),
+  );
+}
+
+const BANNED_IDENTIFIER_CASES = [
+  {
+    name: "milestone ID",
+    token: "M22",
+    statement:
+      "Readers cannot understand M22 without opening internal planning context first.",
+  },
+  {
+    name: "ADR number",
+    token: "ADR-056",
+    statement:
+      "Readers must decode ADR-056 before they can understand what remains broken here.",
+  },
+  {
+    name: "version",
+    token: "v1.17.0",
+    statement:
+      "People cannot tell why v1.17.0 matters without knowing the project release history.",
+  },
+  {
+    name: "flag",
+    token: "--strict",
+    statement:
+      "Plan reviewers must understand --strict before they can judge what remains broken.",
+  },
+  {
+    name: "file path",
+    token: "src/cli/plans-check.ts",
+    statement:
+      "Contributors must open `src/cli/plans-check.ts` before this problem statement makes sense.",
+  },
+] as const;
+
 describe("plans check: structure, identity, and dependencies", () => {
+  /**
+   * Writes a temporary plan and runs both CLI modes; cleanup removes every fixture file.
+   * Invariant: one deterministic length finding moves from warning to error without duplication.
+   */
+  it("stages current plain-language length findings by mode", () => {
+    const temporaryRoot = mkdtempSync(
+      join(tmpdir(), "goat-flow-plan-current-language-"),
+    );
+    const planPath = writeCheckFixture(
+      temporaryRoot,
+      withPlainLanguageSections(
+        canonicalMilestoneBody(),
+        "current",
+        "x".repeat(121),
+      ),
+    );
+
+    try {
+      const defaultResult = runPlansCheck(planPath);
+      const strictResult = runPlansCheck(planPath, "--strict");
+      const finding =
+        'current plain-language section "What problem are we solving" has an invalid length; expected "70-120 characters"; received "121 characters"';
+
+      assert.equal(defaultResult.status, 0, defaultResult.stdout);
+      assert.match(
+        defaultResult.stdout,
+        new RegExp(`warning: M01-fixture\\.md: ${finding}`, "u"),
+      );
+      assert.equal(strictResult.status, 1, strictResult.stdout);
+      assert.match(
+        strictResult.stdout,
+        new RegExp(`error: M01-fixture\\.md: ${finding}`, "u"),
+      );
+      assert.doesNotMatch(
+        strictResult.stdout,
+        new RegExp(`warning: M01-fixture\\.md: ${finding}`, "u"),
+      );
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
+  /**
+   * Writes one temporary milestone per identifier class and runs both CLI modes.
+   * Invariant: each named case echoes its token and becomes blocking only in strict mode.
+   */
+  for (const [caseIndex, identifierCase] of BANNED_IDENTIFIER_CASES.entries()) {
+    it(`reports a banned ${identifierCase.name} from current sections`, () => {
+      const temporaryRoot = mkdtempSync(
+        join(tmpdir(), `goat-flow-plan-current-identifier-${caseIndex}-`),
+      );
+      const planPath = writeCheckFixture(
+        temporaryRoot,
+        withPlainLanguageSections(
+          canonicalMilestoneBody(),
+          "current",
+          identifierCase.statement,
+        ),
+      );
+
+      try {
+        const defaultResult = runPlansCheck(planPath);
+        const strictResult = runPlansCheck(planPath, "--strict");
+        const finding =
+          `names an internal identifier; expected "no milestone ID, ADR number, version, flag, or internal file path"; ` +
+          `received "${identifierCase.token}"`;
+
+        assert.equal(defaultResult.status, 0, defaultResult.stdout);
+        assert.match(
+          defaultResult.stdout,
+          new RegExp(`warning: M01-fixture\\.md: .+${finding}`, "u"),
+        );
+        assert.equal(strictResult.status, 1, strictResult.stdout);
+        assert.match(
+          strictResult.stdout,
+          new RegExp(`error: M01-fixture\\.md: .+${finding}`, "u"),
+        );
+      } finally {
+        rmSync(temporaryRoot, { recursive: true, force: true });
+      }
+    });
+  }
+
+  /**
+   * Writes two temporary plans and runs four CLI checks; cleanup removes both fixture trees.
+   * Legacy and missing findings stay advisory, while slash shorthand such as `n/a` stays clean.
+   */
+  it("keeps legacy and omitted plain-language sections advisory in strict mode", () => {
+    const legacyRoot = mkdtempSync(
+      join(tmpdir(), "goat-flow-plan-legacy-language-"),
+    );
+    const missingRoot = mkdtempSync(
+      join(tmpdir(), "goat-flow-plan-missing-language-"),
+    );
+    try {
+      const legacyPlanPath = writeCheckFixture(
+        legacyRoot,
+        withPlainLanguageSections(
+          canonicalMilestoneBody(),
+          "legacy",
+          "M22",
+          "Reviewers can mark a field as `n/a` when no reader-facing benefit applies to an archived plan.",
+        ),
+      );
+      const missingPlanPath = writeCheckFixture(
+        missingRoot,
+        withPlainLanguageSections(canonicalMilestoneBody(), null),
+      );
+      const legacyDefaultResult = runPlansCheck(legacyPlanPath);
+      const legacyStrictResult = runPlansCheck(legacyPlanPath, "--strict");
+      const missingDefaultResult = runPlansCheck(missingPlanPath);
+      const missingStrictResult = runPlansCheck(missingPlanPath, "--strict");
+
+      assert.equal(legacyDefaultResult.status, 0, legacyDefaultResult.stdout);
+      assert.equal(legacyStrictResult.status, 0, legacyStrictResult.stdout);
+      assert.match(
+        legacyStrictResult.stdout,
+        /warning: M01-fixture\.md: legacy plain-language section "The problem" has an invalid length/u,
+      );
+      assert.match(
+        legacyStrictResult.stdout,
+        /warning: M01-fixture\.md: legacy plain-language section "The problem" names an internal identifier.+received "M22"/u,
+      );
+      assert.doesNotMatch(legacyStrictResult.stdout, /received "n\/a"/u);
+      assert.equal(missingDefaultResult.status, 0, missingDefaultResult.stdout);
+      assert.equal(missingStrictResult.status, 0, missingStrictResult.stdout);
+      assert.match(
+        missingStrictResult.stdout,
+        /warning: M01-fixture\.md: legacy-compatible plain-language problem section is missing/u,
+      );
+      assert.match(
+        missingStrictResult.stdout,
+        /warning: M01-fixture\.md: legacy-compatible plain-language benefit section is missing/u,
+      );
+    } finally {
+      rmSync(legacyRoot, { recursive: true, force: true });
+      rmSync(missingRoot, { recursive: true, force: true });
+    }
+  });
+
+  /**
+   * Writes one incomplete temporary plan and runs strict CLI validation; cleanup removes the fixture.
+   * Invariant: every missing deterministic core field is reported with its source label in one run.
+   */
   it("strict mode rejects an absent deterministic core", () => {
     const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-core-"));
     const planPath = writeCheckFixture(
@@ -36,16 +258,12 @@ describe("plans check: structure, identity, and dependencies", () => {
 
       assert.equal(result.status, 1);
       assertSourceLabelledErrors(result.stdout);
-      for (const field of [
-        "status",
-        "scope",
-        "tasks",
-        "proof",
-        "exit",
-        "stop",
-      ]) {
-        assert.match(result.stdout, new RegExp(`missing ${field}`, "u"));
-      }
+      assert.match(result.stdout, /missing status/u);
+      assert.match(result.stdout, /missing scope/u);
+      assert.match(result.stdout, /missing tasks/u);
+      assert.match(result.stdout, /missing proof/u);
+      assert.match(result.stdout, /missing exit/u);
+      assert.match(result.stdout, /missing stop/u);
     } finally {
       rmSync(temporaryRoot, { recursive: true, force: true });
     }

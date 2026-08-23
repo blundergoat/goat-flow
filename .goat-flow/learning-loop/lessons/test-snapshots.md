@@ -1,9 +1,30 @@
 ---
 category: test-snapshots
-last_reviewed: 2026-08-23
+last_reviewed: 2026-08-24
 ---
 
 **Scope:** Keeping asserted values true - snapshot files and tables, metadata contracts beyond the typed shape, which field a check should assert, and the suite/runner selection that decides whether a fixture runs at all. Building the fixtures themselves is [test-fixtures.md](test-fixtures.md).
+
+## Lesson: Advisory output must not erase existing empty-result guidance
+
+**Status:** active | **Created:** 2026-08-24
+**Decision changed:** Derive an empty-result message from the underlying result lanes before appending independent diagnostics.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+**Incident count:** 1
+
+**What happened:** M22 appended plain-language warnings to `plans check` before testing whether a legacy plan had no effort report. The warnings made
+the shared output array nonempty, so the established `no effort estimates found` line disappeared. Focused M22 tests passed, while the fast suite
+failed both existing estimate-less-plan contracts.
+
+**Root cause:** The final rendered output array was reused as the semantic test for whether effort data existed. An unrelated advisory changed that
+array without changing the plan's effort state.
+
+**Prevention:** Evaluate fallback messages from their owning result lanes, or emit them before unrelated diagnostics join the report. Pair every new
+advisory lane with existing empty-input and legacy-output contracts. Evidence anchors: `src/cli/plans-check.ts` (search: `No effort rows and no errors`),
+`test/unit/plans-check-forecast.test.ts` (search: `default mode preserves legacy plans`), and `test/unit/plans-check.test.ts` (search: `single info line`).
+
+---
 
 ## Lesson: CI must use package test scripts after suite splits
 

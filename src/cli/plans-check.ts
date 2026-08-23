@@ -33,7 +33,10 @@ import {
   renderMilestoneLine,
   renderPlanSummary,
 } from "./plans-check-summary.js";
-import { collectPlanStructureErrors } from "./plans-check-structure.js";
+import {
+  collectPlanStructureAdvisories,
+  collectPlanStructureErrors,
+} from "./plans-check-structure.js";
 
 /** Category iteration order for split arithmetic and rendering. */
 const CATEGORIES = ["product", "proof", "other"] as const;
@@ -731,6 +734,10 @@ function handlePlansCheckCommand(options: ParsedCLI): void {
   const errors = records.flatMap((record) =>
     collectMilestoneErrors(record, options.plansStrict),
   );
+  const structureAdvisories = collectPlanStructureAdvisories(
+    records,
+    options.plansStrict,
+  );
   // Strict mode also checks ordering and dependencies across the whole selected plan.
   if (options.plansStrict) {
     errors.push(...collectPlanStructureErrors(records));
@@ -748,10 +755,17 @@ function handlePlansCheckCommand(options: ParsedCLI): void {
     reportLines.push(...renderCalibrationSummary(records));
   }
 
-  // Nothing estimated and nothing wrong: tell the user the plan predates the notation.
+  // No effort rows and no errors means the user selected a legacy plan, even when prose advice follows.
   if (reportLines.length === 0 && errors.length === 0) {
     reportLines.push(
       "no effort estimates found - this plan predates the estimation notation (informational)",
+    );
+  }
+
+  // Non-blocking findings stay visible so authors can clean old or default-mode prose without breaking automation.
+  if (structureAdvisories.length > 0) {
+    reportLines.push(
+      ...structureAdvisories.map((advisory) => `warning: ${advisory}`),
     );
   }
 
