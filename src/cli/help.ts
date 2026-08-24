@@ -196,11 +196,14 @@ const COMMAND_HELP_CATALOG = {
       ["enable", "Enable one hook and synchronize agent configs."],
       ["disable", "Disable one hook and synchronize agent configs."],
       ["sync", "Reapply config.yaml hook state to agent configs."],
-      ["verify", "Run one bounded configured-command scenario."],
+      ["verify", "Run bounded configured-command scenarios."],
     ],
     flags: [
       ["--agent <id>", "Select the agent for hooks verify."],
-      ["--scenario <name>", "Choose deny-hook, post-turn-hook, or gruff-hook."],
+      [
+        "--scenario <name>",
+        "Choose deny-hook, post-turn-hook, gruff-hook, or all.",
+      ],
       ["--trusted-target", "Allow the selected configured hook to run."],
       ["--format <type>", "Choose text or json output."],
     ],
@@ -208,6 +211,7 @@ const COMMAND_HELP_CATALOG = {
       "goat-flow hooks list",
       "goat-flow hooks enable gruff-code-quality",
       "goat-flow hooks verify . --agent codex --scenario deny-hook --trusted-target",
+      "goat-flow hooks verify . --agent codex --scenario all --trusted-target",
     ],
   },
   menu: {

@@ -240,6 +240,10 @@
                 }
               ]
             }
+          },
+          "registrationPrerequisite": {
+            "reason": "A non-Git workspace requires explicit post-turn scan roots.",
+            "remediation": "Configure valid scan roots or disable this hook before registering it."
           }
         }
       }
@@ -392,6 +396,10 @@
                 }
               ]
             }
+          },
+          "registrationPrerequisite": {
+            "reason": "A non-Git workspace requires explicit post-turn scan roots.",
+            "remediation": "Configure valid scan roots or disable this hook before registering it."
           }
         }
       }

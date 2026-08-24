@@ -1781,11 +1781,31 @@ function postTurnRootContractAllowsRegistration() {
   );
 }
 
+/** Hooks already explained once, so a repeated registration pass cannot repeat the notice. */
+const explainedBlockedHookIds = new Set();
+
+/**
+ * Tell the user why an enabled hook was left unregistered, using the package contract's wording.
+ * Losing a safety hook during an upgrade is invisible otherwise, so this prints once per hook.
+ */
+function explainBlockedRegistration(hookId, hookContract) {
+  if (explainedBlockedHookIds.has(hookId)) return;
+  explainedBlockedHookIds.add(hookId);
+  const prerequisite = hookContract.registrationPrerequisite;
+  // A contract without prerequisite prose has nothing truthful to add beyond the skipped registration.
+  if (!isObject(prerequisite)) return;
+  // stdout carries the migrated/unchanged protocol word, so user-facing prose goes to stderr.
+  console.error(`  ! ${hookId} not registered: ${prerequisite.reason}`);
+  console.error(`    fix: ${prerequisite.remediation}`);
+}
+
 /** Combine the user's toggle with any hook-specific registration prerequisite. */
 function shouldRegisterManagedHook(hookId, hookContract) {
   if (!configuredHookEnabled(hookId, hookContract.defaultEnabled)) return false;
   if (hookId !== "post-turn-safety") return true;
-  return postTurnRootContractAllowsRegistration();
+  if (postTurnRootContractAllowsRegistration()) return true;
+  explainBlockedRegistration(hookId, hookContract);
+  return false;
 }
 
 /** Validate the generated package contract before it can influence a user's config. */

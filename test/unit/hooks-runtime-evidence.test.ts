@@ -22,8 +22,11 @@ import { HOOK_VERIFICATION_CONTRACTS } from "../../src/cli/hook-verification-con
 import type { CreateEvidenceEnvelopeInput } from "../../src/cli/evidence/envelope.js";
 import {
   executeManagedHookProbe,
+  BATCH_REPORT_SCHEMA,
+  renderHookRuntimeBatchReportJson,
   renderHookRuntimeReportJson,
   renderHookRuntimeReportText,
+  summarizeHookRuntimeBatch,
   verifyManagedDenyHook,
   type HookProbeExecution,
   type HookProbeScenario,
@@ -235,6 +238,8 @@ describe("hooks runtime evidence", () => {
   });
 
   // The batch selection expands to exactly the shipped groups, so no proof group is invented or dropped.
+  // Invariant: BATCH_HOOK_SCENARIOS and HOOK_VERIFICATION_CONTRACTS always describe the same set of groups,
+  // so a group added to one and not the other fails here instead of silently never running in a batch.
   it("expands the all selection to the three fixed scenario groups", () => {
     assert.deepEqual(BATCH_HOOK_SCENARIOS, [
       "deny-hook",
@@ -279,6 +284,87 @@ describe("hooks runtime evidence", () => {
         ]),
       /--scenario is only valid for the hooks verify command/iu,
     );
+  });
+
+  /**
+   * Build one completed group report with a chosen verdict, without running any hook.
+   * Use to exercise batch totalling; the aggregate must never reclassify a contained report.
+   *
+   * @param scenarioGroup - group the report belongs to, echoed in the batch's group list
+   * @param status - verdict the group reached; "fail" must keep the whole batch failing
+   * @returns a report shaped exactly like a real one, with a single counted scenario
+   */
+  function groupReport(
+    scenarioGroup: "deny-hook" | "post-turn-hook" | "gruff-hook",
+    status: "pass" | "fail",
+  ) {
+    return {
+      schema: "goat-flow.hook-runtime-report.v1",
+      status,
+      command: "hooks.verify",
+      projectPath: "/tmp/batch-fixture",
+      agent: "claude",
+      hookId: `${scenarioGroup}-hook-id`,
+      scenarioGroup,
+      evidenceLimit: "managed-hook-classifier",
+      summary: {
+        pass: status === "pass" ? 1 : 0,
+        fail: status === "pass" ? 0 : 1,
+        unsupported: 0,
+        notConfigured: 0,
+        error: 0,
+      },
+      scenarios: [],
+    } as Parameters<typeof summarizeHookRuntimeBatch>[2][number];
+  }
+
+  // The batch is a new document; single-scenario consumers must keep reading the untouched v1 reports.
+  it("wraps unchanged group reports in one versioned batch document", () => {
+    assert.equal(BATCH_REPORT_SCHEMA, "goat-flow.hook-runtime-batch.v1");
+
+    const batch = summarizeHookRuntimeBatch("/tmp/batch-fixture", "claude", [
+      groupReport("deny-hook", "pass"),
+      groupReport("post-turn-hook", "fail"),
+      groupReport("gruff-hook", "pass"),
+    ]);
+
+    assert.equal(batch.schema, BATCH_REPORT_SCHEMA);
+    // A failed group must not remove the groups either side of it from the report.
+    assert.equal(batch.status, "fail");
+    assert.deepEqual(batch.scenarioGroups, [
+      "deny-hook",
+      "post-turn-hook",
+      "gruff-hook",
+    ]);
+    assert.deepEqual(batch.summary, {
+      pass: 2,
+      fail: 1,
+      unsupported: 0,
+      notConfigured: 0,
+      error: 0,
+    });
+    // Comparing every contained schema at once names all drifting reports, not just the first.
+    assert.deepEqual(
+      batch.reports.map((report) => report.schema),
+      Array(3).fill("goat-flow.hook-runtime-report.v1"),
+    );
+    assert.equal(
+      JSON.parse(renderHookRuntimeBatchReportJson(batch)).schema,
+      "goat-flow.hook-runtime-batch.v1",
+    );
+  });
+
+  // An all-passing batch is the only shape that may report success to CI.
+  it("passes a batch only when every group passed", () => {
+    const passing = summarizeHookRuntimeBatch("/tmp/batch-fixture", "claude", [
+      groupReport("deny-hook", "pass"),
+      groupReport("post-turn-hook", "pass"),
+    ]);
+    assert.equal(passing.status, "pass");
+
+    // An empty run has proven nothing, so it must not read as success.
+    const empty = summarizeHookRuntimeBatch("/tmp/batch-fixture", "claude", []);
+    assert.equal(empty.status, "fail");
   });
 
   // Unknown scenario names must fail before a user believes an unimplemented proof ran.

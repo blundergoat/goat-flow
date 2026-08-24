@@ -218,6 +218,7 @@ have the installed deny hook configured in a trusted checkout.
 
 ```bash
 goat-flow hooks verify . --agent <id> --scenario deny-hook --trusted-target
+goat-flow hooks verify . --agent <id> --scenario all --trusted-target
 ```
 
 The command passes four fixed inert classifier operands to the managed script as
