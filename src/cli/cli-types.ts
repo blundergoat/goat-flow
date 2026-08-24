@@ -25,6 +25,7 @@ export type Command =
   | "hooks"
   | "menu"
   | "stats"
+  | "recall"
   | "diagnostics"
   | "index"
   | "redact"
@@ -120,6 +121,7 @@ export const COMMANDS: Command[] = [
   "hooks",
   "menu",
   "stats",
+  "recall",
   "diagnostics",
   "index",
   "redact",
@@ -187,6 +189,8 @@ export interface ParsedCLI extends CLIOptions {
   plansTimeCategory: PlansTimeCategory | null;
   plansTimeFinalize: boolean;
   plansTimeDiscardOpen: boolean;
+  /** Project-relative file or directory operands used by read-only learning-loop recall. */
+  recallPaths: readonly string[];
   diagnosticsSubcommand: DiagnosticsSubcommand | null;
   includeAll: boolean;
 }

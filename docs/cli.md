@@ -184,6 +184,19 @@ npx @blundergoat/goat-flow@latest stats --check               # CI gate for buck
 npx @blundergoat/goat-flow@latest stats --format json         # Machine-readable report
 ```
 
+### `goat-flow recall <path> [path...] [--format text|json]`
+
+List active learning-loop entries whose `(search: ...)` evidence anchors cite the files or directories you name. File operands match exact normalized project-relative paths, including equivalent `./` forms. Directory operands match cited files beneath that directory.
+
+Recall prints each matching entry's source path, heading, status, matching citations, and `Decision changed` guidance when present. It never inlines entry bodies or writes output files. Results are ordered by source path and heading, capped at 25 entries, and report the number of additional matches instead of truncating silently.
+
+```bash
+npx @blundergoat/goat-flow@latest recall src/cli/server/terminal.ts
+npx @blundergoat/goat-flow@latest recall src/cli src/dashboard --format json
+```
+
+Use recall after the required INDEX-first Step 0 read when concrete files are already known. It supplements generated learning-loop indexes; it does not replace INDEX retrieval or relevance searches for symptoms and tools.
+
 ### `goat-flow diagnostics context [path] [--agent <id>] [--format text|json|markdown]`
 
 Measure static context pressure from local goat-flow files without runner telemetry, network calls, provider credentials, prompt bodies, or session logs. The report covers root agent instructions, installed skill bodies, manifest-owned skill references, shared references/playbooks, and learning-loop buckets already extracted by the shared facts pipeline.

@@ -41,6 +41,7 @@ import {
   parseHooksPositionals,
   parsePlansPositionals,
   parseQualityModeArg,
+  parseRecallPositionals,
   resolveOutputPath,
 } from "./cli-parser-positionals.js";
 import { buildReviewCLIFields } from "./review-command-parser.js";
@@ -165,6 +166,7 @@ const INFORMATIONAL_POSITIONALS: Partial<Record<Command, string[]>> = {
   events: ["tail"],
   hooks: ["list"],
   plans: ["export", "."],
+  recall: ["."],
   review: ["validate"],
 };
 /** Choose real positionals unless the CLI will stop after rendering information. */
@@ -212,6 +214,17 @@ function validateCommonFlags(command: Command, values: ParsedArgValues): void {
     "--no-audit-details",
     parsedFlag(values, "no-audit-details"),
   );
+  if (command === "recall") {
+    if (parsedString(values, "output") !== undefined) {
+      throw new CLIError(
+        "recall is read-only and does not support --output.",
+        2,
+      );
+    }
+    if (parsedString(values, "format") === "markdown") {
+      throw new CLIError("recall supports only text or json output.", 2);
+    }
+  }
 }
 
 /**
@@ -650,6 +663,26 @@ function selectCommandProjectPath(
   return qualityProjectPath;
 }
 
+/** Route top-level quality/review/recall operands without adding command branches to the main parser. */
+function parsePrimaryPositionals(
+  command: Command,
+  commandPositionals: string[],
+  draftFlag: string | null,
+): {
+  qualityPositionals: ReturnType<typeof parseCommandPositionals>;
+  recallPaths: readonly string[];
+} {
+  const isRecall = command === "recall";
+  return {
+    qualityPositionals: parseCommandPositionals(
+      command,
+      command === "review" || isRecall ? [] : commandPositionals,
+      draftFlag,
+    ),
+    recallPaths: isRecall ? parseRecallPositionals(commandPositionals) : [],
+  };
+}
+
 /**
  * Parse raw CLI argv into structured command options.
  * Throws CLIError when a command, flag, positional, or value combination is invalid.
@@ -712,9 +745,9 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
     positionals,
     parsedValues,
   );
-  const qualityPositionals = parseCommandPositionals(
+  const { qualityPositionals, recallPaths } = parsePrimaryPositionals(
     command,
-    command === "review" ? [] : commandPositionals,
+    commandPositionals,
     parsedString(parsedValues, "draft") ?? null,
   );
   const eventsPositionals =
@@ -833,6 +866,7 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
     ),
     plansTimeFinalize: parsedFlag(parsedValues, "finalize"),
     plansTimeDiscardOpen: parsedFlag(parsedValues, "discard-open"),
+    recallPaths,
     diagnosticsSubcommand: diagnosticsPositionals.diagnosticsSubcommand,
     includeAll: parsedFlag(parsedValues, "all"),
     isDevMode: parsedFlag(parsedValues, "dev"),

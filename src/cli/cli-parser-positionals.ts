@@ -494,3 +494,22 @@ export function parseCommandPositionals(
     candidacyInput: null,
   };
 }
+
+/**
+ * Preserve every file/directory operand supplied to the recall command.
+ * Error behavior: throws CLIError with exit code 2 when no recall subject was named.
+ *
+ * @param positionals - project-relative files or directories typed after `recall`
+ * @returns the operands in caller order; path safety and canonicalization happen against the selected filesystem
+ */
+export function parseRecallPositionals(
+  positionals: string[],
+): readonly string[] {
+  if (positionals.length === 0) {
+    throw new CLIError(
+      "recall requires at least one file or directory path.",
+      2,
+    );
+  }
+  return positionals;
+}

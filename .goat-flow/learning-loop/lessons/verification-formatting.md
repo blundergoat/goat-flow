@@ -1,6 +1,6 @@
 ---
 category: verification-formatting
-last_reviewed: 2026-08-23
+last_reviewed: 2026-08-24
 ---
 
 **Scope:** Formatter, lint, and Knip debt that only surfaces at repo-wide scope - style flags, copied or untracked files that inherit debt, and touched-test formatting before a verification claim. Adding or tuning a preflight gate is [verification-preflight.md](verification-preflight.md).
@@ -89,6 +89,8 @@ last_reviewed: 2026-08-23
 
 **Recurrence 2026-08-23:** M09's recurrence-normalisation integration tests passed before the exact-path Prettier check rejected `test/integration/stats-command.test.ts`. Formatting that file made the same check pass, and the focused tests remained green. M10 repeated the ordering error: all 69 focused tests and typecheck completed before exact-path Prettier rejected `src/cli/stats/render.ts`. Formatting the renderer cleared the same check.
 
+**Recurrence 2026-08-24:** M26's recall unit/help tests and typecheck passed before the exact-path Prettier check rejected four touched files. Formatting only those files made the same command print `All matched files use Prettier code style!`, after which focused proof and the fast suite remained green. Evidence anchors: `src/cli/learning-loop-recall.ts` (search: `collectLearningLoopRecall`) and `test/unit/learning-loop-recall.test.ts` (search: `recall CLI parsing`).
+
 Evidence anchors:
 
 - `src/cli/audit/sarif.ts` (search: `buildAuditSarifLog`); `src/cli/prompt/compose-setup.ts` (search: `contentAuditCommand`).
@@ -110,7 +112,7 @@ Evidence anchors:
 
 **Prevention:** Format touched TypeScript before focused proof and retain Prettier in final verification. For goat-clarity, freeze the repository-owned check and write commands before mutation; a receipt without literal formatter proof remains incomplete.
 
-**Decision changed:** Run the repository formatter on touched TypeScript before treating a focused GREEN run as milestone verification. | **Trigger phase:** ACT | **Incident count:** 19 | **Latest occurrence:** 2026-08-23
+**Decision changed:** Run the repository formatter on touched TypeScript before treating a focused GREEN run as milestone verification. | **Trigger phase:** ACT | **Incident count:** 20 | **Latest occurrence:** 2026-08-24
 **Caught at:** VERIFY
 
 ---
@@ -162,7 +164,7 @@ Evidence anchors:
 
 **Status:** active | **Created:** 2026-06-07
 
-**Decision changed:** Run typecheck, ESLint, Knip, and formatting before preflight after TypeScript surface changes. | **Trigger phase:** VERIFY | **Incident count:** 15 | **Latest occurrence:** 2026-08-17
+**Decision changed:** Run typecheck, ESLint, Knip, and formatting before preflight after TypeScript surface changes. | **Trigger phase:** VERIFY | **Incident count:** 16 | **Latest occurrence:** 2026-08-24
 
 **What happened:** Narrower checks repeatedly cleared before later static gates. On 2026-08-10, typecheck rejected dynamic membership against a literal-tuple union and ESLint found proof-reader and registrar complexity 13/11. Earlier recurrences included formatting drift, an undiscovered worker, and impossible fallback logic.
 
@@ -175,6 +177,8 @@ Evidence anchors:
 **Recurrence 2026-08-16 (registrar helper extraction):** Moving the provider-case matrix and recursive row counter into the existing helper removed the Gruff file-length error, but the changed multiline import in the original test failed the focused Prettier gate. Formatting the touched test before typecheck and Knip kept the failure local. Evidence anchors: `test/unit/hook-registrar.helpers.ts` (search: `SUPPORTED_PROVIDER_HOOK_CASES`) and `test/unit/hook-registrar.test.ts` (search: `countOwnedCommandRows`).
 
 **Recurrence 2026-08-17 (settings-rule collector):** The focused audit suites and typecheck passed, but full preflight found complexity 12 in the new settings-rule collector. Extracting its single-entry classification made the file-level ESLint gate pass without changing the collector contract. Evidence anchors: `src/cli/audit/harness/check-constraints.ts` (search: `collectStaleSettingsRules`) and (search: `staleRuleDetail`).
+
+**Recurrence 2026-08-24 (anchor-driven recall):** Focused recall tests and typecheck passed, but preflight found complexity 12 in the top-level CLI parser plus two internal recall declarations exported unnecessarily. Moving recall-aware positional routing behind `parsePrimaryPositionals` and narrowing those declarations to module scope cleared ESLint and the repository-configured Knip gate without changing recall output. Evidence anchors: `src/cli/cli-parser.ts` (search: `parsePrimaryPositionals`) and `src/cli/learning-loop-recall.ts` (search: `LEARNING_LOOP_RECALL_LIMIT`).
 
 **Release recurrence (2026-08-09):** Hook notes gained a dated release heading before its manifest snapshot existed, so the full suite failed. Keep notes under `Unreleased` until release identity and its snapshot propagate together. Evidence: `CHANGELOG.md` (search: `## Unreleased`) and `test/unit/manifest.test.ts` (search: `missing manifest snapshots`).
 

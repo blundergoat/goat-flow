@@ -49,6 +49,26 @@ export interface IndexEntry {
   approxTokenEstimate: number;
 }
 
+/**
+ * One active learning-loop section with enough source evidence for non-index consumers.
+ * Recall uses this shape so entry identity/status and `(search: ...)` extraction share the
+ * indexer's resolved filtering instead of growing a second Markdown section parser.
+ */
+export interface ActiveLearningLoopSection {
+  bucket: IndexBucket;
+  title: string;
+  /** Exact Markdown heading used as the entry's semantic anchor. */
+  heading: string;
+  /** Project-relative bucket file containing this entry. */
+  sourcePath: string;
+  /** Declared status, or `active` for entry buckets whose live status is implicit. */
+  status: string;
+  /** Optional future-agent guidance carried by the entry metadata. */
+  decisionChanged: string | null;
+  /** Section-local Markdown supplied to shared evidence extractors, never rendered wholesale. */
+  content: string;
+}
+
 /** Heading keyword per entry-style bucket (`## Footgun:` / `## Lesson:` / `## Pattern:`). */
 const HEADING_KIND = {
   footguns: "Footgun",
@@ -222,28 +242,57 @@ function splitEntrySections(body: string, kind: string): RawSection[] {
   }));
 }
 
+/** Read one line-scoped bold metadata value without interpreting its prose. */
+function metadataValue(body: string, label: string): string | null {
+  return (
+    body
+      .match(new RegExp(`^\\*\\*${label}:\\*\\*\\s*(.+)$`, "m"))?.[1]
+      ?.trim() ?? null
+  );
+}
+
+/** Entry-bucket status uses its first pipe-delimited field; omission means the live default. */
+function entryStatus(body: string): string {
+  return metadataValue(body, "Status")?.split("|")[0]?.trim() || "active";
+}
+
+/** Parse one footgun/lesson/pattern bucket file into active source sections. */
+function parseEntryFileSections(
+  file: MarkdownEntry,
+  bucket: Exclude<IndexBucket, "decisions">,
+): ActiveLearningLoopSection[] {
+  const { body } = parseMarkdownFrontmatter(file.content);
+  const resolvedAt = body.indexOf(RESOLVED_MARKER);
+  return splitEntrySections(body, HEADING_KIND[bucket])
+    .filter((section) => resolvedAt === -1 || section.start < resolvedAt)
+    .filter((section) => !/\*\*Status:\*\*\s*resolved\b/i.test(section.content))
+    .map((section) => ({
+      bucket,
+      title: section.title,
+      heading: section.headingLine,
+      sourcePath: file.path,
+      status: entryStatus(section.content),
+      decisionChanged: metadataValue(section.content, "Decision changed"),
+      content: section.content,
+    }));
+}
+
 /** Parse one footgun/lesson/pattern bucket file into active-entry index rows. */
 function parseEntryFile(
   file: MarkdownEntry,
   bucket: Exclude<IndexBucket, "decisions">,
 ): IndexEntry[] {
-  const { body } = parseMarkdownFrontmatter(file.content);
-  const resolvedAt = body.indexOf(RESOLVED_MARKER);
-  const sourceFile = baseName(file.path);
-  return splitEntrySections(body, HEADING_KIND[bucket])
-    .filter((section) => resolvedAt === -1 || section.start < resolvedAt)
-    .filter((section) => !/\*\*Status:\*\*\s*resolved\b/i.test(section.content))
-    .map((section) => ({
-      title: section.title,
-      sourceFile,
-      anchor: searchNeedle(section.headingLine),
-      hook: firstSentence(
-        paragraphAfter(section.content, HOOK_MARKER[bucket]) ??
-          firstBodyParagraph(section.content),
-      ),
-      declaredDate: metadataDate(section.content, "Created"),
-      approxTokenEstimate: approximateTokenEstimate(section.content),
-    }));
+  return parseEntryFileSections(file, bucket).map((section) => ({
+    title: section.title,
+    sourceFile: baseName(section.sourcePath),
+    anchor: searchNeedle(section.heading),
+    hook: firstSentence(
+      paragraphAfter(section.content, HOOK_MARKER[bucket]) ??
+        firstBodyParagraph(section.content),
+    ),
+    declaredDate: metadataDate(section.content, "Created"),
+    approxTokenEstimate: approximateTokenEstimate(section.content),
+  }));
 }
 
 /** Read one declared `**Label:** YYYY-MM-DD` date from an entry body. */
@@ -282,20 +331,61 @@ function decisionSummary(body: string): string {
 
 /** Parse one ADR file into its index row; null when the file lacks an H1 title. */
 function parseDecisionFile(file: MarkdownEntry): IndexEntry | null {
-  const { body } = parseMarkdownFrontmatter(file.content);
-  const titleMatch = body.match(/^#\s+(.+)$/m);
-  if (!titleMatch) return null;
-  const status = decisionStatus(body);
-  // Current ADRs declare status/date metadata. Older shapes may omit either, so the row uses stable
-  // fallbacks instead of inferred values.
+  const section = parseDecisionSection(file);
+  if (section === null) return null;
+  const body = section.content;
+  const status = section.status;
   return {
-    title: (titleMatch[1] ?? "").trim(),
-    sourceFile: baseName(file.path),
-    anchor: searchNeedle(titleMatch[0]),
+    title: section.title,
+    sourceFile: baseName(section.sourcePath),
+    anchor: searchNeedle(section.heading),
     hook: `${status} - ${decisionSummary(body)}`,
     declaredDate: decisionIndexDate(body, status),
     approxTokenEstimate: approximateTokenEstimate(body),
   };
+}
+
+/** Parse one ADR file into the active source-section shape; null when it has no H1 title. */
+function parseDecisionSection(
+  file: MarkdownEntry,
+): ActiveLearningLoopSection | null {
+  const { body } = parseMarkdownFrontmatter(file.content);
+  const titleMatch = body.match(/^#\s+(.+)$/m);
+  if (!titleMatch) return null;
+  const status = decisionStatus(body);
+  return {
+    bucket: "decisions",
+    title: (titleMatch[1] ?? "").trim(),
+    heading: titleMatch[0],
+    sourcePath: file.path,
+    status,
+    decisionChanged: metadataValue(body, "Decision changed"),
+    content: body,
+  };
+}
+
+/**
+ * Parse one bucket into active source sections for consumers that need entry-local evidence.
+ * Files and sections retain deterministic source order; resolved entry-bucket history is omitted,
+ * while ADRs retain their declared status so callers do not follow superseded decisions blind.
+ *
+ * @param fs - read-only filesystem adapter rooted at the target project
+ * @param dirPath - bucket directory path relative to the project root
+ * @param bucket - grammar and status policy for the selected learning-loop bucket
+ * @returns active source sections in deterministic file and document order
+ */
+export function parseActiveBucketSections(
+  fs: ReadonlyFS,
+  dirPath: string,
+  bucket: IndexBucket,
+): ActiveLearningLoopSection[] {
+  const dir = listMarkdownEntries(fs, dirPath);
+  if (bucket === "decisions") {
+    return dir.files
+      .filter((file) => ADR_FILE.test(baseName(file.path)))
+      .flatMap((file) => parseDecisionSection(file) ?? []);
+  }
+  return dir.files.flatMap((file) => parseEntryFileSections(file, bucket));
 }
 
 /**
@@ -313,11 +403,12 @@ export function parseBucket(
   dirPath: string,
   bucket: IndexBucket,
 ): IndexEntry[] {
-  const dir = listMarkdownEntries(fs, dirPath);
   if (bucket === "decisions") {
-    return dir.files
-      .filter((file) => ADR_FILE.test(baseName(file.path)))
+    return listMarkdownEntries(fs, dirPath)
+      .files.filter((file) => ADR_FILE.test(baseName(file.path)))
       .flatMap((file) => parseDecisionFile(file) ?? []);
   }
-  return dir.files.flatMap((file) => parseEntryFile(file, bucket));
+  return listMarkdownEntries(fs, dirPath).files.flatMap((file) =>
+    parseEntryFile(file, bucket),
+  );
 }

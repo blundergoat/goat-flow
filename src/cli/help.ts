@@ -228,6 +228,17 @@ const COMMAND_HELP_CATALOG = {
     ],
     examples: ["goat-flow stats", "goat-flow stats --check"],
   },
+  recall: {
+    command: "recall",
+    visibility: "advanced",
+    summary: "Find learning entries that cite named paths.",
+    usage: ["goat-flow recall <path> [path...] [--format <type>]"],
+    flags: [["--format <type>", "Choose text or json output."]],
+    examples: [
+      "goat-flow recall src/cli/server/terminal.ts",
+      "goat-flow recall src/cli src/dashboard --format json",
+    ],
+  },
   diagnostics: {
     command: "diagnostics",
     visibility: "advanced",

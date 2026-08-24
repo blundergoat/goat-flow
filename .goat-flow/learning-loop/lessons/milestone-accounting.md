@@ -179,7 +179,7 @@ anchor: `src/cli/plans-time.ts` (search: `receipt contains a discarded open span
 **Status:** active | **Created:** 2026-08-14
 **Decision changed:** Activate before timing starts, and remove the active receipt schema before resetting a milestone to `not-started`.
 **Trigger phase:** ACT
-**Incident count:** 6
+**Incident count:** 7
 **Latest occurrence:** 2026-08-24
 
 **What happened:** While starting code-quality-upstream M04, I ran `plans time start` while its rendered `Status` was still `not-started`. The CLI refused with `Timing Start requires exactly one rendered Status field set to in-progress or testing-gate`; I then changed the status and reran the command successfully.
@@ -193,6 +193,8 @@ anchor: `src/cli/plans-time.ts` (search: `receipt contains a discarded open span
 **Recurrence 2026-08-24 (M22 activation order):** I tried to start M22's first segment while its status was still `not-started`. The guard wrote no
 receipt; changing the status to `in-progress` before retrying opened the segment prospectively. The activation order remains status first, timer
 second, even when every plan task is already approved.
+
+**Recurrence 2026-08-24 (M26 activation order):** I tried to start M26's first segment while its status was still `not-started`. The guard rejected the command without opening a receipt. Changing the status to `in-progress` before the prospective retry opened M26-S01; no interval was backfilled. Evidence anchor: `src/cli/plans-time.ts` (search: `Timing Start requires exactly one rendered Status field`).
 
 **Recurrence 2026-08-24 (reset to not-started):** I reset `windows-native-hooks` M01 to `not-started` while preserving its paused Timing Receipt. Strict plan validation rejected `not-started milestone must not include a Timing Receipt`. Moving the exact closed S01 row to Reset history, reopening the checked task, and removing the active receipt section made validation pass without erasing measured effort.
 

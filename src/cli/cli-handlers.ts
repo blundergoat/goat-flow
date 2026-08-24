@@ -22,6 +22,7 @@ import { handleInstallCommand } from "./install-command.js";
 import { handleReviewCommand } from "./review-validate.js";
 import { getPackageVersion } from "./paths.js";
 import { handleIndexCommand } from "./learning-loop-index/command.js";
+import { handleLearningLoopRecallCommand } from "./learning-loop-recall.js";
 import type { CandidacyResult } from "./quality/candidacy.js";
 import { handleQualityCommand as runQualityCommand } from "./quality/quality-command.js";
 import { handleRedactCommand } from "./redact-command.js";
@@ -542,6 +543,7 @@ const COMMAND_HANDLERS: Partial<
   skill: handleSkillCommand,
   manifest: handleManifestCommand,
   stats: handleStatsCommand,
+  recall: handleLearningLoopRecallCommand,
   diagnostics: handleDiagnosticsCommand,
   index: handleIndexCommand,
   redact: handleRedactCommand,

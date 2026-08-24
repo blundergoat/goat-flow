@@ -1,6 +1,6 @@
 ---
 category: cli
-last_reviewed: 2026-08-23
+last_reviewed: 2026-08-24
 ---
 
 ## Footgun: An additive classification rule can silently delete a published state value
@@ -38,6 +38,23 @@ last_reviewed: 2026-08-23
 3. For path *composition* (joining a host-native projectPath with a POSIX sub-path), prefer `path.posix.join(projectPath, sub).replace(/\\/g, "/")` to avoid `path.resolve`'s drive-letter prepending on Windows.
 4. Test stubs that pattern-match on path strings must normalize incoming paths the same way (`test/unit/audit-command/helpers.ts` (search: `export function stubFS`) is the canonical example).
 5. CI's Windows job (`.github/workflows/ci.yml`, search: `windows-hook-contracts`, added 2026-08-14) runs only the hook spawn-matrix and hook-state contracts, so path-emission changes still ship without Windows coverage - probe them on a Windows host before release.
+
+---
+
+## Footgun: POSIX absolute checks admit Windows drive-relative file operands
+
+**Status:** active | **Created:** 2026-08-24 | **Evidence:** OBSERVED
+**Decision changed:** Reject every Windows drive prefix before passing a project-relative CLI operand to a project-rooted filesystem.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Symptoms:** A CLI that accepts only project-relative paths still admits `C:outside`. The value is not POSIX-absolute, but it is a Windows drive-relative path and therefore violates the command's selected-project boundary before any filesystem lookup runs.
+
+**Why it happens:** Replacing backslashes and calling `path.posix.normalize()` makes output comparison deterministic, but it does not turn Windows drive syntax into a POSIX absolute path. A guard for `C:/...` still misses `C:...` because `path.posix.isAbsolute("C:outside")` is false.
+
+**Evidence:** `src/cli/learning-loop-recall.ts` (search: `function normalizeRecallPath`) rejects a drive prefix before the read-only filesystem classifies the operand. `test/unit/learning-loop-recall.test.ts` (search: `rejects absolute, parent-escaping, and Windows drive-relative operands`) pins POSIX absolute, parent escape, drive-absolute, drive-relative, and UNC forms.
+
+**Prevention:** When an interface promises project-relative paths, reject `^[A-Za-z]:` and UNC prefixes before any host-native resolution or filesystem call. Test both `C:\\path` and `C:path`; checking only the slash form leaves the drive-relative grammar open.
 
 ---
 
