@@ -1,6 +1,6 @@
 ---
 category: hook-testing
-last_reviewed: 2026-08-22
+last_reviewed: 2026-08-24
 ---
 
 **Scope:** Hook test coverage strategy - what a self-test actually exercised, matrices that interfere with the live guard, fixtures that must not carry real secrets, and splits that only look like coverage. The script under test is [hook-script-authoring.md](hook-script-authoring.md); driving it with payloads is [hook-probe-testing.md](hook-probe-testing.md).
@@ -44,6 +44,19 @@ last_reviewed: 2026-08-22
 **Root cause:** The corpus over-indexed on dangerous block cases plus a few canonical allow cases. Parser regressions surface as false positives on benign-but-structurally-varied input (operators inside substitutions, arithmetic, redirects on allowlisted reads), which the curated allow set did not vary.
 
 **Prevention:** For guardrail parsers, vary shell *structure* in the allow corpus, not just verbs: substitutions with/without inner operators, quoted vs unquoted, arithmetic expansion, process substitution, and redirects (`2>&1`, `2>/dev/null`, redirect-to-other-file) on allowlisted-readable files - each paired with its dangerous counterpart. A green smoke run proves only the cases present. Also: when a report fingers a downstream rule (a catch-all), trace the token that rule sees back to the tokenizer before relaxing it - here the catch-all was correct and the orphan `$(` was manufactured upstream by the segment splitter. Evidence anchors: `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `unquoted subst with || fallback`), (search: `arithmetic expansion`), (search: `.env.example read with stderr dup`); root-cause anchor in `.goat-flow/learning-loop/footguns/deny-shell.md` (search: `track substitution depth`).
+
+## Lesson: Exact hook-copy assertions must derive from owned policy text
+
+**Status:** active | **Created:** 2026-08-24
+**Decision changed:** Before adding an exact block-copy assertion, read the source-owned block reason or capture attributed classifier output; never infer the expected fragment from the command.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**What happened:** M33 added exact-copy self-test cases for nested deletion and a background hard reset. I first expected "Recursive deletion" where the runtime says "rm -r without safe scoping", then expected "git reset --hard" where the repository policy says only "reset --hard". The full self-test failed two verification iterations even though the verdict-only integration matrix was green.
+
+**Root cause:** I derived expected copy from each fixture's intent and command text instead of the block reason owned by the policy module. A scope-only integration assertion could not catch that mismatch.
+
+**Prevention:** Before writing an `expect_block_message` case, locate the owning block reason or capture the hook's attributed output, then reuse a stable source-owned fragment. Run the full central self-test after the RED fixture and after implementation; a verdict-only integration pass is not copy proof. Evidence anchors: `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `dangerous nested command substitution`) and `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `Destructive git operation`).
 
 ---
 

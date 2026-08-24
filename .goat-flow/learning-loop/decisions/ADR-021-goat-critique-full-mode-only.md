@@ -20,6 +20,8 @@
 
 ## Decision
 
+goat-critique runs only as a full delegated workflow and remains a core feature.
+
 ### Standing rule: critique is a core feature
 
 1. **The critique skill is never removed, demoted, or auto-skipped.** It is a core product feature.

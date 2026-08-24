@@ -772,6 +772,17 @@ describe("managed setup preview", () => {
       );
       assert.notEqual(forcedInstall.status, 0);
       assert.match(forcedInstall.stderr, /no authority bypasses path safety/u);
+
+      const namedInstall = runCliInstaller(
+        projectPath,
+        "--agent",
+        "codex",
+        "--force-path",
+        ".goat-flow/logs/quality/README.md",
+      );
+      assert.notEqual(namedInstall.status, 0);
+      assert.match(namedInstall.stderr, /path safety/u);
+      assert.doesNotMatch(namedInstall.stderr, /needs no authority/u);
       assert.deepEqual(
         readFileSync(redirectedReadmePath),
         redirectedBytesBefore,

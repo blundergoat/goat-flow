@@ -102,7 +102,7 @@ npx @blundergoat/goat-flow@latest install . --agent claude
 npx @blundergoat/goat-flow@latest install . --agent claude --dry-run
 ```
 
-`--dry-run` shows managed-template drift without writing. A normal install refreshes system-owned files, preserves user-owned and external files, and blocks ambiguous local edits or unsafe paths. `--force` accepts managed conflicts and may replace seeded user-owned guidance, but it never bypasses path-safety failures. Replacements are atomic per file; the [CLI reference](docs/cli.md#atomic-installer-writes) explains failure and rollback behaviour.
+`--dry-run` shows managed-template drift without writing. A normal install refreshes system-owned files, preserves user-owned and external files, and blocks ambiguous local edits or unsafe paths. `--force` is an alias for `--force-managed` and accepts every inspected system-owned conflict. A replaceable user-owned file requires both `--force-user-owned` and a matching `--force-path`; settings, hook configs, and `.goat-flow/config.yaml` are never replaced. No authority bypasses path-safety failures. Replacements are atomic per file; the [CLI reference](docs/cli.md#atomic-installer-writes) explains failure and rollback behaviour.
 
 Dashboard Home and aggregate `goat-flow audit .` read supported agents from `workflow/manifest.json`. Use `--agent <id>` when you intentionally want one runtime. Installs also include shared meta references and on-demand tool playbooks under `.goat-flow/skill-docs/`.
 

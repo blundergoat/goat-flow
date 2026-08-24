@@ -560,6 +560,68 @@ export function renderBoundedLearningLoopContext(
   );
 }
 
+/** Add non-empty audit text to the ephemeral retrieval input in report order. */
+function appendConcreteAuditSignals(
+  concreteSignals: string[],
+  candidateSignals: readonly (string | undefined)[],
+): void {
+  for (const signal of candidateSignals) {
+    const trimmedSignal = signal?.trim();
+    // Blank optional fields cannot identify the user's task, so they are excluded before stable de-duplication.
+    if (trimmedSignal) concreteSignals.push(trimmedSignal);
+  }
+}
+
+/** Add signals from failed setup, agent, and harness checks without promoting passing evidence. */
+function appendFailedAuditCheckSignals(
+  concreteSignals: string[],
+  auditReport: AuditReport,
+): void {
+  // Setup, agent, and harness failures stay in report order so repeated launches explain matches consistently.
+  for (const scope of [
+    auditReport.scopes.setup,
+    auditReport.scopes.agent,
+    auditReport.scopes.harness,
+  ]) {
+    // A scope without checks behaves like an empty list, while each available failed check can target a prior incident.
+    for (const check of scope?.checks ?? []) {
+      // Passing checks do not describe work the user needs help with, so they cannot influence retrieval.
+      if (check.status !== "fail") continue;
+      appendConcreteAuditSignals(concreteSignals, [
+        check.id,
+        check.name,
+        check.failure?.check,
+        check.failure?.message,
+        check.failure?.evidence,
+        check.failure?.howToFix,
+      ]);
+    }
+  }
+}
+
+/** Add audit finding signals; stable order keeps drift before content and preserves order within each group. */
+function appendAuditFindingSignals(
+  concreteSignals: string[],
+  auditReport: AuditReport,
+): void {
+  // Drift findings target prior incidents by changed generated path or audit message.
+  for (const finding of auditReport.drift?.findings ?? []) {
+    appendConcreteAuditSignals(concreteSignals, [
+      finding.path,
+      finding.message,
+    ]);
+  }
+  // Content findings add their rule, path, message, and suggested correction in report order.
+  for (const finding of auditReport.content?.findings ?? []) {
+    appendConcreteAuditSignals(concreteSignals, [
+      finding.rule,
+      finding.path,
+      finding.message,
+      finding.suggestion,
+    ]);
+  }
+}
+
 /**
  * Collect concrete, audit-owned retrieval signals without accepting or storing user task prose.
  *
@@ -577,48 +639,8 @@ function qualityLearningLoopTaskSignals(
   // Without audit evidence there is no grounded user problem to target, so selection keeps its original ranking.
   if (!auditReport) return [];
   const concreteSignals: string[] = [];
-  /**
-   * Add one non-empty audit-owned phrase to the ephemeral retrieval input; missing optional evidence contributes nothing to the user's prompt.
-   *
-   * @param signal - check, path, or failure text from the audit; undefined or blank text is ignored
-   * @returns nothing; usable text is appended to the in-memory signal list
-   */
-  const addConcreteAuditSignal = (signal: string | undefined): void => {
-    const trimmedSignal = signal?.trim();
-    // Blank optional fields cannot identify the user's task, so they are excluded before stable de-duplication.
-    if (trimmedSignal) concreteSignals.push(trimmedSignal);
-  };
-
-  // Setup, agent, and harness failures are considered in report order so repeated launches explain matches consistently.
-  for (const scope of [
-    auditReport.scopes.setup,
-    auditReport.scopes.agent,
-    auditReport.scopes.harness,
-  ]) {
-    // A scope without checks behaves like an empty list, while each available failed check can target a prior incident.
-    for (const check of scope?.checks ?? []) {
-      // Passing checks do not describe work the user needs help with, so they cannot influence retrieval.
-      if (check.status !== "fail") continue;
-      addConcreteAuditSignal(check.id);
-      addConcreteAuditSignal(check.name);
-      addConcreteAuditSignal(check.failure?.check);
-      addConcreteAuditSignal(check.failure?.message);
-      addConcreteAuditSignal(check.failure?.evidence);
-      addConcreteAuditSignal(check.failure?.howToFix);
-    }
-  }
-  // A user who ran drift checks receives prior incidents matched to each changed generated path or message.
-  for (const finding of auditReport.drift?.findings ?? []) {
-    addConcreteAuditSignal(finding.path);
-    addConcreteAuditSignal(finding.message);
-  }
-  // A user who ran content checks receives prior incidents matched to each rule, path, message, or suggested correction.
-  for (const finding of auditReport.content?.findings ?? []) {
-    addConcreteAuditSignal(finding.rule);
-    addConcreteAuditSignal(finding.path);
-    addConcreteAuditSignal(finding.message);
-    addConcreteAuditSignal(finding.suggestion);
-  }
+  appendFailedAuditCheckSignals(concreteSignals, auditReport);
+  appendAuditFindingSignals(concreteSignals, auditReport);
 
   // A clean or evidence-free audit keeps prompt bytes and ranking identical to the non-targeted baseline.
   if (concreteSignals.length === 0) return [];

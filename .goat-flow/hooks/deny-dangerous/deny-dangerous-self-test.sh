@@ -1021,6 +1021,33 @@ run_full() {
   expect_block shell 'echo "`rm -rf /`"' "backtick subst inside double quotes still executes"
   expect_block shell 'rm -rf "$(cat /tmp/target)"' "command subst inside double quotes still executes"
 
+  # --- Parser-boundary matrix. Quoted or escaped operator-looking text stays
+  # inert, while recursive substitutions, background actions, and direct
+  # lockfile writes retain their policy verdicts. ---
+  local _parser_multiline_literal
+  _parser_multiline_literal=$'printf "%s\\\\n" "line one <(sort a)\nline two >(cat)"'
+  expect_allow shell 'node -e "const f=(x)=>(x+1);console.log(f(1))"' "double-quoted JavaScript arrow"
+  expect_allow shell 'printf "%s\n" "literal <(sort a) and >(cat)"' "double-quoted process-substitution-looking literals"
+  expect_allow shell 'printf "%s\n" "\$(literal)"' "escaped command-substitution opener"
+  expect_allow shell "$_parser_multiline_literal" "multiline double-quoted process-substitution-looking literals"
+  expect_allow shell "printf '%s\n' 'literal <(sort a) and >(cat)'" "single-quoted process-substitution-looking control"
+  expect_allow shell 'echo "$(dirname "$(pwd)")"' "benign nested command substitution"
+  expect_block_message shell 'echo "$(echo "$(rm -rf /)")"' "dangerous nested command substitution" destructive "rm -r without safe scoping"
+  expect_allow shell 'diff <(sort a) <(sort b)' "genuine benign process substitution"
+  expect_block_message shell 'cat <(true || rm -rf /)' "genuine dangerous process substitution" destructive "rm -r without safe scoping"
+
+  expect_block_message writes 'echo safe & git reset --hard' "bare background command" repository "reset --hard"
+  expect_allow shell 'echo safe 2>&1' "stderr duplication beside ampersand splitting"
+  expect_allow shell 'echo safe &>m33-output.log' "combined output redirect beside ampersand splitting"
+  expect_allow writes 'git status |& cat' "stderr pipeline beside ampersand splitting"
+  expect_allow shell 'printf "%s\n" "safe & text"' "quoted ampersand"
+  expect_allow shell 'printf "%s\n" \&' "escaped ampersand"
+
+  expect_block_message shell 'echo x>package-lock.json' "compact direct lockfile overwrite" destructive "Direct lockfile modification"
+  expect_block_message shell 'echo x>>pnpm-lock.yaml' "compact direct lockfile append" destructive "Direct lockfile modification"
+  expect_allow shell 'cat package-lock.json' "read-only lockfile mention"
+  expect_allow shell 'npm install --package-lock-only' "package-manager-owned lockfile write"
+
   # --- .env.example is sample material: reads AND writes are allowed. Real
   # .env* files stay blocked in both directions; redirects that merely dup or
   # discard stderr are still reads. ---

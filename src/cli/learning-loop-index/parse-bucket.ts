@@ -162,8 +162,18 @@ function paragraphAfter(content: string, marker: string): string | null {
   const idx = content.indexOf(marker);
   if (idx === -1) return null;
   const after = content.slice(idx + marker.length).trimStart();
-  const paragraph = (after.split(/\n\s*\n/)[0] ?? "").trim();
-  return paragraph.length > 0 ? paragraph : null;
+  return (
+    after
+      .split(/\n\s*\n/)
+      .map((paragraph) => paragraph.trim())
+      .find(
+        (paragraph) =>
+          paragraph.length > 0 &&
+          !paragraph
+            .split("\n")
+            .every((line) => /^#{1,6}\s+\S/u.test(line.trim())),
+      ) ?? null
+  );
 }
 
 /** First non-metadata body paragraph, with any leading `**Label:**` stripped - the hook fallback. */

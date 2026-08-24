@@ -83,7 +83,7 @@ Select named-baseline categories, not memory:
 - generative AI/LLM/RAG; non-generative ML/model; agentic; dependencies/build/CI/releases/shell/agents; infrastructure/IaC/cloud/containers/orchestrators (`references/supply-chain-and-cicd.md`)
 - identity/authz/sessions/secrets/data (`references/identity-and-data.md`); uploads/paths/archives (`references/file-upload-and-paths.md`); local HTTP/WebSocket/PTY and browser-to-terminal controls
 
-Inspect Git metadata/text: deleted or renamed-away control=trusted base-ref anchor; mode/type changes=old/new objects; symlink target=old/new objects/trust boundary. A submodule OID proves identity, not safety; Git LFS/external artifact pointer proves identity, not reviewed content. Inspect referenced content without execution; unavailable=`UNVERIFIED`; MUST NOT recommend high-risk clearance.
+Inspect Git metadata/text: deleted or renamed-away control=trusted base-ref anchor; mode/type changes=old/new objects; symlink target=old/new objects/trust boundary. A submodule OID proves identity, not safety; Git LFS/external artifact pointer proves identity, not reviewed content. Inspect referenced content without execution; unavailable referenced content is `UNVERIFIED`, is a coverage gap, leaves the assessment coverage-degraded, and withholds clearance.
 
 Apply `references/common-threats.md`'s non-executing Git inspection profile before Git state. Binary/unscannable or attribute-suppressed (`-diff`) blobs are coverage gaps. Require bounded non-executing old/new blob inspection; never import/render/extract. Unreadable high-risk blob=`UNVERIFIED`; MUST NOT recommend clearance.
 

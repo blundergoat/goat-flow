@@ -359,6 +359,30 @@ function learningEntryPriority(entry: LearningLoopEntryFact): number {
 }
 
 /**
+ * Compare direct task overlap and recurrence inside one already-safe kind and health tier.
+ *
+ * @param left - first entry in the comparison
+ * @param right - second entry in the comparison
+ * @param taskMatches - optional task overlap by entry; absent preserves the baseline order
+ * @returns the task or recurrence difference, or zero when the existing fallbacks must decide
+ */
+function compareTaskEvidence(
+  left: LearningLoopEntryFact,
+  right: LearningLoopEntryFact,
+  taskMatches?: ReadonlyMap<LearningLoopEntryFact, TaskMatch>,
+): number {
+  // A launch without task evidence keeps the original recency and path ordering byte-for-byte.
+  if (!taskMatches) return 0;
+  // An entry missing from the optional score map behaves as unmatched rather than disappearing.
+  const taskMatchDifference =
+    (taskMatches.get(right)?.score ?? 0) - (taskMatches.get(left)?.score ?? 0);
+  // Direct overlap wins inside the existing kind and health tier.
+  if (taskMatchDifference !== 0) return taskMatchDifference;
+  // Missing incident counts mean zero recurrences, so older entries stay eligible without overstatement.
+  return (right.incidentCount ?? 0) - (left.incidentCount ?? 0);
+}
+
+/**
  * Order candidates by usefulness, then recency, then path, so the same project facts always produce the same prompt block.
  *
  * @param left - first entry in the comparison
@@ -375,20 +399,9 @@ function compareEntries(
     learningEntryPriority(left) - learningEntryPriority(right);
   // Kind and health decide first: a footgun outranks a pattern regardless of when either was written.
   if (priorityDifference !== 0) return priorityDifference;
-  // Targeted launches compare direct task overlap only inside the already-safe kind and health tier.
-  if (taskMatches) {
-    // An entry missing from the optional score map behaves as an unmatched entry rather than disappearing from the prompt.
-    const taskMatchDifference =
-      (taskMatches.get(right)?.score ?? 0) -
-      (taskMatches.get(left)?.score ?? 0);
-    // Direct overlap wins inside the existing kind/health tier; recurrence cannot overpower it.
-    if (taskMatchDifference !== 0) return taskMatchDifference;
-    // Incidents without a recorded count are treated as zero recurrences, keeping older entries eligible without overstating them.
-    const recurrenceDifference =
-      (right.incidentCount ?? 0) - (left.incidentCount ?? 0);
-    // Once relevance ties, recurrence is a bounded signal before the existing recency/path fallbacks.
-    if (recurrenceDifference !== 0) return recurrenceDifference;
-  }
+  const taskEvidenceDifference = compareTaskEvidence(left, right, taskMatches);
+  // Direct task overlap and then recurrence decide before the existing recency and path fallbacks.
+  if (taskEvidenceDifference !== 0) return taskEvidenceDifference;
   const dateDifference = learningEntryDate(right).localeCompare(
     learningEntryDate(left),
   );

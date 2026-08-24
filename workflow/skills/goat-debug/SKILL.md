@@ -128,7 +128,7 @@ Every diagnose-mode report ends with this section. It tells the reader how much 
 - **Evidence states:** OBSERVED (literal result) / INFERRED (reasoned link) / UNVERIFIED (not executed) / HUMAN-PENDING: specific human-owned check
 - **Proof class:** `RUNTIME | CONTRACT-GREP | STATIC | NOT-REPRODUCED` (per `skill-preamble.md` Proof Classification)
 - **Diagnostic mutations:** none / approved and tracked / cleanup incomplete
-- **Footgun retrieval:** hit (cite entry) / miss / skip
+- **Footgun retrieval:** hit (cite entry) / miss
 - **What I Didn't Check:** files, paths, or components deliberately skipped with one-line reason each
 
 ## Investigate Mode
@@ -192,7 +192,7 @@ Keep Quick output compact. Omit D3, D4, UI, and diagnostic-mutation fields when 
 - Evidence states: OBSERVED=[n] / INFERRED=[n] / UNVERIFIED=[n] / HUMAN-PENDING=[n]
 - Proof class: [RUNTIME/CONTRACT-GREP/STATIC/NOT-REPRODUCED]
 - Diagnostic mutations: [none/approved and tracked/cleanup incomplete]
-- Footgun retrieval: [hit/miss/skip]
+- Footgun retrieval: [hit/miss]
 - What I Didn't Check: [files/paths skipped + reason]
 ```
 

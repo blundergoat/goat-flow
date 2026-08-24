@@ -614,7 +614,8 @@ check_command_substitutions() {
   local remaining="$1"
   local depth="$2"
   local residual=""
-  local residual_unquoted=""
+  local command_substitution_candidates=""
+  local process_substitution_candidates=""
   local i=0
   local close_index=""
   local char=""
@@ -625,24 +626,28 @@ check_command_substitutions() {
   local in_double=0
   local escaped=0
 
-  # `residual_unquoted` is built here rather than re-derived afterwards. A
-  # line-oriented strip cannot see a single-quoted span that crosses a newline
-  # and mis-pairs the '\'' escape idiom, so it reported inert text as
-  # executable. This walk already knows the exact quote state of every
-  # character. Single-quoted content is dropped; double-quoted content is kept,
-  # because backticks and $( still execute inside double quotes.
+  # Candidate projections are built during the quote walk so each substitution
+  # class sees only characters Bash can execute in that context. Command
+  # substitutions and backticks execute inside double quotes; process
+  # substitutions do not.
   for ((i = 0; i < ${#remaining}; i++)); do
     char="${remaining:i:1}"
 
     if [[ "$escaped" -eq 1 ]]; then
       residual+="$char"
-      residual_unquoted+="$char"
+      # Escaped characters separate adjacent opener text. A backslash-newline
+      # is removed by Bash, so it does not add a separator.
+      if [[ "$char" != $'\n' ]]; then
+        command_substitution_candidates+="__goat_escaped__"
+        if [[ "$in_double" -eq 0 ]]; then
+          process_substitution_candidates+="__goat_escaped__"
+        fi
+      fi
       escaped=0
       continue
     fi
     if [[ "$in_single" -eq 0 && "$char" == "\\" ]]; then
       residual+="$char"
-      residual_unquoted+="$char"
       escaped=1
       continue
     fi
@@ -662,7 +667,6 @@ check_command_substitutions() {
         in_double=1
       fi
       residual+="$char"
-      residual_unquoted+="$char"
       continue
     fi
 
@@ -674,7 +678,10 @@ check_command_substitutions() {
           inner="${remaining:i+3:close_index-i-3}"
           check_command_substitutions "$inner" "$depth" || return $?
           residual+="__goat_arith__"
-          residual_unquoted+="__goat_arith__"
+          command_substitution_candidates+="__goat_arith__"
+          if [[ "$in_double" -eq 0 ]]; then
+            process_substitution_candidates+="__goat_arith__"
+          fi
           i="$close_index"
           continue
         fi
@@ -685,7 +692,10 @@ check_command_substitutions() {
             check_command_segments "$inner" $((depth + 1)) || return $?
           fi
           residual+="__goat_subst__"
-          residual_unquoted+="__goat_subst__"
+          command_substitution_candidates+="__goat_subst__"
+          if [[ "$in_double" -eq 0 ]]; then
+            process_substitution_candidates+="__goat_subst__"
+          fi
           i="$close_index"
           continue
         fi
@@ -696,7 +706,8 @@ check_command_substitutions() {
             check_command_segments "$inner" $((depth + 1)) || return $?
           fi
           residual+="__goat_proc_subst__"
-          residual_unquoted+="__goat_proc_subst__"
+          command_substitution_candidates+="__goat_proc_subst__"
+          process_substitution_candidates+="__goat_proc_subst__"
           i="$close_index"
           continue
         fi
@@ -705,19 +716,19 @@ check_command_substitutions() {
 
     residual+="$char"
     if [[ "$in_single" -eq 0 ]]; then
-      residual_unquoted+="$char"
+      command_substitution_candidates+="$char"
+      if [[ "$in_double" -eq 0 ]]; then
+        process_substitution_candidates+="$char"
+      fi
     fi
   done
 
-  if [[ "$residual_unquoted" =~ \$\( || "$residual_unquoted" =~ [\<\>]\( ]]; then
+  if [[ "$command_substitution_candidates" =~ \$\( ||
+        "$process_substitution_candidates" =~ [\<\>]\( ]]; then
     block "Complex command substitution. Write the expanded command directly." || return $?
   fi
 
-  # An escaped backtick is literal text, so drop those pairs before the scan.
-  # Substitution bodies already left as placeholders were checked recursively.
-  local remaining_unquoted="${residual_unquoted//\\\`/}"
-
-  if [[ "$remaining_unquoted" == *\`* ]]; then
+  if [[ "$command_substitution_candidates" == *\`* ]]; then
     block "Backtick command substitution hides nested execution. Use a direct command instead, or for an inline script run it from a file (e.g. node script.js)." || return $?
   fi
 }
@@ -1819,6 +1830,7 @@ split_command_segments_into() {
   local current_policy_stage=""
   local command_character=""
   local next_command_character=""
+  local previous_command_character=""
   local in_single_quote=0
   local in_double_quote=0
   local previous_character_escaped=0
@@ -1912,6 +1924,22 @@ split_command_segments_into() {
           command_index=$((command_index + 1))
         fi
         continue
+      fi
+
+      # A bare ampersand starts a background action. Redirection and stderr-pipe
+      # ampersands stay with their operator.
+      if [[ "$command_character" == "&" && "$next_command_character" != ">" ]]; then
+        previous_command_character=""
+        if [[ "$command_index" -gt 0 ]]; then
+          previous_command_character="${developer_command:command_index-1:1}"
+        fi
+        if [[ "$previous_command_character" != ">" &&
+              "$previous_command_character" != "<" &&
+              "$previous_command_character" != "|" ]]; then
+          __goat_split_out__+=("$current_policy_stage")
+          current_policy_stage=""
+          continue
+        fi
       fi
 
       # Semicolons and newlines start the next action the agent wants to run.

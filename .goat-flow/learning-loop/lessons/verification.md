@@ -1,6 +1,6 @@
 ---
 category: verification
-last_reviewed: 2026-08-23
+last_reviewed: 2026-08-24
 ---
 
 **Scope:** General verification discipline - what counts as proof, reading before claiming, and checking the thing you actually changed. Siblings own the narrower surfaces: [verification-validators.md](verification-validators.md) for getting a checker right, [verification-scanners.md](verification-scanners.md) for proving a guard guards, [verification-testing.md](verification-testing.md) for what a test must establish, [verification-preflight.md](verification-preflight.md) and [verification-formatting.md](verification-formatting.md) for repo-wide gates, and [verification-gruff.md](verification-gruff.md) for the analyzer.
@@ -203,6 +203,8 @@ last_reviewed: 2026-08-23
 
 **Recurrence 2026-08-23:** An M11 determinism wrapper ran both prompt commands, then failed before producing a verdict because the orchestration isolate reported `ReferenceError: crypto is not defined`. The two zero exits were not accepted as proof. A fresh rerun compared the complete outputs directly and reported an exact match without depending on hashing. Evidence anchor: `.goat-flow/skill-docs/skill-preamble.md` (search: `Proof Gate`).
 
+**Recurrence 2026-08-24:** M25's first stale-installer-prose sweep matched the valid plans-export sentence “Existing output is preserved unless `--force`” because the negative regex named only the shared suffix. The proof was narrowed to the complete stale user-owned-content clause before it was accepted. Evidence anchor: `docs/cli.md` (search: `Existing output is preserved unless`).
+
 **Root cause:** I treated a matched token and a zero exit as proof without first checking whether the assertion distinguished safe from unsafe prose, whether the hook allowed the command to execute, or whether the output identified the intended CLI mode.
 
-**Prevention:** Pin negative assertions to the complete unsafe instruction while positively requiring the safe replacement. Treat a hook block as no execution evidence and switch to an allowed data tool or file-redirection shape before rerunning. For mode-gated CLI proof, assert the mode sentinel and the target result row before accepting exit zero. Evidence anchors: `test/unit/audit-harness/settings-rules-matched.test.ts` (search: `offers deliberate review instead of an automatic rewrite`), `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Pipe to interpreter`), `src/cli/help.ts` (search: `--harness`), and `src/cli/audit/audit.ts` (search: `harness: options.harness`).
+**Prevention:** Pin negative assertions to the complete unsafe instruction while positively requiring the safe replacement; a shared suffix is not a safe absence proof when another feature can use it legitimately. Treat a hook block as no execution evidence and switch to an allowed data tool or file-redirection shape before rerunning. For mode-gated CLI proof, assert the mode sentinel and the target result row before accepting exit zero. Evidence anchors: `test/unit/audit-harness/settings-rules-matched.test.ts` (search: `offers deliberate review instead of an automatic rewrite`), `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Pipe to interpreter`), `src/cli/help.ts` (search: `--harness`), and `src/cli/audit/audit.ts` (search: `harness: options.harness`).

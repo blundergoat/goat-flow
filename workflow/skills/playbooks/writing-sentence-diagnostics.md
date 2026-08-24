@@ -15,7 +15,7 @@ Project-documented prose policy governs voice, terminology, shape, and punctuati
 
 ## Intent
 
-Find the smallest sentence edit that lowers a concrete reader cost while preserving facts, voice, social meaning, and exact public detail. Labels describe observable effects, not whether a person or an agent wrote the text.
+Find the smallest sentence edit that lowers a concrete reader cost while preserving facts, voice, social meaning, and exact public detail.
 
 ## Diagnostic Route
 

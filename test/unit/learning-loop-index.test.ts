@@ -114,6 +114,8 @@ Layered config dropped falsy values.
 
 ## Decision
 
+### Merge rule
+
 Adopt the UNSET sentinel merge for every config layer. A second sentence to drop.
 
 ## Reversibility
@@ -208,7 +210,7 @@ describe("parseBucket", () => {
     );
     assert.deepEqual(
       [decision?.declaredDate, decision?.approxTokenEstimate],
-      ["2026-06-01", 70],
+      ["2026-06-01", 80],
     );
   });
 

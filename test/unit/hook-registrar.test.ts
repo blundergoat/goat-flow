@@ -26,10 +26,7 @@ import {
   HookRegistrarError,
   syncHookStates,
 } from "../../src/cli/server/hook-registrar.js";
-import {
-  agentHookSpawnDescriptor,
-  managedAgentHookDescriptor,
-} from "../../src/cli/server/agent-hook-command.js";
+import { managedAgentHookDescriptor } from "../../src/cli/server/agent-hook-command.js";
 import {
   getHookSpec,
   isValidHookIdShape,
@@ -57,6 +54,7 @@ import {
   runCodexLauncher,
   SUPPORTED_PROVIDER_HOOK_CASES,
   countOwnedCommandRows,
+  assertProviderDenyDescriptorsMatchInstallerContract,
 } from "./hook-registrar.helpers.js";
 
 describe("hook registrar: launchers and installation", () => {
@@ -710,121 +708,7 @@ describe("hook registrar: launchers and installation", () => {
   });
 
   it("keeps provider deny descriptors byte-identical to the committed installer contract", () => {
-    const denySpec = getHookSpec(HOOK_IDENTIFIER);
-    assert.ok(denySpec);
-    const contract = JSON.parse(
-      readFileSync(
-        join(
-          import.meta.dirname,
-          "..",
-          "..",
-          "workflow",
-          "hooks",
-          "agent-config",
-          "managed-hook-desired-state.json",
-        ),
-        "utf-8",
-      ),
-    ) as {
-      agents: Record<
-        string,
-        { hooks: Record<string, { config: Record<string, never> }> }
-      >;
-    };
-    // Read one agent's deny-hook config out of the contract snapshot.
-    const denyContractConfig = (agentId: string): Record<string, never> =>
-      contract.agents[agentId]!.hooks["deny-dangerous"]!.config;
-
-    // Codex keeps its deferred command bytes and adds the approved Windows override.
-    const codexDescriptor = managedAgentHookDescriptor(
-      PROFILES.codex,
-      denySpec,
-    );
-    if (codexDescriptor.form !== "shell") {
-      assert.fail("Codex must retain a shell registration");
-    }
-    const codexContractRow = (
-      denyContractConfig("codex") as {
-        hooks: {
-          PreToolUse: Array<{
-            hooks: Array<{ command: string; commandWindows: string }>;
-          }>;
-        };
-      }
-    ).hooks.PreToolUse[0]!.hooks[0]!;
-    assert.equal(codexContractRow.command, codexDescriptor.command);
-    assert.equal(
-      codexContractRow.commandWindows,
-      codexDescriptor.commandWindows,
-    );
-    assert.deepEqual(agentHookSpawnDescriptor(codexDescriptor, "linux"), {
-      command: "bash",
-      args: ["-c", codexDescriptor.command],
-    });
-    assert.deepEqual(agentHookSpawnDescriptor(codexDescriptor, "win32"), {
-      command: "powershell.exe",
-      args: [
-        "-NoProfile",
-        "-NonInteractive",
-        "-Command",
-        codexDescriptor.commandWindows,
-      ],
-    });
-
-    // Antigravity retains its one deferred command string byte-for-byte.
-    const antigravityDescriptor = managedAgentHookDescriptor(
-      PROFILES.antigravity,
-      denySpec,
-    );
-    if (antigravityDescriptor.form !== "shell") {
-      assert.fail("Antigravity stays on its deferred shell registration");
-    }
-    const antigravityContractRow = (
-      denyContractConfig("antigravity") as {
-        "deny-dangerous": {
-          PreToolUse: Array<{ hooks: Array<{ command: string }> }>;
-        };
-      }
-    )["deny-dangerous"].PreToolUse[0]!.hooks[0]!;
-    assert.equal(antigravityContractRow.command, antigravityDescriptor.command);
-
-    // Copilot's deferred registration keeps the same command in both shell fields.
-    const copilotDescriptor = managedAgentHookDescriptor(
-      PROFILES.copilot,
-      denySpec,
-    );
-    if (copilotDescriptor.form !== "shell") {
-      assert.fail("Copilot stays on its deferred shell registration");
-    }
-    const copilotContractRow = (
-      denyContractConfig("copilot") as {
-        hooks: {
-          preToolUse: Array<{ bash: string; powershell: string }>;
-        };
-      }
-    ).hooks.preToolUse[0]!;
-    assert.equal(copilotContractRow.bash, copilotDescriptor.command);
-    assert.equal(copilotContractRow.powershell, copilotDescriptor.command);
-
-    // Claude's approved handler remains the provider-native argv form.
-    const claudeDescriptor = managedAgentHookDescriptor(
-      PROFILES.claude,
-      denySpec,
-    );
-    if (claudeDescriptor.form !== "argv") {
-      assert.fail("Claude must register the approved argv handler");
-    }
-    const claudeContractRow = (
-      denyContractConfig("claude") as {
-        hooks: {
-          PreToolUse: Array<{
-            hooks: Array<{ command: string; args: string[] }>;
-          }>;
-        };
-      }
-    ).hooks.PreToolUse[0]!.hooks[0]!;
-    assert.equal(claudeContractRow.command, claudeDescriptor.command);
-    assert.deepEqual(claudeContractRow.args, claudeDescriptor.args);
+    assertProviderDenyDescriptorsMatchInstallerContract();
   });
 
   it("reports a stale Codex Windows override as command drift", () => {

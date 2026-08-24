@@ -17,7 +17,7 @@ Project-documented prose policy governs voice, terminology, shape, and punctuati
 
 Protect meaning before style and spend context in proportion to the defect. A small edit gets the core pass; longer prose earns a sibling only on its objective trigger.
 
-Remove prose that costs the reader time and returns nothing, but do not flatten a working voice to disguise authorship. Readability and truth are the goals.
+Remove prose that costs the reader time and returns nothing, but do not flatten a working voice to disguise authorship.
 
 ## Scope Gate
 
@@ -156,4 +156,4 @@ If the gate passes, stop editing.
 - `writing-structure-diagnostics.md` - document-level assembly defects before sentence work.
 - `changelog.md` - audience, version state, categories, and cadence for changelog entries.
 - `release-notes.md` - audience, evidence selection, and output shape for release narratives.
-- `code-comments.md` - code comments and docstrings; this playbook applies only its correctness and integrity gates to that prose.
+- `code-comments.md` - code comments and docstrings.

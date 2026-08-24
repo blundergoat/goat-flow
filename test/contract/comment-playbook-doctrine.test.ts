@@ -480,12 +480,7 @@ describe("Gruff documentation-pass doctrine", () => {
       assert.match(content, /do not smuggle in a file split/u, playbookPath);
       assert.match(
         content,
-        /when the symbol is a public\/exported API/u,
-        playbookPath,
-      );
-      assert.match(
-        content,
-        /file\/module\/class boundary has a non-obvious\s+contract/u,
+        /when the symbol is a public\/exported API, or when a\s+file\/module\/class boundary has a non-obvious\s+contract/u,
         playbookPath,
       );
       assert.match(

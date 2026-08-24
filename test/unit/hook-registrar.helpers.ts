@@ -32,9 +32,11 @@ import {
   agentHookSpawnDescriptor,
   buildAgentHookDescriptor,
   commandEntryReferencesSpec,
+  managedAgentHookDescriptor,
   type AgentHookHandlerDescriptor,
 } from "../../src/cli/server/agent-hook-command.js";
 import {
+  getHookSpec,
   listHookSpecs,
   type HookSpec,
 } from "../../src/cli/server/hooks-registry.js";
@@ -380,6 +382,124 @@ export function verifyAgentHookRegistrationMatrix(
     }
   }
   return installedCommandEntries.length;
+}
+
+/**
+ * Verify every provider's deny descriptor matches the standalone install contract.
+ * Use from the registrar suite so shell, argv, and Windows spawn shapes stay one assertion boundary.
+ *
+ * @returns no value; an assertion identifies the provider contract that drifted
+ */
+export function assertProviderDenyDescriptorsMatchInstallerContract(): void {
+  const denySpec = getHookSpec(HOOK_IDENTIFIER);
+  assert.ok(denySpec);
+  const contract = JSON.parse(
+    readFileSync(
+      join(
+        import.meta.dirname,
+        "..",
+        "..",
+        "workflow",
+        "hooks",
+        "agent-config",
+        "managed-hook-desired-state.json",
+      ),
+      "utf-8",
+    ),
+  ) as {
+    agents: Record<
+      string,
+      { hooks: Record<string, { config: Record<string, never> }> }
+    >;
+  };
+  /** Read one provider's deny config so every descriptor comparison uses the same generated contract. */
+  const denyContractConfig = (agentId: string): Record<string, never> =>
+    contract.agents[agentId]!.hooks[HOOK_IDENTIFIER]!.config;
+
+  // Codex keeps its deferred command bytes and adds the approved Windows override.
+  const codexDescriptor = managedAgentHookDescriptor(PROFILES.codex, denySpec);
+  if (codexDescriptor.form !== "shell") {
+    assert.fail("Codex must retain a shell registration");
+  }
+  const codexContractRow = (
+    denyContractConfig("codex") as {
+      hooks: {
+        PreToolUse: Array<{
+          hooks: Array<{ command: string; commandWindows: string }>;
+        }>;
+      };
+    }
+  ).hooks.PreToolUse[0]!.hooks[0]!;
+  assert.equal(codexContractRow.command, codexDescriptor.command);
+  assert.equal(codexContractRow.commandWindows, codexDescriptor.commandWindows);
+  assert.deepEqual(agentHookSpawnDescriptor(codexDescriptor, "linux"), {
+    command: "bash",
+    args: ["-c", codexDescriptor.command],
+  });
+  assert.deepEqual(agentHookSpawnDescriptor(codexDescriptor, "win32"), {
+    command: "powershell.exe",
+    args: [
+      "-NoProfile",
+      "-NonInteractive",
+      "-Command",
+      codexDescriptor.commandWindows,
+    ],
+  });
+
+  // Antigravity retains its one deferred command string byte-for-byte.
+  const antigravityDescriptor = managedAgentHookDescriptor(
+    PROFILES.antigravity,
+    denySpec,
+  );
+  if (antigravityDescriptor.form !== "shell") {
+    assert.fail("Antigravity stays on its deferred shell registration");
+  }
+  const antigravityContractRow = (
+    denyContractConfig("antigravity") as {
+      "deny-dangerous": {
+        PreToolUse: Array<{ hooks: Array<{ command: string }> }>;
+      };
+    }
+  )[HOOK_IDENTIFIER].PreToolUse[0]!.hooks[0]!;
+  assert.equal(antigravityContractRow.command, antigravityDescriptor.command);
+
+  // Copilot keeps the same deferred command in both shell fields.
+  const copilotDescriptor = managedAgentHookDescriptor(
+    PROFILES.copilot,
+    denySpec,
+  );
+  if (copilotDescriptor.form !== "shell") {
+    assert.fail("Copilot stays on its deferred shell registration");
+  }
+  const copilotContractRow = (
+    denyContractConfig("copilot") as {
+      hooks: {
+        preToolUse: Array<{ bash: string; powershell: string }>;
+      };
+    }
+  ).hooks.preToolUse[0]!;
+  assert.equal(copilotContractRow.bash, copilotDescriptor.command);
+  assert.equal(copilotContractRow.powershell, copilotDescriptor.command);
+
+  // Claude's approved handler remains the provider-native argv form.
+  const claudeDescriptor = managedAgentHookDescriptor(
+    PROFILES.claude,
+    denySpec,
+  );
+  if (claudeDescriptor.form !== "argv") {
+    assert.fail("Claude must register the approved argv handler");
+  }
+  const claudeContractRow = (
+    denyContractConfig("claude") as {
+      hooks: {
+        PreToolUse: Array<{
+          hooks: Array<{ command: string; args: string[] }>;
+        }>;
+      };
+    }
+  ).hooks.PreToolUse[0]!.hooks[0]!;
+  assert.equal(claudeContractRow.command, claudeDescriptor.command);
+  assert.deepEqual(claudeContractRow.args, claudeDescriptor.args);
 }
 
 /** Writes a cleaned temporary target project for hook-registrar assertions.

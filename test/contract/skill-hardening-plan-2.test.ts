@@ -18,6 +18,16 @@ import {
 } from "./skill-hardening.helpers.js";
 
 describe("skill hardening contracts: goat-plan (2/2)", () => {
+  it("uses plan mode selection as the shared depth decision", () => {
+    assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
+      assert.match(
+        readMarkdownSection(skillPath, "Shared Conventions"),
+        /Mode selection discharges the shared Quick\/Full depth choice; ceremony follows the preamble's complexity table\./u,
+        skillPath,
+      );
+    });
+  });
+
   it("defines proportional goat-plan renderings and a mixed-audience ISSUE contract", () => {
     assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);

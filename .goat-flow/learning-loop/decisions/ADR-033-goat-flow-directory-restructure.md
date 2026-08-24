@@ -24,6 +24,8 @@ Three earlier decisions settled adjacent halves of the same question: which buck
 
 ## Decision
 
+goat-flow stores durable memory, shared skill doctrine, hooks, and plans under one `.goat-flow/` hierarchy while `workflow/` remains the package source.
+
 ### Installed layout
 
 - `.goat-flow/learning-loop/{decisions,footguns,lessons,patterns}/` for durable

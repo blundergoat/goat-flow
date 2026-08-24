@@ -9,6 +9,8 @@ goat-flow-skill-version: "1.16.0"
 
 Read `.goat-flow/skill-docs/skill-preamble.md`; Modes R/1/3/4 also read `.goat-flow/skill-docs/skill-conventions.md`.
 
+Mode selection discharges the shared Quick/Full depth choice; ceremony follows the preamble's complexity table.
+
 ## When to Use
 
 Use for milestones, replans, rescope, or resume-from-plan. Files live in `.goat-flow/plans/<active>/`.
@@ -43,9 +45,9 @@ Use for milestones, replans, rescope, or resume-from-plan. Files live in `.goat-
 
 Plans are local workflow state, not a setup invariant. Mode R is read-only: report each canonical Status token with a plain-language explanation, propose exact corrections, and stop.
 
-**If starting fresh:** identify what is being built, the riskiest part, and kill criteria.
+**If starting fresh:** name the build, main risk, and kill criteria.
 
-4. **Pick exactly one mode.** Apply these signals in order - stop at the first that matches:
+4. **Pick exactly one mode.** First match:
 
 0. **Path-Only Intake / Read-Only Orientation** - path-only or ambiguous task path. Summarize status, ask next action, stop.
 R. **Reconcile Existing Plan State** - explicit reconcile/audit/refresh. Compare live state with recorded evidence, propose corrections, and stop without writes.

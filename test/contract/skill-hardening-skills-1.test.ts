@@ -87,6 +87,20 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
     });
   });
 
+  it("requires a hit or miss for every goat-debug footgun retrieval", () => {
+    assertForEachTarget(installedSkillPaths("goat-debug"), (skillPath) => {
+      const retrievalLines = readProjectFile(skillPath)
+        .split(/\r?\n/u)
+        .filter((line) => line.includes("Footgun retrieval:"));
+
+      assert.equal(retrievalLines.length, 2, skillPath);
+      assert.match(retrievalLines[0] ?? "", /hit.*miss/u, skillPath);
+      assert.doesNotMatch(retrievalLines[0] ?? "", /\bskip\b/u, skillPath);
+      assert.match(retrievalLines[1] ?? "", /hit.*miss/u, skillPath);
+      assert.doesNotMatch(retrievalLines[1] ?? "", /\bskip\b/u, skillPath);
+    });
+  });
+
   /*
    * D4 is where a fix gets called done, so the protections that decide closure
    * must be stated there. A cleanup rule that lives only in D1 is not

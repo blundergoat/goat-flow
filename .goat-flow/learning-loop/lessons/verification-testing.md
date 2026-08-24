@@ -1,6 +1,6 @@
 ---
 category: verification-testing
-last_reviewed: 2026-08-23
+last_reviewed: 2026-08-24
 ---
 
 **Scope:** What a test must actually establish - observable contracts over incidental shape, deadlines independent of the thing under test, telling a transient failure apart from a regression, and the ways a passing suite still fails to prove its claim. Proving a guard or scanner works is [verification-scanners.md](verification-scanners.md); building fixtures is [test-fixtures.md](test-fixtures.md).
@@ -51,7 +51,7 @@ last_reviewed: 2026-08-23
 ## Lesson: Contract tests pin doctrine wording and path semantics
 
 **Status:** active | **Created:** 2026-04-25
-**Incident count:** 12 | **Latest occurrence:** 2026-08-23
+**Incident count:** 16 | **Latest occurrence:** 2026-08-24
 
 **What happened:** While removing one forbidden phrase and changing dashboard quality report ownership, the first full `npm test` run failed two contract-style checks: a skill-hardening contract (now `test/contract/skill-hardening-shared-3.test.ts`, search: `hardening debt`) still required the established "hardening debt" evidence language, and a dashboard prompt-source assertion still expected the old relative quality-report path message.
 
@@ -79,7 +79,11 @@ last_reviewed: 2026-08-23
 
 **Recurrence 2026-08-23:** M15's focused report-schema tests passed, but the first full fast suite failed nine tests: one goat-qa contract still pinned the old gate sentence, and the shared dashboard capture fixture omitted the newly required `refuted_candidates` field, causing eight persistence scenarios to fail at schema admission. Updating the changed doctrine assertion and the one current-report fixture restored `# pass 2174` and `# fail 0`; legacy fixtures remain intentionally field-optional. Evidence anchors: `test/contract/skill-hardening-skills-1.test.ts` (search: `requires goat-qa Standard-mode gap output`) and `test/unit/quality-draft-capture.test.ts` (search: `function validReport`).
 
-**Prevention:** Search tests and durable semantic anchors for changed prose and adjacent commands; sibling parity proves agreement, not preservation of downstream contracts. Keep fixtures inside their consuming subtest and re-read the block before RED. Update a contract only when product semantics change; preserve unrelated doctrine. Before drafting in a near-cap skill, measure the current word budget; replace or condense existing wording, or move detail into a progressive reference, before GREEN. Before quoting a budget or score outcome to the user, measure the exact sizes involved (moved sections minus the pointer text that replaces them) with the same function the gate uses, and state the measured margin.
+**Recurrence 2026-08-24:** Adding an intervening Markdown heading to the learning-loop INDEX unit fixture fixed the parser regression but also changed the fixture's byte-derived token estimate from 70 to 80. The focused assertion passed, while the full unit file rejected the stale adjacent expectation. Updating that derived value restored 17/17. The first learning-loop record then cited the guessed field `tokenEstimate`; `stats --check` rejected it, and a source read retargeted the anchor to `approxTokenEstimate`. Evidence anchor: `test/unit/learning-loop-index.test.ts` (search: `approxTokenEstimate`).
+
+**Recurrence 2026-08-24:** M25's focused goat-plan depth-choice contract passed after a budget-neutral rewrite, but the fast suite failed the adjacent Step 0 ordering contract because the trim removed its exact `Pick exactly one mode.` anchor. Restoring that anchor in the shorter sentence `Pick exactly one mode. First match:` kept the skill at 2,149 words and restored both goat-plan contract files. The first evidence search then omitted the Markdown bold boundary between those clauses; `stats --check` rejected it, so the anchor was narrowed to a literal raw-text substring. Evidence anchors: `workflow/skills/goat-plan/SKILL.md` (search: `Pick exactly one mode.`) and `test/contract/skill-hardening-plan-1.test.ts` (search: `missing mode selection`).
+
+**Prevention:** Search tests and durable semantic anchors for changed prose and adjacent commands; sibling parity proves agreement, not preservation of downstream contracts. Keep fixtures inside their consuming subtest and re-read the block before RED. When fixture size feeds a derived assertion, recalculate that assertion with the production formula after every fixture-text edit. Update a contract only when product semantics change; preserve unrelated doctrine. Before drafting in a near-cap skill, measure the current word budget; replace or condense existing wording, or move detail into a progressive reference, before GREEN. Before quoting a budget or score outcome to the user, measure the exact sizes involved (moved sections minus the pointer text that replaces them) with the same function the gate uses, and state the measured margin.
 ---
 
 ## Lesson: Mid-implementation proof gates split edit batches

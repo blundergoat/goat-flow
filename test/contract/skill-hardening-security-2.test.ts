@@ -131,6 +131,11 @@ describe("skill hardening contracts: security (2/2)", () => {
       /authoritative applicable-control inventory.*independently verified complete.*row per applicable control.*omitted.*unverifiably complete.*not assessed.*coverage-degraded.*withhold.*clearance/iu,
       "dashboard preset security compliance inventory",
     );
+    assert.match(
+      readPresetPrompt("security"),
+      /In compliance mode, the authoritative applicable-control inventory must be independently verified complete/iu,
+      "dashboard preset security compliance inventory scope",
+    );
   });
 
   it("uses non-executing Git inspection and phase-aware persistence recovery", () => {
@@ -150,6 +155,7 @@ describe("skill hardening contracts: security (2/2)", () => {
           /resolved address.*actual connected peer.*before application data.*every redirect\/retry.*mismatch.*stop\/re-authorize/iu,
           /before every tool invocation.*apply.*common-threats\.md.*untrusted-tool-input gate.*path.*ref.*anchor.*pattern.*snippet.*failure.*`UNVERIFIED`.*no-invocation/isu,
           /every local untrusted-artifact content read.*descriptor-anchored.*race-safe no-follow.*validated root.*post-open identity\/type.*bounded raw bytes.*MUST NOT import.*render.*execute.*invoke handlers.*otherwise.*`UNVERIFIED`/isu,
+          /unavailable referenced content.*coverage gap.*coverage-degraded.*withholds clearance/iu,
           /skill-local.*narrows.*durable-artifact convention.*MUST NOT use.*redact --output.*final/iu,
           /untrusted provenance.*MUST NOT use.*source-checkout redactor fallback.*independently trusted absolute installed binary.*`persist-skipped`/iu,
           /write approval.*MUST NOT satisfy.*target-controlled execution authorization/iu,
@@ -176,7 +182,7 @@ describe("skill hardening contracts: security (2/2)", () => {
             /before invoking Git.*non-Git no-follow.*gitfile.*commondir.*resolved common directory.*bind.*--git-dir.*--work-tree/iu,
             /set `GIT_COMMON_DIR`.*independently resolved trusted absolute common directory/iu,
             /isolated read-only snapshot.*descriptor-anchored identity stability.*untrusted mutation.*throughout.*Git invocation.*`UNVERIFIED`.*Git MUST NOT run/iu,
-            /resolved Git and common directories.*config.*includes.*alternates.*`UNVERIFIED`.*Git MUST NOT run/iu,
+            /Resolved Git and common directories require validated repository config, includes, and alternates; otherwise evidence is `UNVERIFIED` and Git MUST NOT run\./u,
             /allowlisted non-executing plumbing/iu,
             /fixed allowlisted argv.*MUST NOT pass repo-controlled refs or options.*literal pathspec.*`--` before every untrusted path/iu,
             /MUST NOT pass repo-controlled data on Git stdin.*batch.*`-Z`.*full-format OIDs.*untrusted revision\/object expressions.*bounded output\/runtime.*response-to-object identity/iu,
