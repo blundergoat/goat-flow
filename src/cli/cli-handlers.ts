@@ -584,7 +584,22 @@ async function handleLearnCommand(options: ParsedCLI): Promise<void> {
     evidenceKind: options.learnEvidenceKind,
     shouldDryRun: options.shouldDryRun,
   });
-  writeOutput(options, result.output);
+  const output =
+    options.format === "json"
+      ? JSON.stringify(
+          {
+            command: "learn",
+            subcommand: "new",
+            targetPath: result.targetPath,
+            wasWritten: result.wasWritten,
+            warnings: result.warnings,
+            scaffold: result.skeleton,
+          },
+          null,
+          2,
+        )
+      : result.output;
+  writeOutput(options, output);
 }
 
 /** Route `skill new` authoring or read-only `skill doctor` diagnosis. */

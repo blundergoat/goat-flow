@@ -15,6 +15,7 @@ import { parseCLIArgs } from "../../src/cli/cli-parser.js";
 import {
   collectLearningLoopRecall,
   formatLearningLoopRecall,
+  handleLearningLoopRecallCommand,
 } from "../../src/cli/learning-loop-recall.js";
 import type { IndexBucket } from "../../src/cli/learning-loop-index/parse-bucket.js";
 
@@ -209,6 +210,16 @@ describe("collectLearningLoopRecall", () => {
     assert.deepEqual(directoryResult.matches[0]?.matchedPaths, [
       "src/server/terminal.ts",
     ]);
+    const trailingSeparatorResult = collectLearningLoopRecall(
+      fs,
+      BUCKET_PATHS,
+      ["src/server/"],
+    );
+    assert.deepEqual(trailingSeparatorResult.paths, ["src/server"]);
+    assert.deepEqual(
+      trailingSeparatorResult.matches.map((match) => match.heading),
+      ["## Lesson: Directory operand"],
+    );
 
     const multiPathResult = collectLearningLoopRecall(fs, BUCKET_PATHS, [
       "src/other.ts",
@@ -312,5 +323,26 @@ describe("recall CLI parsing", () => {
       () => parseCLIArgs(["recall", "src", "--format", "markdown"]),
       /recall supports only text or json output/,
     );
+  });
+
+  it("rejects invalid project config before choosing fallback buckets", () => {
+    const invalidRoot = makeFixtureRepo();
+    writeFileSync(
+      join(invalidRoot, ".goat-flow/config.yaml"),
+      'version: "999.invalid"\n',
+    );
+    const options = {
+      ...parseCLIArgs(["recall", "src"]),
+      projectPath: invalidRoot,
+    };
+
+    try {
+      assert.throws(
+        () => handleLearningLoopRecallCommand(options),
+        /Cannot recall with invalid \.goat-flow\/config\.yaml/u,
+      );
+    } finally {
+      rmSync(invalidRoot, { recursive: true, force: true });
+    }
   });
 });

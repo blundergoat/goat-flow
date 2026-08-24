@@ -68,7 +68,12 @@ const INTERNAL_IDENTIFIER_PATTERNS: readonly InternalIdentifierPattern[] = [
   { pattern: /--[a-z][a-z0-9-]*/iu, tokenCaptureIndex: 0 },
   {
     pattern:
-      /`((?:\.{0,2}\/)?(?:[A-Za-z0-9._-]+\/)*[A-Za-z0-9._-]+\.(?:ts|tsx|js|jsx|md|json|yaml|yml|sh|php))`/iu,
+      /`((?:\.{0,2}\/)?(?:[A-Za-z0-9._-]+\/)*[A-Za-z0-9._-]+\.[A-Za-z0-9]{1,16})`/iu,
+    tokenCaptureIndex: 1,
+  },
+  {
+    pattern:
+      /(?:^|[\s("'])((?:\.{0,2}\/)?(?:[A-Za-z0-9._-]+\/)+[A-Za-z0-9._-]+\.[A-Za-z0-9]{1,16})(?=$|[\s,.;:!?"')])/iu,
     tokenCaptureIndex: 1,
   },
 ];
@@ -149,6 +154,73 @@ function collectPlainLanguageSectionFindings(
         `expected "${EXPECTED_PUBLIC_IDENTIFIER_TEXT}"; received "${internalIdentifier}"`,
     });
   }
+
+  const nonEmptyLines = sectionBody
+    .split(/\r?\n/u)
+    .filter((line) => line.trim().length > 0);
+  const sentenceText = sectionBody.trim();
+  const hasTerminalPunctuation = /[.!?]$/u.test(sentenceText);
+  const hasEarlierSentenceBoundary = /[.!?][\t ]+\p{Lu}/u.test(
+    sentenceText.slice(0, -1),
+  );
+  // Standard+ summaries are deliberately one plain line and one sentence so exports have one unambiguous reader-facing value.
+  if (
+    nonEmptyLines.length !== 1 ||
+    !hasTerminalPunctuation ||
+    hasEarlierSentenceBoundary
+  ) {
+    findings.push({
+      isStrictBlocking: isCurrentHeading,
+      message:
+        `${sectionKind} plain-language section "${displayedHeading}" has an invalid shape; ` +
+        `expected "one plain line and one sentence"; received "${nonEmptyLines.length} non-empty line(s)"`,
+    });
+  }
+  return findings;
+}
+
+/**
+ * Return strict cardinality and heading-style findings for one reader-facing role.
+ *
+ * @param sectionContract - current and legacy names for the problem or benefit role
+ * @param currentSectionCount - visible sections using the current heading
+ * @param legacySectionCount - visible sections using the compatibility heading
+ * @param doesMilestoneUseCurrentHeadings - whether either role selected the current pair
+ * @returns deterministic findings; empty means this role has no cardinality or style conflict
+ * @throws Never; invalid cardinality is represented as findings
+ */
+function collectPlainLanguageCardinalityFindings(
+  sectionContract: PlainLanguageSectionContract,
+  currentSectionCount: number,
+  legacySectionCount: number,
+  doesMilestoneUseCurrentHeadings: boolean,
+): PlainLanguageFinding[] {
+  const findings: PlainLanguageFinding[] = [];
+  // A current pair has exactly one section for each role and cannot fall back to a legacy half.
+  if (doesMilestoneUseCurrentHeadings && currentSectionCount === 0) {
+    findings.push({
+      isStrictBlocking: true,
+      message:
+        `current plain-language ${sectionContract.role} section is missing; ` +
+        `expected "## ${displaySectionHeading(sectionContract.currentHeading)}"; received "legacy heading only"`,
+    });
+  }
+  if (currentSectionCount > 1) {
+    findings.push({
+      isStrictBlocking: true,
+      message:
+        `current plain-language ${sectionContract.role} section is duplicated; ` +
+        `expected "exactly one ## ${displaySectionHeading(sectionContract.currentHeading)}"; received "${currentSectionCount} matching sections"`,
+    });
+  }
+  if (doesMilestoneUseCurrentHeadings && legacySectionCount > 0) {
+    findings.push({
+      isStrictBlocking: true,
+      message:
+        `current milestone mixes plain-language ${sectionContract.role} heading styles; ` +
+        `expected "## ${displaySectionHeading(sectionContract.currentHeading)} only"; received "## ${displaySectionHeading(sectionContract.legacyHeading)}"`,
+    });
+  }
   return findings;
 }
 
@@ -182,19 +254,24 @@ function collectMilestonePlainLanguageFindings(
       (section) => section.heading === sectionContract.legacyHeading,
     );
 
+    findings.push(
+      ...collectPlainLanguageCardinalityFindings(
+        sectionContract,
+        currentSections.length,
+        legacySections.length,
+        milestoneUsesCurrentHeadings,
+      ),
+    );
+
     // No matching heading is strict only when its sibling proves this milestone chose the current pair.
     if (currentSections.length === 0 && legacySections.length === 0) {
-      const sectionKind = milestoneUsesCurrentHeadings
-        ? "current"
-        : "legacy-compatible";
-      const expectedHeadings = milestoneUsesCurrentHeadings
-        ? `## ${displaySectionHeading(sectionContract.currentHeading)}`
-        : `## ${displaySectionHeading(sectionContract.currentHeading)} or ## ${displaySectionHeading(sectionContract.legacyHeading)}`;
+      // Current milestones already received the stricter missing-counterpart finding above.
+      if (milestoneUsesCurrentHeadings) continue;
       findings.push({
-        isStrictBlocking: milestoneUsesCurrentHeadings,
+        isStrictBlocking: false,
         message:
-          `${sectionKind} plain-language ${sectionContract.role} section is missing; ` +
-          `expected "${expectedHeadings}"; received "no matching section"`,
+          `legacy-compatible plain-language ${sectionContract.role} section is missing; ` +
+          `expected "## ${displaySectionHeading(sectionContract.currentHeading)} or ## ${displaySectionHeading(sectionContract.legacyHeading)}"; received "no matching section"`,
       });
       continue;
     }

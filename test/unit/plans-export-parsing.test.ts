@@ -395,6 +395,52 @@ describe("plans export: milestone parsing", () => {
     });
   });
 
+  it("uses visual columns to exclude a tab-indented nested checkbox", () => {
+    const record = parseMilestoneMarkdown(
+      [
+        "# M04: Mixed indentation",
+        "Status: not-started",
+        "Effort estimate: ~3 min agent-time (3 product / 0 proof / 0 other)",
+        "",
+        "## Tasks",
+        "  - [ ] Parent work stays canonical. (est: 3 min product)",
+        "\t- [ ] Nested work is supporting detail only.",
+        "",
+      ].join("\n"),
+      "M04-mixed-indentation.md",
+    );
+
+    assert.equal(record.tasks.length, 1);
+    assert.match(record.tasks[0]?.text ?? "", /Parent work stays canonical/u);
+    assert.equal(record.tasks[0]?.estimateMinutes, 3);
+  });
+
+  it("ignores nested list markers hidden inside fenced task examples", () => {
+    const record = parseMilestoneMarkdown(
+      [
+        "# M04: Fenced task example",
+        "Status: not-started",
+        "Effort estimate: ~3 min agent-time (3 product / 0 proof / 0 other)",
+        "",
+        "## Tasks",
+        "- [ ] Explain the parser with a fenced example.",
+        "  ```markdown",
+        "  - example list item",
+        "  ```",
+        "  Finish the actual task. (est: 3 min product)",
+        "",
+      ].join("\n"),
+      "M04-fenced-task-example.md",
+    );
+
+    assert.equal(record.tasks.length, 1);
+    assert.equal(record.tasks[0]?.estimateMinutes, 3);
+    assert.ok(
+      !record.warnings.some((warning) => warning.includes("estimate")),
+      record.warnings.join("; "),
+    );
+  });
+
   // Estimate-less plans predate the notation and must stay entirely noise-free.
   it("keeps legacy milestones free of effort fields and warnings", () => {
     const record = parseMilestoneMarkdown(

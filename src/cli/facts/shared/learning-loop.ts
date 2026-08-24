@@ -271,10 +271,15 @@ function countRecurrenceLabels(entryContent: string): number {
   return Array.from(
     entryContent.matchAll(/^\*\*([^*\r\n]+):\*\*/gm),
     (labelMatch) => labelMatch[1]?.trim() ?? "",
-  ).filter(
-    (label) =>
-      /\brecurrences?\b/i.test(label) || /^Repeat incident\b/i.test(label),
-  ).length;
+  ).filter((label) => {
+    // These metadata labels describe prevention or an explicit absence, not another observed incident.
+    if (/^(?:No recurrences?|Recurrence prevention)\b/iu.test(label)) {
+      return false;
+    }
+    return (
+      /\brecurrences?\b/iu.test(label) || /^Repeat incident\b/iu.test(label)
+    );
+  }).length;
 }
 
 /**

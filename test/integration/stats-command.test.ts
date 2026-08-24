@@ -490,6 +490,18 @@ describe("goat-flow stats - graduation candidates", () => {
     ]);
   });
 
+  it("does not promote prevention or no-recurrence metadata", () => {
+    const report = loadReport({
+      footguns: {},
+      lessons: {
+        "non-incidents.md":
+          "---\ncategory: non-incidents\nlast_reviewed: 2026-04-18\n---\n\n## Lesson: prevention metadata\n\n**No recurrence:** verified after the repair.\n\n**Recurrence prevention:** keep the focused regression.\n",
+      },
+    });
+
+    assert.deepEqual(report.lessons.buckets[0].graduationCandidates, []);
+  });
+
   it("keeps recurrence candidates report-only without optional-metadata warning noise", () => {
     const verdict = checkStats(loadRecurrenceReport());
     assert.equal(verdict.status, "pass", JSON.stringify(verdict.findings));

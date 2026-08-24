@@ -424,6 +424,24 @@ function renderPriorFindingSummary(summary: string): string {
   );
 }
 
+/** Rationale: three rows match the finding preview and keep both history lists equally bounded. */
+const PRIOR_REFUTATION_PREVIEW_LIMIT = 3;
+/** Rationale: 240 characters preserve two short sentences without letting one row dominate the prompt. */
+const PRIOR_REFUTATION_TEXT_LIMIT = 240;
+
+/**
+ * Flatten and bound one saved refutation field before it enters a generated prompt.
+ * This keeps prior-report context useful without allowing a long historical claim to crowd out the current assessment.
+ *
+ * @param text - saved claim or exclusion reason; schema validation guarantees non-empty text
+ * @returns one prompt-safe line, truncated with an ellipsis when it exceeds the preview limit
+ */
+function renderPriorRefutationText(text: string): string {
+  const flattened = text.replace(/\s+/gu, " ").trim();
+  if (flattened.length <= PRIOR_REFUTATION_TEXT_LIMIT) return flattened;
+  return `${flattened.slice(0, PRIOR_REFUTATION_TEXT_LIMIT - 1).trimEnd()}…`;
+}
+
 /**
  * Escape Markdown table cell content emitted from scorer details.
  *
@@ -499,6 +517,29 @@ export function renderPriorReportContext(
           `  - \`${finding.id}\` | ${finding.severity} | ${finding.type} | ${renderPriorFindingSummary(finding.summary)}`,
         );
       }
+    }
+    const priorRefutations = priorReport.report.refuted_candidates.slice(
+      0,
+      PRIOR_REFUTATION_PREVIEW_LIMIT,
+    );
+    lines.push(
+      "- Prior refuted candidates (do not repeat unless evidence or contract changed):",
+    );
+    if (priorRefutations.length === 0) {
+      lines.push("  - none recorded");
+    } else {
+      for (const candidate of priorRefutations) {
+        lines.push(
+          `  - ${renderPriorRefutationText(candidate.claim)} — ${renderPriorRefutationText(candidate.why_excluded)}`,
+        );
+      }
+    }
+    const omittedPriorRefutationCount =
+      priorReport.report.refuted_candidates.length - priorRefutations.length;
+    if (omittedPriorRefutationCount > 0) {
+      lines.push(
+        `  - ${omittedPriorRefutationCount} additional prior refuted candidate(s) omitted from this bounded preview.`,
+      );
     }
     lines.push("");
     lines.push(

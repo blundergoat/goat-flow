@@ -93,6 +93,12 @@ const BANNED_IDENTIFIER_CASES = [
     statement:
       "Contributors must open `src/cli/plans-check.ts` before this problem statement makes sense.",
   },
+  {
+    name: "unquoted path with an uncommon extension",
+    token: "src/server/main.go",
+    statement:
+      "Contributors must open src/server/main.go before they can understand what remains broken here.",
+  },
 ] as const;
 
 describe("plans check: structure, identity, and dependencies", () => {
@@ -233,6 +239,110 @@ describe("plans check: structure, identity, and dependencies", () => {
     } finally {
       rmSync(legacyRoot, { recursive: true, force: true });
       rmSync(missingRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("strict mode rejects duplicate current plain-language sections", () => {
+    const temporaryRoot = mkdtempSync(
+      join(tmpdir(), "goat-flow-plan-duplicate-language-"),
+    );
+    const body = withPlainLanguageSections(
+      canonicalMilestoneBody(),
+      "current",
+    ).replace(
+      "## Scope",
+      `## What problem are we solving\n\n${VALID_PROBLEM_STATEMENT}\n\n## Scope`,
+    );
+    const planPath = writeCheckFixture(temporaryRoot, body);
+
+    try {
+      const result = runPlansCheck(planPath, "--strict");
+      assert.equal(result.status, 1, result.stdout);
+      assert.match(
+        result.stdout,
+        /current plain-language problem section is duplicated/u,
+      );
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("strict mode rejects mixed current and legacy plain-language pairs", () => {
+    const temporaryRoot = mkdtempSync(
+      join(tmpdir(), "goat-flow-plan-mixed-language-"),
+    );
+    const body = withPlainLanguageSections(
+      canonicalMilestoneBody(),
+      "current",
+    ).replace("## Who benefits and how", "## What you get");
+    const planPath = writeCheckFixture(temporaryRoot, body);
+
+    try {
+      const result = runPlansCheck(planPath, "--strict");
+      assert.equal(result.status, 1, result.stdout);
+      assert.match(
+        result.stdout,
+        /current plain-language benefit section is missing/u,
+      );
+      assert.match(
+        result.stdout,
+        /current milestone mixes plain-language benefit heading styles/u,
+      );
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
+  // Fixture purpose: writes and removes one current milestone whose valid closing hashes previously downgraded strict findings.
+  it("normalizes closing ATX hashes before enforcing current summaries", () => {
+    const temporaryRoot = mkdtempSync(
+      join(tmpdir(), "goat-flow-plan-closing-hash-language-"),
+    );
+    const body = withPlainLanguageSections(
+      canonicalMilestoneBody(),
+      "current",
+      "M22",
+    )
+      .replace(
+        "## What problem are we solving",
+        "## What problem are we solving ##",
+      )
+      .replace("## Who benefits and how", "## Who benefits and how ##");
+    const planPath = writeCheckFixture(temporaryRoot, body);
+
+    try {
+      const result = runPlansCheck(planPath, "--strict");
+      assert.equal(result.status, 1, result.stdout);
+      assert.match(
+        result.stdout,
+        /current plain-language section "What problem are we solving" names an internal identifier.+received "M22"/u,
+      );
+      assert.doesNotMatch(result.stdout, /legacy-compatible.+is missing/u);
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("strict mode rejects multiline current summaries", () => {
+    const temporaryRoot = mkdtempSync(
+      join(tmpdir(), "goat-flow-plan-multiline-language-"),
+    );
+    const body = withPlainLanguageSections(
+      canonicalMilestoneBody(),
+      "current",
+      "Plan authors can leave reader-facing sections vague\nbecause no checker rejects them.",
+    );
+    const planPath = writeCheckFixture(temporaryRoot, body);
+
+    try {
+      const result = runPlansCheck(planPath, "--strict");
+      assert.equal(result.status, 1, result.stdout);
+      assert.match(
+        result.stdout,
+        /expected "one plain line and one sentence"; received "2 non-empty line\(s\)"/u,
+      );
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
     }
   });
 

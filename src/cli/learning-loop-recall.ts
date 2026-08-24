@@ -74,7 +74,8 @@ function normalizeRecallPath(rawPath: string): string {
       2,
     );
   }
-  return normalized;
+  // `path.posix.normalize` preserves a trailing slash, but matching appends its own directory separator.
+  return normalized === "." ? normalized : normalized.replace(/\/+$/u, "");
 }
 
 /**
@@ -241,10 +242,17 @@ export function handleLearningLoopRecallCommand(options: ParsedCLI): void {
     throw new CLIError("recall supports only text or json output.", 2);
   }
   const fs = createFS(options.projectPath);
-  const config = loadConfig(options.projectPath, fs).config;
+  const configState = loadConfig(options.projectPath, fs);
+  // Invalid config may contain the user's real bucket paths, so falling back to defaults could hide relevant entries.
+  if (!configState.valid) {
+    throw new CLIError(
+      `Cannot recall with invalid .goat-flow/config.yaml: ${configState.errors.map((error) => error.message).join("; ")}`,
+      2,
+    );
+  }
   const result = collectLearningLoopRecall(
     fs,
-    resolveIndexBucketPaths(config),
+    resolveIndexBucketPaths(configState.config),
     options.recallPaths,
   );
   console.log(formatLearningLoopRecall(result, options.format));

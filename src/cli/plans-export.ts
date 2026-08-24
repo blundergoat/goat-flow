@@ -114,7 +114,9 @@ function readMilestoneField(
 /** Split level-two sections while preserving nested headings and user-authored Markdown. */
 function readMilestoneSections(content: string): MarkdownSection[] {
   const headingMatches = Array.from(
-    maskNonRenderedMarkdown(content).matchAll(/^##\s+(.+)$/gmu),
+    maskNonRenderedMarkdown(content).matchAll(
+      /^ {0,3}##[\t ]+(.+?)(?:[\t ]+#+)?[\t ]*$/gmu,
+    ),
   );
 
   // Each heading owns text until the next peer heading, matching goat-plan's milestone layout.
@@ -126,6 +128,20 @@ function readMilestoneSections(content: string): MarkdownSection[] {
       body: content.slice(bodyStart, bodyEnd).trim(),
     };
   });
+}
+
+/**
+ * Measure Markdown indentation using four-column tab stops.
+ *
+ * @param indentation - spaces and tabs before one checklist marker
+ * @returns visual zero-based column where the marker begins
+ */
+function markdownIndentColumns(indentation: string): number {
+  let column = 0;
+  for (const character of indentation) {
+    column += character === "\t" ? 4 - (column % 4) : 1;
+  }
+  return column;
 }
 
 /** Return every section matching one semantic alias group in source order. */
@@ -185,11 +201,14 @@ function readChecklistItems(
     maskedMarkdown.matchAll(CHECKLIST_ITEM_PATTERN),
   );
   const shallowestTaskIndentation = Math.min(
-    ...checkboxMatches.map((checkboxMatch) => checkboxMatch[1]?.length ?? 0),
+    ...checkboxMatches.map((checkboxMatch) =>
+      markdownIndentColumns(checkboxMatch[1] ?? ""),
+    ),
   );
   const taskStarts = checkboxMatches.filter(
     (checkboxMatch) =>
-      (checkboxMatch[1]?.length ?? 0) === shallowestTaskIndentation,
+      markdownIndentColumns(checkboxMatch[1] ?? "") ===
+      shallowestTaskIndentation,
   );
 
   // Headings also end an item so nested Testing Gate labels do not swallow its trailing estimate.
@@ -203,8 +222,11 @@ function readChecklistItems(
       nextHeadingOffset >= 0 ? bodyStart + nextHeadingOffset : markdown.length;
     const bodyEnd = Math.min(nextCheckbox, nextHeading);
     const taskBodyMarkdown = markdown.slice(bodyStart, bodyEnd);
+    const maskedTaskBodyMarkdown = maskedMarkdown.slice(bodyStart, bodyEnd);
     const text = taskBodyMarkdown.replace(/\s+/gu, " ").trim();
-    const nestedListStart = taskBodyMarkdown.search(NESTED_LIST_ITEM_PATTERN);
+    const nestedListStart = maskedTaskBodyMarkdown.search(
+      NESTED_LIST_ITEM_PATTERN,
+    );
     const estimateSourceMarkdown =
       nestedListStart < 0
         ? taskBodyMarkdown

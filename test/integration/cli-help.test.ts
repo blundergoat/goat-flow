@@ -249,4 +249,16 @@ describe("contextual CLI help", () => {
     assert.match(hooksHelpProcess.stdout, /^  --scenario <name>\s+/mu);
     assert.doesNotMatch(hooksHelpProcess.stdout, /--harness/u);
   });
+
+  it("advertises narrow setup authority and learn output formats", () => {
+    const setupHelpProcess = runHelpCommand(["setup", "--help"]);
+    const learnHelpProcess = runHelpCommand(["learn", "--help"]);
+
+    assert.equal(setupHelpProcess.status, 0, setupHelpProcess.stderr);
+    assert.match(setupHelpProcess.stdout, /^  --force-managed\s+/mu);
+    assert.match(setupHelpProcess.stdout, /^  --force-path <path>\s+/mu);
+    assert.match(setupHelpProcess.stdout, /^  --force-user-owned\s+/mu);
+    assert.equal(learnHelpProcess.status, 0, learnHelpProcess.stderr);
+    assert.match(learnHelpProcess.stdout, /^  --format <type>\s+/mu);
+  });
 });

@@ -149,7 +149,11 @@ export function extractIncidentCount(entryContent: string): number | null {
   if (incidentCountText === null || !/^\d+$/.test(incidentCountText)) {
     return null;
   }
-  return Number.parseInt(incidentCountText, 10);
+  const incidentCount = Number(incidentCountText);
+  // The contract requires a positive safe integer; zero and rounded overflow values cannot describe a trustworthy total.
+  return Number.isSafeInteger(incidentCount) && incidentCount > 0
+    ? incidentCount
+    : null;
 }
 
 /**

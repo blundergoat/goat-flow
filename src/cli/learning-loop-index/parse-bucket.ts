@@ -11,6 +11,7 @@
 import type { ReadonlyFS } from "../types.js";
 import type { GoatFlowConfig } from "../config/types.js";
 import {
+  findResolvedEntriesHeadingIndex,
   listMarkdownEntries,
   parseMarkdownFrontmatter,
   type MarkdownEntry,
@@ -86,9 +87,6 @@ const HOOK_MARKER = {
   lessons: "**What happened:**",
   patterns: "**Context:**",
 } as const;
-
-/** Entries below this marker are resolved history and stay out of the generated index. */
-const RESOLVED_MARKER = "## Resolved Entries";
 
 /** Metadata-only paragraphs skipped when falling back to the first body paragraph. */
 const METADATA_LABEL =
@@ -266,7 +264,7 @@ function parseEntryFileSections(
   bucket: Exclude<IndexBucket, "decisions">,
 ): ActiveLearningLoopSection[] {
   const { body } = parseMarkdownFrontmatter(file.content);
-  const resolvedAt = body.indexOf(RESOLVED_MARKER);
+  const resolvedAt = findResolvedEntriesHeadingIndex(body);
   return splitEntrySections(body, HEADING_KIND[bucket])
     .filter((section) => resolvedAt === -1 || section.start < resolvedAt)
     .filter((section) => !/\*\*Status:\*\*\s*resolved\b/i.test(section.content))

@@ -15,7 +15,10 @@ import {
   computeFreshness,
   parseFrontmatterFields,
 } from "../../src/cli/facts/shared/learning-loop-common.js";
-import { extractLearningLoopEntries } from "../../src/cli/facts/shared/learning-loop-entries.js";
+import {
+  extractIncidentCount,
+  extractLearningLoopEntries,
+} from "../../src/cli/facts/shared/learning-loop-entries.js";
 import {
   collectFootgunStructureDiagnostics,
   splitFootgunSections,
@@ -473,6 +476,15 @@ describe("extractFootgunFacts search-anchor staleness", () => {
 });
 
 describe("extractLearningLoopEntries", () => {
+  it("rejects zero and unsafe declared incident totals", () => {
+    assert.equal(extractIncidentCount("**Incident count:** 0"), null);
+    assert.equal(
+      extractIncidentCount("**Incident count:** 9007199254740993"),
+      null,
+    );
+    assert.equal(extractIncidentCount("**Incident count:** 2"), 2);
+  });
+
   it("exposes forward memory metadata while preserving legacy entries", () => {
     const fs = stubFS(
       {

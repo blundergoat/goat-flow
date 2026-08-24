@@ -28,7 +28,7 @@ type FieldResult<T> = { ok: true; value: T } | { ok: false; error: string };
 
 /** Canonical grep-friendly anchor accepted in source-backed disproval summaries. */
 const SEMANTIC_ANCHOR_PATTERN =
-  /\(search:\s*(?:`[^`\r\n]+`|"(?:\\.|[^"\\])+")\)/u;
+  /\(search:\s*(?:`[^`\r\n]+`|"(?:\\.|[^"\\])+"|'(?:\\.|[^'\\])+')\)/u;
 
 /** Required claim, reason, and source fields for one disproved candidate. */
 interface RefutedCandidateCoreFields {
@@ -129,6 +129,13 @@ function parseRefutedCandidateEvidenceFields(
   );
   // Unknown quality labels cannot communicate whether the disproval was observed or inferred.
   if (!quality.ok) return quality;
+  // An inferred candidate remains unresolved; only observed evidence can support a disproval ledger.
+  if (quality.value !== "OBSERVED") {
+    return {
+      ok: false,
+      error: `${candidatePath}.evidence_quality must be OBSERVED for a refuted candidate`,
+    };
+  }
   const method = expectEnumValue(
     rawCandidate.evidence_method,
     `${candidatePath}.evidence_method`,
@@ -173,6 +180,57 @@ function parseRefutedCandidateEvidenceFields(
   };
 }
 
+/** Check the command and exit-code half of runtime or mixed evidence. */
+function validateRefutedCandidateRuntimeProvenance(
+  evidence: RefutedCandidateEvidenceFields,
+  candidatePath: string,
+): FieldResult<true> {
+  const requiresRuntimeProvenance =
+    evidence.method === "runtime-probe" || evidence.method === "mixed";
+  if (!requiresRuntimeProvenance) return { ok: true, value: true };
+  // Runtime-backed exclusions need the exact command so the user can reproduce the disproval.
+  if (evidence.command === undefined) {
+    return {
+      ok: false,
+      error: `${candidatePath}.evidence_command is required for ${evidence.method} evidence`,
+    };
+  }
+  // Runtime-backed exclusions need the exit code so pass and failure outcomes are not confused.
+  if (evidence.exitCode === undefined) {
+    return {
+      ok: false,
+      error: `${candidatePath}.evidence_exit_code is required for ${evidence.method} evidence`,
+    };
+  }
+  return { ok: true, value: true };
+}
+
+/** Check the file and semantic-anchor half of static or mixed evidence. */
+function validateRefutedCandidateStaticProvenance(
+  evidence: RefutedCandidateEvidenceFields,
+  sourceFile: string | null,
+  candidatePath: string,
+): FieldResult<true> {
+  const requiresStaticProvenance =
+    evidence.method === "static-analysis" || evidence.method === "mixed";
+  if (!requiresStaticProvenance) return { ok: true, value: true };
+  // Static exclusions need a source file so the user can inspect the evidence that killed the claim.
+  if (sourceFile === null) {
+    return {
+      ok: false,
+      error: `${candidatePath}.file is required for ${evidence.method} evidence`,
+    };
+  }
+  // Static exclusions need a durable search anchor instead of a line number that will drift.
+  if (!SEMANTIC_ANCHOR_PATTERN.test(evidence.summary)) {
+    return {
+      ok: false,
+      error: `${candidatePath}.evidence_summary must include a semantic anchor such as (search: "pattern") for ${evidence.method} evidence`,
+    };
+  }
+  return { ok: true, value: true };
+}
+
 /**
  * Check that an evidence method carries the provenance a user needs to reproduce it.
  * Runtime and static paths intentionally differ because commands and source anchors prove different kinds of disproval.
@@ -187,40 +245,16 @@ function validateRefutedCandidateProvenance(
   sourceFile: string | null,
   candidatePath: string,
 ): FieldResult<true> {
-  const requiresRuntimeProvenance =
-    evidence.method === "runtime-probe" || evidence.method === "mixed";
-  // Runtime-backed exclusions need the exact command so the user can reproduce the disproval.
-  if (requiresRuntimeProvenance && evidence.command === undefined) {
-    return {
-      ok: false,
-      error: `${candidatePath}.evidence_command is required for ${evidence.method} evidence`,
-    };
-  }
-  // Runtime-backed exclusions need the exit code so pass and failure outcomes are not confused.
-  if (requiresRuntimeProvenance && evidence.exitCode === undefined) {
-    return {
-      ok: false,
-      error: `${candidatePath}.evidence_exit_code is required for ${evidence.method} evidence`,
-    };
-  }
-  // Static exclusions need a source file so the user can inspect the evidence that killed the claim.
-  if (evidence.method === "static-analysis" && sourceFile === null) {
-    return {
-      ok: false,
-      error: `${candidatePath}.file is required for static-analysis evidence`,
-    };
-  }
-  // Static exclusions need a durable search anchor instead of a line number that will drift.
-  if (
-    evidence.method === "static-analysis" &&
-    !SEMANTIC_ANCHOR_PATTERN.test(evidence.summary)
-  ) {
-    return {
-      ok: false,
-      error: `${candidatePath}.evidence_summary must include a semantic anchor such as (search: "pattern") for static-analysis evidence`,
-    };
-  }
-  return { ok: true, value: true };
+  const runtimeProvenance = validateRefutedCandidateRuntimeProvenance(
+    evidence,
+    candidatePath,
+  );
+  if (!runtimeProvenance.ok) return runtimeProvenance;
+  return validateRefutedCandidateStaticProvenance(
+    evidence,
+    sourceFile,
+    candidatePath,
+  );
 }
 
 /**

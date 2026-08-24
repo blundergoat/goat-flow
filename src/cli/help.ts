@@ -89,6 +89,7 @@ const COMMAND_HELP_CATALOG = {
       ["--agent <id>", "Select the agent profile to install."],
       ["--dry-run", "Preview every planned write."],
       ["--force", "Authorize inspected managed-file conflicts."],
+      ["--force-managed", "Authorize every inspected managed conflict."],
       [
         "--force-path <path>",
         "Authorize one named conflict; repeat as needed.",
@@ -115,6 +116,15 @@ const COMMAND_HELP_CATALOG = {
       ["--dry-run", "Preview managed setup writes."],
       ["--apply", "Apply managed files instead of printing guidance."],
       ["--force", "Authorize inspected managed-file conflicts."],
+      ["--force-managed", "Authorize every inspected managed conflict."],
+      [
+        "--force-path <path>",
+        "Authorize one named conflict; repeat as needed.",
+      ],
+      [
+        "--force-user-owned",
+        "With --force-path, replace the named user-owned file.",
+      ],
       ["--trusted-target", "Allow target-hook proof in generated guidance."],
     ],
     examples: [
@@ -262,6 +272,7 @@ const COMMAND_HELP_CATALOG = {
         "For footguns, choose ACTUAL_MEASURED, OBSERVED, or EXTERNAL_REFERENCE.",
       ],
       ["--dry-run", "Validate and print the scaffold without writing."],
+      ["--format <type>", "Choose text, json, or markdown output."],
     ],
     examples: [
       'goat-flow learn new --type lesson --category verification --title "Check focused proof" --dry-run',

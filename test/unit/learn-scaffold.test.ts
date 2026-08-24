@@ -21,6 +21,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it, type TestContext } from "node:test";
 import { parseCLIArgs } from "../../src/cli/cli-parser.js";
+import { dispatchCommand } from "../../src/cli/cli-handlers.js";
 import {
   renderLearnEntrySkeleton,
   runLearnScaffold,
@@ -598,6 +599,76 @@ last_reviewed: 2026-08-01
         publishedContent.indexOf("## Lesson: Keep literal proof") <
           publishedContent.indexOf("## Resolved Entries"),
       );
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  // Fixture purpose: writes an isolated bucket where prose and a fence mention the boundary before the one rendered H2, then removes it.
+  it("ignores resolved-heading text in prose and fenced examples", () => {
+    const projectRoot = createLearningProject();
+    const { bucketPath, content } = writeExistingLessonBucket(projectRoot);
+    const misleadingContent = content.replace(
+      "**What happened:** Existing entry bytes must stay unchanged.",
+      "**What happened:** The phrase ## Resolved Entries is ordinary prose here.\n\n```markdown\n## Resolved Entries\n```",
+    );
+    writeFileSync(bucketPath, misleadingContent);
+
+    try {
+      runLearnScaffold(lessonRequest(projectRoot), {
+        ...fixedClock(),
+        regenerateIndexes: () => undefined,
+        verifyStats: () => null,
+      });
+      const publishedContent = readFileSync(bucketPath, "utf-8");
+      assert.ok(
+        publishedContent.indexOf("## Lesson: Keep literal proof") <
+          publishedContent.lastIndexOf("## Resolved Entries"),
+      );
+      assert.match(
+        publishedContent,
+        /phrase ## Resolved Entries is ordinary prose/u,
+      );
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("emits the promised JSON schema through the public learn handler", async () => {
+    const projectRoot = createLearningProject();
+    const outputPath = join(projectRoot, "learn-result.json");
+
+    try {
+      const options = parseCLIArgs([
+        "learn",
+        "new",
+        projectRoot,
+        "--type",
+        "lesson",
+        "--category",
+        "verification",
+        "--title",
+        "Keep literal proof",
+        "--dry-run",
+        "--format",
+        "json",
+        "--output",
+        outputPath,
+      ]);
+      await dispatchCommand(options);
+      const output = JSON.parse(readFileSync(outputPath, "utf-8")) as {
+        command: string;
+        subcommand: string;
+        targetPath: string;
+        wasWritten: boolean;
+        scaffold: string;
+      };
+
+      assert.equal(output.command, "learn");
+      assert.equal(output.subcommand, "new");
+      assert.equal(output.wasWritten, false);
+      assert.match(output.targetPath, /lessons\/verification\.md$/u);
+      assert.match(output.scaffold, /^## Lesson: Keep literal proof$/mu);
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });
     }

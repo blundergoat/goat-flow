@@ -19,9 +19,22 @@ import {
   type ReferenceValidationOptions,
 } from "./reference-paths.js";
 import { evaluateSearchAnchors } from "./search-anchors.js";
+import { maskNonRenderedMarkdown } from "../../rendered-markdown.js";
 
 /** Strict YYYY-MM-DD format - rejects full ISO 8601 timestamps in `last_reviewed`. */
 export const ISO_DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Locate the visible active/resolved boundary while ignoring prose, examples, and longer headings.
+ *
+ * @param content - complete bucket Markdown whose character offsets must remain stable
+ * @returns zero-based heading offset, or -1 when the bucket has no rendered boundary
+ */
+export function findResolvedEntriesHeadingIndex(content: string): number {
+  return maskNonRenderedMarkdown(content).search(
+    /^ {0,3}##[\t ]+Resolved Entries(?:[\t ]+#+)?[\t ]*$/mu,
+  );
+}
 
 /**
  * Matches file path evidence in multiple formats:

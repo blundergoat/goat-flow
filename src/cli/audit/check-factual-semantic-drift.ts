@@ -268,7 +268,7 @@ type SkillInventoryDocumentPath =
 
 /** A document either names each invokable skill or advertises only the total users can expect. */
 type ExplicitSkillInventory =
-  | { kind: "names"; skillNames: string[] }
+  | { kind: "names"; skillNames: string[]; skillTotal?: number }
   | { kind: "total"; skillTotal: number };
 
 /**
@@ -291,7 +291,7 @@ function readCodeMapSkillInventory(
   // For example, an `agent-notes/` row is ignored because users cannot invoke it without a `SKILL.md` row.
   const skillNames = codeMapLines.flatMap((line) => {
     const skillRow = line.match(
-      /^[\s│]*[├└]──\s+(goat(?:-[a-z0-9]+)*)\/SKILL\.md\b/u,
+      /^[\s│]*[├└]──\s+([a-z][a-z0-9]*(?:-[a-z0-9]+)*)\/SKILL\.md\b/u,
     );
     // Rows without a captured SKILL.md name describe folders or prose, not invokable user choices.
     return skillRow?.[1] === undefined ? [] : [skillRow[1]];
@@ -328,7 +328,16 @@ function readGlossarySkillInventory(
     skillDefinition.matchAll(/\bgoat(?:-[a-z0-9]+)*\b/gu),
     (match) => match[0],
   ).filter((skillName) => skillName !== "goat-flow");
-  return { kind: "names", skillNames: [...new Set(skillNames)] };
+  const advertisedTotal = skillDefinition.match(/\b(\d+)\s+total\b/u)?.[1];
+  if (advertisedTotal === undefined) return null;
+  const skillTotal = Number(advertisedTotal);
+  // A total-only definition is complete without inventing names the document does not claim to list.
+  if (skillNames.length === 0) return { kind: "total", skillTotal };
+  return {
+    kind: "names",
+    skillNames: [...new Set(skillNames)],
+    skillTotal,
+  };
 }
 
 /**
@@ -432,10 +441,17 @@ export function findSkillInventoryDrift(
     (skillName) => !expectedSkillNameSet.has(skillName),
   );
 
-  // Matching named inventories give users the same skill choices as the manifest.
-  if (missingSkillNames.length === 0 && unexpectedSkillNames.length === 0)
-    return [];
   const mismatchDescriptions: string[] = [];
+
+  // A glossary can name every skill while still advertising the wrong total, so validate both claims independently.
+  if (
+    explicitInventory.skillTotal !== undefined &&
+    explicitInventory.skillTotal !== expectedSkillNames.length
+  ) {
+    mismatchDescriptions.push(
+      `advertises ${explicitInventory.skillTotal} skill(s), but the manifest declares ${expectedSkillNames.length}.`,
+    );
+  }
 
   // Missing names identify invokable workflows a user would otherwise never discover in this document.
   if (missingSkillNames.length > 0) {
@@ -450,6 +466,8 @@ export function findSkillInventoryDrift(
       `lists non-canonical skill(s): ${unexpectedSkillNames.join(", ")}.`,
     );
   }
+  // Matching names and any advertised total give users the same inventory as the manifest.
+  if (mismatchDescriptions.length === 0) return [];
   return [
     {
       severity: "warning",
@@ -707,7 +725,7 @@ const SKILLS_DOC_STALE_PHRASES: Array<{
       "the live skill bypasses classification for explicit skills and gathering/routing for simple facts.",
   },
   {
-    needle: "Footgun matches\\nRecent git",
+    needle: "Footgun matches\nRecent git",
     rule: "skills-dispatcher-retrieval-drift",
     message:
       "docs/skills.md still claims the dispatcher pre-reads footguns and recent git; " +

@@ -33,6 +33,7 @@ import type { LearnEntryType, LearnEvidenceKind } from "./cli-types.js";
 import { loadConfig } from "./config/reader.js";
 import { createFS } from "./facts/fs.js";
 import {
+  findResolvedEntriesHeadingIndex,
   parseFrontmatterFields,
   parseMarkdownFrontmatter,
 } from "./facts/shared/learning-loop-common.js";
@@ -473,7 +474,7 @@ function renderRefreshedFrontmatter(
 
 /** Insert the new active entry before resolved history without rewriting any existing entry bytes. */
 function insertActiveEntry(content: string, skeleton: string): string {
-  const resolvedHeadingIndex = content.indexOf(RESOLVED_ENTRIES_HEADING);
+  const resolvedHeadingIndex = findResolvedEntriesHeadingIndex(content);
   // Buckets with resolved history receive the new active entry immediately before that boundary.
   if (resolvedHeadingIndex >= 0) {
     const activeContent = content.slice(0, resolvedHeadingIndex);

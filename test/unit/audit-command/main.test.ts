@@ -65,9 +65,12 @@ function codeMapSkillInventory(
  * @param skillNames - invokable names shown to the user; empty input advertises zero total
  * @returns one complete Markdown table row; never empty
  */
-function glossarySkillInventory(skillNames: ReadonlyArray<string>): string {
+function glossarySkillInventory(
+  skillNames: ReadonlyArray<string>,
+  advertisedTotal = skillNames.length,
+): string {
   return (
-    `| Skill | User-invokable capabilities (${skillNames.join(", ")} = ${skillNames.length} total) ` +
+    `| Skill | User-invokable capabilities (${skillNames.join(", ")} = ${advertisedTotal} total) ` +
     "loaded on demand. | `docs/skills.md` | goat-* skills |"
   );
 }
@@ -167,7 +170,7 @@ describe("audit on well-configured project", () => {
         rule: "skill-inventory-drift",
         path: ".goat-flow/glossary.md",
         message:
-          ".goat-flow/glossary.md omits manifest-canonical skill(s): goat-future.",
+          ".goat-flow/glossary.md advertises 8 skill(s), but the manifest declares 9. omits manifest-canonical skill(s): goat-future.",
         suggestion:
           "Update the document's explicit skill inventory to match workflow/manifest.json skills.canonical.",
       },
@@ -206,6 +209,35 @@ describe("audit on well-configured project", () => {
       ],
     );
     assert.equal(report.filesScanned, 1);
+  });
+
+  it("checks glossary totals and accepts non-goat canonical skill rows", () => {
+    assert.deepEqual(
+      findSkillInventoryDrift(
+        ".goat-flow/code-map.md",
+        codeMapSkillInventory(["goat", "skill-with-references"]),
+        ["goat", "skill-with-references"],
+      ),
+      [],
+    );
+    assert.deepEqual(
+      findSkillInventoryDrift(
+        ".goat-flow/glossary.md",
+        glossarySkillInventory(["goat"], 2),
+        ["goat"],
+      ),
+      [
+        {
+          severity: "warning",
+          rule: "skill-inventory-drift",
+          path: ".goat-flow/glossary.md",
+          message:
+            ".goat-flow/glossary.md advertises 2 skill(s), but the manifest declares 1.",
+          suggestion:
+            "Update the document's explicit skill inventory to match workflow/manifest.json skills.canonical.",
+        },
+      ],
+    );
   });
 
   it("passes on this repo", () => {

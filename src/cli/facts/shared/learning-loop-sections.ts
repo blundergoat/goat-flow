@@ -9,6 +9,7 @@
  */
 import {
   EVIDENCE_PATTERN,
+  findResolvedEntriesHeadingIndex,
   parseMarkdownFrontmatter,
   stripStrikethrough,
 } from "./learning-loop-common.js";
@@ -136,7 +137,7 @@ export function collectFootgunStructureDiagnostics(
   content: string,
 ): string[] {
   const { body } = parseMarkdownFrontmatter(content);
-  const resolvedIndex = body.indexOf("## Resolved Entries");
+  const resolvedIndex = findResolvedEntriesHeadingIndex(body);
   const sections = splitFootgunSections(body);
   return sections.flatMap((section) =>
     diagnoseFootgunSection(section, path, resolvedIndex),

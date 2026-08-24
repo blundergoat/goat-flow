@@ -19,6 +19,7 @@ import { join, resolve } from "node:path";
 import { parseCLIArgs } from "../../src/cli/cli-parser.js";
 import { BATCH_HOOK_SCENARIOS } from "../../src/cli/cli-types.js";
 import { HOOK_VERIFICATION_CONTRACTS } from "../../src/cli/hook-verification-contracts.js";
+import { managedHookEnvironment } from "../../src/cli/hooks-configured-runtime-evidence.js";
 import type { CreateEvidenceEnvelopeInput } from "../../src/cli/evidence/envelope.js";
 import {
   executeManagedHookProbe,
@@ -91,6 +92,31 @@ function configuredReport(dependencies: HookRuntimeDependencies) {
 }
 
 describe("hooks runtime evidence", () => {
+  it("preserves only Windows host paths needed by the managed launcher", () => {
+    const environment = managedHookEnvironment(
+      "C:\\fixture",
+      {
+        PATH: "C:\\Windows\\System32",
+        SystemRoot: "C:\\Windows",
+        ProgramFiles: "C:\\Program Files",
+        LOCALAPPDATA: "C:\\Users\\fixture\\AppData\\Local",
+        TEMP: "C:\\Users\\fixture\\AppData\\Local\\Temp",
+        TMP: "C:\\Users\\fixture\\AppData\\Local\\Temp",
+        SECRET_TOKEN: "must-not-leak",
+      },
+      "win32",
+    );
+
+    assert.equal(environment.SystemRoot, "C:\\Windows");
+    assert.equal(environment.ProgramFiles, "C:\\Program Files");
+    assert.equal(
+      environment.LOCALAPPDATA,
+      "C:\\Users\\fixture\\AppData\\Local",
+    );
+    assert.equal(environment.TMPDIR, environment.TEMP);
+    assert.equal(environment.SECRET_TOKEN, undefined);
+  });
+
   for (const [flag, field] of [
     ["--help", "showHelp"],
     ["--version", "showVersion"],

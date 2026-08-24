@@ -379,6 +379,21 @@ describe("quality refuted candidates", () => {
       true,
       sourceBackedLedger.ok ? undefined : sourceBackedLedger.error,
     );
+
+    const singleQuotedAnchor = parseQualityReport({
+      ...currentQualityReport(resolve("quality-refutation-fixture")),
+      refuted_candidates: [
+        staticRefutedCandidate({
+          evidence_summary:
+            "The parser rejects unknown keys (search: 'rejectUnknownKeys').",
+        }),
+      ],
+    });
+    assert.equal(
+      singleQuotedAnchor.ok,
+      true,
+      singleQuotedAnchor.ok ? undefined : singleQuotedAnchor.error,
+    );
   });
 
   it("accepts runtime and mixed disprovals with command provenance", () => {
@@ -491,6 +506,10 @@ describe("quality refuted candidates", () => {
       staticRefutedCandidate({ evidence_method: "browser" }),
       "refuted_candidates[0].evidence_method must be one of: runtime-probe, static-analysis, mixed",
     );
+    assertRefutedCandidateError(
+      staticRefutedCandidate({ evidence_quality: "INFERRED" }),
+      "refuted_candidates[0].evidence_quality must be OBSERVED for a refuted candidate",
+    );
   });
 
   it("requires runtime command provenance for runtime and mixed evidence", () => {
@@ -513,7 +532,7 @@ describe("quality refuted candidates", () => {
     );
   });
 
-  it("requires a file and semantic anchor for static evidence", () => {
+  it("requires a file and semantic anchor for static and mixed evidence", () => {
     assertRefutedCandidateError(
       staticRefutedCandidate({ file: null }),
       "refuted_candidates[0].file is required for static-analysis evidence",
@@ -523,6 +542,24 @@ describe("quality refuted candidates", () => {
         evidence_summary: "The parser calls rejectUnknownKeys before saving.",
       }),
       'refuted_candidates[0].evidence_summary must include a semantic anchor such as (search: "pattern") for static-analysis evidence',
+    );
+    assertRefutedCandidateError(
+      staticRefutedCandidate({
+        file: null,
+        evidence_method: "mixed",
+        evidence_command: "npm run typecheck",
+        evidence_exit_code: 0,
+      }),
+      "refuted_candidates[0].file is required for mixed evidence",
+    );
+    assertRefutedCandidateError(
+      staticRefutedCandidate({
+        evidence_method: "mixed",
+        evidence_command: "npm run typecheck",
+        evidence_exit_code: 0,
+        evidence_summary: "Typecheck passed after source inspection.",
+      }),
+      'refuted_candidates[0].evidence_summary must include a semantic anchor such as (search: "pattern") for mixed evidence',
     );
   });
 });

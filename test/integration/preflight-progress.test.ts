@@ -18,6 +18,7 @@ import { join } from "node:path";
 import type { Readable } from "node:stream";
 import { afterEach, describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
+import { runInNewContext } from "node:vm";
 
 const PROJECT_ROOT = fileURLToPath(new URL("../../", import.meta.url));
 const PREFLIGHT_SCRIPT_PATH = join(
@@ -518,17 +519,57 @@ describe("preflight Tests-phase progress", () => {
 
   it("selects Codex's Windows override for native configured-hook smokes", () => {
     const preflightSource = readFileSync(PREFLIGHT_SCRIPT_PATH, "utf-8");
+    const functionStart = preflightSource.indexOf("function runCommand(");
+    const functionEnd = preflightSource.indexOf(
+      "\nfunction spawnFailureMessage(",
+      functionStart,
+    );
+    assert.ok(functionStart >= 0 && functionEnd > functionStart);
+    const runCommandSource = preflightSource.slice(functionStart, functionEnd);
+    const calls: unknown[][] = [];
+    const runCommand = runInNewContext(`${runCommandSource}\nrunCommand`, {
+      process: { platform: "win32", env: {} },
+      spawnSync: (...args: unknown[]) => {
+        calls.push(args);
+        return { status: 0 };
+      },
+    }) as (
+      entry: { command: string; commandWindows?: string; args?: string[] },
+      input: string,
+      cwd: string,
+    ) => unknown;
 
     assert.match(preflightSource, /typeof value\.commandWindows === "string"/u);
     assert.match(
       preflightSource,
-      /process\.platform === "win32" && entry\.commandWindows/u,
+      /process\.platform === "win32" && entry\.commandWindows !== undefined/u,
     );
     assert.match(
       preflightSource,
       /\["-NoProfile", "-NonInteractive", "-Command", entry\.commandWindows\]/u,
     );
     assert.match(preflightSource, /entry\.commandWindows \?\? ""/u);
+
+    runCommand(
+      { command: "echo default", commandWindows: "" },
+      "payload",
+      "C:\\fixture",
+    );
+    assert.equal(calls[0]?.[0], "powershell.exe");
+    assert.deepEqual(Array.from(calls[0]?.[1] as string[]), [
+      "-NoProfile",
+      "-NonInteractive",
+      "-Command",
+      "",
+    ]);
+
+    calls.length = 0;
+    runCommand({ command: "echo default" }, "payload", "C:\\fixture");
+    assert.equal(calls[0]?.[0], "bash");
+    assert.deepEqual(Array.from(calls[0]?.[1] as string[]), [
+      "-c",
+      'printf %s "$GOAT_HOOK_SMOKE_PAYLOAD" | { echo default; }',
+    ]);
   });
 
   it("keeps fast concurrency bounded and isolates observed subprocess-heavy suites", () => {

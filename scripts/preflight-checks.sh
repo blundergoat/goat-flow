@@ -912,7 +912,7 @@ function runCommand(entry, input, cwd) {
     });
   }
   // Codex documents commandWindows as the native Windows replacement for its default shell command.
-  if (process.platform === "win32" && entry.commandWindows) {
+  if (process.platform === "win32" && entry.commandWindows !== undefined) {
     return spawnSync(
       "powershell.exe",
       ["-NoProfile", "-NonInteractive", "-Command", entry.commandWindows],

@@ -384,7 +384,7 @@ describe("checkDrift: artifact integrity", () => {
       mkdirSync(dirname(skillsDocPath), { recursive: true });
       writeFileSync(
         skillsDocPath,
-        "# Skills\n\nAnnounce: Routing to /goat-X\n\nFootgun matches\\nRecent git\n\nLearning loop - log lessons and footguns after completion\n",
+        "# Skills\n\nAnnounce: Routing to /goat-X\n\nFootgun matches\nRecent git\n\nLearning loop - log lessons and footguns after completion\n",
       );
       const context = {
         projectPath: fixtureRoot,

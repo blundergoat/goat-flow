@@ -52,6 +52,8 @@ const REQUIRED_FINDING_FIELDS = [
 const REQUIRED_REFUTED_CANDIDATE_FIELDS = [
   "claim",
   "why_excluded",
+  "file",
+  "line",
   "evidence_quality",
   "evidence_method",
   "evidence_summary",
@@ -221,7 +223,17 @@ function makePriorQualityReport(
         },
       },
       findings: [],
-      refuted_candidates: [],
+      refuted_candidates: [
+        {
+          claim: "The schema accepts an inferred refutation",
+          why_excluded: "Observed parser evidence requires a resolved verdict.",
+          file: "src/cli/quality/schema-refuted-candidates.ts",
+          line: null,
+          evidence_quality: "OBSERVED",
+          evidence_method: "static-analysis",
+          evidence_summary: '(search: "quality.value !== \\"OBSERVED\\"")',
+        },
+      ],
     },
   };
 }
@@ -306,6 +318,15 @@ function assertCarriesContract(surface: string, text: string): void {
   assert.ok(
     text.includes("static-analysis") && text.includes('(search: "pattern")'),
     `${surface}: missing static refutation anchor rule`,
+  );
+  assert.ok(
+    text.includes('evidence_quality: "OBSERVED"') &&
+      text.includes("an `INFERRED` candidate remains unresolved"),
+    `${surface}: missing observed-only refutation rule`,
+  );
+  assert.ok(
+    text.includes("`static-analysis` or `mixed` refuted candidate"),
+    `${surface}: missing mixed static provenance rule`,
   );
   for (const guidance of ASSESSMENT_CONTEXT_GUIDANCE) {
     assert.ok(
@@ -848,8 +869,50 @@ describe("quality report contract: cross-variant boundaries", () => {
         promptWithPriorReport.includes(PRIOR_REPORT_REVALIDATION_GUIDANCE),
         `${qualityMode}: missing prior-report revalidation guidance`,
       );
+      assert.ok(
+        promptWithPriorReport.includes(
+          "Prior refuted candidates (do not repeat unless evidence or contract changed)",
+        ),
+        `${qualityMode}: missing prior refutation continuity`,
+      );
+      assert.ok(
+        promptWithPriorReport.includes(
+          "The schema accepts an inferred refutation",
+        ),
+        `${qualityMode}: missing prior refuted claim`,
+      );
     });
   }
+
+  // Five rows prove the prompt shows its three-row allowance and reports the two omitted rows.
+  it("bounds prior refutation context to three candidates", () => {
+    const priorReport = makePriorQualityReport("skills");
+    priorReport.report.refuted_candidates = Array.from(
+      { length: 5 },
+      (_, index) => ({
+        claim: `Refuted claim ${index + 1}`,
+        why_excluded: `Observed exclusion ${index + 1}`,
+        file: "src/cli/quality/schema-refuted-candidates.ts",
+        line: null,
+        evidence_quality: "OBSERVED" as const,
+        evidence_method: "static-analysis" as const,
+        evidence_summary: '(search: "parseReportRefutedCandidates")',
+      }),
+    );
+    const prompt = composeQuality({
+      ...makeInput("skills"),
+      priorReport,
+    }).prompt;
+
+    assert.ok(prompt.includes("Refuted claim 1"));
+    assert.ok(prompt.includes("Refuted claim 3"));
+    assert.equal(prompt.includes("Refuted claim 4"), false);
+    assert.ok(
+      prompt.includes(
+        "2 additional prior refuted candidate(s) omitted from this bounded preview.",
+      ),
+    );
+  });
 });
 
 describe("quality report contract: staged-draft persistence variant", () => {

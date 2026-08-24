@@ -412,6 +412,40 @@ export function patchInstallRoundTripFixture(root: string): {
   };
   writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
 
+  const canonicalSkillTotal = manifest.skills.canonical.length;
+  const codeMapPath = join(root, ".goat-flow", "code-map.md");
+  const codeMap = readFileSync(codeMapPath, "utf8");
+  const fixtureSkillRow = `│   ├── ${INSTALL_FIXTURE_SKILL}/SKILL.md = installer round-trip fixture skill template`;
+  if (!codeMap.includes(fixtureSkillRow)) {
+    writeFileSync(
+      codeMapPath,
+      codeMap.replace(
+        "│   ├── reference/               = skill-preamble.md and skill-conventions.md templates",
+        `${fixtureSkillRow}\n│   ├── reference/               = skill-preamble.md and skill-conventions.md templates`,
+      ),
+    );
+  }
+
+  const glossaryPath = join(root, ".goat-flow", "glossary.md");
+  const glossary = readFileSync(glossaryPath, "utf8");
+  writeFileSync(
+    glossaryPath,
+    glossary.replace(
+      /^\| Skill \|.*$/mu,
+      `| Skill | A slash-command-invoked capability (${canonicalSkillTotal} total) loaded on demand. | \`docs/skills.md\` | goat-* skills |`,
+    ),
+  );
+
+  const architecturePath = join(root, ".goat-flow", "architecture.md");
+  const architecture = readFileSync(architecturePath, "utf8");
+  writeFileSync(
+    architecturePath,
+    architecture.replace(
+      /\b\d+ goat-flow skill templates\b/u,
+      `${canonicalSkillTotal} goat-flow skill templates`,
+    ),
+  );
+
   const constantsPath = join(root, "src", "cli", "constants.ts");
   const constants = readFileSync(constantsPath, "utf8");
   // The CLI registry must expose the same fixture skill as the manifest.
