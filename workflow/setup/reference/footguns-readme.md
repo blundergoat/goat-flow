@@ -27,6 +27,18 @@ Agents should scan only entries above the `## Resolved Entries` section. Resolve
 
 Prefer category bucket files such as `hooks.md`, `setup.md`, or `auditor.md`. Every bucket file MUST start with a YAML frontmatter block that includes BOTH a `category` and a `last_reviewed` date (ISO `YYYY-MM-DD`). `goat-flow stats --check` fails when `last_reviewed` is missing.
 
+Split a bucket at roughly 200 lines or 10 entries (ADR-033).
+Split along a real seam and extract the new bucket **out of** the existing file rather than renaming it.
+Do not split at the line that merely happens to cross the threshold.
+Audit provenance in `src/cli/audit/` cites paths such as `footguns/auditor.md` and `footguns/skills.md`.
+Those paths are `evidence_paths`, so a rename breaks code, not just links.
+Re-run `goat-flow index` afterwards and let `stats --check` find any anchor that pointed at a moved entry.
+
+Those figures are guidance.
+The blocking gate is measured in bytes: `stats --check` fails with `bucket-size` above 40,000 bytes.
+Its owner is `src/cli/stats/stats.ts` (search: `BUCKET_SIZE_WARN_BYTES`).
+A bucket can sit under ten entries and still trip it, so check size after adding a long entry rather than counting headings.
+
 ```yaml
 ---
 category: hooks
@@ -51,10 +63,34 @@ Entry bodies are retrieved by agents but verified by people in code review and s
 
 Evidence labels are mutually exclusive: `ACTUAL_MEASURED` means reproduced or measured in the current project; `OBSERVED` means directly verified from current code or configuration without runtime measurement; `EXTERNAL_REFERENCE` means a cited real external incident with explicit local applicability. `goat-flow stats --check` fails unless every entry has exactly one of these labels. Hypothetical scenarios are never evidence.
 
+`EXTERNAL_REFERENCE` needs the local half to be real, not anticipated.
+Name and cite the goat-flow surface the trap reaches today.
+If the entry says the hazard is "preventative", "not currently", or "future", it is a hypothetical with a citation.
+It belongs in `.goat-flow/learning-loop/patterns/` or the backlog instead.
+
+**Prevention items are rules, not work orders.** Write what a future agent must do when it touches this surface.
+A Prevention that says "write doc X" or "adopt lint rule Y" parks untracked work in an active entry.
+Nothing tracks that work, so it silently ages.
+This is the same "TODOs disguised as decisions" defect rejected by `decisions/README.md`.
+If the fix is worth doing, open a plan or issue and state the rule here in the meantime.
+
 New entries SHOULD include `**Decision changed:**`; stats JSON exposes missing guidance for migration visibility without turning every legacy entry into a `stats --check` warning.
 
 `**Trigger phase:**` names the earliest execution-loop phase where retrieving the entry can prevent the failure; it does not name where the failure surfaced. When those phases differ, add the optional `**Caught at:** READ|SCOPE|ACT|VERIFY` field. For example, `Isolated fixtures must create every dependency they assert` uses `Trigger phase: ACT` because fixture construction prevents the failure and `Caught at: VERIFY` because the missing dependency surfaced during proof.
 
 When recurrence is measured, add `**Incident count:** <positive integer>` and `**Latest occurrence:** YYYY-MM-DD`. Record each new incident with the canonical `**Recurrence YYYY-MM-DD:**` prose label. Recurrence prose records individual evidence; Incident count records the total. Keep both current; neither suppresses the other.
+
+## Entry Body Conventions
+
+Keep the metadata block immediately below the heading, including `**Decision changed:**` when present.
+Then lead with `**Prevention:**` before symptoms, causes, evidence, or recurrence history.
+A reader sees the future action before replaying the incident.
+
+At five recurrence paragraphs, replace repeated setup with one root-cause summary and a concise incident ledger.
+Every ledger item keeps its canonical recurrence label, date, evidence anchor, and distinct rider.
+Keep `Incident count` and `Latest occurrence` current.
+
+Mutable numbers must cite their owning file with a semantic anchor or state when they were measured.
+Counts, thresholds, and limits that can change must not read as timeless facts.
 
 Entries without `**Status:**` cannot be split into active-vs-resolved by the audit scanner. Legacy single-entry files still work during migration, but category buckets with the frontmatter + `**Status:**` contract are the preferred and audited format.

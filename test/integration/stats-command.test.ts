@@ -180,6 +180,32 @@ function loadReportWithoutLoopDirs() {
   });
 }
 
+/** Build the same footgun with either the user-facing rule or incident narrative first. */
+function orderedFootgunBucket(shouldLeadWithPrevention: boolean): string {
+  const prevention =
+    "**Prevention:** Run the supported project check before reporting a result.";
+  const narrative =
+    "**Symptoms:** A user receives a result that the supported project check did not verify.";
+  const orderedBody = shouldLeadWithPrevention
+    ? [prevention, narrative]
+    : [narrative, prevention];
+  return `---
+category: quality
+last_reviewed: 2026-04-18
+---
+
+## Footgun: Body order preserves stats findings
+
+**Status:** active | **Created:** 2026-04-18 | **Evidence:** OBSERVED
+**Decision changed:** Use the supported project check.
+**Trigger phase:** VERIFY
+
+${orderedBody.join("\n\n")}
+
+The missing source remains visible at \`src/body-order-proof.ts\` (search: \`missingBodyOrderProof\`).
+`;
+}
+
 describe("goat-flow stats - happy path", () => {
   it("reports per-bucket freshness and live entry counts", () => {
     const expectedFootgunEntries = 2;
@@ -495,6 +521,31 @@ describe("goat-flow stats - graduation candidates", () => {
 });
 
 describe("goat-flow stats --check", () => {
+  it("keeps findings identical when Prevention moves before the incident narrative", () => {
+    const ruleFirstFindings = checkStats(
+      loadReport({
+        footguns: { "body-order.md": orderedFootgunBucket(true) },
+        lessons: {},
+      }),
+    ).findings;
+    const narrativeFirstFindings = checkStats(
+      loadReport({
+        footguns: { "body-order.md": orderedFootgunBucket(false) },
+        lessons: {},
+      }),
+    ).findings;
+
+    assert.ok(
+      ruleFirstFindings.some((finding) => finding.rule === "stale-ref"),
+      "the fixture must produce a real finding before order-indifference is compared",
+    );
+    assert.equal(
+      JSON.stringify(ruleFirstFindings),
+      JSON.stringify(narrativeFirstFindings),
+      "moving the user-facing rule first must not change stats findings",
+    );
+  });
+
   it("fails when a pattern entry carries a stale semantic anchor", () => {
     const report = loadReport({
       footguns: {},

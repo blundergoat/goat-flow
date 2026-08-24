@@ -79,13 +79,14 @@ Applies to: any goat-flow audit that gates progress on artifact completeness —
 **Incident count:** 2
 **Latest occurrence:** 2026-07-17
 
+**Prevention:** Advisory warnings must have an enforcement timeline, a migration path, or be removed.
+A warning that fires on 100% of the corpus is not a safety net.
+
 **Symptoms:** A command emits the same wall of warnings on every run, but the warnings never fail the gate and have no migration path. Users and agents learn to scroll past them, including warnings that might matter later.
 
 **Why it happens:** Advisory metadata checks are easy to add, but if the existing corpus is not backfilled and no deadline is set, the warning stream becomes permanent noise.
 
 **Evidence:** `stats --check` previously emitted decision-metadata warnings for every ADR missing optional Author(s) and Ticket/Context fields. The current stats warning pipeline is anchored at `src/cli/stats/stats.ts` (search: `Collect advisory learning-loop warnings`), and `.goat-flow/learning-loop/decisions/README.md` (search: `Author(s):`) still recommends the metadata without forcing unavoidable warnings.
-
-**Prevention:** Advisory warnings must have an enforcement timeline, a migration path, or be removed. A warning that fires on 100% of the corpus is not a safety net.
 
 **Recurrence update (2026-07-17):** `stats --check` passed while emitting 35 memory-quality warning groups covering 342 missing optional `Decision changed` values. The remediation kept `hasDecisionChangedGuidance` in JSON and removed absence-only warnings from `src/cli/stats/stats.ts` (search: `describeMemoryQualityIssues`).
 

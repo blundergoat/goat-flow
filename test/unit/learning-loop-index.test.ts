@@ -11,7 +11,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createFS } from "../../src/cli/facts/fs.js";
 import { generateIndexes } from "../../src/cli/learning-loop-index/generate.js";
-import { parseBucket } from "../../src/cli/learning-loop-index/parse-bucket.js";
+import {
+  parseActiveBucketSections,
+  parseBucket,
+} from "../../src/cli/learning-loop-index/parse-bucket.js";
 import type { IndexBucket } from "../../src/cli/learning-loop-index/parse-bucket.js";
 import { formatIndex } from "../../src/cli/learning-loop-index/format-index.js";
 
@@ -140,6 +143,60 @@ last_reviewed: 2026-06-01
 **What happened:** ${"alpha bravo ".repeat(30)}omega
 `;
 
+/**
+ * Parse one disposable lesson with either the user-facing rule or incident narrative first.
+ * Use to prove that changing reading order does not change generated index facts.
+ * Filesystem side effects: creates and removes one temporary lesson directory.
+ */
+function extractOrderedLessonFacts(shouldLeadWithPrevention: boolean) {
+  const fixtureProjectRoot = mkdtempSync(
+    join(tmpdir(), "goatflow-llindex-order-"),
+  );
+  const lessonDirectory = join(fixtureProjectRoot, LESSONS_DIR);
+  const prevention =
+    "**Prevention:** Run the repository-owned verification command before reporting success.";
+  const narrative =
+    "**What happened:** A user saw a success report before the supported verification command ran.";
+  const orderedBody = shouldLeadWithPrevention
+    ? [prevention, narrative]
+    : [narrative, prevention];
+  const lesson = `---
+category: verification
+last_reviewed: 2026-06-01
+---
+
+## Lesson: Body order preserves extracted facts
+
+**Status:** active | **Created:** 2026-06-01
+**Decision changed:** Use the repository-owned verification command.
+**Trigger phase:** VERIFY
+
+${orderedBody.join("\n\n")}
+`;
+  mkdirSync(lessonDirectory, { recursive: true });
+  writeFileSync(join(lessonDirectory, "body-order.md"), lesson);
+
+  try {
+    const fixtureFiles = createFS(fixtureProjectRoot);
+    const [activeSection] = parseActiveBucketSections(
+      fixtureFiles,
+      LESSONS_DIR,
+      "lessons",
+    );
+    const [indexEntry] = parseBucket(fixtureFiles, LESSONS_DIR, "lessons");
+    assert.ok(activeSection, "expected one active lesson section");
+    assert.ok(indexEntry, "expected one generated lesson index row");
+    return {
+      heading: activeSection.heading,
+      status: activeSection.status,
+      decisionChanged: activeSection.decisionChanged,
+      indexEntry,
+    };
+  } finally {
+    rmSync(fixtureProjectRoot, { recursive: true, force: true });
+  }
+}
+
 /** Write a throw-away filesystem repo containing all four learning-loop buckets and return its root. */
 function makeFixtureRepo(): string {
   const root = mkdtempSync(join(tmpdir(), "goatflow-llindex-"));
@@ -183,6 +240,17 @@ describe("parseBucket", () => {
     assert.equal(entry?.hook, "The guard blocks every Bash call.");
     assert.equal(entry?.sourceFile, "hooks.md");
     assert.equal(entry?.anchor, "## Footgun: Active trap with symptoms");
+  });
+
+  it("keeps extracted facts identical when Prevention moves before the incident narrative", () => {
+    const ruleFirstFacts = extractOrderedLessonFacts(true);
+    const narrativeFirstFacts = extractOrderedLessonFacts(false);
+
+    assert.equal(
+      JSON.stringify(ruleFirstFacts),
+      JSON.stringify(narrativeFirstFacts),
+      "a reader-focused body reorder must not change status, anchors, or the generated index row",
+    );
   });
 
   it("extracts declared dates and byte-derived reading costs", () => {

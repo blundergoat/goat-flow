@@ -38,6 +38,19 @@ When recurrence is measured, add `**Incident count:** <positive integer>` and `*
 
 Entry bodies are retrieved by agents but verified by people in code review and staleness checks: write them per `.goat-flow/skill-docs/playbooks/writing-style.md`. Body prose only - frontmatter, schema lines, and semantic anchors stay exempt as fixed schema.
 
+## Entry Body Conventions
+
+Keep the metadata block immediately below the heading, including `**Decision changed:**` when present.
+Then lead with `**Prevention:**` before symptoms, causes, evidence, or recurrence history.
+A reader sees the future action before replaying the incident.
+
+At five recurrence paragraphs, replace repeated setup with one root-cause summary and a concise incident ledger.
+Every ledger item keeps its canonical recurrence label, date, evidence anchor, and distinct rider.
+Keep `Incident count` and `Latest occurrence` current.
+
+Mutable numbers must cite their owning file with a semantic anchor or state when they were measured.
+Counts, thresholds, and limits that can change must not read as timeless facts.
+
 ## Status Values
 
 `**Status:**` is optional; an entry without one is treated as active. When present it must be one of three:
@@ -45,25 +58,41 @@ Entry bodies are retrieved by agents but verified by people in code review and s
 | Status | Meaning | Indexed? |
 |---|---|---|
 | `active` | The mistake is still available to make. | Yes |
-| `historical` | The worked example names a removed subsystem, but the behavioural principle still applies. | **Yes** - the principle is still retrievable |
+| `historical` | A removed subsystem is the example, but the behavioural principle still applies. | **Yes** - the principle remains retrievable |
 | `resolved` | A shipped guardrail makes the mistake mechanically impossible, or the behaviour it describes no longer exists. | No |
 
-`historical` entries MUST carry a `**Reason:**` naming what died and what survives - "Rubric check 2.4.3 no longer exists (ADR-013); normalization-invariant principle applies to any parser". Without that sentence a reader cannot tell whether the entry is still safe to apply. The generated index keeps them because the principle is the retrievable part; only `resolved` is filtered out (`src/cli/learning-loop-index/parse-bucket.ts`, search: `Status:\*\*\s*resolved`).
+`historical` entries MUST carry a `**Reason:**` naming what died and what survives.
+The reason must make clear whether the entry remains safe to apply.
+For example: "Rubric check 2.4.3 no longer exists (ADR-013); the normalization-invariant principle still applies to any parser."
+The index keeps historical entries because the principle remains retrievable.
+Only `resolved` is filtered out (`src/cli/learning-loop-index/parse-bucket.ts`, search: `Status:\*\*\s*resolved`).
 
 ## Retiring A Lesson
 
-Lessons accumulate faster than they retire, because a behavioural mistake has no natural end event the way an architectural trap does. Retire deliberately, on one of three triggers:
+Lessons accumulate faster than they retire because a behavioural mistake has no natural end event like an architectural trap.
+Retire a lesson deliberately on one of three triggers:
 
-- **Superseded by a guardrail.** A hook, audit check, or contract test now prevents the mistake rather than reminding an agent not to make it. Cite the enforcing surface; the lesson becomes `resolved`.
-- **Obsolete surface.** The subsystem the lesson describes was removed. If the principle generalises beyond that subsystem it becomes `historical` with a `**Reason:**`, not `resolved` - deleting a still-true principle because its example died is the failure mode to avoid.
-- **Folded into a sibling.** The same root cause already exists elsewhere. Merge the distinct evidence into that entry and retire this one; do not leave two entries describing one cause.
+- **Superseded by a guardrail.** A hook, audit check, or contract test now prevents the mistake instead of reminding an agent.
+  Cite the enforcing surface and mark the lesson `resolved`.
+- **Obsolete surface.** The subsystem was removed. A principle that still generalises becomes `historical` with a `**Reason:**`, not `resolved`.
+  Do not delete a true principle because its worked example died.
+- **Folded into a sibling.** The same root cause already exists elsewhere.
+  Merge the distinct evidence into that entry and retire this one; do not leave two entries describing one cause.
 
 Recurrence is the opposite signal. An entry with `**Incident count:**` above one is load-bearing and stays regardless of age.
 
 ## Bucket Size
 
-Split a bucket at roughly 200 lines or 10 entries (ADR-033). Split along a real seam in the subject matter, and extract the new bucket **out of** the existing file rather than renaming it, so paths cited from code, ADRs, and sibling entries keep resolving. Re-run `goat-flow index` afterwards and let `stats --check` find any anchor that pointed at a moved entry.
+Split a bucket at roughly 200 lines or 10 entries (ADR-033).
+Split along a real seam and extract the new bucket **out of** the existing file rather than renaming it.
+This keeps paths cited by code, ADRs, and sibling entries resolving.
+Re-run `goat-flow index` afterwards and let `stats --check` find any anchor that pointed at a moved entry.
 
-Those figures are guidance. The gate that actually blocks is measured in bytes: `stats --check` raises a `bucket-size` finding and fails when a bucket exceeds 40,000 bytes (`src/cli/stats/stats.ts`, search: `BUCKET_SIZE_WARN_BYTES`). A bucket can sit under ten entries and still trip it, so check size after adding a long entry rather than counting headings.
+Those figures are guidance.
+The blocking gate is measured in bytes: `stats --check` fails with `bucket-size` above 40,000 bytes.
+Its owner is `src/cli/stats/stats.ts` (search: `BUCKET_SIZE_WARN_BYTES`).
+A bucket can sit under ten entries and still trip it, so check size after adding a long entry rather than counting headings.
 
-When a directory holds several buckets a reader could confuse - `verification.md` beside `verification-testing.md`, or five `*-testing.md` files - each MUST open with a `**Scope:**` line saying what it owns and naming the sibling that owns the rest. INDEX-first retrieval shows titles, not contents; without that line an agent cannot tell which bucket to open.
+When nearby bucket names are easy to confuse, each MUST open with a `**Scope:**` line saying what it owns and naming the sibling that owns the rest.
+This includes `verification.md` beside `verification-testing.md`, or several `*-testing.md` files.
+INDEX-first retrieval shows titles, not contents; without that line an agent cannot tell which bucket to open.
