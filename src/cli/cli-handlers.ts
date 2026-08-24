@@ -1,5 +1,6 @@
 /**
  * Routes parsed CLI commands through lazy handlers so unrelated commands avoid heavy imports.
+ *
  * User failures throw CLIError; report failures set process.exitCode so stdout can flush.
  * Use this layer when a command needs shared output and exit conventions.
  */
@@ -544,6 +545,7 @@ const COMMAND_HANDLERS: Partial<
   manifest: handleManifestCommand,
   stats: handleStatsCommand,
   recall: handleLearningLoopRecallCommand,
+  learn: handleLearnCommand,
   diagnostics: handleDiagnosticsCommand,
   index: handleIndexCommand,
   redact: handleRedactCommand,
@@ -553,6 +555,37 @@ const COMMAND_HANDLERS: Partial<
   dashboard: runDashboardCommand,
   info: handleInfoCommand,
 };
+
+/**
+ * Run the explicit learning-loop scaffold selected by the developer.
+ * Use after parsing has validated flag placement; it throws a usage error for incomplete programmatic calls and forwards writer failures.
+ */
+async function handleLearnCommand(options: ParsedCLI): Promise<void> {
+  // Missing authoring fields mean a programmatic caller bypassed normal parsing, so dispatch returns the same actionable usage contract.
+  if (
+    options.learnSubcommand !== "new" ||
+    options.learnEntryType === null ||
+    options.learnCategory === null ||
+    options.learnTitle === null
+  ) {
+    throw new CLIError(
+      "Usage: goat-flow learn new [project-path] --type <footgun|lesson|pattern> --category <bucket> --title <title> [flags]",
+      2,
+    );
+  }
+  const { runLearnScaffold } = await import("./learn-scaffold.js");
+  const result = runLearnScaffold({
+    projectRoot: options.projectPath,
+    entryType: options.learnEntryType,
+    category: options.learnCategory,
+    title: options.learnTitle,
+    evidencePaths: options.learnEvidencePaths,
+    searchLiterals: options.learnSearchLiterals,
+    evidenceKind: options.learnEvidenceKind,
+    shouldDryRun: options.shouldDryRun,
+  });
+  writeOutput(options, result.output);
+}
 
 /** Route `skill new` authoring or read-only `skill doctor` diagnosis. */
 async function handleSkillCommand(options: ParsedCLI): Promise<void> {

@@ -1,6 +1,6 @@
 ---
 category: gruff-cleanup
-last_reviewed: 2026-08-17
+last_reviewed: 2026-08-24
 ---
 
 **Scope:** Using the Gruff analyzer - reading its findings before acting on them, capturing clean JSON, masking blind spots, and not converting a fix request into threshold tuning. What breaks downstream when code is split or renamed is [refactor-fallout.md](refactor-fallout.md); proving comment fixes satisfy it is [verification-gruff.md](verification-gruff.md).
@@ -112,9 +112,14 @@ last_reviewed: 2026-08-17
 ## Lesson: Gruff cleanup automation must fit the hook surface
 
 **Status:** active | **Created:** 2026-05-31
+**Incident count:** 2 | **Latest occurrence:** 2026-08-24
 
 **What happened:** During the same size cleanup, several long inline Node shell snippets were blocked by the guardrail hook before they could run. The commands were meant to perform mechanical test-file edits, but their length and nested shell shape crossed the safety rules and slowed the cleanup.
 
 **Root cause:** I optimized for one-off shell compactness instead of for the repository's hook contract. A command that is easy to paste can still be the wrong operational shape when hooks inspect chained segments and command substitution.
+
+**Recurrence 2026-08-24:** While verifying `learn new`, two ripgrep commands put literal backticks inside a double-quoted shell command.
+The deny-dangerous hook correctly treated them as command substitution and blocked both attempts before execution.
+Using a single-quoted plain search pattern let the read-only check run safely. Evidence anchor: `.goat-flow/hooks/deny-dangerous.sh` (search: `Backtick command substitution hides nested execution`).
 
 **Prevention:** For large mechanical rewrites, use `apply_patch` for hand edits or a small checked command with obvious arguments. Keep verification commands short enough that the hook can audit them directly, and split multi-step analysis into separate commands. Evidence anchors: `workflow/hooks/deny-dangerous.sh` (search: `more than 50 chained segments`), `.goat-flow/skill-docs/playbooks/gruff-code-quality.md` (search: `Verification Gate`).

@@ -1,9 +1,8 @@
 /**
  * Command and option type vocabulary shared between the CLI parser and the command handlers.
  *
- * Centralising the subcommand unions, the parsed-option shape, and the removed-command map here keeps the parser (which produces these values) and
- * dispatch (which consumes them) agreeing on one source of truth, so adding a command means touching the union once rather than hunting string
- * literals across files.
+ * Centralising subcommand unions, parsed options, and removed commands keeps the parser and dispatch on one source of truth.
+ * Adding a command then changes the union once instead of scattering string literals across files.
  *
  * Pure type/const declarations only; no runtime behaviour lives here.
  */
@@ -26,6 +25,7 @@ export type Command =
   | "menu"
   | "stats"
   | "recall"
+  | "learn"
   | "diagnostics"
   | "index"
   | "redact"
@@ -41,6 +41,16 @@ export type PlansTimeAction = "start" | "stop" | "status";
 
 /** Categories stamped on timing spans and reconciled into structured Actuals. */
 export type PlansTimeCategory = "product" | "proof" | "other";
+
+/** Explicit learning-loop authoring action. */
+export type LearnSubcommand = "new";
+
+/** Learning-loop entry grammars supported by the safe scaffold command. */
+export type LearnEntryType = "footgun" | "lesson" | "pattern";
+
+/** Canonical evidence taxonomy required by footgun entries. */
+export type LearnEvidenceKind =
+  "ACTUAL_MEASURED" | "OBSERVED" | "EXTERNAL_REFERENCE";
 
 /** Deterministic checks for drafted goat-review Markdown. */
 export type ReviewSubcommand = "validate";
@@ -122,6 +132,7 @@ export const COMMANDS: Command[] = [
   "menu",
   "stats",
   "recall",
+  "learn",
   "diagnostics",
   "index",
   "redact",
@@ -189,6 +200,13 @@ export interface ParsedCLI extends CLIOptions {
   plansTimeCategory: PlansTimeCategory | null;
   plansTimeFinalize: boolean;
   plansTimeDiscardOpen: boolean;
+  learnSubcommand: LearnSubcommand | null;
+  learnEntryType: LearnEntryType | null;
+  learnCategory: string | null;
+  learnTitle: string | null;
+  learnEvidencePaths: readonly string[];
+  learnSearchLiterals: readonly string[];
+  learnEvidenceKind: LearnEvidenceKind | null;
   /** Project-relative file or directory operands used by read-only learning-loop recall. */
   recallPaths: readonly string[];
   diagnosticsSubcommand: DiagnosticsSubcommand | null;

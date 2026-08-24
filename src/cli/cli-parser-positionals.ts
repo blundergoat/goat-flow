@@ -1,9 +1,9 @@
 /**
- * Reads the words a user typed after a goat-flow command and turns them into a subcommand.
- * Everything here answers one question: given `goat-flow quality save draft`, which action did they mean, and did they supply the right number of
- * arguments for it?
+ * Reads the words after a goat-flow command and resolves the subcommand the developer intended.
+ * It also checks that the selected action received the right number of positional arguments.
  *
  * Mistakes are rejected loudly rather than guessed at.
+ *
  * An unknown subcommand or a missing argument raises a CLIError naming the accepted forms, because silently picking a default would run something the
  * user did not ask for - and for commands that write files, that is the difference between a helpful message and an unwanted change to their project.
  */
@@ -16,6 +16,7 @@ import {
   type EventsSubcommand,
   type HookScenario,
   type HookSubcommand,
+  type LearnSubcommand,
   type PlansSubcommand,
   type PlansTimeAction,
   type QualitySubcommand,
@@ -512,4 +513,35 @@ export function parseRecallPositionals(
     );
   }
   return positionals;
+}
+
+/**
+ * Read `learn new [project]` so an author knows which project will receive the scaffold.
+ * Use before any learning-loop file is inspected or written.
+ *
+ * @param positionals - words typed after `learn`; an omitted project path means the author's current directory
+ * @returns the `new` action and absolute project path; the returned path is never empty
+ * @throws CLIError when the action is missing or unknown, or when extra paths leave the selected project ambiguous
+ */
+export function parseLearnPositionals(positionals: string[]): {
+  learnSubcommand: LearnSubcommand;
+  projectPath: string;
+} {
+  const [subcommand, projectPath, ...extraPositionals] = positionals;
+  // A different first word names no safe authoring flow, so the developer sees the one accepted action before any file lookup.
+  if (subcommand !== "new") {
+    throw new CLIError('learn requires subcommand "new".', 2);
+  }
+  // More than one project path leaves the write target ambiguous, so the CLI rejects the request before opening the learning loop.
+  if (extraPositionals.length > 0) {
+    throw new CLIError(
+      "learn new accepts at most one positional project path.",
+      2,
+    );
+  }
+  // No path means the developer selected the current project, matching other project-scoped goat-flow commands.
+  return {
+    learnSubcommand: "new",
+    projectPath: resolve(projectPath ?? "."),
+  };
 }

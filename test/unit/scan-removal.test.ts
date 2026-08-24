@@ -1,4 +1,9 @@
-/** Root command-routing and removed-scan stability tests. */
+/**
+ * Protects the command-routing errors developers see before goat-flow starts project work.
+ *
+ * Use these tests when adding a top-level command or changing a shared flag's valid owners.
+ * Retired scan syntax stays rejected while commandless help, menu, and explicit project paths remain stable.
+ */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { parseCLIArgs } from "../../src/cli/cli.js";
@@ -88,10 +93,10 @@ describe("removed flags rejected", () => {
 });
 
 describe("managed preview flags", () => {
-  it("rejects dry-run outside install and setup", () => {
+  it("rejects dry-run outside install, setup, and learn new", () => {
     assert.throws(
       () => parseCLIArgs(["audit", ".", "--dry-run"]),
-      /--dry-run is only valid for install or setup/u,
+      /--dry-run is only valid for install, setup, or learn new/u,
     );
   });
 });

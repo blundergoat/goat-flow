@@ -239,6 +239,31 @@ const COMMAND_HELP_CATALOG = {
       "goat-flow recall src/cli src/dashboard --format json",
     ],
   },
+  learn: {
+    command: "learn",
+    visibility: "advanced",
+    summary: "Validate and scaffold one learning-loop entry.",
+    usage: [
+      "goat-flow learn new [path] --type <kind> --category <bucket> --title <title> [flags]",
+    ],
+    subcommands: [["new", "Preview or write one explicit learning entry."]],
+    flags: [
+      ["--type <kind>", "Choose footgun, lesson, or pattern."],
+      ["--category <bucket>", "Select a lowercase kebab-case bucket."],
+      ["--title <title>", "Set the one-line entry heading."],
+      ["--evidence <path>", "Cite one project file; repeat as needed."],
+      ["--search <literal>", "Pair one literal with each evidence path."],
+      [
+        "--evidence-kind <kind>",
+        "For footguns, choose ACTUAL_MEASURED, OBSERVED, or EXTERNAL_REFERENCE.",
+      ],
+      ["--dry-run", "Validate and print the scaffold without writing."],
+    ],
+    examples: [
+      'goat-flow learn new --type lesson --category verification --title "Check focused proof" --dry-run',
+      'goat-flow learn new . --type footgun --category hooks --title "Hook drift" --evidence workflow/hooks/README.md --search "Generated index" --evidence-kind OBSERVED',
+    ],
+  },
   diagnostics: {
     command: "diagnostics",
     visibility: "advanced",

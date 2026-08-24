@@ -197,6 +197,30 @@ npx @blundergoat/goat-flow@latest recall src/cli src/dashboard --format json
 
 Use recall after the required INDEX-first Step 0 read when concrete files are already known. It supplements generated learning-loop indexes; it does not replace INDEX retrieval or relevance searches for symptoms and tools.
 
+### `goat-flow learn new [path] --type <kind> --category <bucket> --title <title> [flags]`
+
+Validate and scaffold one explicitly requested footgun, lesson, or pattern.
+This is manual authoring, not automatic capture: the command never reads sessions, reports, reviews, or agent output to decide what becomes durable
+project knowledge.
+Search the generated index and category bucket first; consolidation and the decision to create a new entry remain the author's responsibility.
+
+Use lowercase kebab-case for `--category` and one line for `--title`.
+Repeat `--evidence <project-relative-path>` with one same-order `--search <literal>` for each citation.
+Footguns require at least one pair plus `--evidence-kind ACTUAL_MEASURED|OBSERVED|EXTERNAL_REFERENCE`; lessons and patterns may omit evidence.
+Search values use the same literal citation validator as learning-loop audits, so regex-shaped input is not interpreted as a pattern.
+
+`--dry-run` runs the same destination, schema, duplicate-heading, and citation checks, then prints the entry without writing a bucket or index.
+A real write places the active entry above `## Resolved Entries`, regenerates learning-loop indexes, and runs `stats --check`.
+If either follow-up fails after publication, the valid entry remains and the command prints `goat-flow index && goat-flow stats --check` for recovery.
+Adjacent atomic replacement prevents partial bytes and the final recheck detects a cooperative editor save.
+It does not claim to prevent a lost update in the residual interval after that check.
+
+```bash
+npx @blundergoat/goat-flow@latest learn new --type lesson --category verification --title "Check focused proof" --dry-run
+npx @blundergoat/goat-flow@latest learn new . --type footgun --category hooks --title "Hook drift" \
+  --evidence workflow/hooks/README.md --search "Generated index" --evidence-kind OBSERVED
+```
+
 ### `goat-flow diagnostics context [path] [--agent <id>] [--format text|json|markdown]`
 
 Measure static context pressure from local goat-flow files without runner telemetry, network calls, provider credentials, prompt bodies, or session logs. The report covers root agent instructions, installed skill bodies, manifest-owned skill references, shared references/playbooks, and learning-loop buckets already extracted by the shared facts pipeline.

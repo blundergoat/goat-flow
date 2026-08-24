@@ -6,6 +6,7 @@
  *
  * The deliberate contract is fail-fast for malformed commands, flags, values, or combinations, throwing CLIError with exit code 2 (usage error) and a
  * human-readable message, so the entry point can print it and exit without a stack trace.
+ *
  * Path positionals are resolved to absolute paths here so downstream handlers never see relative input.
  */
 
@@ -25,6 +26,9 @@ import {
   type Command,
   type DiagnosticsSubcommand,
   type HookSubcommand,
+  type LearnEntryType,
+  type LearnEvidenceKind,
+  type LearnSubcommand,
   type ParsedArgValues,
   type ParsedCLI,
   type PlansSubcommand,
@@ -39,6 +43,7 @@ import {
   parseEventsPositionals,
   parseHookScenarioArg,
   parseHooksPositionals,
+  parseLearnPositionals,
   parsePlansPositionals,
   parseQualityModeArg,
   parseRecallPositionals,
@@ -53,6 +58,19 @@ import {
 } from "./skill-command-parser.js";
 
 const GLOBAL_INFORMATIONAL_FLAGS = new Set(["--help", "-h", "--version", "-v"]);
+
+/**
+ * Flags a developer can use to describe one learning-loop scaffold.
+ * Kept together so strict parsing and command-specific validation expose the same authoring vocabulary.
+ * The parser loads this group only as option declarations; validation still prevents other commands from accepting them.
+ */
+const LEARN_ARG_OPTIONS = {
+  type: { type: "string" },
+  title: { type: "string" },
+  evidence: { type: "string", multiple: true },
+  search: { type: "string", multiple: true },
+  "evidence-kind": { type: "string" },
+} as const;
 
 /** Parse the positional subcommand from raw CLI args; throws CLIError for removed or unknown commands. */
 function parseCommand(argv: string[]): {
@@ -165,6 +183,7 @@ const INFORMATIONAL_POSITIONALS: Partial<Record<Command, string[]>> = {
   diagnostics: ["context"],
   events: ["tail"],
   hooks: ["list"],
+  learn: ["new"],
   plans: ["export", "."],
   recall: ["."],
   review: ["validate"],
@@ -312,9 +331,14 @@ function validatePlansCategoryFlag(
     command === "plans" &&
     plansSubcommand === "time" &&
     plansTimeAction === "start";
-  if (category !== undefined && !isTimingStart) {
-    throw new CLIError("--category is only valid for plans time start.", 2);
+  // A category describes either recorded plan time or a learning bucket; every other command rejects it instead of silently ignoring it.
+  if (category !== undefined && !isTimingStart && command !== "learn") {
+    throw new CLIError(
+      "--category is only valid for plans time start or learn new.",
+      2,
+    );
   }
+  // A timing start without a category would create unattributed time, so the developer must choose one before the receipt changes.
   if (isTimingStart && category === undefined) {
     throw new CLIError("plans time start requires --category.", 2);
   }
@@ -413,10 +437,14 @@ function isInstallCommand(command: Command, values: ParsedArgValues): boolean {
 /** Validate managed-preview combinations; throws CLIError before ignored write flags confuse users. */
 function validateDryRunFlag(command: Command, values: ParsedArgValues): void {
   const shouldDryRun = parsedFlag(values, "dry-run");
-  const commandSupportsDryRun = command === "install" || command === "setup";
-  // Preview is meaningful only where users can otherwise run deterministic setup writes.
+  const commandSupportsDryRun =
+    command === "install" || command === "setup" || command === "learn";
+  // A dry run on another command would promise a preview that command cannot produce, so the CLI rejects it before dispatch.
   if (shouldDryRun && !commandSupportsDryRun) {
-    throw new CLIError("--dry-run is only valid for install or setup.", 2);
+    throw new CLIError(
+      "--dry-run is only valid for install, setup, or learn new.",
+      2,
+    );
   }
   // Authority and migration flags change what apply would do, so a preview that
   // rejected them could not answer the question the user is actually asking.
@@ -593,6 +621,147 @@ function validateQualityFlags(
 }
 
 /**
+ * Keep learning-entry details on `learn new`, where the developer can see what they affect.
+ * Use during cross-flag validation before any command handler runs.
+ *
+ * @throws CLIError with exit code 2 for the first misplaced learn-only flag
+ */
+function validateLearnFlagPlacement(
+  command: Command,
+  values: ParsedArgValues,
+): void {
+  const learnOnlyFlags: Array<[string, boolean]> = [
+    ["--type", parsedString(values, "type") !== undefined],
+    ["--title", parsedString(values, "title") !== undefined],
+    ["--evidence", parsedStringList(values, "evidence").length > 0],
+    ["--search", parsedStringList(values, "search").length > 0],
+    ["--evidence-kind", parsedString(values, "evidence-kind") !== undefined],
+  ];
+  // The learn command owns every listed flag, so its request proceeds to the content validators below.
+  if (command === "learn") return;
+  // Another command may have received a learn-only flag, so report the first misplaced option rather than ignore author intent.
+  for (const [flag, isSupplied] of learnOnlyFlags) {
+    // A supplied flag would otherwise have no user-visible effect on this command.
+    if (isSupplied) {
+      throw new CLIError(`${flag} is only valid for learn new.`, 2);
+    }
+  }
+}
+
+/**
+ * Read the entry type after confirming the developer named a type, category, and title.
+ * Use before validating type-specific citations or evidence taxonomy.
+ *
+ * @throws CLIError with exit code 2 when a required value is absent or the entry type is unknown
+ */
+function requireLearnEntryType(values: ParsedArgValues): LearnEntryType {
+  const entryType = parsedString(values, "type");
+  const category = parsedString(values, "category");
+  const title = parsedString(values, "title");
+  // A missing core value leaves either the bucket or heading unknown, so the CLI stops before resolving a destination.
+  if (
+    entryType === undefined ||
+    category === undefined ||
+    title === undefined
+  ) {
+    throw new CLIError(
+      "learn new requires --type, --category, and --title.",
+      2,
+    );
+  }
+  // Decisions require human routing and are intentionally absent; any other unknown type gets the supported scaffold list.
+  if (
+    entryType !== "footgun" &&
+    entryType !== "lesson" &&
+    entryType !== "pattern"
+  ) {
+    throw new CLIError("--type must be footgun, lesson, or pattern.", 2);
+  }
+  return entryType;
+}
+
+/**
+ * Pair each cited project file with the literal text the developer verified there.
+ * Use before the writer asks the shared anchor checker to resolve those pairs.
+ *
+ * @throws CLIError with exit code 2 for unequal pairs or a footgun with no citation
+ */
+function validateLearnCitationFlags(
+  entryType: LearnEntryType,
+  values: ParsedArgValues,
+): void {
+  const evidencePaths = parsedStringList(values, "evidence");
+  const searchLiterals = parsedStringList(values, "search");
+  // Unequal lists cannot identify which literal belongs to which file, so no prospective entry is built.
+  if (evidencePaths.length !== searchLiterals.length) {
+    throw new CLIError(
+      "Each --evidence <path> requires one paired --search <literal>, in the same order.",
+      2,
+    );
+  }
+  // A footgun without local file evidence would be an unsupported warning rather than a durable architectural trap.
+  if (entryType === "footgun" && evidencePaths.length === 0) {
+    throw new CLIError(
+      "Footgun scaffolds require at least one --evidence/--search pair.",
+      2,
+    );
+  }
+}
+
+/**
+ * Validate the evidence label shown to readers of a footgun entry.
+ * Use after the entry type is known, because lessons and patterns do not carry this taxonomy.
+ *
+ * @throws CLIError with exit code 2 for a missing, misplaced, or unknown taxonomy value
+ */
+function validateLearnEvidenceKindFlag(
+  entryType: LearnEntryType,
+  values: ParsedArgValues,
+): void {
+  const evidenceKind = parsedString(values, "evidence-kind");
+  // A footgun reader needs to know whether its warning was measured, observed, or externally sourced.
+  if (entryType === "footgun" && evidenceKind === undefined) {
+    throw new CLIError("Footgun scaffolds require --evidence-kind.", 2);
+  }
+  // Lessons and patterns have no evidence-kind schema field, so accepting one would misrepresent their generated shape.
+  if (entryType !== "footgun" && evidenceKind !== undefined) {
+    throw new CLIError(
+      "--evidence-kind is only valid for footgun scaffolds.",
+      2,
+    );
+  }
+  // Unknown taxonomy text cannot pass the same stats check that later verifies the written bucket.
+  if (
+    evidenceKind !== undefined &&
+    evidenceKind !== "ACTUAL_MEASURED" &&
+    evidenceKind !== "OBSERVED" &&
+    evidenceKind !== "EXTERNAL_REFERENCE"
+  ) {
+    throw new CLIError(
+      "--evidence-kind must be ACTUAL_MEASURED, OBSERVED, or EXTERNAL_REFERENCE.",
+      2,
+    );
+  }
+}
+
+/**
+ * Validate the flags that define one explicit learning-loop scaffold request.
+ * The checks stay separated by concern so placement, paired citations, and taxonomy failures each produce one stable usage error.
+ *
+ * @throws CLIError with exit code 2 when a learn-only flag is misplaced or the scaffold grammar is incomplete
+ */
+function validateLearnFlags(command: Command, values: ParsedArgValues): void {
+  validateLearnFlagPlacement(command, values);
+  // Non-learning commands have no scaffold content to validate after placement checks pass.
+  if (command !== "learn") return;
+  // Help and version stop before dispatch, so developers can discover required authoring flags without supplying a fake scaffold request.
+  if (parsedFlag(values, "help") || parsedFlag(values, "version")) return;
+  const entryType = requireLearnEntryType(values);
+  validateLearnCitationFlags(entryType, values);
+  validateLearnEvidenceKindFlag(entryType, values);
+}
+
+/**
  * Validate flag combinations after strict parseArgs has accepted their individual shapes.
  *
  * This is the single ordering point for every per-command validator, so a user with several misplaced flags always sees the same first complaint
@@ -629,6 +798,7 @@ function validateFlagCombinations(
   validateCommonFlags(command, values);
   validateInstallFlags(command, values);
   validateQualityFlags(command, values, qualitySubcommand);
+  validateLearnFlags(command, values);
   validateSkillFlags(command, values, qualitySubcommand, skillSubcommand);
   validateHookFlags(command, values, hookSubcommand);
   validatePlansFlags(command, values, plansSubcommand, plansTimeAction);
@@ -644,23 +814,109 @@ function parseEventsLimitArg(rawLimit: string | undefined): number {
   return Math.min(parsed, 500);
 }
 
-/** Select the path consumed by the chosen command after each positional grammar is parsed. */
+/**
+ * Project choices produced by each positional grammar before the active command selects one.
+ * Every value is absolute, so dispatch never has to reinterpret what directory the developer named.
+ * Keeping all namespaces visible here prevents a new command from accidentally using another command's path.
+ */
+interface CommandProjectPaths {
+  quality: string;
+  events: string;
+  hooks: string;
+  plans: string;
+  diagnostics: string;
+  skill: string;
+  learn: string;
+}
+
+/** Select the absolute project path owned by the command the developer invoked. */
 function selectCommandProjectPath(
   command: Command,
-  qualityProjectPath: string,
-  eventsProjectPath: string,
-  hooksProjectPath: string,
-  plansProjectPath: string,
-  diagnosticsProjectPath: string,
-  skillProjectPath: string,
+  paths: CommandProjectPaths,
 ): string {
-  // Each namespaced command owns the path position its users supplied.
-  if (command === "events") return eventsProjectPath;
-  if (command === "hooks") return hooksProjectPath;
-  if (command === "plans") return plansProjectPath;
-  if (command === "diagnostics") return diagnosticsProjectPath;
-  if (command === "skill") return skillProjectPath;
-  return qualityProjectPath;
+  // An events path follows `tail`, so it differs from the default first-position path used by simple commands.
+  if (command === "events") return paths.events;
+  // Hook actions can carry a hook id before the project, so their parser owns the selected path.
+  if (command === "hooks") return paths.hooks;
+  // Plan commands point at plan artifacts rather than a normal project positional.
+  if (command === "plans") return paths.plans;
+  // Diagnostic subcommands parse their own optional project after the diagnostic name.
+  if (command === "diagnostics") return paths.diagnostics;
+  // Skill authoring and diagnosis accept different positional shapes, so they keep their resolved path.
+  if (command === "skill") return paths.skill;
+  // Learning authoring places the project after `new`, so its namespace supplies the write target.
+  if (command === "learn") return paths.learn;
+  // Simple commands and quality's default route use the first project positional, or the current directory when it is absent.
+  return paths.quality;
+}
+
+/** Read skill positionals only when the developer invoked `skill`; other commands receive inert fields and their existing project path. */
+function parseOptionalSkillPositionals(
+  command: Command,
+  commandPositionals: string[],
+  fallbackProjectPath: string,
+): SkillPositionals {
+  return command === "skill"
+    ? parseSkillPositionals(commandPositionals)
+    : {
+        skillSubcommand: null,
+        skillDescription: null,
+        projectPath: fallbackProjectPath,
+      };
+}
+
+/** Read `learn new` positionals only for that authoring route; other commands keep their existing project path and no learn action. */
+function parseOptionalLearnPositionals(
+  command: Command,
+  commandPositionals: string[],
+  fallbackProjectPath: string,
+) {
+  return command === "learn"
+    ? parseLearnPositionals(commandPositionals)
+    : { learnSubcommand: null, projectPath: fallbackProjectPath };
+}
+
+/**
+ * Build the learning fields consumed by the scaffold handler after flag validation succeeds.
+ * Use inert null and empty values on other commands so dispatch sees one stable `ParsedCLI` shape.
+ */
+function buildLearnCLIFields(
+  command: Command,
+  values: ParsedArgValues,
+  learnSubcommand: LearnSubcommand | null,
+): Pick<
+  ParsedCLI,
+  | "learnSubcommand"
+  | "learnEntryType"
+  | "learnCategory"
+  | "learnTitle"
+  | "learnEvidencePaths"
+  | "learnSearchLiterals"
+  | "learnEvidenceKind"
+> {
+  // Another command must not receive stale learning values that could imply it will write a bucket.
+  if (command !== "learn") {
+    return {
+      learnSubcommand: null,
+      learnEntryType: null,
+      learnCategory: null,
+      learnTitle: null,
+      learnEvidencePaths: [],
+      learnSearchLiterals: [],
+      learnEvidenceKind: null,
+    };
+  }
+  return {
+    learnSubcommand,
+    learnEntryType: (parsedString(values, "type") ??
+      null) as LearnEntryType | null,
+    learnCategory: parsedString(values, "category") ?? null,
+    learnTitle: parsedString(values, "title") ?? null,
+    learnEvidencePaths: parsedStringList(values, "evidence"),
+    learnSearchLiterals: parsedStringList(values, "search"),
+    learnEvidenceKind: (parsedString(values, "evidence-kind") ??
+      null) as LearnEvidenceKind | null,
+  };
 }
 
 /** Route top-level quality/review/recall operands without adding command branches to the main parser. */
@@ -728,6 +984,7 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
       scenario: { type: "string" },
       strict: { type: "boolean", default: false },
       category: { type: "string" },
+      ...LEARN_ARG_OPTIONS,
       finalize: { type: "boolean", default: false },
       "discard-open": { type: "boolean", default: false },
       yes: { type: "boolean", short: "y", default: false },
@@ -738,7 +995,6 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
     allowPositionals: true,
     strict: true,
   });
-
   const parsedValues = values as ParsedArgValues;
   const commandPositionals = selectCommandPositionals(
     command,
@@ -781,23 +1037,25 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
           diagnosticsSubcommand: null,
           projectPath: qualityPositionals.projectPath,
         };
-  const skillPositionals: SkillPositionals =
-    command === "skill"
-      ? parseSkillPositionals(commandPositionals)
-      : {
-          skillSubcommand: null,
-          skillDescription: null,
-          projectPath: qualityPositionals.projectPath,
-        };
-  const projectPath = selectCommandProjectPath(
+  const skillPositionals = parseOptionalSkillPositionals(
     command,
+    commandPositionals,
     qualityPositionals.projectPath,
-    eventsPositionals.projectPath,
-    hooksPositionals.projectPath,
-    plansPositionals.projectPath,
-    diagnosticsPositionals.projectPath,
-    skillPositionals.projectPath,
   );
+  const learnPositionals = parseOptionalLearnPositionals(
+    command,
+    commandPositionals,
+    qualityPositionals.projectPath,
+  );
+  const projectPath = selectCommandProjectPath(command, {
+    quality: qualityPositionals.projectPath,
+    events: eventsPositionals.projectPath,
+    hooks: hooksPositionals.projectPath,
+    plans: plansPositionals.projectPath,
+    diagnostics: diagnosticsPositionals.projectPath,
+    skill: skillPositionals.projectPath,
+    learn: learnPositionals.projectPath,
+  });
   const skillFields = buildSkillCLIFields(
     command,
     parsedValues,
@@ -811,6 +1069,11 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
     hooksPositionals.hookSubcommand,
     plansPositionals.plansSubcommand,
     plansPositionals.plansTimeAction,
+  );
+  const learnFields = buildLearnCLIFields(
+    command,
+    parsedValues,
+    learnPositionals.learnSubcommand,
   );
 
   return {
@@ -866,6 +1129,7 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
     ),
     plansTimeFinalize: parsedFlag(parsedValues, "finalize"),
     plansTimeDiscardOpen: parsedFlag(parsedValues, "discard-open"),
+    ...learnFields,
     recallPaths,
     diagnosticsSubcommand: diagnosticsPositionals.diagnosticsSubcommand,
     includeAll: parsedFlag(parsedValues, "all"),
