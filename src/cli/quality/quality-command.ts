@@ -220,13 +220,15 @@ async function handleQualityCandidacySubcommand(
 }
 
 /**
- * Validate one saved report file against the quality report schema.
+ * Validate one saved report file, separating reports `quality save` accepts from merely readable legacy ones.
+ * A current report prints an unqualified receipt; a report only the compatibility parser accepts prints a labelled
+ * receipt and names the current-report rule it misses on stderr, so nobody reads success as save-acceptance.
  * Error behavior: throws CLIError with exit code 2 for a missing path, an unreadable file, invalid JSON, or a schema violation, each naming the file
  * so the user can fix the right report.
  *
  * @param options - parsed CLI options carrying the report path to validate
  * @param deps - injected CLI error type and output writer
- * @returns nothing; a valid report writes `OK <path>` through `deps.writeOutput`
+ * @returns nothing; writes `OK <path>` for a current report, or `OK LEGACY-COMPATIBLE <path>` for a compatibility-only one
  */
 async function handleQualityValidateSubcommand(
   options: ParsedCLI,
@@ -252,14 +254,27 @@ async function handleQualityValidateSubcommand(
       2,
     );
   }
-  const parsed = parseQualityReport(raw, { requireCurrentFields: false });
-  if (!parsed.ok) {
+  // Current rules run first so a report the saver would accept keeps its unqualified receipt.
+  const current = parseQualityReport(raw, { requireCurrentFields: true });
+  if (current.ok) {
+    deps.writeOutput(options, `OK ${path}`);
+    return;
+  }
+
+  // Failing the compatibility parser too means the file is not a readable quality report at all.
+  const compatible = parseQualityReport(raw, { requireCurrentFields: false });
+  if (!compatible.ok) {
     throw new deps.CLIError(
-      `quality validate: schema error in ${path}: ${parsed.error}`,
+      `quality validate: schema error in ${path}: ${compatible.error}`,
       2,
     );
   }
-  deps.writeOutput(options, `OK ${path}`);
+
+  // The note goes to stderr so the receipt on stdout stays machine-readable, as quality history already does.
+  console.error(
+    `quality validate: legacy-compatible only, so \`quality save\` would reject it: ${current.error}`,
+  );
+  deps.writeOutput(options, `OK LEGACY-COMPATIBLE ${path}`);
 }
 
 /**

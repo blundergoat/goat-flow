@@ -143,7 +143,7 @@ const COMMAND_HELP_CATALOG = {
       ["history", "List saved quality reports."],
       ["diff", "Compare two saved same-agent reports."],
       ["save", "Persist one report supplied on stdin."],
-      ["validate", "Validate one saved report."],
+      ["validate", "Check one saved report; legacy-only reports are labelled."],
       ["candidacy", "Classify a proposed skill or playbook artifact."],
     ],
     flags: [

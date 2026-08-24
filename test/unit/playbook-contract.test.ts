@@ -44,6 +44,24 @@ const hookPolicyPlaybookPaths = [
   ".goat-flow/skill-docs/playbooks/hook-policy-testing.md",
 ] as const;
 
+/** The one copyable command a reader runs when a provider denies the quoted `--check` operand first. */
+const HOOK_STDIN_PROBE_COMMAND =
+  "bash .goat-flow/hooks/deny-dangerous.sh < .goat-flow/scratchpad/payload.json";
+
+/** Guidance that keeps the stdin fallback runnable and tells a reader when the direct examples apply. */
+const HOOK_PROBE_REQUIRED_PHRASES = [
+  HOOK_STDIN_PROBE_COMMAND,
+  "where the provider admits the quoted operand",
+  "route the same shapes through the stdin probe above",
+] as const;
+
+/** Per-provider results; one documented exit code would be wrong for two of the three event shapes. */
+const HOOK_PROVIDER_ATTRIBUTION_ROWS = [
+  "| Claude | `tool_name` | exits `2`, `BLOCKED:` message on stderr |",
+  "| Copilot | `toolName` | exits `0`, deny JSON on stdout |",
+  "| Antigravity | `toolCall` | exits `0`, deny JSON on stdout |",
+] as const;
+
 /**
  * Observable registration result shown to a user running the playbook command.
  * Output may be empty when the project has no matching registration pointer.
@@ -266,6 +284,32 @@ describe("standalone playbook audit contract", () => {
     }
   });
 
+  it("supplies a runnable stdin probe and conditions the direct examples", () => {
+    // Collecting every gap first names all missing guidance at once, rather than only the first mirror to fail.
+    const gaps = hookPolicyPlaybookPaths.flatMap((playbookPath) => {
+      const raw = readFileSync(join(process.cwd(), playbookPath), "utf8");
+      const guidance = raw.replace(/\s+/gu, " ");
+      const fencedSections = raw
+        .split("```")
+        .filter((_section, index) => index % 2 === 1);
+      const runnableProbe = fencedSections.some((section) =>
+        section.includes(HOOK_STDIN_PROBE_COMMAND),
+      );
+      return [
+        ...HOOK_PROBE_REQUIRED_PHRASES.filter(
+          (phrase) => !guidance.includes(phrase),
+        ),
+        ...HOOK_PROVIDER_ATTRIBUTION_ROWS.filter(
+          (row) => !guidance.includes(row),
+        ),
+        ...(runnableProbe
+          ? []
+          : ["the stdin probe must sit in a runnable code block"]),
+      ].map((detail) => `${playbookPath}: ${detail}`);
+    });
+
+    assert.deepEqual(gaps, []);
+  });
   it("registers writing-style.md for audit and consumer discovery", () => {
     assert.ok(
       STANDALONE_PLAYBOOK_FILES.some(

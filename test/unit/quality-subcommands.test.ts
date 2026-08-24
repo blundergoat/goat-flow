@@ -527,6 +527,143 @@ describe("quality refuted candidates", () => {
   });
 });
 
+/** Spawns the public source CLI validator against one saved report path. */
+function runQualityValidate(reportPath: string) {
+  return spawnSync(
+    process.execPath,
+    ["--import", "tsx", "src/cli/cli.ts", "quality", "validate", reportPath],
+    {
+      cwd: REPOSITORY_ROOT,
+      encoding: "utf8",
+    },
+  );
+}
+
+/**
+ * Writes one report body into a throwaway directory the public validator can open.
+ * Use when a test needs the command's real filesystem path instead of an in-memory object.
+ *
+ * @param body - report to serialise; a string is written verbatim so a malformed fixture stays malformed
+ * @returns the throwaway directory the caller must remove, and the report path to validate
+ */
+function writeQualityReportFixture(body: unknown): {
+  directory: string;
+  reportPath: string;
+} {
+  const directory = mkdtempSync(join(tmpdir(), "goat-flow-quality-validate-"));
+  const reportPath = join(directory, "report.json");
+  const serialised =
+    typeof body === "string" ? body : `${JSON.stringify(body, null, 2)}\n`;
+  writeFileSync(reportPath, serialised);
+  return { directory, reportPath };
+}
+
+/**
+ * Build one report the compatibility parser accepts and the current-report parser rejects.
+ * Use for the legacy half of every validate outcome; it omits only the provenance block.
+ *
+ * @param projectPath - project the report claims to describe, matched by the saver's ownership check
+ * @returns a report body with no `assessment_context`, so exactly one current-report rule fails
+ */
+function legacyQualityReport(projectPath: string) {
+  const { assessment_context: _assessmentContext, ...legacy } =
+    currentQualityReport(projectPath);
+  return legacy;
+}
+
+describe("quality validate", () => {
+  it("gives a current report an unqualified receipt", () => {
+    const fixture = writeQualityReportFixture(
+      currentQualityReport(resolve("quality-validate-current")),
+    );
+    try {
+      const result = runQualityValidate(fixture.reportPath);
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+      assert.equal(result.stdout.trim(), `OK ${fixture.reportPath}`);
+      // A current report has nothing to disclose, so the advisory stream stays empty for scripts.
+      assert.equal(result.stderr.trim(), "");
+    } finally {
+      rmSync(fixture.directory, { recursive: true, force: true });
+    }
+  });
+
+  it("labels a legacy-compatible report and names the rule it misses", () => {
+    const fixture = writeQualityReportFixture(
+      legacyQualityReport(resolve("quality-validate-legacy")),
+    );
+    try {
+      const result = runQualityValidate(fixture.reportPath);
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+      assert.equal(
+        result.stdout.trim(),
+        `OK LEGACY-COMPATIBLE ${fixture.reportPath}`,
+      );
+      // Naming the failed rule is what separates "old but readable" from "ready to save".
+      assert.match(
+        result.stderr,
+        /report\.assessment_context is required for current quality reports/u,
+      );
+    } finally {
+      rmSync(fixture.directory, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps the saver stricter than the validator for the same legacy bytes", () => {
+    const projectRoot = makeIgnoredQualityRoot();
+    const legacy = legacyQualityReport(projectRoot);
+    const fixture = writeQualityReportFixture(legacy);
+    try {
+      const validated = runQualityValidate(fixture.reportPath);
+      assert.equal(validated.status, 0, validated.stderr || validated.stdout);
+      assert.match(validated.stdout, /OK LEGACY-COMPATIBLE /u);
+
+      // The qualifier is only truthful while the saver still refuses the identical report.
+      const saved = runQualitySave(projectRoot, legacy);
+      assert.equal(saved.status, CLI_USAGE_EXIT_CODE);
+      assert.match(
+        saved.stderr,
+        /report\.assessment_context is required for current quality reports/u,
+      );
+    } finally {
+      rmSync(fixture.directory, { recursive: true, force: true });
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects a report both parsers refuse", () => {
+    const fixture = writeQualityReportFixture({
+      ...currentQualityReport(resolve("quality-validate-invalid")),
+      report_kind: "not-a-quality-report",
+    });
+    try {
+      const result = runQualityValidate(fixture.reportPath);
+      assert.equal(result.status, CLI_USAGE_EXIT_CODE);
+      assert.match(result.stderr, /quality validate: schema error in /u);
+      assert.ok(result.stderr.includes(fixture.reportPath));
+      assert.equal(result.stdout.trim(), "");
+    } finally {
+      rmSync(fixture.directory, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects unreadable input before either parser runs", () => {
+    const malformed = writeQualityReportFixture("not json");
+    try {
+      const invalidJson = runQualityValidate(malformed.reportPath);
+      assert.equal(invalidJson.status, CLI_USAGE_EXIT_CODE);
+      assert.match(invalidJson.stderr, /quality validate: invalid JSON in /u);
+
+      const missing = runQualityValidate(
+        join(malformed.directory, "absent.json"),
+      );
+      assert.equal(missing.status, CLI_USAGE_EXIT_CODE);
+      assert.match(missing.stderr, /quality validate: file not found: /u);
+    } finally {
+      rmSync(malformed.directory, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("quality save", () => {
   it("redacts, validates, and exclusively writes under the selected project", () => {
     const projectRoot = makeIgnoredQualityRoot();

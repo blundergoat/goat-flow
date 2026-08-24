@@ -20,6 +20,7 @@ import { basename, join, resolve } from "node:path";
 import { describe, it } from "node:test";
 
 import { STANDALONE_PLAYBOOK_FILES } from "../../src/cli/audit/skill-docs-contract.js";
+import { getPackageVersion } from "../../src/cli/paths.js";
 import type { QualityMode } from "../../src/cli/quality/schema-types.js";
 
 const CONTROLLING_WORKSPACE = resolve(import.meta.dirname, "..", "..");
@@ -264,24 +265,32 @@ async function withTemporaryConsumerTarget(
 }
 
 /**
- * Build the smallest valid prior report needed to exercise prompt history and validation.
- * Use after setup to prove the selected consumer owns its local quality history.
+ * Build the smallest current-shaped prior report needed to exercise prompt history and validation.
+ * Use after setup to prove the selected consumer owns its local quality history. The report satisfies every
+ * current-report rule, so `quality validate` returns its unqualified receipt rather than the legacy label.
  *
  * @param consumerTargetPath - installed target recorded in report history; empty is never valid
- * @returns schema-valid report with no findings; an empty findings list means this fixture found no defects
+ * @returns schema-valid current report with no findings; an empty findings list means this fixture found no defects
  */
 function consumerQualityReport(consumerTargetPath: string): object {
   return {
     report_kind: "goat-flow-quality-report",
-    goat_flow_version: "1.13.1",
+    goat_flow_version: getPackageVersion(),
     agent: "codex",
     project_path: consumerTargetPath,
     run_date: "2026-07-12",
     audit_status: "pass",
     scope: "consumer",
-    rubric_version: "1.13.1",
+    rubric_version: getPackageVersion(),
     quality_mode: "agent-setup",
     prior_report_id: null,
+    assessment_context: {
+      project_revision: null,
+      working_tree_state: "clean",
+      grounding_status: "complete",
+      unverified_probes: [],
+      score_confidence: "high",
+    },
     scores: {
       setup: {
         total: 100,
@@ -299,6 +308,7 @@ function consumerQualityReport(consumerTargetPath: string): object {
       },
     },
     findings: [],
+    refuted_candidates: [],
   };
 }
 
@@ -460,7 +470,7 @@ describe("consumer setup to quality-report lifecycle", () => {
         `${JSON.stringify(consumerQualityReport(consumerTargetPath), null, 2)}\n`,
       );
 
-      // Public validation proves the report can enter the consumer's quality history.
+      // A current-shaped report validates without a legacy label, so it can enter the consumer's quality history.
       const validationResult = runPublicCli([
         "quality",
         "validate",

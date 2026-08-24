@@ -80,9 +80,24 @@ write the provider event to a gitignored JSON payload file with a non-Bash file 
 file on stdin using a command line that contains only its path. This keeps the guarded phrase in stdin,
 not provider-matched command text, so the resulting hook output has a truthful attribution boundary.
 
+```bash
+bash .goat-flow/hooks/deny-dangerous.sh < .goat-flow/scratchpad/payload.json
+```
+
+The redirect leaves the guarded phrase in the file, so the command line stays clear of
+provider-matched text. Read the exit and stream against the event shape your provider sends:
+
+| Provider shape | Event key | Expected result |
+|---|---|---|
+| Claude | `tool_name` | exits `2`, `BLOCKED:` message on stderr |
+| Copilot | `toolName` | exits `0`, deny JSON on stdout |
+| Antigravity | `toolCall` | exits `0`, deny JSON on stdout |
+
 For each policy behaviour, test a denied shape and a neighbouring allowed
 control. This prevents a broad matcher from making ordinary terminal work
-unusable.
+unusable. Run the direct forms below where the provider admits the quoted
+operand; where it denies first, route the same shapes through the stdin
+probe above.
 
 ```bash
 bash .goat-flow/hooks/deny-dangerous.sh --check="bash -lc 'git push'"

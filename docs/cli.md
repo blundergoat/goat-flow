@@ -146,10 +146,13 @@ npx @blundergoat/goat-flow@latest quality diff 2026-04-01-0900-claude-aaaaa:2026
 
 ### `goat-flow quality validate <path-to-report>`
 
-Validate a saved quality report JSON file against the report schema. Checks that the file exists, parses as JSON, and conforms to the expected quality-report shape. Exits `2` on a missing file, invalid JSON, or a schema violation, and `0` when the report is well-formed. Use it to verify an agent-written report before consuming it.
+Validate a saved quality report JSON file. Current-report rules run first: a report that satisfies them prints `OK <path>`. A report only the compatibility parser accepts prints `OK LEGACY-COMPATIBLE <path>` and names the missing current-report rule on stderr. That label reports historical readability - the file stays loadable by validate, history, and diff - and not acceptance by `quality save`, which parses strictly and would reject it. Exits `2` on a missing file, invalid JSON, or a report both parsers reject, and `0` for either receipt. Use it to verify an agent-written report before consuming it.
 
 ```bash
 npx @blundergoat/goat-flow@latest quality validate .goat-flow/logs/quality/2026-04-01-0900-claude-aaaaa.json
+
+# OK <path>                     current report; `quality save` accepts this shape
+# OK LEGACY-COMPATIBLE <path>   readable only; stderr names the missing current-report rule
 ```
 
 ### `goat-flow quality save <project>`
