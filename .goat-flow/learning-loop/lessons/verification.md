@@ -197,13 +197,18 @@ last_reviewed: 2026-08-24
 **Status:** active | **Created:** 2026-08-17
 **Decision changed:** Accept a verification result only after confirming the command executed, selected the intended mode, and asserted the behavior rather than a shared keyword.
 **Trigger phase:** VERIFY
-**Incident count:** 2 | **Latest occurrence:** 2026-08-23
+**Incident count:** 4 | **Latest occurrence:** 2026-08-24
 
 **What happened:** M39 verification exposed three false-proof shapes in one pass. A negative regex for the unsafe rewrite instruction also rejected the safe sentence “does not rewrite them automatically.” A command that piped audit JSON into inline Node was blocked before either parallel check ran. The direct retry exited zero but omitted `--harness`; its JSON explicitly said `"harness": false` and carried no harness scope, so it had not exercised `settings-rules-matched`.
 
 **Recurrence 2026-08-23:** An M11 determinism wrapper ran both prompt commands, then failed before producing a verdict because the orchestration isolate reported `ReferenceError: crypto is not defined`. The two zero exits were not accepted as proof. A fresh rerun compared the complete outputs directly and reported an exact match without depending on hashing. Evidence anchor: `.goat-flow/skill-docs/skill-preamble.md` (search: `Proof Gate`).
 
 **Recurrence 2026-08-24:** M25's first stale-installer-prose sweep matched the valid plans-export sentence “Existing output is preserved unless `--force`” because the negative regex named only the shared suffix. The proof was narrowed to the complete stale user-owned-content clause before it was accepted. Evidence anchor: `docs/cli.md` (search: `Existing output is preserved unless`).
+
+**Recurrence 2026-08-24 (M51):** The completed milestone escaped a pipeline pipe inside its single-quoted `--check` argument.
+The documented command passed literal `\|` and exited 0 despite its expected exit 2.
+Running the real `|` pipeline exposed the intended eval verdict.
+Evidence anchor: `test/integration/deny-dangerous-policy.test.ts` (search: `Policy destructive: eval hides commands from safety checks`).
 
 **Root cause:** I treated a matched token and a zero exit as proof without first checking whether the assertion distinguished safe from unsafe prose, whether the hook allowed the command to execute, or whether the output identified the intended CLI mode.
 

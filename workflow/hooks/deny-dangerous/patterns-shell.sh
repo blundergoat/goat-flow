@@ -600,6 +600,32 @@ check_pipeline_xargs_destructive_payloads() {
   done
 }
 
+# Detect whether a proposed command invokes the shell's eval built-in in any executable pipeline stage.
+# Use before approval because eval can reinterpret or construct a different command after policy review.
+pipeline_contains_shell_eval_stage() {
+  local developer_command="$1"
+  local -a executable_pipeline_stages=()
+  local executable_pipeline_stage
+  local normalized_pipeline_stage
+  local pipeline_stage_verb
+
+  split_top_level_pipeline_stages_into executable_pipeline_stages "$developer_command"
+
+  # A pipeline runs each top-level stage separately, so inspect every command the developer would start.
+  for executable_pipeline_stage in "${executable_pipeline_stages[@]}"; do
+    normalized_pipeline_stage="$(normalize_command_candidate "$executable_pipeline_stage")"
+    normalized_pipeline_stage="${normalized_pipeline_stage#"${normalized_pipeline_stage%%[![:space:]]*}"}"
+    pipeline_stage_verb="${normalized_pipeline_stage%%[[:space:]]*}"
+    pipeline_stage_verb="${pipeline_stage_verb##*/}"
+
+    # Shell eval can reinterpret text after review, so the developer must submit the revealed command instead.
+    if [[ "$pipeline_stage_verb" == "eval" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
 # Apply destructive-shell policy to one user-visible command segment.
 # This is the final shell gate before secret and repository policy inspect the same segment.
 check_destructive_segment() {
@@ -657,7 +683,8 @@ check_destructive_segment() {
     block "Direct lockfile modification. Use the package manager (npm install, composer update, etc.)." || return $?
   fi
 
-  if [[ "$CMD_VERB" == "eval" ]]; then
+  # Any eval stage can reinterpret reviewed text, so ask the developer to submit the resulting command instead.
+  if pipeline_contains_shell_eval_stage "$cmd"; then
     block "eval hides commands from safety checks. Write the command directly." || return $?
   fi
 

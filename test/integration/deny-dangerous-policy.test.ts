@@ -577,6 +577,30 @@ const parserBoundaryCases: ParserBoundaryCase[] = [
     expectedStatus: 0,
   },
   {
+    name: "downstream shell eval",
+    userCommand: "printf safe | eval 'git status'",
+    expectedStatus: 2,
+    expectedPolicyMessage:
+      /Policy destructive: eval hides commands from safety checks/u,
+  },
+  {
+    name: "command-wrapped downstream shell eval",
+    userCommand: "printf safe | command eval 'git status'",
+    expectedStatus: 2,
+    expectedPolicyMessage:
+      /Policy destructive: eval hides commands from safety checks/u,
+  },
+  {
+    name: "downstream yq eval subcommand",
+    userCommand: "printf document | yq eval '.metadata.key'",
+    expectedStatus: 0,
+  },
+  {
+    name: "quoted downstream eval evidence",
+    userCommand: `rg -n 'printf safe | eval "rm -rf /"' docs | head -n 1`,
+    expectedStatus: 0,
+  },
+  {
     name: "compact direct lockfile overwrite is blocked",
     userCommand: "echo x>package-lock.json",
     expectedStatus: 2,
