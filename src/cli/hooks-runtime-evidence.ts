@@ -25,12 +25,14 @@ import {
   type HookRuntimeReasonCode,
   type HookRuntimeReport,
   type HookRuntimeScenarioResult,
+  type HookRuntimeSummary,
 } from "./hooks-configured-runtime-evidence.js";
 import {
   type AppendEvidenceEnvelopeResult,
   type CreateEvidenceEnvelopeInput,
 } from "./evidence/envelope.js";
 import type { AgentId } from "./types.js";
+import type { HookScenario } from "./cli-types.js";
 import { readAllHookStates } from "./server/hook-registrar.js";
 import { getAgentProfiles } from "./agents/registry.js";
 import {
@@ -581,6 +583,99 @@ export function verifyManagedDenyHook(
     summary,
     scenarios: recordedScenarios,
   };
+}
+
+/** Schema id for one batch run; single-scenario reports keep emitting `REPORT_SCHEMA` unchanged. */
+export const BATCH_REPORT_SCHEMA = "goat-flow.hook-runtime-batch.v1";
+
+/**
+ * One `--scenario all` run: every group's unmodified report plus a total across them.
+ * Wrapping rather than merging keeps each report readable by existing single-scenario consumers.
+ */
+export interface HookRuntimeBatchReport {
+  schema: typeof BATCH_REPORT_SCHEMA;
+  status: "pass" | "fail";
+  command: "hooks.verify";
+  projectPath: string;
+  agent: AgentId;
+  scenarioGroups: HookScenario[];
+  summary: HookRuntimeSummary;
+  reports: HookRuntimeReport[];
+}
+
+/**
+ * Total one batch without reclassifying any group, so an unsupported or failed group stays visible.
+ * Use after every requested group has run; a batch passes only when each contained report passed.
+ *
+ * @param projectPath - checkout the batch verified; echoed so one document identifies its target
+ * @param agent - selected agent every contained report belongs to
+ * @param reports - one completed report per requested group, in execution order; never empty
+ * @returns the wrapping report; `status` is "fail" when any contained report failed
+ */
+export function summarizeHookRuntimeBatch(
+  projectPath: string,
+  agent: AgentId,
+  reports: HookRuntimeReport[],
+): HookRuntimeBatchReport {
+  const summary = reports.reduce<HookRuntimeSummary>(
+    (totals, report) => ({
+      pass: totals.pass + report.summary.pass,
+      fail: totals.fail + report.summary.fail,
+      unsupported: totals.unsupported + report.summary.unsupported,
+      notConfigured: totals.notConfigured + report.summary.notConfigured,
+      error: totals.error + report.summary.error,
+    }),
+    { pass: 0, fail: 0, unsupported: 0, notConfigured: 0, error: 0 },
+  );
+
+  // One failed group fails the batch; an empty run would otherwise report a vacuous pass.
+  const everyGroupPassed =
+    reports.length > 0 && reports.every((report) => report.status === "pass");
+
+  return {
+    schema: BATCH_REPORT_SCHEMA,
+    status: everyGroupPassed ? "pass" : "fail",
+    command: "hooks.verify",
+    projectPath,
+    agent,
+    scenarioGroups: reports.map((report) => report.scenarioGroup),
+    summary,
+    reports,
+  };
+}
+
+/**
+ * Render one batch as a single JSON document for CI and local automation.
+ *
+ * @param batch - completed batch; contained reports stay in their original schema
+ * @returns indented JSON; never null or empty for a valid batch
+ */
+export function renderHookRuntimeBatchReportJson(
+  batch: HookRuntimeBatchReport,
+): string {
+  return JSON.stringify(batch, null, 2);
+}
+
+/**
+ * Render one batch as grouped terminal verdicts without exposing operands or captured text.
+ *
+ * @param batch - completed batch shown after a user verifies every group at once
+ * @returns plain-text verdict lines, one block per group; never null or empty
+ */
+export function renderHookRuntimeBatchReportText(
+  batch: HookRuntimeBatchReport,
+): string {
+  const groupBlocks = batch.reports.map((report) =>
+    renderHookRuntimeReportText(report),
+  );
+  return [
+    `Hook runtime batch: ${batch.status.toUpperCase()}`,
+    `Agent: ${batch.agent}`,
+    `Groups: ${batch.scenarioGroups.join(", ")}`,
+    `Totals: pass=${batch.summary.pass} fail=${batch.summary.fail} unsupported=${batch.summary.unsupported} not-configured=${batch.summary.notConfigured} error=${batch.summary.error}`,
+    "",
+    ...groupBlocks,
+  ].join("\n");
 }
 
 /**

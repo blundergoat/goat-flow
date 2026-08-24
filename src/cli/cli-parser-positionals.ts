@@ -14,7 +14,7 @@ import {
   type Command,
   type CandidacyInputArg,
   type EventsSubcommand,
-  type HookScenario,
+  type HookScenarioSelection,
   type HookSubcommand,
   type LearnSubcommand,
   type PlansSubcommand,
@@ -331,24 +331,26 @@ export function parseHooksPositionals(positionals: string[]): {
 export function parseHookScenarioArg(
   subcommand: HookSubcommand | null,
   scenarioArg: string | undefined,
-): HookScenario | null {
+): HookScenarioSelection | null {
   // Other hooks operations do not run runtime scenarios or receive a default group.
   if (subcommand !== "verify") return null;
   // Verification must not choose a proof group the user did not explicitly request.
   if (scenarioArg === undefined) {
     throw new CLIError(
-      'hooks verify requires --scenario "deny-hook", "post-turn-hook", or "gruff-hook".',
+      'hooks verify requires --scenario "deny-hook", "post-turn-hook", "gruff-hook", or "all".',
       2,
     );
   }
   // Unknown groups must fail before the CLI can imply an unimplemented proof ran.
+  // `all` is the only non-group word accepted; every other value must fail before a proof looks like it ran.
   if (
     scenarioArg !== "deny-hook" &&
     scenarioArg !== "post-turn-hook" &&
-    scenarioArg !== "gruff-hook"
+    scenarioArg !== "gruff-hook" &&
+    scenarioArg !== "all"
   ) {
     throw new CLIError(
-      '--scenario must be "deny-hook", "post-turn-hook", or "gruff-hook".',
+      '--scenario must be "deny-hook", "post-turn-hook", "gruff-hook", or "all".',
       2,
     );
   }

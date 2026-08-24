@@ -8,7 +8,8 @@
 
 import { CLIError } from "./cli-error.js";
 import { writeOutput } from "./cli-output.js";
-import type { ParsedCLI } from "./cli-types.js";
+import { BATCH_HOOK_SCENARIOS } from "./cli-types.js";
+import type { HookScenario, ParsedCLI } from "./cli-types.js";
 import type { HookState } from "./server/hook-registrar.js";
 
 /** Render desired and effective hook state as a compact terminal table. */
@@ -94,23 +95,29 @@ async function handleHookVerification(options: ParsedCLI): Promise<void> {
   // Direct callers must select one bounded offline scenario group before target hook code runs.
   if (options.hookScenario === null) {
     throw new CLIError(
-      'hooks verify requires --scenario "deny-hook", "post-turn-hook", or "gruff-hook".',
+      'hooks verify requires --scenario "deny-hook", "post-turn-hook", "gruff-hook", or "all".',
       2,
     );
   }
   const {
+    renderHookRuntimeBatchReportJson,
+    renderHookRuntimeBatchReportText,
     renderHookRuntimeReportJson,
     renderHookRuntimeReportText,
+    summarizeHookRuntimeBatch,
     verifyManagedDenyHook,
   } = await import("./hooks-runtime-evidence.js");
   const { verifyManagedConfiguredHook } =
     await import("./hooks-configured-runtime-evidence.js");
-  const report =
-    options.hookScenario === "deny-hook"
+  const agent = options.agent;
+
+  /** Run one group through the entrypoint that owns it, keeping the single trust decision. */
+  const verifyScenarioGroup = (scenarioGroup: HookScenario) =>
+    scenarioGroup === "deny-hook"
       ? verifyManagedDenyHook({
           projectPath: options.projectPath,
-          agent: options.agent,
-          scenarioGroup: options.hookScenario,
+          agent,
+          scenarioGroup,
           // The runtime-evidence layer uses this field as its no-execution gate.
           // Omission and the deprecated alias both stay static; only explicit
           // trusted-target selection releases the gate.
@@ -118,10 +125,30 @@ async function handleHookVerification(options: ParsedCLI): Promise<void> {
         })
       : verifyManagedConfiguredHook({
           projectPath: options.projectPath,
-          agent: options.agent,
-          scenarioGroup: options.hookScenario,
+          agent,
+          scenarioGroup,
           isTargetUntrusted: !options.isTargetTrusted,
         });
+
+  // One batch runs every shipped group in order and keeps each verdict, so a failed group never hides a later one.
+  if (options.hookScenario === "all") {
+    const batch = summarizeHookRuntimeBatch(
+      options.projectPath,
+      agent,
+      BATCH_HOOK_SCENARIOS.map(verifyScenarioGroup),
+    );
+    writeOutput(
+      options,
+      options.format === "json"
+        ? renderHookRuntimeBatchReportJson(batch)
+        : renderHookRuntimeBatchReportText(batch),
+    );
+    // CI must receive failure when any group in the batch lacks matching recorded proof.
+    if (batch.status === "fail") process.exitCode = 1;
+    return;
+  }
+
+  const report = verifyScenarioGroup(options.hookScenario);
   writeOutput(
     options,
     options.format === "json"

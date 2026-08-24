@@ -250,6 +250,8 @@ function pendingHookConfigEdits(projectPath: string, agent: AgentId): string[] {
     remove: [],
   };
 
+  const removalReasons: string[] = [];
+
   for (const spec of listHookSpecs()) {
     const edit = pendingHookRegistrationEdit(
       projectPath,
@@ -258,14 +260,48 @@ function pendingHookConfigEdits(projectPath: string, agent: AgentId): string[] {
       hookStates,
       spec,
     );
-    if (edit !== null) edits[edit].push(spec.id);
+    if (edit === null) continue;
+    edits[edit].push(spec.id);
+
+    // Losing a hook is the one edit a user cannot infer, so it carries the registrar's own reason and fix.
+    if (edit === "remove") {
+      removalReasons.push(
+        ...hookRemovalExplanation(hookStates.get(spec.id), agent, spec.id),
+      );
+    }
   }
 
-  return (Object.keys(edits) as HookRegistrationEdit[]).flatMap((edit) =>
-    edits[edit].length > 0
-      ? [`${HOOK_REGISTRATION_EDIT_PREFIX[edit]}: ${edits[edit].join(", ")}`]
-      : [],
-  );
+  return [
+    ...(Object.keys(edits) as HookRegistrationEdit[]).flatMap((edit) =>
+      edits[edit].length > 0
+        ? [`${HOOK_REGISTRATION_EDIT_PREFIX[edit]}: ${edits[edit].join(", ")}`]
+        : [],
+    ),
+    ...removalReasons,
+  ];
+}
+
+/**
+ * Explain one removal using the registrar's own wording instead of re-deciding why it applies.
+ * Use for a `remove` edit; other edits are self-explanatory from their verb and hook id.
+ *
+ * @param hookState - registrar state for the hook; undefined means the registry never reported it
+ * @param agent - provider whose per-agent reason and repair summary apply
+ * @param hookId - hook the removal names, echoed so grouped output stays attributable
+ * @returns reason and fix lines, or an empty array when the registrar published no reason
+ */
+function hookRemovalExplanation(
+  hookState: HookState | undefined,
+  agent: AgentId,
+  hookId: string,
+): string[] {
+  const agentState = hookState?.agents[agent];
+  // Without a published reason there is nothing truthful to add beyond the verb line already shown.
+  if (!agentState?.reason) return [];
+  return [
+    `  ${hookId}: ${agentState.reason}`,
+    `  fix: ${agentState.repairSummary}`,
+  ];
 }
 
 /** Add one path-specific edit sentence without discarding an earlier migration summary. */

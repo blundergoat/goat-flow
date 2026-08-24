@@ -17,6 +17,8 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 import { parseCLIArgs } from "../../src/cli/cli-parser.js";
+import { BATCH_HOOK_SCENARIOS } from "../../src/cli/cli-types.js";
+import { HOOK_VERIFICATION_CONTRACTS } from "../../src/cli/hook-verification-contracts.js";
 import type { CreateEvidenceEnvelopeInput } from "../../src/cli/evidence/envelope.js";
 import {
   executeManagedHookProbe,
@@ -211,6 +213,71 @@ describe("hooks runtime evidence", () => {
     assert.throws(
       () => parseCLIArgs(["hooks", "verify", ".", "--agent", "codex"]),
       /hooks verify requires --scenario "deny-hook"/iu,
+    );
+  });
+
+  // One batch refreshes every supported group without six separate invocations.
+  it("parses the all-scenario batch selection for hooks verify", () => {
+    const parsed = parseCLIArgs([
+      "hooks",
+      "verify",
+      ".",
+      "--agent",
+      "claude",
+      "--scenario",
+      "all",
+      "--trusted-target",
+    ]);
+
+    assert.equal(parsed.hookSubcommand, "verify");
+    assert.equal(parsed.hookScenario, "all");
+    assert.equal(parsed.isTargetTrusted, true);
+  });
+
+  // The batch selection expands to exactly the shipped groups, so no proof group is invented or dropped.
+  it("expands the all selection to the three fixed scenario groups", () => {
+    assert.deepEqual(BATCH_HOOK_SCENARIOS, [
+      "deny-hook",
+      "post-turn-hook",
+      "gruff-hook",
+    ]);
+    // Membership must match the shipped contracts; execution order stays a deliberate user-facing choice.
+    assert.deepEqual(
+      [...BATCH_HOOK_SCENARIOS].sort(),
+      Object.keys(HOOK_VERIFICATION_CONTRACTS).sort(),
+    );
+  });
+
+  // M17 shipped a parser that returned a scenario when the flag was absent; the batch must not reintroduce a default.
+  it("keeps the batch selection opt-in when --scenario is omitted", () => {
+    assert.throws(
+      () =>
+        parseCLIArgs([
+          "hooks",
+          "verify",
+          ".",
+          "--agent",
+          "claude",
+          "--trusted-target",
+        ]),
+      /hooks verify requires --scenario "deny-hook"/iu,
+    );
+  });
+
+  // Only hooks verify runs scenarios, so a batch word must not leak into another hooks subcommand.
+  it("rejects the all selection on other hooks subcommands", () => {
+    assert.throws(
+      () =>
+        parseCLIArgs([
+          "hooks",
+          "list",
+          ".",
+          "--agent",
+          "claude",
+          "--scenario",
+          "all",
+        ]),
+      /--scenario is only valid for the hooks verify command/iu,
     );
   });
 

@@ -89,6 +89,22 @@ export const HOOK_SUBCOMMANDS = new Set<string>([
 export type HookScenario = "deny-hook" | "post-turn-hook" | "gruff-hook";
 
 /**
+ * Every shipped scenario group, in the order one `--scenario all` run executes them.
+ * Deny runs first because it guards the most destructive commands a user can reach.
+ */
+export const BATCH_HOOK_SCENARIOS: readonly HookScenario[] = [
+  "deny-hook",
+  "post-turn-hook",
+  "gruff-hook",
+];
+
+/**
+ * What a user asked `hooks verify` to prove: one explicit group, or every shipped group.
+ * `all` never reaches the registrar, which keeps consuming the closed `HookScenario` union.
+ */
+export type HookScenarioSelection = HookScenario | "all";
+
+/**
  * The mutually exclusive modes of the `quality` command.
  * `prompt` (the default when no subcommand positional is given) emits an assessment prompt; `history`/`diff` read prior runs; `save` redacts,
  * validates, and persists an in-memory report; `validate` schema-checks a written report; `candidacy` scores a skill/playbook idea.
@@ -191,7 +207,7 @@ export interface ParsedCLI extends CLIOptions {
   eventsLimit: number;
   hookSubcommand: HookSubcommand | null;
   hookId: string | null;
-  hookScenario: HookScenario | null;
+  hookScenario: HookScenarioSelection | null;
   reviewSubcommand: ReviewSubcommand | null;
   reviewValidatePath: string | null;
   plansSubcommand: PlansSubcommand | null;
