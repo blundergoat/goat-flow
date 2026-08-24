@@ -28,8 +28,10 @@ export const INDEX_BUCKETS: IndexBucket[] = [
 ];
 
 /**
- * One generated index row. The anchor is the entry's verbatim heading line (semantic anchor,
- * never a line number) so `(search: "...")` retrieval survives bucket edits.
+ * One deterministic row shown to a developer searching the generated learning index.
+ *
+ * The anchor is the verbatim heading, never a line number, so retrieval survives bucket edits.
+ * Invariant: only footgun and lesson renderers may replace `hook` with optional `decisionChanged` guidance.
  */
 export interface IndexEntry {
   /** Entry heading text without the `## <Kind>:` prefix; decisions carry the full H1 text. */
@@ -43,6 +45,8 @@ export interface IndexEntry {
   anchor: string;
   /** One-sentence routing hook extracted mechanically from the entry body. */
   hook: string;
+  /** Optional future action; null means the generated row keeps its incident or context hook. */
+  decisionChanged: string | null;
   /** Declared date shown in the row suffix: `Created` for bucket entries, the index date for ADRs. */
   declaredDate: string | null;
   /** Stable reading-cost heuristic: UTF-8 bytes divided by four, rounded to the nearest ten. */
@@ -290,6 +294,7 @@ function parseEntryFile(
       paragraphAfter(section.content, HOOK_MARKER[bucket]) ??
         firstBodyParagraph(section.content),
     ),
+    decisionChanged: section.decisionChanged,
     declaredDate: metadataDate(section.content, "Created"),
     approxTokenEstimate: approximateTokenEstimate(section.content),
   }));
@@ -340,6 +345,7 @@ function parseDecisionFile(file: MarkdownEntry): IndexEntry | null {
     sourceFile: baseName(section.sourcePath),
     anchor: searchNeedle(section.heading),
     hook: `${status} - ${decisionSummary(body)}`,
+    decisionChanged: section.decisionChanged,
     declaredDate: decisionIndexDate(body, status),
     approxTokenEstimate: approximateTokenEstimate(body),
   };

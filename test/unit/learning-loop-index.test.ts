@@ -15,7 +15,10 @@ import {
   parseActiveBucketSections,
   parseBucket,
 } from "../../src/cli/learning-loop-index/parse-bucket.js";
-import type { IndexBucket } from "../../src/cli/learning-loop-index/parse-bucket.js";
+import type {
+  IndexBucket,
+  IndexEntry,
+} from "../../src/cli/learning-loop-index/parse-bucket.js";
 import { formatIndex } from "../../src/cli/learning-loop-index/format-index.js";
 
 const FOOTGUNS_DIR = ".goat-flow/learning-loop/footguns/";
@@ -31,6 +34,7 @@ last_reviewed: 2026-06-01
 ## Footgun: Active trap with symptoms
 
 **Status:** active | **Created:** 2026-05-01 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Run the command guard before the caller starts a shell command.
 
 **Symptoms:** The guard blocks every Bash call. Later sentences must not leak into the hook.
 
@@ -238,6 +242,10 @@ describe("parseBucket", () => {
   it("extracts the footgun hook from the first Symptoms sentence only", () => {
     const [entry] = parseBucket(fs, FOOTGUNS_DIR, "footguns");
     assert.equal(entry?.hook, "The guard blocks every Bash call.");
+    assert.equal(
+      entry?.decisionChanged,
+      "Run the command guard before the caller starts a shell command.",
+    );
     assert.equal(entry?.sourceFile, "hooks.md");
     assert.equal(entry?.anchor, "## Footgun: Active trap with symptoms");
   });
@@ -266,7 +274,7 @@ describe("parseBucket", () => {
 
     assert.deepEqual(
       [footgun?.declaredDate, footgun?.approxTokenEstimate],
-      ["2026-05-01", 60],
+      ["2026-05-01", 80],
     );
     assert.deepEqual(
       [datedLesson?.declaredDate, datedLesson?.approxTokenEstimate],
@@ -404,6 +412,16 @@ describe("formatIndex", () => {
   const ROW_SCHEMA =
     /^- \[[^\]]+\]\([^)]+\.md\) \(search: ("(?:[^"\\]|\\.)+"|'[^']*"[^']*')\) - .+ \((?:\d{4}-\d{2}-\d{2}; )?~\d+ tok\)$/;
 
+  const entryWithDecisionGuidance: IndexEntry = {
+    title: "Use the safe command path",
+    sourceFile: "commands.md",
+    anchor: "## Lesson: Use the safe command path",
+    hook: "The caller used the unsafe command path.",
+    decisionChanged: "Run the command guard before starting a shell command.",
+    declaredDate: "2026-08-24",
+    approxTokenEstimate: 120,
+  };
+
   it("renders the unified row schema with generated frontmatter for every bucket", () => {
     const buckets: Array<[IndexBucket, string]> = [
       ["footguns", FOOTGUNS_DIR],
@@ -485,6 +503,74 @@ describe("formatIndex", () => {
     assert.match(datedRow ?? "", /\(2026-05-10; ~50 tok\)$/);
     assert.match(undatedRow ?? "", /\(~30 tok\)$/);
     assert.doesNotMatch(undatedRow ?? "", /\(\d{4}-\d{2}-\d{2};/);
+  });
+
+  it("uses decision guidance as the single hook for footgun and lesson rows", () => {
+    for (const bucket of ["footguns", "lessons"] as const) {
+      const content = formatIndex(bucket, [entryWithDecisionGuidance]);
+      assert.match(
+        content,
+        / - Decision: Run the command guard before starting a shell command\. \(2026-08-24; ~120 tok\)$/m,
+      );
+      assert.doesNotMatch(content, /The caller used the unsafe command path/);
+    }
+  });
+
+  it("leaves a row without decision guidance byte-identical to the established shape", () => {
+    const content = formatIndex("lessons", [
+      { ...entryWithDecisionGuidance, decisionChanged: null },
+    ]);
+    const [row] = content.split("\n").filter((line) => line.startsWith("- ["));
+    const establishedRow =
+      '- [Use the safe command path](commands.md) (search: "## Lesson: Use the safe command path") - ' +
+      "The caller used the unsafe command path. (2026-08-24; ~120 tok)";
+    assert.equal(row, establishedRow);
+  });
+
+  it("keeps long decision guidance within one balanced 100-character hook", () => {
+    const longPlainGuidance =
+      "Run each repository check before reporting success to the caller and repeat the complete verification sequence for every changed surface.";
+    const longInlineCodeSpan = `\`${"command-with-many-options ".repeat(8).trim()}\``;
+    const guidanceEndingInsideCode = `Run the repository checks before using ${longInlineCodeSpan} and reporting success.`;
+    const closedCodeFollowedByLongToken = `Use \`safe command\`${"x".repeat(100)}`;
+
+    for (const decisionChanged of [
+      longPlainGuidance,
+      guidanceEndingInsideCode,
+      closedCodeFollowedByLongToken,
+    ]) {
+      const content = formatIndex("lessons", [
+        { ...entryWithDecisionGuidance, decisionChanged },
+      ]);
+      const [row] = content
+        .split("\n")
+        .filter((line) => line.startsWith("- ["));
+      const renderedHook = row
+        ?.replace(/^.+\) - /u, "")
+        .replace(/ \(2026-08-24; ~120 tok\)$/u, "");
+      assert.ok(renderedHook, "expected one rendered decision hook");
+      assert.ok(
+        renderedHook.length <= 100,
+        `decision hook exceeded the cap at ${renderedHook.length} characters`,
+      );
+      assert.ok(
+        renderedHook.endsWith("…"),
+        "a truncated hook must show its cut",
+      );
+      assert.equal(
+        (renderedHook.match(/`/gu) ?? []).length % 2,
+        0,
+        "a rendered hook must not contain an unmatched backtick",
+      );
+    }
+  });
+
+  it("keeps pattern and decision hooks unchanged when optional guidance is present", () => {
+    for (const bucket of ["patterns", "decisions"] as const) {
+      const content = formatIndex(bucket, [entryWithDecisionGuidance]);
+      assert.match(content, / - The caller used the unsafe command path\./);
+      assert.doesNotMatch(content, / - Decision:/);
+    }
   });
 
   it("is deterministic across repeated parse+format runs", () => {

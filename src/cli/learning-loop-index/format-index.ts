@@ -26,6 +26,12 @@ const BUCKET_ROW_NOUN: Record<IndexBucket, string> = {
   decisions: "one Architectural Decision Record with its current status",
 };
 
+/** Row hooks stay at 100 characters because every skill reads the generated index before deciding which entry to open. */
+const ROW_HOOK_MAX_CHARS = 100;
+
+/** Label that distinguishes future guidance from an incident or context summary. */
+const DECISION_HOOK_PREFIX = "Decision: ";
+
 /**
  * Render one generated bucket index from its parsed entries.
  *
@@ -52,11 +58,95 @@ export function formatIndex(
   const rows =
     entries.length === 0
       ? ["_No active entries._"]
-      : entries.map(
-          (entry) =>
-            `- [${entry.title}](${entry.sourceFile}) (search: ${quoteAnchor(entry.anchor)}) - ${entry.hook}${formatRowSuffix(entry)}`,
-        );
+      : entries.map((entry) => {
+          const selectedHook = formatEntryHook(bucket, entry);
+          return `- [${entry.title}](${entry.sourceFile}) (search: ${quoteAnchor(entry.anchor)}) - ${selectedHook}${formatRowSuffix(entry)}`;
+        });
   return [...header, ...rows].join("\n") + "\n";
+}
+
+/**
+ * Choose the single routing hook a reader sees before opening an entry.
+ * Footgun and lesson guidance replaces incident prose; other buckets retain their established hook.
+ *
+ * @param bucket - generated index whose reader contract decides whether guidance is eligible
+ * @param entry - parsed row including the legacy hook and optional future action
+ * @returns one bounded reader-facing hook
+ */
+function formatEntryHook(bucket: IndexBucket, entry: IndexEntry): string {
+  // Footgun and lesson readers get the future action only when the source declares one.
+  if (
+    (bucket === "footguns" || bucket === "lessons") &&
+    entry.decisionChanged !== null
+  ) {
+    return formatDecisionHook(entry.decisionChanged);
+  }
+
+  return entry.hook;
+}
+
+/**
+ * Fit future guidance inside the shared row-hook budget without splitting words or inline code.
+ * Use when a footgun or lesson tells a reader which action changes next.
+ *
+ * @param decisionChanged - declared future action; callers use the legacy hook when it is absent
+ * @returns labelled guidance no longer than the shared row-hook ceiling
+ */
+function formatDecisionHook(decisionChanged: string): string {
+  const decisionTextMaxChars = ROW_HOOK_MAX_CHARS - DECISION_HOOK_PREFIX.length;
+
+  // Guidance that fits reaches the reader verbatim, including any complete inline code spans.
+  if (decisionChanged.length <= decisionTextMaxChars) {
+    return `${DECISION_HOOK_PREFIX}${decisionChanged}`;
+  }
+
+  const truncatedTextMaxChars = decisionTextMaxChars - 1;
+  const candidateText = decisionChanged.slice(0, truncatedTextMaxChars);
+  const lastWordBoundary = candidateText.lastIndexOf(" ");
+  const completeWords = candidateText.slice(
+    0,
+    lastWordBoundary > 0 ? lastWordBoundary : 0,
+  );
+  const openCodeSpanStart = findOpenCodeSpanStart(completeWords);
+
+  // A word boundary inside inline code backs up before its opening delimiter so the reader never sees a broken fragment.
+  if (openCodeSpanStart !== null) {
+    return `${DECISION_HOOK_PREFIX}${completeWords.slice(0, openCodeSpanStart).trimEnd()}…`;
+  }
+
+  return `${DECISION_HOOK_PREFIX}${completeWords}…`;
+}
+
+/**
+ * Find an inline-code delimiter that remains open at the proposed cut.
+ * A null result means the candidate ends outside inline code from the reader's perspective.
+ *
+ * @param candidateText - decision text already limited to the available row budget
+ * @returns opening delimiter offset, or null when every code span is complete
+ */
+function findOpenCodeSpanStart(candidateText: string): number | null {
+  let openDelimiterLength: number | null = null;
+  let openDelimiterStart: number | null = null;
+
+  // Delimiter runs are paired by width because Markdown code spans may use one or more backticks.
+  for (const delimiterMatch of candidateText.matchAll(/`+/gu)) {
+    const delimiterLength = delimiterMatch[0].length;
+
+    // With no open span, this delimiter starts code that must either close or be removed from the row.
+    if (openDelimiterLength === null) {
+      openDelimiterLength = delimiterLength;
+      openDelimiterStart = delimiterMatch.index;
+      continue;
+    }
+
+    // Only a delimiter of the same width closes the active Markdown code span.
+    if (delimiterLength === openDelimiterLength) {
+      openDelimiterLength = null;
+      openDelimiterStart = null;
+    }
+  }
+
+  return openDelimiterStart;
 }
 
 /** Render the fixed row suffix, omitting only an undeclared date. */

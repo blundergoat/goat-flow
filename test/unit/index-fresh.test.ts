@@ -44,11 +44,16 @@ const INDEX_BUCKET_COUNT = 4;
 const BUCKET_CONTENT: Record<IndexBucket, [string, string]> = {
   footguns: [
     "hooks.md",
-    "---\ncategory: hooks\nlast_reviewed: 2026-06-01\n---\n\n## Footgun: A trap\n\n**Status:** active | **Created:** 2026-05-01 | **Evidence:** ACTUAL_MEASURED\n\n**Symptoms:** It bites.\n",
+    "---\ncategory: hooks\nlast_reviewed: 2026-06-01\n---\n\n## Footgun: A trap\n\n" +
+      "**Status:** active | **Created:** 2026-05-01 | **Evidence:** ACTUAL_MEASURED\n" +
+      "**Decision changed:** Run the guard before starting a shell command.\n\n" +
+      "**Symptoms:** It bites.\n",
   ],
   lessons: [
     "agent.md",
-    "---\ncategory: agent\nlast_reviewed: 2026-06-01\n---\n\n## Lesson: A lesson\n\n**Created:** 2026-05-01\n\n**What happened:** Something went wrong.\n",
+    "---\ncategory: agent\nlast_reviewed: 2026-06-01\n---\n\n## Lesson: A lesson\n\n**Created:** 2026-05-01\n" +
+      "**Decision changed:** Read the evidence before reporting success.\n\n" +
+      "**What happened:** Something went wrong.\n",
   ],
   patterns: [
     "arch.md",
@@ -118,6 +123,14 @@ describe("collectIndexFreshness", () => {
     );
     assert.deepEqual(states, ["fresh", "fresh", "fresh", "fresh"]);
     assert.match(
+      readFileSync(join(root, BUCKET_PATHS.footguns, "INDEX.md"), "utf8"),
+      /Decision: Run the guard before starting a shell command\./m,
+    );
+    assert.match(
+      readFileSync(join(root, BUCKET_PATHS.lessons, "INDEX.md"), "utf8"),
+      /Decision: Read the evidence before reporting success\./m,
+    );
+    assert.match(
       readFileSync(join(root, BUCKET_PATHS.patterns, "INDEX.md"), "utf8"),
       /A pattern.*\(~\d+ tok\)$/m,
     );
@@ -162,6 +175,33 @@ describe("collectIndexFreshness", () => {
     )["decisions"]?.state;
     rmSync(edited, { recursive: true, force: true });
     assert.equal(state, "stale");
+  });
+
+  /**
+   * Changes guidance after generation so stale future action cannot reach callers.
+   * Filesystem side effects: creates, edits, and removes one temporary repository.
+   */
+  it("reports stale when decision guidance changes after generation", () => {
+    const changedGuidanceRepo = makeFreshRepo();
+    const footgunPath = join(
+      changedGuidanceRepo,
+      BUCKET_PATHS.footguns,
+      "hooks.md",
+    );
+    const changedFootgun = readFileSync(footgunPath, "utf8").replace(
+      "Run the guard before starting a shell command.",
+      "Run every guard before starting a shell command.",
+    );
+    writeFileSync(footgunPath, changedFootgun);
+    const states = byBucket(
+      collectIndexFreshness(createFS(changedGuidanceRepo), BUCKET_PATHS),
+    );
+    rmSync(changedGuidanceRepo, { recursive: true, force: true });
+
+    assert.equal(states.footguns?.state, "stale");
+    assert.equal(states.lessons?.state, "fresh");
+    assert.equal(states.patterns?.state, "fresh");
+    assert.equal(states.decisions?.state, "fresh");
   });
 
   it("reports missing when INDEX.md is absent and no-bucket when the directory is absent", () => {

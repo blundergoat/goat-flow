@@ -2,6 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-08-23
+**Updated:** 2026-08-24 - M29 made optional decision guidance the single bounded hook for footgun and lesson rows.
 **Ticket/Context:** `.goat-flow/plans/1.17.0/M05-index-cost-and-date-columns.md`
 
 ## Context
@@ -24,6 +25,12 @@ The date is present only when the source entry declares one. Footguns, lessons, 
 
 Decision-row hooks retain the verbatim status and first Decision sentence. Their date moves into the common suffix so it is not rendered twice. Entry ordering, search anchors, hook extraction, and active/resolved filtering do not change.
 
+Footgun and lesson rows use a declared `**Decision changed:**` value as their one hook, prefixed with `Decision:`. They keep the existing incident or
+context hook when that field is absent. Pattern and decision hooks do not use this optional field.
+
+The complete labelled hook remains within 100 characters. Long guidance first ends at a word boundary with an ellipsis. The shortened text is then
+checked for an open Markdown code span and backs up before its opening delimiter when needed. The rule is derived only from entry text.
+
 ## Failure Mode Comparison
 
 | Option | What fails | Why rejected or accepted |
@@ -32,10 +39,15 @@ Decision-row hooks retain the verbatim status and first Decision sentence. Their
 | Add generation time or filesystem modification time | An unchanged source can produce different output, so `stats --check` reports permanent staleness. | Rejected by ADR-033's determinism contract. |
 | Run an exact model tokenizer | The index gains a model-specific dependency and presents precision that does not transfer across runtimes. | Rejected for a routing heuristic. |
 | Derive both fields from entry text | Repeated generation is stable, missing dates stay honest, and every row exposes comparable reading cost. | Accepted. |
+| Append guidance | Rows repeat summaries; measured growth was 4,323 footgun bytes and 8,815 lesson bytes. | Rejected after the corpus measurement. |
+| Replace the hook | Rows expose the future action within the existing 100-character budget. | Accepted. |
 
 ## Consequences
 
 All four committed `INDEX.md` files gain the suffix and must be regenerated together. Editing an entry section can change its displayed estimate and therefore makes its index stale until regeneration. Undated entries remain valid and visibly omit the date.
+
+The 2026-08-24 regeneration replaced hooks in place and increased the footguns index by 174 bytes and the lessons index by 490 bytes. Pattern rows
+were byte-identical; the decisions index changed only because this ADR's reading-cost estimate changed.
 
 The suffix increases the mandatory Step 0 index read size. The implementation must measure the generated indexes and revisit this decision if the added columns make index-first retrieval impractical.
 
