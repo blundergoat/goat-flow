@@ -1,6 +1,6 @@
 ---
 category: lockstep-surfaces
-last_reviewed: 2026-08-18
+last_reviewed: 2026-08-26
 ---
 
 **Scope:** Changes where adding or renaming one artifact obliges a matching edit on several other surfaces at once, and the partial-update failures that follow. Stale pointers, path validation, and evidence rot live in [docs-and-crossrefs.md](docs-and-crossrefs.md).
@@ -74,6 +74,7 @@ Live instruction files (`CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.
 ## Footgun: Adding a skill-playbook requires lock-step updates across 13+ surfaces
 
 **Status:** active | **Created:** 2026-05-24 | **Evidence:** ACTUAL_MEASURED
+**Incident count:** 3 | **Latest occurrence:** 2026-08-26
 
 **Symptoms:** A playbook appears in `workflow/skills/playbooks/` and `.goat-flow/skill-docs/playbooks/`, but one parity, audit, prompt, install, or docs surface is not enrolled. The playbook works locally until template-vs-installed drift or missing setup context surfaces later.
 
@@ -81,9 +82,11 @@ Live instruction files (`CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.
 
 **Evidence:** `code-comments.md` and `observability.md` initially shipped without full parity enrollment; the gap was closed when later playbooks forced updates to `scripts/preflight-checks.sh` (search: `if [[ -f workflow/skills/playbooks/code-comments.md`), `src/cli/audit/check-artifact-integrity.ts` (search: `SHARED_ARTIFACT_MIRRORS`), and `test/integration/preamble-sync.test.ts` (search: `template and installed code-comments.md match`). The 2026-05-25 gruff-code-quality addition also proved package-surface coupling when preflight exposed a Knip dependency classification issue.
 
-**Prevention:** When adding a playbook, grep the new filename through every surface above before declaring done. Then run `bash scripts/preflight-checks.sh`; the output must name the new playbook in parity rows. Run `npm test`; `preamble-sync.test.ts` must include the new playbook. If the playbook documents a CLI-only package, run `npx knip --no-progress` and only add `ignoreDependencies` after real npm-script or shell usage still leaves Knip unable to see it.
+**Prevention:** When adding or retiring a playbook, grep the filename and its routed concepts through every surface above before declaring done. A history rewrite must replay descendant contracts instead of assuming every line in the introduction commit belongs to the retired artifact. Then run `bash scripts/preflight-checks.sh`; the output must name current playbooks in parity rows. Run `npm test`; `preamble-sync.test.ts` must include each current playbook. If the playbook documents a CLI-only package, run `npx knip --no-progress` and only add `ignoreDependencies` after real npm-script or shell usage still leaves Knip unable to see it.
 
 **Recurrence update (2026-07-13):** M12 registered `skill-playbook-authoring-sync.md` in manifest and audit surfaces, so focused checks and the live controlling-workspace audit passed. The full consumer setup lifecycle then failed because `workflow/install-goat-flow.sh` lacked its explicit copy line; the same sweep found missing preflight, parity-test, setup-doc, architecture, code-map, and quality-prompt enrollment. The next preflight also rejected the playbook because its worked YAML example repeated the exact installed version assignment, producing `1.13.1 | 1.13.1`; examples now use an unquoted `CURRENT_VERSION` sentinel. The decisive reproductions are `test/integration/setup-quality-lifecycle.test.ts` (search: "keeps setup, audit, prompts, and report history on the selected consumer") and `scripts/preflight-checks.sh` (search: "Installed shared reference").
+
+**Recurrence 2026-08-26:** Retiring a playbook through a history rewrite also removed a descendant-required wording change that had shared the introduction commit. The focused contracts and `npm test` passed, but preflight rejected all seven instruction mirrors because they no longer contained the manifest-pinned `ordinary README prose` route. Restoring only that human-prose phrase preserved instruction parity without routing the reserved replacement placeholder. Evidence anchors: `workflow/manifest.json` (search: `"ordinary README prose"`) and `scripts/check-instruction-parity.mjs` (search: `for (const rule of SHARED_PHRASES)`).
 
 ---
 

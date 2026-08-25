@@ -2168,6 +2168,15 @@ if [[ -f workflow/skills/reference/skill-conventions.md ]] && [[ -f .goat-flow/s
 else
     skip "skill-conventions.md sync (one or both files missing)"
 fi
+if [[ -f workflow/skills/reference/agent-document-authoring.md ]] && [[ -f .goat-flow/skill-docs/agent-document-authoring.md ]]; then
+    if diff -q workflow/skills/reference/agent-document-authoring.md .goat-flow/skill-docs/agent-document-authoring.md >/dev/null 2>&1; then
+        pass "agent-document-authoring.md: template and installed copy match"
+    else
+        fail "agent-document-authoring.md: template (workflow/skills/reference/) and installed (.goat-flow/skill-docs/) differ"
+    fi
+else
+    skip "agent-document-authoring.md sync (one or both files missing)"
+fi
 if [[ -f workflow/skills/playbooks/README.md ]] && [[ -f .goat-flow/skill-docs/playbooks/README.md ]]; then
     if diff -q workflow/skills/playbooks/README.md .goat-flow/skill-docs/playbooks/README.md >/dev/null 2>&1; then
         pass "skill-docs playbooks README.md: template and installed copy match"

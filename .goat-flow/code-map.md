@@ -195,7 +195,7 @@ workflow/                        = packaged template source copied into target p
 │   ├── goat-qa/SKILL.md         = testing-gap analysis skill template
 │   ├── goat-qa/references/       = progressive output templates loaded only when rendering QA results
 │   ├── goat-clarity/SKILL.md    = bounded comment, naming, and private-placement remediation template
-│   ├── reference/               = skill-preamble.md and skill-conventions.md templates
+│   ├── reference/               = active meta-reference templates plus the reserved agent-document-authoring.md placeholder
 │   └── playbooks/               = browser-use, changelog, code-comments, gruff-code-quality, hook-policy-testing, naming-and-placement, observability, page-capture, release-notes, skill-playbook-authoring-sync, skill-quality-testing, test-selection, writing-sentence-diagnostics, writing-structure-diagnostics, writing-style
 │
 ├── hooks/                       = hook templates and agent hook config templates
@@ -290,6 +290,7 @@ docs/                            = user and maintainer documentation
 │   └── deny-dangerous/          = policy modules and self-test
 ├── skill-docs/                  = installed shared skill doctrine and playbooks
 │   ├── README.md                = index for shared skill doctrine and playbooks
+│   ├── agent-document-authoring.md = reserved, unrouted authoring-guidance placeholder
 │   ├── skill-preamble.md        = shared proof/evidence/routing doctrine loaded by goat-* skills
 │   ├── skill-conventions.md     = full-depth task tracking, learning-loop, recovery conventions
 │   ├── skill-quality-testing/   = skill-authoring methodology pack

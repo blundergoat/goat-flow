@@ -29,12 +29,13 @@ Each SKILL.md MUST include:
 
 **IMPORTANT: Install skills VERBATIM from the templates. Do NOT adapt, compress, rewrite, or remove any sections.** Copy `SKILL.md` plus any `references/*.md` files listed under that skill, and delete any stale Markdown files in that skill's `references/` directory that are no longer listed in `workflow/manifest.json` `skills.references`. Skills are the same for every project - project-specific context comes from the instruction file, `.goat-flow/learning-loop/footguns/`, `.goat-flow/learning-loop/lessons/`, and any optional local instruction files the project already has. Cutting or rewriting skill content causes more damage than generic examples ever will.
 
-## Shared meta references
+## Shared references
 
-Install the meta references from `workflow/skills/reference/`:
+Install the managed references from `workflow/skills/reference/`:
 - `.goat-flow/skill-docs/README.md` from `workflow/skills/reference/README.md` - meta references index
 - `.goat-flow/skill-docs/skill-preamble.md` from `workflow/skills/reference/skill-preamble.md` - essential preamble read on every skill invocation
 - `.goat-flow/skill-docs/skill-conventions.md` from `workflow/skills/reference/skill-conventions.md` - full conventions reference read only on full-depth invocations
+- `.goat-flow/skill-docs/agent-document-authoring.md` from `workflow/skills/reference/agent-document-authoring.md` - reserved placeholder; do not route or load it until its guidance is authored
 
 ## Standalone playbooks
 
@@ -102,6 +103,7 @@ The installer prunes stale per-skill Markdown reference files automatically befo
 - [ ] `.goat-flow/skill-docs/README.md` exists
 - [ ] `.goat-flow/skill-docs/skill-preamble.md` exists
 - [ ] `.goat-flow/skill-docs/skill-conventions.md` exists
+- [ ] `.goat-flow/skill-docs/agent-document-authoring.md` exists
 - [ ] `.goat-flow/skill-docs/playbooks/README.md` exists
 - [ ] `.goat-flow/skill-docs/playbooks/browser-use.md` exists
 - [ ] `.goat-flow/skill-docs/playbooks/changelog.md` exists

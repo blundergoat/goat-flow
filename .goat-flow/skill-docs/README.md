@@ -3,7 +3,7 @@ goat-flow-reference-version: "1.16.0"
 ---
 # Skill Docs
 
-This directory holds **shared meta-references composed into goat-flow skills**. They describe the universal contract that every `/goat-*` skill inherits - they are not standalone playbooks.
+This directory holds shared meta-references and reserved guidance placeholders. The active meta-references describe contracts inherited by `/goat-*` skills; placeholders are not loaded until an explicit route is added.
 
 For tool/capability playbooks, see `playbooks/`. For skill-authoring methodology, see `skill-quality-testing/`.
 
@@ -11,10 +11,11 @@ For tool/capability playbooks, see `playbooks/`. For skill-authoring methodology
 
 | File | Role | When loaded |
 |---|---|---|
+| [`agent-document-authoring.md`](./agent-document-authoring.md) | Reserved placeholder for future agent-document authoring guidance. | Not routed or loaded. |
 | [`skill-preamble.md`](./skill-preamble.md) | Universal goat-flow contract: Proof Gate, OBSERVED/INFERRED tagging, evidence discipline, retry budget. | Composed into every `/goat-*` skill at scoring time and at runtime; agents inherit its gate vocabulary. |
 | [`skill-conventions.md`](./skill-conventions.md) | Authoring conventions: footgun/lesson entry shapes, frontmatter contracts, status / created / evidence blocks. | Composed into a skill when its body references `skill-conventions`. |
 
-These are meta because they describe the *shape* of skills, not how to use a specific tool. Adding a new shared meta reference here means committing every existing skill to inherit it - do that intentionally, not by accident.
+The active meta-references describe the *shape* of skills, not how to use a specific tool. A file is inherited only when the composition configuration or a skill explicitly loads it.
 
 ## Why a separate directory (and not duplicated into each skill)
 

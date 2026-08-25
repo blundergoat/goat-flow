@@ -2803,10 +2803,11 @@ fi
 # ==========================================================================
 # 5. Copy shared reference files (always overwrite - verbatim copies)
 # ==========================================================================
-echo "Meta references → .goat-flow/skill-docs/:"
+echo "Shared references → .goat-flow/skill-docs/:"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/reference/README.md" ".goat-flow/skill-docs/README.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/reference/skill-preamble.md" ".goat-flow/skill-docs/skill-preamble.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/reference/skill-conventions.md" ".goat-flow/skill-docs/skill-conventions.md"
+copy_file "$GOAT_FLOW_ROOT/workflow/skills/reference/agent-document-authoring.md" ".goat-flow/skill-docs/agent-document-authoring.md"
 
 echo "Standalone playbooks → .goat-flow/skill-docs/playbooks/:"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/README.md" ".goat-flow/skill-docs/playbooks/README.md"

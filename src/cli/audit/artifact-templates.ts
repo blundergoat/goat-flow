@@ -45,6 +45,7 @@ function sharedMarkdownMirrors(
 export const SHARED_ARTIFACT_MIRRORS: readonly ArtifactMirrorSpec[] = [
   ...sharedMarkdownMirrors("workflow/skills/reference", INSTALLED_SHARED_ROOT, [
     "README.md",
+    "agent-document-authoring.md",
     "skill-preamble.md",
     "skill-conventions.md",
   ]),

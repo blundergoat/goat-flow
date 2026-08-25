@@ -1,7 +1,6 @@
 /**
- * Regression test for the preflight preamble/conventions sync check.
- * Verifies the diff-based check correctly detects when template and installed
- * copies of skill-preamble.md or skill-conventions.md diverge.
+ * Regression test for the preflight shared-reference sync checks.
+ * Verifies the diff-based checks detect when template and installed copies diverge.
  *
  * Regression detection runs in a tmpdir - never mutates tracked repo files.
  */
@@ -43,6 +42,14 @@ const TEMPLATE_CONVENTIONS = resolve(
 const INSTALLED_CONVENTIONS = resolve(
   PROJECT_ROOT,
   ".goat-flow/skill-docs/skill-conventions.md",
+);
+const TEMPLATE_AGENT_DOCUMENT_AUTHORING = resolve(
+  PROJECT_ROOT,
+  "workflow/skills/reference/agent-document-authoring.md",
+);
+const INSTALLED_AGENT_DOCUMENT_AUTHORING = resolve(
+  PROJECT_ROOT,
+  ".goat-flow/skill-docs/agent-document-authoring.md",
 );
 const TEMPLATE_BROWSER_USE = resolve(
   PROJECT_ROOT,
@@ -232,6 +239,22 @@ describe("preamble/conventions sync: current state", () => {
       diffQuiet(TEMPLATE_CONVENTIONS, INSTALLED_CONVENTIONS),
       0,
       "skill-conventions.md: template and installed should match",
+    );
+  });
+
+  it("template and installed agent-document-authoring.md match", () => {
+    assertMirrorExists(
+      TEMPLATE_AGENT_DOCUMENT_AUTHORING,
+      INSTALLED_AGENT_DOCUMENT_AUTHORING,
+      "agent-document-authoring.md",
+    );
+    assert.equal(
+      diffQuiet(
+        TEMPLATE_AGENT_DOCUMENT_AUTHORING,
+        INSTALLED_AGENT_DOCUMENT_AUTHORING,
+      ),
+      0,
+      "agent-document-authoring.md: template and installed should match",
     );
   });
 
