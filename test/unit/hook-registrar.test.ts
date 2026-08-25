@@ -693,6 +693,8 @@ describe("hook registrar: launchers and installation", () => {
             type: "command",
             command: expectedDescriptor.command,
             args: expectedDescriptor.args,
+            bash: expectedDescriptor.bash,
+            powershell: expectedDescriptor.powershell,
             timeout: denySpec.timeoutSec,
           },
         ],
@@ -703,6 +705,30 @@ describe("hook registrar: launchers and installation", () => {
       assert.equal(
         readFileSync(join(root, ".claude", "settings.json"), "utf-8"),
         migratedText,
+      );
+    });
+  });
+
+  // Mutating an isolated installed row proves a loader cannot drop one no-op field and revive Copilot's bare-node failure after sync.
+  it("reports a partial Claude routing descriptor as command drift", () => {
+    withTempProject((root) => {
+      installClaudeDenyHook(root);
+      const configPath = join(root, ".claude", "settings.json");
+      const config = JSON.parse(readFileSync(configPath, "utf-8")) as {
+        hooks: {
+          PreToolUse: Array<{
+            hooks: Array<Record<string, unknown>>;
+          }>;
+        };
+      };
+      delete config.hooks.PreToolUse[0]!.hooks[0]!.powershell;
+      writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
+
+      const denySpec = getHookSpec(HOOK_IDENTIFIER);
+      assert.ok(denySpec);
+      assert.equal(
+        readAgentHookState(root, PROFILES.claude, denySpec).registrationIssue,
+        "command-or-response-mismatch",
       );
     });
   });

@@ -295,11 +295,11 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
     );
   });
 
-  it("wires a milestone added to an existing plan into its terminal milestone and ISSUE bands", () => {
+  it("wires appended or inserted milestones through the prior terminal milestone and ISSUE bands", () => {
     // RED 2026-08-23: File-Write created M47 in the 1.17.0 train but left the terminal milestone's `Depends on` and the
     // ISSUE band untouched, so the release cut would have closed without it (lesson: milestone-accounting.md).
     const rule =
-      /Existing plan: also add the new ID to the terminal milestone's `Depends on` and re-derive any `ISSUE\.md` band and totals\./u;
+      /Existing plan: identify its prior terminal milestone\. Append: new `Depends on` prior\. Insert before prior: prior `Depends on` new\. Re-derive `ISSUE\.md` bands and totals\./u;
     assert.match(
       readProjectFile("workflow/skills/goat-plan/SKILL.md"),
       rule,

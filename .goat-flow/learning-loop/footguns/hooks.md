@@ -1,6 +1,6 @@
 ---
 category: hooks
-last_reviewed: 2026-08-24
+last_reviewed: 2026-08-25
 ---
 
 **Scope:** Hook runtime delivery, provider result adapters, policy-module execution, and performance. What a scanner can actually see - changed-file enumeration, diff/rename detection, gitignore and gitattribute blind spots - lives in [hook-scanning.md](hook-scanning.md). Install / launch / registration / config-drift plumbing lives in [hook-installation.md](hook-installation.md). The `deny-dangerous` shell-grammar policy parser lives in [deny-shell.md](deny-shell.md), [deny-secrets.md](deny-secrets.md), and [deny-writes.md](deny-writes.md).
@@ -122,16 +122,18 @@ A child result that ends a bounded cycle is a release decision, not a finding. A
 ## Footgun: Copilot combines native and Claude project hook registrations
 
 **Status:** active | **Created:** 2026-08-23 | **Evidence:** ACTUAL_MEASURED
-**Decision changed:** Treat repository `.claude/settings.json` as a Copilot hook source too; do not register the same lifecycle independently for Claude and Copilot without proven provider routing or deduplication.
+**Decision changed:** Treat repository `.claude/settings.json` as a Copilot hook source too; keep real Copilot policy only in its native config and give managed Claude rows explicit inert shell routes.
 **Trigger phase:** SCOPE
 **Caught at:** VERIFY
-**Incident count:** 1 | **Latest occurrence:** 2026-08-23
+**Incident count:** 2 | **Latest occurrence:** 2026-08-25
 
 An isolated session-start fixture registered one command in `.github/hooks/` and one in `.claude/settings.json`. GitHub Copilot CLI 1.0.80 invoked both for one initial session: the native entry received camelCase fields and the Claude-compatible entry received PascalCase-event snake_case fields. Their privacy-safe markers had the same session fingerprint and landed 32 ms apart. A runner that expected one marker correctly stopped instead of claiming delivery.
 
 This is provider behavior, not duplicate JSON inside one config. GitHub's [hook-locations contract](https://docs.github.com/en/copilot/reference/hooks-reference#hooks-locations) says Copilot combines repository `.github/hooks/*.json` with the inline `hooks` block in `.claude/settings.json`. Goat Flow already owns both potential surfaces: `workflow/manifest.json` (search: `"hook_config_file": ".claude/settings.json"`) and (search: `"hook_config_file": ".github/hooks/hooks.json"`). A hook added to both can therefore run twice for Copilot; a hook added only to Claude can still run under Copilot and bypass a manifest claim that Copilot is unsupported.
 
-Before adding a lifecycle shared by Claude and Copilot, test a mixed-agent fixture containing both real registration shapes. The design must prove one of these outcomes: the handler identifies the actual host from a documented contract, registration coordination leaves only one effective entry, or duplicate invocations are safely deduplicated without stale session state. Source matchers are not enough unless a live mixed-agent capture proves Copilot honors that matcher's event semantics. Until then, keep default-on support narrower than the apparently successful single-provider captures.
+The second incident exposed field selection, not just duplicate invocation. Copilot selected `command: "node"` from Goat Flow's structured Claude row without its `args`, so a safe `pwd` request failed before policy startup with a Node syntax error. The accepted descriptor keeps Claude's real `command` plus `args` and adds `bash: "exit 0"` and `powershell: "exit 0"`. Copilot's cross-loaded copy becomes inert, while `.github/hooks/hooks.json` remains the sole managed Copilot policy source. Owners: `src/cli/server/agent-hook-command.ts` (search: `bash: "exit 0"`), `src/cli/server/agent-hook-writer.ts` (search: `handlerDescriptor.bash`), and `test/unit/hooks-runtime-evidence.test.ts` (search: `requires Copilot native registration`).
+
+Before changing a lifecycle shared by Claude and Copilot, test a mixed-source fixture with both real registration shapes and the exact current providers. Preserve all four Claude identity fields - `command`, ordered `args`, `bash`, and `powershell` - through writer, generated contract, installer, audit, and replay. Audit and runtime proof must continue to read the selected provider's native config path; a Claude no-op never counts as Copilot protection. Configured replay proves only local execution. Renew live delivery separately, and do not extend the result to Copilot cloud behavior or to the documented-but-not-live-captured Windows route.
 
 ---
 

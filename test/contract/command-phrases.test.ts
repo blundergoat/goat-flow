@@ -49,6 +49,8 @@ const WRITE_SCOPE_RECONCILIATION_PATHS = [
 ] as const;
 const WRITE_SCOPE_CAPTURE_RULE =
   "Before writing, record the write allowlist and starting dirty paths; keep an in-session list of every path this session writes.";
+const SCOPE_EXPANSION_RULE =
+  "Expanding beyond scope = stop and re-scope with human.";
 const WRITE_SCOPE_RECONCILIATION_RULE =
   "Reconcile the write allowlist, starting dirty paths, session write paths, and final changed state before delivery.";
 const WRITE_SCOPE_DECISION_CASES = [
@@ -63,7 +65,7 @@ const WRITE_SCOPE_DECISION_CASES = [
   {
     userSituation: "a new out-of-scope write",
     expectedDecision:
-      "A new out-of-scope write requires the agent to stop and re-scope before delivery.",
+      "A new out-of-scope write requires the agent to stop and obtain human approval for the expanded scope before delivery.",
   },
   {
     userSituation: "a dirty path present before the session",
@@ -708,6 +710,10 @@ describe("end-of-run write-scope reconciliation", () => {
       assert.ok(
         instructionText.includes(WRITE_SCOPE_CAPTURE_RULE),
         `${relativePath} must capture the write boundary before work starts`,
+      );
+      assert.ok(
+        instructionText.includes(SCOPE_EXPANSION_RULE),
+        `${relativePath} must require human re-scope before expanding work`,
       );
       assert.ok(
         instructionText.includes(WRITE_SCOPE_RECONCILIATION_RULE),

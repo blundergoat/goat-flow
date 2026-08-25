@@ -386,7 +386,9 @@ describe("Gruff documentation-pass doctrine", () => {
       const configOffset = content.indexOf(
         "hooks.gruff-code-quality.binaries.<go|rs|ts|php|py>",
       );
-      const wrapperOffset = content.indexOf('"bin/test/$target-analyse.sh"');
+      const binTestWrapperOffset = content.indexOf('"bin/test/$target.sh"');
+      const binWrapperOffset = content.indexOf('"bin/$target.sh"');
+      const scriptsWrapperOffset = content.indexOf('"scripts/$target.sh"');
       const releaseOffset = content.indexOf('"target/release/$target"');
       const checkoutBinOffset = content.indexOf('"bin/$target"');
       const composerShimOffset = content.indexOf('"vendor/bin/$target"');
@@ -402,8 +404,10 @@ describe("Gruff documentation-pass doctrine", () => {
       const userLocalOffset = content.indexOf('"$HOME/.local/bin/$target"');
       const pathOffset = content.indexOf('"$target"');
       assert.ok(configOffset >= 0, playbookPath);
-      assert.ok(configOffset < wrapperOffset, playbookPath);
-      assert.ok(wrapperOffset < releaseOffset, playbookPath);
+      assert.ok(configOffset < binTestWrapperOffset, playbookPath);
+      assert.ok(binTestWrapperOffset < binWrapperOffset, playbookPath);
+      assert.ok(binWrapperOffset < scriptsWrapperOffset, playbookPath);
+      assert.ok(scriptsWrapperOffset < releaseOffset, playbookPath);
       assert.ok(releaseOffset < checkoutBinOffset, playbookPath);
       assert.ok(checkoutBinOffset < composerShimOffset, playbookPath);
       assert.ok(composerShimOffset < composerPackageOffset, playbookPath);
@@ -413,6 +417,7 @@ describe("Gruff documentation-pass doctrine", () => {
       assert.ok(virtualenvOffset < cargoOffset, playbookPath);
       assert.ok(cargoOffset < userLocalOffset, playbookPath);
       assert.ok(userLocalOffset < pathOffset, playbookPath);
+      assert.doesNotMatch(content, /\$target-analyse\.sh/u, playbookPath);
       assert.match(
         content,
         /Do not recursively execute name-matched binaries/u,

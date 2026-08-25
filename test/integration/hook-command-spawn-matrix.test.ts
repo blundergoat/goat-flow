@@ -56,6 +56,8 @@ after(() => {
 interface RegisteredHandler {
   command: string;
   args: string[];
+  bash: string;
+  powershell: string;
 }
 
 /**
@@ -141,7 +143,14 @@ function registeredHandler(
   ) as {
     hooks: Record<
       string,
-      Array<{ hooks: Array<{ command?: string; args?: string[] }> }>
+      Array<{
+        hooks: Array<{
+          command?: string;
+          args?: string[];
+          bash?: string;
+          powershell?: string;
+        }>;
+      }>
     >;
   };
   const registeredHook = settings.hooks[lifecycleEvent]![0]!.hooks[0]!;
@@ -150,9 +159,13 @@ function registeredHandler(
     Array.isArray(registeredHook.args),
     `${lifecycleEvent} registration should carry a structured args tuple`,
   );
+  assert.equal(registeredHook.bash, "exit 0");
+  assert.equal(registeredHook.powershell, "exit 0");
   return {
     command: registeredHook.command as string,
     args: registeredHook.args as string[],
+    bash: registeredHook.bash as string,
+    powershell: registeredHook.powershell as string,
   };
 }
 
@@ -206,7 +219,9 @@ function runRegisteredHandler(
   payload: string,
   cwd: string = projectRoot,
 ): ReturnType<typeof spawnSync> {
-  return spawnSync(handler.command, handler.args, {
+  const selected = agentHookSpawnDescriptor({ form: "argv", ...handler });
+  // The public writer owns this executable and argv; fixture payloads reach stdin only.
+  return spawnSync(selected.command, selected.args, {
     cwd,
     encoding: "utf8",
     input: payload,

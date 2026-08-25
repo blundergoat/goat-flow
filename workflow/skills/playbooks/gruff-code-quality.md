@@ -26,9 +26,9 @@ Availability discovery only inspects wrappers and existing executable paths. It 
 target=gruff-ts  # gruff-go | gruff-rs | gruff-ts | gruff-php | gruff-py
 wrapper=
 for candidate in \
-  "bin/test/$target-analyse.sh" \
-  "bin/$target-analyse.sh" \
-  "scripts/$target-analyse.sh"
+  "bin/test/$target.sh" \
+  "bin/$target.sh" \
+  "scripts/$target.sh"
 do
   if [ -x "$candidate" ]; then wrapper="$candidate"; break; fi
 done

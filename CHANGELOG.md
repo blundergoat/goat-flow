@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Gruff playbooks find project wrappers again** - Plain `<tool>.sh` scripts retain wrapper-owned config, paths, and reports.
 - **Deny hooks parse quoted shell boundaries precisely** - JavaScript arrows and escaped literals stay usable; background commands and compact lockfile redirects are blocked.
 - **Deny hooks block downstream shell `eval`** - A safe first stage cannot hide later evaluation; `yq eval` and quoted evidence still work.
 - **BREAKING: audits require `audit`** - Use `goat-flow audit <path>`; bare `goat-flow` still opens the menu, and unknown commands exit `2`.

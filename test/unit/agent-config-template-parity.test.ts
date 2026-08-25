@@ -20,7 +20,19 @@ describe("agent config template parity", () => {
       join(PROJECT_ROOT, "workflow/hooks/agent-config/claude.json"),
       "utf-8",
     ),
-  ) as { permissions?: { deny?: unknown; allow?: unknown } };
+  ) as {
+    permissions?: { deny?: unknown; allow?: unknown };
+    hooks?: Record<
+      string,
+      Array<{
+        hooks?: Array<{
+          args?: unknown;
+          bash?: unknown;
+          powershell?: unknown;
+        }>;
+      }>
+    >;
+  };
   const claudeDeny = Array.isArray(claude.permissions?.deny)
     ? claude.permissions.deny.filter(
         (entry): entry is string => typeof entry === "string",
@@ -41,6 +53,21 @@ describe("agent config template parity", () => {
     join(PROJECT_ROOT, "workflow/hooks/agent-config/codex.toml"),
     "utf-8",
   );
+
+  it("routes every structured Claude template row away from cross-loading shells", () => {
+    const structuredRows = Object.values(claude.hooks ?? {})
+      .flat()
+      .flatMap((entry) => entry.hooks ?? [])
+      .filter((entry) => Array.isArray(entry.args));
+    assert.ok(structuredRows.length > 0, "Claude template must ship hooks");
+    assert.equal(
+      structuredRows.every(
+        (row) => row.bash === "exit 0" && row.powershell === "exit 0",
+      ),
+      true,
+      "every structured Claude row must carry both inert shell routes",
+    );
+  });
 
   // Env policy: deny rules beat allow rules on BOTH agents, so a broad
   // **/.env* deny would shadow .env.example. Each real env variant is

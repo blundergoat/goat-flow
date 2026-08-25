@@ -9,6 +9,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -18,9 +19,16 @@ import { join, resolve } from "node:path";
 
 import { parseCLIArgs } from "../../src/cli/cli-parser.js";
 import { BATCH_HOOK_SCENARIOS } from "../../src/cli/cli-types.js";
+import { PROFILES } from "../../src/cli/detect/agents.js";
 import { HOOK_VERIFICATION_CONTRACTS } from "../../src/cli/hook-verification-contracts.js";
-import { managedHookEnvironment } from "../../src/cli/hooks-configured-runtime-evidence.js";
+import {
+  managedHookEnvironment,
+  verifyManagedConfiguredHook,
+} from "../../src/cli/hooks-configured-runtime-evidence.js";
 import type { CreateEvidenceEnvelopeInput } from "../../src/cli/evidence/envelope.js";
+import { writeAgentHookState } from "../../src/cli/server/agent-hook-writer.js";
+import { applyHookState } from "../../src/cli/server/hook-registrar.js";
+import { getHookSpec } from "../../src/cli/server/hooks-registry.js";
 import {
   executeManagedHookProbe,
   BATCH_REPORT_SCHEMA,
@@ -43,7 +51,7 @@ const CONFIGURED_HOOK_STATE: ManagedDenyHookState = {
   enabled: true,
   installed: true,
   scriptPath: ".goat-flow/hooks/deny-dangerous.sh",
-  configuredCommand: null,
+  configuredHandler: null,
   reasonCode: null,
 };
 
@@ -493,6 +501,81 @@ describe("hooks runtime evidence", () => {
     assert.equal(report.status, "fail");
     assert.equal(report.summary.notConfigured, DENY_HOOK_SCENARIO_COUNT);
     assert.equal(report.summary.pass, 0);
+  });
+
+  // Fixture side effects: creates a disposable project, writes managed configs/scripts, replays fixed hook inputs, damages the native row, then removes the tree.
+  it("requires Copilot native registration even when Claude no-op routes are present", () => {
+    const projectRoot = mkdtempSync(join(tmpdir(), "goat-flow-copilot-proof-"));
+    try {
+      mkdirSync(join(projectRoot, ".claude"), { recursive: true });
+      writeFileSync(join(projectRoot, ".claude", "settings.json"), "{}\n");
+      applyHookState("deny-dangerous", true, projectRoot);
+      applyHookState("gruff-code-quality", true, projectRoot);
+      assert.equal(
+        existsSync(join(projectRoot, ".github", "hooks", "hooks.json")),
+        false,
+      );
+
+      const missingNativeDeny = verifyManagedDenyHook({
+        projectPath: projectRoot,
+        agent: "copilot",
+        scenarioGroup: "deny-hook",
+        isTargetUntrusted: false,
+      });
+      assert.equal(missingNativeDeny.status, "fail");
+      assert.equal(
+        missingNativeDeny.summary.notConfigured,
+        DENY_HOOK_SCENARIO_COUNT,
+      );
+      const missingNativeGruff = verifyManagedConfiguredHook({
+        projectPath: projectRoot,
+        agent: "copilot",
+        scenarioGroup: "gruff-hook",
+        isTargetUntrusted: false,
+      });
+      assert.equal(missingNativeGruff.status, "fail");
+      assert.equal(missingNativeGruff.summary.notConfigured, 3);
+
+      const denySpec = getHookSpec("deny-dangerous");
+      assert.ok(denySpec);
+      mkdirSync(join(projectRoot, ".github", "hooks"), { recursive: true });
+      writeAgentHookState(projectRoot, PROFILES.copilot, denySpec, true);
+      const exactNative = verifyManagedDenyHook({
+        projectPath: projectRoot,
+        agent: "copilot",
+        scenarioGroup: "deny-hook",
+        isTargetUntrusted: false,
+      });
+      assert.equal(exactNative.status, "pass");
+      assert.equal(exactNative.summary.pass, DENY_HOOK_SCENARIO_COUNT);
+
+      const nativeConfigPath = join(
+        projectRoot,
+        ".github",
+        "hooks",
+        "hooks.json",
+      );
+      const nativeConfig = JSON.parse(
+        readFileSync(nativeConfigPath, "utf8"),
+      ) as {
+        hooks: { preToolUse: Array<Record<string, unknown>> };
+      };
+      nativeConfig.hooks.preToolUse[0]!.powershell = "exit 0";
+      writeFileSync(
+        nativeConfigPath,
+        `${JSON.stringify(nativeConfig, null, 2)}\n`,
+      );
+      const staleNative = verifyManagedDenyHook({
+        projectPath: projectRoot,
+        agent: "copilot",
+        scenarioGroup: "deny-hook",
+        isTargetUntrusted: false,
+      });
+      assert.equal(staleNative.status, "fail");
+      assert.equal(staleNative.summary.notConfigured, DENY_HOOK_SCENARIO_COUNT);
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
   });
 
   // Missing policy dependencies return exit 2 too, so the unavailable marker must outrank BLOCKED.

@@ -179,7 +179,9 @@ npx @blundergoat/goat-flow@latest manifest --check            # Fail if manifest
 
 Report learning-loop health: live entry counts by bucket, stale file refs, and `last_reviewed` freshness. Use `--check` in CI - it exits non-zero if any bucket is missing `last_reviewed`, uses a malformed date, contains stale file references, or has a generated `INDEX.md` that no longer matches its bucket content (`index-stale`; a never-generated index is only an advisory warning).
 
-The report also lists **graduation candidates**: active footgun/lesson entries carrying a line-start `**Recurrence update` marker, meaning the recorded mistake happened again after the entry was written. Per the feedback-loop doctrine in [harness-engineering.md](harness-engineering.md), that prevention should be promoted to a structural gate (preflight check, CI step, deny pattern) or the entry resolved. Candidates are report-only: they never appear in `--check` output and never fail the gate, and a corpus without recurrence markers renders nothing extra.
+The report also lists **graduation candidates**. The effective incident count is the larger of a valid positive safe-integer `Incident count` and one base incident plus recognized line-start recurrence labels. Only active entries with at least two effective incidents are candidates. Per the feedback-loop doctrine in [harness-engineering.md](harness-engineering.md), that prevention should be promoted to a structural gate (preflight check, CI step, deny pattern) or the entry resolved.
+
+Graduation candidates are report-only: they are omitted from `stats --check`, cannot fail that gate, and have no graduation-specific `--check` mode. A corpus without qualifying entries renders nothing extra.
 
 ```bash
 npx @blundergoat/goat-flow@latest stats                       # Learning-loop health report
@@ -213,6 +215,7 @@ Footguns require at least one pair plus `--evidence-kind ACTUAL_MEASURED|OBSERVE
 Search values use the same literal citation validator as learning-loop audits, so regex-shaped input is not interpreted as a pattern.
 
 `--dry-run` runs the same destination, schema, duplicate-heading, and citation checks, then prints the entry without writing a bucket or index.
+With `--format json`, `learn new` emits `command`, `subcommand`, `targetPath`, `wasWritten`, `warnings`, and `scaffold`.
 A real write places the active entry above `## Resolved Entries`, regenerates learning-loop indexes, and runs `stats --check`.
 If either follow-up fails after publication, the valid entry remains and the command prints `goat-flow index && goat-flow stats --check` for recovery.
 Adjacent atomic replacement prevents partial bytes and the final recheck detects a cooperative editor save.

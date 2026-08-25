@@ -269,6 +269,8 @@ function assertManagedHookRegistration(
   if (expectedDescriptor.form === "argv") {
     assert.equal(commandEntry.command, expectedDescriptor.command);
     assert.deepEqual(commandEntry.args, expectedDescriptor.args);
+    assert.equal(commandEntry.bash, expectedDescriptor.bash);
+    assert.equal(commandEntry.powershell, expectedDescriptor.powershell);
   } else {
     assert.equal(commandEntry.command, expectedDescriptor.command);
     assert.equal(
@@ -493,13 +495,20 @@ export function assertProviderDenyDescriptorsMatchInstallerContract(): void {
     denyContractConfig("claude") as {
       hooks: {
         PreToolUse: Array<{
-          hooks: Array<{ command: string; args: string[] }>;
+          hooks: Array<{
+            command: string;
+            args: string[];
+            bash: string;
+            powershell: string;
+          }>;
         }>;
       };
     }
   ).hooks.PreToolUse[0]!.hooks[0]!;
   assert.equal(claudeContractRow.command, claudeDescriptor.command);
   assert.deepEqual(claudeContractRow.args, claudeDescriptor.args);
+  assert.equal(claudeContractRow.bash, claudeDescriptor.bash);
+  assert.equal(claudeContractRow.powershell, claudeDescriptor.powershell);
 }
 
 /** Writes a cleaned temporary target project for hook-registrar assertions.

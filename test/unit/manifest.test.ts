@@ -571,6 +571,7 @@ describe("getRequiredInstructionSections (real repo)", () => {
         section: "Execution Loop",
         phrases: [
           "Prose surfaces route the same way before writing",
+          "ordinary README prose",
           "need `writing-style.md`",
           "the trigger is touching the surface, not the request naming it",
         ],

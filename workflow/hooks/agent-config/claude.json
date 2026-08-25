@@ -71,6 +71,8 @@
               ".claude/settings.json",
               ".goat-flow/hooks/run-with-bash.mjs"
             ],
+            "bash": "exit 0",
+            "powershell": "exit 0",
             "timeout": 30
           }
         ],
@@ -92,6 +94,8 @@
               ".claude/settings.json",
               ".goat-flow/hooks/run-with-bash.mjs"
             ],
+            "bash": "exit 0",
+            "powershell": "exit 0",
             "timeout": 90
           }
         ]

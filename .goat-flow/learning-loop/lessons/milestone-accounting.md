@@ -1,6 +1,6 @@
 ---
 category: milestone-accounting
-last_reviewed: 2026-08-24
+last_reviewed: 2026-08-25
 ---
 
 **Scope:** Milestone state and effort accounting - activation order, where human gates belong, what a task section may contain, and why estimates counted from work units beat estimates written as durations. Multi-agent council coordination is [coordination.md](coordination.md).
@@ -240,7 +240,7 @@ second, even when every plan task is already approved.
 
 **Status:** active | **Created:** 2026-07-17
 **Decision changed:** After writing or restructuring `M*.md` files, validate them with the shipped plan exporter before handoff; visual Markdown completeness is insufficient. | **Trigger phase:** VERIFY
-**Incident count:** 5 | **Latest occurrence:** 2026-08-15
+**Incident count:** 6 | **Latest occurrence:** 2026-08-25
 
 **What happened:** The 1.15.0 milestone files looked structurally complete and passed a custom heading/count check, but the first `plans export` preview warned that all 11 records lacked portable objectives and boundary notes. At that revision, the exporter accepted only the bold `Objective` field, while the files used a level-two `Objective` section. They also omitted `Boundary Notes` and initially placed CAO incident gates in peer sections the exporter would not include in task bodies.
 
@@ -254,27 +254,31 @@ second, even when every plan task is already approved.
 
 **Recurrence (2026-08-15):** The goat-clarity M03 fresh-consumer command passed strict plan validation but failed on first execution because the installer requires its target directory to exist. Adding an explicit `mkdir -p` precondition made the command self-contained and the four-agent install then completed. Evidence anchor: `workflow/install-goat-flow.sh` (search: `is not a directory`).
 
+**Recurrence (2026-08-25):** A new M55 draft nested `### Stop / rescope` below `## Exit`; strict validation reported `missing stop/rescope` because the exporter reads milestone sections at H2. An ad hoc trim then shortened the required Forecast range grammar and failed again. Rewinding to the exact Standard template fixed both fields before handoff.
+
 **Root cause:** I validated the authoring layout I had produced instead of the repository's consumer contract. A Markdown reader could infer the intended fields, while `parseMilestoneMarkdown` intentionally recognizes a narrower portable schema.
 
-**Fix and prevention:** Treat the canonical example as an executable consumer fixture, not prose. Cover compact and expanded representations through `parseMilestoneMarkdown`, run `goat-flow plans check <plan-path> --strict`, require exporter records to have zero warnings, and resolve every cited path plus exact semantic search string before handoff. Dry-run executable plan commands against disposable inputs, including every directory or file precondition they rely on. Parser changes also run scoped ESLint before full preflight. Current objective parsing accepts a bold field, an `## Objective` section, or the outcome title. Other portable anchors are Status, compact or section Scope, Tasks, Proof, Exit/Exit criteria, and Stop/rescope. Evidence anchors: `src/cli/plans-export.ts` (search: `readFieldOrSectionMarkdown`), `src/cli/plans-export.ts` (search: `readStopMarkdown`), and `test/unit/plans-check.test.ts` (search: `accepts the compact Small rendering in strict mode`).
+**Fix and prevention:** Treat the canonical example as an executable consumer fixture, not prose. Cover compact and expanded representations through `parseMilestoneMarkdown`, run `goat-flow plans check <plan-path> --strict`, require exporter records to have zero warnings, and resolve every cited path plus exact semantic search string before handoff. Dry-run executable plan commands against disposable inputs, including every directory or file precondition they rely on. Parser changes also run scoped ESLint before full preflight. Current objective parsing accepts a bold field, an `## Objective` section, or the outcome title. Other portable anchors are Status, compact or section Scope, Tasks, Proof, Exit/Exit criteria, and Stop/rescope at H2 or as the compact `- Stop/rescope if ...` line inside Exit. Evidence anchors: `src/cli/plans-export.ts` (search: `readFieldOrSectionMarkdown`), `src/cli/plans-export.ts` (search: `readStopMarkdown`), and `test/unit/plans-check.test.ts` (search: `accepts the compact Small rendering in strict mode`).
 
 ---
 
 ## Lesson: A milestone added to an existing train must be wired into its terminal node and ISSUE bands
 
 **Status:** active | **Created:** 2026-08-23
-**Incident count:** 2
-**Latest occurrence:** 2026-08-23
+**Incident count:** 3
+**Latest occurrence:** 2026-08-25
 **Decision changed:** When goat-plan File-Write adds a milestone to a plan directory that already has a terminal release milestone, the same batch adds the new ID to that node's `Depends on` and re-derives the ISSUE task band and totals; a milestone file alone is not "in the plan".
 **Trigger phase:** SCOPE
 **Caught at:** ACT
 
 **What happened:** Twice on the same day, in two sessions. First, M47 was created in the 1.17.0 train with valid structure and a passing strict check, but the train's terminal node (M37, whose `Depends on` list closes the release) did not list it, so the release cut would have closed without M47. The ISSUE.md band and totals were updated only because the user asked for the ISSUE reference separately. The gap surfaced on a "double check that plan" pass, not on validation, because `plans check` validates each file and the ISSUE arithmetic, not membership in the terminal node. Hours later a parallel session added M48 to the same train, also absent from that node - the fix was already in flight and did not reach the other session.
 
+**Recurrence (2026-08-25):** M55 correctly replaced M54 as M37's terminal dependency and updated ISSUE bands, but the dependency note reused stale counts. Independent graph traversal found 28 direct terminals and a 51-milestone closure, not 27 and 50. The edges were complete; only the human-readable graph claim was wrong.
+
 **Root cause:** goat-plan's File-Write path describes creating and validating files in `.goat-flow/plans/<active>/`; it does not say that an existing train's dependency graph and ISSUE bands are part of the artifact, so "wrote M47" felt complete.
 
 **Evidence:** Both files are local gitignored plan files (the 1.17.0 terminal milestone M37 and the new M47), so no durable repository anchor exists; the strict check passed before and after the fix, which is the point.
 
-**Prevention:** When adding a milestone to an existing plan directory, read the terminal node (the milestone whose `Depends on` closes the train), add the new ID there, re-derive the ISSUE.md band and the "How long" totals from the new forecast, and only then run the strict check. Treat a passing per-file check as necessary, not sufficient. Since 2026-08-23 goat-plan's File Artifact Rules state this for existing plans (TDD log: `2026-08-23-goat-plan-tdd.md`; evidence class partial hardening, one real RED and one GREEN).
+**Prevention:** When adding a milestone to an existing plan directory, read the terminal node, add the new ID, traverse the graph to re-derive direct and closure counts, then re-derive the ISSUE.md band and "How long" totals before strict validation. Treat a passing per-file check as necessary, not sufficient. Since 2026-08-23 goat-plan's File Artifact Rules state this for existing plans (TDD log: `2026-08-23-goat-plan-tdd.md`; evidence class partial hardening, one real RED and one GREEN).
 
 ---

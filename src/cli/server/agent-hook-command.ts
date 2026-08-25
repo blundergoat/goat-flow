@@ -317,12 +317,19 @@ export function agentRegistersHostTimeout(
 /**
  * Complete handler shape one provider registers for a managed hook.
  *
- * Shell descriptors carry one host-parsed command string and may add the provider's Windows-only override; argv descriptors carry an exec-form
- * executable plus ordered arguments that no shell retokenizes. Readers compare the complete selected descriptor, never a reconstructed string.
+ * Shell descriptors carry one host-parsed command string and may add the provider's Windows-only override. Claude argv descriptors carry an
+ * exec-form executable plus ordered arguments and inert shell routes for hosts that also load Claude config. Readers compare the complete
+ * selected descriptor, never a reconstructed string.
  */
 export type AgentHookHandlerDescriptor =
   | { form: "shell"; command: string; commandWindows?: string }
-  | { form: "argv"; command: string; args: string[] };
+  | {
+      form: "argv";
+      command: string;
+      args: string[];
+      bash: string;
+      powershell: string;
+    };
 
 /** Executable and ordered arguments used to replay one configured handler on the current platform. */
 export interface AgentHookSpawnDescriptor {
@@ -373,6 +380,7 @@ export function agentHookSpawnDescriptor(
   platform: NodeJS.Platform = process.platform,
 ): AgentHookSpawnDescriptor {
   if (descriptor.form === "argv") {
+    // Shell-routing fields belong to host config identity, never Claude's direct exec replay.
     return { command: descriptor.command, args: [...descriptor.args] };
   }
   if (platform === "win32" && descriptor.commandWindows !== undefined) {
@@ -414,7 +422,7 @@ export function buildAgentHookDescriptor(
   if (!registrationPath) throw new Error(`${agentId} has no hook config file`);
   // Codex can use managed ancestors but has no supported final host-root environment fallback.
   const rootEnvironmentName = agentId === "codex" ? "-" : "CLAUDE_PROJECT_DIR";
-  // Claude's live capture approves exec form, so its operands bypass host shells entirely.
+  // Claude's live capture approves exec form, while cross-loading shell hosts receive inert routes.
   if (agentId === "claude") {
     return {
       form: "argv",
@@ -428,6 +436,8 @@ export function buildAgentHookDescriptor(
         registrationPath,
         bashLauncherPath,
       ],
+      bash: "exit 0",
+      powershell: "exit 0",
     };
   }
   const bootstrapSource = hookLaunchBootstrap(hookResponseMode);
@@ -643,9 +653,25 @@ export function entryCarriesHandlerDescriptor(
       entry.powershell === descriptor.command
     );
   }
-  // Argv handlers must match the executable plus every ordered argument exactly.
+  // Argv handlers must match the executable, every ordered argument, and both inert shell routes exactly.
   if (descriptor.form === "argv") {
-    if (entry.command !== descriptor.command || !Array.isArray(entry.args)) {
+    if (!Array.isArray(entry.args)) return false;
+    const registeredIdentityFields = [
+      entry.command,
+      entry.bash,
+      entry.powershell,
+    ];
+    const expectedIdentityFields = [
+      descriptor.command,
+      descriptor.bash,
+      descriptor.powershell,
+    ];
+    if (
+      !registeredIdentityFields.every(
+        (fieldValue, fieldIndex) =>
+          fieldValue === expectedIdentityFields[fieldIndex],
+      )
+    ) {
       return false;
     }
     const registeredArguments = entry.args;

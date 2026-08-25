@@ -1,6 +1,6 @@
 ---
 category: verification-formatting
-last_reviewed: 2026-08-24
+last_reviewed: 2026-08-25
 ---
 
 **Scope:** Formatter, lint, and Knip debt that only surfaces at repo-wide scope - style flags, copied or untracked files that inherit debt, and touched-test formatting before a verification claim. Adding or tuning a preflight gate is [verification-preflight.md](verification-preflight.md).
@@ -120,6 +120,7 @@ Evidence anchors:
 ## Lesson: Slow installer round-trip catches prompt/test lint debt
 
 **Status:** active | **Created:** 2026-04-26
+**Incident count:** 5 | **Latest occurrence:** 2026-08-25
 
 **What happened:** Prompt changes cleared focused tests and typecheck but failed the installer round-trip embedded preflight three times: on 2026-04-26 an over-complex compose-quality.ts helper and unformatted quality-command fixture; on 2026-05-24 checkHookRuntimeSmoke exceeded ESLint complexity by one; on 2026-07-16 PR #56 renderAuditSummary reached complexity 17. Extracting narrow helpers and formatting the fixture cleared the direct gates. The first 2026-07-16 recurrence note also pushed this bucket to 40,353 bytes, so the incident history was consolidated below the cap.
 
@@ -127,7 +128,9 @@ Evidence anchors:
 
 **Prevention:** Before slow installer tests, run the supported source ESLint and format gates. Reproduce a failure directly before changing installer or drift logic. Evidence anchors: `src/cli/prompt/compose-quality-common.ts` (search: `appendScopeSummary`), `src/cli/audit/check-agent-deny-runtime.ts` (search: `verifyConfiguredHookRuntime`), and `test/unit/quality-report-contract.test.ts` (search: `embeds drift and content failures`).
 
-**Recurrence (2026-08-19):** The 1.16.0 go-live milestones M02-M04 listed unit/integration suites, shellcheck, and typecheck as their gates but not ESLint or Prettier, so the commit at `451dae70` reached CI with `validateQualityField` at complexity 12 (`src/cli/config/reader-validators.ts`, search: `warnUnknownQualitySubtypeKeys`) and one unformatted test file; CI's Lint step and the round-trip fixture in slow shard 2/5 both failed, and the local lint command then also caught complexity 11 in `setDashboardProjectArchived` (search: `obsoleteIdentityAfterRekey`). A plan milestone that edits `src/` is not closable until `npx eslint src/cli src/dashboard` and `bash scripts/prettier-check.sh` have printed clean in the session; put both commands in the milestone's Commands table when the plan is written.
+**Recurrence 2026-08-19:** The 1.16.0 go-live milestones M02-M04 listed unit/integration suites, shellcheck, and typecheck as their gates but not ESLint or Prettier, so the commit at `451dae70` reached CI with `validateQualityField` at complexity 12 (`src/cli/config/reader-validators.ts`, search: `warnUnknownQualitySubtypeKeys`) and one unformatted test file; CI's Lint step and the round-trip fixture in slow shard 2/5 both failed, and the local lint command then also caught complexity 11 in `setDashboardProjectArchived` (search: `obsoleteIdentityAfterRekey`). A plan milestone that edits `src/` is not closable until `npx eslint src/cli src/dashboard` and `bash scripts/prettier-check.sh` have printed clean in the session; put both commands in the milestone's Commands table when the plan is written.
+
+**Recurrence 2026-08-25:** Focused behavior tests were green, but the exact installer round-trip preflight rejected complexity 13 in `managedHookEnvironment`, complexity 11 in `validateRefutedCandidateProvenance`, and two unformatted files. Extracting narrow helpers and formatting the touched TypeScript made the original one-test round-trip reproduction pass. Evidence anchors: `src/cli/hooks-configured-runtime-evidence.ts` (search: `managedHookEnvironment`), `src/cli/quality/schema-refuted-candidates.ts` (search: `validateRefutedCandidateProvenance`), and `test/integration/audit-drift-checkdrift-installer-round-trip-fixture.test.ts` (search: `checkDrift: installer round-trip fixture`).
 
 ---
 
