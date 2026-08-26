@@ -1,6 +1,5 @@
 /**
  * Cold-path content quality linting over truth-bearing prose: instruction files, installed skills, and canonical docs.
- * Logic is ported inline from cclint and agnix, because the project accepts no new runtime dependencies.
  *
  * Three detector families run over every scanned file:
  *
