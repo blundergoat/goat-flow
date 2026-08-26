@@ -1494,6 +1494,7 @@ const files = [
       "release-notes.md",
       "skill-playbook-authoring-sync.md",
       "test-selection.md",
+      "writing-for-agents.md",
       "writing-sentence-diagnostics.md",
       "writing-structure-diagnostics.md",
       "writing-style.md",
@@ -2168,15 +2169,6 @@ if [[ -f workflow/skills/reference/skill-conventions.md ]] && [[ -f .goat-flow/s
 else
     skip "skill-conventions.md sync (one or both files missing)"
 fi
-if [[ -f workflow/skills/reference/agent-document-authoring.md ]] && [[ -f .goat-flow/skill-docs/agent-document-authoring.md ]]; then
-    if diff -q workflow/skills/reference/agent-document-authoring.md .goat-flow/skill-docs/agent-document-authoring.md >/dev/null 2>&1; then
-        pass "agent-document-authoring.md: template and installed copy match"
-    else
-        fail "agent-document-authoring.md: template (workflow/skills/reference/) and installed (.goat-flow/skill-docs/) differ"
-    fi
-else
-    skip "agent-document-authoring.md sync (one or both files missing)"
-fi
 if [[ -f workflow/skills/playbooks/README.md ]] && [[ -f .goat-flow/skill-docs/playbooks/README.md ]]; then
     if diff -q workflow/skills/playbooks/README.md .goat-flow/skill-docs/playbooks/README.md >/dev/null 2>&1; then
         pass "skill-docs playbooks README.md: template and installed copy match"
@@ -2276,6 +2268,16 @@ if [[ -f workflow/skills/playbooks/writing-structure-diagnostics.md ]] && [[ -f 
     fi
 else
     skip "writing-structure-diagnostics.md sync (one or both files missing)"
+fi
+# Consumers receive agent-document authoring guidance; a drifted copy teaches the wrong ladder.
+if [[ -f workflow/skills/playbooks/writing-for-agents.md ]] && [[ -f .goat-flow/skill-docs/playbooks/writing-for-agents.md ]]; then
+    if diff -q workflow/skills/playbooks/writing-for-agents.md .goat-flow/skill-docs/playbooks/writing-for-agents.md >/dev/null 2>&1; then
+        pass "writing-for-agents.md: template and installed copy match"
+    else
+        fail "writing-for-agents.md: template (workflow/skills/playbooks/) and installed (.goat-flow/skill-docs/playbooks/) differ"
+    fi
+else
+    skip "writing-for-agents.md sync (one or both files missing)"
 fi
 # Consumers receive prose-style guidance; a drifted copy teaches the wrong scope gate.
 if [[ -f workflow/skills/playbooks/writing-style.md ]] && [[ -f .goat-flow/skill-docs/playbooks/writing-style.md ]]; then
