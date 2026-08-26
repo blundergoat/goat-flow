@@ -160,7 +160,7 @@ Related: `feedback_gruff_never_disable` (auto-memory, 2026-05-25).
 
 **Trigger phase:** READ
 
-**What happened:** While re-homing the native Windows hook milestone, the agent correctly expanded scope to update live dependency and roadmap references, but edited `.goat-flow/plans/1.17.0/ISSUE.md` before reading the writing-style playbook required for `ISSUE.md` prose. The miss was caught before final verification, and the edited wording was then checked against the playbook's minimum pass.
+**What happened:** While re-homing the native Windows hook milestone, the agent correctly expanded scope to update live dependency and roadmap references, but edited `.goat-flow/plans/1.17.0/ISSUE.md` before reading the `writing-human-facing-prose.md` playbook required for `ISSUE.md` prose. The miss was caught before final verification, and the edited wording was then checked against the playbook's minimum pass.
 
 **Root cause:** The first READ pass classified the request as a file move. When cross-reference evidence expanded the work into companion prose edits, the agent updated the file list but did not rerun surface routing before the combined patch.
 

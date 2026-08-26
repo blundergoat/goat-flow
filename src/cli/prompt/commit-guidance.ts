@@ -47,6 +47,12 @@ interface InstructionBridgeUpdate {
   updated: string;
 }
 
+/** Render caught non-Error values without default object stringification. */
+function errorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return typeof error === "string" ? error : "unknown error";
+}
+
 /** Locate the selected bridge section without treating another level-two section as writable. */
 function commitMessagesRange(
   content: string,
@@ -146,12 +152,8 @@ function renameLegacyGuide(
       }
     }
     if (rollbackError !== null) {
-      const detail =
-        rollbackError instanceof Error
-          ? rollbackError.message
-          : String(rollbackError);
       throw new Error(
-        `commit-guide migration failed and rollback was incomplete: ${detail}`,
+        `commit-guide migration failed and rollback was incomplete: ${errorMessage(rollbackError)}`,
       );
     }
     throw error;
@@ -236,7 +238,7 @@ export function emitCommitGuidanceInstallResult(
   } catch (error) {
     // A read-only docs tree, a Windows permission error, or the race that renameLegacyGuide
     // documents must read as a skipped extra, not as a failed install.
-    const reason = error instanceof Error ? error.message : String(error);
+    const reason = errorMessage(error);
     console.log("");
     console.log("Git commit instructions:");
     console.log(`  ! skipped (${reason})`);

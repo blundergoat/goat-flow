@@ -507,7 +507,7 @@ describe("Gruff documentation-pass doctrine", () => {
   });
 });
 
-describe("writing-style code-prose boundary", () => {
+describe("human-facing prose code-prose boundary", () => {
   it("separates code comments from replies to people", () => {
     assertForPlaybook(
       "writing-human-facing-prose.md",

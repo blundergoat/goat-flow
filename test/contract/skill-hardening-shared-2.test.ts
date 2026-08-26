@@ -424,7 +424,7 @@ describe("skill hardening contracts: shared surfaces (2/3)", () => {
     });
   });
 
-  it("keeps writing-style edits truth-preserving and source-aware through the routed core", () => {
+  it("keeps human-facing prose edits truth-preserving and source-aware through the routed core", () => {
     for (const playbookPath of [
       "workflow/skills/playbooks/writing-human-facing-prose.md",
       ".goat-flow/skill-docs/playbooks/writing-human-facing-prose.md",
@@ -649,7 +649,7 @@ describe("skill hardening contracts: shared surfaces (2/3)", () => {
       assert.doesNotMatch(sourceOrder, /<current-tag>/u, playbookPath);
 
       assertSectionPatterns(playbookPath, "Prose Routing", [
-        /writing-style\.md[\s\S]+core prose pass/u,
+        /writing-human-facing-prose\.md[\s\S]+core prose pass/u,
         /writing-structure-diagnostics\.md[\s\S]+assembly defect/u,
         /writing-sentence-diagnostics\.md[\s\S]+sentence-level reader cost/u,
         /structure first/u,
@@ -738,7 +738,7 @@ describe("skill hardening contracts: shared surfaces (2/3)", () => {
       );
 
       assertSectionPatterns(playbookPath, "Prose Routing", [
-        /writing-style\.md[\s\S]+core prose pass/u,
+        /writing-human-facing-prose\.md[\s\S]+core prose pass/u,
         /writing-structure-diagnostics\.md[\s\S]+assembly defect/u,
         /writing-sentence-diagnostics\.md[\s\S]+sentence-level reader cost/u,
         /structure first/u,
@@ -786,7 +786,10 @@ describe("skill hardening contracts: shared surfaces (2/3)", () => {
       ".goat-flow/skill-docs/playbooks/README.md",
     ]) {
       const readme = readProjectFile(readmePath);
-      assert.match(readme, /writing-style\.md[^\n]+correctness router/u);
+      assert.match(
+        readme,
+        /writing-human-facing-prose\.md[^\n]+correctness router/u,
+      );
       assert.match(
         readme,
         /writing-sentence-diagnostics\.md[^\n]+sentence-level reader cost/u,

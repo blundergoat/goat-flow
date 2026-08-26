@@ -63,13 +63,13 @@ function selectManifestSkillMirror(): SkillMirrorFixtureTarget {
 
 /**
  * Render the minimal Execution Loop guidance users receive in sibling instruction files.
- * Use when parity tests need either current prose or one intentionally omitted writing-style pointer.
+ * Use when parity tests need either current prose or one intentionally omitted human-facing prose pointer.
  *
- * @param shouldIncludeWritingStyle - false models a sibling that omits required prose routing
+ * @param shouldIncludeHumanFacingProse - false models a sibling that omits required prose routing
  * @returns complete fixture Markdown; never empty
  */
 const renderProseRoutingInstruction = (
-  shouldIncludeWritingStyle: boolean,
+  shouldIncludeHumanFacingProse: boolean,
 ): string =>
   [
     "# Agent instructions",
@@ -77,7 +77,7 @@ const renderProseRoutingInstruction = (
     "## Execution Loop",
     "",
     "Prose surfaces route the same way before writing.",
-    shouldIncludeWritingStyle
+    shouldIncludeHumanFacingProse
       ? "README and docs need `writing-human-facing-prose.md`."
       : "",
     "The trigger is touching the surface, not the request naming it.",
@@ -89,12 +89,12 @@ const renderProseRoutingInstruction = (
  * Use when users should receive the same Execution Loop guidance from Claude, Codex, and Copilot.
  *
  * @param fixtureRoot - disposable project root; empty input would resolve outside a valid fixture and is not supported
- * @param shouldCopilotIncludeWritingStyle - false reproduces a Copilot instruction missing the writing-style pointer
+ * @param shouldCopilotIncludeHumanFacingProse - false reproduces a Copilot instruction missing the human-facing prose pointer
  * @returns nothing; creates `.github/` and writes only inside the disposable fixture
  */
 function writeInstructionParityFixture(
   fixtureRoot: string,
-  shouldCopilotIncludeWritingStyle: boolean,
+  shouldCopilotIncludeHumanFacingProse: boolean,
 ): void {
   writeFileSync(
     join(fixtureRoot, "CLAUDE.md"),
@@ -107,7 +107,7 @@ function writeInstructionParityFixture(
   mkdirSync(join(fixtureRoot, ".github"), { recursive: true });
   writeFileSync(
     join(fixtureRoot, ".github", "copilot-instructions.md"),
-    renderProseRoutingInstruction(shouldCopilotIncludeWritingStyle),
+    renderProseRoutingInstruction(shouldCopilotIncludeHumanFacingProse),
   );
 }
 

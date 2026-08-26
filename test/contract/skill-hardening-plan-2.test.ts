@@ -541,7 +541,7 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
       );
     }
 
-    // Both writing-style copies must expose the same plan-authoring scope gate.
+    // Both human-facing prose copies must expose the same plan-authoring scope gate.
     for (const playbookPath of [
       "workflow/skills/playbooks/writing-human-facing-prose.md",
       ".goat-flow/skill-docs/playbooks/writing-human-facing-prose.md",
