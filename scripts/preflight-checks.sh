@@ -1494,10 +1494,10 @@ const files = [
       "release-notes.md",
       "skill-playbook-authoring-sync.md",
       "test-selection.md",
-      "writing-for-agents.md",
+      "writing-agent-facing-instructions.md",
       "writing-sentence-diagnostics.md",
       "writing-structure-diagnostics.md",
-      "writing-style.md",
+      "writing-human-facing-prose.md",
     ].flatMap((name) => [
       `workflow/skills/playbooks/${name}`,
       `.goat-flow/skill-docs/playbooks/${name}`,
@@ -2270,24 +2270,24 @@ else
     skip "writing-structure-diagnostics.md sync (one or both files missing)"
 fi
 # Consumers receive agent-document authoring guidance; a drifted copy teaches the wrong ladder.
-if [[ -f workflow/skills/playbooks/writing-for-agents.md ]] && [[ -f .goat-flow/skill-docs/playbooks/writing-for-agents.md ]]; then
-    if diff -q workflow/skills/playbooks/writing-for-agents.md .goat-flow/skill-docs/playbooks/writing-for-agents.md >/dev/null 2>&1; then
-        pass "writing-for-agents.md: template and installed copy match"
+if [[ -f workflow/skills/playbooks/writing-agent-facing-instructions.md ]] && [[ -f .goat-flow/skill-docs/playbooks/writing-agent-facing-instructions.md ]]; then
+    if diff -q workflow/skills/playbooks/writing-agent-facing-instructions.md .goat-flow/skill-docs/playbooks/writing-agent-facing-instructions.md >/dev/null 2>&1; then
+        pass "writing-agent-facing-instructions.md: template and installed copy match"
     else
-        fail "writing-for-agents.md: template (workflow/skills/playbooks/) and installed (.goat-flow/skill-docs/playbooks/) differ"
+        fail "writing-agent-facing-instructions.md: template (workflow/skills/playbooks/) and installed (.goat-flow/skill-docs/playbooks/) differ"
     fi
 else
-    skip "writing-for-agents.md sync (one or both files missing)"
+    skip "writing-agent-facing-instructions.md sync (one or both files missing)"
 fi
 # Consumers receive prose-style guidance; a drifted copy teaches the wrong scope gate.
-if [[ -f workflow/skills/playbooks/writing-style.md ]] && [[ -f .goat-flow/skill-docs/playbooks/writing-style.md ]]; then
-    if diff -q workflow/skills/playbooks/writing-style.md .goat-flow/skill-docs/playbooks/writing-style.md >/dev/null 2>&1; then
-        pass "writing-style.md: template and installed copy match"
+if [[ -f workflow/skills/playbooks/writing-human-facing-prose.md ]] && [[ -f .goat-flow/skill-docs/playbooks/writing-human-facing-prose.md ]]; then
+    if diff -q workflow/skills/playbooks/writing-human-facing-prose.md .goat-flow/skill-docs/playbooks/writing-human-facing-prose.md >/dev/null 2>&1; then
+        pass "writing-human-facing-prose.md: template and installed copy match"
     else
-        fail "writing-style.md: template (workflow/skills/playbooks/) and installed (.goat-flow/skill-docs/playbooks/) differ"
+        fail "writing-human-facing-prose.md: template (workflow/skills/playbooks/) and installed (.goat-flow/skill-docs/playbooks/) differ"
     fi
 else
-    skip "writing-style.md sync (one or both files missing)"
+    skip "writing-human-facing-prose.md sync (one or both files missing)"
 fi
 # Hook maintainers need the same policy-test workflow that consumer agents receive.
 if [[ -f workflow/skills/playbooks/hook-policy-testing.md ]] && [[ -f .goat-flow/skill-docs/playbooks/hook-policy-testing.md ]]; then
