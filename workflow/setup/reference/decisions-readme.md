@@ -80,7 +80,7 @@ Whether this is a one-way or two-way door, plus rollback or revisit triggers.
 
 `## Context` may appear before `## Decision` if that reads better. Section order is not enforced.
 
-ADR narrative (`## Context`, `## Decision`, and trade-off prose) follows `.goat-flow/skill-docs/playbooks/writing-style.md`. Body prose only - status/date metadata lines, comparison tables, and the filename format stay exempt as fixed schema.
+ADR narrative (`## Context`, `## Decision`, and trade-off prose) follows `.goat-flow/skill-docs/playbooks/writing-human-facing-prose.md`. Body prose only - status/date metadata lines, comparison tables, and the filename format stay exempt as fixed schema.
 
 At least one trade-off section is required:
 

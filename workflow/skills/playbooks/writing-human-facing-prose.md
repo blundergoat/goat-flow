@@ -1,7 +1,7 @@
 ---
 goat-flow-reference-version: "1.16.0"
 ---
-# Writing Style
+# Writing Human-Facing Prose
 
 Apply this core prose pass after an applicable surface owner settles scope and facts. Sibling playbooks own diagnostics and release surfaces; load them only on objective triggers.
 

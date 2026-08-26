@@ -51,10 +51,10 @@ Install the playbook pack from `workflow/skills/playbooks/`:
 - `.goat-flow/skill-docs/playbooks/release-notes.md` from `workflow/skills/playbooks/release-notes.md` - per-release narrative discipline derived from the changelog source of truth
 - `.goat-flow/skill-docs/playbooks/skill-playbook-authoring-sync.md` from `workflow/skills/playbooks/skill-playbook-authoring-sync.md` - built-in playbook shape, source/install enrollment, discovery, and verification contract
 - `.goat-flow/skill-docs/playbooks/test-selection.md` from `workflow/skills/playbooks/test-selection.md` - value-led test selection, placement, disposition, and mutation-handoff discipline
-- `.goat-flow/skill-docs/playbooks/writing-for-agents.md` from `workflow/skills/playbooks/writing-for-agents.md` - authoring discipline for agent-read documents: skills, playbooks, shared preamble/conventions, instruction files, hook messages, and README discovery rows
+- `.goat-flow/skill-docs/playbooks/writing-agent-facing-instructions.md` from `workflow/skills/playbooks/writing-agent-facing-instructions.md` - authoring discipline for agent-read documents: skills, playbooks, shared preamble/conventions, instruction files, hook messages, and README discovery rows
 - `.goat-flow/skill-docs/playbooks/writing-sentence-diagnostics.md` from `workflow/skills/playbooks/writing-sentence-diagnostics.md` - sentence-level reader-cost diagnostics after the writing core identifies an objective trigger
 - `.goat-flow/skill-docs/playbooks/writing-structure-diagnostics.md` from `workflow/skills/playbooks/writing-structure-diagnostics.md` - document-level assembly diagnostics before sentence work
-- `.goat-flow/skill-docs/playbooks/writing-style.md` from `workflow/skills/playbooks/writing-style.md` - compact correctness and routing owner for human-read prose, with agent-read control text explicitly exempt
+- `.goat-flow/skill-docs/playbooks/writing-human-facing-prose.md` from `workflow/skills/playbooks/writing-human-facing-prose.md` - compact correctness and routing owner for human-read prose, with agent-read control text explicitly exempt
 - `.goat-flow/skill-docs/skill-quality-testing/README.md` from `workflow/skills/playbooks/skill-quality-testing.md` - short index for skill authoring and hardening
 - `.goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md` from `workflow/skills/playbooks/skill-quality-testing/tdd-iteration.md` - RED/GREEN/REFACTOR and pressure-test methodology
 - `.goat-flow/skill-docs/skill-quality-testing/adversarial-framing.md` from `workflow/skills/playbooks/skill-quality-testing/adversarial-framing.md` - review-class skill hardening patterns
@@ -115,10 +115,10 @@ The installer prunes stale per-skill Markdown reference files automatically befo
 - [ ] `.goat-flow/skill-docs/playbooks/release-notes.md` exists
 - [ ] `.goat-flow/skill-docs/playbooks/skill-playbook-authoring-sync.md` exists
 - [ ] `.goat-flow/skill-docs/playbooks/test-selection.md` exists
-- [ ] `.goat-flow/skill-docs/playbooks/writing-for-agents.md` exists
+- [ ] `.goat-flow/skill-docs/playbooks/writing-agent-facing-instructions.md` exists
 - [ ] `.goat-flow/skill-docs/playbooks/writing-sentence-diagnostics.md` exists
 - [ ] `.goat-flow/skill-docs/playbooks/writing-structure-diagnostics.md` exists
-- [ ] `.goat-flow/skill-docs/playbooks/writing-style.md` exists
+- [ ] `.goat-flow/skill-docs/playbooks/writing-human-facing-prose.md` exists
 - [ ] `.goat-flow/skill-docs/skill-quality-testing/README.md` exists
 - [ ] `.goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md` exists
 - [ ] `.goat-flow/skill-docs/skill-quality-testing/adversarial-framing.md` exists

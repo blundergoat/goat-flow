@@ -277,5 +277,5 @@ Fix a confirmed applicable failure before merging.
 ## Related References
 
 - [`naming-and-placement.md`](./naming-and-placement.md) - responsibility-first placement and verified identifier claims before comment work.
-- `writing-style.md` - comments and docstrings follow this playbook; other human-read prose follows `writing-style.md`.
+- `writing-human-facing-prose.md` - comments and docstrings follow this playbook; other human-read prose follows `writing-human-facing-prose.md`.
 - Sibling playbooks share the same scaffold; project instruction files may point here as the canonical comment policy.

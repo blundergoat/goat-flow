@@ -2821,10 +2821,18 @@ copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/page-capture.md" ".goat-flo
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/release-notes.md" ".goat-flow/skill-docs/playbooks/release-notes.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/skill-playbook-authoring-sync.md" ".goat-flow/skill-docs/playbooks/skill-playbook-authoring-sync.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/test-selection.md" ".goat-flow/skill-docs/playbooks/test-selection.md"
-copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/writing-for-agents.md" ".goat-flow/skill-docs/playbooks/writing-for-agents.md"
+copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/writing-agent-facing-instructions.md" ".goat-flow/skill-docs/playbooks/writing-agent-facing-instructions.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/writing-sentence-diagnostics.md" ".goat-flow/skill-docs/playbooks/writing-sentence-diagnostics.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/writing-structure-diagnostics.md" ".goat-flow/skill-docs/playbooks/writing-structure-diagnostics.md"
-copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/writing-style.md" ".goat-flow/skill-docs/playbooks/writing-style.md"
+copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/writing-human-facing-prose.md" ".goat-flow/skill-docs/playbooks/writing-human-facing-prose.md"
+for retired_writing_playbook in \
+  ".goat-flow/skill-docs/playbooks/writing-for-agents.md" \
+  ".goat-flow/skill-docs/playbooks/writing-style.md"; do
+  if [[ -f "$retired_writing_playbook" ]]; then
+    rm -f "$retired_writing_playbook"
+    echo "  - removed retired $retired_writing_playbook"
+  fi
+done
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/skill-quality-testing.md" ".goat-flow/skill-docs/skill-quality-testing/README.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/skill-quality-testing/tdd-iteration.md" ".goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/skill-quality-testing/adversarial-framing.md" ".goat-flow/skill-docs/skill-quality-testing/adversarial-framing.md"

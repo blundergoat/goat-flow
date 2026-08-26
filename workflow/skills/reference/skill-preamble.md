@@ -31,7 +31,7 @@ Order findings by severity, not by file or discovery order.
 - NEVER suppress linter warnings or bypass types (e.g., casts) without a same-line `-- rationale` naming the load-bearing reason
 - Read surrounding files; keep updates surgical, idiomatic, and convention-aligned
 - Before editing a file with a declared budget (`line_target`, `line-limits`), state its current count and threshold; if already over target, name the gap before adding content
-- Human-read skill output - reports, `ISSUE.md`, milestone and testing-plan narrative, decision records, learning-loop entry bodies, and release or changelog text - follows `.goat-flow/skill-docs/playbooks/writing-style.md`; fixed schema fields, exact paths, commands, approved requirements and acceptance/proof/verification/exit criteria, task/proof checklists, tables, catalogues, and deliberate control repetition stay exempt
+- Human-read skill output - reports, `ISSUE.md`, milestone and testing-plan narrative, decision records, learning-loop entry bodies, and release or changelog text - follows `.goat-flow/skill-docs/playbooks/writing-human-facing-prose.md`; fixed schema fields, exact paths, commands, approved requirements and acceptance/proof/verification/exit criteria, task/proof checklists, tables, catalogues, and deliberate control repetition stay exempt
 
 ## Evidence Standard
 

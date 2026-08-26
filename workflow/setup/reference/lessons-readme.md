@@ -36,7 +36,7 @@ Inside a bucket, add entries as `## Lesson:` or `## Pattern:` blocks. Each entry
 
 When recurrence is measured, add `**Incident count:** <positive integer>` and `**Latest occurrence:** YYYY-MM-DD`. Record each new incident with the canonical `**Recurrence YYYY-MM-DD:**` prose label. Recurrence prose records individual evidence; Incident count records the total. Keep both current; neither suppresses the other. Legacy one-entry files still work during migration, but category buckets with the frontmatter contract are the preferred and audited format.
 
-Entry bodies are retrieved by agents but verified by people in code review and staleness checks: write them per `.goat-flow/skill-docs/playbooks/writing-style.md`. Body prose only - frontmatter, schema lines, and semantic anchors stay exempt as fixed schema.
+Entry bodies are retrieved by agents but verified by people in code review and staleness checks: write them per `.goat-flow/skill-docs/playbooks/writing-human-facing-prose.md`. Body prose only - frontmatter, schema lines, and semantic anchors stay exempt as fixed schema.
 
 ## Entry Body Conventions
 
