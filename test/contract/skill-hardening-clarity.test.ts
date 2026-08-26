@@ -251,7 +251,7 @@ describe("skill hardening contracts: goat-clarity", () => {
       "naming-and-placement.md",
       "gruff-code-quality.md",
       "test-selection.md",
-      "writing-style.md",
+      "writing-human-facing-prose.md",
       ".goat-flow/glossary.md",
       "Naming and placement before comments",
     ]);
@@ -414,7 +414,7 @@ describe("skill hardening contracts: goat-clarity", () => {
       "code-comments.md",
       "gruff-code-quality.md",
       "test-selection.md",
-      "writing-style.md",
+      "writing-human-facing-prose.md",
       ".goat-flow/glossary.md",
     ]);
     assert.doesNotMatch(

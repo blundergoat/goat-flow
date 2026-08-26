@@ -77,7 +77,9 @@ const renderProseRoutingInstruction = (
     "## Execution Loop",
     "",
     "Prose surfaces route the same way before writing.",
-    shouldIncludeWritingStyle ? "README and docs need `writing-style.md`." : "",
+    shouldIncludeWritingStyle
+      ? "README and docs need `writing-human-facing-prose.md`."
+      : "",
     "The trigger is touching the surface, not the request naming it.",
     "",
   ].join("\n");
@@ -253,7 +255,7 @@ describe("checkDrift: clean fixture", () => {
           path: ".github/copilot-instructions.md",
           message:
             "instruction parity: prose-surface READ routing differs in Execution Loop; " +
-            'missing "need `writing-style.md`" while present in CLAUDE.md, AGENTS.md',
+            'missing "need `writing-human-facing-prose.md`" while present in CLAUDE.md, AGENTS.md',
         },
       ]);
     } finally {

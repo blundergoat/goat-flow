@@ -34,10 +34,10 @@ describe("ADR-023 word budget tiers", () => {
     "release-notes.md",
     "skill-playbook-authoring-sync.md",
     "test-selection.md",
-    "writing-for-agents.md",
+    "writing-agent-facing-instructions.md",
     "writing-sentence-diagnostics.md",
     "writing-structure-diagnostics.md",
-    "writing-style.md",
+    "writing-human-facing-prose.md",
   ] as const;
 
   const FUNCTIONAL_SKILLS = [
@@ -205,7 +205,7 @@ describe("ADR-023 word budget tiers", () => {
       // Set 2026-08-23 at 2800 from a measured 2593-word body, then re-based to 2900 the same day after review added a Project
       // Authority section while Antipatterns was cut as duplication; the live body measured 2745. The playbook teaches pruning, so it
       // stays under the 3000 tier.
-      { filename: "writing-for-agents.md", cap: 2900 },
+      { filename: "writing-agent-facing-instructions.md", cap: 2900 },
     ] as const;
 
     for (const { filename, cap } of rolloutBudgets) {
@@ -225,7 +225,11 @@ describe("ADR-023 word budget tiers", () => {
 
   it("M51 writing playbooks stay within their routed context budgets", () => {
     const routedWritingBudgets = [
-      { filename: "writing-style.md", minimum: 1700, maximum: 2000 },
+      {
+        filename: "writing-human-facing-prose.md",
+        minimum: 1700,
+        maximum: 2000,
+      },
       {
         filename: "writing-sentence-diagnostics.md",
         minimum: 900,

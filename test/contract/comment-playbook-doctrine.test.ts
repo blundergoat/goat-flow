@@ -509,51 +509,60 @@ describe("Gruff documentation-pass doctrine", () => {
 
 describe("writing-style code-prose boundary", () => {
   it("separates code comments from replies to people", () => {
-    assertForPlaybook("writing-style.md", (content, playbookPath) => {
-      assert.doesNotMatch(
-        content,
-        /Comments and replies addressed to a person/u,
-        playbookPath,
-      );
-      assert.match(
-        content,
-        /Review comments and replies to a person\s*\|\s*Correctness and residue only/u,
-        playbookPath,
-      );
-      assert.match(
-        content,
-        /Code comments and docstrings\s*\|\s*No - see `code-comments\.md`/u,
-        playbookPath,
-      );
-    });
+    assertForPlaybook(
+      "writing-human-facing-prose.md",
+      (content, playbookPath) => {
+        assert.doesNotMatch(
+          content,
+          /Comments and replies addressed to a person/u,
+          playbookPath,
+        );
+        assert.match(
+          content,
+          /Review comments and replies to a person\s*\|\s*Correctness and residue only/u,
+          playbookPath,
+        );
+        assert.match(
+          content,
+          /Code comments and docstrings\s*\|\s*No - see `code-comments\.md`/u,
+          playbookPath,
+        );
+      },
+    );
   });
 
   it("treats code prose as a citation and substitution as suspicion only", () => {
-    assertForPlaybook("writing-style.md", (content, playbookPath) => {
-      assert.match(
-        content,
-        /prose describes code behaviour[\s\S]+function, query, or getter/u,
-        playbookPath,
-      );
-      assert.match(content, /## Quick Tests/u, playbookPath);
-      assert.match(content, /\*\*Substitution test\./u, playbookPath);
-      assert.match(content, /raises suspicion, not proof/u, playbookPath);
-    });
+    assertForPlaybook(
+      "writing-human-facing-prose.md",
+      (content, playbookPath) => {
+        assert.match(
+          content,
+          /prose describes code behaviour[\s\S]+function, query, or getter/u,
+          playbookPath,
+        );
+        assert.match(content, /## Quick Tests/u, playbookPath);
+        assert.match(content, /\*\*Substitution test\./u, playbookPath);
+        assert.match(content, /raises suspicion, not proof/u, playbookPath);
+      },
+    );
   });
 
   it("keeps examples correct and links the code-comment owner", () => {
-    assertForPlaybook("writing-style.md", (content, playbookPath) => {
-      assert.match(
-        content,
-        /exempt from stylistic rewriting, not correctness, syntax, or security/u,
-        playbookPath,
-      );
-      assert.match(
-        content,
-        /`code-comments\.md` - code comments and docstrings/u,
-        playbookPath,
-      );
-    });
+    assertForPlaybook(
+      "writing-human-facing-prose.md",
+      (content, playbookPath) => {
+        assert.match(
+          content,
+          /exempt from stylistic rewriting, not correctness, syntax, or security/u,
+          playbookPath,
+        );
+        assert.match(
+          content,
+          /`code-comments\.md` - code comments and docstrings/u,
+          playbookPath,
+        );
+      },
+    );
   });
 });
 
@@ -563,7 +572,7 @@ describe("shipped playbook portability", () => {
       "code-comments.md",
       "gruff-code-quality.md",
       "naming-and-placement.md",
-      "writing-style.md",
+      "writing-human-facing-prose.md",
     ]) {
       assertForPlaybook(playbookName, (content, playbookPath) => {
         assert.doesNotMatch(

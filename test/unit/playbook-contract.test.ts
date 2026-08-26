@@ -34,10 +34,10 @@ const standalonePlaybookPaths = [
   ".goat-flow/skill-docs/playbooks/release-notes.md",
   ".goat-flow/skill-docs/playbooks/skill-playbook-authoring-sync.md",
   ".goat-flow/skill-docs/playbooks/test-selection.md",
-  ".goat-flow/skill-docs/playbooks/writing-for-agents.md",
+  ".goat-flow/skill-docs/playbooks/writing-agent-facing-instructions.md",
   ".goat-flow/skill-docs/playbooks/writing-sentence-diagnostics.md",
   ".goat-flow/skill-docs/playbooks/writing-structure-diagnostics.md",
-  ".goat-flow/skill-docs/playbooks/writing-style.md",
+  ".goat-flow/skill-docs/playbooks/writing-human-facing-prose.md",
 ] as const;
 
 const hookPolicyPlaybookPaths = [
@@ -45,15 +45,15 @@ const hookPolicyPlaybookPaths = [
   ".goat-flow/skill-docs/playbooks/hook-policy-testing.md",
 ] as const;
 
-const writingForAgentsScopePaths = [
+const agentFacingInstructionScopePaths = [
   "workflow/setup/03-install-skills.md",
   "workflow/manifest.json",
   ".goat-flow/code-map.md",
   "src/cli/prompt/compose-quality-agent-setup.ts",
   ".goat-flow/skill-docs/skill-conventions.md",
   "workflow/skills/reference/skill-conventions.md",
-  ".goat-flow/skill-docs/playbooks/writing-for-agents.md",
-  "workflow/skills/playbooks/writing-for-agents.md",
+  ".goat-flow/skill-docs/playbooks/writing-agent-facing-instructions.md",
+  "workflow/skills/playbooks/writing-agent-facing-instructions.md",
 ] as const;
 
 /** The one copyable command a reader runs when a provider denies the quoted `--check` operand first. */
@@ -257,8 +257,8 @@ function playbookContractContext(
 }
 
 describe("standalone playbook audit contract", () => {
-  it("keeps writing-for-agents scope complete across discovery surfaces", () => {
-    for (const scopePath of writingForAgentsScopePaths) {
+  it("keeps agent-facing instruction scope complete across discovery surfaces", () => {
+    for (const scopePath of agentFacingInstructionScopePaths) {
       const scopeText = readFileSync(join(process.cwd(), scopePath), "utf8");
       for (const requiredScope of [
         /skills?/u,
@@ -342,13 +342,14 @@ describe("standalone playbook audit contract", () => {
 
     assert.deepEqual(gaps, []);
   });
-  it("registers writing-style.md for audit and consumer discovery", () => {
+  it("registers writing-human-facing-prose.md for audit and consumer discovery", () => {
     assert.ok(
       STANDALONE_PLAYBOOK_FILES.some(
         (playbookPath) =>
-          playbookPath === ".goat-flow/skill-docs/playbooks/writing-style.md",
+          playbookPath ===
+          ".goat-flow/skill-docs/playbooks/writing-human-facing-prose.md",
       ),
-      "writing-style.md must be registered before users can discover it",
+      "writing-human-facing-prose.md must be registered before users can discover it",
     );
   });
 

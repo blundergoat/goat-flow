@@ -18,14 +18,14 @@ const AUTHORITY_PLAYBOOKS = [
   "gruff-code-quality.md",
   "naming-and-placement.md",
   "test-selection.md",
-  "writing-for-agents.md",
+  "writing-agent-facing-instructions.md",
   "writing-sentence-diagnostics.md",
   "writing-structure-diagnostics.md",
-  "writing-style.md",
+  "writing-human-facing-prose.md",
 ] as const;
 
 const WRITING_PLAYBOOKS = [
-  "writing-style.md",
+  "writing-human-facing-prose.md",
   "writing-sentence-diagnostics.md",
   "writing-structure-diagnostics.md",
 ] as const;

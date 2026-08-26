@@ -5,6 +5,7 @@
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -19,6 +20,116 @@ import {
 } from "./setup-install.helpers.js";
 
 describe("setup --apply installer upgrade migrations", () => {
+  // Run the production block in a disposable project: it writes both replacements, then removes both retired files.
+  // The minimal copy primitive isolates that ordering contract from unrelated installer work.
+  it("installs renamed standalone playbooks before pruning retired filenames", () => {
+    const root = makeTempProject();
+    const playbookDirectory = join(
+      root,
+      ".goat-flow",
+      "skill-docs",
+      "playbooks",
+    );
+    mkdirSync(playbookDirectory, { recursive: true });
+    const retiredAgentInstructions = join(
+      playbookDirectory,
+      "writing-for-agents.md",
+    );
+    const retiredHumanProse = join(playbookDirectory, "writing-style.md");
+    writeFileSync(retiredAgentInstructions, "# Retired agent instructions\n");
+    writeFileSync(retiredHumanProse, "# Retired human prose\n");
+
+    const installerSource = readFileSync(
+      join(PROJECT_ROOT, "workflow", "install-goat-flow.sh"),
+      "utf-8",
+    );
+    const blockStart = installerSource.indexOf('echo "Standalone playbooks');
+    const blockEnd = installerSource.indexOf(
+      'copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/skill-quality-testing.md"',
+      blockStart,
+    );
+    assert.ok(blockStart >= 0, "standalone playbook install block is missing");
+    assert.ok(
+      blockEnd > blockStart,
+      "standalone playbook block end is missing",
+    );
+    const standalonePlaybookBlock = installerSource.slice(blockStart, blockEnd);
+    const install = spawnSync(
+      "bash",
+      [
+        "-c",
+        [
+          "set -euo pipefail",
+          "copy_file() {",
+          '  local src="$1" dst="$2"',
+          '  mkdir -p "$(dirname "$dst")"',
+          '  cp "$src" "$dst"',
+          '  printf "%s\\n" "$dst"',
+          "}",
+          standalonePlaybookBlock,
+        ].join("\n"),
+      ],
+      {
+        cwd: root,
+        encoding: "utf-8",
+        env: { ...process.env, GOAT_FLOW_ROOT: PROJECT_ROOT },
+        timeout: 10000,
+      },
+    );
+
+    assert.equal(install.status, 0, install.stderr || install.stdout);
+    const installedAgentInstructions = join(
+      playbookDirectory,
+      "writing-agent-facing-instructions.md",
+    );
+    const installedHumanProse = join(
+      playbookDirectory,
+      "writing-human-facing-prose.md",
+    );
+    assert.equal(
+      readFileSync(installedAgentInstructions, "utf-8"),
+      readFileSync(
+        join(
+          PROJECT_ROOT,
+          "workflow",
+          "skills",
+          "playbooks",
+          "writing-agent-facing-instructions.md",
+        ),
+        "utf-8",
+      ),
+    );
+    assert.equal(
+      readFileSync(installedHumanProse, "utf-8"),
+      readFileSync(
+        join(
+          PROJECT_ROOT,
+          "workflow",
+          "skills",
+          "playbooks",
+          "writing-human-facing-prose.md",
+        ),
+        "utf-8",
+      ),
+    );
+    assert.equal(existsSync(retiredAgentInstructions), false);
+    assert.equal(existsSync(retiredHumanProse), false);
+
+    const agentCopyIndex = install.stdout.indexOf(
+      ".goat-flow/skill-docs/playbooks/writing-agent-facing-instructions.md",
+    );
+    const humanCopyIndex = install.stdout.indexOf(
+      ".goat-flow/skill-docs/playbooks/writing-human-facing-prose.md",
+    );
+    const cleanupIndex = install.stdout.indexOf(
+      "removed retired .goat-flow/skill-docs/playbooks/writing-for-agents.md",
+    );
+    assert.ok(agentCopyIndex >= 0, install.stdout);
+    assert.ok(humanCopyIndex >= 0, install.stdout);
+    assert.ok(cleanupIndex > agentCopyIndex, install.stdout);
+    assert.ok(cleanupIndex > humanCopyIndex, install.stdout);
+  });
+
   it("keeps derived config migration flags under the force alias", () => {
     const root = makeTempProject();
     const firstInstall = runCliInstaller(root, "--agent", "codex");

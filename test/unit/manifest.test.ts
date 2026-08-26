@@ -572,10 +572,10 @@ describe("getRequiredInstructionSections (real repo)", () => {
         phrases: [
           "Prose surfaces route the same way before writing",
           "ordinary README prose",
-          "need `writing-style.md`",
+          "need `writing-human-facing-prose.md`",
           "README discovery rows",
           "hook messages",
-          "need `writing-for-agents.md`",
+          "need `writing-agent-facing-instructions.md`",
           "the trigger is touching the surface, not the request naming it",
         ],
       },

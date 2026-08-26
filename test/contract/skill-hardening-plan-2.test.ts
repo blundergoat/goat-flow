@@ -543,8 +543,8 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
 
     // Both writing-style copies must expose the same plan-authoring scope gate.
     for (const playbookPath of [
-      "workflow/skills/playbooks/writing-style.md",
-      ".goat-flow/skill-docs/playbooks/writing-style.md",
+      "workflow/skills/playbooks/writing-human-facing-prose.md",
+      ".goat-flow/skill-docs/playbooks/writing-human-facing-prose.md",
     ]) {
       const scopeGate = readMarkdownSection(playbookPath, "Scope Gate");
       assert.match(

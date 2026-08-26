@@ -426,8 +426,8 @@ describe("skill hardening contracts: shared surfaces (2/3)", () => {
 
   it("keeps writing-style edits truth-preserving and source-aware through the routed core", () => {
     for (const playbookPath of [
-      "workflow/skills/playbooks/writing-style.md",
-      ".goat-flow/skill-docs/playbooks/writing-style.md",
+      "workflow/skills/playbooks/writing-human-facing-prose.md",
+      ".goat-flow/skill-docs/playbooks/writing-human-facing-prose.md",
     ]) {
       assert.match(
         readProjectFile(playbookPath),

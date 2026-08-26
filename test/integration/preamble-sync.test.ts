@@ -124,21 +124,21 @@ const INSTALLED_TEST_SELECTION = resolve(
   PROJECT_ROOT,
   ".goat-flow/skill-docs/playbooks/test-selection.md",
 );
-const TEMPLATE_WRITING_FOR_AGENTS = resolve(
+const TEMPLATE_AGENT_FACING_INSTRUCTIONS = resolve(
   PROJECT_ROOT,
-  "workflow/skills/playbooks/writing-for-agents.md",
+  "workflow/skills/playbooks/writing-agent-facing-instructions.md",
 );
-const INSTALLED_WRITING_FOR_AGENTS = resolve(
+const INSTALLED_AGENT_FACING_INSTRUCTIONS = resolve(
   PROJECT_ROOT,
-  ".goat-flow/skill-docs/playbooks/writing-for-agents.md",
+  ".goat-flow/skill-docs/playbooks/writing-agent-facing-instructions.md",
 );
-const TEMPLATE_WRITING_STYLE = resolve(
+const TEMPLATE_HUMAN_FACING_PROSE = resolve(
   PROJECT_ROOT,
-  "workflow/skills/playbooks/writing-style.md",
+  "workflow/skills/playbooks/writing-human-facing-prose.md",
 );
-const INSTALLED_WRITING_STYLE = resolve(
+const INSTALLED_HUMAN_FACING_PROSE = resolve(
   PROJECT_ROOT,
-  ".goat-flow/skill-docs/playbooks/writing-style.md",
+  ".goat-flow/skill-docs/playbooks/writing-human-facing-prose.md",
 );
 const ROUTED_WRITING_DIAGNOSTIC_PAIRS = [
   "writing-sentence-diagnostics.md",
@@ -378,30 +378,33 @@ describe("preamble/conventions sync: current state", () => {
   });
 
   // Agent-document authoring guidance ships to consumers, so the installed copy must not drift.
-  it("template and installed writing-for-agents.md match", () => {
+  it("template and installed writing-agent-facing-instructions.md match", () => {
     assertMirrorExists(
-      TEMPLATE_WRITING_FOR_AGENTS,
-      INSTALLED_WRITING_FOR_AGENTS,
-      "writing-for-agents.md",
+      TEMPLATE_AGENT_FACING_INSTRUCTIONS,
+      INSTALLED_AGENT_FACING_INSTRUCTIONS,
+      "writing-agent-facing-instructions.md",
     );
     assert.equal(
-      diffQuiet(TEMPLATE_WRITING_FOR_AGENTS, INSTALLED_WRITING_FOR_AGENTS),
+      diffQuiet(
+        TEMPLATE_AGENT_FACING_INSTRUCTIONS,
+        INSTALLED_AGENT_FACING_INSTRUCTIONS,
+      ),
       0,
-      "writing-for-agents.md: template and installed should match",
+      "writing-agent-facing-instructions.md: template and installed should match",
     );
   });
 
   // Prose-style guidance ships to consumers, so the installed copy must not drift.
-  it("template and installed writing-style.md match", () => {
+  it("template and installed writing-human-facing-prose.md match", () => {
     assertMirrorExists(
-      TEMPLATE_WRITING_STYLE,
-      INSTALLED_WRITING_STYLE,
-      "writing-style.md",
+      TEMPLATE_HUMAN_FACING_PROSE,
+      INSTALLED_HUMAN_FACING_PROSE,
+      "writing-human-facing-prose.md",
     );
     assert.equal(
-      diffQuiet(TEMPLATE_WRITING_STYLE, INSTALLED_WRITING_STYLE),
+      diffQuiet(TEMPLATE_HUMAN_FACING_PROSE, INSTALLED_HUMAN_FACING_PROSE),
       0,
-      "writing-style.md: template and installed should match",
+      "writing-human-facing-prose.md: template and installed should match",
     );
   });
 

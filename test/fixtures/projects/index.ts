@@ -36,10 +36,10 @@ const HEALTHY_STANDALONE_PLAYBOOK_FILENAMES = [
   "release-notes.md",
   "skill-playbook-authoring-sync.md",
   "test-selection.md",
-  "writing-for-agents.md",
+  "writing-agent-facing-instructions.md",
   "writing-sentence-diagnostics.md",
   "writing-structure-diagnostics.md",
-  "writing-style.md",
+  "writing-human-facing-prose.md",
 ] as const;
 
 /** Render the default playbook index a healthy-project audit fixture exposes to users. */
