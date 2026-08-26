@@ -517,6 +517,21 @@ describe("preflight Tests-phase progress", () => {
     );
   });
 
+  it("keeps Knip failure guidance on the heap-safe preflight invocation", () => {
+    const preflightSource = readFileSync(PREFLIGHT_SCRIPT_PATH, "utf-8");
+
+    assert.match(
+      preflightSource,
+      /knip_command=\(\s+node\s+--max-old-space-size=5120\s+node_modules\/knip\/bin\/knip\.js\s+--no-progress\s+--no-gitignore\s+\)/u,
+    );
+    assert.match(
+      preflightSource,
+      /knip_output=\$\("\$\{knip_command\[@\]\}" 2>&1\)/u,
+    );
+    assert.match(preflightSource, /run \$\{knip_command\[\*\]\} for details/u);
+    assert.doesNotMatch(preflightSource, /run npx knip for details/u);
+  });
+
   it("selects Codex's Windows override for native configured-hook smokes", () => {
     const preflightSource = readFileSync(PREFLIGHT_SCRIPT_PATH, "utf-8");
     const functionStart = preflightSource.indexOf("function runCommand(");

@@ -1758,12 +1758,19 @@ if [[ -f tsconfig.json ]]; then
     # .goat-flow/scratchpad, and Knip's own `ignore` option cannot help because it filters the report rather than the
     # file walk. Nothing under src/, test/, or scripts/ is gitignored, so the analysed set is unchanged.
     if command -v npx >/dev/null 2>&1 && npx knip --version >/dev/null 2>&1; then
-        knip_output=$(node --max-old-space-size=5120 node_modules/knip/bin/knip.js --no-progress --no-gitignore 2>&1) && knip_exit=0 || knip_exit=$?
+        knip_command=(
+            node
+            --max-old-space-size=5120
+            node_modules/knip/bin/knip.js
+            --no-progress
+            --no-gitignore
+        )
+        knip_output=$("${knip_command[@]}" 2>&1) && knip_exit=0 || knip_exit=$?
         if [[ "$knip_exit" -eq 0 ]]; then
             pass "Knip (no unused exports or deps)"
         else
             unused_count=$(echo "$knip_output" | grep -c '^[A-Za-z].*  ' || echo "?")
-            fail "Knip: $unused_count unused exports/types - run npx knip for details"
+            fail "Knip: $unused_count unused exports/types - run ${knip_command[*]} for details"
         fi
     else
         skip "Knip (not installed)"
