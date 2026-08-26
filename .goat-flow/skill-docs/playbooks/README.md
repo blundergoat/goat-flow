@@ -9,7 +9,7 @@ For shared meta-references inherited by goat-* skills (preamble on every invocat
 
 ## How agents should use this directory
 
-1. When the request names a tool or discipline (browser, screenshots, skill testing, changelog, release notes, logging/instrumentation, naming and placement, code comments, or prose and writing style), check this index for a matching playbook. Also check it when the work touches a discipline's surface without naming it: editing `CHANGELOG.md`, release notes, README or `docs/` prose, PR/issue text, or a learning-loop entry body.
+1. When the request names a tool or discipline (browser, screenshots, skill testing, changelog, release notes, logging/instrumentation, naming and placement, code comments, prose and writing style, or writing for agents), check this index for a matching playbook. Also check it when the work touches a discipline's surface without naming it: editing `CHANGELOG.md`, release notes, README or `docs/` prose, PR/issue text, a learning-loop entry body, or a skill, playbook, or instruction file an agent reads.
 2. Open the playbook. If it has an **Availability Check** section, run the exact `command -v <tool>` or equivalent it specifies before falling back.
 3. Only after the availability check fails AND the playbook's fallback path also fails, declare the capability unavailable.
 
@@ -33,6 +33,7 @@ For shared meta-references inherited by goat-* skills (preamble on every invocat
 | [`writing-style.md`](./writing-style.md) | Starting any human-read prose edit: compact correctness router, scope and source gates, meaning and precision protection, objective sibling triggers, minimum pass, and early stop. Exempts agent-read control text, plan mechanics, tables, and code | n/a (prose-style discipline) |
 | [`writing-sentence-diagnostics.md`](./writing-sentence-diagnostics.md) | After the writing core identifies sentence-level reader cost: actor choice, reader knowledge, assistant voice, residue, punctuation, social meaning, and non-authorizing lexical or rhythm signals | n/a (sentence-diagnostic discipline) |
 | [`writing-structure-diagnostics.md`](./writing-structure-diagnostics.md) | After the writing core identifies document-level assembly defects: duplicate representations, append seams, compound entries, parallel lists, causal order, padded triads, and chronology | n/a (structure-diagnostic discipline) |
+| [`writing-for-agents.md`](./writing-for-agents.md) | Creating or editing text an agent executes from: a skill, playbook, shared preamble or conventions file, instruction file, hook message, or README discovery row. Owns the two loads, pointer wording, the information ladder, completion criteria, leading words, negation, and pruning; the agent-read complement to `writing-style.md`'s exemption | n/a (agent-document authoring discipline) |
 
 ## Adding a new playbook
 

@@ -127,6 +127,7 @@ last_reviewed: 2026-08-24
 ## Lesson: A full-suite result is not attributable when another session is mutating the tree
 
 **Status:** active | **Created:** 2026-08-18
+**Incident count:** 3 | **Latest occurrence:** 2026-08-24
 **Decision changed:** In a checkout a second session is writing to, prove attribution from the change set and the failure message before reporting a suite result as yours or as pre-existing. Scope the claim you make to the contracts covering your files.
 **Trigger phase:** VERIFY
 
@@ -135,6 +136,8 @@ last_reviewed: 2026-08-24
 **Root cause:** I reached for a whole-repo gate as the proof of a scoped change. In a shared checkout the suite measures the tree, not the diff, so its result carries another session's in-flight state. `git status` and `git diff` describe the working tree the same way, so neither separates authorship.
 
 **Prevention:** Keep a written list of the files you actually edited; that list, not `git diff`, is your change set. Prove a failure is not yours by reading its assertion and showing it names a file outside that list - a filename overlap is not proof either way, since one test file can hold both a failing gitignore assertion and an unrelated reference to your files. Run the focused contracts covering your change as the gate you claim, and report the full-suite number separately with its attribution stated. Never `git stash` to isolate; a second session can commit between the stash and the pop. Related: [[Parallel sessions need concurrency-safe file patterns]] covers write contention on the same files, which is a different failure from this one.
+
+**Recurrence 2026-08-23:** M17's no-schema gate first used broad `src/cli` and `test` status as an ownership signal. It ran clean before M17 wrote its decision, then a concurrent writing-for-agents batch made twelve paths appear dirty even though M17 had not edited them. After stopping for approval, proof was narrowed to the exact M17-owned paths and an all-diff search for checkpoint-schema vocabulary. Evidence anchors: `src/cli/audit/skill-docs-contract.ts` (search: `.goat-flow/skill-docs/playbooks/writing-for-agents.md`) and `workflow/skills/goat-plan/SKILL.md` (search: `mid-proof before switching modules`).
 
 ---
 

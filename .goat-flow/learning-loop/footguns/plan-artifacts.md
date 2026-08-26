@@ -1,6 +1,6 @@
 ---
 category: plan-artifacts
-last_reviewed: 2026-08-24
+last_reviewed: 2026-08-26
 ---
 
 **Scope:** The grammar and validation of plan, milestone, and review artifacts - evidence fields, proof gates, machine-parsed dependency links, effort accounting, and when a validator runs relative to persistence. CLI process behaviour and output streams live in [cli.md](cli.md).
@@ -121,7 +121,7 @@ last_reviewed: 2026-08-24
 **Decision changed:** Reforecast every estimate line together, and when the local likely rate implies fewer minutes than there are work units, keep the planning-time basis and record the local figure in prose.
 **Trigger phase:** SCOPE
 **Caught at:** VERIFY
-**Incident count:** 6 | **Latest occurrence:** 2026-08-24
+**Incident count:** 7 | **Latest occurrence:** 2026-08-26
 
 **Symptoms:** `plans check --strict` printed `reforecast required: ... use 0.61-0.93-1.04 min/unit before implementation` (advisory, exit 0). Updating only `**Forecast basis:**` and `**Forecast range:**` to those rates - a handoff note said to update "the Forecast basis/range lines" - flipped the plan to exit 1: `forecast range likely (8 min) must equal the Effort estimate total (22 min)`. Measured 2026-08-19 on `.goat-flow/plans/1.16.0-golive` M04 (9 units) and M05 (8 units).
 
@@ -136,6 +136,8 @@ The closeout strict check exited 1 with both parser and counted-work errors.
 The correction restored canonical basis grammar and changed the clean-fixture task from 3 to 2 minutes, preserving the pre-work 22-minute forecast without using measured timing.
 
 **Recurrence 2026-08-24 (M24 low-bound rounding):** Reducing an approved milestone from eight to six agent work units changed its calibrated range. I rounded `6 x 0.80` to 5 by intuition, but the validator deliberately floors the low bound and exited 1 with `forecast basis derives 4-25 agent-time minutes; likely 15, but Forecast range says 5-25; likely 15`. Replacing the low bound with 4 restored a zero exit before product work resumed. Evidence anchor: `src/cli/plans-effort.ts` (search: `deriveForecastRangeFromBasis`) applies floor/nearest/ceiling to the low/likely/high values.
+
+**Recurrence 2026-08-26 (M55 unit/range reconciliation):** The first resumed forecast amendment declared 14 agent work units even though the plan grammar counted 16, and its high bound did not match the declared basis. `plans check --strict` exited 1 before source edits with `forecast basis declares 14 agent work units but plan contains 16` and a derived-range mismatch. The correction retained the planning-time `0.80-2.64-7.59` basis, declared 16 units, derived `12-122` with likely 42, and reconciled the headline, split, and item estimates; the strict check then exited 0. Evidence anchors: `src/cli/plans-effort.ts` (search: `forecast basis declares`) and (search: `deriveForecastRangeFromBasis`).
 
 **Why it happens:** `src/cli/plans-check-summary.ts` (search: `renderRequiredReforecasts`) advises the new rates, but `src/cli/plans-effort.ts` (search: `forecast basis derives`) requires the range to be derived from the basis, `src/cli/plans-check.ts` (search: `must equal the Effort estimate total`) requires the `**Effort estimate:**` headline to equal the range's likely, and that headline is the sum of the per-item `(est: n min category)` entries whose grammar is integer-only (`plans-effort.ts`, search: `TASK_ESTIMATE_PATTERN`). With a likely rate under 1 min/unit, round(units × rate) is below the unit count and N positive integer items cannot sum to fewer than N minutes, so the strict shape is unsatisfiable rather than merely tedious. `.claude/skills/goat-plan/references/milestone-examples.md` (search: `Reforecast all estimates`) already says "all"; the partial edit ignored it.
 

@@ -1,6 +1,6 @@
 ---
 category: milestone-accounting
-last_reviewed: 2026-08-26
+last_reviewed: 2026-08-25
 ---
 
 **Scope:** Milestone state and effort accounting - activation order, where human gates belong, what a task section may contain, and why estimates counted from work units beat estimates written as durations. Multi-agent council coordination is [coordination.md](coordination.md).
@@ -36,24 +36,6 @@ last_reviewed: 2026-08-26
 **Evidence:** Both incidents occurred in local gitignored milestone files, so no durable repository anchor exists. In each case, dependency validation exposed the ordering defect before dependent implementation continued.
 
 **Prevention:** Before changing milestone status, read every declared prerequisite and run plan validation. Keep `Depends on` machine-only (`none` or comma-separated local IDs); put rationale in narrative fields.
-
----
-
-## Lesson: Deactivate the current milestone before a priority switch
-
-**Status:** active | **Created:** 2026-08-26
-**Decision changed:** Before activating replacement work, stop its predecessor's timing receipt and move the predecessor to an inactive status.
-**Trigger phase:** ACT
-**Caught at:** VERIFY
-**Incident count:** 1 | **Latest occurrence:** 2026-08-26
-
-**Prevention:** Treat a priority switch as one transition: stop or discard the open receipt, record why the current milestone is paused, set it to `blocked` or another truthful inactive state, and only then activate and time the replacement milestone. Run strict plan validation immediately after the transition.
-
-**What happened:** An urgent branch-rewrite milestone was activated while the previous implementation milestone still said `in-progress`. Strict plan validation rejected the plan with `multiple active milestones` before product edits continued. The earlier receipt was discarded because it included an interruption, and the previous milestone was marked `blocked` with its dirty paths recorded.
-
-**Root cause:** Starting the urgent work and pausing the existing work were treated as separate bookkeeping steps. The new milestone became active before the old lifecycle and timing state were closed.
-
-**Evidence:** The incident occurred in gitignored local milestone files. Durable enforcement is in `src/cli/plans-check-structure.ts` (search: `Two active milestones make timing and next-action guidance ambiguous`).
 
 ---
 

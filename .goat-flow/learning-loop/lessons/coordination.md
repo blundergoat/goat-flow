@@ -1,6 +1,6 @@
 ---
 category: coordination
-last_reviewed: 2026-08-23
+last_reviewed: 2026-08-26
 ---
 
 **Scope:** Running work across multiple agents or phases - council findings that need normalising before they create work, where reviewers hallucinate, and phase totals that must derive from their breakdowns. Milestone state and effort accounting is [milestone-accounting.md](milestone-accounting.md).
@@ -74,8 +74,8 @@ last_reviewed: 2026-08-23
 **Decision changed:** Run the plan arithmetic gate immediately after writing estimates, then independently derive every ISSUE-level roll-up from the validated milestone headlines.
 **Trigger phase:** SCOPE
 **Caught at:** VERIFY
-**Incident count:** 7
-**Latest occurrence:** 2026-08-17
+**Incident count:** 8
+**Latest occurrence:** 2026-08-26
 
 **What happened:** Programme headline stated ~33 weekends (council's estimate). Phase breakdowns summed to ~26. The gap was unexplained - some combination of CF items, overhead, and double-counted shared infrastructure. The headline lost legitimacy when the math didn't add up.
 
@@ -90,6 +90,8 @@ last_reviewed: 2026-08-23
 **Recurrence 2026-08-14:** Reforecasting three downstream milestones used nearest-integer transcription for one or both bounds instead of the deterministic floor/ceiling rule. Strict validation derived `16-42`, `12-32`, and `15-39`, then blocked reconciliation because the plan displayed `17-41`, `13-32`, and `15-38`. The ISSUE roll-up also needed recomputation from `45-111` to `43-113` after the milestone ranges were corrected.
 
 **Recurrence 2026-08-17:** M39 multiplied 10 work units by a 1.16-minute low rate but transcribed the range floor as 12. Strict validation derived 11 and rejected the plan until both the milestone and ISSUE roll-up used `11-72`. Evidence anchor: `src/cli/plans-effort.ts` (search: `forecast basis derives`).
+
+**Recurrence 2026-08-26:** After trimming two milestones, I adjusted the 1.17.0 ISSUE headline by subtracting only those deltas from its stale prior total. A fresh exact sum over all 53 milestone files measured `557-2,997`, likely `1,368`, rather than `537-3,331`, likely `1,338`. Strict validation still passed because its milestone inventory excludes `ISSUE.md`. Evidence anchor: `src/cli/plans-export.ts` (search: `function listMilestoneFiles`).
 
 **Prevention:** Programme documents should show effort accounting explicitly and derive each roll-up from the milestone headlines after strict validation. If two totals intentionally differ, name the accounting difference; do not transcribe a mental sum into the summary.
 

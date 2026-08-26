@@ -1,6 +1,6 @@
 ---
 category: verification
-last_reviewed: 2026-08-20
+last_reviewed: 2026-08-26
 ---
 
 ## Pattern: Cross-runner quality-report triage by convergence
@@ -109,7 +109,9 @@ else:
 
 ## Pattern: Verification scope must match change scope
 **Context:** Any change that touches more than just code.
-**Approach:** When the change is code-only, running tests is sufficient. When the change touches docs, setup prompts, or workflow templates, verification must read those files too. When building on existing files, audit them first - errors in source files propagate to everything built on top.
+**Approach:** When the change is code-only, running tests is sufficient. When the change touches docs, setup prompts, or workflow templates, verification must read those files too. When building on existing files, audit them first - errors in source files propagate to everything built on top. For learning-loop bucket edits, run `goat-flow index` itself. If unrelated buckets are dirty, run it against an isolated copy and compare only the owning `INDEX.md`; `stats --check` proves byte freshness but does not surface write-side generation diagnostics.
+
+**Evidence:** On 2026-08-26, `stats --check` returned `status: pass` for a prose-only empty bucket while `goat-flow index` emitted `[unindexed-bucket-content]`. The split is explicit in `src/cli/stats/index-freshness.ts` (search: `const expected = formatIndex`) and `src/cli/learning-loop-index/generate.ts` (search: `unindexedContentDiagnostics`).
 
 ## Pattern: Complexity refactors need file-level lint before closeout
 **Context:** Reducing complexity in a specific function.
@@ -137,7 +139,6 @@ else:
 **Goat-flow application (candidate bans - no guardrail test ships yet):** As of 2026-08-20 nothing in `test/` walks `src/` for banned patterns, so the list below is the starting inventory for whoever ships the first guardrail test, not a description of enforced checks:
 - Ban `Math.random()` in `src/cli/server/` (where session IDs live) — `randomUUID()` is already the convention (`src/cli/server/terminal.ts` search: `randomUUID`, `src/cli/server/dashboard-routes.ts` search: `randomUUID`). The grep test prevents regression.
 - Ban `console.log` in MCP server code (when added) — see `.goat-flow/learning-loop/footguns/cli.md` (search: `Diagnostic logs to stdout corrupt structured-output modes`).
-- Ban `JSON.stringify` as a `Set<string>` dedupe key in merge functions — the failure mode and its three-PR calibration arc are in `.goat-flow/learning-loop/patterns/external-lessons.md` (search: `Bug-fix clusters arc fix`).
 - Ban bare `setTimeout` / `setInterval` without an associated `clearTimeout` / `clearInterval` in the same file (dashboard server long-running handlers in `src/cli/server/`).
 
 **Shape of the test (TypeScript, Node's built-in test runner):**

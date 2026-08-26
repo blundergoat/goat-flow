@@ -1,6 +1,6 @@
 ---
 category: verification-formatting
-last_reviewed: 2026-08-25
+last_reviewed: 2026-08-26
 ---
 
 **Scope:** Formatter, lint, and Knip debt that only surfaces at repo-wide scope - style flags, copied or untracked files that inherit debt, and touched-test formatting before a verification claim. Adding or tuning a preflight gate is [verification-preflight.md](verification-preflight.md).
@@ -76,10 +76,18 @@ last_reviewed: 2026-08-25
 ## Lesson: New tests need formatter gate before verification claims
 
 **Status:** active | **Created:** 2026-04-25
+**Decision changed:** Run the repository formatter on touched TypeScript before treating a focused GREEN run as milestone verification.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+**Incident count:** 21 | **Latest occurrence:** 2026-08-26
+
+**Prevention:** Format touched TypeScript before focused proof and retain Prettier in final verification. For goat-clarity, freeze the repository-owned check and write commands before mutation; a receipt without literal formatter proof remains incomplete.
 
 **What happened:** M01's focused security-preset test passed before scoped Prettier rejected the new test file.
 
 **Root cause:** I ran behavioural proof before the formatter gate for touched TypeScript.
+
+**Incident ledger:**
 
 **Recurrences through 2026-08-12:** M11 SARIF and later contract, setup, dashboard, review, and hook batches repeated the same ordering error. M01 again passed focused tests and typecheck before scoped Prettier rejected its touched TypeScript.
 
@@ -90,6 +98,8 @@ last_reviewed: 2026-08-25
 **Recurrence 2026-08-23:** M09's recurrence-normalisation integration tests passed before the exact-path Prettier check rejected `test/integration/stats-command.test.ts`. Formatting that file made the same check pass, and the focused tests remained green. M10 repeated the ordering error: all 69 focused tests and typecheck completed before exact-path Prettier rejected `src/cli/stats/render.ts`. Formatting the renderer cleared the same check.
 
 **Recurrence 2026-08-24:** M26's recall unit/help tests and typecheck passed before the exact-path Prettier check rejected four touched files. Formatting only those files made the same command print `All matched files use Prettier code style!`, after which focused proof and the fast suite remained green. Evidence anchors: `src/cli/learning-loop-recall.ts` (search: `collectLearningLoopRecall`) and `test/unit/learning-loop-recall.test.ts` (search: `recall CLI parsing`).
+
+**Recurrence 2026-08-26:** M55's shipped-descriptor regression was behaviourally green before an exact-path Prettier check rejected `test/unit/audit-command/hook-facts.test.ts`. Formatting only that file made the same check print `All matched files use Prettier code style!`. Evidence anchor: `test/unit/audit-command/hook-facts.test.ts` (search: `reads managed Claude exec operands before inert shell routes`).
 
 Evidence anchors:
 
@@ -109,11 +119,6 @@ Evidence anchors:
 - `test/unit/hook-registrar.test.ts` (search: `repairs a duplicate registration`).
 - `workflow/skills/goat-clarity/SKILL.md` (search: `Formatter proof:`).
 - `test/contract/skill-hardening-clarity.test.ts` (search: `freezes repository formatter commands and proof before mutation`).
-
-**Prevention:** Format touched TypeScript before focused proof and retain Prettier in final verification. For goat-clarity, freeze the repository-owned check and write commands before mutation; a receipt without literal formatter proof remains incomplete.
-
-**Decision changed:** Run the repository formatter on touched TypeScript before treating a focused GREEN run as milestone verification. | **Trigger phase:** ACT | **Incident count:** 20 | **Latest occurrence:** 2026-08-24
-**Caught at:** VERIFY
 
 ---
 
