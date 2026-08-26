@@ -1,6 +1,6 @@
 ---
 category: verification-scanners
-last_reviewed: 2026-08-24
+last_reviewed: 2026-08-27
 ---
 
 **Scope:** Proving a guard, scanner, or parser actually guards - block-and-allow pairs, false-positive probes, parser-shape fixtures per claimed file family, and self-test fanout. What a test must assert generally is [verification-testing.md](verification-testing.md); Gruff specifics are [verification-gruff.md](verification-gruff.md).
@@ -73,13 +73,15 @@ last_reviewed: 2026-08-24
 ## Lesson: Temp cleanup must satisfy destructive-command hooks
 
 **Status:** active | **Created:** 2026-05-08
-**Incident count:** 4 | **Latest occurrence:** 2026-08-12
+**Incident count:** 5 | **Latest occurrence:** 2026-08-27
 
 **What happened:** While smoke-testing `scripts/install-browser-tools.sh` wrapper-guard behavior, a temp-directory cleanup command used `rm -rf "$tmpdir"`. The PreToolUse hook blocked the command with `BLOCKED: rm -r without safe scoping. Specify an explicit target path.` The smoke test had to be rerun with non-recursive cleanup: `rm -f "$tmpdir/browser-use"; rmdir "$tmpdir"`.
 
 **Recurrence 2026-08-03:** A packaged-release smoke again placed variable-scoped `rm -rf` in the same shell program as the validation. The hook rejected the complete command before `mktemp` ran, so no validation state was created. The rerun omitted destructive cleanup and retained its printed `/tmp/goat-flow-release-check.*` directory as disposable local evidence.
 
 **Recurrence 2026-08-10:** Cleanup of two known redaction directories still used recursive removal, so the safety hook rejected it despite literal paths. Listing each file, deleting the exact files in bounded groups, and removing the empty directories completed cleanup without weakening the guard.
+
+**Recurrence 2026-08-27:** While regenerating the M41 learning-loop index through a temporary mirror, I put `rm -rf "$index_fixture_dir"` in an `EXIT` trap within the same shell program. The command guard rejected the complete program before `mktemp` ran, so neither temporary nor workspace files were created. The retry keeps the printed `/tmp/goat-flow-m41-index.*` directory as disposable evidence instead of coupling proof to recursive cleanup. The repository policy contract covers the same class at `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `embedded variable recursive rm`).
 
 **Root cause:** Treated a `mktemp` path as self-evidently safe, but the hook cannot prove variable-scoped recursive deletion is bounded.
 

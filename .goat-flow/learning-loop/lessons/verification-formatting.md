@@ -1,6 +1,6 @@
 ---
 category: verification-formatting
-last_reviewed: 2026-08-26
+last_reviewed: 2026-08-27
 ---
 
 **Scope:** Formatter, lint, and Knip debt that only surfaces at repo-wide scope - style flags, copied or untracked files that inherit debt, and touched-test formatting before a verification claim. Adding or tuning a preflight gate is [verification-preflight.md](verification-preflight.md).
@@ -79,7 +79,7 @@ last_reviewed: 2026-08-26
 **Decision changed:** Run the repository formatter on touched TypeScript before treating a focused GREEN run as milestone verification.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
-**Incident count:** 21 | **Latest occurrence:** 2026-08-26
+**Incident count:** 22 | **Latest occurrence:** 2026-08-27
 
 **Prevention:** Format touched TypeScript before focused proof and retain Prettier in final verification. For goat-clarity, freeze the repository-owned check and write commands before mutation; a receipt without literal formatter proof remains incomplete.
 
@@ -100,6 +100,8 @@ last_reviewed: 2026-08-26
 **Recurrence 2026-08-24:** M26's recall unit/help tests and typecheck passed before the exact-path Prettier check rejected four touched files. Formatting only those files made the same command print `All matched files use Prettier code style!`, after which focused proof and the fast suite remained green. Evidence anchors: `src/cli/learning-loop-recall.ts` (search: `collectLearningLoopRecall`) and `test/unit/learning-loop-recall.test.ts` (search: `recall CLI parsing`).
 
 **Recurrence 2026-08-26:** M55's shipped-descriptor regression was behaviourally green before an exact-path Prettier check rejected `test/unit/audit-command/hook-facts.test.ts`. Formatting only that file made the same check print `All matched files use Prettier code style!`. Evidence anchor: `test/unit/audit-command/hook-facts.test.ts` (search: `reads managed Claude exec operands before inert shell routes`).
+
+**Recurrence 2026-08-27:** M41 added a source-shape contract for the heap-safe Knip recovery command but did not format it before the first exact-path check. `npx prettier --check test/integration/preflight-progress.test.ts` rejected the file, and `set -e` stopped the proof batch before ShellCheck, Bash syntax, or runtime tests. Format only that file and restart the complete proof batch. Evidence anchor: `test/integration/preflight-progress.test.ts` (search: `keeps Knip failure guidance on the heap-safe preflight invocation`).
 
 Evidence anchors:
 

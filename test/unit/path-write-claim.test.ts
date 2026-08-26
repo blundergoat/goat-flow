@@ -45,6 +45,24 @@ function makeProject(): string {
   return root;
 }
 
+/**
+ * Change a live marker and return the exact foreign bytes left at its path.
+ * Filesystem side effects: mutates bytes on Windows and replaces the inode with the same bytes on POSIX.
+ * Windows uses byte tampering because a retained descriptor makes immediate pathname recreation unstable.
+ */
+function tamperWithOwnedClaimMarker(
+  markerPath: string,
+  markerBytes: Buffer,
+): Buffer {
+  if (process.platform === "win32") {
+    fs.appendFileSync(markerPath, "foreign-marker-state\n", "utf8");
+  } else {
+    fs.unlinkSync(markerPath);
+    fs.writeFileSync(markerPath, markerBytes, { mode: 0o600 });
+  }
+  return fs.readFileSync(markerPath);
+}
+
 /** Require one exact helper refusal without accepting an unrelated exception. */
 function assertClaimFailure(
   action: () => unknown,
@@ -230,7 +248,7 @@ describe("path write claims", () => {
     }
   });
 
-  it("reports a replaced owner marker and leaves the replacement untouched", () => {
+  it("reports ownership-changed and leaves foreign marker state untouched", () => {
     const projectRoot = makeProject();
     const targetPath = "managed.txt";
     const batch = acquirePathWriteClaims(projectRoot, [
@@ -242,13 +260,15 @@ describe("path write claims", () => {
     const original = inspectPathWriteClaim(projectRoot, targetPath);
     assert.ok(original);
     const markerBytes = fs.readFileSync(original.markerPath);
-    fs.unlinkSync(original.markerPath);
-    fs.writeFileSync(original.markerPath, markerBytes, { mode: 0o600 });
+    const foreignMarkerBytes = tamperWithOwnedClaimMarker(
+      original.markerPath,
+      markerBytes,
+    );
 
     assert.deepEqual(releasePathWriteClaims(batch), [
       { targetPath, status: "ownership-changed" },
     ]);
-    assert.equal(fs.existsSync(original.markerPath), true);
+    assert.deepEqual(fs.readFileSync(original.markerPath), foreignMarkerBytes);
     const replacement = inspectPathWriteClaim(projectRoot, targetPath);
     assert.ok(replacement);
     assert.equal(
@@ -257,7 +277,7 @@ describe("path write claims", () => {
     );
   });
 
-  it("refuses a marker replaced before ownership confirmation", (context: TestContext) => {
+  it("refuses marker tampering before ownership confirmation", (context: TestContext) => {
     const projectRoot = makeProject();
     const targetPath = "managed.txt";
     const expectedIdentity = readPathWriteTargetIdentity(
@@ -273,8 +293,7 @@ describe("path write claims", () => {
       assert.ok(markerName);
       replacementPath = join(claimDirectory, markerName);
       const markerBytes = fs.readFileSync(replacementPath);
-      fs.unlinkSync(replacementPath);
-      fs.writeFileSync(replacementPath, markerBytes, { mode: 0o600 });
+      tamperWithOwnedClaimMarker(replacementPath, markerBytes);
     });
 
     assertClaimFailure(

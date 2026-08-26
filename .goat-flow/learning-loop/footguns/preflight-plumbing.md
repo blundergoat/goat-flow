@@ -1,6 +1,6 @@
 ---
 category: preflight-plumbing
-last_reviewed: 2026-08-16
+last_reviewed: 2026-08-27
 ---
 
 **Scope:** Data crossing the Node-to-shell boundary inside preflight and CI scripts - command substitution, formatting that shell arithmetic cannot parse, and stdout fed into pattern matchers. What the audit checks *mean* lives in [auditor.md](auditor.md).
@@ -9,7 +9,7 @@ last_reviewed: 2026-08-16
 
 **Status:** active | **Created:** 2026-08-16 | **Evidence:** ACTUAL_MEASURED
 
-**Symptoms:** Preflight's TypeScript phase fails with `Knip: 0 | ? unused exports/types`. The `0 | ?` is parsed out of an OOM stack trace, not from findings, because `scripts/preflight-checks.sh` (search: `knip_output=$(node --max-old-space-size=5120`) counts result lines and falls back to `?`. Knip exits 134. Adding the offending directory to `knip.json`'s `ignore` changes nothing.
+**Symptoms:** Preflight's TypeScript phase fails with `Knip: 0 | ? unused exports/types`. The `0 | ?` is parsed out of an OOM stack trace, not from findings, because `scripts/preflight-checks.sh` (search: `knip_command=(`) owns the heap-safe invocation but still counts captured result lines and falls back to `?`. Knip exits 134. Adding the offending directory to `knip.json`'s `ignore` changes nothing.
 
 **Why it happens:** `ignore` is a report filter by definition. The installed schema at `node_modules/knip/schema.json` titles it "Files to exclude from the report (any issue type)", and `ignoreFiles` as "Unused files to exclude from the report". Neither governs the file walk. `project` and `entry` do define the analysed set, and in this repo they are already narrow - `src/**/*.ts`, `scripts/**/*.mjs`, `test/**/*.ts` - so gitignored local state was never in the analysed set to begin with. `knip --debug` names the real cost: it builds a `gitignoreFiles` list by walking the entire checkout to collect every nested `.gitignore`, and a scratchpad holding cloned repositories contributes hundreds. The heap is spent deciding what to skip, before any analysis starts.
 

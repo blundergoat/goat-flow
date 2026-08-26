@@ -1,6 +1,6 @@
 ---
 category: agent-evidence-claims
-last_reviewed: 2026-08-23
+last_reviewed: 2026-08-27
 ---
 
 **Scope:** What counts as citable evidence - mechanism claims need a read source, absence and exact-count claims need untruncated searches, gitignored paths are never durable anchors, and final verification gates need supported scopes with captured logs. Reading the request and retrieving memory is [agent-behavior.md](agent-behavior.md); using tools and the environment is [agent-tooling.md](agent-tooling.md).
@@ -123,7 +123,7 @@ Round 4 entries in `.goat-flow/learning-loop/footguns/docs-drift.md` (search: `R
 
 ## Lesson: Final verification gates need supported scopes and captured logs
 
-**Status:** active | **Created:** 2026-05-19 | **Incident count:** 16 | **Latest occurrence:** 2026-08-15
+**Status:** active | **Created:** 2026-05-19 | **Incident count:** 18 | **Latest occurrence:** 2026-08-27
 
 **Decision changed:** Use repository-owned package scripts when a verification target loads TypeScript. | **Trigger phase:** VERIFY
 
@@ -139,6 +139,10 @@ Evidence anchors: `test/integration/setup-install-agent-matrix.test.ts` (search:
 **Root cause:** I mixed repo-supported verification scopes with improvised paths and treated parallel final gates as interchangeable with a clean final evidence run. That made the first failure ambiguous and forced a rerun to recover the actual evidence.
 
 ### Incident Ledger
+
+**Recurrence 2026-08-27 (plan command shape):** After stopping M41 timing with its milestone-file path, I passed the same file to `plans check --strict`; the checker rejected it with `ENOTDIR` because `plans check` consumes the version directory while `plans time` consumes one milestone file. A failed invocation is not strict-plan evidence even when the corrected command follows immediately. Use the literal help example, capture each exit separately, and label only the directory-scoped run. Evidence anchors: `src/cli/help.ts` (search: `goat-flow plans check .goat-flow/plans/1.17.0 --strict`) and `src/cli/plans-export.ts` (search: `Cannot read plan directory`).
+
+**Recurrence 2026-08-27:** M41 ran `npx eslint test/integration/preflight-progress.test.ts` and appended a PASS label because the command exited zero, even though ESLint's only diagnostic said the file was ignored. `eslint.config.mjs` (search: `"test/**"`) makes that path outside the repository's ESLint scope. An ignored-file warning is not lint evidence: keep the repository-owned source lint scope, and cover ignored tests with typecheck, Prettier, and their runtime suite instead of forcing `--no-ignore`.
 
 **Recurrence 2026-08-14:** M03 ran `scripts/generate-managed-hook-desired-state.mjs` with plain Node.
 Plain Node could not resolve `registry.ts`'s `.js` import of the TypeScript manifest.
