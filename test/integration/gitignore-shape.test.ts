@@ -70,6 +70,7 @@ const EXPECTED_DECISIONS: ReadonlyArray<
   // Local-only content stays ignored.
   ["plans/1.16.0/M99.md", "!!"],
   ["scratchpad/x/y.md", "!!"],
+  ["write-claims/example.claim", "!!"],
   ["logs/sessions/2026.md", "!!"],
   ["logs/quality/r.json", "!!"],
   ["logs/review/r.txt", "!!"],

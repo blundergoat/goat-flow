@@ -115,6 +115,7 @@ export const REQUIRED_GOAT_FLOW_GITIGNORE_PATTERNS = [
   "!**/plans/**",
   "!scratchpad/",
   "!**/scratchpad/**",
+  "**/write-claims/",
   "**/logs/*/*/",
   "!logs/",
   "!**/logs/sessions/",

@@ -40,7 +40,7 @@ jobs:
       - name: Create gitignored runtime dirs
         run: |
           # Project runtime dirs (gitignored, needed by path-resolution checks)
-          mkdir -p .goat-flow/learning-loop/footguns .goat-flow/learning-loop/lessons
+          mkdir -p .goat-flow/learning-loop/footguns .goat-flow/learning-loop/lessons .goat-flow/write-claims
 
       - name: Install
         run: npm ci
@@ -170,13 +170,16 @@ jobs:
       - name: Create gitignored runtime dirs
         run: |
           # Project runtime dirs (gitignored, needed by path-resolution tests)
-          mkdir -p .goat-flow/learning-loop/footguns .goat-flow/learning-loop/lessons
+          mkdir -p .goat-flow/learning-loop/footguns .goat-flow/learning-loop/lessons .goat-flow/write-claims
 
       - name: Install
         run: npm ci
 
       - name: Build
         run: npm run build
+
+      - name: Path write claim contract
+        run: node --import tsx --test test/unit/path-write-claim.test.ts
 
       # Only the fast suite pins jq: gruff-code-quality-smoke.test.ts asserts against jq 1.6 behaviour.
       - name: Provision jq 1.6
@@ -216,7 +219,7 @@ jobs:
       - name: Create gitignored runtime dirs
         run: |
           # Project runtime dirs (gitignored, needed by path-resolution tests)
-          mkdir -p .goat-flow/learning-loop/footguns .goat-flow/learning-loop/lessons
+          mkdir -p .goat-flow/learning-loop/footguns .goat-flow/learning-loop/lessons .goat-flow/write-claims
 
       - name: Install
         run: npm ci
@@ -227,9 +230,9 @@ jobs:
       - name: Test (slow shard ${{ matrix.shard }}/5)
         run: npm run test:slow:ci -- --shard=${{ matrix.shard }}/5
 
-  # ADR-053 structured Claude handler coverage on the package-minimum Node.
-  # Executes the registered exec-form argv and its catchable-failure contract
-  # with only the runner's preinstalled PowerShell, Git Bash, and Node.
+  # ADR-048 claim coordination and ADR-053 structured Claude handler coverage on the package-minimum Node.
+  # Executes the cross-platform filesystem/process contract plus the registered exec-form argv and its catchable-failure contract with only
+  # the runner's preinstalled PowerShell, Git Bash, and Node.
   windows-hook-contracts:
     runs-on: windows-latest
     steps:
@@ -240,6 +243,8 @@ jobs:
           cache: "npm"
       - name: Install
         run: npm ci
+      - name: Path write claim contract
+        run: node --import tsx --test test/unit/path-write-claim.test.ts
       - name: Descriptor spawn matrix and focused hook contracts
         run: node --import tsx --test test/integration/hook-command-spawn-matrix.test.ts test/integration/hook-effective-state.test.ts
 

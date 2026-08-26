@@ -603,6 +603,36 @@ describe("checkDrift: artifact integrity", () => {
     }
   });
 
+  // Creates and removes a temporary project whose doc names a valid transient marker normally absent outside an active writer.
+  it("accepts an absent path-write claim reference", () => {
+    const fixtureRoot = setupFixture();
+    try {
+      const guidePath = join(fixtureRoot, "docs", "audit-checks.md");
+      mkdirSync(dirname(guidePath), { recursive: true });
+      writeFileSync(
+        guidePath,
+        "An active writer may own `.goat-flow/write-claims/example.claim`.\n",
+      );
+      const context = {
+        projectPath: fixtureRoot,
+        fs: createFS(fixtureRoot),
+      } as AuditContext;
+
+      const report = runFactualClaimChecks(context);
+      assert.equal(
+        report.findings.some(
+          (finding) =>
+            finding.rule === "path-ref-unresolved" &&
+            finding.message.includes("write-claims/example.claim"),
+        ),
+        false,
+        `local coordination path produced an unresolved-path finding: ${JSON.stringify(report.findings)}`,
+      );
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
   // Covers a doc reference pointing nowhere: writes the dangling path, which must be reported.
   it("reports an arbitrary missing documentation path", () => {
     const fixtureRoot = setupFixture();

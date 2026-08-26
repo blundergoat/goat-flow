@@ -26,6 +26,8 @@
 !**/plans/**
 !scratchpad/
 !**/scratchpad/**
+# Path-write claims are transient coordination markers. They stay ignored and blocking until owner release or explicit recovery.
+**/write-claims/
 # No committed content lives two levels below a logs directory. This guard keeps the `**/` re-includes above from reaching a nested
 # directory that happens to share a committed name (logs/quality/plans/, logs/review/hooks/, ...); test/integration/gitignore-shape.test.ts pins it.
 **/logs/*/*/

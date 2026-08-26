@@ -8,6 +8,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { REQUIRED_GOAT_FLOW_GITIGNORE_PATTERNS } from "../../src/cli/audit/check-goat-flow.js";
 import type { EvidenceEventKind } from "../../src/cli/evidence/envelope.js";
 
 const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
@@ -65,6 +66,13 @@ const LOCAL_STATE_README_ENTRIES = [
   ],
 ] as const;
 
+/** Manifest fields that define whether coordination state is local, created, and non-persistent. */
+interface LocalDataManifestContract {
+  required_files: string[];
+  required_dirs: string[];
+  directory_purposes: Record<string, string>;
+}
+
 /** Read one repository-relative contract surface for exact semantic checks. */
 function readContractFile(relativePath: string): string {
   return readFileSync(resolve(PROJECT_ROOT, relativePath), "utf-8");
@@ -103,6 +111,51 @@ describe("local data contract", () => {
     assertEveryEventKindBudgeted(architecture);
     assert.match(architecture, /route\/checkpoint\/promotion.*deferred/iu);
     assert.match(architecture, /other runtime event families.*deferred/iu);
+  });
+
+  // A claim must be locally available to cooperating writers without becoming durable evidence or an age-based cleanup target.
+  it("registers path-write claims as transient fail-closed coordination", () => {
+    const architecture = readContractFile(".goat-flow/architecture.md");
+    const manifest = JSON.parse(
+      readContractFile("workflow/manifest.json"),
+    ) as LocalDataManifestContract;
+    const template = readContractFile(
+      "workflow/setup/reference/goat-flow-gitignore",
+    );
+    const installedGitignore = readContractFile(".goat-flow/.gitignore");
+    const installer = readContractFile("workflow/install-goat-flow.sh");
+    const claimDirectory = ".goat-flow/write-claims/";
+    const ignorePattern = "**/write-claims/";
+
+    assert.match(
+      architecture,
+      /\*\*Local coordination state\*\*.*`\.goat-flow\/write-claims\/\*\.claim`.*do not expire.*explicit operator-confirmed recovery/iu,
+    );
+    assert.match(
+      architecture,
+      /Coordination claims are not generic cleanup candidates\.[^\n]*elapsed time never authorizes removal/iu,
+    );
+    assert.ok(manifest.required_dirs.includes(claimDirectory));
+    assert.match(
+      manifest.directory_purposes[claimDirectory] ?? "",
+      /exclusive path-write coordination.*do not expire.*explicit operator-confirmed recovery/iu,
+    );
+    assert.equal(
+      manifest.required_files.some((path) => path.startsWith(claimDirectory)),
+      false,
+    );
+    assert.equal(installedGitignore, template);
+    assert.ok(REQUIRED_GOAT_FLOW_GITIGNORE_PATTERNS.includes(ignorePattern));
+    assert.ok(
+      template
+        .split(/\r?\n/u)
+        .map((line) => line.trim())
+        .includes(ignorePattern),
+    );
+    assert.match(
+      installer,
+      /for dir in [^\n]*\.goat-flow\/write-claims[^\n]*; do/u,
+    );
   });
 
   describe("local-state guides", () => {
