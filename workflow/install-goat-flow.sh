@@ -2803,11 +2803,10 @@ fi
 # ==========================================================================
 # 5. Copy shared reference files (always overwrite - verbatim copies)
 # ==========================================================================
-echo "Shared references → .goat-flow/skill-docs/:"
+echo "Meta references → .goat-flow/skill-docs/:"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/reference/README.md" ".goat-flow/skill-docs/README.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/reference/skill-preamble.md" ".goat-flow/skill-docs/skill-preamble.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/reference/skill-conventions.md" ".goat-flow/skill-docs/skill-conventions.md"
-copy_file "$GOAT_FLOW_ROOT/workflow/skills/reference/agent-document-authoring.md" ".goat-flow/skill-docs/agent-document-authoring.md"
 
 echo "Standalone playbooks → .goat-flow/skill-docs/playbooks/:"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/README.md" ".goat-flow/skill-docs/playbooks/README.md"
@@ -2822,6 +2821,7 @@ copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/page-capture.md" ".goat-flo
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/release-notes.md" ".goat-flow/skill-docs/playbooks/release-notes.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/skill-playbook-authoring-sync.md" ".goat-flow/skill-docs/playbooks/skill-playbook-authoring-sync.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/test-selection.md" ".goat-flow/skill-docs/playbooks/test-selection.md"
+copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/writing-for-agents.md" ".goat-flow/skill-docs/playbooks/writing-for-agents.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/writing-sentence-diagnostics.md" ".goat-flow/skill-docs/playbooks/writing-sentence-diagnostics.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/writing-structure-diagnostics.md" ".goat-flow/skill-docs/playbooks/writing-structure-diagnostics.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/writing-style.md" ".goat-flow/skill-docs/playbooks/writing-style.md"

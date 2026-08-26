@@ -22,7 +22,6 @@
     ".goat-flow/skill-docs/README.md",
     ".goat-flow/skill-docs/skill-preamble.md",
     ".goat-flow/skill-docs/skill-conventions.md",
-    ".goat-flow/skill-docs/agent-document-authoring.md",
     ".goat-flow/skill-docs/playbooks/README.md",
     ".goat-flow/skill-docs/playbooks/browser-use.md",
     ".goat-flow/skill-docs/playbooks/changelog.md",
@@ -35,6 +34,7 @@
     ".goat-flow/skill-docs/playbooks/release-notes.md",
     ".goat-flow/skill-docs/playbooks/skill-playbook-authoring-sync.md",
     ".goat-flow/skill-docs/playbooks/test-selection.md",
+    ".goat-flow/skill-docs/playbooks/writing-for-agents.md",
     ".goat-flow/skill-docs/playbooks/writing-sentence-diagnostics.md",
     ".goat-flow/skill-docs/playbooks/writing-structure-diagnostics.md",
     ".goat-flow/skill-docs/playbooks/writing-style.md",
@@ -135,10 +135,6 @@
       "ownership": "system-owned",
       "source": "workflow/skills/reference/skill-conventions.md"
     },
-    ".goat-flow/skill-docs/agent-document-authoring.md": {
-      "ownership": "system-owned",
-      "source": "workflow/skills/reference/agent-document-authoring.md"
-    },
     ".goat-flow/skill-docs/playbooks/README.md": {
       "ownership": "system-owned",
       "source": "workflow/skills/playbooks/README.md"
@@ -186,6 +182,10 @@
     ".goat-flow/skill-docs/playbooks/test-selection.md": {
       "ownership": "system-owned",
       "source": "workflow/skills/playbooks/test-selection.md"
+    },
+    ".goat-flow/skill-docs/playbooks/writing-for-agents.md": {
+      "ownership": "system-owned",
+      "source": "workflow/skills/playbooks/writing-for-agents.md"
     },
     ".goat-flow/skill-docs/playbooks/writing-sentence-diagnostics.md": {
       "ownership": "system-owned",
@@ -309,8 +309,8 @@
     ".goat-flow/logs/review/": "Workspace-local, gitignored-by-design review artifact history. Refutation ledgers and cross-model refuter outputs from `/goat-review` runs are stored here so review integrity evidence survives session interruptions. Only README.md is committed.",
     ".goat-flow/logs/security/": "Workspace-local, gitignored-by-design security assessment history. Saved `/goat-security` run outputs for reference across sessions. Only README.md is committed.",
     ".goat-flow/scratchpad/": "Local, gitignored-by-design working notes. Session-scoped WIP; not a persistence gap. Durable project knowledge belongs in lessons/, footguns/, or decisions/. Transient continuity notes belong in logs/sessions/. Only README.md, .gitignore, and .gitkeep are committed.",
-    ".goat-flow/skill-docs/": "Committed shared references and reserved guidance placeholders. Holds README.md, skill-preamble.md (Proof Gate, OBSERVED/INFERRED tagging, evidence discipline; loaded every skill invocation), skill-conventions.md (footgun/lesson entry shapes, frontmatter contracts; loaded on full-depth), and the unrouted agent-document-authoring.md placeholder. Only explicitly configured composition inputs are inherited by skills.",
-    ".goat-flow/skill-docs/playbooks/": "Committed standalone playbooks for tools and capabilities available to coding agents. Holds README.md as the capability-playbook index, browser-use.md for browser evidence capture, changelog.md for CHANGELOG.md discipline, code-comments.md for inline-comment discipline, gruff-code-quality.md for gruff analyzer triage/fix/verification workflow across gruff-go/gruff-rs/gruff-ts/gruff-php/gruff-py, hook-policy-testing.md for deny-hook policy, mirror, and registration verification, naming-and-placement.md for responsibility-first placement and truthful identifier claims, observability.md for instrumentation discipline, page-capture.md for Playwright page-capture usage tiers, release-notes.md for per-release narrative discipline, skill-playbook-authoring-sync.md for built-in playbook shape, mirroring, discovery, registration, and verification, test-selection.md for value-led test dispositions and placement, writing-sentence-diagnostics.md for sentence-level reader costs, writing-structure-diagnostics.md for document-level assembly defects, and writing-style.md for the human-read prose correctness router. Loaded on-demand by skills/agents - never composed into a skill at scoring time.",
+    ".goat-flow/skill-docs/": "Committed shared meta references composed into every goat-flow skill at scoring and runtime. Holds README.md, skill-preamble.md (Proof Gate, OBSERVED/INFERRED tagging, evidence discipline; loaded every skill invocation), skill-conventions.md (footgun/lesson entry shapes, frontmatter contracts; loaded on full-depth). These describe the universal contract every skill inherits - adding a new file here commits every skill to inherit it.",
+    ".goat-flow/skill-docs/playbooks/": "Committed standalone playbooks for tools and capabilities available to coding agents. Holds README.md as the capability-playbook index, browser-use.md for browser evidence capture, changelog.md for CHANGELOG.md discipline, code-comments.md for inline-comment discipline, gruff-code-quality.md for gruff analyzer triage/fix/verification workflow across gruff-go/gruff-rs/gruff-ts/gruff-php/gruff-py, hook-policy-testing.md for deny-hook policy, mirror, and registration verification, naming-and-placement.md for responsibility-first placement and truthful identifier claims, observability.md for instrumentation discipline, page-capture.md for Playwright page-capture usage tiers, release-notes.md for per-release narrative discipline, skill-playbook-authoring-sync.md for built-in playbook shape, mirroring, discovery, registration, and verification, test-selection.md for value-led test dispositions and placement, writing-for-agents.md for authoring agent-read documents (skills, playbooks, shared preamble/conventions, instruction files, hook messages, and README discovery rows), writing-sentence-diagnostics.md for sentence-level reader costs, writing-structure-diagnostics.md for document-level assembly defects, and writing-style.md for the human-read prose correctness router. Loaded on-demand by skills/agents - never composed into a skill at scoring time.",
     ".goat-flow/skill-docs/skill-quality-testing/": "Committed skill-authoring methodology pack. README.md indexes the pack; tdd-iteration.md, adversarial-framing.md, and deployment.md cover skill TDD, pressure-testing, and deployment discipline.",
     ".goat-flow/hooks/": "Committed central hook runtime. Holds the cross-platform launcher, its bounded launch runtime and provider adapters, deny-dangerous.sh, gruff-code-quality.sh, post-turn-safety.sh, and hook-specific policy modules under subdirectories.",
     ".goat-flow/hooks/deny-dangerous/": "Committed shared hook policy store sourced by each agent's deny-dangerous.sh dispatcher. Holds the destructive-shell, secret-path, repository-write policy modules and the central deny-dangerous self-test.",
@@ -607,6 +607,9 @@
           "Prose surfaces route the same way before writing",
           "ordinary README prose",
           "need `writing-style.md`",
+          "README discovery rows",
+          "hook messages",
+          "need `writing-for-agents.md`",
           "the trigger is touching the surface, not the request naming it"
         ]
       }

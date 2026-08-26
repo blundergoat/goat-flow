@@ -29,13 +29,12 @@ Each SKILL.md MUST include:
 
 **IMPORTANT: Install skills VERBATIM from the templates. Do NOT adapt, compress, rewrite, or remove any sections.** Copy `SKILL.md` plus any `references/*.md` files listed under that skill, and delete any stale Markdown files in that skill's `references/` directory that are no longer listed in `workflow/manifest.json` `skills.references`. Skills are the same for every project - project-specific context comes from the instruction file, `.goat-flow/learning-loop/footguns/`, `.goat-flow/learning-loop/lessons/`, and any optional local instruction files the project already has. Cutting or rewriting skill content causes more damage than generic examples ever will.
 
-## Shared references
+## Shared meta references
 
-Install the managed references from `workflow/skills/reference/`:
+Install the meta references from `workflow/skills/reference/`:
 - `.goat-flow/skill-docs/README.md` from `workflow/skills/reference/README.md` - meta references index
 - `.goat-flow/skill-docs/skill-preamble.md` from `workflow/skills/reference/skill-preamble.md` - essential preamble read on every skill invocation
 - `.goat-flow/skill-docs/skill-conventions.md` from `workflow/skills/reference/skill-conventions.md` - full conventions reference read only on full-depth invocations
-- `.goat-flow/skill-docs/agent-document-authoring.md` from `workflow/skills/reference/agent-document-authoring.md` - reserved placeholder; do not route or load it until its guidance is authored
 
 ## Standalone playbooks
 
@@ -52,6 +51,7 @@ Install the playbook pack from `workflow/skills/playbooks/`:
 - `.goat-flow/skill-docs/playbooks/release-notes.md` from `workflow/skills/playbooks/release-notes.md` - per-release narrative discipline derived from the changelog source of truth
 - `.goat-flow/skill-docs/playbooks/skill-playbook-authoring-sync.md` from `workflow/skills/playbooks/skill-playbook-authoring-sync.md` - built-in playbook shape, source/install enrollment, discovery, and verification contract
 - `.goat-flow/skill-docs/playbooks/test-selection.md` from `workflow/skills/playbooks/test-selection.md` - value-led test selection, placement, disposition, and mutation-handoff discipline
+- `.goat-flow/skill-docs/playbooks/writing-for-agents.md` from `workflow/skills/playbooks/writing-for-agents.md` - authoring discipline for agent-read documents: skills, playbooks, shared preamble/conventions, instruction files, hook messages, and README discovery rows
 - `.goat-flow/skill-docs/playbooks/writing-sentence-diagnostics.md` from `workflow/skills/playbooks/writing-sentence-diagnostics.md` - sentence-level reader-cost diagnostics after the writing core identifies an objective trigger
 - `.goat-flow/skill-docs/playbooks/writing-structure-diagnostics.md` from `workflow/skills/playbooks/writing-structure-diagnostics.md` - document-level assembly diagnostics before sentence work
 - `.goat-flow/skill-docs/playbooks/writing-style.md` from `workflow/skills/playbooks/writing-style.md` - compact correctness and routing owner for human-read prose, with agent-read control text explicitly exempt
@@ -103,7 +103,6 @@ The installer prunes stale per-skill Markdown reference files automatically befo
 - [ ] `.goat-flow/skill-docs/README.md` exists
 - [ ] `.goat-flow/skill-docs/skill-preamble.md` exists
 - [ ] `.goat-flow/skill-docs/skill-conventions.md` exists
-- [ ] `.goat-flow/skill-docs/agent-document-authoring.md` exists
 - [ ] `.goat-flow/skill-docs/playbooks/README.md` exists
 - [ ] `.goat-flow/skill-docs/playbooks/browser-use.md` exists
 - [ ] `.goat-flow/skill-docs/playbooks/changelog.md` exists
@@ -116,6 +115,7 @@ The installer prunes stale per-skill Markdown reference files automatically befo
 - [ ] `.goat-flow/skill-docs/playbooks/release-notes.md` exists
 - [ ] `.goat-flow/skill-docs/playbooks/skill-playbook-authoring-sync.md` exists
 - [ ] `.goat-flow/skill-docs/playbooks/test-selection.md` exists
+- [ ] `.goat-flow/skill-docs/playbooks/writing-for-agents.md` exists
 - [ ] `.goat-flow/skill-docs/playbooks/writing-sentence-diagnostics.md` exists
 - [ ] `.goat-flow/skill-docs/playbooks/writing-structure-diagnostics.md` exists
 - [ ] `.goat-flow/skill-docs/playbooks/writing-style.md` exists
