@@ -51,8 +51,8 @@ describe("hook registrar: surface detection, toggles, and sync", () => {
   it("treats Windows case and separator variants as the same physical root", () => {
     assert.equal(
       filesystemPathsAreEquivalent(
-        "C:\\Work\\HealthKit",
-        "c:/work/healthkit",
+        "C:\\Work\\Project",
+        "c:/work/project",
         win32.relative,
       ),
       true,

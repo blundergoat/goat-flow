@@ -62,6 +62,7 @@ const SHARED_PLAYBOOK_FILENAMES = [
   "release-notes.md",
   "skill-playbook-authoring-sync.md",
   "test-selection.md",
+  "writing-for-agents.md",
   "writing-sentence-diagnostics.md",
   "writing-structure-diagnostics.md",
   "writing-style.md",
@@ -152,16 +153,6 @@ export function setupFixture(): string {
     join(root, "workflow", "skills", "reference", "skill-conventions.md"),
     SHARED_STUB,
   );
-  writeFileSync(
-    join(
-      root,
-      "workflow",
-      "skills",
-      "reference",
-      "agent-document-authoring.md",
-    ),
-    SHARED_STUB,
-  );
   // Canonical playbooks represent what a future user receives from setup.
   writeSharedPlaybookFixtures(join(root, "workflow", "skills", "playbooks"));
   writeFileSync(
@@ -214,10 +205,6 @@ export function setupFixture(): string {
   );
   writeFileSync(
     join(root, ".goat-flow", "skill-docs", "skill-conventions.md"),
-    SHARED_STUB,
-  );
-  writeFileSync(
-    join(root, ".goat-flow", "skill-docs", "agent-document-authoring.md"),
     SHARED_STUB,
   );
   // Installed playbooks represent the exact references an agent opens for a user.
@@ -434,8 +421,8 @@ export function patchInstallRoundTripFixture(root: string): {
     writeFileSync(
       codeMapPath,
       codeMap.replace(
-        "│   ├── reference/               = active meta-reference templates plus the reserved agent-document-authoring.md placeholder",
-        `${fixtureSkillRow}\n│   ├── reference/               = active meta-reference templates plus the reserved agent-document-authoring.md placeholder`,
+        "│   ├── reference/               = skill-preamble.md and skill-conventions.md templates",
+        `${fixtureSkillRow}\n│   ├── reference/               = skill-preamble.md and skill-conventions.md templates`,
       ),
     );
   }

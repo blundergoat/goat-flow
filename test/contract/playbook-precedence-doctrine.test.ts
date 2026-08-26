@@ -18,6 +18,7 @@ const AUTHORITY_PLAYBOOKS = [
   "gruff-code-quality.md",
   "naming-and-placement.md",
   "test-selection.md",
+  "writing-for-agents.md",
   "writing-sentence-diagnostics.md",
   "writing-structure-diagnostics.md",
   "writing-style.md",

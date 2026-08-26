@@ -107,6 +107,32 @@ describe("hook fact extraction", () => {
     assert.equal(extractSkillFacts(fs, STUB_AGENT_PROFILE).hasDispatcher, true);
   });
 
+  it("reads managed Claude exec operands before inert shell routes", () => {
+    const claudeTemplate = JSON.parse(
+      readFileSync(
+        resolve(PROJECT_ROOT, "workflow/hooks/agent-config/claude.json"),
+        "utf8",
+      ),
+    ) as unknown;
+
+    assert.deepEqual(
+      {
+        deny: buildDenyRegistration(STUB_AGENT_PROFILE, claudeTemplate),
+        postTurn: buildHookRegistration(STUB_AGENT_PROFILE, claudeTemplate),
+      },
+      {
+        deny: {
+          denyIsRegistered: true,
+          denyRegisteredPath: ".goat-flow/hooks/deny-dangerous.sh",
+        },
+        postTurn: {
+          postTurnRegistered: true,
+          postTurnRegisteredPath: ".goat-flow/hooks/post-turn-safety.sh",
+        },
+      },
+    );
+  });
+
   it("normalizes root-resolving hook launcher commands", () => {
     const config = {
       hooks: {

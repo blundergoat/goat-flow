@@ -34,6 +34,7 @@ describe("ADR-023 word budget tiers", () => {
     "release-notes.md",
     "skill-playbook-authoring-sync.md",
     "test-selection.md",
+    "writing-for-agents.md",
     "writing-sentence-diagnostics.md",
     "writing-structure-diagnostics.md",
     "writing-style.md",
@@ -201,6 +202,10 @@ describe("ADR-023 word budget tiers", () => {
       // Raised 2880 -> 2980 -> 3000 on 2026-08-17: first for width-resolution guidance and the two mechanical gate commands, then to swap
       // "each tag adds meaning beyond its type" for the closed list of admissible contents, after a sweep found @param lines restating the signature.
       { filename: "code-comments.md", cap: 3000 },
+      // Set 2026-08-23 at 2800 from a measured 2593-word body, then re-based to 2900 the same day after review added a Project
+      // Authority section while Antipatterns was cut as duplication; the live body measured 2745. The playbook teaches pruning, so it
+      // stays under the 3000 tier.
+      { filename: "writing-for-agents.md", cap: 2900 },
     ] as const;
 
     for (const { filename, cap } of rolloutBudgets) {

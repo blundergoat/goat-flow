@@ -34,6 +34,7 @@ const standalonePlaybookPaths = [
   ".goat-flow/skill-docs/playbooks/release-notes.md",
   ".goat-flow/skill-docs/playbooks/skill-playbook-authoring-sync.md",
   ".goat-flow/skill-docs/playbooks/test-selection.md",
+  ".goat-flow/skill-docs/playbooks/writing-for-agents.md",
   ".goat-flow/skill-docs/playbooks/writing-sentence-diagnostics.md",
   ".goat-flow/skill-docs/playbooks/writing-structure-diagnostics.md",
   ".goat-flow/skill-docs/playbooks/writing-style.md",
@@ -42,6 +43,17 @@ const standalonePlaybookPaths = [
 const hookPolicyPlaybookPaths = [
   "workflow/skills/playbooks/hook-policy-testing.md",
   ".goat-flow/skill-docs/playbooks/hook-policy-testing.md",
+] as const;
+
+const writingForAgentsScopePaths = [
+  "workflow/setup/03-install-skills.md",
+  "workflow/manifest.json",
+  ".goat-flow/code-map.md",
+  "src/cli/prompt/compose-quality-agent-setup.ts",
+  ".goat-flow/skill-docs/skill-conventions.md",
+  "workflow/skills/reference/skill-conventions.md",
+  ".goat-flow/skill-docs/playbooks/writing-for-agents.md",
+  "workflow/skills/playbooks/writing-for-agents.md",
 ] as const;
 
 /** The one copyable command a reader runs when a provider denies the quoted `--check` operand first. */
@@ -245,6 +257,26 @@ function playbookContractContext(
 }
 
 describe("standalone playbook audit contract", () => {
+  it("keeps writing-for-agents scope complete across discovery surfaces", () => {
+    for (const scopePath of writingForAgentsScopePaths) {
+      const scopeText = readFileSync(join(process.cwd(), scopePath), "utf8");
+      for (const requiredScope of [
+        /skills?/u,
+        /playbooks?/u,
+        /preamble/u,
+        /instruction files?/u,
+        /hook messages?/u,
+        /README discovery rows?/u,
+      ]) {
+        assert.match(
+          scopeText,
+          requiredScope,
+          `${scopePath}: incomplete scope`,
+        );
+      }
+    }
+  });
+
   it("registers hook-policy-testing.md for audit and consumer discovery", () => {
     assert.ok(
       STANDALONE_PLAYBOOK_FILES.some(

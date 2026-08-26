@@ -1,6 +1,7 @@
 /**
- * Regression test for the preflight shared-reference sync checks.
- * Verifies the diff-based checks detect when template and installed copies diverge.
+ * Regression test for the preflight preamble/conventions sync check.
+ * Verifies the diff-based check correctly detects when template and installed
+ * copies of skill-preamble.md or skill-conventions.md diverge.
  *
  * Regression detection runs in a tmpdir - never mutates tracked repo files.
  */
@@ -42,14 +43,6 @@ const TEMPLATE_CONVENTIONS = resolve(
 const INSTALLED_CONVENTIONS = resolve(
   PROJECT_ROOT,
   ".goat-flow/skill-docs/skill-conventions.md",
-);
-const TEMPLATE_AGENT_DOCUMENT_AUTHORING = resolve(
-  PROJECT_ROOT,
-  "workflow/skills/reference/agent-document-authoring.md",
-);
-const INSTALLED_AGENT_DOCUMENT_AUTHORING = resolve(
-  PROJECT_ROOT,
-  ".goat-flow/skill-docs/agent-document-authoring.md",
 );
 const TEMPLATE_BROWSER_USE = resolve(
   PROJECT_ROOT,
@@ -130,6 +123,14 @@ const TEMPLATE_TEST_SELECTION = resolve(
 const INSTALLED_TEST_SELECTION = resolve(
   PROJECT_ROOT,
   ".goat-flow/skill-docs/playbooks/test-selection.md",
+);
+const TEMPLATE_WRITING_FOR_AGENTS = resolve(
+  PROJECT_ROOT,
+  "workflow/skills/playbooks/writing-for-agents.md",
+);
+const INSTALLED_WRITING_FOR_AGENTS = resolve(
+  PROJECT_ROOT,
+  ".goat-flow/skill-docs/playbooks/writing-for-agents.md",
 );
 const TEMPLATE_WRITING_STYLE = resolve(
   PROJECT_ROOT,
@@ -239,22 +240,6 @@ describe("preamble/conventions sync: current state", () => {
       diffQuiet(TEMPLATE_CONVENTIONS, INSTALLED_CONVENTIONS),
       0,
       "skill-conventions.md: template and installed should match",
-    );
-  });
-
-  it("template and installed agent-document-authoring.md match", () => {
-    assertMirrorExists(
-      TEMPLATE_AGENT_DOCUMENT_AUTHORING,
-      INSTALLED_AGENT_DOCUMENT_AUTHORING,
-      "agent-document-authoring.md",
-    );
-    assert.equal(
-      diffQuiet(
-        TEMPLATE_AGENT_DOCUMENT_AUTHORING,
-        INSTALLED_AGENT_DOCUMENT_AUTHORING,
-      ),
-      0,
-      "agent-document-authoring.md: template and installed should match",
     );
   });
 
@@ -389,6 +374,20 @@ describe("preamble/conventions sync: current state", () => {
       diffQuiet(TEMPLATE_TEST_SELECTION, INSTALLED_TEST_SELECTION),
       0,
       "test-selection.md: template and installed should match",
+    );
+  });
+
+  // Agent-document authoring guidance ships to consumers, so the installed copy must not drift.
+  it("template and installed writing-for-agents.md match", () => {
+    assertMirrorExists(
+      TEMPLATE_WRITING_FOR_AGENTS,
+      INSTALLED_WRITING_FOR_AGENTS,
+      "writing-for-agents.md",
+    );
+    assert.equal(
+      diffQuiet(TEMPLATE_WRITING_FOR_AGENTS, INSTALLED_WRITING_FOR_AGENTS),
+      0,
+      "writing-for-agents.md: template and installed should match",
     );
   });
 
