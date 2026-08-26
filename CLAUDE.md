@@ -44,7 +44,7 @@ Conventional `type(scope): subject` - imperative, ≤72 chars, concrete verbs no
 ## Key Resources
 
 - **Learning loop** (grep before every change): `.goat-flow/learning-loop/footguns/`, `.goat-flow/learning-loop/lessons/`, `.goat-flow/learning-loop/patterns/`, `.goat-flow/learning-loop/decisions/`
-- **Tool playbooks**: `.goat-flow/skill-docs/playbooks/README.md` is the full index (examples: `.goat-flow/skill-docs/playbooks/browser-use.md`, `.goat-flow/skill-docs/playbooks/page-capture.md`; disciplines: changelog, release notes, observability, comments, prose style) - read when named or when the work touches that discipline's surface, and read BEFORE declaring a tool unavailable
+- **Tool playbooks**: `.goat-flow/skill-docs/playbooks/README.md` is the full index (examples: `.goat-flow/skill-docs/playbooks/browser-use.md`, `.goat-flow/skill-docs/playbooks/page-capture.md`; disciplines: changelog, release notes, observability, comments, prose style, writing for agents) - read when named or when the work touches that discipline's surface, and read BEFORE declaring a tool unavailable
 
 ## Essential Commands
 
@@ -67,7 +67,7 @@ MUST read relevant files before changes. Never fabricate codebase facts. Cross-d
 - For URL, local HTML, localhost, screenshot, rendered UI, or browser-visible behaviour, check browser evidence first: `command -v browser-use || command -v browser-use-python`; if available use `browser-use open/state/screenshot`, otherwise ask before installing or use manual fallback.
 - Use INDEX-first retrieval across `.goat-flow/learning-loop/{footguns,lessons,patterns}/INDEX.md`; include `.goat-flow/learning-loop/decisions/INDEX.md` for architecture, policy, or setup. Open source entries only on candidate hits; grep bucket files only after the INDEX pass or on a known retrieval miss; reword once on zero hits, then record the miss. Recursive searches under `.goat-flow/` that must include ignored plans/logs MUST use `command grep -rn --exclude-dir=.git --exclude-dir=scratchpad <pattern> .goat-flow/`; Claude Code's session grep shim and `git grep` omit ignored local state, so zero hits from those tools do not prove absence.
 - Before declaring any tool or capability unavailable, read the matching playbook in `.goat-flow/skill-docs/playbooks/` (e.g. `browser-use.md`, `page-capture.md`) and run that doc's "Availability Check" section verbatim - project-local CLI tools at `~/.local/bin/` are valid; do not conflate "no harness/MCP tool" with "no tool".
-- Prose surfaces route the same way before writing: `CHANGELOG.md` needs `changelog.md`; release notes need `release-notes.md`; ordinary README prose, `docs/`, PR/issue text, and learning-loop entry bodies need `writing-style.md` - the trigger is touching the surface, not the request naming it.
+- Prose surfaces route the same way before writing: `CHANGELOG.md` needs `changelog.md`; release notes need `release-notes.md`; ordinary README prose, `docs/`, PR/issue text, and learning-loop entry bodies need `writing-style.md`; README discovery rows, skills, playbooks, shared preamble/conventions, instruction files, and hook messages need `writing-for-agents.md` - the trigger is touching the surface, not the request naming it.
 - Before creating, changing, reviewing, consolidating, moving, or pruning tests, read `.goat-flow/skill-docs/playbooks/test-selection.md`.
 BAD: "The CLI has 30 audit checks" (guessed without reading)
 GOOD: Read check-goat-flow.ts → 16 setup checks, check-agent-setup.ts → 4 agent checks (20 total)

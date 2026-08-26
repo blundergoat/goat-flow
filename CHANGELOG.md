@@ -12,6 +12,7 @@
 - **`/goat-plan` wires new milestones into an existing plan** - It also updates the terminal milestone's `Depends on` and the ISSUE band and totals.
 - **One command refreshes every hook scenario** - `goat-flow hooks verify --scenario all` runs the deny, post-turn, and Gruff groups in sequence, keeps every verdict when one fails, and wraps them in a `goat-flow.hook-runtime-batch.v1` report.
 - **Installs say why a hook was left unregistered** - A non-Git workspace that cannot satisfy the post-turn scan-root contract now names the hook, the reason, and the fix instead of skipping it silently.
+- **New `writing-for-agents.md` playbook** - Installs with the shared pack and states what earns a line in a skill, playbook, or instruction file; the instruction files' prose-surface READ line and `skill-conventions.md` route that authoring to it.
 
 ## v1.16.0 - 2026-08-20
 
