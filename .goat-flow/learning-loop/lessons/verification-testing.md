@@ -1,6 +1,6 @@
 ---
 category: verification-testing
-last_reviewed: 2026-08-26
+last_reviewed: 2026-08-27
 ---
 
 **Scope:** What a test must actually establish - observable contracts over incidental shape, deadlines independent of the thing under test, telling a transient failure apart from a regression, and the ways a passing suite still fails to prove its claim. Proving a guard or scanner works is [verification-scanners.md](verification-scanners.md); building fixtures is [test-fixtures.md](test-fixtures.md).
@@ -205,3 +205,18 @@ Evidence anchors: `test/contract/skill-hardening-shared-1.test.ts` (search: `req
 **Root cause:** I treated a multi-file patch as a transaction and reasoned from the final failing hunk instead of checking the state of every target. The retry therefore risked applying already-landed edits twice or building new hunks against stale bytes.
 
 **Prevention:** Prefer one file or independently recoverable hunk group per patch when source is changing concurrently. After any patch failure, inspect timestamps and exact semantic anchors across every target before retrying, then generate the retry from current bytes. The affected artifacts were gitignored milestone files, so they are deliberately not cited as durable learning-loop anchors; the evidence was the failed patch result followed by the same-session target-by-target read.
+
+---
+
+## Lesson: Provider-output probes must assert semantic payloads, not label adjacency
+
+**Created:** 2026-08-27
+**Decision changed:** Verify the unique provider payload independently from any UI or summary prefix.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Parse the provider event when a structured field is available; otherwise search for the unique semantic marker separately from rendering labels and metadata. When a summary boolean conflicts with its captured raw event, inspect the event before classifying the provider run.
+
+**What happened:** A trusted Codex PostToolUse probe delivered the analyzer-only marker inside a valid JSONL agent message, but its summary boolean reported false. The verifier expected the marker immediately after `LIVE_CODEX_TRUSTED_PROVIDER_VISIBLE:`; Codex correctly inserted the finding's rule, path, and severity first.
+
+**Root cause:** The probe coupled delivery proof to one rendered sentence shape instead of the stable analyzer marker. Its selected raw JSONL and analyzer-start counters proved the event, while the adjacency assertion measured incidental formatting.

@@ -223,8 +223,8 @@ describe("effective hook state", () => {
     );
   });
 
-  /** Current deny proof expires while changed result-hook registrations stay stale. */
-  it("expires exact Codex proof and keeps invalidated result hooks stale", () => {
+  /** Current deny and Gruff proof expire while the uncaptured Stop registration stays stale. */
+  it("expires exact Codex proof while keeping uncaptured Stop stale", () => {
     const denySpec = getHookSpec("deny-dangerous");
     const gruffSpec = getHookSpec("gruff-code-quality");
     const postTurnSpec = getHookSpec("post-turn-safety");
@@ -253,13 +253,26 @@ describe("effective hook state", () => {
       "provider-capture-stale",
     );
 
-    for (const evidence of [gruffCodexEvidence, postTurnCodexEvidence]) {
-      assert.equal(evidence.expiresAt, undefined);
-      assert.equal(
-        currentHookProviderSupportGate(evidence),
-        "provider-capture-stale",
-      );
-    }
+    assert.equal(
+      currentHookProviderSupportGate(
+        gruffCodexEvidence,
+        new Date("2026-09-25T20:17:22.830Z"),
+      ),
+      "scenario-unverified",
+    );
+    assert.equal(
+      currentHookProviderSupportGate(
+        gruffCodexEvidence,
+        new Date("2026-09-25T20:17:22.831Z"),
+      ),
+      "provider-capture-stale",
+    );
+
+    assert.equal(postTurnCodexEvidence.expiresAt, undefined);
+    assert.equal(
+      currentHookProviderSupportGate(postTurnCodexEvidence),
+      "provider-capture-stale",
+    );
   });
 
   // A desired hook with no exact registration is not protected merely because the registry lists it.

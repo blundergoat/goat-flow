@@ -155,7 +155,8 @@ const HOOKS: HookSpec[] = [
       },
       codex: {
         identity: "hook-provider-adapter.v1:codex:post-tool",
-        effectiveSupportGate: "provider-capture-stale",
+        effectiveSupportGate: "scenario-unverified",
+        expiresAt: "2026-09-25T20:17:22.830Z",
       },
       antigravity: {
         identity: "hook-provider-adapter.v1:antigravity:post-tool",
