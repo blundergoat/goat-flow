@@ -1,6 +1,6 @@
 ---
 category: verification-validators
-last_reviewed: 2026-08-23
+last_reviewed: 2026-08-26
 ---
 
 **Scope:** Getting a checker itself right - regex and wildcard construction, path resolution inside guards, what a validator must inventory, and counting contracts between a check and what it reports. Whether a claim was verified at all is [verification.md](verification.md).
@@ -53,15 +53,17 @@ last_reviewed: 2026-08-23
 ## Lesson: Harness fixture counts must match the reported unit
 
 **Status:** active | **Created:** 2026-05-25
-**Incident count:** 2 | **Latest occurrence:** 2026-08-10
+**Incident count:** 3 | **Latest occurrence:** 2026-08-26
+
+**Prevention:** Name and assert the reported unit explicitly: profiles, unique files, unique identifiers, representations, findings, or checks. Normalize before counting identities, and assert representation cardinality separately when case or separator variants are part of the fixture. When multiple agents share one instruction file, document that duplicate-path case next to the fixture helper. Evidence anchors: `test/unit/audit-harness/check-evidence-before-claims.test.ts` (search: `unique present instruction files`), `src/cli/audit/harness/check-verification.ts` (search: `instructionFilePaths`), `test/fixtures/evidence-before-claims.ts` (search: `antigravity: "AGENTS.md"`).
 
 **What happened:** During the gruff documentation pass on `src/cli/audit/harness/check-verification.ts`, the focused evidence-before-claims test failed because the fixture expected `4 present instruction file` even though Codex and Antigravity both pointed at the same `AGENTS.md`. The harness reported the correct deduplicated count: 3 unique present instruction files.
 
 **Root cause:** The assertion counted agent profiles, while the check reports unique instruction-file paths. Shared instruction files make those units diverge.
 
-**Prevention:** In harness tests, name and assert the reported unit explicitly: profiles, unique files, findings, or checks. When a fixture deliberately maps multiple agents to the same instruction file, document that duplicate-path case next to the fixture helper. Evidence anchors: `test/unit/audit-harness/check-evidence-before-claims.test.ts` (search: `unique present instruction files`), `src/cli/audit/harness/check-verification.ts` (search: `instructionFilePaths`), `test/fixtures/evidence-before-claims.ts` (search: `antigravity: "AGENTS.md"`).
-
 **Recurrence (2026-08-10):** A migrated Gruff result fixture asserted only the first finding code. Replacing that partial check with the complete user-visible code list failed because the analyzer envelope also carries `naming.short`. The expected result now enumerates both findings, so a missing or extra detail row is visible. Evidence anchors: `test/integration/hook-provider-contracts.test.ts` (search: `expectedFindingCodes`) and `test/integration/gruff-code-quality-smoke.helpers.ts` (search: `FINDING_GRUFF_CONTRACT_ENVELOPE`).
+
+**Recurrence 2026-08-26:** M55's privacy proof described two case and separator path spellings as two restricted names. Its first derived guard normalized both spellings to one project identifier, then failed because the assertion required two unique identifiers. Separating identity from representation produced the truthful contract: one identifier, two path spellings, and zero case-insensitive tracked hits. Evidence anchor: `test/unit/hook-registrar-surfaces.test.ts` (search: `treats Windows case and separator variants as the same physical root`) preserves the two-representation invariant without retaining the historical identifier.
 
 ## Lesson: Validators can require explicit inventories and phrases despite README pointers
 
