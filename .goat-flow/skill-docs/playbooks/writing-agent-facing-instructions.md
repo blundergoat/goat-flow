@@ -1,9 +1,9 @@
 ---
 goat-flow-reference-version: "1.16.0"
 ---
-# Writing for Agents
+# Writing Agent-Facing Instructions
 
-Use this when creating or editing text an agent executes from: a skill, a playbook, a shared preamble or conventions file, an instruction file (`CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.md`), a hook message, or a README discovery row. `writing-style.md` owns human-read prose and exempts these surfaces because emphasis, structure, and deliberate repetition can be compliance mechanisms; this playbook owns the control text inside that exemption.
+Use this when creating or editing text an agent executes from: a skill, a playbook, a shared preamble or conventions file, an instruction file (`CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.md`), a hook message, or a README discovery row. `writing-human-facing-prose.md` owns human-read prose and exempts these surfaces because emphasis, structure, and deliberate repetition can be compliance mechanisms; this playbook owns the control text inside that exemption.
 
 > **Illustrative examples - shape only; never evidence.** Examples below demonstrate form, not recorded incidents.
 
@@ -14,6 +14,8 @@ This is a documentary reference, not a runnable tool; no CLI probe applies. Load
 ## Project Authority
 
 Project conventions govern shape, vocabulary, budgets, and supported surfaces. Explicit current instructions and the authoritative project hierarchy stay higher. Safety, architecture, verified facts, evidence requirements, licences, permission boundaries, and verification gates are never superseded here.
+
+When no project convention answers an authoring question, use this playbook's generic default.
 
 Before writing project policy, inspect the applicable instructions, source, configuration, tests, CI, documentation, and relevant history. Preserve useful guidance and ownership. Do not invent conventions, commands, capabilities, or workflows or replace an established file merely to fit a template.
 
@@ -225,7 +227,7 @@ Walk this once against the actual draft before claiming the document is done.
 
 ## Related References
 
-- `writing-style.md` - human-read prose; its Scope Gate exempts the agent-control surfaces this playbook owns.
+- `writing-human-facing-prose.md` - human-read prose; its Scope Gate exempts the agent-control surfaces this playbook owns.
 - `skill-playbook-authoring-sync.md` - frontmatter, first-H2, registration, budget, and structural contract for a playbook; this playbook owns the behaviour inside that frame.
 - `.goat-flow/skill-docs/skill-quality-testing/README.md` - failing-test-first methodology, fixtures, controls, evaluation evidence, and deployment gate for skills.
 - `code-comments.md` - code comments and docstrings, which are neither human prose nor agent control text.

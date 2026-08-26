@@ -1,6 +1,6 @@
 ---
 category: agent-behavior
-last_reviewed: 2026-08-23
+last_reviewed: 2026-08-26
 ---
 
 **Scope:** Reading the request and retrieving memory - parsing what was asked, honouring an explicit next step, retrieval terms that name the real failure class, and treating end-of-task rules as deliverables. Using tools and the environment is [agent-tooling.md](agent-tooling.md); what an explicit skill invocation obliges is [skill-invocation.md](skill-invocation.md).
@@ -166,6 +166,6 @@ Related: `feedback_gruff_never_disable` (auto-memory, 2026-05-25).
 
 **Why it matters:** A late prose check can catch residue, but it cannot make the required source-of-truth, meaning-preservation, and audience checks shape the first edit. On a larger change, that ordering can turn a factual plan adjustment into an avoidable rewrite.
 
-**Prevention:** Before the first write after any scope expansion, inventory each newly admitted surface and rerun its READ route. For `ISSUE.md`, milestone narrative, documentation, or learning-loop prose, read `.goat-flow/skill-docs/playbooks/writing-style.md` (search: `## Scope Gate`) before drafting. Keep exempt control rows and commands out of style-only rewrites.
+**Prevention:** Before the first write after any scope expansion, inventory each newly admitted surface and rerun its READ route. For `ISSUE.md`, milestone narrative, documentation, or learning-loop prose, read `.goat-flow/skill-docs/playbooks/writing-human-facing-prose.md` (search: `## Scope Gate`) before drafting. Keep exempt control rows and commands out of style-only rewrites.
 
 ---

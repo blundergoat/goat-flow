@@ -8,10 +8,6 @@ automated-reviewer findings (Copilot, CodeQL/github-advanced-security,
 claude[bot], or any other repo bot) after Pass 2 records local findings,
 and how to report human/automated provenance in Review Integrity.
 
-Borrowed from awslabs/cli-agent-orchestrator PR #245 review pattern, where
-the human reviewer posted a Copilot/Manual finding tally that made the
-review accountable ("Copilot 11, Manual 3, accuracy 100%").
-
 ## Post-Pass-2 Ingestion
 
 Record the complete local findings list before fetching automated-review conclusions.

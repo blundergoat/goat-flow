@@ -3,7 +3,7 @@ goat-flow-reference-version: "1.16.0"
 ---
 # Writing Structure Diagnostics
 
-Load this after `writing-style.md` identifies a document-level assembly defect. Repair shape before sentence polish so discarded sections do not consume review effort.
+Load this after `writing-human-facing-prose.md` identifies a document-level assembly defect. Repair shape before sentence polish so discarded sections do not consume review effort.
 
 ## Availability Check
 
@@ -78,6 +78,6 @@ Preserve required schemas, project conventions, reader-facing categories, and fa
 
 ## Related References
 
-- `writing-style.md` - required core correctness, scope, and routing owner.
+- `writing-human-facing-prose.md` - required core correctness, scope, and routing owner.
 - `writing-sentence-diagnostics.md` - sentence work after structure is sound.
 - `changelog.md` and `release-notes.md` - release-specific structure and audience owners.

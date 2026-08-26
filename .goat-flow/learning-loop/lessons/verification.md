@@ -1,6 +1,6 @@
 ---
 category: verification
-last_reviewed: 2026-08-24
+last_reviewed: 2026-08-26
 ---
 
 **Scope:** General verification discipline - what counts as proof, reading before claiming, and checking the thing you actually changed. Siblings own the narrower surfaces: [verification-validators.md](verification-validators.md) for getting a checker right, [verification-scanners.md](verification-scanners.md) for proving a guard guards, [verification-testing.md](verification-testing.md) for what a test must establish, [verification-preflight.md](verification-preflight.md) and [verification-formatting.md](verification-formatting.md) for repo-wide gates, and [verification-gruff.md](verification-gruff.md) for the analyzer.
@@ -137,7 +137,7 @@ last_reviewed: 2026-08-24
 
 **Prevention:** Keep a written list of the files you actually edited; that list, not `git diff`, is your change set. Prove a failure is not yours by reading its assertion and showing it names a file outside that list - a filename overlap is not proof either way, since one test file can hold both a failing gitignore assertion and an unrelated reference to your files. Run the focused contracts covering your change as the gate you claim, and report the full-suite number separately with its attribution stated. Never `git stash` to isolate; a second session can commit between the stash and the pop. Related: [[Parallel sessions need concurrency-safe file patterns]] covers write contention on the same files, which is a different failure from this one.
 
-**Recurrence 2026-08-23:** M17's no-schema gate first used broad `src/cli` and `test` status as an ownership signal. It ran clean before M17 wrote its decision, then a concurrent writing-for-agents batch made twelve paths appear dirty even though M17 had not edited them. After stopping for approval, proof was narrowed to the exact M17-owned paths and an all-diff search for checkpoint-schema vocabulary. Evidence anchors: `src/cli/audit/skill-docs-contract.ts` (search: `.goat-flow/skill-docs/playbooks/writing-for-agents.md`) and `workflow/skills/goat-plan/SKILL.md` (search: `mid-proof before switching modules`).
+**Recurrence 2026-08-23:** M17's no-schema gate first used broad `src/cli` and `test` status as an ownership signal. It ran clean before M17 wrote its decision, then a concurrent writing-for-agents batch made twelve paths appear dirty even though M17 had not edited them. After stopping for approval, proof was narrowed to the exact M17-owned paths and an all-diff search for checkpoint-schema vocabulary. Evidence anchors: `src/cli/audit/skill-docs-contract.ts` (search: `.goat-flow/skill-docs/playbooks/writing-agent-facing-instructions.md`) and `workflow/skills/goat-plan/SKILL.md` (search: `mid-proof before switching modules`).
 
 ---
 
@@ -216,3 +216,20 @@ Evidence anchor: `test/integration/deny-dangerous-policy.test.ts` (search: `Poli
 **Root cause:** I treated a matched token and a zero exit as proof without first checking whether the assertion distinguished safe from unsafe prose, whether the hook allowed the command to execute, or whether the output identified the intended CLI mode.
 
 **Prevention:** Pin negative assertions to the complete unsafe instruction while positively requiring the safe replacement; a shared suffix is not a safe absence proof when another feature can use it legitimately. Treat a hook block as no execution evidence and switch to an allowed data tool or file-redirection shape before rerunning. For mode-gated CLI proof, assert the mode sentinel and the target result row before accepting exit zero. Evidence anchors: `test/unit/audit-harness/settings-rules-matched.test.ts` (search: `offers deliberate review instead of an automatic rewrite`), `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Pipe to interpreter`), `src/cli/help.ts` (search: `--harness`), and `src/cli/audit/audit.ts` (search: `harness: options.harness`).
+
+---
+
+## Lesson: Focused installer migration tests must isolate the owning block
+
+**Status:** active | **Created:** 2026-08-26
+**Decision changed:** For a focused installer migration test, execute the smallest production-owned block or helper that contains the migration; reserve the full installer round trip for its end-to-end gate.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Bind the focused fixture to semantic anchors around the production block, run that exact block with only the primitives it needs, and assert both final filesystem state and operation order. Do not copy the migration sequence into the test. Keep the full installer run as separate repository proof because it covers unrelated installation stages.
+
+**What happened:** The first renamed-playbook migration test invoked the complete shell installer through `runInstaller`. On this Windows host, the helper reached both replacement copies and both retired-file removals, then hit its 30-second process limit during later skill installation. The test received `status: null` before its assertions, and teardown then reported `EPERM` for the still-contended temporary directory. The corrected fixture extracts and executes the installer's real standalone-playbook block with a minimal copy primitive; the original focused command completed in about two seconds with one passing test.
+
+**Root cause:** A local replacement-before-pruning contract was coupled to every downstream installer stage. The larger process added runtime and platform failure modes that could fail before the test interpreted already-produced migration evidence.
+
+Evidence anchors: `workflow/install-goat-flow.sh` (search: `retired_writing_playbook`), `test/integration/setup-install-migrations.test.ts` (search: `installs renamed standalone playbooks before pruning retired filenames`), and `test/integration/setup-install.helpers.ts` (search: `timeout: 30000`).
