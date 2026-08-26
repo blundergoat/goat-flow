@@ -437,6 +437,10 @@ describe("Audit scoring model", () => {
     assert.equal(metric.status, "fail");
     assert.equal(metric.displayStatus, "warn");
     assert.equal(metric.impact, "score-only");
+    assert.equal(
+      metric.details?.verification?.[0]?.expected,
+      "universal safety guard or meaningful validation",
+    );
     assert.match(metric.failure?.evidence ?? "", /Metric/);
     assert.equal(
       concerns.verification.metrics,
@@ -459,6 +463,50 @@ describe("Audit scoring model", () => {
         recommendation.includes("post-turn safety guard"),
       ),
       JSON.stringify(concerns.verification.recommendations),
+    );
+  });
+
+  it("skips post-turn hook integrity when post-turn safety is explicitly disabled", () => {
+    const baseFacts = makeCtx().facts;
+    const evidenceFiles: Record<string, string> = {
+      ".goat-flow/skill-docs/skill-preamble.md": RATIONALISATIONS_PREAMBLE,
+      [INSTRUCTION_FILES.claude]: completeInstruction("CLAUDE.md"),
+    };
+    const ctx = makeCtx({
+      config: stubConfig({
+        hooks: { "post-turn-safety": { enabled: false } },
+      }),
+      facts: {
+        ...baseFacts,
+        shared: {
+          ...baseFacts.shared,
+          gitCommitInstructions: {
+            exists: true,
+            path: "docs/coding-standards/git-commit-message.md",
+            requiredPath: "docs/coding-standards/git-commit-message.md",
+            misplacedPaths: [],
+          },
+        },
+      },
+      fs: stubFS({
+        readFile: (path) => evidenceFiles[path] ?? null,
+      }),
+    });
+
+    const { scope, concerns } = computeHarness(ctx);
+    const metric = scope.checks.find(
+      (check) => check.id === "post-turn-hook-integrity",
+    )!;
+
+    assert.equal(metric.status, "skipped");
+    assert.equal(metric.displayStatus, "skipped");
+    assert.equal(metric.impact, "none");
+    assert.equal(concerns.verification.score, FULL_CONCERN_SCORE);
+    assert.equal(
+      concerns.verification.limits.some((limit) =>
+        limit.includes("No post-turn safety or validation hooks installed"),
+      ),
+      false,
     );
   });
 });

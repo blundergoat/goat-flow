@@ -353,7 +353,7 @@ describe("goat-flow stats - graduation candidates", () => {
         "consolidated.md":
           '---\ncategory: consolidated\nlast_reviewed: 2026-04-18\n---\n\n## Footgun: consolidated history\n\n**Status:** active | **Evidence:** ACTUAL_MEASURED\n**Incident count:** 8\n**Latest occurrence:** 2026-04-17\n\nEvidence: `.goat-flow/learning-loop/footguns/consolidated.md` (search: "## Footgun: consolidated history").\n',
         "hooks.md":
-          '---\ncategory: hooks\nlast_reviewed: 2026-04-18\n---\n\n## Footgun: alpha\n\n**Status:** active | **Evidence:** ACTUAL_MEASURED\n\nBody with `src/alpha.ts` ref.\n\n**Recurrence update (2026-04-17):** happened again after recording.\n\n## Footgun: undercounted\n\n**Status:** active | **Evidence:** ACTUAL_MEASURED\n**Incident count:** 2\n\nEvidence: `.goat-flow/learning-loop/footguns/hooks.md` (search: "## Footgun: undercounted").\n\n**Recurrence 2026-04-16:** first recorded recurrence.\n\n**Repeat incident (2026-04-17):** second recorded recurrence.\n\n## Footgun: declared one-off\n\n**Status:** active | **Evidence:** ACTUAL_MEASURED\n**Incident count:** 1\n\nEvidence: `.goat-flow/learning-loop/footguns/hooks.md` (search: "## Footgun: declared one-off").\n\n## Resolved Entries\n\n## Footgun: closed trap\n\n**Status:** resolved | **Created:** 2026-04-01 | **Resolved:** 2026-04-02 | **Evidence:** ACTUAL_MEASURED\n\nBody.\n\n**Recurrence update (2026-04-01):** recurred before the fix landed.\n',
+          '---\ncategory: hooks\nlast_reviewed: 2026-04-18\n---\n\n## Footgun: alpha\n\n**Status:** active | **Evidence:** ACTUAL_MEASURED\n\nEvidence: `.goat-flow/learning-loop/footguns/hooks.md` (search: "## Footgun: alpha").\n\n**Recurrence update (2026-04-17):** happened again after recording.\n\n## Footgun: undercounted\n\n**Status:** active | **Evidence:** ACTUAL_MEASURED\n**Incident count:** 2\n\nEvidence: `.goat-flow/learning-loop/footguns/hooks.md` (search: "## Footgun: undercounted").\n\n**Recurrence 2026-04-16:** first recorded recurrence.\n\n**Repeat incident (2026-04-17):** second recorded recurrence.\n\n## Footgun: declared one-off\n\n**Status:** active | **Evidence:** ACTUAL_MEASURED\n**Incident count:** 1\n\nEvidence: `.goat-flow/learning-loop/footguns/hooks.md` (search: "## Footgun: declared one-off").\n\n## Resolved Entries\n\n## Footgun: closed trap\n\n**Status:** resolved | **Created:** 2026-04-01 | **Resolved:** 2026-04-02 | **Evidence:** ACTUAL_MEASURED\n\nBody.\n\n**Recurrence update (2026-04-01):** recurred before the fix landed.\n',
       },
       lessons: {
         "verification.md":
@@ -636,7 +636,7 @@ describe("goat-flow stats --check", () => {
     const report = loadReport({
       footguns: {
         "hooks.md":
-          "---\ncategory: hooks\nlast_reviewed: 2026-04-18\n---\n\n## Footgun: alpha\n\n**Status:** active | **Evidence:** ACTUAL_MEASURED\n\nBody with `src/alpha.ts` ref.\n",
+          "---\ncategory: hooks\nlast_reviewed: 2026-04-18\n---\n\n## Footgun: alpha\n\n**Status:** active | **Evidence:** ACTUAL_MEASURED\n\nEvidence: `.goat-flow/learning-loop/footguns/hooks.md` (search: \"## Footgun: alpha\").\n",
       },
       lessons: {
         "verification.md":
@@ -1024,7 +1024,7 @@ describe("goat-flow stats --check", () => {
     const report = loadReport({
       footguns: {
         "hooks.md":
-          "---\ncategory: hooks\nlast_reviewed: 2026-04-18\n---\n\n## Footgun: alpha\n\n**Status:** active | **Evidence:** ACTUAL_MEASURED\n\nBody with `src/alpha.ts` ref.\n",
+          "---\ncategory: hooks\nlast_reviewed: 2026-04-18\n---\n\n## Footgun: alpha\n\n**Status:** active | **Evidence:** ACTUAL_MEASURED\n\nEvidence: `.goat-flow/learning-loop/footguns/hooks.md` (search: \"## Footgun: alpha\").\n",
       },
       lessons: {
         "verification.md":
@@ -1052,7 +1052,7 @@ describe("goat-flow stats --check", () => {
     const report = loadReport({
       footguns: {
         "hooks.md":
-          "---\ncategory: hooks\nlast_reviewed: 2026-04-18\n---\n\n## Footgun: alpha\n\n**Status:** active | **Evidence:** ACTUAL_MEASURED\n\nBody with `src/alpha.ts` ref.\n",
+          "---\ncategory: hooks\nlast_reviewed: 2026-04-18\n---\n\n## Footgun: alpha\n\n**Status:** active | **Evidence:** ACTUAL_MEASURED\n\nEvidence: `.goat-flow/learning-loop/footguns/hooks.md` (search: \"## Footgun: alpha\").\n",
       },
       lessons: {
         "verification.md":
@@ -1072,6 +1072,33 @@ describe("goat-flow stats --check", () => {
       verdict.warnings.filter((warning) => warning.rule === "decision-metadata")
         .length,
       0,
+    );
+  });
+
+  it("reports a missing anchor for an active footgun with only a bare path and ignores resolved history", () => {
+    const report = loadReport({
+      footguns: {
+        "hooks.md":
+          "---\ncategory: hooks\nlast_reviewed: 2026-04-18\n---\n\n## Footgun: bare path only\n\n**Status:** active | **Evidence:** ACTUAL_MEASURED\n\nEvidence path: `.goat-flow/learning-loop/footguns/hooks.md`.\n\n## Resolved Entries\n\n## Footgun: resolved bare path\n\n**Status:** resolved | **Evidence:** ACTUAL_MEASURED\n\nEvidence path: `.goat-flow/learning-loop/footguns/hooks.md`.\n",
+      },
+      lessons: {},
+    });
+
+    const verdict = checkStats(report);
+    const anchorFindings = verdict.findings.filter(
+      (finding) => finding.rule === "missing-anchor",
+    );
+
+    assert.equal(verdict.status, "fail");
+    assert.equal(anchorFindings.length, 1);
+    assert.equal(
+      anchorFindings[0]?.file,
+      ".goat-flow/learning-loop/footguns/hooks.md",
+    );
+    assert.ok(anchorFindings[0]?.message.includes('"bare path only"'));
+    assert.ok(
+      !anchorFindings[0]?.message.includes("resolved bare path"),
+      "resolved footgun history must not require anchor migration",
     );
   });
 

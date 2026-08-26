@@ -16,6 +16,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 
+import { emitCommitGuidanceInstallResult } from "../../src/cli/prompt/commit-guidance.js";
 import {
   git,
   makeTempProject,
@@ -361,6 +362,72 @@ describe("setup --apply installer", () => {
       result.stdout,
       /renamed from docs\/coding-standards\/git-commit\.md/,
     );
+  });
+
+  it("commit guidance rewrites the selected Commit Messages bridge before renaming", () => {
+    const root = makeTempProject();
+    const guidanceDir = join(root, "docs", "coding-standards");
+    const legacyGuidancePath = join(guidanceDir, "git-commit.md");
+    const preferredGuidancePath = join(guidanceDir, "git-commit-message.md");
+    const instructionPath = join(root, ".github", "copilot-instructions.md");
+    const legacyGuidance = "# Team Commit Rules\n\nKeep this project rule.\n";
+    const instructionContent =
+      "# Copilot\n\n## Commit Messages\n\nRead docs/coding-standards/git-commit.md before proposing a commit.\n\n## Verification\n\nKeep this section unchanged.\n";
+    mkdirSync(join(root, ".git"));
+    mkdirSync(guidanceDir, { recursive: true });
+    mkdirSync(join(root, ".github"), { recursive: true });
+    writeFileSync(legacyGuidancePath, legacyGuidance);
+    writeFileSync(instructionPath, instructionContent);
+
+    emitCommitGuidanceInstallResult(root, "copilot");
+
+    assert.equal(existsSync(legacyGuidancePath), false);
+    assert.equal(readFileSync(preferredGuidancePath, "utf-8"), legacyGuidance);
+    assert.equal(
+      readFileSync(instructionPath, "utf-8"),
+      instructionContent.replace(
+        "docs/coding-standards/git-commit.md",
+        "docs/coding-standards/git-commit-message.md",
+      ),
+    );
+  });
+
+  it("commit guidance keeps the former guide when another agent instruction still references it", () => {
+    const root = makeTempProject();
+    const guidanceDir = join(root, "docs", "coding-standards");
+    const legacyGuidancePath = join(guidanceDir, "git-commit.md");
+    const preferredGuidancePath = join(guidanceDir, "git-commit-message.md");
+    const foreignInstructionPath = join(root, "CLAUDE.md");
+    const legacyGuidance = "# Team Commit Rules\n\nKeep this project rule.\n";
+    const foreignInstruction =
+      "# Claude\n\n## Commit Messages\n\nRead docs/coding-standards/git-commit.md before proposing a commit.\n";
+    mkdirSync(join(root, ".git"));
+    mkdirSync(guidanceDir, { recursive: true });
+    writeFileSync(legacyGuidancePath, legacyGuidance);
+    writeFileSync(foreignInstructionPath, foreignInstruction);
+
+    const output: string[] = [];
+    const originalLog = console.log;
+    console.log = (...values: unknown[]) => {
+      output.push(values.map(String).join(" "));
+    };
+    try {
+      emitCommitGuidanceInstallResult(root, "copilot");
+    } finally {
+      console.log = originalLog;
+    }
+
+    assert.equal(readFileSync(legacyGuidancePath, "utf-8"), legacyGuidance);
+    assert.equal(existsSync(preferredGuidancePath), false);
+    assert.equal(
+      readFileSync(foreignInstructionPath, "utf-8"),
+      foreignInstruction,
+    );
+    assert.match(
+      output.join("\n"),
+      /kept docs\/coding-standards\/git-commit\.md/,
+    );
+    assert.match(output.join("\n"), /legacy references in CLAUDE\.md/);
   });
 
   it("CLI install copies the reviewed template for a Git project", () => {

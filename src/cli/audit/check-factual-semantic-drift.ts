@@ -143,20 +143,9 @@ function readCodeMapDashboardViews(codeMap: string): string[] | null {
     .sort();
 }
 
-/**
- * Read shipped dashboard view names from source, with manifest facts for source-free installations.
- * Use as the UI navigation authority for code-map and dashboard content checks.
- * Invariant: returned names are extension-free and sorted by source or manifest validation.
- *
- * @param auditContext - selected-project filesystem; an empty view glob uses validated manifest facts
- * @returns sorted view names without extensions; valid manifests provide a non-empty fallback
- */
+/** Read selected-project dashboard view names without substituting framework facts. */
 function readDashboardViewFiles(auditContext: AuditContext): string[] {
   const dashboardViewFiles = auditContext.fs.glob("src/dashboard/views/*.html");
-  // Installed projects often omit dashboard source, so manifest facts preserve the user's shipped view inventory.
-  if (dashboardViewFiles.length === 0) {
-    return [...loadManifest().facts.dashboard_views.names];
-  }
   // A malformed path contributes an empty name, which filtering removes before users see the comparison.
   return dashboardViewFiles
     .map(
@@ -175,7 +164,7 @@ function readDashboardViewFiles(auditContext: AuditContext): string[] {
  * Use in content audit to keep contributor navigation guidance aligned with the UI.
  *
  * @param codeMap - complete code-map text; missing inventory is reported as none
- * @param auditContext - selected-project files and manifest fallback used as the view authority
+ * @param auditContext - selected-project files used as the only view authority
  * @returns one warning for a mismatch, or an empty list when documented and shipped views match
  */
 function driftCodeMapDashboardViews(
@@ -184,10 +173,11 @@ function driftCodeMapDashboardViews(
 ): ContentFinding[] {
   const documentedViewNames = readCodeMapDashboardViews(codeMap);
   const shippedViewNames = readDashboardViewFiles(auditContext);
-  // A non-null inventory with the same names already matches every dashboard view users can open.
+  // No source and no explicit claim are both absence, while an explicit inventory must match target files exactly.
   if (
-    documentedViewNames !== null &&
-    documentedViewNames.join("|") === shippedViewNames.join("|")
+    (documentedViewNames === null && shippedViewNames.length === 0) ||
+    (documentedViewNames !== null &&
+      documentedViewNames.join("|") === shippedViewNames.join("|"))
   ) {
     return [];
   }

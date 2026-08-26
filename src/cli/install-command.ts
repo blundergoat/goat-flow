@@ -754,6 +754,6 @@ export async function handleInstallCommand(options: ParsedCLI): Promise<void> {
       1,
     );
   }
-  emitCommitGuidanceInstallResult(options.projectPath);
+  emitCommitGuidanceInstallResult(options.projectPath, selectedAgent);
   emitIndexGenerationInstallResult(options.projectPath);
 }

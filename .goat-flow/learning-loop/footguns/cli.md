@@ -91,7 +91,7 @@ last_reviewed: 2026-08-24
 **Evidence (external — promptfoo PR #9329):** `code-scan --format sarif|json` printed the payload via `console.log`. Winston's Console transport had no `stderrLevels` set, so any `logger.warn` / `logger.info` from cache loading, telemetry, or update-check code silently interleaved with the SARIF payload. GitHub Code Scanning rejected the upload as malformed. Fix: detect structured-output mode early in CLI dispatch, set `PROMPTFOO_LOG_TO_STDERR=1` BEFORE the logger import, route all log levels to stderr unconditionally in that mode.
 
 **Goat-flow applicability — HIGH:** Goat-flow CLI surfaces that emit structured stdout:
-- `src/cli/audit/render.ts` and `src/cli/audit/sarif.ts` — SARIF and JSON output modes for audit results.
+- `src/cli/audit/render.ts` (search: "renderAuditJson") and `src/cli/audit/sarif.ts` (search: "renderAuditSarif") — SARIF and JSON output modes for audit results.
 - `src/cli/quality/` — JSON quality report exports.
 - Any future `--json` or `--format` flag added to a goat-flow command.
 - MCP server code (when added) — MCP communicates over JSON-RPC stdio; every byte on stdout must be protocol-conformant. A single stray log line breaks the entire MCP session, often with no diagnostic on the consumer side.

@@ -71,7 +71,7 @@ Some harness checks can report a missing directory as present if they rely on `c
 Build checks in `src/cli/audit/check-goat-flow.ts` and `src/cli/audit/check-agent-setup.ts` prove the install shape is present, not that the cold-path docs are semantically true. A structural PASS without content verification still creates false confidence.
 
 **Evidence:**
-- `src/cli/audit/check-goat-flow.ts` and `src/cli/audit/check-agent-setup.ts` gate file existence / install structure.
+- `src/cli/audit/check-goat-flow.ts` (search: "export const SETUP_CHECKS") and `src/cli/audit/check-agent-setup.ts` gate file existence / install structure.
 - `src/cli/audit/check-content-quality.ts` and `src/cli/audit/check-factual-claims.ts` exist because structural correctness alone did not catch cold-path truth drift.
 
 **Prevention:** Keep structural audit and content-truth checks separate and explicit. Never treat a build PASS as proof that docs, ADRs, or prompts are semantically current.

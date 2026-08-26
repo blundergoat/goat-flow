@@ -14,7 +14,7 @@ last_reviewed: 2026-08-23
 **Evidence (external — promptfoo PR #9364):** `optimize` ran baseline + candidate evals against the user's target via `new Eval(config, { persisted: false })`. The `Evaluator` constructor still saw `config.outputPath` and instantiated a `JsonlFileWriter`, which appended every intermediate row to the user's actual jsonl. Fix strips `outputPath` from the config copy before constructing the internal run. The bug shipped because "persisted: false" was treated as the complete isolation primitive when it actually only covered DB persistence.
 
 **Goat-flow applicability — HIGH:** Goat-flow has multiple surfaces where a meta-command invokes the primary engine against a user target:
-- Dashboard audit / quality previews that re-run audit against the target project repeatedly as the user navigates (`src/cli/server/dashboard-routes.ts` audit + quality routes).
+- Dashboard audit / quality previews that re-run audit against the target project repeatedly as the user navigates (`src/cli/server/dashboard-quality-routes.ts` (search: "function getOrRunQualityAudit")).
 - Quality preview that runs a focused subset of checks before the full run commits.
 - Any future "compare two skill versions side-by-side" or "preview audit fix" flow that re-runs the engine against the user's tree.
 - `src/cli/audit/audit.ts` accepts an output JSON path via `--output`; if a dashboard route constructs an `AuditContext` from user config and forwards `--output` without stripping, the internal run will overwrite the user's saved audit output.

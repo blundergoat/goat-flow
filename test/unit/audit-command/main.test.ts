@@ -240,6 +240,50 @@ describe("audit on well-configured project", () => {
     );
   });
 
+  it("treats dashboard view drift as a target-only four-state comparison", () => {
+    const cases = [
+      {
+        name: "no source and no claim",
+        codeMap: "# Code Map",
+        views: [],
+        warns: false,
+      },
+      {
+        name: "claim without source",
+        codeMap: "└── views/ = HTML view templates (home)",
+        views: [],
+        warns: true,
+      },
+      {
+        name: "source without claim",
+        codeMap: "# Code Map",
+        views: ["src/dashboard/views/home.html"],
+        warns: true,
+      },
+      {
+        name: "matching source and claim",
+        codeMap: "└── views/ = HTML view templates (home)",
+        views: ["src/dashboard/views/home.html"],
+        warns: false,
+      },
+    ];
+
+    for (const scenario of cases) {
+      const context = makeCtx({
+        fs: stubFS({
+          readFile: (path) =>
+            path === ".goat-flow/code-map.md" ? scenario.codeMap : null,
+          glob: (pattern) =>
+            pattern === "src/dashboard/views/*.html" ? scenario.views : [],
+        }),
+      });
+      const findings = scanSemanticDrift(context).findings.filter(
+        (finding) => finding.rule === "code-map-dashboard-view-drift",
+      );
+      assert.equal(findings.length === 1, scenario.warns, scenario.name);
+    }
+  });
+
   it("passes on this repo", () => {
     const report = getRepoAudit({ agentFilter: "claude", harness: false });
     assert.equal(report.command, "audit");

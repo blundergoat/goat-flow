@@ -97,6 +97,7 @@ interface StatsFinding {
     | "stale-last-reviewed"
     | "stale-ref"
     | "invalid-line-ref"
+    | "missing-anchor"
     | "evidence-label"
     | "format"
     | "bucket-size"
@@ -498,6 +499,27 @@ function collectPatternReferenceFindings(
   return findings;
 }
 
+/**
+ * Require every active footgun to retain at least one resolving evidence anchor.
+ * Resolved history stays readable without retroactive migration because it no longer drives current prevention work.
+ */
+function collectActiveFootgunAnchorFindings(
+  learningLoopEntries: LearningLoopEntryFact[],
+): StatsFinding[] {
+  return learningLoopEntries
+    .filter(
+      (entry) =>
+        entry.kind === "footgun" &&
+        entry.status === "active" &&
+        !entry.hasValidAnchor,
+    )
+    .map((entry) => ({
+      file: entry.sourcePath,
+      rule: "missing-anchor" as const,
+      message: `${entry.sourcePath}: active footgun "${entry.title}" is missing a valid evidence anchor; cite a repository-relative file path immediately followed by (search: "stable semantic needle")`,
+    }));
+}
+
 const ADR_FILENAME = /^ADR-\d{3}-[a-z0-9-]+\.md$/;
 const ROUTING_HINT =
   "Wrong home -> right home: implementation TODOs and scoped work plans belong in .goat-flow/plans/; recurring hazards with evidence belong in .goat-flow/learning-loop/footguns/; reusable takeaways belong in .goat-flow/learning-loop/lessons/; temporary notes belong in .goat-flow/scratchpad/; backlog requests belong in Linear/GitHub issues.";
@@ -666,11 +688,14 @@ export function checkStats(report: StatsCheckInput): StatsCheckReport {
   const learningLoopEntries = report.learningLoopEntries ?? [];
   const patternReferenceFindings =
     collectPatternReferenceFindings(learningLoopEntries);
+  const activeFootgunAnchorFindings =
+    collectActiveFootgunAnchorFindings(learningLoopEntries);
   // Hard integrity defects combine into the blocking list that controls the user's exit status.
   const findings = [
     ...collectFindings(report.footguns),
     ...collectFindings(report.lessons),
     ...patternReferenceFindings,
+    ...activeFootgunAnchorFindings,
     ...decisionFindings,
     ...indexFindings,
   ];

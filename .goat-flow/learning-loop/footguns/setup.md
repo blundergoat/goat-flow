@@ -40,7 +40,7 @@ last_reviewed: 2026-08-23
 
 **Evidence:**
 - `workflow/manifest.json` (search: `"agents"`, `"skills_dir"`, `"hooks_dir"`, `"hook_config_file"`) declares every supported agent in a single contract; bypassing it creates a phantom harness invisible to manifest-driven tooling.
-- `workflow/install-goat-flow.sh` (search: `manifest_eval supported-agents`, `SKILLS_DIR`) reads the manifest and writes per-agent mirrors; any harness whose files arrive by another path will silently drift the moment a skill changes.
+- `workflow/install-goat-flow.sh` (search: "manifest_eval supported-agents") reads the manifest and writes per-agent mirrors; any harness whose files arrive by another path will silently drift the moment a skill changes.
 - `scripts/installers/` holds `install-claude.sh`, `install-codex.sh`, `install-github-copilot.sh`, `install-antigravity.sh`, `install-kilo.sh` — each is a thin wrapper over the manifest-driven core, not a bespoke implementation. A new harness should add a sibling, not a fork.
 - `scripts/check-instruction-parity.mjs` (search: `SETUP_FILES`, `LIVE_FILES`, `CANONICAL_SECTIONS`) enforces shared sections across instruction files; a harness that adds its own instruction file without registering it here is silently exempt from the parity contract.
 - `AGENTS.md` and `CLAUDE.md` are shared instruction surfaces covered by setup/parity rules; a PR that hand-edits one surface for a new harness without updating the manifest-driven setup path breaks the shared-source pattern that keeps them in sync.
