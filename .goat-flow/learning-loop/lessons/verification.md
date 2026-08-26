@@ -1,6 +1,6 @@
 ---
 category: verification
-last_reviewed: 2026-08-26
+last_reviewed: 2026-08-27
 ---
 
 **Scope:** General verification discipline - what counts as proof, reading before claiming, and checking the thing you actually changed. Siblings own the narrower surfaces: [verification-validators.md](verification-validators.md) for getting a checker right, [verification-scanners.md](verification-scanners.md) for proving a guard guards, [verification-testing.md](verification-testing.md) for what a test must establish, [verification-preflight.md](verification-preflight.md) and [verification-formatting.md](verification-formatting.md) for repo-wide gates, and [verification-gruff.md](verification-gruff.md) for the analyzer.
@@ -200,7 +200,7 @@ last_reviewed: 2026-08-26
 **Status:** active | **Created:** 2026-08-17
 **Decision changed:** Accept a verification result only after confirming the command executed, selected the intended mode, and asserted the behavior rather than a shared keyword.
 **Trigger phase:** VERIFY
-**Incident count:** 4 | **Latest occurrence:** 2026-08-24
+**Incident count:** 5 | **Latest occurrence:** 2026-08-27
 
 **What happened:** M39 verification exposed three false-proof shapes in one pass. A negative regex for the unsafe rewrite instruction also rejected the safe sentence “does not rewrite them automatically.” A command that piped audit JSON into inline Node was blocked before either parallel check ran. The direct retry exited zero but omitted `--harness`; its JSON explicitly said `"harness": false` and carried no harness scope, so it had not exercised `settings-rules-matched`.
 
@@ -213,9 +213,11 @@ The documented command passed literal `\|` and exited 0 despite its expected exi
 Running the real `|` pipeline exposed the intended eval verdict.
 Evidence anchor: `test/integration/deny-dangerous-policy.test.ts` (search: `Policy destructive: eval hides commands from safety checks`).
 
+**Recurrence 2026-08-27:** An approved Codex CLI 0.149.1 live PostToolUse probe exited 0 and the model replied `LIVE_CODEX_PROBE_DONE`, but stderr showed that `apply_patch` had searched for a guessed declaration absent from the fixture. The source remained `BEFORE` and the analyzer-start marker was absent, so the first turn was invalid evidence. A corrected retry used the exact source line: Codex reported a completed file-change event, the file became `AFTER`, Gruff wrote both startup markers, the provider exposed the analyzer-only marker `LIVE_POSTTOOL_PROVIDER_MARKER_20260827`, the process exited 0, and stderr was empty. That closed live PostToolUse delivery for the exact bypass-trust exec fixture, not for untouched DevGoat or generic trusted sessions. Because the disposable file had not been indexed, ordinary `git diff` stayed empty; the independent before-state capture, file-change event, after-state read, hook marker, and provider-only marker supplied the proof, while also exposing a fixture setup defect. Evidence anchors: `workflow/hooks/README.md` (search: `does not prove the external provider fired the hook or showed the result to the model`) and `test/integration/hook-command-spawn-matrix.test.ts` (search: `delivers a managed Gruff result through Codex's registered Windows override`).
+
 **Root cause:** I treated a matched token and a zero exit as proof without first checking whether the assertion distinguished safe from unsafe prose, whether the hook allowed the command to execute, or whether the output identified the intended CLI mode.
 
-**Prevention:** Pin negative assertions to the complete unsafe instruction while positively requiring the safe replacement; a shared suffix is not a safe absence proof when another feature can use it legitimately. Treat a hook block as no execution evidence and switch to an allowed data tool or file-redirection shape before rerunning. For mode-gated CLI proof, assert the mode sentinel and the target result row before accepting exit zero. Evidence anchors: `test/unit/audit-harness/settings-rules-matched.test.ts` (search: `offers deliberate review instead of an automatic rewrite`), `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Pipe to interpreter`), `src/cli/help.ts` (search: `--harness`), and `src/cli/audit/audit.ts` (search: `harness: options.harness`).
+**Prevention:** Pin negative assertions to the complete unsafe instruction while positively requiring the safe replacement; a shared suffix is not a safe absence proof when another feature can use it legitimately. Treat a hook block as no execution evidence and switch to an allowed data tool or file-redirection shape before rerunning. For mode-gated CLI proof, assert the mode sentinel and the target result row before accepting exit zero. For agent-driven probes, give the exact source line, commit or index the disposable baseline before launch, and require all mechanical postconditions: successful tool event, intended file diff or independently captured state transition, hook-start marker, provider-visible marker, and expected exit status. Never promote the model's final sentence to proof. Evidence anchors: `test/unit/audit-harness/settings-rules-matched.test.ts` (search: `offers deliberate review instead of an automatic rewrite`), `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Pipe to interpreter`), `src/cli/help.ts` (search: `--harness`), and `src/cli/audit/audit.ts` (search: `harness: options.harness`).
 
 ---
 

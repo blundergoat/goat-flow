@@ -1,6 +1,6 @@
 ---
 category: verification-testing
-last_reviewed: 2026-08-24
+last_reviewed: 2026-08-26
 ---
 
 **Scope:** What a test must actually establish - observable contracts over incidental shape, deadlines independent of the thing under test, telling a transient failure apart from a regression, and the ways a passing suite still fails to prove its claim. Proving a guard or scanner works is [verification-scanners.md](verification-scanners.md); building fixtures is [test-fixtures.md](test-fixtures.md).
@@ -14,7 +14,7 @@ last_reviewed: 2026-08-24
 
 **What happened:** The seven-skill pressure matrix reproduced a preflight runner that exceeded its hard timeout window after process-group escalation. A detached test helper escaped the group, inherited stdout/stderr, and held those pipes open, so Node delayed the child's `close` event after the direct process exited.
 
-**Recurrence 2026-08-09:** M03 preflight first reported `bounds gruff hooks with a timeout-specific response` as transient because its automatic full-suite retry passed. Running that named test directly reproduced the failure in 2.02 seconds: the launcher emitted the expected timeout message and status but missed its 1.5-second return bound. A deterministic fixture then wrote a marker after starting the background child and reproduced the same wait, ruling out an early Bash kill. Evidence anchors: `workflow/hooks/run-with-bash.mjs` (search: `hook exceeded its deadline and was killed`) and `test/unit/hook-launcher.test.ts` (search: `returns promptly after a started hook descendant exceeds its deadline`).
+**Recurrence 2026-08-09:** M03 preflight first reported `bounds gruff hooks with a timeout-specific response` as transient because its automatic full-suite retry passed. Running that named test directly reproduced the failure in 2.02 seconds: the launcher emitted the expected timeout message and status but missed its 1.5-second return bound. A deterministic fixture then wrote a marker after starting the background child and reproduced the same wait, ruling out an early Bash kill. Evidence anchors: `workflow/hooks/run-with-bash.mjs` (search: `function stopHookProcessTree`) and `test/unit/hook-launcher.test.ts` (search: `returns promptly after a started hook descendant exceeds its deadline`).
 
 **Root cause:** Both timeout paths treated direct-child termination as completion. A descendant retaining inherited output handles could keep the host-facing call open; the hook launcher also killed Bash without bounding the process tree it had started.
 
@@ -39,12 +39,18 @@ last_reviewed: 2026-08-24
 ## Lesson: Cache-behaviour tests need observable contracts
 
 **Status:** active | **Created:** 2026-05-20
+**Decision changed:** Cache-aware tests now assert a boundary-level signal or rebuild any read-caching fixture after its backing files change.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+**Incident count:** 2 | **Latest occurrence:** 2026-08-26
 
 **What happened:** While replacing a flaky Quality cache timing assertion, my first counter-based test tried to observe deny-hook self-test executions by monkeypatching `child_process.execFileSync`. The route path imports `execFileSync` as a named binding before the test patch, so the counter stayed at zero and the focused dashboard integration test failed even though the product behavior was the target.
 
-**Root cause:** I swapped a timing smell for an implementation-observation smell. Imported Node builtins and transitive helpers are not a reliable public signal for cache behavior.
+**Recurrence 2026-08-26:** A Windows hook-audit regression test changed `.codex/hooks.json` after its first `checkHookRuntimeSmoke` call, then expected the same audit context to observe the empty `commandWindows`. `createFS` had already cached the first read, so the second assertion exercised stale bytes and failed before it could distinguish fallback from platform-override selection. Splitting the scenarios into fresh disposable audit contexts produced the intended proof. Evidence anchors: `src/cli/facts/fs.ts` (search: `const readFile = createCachedReadFile(resolvePath)`) and `test/unit/audit-command/agent-deny-hooks-drift.test.ts` (search: `selects any present Codex Windows override`).
 
-**Prevention:** For server cache behavior, expose a narrow response/debug contract or inject an explicit dependency, then assert that contract at the route boundary. Avoid timing ratios and late monkeypatches of already-imported helpers. Evidence anchors: `src/cli/server/dashboard-quality-routes.ts` (search: `getOrRunQualityAudit`), `test/integration/dashboard-server-dashboard-api-quality.test.ts` (search: `reuses cached quality audits unless fresh=true is requested`), `src/cli/audit/check-agent-deny-mechanism.ts` (search: `checkHookSelfTest`).
+**Root cause:** Both tests assumed a late mutation would remain observable through production wiring that had already captured or cached its dependency. Imported Node builtins, transitive helpers, and cached filesystem adapters are not reliable public signals for a changed state.
+
+**Prevention:** For server cache behavior, expose a narrow response/debug contract or inject an explicit dependency, then assert that contract at the route boundary. When a fixture uses `createFS`, write its final state before the first consumer call or construct a fresh filesystem and audit context after each mutation. Avoid timing ratios, late monkeypatches of already-imported helpers, and reuse of a read-caching context to model a second on-disk state. Evidence anchors: `src/cli/server/dashboard-quality-routes.ts` (search: `getOrRunQualityAudit`), `test/integration/dashboard-server-dashboard-api-quality.test.ts` (search: `reuses cached quality audits unless fresh=true is requested`), and `src/cli/audit/check-agent-deny-mechanism.ts` (search: `checkHookSelfTest`).
 
 ---
 

@@ -1382,6 +1382,7 @@ function entryReferencesManagedScript(entry, scriptNames) {
     : "";
   const commandText = [
     typeof entry.command === "string" ? entry.command : "",
+    typeof entry.commandWindows === "string" ? entry.commandWindows : "",
     typeof entry.bash === "string" ? entry.bash : "",
     typeof entry.powershell === "string" ? entry.powershell : "",
     structuredArgumentText,

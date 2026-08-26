@@ -17,8 +17,9 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
+import { agentHookSpawnDescriptor } from "../../src/cli/server/agent-hook-command.js";
 
 const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
 const CODEX_GRUFF_LAUNCHER_DEADLINE_MS = 75_000;
@@ -36,7 +37,7 @@ interface PackedCliInstallation {
 interface CodexHookConfiguration {
   hooks?: {
     PreToolUse?: Array<{
-      hooks?: Array<{ command?: string }>;
+      hooks?: Array<{ command?: string; commandWindows?: string }>;
     }>;
   };
 }
@@ -77,24 +78,36 @@ function extractPackedCandidate(): string {
   const extractedDirectoryPath = join(packageWorkspacePath, "extracted");
   mkdirSync(archiveDirectoryPath, { recursive: true });
   mkdirSync(extractedDirectoryPath, { recursive: true });
-  const packResult = spawnSync(
-    "npm",
-    [
-      "pack",
-      "--json",
-      "--ignore-scripts",
-      // `npm publish --dry-run` exports npm_config_dry_run=true to prepublishOnly,
-      // and a nested pack inherits it: npm still reports a filename it never wrote.
-      "--dry-run=false",
-      "--pack-destination",
-      archiveDirectoryPath,
-    ],
-    {
-      cwd: PROJECT_ROOT,
-      encoding: "utf8",
-      timeout: 30_000,
-    },
-  );
+  const npmPackArguments = [
+    "pack",
+    "--json",
+    "--ignore-scripts",
+    // `npm publish --dry-run` exports npm_config_dry_run=true to prepublishOnly,
+    // and a nested pack inherits it: npm still reports a filename it never wrote.
+    "--dry-run=false",
+    "--pack-destination",
+    archiveDirectoryPath,
+  ];
+  // Native Windows has an npm command shim, so launch its JavaScript entry through Node.
+  const npmExecutable = process.platform === "win32" ? process.execPath : "npm";
+  const npmExecutableArguments =
+    process.platform === "win32"
+      ? [
+          join(
+            dirname(process.execPath),
+            "node_modules",
+            "npm",
+            "bin",
+            "npm-cli.js",
+          ),
+          ...npmPackArguments,
+        ]
+      : npmPackArguments;
+  const packResult = spawnSync(npmExecutable, npmExecutableArguments, {
+    cwd: PROJECT_ROOT,
+    encoding: "utf8",
+    timeout: 30_000,
+  });
   assert.equal(packResult.status, 0, packResult.stderr || packResult.stdout);
   const packRecords = JSON.parse(packResult.stdout) as Array<{
     filename?: string;
@@ -108,8 +121,9 @@ function extractPackedCandidate(): string {
   );
   const extractionResult = spawnSync(
     "tar",
-    ["-xzf", packedArchivePath, "-C", extractedDirectoryPath],
+    ["-xzf", basename(packedArchivePath), "-C", "../extracted"],
     {
+      cwd: archiveDirectoryPath,
       encoding: "utf8",
       timeout: 30_000,
     },
@@ -147,8 +161,14 @@ function installPackedCliExecutable(): PackedCliInstallation {
     ".bin",
   );
   mkdirSync(packedCliBinDirectoryPath, { recursive: true });
-  const packedCliExecutablePath = join(packedCliBinDirectoryPath, "goat-flow");
-  symlinkSync(packedCliTargetPath, packedCliExecutablePath, "file");
+  // npm uses a command shim on Windows; this fixture already invokes the declared target with Node.
+  const packedCliExecutablePath =
+    process.platform === "win32"
+      ? packedCliTargetPath
+      : join(packedCliBinDirectoryPath, "goat-flow");
+  if (process.platform !== "win32") {
+    symlinkSync(packedCliTargetPath, packedCliExecutablePath, "file");
+  }
   symlinkSync(
     join(PROJECT_ROOT, "node_modules"),
     join(packedPackageRoot, "node_modules"),
@@ -218,18 +238,25 @@ const V1_15_0_PACKAGE_MIGRATION_UNAVAILABLE =
  * Use before replaying safe and dangerous shell requests through configured policy.
  *
  * @param targetProjectPath - non-empty installed project root; empty has no Codex configuration
- * @returns Configured command; never empty after a successful managed installation.
+ * @returns Configured shell descriptor; its cross-platform command is never empty after a successful managed installation.
  */
-function readInstalledCodexDenyCommand(targetProjectPath: string): string {
+function readInstalledCodexDenyHandler(targetProjectPath: string): {
+  command: string;
+  commandWindows?: string;
+} {
   const installedHookConfiguration = JSON.parse(
     readFileSync(join(targetProjectPath, ".codex", "hooks.json"), "utf8"),
   ) as CodexHookConfiguration;
   // Empty registration means the package left the user's shell without the managed deny guard.
-  const installedDenyCommand =
-    installedHookConfiguration.hooks?.PreToolUse?.[0]?.hooks?.[0]?.command ??
-    "";
-  assert.notEqual(installedDenyCommand, "");
-  return installedDenyCommand;
+  const installedDenyHandler =
+    installedHookConfiguration.hooks?.PreToolUse?.[0]?.hooks?.[0];
+  assert.equal(typeof installedDenyHandler?.command, "string");
+  return {
+    command: installedDenyHandler.command,
+    ...(typeof installedDenyHandler.commandWindows === "string"
+      ? { commandWindows: installedDenyHandler.commandWindows }
+      : {}),
+  };
 }
 
 /**
@@ -241,16 +268,24 @@ function readInstalledCodexDenyCommand(targetProjectPath: string): string {
  * @returns Nothing; failed policy outcomes throw assertions with captured user-facing output.
  */
 function assertInstalledCodexPolicy(targetProjectPath: string): void {
-  const installedDenyCommand = readInstalledCodexDenyCommand(targetProjectPath);
-  const safePolicyResult = spawnSync("bash", ["-lc", installedDenyCommand], {
-    cwd: targetProjectPath,
-    encoding: "utf8",
-    input: JSON.stringify({
-      tool_name: "Bash",
-      tool_input: { command: "echo safe" },
-    }),
-    timeout: 30_000,
+  const installedDenyHandler = readInstalledCodexDenyHandler(targetProjectPath);
+  const selectedDenyHandler = agentHookSpawnDescriptor({
+    form: "shell",
+    ...installedDenyHandler,
   });
+  const safePolicyResult = spawnSync(
+    selectedDenyHandler.command,
+    selectedDenyHandler.args,
+    {
+      cwd: targetProjectPath,
+      encoding: "utf8",
+      input: JSON.stringify({
+        tool_name: "Bash",
+        tool_input: { command: "echo safe" },
+      }),
+      timeout: 30_000,
+    },
+  );
   assert.equal(
     safePolicyResult.status,
     0,
@@ -258,8 +293,8 @@ function assertInstalledCodexPolicy(targetProjectPath: string): void {
   );
 
   const dangerousPolicyResult = spawnSync(
-    "bash",
-    ["-lc", installedDenyCommand],
+    selectedDenyHandler.command,
+    selectedDenyHandler.args,
     {
       cwd: targetProjectPath,
       encoding: "utf8",
@@ -427,7 +462,7 @@ describe("packaged hook installation canary", () => {
     assert.match(modelVisibleContext, /execution-timeout/u);
     assert.match(
       modelVisibleContext,
-      /hook exceeded its deadline and was killed/u,
+      /hook exceeded its deadline; process-tree termination was requested/u,
     );
     assert.equal(canaryResult.stderr, "");
     assert.ok(

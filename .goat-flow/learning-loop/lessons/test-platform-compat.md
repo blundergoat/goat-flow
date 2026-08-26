@@ -1,6 +1,6 @@
 ---
 category: test-platform-compat
-last_reviewed: 2026-08-23
+last_reviewed: 2026-08-27
 ---
 
 **Scope:** Platform and runtime differences that break tests - CI Node versions older than local, Windows path/URL shapes and symlink privileges, filesystem-clock skew, and npm scripts that assume a POSIX shell. Choosing and invoking the runner is [test-execution-environment.md](test-execution-environment.md); shell and process behaviour under a test is [test-shell-environment.md](test-shell-environment.md).
@@ -49,7 +49,7 @@ spawnSync(process.execPath, ["--import", TSX_LOADER_URL, CLI_PATH, ...args], ...
 
 ## Lesson: Windows test runs require explicit EPERM handling for symlink fixtures
 
-**Status:** active | **Created:** 2026-05-11 | **Trigger phase:** ACT | **Incident count:** 2 | **Latest occurrence:** 2026-08-22
+**Status:** active | **Created:** 2026-05-11 | **Trigger phase:** ACT | **Incident count:** 3 | **Latest occurrence:** 2026-08-27
 **Caught at:** VERIFY
 
 **What happened:** Three tests (`main-module guard via symlink`, `skips symlink entries in skill walk roots`, `rejects upload paths that escape through symlinked components`) call `fs.symlinkSync()` to build fixtures. On Windows without Developer Mode (or admin rights), `symlinkSync` throws `EPERM: operation not permitted`. The tests failed because they treated the fixture setup as guaranteed; the production code under test is correct on all platforms, but the test harness can't reach it.
@@ -75,10 +75,24 @@ Each test that uses `symlinkSync` accepts a `TestContext` arg (`(t) => { ... }`)
 
 **Second recurrence 2026-08-22 (ACTUAL_MEASURED):** The focused ADR-053 hook suites passed on Windows, but the repository-wide fast suite still exited 1 on existing platform assumptions outside that patch. Unguarded symlink fixtures raised `EPERM`, and the direct hook probe passed an OS-native `C:\...` script path to Bash, which stripped the backslashes and returned 127. A focused pass is therefore not evidence of repository-wide Windows readiness. Anchors: `test/unit/hook-launcher.test.ts` (search: `fails closed when the managed hook script is a symlink`), `test/unit/hooks-runtime-evidence.test.ts` (search: `still executes a regular in-checkout hook script`).
 
+**Third recurrence 2026-08-27 (ACTUAL_MEASURED):** The full Gruff smoke suite reached 18 passes but failed six cases on Windows. Two fixture setups called `symlinkSync` without a capability guard and raised `EPERM`; four self-test cases expected `chmod -x` to make an analyzer non-executable, a Unix permission transition this Windows filesystem did not represent. The focused Gruff contract and provider-adaptation suites passed separately, so these failures remain test-platform debt rather than evidence against the Codex PostToolUse fix. Anchors: `test/integration/gruff-code-quality-smoke.test.ts` (search: `accepts a contained configured analyzer symlink`) and `workflow/hooks/gruff-code-quality.sh` (search: `non-executable config override diagnostic failed`).
+
 **Prevention:**
 1. Any new test that calls `symlinkSync`, `linkSync`, or any privileged fs op must guard against `EPERM` with a `t.skip(...)`.
 2. The skip message must name the platform constraint so a reader knows why coverage dropped, not just that it dropped.
 3. Don't try to detect "is Windows" via `process.platform` - the privilege depends on Developer Mode / admin context, not the OS. Always try-and-catch.
+
+---
+
+## Lesson: Archive tools need shell-native relative paths on Windows
+
+**Status:** active | **Created:** 2026-08-27 | **Trigger phase:** VERIFY | **Incident count:** 1 | **Latest occurrence:** 2026-08-27
+
+**What happened:** The archived-package canary failed before it could execute Goat Flow. Node passed GNU tar an absolute `C:\...` archive path; tar interpreted the drive-letter colon as its remote-archive syntax and reported `Cannot connect to C: resolve failed`. Both package tests failed even though `npm pack` had produced the archive correctly.
+
+**Root cause:** A child process can start successfully while still receiving paths in the wrong dialect. Git for Windows supplied a POSIX-oriented tar, but the native Node parent passed a Windows drive path to tar's `-f` argument.
+
+**Prevention:** Give shell-oriented archive tools relative paths from an explicit `cwd` when a fixture controls both locations. This avoids drive-letter parsing and works on POSIX too. Re-run the complete archived-package canary after correcting the transport; do not replace it with a source-tree test. Evidence anchor: `test/integration/packaged-hook-install.test.ts` (search: `basename(packedArchivePath)`).
 
 ---
 

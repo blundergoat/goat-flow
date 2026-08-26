@@ -76,13 +76,13 @@ function unavailableLauncherDelivery(userFacingReason, childStandardError) {
  * Capture one started hook until it exits, fails, floods output, or reaches its deadline.
  * Keep first-result ownership here because deadline, error, close, and output events can race.
  *
- * @param {import("node:child_process").ChildProcess} hookProcess - started Bash child; missing streams are valid only for legacy pass-through
+ * @param {import("node:child_process").ChildProcess} hookProcess - started Bash child; missing streams mean startup failed before output pipes opened
  * @param {NodeJS.ProcessEnv} hookEnvironment - hook environment; missing Windows roots allow direct-process cleanup only
  * @param {number} launchTimeout - positive deadline in milliseconds; zero would time out immediately
  * @param {NodeJS.Platform} hostPlatform - active host; empty text cannot select safe tree cleanup
- * @param {Function | null} appendCapturedHookOutput - bounded adapter writer; null preserves direct legacy streams
+ * @param {Function | null} appendCapturedHookOutput - bounded adapter writer; null preserves relayed legacy streams
  * @param {Function} stopHookProcessTree - required cleanup callback; missing behavior could strand timed-out user work
- * @returns {Promise<{status: number | null, timedOut: boolean, launchError: Error | null, stdout: string, stderr: string, hasExceededOutputLimit: boolean}>} first terminal result; empty streams mean legacy pass-through or no child output
+ * @returns {Promise<{status: number | null, timedOut: boolean, launchError: Error | null, stdout: string, stderr: string, hasExceededOutputLimit: boolean}>} first terminal result; empty captured streams mean legacy relay or no child output
  */
 export function captureHookProcessUntilDeadline(
   hookProcess,
@@ -99,10 +99,26 @@ export function captureHookProcessUntilDeadline(
     let hasHookReachedDeadline = false;
     let hasExceededOutputLimit = false;
     const capturedHookOutput = { stdout: "", stderr: "" };
+
+    /**
+     * Release launcher-owned pipe handles after a forced terminal result.
+     * Use so a descendant that outlives Bash cannot keep the provider-facing Node process open.
+     *
+     * @returns {void} no value; captured text remains in memory for the provider adapter.
+     */
+    function releaseHookOutputStreams() {
+      for (const outputStream of [hookProcess.stdout, hookProcess.stderr]) {
+        if (!outputStream) continue;
+        outputStream.removeAllListeners("data");
+        outputStream.destroy();
+      }
+    }
+
     const launchDeadlineTimer = setTimeout(() => {
       hasHookReachedDeadline = true;
       stopHookProcessTree(hookProcess, hostPlatform, hookEnvironment);
       hookProcess.unref();
+      releaseHookOutputStreams();
       // A deadline has no trustworthy exit code or startup error, so the agent gets timeout context.
       deliverHookResult(null, null);
     }, launchTimeout);
@@ -156,10 +172,11 @@ export function captureHookProcessUntilDeadline(
       hasExceededOutputLimit = true;
       stopHookProcessTree(hookProcess, hostPlatform, hookEnvironment);
       hookProcess.unref();
+      releaseHookOutputStreams();
       deliverHookResult(null, null);
     }
 
-    // Envelope mode owns both child streams; legacy mode leaves them inherited and null here.
+    // Envelope mode captures both child streams; legacy relay listeners are attached by the launcher.
     if (shouldCaptureResult && hookProcess.stdout && hookProcess.stderr) {
       hookProcess.stdout.on("data", (outputChunk) => {
         captureHookOutputChunk("stdout", outputChunk);

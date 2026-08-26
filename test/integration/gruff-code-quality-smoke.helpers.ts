@@ -15,7 +15,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { delimiter, dirname, extname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import assert from "node:assert/strict";
 
@@ -43,12 +43,61 @@ export function cleanupHookTestDirs(): void {
  * @returns the first matching absolute path; throws when the tool is missing
  */
 export function resolveTool(name: string): string {
-  for (const dir of (process.env.PATH ?? "").split(":")) {
+  const executableSuffixes =
+    process.platform === "win32" && extname(name).length === 0
+      ? [
+          "",
+          ...(process.env.PATHEXT ?? ".COM;.EXE;.BAT;.CMD")
+            .split(";")
+            .filter((suffix) => suffix.length > 0),
+        ]
+      : [""];
+  for (const pathEntry of (process.env.PATH ?? "").split(delimiter)) {
+    const dir = pathEntry.replace(/^"(.*)"$/u, "$1");
     if (!dir) continue;
-    const candidate = join(dir, name);
-    if (existsSync(candidate)) return candidate;
+    for (const executableSuffix of executableSuffixes) {
+      const candidate = join(dir, `${name}${executableSuffix}`);
+      if (existsSync(candidate)) return candidate;
+    }
   }
   throw new Error(`required tool not found on PATH: ${name}`);
+}
+
+/** Convert a native Windows path into the absolute form Git Bash accepts in PATH. */
+function bashPath(pathValue: string): string {
+  if (process.platform !== "win32") return pathValue;
+  return pathValue
+    .replace(
+      /(^|:)([A-Za-z]):[\\/]/gu,
+      (_match, separator: string, drive: string) =>
+        `${separator}/${drive.toLowerCase()}/`,
+    )
+    .replaceAll("\\", "/");
+}
+
+/**
+ * Preserve the fixture's analyzer sandbox while making its POSIX system-path sentinel portable to Windows.
+ * Custom paths that deliberately omit jq remain unmodified apart from native-path conversion.
+ */
+function hookSearchPath(pathPrefix: string): string {
+  const normalizedPrefix = bashPath(pathPrefix);
+  if (
+    process.platform !== "win32" ||
+    !normalizedPrefix.split(":").some((entry) => entry === "/usr/bin")
+  ) {
+    return normalizedPrefix;
+  }
+  const requiredHostToolDirectories = ["git", "jq"].map((tool) =>
+    bashPath(dirname(resolveTool(tool))),
+  );
+  return [
+    ...new Set([
+      ...normalizedPrefix.split(":"),
+      ...requiredHostToolDirectories,
+    ]),
+  ]
+    .filter((entry) => entry.length > 0)
+    .join(":");
 }
 
 /**
@@ -139,7 +188,7 @@ exit 1
  * @returns nothing - mutates the repo and fails the test on a non-zero exit
  */
 export function git(root: string, args: string[]): void {
-  const result = spawnSync("git", args, {
+  const result = spawnSync(resolveTool("git"), args, {
     cwd: root,
     encoding: "utf-8",
     env: { ...process.env, PATH: "/usr/bin:/bin" },
@@ -189,12 +238,12 @@ export function runHook(
     // File-backed stdin keeps Bash `cat` readers from waiting forever for EOF
     // under Codex's sandboxed child-process plumbing.
     return spawnSync(
-      "bash",
+      resolveTool("bash"),
       ["-c", 'bash "$1" < "$2"', "gruff-code-quality-test", HOOK, payloadPath],
       {
         cwd: root,
         encoding: "utf-8",
-        env: { ...process.env, ...extraEnv, PATH: pathPrefix },
+        env: { ...process.env, ...extraEnv, PATH: hookSearchPath(pathPrefix) },
         stdio: ["ignore", "pipe", "pipe"],
       },
     );

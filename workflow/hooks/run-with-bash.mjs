@@ -482,8 +482,8 @@ function stopHookProcessTree(hookProcess, hostPlatform, hookEnvironment) {
  * @param {NodeJS.ProcessEnv} hookEnvironment - Hook environment; missing values remain unavailable to the script.
  * @param {number} launchTimeout - Positive deadline in milliseconds; zero would time out immediately.
  * @param {NodeJS.Platform} hostPlatform - Active host used for process-tree cleanup.
- * @param {Function | null} appendCapturedHookOutput - adapter writer; null preserves direct legacy streams.
- * @returns {Promise<{status: number | null, timedOut: boolean, launchError: Error | null, stdout: string, stderr: string, hasExceededOutputLimit: boolean}>} Result for the user; empty streams mean legacy passthrough or no child output.
+ * @param {Function | null} appendCapturedHookOutput - adapter writer; null relays legacy streams without exposing provider handles to descendants.
+ * @returns {Promise<{status: number | null, timedOut: boolean, launchError: Error | null, stdout: string, stderr: string, hasExceededOutputLimit: boolean}>} Result for the user; empty captured streams mean legacy relay or no child output.
  */
 function runHookProcessUntilDeadline(
   bashExecutable,
@@ -506,10 +506,20 @@ function runHookProcessUntilDeadline(
       detached: hostPlatform !== "win32",
       env: hookEnvironment,
       shell: false,
-      stdio: shouldCaptureResult ? ["inherit", "pipe", "pipe"] : "inherit",
+      // Launcher-owned pipes keep an escaped descendant from retaining provider-facing handles.
+      stdio: ["inherit", "pipe", "pipe"],
       windowsHide: true,
     },
   );
+  // Legacy output stays live while the launcher retains ownership of the underlying handles.
+  if (!shouldCaptureResult && hookProcess.stdout && hookProcess.stderr) {
+    hookProcess.stdout.on("data", (outputChunk) => {
+      process.stdout.write(outputChunk);
+    });
+    hookProcess.stderr.on("data", (outputChunk) => {
+      process.stderr.write(outputChunk);
+    });
+  }
   return captureHookProcessUntilDeadline(
     hookProcess,
     hookEnvironment,
@@ -632,7 +642,7 @@ function renderHookExecutionResult(
       providerAdapterRuntime,
       launchContract,
       "execution-timeout",
-      "hook exceeded its deadline and was killed",
+      "hook exceeded its deadline; process-tree termination was requested",
       hookExecution.stderr,
       launchTimeout,
     );
