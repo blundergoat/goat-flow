@@ -31,10 +31,10 @@ export const STANDALONE_PLAYBOOK_FILES = [
   ".goat-flow/skill-docs/playbooks/release-notes.md",
   ".goat-flow/skill-docs/playbooks/skill-playbook-authoring-sync.md",
   ".goat-flow/skill-docs/playbooks/test-selection.md",
-  ".goat-flow/skill-docs/playbooks/writing-for-agents.md",
+  ".goat-flow/skill-docs/playbooks/writing-agent-facing-instructions.md",
   ".goat-flow/skill-docs/playbooks/writing-sentence-diagnostics.md",
   ".goat-flow/skill-docs/playbooks/writing-structure-diagnostics.md",
-  ".goat-flow/skill-docs/playbooks/writing-style.md",
+  ".goat-flow/skill-docs/playbooks/writing-human-facing-prose.md",
 ] as const;
 
 /**
