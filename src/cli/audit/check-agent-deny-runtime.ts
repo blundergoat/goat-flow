@@ -338,7 +338,9 @@ const CONFIGURED_RUNTIME_SCRIPTS = ["deny-dangerous.sh"] as const;
 /** Hook handler extracted from agent config for runtime-shaped smoke validation. */
 interface ConfiguredHookCommand {
   command: string;
-  /** Exec-form arguments; null means the command string is parsed by Bash. */
+  /** Codex's optional Windows-only shell override; null keeps the default command on every platform. */
+  commandWindows: string | null;
+  /** Exec-form arguments; null means the platform-selected shell command is used. */
   args: string[] | null;
   scriptFile: string;
   scriptPath: string | null;
@@ -431,20 +433,34 @@ function extractConfiguredArgvScriptPath(
 function pushConfiguredCommand(
   commands: ConfiguredHookCommand[],
   command: unknown,
+  commandWindows: unknown,
   configPath: string,
 ): void {
   // Empty or non-text values cannot be launchers the user's agent will run.
   if (typeof command !== "string" || command.length === 0) return;
+  const configuredWindowsCommand =
+    typeof commandWindows === "string" ? commandWindows : null;
+  const commandSearchText = [command, configuredWindowsCommand ?? ""].join(
+    "\n",
+  );
   const managedScriptFile = CONFIGURED_RUNTIME_SCRIPTS.find((script) =>
-    commandsReferenceScriptToken(command, script),
+    commandsReferenceScriptToken(commandSearchText, script),
   );
   // Unrelated user hooks stay outside the managed runtime audit.
   if (!managedScriptFile) return;
+  const platformSelectedCommand =
+    process.platform === "win32" && configuredWindowsCommand !== null
+      ? configuredWindowsCommand
+      : command;
   commands.push({
     command,
+    commandWindows: configuredWindowsCommand,
     args: null,
     scriptFile: managedScriptFile,
-    scriptPath: extractConfiguredScriptPath(command, managedScriptFile),
+    scriptPath: extractConfiguredScriptPath(
+      platformSelectedCommand,
+      managedScriptFile,
+    ),
     configPath,
   });
 }
@@ -473,6 +489,7 @@ function pushConfiguredArgvCommand(
   if (!managedScriptFile) return;
   commands.push({
     command,
+    commandWindows: null,
     args: stringArguments,
     scriptFile: managedScriptFile,
     scriptPath: extractConfiguredArgvScriptPath(
@@ -508,9 +525,14 @@ function collectNestedCommandValues(
   if (Array.isArray(obj.args)) {
     pushConfiguredArgvCommand(commands, obj.command, obj.args, configPath);
   } else {
-    pushConfiguredCommand(commands, obj.command, configPath);
+    pushConfiguredCommand(
+      commands,
+      obj.command,
+      obj.commandWindows,
+      configPath,
+    );
   }
-  pushConfiguredCommand(commands, obj.bash, configPath);
+  pushConfiguredCommand(commands, obj.bash, undefined, configPath);
   for (const child of Object.values(obj)) {
     if (typeof child === "object") {
       collectNestedCommandValues(child, configPath, commands);
@@ -540,6 +562,7 @@ function configuredGuardCommands(
   try {
     parsed = JSON.parse(rawConfig);
   } catch {
+    // For example, a user may be midway through repairing a truncated hooks file; setup owns that malformed-config guidance.
     return [];
   }
   const commands: ConfiguredHookCommand[] = [];
@@ -550,6 +573,7 @@ function configuredGuardCommands(
     const key = [
       command.configPath,
       command.command,
+      command.commandWindows ?? "",
       ...(command.args ?? []),
     ].join("\0");
     if (seen.has(key)) return false;
@@ -560,9 +584,23 @@ function configuredGuardCommands(
 
 /** Render one configured handler for failure messages without re-quoting operands. */
 function describeConfiguredCommand(configured: ConfiguredHookCommand): string {
-  return configured.args === null
-    ? configured.command
-    : [configured.command, ...configured.args].join(" ");
+  if (configured.args !== null) {
+    return [configured.command, ...configured.args].join(" ");
+  }
+  if (process.platform === "win32" && configured.commandWindows !== null) {
+    return configured.commandWindows.length > 0
+      ? configured.commandWindows
+      : "<empty commandWindows>";
+  }
+  return configured.command;
+}
+
+/** Name the executable selected for one configured handler on this platform. */
+function configuredHookExecutable(configured: ConfiguredHookCommand): string {
+  if (configured.args !== null) return configured.command;
+  return process.platform === "win32" && configured.commandWindows !== null
+    ? "powershell.exe"
+    : "bash";
 }
 
 /**
@@ -631,7 +669,7 @@ function configuredHookProbeFailureFromResult(
   const spawnFailure = spawnFailureFromResult(
     result,
     `${agentFacts.agent.id} configured hook command for ${configured.scriptFile}`,
-    configured.args === null ? "bash" : configured.command,
+    configuredHookExecutable(configured),
   );
   // A launcher that cannot start leaves the user without policy protection.
   if (spawnFailure !== null) {
@@ -669,8 +707,64 @@ function configuredHookProbeFailureFromResult(
 }
 
 /**
+ * Start one policy probe with the user's registered invocation shape. Side effect: spawns one bounded child process.
+ *
+ * PowerShell receives the Windows override, Bash keeps its input pipe, and exec-form handlers retain exact argv.
+ * Use this split because replaying through another shell can make a broken registration appear healthy.
+ *
+ * @param configured - installed handler; null argv selects a platform shell command
+ * @param runtimeProbe - safe or blocked request and its expected user-visible result
+ * @param workingDirectoryPath - selected project location; empty cannot model a real agent launch
+ * @returns Completed bounded process result; null status means the configured executable did not report an exit code.
+ */
+function spawnConfiguredHookProbe(
+  configured: ConfiguredHookCommand,
+  runtimeProbe: RuntimeProbeExpectation,
+  workingDirectoryPath: string,
+): childProcess.SpawnSyncReturns<string> {
+  // Exec-form handlers receive the policy request on stdin without shell retokenization.
+  if (configured.args !== null) {
+    return childProcess.spawnSync(configured.command, configured.args, {
+      cwd: workingDirectoryPath,
+      encoding: "utf8",
+      env: process.env,
+      input: runtimeProbe.hookInput,
+      timeout: 5000,
+    });
+  }
+  // Codex users on native Windows run the registered PowerShell override directly.
+  if (process.platform === "win32" && configured.commandWindows !== null) {
+    return childProcess.spawnSync(
+      "powershell.exe",
+      ["-NoProfile", "-NonInteractive", "-Command", configured.commandWindows],
+      {
+        cwd: workingDirectoryPath,
+        encoding: "utf8",
+        env: runtimeProbeEnvironment(runtimeProbe.hookInput),
+        input: runtimeProbe.hookInput,
+        timeout: 5000,
+      },
+    );
+  }
+  // Other shell registrations pipe the request exactly as their Bash command expects.
+  return childProcess.spawnSync(
+    "bash",
+    ["-c", pipeRuntimeProbeTo(configured.command)],
+    {
+      cwd: workingDirectoryPath,
+      encoding: "utf8",
+      env: runtimeProbeEnvironment(runtimeProbe.hookInput),
+      input: "",
+      timeout: 5000,
+    },
+  );
+}
+
+/**
  * Replay safe and blocked user commands through one exact configured launcher.
- * It spawns the registered launcher, so the audit proves the launcher, root selection, and policy together rather than inferring them.
+ *
+ * Provider-specific spawn shapes stay distinct because another shell can make a broken registration appear healthy.
+ * Use after config discovery so the UI's first failure names the launcher, root, or policy the user must repair.
  */
 function verifyConfiguredHookRuntime(
   ctx: AuditContext,
@@ -694,27 +788,11 @@ function verifyConfiguredHookRuntime(
   for (const probeLocation of configuredHookProbeLocations(ctx, agentFacts)) {
     // A safe command followed by a blocked one proves policy is selective, not broadly broken.
     for (const runtimeProbe of runtimeProbes) {
-      // Exec-form handlers replay their exact argv with the probe on stdin, as the provider runs them.
-      const probeResult =
-        configured.args === null
-          ? childProcess.spawnSync(
-              "bash",
-              ["-c", pipeRuntimeProbeTo(configured.command)],
-              {
-                cwd: probeLocation.cwd,
-                encoding: "utf8",
-                env: runtimeProbeEnvironment(runtimeProbe.hookInput),
-                input: "",
-                timeout: 5000,
-              },
-            )
-          : childProcess.spawnSync(configured.command, configured.args, {
-              cwd: probeLocation.cwd,
-              encoding: "utf8",
-              env: process.env,
-              input: runtimeProbe.hookInput,
-              timeout: 5000,
-            });
+      const probeResult = spawnConfiguredHookProbe(
+        configured,
+        runtimeProbe,
+        probeLocation.cwd,
+      );
       const runtimeFailure = configuredHookProbeFailureFromResult(
         probeResult,
         agentFacts,
