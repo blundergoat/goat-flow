@@ -17,7 +17,7 @@ import {
   resolveIndexBucketPaths,
 } from "./learning-loop-index/parse-bucket.js";
 import { loadManifest } from "./manifest/manifest.js";
-import type { AgentId } from "./types.js";
+import { KNOWN_AGENT_IDS, type AgentId } from "./types.js";
 
 /** Filesystem evidence for a destination, gathered without following target symlinks. */
 export type ManagedTargetStatus =
@@ -218,7 +218,6 @@ function agentProjectWrites(agent: AgentId): ProjectWriteDefinition[] {
  */
 function conditionalProjectWrites(
   projectPath: string,
-  agent: AgentId,
 ): ProjectWriteDefinition[] {
   const bucketPaths = resolveIndexBucketPaths(loadConfig(projectPath).config);
   return [
@@ -247,13 +246,21 @@ function conditionalProjectWrites(
         "Install seeds commit guidance only in a Git project that has no guide at this path.",
     },
     {
-      path: `.goat-flow/install-state/${agent}.json`,
+      path: ".goat-flow/install-state/managed.json",
       ownership: "generated",
       seedable: true,
       replaceable: false,
       reason:
-        "Install records this hash-only baseline after verifying the managed refresh.",
+        "Install records the project-wide hash-only baseline and verified agent receipts after the managed refresh.",
     },
+    ...KNOWN_AGENT_IDS.map((knownAgent) => ({
+      path: `.goat-flow/install-state/${knownAgent}.json`,
+      ownership: "generated" as const,
+      seedable: true,
+      replaceable: false,
+      reason:
+        "Install replaces the retired agent-specific baseline with a hashless managed-state cutover marker.",
+    })),
     ...INDEX_BUCKETS.map((bucket) => ({
       path: posix.join(bucketPaths[bucket], "INDEX.md"),
       ownership: "generated" as const,
@@ -281,7 +288,7 @@ export function collectProjectWriteDefinitions(
   for (const definition of [
     ...manifestProjectWrites(),
     ...agentProjectWrites(agent),
-    ...conditionalProjectWrites(projectPath, agent),
+    ...conditionalProjectWrites(projectPath),
   ]) {
     const existing = definitions.get(definition.path);
     // Two different ownership claims for one path would make the preview action unverifiable.

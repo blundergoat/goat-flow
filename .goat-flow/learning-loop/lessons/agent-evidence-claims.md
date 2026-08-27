@@ -123,7 +123,7 @@ Round 4 entries in `.goat-flow/learning-loop/footguns/docs-drift.md` (search: `R
 
 ## Lesson: Final verification gates need supported scopes and captured logs
 
-**Status:** active | **Created:** 2026-05-19 | **Incident count:** 18 | **Latest occurrence:** 2026-08-27
+**Status:** active | **Created:** 2026-05-19 | **Incident count:** 22 | **Latest occurrence:** 2026-08-27
 
 **Decision changed:** Use repository-owned package scripts when a verification target loads TypeScript. | **Trigger phase:** VERIFY
 
@@ -139,6 +139,12 @@ Evidence anchors: `test/integration/setup-install-agent-matrix.test.ts` (search:
 **Root cause:** I mixed repo-supported verification scopes with improvised paths and treated parallel final gates as interchangeable with a clean final evidence run. That made the first failure ambiguous and forced a rerun to recover the actual evidence.
 
 ### Incident Ledger
+
+**Recurrence 2026-08-27 (unsupported formatter scope):** M41 Task 6 explicitly passed `workflow/install-goat-flow.sh` to `npx prettier --check` beside supported Markdown and TypeScript paths. Prettier exited 2 because it has no parser for that shell file, even though ShellCheck and `bash -n` had already exited cleanly. Use the repository-owned `npm run format:check` scope and keep shell proof in the shell gates; a mixed command that targets an unsupported file is not formatting evidence. Evidence anchor: `package.json` (search: `"format:check"`).
+
+**Recurrence 2026-08-27 (Knip heap contract):** M41 Task 5 ran ad-hoc `npx knip`; its ignored-tree walk reached Node's default 4 GiB heap and aborted with exit 134 before producing findings. The repository-owned command then exited zero: `node --max-old-space-size=5120 node_modules/knip/bin/knip.js --no-progress --no-gitignore`. Read the owning preflight block before invoking a heavyweight gate; an analyzer crash is neither a finding nor a clean report. Evidence anchor: `scripts/preflight-checks.sh` (search: `The project graph exceeds`).
+
+**Recurrence 2026-08-27 (yielded test handle):** M41 Task 5 ran three verification commands in one orchestrated call. The long install matrix yielded with a live session identifier after only `TAP version 13`, but the combined renderer retained neither that identifier nor a terminal status, so the still-running process could not supply attributable proof. Task 6 repeated the mistake with `Promise.all`: rendering only each result's exit and output discarded the shared-state suite's session identifier and left that exact process alive. The process was terminated by its resolved PID and the suite was rerun serially to `# tests 13`, `# pass 13`, and `# fail 0`. Preserve and surface every yielded command handle before combining results; an undefined exit beside partial output is not evidence. Evidence anchor: `AGENTS.md` (search: `literal pass/fail line copied verbatim`).
 
 **Recurrence 2026-08-27 (plan command shape):** After stopping M41 timing with its milestone-file path, I passed the same file to `plans check --strict`; the checker rejected it with `ENOTDIR` because `plans check` consumes the version directory while `plans time` consumes one milestone file. A failed invocation is not strict-plan evidence even when the corrected command follows immediately. Use the literal help example, capture each exit separately, and label only the directory-scoped run. Evidence anchors: `src/cli/help.ts` (search: `goat-flow plans check .goat-flow/plans/1.17.0 --strict`) and `src/cli/plans-export.ts` (search: `Cannot read plan directory`).
 

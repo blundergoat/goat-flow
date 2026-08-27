@@ -8,10 +8,10 @@ last_reviewed: 2026-08-27
 ## Footgun: Prose after the last checklist row silently strips that row's estimate
 
 **Status:** active | **Created:** 2026-08-15 | **Evidence:** ACTUAL_MEASURED
-**Decision changed:** Keep machine-parsed checklist sections contiguous; put explanatory prose and tables under their own headings outside the checklist.
+**Decision changed:** Keep machine-parsed checklist sections contiguous, leave `(est: ...)` as each row's final token, and put explanatory prose and tables under their own headings outside the checklist.
 **Trigger phase:** SCOPE
 **Caught at:** VERIFY
-**Incident count:** 4 | **Latest occurrence:** 2026-08-23
+**Incident count:** 5 | **Latest occurrence:** 2026-08-27
 
 **Symptoms:** `plans check --strict` starts failing on a milestone whose checklist was only ticked, with three errors at once: `proof counted work (N min) does not equal the split component`, `N testing gate item(s) missing an (est: ...) entry`, and `forecast basis declares N agent work units but the plan contains N-1`. The arithmetic looks corrupted even though no estimate was edited, and the named item visibly still carries its `(est: ...)`.
 
@@ -23,9 +23,11 @@ last_reviewed: 2026-08-27
 
 **Recurrence 2026-08-23:** M15 put one indented evidence bullet after every completed P1/C1-C3 row. Strict validation then counted zero proof minutes, reported all four gates as missing estimates, and saw only 8 of 12 forecast work units even though every checklist row still ended in `(est: ...)`. Moving those notes unchanged under `## Verification evidence` restored the checklist boundaries.
 
+**Recurrence 2026-08-27:** While closing M41's MP1 gate, appending a `Satisfied on ...` sentence after the row's `(est: 2 min proof)` suffix made strict validation report the same three-error cluster: proof work fell by two minutes, one mid-proof estimate disappeared, and the forecast lost one work unit. Moving the sentence before the unchanged estimate suffix restored the parsed row. The tracked parser owner is `src/cli/plans-effort.ts` (search: `TASK_ESTIMATE_PATTERN`).
+
 **Why it happens:** An item's body is not one line. `src/cli/plans-export.ts` (search: `Headings also end an item so nested Testing Gate labels do not swallow its trailing estimate`) runs each item from its checkbox to the next checkbox or the next heading, so a paragraph after the last row is absorbed into that row's body. The estimate is then read by `src/cli/plans-effort.ts` (search: `TASK_ESTIMATE_PATTERN`), whose regex is anchored to the end of the body text - the appended prose pushes `(est: ...)` away from that anchor and the item reads as unestimated. One insertion therefore produces three errors, and none of them names prose as the cause. A heading terminates an item, which is why prose under the *next* `##` heading is safe.
 
-**Prevention:** Keep a checklist section to its rows. Caveats, inventories, and tables belong under a dedicated heading outside the parsed checklist; gate evidence belongs under `## Mid-implementation evidence`. This applies to any section `readChecklistItems` parses - tasks, proof, and mid-proof - not to Proof alone. Run `plans check --strict` immediately after editing a milestone's checklist sections; three errors together with unchanged estimates points at absorbed content rather than at arithmetic.
+**Prevention:** Keep a checklist section to its rows and keep `(est: ...)` as the final token of every estimated row. Do not append completion evidence after that suffix. Caveats, inventories, and tables belong under a dedicated heading outside the parsed checklist; gate evidence belongs under `## Mid-implementation evidence`. This applies to any section `readChecklistItems` parses - tasks, proof, and mid-proof - not to Proof alone. Run `plans check --strict` immediately after editing a milestone's checklist sections; three errors together with unchanged estimates points at absorbed content rather than at arithmetic.
 
 ---
 

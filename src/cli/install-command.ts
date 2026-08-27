@@ -19,7 +19,9 @@ import {
 } from "./install-invocation.js";
 import {
   buildManagedSetupPreview,
+  ManagedInstallStateRecordError,
   managedSetupPreviewForInstallerLaunch,
+  prepareManagedInstallStateForApply,
   recordManagedInstallAfterVerification,
   type ManagedSetupPreview,
 } from "./managed-setup-preview.js";
@@ -31,6 +33,14 @@ import {
   validateManagedSetupRequest,
 } from "./managed-setup-command.js";
 import { getTemplatePath } from "./paths.js";
+import {
+  acquirePathWriteClaims,
+  PathWriteClaimError,
+  readPathWriteTargetIdentity,
+  releasePathWriteClaims,
+  type PathWriteClaimBatch,
+  type PathWriteClaimReleaseResult,
+} from "./path-write-claim.js";
 import { emitIndexGenerationInstallResult } from "./learning-loop-index/command.js";
 import { emitCommitGuidanceInstallResult } from "./prompt/commit-guidance.js";
 import {
@@ -666,6 +676,208 @@ function pendingMigrations(
   return migrations;
 }
 
+/** Return only owner releases that need operator-visible recovery. */
+function failedClaimReleases(
+  results: readonly PathWriteClaimReleaseResult[],
+): PathWriteClaimReleaseResult[] {
+  return results.filter((result) => result.status !== "released");
+}
+
+/** Render bounded release evidence without guessing that an abandoned owner is dead. */
+function claimReleaseDiagnostic(
+  results: readonly PathWriteClaimReleaseResult[],
+): string | null {
+  const failures = failedClaimReleases(results);
+  if (failures.length === 0) return null;
+  const details = failures
+    .map((failure) => `${failure.targetPath} (${failure.status})`)
+    .join(", ");
+  return `Managed install could not confirm owner-safe claim release for ${details}. Inspect the listed write claim before retrying; do not remove it while a writer may be active.`;
+}
+
+/** Translate reusable claim admission into the install command's no-mutation contract. */
+function managedInstallClaimError(error: PathWriteClaimError): CLIError {
+  const baseMessage =
+    error.reason === "busy"
+      ? `Managed install is busy: another process owns ${error.targetPath}. No target files were changed.`
+      : `Managed install could not claim ${error.targetPath}: ${error.message} No target files were changed.`;
+  const cleanupDiagnostic = claimReleaseDiagnostic(error.cleanupResults);
+  return new CLIError(
+    cleanupDiagnostic === null
+      ? baseMessage
+      : `${baseMessage} ${cleanupDiagnostic}`,
+    1,
+  );
+}
+
+/**
+ * Capture and acquire the complete previewed target-and-state write set.
+ * Error behavior: throws an install-specific CLI error for reusable claim refusals; unexpected failures propagate.
+ */
+function acquireManagedInstallClaims(
+  projectPath: string,
+  preview: ManagedSetupPreview,
+): PathWriteClaimBatch {
+  try {
+    const requests = preview.files.map((file) => ({
+      targetPath: file.path,
+      expectedIdentity: readPathWriteTargetIdentity(projectPath, file.path),
+    }));
+    return acquirePathWriteClaims(projectPath, requests);
+  } catch (error) {
+    if (error instanceof PathWriteClaimError) {
+      throw managedInstallClaimError(error);
+    }
+    throw error;
+  }
+}
+
+/**
+ * Release one completed batch without masking a transaction failure already in flight.
+ * Error behavior: throws a CLI error for an unconfirmed release unless another error is already propagating, in which case it prints the recovery.
+ */
+function releaseManagedInstallClaims(
+  claims: PathWriteClaimBatch,
+  didTransactionFail: boolean,
+): void {
+  let diagnostic: string | null;
+  try {
+    diagnostic = claimReleaseDiagnostic(releasePathWriteClaims(claims));
+  } catch {
+    diagnostic =
+      "Managed install could not confirm owner-safe claim release. Inspect the write claims before retrying; do not remove them while a writer may be active.";
+  }
+  if (diagnostic === null) return;
+  if (didTransactionFail) {
+    console.error(diagnostic);
+    return;
+  }
+  throw new CLIError(diagnostic, 1);
+}
+
+/**
+ * Rebuild and repeat admission while every previewed destination is claimed.
+ * Error behavior: throws a CLI error when admission or any preview input changed before mutation.
+ */
+function revalidateManagedInstallPreview(
+  options: ParsedCLI,
+  agent: AgentId,
+  authority: ManagedSetupAuthority,
+  initialPreview: ManagedSetupPreview,
+): ManagedSetupPreview {
+  const revalidatedPreview = buildManagedSetupPreview(
+    options.projectPath,
+    agent,
+    authority,
+    pendingMigrations(options, agent),
+  );
+  const overwriteBlocker = managedSetupAdmissionFailure(
+    revalidatedPreview,
+    authority,
+  );
+  if (overwriteBlocker !== null) throw new CLIError(overwriteBlocker, 1);
+  if (JSON.stringify(revalidatedPreview) !== JSON.stringify(initialPreview)) {
+    throw new CLIError(
+      "Managed install inputs changed after claim admission. No target files were changed.",
+      1,
+    );
+  }
+  return revalidatedPreview;
+}
+
+/** Build the accepted installed-bytes-unrecorded recovery command. */
+function managedInstallStateRecovery(
+  projectPath: string,
+  agent: AgentId,
+): CLIError {
+  return new CLIError(
+    `Managed files were verified, but install state was not recorded. The previous managed baseline is intact and no confirmed receipt was written. Repair write access to .goat-flow/install-state/, then rerun: goat-flow install ${projectPath} --agent ${agent}`,
+    1,
+  );
+}
+
+/** Whether the claimed installer reached post-write verification or preserved a child failure. */
+type ClaimedManagedInstallOutcome = "completed" | "installer-failed";
+
+/**
+ * Apply, verify, and record one install while its caller retains every write claim.
+ * Error behavior: preserves installer exits and translates verified-but-unrecorded state into the accepted recovery error.
+ * @returns completed after verified state and post-install writes, or installer-failed after preserving a non-zero child status
+ */
+async function runClaimedManagedInstall(
+  options: ParsedCLI,
+  agent: AgentId,
+  authority: ManagedSetupAuthority,
+  initialPreview: ManagedSetupPreview,
+): Promise<ClaimedManagedInstallOutcome> {
+  const installPreview = revalidateManagedInstallPreview(
+    options,
+    agent,
+    authority,
+    initialPreview,
+  );
+  // V2 state and every old-reader marker become visible while the complete claim batch is held, before Bash receives permission to mutate targets.
+  prepareManagedInstallStateForApply(options.projectPath);
+  const installerLaunch = buildInstallerInvocation({
+    scriptPath: getTemplatePath("workflow/install-goat-flow.sh"),
+    projectPath: options.projectPath,
+    agent,
+    installerFlags: collectInstallerFlags(options, agent, installPreview),
+    platform: process.platform,
+  });
+  if (!installerLaunch.ok) throw new CLIError(installerLaunch.error, 1);
+
+  const { spawnInheritedSync } = await import("./server/safe-exec.js");
+  const installerProcess = buildInstallerSpawnSpec(installerLaunch);
+  const installResult = spawnInheritedSync({
+    command: installerProcess.command,
+    args: installerProcess.args,
+    allowedBasenames: ["bash", "bash.exe"],
+    env: {
+      ...installerProcess.env,
+      GOAT_FLOW_INSTALL_ADMISSION: "v2",
+    },
+  });
+  if (installResult.error) {
+    throw new CLIError(
+      `Could not run installer with ${installerProcess.command}: ${installResult.error.message}`,
+      1,
+    );
+  }
+  if (installResult.signal) {
+    throw new CLIError(
+      `Installer terminated by signal ${installResult.signal}`,
+      1,
+    );
+  }
+  if (installResult.status !== 0) {
+    process.exitCode = installResult.status ?? 1;
+    return "installer-failed";
+  }
+
+  let installationMismatches: string[];
+  try {
+    installationMismatches = recordManagedInstallAfterVerification(
+      options.projectPath,
+      agent,
+    );
+  } catch (error) {
+    if (error instanceof ManagedInstallStateRecordError) {
+      throw managedInstallStateRecovery(options.projectPath, agent);
+    }
+    throw error;
+  }
+  if (installationMismatches.length > 0) {
+    throw new CLIError(
+      `Installer exited successfully, but ${installationMismatches.length} managed file(s) do not match their templates. Install state was not recorded.`,
+      1,
+    );
+  }
+  emitCommitGuidanceInstallResult(options.projectPath, agent);
+  emitIndexGenerationInstallResult(options.projectPath);
+  return "completed";
+}
+
 /**
  * Run a managed preview or deterministic install after the user chooses an agent.
  * Use for install or setup dry-run/apply; it throws CLI errors or preserves a non-zero child exit.
@@ -714,46 +926,23 @@ export async function handleInstallCommand(options: ParsedCLI): Promise<void> {
     throw new CLIError(installerLaunch.error, 1);
   }
 
-  const { spawnInheritedSync } = await import("./server/safe-exec.js");
-  const installerProcess = buildInstallerSpawnSpec(installerLaunch);
-  const installResult = spawnInheritedSync({
-    command: installerProcess.command,
-    args: installerProcess.args,
-    allowedBasenames: ["bash", "bash.exe"],
-    env: installerProcess.env,
-  });
-  // A spawn failure means the installer never started, so users receive the operating-system error.
-  if (installResult.error) {
-    throw new CLIError(
-      `Could not run installer with ${installerProcess.command}: ${installResult.error.message}`,
-      1,
-    );
-  }
-  // A signal means installation ended mid-flow and cannot be recorded as a verified baseline.
-  if (installResult.signal) {
-    throw new CLIError(
-      `Installer terminated by signal ${installResult.signal}`,
-      1,
-    );
-  }
-  // A non-zero or missing child status is preserved as failure instead of running post-install writes.
-  if (installResult.status !== 0) {
-    // Missing numeric status still maps to exit 1 so scripts never mistake it for success.
-    process.exitCode = installResult.status ?? 1;
-    return;
-  }
-
-  const installationMismatches = recordManagedInstallAfterVerification(
+  const claims = acquireManagedInstallClaims(
     options.projectPath,
-    selectedAgent,
+    installPreview,
   );
-  // A successful process exit is insufficient when managed bytes still differ from their templates.
-  if (installationMismatches.length > 0) {
-    throw new CLIError(
-      `Installer exited successfully, but ${installationMismatches.length} managed file(s) do not match their templates. Install state was not recorded.`,
-      1,
+  let didTransactionFail = false;
+  try {
+    const installOutcome = await runClaimedManagedInstall(
+      options,
+      selectedAgent,
+      authority,
+      installPreview,
     );
+    didTransactionFail = installOutcome === "installer-failed";
+  } catch (error) {
+    didTransactionFail = true;
+    throw error;
+  } finally {
+    releaseManagedInstallClaims(claims, didTransactionFail);
   }
-  emitCommitGuidanceInstallResult(options.projectPath, selectedAgent);
-  emitIndexGenerationInstallResult(options.projectPath);
 }

@@ -1,6 +1,6 @@
 ---
 category: gruff-cleanup
-last_reviewed: 2026-08-24
+last_reviewed: 2026-08-27
 ---
 
 **Scope:** Using the Gruff analyzer - reading its findings before acting on them, capturing clean JSON, masking blind spots, and not converting a fix request into threshold tuning. What breaks downstream when code is split or renamed is [refactor-fallout.md](refactor-fallout.md); proving comment fixes satisfy it is [verification-gruff.md](verification-gruff.md).
@@ -39,15 +39,19 @@ last_reviewed: 2026-08-24
 
 **Status:** active | **Created:** 2026-06-10
 
+**Incident count:** 4 | **Latest occurrence:** 2026-08-27
+
 **What happened:** During M01 gruff cleanup, extracting `src/cli/facts/fs.ts` cache helpers added comments that said "read errors cache and return null", "stat errors cache and return false", and "readdir errors cache and return []". Humans could infer the behavior, but `gruff-ts` still reported `docs.missing-error-behavior-doc` until the comments used the installed rule vocabulary: `swallows ... fallback`.
 
 **Recurrence update (2026-08-06):** New Windows Bash discovery comments said lookup errors returned no choices, but the rule stayed open until the text explicitly said the process errors `recover` to fallback discovery. The targeted report then cleared all three error-behavior findings.
 
 **Recurrence update (2026-08-16):** Two rewrites of the `readTargetConfigText` docblock in `src/cli/install-command.ts` failed the same way. "or null when no config can be read" carried no marker at all, and "returns null rather than throwing" failed because the vocabulary match is whole-word: `throwing` is not `throws`. The third wording used the bare `swallows` and cleared the finding.
 
+**Recurrence 2026-08-27:** During M41 Task 5, `recordManagedInstallAfterVerification` gained a typed state-persistence exception while its docblock still described only the return value. The focused Gruff baseline had zero findings; the post-change report found one `docs.missing-error-behavior-doc` advisory. Adding an explicit `@throws` contract returned the same targeted report to zero findings. Evidence anchor: `src/cli/managed-setup-preview.ts` (search: `@throws \`ManagedInstallStateRecordError\``).
+
 **Root cause:** I wrote comments that described the behavior semantically but did not satisfy the analyzer's marker vocabulary for error recovery.
 
-**Prevention:** When `docs.missing-error-behavior-doc` survives a comment pass, read the installed rule vocabulary and use accepted recovery words such as `swallows`, `fallback`, or `recover` when truthful. Evidence anchors: `src/cli/facts/fs.ts` (search: `swallows read errors as a cached null fallback`) and `node_modules/@blundergoat/gruff-ts/src/context-doc-rules.ts` (search: `hasErrorBehaviorMarker`).
+**Prevention:** When adding or changing a throw, return fallback, or swallowed failure, update the function's error-behavior contract in the same patch. If `docs.missing-error-behavior-doc` survives, read the installed rule vocabulary and use an explicit `@throws` tag or accepted recovery words such as `swallows`, `fallback`, or `recover` when truthful. Evidence anchors: `src/cli/facts/fs.ts` (search: `swallows read errors as a cached null fallback`) and `node_modules/@blundergoat/gruff-ts/src/context-doc-rules.ts` (search: `hasErrorBehaviorMarker`).
 
 ## Lesson: Do not leave generated gruff defaults after an init probe
 

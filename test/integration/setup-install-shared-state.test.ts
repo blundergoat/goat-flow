@@ -13,16 +13,22 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  rmSync,
   writeFileSync,
 } from "node:fs";
 import { delimiter, join } from "node:path";
 import { describe, it } from "node:test";
 
 import {
+  buildManagedSetupPreview,
+  writeManagedInstallState,
+} from "../../src/cli/managed-setup-preview.js";
+import {
   PROJECT_ROOT,
   makeTempProject,
   recordStaleBaselineHashes,
   runCliInstaller,
+  runInstaller,
 } from "./setup-install.helpers.js";
 
 const SHARED_HOOK_PATH = ".goat-flow/hooks/run-with-bash.mjs";
@@ -109,6 +115,12 @@ const SHARED_STATE_DECISIONS: readonly DecisionRow[] = [
     outcome:
       "Exactly one process mutates; the contender fails before its first target write and never waits or steals.",
   },
+  {
+    id: "installed-bytes-unrecorded",
+    evidence: "contract",
+    outcome:
+      "Retain the previous baseline and confirmed receipt state when persistence fails after target verification, then print the exact recovery command.",
+  },
 ] as const;
 
 /** One path classification from the public JSON preview. */
@@ -152,6 +164,17 @@ interface ManagedStateV2 {
   schemaVersion: string;
   files: ManagedStateRow[];
   receipts: ManagedStateReceipt[];
+}
+
+/**
+ * One parsed old-reader cutover marker written at a known agent path.
+ * Invariant: the fixture accepts only the four hashless fields asserted by each cutover case.
+ */
+interface CutoverMarker {
+  schemaVersion: string;
+  agent: string;
+  managedState: string;
+  legacyEvidence: string;
 }
 
 /** Captured terminal result from one asynchronously running public install. */
@@ -205,14 +228,31 @@ function setLegacyVersion(
   writeFileSync(statePath, `${JSON.stringify(state, null, 2)}\n`);
 }
 
-/** Install two legacy agents so migration cases start with real public state. */
+/**
+ * Install two agents through the predecessor producer and persist its real v1 state shape.
+ * Filesystem side effects: direct-installs and writes two v1 baselines only inside one disposable target.
+ */
 function installedLegacyPair(): string {
   const projectPath = makeTempProject();
-  for (const agent of ["codex", "antigravity"]) {
-    const result = runCliInstaller(projectPath, "--agent", agent);
+  for (const agent of ["codex", "antigravity"] as const) {
+    const result = runInstaller(projectPath, "--agent", agent);
     assert.equal(result.status, 0, result.stderr || result.stdout);
+    writeManagedInstallState(
+      projectPath,
+      buildManagedSetupPreview(projectPath, agent),
+    );
   }
   return projectPath;
+}
+
+/** Read one known-agent cutover marker after a public v2 install. */
+function readCutoverMarker(projectPath: string, agent: string): CutoverMarker {
+  return JSON.parse(
+    readFileSync(
+      join(projectPath, ".goat-flow", "install-state", `${agent}.json`),
+      "utf-8",
+    ),
+  ) as CutoverMarker;
 }
 
 /** Read one canonical v2 state file after a public install. */
@@ -297,6 +337,7 @@ function runCliInstallerAsync(
   projectPath: string,
   agent: string,
   environment: NodeJS.ProcessEnv,
+  extraArgs: readonly string[] = [],
 ): Promise<AsyncInstallResult> {
   return new Promise((resolve, reject) => {
     const child = spawn(
@@ -309,6 +350,7 @@ function runCliInstallerAsync(
         projectPath,
         "--agent",
         agent,
+        ...extraArgs,
       ],
       {
         cwd: PROJECT_ROOT,
@@ -361,6 +403,7 @@ describe("one baseline per managed path", () => {
       "unselected-malformed-v1",
       "receipt-invalidation",
       "concurrent-public-installs",
+      "installed-bytes-unrecorded",
     ];
     const actualIds = SHARED_STATE_DECISIONS.map((row) => row.id);
 
@@ -412,6 +455,61 @@ describe("one baseline per managed path", () => {
     assert.equal(
       readFileSync(join(projectPath, SHARED_SKILL_PATH), "utf-8"),
       patchedSkill,
+    );
+  });
+
+  it("cuts every legacy path over once and refuses later direct mutation", () => {
+    const projectPath = installedLegacyPair();
+    const publicInstall = runCliInstaller(projectPath, "--agent", "codex");
+    assert.equal(
+      publicInstall.status,
+      0,
+      publicInstall.stderr || publicInstall.stdout,
+    );
+    const managedStateBeforeDirectUse = readManagedState(projectPath).bytes;
+    const hookBytesBeforeDirectUse = readFileSync(
+      join(projectPath, SHARED_HOOK_PATH),
+      "utf-8",
+    );
+
+    assert.deepEqual(readCutoverMarker(projectPath, "claude"), {
+      schemaVersion: "goat-flow.install-state.v1-cutover",
+      agent: "claude",
+      managedState: "managed.json",
+      legacyEvidence: "absent",
+    });
+    assert.deepEqual(readCutoverMarker(projectPath, "codex"), {
+      schemaVersion: "goat-flow.install-state.v1-cutover",
+      agent: "codex",
+      managedState: "managed.json",
+      legacyEvidence: "migrated",
+    });
+    assert.deepEqual(readCutoverMarker(projectPath, "antigravity"), {
+      schemaVersion: "goat-flow.install-state.v1-cutover",
+      agent: "antigravity",
+      managedState: "managed.json",
+      legacyEvidence: "migrated",
+    });
+    assert.deepEqual(readCutoverMarker(projectPath, "copilot"), {
+      schemaVersion: "goat-flow.install-state.v1-cutover",
+      agent: "copilot",
+      managedState: "managed.json",
+      legacyEvidence: "absent",
+    });
+
+    const directInstall = runInstaller(projectPath, "--agent", "codex");
+    assert.equal(directInstall.status, 1, directInstall.stdout);
+    assert.match(
+      directInstall.stderr,
+      /managed install state requires the public CLI\. Run: goat-flow install .* --agent "codex"/u,
+    );
+    assert.equal(
+      readManagedState(projectPath).bytes,
+      managedStateBeforeDirectUse,
+    );
+    assert.equal(
+      readFileSync(join(projectPath, SHARED_HOOK_PATH), "utf-8"),
+      hookBytesBeforeDirectUse,
     );
   });
 
@@ -500,6 +598,48 @@ describe("one baseline per managed path", () => {
     assert.match(JSON.stringify(report), /stale/u);
   });
 
+  it("marks a receipt stale when its verified package version changes", () => {
+    const projectPath = makeTempProject();
+    const install = runCliInstaller(projectPath, "--agent", "codex");
+    assert.equal(install.status, 0, install.stderr || install.stdout);
+    const { state } = readManagedState(projectPath);
+    const codexReceipt = state.receipts.find(
+      (receipt) => receipt.agent === "codex",
+    );
+    assert.ok(codexReceipt, "public install must create the Codex receipt");
+    codexReceipt.goatFlowVersion = "0.0.0";
+    writeFileSync(
+      join(projectPath, MANAGED_STATE_PATH),
+      `${JSON.stringify(state, null, 2)}\n`,
+    );
+
+    const report = preview(projectPath, "codex");
+    assert.equal(report.verdict, "ready");
+    assert.match(JSON.stringify(report), /stale/u);
+  });
+
+  it("retains stale receipt bytes when one selected path is preserved locally", () => {
+    const projectPath = makeTempProject();
+    const install = runCliInstaller(projectPath, "--agent", "codex");
+    assert.equal(install.status, 0, install.stderr || install.stdout);
+    const hookPath = join(projectPath, SHARED_HOOK_PATH);
+    const patchedHook = `${readFileSync(hookPath, "utf-8")}\n// retained local patch\n`;
+    writeFileSync(hookPath, patchedHook);
+    const stateBeforeRepeat = readManagedState(projectPath).bytes;
+
+    const repeatInstall = runCliInstaller(projectPath, "--agent", "codex");
+    assert.equal(
+      repeatInstall.status,
+      0,
+      repeatInstall.stderr || repeatInstall.stdout,
+    );
+    assert.equal(readFileSync(hookPath, "utf-8"), patchedHook);
+    assert.equal(readManagedState(projectPath).bytes, stateBeforeRepeat);
+    const report = preview(projectPath, "codex");
+    assert.equal(previewRow(report, SHARED_HOOK_PATH).state, "local-preserved");
+    assert.match(JSON.stringify(report), /stale/u);
+  });
+
   it(
     "lets one concurrent public install mutate and rejects the contender",
     {
@@ -581,7 +721,7 @@ describe("one baseline per managed path", () => {
       assert.ok(loser, "one public install must lose claim contention");
       assert.match(
         loser.stderr,
-        /managed install.*(?:busy|claim|another process)/iu,
+        /^Managed install is busy: another process owns [^\r\n]+\. No target files were changed\.\n$/u,
       );
       const loserSkillPath =
         loser.agent === "claude" ? CLAUDE_SKILL_PATH : SHARED_SKILL_PATH;
@@ -589,6 +729,95 @@ describe("one baseline per managed path", () => {
         existsSync(join(projectPath, loserSkillPath)),
         false,
         "the contender must fail before its first agent-specific target write",
+      );
+    },
+  );
+
+  it(
+    "retains old state and prints exact recovery after verified target writes",
+    {
+      skip: process.platform === "win32" ? "POSIX Bash PID fixture" : false,
+    },
+    async () => {
+      const projectPath = makeTempProject();
+      const initialInstall = runCliInstaller(projectPath, "--agent", "codex");
+      assert.equal(
+        initialInstall.status,
+        0,
+        initialInstall.stderr || initialInstall.stdout,
+      );
+
+      const cutoverMarkerPath = join(
+        projectPath,
+        ".goat-flow",
+        "install-state",
+        "codex.json",
+      );
+      const oldCutoverMarker = readFileSync(cutoverMarkerPath, "utf-8");
+      const managedStatePath = join(projectPath, MANAGED_STATE_PATH);
+      const stateWithoutSelectedReceipt = JSON.parse(
+        readFileSync(managedStatePath, "utf-8"),
+      ) as ManagedStateV2;
+      stateWithoutSelectedReceipt.receipts =
+        stateWithoutSelectedReceipt.receipts.filter(
+          (receipt) => receipt.agent !== "codex",
+        );
+      writeFileSync(
+        managedStatePath,
+        `${JSON.stringify(stateWithoutSelectedReceipt, null, 2)}\n`,
+      );
+      const oldManagedState = readFileSync(managedStatePath, "utf-8");
+      const hookPath = join(projectPath, SHARED_HOOK_PATH);
+      const expectedHookBytes = readFileSync(hookPath, "utf-8");
+      rmSync(hookPath);
+
+      const fixtureDirectory = join(projectPath, ".state-write-failure");
+      const binaryDirectory = join(fixtureDirectory, "bin");
+      mkdirSync(binaryDirectory, { recursive: true });
+      const bashLookup = spawnSync("bash", ["-c", "command -v bash"], {
+        encoding: "utf-8",
+      });
+      assert.equal(bashLookup.status, 0, bashLookup.stderr);
+      const realBash = bashLookup.stdout.trim();
+      assert.ok(realBash, "fixture requires the Bash executable path");
+
+      const wrapperPath = join(binaryDirectory, "bash");
+      writeFileSync(
+        wrapperPath,
+        [
+          `#!${realBash}`,
+          "set -uo pipefail",
+          '"$GOAT_FLOW_TEST_REAL_BASH" "$@"',
+          "status=$?",
+          'if [[ "$status" -eq 0 && "${1:-}" == */workflow/install-goat-flow.sh ]]; then',
+          '  mkdir "$2/.goat-flow/install-state/managed.json.tmp-$PPID"',
+          "fi",
+          'exit "$status"',
+          "",
+        ].join("\n"),
+      );
+      chmodSync(wrapperPath, 0o755);
+
+      const failedInstall = await runCliInstallerAsync(
+        projectPath,
+        "codex",
+        {
+          PATH: `${binaryDirectory}${delimiter}${process.env.PATH ?? ""}`,
+          GOAT_FLOW_TEST_REAL_BASH: realBash,
+        },
+        ["--force-managed"],
+      );
+      assert.equal(failedInstall.status, 1, failedInstall.stdout);
+      assert.equal(
+        failedInstall.stderr.trim().split("\n").at(-1),
+        `Managed files were verified, but install state was not recorded. The previous managed baseline is intact and no confirmed receipt was written. Repair write access to .goat-flow/install-state/, then rerun: goat-flow install ${projectPath} --agent codex`,
+      );
+      assert.equal(readFileSync(cutoverMarkerPath, "utf-8"), oldCutoverMarker);
+      assert.equal(readFileSync(hookPath, "utf-8"), expectedHookBytes);
+      assert.equal(
+        readFileSync(managedStatePath, "utf-8"),
+        oldManagedState,
+        "a failed state commit must not publish a new confirmed receipt",
       );
     },
   );

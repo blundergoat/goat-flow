@@ -38,6 +38,38 @@ NODE
   done
 }
 
+# Refuse non-CLI mutation after v2 state or any old-reader cutover marker appears.
+# The environment value is cooperative admission supplied only after the public CLI owns and revalidates the complete write-claim batch.
+require_managed_install_admission() {
+  local managed_state_path="$PROJECT/.goat-flow/install-state/managed.json"
+  local marker_path known_agent
+  local -a known_agents=()
+
+  if [[ "${GOAT_FLOW_INSTALL_ADMISSION:-}" == "v2" ]]; then
+    return 0
+  fi
+  # Any object at the sole v2 authority path activates the guard; the CLI reports malformed state in detail.
+  if [[ -e "$managed_state_path" || -L "$managed_state_path" ]]; then
+    echo "ERROR: managed install state requires the public CLI. Run: goat-flow install \"$PROJECT\" --agent \"$AGENT\"" >&2
+    return 1
+  fi
+
+  IFS=',' read -r -a known_agents <<< "$SUPPORTED_AGENTS_CSV"
+  for known_agent in "${known_agents[@]}"; do
+    marker_path="$PROJECT/.goat-flow/install-state/$known_agent.json"
+    if [[ -L "$marker_path" || ( -e "$marker_path" && ! -f "$marker_path" ) ]]; then
+      echo "ERROR: managed install state requires the public CLI. Run: goat-flow install \"$PROJECT\" --agent \"$AGENT\"" >&2
+      return 1
+    fi
+    if [[ -f "$marker_path" ]]; then
+      if [[ ! -r "$marker_path" ]] || grep -Eq '"schemaVersion"[[:space:]]*:[[:space:]]*"goat-flow\.install-state\.v1-cutover"' "$marker_path"; then
+        echo "ERROR: managed install state requires the public CLI. Run: goat-flow install \"$PROJECT\" --agent \"$AGENT\"" >&2
+        return 1
+      fi
+    fi
+  done
+}
+
 manifest_eval() {
   node - "$MANIFEST_PATH" "$@" <<'NODE'
 const fs = require("node:fs");
@@ -288,6 +320,9 @@ fi
 
 # Dependency errors must reach the user before migrations, directory scaffolding, or staged file writes begin.
 preflight_installer_dependencies
+
+# A v1-only CLI or direct script must not mutate a target once v2 state controls admission.
+require_managed_install_admission
 
 COPIED=0
 SKIPPED=0

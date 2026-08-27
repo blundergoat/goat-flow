@@ -1,6 +1,6 @@
 ---
 category: contract-testing
-last_reviewed: 2026-08-26
+last_reviewed: 2026-08-27
 ---
 
 **Scope:** Tests that pin a contract rather than behaviour - exact wording, path semantics, word budgets, and user-visible serialization. When the thing under test is a hook, dashboard surface, or fixture, use the bucket that owns it.
@@ -97,9 +97,12 @@ last_reviewed: 2026-08-26
 
 **Status:** active | **Created:** 2026-08-12
 
-**Decision changed:** Compare both parsed state and serialized output when replacing config migration logic.
+**Decision changed:** Compare both parsed state and serialized output when replacing migration logic, and seed compatibility proof through the predecessor producer when it remains callable.
 
-**Trigger phase:** VERIFY | **Incident count:** 1 | **Latest occurrence:** 2026-08-12
+**Trigger phase:** ACT | **Caught at:** VERIFY
+**Incident count:** 2 | **Latest occurrence:** 2026-08-27
+
+**Prevention:** When migrating serialized state, reproduce its whitespace, trailing newline, key shape, and ordering contract as well as parsed semantics. Drive at least one compatibility fixture through the supported predecessor writer instead of rebuilding its output from the new reader's assumptions.
 
 **What happened:** M01's generated desired-state merger produced semantically correct Codex hooks but wrote minified JSON. The focused installer matrix failed two user-visible formatting assertions, including the expected `"timeout": 90` form.
 
@@ -107,7 +110,25 @@ last_reviewed: 2026-08-26
 
 **Fix:** Keep compact JSON only for before/after comparison and pretty-print the user file. Evidence anchors: `workflow/install-goat-flow.sh` (search: `JSON.stringify(currentConfig, null, 2)`) and `test/integration/setup-install-agent-matrix.test.ts` (search: `timeout\": 90`).
 
-**Prevention:** When migrating a config writer, reproduce its whitespace, trailing newline, and key-shape contract as well as parsed semantics. Run the exact consumer-facing fixture before broader verification.
+**Recurrence 2026-08-27:** M41's first v2 bootstrap fixture rebuilt small v1 files in an order that happened to satisfy the new UTF-8 canonicalizer. The production v1 writer orders its complete path set with `localeCompare`; a direct writer-to-facade reproduction returned `malformed-blocking` for every agent shape checked. The correction preserves parsed v1 row order during byte normalization, then applies UTF-8 sorting only to the virtual v2 state. Evidence anchors: `src/cli/managed-setup-state.ts` (search: `V1 predates UTF-8 canonical ordering`) and `test/unit/managed-setup-preview.test.ts` (search: `bootstraps a baseline written by the v1 state writer`).
+
+---
+
+## Lesson: Retire shared contract vocabulary only after predecessor consumers migrate
+
+**Status:** active | **Created:** 2026-08-27
+
+**Decision changed:** Stop emitting predecessor-only values at the new boundary first; narrow a shared type only after every producer and consumer has migrated.
+
+**Trigger phase:** SCOPE | **Caught at:** VERIFY
+
+**Prevention:** Before narrowing an exported union during a staged migration, search every producer and consumer. Keep predecessor-only members available to unmigrated internals while making the new public boundary use only its replacement vocabulary.
+
+**What happened:** M41 Task 6 first removed `"invalid"` from `ManagedSetupBaselineStatus` while the v1 state reader still returned it and admission still compared against it. TypeScript rejected both predecessor consumers. The correction retained `"invalid"` as an internal compatibility member while the v2 preview reports the granular replacement statuses and never emits it.
+
+**Root cause:** I changed the shared type at the migrated producer boundary without first accounting for consumers that still owned predecessor behavior.
+
+**Evidence anchors:** `src/cli/managed-setup-preview.ts` (search: `export type ManagedSetupBaselineStatus`), `src/cli/managed-setup-state.ts` (search: `status: "invalid"`), and `src/cli/managed-setup-admission.ts` (search: `baselineStatus === "invalid"`).
 
 ---
 

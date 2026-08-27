@@ -25,7 +25,7 @@ import {
   getHookSpec,
   listHookSpecs,
 } from "../../src/cli/server/hooks-registry.js";
-import type { AgentProfile } from "../../src/cli/types.js";
+import { KNOWN_AGENT_IDS, type AgentProfile } from "../../src/cli/types.js";
 import {
   PROJECT_ROOT,
   makeTempProject,
@@ -221,7 +221,12 @@ function expectedManagedHookWritePaths(
     ],
     "agent-hook-config": [agentProfile.hookConfigFile],
     "goat-flow-config": [".goat-flow/config.yaml"],
-    "install-state": [`.goat-flow/install-state/${agentProfile.id}.json`],
+    "install-state": [
+      ".goat-flow/install-state/managed.json",
+      ...KNOWN_AGENT_IDS.map(
+        (agent) => `.goat-flow/install-state/${agent}.json`,
+      ),
+    ],
   };
   return fixture.expectedWriteTargets.flatMap((target) => targetPaths[target]);
 }

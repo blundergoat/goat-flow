@@ -17,17 +17,88 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 
+import {
+  canonicalManagedInstallStateBytes,
+  createManagedInstallStateRow,
+  type ManagedInstallStateV2,
+} from "../../src/cli/managed-setup-state.js";
 import { getTemplatePath } from "../../src/cli/paths.js";
 import {
-  downgradeCodexBaselineToSevenSkills,
   makeTempProject,
-  recordStaleBaselineHashes,
   runCliInstaller,
   symlinkDirectoryOrSkip,
   symlinkFileOrSkip,
 } from "./setup-install.helpers.js";
 
 const CODEX_GOAT_CLARITY_PATH = ".agents/skills/goat-clarity/SKILL.md";
+const MANAGED_INSTALL_STATE_PATH =
+  ".goat-flow/install-state/managed.json" as const;
+
+/**
+ * Read, mutate, and canonically replace the disposable project's v2 state fixture.
+ * Filesystem side effects: rewrites only managed.json inside the supplied temporary target.
+ * Error behavior: schema-invalid fixture mutations throw during canonical serialization.
+ */
+function mutateManagedInstallState(
+  projectPath: string,
+  mutation: (state: ManagedInstallStateV2) => void,
+): void {
+  const statePath = join(projectPath, MANAGED_INSTALL_STATE_PATH);
+  const state = JSON.parse(
+    readFileSync(statePath, "utf-8"),
+  ) as ManagedInstallStateV2;
+  mutation(state);
+  writeFileSync(statePath, canonicalManagedInstallStateBytes(state));
+}
+
+/**
+ * Remove goat-clarity's canonical row while retaining its stale receipt reference.
+ * Filesystem side effects: rewrites only the disposable project's managed.json fixture.
+ * Invariant: the next preview sees a loaded baseline that never owned the existing clarity path.
+ */
+function downgradeManagedStateToSevenCodexSkills(projectPath: string): void {
+  mutateManagedInstallState(projectPath, (state) => {
+    const originalFileCount = state.files.length;
+    state.files = state.files.filter(
+      (file) => file.path !== CODEX_GOAT_CLARITY_PATH,
+    );
+    assert.equal(
+      state.files.length,
+      originalFileCount - 1,
+      "the installed baseline must contain goat-clarity before the fixture removes it",
+    );
+  });
+}
+
+/**
+ * Replace selected canonical row hashes while retaining prior receipt generations.
+ * Filesystem side effects: rewrites only the disposable project's managed.json fixture.
+ * Invariant: each named path becomes a valid changed-package row and its prior receipt becomes stale.
+ */
+function recordStaleManagedStateHashes(
+  projectPath: string,
+  managedPaths: readonly string[],
+): void {
+  mutateManagedInstallState(projectPath, (state) => {
+    for (const managedPath of managedPaths) {
+      const rowIndex = state.files.findIndex(
+        (file) => file.path === managedPath,
+      );
+      assert.notEqual(
+        rowIndex,
+        -1,
+        `${managedPath} must appear in managed state`,
+      );
+      const row = state.files[rowIndex];
+      assert.ok(row);
+      state.files[rowIndex] = createManagedInstallStateRow({
+        path: row.path,
+        expectedSha256: "0".repeat(64),
+        provenance: row.provenance,
+      });
+    }
+  });
+}
 
 /** One preview row as the JSON contract publishes it. */
 interface PreviewRow {
@@ -195,16 +266,19 @@ describe("managed setup preview", () => {
       result.stdout,
       /The public goat-flow CLI verifies managed files and records install state after this helper exits\./u,
     );
-    const statePath = join(
-      projectPath,
-      ".goat-flow",
-      "install-state",
-      "codex.json",
-    );
+    const statePath = join(projectPath, MANAGED_INSTALL_STATE_PATH);
     assert.equal(existsSync(statePath), true);
     const state = readFileSync(statePath, "utf-8");
-    assert.match(state, /goat-flow\.install-state\.v1/u);
+    assert.match(state, /goat-flow\.install-state\.v2/u);
+    assert.match(state, /"agent": "codex"/u);
     assert.doesNotMatch(state, new RegExp(projectPath, "u"));
+    assert.match(
+      readFileSync(
+        join(projectPath, ".goat-flow", "install-state", "codex.json"),
+        "utf-8",
+      ),
+      /goat-flow\.install-state\.v1-cutover/u,
+    );
   });
 
   /**
@@ -255,9 +329,7 @@ describe("managed setup preview", () => {
       "the adopted file must be refreshed to the current package bytes",
     );
     assert.equal(
-      existsSync(
-        join(projectPath, ".goat-flow", "install-state", "codex.json"),
-      ),
+      existsSync(join(projectPath, MANAGED_INSTALL_STATE_PATH)),
       true,
       "the first managed upgrade must record a baseline",
     );
@@ -271,7 +343,7 @@ describe("managed setup preview", () => {
       0,
       firstInstall.stderr || firstInstall.stdout,
     );
-    downgradeCodexBaselineToSevenSkills(projectPath);
+    downgradeManagedStateToSevenCodexSkills(projectPath);
     const installedClarityPath = join(projectPath, CODEX_GOAT_CLARITY_PATH);
     rmSync(installedClarityPath);
 
@@ -320,7 +392,7 @@ describe("managed setup preview", () => {
       0,
       firstInstall.stderr || firstInstall.stdout,
     );
-    downgradeCodexBaselineToSevenSkills(projectPath);
+    downgradeManagedStateToSevenCodexSkills(projectPath);
     const installedClarityPath = join(projectPath, CODEX_GOAT_CLARITY_PATH);
     const developerOwnedBytes =
       "# Local goat-clarity\n\nKeep this developer-owned skill.\n";
@@ -374,7 +446,7 @@ describe("managed setup preview", () => {
     const localEdit = "keep this local managed edit\n";
     writeFileSync(managedReadmePath, localEdit);
     // Divergent bytes alone are preserved now; a stale baseline makes the package want this path too.
-    recordStaleBaselineHashes(projectPath, "codex", [
+    recordStaleManagedStateHashes(projectPath, [
       ".goat-flow/logs/quality/README.md",
     ]);
 
@@ -418,7 +490,7 @@ describe("managed setup preview", () => {
     const locallyEditedManagedContent = "force may replace this managed edit\n";
     writeFileSync(managedReadmePath, locallyEditedManagedContent);
     // Only a package template change makes this row a conflict force is allowed to resolve.
-    recordStaleBaselineHashes(projectPath, "codex", [
+    recordStaleManagedStateHashes(projectPath, [
       ".goat-flow/logs/quality/README.md",
     ]);
 
@@ -556,12 +628,7 @@ describe("managed setup preview", () => {
       "quality",
       "README.md",
     );
-    const statePath = join(
-      projectPath,
-      ".goat-flow",
-      "install-state",
-      "codex.json",
-    );
+    const statePath = join(projectPath, MANAGED_INSTALL_STATE_PATH);
     writeFileSync(managedReadmePath, "preview-only local edit\n");
     const stateBefore = readFileSync(statePath, "utf-8");
 
