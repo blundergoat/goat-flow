@@ -10,6 +10,7 @@ import {
   lstatSync,
   mkdirSync,
   mkdtempSync,
+  openSync,
   readFileSync,
   readdirSync,
   renameSync,
@@ -161,6 +162,20 @@ function makeIgnoredQualityRoot(): string {
   execFileSync("git", ["-C", root, "init", "--quiet"]);
   writeFileSync(join(root, ".gitignore"), ".goat-flow/logs/quality/*.json\n");
   return root;
+}
+
+/** Persist one current report through injected filesystem dependencies for race fixtures. */
+function persistCurrentQualityReport(
+  projectRoot: string,
+  deps: Parameters<typeof persistQualityReportText>[1],
+): string {
+  return persistQualityReportText(
+    {
+      projectPath: projectRoot,
+      rawText: JSON.stringify(currentQualityReport(projectRoot)),
+    },
+    deps,
+  );
 }
 
 describe("quality subcommand parsing", () => {
@@ -417,6 +432,19 @@ describe("quality refuted candidates", () => {
       refuted_candidates: [runtimeCandidate, mixedCandidate],
     });
     assert.equal(parsed.ok, true, parsed.ok ? undefined : parsed.error);
+  });
+
+  it("rejects an unsafe runtime evidence exit code", () => {
+    assertRefutedCandidateError(
+      staticRefutedCandidate({
+        file: null,
+        evidence_method: "runtime-probe",
+        evidence_command: "npm test",
+        evidence_exit_code: Number.MAX_SAFE_INTEGER + 1,
+        evidence_summary: "The focused regression produced an exit status.",
+      }),
+      "refuted_candidates[0].evidence_exit_code must be a non-negative integer",
+    );
   });
 
   it("requires the current ledger while normalizing its legacy absence", () => {
@@ -835,30 +863,17 @@ describe("quality save", () => {
       createReportDirectory(directoryPath: string): void {
         // Example: another dashboard session completes its first save while this user is saving.
         if (competingReportPath === null) {
-          competingReportPath = persistQualityReportText(
-            {
-              projectPath: projectRoot,
-              rawText: JSON.stringify(
-                currentQualityReport(projectRoot, "Competing session"),
-              ),
-              sourceLabel: "competing draft",
-            },
-            { CLIError },
-          );
+          competingReportPath = persistCurrentQualityReport(projectRoot, {
+            CLIError,
+          });
         }
         mkdirSync(directoryPath);
       },
     };
 
     try {
-      const firstReportPath = persistQualityReportText(
-        {
-          projectPath: projectRoot,
-          rawText: JSON.stringify(
-            currentQualityReport(projectRoot, "First session"),
-          ),
-          sourceLabel: "first draft",
-        },
+      const firstReportPath = persistCurrentQualityReport(
+        projectRoot,
         firstSaveDependencies,
       );
 
@@ -893,15 +908,7 @@ describe("quality save", () => {
 
     try {
       assert.throws(
-        () =>
-          persistQualityReportText(
-            {
-              projectPath: projectRoot,
-              rawText: JSON.stringify(currentQualityReport(projectRoot)),
-              sourceLabel: "racing draft",
-            },
-            unsafeSaveDependencies,
-          ),
+        () => persistCurrentQualityReport(projectRoot, unsafeSaveDependencies),
         /must be a real project-local directory/u,
       );
       assert.equal(lstatSync(join(projectRoot, ".goat-flow")).isFile(), true);
@@ -939,18 +946,41 @@ describe("quality save", () => {
 
     try {
       assert.throws(
-        () =>
-          persistQualityReportText(
-            {
-              projectPath: projectRoot,
-              rawText: JSON.stringify(currentQualityReport(projectRoot)),
-              sourceLabel: "ancestor-swap draft",
-            },
-            unsafeSaveDependencies,
-          ),
+        () => persistCurrentQualityReport(projectRoot, unsafeSaveDependencies),
         /must be a real project-local directory/u,
       );
       assert.deepEqual(readdirSync(join(outsideRoot, "logs", "quality")), []);
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+      rmSync(outsideRoot, { recursive: true, force: true });
+    }
+  });
+
+  /**
+   * Fixture purpose: swaps the checked report directory at allocation and proves no report bytes escape.
+   * Filesystem side effects: mutates paths only inside the two temporary fixture roots.
+   */
+  it("fails closed when report allocation follows a swapped parent", () => {
+    const projectRoot = makeIgnoredQualityRoot();
+    const outsideRoot = mkdtempSync(join(tmpdir(), "quality-outside-"));
+    const qualityDirectory = join(projectRoot, ".goat-flow/logs/quality");
+    const unsafeSaveDependencies = {
+      CLIError,
+      /** Filesystem side effects: renames the checked parent, symlinks it outside, and allocates an empty report there. */
+      openReportFile(reportPath: string): number {
+        renameSync(qualityDirectory, `${qualityDirectory}-original`);
+        symlinkSync(outsideRoot, qualityDirectory, "dir");
+        return openSync(reportPath, "wx", 0o600);
+      },
+    };
+
+    try {
+      assert.throws(
+        () => persistCurrentQualityReport(projectRoot, unsafeSaveDependencies),
+        /must be a real project-local directory/u,
+      );
+      const [escapedFile] = readdirSync(outsideRoot);
+      assert.equal(lstatSync(join(outsideRoot, escapedFile ?? "")).size, 0);
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });
       rmSync(outsideRoot, { recursive: true, force: true });

@@ -676,10 +676,12 @@ check_destructive_segment() {
     esac
   fi
 
-  # Compact redirect targets are valid shell syntax; tee and sed still require
-  # whitespace before their lockfile operand.
-  local lockfile_write_re='((>|>>)[[:space:]]*|(tee|sed[[:space:]]+-i)[[:space:]]+).*(package-lock\.json|pnpm-lock\.yaml|composer\.lock|Cargo\.lock|yarn\.lock)'
-  if [[ "$cmd" =~ $lockfile_write_re ]]; then
+  # Redirects write only their immediate target; a later lockfile argument may still be read-only.
+  # Compact and quoted targets remain valid shell syntax, while tee and sed -i may name the lockfile later in their operand list.
+  local lockfile_name_re='(package-lock\.json|pnpm-lock\.yaml|composer\.lock|Cargo\.lock|yarn\.lock)'
+  local lockfile_redirect_re="(>|>>)[[:space:]]*[\"']?([^[:space:]<>|;&\"']*/)*${lockfile_name_re}[\"']?([[:space:]|;&]|$)"
+  local lockfile_tool_write_re="(^|[[:space:]])([^[:space:]]*/)?(tee|sed[[:space:]]+-i)[[:space:]]+.*${lockfile_name_re}([[:space:]|;&]|$)"
+  if [[ "$cmd" =~ $lockfile_redirect_re ]] || [[ "$cmd" =~ $lockfile_tool_write_re ]]; then
     block "Direct lockfile modification. Use the package manager (npm install, composer update, etc.)." || return $?
   fi
 

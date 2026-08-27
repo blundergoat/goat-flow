@@ -177,6 +177,19 @@ describe("audit on well-configured project", () => {
     ]);
   });
 
+  it("ignores SKILL.md rows outside the declared code-map skill subtree", () => {
+    const codeMap = [
+      codeMapSkillInventory(["goat"]),
+      "├── plugins/ = unrelated plugin fixtures",
+      "│   ├── plugin-helper/SKILL.md = not a workflow skill template",
+    ].join("\n");
+
+    assert.deepEqual(
+      findSkillInventoryDrift(".goat-flow/code-map.md", codeMap, ["goat"]),
+      [],
+    );
+  });
+
   it("routes explicit skill inventories through the semantic audit", () => {
     const canonicalSkillNames = [...buildProjectStructure().skills.canonical];
     const inventoryWithoutClarity = canonicalSkillNames.filter(

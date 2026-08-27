@@ -50,6 +50,7 @@ import {
   resolveIndexBucketPaths,
   type IndexBucket,
 } from "./learning-loop-index/parse-bucket.js";
+import { maskNonRenderedMarkdown } from "./rendered-markdown.js";
 import { collectIndexFreshness } from "./stats/index-freshness.js";
 import {
   BUCKET_SIZE_WARN_BYTES,
@@ -626,7 +627,11 @@ function buildProspectiveContent(
     return `${newBucketFrontmatter(category, scaffoldDate)}${skeleton}`;
   }
   // An existing exact heading would make retrieval ambiguous, even when one copy sits in resolved history.
-  if (snapshot.content.split(/\r?\n/u).some((line) => line === heading)) {
+  if (
+    maskNonRenderedMarkdown(snapshot.content)
+      .split(/\r?\n/u)
+      .some((line) => line === heading)
+  ) {
     throw new CLIError(
       `${snapshot.projectRelativePath}: duplicate entry heading ${JSON.stringify(heading)}.`,
       2,
@@ -874,11 +879,15 @@ export function runLearnScaffold(
     heading,
   );
   const warnings: string[] = [];
-  // Crossing the size gate warns before publication; the author can still proceed and split the category deliberately.
-  if (Buffer.byteLength(prospectiveContent, "utf-8") > BUCKET_SIZE_WARN_BYTES) {
-    warnings.push(
-      `${snapshot.projectRelativePath} will exceed the ${BUCKET_SIZE_WARN_BYTES}-byte bucket-size gate; split the category before relying on stats --check.`,
-    );
+  const exceedsBucketSizeGate =
+    Buffer.byteLength(prospectiveContent, "utf-8") > BUCKET_SIZE_WARN_BYTES;
+  // Dry runs expose the prospective size without mutating state; real writes stop before publishing a bucket that the mandatory stats gate rejects.
+  if (exceedsBucketSizeGate) {
+    const warning = `${snapshot.projectRelativePath} will exceed the ${BUCKET_SIZE_WARN_BYTES}-byte bucket-size gate; split the category before relying on stats --check.`;
+    warnings.push(warning);
+    if (!request.shouldDryRun) {
+      throw new CLIError(`${warning} No scaffold was published.`, 2);
+    }
   }
   // Dry-run performs every check above, then returns before the bucket or generated indexes can change.
   if (request.shouldDryRun) {

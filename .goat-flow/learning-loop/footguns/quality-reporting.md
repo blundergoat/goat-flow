@@ -1,6 +1,6 @@
 ---
 category: quality-reporting
-last_reviewed: 2026-08-24
+last_reviewed: 2026-08-27
 ---
 
 **Scope:** The quality prompt-to-report pipeline - prompt generation, the agent session that runs it, report persistence, and `quality diff` comparison. How audit checks score and temper concerns lives in [quality.md](quality.md).
@@ -80,6 +80,23 @@ See `.goat-flow/learning-loop/patterns/refactoring.md` (search: `Put prompt side
 **Evidence:** Raised as P1 by Codex review on PR #57 and confirmed by reading the resolver: `preset?.mayWriteFiles === true` is `undefined` for a custom prompt, so the ternary yields `reporting`. Fixed by adding an explicit `captureQualityDrafts` field to the terminal-create contract in `src/cli/server/decoders.ts` (search: "decodeTerminalCaptureQualityDrafts"), set only by the quality launch and carried through retry as `retryCaptureQualityDrafts`.
 
 **Prevention:** A permission mode answers "what may this session do", not "what is this session for". Before deriving a side effect from one, list every launch that lands in the same mode; if that list is wider than the feature, carry an explicit opt-in field instead. Make the field default to the inert value so an omission skips the side effect rather than performing it, and check the retry/reconnect path in the same change - a flag that opens the feature but is dropped on relaunch fails silently.
+
+---
+
+## Footgun: Path validation does not pin a later pathname write
+
+**Status:** active | **Created:** 2026-08-27 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Allocate an empty report exclusively, revalidate its ancestry and descriptor/path identity, then write sensitive bytes through the pinned descriptor.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Any persistence path that validates directories before writing must allocate an empty destination exclusively, recheck every trusted ancestor, compare descriptor and pathname device/inode identity, write through the descriptor, fsync, and check again. On rejection after allocation, truncate through the descriptor before closing it so a raced rename cannot retain sensitive bytes.
+
+**Symptoms:** In the measured failure, the saver validated that its destination chain contained only project-local directories, yet a concurrent replacement redirected the later pathname write outside the selected project. The command returned success because the resulting file was still a regular single-link file.
+
+**Why it happens:** `lstat` proves what a pathname names only at the instant of the check. Opening the same pathname later performs a new traversal, so a parent can become a symlink during the check-to-write gap. Validating the final file after writing detects neither that its ancestors changed nor where sensitive bytes landed.
+
+**Evidence:** A 2026-08-27 runtime probe replaced `.goat-flow/logs/quality` with a symlink immediately before the former pathname write. The saver returned normally, and `realpath` placed the complete report under the external fixture root. `src/cli/quality/quality-command.ts` (search: `function assertAllocatedQualityReport`) now checks the directory chain and descriptor/path identity before and after the descriptor write. `test/unit/quality-subcommands.test.ts` (search: `fails closed when report allocation follows a swapped parent`) reproduces the allocation-boundary swap and proves the external allocation remains empty.
 
 ---
 

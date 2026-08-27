@@ -11,6 +11,7 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  statSync,
   unlinkSync,
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -45,6 +46,7 @@ interface InstructionBridgeUpdate {
   path: string;
   original: string;
   updated: string;
+  mode: number;
 }
 
 /** Render caught non-Error values without default object stringification. */
@@ -115,6 +117,7 @@ function preflightLegacyReferences(
         LEGACY_GIT_COMMIT_INSTRUCTIONS_PATH,
         GIT_COMMIT_INSTRUCTIONS_PATH,
       ),
+      mode: statSync(absolutePath).mode & 0o777,
     };
   }
   return { bridge, blockers };
@@ -131,7 +134,7 @@ function renameLegacyGuide(
   let bridgeWritten = false;
   try {
     if (bridge !== null) {
-      writeFileAtomic(bridge.path, bridge.updated, root);
+      writeFileAtomic(bridge.path, bridge.updated, root, bridge.mode);
       bridgeWritten = true;
     }
     unlinkSync(legacyPath);
@@ -139,7 +142,7 @@ function renameLegacyGuide(
     let rollbackError: unknown = null;
     if (bridgeWritten && bridge !== null) {
       try {
-        writeFileAtomic(bridge.path, bridge.original, root);
+        writeFileAtomic(bridge.path, bridge.original, root, bridge.mode);
       } catch (restoreError) {
         rollbackError = restoreError;
       }

@@ -5,11 +5,13 @@ import { strict as assert } from "node:assert";
 import { describe, it } from "node:test";
 import { tmpdir } from "node:os";
 import {
+  chmod,
   mkdir,
   mkdtemp,
   readFile,
   readdir,
   rm,
+  stat,
   writeFile,
 } from "node:fs/promises";
 import { join } from "node:path";
@@ -60,6 +62,26 @@ describe("safe-exec/writeFileAtomic", () => {
       await rm(root, { recursive: true, force: true });
     }
   });
+
+  it(
+    "uses the caller-selected replacement permissions",
+    { skip: process.platform === "win32" },
+    async () => {
+      const root = await mkdtemp(join(tmpdir(), "goat-flow-atomic-mode-"));
+      const targetPath = join(root, "instructions.md");
+      try {
+        await writeFile(targetPath, "before\n", "utf-8");
+        await chmod(targetPath, 0o640);
+
+        writeFileAtomic(targetPath, "after\n", root, 0o640);
+
+        assert.equal(await readFile(targetPath, "utf-8"), "after\n");
+        assert.equal((await stat(targetPath)).mode & 0o777, 0o640);
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
+    },
+  );
 });
 
 describe("safe-exec/spawnInheritedSync", () => {

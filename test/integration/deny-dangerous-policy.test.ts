@@ -618,6 +618,16 @@ const parserBoundaryCases: ParserBoundaryCase[] = [
     expectedStatus: 0,
   },
   {
+    name: "lockfile read after stderr discard remains allowed",
+    userCommand: "cat 2>/dev/null package-lock.json",
+    expectedStatus: 0,
+  },
+  {
+    name: "lockfile read after stderr duplication remains allowed",
+    userCommand: "wc -l 2>&1 Cargo.lock",
+    expectedStatus: 0,
+  },
+  {
     name: "package-manager-owned lockfile write remains allowed",
     userCommand: "npm install --package-lock-only",
     expectedStatus: 0,

@@ -126,12 +126,11 @@ interface ClaimSnapshot {
   bytes: Buffer;
 }
 
-/** Live descriptor and marker snapshot retained until owner-checked release. */
+/** Marker snapshot retained until owner-checked release. */
 interface OwnedPathWriteClaim {
   targetPath: string;
   markerPath: string;
   snapshot: ClaimSnapshot;
-  descriptor: number;
 }
 
 type ClaimSnapshotResult =
@@ -517,7 +516,10 @@ function exclusiveCreateFailure(
   return new PathWriteClaimError("coordination-unavailable", targetPath);
 }
 
-/** Close a held descriptor and report cleanup failure without masking the primary outcome. */
+/**
+ * Close a descriptor without masking the primary outcome.
+ * Error behavior: returns false instead of throwing when the operating system rejects the close.
+ */
 function closeClaimDescriptor(descriptor: number): boolean {
   try {
     fs.closeSync(descriptor);
@@ -527,7 +529,50 @@ function closeClaimDescriptor(descriptor: number): boolean {
   }
 }
 
-/** Exclusively create, fill, and flush one marker while retaining its descriptor. */
+/**
+ * Remove a failed initialization marker only when the path still names the descriptor-created entry.
+ * Side effects: closes the descriptor and may unlink that exact marker; identity/read/cleanup failures return without throwing.
+ */
+function cleanupFailedClaimInitialization(
+  markerPath: string,
+  descriptor: number,
+): void {
+  let ownedSnapshot: ClaimSnapshot | null = null;
+  try {
+    const descriptorStats = fs.fstatSync(descriptor, { bigint: true });
+    const claim = readClaimSnapshot(markerPath);
+    if (
+      claim.status === "present" &&
+      claimSnapshotMatchesDescriptor(claim.snapshot, descriptorStats)
+    ) {
+      ownedSnapshot = claim.snapshot;
+    }
+  } catch {
+    // If identity cannot be proven, leave the marker for explicit inspection instead of deleting another entry.
+    closeClaimDescriptor(descriptor);
+    return;
+  }
+  if (!closeClaimDescriptor(descriptor) || ownedSnapshot === null) return;
+  const current = readClaimSnapshot(markerPath);
+  if (
+    current.status !== "present" ||
+    !claimSnapshotsMatch(current.snapshot, ownedSnapshot)
+  ) {
+    return;
+  }
+  try {
+    fs.unlinkSync(markerPath);
+  } catch {
+    // The primary initialization failure remains authoritative; cleanup is best effort and ownership-checked.
+    return;
+  }
+}
+
+/**
+ * Exclusively create, fill, and flush one marker.
+ * Side effects: creates one private claim file and leaves its descriptor open for identity binding by the caller.
+ * Error behavior: owner-checks cleanup and throws a categorized claim error when creation, writing, or flushing fails.
+ */
 function createClaimMarker(
   markerPath: string,
   markerBytes: Buffer,
@@ -544,7 +589,7 @@ function createClaimMarker(
     fs.fsyncSync(descriptor);
     return descriptor;
   } catch (error) {
-    closeClaimDescriptor(descriptor);
+    cleanupFailedClaimInitialization(markerPath, descriptor);
     throw exclusiveCreateFailure(error, targetPath);
   }
 }
@@ -562,11 +607,11 @@ function acquireOneClaim(
   );
   const descriptor = createClaimMarker(markerPath, markerBytes, targetPath);
   const claim = readOwnedClaimSnapshot(markerPath, descriptor, markerBytes);
-  if (claim.status !== "present") {
-    closeClaimDescriptor(descriptor);
+  const descriptorClosed = closeClaimDescriptor(descriptor);
+  if (claim.status !== "present" || !descriptorClosed) {
     throw new PathWriteClaimError("claim-integrity", targetPath);
   }
-  return { targetPath, markerPath, snapshot: claim.snapshot, descriptor };
+  return { targetPath, markerPath, snapshot: claim.snapshot };
 }
 
 /** Release one marker only when its entry and exact bytes still identify this owner. */
@@ -575,28 +620,18 @@ function releaseOneClaim(
 ): PathWriteClaimReleaseResult {
   const current = readClaimSnapshot(claim.markerPath);
   if (current.status === "missing") {
-    const status = closeClaimDescriptor(claim.descriptor)
-      ? "missing"
-      : "unreadable";
-    return { targetPath: claim.targetPath, status };
+    return { targetPath: claim.targetPath, status: "missing" };
   }
   if (
     current.status !== "present" ||
     !claimSnapshotsMatch(current.snapshot, claim.snapshot)
   ) {
-    const status = closeClaimDescriptor(claim.descriptor)
-      ? "ownership-changed"
-      : "unreadable";
-    return { targetPath: claim.targetPath, status };
+    return { targetPath: claim.targetPath, status: "ownership-changed" };
   }
   try {
     fs.unlinkSync(claim.markerPath);
-    const status = closeClaimDescriptor(claim.descriptor)
-      ? "released"
-      : "unreadable";
-    return { targetPath: claim.targetPath, status };
+    return { targetPath: claim.targetPath, status: "released" };
   } catch (error) {
-    closeClaimDescriptor(claim.descriptor);
     return {
       targetPath: claim.targetPath,
       status:

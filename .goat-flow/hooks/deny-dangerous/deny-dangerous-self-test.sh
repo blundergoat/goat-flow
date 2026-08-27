@@ -1051,6 +1051,8 @@ run_full() {
   expect_block_message shell 'echo x>package-lock.json' "compact direct lockfile overwrite" destructive "Direct lockfile modification"
   expect_block_message shell 'echo x>>pnpm-lock.yaml' "compact direct lockfile append" destructive "Direct lockfile modification"
   expect_allow shell 'cat package-lock.json' "read-only lockfile mention"
+  expect_allow shell 'cat 2>/dev/null package-lock.json' "lockfile read after stderr discard"
+  expect_allow shell 'wc -l 2>&1 Cargo.lock' "lockfile read after stderr duplication"
   expect_allow shell 'npm install --package-lock-only' "package-manager-owned lockfile write"
 
   # --- .env.example is sample material: reads AND writes are allowed. Real

@@ -272,14 +272,23 @@ function readCodeMapSkillInventory(
   codeMap: string,
 ): ExplicitSkillInventory | null {
   const codeMapLines = codeMap.split(/\r?\n/u);
-  const declaresSkillTree = codeMapLines.some((line) =>
+  const skillTreeLineIndex = codeMapLines.findIndex((line) =>
     /[├└]──\s+skills\/\s+=.*\bskill templates\b/u.test(line),
   );
 
   // A code map without a skill-template tree makes no inventory promise to the user.
-  if (!declaresSkillTree) return null;
+  if (skillTreeLineIndex === -1) return null;
+  const skillTreeLine = codeMapLines[skillTreeLineIndex] ?? "";
+  const skillTreeBranchColumn = skillTreeLine.search(/[├└]──/u);
+  const skillSubtreeLines: string[] = [];
+  for (const line of codeMapLines.slice(skillTreeLineIndex + 1)) {
+    const branchColumn = line.search(/[├└]──/u);
+    // The next row at the declaration's depth (or above it) belongs to a sibling subtree.
+    if (branchColumn >= 0 && branchColumn <= skillTreeBranchColumn) break;
+    skillSubtreeLines.push(line);
+  }
   // For example, an `agent-notes/` row is ignored because users cannot invoke it without a `SKILL.md` row.
-  const skillNames = codeMapLines.flatMap((line) => {
+  const skillNames = skillSubtreeLines.flatMap((line) => {
     const skillRow = line.match(
       /^[\s│]*[├└]──\s+([a-z][a-z0-9]*(?:-[a-z0-9]+)*)\/SKILL\.md\b/u,
     );

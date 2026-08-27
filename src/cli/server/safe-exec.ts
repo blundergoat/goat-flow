@@ -182,11 +182,13 @@ function isWithinProject(projectRoot: string, targetPath: string): boolean {
  * @param targetPath - destination path to replace atomically
  * @param content - complete file contents to write
  * @param projectRoot - project boundary that targetPath must stay within
+ * @param fileMode - permissions assigned to the replacement; defaults to private dashboard state
  */
 export function writeFileAtomic(
   targetPath: string,
   content: string,
   projectRoot: string,
+  fileMode = 0o600,
 ): void {
   if (!isWithinProject(projectRoot, targetPath)) {
     throw new SafeFileWriteRejection(targetPath, projectRoot);
@@ -202,7 +204,7 @@ export function writeFileAtomic(
   }
   let fileDescriptor: number | null = null;
   try {
-    fileDescriptor = openSync(tempPath, "w", 0o600);
+    fileDescriptor = openSync(tempPath, "w", fileMode);
     writeFileSync(fileDescriptor, content, "utf-8");
     fsyncSync(fileDescriptor);
     closeSync(fileDescriptor);

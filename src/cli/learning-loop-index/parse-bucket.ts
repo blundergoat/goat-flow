@@ -16,6 +16,7 @@ import {
   parseMarkdownFrontmatter,
   type MarkdownEntry,
 } from "../facts/shared/learning-loop-common.js";
+import { maskNonRenderedMarkdown } from "../rendered-markdown.js";
 
 /** Learning-loop buckets that receive a generated INDEX.md. */
 export type IndexBucket = "footguns" | "lessons" | "patterns" | "decisions";
@@ -181,9 +182,10 @@ function firstSentence(text: string): string {
 
 /** Return the first paragraph following a literal marker, or null when the marker is absent. */
 function paragraphAfter(content: string, marker: string): string | null {
-  const idx = content.indexOf(marker);
+  const renderedContent = maskNonRenderedMarkdown(content);
+  const idx = renderedContent.indexOf(marker);
   if (idx === -1) return null;
-  const after = content.slice(idx + marker.length).trimStart();
+  const after = renderedContent.slice(idx + marker.length).trimStart();
   return (
     after
       .split(/\n\s*\n/)
@@ -200,7 +202,10 @@ function paragraphAfter(content: string, marker: string): string | null {
 
 /** First non-metadata body paragraph, with any leading `**Label:**` stripped - the hook fallback. */
 function firstBodyParagraph(content: string): string {
-  const withoutHeading = content.replace(/^#{1,2}[^\n]*\n/, "");
+  const withoutHeading = maskNonRenderedMarkdown(content).replace(
+    /^#{1,2}[^\n]*\n/,
+    "",
+  );
   for (const raw of withoutHeading.split(/\n\s*\n/)) {
     const paragraph = raw.trim();
     if (paragraph.length === 0 || METADATA_LABEL.test(paragraph)) continue;
@@ -230,11 +235,15 @@ interface RawSection {
 /** Slice a bucket body at each `## <Kind>:` heading into document-ordered sections. */
 function splitEntrySections(body: string, kind: string): RawSection[] {
   const headingPattern = new RegExp(`^##\\s+${kind}:\\s+(.+)$`, "gm");
-  const headings = Array.from(body.matchAll(headingPattern), (match) => ({
-    title: (match[1] ?? "").trim(),
-    headingLine: match[0],
-    start: match.index,
-  }));
+  const renderedBody = maskNonRenderedMarkdown(body);
+  const headings = Array.from(
+    renderedBody.matchAll(headingPattern),
+    (match) => ({
+      title: (match[1] ?? "").trim(),
+      headingLine: match[0],
+      start: match.index,
+    }),
+  );
   return headings.map((heading, index) => ({
     ...heading,
     content: body.slice(
@@ -247,7 +256,7 @@ function splitEntrySections(body: string, kind: string): RawSection[] {
 /** Read one line-scoped bold metadata value without interpreting its prose. */
 function metadataValue(body: string, label: string): string | null {
   return (
-    body
+    maskNonRenderedMarkdown(body)
       .match(new RegExp(`^\\*\\*${label}:\\*\\*\\s*(.+)$`, "m"))?.[1]
       ?.trim() ?? null
   );
@@ -267,7 +276,9 @@ function parseEntryFileSections(
   const resolvedAt = findResolvedEntriesHeadingIndex(body);
   return splitEntrySections(body, HEADING_KIND[bucket])
     .filter((section) => resolvedAt === -1 || section.start < resolvedAt)
-    .filter((section) => !/\*\*Status:\*\*\s*resolved\b/i.test(section.content))
+    .filter(
+      (section) => entryStatus(section.content).toLowerCase() !== "resolved",
+    )
     .map((section) => ({
       bucket,
       title: section.title,
@@ -301,7 +312,7 @@ function parseEntryFile(
 /** Read one declared `**Label:** YYYY-MM-DD` date from an entry body. */
 function metadataDate(body: string, label: string): string | null {
   return (
-    body.match(
+    maskNonRenderedMarkdown(body).match(
       new RegExp(
         `(?:^|\\|\\s*)\\*\\*${label}:\\*\\*\\s*(\\d{4}-\\d{2}-\\d{2})`,
         "m",
@@ -321,7 +332,9 @@ function decisionIndexDate(body: string, status: string): string | null {
 /** Read the status prefix for one ADR index hook. */
 function decisionStatus(body: string): string {
   return firstSentence(
-    body.match(/^\*\*Status:\*\*\s*(.+)$/m)?.[1]?.trim() ?? "Unknown status",
+    maskNonRenderedMarkdown(body)
+      .match(/^\*\*Status:\*\*\s*(.+)$/m)?.[1]
+      ?.trim() ?? "Unknown status",
   );
 }
 
@@ -354,7 +367,7 @@ function parseDecisionSection(
   file: MarkdownEntry,
 ): ActiveLearningLoopSection | null {
   const { body } = parseMarkdownFrontmatter(file.content);
-  const titleMatch = body.match(/^#\s+(.+)$/m);
+  const titleMatch = maskNonRenderedMarkdown(body).match(/^#\s+(.+)$/m);
   if (!titleMatch) return null;
   const status = decisionStatus(body);
   return {

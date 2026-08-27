@@ -74,6 +74,7 @@ export interface FootgunRefSummary {
   invalidLineRefs: string[];
   totalRefs: number;
   validRefs: number;
+  validSearchAnchors: number;
 }
 
 /** Normalize a surface path so trailing slashes do not affect comparisons. */
@@ -281,6 +282,7 @@ export function summarizeFootgunRefs(
     invalidLineRefs: [],
     totalRefs: 0,
     validRefs: 0,
+    validSearchAnchors: 0,
   };
   const cleanedContent = stripStrikethrough(content);
   for (const line of cleanedContent.split("\n")) {
@@ -425,6 +427,7 @@ function scanSearchAnchors(
       continue;
     }
     summary.validRefs++;
+    summary.validSearchAnchors++;
   }
 }
 
@@ -450,6 +453,7 @@ export function summarizeLessonRefs(
     invalidLineRefs: [],
     totalRefs: 0,
     validRefs: 0,
+    validSearchAnchors: 0,
   };
   const pathPattern =
     /`((?:src|config|app|apps|lib|docs|scripts|setup|workflow|agents|\.goat-flow)\/[^`]+)`/g;

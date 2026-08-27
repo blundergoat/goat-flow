@@ -24,6 +24,23 @@ const VALID_PROBLEM_STATEMENT =
 const VALID_BENEFIT_STATEMENT =
   "You can fix unclear plan summaries before another person has to review them.";
 
+/** Second-sentence openings that used to evade the uppercase-only boundary detector. */
+const SECOND_SENTENCE_CASES = [
+  {
+    name: "lowercase",
+    text: "another reviewer then misses the intended outcome.",
+  },
+  { name: "numeric", text: "2 reviewers then miss the intended outcome." },
+  {
+    name: "quoted",
+    text: '"another reviewer" then misses the intended outcome.',
+  },
+  {
+    name: "inline-code",
+    text: "`another reviewer` then misses the intended outcome.",
+  },
+] as const;
+
 /**
  * Add the reader-facing section pair an author sees in a milestone.
  * Use to vary current, legacy, or omitted headings without rebuilding the plan fixture.
@@ -345,6 +362,36 @@ describe("plans check: structure, identity, and dependencies", () => {
       rmSync(temporaryRoot, { recursive: true, force: true });
     }
   });
+
+  // Fixture purpose: varies the first token of a second sentence. Filesystem side effects stay in each removed temp root.
+  for (const secondSentenceCase of SECOND_SENTENCE_CASES) {
+    it(`strict mode rejects a ${secondSentenceCase.name} second sentence`, () => {
+      const temporaryRoot = mkdtempSync(
+        join(
+          tmpdir(),
+          `goat-flow-plan-second-sentence-${secondSentenceCase.name}-`,
+        ),
+      );
+      const problemStatement = `Plan authors can leave reader-facing sections vague. ${secondSentenceCase.text}`;
+      const body = withPlainLanguageSections(
+        canonicalMilestoneBody(),
+        "current",
+        problemStatement,
+      );
+      const planPath = writeCheckFixture(temporaryRoot, body);
+
+      try {
+        const result = runPlansCheck(planPath, "--strict");
+        assert.equal(result.status, 1, result.stdout);
+        assert.match(
+          result.stdout,
+          /expected "one plain line and one sentence"/u,
+        );
+      } finally {
+        rmSync(temporaryRoot, { recursive: true, force: true });
+      }
+    });
+  }
 
   /**
    * Writes one incomplete temporary plan and runs strict CLI validation; cleanup removes the fixture.

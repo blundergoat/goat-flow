@@ -359,6 +359,37 @@ describe("runLearnScaffold", () => {
     }
   });
 
+  // Fixture purpose: puts the requested heading in a fence beside an existing entry. Filesystem side effects stay inside the removed temp project.
+  it("ignores duplicate-heading examples inside fenced code", () => {
+    const projectRoot = createLearningProject();
+    const { bucketPath, content } = writeExistingLessonBucket(projectRoot);
+    const fencedHeading = "## Lesson: Fenced example";
+    const withExample = content.replace(
+      "**What happened:** Existing entry bytes must stay unchanged.",
+      `**What happened:** Existing entry bytes must stay unchanged.\n\n\`\`\`markdown\n${fencedHeading}\n\`\`\``,
+    );
+    writeFileSync(bucketPath, withExample);
+
+    try {
+      const result = runLearnScaffold(
+        lessonRequest(projectRoot, { title: "Fenced example" }),
+        {
+          ...fixedClock(),
+          regenerateIndexes: () => undefined,
+          verifyStats: () => null,
+        },
+      );
+      assert.equal(result.wasWritten, true);
+      const publishedContent = readFileSync(bucketPath, "utf-8");
+      assert.ok(
+        publishedContent.lastIndexOf(fencedHeading) <
+          publishedContent.indexOf("## Resolved Entries"),
+      );
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
   it("treats regex-shaped needles literally and rejects missing citation files", () => {
     const projectRoot = createLearningProject();
     const bucketPath = join(
@@ -507,6 +538,42 @@ last_reviewed: 2026-08-01
         /will exceed the 40000-byte bucket-size gate/u,
       );
       assert.equal(readFileSync(bucketPath, "utf-8"), content);
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  // Fixture purpose: crosses the production byte gate on a real-write request. Filesystem side effects stay inside the removed temp project.
+  it("rejects an oversized real write before changing buckets or indexes", () => {
+    const projectRoot = createLearningProject();
+    const bucketPath = join(
+      projectRoot,
+      LEARNING_ROOT,
+      "lessons/verification.md",
+    );
+    const prefix = `---
+category: verification
+last_reviewed: 2026-08-01
+---
+
+## Lesson: Existing large entry
+
+**Created:** 2026-08-01
+
+**What happened:** `;
+    const suffix = "\n";
+    const paddingLength =
+      BUCKET_SIZE_WARN_BYTES - Buffer.byteLength(prefix + suffix, "utf-8") - 40;
+    const content = `${prefix}${"x".repeat(paddingLength)}${suffix}`;
+    writeFileSync(bucketPath, content);
+
+    try {
+      assert.throws(
+        () => runLearnScaffold(lessonRequest(projectRoot), fixedClock()),
+        /will exceed the 40000-byte bucket-size gate.*No scaffold was published/u,
+      );
+      assert.equal(readFileSync(bucketPath, "utf-8"), content);
+      assertAllIndexFiles(projectRoot, false);
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });
     }

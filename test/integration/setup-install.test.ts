@@ -8,9 +8,11 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   readFileSync,
+  statSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
@@ -35,6 +37,12 @@ interface ClaudePermissionGroups {
   deny: string[];
   allow: string[];
   ask: string[];
+}
+
+/** Assert POSIX permission bits while treating Windows' synthetic mode as outside this filesystem contract. */
+function assertPosixFileMode(filePath: string, expectedMode: number): void {
+  if (process.platform === "win32") return;
+  assert.equal(statSync(filePath).mode & 0o777, expectedMode);
 }
 
 /**
@@ -378,6 +386,7 @@ describe("setup --apply installer", () => {
     mkdirSync(join(root, ".github"), { recursive: true });
     writeFileSync(legacyGuidancePath, legacyGuidance);
     writeFileSync(instructionPath, instructionContent);
+    chmodSync(instructionPath, 0o640);
 
     emitCommitGuidanceInstallResult(root, "copilot");
 
@@ -390,6 +399,7 @@ describe("setup --apply installer", () => {
         "docs/coding-standards/git-commit-message.md",
       ),
     );
+    assertPosixFileMode(instructionPath, 0o640);
   });
 
   it("commit guidance keeps the former guide when another agent instruction still references it", () => {

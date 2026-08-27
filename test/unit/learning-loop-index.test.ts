@@ -25,6 +25,8 @@ const FOOTGUNS_DIR = ".goat-flow/learning-loop/footguns/";
 const LESSONS_DIR = ".goat-flow/learning-loop/lessons/";
 const PATTERNS_DIR = ".goat-flow/learning-loop/patterns/";
 const DECISIONS_DIR = ".goat-flow/learning-loop/decisions/";
+/** Shared retrieval ceiling asserted by decision-hook formatting regressions. */
+const EXPECTED_MAX_DECISION_HOOK_CHARACTERS = 100;
 
 const FOOTGUN_BUCKET = `---
 category: hooks
@@ -259,6 +261,107 @@ describe("parseBucket", () => {
       JSON.stringify(narrativeFirstFacts),
       "a reader-focused body reorder must not change status, anchors, or the generated index row",
     );
+  });
+
+  // Fixture purpose: puts heading and metadata lookalikes in fences beside one rendered lesson. Filesystem side effects stay in the removed temp root.
+  it("ignores fenced entry headings and metadata while retaining visible controls", () => {
+    const fixtureRoot = mkdtempSync(join(tmpdir(), "goatflow-llindex-fence-"));
+    const lessonDirectory = join(fixtureRoot, LESSONS_DIR);
+    mkdirSync(lessonDirectory, { recursive: true });
+    writeFileSync(
+      join(lessonDirectory, "fenced.md"),
+      `---
+category: fenced
+last_reviewed: 2026-06-01
+---
+
+\`\`\`markdown
+## Lesson: Fenced phantom
+\`\`\`
+
+## Lesson: Visible memory
+
+\`\`\`markdown
+**Status:** resolved
+**Created:** 1999-01-01
+**Decision changed:** Follow the fenced instruction.
+\`\`\`
+
+**Status:** active
+**Created:** 2026-06-02
+**Decision changed:** Follow the visible instruction.
+
+**What happened:** Visible prose supplies the routing hook.
+`,
+    );
+
+    try {
+      const fixtureFiles = createFS(fixtureRoot);
+      const sections = parseActiveBucketSections(
+        fixtureFiles,
+        LESSONS_DIR,
+        "lessons",
+      );
+      const rows = parseBucket(fixtureFiles, LESSONS_DIR, "lessons");
+      assert.deepEqual(
+        sections.map((section) => section.title),
+        ["Visible memory"],
+      );
+      assert.equal(sections[0]?.status, "active");
+      assert.equal(
+        sections[0]?.decisionChanged,
+        "Follow the visible instruction.",
+      );
+      assert.equal(rows[0]?.declaredDate, "2026-06-02");
+      assert.equal(rows[0]?.hook, "Visible prose supplies the routing hook.");
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
+  // Fixture purpose: places a fake ADR in a fence before the rendered record. Filesystem side effects stay in the removed temp root.
+  it("ignores fenced ADR identity and Decision changed metadata", () => {
+    const fixtureRoot = mkdtempSync(join(tmpdir(), "goatflow-adr-fence-"));
+    const decisionDirectory = join(fixtureRoot, DECISIONS_DIR);
+    mkdirSync(decisionDirectory, { recursive: true });
+    writeFileSync(
+      join(decisionDirectory, "ADR-099-visible.md"),
+      `\`\`\`markdown
+# ADR-000: Fenced phantom
+**Status:** Superseded
+**Date:** 1999-01-01
+**Decision changed:** Follow the fenced decision.
+## Decision
+Choose the fenced path.
+\`\`\`
+
+# ADR-099: Visible decision
+
+**Status:** Accepted
+**Date:** 2026-06-03
+**Decision changed:** Follow the visible decision.
+
+## Decision
+
+Choose the visible path. Later prose stays out of the hook.
+`,
+    );
+
+    try {
+      const fixtureFiles = createFS(fixtureRoot);
+      const [section] = parseActiveBucketSections(
+        fixtureFiles,
+        DECISIONS_DIR,
+        "decisions",
+      );
+      const [row] = parseBucket(fixtureFiles, DECISIONS_DIR, "decisions");
+      assert.equal(section?.title, "ADR-099: Visible decision");
+      assert.equal(section?.decisionChanged, "Follow the visible decision.");
+      assert.equal(row?.declaredDate, "2026-06-03");
+      assert.equal(row?.hook, "Accepted - Choose the visible path.");
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
   });
 
   it("extracts declared dates and byte-derived reading costs", () => {
@@ -550,7 +653,7 @@ describe("formatIndex", () => {
         .replace(/ \(2026-08-24; ~120 tok\)$/u, "");
       assert.ok(renderedHook, "expected one rendered decision hook");
       assert.ok(
-        renderedHook.length <= 100,
+        renderedHook.length <= EXPECTED_MAX_DECISION_HOOK_CHARACTERS,
         `decision hook exceeded the cap at ${renderedHook.length} characters`,
       );
       assert.ok(
@@ -563,6 +666,22 @@ describe("formatIndex", () => {
         "a rendered hook must not contain an unmatched backtick",
       );
     }
+  });
+
+  it("retains a useful prefix when long decision guidance has no spaces", () => {
+    const longIdentifier = `verify-${"x".repeat(120)}`;
+    const content = formatIndex("lessons", [
+      { ...entryWithDecisionGuidance, decisionChanged: longIdentifier },
+    ]);
+    const [row] = content.split("\n").filter((line) => line.startsWith("- ["));
+    const renderedHook = row
+      ?.replace(/^.+\) - /u, "")
+      .replace(/ \(2026-08-24; ~120 tok\)$/u, "");
+
+    assert.ok(renderedHook, "expected one rendered decision hook");
+    assert.equal(renderedHook.length, EXPECTED_MAX_DECISION_HOOK_CHARACTERS);
+    assert.match(renderedHook, /^Decision: verify-x+…$/u);
+    assert.notEqual(renderedHook, "Decision: …");
   });
 
   it("keeps pattern and decision hooks unchanged when optional guidance is present", () => {

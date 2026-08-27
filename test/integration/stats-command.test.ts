@@ -736,7 +736,7 @@ describe("goat-flow stats --check", () => {
     const report = loadReport({
       footguns: {
         "hooks.md":
-          "---\ncategory: hooks\nlast_reviewed: 2026-04-18\n---\n\n## Footgun: bare path only\n\n**Status:** active | **Evidence:** ACTUAL_MEASURED\n\nEvidence path: `.goat-flow/learning-loop/footguns/hooks.md`.\n\n## Resolved Entries\n\n## Footgun: resolved bare path\n\n**Status:** resolved | **Evidence:** ACTUAL_MEASURED\n\nEvidence path: `.goat-flow/learning-loop/footguns/hooks.md`.\n",
+          '---\ncategory: hooks\nlast_reviewed: 2026-04-18\n---\n\n## Footgun: bare path only\n\n**Status:** active | **Evidence:** ACTUAL_MEASURED\n\nEvidence anchors: `.goat-flow/learning-loop/footguns/hooks.md`.\n\n## Footgun: semantic anchor control\n\n**Status:** active | **Evidence:** ACTUAL_MEASURED\n\nEvidence anchors: `.goat-flow/learning-loop/footguns/hooks.md` (search: "## Footgun: semantic anchor control").\n\n## Resolved Entries\n\n## Footgun: resolved bare path\n\n**Status:** resolved | **Evidence:** ACTUAL_MEASURED\n\nEvidence anchors: `.goat-flow/learning-loop/footguns/hooks.md`.\n',
       },
       lessons: {},
     });
@@ -753,6 +753,10 @@ describe("goat-flow stats --check", () => {
       ".goat-flow/learning-loop/footguns/hooks.md",
     );
     assert.ok(anchorFindings[0]?.message.includes('"bare path only"'));
+    assert.ok(
+      !anchorFindings[0]?.message.includes("semantic anchor control"),
+      "a valid search anchor must remain an accepted visible control",
+    );
     assert.ok(
       !anchorFindings[0]?.message.includes("resolved bare path"),
       "resolved footgun history must not require anchor migration",

@@ -48,7 +48,6 @@ function makeProject(): string {
 /**
  * Change a live marker and return the exact foreign bytes left at its path.
  * Filesystem side effects: mutates bytes on Windows and replaces the inode with the same bytes on POSIX.
- * Windows uses byte tampering because a retained descriptor makes immediate pathname recreation unstable.
  */
 function tamperWithOwnedClaimMarker(
   markerPath: string,
@@ -309,6 +308,41 @@ describe("path write claims", () => {
       removeConfirmedAbandonedPathWriteClaim(replacement),
       "removed",
     );
+  });
+
+  it("removes its marker when claim initialization fails", (context: TestContext) => {
+    const projectRoot = makeProject();
+    const targetPath = "managed.txt";
+    const expectedIdentity = readPathWriteTargetIdentity(
+      projectRoot,
+      targetPath,
+    );
+    const originalFsyncSync = fs.fsyncSync;
+    let shouldFailNextFlush = true;
+    context.mock.method(fs, "fsyncSync", (descriptor: number) => {
+      if (shouldFailNextFlush) {
+        shouldFailNextFlush = false;
+        const error = new Error("fixture flush failure");
+        Object.assign(error, { code: "EIO" });
+        throw error;
+      }
+      originalFsyncSync(descriptor);
+    });
+
+    assertClaimFailure(
+      () =>
+        acquirePathWriteClaims(projectRoot, [{ targetPath, expectedIdentity }]),
+      "coordination-unavailable",
+      targetPath,
+    );
+    assert.equal(inspectPathWriteClaim(projectRoot, targetPath), null);
+
+    const retry = acquirePathWriteClaims(projectRoot, [
+      { targetPath, expectedIdentity },
+    ]);
+    assert.deepEqual(releasePathWriteClaims(retry), [
+      { targetPath, status: "released" },
+    ]);
   });
 
   it("never expires or steals an old claim and permits explicit identity-bound recovery", () => {

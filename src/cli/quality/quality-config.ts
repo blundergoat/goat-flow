@@ -1,7 +1,7 @@
 /**
  * Configuration layer for the deterministic skill-quality scoring engine.
  *
- * Goat-flow ships with `DEFAULT_QUALITY_CONFIG` calibrated against the in-tree 12-artifact corpus.
+ * Goat-flow ships with `DEFAULT_QUALITY_CONFIG` calibrated against the in-tree expected-score corpus.
  * Consumer projects override pieces via `.goat-flow/config.yaml` under the top-level `quality` section.
  *
  * Zero-config behaviour (no `quality` section in config) is identical to the older hardcoded defaults; fixtures still pass without any project

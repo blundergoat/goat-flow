@@ -160,7 +160,7 @@ function collectPlainLanguageSectionFindings(
     .filter((line) => line.trim().length > 0);
   const sentenceText = sectionBody.trim();
   const hasTerminalPunctuation = /[.!?]$/u.test(sentenceText);
-  const hasEarlierSentenceBoundary = /[.!?][\t ]+\p{Lu}/u.test(
+  const hasEarlierSentenceBoundary = /[.!?][\t ]+\S/u.test(
     sentenceText.slice(0, -1),
   );
   // Standard+ summaries are deliberately one plain line and one sentence so exports have one unambiguous reader-facing value.

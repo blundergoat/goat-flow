@@ -34,6 +34,7 @@ import {
 } from "./learning-loop-sections.js";
 import { extractIncidentCount } from "./learning-loop-entries.js";
 import { isFileRef } from "./reference-paths.js";
+import { maskNonRenderedMarkdown } from "../../rendered-markdown.js";
 
 export { extractLearningLoopEntries } from "./learning-loop-entries.js";
 
@@ -295,7 +296,8 @@ function countRecurrenceLabels(entryContent: string): number {
  */
 function collectGraduationCandidates(body: string): GraduationCandidate[] {
   const candidates: GraduationCandidate[] = [];
-  for (const section of body.split(/^(?=##\s)/m)) {
+  const renderedBody = maskNonRenderedMarkdown(body);
+  for (const section of renderedBody.split(/^(?=##\s)/m)) {
     const heading = section.match(/^##\s+(?:Footgun|Lesson|Pattern):\s*(.+)/);
     if (heading?.[1] === undefined) continue;
     if (/^\*\*Status:\*\*\s*resolved\b/im.test(section)) continue;

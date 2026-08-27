@@ -271,7 +271,7 @@ function extractFootgunEntries(
         excerpt: compactEntryExcerpt(footgunSection.content),
         staleRefs: referenceHealth.staleRefs,
         invalidLineRefs: referenceHealth.invalidLineRefs,
-        hasValidAnchor: referenceHealth.validRefs > 0,
+        hasValidAnchor: referenceHealth.validSearchAnchors > 0,
         bucketSizeBytes,
         order: nextDisplayOrder++,
       });

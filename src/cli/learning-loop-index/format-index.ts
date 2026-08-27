@@ -103,10 +103,10 @@ function formatDecisionHook(decisionChanged: string): string {
   const truncatedTextMaxChars = decisionTextMaxChars - 1;
   const candidateText = decisionChanged.slice(0, truncatedTextMaxChars);
   const lastWordBoundary = candidateText.lastIndexOf(" ");
-  const completeWords = candidateText.slice(
-    0,
-    lastWordBoundary > 0 ? lastWordBoundary : 0,
-  );
+  const completeWords =
+    lastWordBoundary > 0
+      ? candidateText.slice(0, lastWordBoundary)
+      : candidateText;
   const openCodeSpanStart = findOpenCodeSpanStart(completeWords);
 
   // A word boundary inside inline code backs up before its opening delimiter so the reader never sees a broken fragment.

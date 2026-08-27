@@ -168,6 +168,45 @@ describe("goat-flow stats - graduation candidates", () => {
     assert.deepEqual(report.lessons.buckets[0].graduationCandidates, []);
   });
 
+  // Fixture purpose: places candidate headings and incident metadata in fences beside one visible recurrence so only rendered evidence is counted.
+  it("ignores fenced graduation headings, counts, and recurrence labels", () => {
+    const report = loadReport({
+      footguns: {},
+      lessons: {
+        "fenced-incidents.md": `---
+category: fenced-incidents
+last_reviewed: 2026-04-18
+---
+
+\`\`\`markdown
+## Lesson: fenced phantom
+**Incident count:** 9
+**Recurrence 2026-04-01:** fenced recurrence.
+\`\`\`
+
+## Lesson: visible recurrence
+
+\`\`\`markdown
+**Incident count:** 8
+**Recurrence 2026-04-02:** fenced recurrence in a visible entry.
+\`\`\`
+
+**Recurrence 2026-04-03:** visible recurrence control.
+`,
+      },
+    });
+
+    assert.deepEqual(report.lessons.buckets[0].graduationCandidates, [
+      {
+        title: "visible recurrence",
+        recurrenceCount: 1,
+        declaredIncidentCount: null,
+        incidentCount: 2,
+        hasIncidentCountDivergence: false,
+      },
+    ]);
+  });
+
   it("keeps recurrence candidates report-only without optional-metadata warning noise", () => {
     const verdict = checkStats(loadRecurrenceReport());
     assert.equal(verdict.status, "pass", JSON.stringify(verdict.findings));

@@ -475,6 +475,18 @@ function stopHookProcessTree(hookProcess, hostPlatform, hookEnvironment) {
 }
 
 /**
+ * Relay one legacy hook stream while honoring the host stream's backpressure.
+ * Side effect: pipes child bytes into the host without closing the host stream when the child ends.
+ *
+ * @param {NodeJS.ReadableStream} hookOutputStream - Child output; an ended stream simply pipes no more bytes.
+ * @param {NodeJS.WritableStream} hostOutputStream - Host destination; a saturated stream pauses the child source until drain.
+ * @returns {void} No value; Node's pipe lifecycle owns pause and resume behavior.
+ */
+export function relayLegacyHookOutput(hookOutputStream, hostOutputStream) {
+  hookOutputStream.pipe(hostOutputStream, { end: false });
+}
+
+/**
  * Run a verified hook until it exits, fails, or reaches the user's deadline.
  *
  * @param {string} bashExecutable - Resolved Bash command; empty would fail through the launch-error result.
@@ -514,12 +526,8 @@ function runHookProcessUntilDeadline(
   );
   // Legacy output stays live while the launcher retains ownership of the underlying handles.
   if (!shouldCaptureResult && hookProcess.stdout && hookProcess.stderr) {
-    hookProcess.stdout.on("data", (outputChunk) => {
-      process.stdout.write(outputChunk);
-    });
-    hookProcess.stderr.on("data", (outputChunk) => {
-      process.stderr.write(outputChunk);
-    });
+    relayLegacyHookOutput(hookProcess.stdout, process.stdout);
+    relayLegacyHookOutput(hookProcess.stderr, process.stderr);
   }
   return captureHookProcessUntilDeadline(
     hookProcess,
