@@ -39,7 +39,6 @@ Use for milestones, replans, rescope, or resume-from-plan. Files live in `.goat-
 - If missing/invalid, list non-archive dirs and recent `M*.md`, ask which is current, and offer to update `.active`; this is not setup failure.
 - If milestones exist and the user hasn't given an explicit action verb: "Milestone files exist for [feature]. Resume from here, update milestones, or start fresh?"
 - For stale plans, compare code and file modification dates; plan files are gitignored.
-- Note legacy `milestones/` or `tasks/`. Scan sibling versions only when `.active` is invalid.
 
 ### Reconcile Existing Plan State
 

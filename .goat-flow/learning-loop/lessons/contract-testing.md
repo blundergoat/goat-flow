@@ -1,6 +1,6 @@
 ---
 category: contract-testing
-last_reviewed: 2026-08-27
+last_reviewed: 2026-08-28
 ---
 
 **Scope:** Tests that pin a contract rather than behaviour - exact wording, path semantics, word budgets, and user-visible serialization. When the thing under test is a hook, dashboard surface, or fixture, use the bucket that owns it.
@@ -126,9 +126,11 @@ last_reviewed: 2026-08-27
 
 **What happened:** M41 Task 6 first removed `"invalid"` from `ManagedSetupBaselineStatus` while the v1 state reader still returned it and admission still compared against it. TypeScript rejected both predecessor consumers. The correction retained `"invalid"` as an internal compatibility member while the v2 preview reports the granular replacement statuses and never emits it.
 
+**Recurrence 2026-08-28:** Task 8 migrated the final direct per-agent reader, after which Knip proved that no module imported the status union. The union and its `"invalid"` compatibility member remain module-local because preview and admission still classify that conservative internal state; only the obsolete export was retired. Run the exact consumer search and Knip immediately after the final import disappears, then refresh durable anchors in the same slice.
+
 **Root cause:** I changed the shared type at the migrated producer boundary without first accounting for consumers that still owned predecessor behavior.
 
-**Evidence anchors:** `src/cli/managed-setup-preview.ts` (search: `export type ManagedSetupBaselineStatus`), `src/cli/managed-setup-state.ts` (search: `status: "invalid"`), and `src/cli/managed-setup-admission.ts` (search: `baselineStatus === "invalid"`).
+**Evidence anchors:** `src/cli/managed-setup-preview.ts` (search: `type ManagedSetupBaselineStatus`), `src/cli/managed-setup-preview.ts` (search: `baselineStatus === "invalid"`), and `src/cli/managed-setup-admission.ts` (search: `baselineStatus === "invalid"`).
 
 ---
 

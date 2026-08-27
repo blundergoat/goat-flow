@@ -22,6 +22,10 @@ import { checkDrift } from "../../src/cli/audit/check-drift.js";
 import { createFS } from "../../src/cli/facts/fs.js";
 import { buildManagedSetupPreview } from "../../src/cli/managed-setup-preview.js";
 import {
+  createManagedInstallStateRow,
+  writeManagedInstallStateV2,
+} from "../../src/cli/managed-setup-state.js";
+import {
   readAllHookStates,
   syncHookStates,
 } from "../../src/cli/server/hook-registrar.js";
@@ -56,11 +60,25 @@ function writeClaudeBaseline(
   managedPath: string,
   expectedContent: string,
 ): void {
+  writeLegacyBaseline(projectPath, "claude", managedPath, expectedContent);
+}
+
+/**
+ * Write one valid legacy baseline row for a known agent into a disposable project.
+ * Filesystem side effects: creates or replaces only that agent's v1 install-state file.
+ * Invariant: agent selection changes only the evidence filename and declared agent, never the row shape.
+ */
+function writeLegacyBaseline(
+  projectPath: string,
+  agent: "antigravity" | "claude",
+  managedPath: string,
+  expectedContent: string,
+): void {
   const baselinePath = join(
     projectPath,
     ".goat-flow",
     "install-state",
-    "claude.json",
+    `${agent}.json`,
   );
   mkdirSync(dirname(baselinePath), { recursive: true });
   writeFileSync(
@@ -68,7 +86,7 @@ function writeClaudeBaseline(
     `${JSON.stringify(
       {
         schemaVersion: "goat-flow.install-state.v1",
-        agent: "claude",
+        agent,
         goatFlowVersion: "1.15.0",
         files: [
           {
@@ -81,6 +99,31 @@ function writeClaudeBaseline(
       2,
     )}\n`,
   );
+}
+
+/**
+ * Persist one verified canonical row without a receipt in a disposable project.
+ * Filesystem side effects: atomically creates or replaces only managed.json below the fixture root.
+ * Invariant: the supplied bytes become the row's expected hash with verified-install provenance.
+ */
+function writeCanonicalBaseline(
+  projectPath: string,
+  managedPath: string,
+  expectedContent: string,
+): void {
+  const row = createManagedInstallStateRow({
+    path: managedPath,
+    expectedSha256: sha256(expectedContent),
+    provenance: {
+      kind: "verified-install",
+      goatFlowVersion: "1.16.0",
+    },
+  });
+  writeManagedInstallStateV2(projectPath, {
+    schemaVersion: "goat-flow.install-state.v2",
+    files: [row],
+    receipts: [],
+  });
 }
 
 /** Return one Claude hook row from the public list surface. */
@@ -117,6 +160,107 @@ function createClaudeProject(): string {
 }
 
 describe("managed divergence messaging", () => {
+  /**
+   * Fixture purpose: prove drift direction comes from the canonical row for every selected runtime.
+   * Side effects: writes v2 state plus one contradictory retained v1 file inside a disposable project.
+   * Invariant: both filters report the v2 row's verified provenance and never consult the retained v1 hash.
+   */
+  it("uses one provenance-bearing v2 hook baseline for every agent", () => {
+    const projectPath = setupFixture();
+    try {
+      writeHookFixtures(projectPath);
+      const managedPath = ".goat-flow/hooks/deny-dangerous.sh";
+      const installedPath = join(projectPath, managedPath);
+      const previousTemplate =
+        "#!/usr/bin/env bash\n# previous managed hook version\n";
+      writeFileSync(installedPath, previousTemplate);
+      writeCanonicalBaseline(projectPath, managedPath, previousTemplate);
+
+      // Retained v1 evidence deliberately points at the incoming bytes; a per-agent fallback would misclassify the local file as diverged.
+      writeClaudeBaseline(projectPath, managedPath, HOOK_STUB);
+
+      for (const agentFilter of ["claude", "antigravity"] as const) {
+        const report = checkDrift({
+          fs: createFS(projectPath),
+          projectPath,
+          templateRoot: projectPath,
+          agentFilter,
+        });
+        const finding = report.findings.find(
+          (candidate) => candidate.path === managedPath,
+        );
+        assert.ok(finding, `${agentFilter} audit must report the older hook`);
+        assert.match(finding.message, /behind/u);
+        assert.match(finding.message, /verified install 1\.16\.0/u);
+        assert.doesNotMatch(finding.message, /diverged/u);
+      }
+    } finally {
+      rmSync(projectPath, { recursive: true, force: true });
+    }
+  });
+
+  /**
+   * Fixture purpose: keep audit's global legacy-bootstrap refusal byte-for-byte aligned with preview evidence.
+   * Filesystem side effects: creates, rewrites, and removes only disposable legacy state and hook fixture files.
+   * Invariant: selected-agent input changes neither the blocking status nor the diagnostic text.
+   */
+  it("reports conflicting and malformed bootstrap evidence consistently with preview", () => {
+    const projectPath = setupFixture();
+    try {
+      writeHookFixtures(projectPath);
+      const managedPath = ".goat-flow/hooks/post-turn-safety.sh";
+      writeLegacyBaseline(projectPath, "claude", managedPath, "claude bytes\n");
+      writeLegacyBaseline(
+        projectPath,
+        "antigravity",
+        managedPath,
+        "antigravity bytes\n",
+      );
+
+      for (const agentFilter of ["claude", "antigravity"] as const) {
+        const preview = buildManagedSetupPreview(projectPath, agentFilter);
+        assert.equal(preview.baselineStatus, "conflicting");
+        const previewEvidence = preview.limits.find((limit) =>
+          limit.startsWith("Install state is conflicting:"),
+        );
+        assert.ok(previewEvidence);
+        const report = checkDrift({
+          fs: createFS(projectPath),
+          projectPath,
+          templateRoot: projectPath,
+          agentFilter,
+        });
+        const auditEvidence = report.findings.find(
+          (finding) => finding.path === ".goat-flow/install-state",
+        );
+        assert.equal(auditEvidence?.message, previewEvidence);
+      }
+
+      writeFileSync(
+        join(projectPath, ".goat-flow", "install-state", "antigravity.json"),
+        "{\n",
+      );
+      const preview = buildManagedSetupPreview(projectPath, "claude");
+      assert.equal(preview.baselineStatus, "malformed-blocking");
+      const previewEvidence = preview.limits.find((limit) =>
+        limit.startsWith("Install state is malformed-blocking:"),
+      );
+      assert.ok(previewEvidence);
+      const report = checkDrift({
+        fs: createFS(projectPath),
+        projectPath,
+        templateRoot: projectPath,
+        agentFilter: "claude",
+      });
+      const auditEvidence = report.findings.find(
+        (finding) => finding.path === ".goat-flow/install-state",
+      );
+      assert.equal(auditEvidence?.message, previewEvidence);
+    } finally {
+      rmSync(projectPath, { recursive: true, force: true });
+    }
+  });
+
   /**
    * Fixture purpose: prove one real baseline drives consistent audit, list, and sync outcomes.
    * Side effects: writes only inside two disposable projects removed in finally.

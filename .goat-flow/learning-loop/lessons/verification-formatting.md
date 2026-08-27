@@ -174,7 +174,7 @@ Evidence anchors:
 
 **Status:** active | **Created:** 2026-06-07
 
-**Decision changed:** Run typecheck, ESLint, Knip, and formatting before preflight after TypeScript surface changes. | **Trigger phase:** VERIFY | **Incident count:** 17 | **Latest occurrence:** 2026-08-27
+**Decision changed:** Run typecheck, ESLint, Knip, and formatting before preflight after TypeScript surface changes. | **Trigger phase:** VERIFY | **Incident count:** 18 | **Latest occurrence:** 2026-08-28
 
 **What happened:** Narrower checks repeatedly cleared before later static gates. On 2026-08-10, typecheck rejected dynamic membership against a literal-tuple union and ESLint found proof-reader and registrar complexity 13/11. Earlier recurrences included formatting drift, an undiscovered worker, and impossible fallback logic.
 
@@ -191,6 +191,8 @@ Evidence anchors:
 **Recurrence 2026-08-24 (anchor-driven recall):** Focused recall tests and typecheck passed, but preflight found complexity 12 in the top-level CLI parser plus two internal recall declarations exported unnecessarily. Moving recall-aware positional routing behind `parsePrimaryPositionals` and narrowing those declarations to module scope cleared ESLint and the repository-configured Knip gate without changing recall output. Evidence anchors: `src/cli/cli-parser.ts` (search: `parsePrimaryPositionals`) and `src/cli/learning-loop-recall.ts` (search: `LEARNING_LOOP_RECALL_LIMIT`).
 
 **Recurrence 2026-08-27 (managed-state facade):** Task 4's focused state tests, typecheck, ESLint, Prettier, and Gruff checks passed before preflight found five schema declarations exported for future consumers but unused by the current slice. Keeping only the facade types that this slice consumes cleared the exact Knip gate without changing state behavior. Evidence anchors: `src/cli/managed-setup-state.ts` (search: `interface ManagedInstallLegacyObservation`) and (search: `const MANAGED_INSTALL_STATE_V2_SCHEMA`).
+
+**Recurrence 2026-08-28 (hook-state consumer cutover):** Task 8 removed the final runtime import of the direct per-agent baseline reader. Focused tests, TypeScript, ESLint, Prettier, Gruff, and the full suite passed, but the exact Knip command had been omitted; preflight then found the reader export, its result type, and their private validation path unreachable. Remove dead compatibility declarations with their final consumer, and run the repository-owned Knip command before the full suite and preflight whenever an import or consumer disappears. Evidence anchors: `src/cli/managed-setup-state.ts` (search: `function readLegacyManagedInstallStateFacade`) and `scripts/preflight-checks.sh` (search: `knip_command=(`).
 
 **Release recurrence (2026-08-09):** Hook notes gained a dated release heading before its manifest snapshot existed, so the full suite failed. Keep notes under `Unreleased` until release identity and its snapshot propagate together. Evidence: `CHANGELOG.md` (search: `## Unreleased`) and `test/unit/manifest.test.ts` (search: `missing manifest snapshots`).
 

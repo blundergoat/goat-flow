@@ -1,6 +1,6 @@
 ---
 category: integration-verification
-last_reviewed: 2026-08-15
+last_reviewed: 2026-08-28
 ---
 
 **Scope:** Proof that separately-correct components still cooperate - manifest against installer, built against source-run server paths, helper ownership across splits, and API contracts beyond the happy path.
@@ -134,6 +134,6 @@ last_reviewed: 2026-08-15
 
 **Root cause:** I documented the fixture's scenario instead of the caller-visible filesystem effect. The helper name explained the test setup but not which local state it mutates.
 
-**Fix:** Expanded the doc block to state that the helper reads and rewrites only the fixture's Codex baseline and why the next installer run needs that loaded state.
+**Fix:** Expanded the original doc block to state that the helper reads and rewrites only the fixture's Codex baseline and why the next installer run needs that loaded state. Its v2 successor, `downgradeManagedStateToSevenCodexSkills`, preserves the contract by naming the contained `managed.json` rewrite and the next preview's invariant.
 
-**Prevention:** For every fixture helper that writes, removes, or replaces local state, name the exact state class and containment boundary in the doc contract. A scenario-oriented name does not replace side-effect documentation. Evidence anchors: `test/integration/setup-install-preview.test.ts` (search: `downgradeCodexBaselineToSevenSkills`) and `.goat-flow/skill-docs/playbooks/gruff-code-quality.md` (search: `Write comments for caller-visible contract`).
+**Prevention:** For every fixture helper that writes, removes, or replaces local state, name the exact state class and containment boundary in the doc contract. A scenario-oriented name does not replace side-effect documentation. Evidence anchors: `test/integration/setup-install-preview.test.ts` (search: `downgradeManagedStateToSevenCodexSkills`) and `.goat-flow/skill-docs/playbooks/gruff-code-quality.md` (search: `Write comments for caller-visible contract`).

@@ -25,6 +25,10 @@ import {
   renderAuditText,
 } from "../../src/cli/audit/render.js";
 import { createFS } from "../../src/cli/facts/fs.js";
+import {
+  createManagedInstallStateRow,
+  writeManagedInstallStateV2,
+} from "../../src/cli/managed-setup-state.js";
 import { hashFile } from "../../src/cli/managed-setup-write-set.js";
 import { HOOK_VERIFICATION_CONTRACTS } from "../../src/cli/hook-verification-contracts.js";
 import {
@@ -126,6 +130,31 @@ function recordManagedHookBaseline(
       2,
     )}\n`,
   );
+}
+
+/**
+ * Publish canonical v2 rows for the fixture bytes currently present on disk.
+ * Filesystem side effects: atomically writes managed.json inside the disposable project.
+ * Invariant: retained v1 files cannot override these path-keyed hashes.
+ */
+function recordCanonicalManagedHookBaseline(
+  projectPath: string,
+  managedPaths: readonly string[],
+): void {
+  writeManagedInstallStateV2(projectPath, {
+    schemaVersion: "goat-flow.install-state.v2",
+    files: managedPaths.map((managedPath) =>
+      createManagedInstallStateRow({
+        path: managedPath,
+        expectedSha256: hashFile(join(projectPath, managedPath)),
+        provenance: {
+          kind: "verified-install",
+          goatFlowVersion: "previous-test-version",
+        },
+      }),
+    ),
+    receipts: [],
+  });
 }
 
 /** Return one named hook row; a missing registry hook is an immediate fixture failure. */
@@ -295,6 +324,9 @@ describe("effective hook state", () => {
   it("separates current installation from scenario verification", () => {
     const projectPath = createClaudeProject();
     syncHookStates(projectPath);
+    recordCanonicalManagedHookBaseline(projectPath, [
+      ".goat-flow/hooks/deny-dangerous.sh",
+    ]);
     const denyHookState = claudeHookState(projectPath, "deny-dangerous");
 
     assert.equal(denyHookState.installed, true);
@@ -354,20 +386,24 @@ describe("effective hook state", () => {
   });
 
   /**
-   * Fixture purpose: records shared hook bytes under Codex while reading the same installation as Claude.
-   * Side effects: writes one hash-only baseline and one older managed script in a disposable project.
-   * Invariant: any matching installed-agent baseline may classify shared hook bytes as safely behind.
+   * Fixture purpose: gives one shared hook a canonical row that contradicts retained Codex evidence.
+   * Side effects: writes v1 and v2 state, one older managed script, and one removed orphan fixture.
+   * Invariant: Claude reads the path row from managed.json; neither agent identity nor an orphan row changes it.
    */
-  it("uses another installed agent baseline for shared managed hook bytes", () => {
+  it("uses the canonical row for shared hook bytes despite retained agent evidence", () => {
     const projectPath = createClaudeProject();
     syncHookStates(projectPath);
     const managedPath = ".goat-flow/hooks/deny-dangerous.sh";
     const hookScriptPath = join(projectPath, managedPath);
+    recordManagedHookBaseline(projectPath, "codex", [managedPath]);
     writeFileSync(
       hookScriptPath,
       "#!/usr/bin/env bash\n# previous package bytes\n",
     );
-    recordManagedHookBaseline(projectPath, "codex", [managedPath]);
+    const orphanPath = ".goat-flow/hooks/retired-orphan.sh";
+    writeFileSync(join(projectPath, orphanPath), "retired managed bytes\n");
+    recordCanonicalManagedHookBaseline(projectPath, [managedPath, orphanPath]);
+    unlinkSync(join(projectPath, orphanPath));
 
     const denyState = claudeHookState(projectPath, "deny-dangerous");
 
@@ -425,7 +461,7 @@ describe("effective hook state", () => {
     const projectPath = createClaudeProject();
     syncHookStates(projectPath);
     const managedPath = ".goat-flow/hooks/deny-dangerous.sh";
-    recordManagedHookBaseline(projectPath, "claude", [managedPath]);
+    recordCanonicalManagedHookBaseline(projectPath, [managedPath]);
     const hookPath = join(projectPath, managedPath);
     const localBytes = `${readFileSync(hookPath, "utf-8")}\n# local disabled copy\n`;
     writeFileSync(hookPath, localBytes);
@@ -449,12 +485,12 @@ describe("effective hook state", () => {
     const projectPath = createClaudeProject();
     syncHookStates(projectPath);
     const managedPath = ".goat-flow/hooks/deny-dangerous.sh";
-    recordManagedHookBaseline(projectPath, "claude", [managedPath]);
     const hookPath = join(projectPath, managedPath);
-    writeFileSync(
-      hookPath,
-      `${readFileSync(hookPath, "utf-8")}\n# local enabled copy\n`,
-    );
+    const previousPackageBytes =
+      "#!/usr/bin/env bash\n# previous package baseline\n";
+    writeFileSync(hookPath, previousPackageBytes);
+    recordCanonicalManagedHookBaseline(projectPath, [managedPath]);
+    writeFileSync(hookPath, `${previousPackageBytes}# local enabled copy\n`);
     const tombstonePath = join(
       projectPath,
       ".goat-flow",

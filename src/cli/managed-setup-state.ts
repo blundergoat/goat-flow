@@ -19,10 +19,7 @@ import {
 } from "node:fs";
 import { dirname, isAbsolute, join, posix, win32 } from "node:path";
 
-import type {
-  ManagedSetupBaselineStatus,
-  ManagedSetupPreview,
-} from "./managed-setup-preview.js";
+import type { ManagedSetupPreview } from "./managed-setup-preview.js";
 import { compareVersions, isReleaseVersion } from "./version-compare.js";
 import { KNOWN_AGENT_IDS, type AgentId } from "./types.js";
 
@@ -48,13 +45,6 @@ interface ManagedInstallState {
   agent: AgentId;
   goatFlowVersion: string;
   files: ManagedInstallStateEntry[];
-}
-
-/** Parsed baseline outcome; invalid state blocks installs instead of being guessed away. */
-export interface ManagedInstallBaseline {
-  status: ManagedSetupBaselineStatus;
-  expectedHashes: Map<string, string>;
-  error: string | null;
 }
 
 /**
@@ -115,50 +105,6 @@ function isRecord(candidate: unknown): candidate is Record<string, unknown> {
 }
 
 /**
- * Validate baseline metadata before accepting any target-provided file rows.
- *
- * Use to keep incompatible or cross-agent state from authorizing an overwrite.
- * Error behavior: throws when the metadata is unusable, so a rejected baseline cannot be mistaken for an empty one.
- *
- * @param rawState - parsed state; null or empty metadata means no trustworthy baseline is available
- * @param expectedAgent - selected CLI agent; never null after command validation
- * @returns untrusted file rows for per-entry validation; empty means the prior install managed no files
- */
-function validatedManagedStateFiles(
-  rawState: unknown,
-  expectedAgent: AgentId,
-): unknown[] {
-  // Without a JSON object, the UI cannot trust any previous-install evidence.
-  if (!isRecord(rawState)) {
-    throw new Error("Install state must be a JSON object.");
-  }
-  // A different schema may use incompatible fields, so the preview blocks for migration.
-  if (rawState["schemaVersion"] !== MANAGED_INSTALL_STATE_SCHEMA) {
-    throw new Error(
-      `Install state schema must be ${MANAGED_INSTALL_STATE_SCHEMA}.`,
-    );
-  }
-  // Agent-specific state cannot authorize writes into another agent's skill mirror.
-  if (rawState["agent"] !== expectedAgent) {
-    throw new Error(`Install state agent must be ${expectedAgent}.`);
-  }
-  // Missing version metadata prevents users from tracing which package created the baseline.
-  if (
-    typeof rawState["goatFlowVersion"] !== "string" ||
-    rawState["goatFlowVersion"].length === 0
-  ) {
-    throw new Error(
-      "Install state goatFlowVersion must be a non-empty string.",
-    );
-  }
-  // Missing file rows leave the preview with no trustworthy path-to-hash mapping.
-  if (!Array.isArray(rawState["files"])) {
-    throw new Error("Install state files must be an array.");
-  }
-  return rawState["files"];
-}
-
-/**
  * Validate one persisted file row before it can protect or authorize a managed path.
  * It throws safe repair text when invalid paths or hashes cannot protect the user.
  *
@@ -186,34 +132,6 @@ function parseManagedStateEntry(rawEntry: unknown): ManagedInstallStateEntry {
     throw new Error(`Install state hash for ${managedPath} must be SHA-256.`);
   }
   return { path: managedPath, expectedSha256 };
-}
-
-/**
- * Validate and index one hash-only baseline for the selected agent.
- *
- * Use before comparing user files so duplicate or unsafe rows cannot weaken protection.
- *
- * @param rawState - parsed state object; null or malformed values are rejected
- * @param expectedAgent - selected agent; never null after CLI validation
- * @returns path-to-hash map; empty means the prior install managed no exact-copy files. It throws on a malformed row or a duplicate path, because
- *   a duplicate would make the previously expected bytes ambiguous for one visible path.
- */
-function parseManagedInstallState(
-  rawState: unknown,
-  expectedAgent: AgentId,
-): Map<string, string> {
-  const rawFiles = validatedManagedStateFiles(rawState, expectedAgent);
-  const expectedHashes = new Map<string, string>();
-  // Each row is independently validated so one corrupt path cannot weaken overwrite protection.
-  for (const rawFile of rawFiles) {
-    const file = parseManagedStateEntry(rawFile);
-    // Duplicate identities make the old expected bytes ambiguous for one visible path.
-    if (expectedHashes.has(file.path)) {
-      throw new Error(`Install state contains duplicate path ${file.path}.`);
-    }
-    expectedHashes.set(file.path, file.expectedSha256);
-  }
-  return expectedHashes;
 }
 
 /**
@@ -267,93 +185,6 @@ function assertManagedStateParentDirectories(projectPath: string): void {
         `${parent.displayPath} must be a project-local directory.`,
       );
     }
-  }
-}
-
-/**
- * Load the previous CLI install baseline without trusting target-controlled bytes.
- *
- * Use before every preview; malformed or redirected state is visible and blocks by default.
- * Error behavior: throws nothing; every failure is reported as an invalid result carrying a safe message, so the caller can block the install without
- * handling exceptions.
- *
- * @param projectPath - selected target root; empty is invalid upstream and yields no useful state path
- * @param agent - selected agent baseline; never null after CLI validation
- * @returns loaded hashes, missing first-install state, or an invalid result with safe user-facing detail
- */
-export function readManagedInstallBaseline(
-  projectPath: string,
-  agent: AgentId,
-): ManagedInstallBaseline {
-  const statePath = managedInstallStatePath(projectPath, agent);
-  let stateStats: Stats | null;
-  try {
-    assertManagedStateParentDirectories(projectPath);
-    stateStats = readStatePathStats(
-      statePath,
-      `.goat-flow/install-state/${agent}.json`,
-    );
-  } catch (error) {
-    // For example, a copied project may retain an install-state symlink into another checkout.
-    const safeErrorMessage =
-      error instanceof Error
-        ? error.message
-        : "Install state path could not be inspected safely.";
-    return {
-      status: "invalid",
-      expectedHashes: new Map(),
-      error: safeErrorMessage,
-    };
-  }
-  // A first install has no baseline and relies on current-vs-template byte evidence.
-  if (stateStats === null) {
-    return { status: "missing", expectedHashes: new Map(), error: null };
-  }
-  // A state symlink or directory could expose unrelated data, so never read it.
-  if (!stateStats.isFile()) {
-    return {
-      status: "invalid",
-      expectedHashes: new Map(),
-      error: "Install state must be a regular project-local file.",
-    };
-  }
-  let serializedState: string;
-  try {
-    serializedState = readFileSync(statePath, "utf-8");
-  } catch {
-    // For example, a user may remove read permission after opening the preview command.
-    return {
-      status: "invalid",
-      expectedHashes: new Map(),
-      error: "Install state could not be read.",
-    };
-  }
-  let rawState: unknown;
-  try {
-    rawState = JSON.parse(serializedState) as unknown;
-  } catch {
-    // For example, a partial manual edit can leave the local state file as invalid JSON.
-    return {
-      status: "invalid",
-      expectedHashes: new Map(),
-      error: "Install state is not valid JSON.",
-    };
-  }
-  try {
-    return {
-      status: "loaded",
-      expectedHashes: parseManagedInstallState(rawState, agent),
-      error: null,
-    };
-  } catch (error) {
-    // For example, a copied state file may name another agent or contain an obsolete schema.
-    const safeErrorMessage =
-      error instanceof Error ? error.message : "Install state is invalid.";
-    return {
-      status: "invalid",
-      expectedHashes: new Map(),
-      error: safeErrorMessage,
-    };
   }
 }
 
@@ -501,6 +332,8 @@ export interface ManagedInstallStateFacade {
   canonicalBytes: string | null;
   legacyAgents: AgentId[];
   staleReceiptAgents: AgentId[];
+  affectedAgents: AgentId[];
+  affectedPaths: string[];
   error: string | null;
 }
 
@@ -526,7 +359,24 @@ interface LegacyPathObservation extends ManagedInstallLegacyObservation {
 /** Result of resolving every valid legacy observation without selected-agent input. */
 type LegacyBootstrapResolution =
   | { status: "loaded"; state: ManagedInstallStateV2 }
-  | { status: "conflicting"; error: string };
+  | {
+      status: "conflicting";
+      affectedAgents: AgentId[];
+      affectedPaths: string[];
+      error: string;
+    };
+
+/** Preserve structured subjects when target-controlled state cannot be parsed safely. */
+class ManagedInstallStateEvidenceError extends Error {
+  /** Store only known agents and portable project-relative paths for later status output. */
+  constructor(
+    message: string,
+    readonly affectedAgents: AgentId[],
+    readonly affectedPaths: string[],
+  ) {
+    super(message);
+  }
+}
 
 /**
  * Return the sole project-wide managed baseline path.
@@ -968,44 +818,51 @@ function readLegacyInstallStateInventory(
 ): ParsedLegacyInstallState[] {
   const inventory: ParsedLegacyInstallState[] = [];
   for (const agent of KNOWN_AGENT_IDS) {
-    const statePath = managedInstallStatePath(projectPath, agent);
-    const stateStats = readStatePathStats(
-      statePath,
-      `.goat-flow/install-state/${agent}.json`,
-    );
-    if (stateStats === null) continue;
-    if (!stateStats.isFile() || stateStats.nlink !== 1) {
-      throw new Error(
-        `.goat-flow/install-state/${agent}.json must be a safe regular file.`,
+    const affectedPath = `.goat-flow/install-state/${agent}.json`;
+    try {
+      const statePath = managedInstallStatePath(projectPath, agent);
+      const stateStats = readStatePathStats(statePath, affectedPath);
+      if (stateStats === null) continue;
+      if (!stateStats.isFile() || stateStats.nlink !== 1) {
+        throw new Error(`${affectedPath} must be a safe regular file.`);
+      }
+      let serializedState: string;
+      let rawState: unknown;
+      try {
+        serializedState = readFileSync(statePath, "utf-8");
+        rawState = JSON.parse(serializedState) as unknown;
+      } catch {
+        throw new Error(`Legacy install state for ${agent} is not valid JSON.`);
+      }
+      const legacyState = parseLegacyInstallState(rawState, agent);
+      // V1 predates UTF-8 canonical ordering, so preserve its parsed row sequence while rejecting duplicate-key or formatting ambiguity.
+      const normalizedLegacyBytes = `${JSON.stringify(
+        {
+          schemaVersion: MANAGED_INSTALL_STATE_SCHEMA,
+          agent: legacyState.agent,
+          goatFlowVersion: legacyState.goatFlowVersion,
+          files: legacyState.files,
+        },
+        null,
+        2,
+      )}\n`;
+      if (serializedState !== normalizedLegacyBytes) {
+        throw new Error(`Legacy install state for ${agent} is not canonical.`);
+      }
+      const canonicalFiles = [...legacyState.files].sort((left, right) =>
+        compareUtf8(left.path, right.path),
+      );
+      inventory.push({ ...legacyState, files: canonicalFiles });
+    } catch (error) {
+      if (error instanceof ManagedInstallStateEvidenceError) throw error;
+      throw new ManagedInstallStateEvidenceError(
+        error instanceof Error
+          ? error.message
+          : `Legacy install state for ${agent} is malformed.`,
+        [agent],
+        [affectedPath],
       );
     }
-    let serializedState: string;
-    let rawState: unknown;
-    try {
-      serializedState = readFileSync(statePath, "utf-8");
-      rawState = JSON.parse(serializedState) as unknown;
-    } catch {
-      throw new Error(`Legacy install state for ${agent} is not valid JSON.`);
-    }
-    const legacyState = parseLegacyInstallState(rawState, agent);
-    // V1 predates UTF-8 canonical ordering, so preserve its parsed row sequence while rejecting duplicate-key or formatting ambiguity.
-    const normalizedLegacyBytes = `${JSON.stringify(
-      {
-        schemaVersion: MANAGED_INSTALL_STATE_SCHEMA,
-        agent: legacyState.agent,
-        goatFlowVersion: legacyState.goatFlowVersion,
-        files: legacyState.files,
-      },
-      null,
-      2,
-    )}\n`;
-    if (serializedState !== normalizedLegacyBytes) {
-      throw new Error(`Legacy install state for ${agent} is not canonical.`);
-    }
-    const canonicalFiles = [...legacyState.files].sort((left, right) =>
-      compareUtf8(left.path, right.path),
-    );
-    inventory.push({ ...legacyState, files: canonicalFiles });
   }
   return inventory;
 }
@@ -1085,6 +942,10 @@ function resolveLegacyBootstrap(
     if (row === null) {
       return {
         status: "conflicting",
+        affectedAgents: [
+          ...new Set(observations.map((observation) => observation.agent)),
+        ].sort(compareUtf8),
+        affectedPaths: [path],
         error: `Legacy install state has conflicting baselines for ${path}.`,
       };
     }
@@ -1159,6 +1020,8 @@ function readPersistedManagedInstallStateFacade(
     state,
     canonicalBytes,
     legacyAgents: [],
+    affectedAgents: [],
+    affectedPaths: [],
     error: null,
   };
 }
@@ -1180,6 +1043,8 @@ function readLegacyManagedInstallStateFacade(
       canonicalBytes: null,
       legacyAgents: [],
       staleReceiptAgents: [],
+      affectedAgents: [],
+      affectedPaths: [],
       error: null,
     };
   }
@@ -1196,6 +1061,8 @@ function readLegacyManagedInstallStateFacade(
       canonicalBytes: null,
       legacyAgents,
       staleReceiptAgents: [],
+      affectedAgents: bootstrap.affectedAgents,
+      affectedPaths: bootstrap.affectedPaths,
       error: bootstrap.error,
     };
   }
@@ -1206,6 +1073,8 @@ function readLegacyManagedInstallStateFacade(
     state: bootstrap.state,
     canonicalBytes: canonicalManagedInstallStateBytes(bootstrap.state),
     legacyAgents,
+    affectedAgents: [],
+    affectedPaths: [],
     error: null,
   };
 }
@@ -1234,6 +1103,8 @@ export function readManagedInstallStateFacade(
     }
     return readLegacyManagedInstallStateFacade(projectPath);
   } catch (error) {
+    const structuredError =
+      error instanceof ManagedInstallStateEvidenceError ? error : null;
     return {
       status: "malformed-blocking",
       source,
@@ -1242,6 +1113,14 @@ export function readManagedInstallStateFacade(
       canonicalBytes: null,
       legacyAgents: [],
       staleReceiptAgents: [],
+      affectedAgents: structuredError?.affectedAgents ?? [],
+      affectedPaths:
+        structuredError?.affectedPaths ??
+        [
+          source === "v2"
+            ? ".goat-flow/install-state/managed.json"
+            : ".goat-flow/install-state",
+        ],
       error:
         error instanceof Error
           ? error.message

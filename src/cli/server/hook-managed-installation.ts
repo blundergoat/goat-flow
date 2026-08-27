@@ -21,10 +21,10 @@ import {
   managedSetupChangeDirection,
   type ManagedSetupChangeDirection,
 } from "../managed-setup-preview.js";
-import { readManagedInstallBaseline } from "../managed-setup-state.js";
+import { readManagedInstallStateFacade } from "../managed-setup-state.js";
 import { hashFile } from "../managed-setup-write-set.js";
 import { getTemplatePath } from "../paths.js";
-import { KNOWN_AGENT_IDS, type AgentProfile } from "../types.js";
+import type { AgentProfile } from "../types.js";
 import { projectIsAheadOfCli } from "../version-compare.js";
 import type { HookSpec } from "./hooks-registry.js";
 import { writeFileAtomic } from "./safe-exec.js";
@@ -103,30 +103,21 @@ function managedHookRelativePath(
  *
  * @param projectPath - selected project used to derive the baseline's relative path
  * @param managedHookFile - installed/template pair whose exact bytes are compared
- * @param expectedHashes - trusted prior hashes; null keeps a differing file unclassified
+ * @param expectedHashes - canonical path-keyed prior hashes; a missing row keeps differing bytes unclassified
  * @returns shared repair direction; unreadable files return unclassified
  * @throws Never; filesystem read failures are converted into unclassified evidence
  */
 function managedHookFileDirection(
   projectPath: string,
   managedHookFile: ManagedHookFileContract,
-  expectedHashSets: readonly Map<string, string>[],
+  expectedHashes: ReadonlyMap<string, string>,
 ): ManagedSetupChangeDirection {
   const managedPath = managedHookRelativePath(projectPath, managedHookFile);
   try {
     const currentSha256 = hashFile(managedHookFile.installedPath);
     const newExpectedSha256 = hashFile(managedHookFile.templatePath);
-    const oldExpectedHashes = expectedHashSets.flatMap((expectedHashes) => {
-      const expectedHash = expectedHashes.get(managedPath);
-      return expectedHash === undefined ? [] : [expectedHash];
-    });
-    // Shared files are safe to advance when any installed agent baseline exactly names current bytes.
-    const oldExpectedSha256 =
-      oldExpectedHashes.find(
-        (expectedHash) => expectedHash === currentSha256,
-      ) ??
-      oldExpectedHashes[0] ??
-      null;
+    // One canonical row owns the comparison even when retained per-agent evidence disagrees.
+    const oldExpectedSha256 = expectedHashes.get(managedPath) ?? null;
     const state = classifyManagedSetupFile({
       oldExpectedSha256,
       currentSha256,
@@ -375,13 +366,14 @@ export function managedHookInstallationFacts(
   const hasAllRequiredFiles = managedHookFiles.every((managedHookFile) =>
     existsSync(managedHookFile.installedPath),
   );
-  const expectedHashSets = KNOWN_AGENT_IDS.flatMap((agentId) => {
-    const baseline = readManagedInstallBaseline(projectPath, agentId);
-    return baseline.status === "loaded" ? [baseline.expectedHashes] : [];
-  });
+  const managedBaseline = readManagedInstallStateFacade(projectPath);
   const fileDirections = managedHookFiles.map((managedHookFile) =>
     existsSync(managedHookFile.installedPath)
-      ? managedHookFileDirection(projectPath, managedHookFile, expectedHashSets)
+      ? managedHookFileDirection(
+          projectPath,
+          managedHookFile,
+          managedBaseline.expectedHashes,
+        )
       : "unclassified",
   );
   const changedPaths = managedHookFiles.flatMap((managedHookFile, index) =>

@@ -2,11 +2,12 @@
 
 **Status:** Accepted
 **Date:** 2026-08-27
+**Updated:** 2026-08-28 - refreshed the preview evidence after Task 6 moved admission to the v2 facade.
 **Ticket/Context:** M41, goat-flow 1.17.0 managed install-state work
 
 ## Context
 
-The current design creates that disagreement by construction. `src/cli/managed-setup-state.ts` (search: `goat-flow.install-state.v1`) stores every selected preview path in `.goat-flow/install-state/<agent>.json`. `src/cli/managed-setup-preview.ts` (search: `const baseline = readManagedInstallBaseline`) then reads only the selected agent's file, although the manifest contributes project-wide paths and Codex and Antigravity share `.agents/skills/`.
+The predecessor design created that disagreement by construction. `src/cli/managed-setup-state.ts` (search: `goat-flow.install-state.v1`) stored every selected preview path in `.goat-flow/install-state/<agent>.json`, and preview read only the selected agent's file although the manifest contributes project-wide paths and Codex and Antigravity share `.agents/skills/`. The migrated preview now calls the selection-independent v2 boundary in `src/cli/managed-setup-preview.ts` (search: `const baseline = readManagedSetupV2Baseline`).
 
 The RED fixture in `test/integration/setup-install-shared-state.test.ts` (search: `one baseline per managed path`) preserves the reported 1.15.1-to-1.16.0 shared-file cases as inputs and reproduces the remaining structural failure with the current public CLI. Without running hook payloads, a local patch was `local-preserved` under the current Codex baseline and `both-changed` under stale Antigravity state. Equal-version and unrankable legacy disagreements remained hidden when another agent was selected. An unselected malformed state remained `loaded`, no project-wide state existed, and two synchronized public installs both exited zero.
 

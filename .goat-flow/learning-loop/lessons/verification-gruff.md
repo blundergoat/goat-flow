@@ -54,11 +54,13 @@ last_reviewed: 2026-08-23
 ## Lesson: Gruff doc comments can expose hidden complexity warnings
 
 **Status:** active | **Created:** 2026-05-30
-**Incident count:** 3 | **Latest occurrence:** 2026-08-27
+**Incident count:** 4 | **Latest occurrence:** 2026-08-28
 
 **What happened:** Adding a maintainer comment to `src/dashboard/app.ts` `_uploadTerminalImages` cleared a docs finding but exposed new `complexity.npath` and `design.god-function` warnings. The helper extraction then passed TypeScript but failed preflight ESLint on an unnecessary assertion.
 
-**Recurrence update (2026-08-17):** M47 added truthful exported-function documentation to the hook registrar, so Gruff correctly stopped reporting that accepted warning while the reviewed-warning manifest still claimed it existed. The same preflight run found an 11-branch audit helper after focused behavior and TypeScript checks had passed. Removing only the stale manifest row and moving agent-ID validation into the baseline helper cleared the two gates without weakening analyzer policy. Evidence anchors: `scripts/gruff-warning-ratchet-checks.mjs` (search: `stale accepted debt`), `src/cli/server/hook-registrar.ts` (search: `Apply one enabled choice after proving`), and `src/cli/audit/check-drift-hooks.ts` (search: `function managedBaselineHashes`).
+**Recurrence update (2026-08-17):** M47 added truthful exported-function documentation to the hook registrar, so Gruff correctly stopped reporting that accepted warning while the reviewed-warning manifest still claimed it existed. The same preflight run found an 11-branch audit helper after focused behavior and TypeScript checks had passed. Removing only the stale manifest row and moving agent-ID validation into the baseline helper cleared the two gates without weakening analyzer policy. Evidence anchors: `scripts/gruff-warning-ratchet-checks.mjs` (search: `stale accepted debt`), `src/cli/server/hook-registrar.ts` (search: `Apply one enabled choice after proving`), and `src/cli/audit/check-drift-hooks.ts` (search: `function managedBaselineRows`).
+
+**Recurrence 2026-08-28:** M41 Task 7 retired that baseline helper after migrating the primary hook loop, but the optional registry comparison still called it. The first focused run threw `ReferenceError: managedBaselineHashes is not defined`; the later stats check also found this lesson's evidence anchor still named the removed helper. Before deleting a helper, search its exact symbol across the complete edited file and durable evidence, not only the primary caller. Evidence anchors: `src/cli/audit/check-drift-hooks.ts` (search: `function managedBaselineRows`) and `src/cli/audit/check-drift-hooks.ts` (search: `function compareRegistryHookScripts`).
 
 **Root cause:** I checked only the targeted docs rule and assumed a comment-only patch could not change broader warning or lint counts.
 

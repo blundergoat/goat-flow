@@ -12,7 +12,11 @@ import {
   classifyManagedSetupFile,
   managedSetupChangeDirection,
 } from "../managed-setup-preview.js";
-import { readManagedInstallBaseline } from "../managed-setup-state.js";
+import {
+  readManagedInstallStateFacade,
+  type ManagedInstallStateFacade,
+  type ManagedInstallStateRow,
+} from "../managed-setup-state.js";
 import type { ReadonlyFS } from "../types.js";
 import { loadManifest } from "../manifest/manifest.js";
 import { listHookSpecs, type HookSpec } from "../server/hooks-registry.js";
@@ -310,22 +314,57 @@ function expectedHookConfig(
   return `${JSON.stringify(config, null, 2)}\n`;
 }
 
+/** Name the retained source evidence without exposing target bytes or generations. */
+function managedBaselineProvenance(row: ManagedInstallStateRow): string {
+  if (row.provenance.kind === "verified-install") {
+    return `verified install ${row.provenance.goatFlowVersion}`;
+  }
+  return `legacy bootstrap ${row.provenance.observations
+    .map((observation) => `${observation.agent} ${observation.goatFlowVersion}`)
+    .join(", ")}`;
+}
+
 /**
- * Load the selected agent's prior managed hashes before audit describes repair safety.
- * Use only as direction evidence; missing or invalid state cannot authorize sync.
- * Invariant: hashes belong to the same selected agent and safe project-relative paths.
- *
- * @param projectPath - audited project whose local install state supplies prior hashes
- * @param agentId - selected agent; null means aggregate audit has no single baseline owner
- * @returns loaded path-to-hash evidence, or null when no trustworthy baseline is available
+ * Read the selection-independent baseline and report bootstrap refusal as drift.
+ * Side effect: appends one global finding when valid legacy evidence conflicts or any state file is malformed.
+ * Invariant: every selected runtime receives the same path row and provenance from the strict facade.
  */
-function managedBaselineHashes(
+function managedBaselineRows(
   projectPath: string,
-  agentId: string | null,
-): Map<string, string> | null {
-  if (agentId === null || !isAgentId(agentId)) return null;
-  const baseline = readManagedInstallBaseline(projectPath, agentId);
-  return baseline.status === "loaded" ? baseline.expectedHashes : null;
+  findings: DriftFinding[],
+): Map<string, ManagedInstallStateRow> | null {
+  const baseline = readManagedInstallStateFacade(projectPath);
+  if (
+    baseline.status === "malformed-blocking" ||
+    baseline.status === "conflicting"
+  ) {
+    const finding: DriftFinding = {
+      kind: "content",
+      path: managedBaselineEvidencePath(baseline),
+      message: `Install state is ${baseline.status}: ${baseline.error ?? "Managed install state is malformed."}`,
+    };
+    if (
+      !findings.some(
+        (candidate) =>
+          candidate.path === finding.path &&
+          candidate.message === finding.message,
+      )
+    ) {
+      findings.push(finding);
+    }
+    return null;
+  }
+  if (baseline.status !== "loaded" || baseline.state === null) return null;
+  return new Map(baseline.state.files.map((row) => [row.path, row]));
+}
+
+/** Point drift evidence at the authoritative v2 file or the inventoried legacy directory. */
+function managedBaselineEvidencePath(
+  baseline: ManagedInstallStateFacade,
+): string {
+  return baseline.source === "v2"
+    ? ".goat-flow/install-state/managed.json"
+    : ".goat-flow/install-state";
 }
 
 /** Hash in-memory expected or installed text with the install baseline's exact-byte contract. */
@@ -335,6 +374,7 @@ function managedContentHash(content: string): string {
 
 /**
  * Explain one content mismatch from M02's canonical three-way state.
+ * Invariant: selected-agent scope never changes the path row or provenance used to classify the mismatch.
  * Behind files may name sync; diverged files instead name the local bytes sync would discard.
  */
 function hookContentMismatchMessage(
@@ -342,19 +382,24 @@ function hookContentMismatchMessage(
   installedRel: string,
   expected: string,
   installed: string,
-  baselineHashes: Map<string, string> | null,
+  baselineRows: Map<string, ManagedInstallStateRow> | null,
 ): string {
+  const baselineRow = baselineRows?.get(installedRel) ?? null;
   const state = classifyManagedSetupFile({
-    oldExpectedSha256: baselineHashes?.get(installedRel) ?? null,
+    oldExpectedSha256: baselineRow?.expectedSha256 ?? null,
     currentSha256: managedContentHash(installed),
     newExpectedSha256: managedContentHash(expected),
   });
   const direction = managedSetupChangeDirection(state);
-  if (direction === "behind") {
-    return `installed hook ${installedRel} is behind template ${templateRel}; its bytes still match the previous-install baseline, so run goat-flow hooks sync`;
+  if (direction === "behind" && baselineRow !== null) {
+    return `installed hook ${installedRel} is behind template ${templateRel}; its bytes still match the previous-install baseline (${managedBaselineProvenance(baselineRow)}), so run goat-flow hooks sync`;
   }
   if (direction === "diverged") {
-    return `installed hook ${installedRel} diverged from template ${templateRel}; sync would overwrite local content at ${installedRel}, so preserve or port that content before any explicit replacement`;
+    const provenance =
+      baselineRow === null
+        ? ""
+        : `; the previous-install baseline (${managedBaselineProvenance(baselineRow)}) confirms the drift direction`;
+    return `installed hook ${installedRel} diverged from template ${templateRel}${provenance}; sync would overwrite local content at ${installedRel}, so preserve or port that content before any explicit replacement`;
   }
   return `hook template (${templateRel}) and installed copy (${installedRel}) differ, but no matching previous-install baseline proves the direction; compare them before you run goat-flow hooks sync, which replaces current managed bytes at ${installedRel}`;
 }
@@ -371,7 +416,7 @@ function compareHookArtifact(
   templateRel: string,
   installedRel: string,
   expectedFromTemplate: (template: string) => string,
-  baselineHashes: Map<string, string> | null,
+  baselineRows: Map<string, ManagedInstallStateRow> | null,
 ): void {
   const template = readTemplateText(templateRoot, templateRel);
   if (template === null) {
@@ -402,7 +447,7 @@ function compareHookArtifact(
         installedRel,
         expected,
         installed,
-        baselineHashes,
+        baselineRows,
       ),
     });
   }
@@ -413,7 +458,7 @@ function compareHookArtifact(
  * A filter keeps one runtime from reporting another runtime's absent config.
  *
  * @param fs - the audited project's filesystem
- * @param projectPath - the audited project's root, used to resolve installed baseline hashes
+ * @param projectPath - the audited project's root, used to resolve canonical baseline rows
  * @param templateRoot - package root holding the hooks goat-flow would install
  * @param findings - shared list this appends drift to; existing entries are left alone
  * @param checkedHookArtifacts - paths already compared, so one file is not reported twice
@@ -432,6 +477,7 @@ export function compareHooks(
 ): number {
   let checked = 0;
   const manifest = loadManifest();
+  const baselineRows = managedBaselineRows(projectPath, findings);
 
   // Every selected agent contributes its own hook launcher and runtime files.
   for (const [agentId, agent] of Object.entries(manifest.agents)) {
@@ -440,8 +486,6 @@ export function compareHooks(
 
     // Hookless agents have no local artifacts for drift to compare.
     if (!agent.hooks_dir || !agent.hooks) continue;
-
-    const baselineHashes = managedBaselineHashes(projectPath, agentId);
 
     // An uninstalled hook root belongs to agent setup checks, not content drift.
     if (!fs.exists(agent.hooks_dir)) continue;
@@ -462,7 +506,7 @@ export function compareHooks(
           hookFile === agent.hook_config_file
             ? expectedHookConfig(fs, agentId, agent, template)
             : template,
-        baselineHashes,
+        baselineRows,
       );
     }
 
@@ -478,7 +522,7 @@ export function compareHooks(
         templateRel,
         installedRel,
         (template) => expectedHookConfig(fs, agentId, agent, template),
-        baselineHashes,
+        baselineRows,
       );
     }
   }
@@ -730,7 +774,7 @@ function shouldCompareRegistryHookScript(
  * file they do not have.
  *
  * @param fs - the audited project's filesystem
- * @param projectPath - the audited project's root, used to resolve installed baseline hashes
+ * @param projectPath - the audited project's root, used to resolve canonical baseline rows
  * @param templateRoot - package root holding the scripts goat-flow would install
  * @param findings - shared list this appends drift to
  * @param checkedHookArtifacts - paths already compared, so one file is not reported twice
@@ -746,10 +790,7 @@ export function compareRegistryHookScripts(
   agentFilter: AgentId | null | undefined,
 ): number {
   let checked = 0;
-  const baselineHashes = managedBaselineHashes(
-    projectPath,
-    agentFilter ?? null,
-  );
+  const baselineRows = managedBaselineRows(projectPath, findings);
   for (const spec of listHookSpecs()) {
     // Agent-scoped drift must not report scripts the selected runner cannot execute.
     if (agentFilter && spec.unsupportedAgents?.[agentFilter]) continue;
@@ -767,7 +808,7 @@ export function compareRegistryHookScripts(
         `workflow/hooks/${script}`,
         installedRel,
         (template) => template,
-        baselineHashes,
+        baselineRows,
       );
     }
   }

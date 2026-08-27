@@ -1,6 +1,6 @@
 ---
 category: verification-preflight
-last_reviewed: 2026-08-23
+last_reviewed: 2026-08-28
 ---
 
 **Scope:** Adding, tuning, and trusting a repo-wide gate - dependency-audit baselines, count locks and provenance dates, what a PASS line does and does not prove, and the shell mechanics of the commands a gate runs. Formatter and lint debt is [verification-formatting.md](verification-formatting.md).
@@ -18,6 +18,22 @@ last_reviewed: 2026-08-23
 **Prevention:** When a shell gate has an EXIT trap or report renderer, capture both its human-readable summary and `$?` before treating it as final evidence. A green report line is not sufficient if the process status disagrees.
 
 **Recurrence update (2026-07-12):** The new preflight runner passed focused checks, but `Doc/code drift` failed until `.goat-flow/code-map.md` listed it. Keep the top-level script inventory current. Evidence: `scripts/preflight-checks.sh` (search: `code-map.md scripts list drifts from scripts/ filesystem`).
+
+---
+
+## Lesson: Attribute composite audit exits to the structured failing scope
+
+**Status:** active | **Created:** 2026-08-28
+**Decision changed:** Inspect each structured audit scope before attributing a composite command's nonzero exit to a prominent rendered status row.
+**Trigger phase:** VERIFY | **Caught at:** VERIFY
+
+**Prevention:** When one command renders several independent statuses, capture its exit and structured output together. Identify the scope whose status changes the exit before proposing repair; a visible `FAIL` row can remain advisory to that command.
+
+**What happened:** M41 Task 6 preflight rendered ineffective hook coverage above a failing content-lint section. I initially attributed the command failure to stale provider capture. The JSON audit showed the actual blocking finding was ADR-064's retired semantic anchor. After that anchor was repaired, the audit exited zero with content status `pass` while still reporting two required hook surfaces as ineffective.
+
+**Root cause:** I treated the most prominent failure label as the exit owner instead of reading the command's structured scope statuses.
+
+**Evidence anchors:** `scripts/preflight-checks.sh` (search: `audit --check-content reported drift`) and `src/cli/audit/audit.ts` (search: `status: requiredIneffective === 0`).
 
 ---
 
@@ -79,7 +95,7 @@ last_reviewed: 2026-08-23
 **Status:** active | **Created:** 2026-05-25
 **Decision changed:** Before accepting a file or symbol rename, grep durable references and ignored working plans for the old name, then run `stats --check`.
 **Trigger phase:** VERIFY
-**Incident count:** 5 | **Latest occurrence:** 2026-08-22
+**Incident count:** 6 | **Latest occurrence:** 2026-08-27
 
 **What happened:** The M10 split from the old command-safety hook to three guardrail hooks passed focused hook self-tests and the fast test suite, but `bash scripts/preflight-checks.sh` still failed. The failures were not in hook execution: stale learning-loop evidence pointed at deleted files, `.goat-flow/code-map.md` listed hook scripts under `scripts/`, `.goat-flow/architecture.md` omitted the new `hooks` dashboard view from the exact view inventory, and `.github/copilot-instructions.md` still routed to the old Copilot hook path.
 
@@ -92,6 +108,8 @@ last_reviewed: 2026-08-23
 **Recurrence update (2026-08-22):** During M40, an optional private rename from `isMainModule` to `isDirectCliLaunch` passed focused help, drift, typecheck, and Gruff checks.
 `stats --check` then found that the ESM-launch footgun still used `isMainModule` as its durable source anchor. Restoring the stable symbol fixed the reference without widening scope.
 Evidence anchors: `src/cli/cli.ts` (search: `function isMainModule`) and `.goat-flow/learning-loop/footguns/cli.md` (search: `isMainModule`).
+
+**Recurrence update (2026-08-27):** M41 Task 6 replaced a v1 preview-fixture helper and preview reader with v2 managed-state successors. Focused tests and typecheck passed, but `stats --check` found that the fixture-comment lesson still searched for the removed helper; the later content audit found ADR-064 still searched for the retired reader call. Both live evidence pointers now name their v2 successors. A closeout grep then over-scoped the retired call across all source and flagged the audit and hook-status consumers intentionally reserved for Tasks 7 and 8. Treat test-helper and production-symbol migrations alike: grep durable learning-loop and decision anchors before final verification, but scope zero-hit assertions to the migrated surface and classify remaining hits against explicit downstream ownership. Evidence anchors: `test/integration/setup-install-preview.test.ts` (search: `downgradeManagedStateToSevenCodexSkills`), `src/cli/managed-setup-preview.ts` (search: `const baseline = readManagedSetupV2Baseline`), and `.goat-flow/learning-loop/decisions/ADR-064-one-managed-path-one-baseline.md` (search: `# ADR-064: Give each managed path one install baseline`).
 
 **Prevention:** After a file or code-symbol rename, run the full preflight and treat drift failures as part of the rename, not documentation cleanup.
 Use the milestone's exact tracked-file grep, run `stats --check`, then use the required ignored-state search for active plans and local artifacts.
@@ -152,7 +170,7 @@ Evidence anchors: `scripts/preflight-checks.sh` (search: `Learning-loop schema`)
 
 **Status:** active | **Created:** 2026-06-07
 **Decision changed:** Validate persisted anchors with the literal search shape a future agent will run.
-**Incident count:** 8 | **Latest occurrence:** 2026-08-17
+**Incident count:** 9 | **Latest occurrence:** 2026-08-28
 
 **What happened:** Shell commands copied Markdown-formatted anchors into executable arguments. Bash treated backticks as command substitution, mangled searches, and once ran embedded CLI names. Later PreToolUse checks blocked the same shape before execution, including a redaction draft sent through a generated shell command.
 
@@ -161,6 +179,8 @@ Evidence anchors: `scripts/preflight-checks.sh` (search: `Learning-loop schema`)
 **2026-08-16 recurrence:** A read-only `rg` pattern copied the milestone's Markdown backticks into a double-quoted shell argument, so PreToolUse rejected the search as command substitution before execution. Removing the formatting punctuation preserved the intended query. Evidence: `workflow/hooks/deny-dangerous.sh` (search: `Backtick command substitution hides nested execution`).
 
 **2026-08-17 recurrence:** An M43 verification search again placed Markdown backticks inside a double-quoted `rg` argument. Policy blocked it before execution; a single-quoted plain search expressed the same read-only query safely. Evidence: `workflow/hooks/deny-dangerous.sh` (search: `Backtick command substitution hides nested execution`).
+
+**2026-08-28 recurrence:** A read-only search for the Knip lesson copied its Markdown-formatted `ignore` token into a double-quoted `rg` argument. PreToolUse blocked the command before any nested execution or file change; a single-quoted substitution-free search then returned the intended entry. Evidence: `workflow/hooks/deny-dangerous.sh` (search: `Backtick command substitution hides nested execution`).
 
 **Root cause:** Persisted search anchors were treated as prose or memory instead of executable future-agent contracts.
 
