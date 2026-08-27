@@ -136,6 +136,65 @@ describe("skill-quality-testing evaluation doctrine", () => {
     );
   });
 
+  it("scopes retirement and qualification to one reproducible target", () => {
+    assertForEachSection(
+      TDD_GUIDES,
+      "Dispatch protocol",
+      (section, guidePath) => {
+        assert.match(
+          section,
+          /classify capability versus preference/u,
+          guidePath,
+        );
+        assert.match(section, /repeated model-scoped ablations/u, guidePath);
+        assert.match(
+          section,
+          /capability success applies only to the named provider\/model\/config/u,
+          guidePath,
+        );
+        assert.match(
+          section,
+          /keep a preference while its convention remains/u,
+          guidePath,
+        );
+        assert.match(
+          section,
+          /retain the corpus as a reintroduction guard/u,
+          guidePath,
+        );
+        assert.match(
+          section,
+          /Qualification is target-specific, not source-release proof/u,
+          guidePath,
+        );
+        assert.match(
+          section,
+          /provider\/model\/class, runner\/version, reasoning\/config, skill hash, trial count, runtime, and cost/u,
+          guidePath,
+        );
+        assert.match(section, /use `unknown`, never infer/u, guidePath);
+      },
+    );
+  });
+
+  it("records TDD evidence at a repository-approved task location", () => {
+    assertForEachSection(TDD_GUIDES, "Iteration log", (section, guidePath) => {
+      assert.match(
+        section,
+        /repository-approved task evidence path/u,
+        guidePath,
+      );
+      assert.match(section, /prefer active task state/u, guidePath);
+      assert.match(section, /local redacted-log policy/u, guidePath);
+      assert.match(
+        section,
+        /Run: <provider\/model\/class; runner\/version; reasoning\/config; skill hash; trial count; runtime; cost>/u,
+        guidePath,
+      );
+      assert.doesNotMatch(section, /Write the TDD log as/u, guidePath);
+    });
+  });
+
   it("keeps review-class control handling as a specialisation", () => {
     assertForEachSection(
       ADVERSARIAL_GUIDES,

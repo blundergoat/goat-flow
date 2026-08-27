@@ -580,7 +580,7 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
     });
   });
 
-  it("documents distinct dispatcher endpoints for inferred skills and direct execution", () => {
+  it("documents every dispatcher terminal outcome without collapsing endpoints", () => {
     const skillsDocumentation = readProjectFile("docs/skills.md");
     const dispatcherDocumentation = readMarkdownSection(
       "docs/skills.md",
@@ -591,6 +591,16 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
       dispatcherDocumentation,
       /Explicit -->\|Yes\| Execute\["Load (?:named|target) skill's Step 0"\]/u,
       "explicit skill invocations must load the named skill",
+    );
+    assert.match(
+      dispatcherDocumentation,
+      /Explicit skill invocations pass through immediately to the named skill's Step 0 without reclassification/u,
+      "explicit invocations must bypass inferred routing",
+    );
+    assert.match(
+      dispatcherDocumentation,
+      /Multi-intent requests are split into numbered intents and routed separately/u,
+      "compound requests must retain separate ordered routes",
     );
     assert.match(
       dispatcherDocumentation,
@@ -606,6 +616,41 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
       dispatcherDocumentation,
       /Destination -->\|Direct\| Direct\["Use execution loop directly"\]/u,
       "direct execution must not load a skill Step 0",
+    );
+    assert.match(
+      dispatcherDocumentation,
+      /Outcome -->\|Quality flow\| Quality\["Use goat-flow quality"\]/u,
+      "framework quality assessment must use its dedicated flow",
+    );
+    assert.match(
+      dispatcherDocumentation,
+      /Outcome -->\|Bare path\| Context\["Keep read-only context"\]/u,
+      "a bare path must remain a non-writing context outcome",
+    );
+    assert.match(
+      dispatcherDocumentation,
+      /GOAT Flow setup\/process\/harness\/skills quality assessment[^\n]+`goat-flow quality` CLI\/dashboard prompt flow; no goat skill wrapper/u,
+      "the quality-flow table row must not imply a skill wrapper",
+    );
+    assert.match(
+      dispatcherDocumentation,
+      /Comment, documentation, naming, or private-placement remediation[^\n]+`\/goat-clarity`/u,
+      "clarity remediation must have a public route",
+    );
+    assert.match(
+      dispatcherDocumentation,
+      /Bare task path \(no action verb\)[^\n]+Read-only context; do not update `\.active`, milestone status, or code/u,
+      "bare task paths must remain read-only",
+    );
+    assert.match(
+      dispatcherDocumentation,
+      /Simple implementation \(single-file, obvious\)[^\n]+Direct execution loop with a Route Snapshot; no skill/u,
+      "simple implementation must terminate in direct execution",
+    );
+    assert.match(
+      dispatcherDocumentation,
+      /Simple question[^\n]+Direct answer; no GATHER or Route Snapshot/u,
+      "simple questions must terminate in a direct answer",
     );
     assert.doesNotMatch(
       skillsDocumentation,

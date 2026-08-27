@@ -258,18 +258,6 @@ async function handleStatusCommand(options: ParsedCLI): Promise<void> {
   const fs = createFS(options.projectPath);
   const result = classifyProjectState(fs, options.agent ?? undefined);
 
-  if (options.format === "json") {
-    writeOutput(
-      options,
-      JSON.stringify(
-        { path: options.projectPath, ...result, version: PACKAGE_VERSION },
-        null,
-        2,
-      ),
-    );
-    return;
-  }
-
   if (options.format === "markdown") {
     const lines = [
       `**Path:** ${options.projectPath}`,
@@ -278,6 +266,31 @@ async function handleStatusCommand(options: ParsedCLI): Promise<void> {
       `**Details:** ${result.details}`,
     ];
     writeOutput(options, lines.join("\n"));
+    return;
+  }
+
+  const {
+    buildManagedInstallEvidenceReport,
+    renderManagedInstallEvidenceText,
+  } = await import("./managed-install-evidence.js");
+  const managedInstallEvidence = buildManagedInstallEvidenceReport(
+    options.projectPath,
+  );
+
+  if (options.format === "json") {
+    writeOutput(
+      options,
+      JSON.stringify(
+        {
+          path: options.projectPath,
+          ...result,
+          version: PACKAGE_VERSION,
+          managedInstallEvidence,
+        },
+        null,
+        2,
+      ),
+    );
     return;
   }
 
@@ -297,6 +310,8 @@ async function handleStatusCommand(options: ParsedCLI): Promise<void> {
     `  State:   ${color}${result.state}${reset}`,
     `  Action:  ${result.action}`,
     `  Details: ${result.details}`,
+    "",
+    renderManagedInstallEvidenceText(managedInstallEvidence),
   ].join("\n");
   writeOutput(options, rendered);
 }

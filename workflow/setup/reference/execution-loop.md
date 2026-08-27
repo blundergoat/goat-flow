@@ -62,6 +62,8 @@ h) Execution Loop: READ -> SCOPE -> ACT -> VERIFY
    Declare intent, complexity tier, mode, files allowed to change, non-goals, and blast radius. Expanding beyond scope = stop and re-scope with human. Before writing, record the write allowlist and starting dirty paths; keep an in-session list of every path this session writes. Reads and searches stay unrestricted.
    ### ACT
    Declare `State: [MODE] | Goal: [one line] | Exit: [condition]`. Mode must be Plan, Implement, Explain, Debug, or Review.
+   For milestone work, load `goat-plan`; start timing before the first source edit, pause it at human gates, and finalize it at exit.
+   If a milestone changes source, run `goat-clarity` once before exit.
    ### VERIFY
    Run required checks for changed files. Check cross-references after renames. Tick milestone checkboxes immediately. Do not claim checks passed without the literal pass/fail line from this session. Stop the line when tests break, builds fail, or behaviour regresses. Reconcile the write allowlist, starting dirty paths, session write paths, and final changed state before delivery. A new in-scope write is deliverable. A new out-of-scope write requires the agent to stop and obtain human approval for the expanded scope before delivery. Do not attribute a starting dirty path to this session unless the session also recorded writing it.
    If VERIFY caught a failure or you corrected course, update the learning loop before DoD.

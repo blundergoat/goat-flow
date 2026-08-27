@@ -846,6 +846,9 @@ function previewVerdict(
  * Read one selection-independent baseline and layer marker compatibility over v2 rows.
  * Invariant: selected-agent input never changes the expected hash map or global bootstrap outcome.
  * Error behavior: target-controlled failures remain non-throwing status and safe diagnostic fields.
+ *
+ * @param projectPath - selected project root whose complete install-state directory supplies evidence
+ * @returns canonical facade plus marker compatibility; malformed input remains a blocking result
  */
 export function readManagedSetupV2Baseline(projectPath: string): {
   facade: ManagedInstallStateFacade;
@@ -883,6 +886,11 @@ interface ManagedReceiptProblem {
 /**
  * Check the selected receipt against its exact current path, row, generation, and target-byte set.
  * Invariant: an absent receipt has no problems, while every mismatch in a present receipt stays available for user-facing status evidence.
+ *
+ * @param state - canonical v2 state containing the receipt and referenced row generations
+ * @param files - current selected-agent preview rows used for exact path and target-byte checks
+ * @param selectedAgent - agent whose stored receipt is evaluated; absence produces no problems
+ * @returns every authority-removing mismatch, including its path when the reason is path-specific
  */
 export function selectedManagedReceiptProblems(
   state: ManagedInstallStateV2,
@@ -974,9 +982,7 @@ function managedInstallStaleReceiptAgents(
     }
   }
 
-  if (
-    selectedManagedReceiptProblems(state, files, selectedAgent).length > 0
-  ) {
+  if (selectedManagedReceiptProblems(state, files, selectedAgent).length > 0) {
     staleAgents.add(selectedAgent);
   }
   return KNOWN_AGENT_IDS.filter((agent) => staleAgents.has(agent));
@@ -1118,280 +1124,6 @@ export function renderManagedSetupPreviewText(
   for (const limit of preview.limits) lines.push(`  - ${limit}`);
   return lines.join("\n");
 }
-
-/** Normalize a project path before embedding it in user-visible recovery commands. */
-function managedEvidenceProjectArgument(projectPath: string): string {
-  return projectPath.replace(/\\/gu, "/");
-}
-
-/** Build the public install command that can verify one agent without force. */
-function managedEvidenceInstallCommand(
-  projectPath: string,
-  agent: AgentId,
-): string {
-  return `goat-flow install ${managedEvidenceProjectArgument(projectPath)} --agent ${agent}`;
-}
-
-/** Build the read-only recheck command used after repairing blocking global evidence. */
-function managedEvidenceStatusCommand(projectPath: string): string {
-  return `goat-flow status ${managedEvidenceProjectArgument(projectPath)} --format json`;
-}
-
-/** Return each legacy-provenance path associated with one known agent. */
-function legacyEvidencePaths(
-  state: ManagedInstallStateV2,
-  agent: AgentId,
-): string[] {
-  return state.files
-    .filter(
-      (row) =>
-        row.provenance.kind === "legacy-v1-bootstrap" &&
-        row.provenance.observations.some(
-          (observation) => observation.agent === agent,
-        ),
-    )
-    .map((row) => row.path);
-}
-
-/** Return a stable unique list of every path named by receipt problems. */
-function receiptProblemPaths(problems: readonly ManagedReceiptProblem[]): string[] {
-  return [
-    ...new Set(
-      problems.flatMap((problem) =>
-        problem.path === null ? [] : [problem.path],
-      ),
-    ),
-  ].sort((left, right) =>
-    Buffer.compare(Buffer.from(left, "utf-8"), Buffer.from(right, "utf-8")),
-  );
-}
-
-/** Build one non-authoritative global bootstrap entry and its exact read-only recovery. */
-function blockingManagedEvidenceEntry(
-  projectPath: string,
-  baseline: ReturnType<typeof readManagedSetupV2Baseline>,
-): ManagedInstallEvidenceEntry {
-  const status = baseline.status;
-  if (status !== "malformed-blocking" && status !== "conflicting") {
-    throw new Error(`Install-state status ${status} is not globally blocking.`);
-  }
-  const affectedPaths = baseline.facade.affectedPaths;
-  const affectedAgents = baseline.facade.affectedAgents;
-  const subject = affectedPaths.join(", ") || ".goat-flow/install-state";
-  const reasonPrefix = baseline.error ?? "Managed install evidence is invalid.";
-  const reason =
-    status === "malformed-blocking"
-      ? `${reasonPrefix} Malformed evidence blocks every agent and cannot select an installed agent.`
-      : `${reasonPrefix} Conflicting legacy history cannot select an installed agent.`;
-  const recovery =
-    status === "malformed-blocking"
-      ? `Repair ${subject} as canonical safe install-state JSON, then run: ${managedEvidenceStatusCommand(projectPath)}. Force cannot repair malformed evidence.`
-      : `Reconcile the named legacy baselines for ${subject} to one verified historical hash, then run: ${managedEvidenceStatusCommand(projectPath)}. Force cannot choose baseline history.`;
-  return {
-    status,
-    subjects: { agents: affectedAgents, paths: affectedPaths },
-    canSelectInstalledAgent: false,
-    reason,
-    recovery,
-  };
-}
-
-/**
- * Build the managed-install evidence consumed by public status text and JSON.
- * Invariant: only a fully matching v2 receipt can select an installed agent; every other stored condition carries subjects, reason, and recovery.
- */
-export function buildManagedInstallEvidenceReport(
-  projectPath: string,
-): ManagedInstallEvidenceReport {
-  const baseline = readManagedSetupV2Baseline(projectPath);
-  if (
-    baseline.status === "malformed-blocking" ||
-    baseline.status === "conflicting"
-  ) {
-    return {
-      schemaVersion: MANAGED_INSTALL_EVIDENCE_SCHEMA,
-      baselineStatus: baseline.status,
-      entries: [blockingManagedEvidenceEntry(projectPath, baseline)],
-    };
-  }
-
-  const state = baseline.facade.state;
-  if (state === null) {
-    return {
-      schemaVersion: MANAGED_INSTALL_EVIDENCE_SCHEMA,
-      baselineStatus: baseline.status,
-      entries: [],
-    };
-  }
-
-  const previews = new Map(
-    KNOWN_AGENT_IDS.map((agent) => [
-      agent,
-      buildManagedSetupPreview(projectPath, agent),
-    ]),
-  );
-  const entries: ManagedInstallEvidenceEntry[] = [];
-  const packageVersion = getPackageVersion();
-  const incompatibleAgents = new Set(
-    baseline.cutoverEvidence?.incompatibleAgents ?? [],
-  );
-
-  for (const agent of KNOWN_AGENT_IDS) {
-    const receipt = state.receipts.find(
-      (candidate) => candidate.agent === agent,
-    );
-    if (receipt === undefined) continue;
-    const preview = previews.get(agent);
-    if (preview === undefined) continue;
-    const problems = selectedManagedReceiptProblems(
-      state,
-      preview.files,
-      agent,
-    );
-    if (receipt.goatFlowVersion !== packageVersion) {
-      problems.unshift({
-        path: null,
-        reason: `Receipt package version ${receipt.goatFlowVersion} does not match current goat-flow ${packageVersion}.`,
-      });
-    }
-    if (incompatibleAgents.has(agent)) {
-      const markerPath = `.goat-flow/install-state/${agent}.json`;
-      problems.push({
-        path: markerPath,
-        reason: `The cutover marker for ${agent} is missing or incompatible.`,
-      });
-    }
-
-    if (problems.length === 0) {
-      entries.push({
-        status: "confirmed",
-        subjects: { agents: [agent], paths: [] },
-        canSelectInstalledAgent: true,
-        reason: `The ${agent} receipt matches the current package, managed path set, row generations, target bytes, and cutover marker.`,
-        recovery: null,
-      });
-      continue;
-    }
-    entries.push({
-      status: "stale",
-      subjects: { agents: [agent], paths: receiptProblemPaths(problems) },
-      canSelectInstalledAgent: false,
-      reason: `${problems.map((problem) => problem.reason).join(" ")} Stale receipt evidence cannot select ${agent} as an installed agent.`,
-      recovery: `Reconcile the listed receipt and managed target paths with the current package, then run: ${managedEvidenceInstallCommand(projectPath, agent)}. The recovery uses no force flag.`,
-    });
-  }
-
-  const legacyAgents = new Set([
-    ...baseline.facade.legacyAgents,
-    ...legacyProvenanceAgents(state),
-  ]);
-  for (const agent of KNOWN_AGENT_IDS) {
-    if (
-      !legacyAgents.has(agent) ||
-      state.receipts.some((receipt) => receipt.agent === agent)
-    ) {
-      continue;
-    }
-    entries.push({
-      status: "legacy-unconfirmed",
-      subjects: { agents: [agent], paths: legacyEvidencePaths(state, agent) },
-      canSelectInstalledAgent: false,
-      reason: `Valid v1 evidence was imported for ${agent}, but no v2 receipt has verified the current package or target bytes, so it cannot select an installed agent.`,
-      recovery: `Run: ${managedEvidenceInstallCommand(projectPath, agent)}. The public CLI verifies current target bytes and publishes a confirmed receipt without force.`,
-    });
-  }
-
-  const incompatibleAgentList = KNOWN_AGENT_IDS.filter((agent) =>
-    incompatibleAgents.has(agent),
-  );
-  if (incompatibleAgentList.length > 0) {
-    entries.push({
-      status: "cutover-incompatible",
-      subjects: {
-        agents: incompatibleAgentList,
-        paths: incompatibleAgentList.map(
-          (agent) => `.goat-flow/install-state/${agent}.json`,
-        ),
-      },
-      canSelectInstalledAgent: false,
-      reason:
-        "The named hashless cutover markers are missing or incompatible, so their evidence cannot select an installed agent.",
-      recovery: `Run: ${managedEvidenceInstallCommand(projectPath, incompatibleAgentList[0]!)}. The public CLI repairs every marker under claims before target mutation, without force.`,
-    });
-  }
-
-  const currentManagedPaths = new Set<string>();
-  for (const preview of previews.values()) {
-    for (const file of preview.files) {
-      if (
-        file.ownership === "system-owned" &&
-        file.newExpectedSha256 !== null
-      ) {
-        currentManagedPaths.add(file.path);
-      }
-    }
-  }
-  const receiptPaths = new Set(
-    state.receipts.flatMap((receipt) =>
-      receipt.files.map((reference) => reference.path),
-    ),
-  );
-  const orphanPaths = state.files
-    .filter(
-      (row) =>
-        !currentManagedPaths.has(row.path) && !receiptPaths.has(row.path),
-    )
-    .map((row) => row.path);
-  if (orphanPaths.length > 0) {
-    entries.push({
-      status: "orphan",
-      subjects: { agents: [], paths: orphanPaths },
-      canSelectInstalledAgent: false,
-      reason:
-        "The stored rows are absent from the current manifest path union and every receipt reference, so they have no preview, overwrite, installed-agent, audit, or hook authority.",
-      recovery:
-        "Retain these rows until an explicit cleanup contract verifies retirement. Do not delete them by inference or use force; ordinary install intentionally preserves orphan evidence.",
-    });
-  }
-
-  return {
-    schemaVersion: MANAGED_INSTALL_EVIDENCE_SCHEMA,
-    baselineStatus: baseline.status,
-    entries,
-  };
-}
-
-/** Render the exact managed-install evidence vocabulary for terminal status output. */
-export function renderManagedInstallEvidenceText(
-  report: ManagedInstallEvidenceReport,
-): string {
-  if (report.entries.length === 0) {
-    return `Managed install evidence: none (baseline=${report.baselineStatus})`;
-  }
-  const lines = [
-    `Managed install evidence: (baseline=${report.baselineStatus})`,
-  ];
-  for (const entry of report.entries) {
-    const subjects: string[] = [];
-    if (entry.subjects.agents.length === 1) {
-      subjects.push(`agent=${entry.subjects.agents[0]}`);
-    } else if (entry.subjects.agents.length > 1) {
-      subjects.push(`agents=${entry.subjects.agents.join(",")}`);
-    }
-    if (entry.subjects.paths.length === 1) {
-      subjects.push(`path=${entry.subjects.paths[0]}`);
-    } else if (entry.subjects.paths.length > 1) {
-      subjects.push(`paths=${entry.subjects.paths.join(",")}`);
-    }
-    lines.push(
-      `  ${entry.status}${subjects.length > 0 ? ` ${subjects.join(" ")}` : ""} can-select-installed-agent=${entry.canSelectInstalledAgent ? "yes" : "no"}`,
-      `    Reason: ${entry.reason}`,
-      `    Recovery: ${entry.recovery ?? "none"}`,
-    );
-  }
-  return lines.join("\n");
-}
-
 /**
  * Build the one post-verification state candidate without mutating persisted evidence.
  * Invariant: only selected paths whose current bytes equal the incoming hash receive verified provenance, and the selected receipt changes only when

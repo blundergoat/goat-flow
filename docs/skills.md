@@ -70,30 +70,38 @@ Route to the right skill in one step. Type `/goat` followed by what you need.
 flowchart TD
     Input["User input"] --> Explicit{"Named goat-* skill?"}
     Explicit -->|Yes| Execute["Load named skill's Step 0"]
-    Explicit -->|No| Understand["Classify intent"]
+    Explicit -->|No| Understand["Classify intent\nSplit numbered intents"]
     Understand --> Simple{"Simple factual question?"}
     Simple -->|Yes| Answer["Answer directly"]
-    Simple -->|No| Gather["Scan Ask First boundaries\nRouted skill owns learnings\nDirect path retrieves learnings"]
-    Gather --> Route{"Route to skill\nor direct execution"}
-    Route --> Snapshot["Emit Route Snapshot"]
+    Simple -->|No| Outcome{"Select terminal outcome"}
+    Outcome -->|Inferred skill| Gather["Scan Ask First boundaries\nRouted skill owns learnings"]
+    Outcome -->|Direct execution| Retrieve["Scan boundaries\nRetrieve direct-path learnings"]
+    Outcome -->|Quality flow| Quality["Use goat-flow quality"]
+    Outcome -->|Bare path| Context["Keep read-only context"]
+    Gather --> Snapshot["Emit Route Snapshot"]
+    Retrieve --> Snapshot
     Snapshot --> Destination{"Selected path"}
     Destination -->|Skill| Execute
     Destination -->|Direct| Direct["Use execution loop directly"]
 ```
 
-Explicit skill invocations pass through immediately. Otherwise, the dispatcher classifies intent conversationally - not by keyword lookup. It answers simple factual questions directly; inferred skill and direct-execution routes emit a Route Snapshot. It asks 0-2 clarification questions max and routes with a stated assumption if still ambiguous.
+Explicit skill invocations pass through immediately to the named skill's Step 0 without reclassification. Otherwise, the dispatcher classifies intent conversationally - not by keyword lookup. Multi-intent requests are split into numbered intents and routed separately in their stated or clarified order. Simple factual questions receive a direct answer without GATHER or a Route Snapshot; inferred skill and direct-execution routes emit a Route Snapshot. It asks 0-2 clarification questions max and routes with a stated assumption if still ambiguous.
 
-| Intent | Skill |
-|--------|-------|
-| Bug, error, symptom, crash | /goat-debug (diagnose) |
-| UI bug, rendering issue, browser-visible symptom | /goat-debug (diagnose + browser evidence) |
-| Explore, understand, new to this | /goat-debug (investigate) |
-| Review changes, PR, diff | /goat-review (quick review) |
-| Quality sweep, audit | /goat-review (audit) |
-| Security, vulnerability, compliance | /goat-security |
-| Plan, design, build a feature | /goat-plan (via Planning Route) |
-| Test gaps, coverage, verification planning | /goat-qa |
-| Critique a plan/assessment | /goat-critique |
+| Intent | Terminal outcome |
+|--------|------------------|
+| Bug, failure, unexpected behaviour; verify a fix | `/goat-debug` (diagnose) |
+| Browser-visible issue | Browser evidence first; then `/goat-debug` (diagnose) |
+| Understand, explain, explore unfamiliar code | `/goat-debug` (investigate) |
+| GOAT Flow setup/process/harness/skills quality assessment | `goat-flow quality` CLI/dashboard prompt flow; no goat skill wrapper |
+| Code quality review, area audit, diff check | `/goat-review` |
+| Multi-perspective critique | `/goat-critique` |
+| Security, compliance, dependency audit | `/goat-security` |
+| Comment, documentation, naming, or private-placement remediation | `/goat-clarity` |
+| Testing gaps, coverage, verification planning | `/goat-qa` |
+| Bare task path (no action verb) | Read-only context; do not update `.active`, milestone status, or code |
+| Plan/design or non-trivial build/change | `/goat-plan`; build/change carries `return-to-implement`, while plan/design stops after planning |
+| Simple implementation (single-file, obvious) | Direct execution loop with a Route Snapshot; no skill |
+| Simple question | Direct answer; no GATHER or Route Snapshot |
 
 **Planning Route:** Hotfixes use direct execution. A plan/design verb routes to planning-only `/goat-plan`; a non-trivial build/change verb routes through `/goat-plan` with `return-to-implement`. After Phase 2, that handoff starts ordinary ACT implementation without repeating the build authorization; new Ask First boundaries still gate. Bare or ambiguous task paths remain read-only context. `/goat-plan` owns `.goat-flow/plans/.active` lookup, existing-plan discovery, complexity classification, and milestone-mode selection; analysis signals ("break this down for me", "how would you approach") select Read-Only Analysis.
 

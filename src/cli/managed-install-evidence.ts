@@ -28,13 +28,13 @@ type ManagedReceiptProblem = ReturnType<
 type AgentPreviewMap = ReadonlyMap<AgentId, ManagedSetupPreview>;
 
 /** Agents and project-relative paths whose local evidence one status entry explains. */
-export interface ManagedInstallEvidenceSubjects {
+interface ManagedInstallEvidenceSubjects {
   agents: AgentId[];
   paths: string[];
 }
 
 /** One authoritative or non-authoritative managed-install condition shown in text and JSON. */
-export interface ManagedInstallEvidenceEntry {
+interface ManagedInstallEvidenceEntry {
   status:
     | "confirmed"
     | "stale"
@@ -52,9 +52,7 @@ export interface ManagedInstallEvidenceEntry {
 /** Stable managed-install evidence envelope appended to the public status command. */
 export interface ManagedInstallEvidenceReport {
   schemaVersion: typeof MANAGED_INSTALL_EVIDENCE_SCHEMA;
-  baselineStatus:
-    | ManagedInstallStateFacade["status"]
-    | "cutover-incompatible";
+  baselineStatus: ManagedInstallStateFacade["status"] | "cutover-incompatible";
   entries: ManagedInstallEvidenceEntry[];
 }
 
@@ -82,7 +80,9 @@ function comparePaths(left: string, right: string): number {
 }
 
 /** Return a stable unique list of every path named by receipt problems. */
-function receiptProblemPaths(problems: readonly ManagedReceiptProblem[]): string[] {
+function receiptProblemPaths(
+  problems: readonly ManagedReceiptProblem[],
+): string[] {
   return [
     ...new Set(
       problems.flatMap((problem) =>
@@ -92,7 +92,10 @@ function receiptProblemPaths(problems: readonly ManagedReceiptProblem[]): string
   ].sort(comparePaths);
 }
 
-/** Build one non-authoritative global bootstrap entry and its exact read-only recovery. */
+/**
+ * Build one non-authoritative global bootstrap entry and its exact read-only recovery.
+ * Invariant: malformed or conflicting evidence never grants selection authority or proposes force.
+ */
 function blockingEntry(
   projectPath: string,
   baseline: ManagedSetupBaseline,
@@ -135,15 +138,16 @@ function agentPreviews(projectPath: string): Map<AgentId, ManagedSetupPreview> {
   );
 }
 
-/** Derive every reason one stored receipt cannot remain confirmed. */
+/**
+ * Derive every reason one stored receipt cannot remain confirmed.
+ * Invariant: package, path, generation, target-byte, and cutover checks can remove authority but never replace the baseline.
+ */
 function receiptProblems(
-  projectPath: string,
   baseline: ManagedSetupBaseline,
   state: ManagedInstallStateV2,
-  previews: AgentPreviewMap,
+  preview: ManagedSetupPreview,
   receipt: ManagedReceipt,
 ): ManagedReceiptProblem[] {
-  const preview = previews.get(receipt.agent)!;
   const problems = selectedManagedReceiptProblems(
     state,
     preview.files,
@@ -207,13 +211,17 @@ function receiptEntries(
   return KNOWN_AGENT_IDS.flatMap((agent) => {
     const receipt = receipts.get(agent);
     if (receipt === undefined) return [];
-    return [
-      receiptEntry(
-        projectPath,
-        receipt,
-        receiptProblems(projectPath, baseline, state, previews, receipt),
-      ),
-    ];
+    const preview = previews.get(agent);
+    const problems: ManagedReceiptProblem[] =
+      preview === undefined
+        ? [
+            {
+              path: null,
+              reason: `Current managed preview is unavailable for ${agent}.`,
+            },
+          ]
+        : receiptProblems(baseline, state, preview, receipt);
+    return [receiptEntry(projectPath, receipt, problems)];
   });
 }
 
@@ -245,7 +253,10 @@ function legacyEvidencePaths(
     .map((row) => row.path);
 }
 
-/** Build legacy-unconfirmed entries for migrated agents that have no v2 receipt. */
+/**
+ * Build legacy-unconfirmed entries for migrated agents that have no v2 receipt.
+ * Invariant: retained legacy provenance stays visible but never grants installed-agent selection authority.
+ */
 function legacyEntries(
   projectPath: string,
   baseline: ManagedSetupBaseline,
@@ -253,9 +264,7 @@ function legacyEntries(
 ): ManagedInstallEvidenceEntry[] {
   const legacyAgents = legacyEvidenceAgents(state);
   for (const agent of baseline.facade.legacyAgents) legacyAgents.add(agent);
-  const receiptAgents = new Set(
-    state.receipts.map((receipt) => receipt.agent),
-  );
+  const receiptAgents = new Set(state.receipts.map((receipt) => receipt.agent));
   return KNOWN_AGENT_IDS.filter(
     (agent) => legacyAgents.has(agent) && !receiptAgents.has(agent),
   ).map((agent) => ({
@@ -267,7 +276,10 @@ function legacyEntries(
   }));
 }
 
-/** Build the combined marker incompatibility entry, or null when every marker is exact. */
+/**
+ * Build the combined marker incompatibility entry, or null when every marker is exact.
+ * Invariant: one known-agent-ordered entry names every incompatible marker and uses only public non-force repair.
+ */
 function cutoverEntry(
   projectPath: string,
   baseline: ManagedSetupBaseline,
@@ -275,19 +287,18 @@ function cutoverEntry(
   const agents = KNOWN_AGENT_IDS.filter((agent) =>
     baseline.cutoverEvidence?.incompatibleAgents.includes(agent),
   );
-  if (agents.length === 0) return null;
+  const repairAgent = agents[0];
+  if (repairAgent === undefined) return null;
   return {
     status: "cutover-incompatible",
     subjects: {
       agents,
-      paths: agents.map(
-        (agent) => `.goat-flow/install-state/${agent}.json`,
-      ),
+      paths: agents.map((agent) => `.goat-flow/install-state/${agent}.json`),
     },
     canSelectInstalledAgent: false,
     reason:
       "The named hashless cutover markers are missing or incompatible, so their evidence cannot select an installed agent.",
-    recovery: `Run: ${installCommand(projectPath, agents[0]!)}. The public CLI repairs every marker under claims before target mutation, without force.`,
+    recovery: `Run: ${installCommand(projectPath, repairAgent)}. The public CLI repairs every marker under claims before target mutation, without force.`,
   };
 }
 

@@ -76,7 +76,16 @@ Three signals before acting: (1) Intent: question → answer it, directive → a
 ### ACT
 MUST declare: `State: [MODE] | Goal: [one line] | Exit: [condition]`
 
-Modes: Plan = produce planning artefacts; selected `/goat-plan` File-Write may create gitignored milestone files, but committed files require explicit approval; exit on LGTM. Implement = edit in 2-3 turns; a 4th read without writing means checkpoint or re-scope. Explain = walkthrough only, with no changes unless asked. Debug = diagnosis with file + semantic anchor first; fix only after human review. Review = investigate first; never blindly apply suggestions.
+For milestone work, load `goat-plan`; start timing before the first source edit, pause it at human gates, and finalize it at exit.
+If a milestone changes source, run `goat-clarity` once before exit.
+
+| Mode | Behaviour |
+|------|-----------|
+| Plan | Produce planning artefacts. `/goat-plan` File-Write may create gitignored milestone files when selected; committed files still require explicit approval. Exit on LGTM |
+| Implement | Edit in 2-3 turns. 4th read without writing = checkpoint or re-scope |
+| Explain | Walkthrough only. No changes unless asked |
+| Debug | Diagnosis with file + semantic anchor first. Fix only after human review |
+| Review | Investigate first. Never blindly apply suggestions |
 
 ### VERIFY
 MUST run `shellcheck` on .sh changes. MUST check cross-references after renames. If working from a plan/milestone file, MUST tick `- [x]` on each task as it's completed - not at the end. Reconcile the write allowlist, starting dirty paths, session write paths, and final changed state before delivery. A new in-scope write is deliverable. A new out-of-scope write requires the agent to stop and obtain human approval for the expanded scope before delivery. Do not attribute a starting dirty path to this session unless the session also recorded writing it.

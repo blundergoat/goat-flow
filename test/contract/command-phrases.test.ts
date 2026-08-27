@@ -47,6 +47,10 @@ const WRITE_SCOPE_RECONCILIATION_PATHS = [
   "CLAUDE.md",
   ".github/copilot-instructions.md",
 ] as const;
+const MILESTONE_TIMING_RULE =
+  "For milestone work, load `goat-plan`; start timing before the first source edit, pause it at human gates, and finalize it at exit.";
+const MILESTONE_CLARITY_RULE =
+  "If a milestone changes source, run `goat-clarity` once before exit.";
 const WRITE_SCOPE_CAPTURE_RULE =
   "Before writing, record the write allowlist and starting dirty paths; keep an in-session list of every path this session writes.";
 const SCOPE_EXPANSION_RULE =
@@ -88,6 +92,29 @@ const USER_FACING_CLI_COMMAND_SURFACE_PATHS = [
   "src/cli/audit/harness/check-feedback-loop.ts",
   "src/dashboard/views/home.html",
 ] as const;
+
+/**
+ * Limits the milestone reminder contract to ACT so adjacent sections cannot
+ * satisfy the required timing or clarity obligations accidentally.
+ */
+function assertMilestoneReminder(
+  instructionText: string,
+  sourceLabel: string,
+): void {
+  const actMatch = instructionText.match(
+    /(?:^|\n)[ \t]*### ACT[^\n]*\n([\s\S]*?)(?=\n[ \t]*### [^\n]+|\n[ \t]*## [^\n]+|$)/u,
+  );
+  assert.ok(actMatch, `${sourceLabel} must contain an ACT section`);
+  const actSection = actMatch[1];
+  assert.ok(
+    actSection.includes(MILESTONE_TIMING_RULE),
+    `${sourceLabel} must keep the complete timing reminder inside ACT`,
+  );
+  assert.ok(
+    actSection.includes(MILESTONE_CLARITY_RULE),
+    `${sourceLabel} must keep the source-changing clarity reminder inside ACT`,
+  );
+}
 
 /**
  * Builds the smallest passing report needed to render the user's audit summary.
@@ -738,6 +765,39 @@ describe("end-of-run write-scope reconciliation", () => {
       });
     }
   }
+});
+
+describe("milestone reminder", () => {
+  for (const relativePath of WRITE_SCOPE_RECONCILIATION_PATHS) {
+    it(`keeps the complete reminder inside ACT in ${relativePath}`, () => {
+      assertMilestoneReminder(
+        readFileSync(resolve(PROJECT_ROOT, relativePath), "utf-8"),
+        relativePath,
+      );
+    });
+  }
+
+  it("rejects a complete reminder placed outside ACT", () => {
+    assert.throws(
+      () =>
+        assertMilestoneReminder(
+          `### ACT\nKeep working.\n### VERIFY\n${MILESTONE_TIMING_RULE}\n${MILESTONE_CLARITY_RULE}`,
+          "misplaced fixture",
+        ),
+      /complete timing reminder inside ACT/u,
+    );
+  });
+
+  it("rejects an incomplete ACT reminder", () => {
+    assert.throws(
+      () =>
+        assertMilestoneReminder(
+          `### ACT\n${MILESTONE_TIMING_RULE}\n### VERIFY\nCheck the work.`,
+          "incomplete fixture",
+        ),
+      /source-changing clarity reminder inside ACT/u,
+    );
+  });
 });
 
 describe("setup-facing learning-loop retrieval", () => {

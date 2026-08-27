@@ -1,6 +1,6 @@
 ---
 category: verification-gruff
-last_reviewed: 2026-08-23
+last_reviewed: 2026-08-28
 ---
 
 **Scope:** The Gruff analyzer specifically - comment rules, doc-comment complexity, binary discovery, and baseline handling. Other repo-wide gates are [verification-preflight.md](verification-preflight.md).
@@ -8,7 +8,7 @@ last_reviewed: 2026-08-23
 ## Lesson: Gruff comment fixes must satisfy both humans and the analyzer
 
 **Status:** active | **Created:** 2026-05-25
-**Incident count:** 12 | **Latest occurrence:** 2026-08-18
+**Incident count:** 13 | **Latest occurrence:** 2026-08-28
 **Decision changed:** Treat a human-readable comment, boolean, compact test, or typed contract as unfinished until targeted and repository-wide analyzers accept the exact source shape.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
@@ -36,6 +36,8 @@ last_reviewed: 2026-08-23
 **Tenth recurrence (2026-08-18):** The Gruff ratchet repair explained the numeric coverage policy as a "floor", but the live hook still reported `docs.magic-threshold-without-rationale` because that clear synonym was outside the installed rule's marker vocabulary. Reading the rule before a second rewrite showed that "threshold" was accepted; changing that one noun cleared the targeted scan without weakening the rationale. Evidence anchors: `scripts/gruff-warning-ratchet-checks.mjs` (search: `Coverage threshold retained`) and `package.json` (search: `@blundergoat/gruff-ts`).
 
 **Eleventh recurrence (2026-08-18):** Resolving a committed `git stash pop` conflict left `npm run build` and `npm run typecheck` green while `node scripts/check-gruff-warning-ratchet.mjs` failed. Merging the feature's migration and archive branches into `dashboardLoadSavedDashboardState` put it at cyclomatic 21 and cognitive 23 against the configured threshold of 15, and the repo keeps no accepted-debt manifest, so any warning counts as a regression. Neither side of the conflict would have passed alone: the feature branch's own if-chain scored higher than the merged form. Extracting the server read and the row assembly into two named helpers returned the scan to zero warnings without changing behaviour. Evidence anchors: `src/dashboard/dashboard-projects.ts` (search: `dashboardReadSavedServerState`), `src/dashboard/dashboard-projects.ts` (search: `dashboardBuildProjectRows`), and `.gruff-ts.yaml` (search: `complexity.cognitive:`).
+
+**Twelfth recurrence (2026-08-28):** M41 Task 9's first cohesive status implementation ignored the already-read "Hold the file-length line continuously, not in a cleanup pass" pattern and expanded `src/cli/managed-setup-preview.ts` to 1,224 substantive lines, above Gruff's 1,000-line error threshold. The correction extracted the status collector to `src/cli/managed-install-evidence.ts` before CLI wiring or verification. Evidence anchors: `src/cli/managed-setup-preview.ts` (search: `selectedManagedReceiptProblems`) and `src/cli/managed-install-evidence.ts` (search: `buildManagedInstallEvidenceReport`).
 
 **Root cause:** I treated human-readable comments, compact boolean names, a local rename, and focused contract checks as complete before checking analyzer vocabulary, branch budgets, public type use, test structure, and parallel type surfaces.
 

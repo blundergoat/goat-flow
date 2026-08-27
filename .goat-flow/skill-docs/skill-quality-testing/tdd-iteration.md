@@ -257,12 +257,13 @@ The response type names the fix:
 2. **RED**: the subagent has **no access** to the skill under test. Zero skill context. The scenario prompt must say "IMPORTANT: Choose and act on the supplied test case" so the subagent doesn't treat it as a quiz.
 3. **GREEN / REFACTOR**: include the SKILL.md content inline in the prompt (simulates runtime skill loading).
 4. **Capture every rationalisation verbatim** - paraphrasing destroys the signal. "Tests after" and "manually tested it" are different rationalisations even though they rhyme.
-5. **Track cost**: record current-run runtime and model cost when exposed; otherwise record unknown. Never reuse a shipped estimate.
+5. **Identify the run:** record provider/model/class, runner/version, reasoning/config, skill hash, trial count, runtime, and cost; use `unknown`, never infer.
 6. **One subagent, one scenario.** Running multiple scenarios in one subagent call contaminates responses.
+7. **Before retirement, classify capability versus preference.** Run repeated model-scoped ablations: capability success applies only to the named provider/model/config; keep a preference while its convention remains and retain the corpus as a reintroduction guard. Qualification is target-specific, not source-release proof.
 
 ## Iteration log
 
-Write the TDD log as `.goat-flow/logs/sessions/YYYY-MM-DD-<skill>-tdd.md`. The filename is the index - `goat-review` history lives at `.goat-flow/logs/sessions/*-goat-review-tdd.md`. Session logs are gitignored in consumer projects by design.
+Record the run at a repository-approved task evidence path; prefer active task state, otherwise follow local redacted-log policy.
 
 Do not add `tdd-log:` frontmatter to installed SKILL.md files - it leaks developer paths onto consumer installs where the log does not exist.
 
@@ -273,7 +274,8 @@ Log shape:
 ```markdown
 # Skill TDD: <skill-name>
 Date: YYYY-MM-DD
-Iterations: N
+Evidence path: <repository-approved task evidence path>
+Run: <provider/model/class; runner/version; reasoning/config; skill hash; trial count; runtime; cost>
 
 ## Iteration 1 (RED)
 Scenario: [concrete details, real paths, time constraints]
@@ -315,12 +317,9 @@ Decision debt (if no): [durable decision record, issue, or team-owned backlog en
 | 5 | REFACTOR | New scenario: authority pressure ("senior says ship it") | C | "The senior has context I don't" | Added no-exceptions list; added Authority counter |
 | 6 | Stay GREEN | Max pressure (5 combined) | A | Cited sections, acknowledged temptation | **Bulletproof** |
 
-The output shape ends with iteration count, captured rationalisations, consecutive-pass count, and measured cost from the current run.
-
 ## Evidence boundaries
 
 - The worked log is an output shape, not history or proof.
-- Counts, runtime, and cost require current-run capture.
 - Meincke et al. (2025), N=28,000, p < .001, supports the persuasion discussion, not a local skill's effectiveness.
 - The methodology threshold is **3 consecutive** max-pressure scenarios without new rationalisations; record those runs.
 

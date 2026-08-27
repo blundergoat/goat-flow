@@ -1,6 +1,6 @@
 ---
 category: agent-evidence-claims
-last_reviewed: 2026-08-27
+last_reviewed: 2026-08-28
 ---
 
 **Scope:** What counts as citable evidence - mechanism claims need a read source, absence and exact-count claims need untruncated searches, gitignored paths are never durable anchors, and final verification gates need supported scopes with captured logs. Reading the request and retrieving memory is [agent-behavior.md](agent-behavior.md); using tools and the environment is [agent-tooling.md](agent-tooling.md).
@@ -123,9 +123,9 @@ Round 4 entries in `.goat-flow/learning-loop/footguns/docs-drift.md` (search: `R
 
 ## Lesson: Final verification gates need supported scopes and captured logs
 
-**Status:** active | **Created:** 2026-05-19 | **Incident count:** 22 | **Latest occurrence:** 2026-08-27
+**Status:** active | **Created:** 2026-05-19 | **Incident count:** 24 | **Latest occurrence:** 2026-08-28
 
-**Decision changed:** Use repository-owned package scripts when a verification target loads TypeScript. | **Trigger phase:** VERIFY
+**Decision changed:** Use repository-owned package scripts for supported gates; baseline bespoke checks and scope them to the claim they prove. | **Trigger phase:** VERIFY
 
 **Prevention:** Run supported format, lint, Knip, and test gates with captured output.
 A predecessor may exempt one named RED fixture only when a blocked dependent owns it.
@@ -139,6 +139,10 @@ Evidence anchors: `test/integration/setup-install-agent-matrix.test.ts` (search:
 **Root cause:** I mixed repo-supported verification scopes with improvised paths and treated parallel final gates as interchangeable with a clean final evidence run. That made the first failure ambiguous and forced a rerun to recover the actual evidence.
 
 ### Incident Ledger
+
+**Recurrence 2026-08-28 (unbounded export capture crossed hook policy):** M46's full plan export exited 0, but the tool truncated its 10,093 JSON lines before they could be parsed. A retry piped the export into inline `node -e`; PreToolUse blocked it as `Pipe to interpreter`. A bounded `jq` selector over the same export then exited 0 and exposed only M46's required fields. When verification output exceeds the capture budget, select the needed data with a policy-compatible processor instead of piping it into a general interpreter, and preserve the producer and selector exits separately. Evidence anchors: `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Known language runtimes may consume local data only when their program is explicit`) and `src/cli/plans-export.ts` (search: `No output path is the safe preview mode`).
+
+**Recurrence 2026-08-28 (proof scope outran claim):** M46's midpoint line-budget command scanned every physical line in eight instruction files even though C1 claims only ACT-local reminder readability. It exited 1 on a 1,677-character READ line measured before the M46 edit; the recorded diff touched only ACT. Baseline bespoke proof commands before editing, then scope them to the named claim while retaining separate whole-file line-limit evidence. Evidence anchors: `workflow/setup/reference/execution-loop.md` (search: `MUST read relevant files before changes`) and `test/contract/command-phrases.test.ts` (search: `assertMilestoneReminder`).
 
 **Recurrence 2026-08-27 (unsupported formatter scope):** M41 Task 6 explicitly passed `workflow/install-goat-flow.sh` to `npx prettier --check` beside supported Markdown and TypeScript paths. Prettier exited 2 because it has no parser for that shell file, even though ShellCheck and `bash -n` had already exited cleanly. Use the repository-owned `npm run format:check` scope and keep shell proof in the shell gates; a mixed command that targets an unsupported file is not formatting evidence. Evidence anchor: `package.json` (search: `"format:check"`).
 

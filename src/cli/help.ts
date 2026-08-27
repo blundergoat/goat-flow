@@ -24,6 +24,8 @@ interface VisibleHelpTopic<
   visibility: Exclude<HelpVisibility, "hidden-legacy">;
   summary: string;
   usage: readonly [string, ...string[]];
+  /** Omitted when the command does not read or write managed install state. */
+  managedState?: HelpDetailRows;
   /** Omitted when the command has no subcommand choices to show the user. */
   subcommands?: HelpDetailRows;
   /** Omitted when the command has no command-specific flags to show the user. */
@@ -85,6 +87,32 @@ const COMMAND_HELP_CATALOG = {
     visibility: "primary",
     summary: "Copy or refresh goat-flow system files.",
     usage: ["goat-flow install [path] --agent <id> [flags]"],
+    managedState: [
+      [
+        "Write set",
+        "Apply may update managed.json and every supported agent's cutover marker.",
+      ],
+      [
+        "Migration",
+        "After managed.json exists, legacy hashes are non-authoritative; ambiguous legacy history blocks every agent.",
+      ],
+      [
+        "Receipts",
+        "Package, path-set, row-generation, target-byte, or cutover-marker drift makes a receipt stale.",
+      ],
+      [
+        "Unrecorded",
+        "After verified bytes but a failed state write, repair .goat-flow/install-state/ and rerun the printed command.",
+      ],
+      [
+        "Direct script",
+        "After cutover, workflow/install-goat-flow.sh refuses before mutation; use the public CLI.",
+      ],
+      [
+        "Recovery",
+        "Force cannot repair install evidence, and ordinary install does not automatically prune it.",
+      ],
+    ],
     flags: [
       ["--agent <id>", "Select the agent profile to install."],
       ["--dry-run", "Preview every planned write."],
@@ -488,6 +516,7 @@ function renderContextualHelp(helpTopic: VisibleHelpTopic): string {
     ...helpTopic.usage.map((usageLine) => `  ${usageLine}`),
     "",
     helpTopic.summary,
+    ...renderHelpSection("Managed state", helpTopic.managedState),
     ...renderHelpSection("Subcommands", helpTopic.subcommands),
     ...renderHelpSection("Flags", helpTopic.flags),
     "",

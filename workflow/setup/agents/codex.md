@@ -84,6 +84,9 @@ MUST declare: `State: [MODE] | Goal: [one line] | Exit: [condition]`
 | Debug | Diagnosis with file + semantic anchor first. Fixes after human reviews |
 | Review | Investigate first. Never blindly apply suggestions |
 
+For milestone work, load `goat-plan`; start timing before the first source edit, pause it at human gates, and finalize it at exit.
+If a milestone changes source, run `goat-clarity` once before exit.
+
 For Codex setup, ACT means updating only Codex-owned surfaces from the shared skeleton and adapting commands, boundaries, and Router Table rows to the target project. Coordinate with Antigravity setup if `AGENTS.md` already exists.
 
 ### VERIFY

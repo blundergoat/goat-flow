@@ -10,9 +10,12 @@
 - **Codex hooks start from complex Windows paths** - `commandWindows` preserves the literal cwd, and trusted Codex CLI 0.149.1 PostToolUse delivery now covers that handler. Affected 1.16.0 installs need a fixed-release `hooks sync` and a fresh Codex session.
 - **Hook tests expose real fixture failures** - Symlink skips require a confirmed Windows host restriction, and missing `node.exe` stays a failure.
 - **`/goat-plan` wires new milestones into an existing plan** - It also updates the terminal milestone's `Depends on` and the ISSUE band and totals.
+- **Milestone reminders match across agents** - Load `goat-plan` and start timing before source edits; run `goat-clarity` once when source changes.
 - **One command refreshes every hook scenario** - `goat-flow hooks verify --scenario all` runs the deny, post-turn, and Gruff groups in sequence, keeps every verdict when one fails, and wraps them in a `goat-flow.hook-runtime-batch.v1` report.
 - **Installs say why a hook was left unregistered** - A non-Git workspace that cannot satisfy the post-turn scan-root contract now names the hook, the reason, and the fix instead of skipping it silently.
 - **Writing playbooks now match their readers** - Agent controls use `writing-agent-facing-instructions.md`; human prose uses `writing-human-facing-prose.md`.
+- **Dispatcher routing gains source-grounded regression coverage** - Sanitized repository cases cover every terminal branch, pass-through, ordered multi-intent requests, and documented ambiguity without model calls.
+- **Skill changes carry model-scoped evidence** - Authoring guidance separates capability from preference, requires repeated target-model ablations, and retains cases as reintroduction guards.
 
 ## v1.16.0 - 2026-08-20
 

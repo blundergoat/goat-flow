@@ -1,6 +1,6 @@
 ---
 category: verification-formatting
-last_reviewed: 2026-08-27
+last_reviewed: 2026-08-28
 ---
 
 **Scope:** Formatter, lint, and Knip debt that only surfaces at repo-wide scope - style flags, copied or untracked files that inherit debt, and touched-test formatting before a verification claim. Adding or tuning a preflight gate is [verification-preflight.md](verification-preflight.md).
@@ -174,7 +174,7 @@ Evidence anchors:
 
 **Status:** active | **Created:** 2026-06-07
 
-**Decision changed:** Run typecheck, ESLint, Knip, and formatting before preflight after TypeScript surface changes. | **Trigger phase:** VERIFY | **Incident count:** 18 | **Latest occurrence:** 2026-08-28
+**Decision changed:** Run typecheck, ESLint, Knip, and formatting before preflight after TypeScript surface changes. | **Trigger phase:** VERIFY | **Incident count:** 20 | **Latest occurrence:** 2026-08-28
 
 **What happened:** Narrower checks repeatedly cleared before later static gates. On 2026-08-10, typecheck rejected dynamic membership against a literal-tuple union and ESLint found proof-reader and registrar complexity 13/11. Earlier recurrences included formatting drift, an undiscovered worker, and impossible fallback logic.
 
@@ -193,6 +193,10 @@ Evidence anchors:
 **Recurrence 2026-08-27 (managed-state facade):** Task 4's focused state tests, typecheck, ESLint, Prettier, and Gruff checks passed before preflight found five schema declarations exported for future consumers but unused by the current slice. Keeping only the facade types that this slice consumes cleared the exact Knip gate without changing state behavior. Evidence anchors: `src/cli/managed-setup-state.ts` (search: `interface ManagedInstallLegacyObservation`) and (search: `const MANAGED_INSTALL_STATE_V2_SCHEMA`).
 
 **Recurrence 2026-08-28 (hook-state consumer cutover):** Task 8 removed the final runtime import of the direct per-agent baseline reader. Focused tests, TypeScript, ESLint, Prettier, Gruff, and the full suite passed, but the exact Knip command had been omitted; preflight then found the reader export, its result type, and their private validation path unreachable. Remove dead compatibility declarations with their final consumer, and run the repository-owned Knip command before the full suite and preflight whenever an import or consumer disappears. Evidence anchors: `src/cli/managed-setup-state.ts` (search: `function readLegacyManagedInstallStateFacade`) and `scripts/preflight-checks.sh` (search: `knip_command=(`).
+
+**Recurrence 2026-08-28 (Task 10 proof command):** During M41 Task 10 proof, I inferred an `npm run knip` script from the dependency and gate name; npm failed because no such package script exists. Reading preflight's `knip_command` restored the repository's required heap and traversal flags, and that exact command exited 0. Copy the repository-owned invocation from its gate instead of inventing a conventional package-script name. Evidence anchors: `scripts/preflight-checks.sh` (search: `knip_command=(`) and `package.json` (search: `"preflight": "bash scripts/preflight-checks.sh"`).
+
+**Recurrence 2026-08-28 (M47 routing contracts):** The edited doctrine contract and new dispatcher-fixture contract passed their focused suites before the required clarity pass found both files outside repository Prettier style. Run the repository-owned scoped formatter check immediately after TypeScript edits, before treating focused GREEN as task proof. Evidence anchors: `test/contract/skill-quality-testing-doctrine.test.ts` (search: `scopes retirement and qualification to one reproducible target`), `test/contract/dispatcher-routing-fixture.test.ts` (search: `Guards deterministic dispatcher-corpus integrity`), and `package.json` (search: `"format:check"`).
 
 **Release recurrence (2026-08-09):** Hook notes gained a dated release heading before its manifest snapshot existed, so the full suite failed. Keep notes under `Unreleased` until release identity and its snapshot propagate together. Evidence: `CHANGELOG.md` (search: `## Unreleased`) and `test/unit/manifest.test.ts` (search: `missing manifest snapshots`).
 

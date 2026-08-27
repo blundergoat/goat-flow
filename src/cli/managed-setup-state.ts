@@ -368,13 +368,18 @@ type LegacyBootstrapResolution =
 
 /** Preserve structured subjects when target-controlled state cannot be parsed safely. */
 class ManagedInstallStateEvidenceError extends Error {
+  readonly affectedAgents: AgentId[];
+  readonly affectedPaths: string[];
+
   /** Store only known agents and portable project-relative paths for later status output. */
   constructor(
     message: string,
-    readonly affectedAgents: AgentId[],
-    readonly affectedPaths: string[],
+    affectedAgents: AgentId[],
+    affectedPaths: string[],
   ) {
     super(message);
+    this.affectedAgents = affectedAgents;
+    this.affectedPaths = affectedPaths;
   }
 }
 
@@ -1114,13 +1119,11 @@ export function readManagedInstallStateFacade(
       legacyAgents: [],
       staleReceiptAgents: [],
       affectedAgents: structuredError?.affectedAgents ?? [],
-      affectedPaths:
-        structuredError?.affectedPaths ??
-        [
-          source === "v2"
-            ? ".goat-flow/install-state/managed.json"
-            : ".goat-flow/install-state",
-        ],
+      affectedPaths: structuredError?.affectedPaths ?? [
+        source === "v2"
+          ? ".goat-flow/install-state/managed.json"
+          : ".goat-flow/install-state",
+      ],
       error:
         error instanceof Error
           ? error.message

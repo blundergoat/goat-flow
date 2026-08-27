@@ -35,17 +35,19 @@ type EvidenceStatus =
   | "cutover-incompatible"
   | "orphan";
 
+/** Public evidence-entry fields asserted through the status process boundary. */
 interface EvidenceEntry {
   status: EvidenceStatus;
   subjects: {
     agents: string[];
     paths: string[];
   };
-  selectsInstalledAgent: boolean;
+  canSelectInstalledAgent: boolean;
   reason: string;
   recovery: string | null;
 }
 
+/** Minimal public status JSON envelope required by this process contract. */
 interface StatusJson {
   managedInstallEvidence?: {
     schemaVersion: "goat-flow.managed-install-evidence.v1";
@@ -54,7 +56,7 @@ interface StatusJson {
   };
 }
 
-/** Run status through the public TypeScript CLI entry point. */
+/** Side effect: spawns status through the public TypeScript CLI entry point and captures its process result. */
 function runStatus(projectPath: string, format: "json" | "text") {
   return spawnSync(
     process.execPath,
@@ -68,7 +70,9 @@ function runStatus(projectPath: string, format: "json" | "text") {
 }
 
 /** Parse status JSON and require the managed evidence envelope. */
-function readEvidence(projectPath: string): StatusJson["managedInstallEvidence"] {
+function readEvidence(
+  projectPath: string,
+): StatusJson["managedInstallEvidence"] {
   const result = runStatus(projectPath, "json");
   assert.equal(result.status, 0, result.stderr);
   const report = JSON.parse(result.stdout) as StatusJson;
@@ -107,7 +111,11 @@ function installedCodexProject(): string {
   return projectPath;
 }
 
-/** Write one canonical v1 baseline without running the v2 public lifecycle. */
+/**
+ * Write one canonical v1 baseline without running the v2 public lifecycle.
+ * Side effect: creates the fixture's install-state directory and writes its agent JSON file.
+ * Invariant: the fixture contains one known-agent observation for the shared managed path.
+ */
 function writeLegacyState(
   projectPath: string,
   agent: "antigravity" | "codex",
@@ -155,13 +163,13 @@ describe("managed install status evidence", () => {
     const confirmed = evidenceEntry(report, "confirmed");
     assert.deepEqual(confirmed.subjects.agents, ["codex"]);
     assert.deepEqual(confirmed.subjects.paths, []);
-    assert.equal(confirmed.selectsInstalledAgent, true);
+    assert.equal(confirmed.canSelectInstalledAgent, true);
     assert.equal(confirmed.recovery, null);
 
     const orphanEntry = evidenceEntry(report, "orphan");
     assert.deepEqual(orphanEntry.subjects.agents, []);
     assert.deepEqual(orphanEntry.subjects.paths, [ORPHAN_PATH]);
-    assert.equal(orphanEntry.selectsInstalledAgent, false);
+    assert.equal(orphanEntry.canSelectInstalledAgent, false);
     assert.match(orphanEntry.reason, /no .*installed-agent.*authority/iu);
     assert.match(orphanEntry.recovery ?? "", /explicit cleanup contract/iu);
     assert.doesNotMatch(orphanEntry.recovery ?? "", /run:.*--force/iu);
@@ -171,7 +179,7 @@ describe("managed install status evidence", () => {
     assert.match(text.stdout, /Managed install evidence:/u);
     assert.match(text.stdout, /confirmed.*agent=codex/iu);
     assert.match(text.stdout, new RegExp(`orphan.*path=${ORPHAN_PATH}`, "iu"));
-    assert.match(text.stdout, /selects-installed-agent=(?:yes|no)/u);
+    assert.match(text.stdout, /can-select-installed-agent=(?:yes|no)/u);
   });
 
   it("reports stale receipts and incompatible cutover markers separately", () => {
@@ -192,7 +200,7 @@ describe("managed install status evidence", () => {
     const stale = evidenceEntry(report, "stale");
     assert.deepEqual(stale.subjects.agents, ["codex"]);
     assert.ok(stale.subjects.paths.includes(managedPath));
-    assert.equal(stale.selectsInstalledAgent, false);
+    assert.equal(stale.canSelectInstalledAgent, false);
     assert.match(stale.reason, /target bytes|cutover marker/iu);
     assert.match(stale.recovery ?? "", /goat-flow install .* --agent codex/u);
     assert.doesNotMatch(stale.recovery ?? "", /run:.*--force/iu);
@@ -202,7 +210,7 @@ describe("managed install status evidence", () => {
     assert.deepEqual(cutover.subjects.paths, [
       ".goat-flow/install-state/codex.json",
     ]);
-    assert.equal(cutover.selectsInstalledAgent, false);
+    assert.equal(cutover.canSelectInstalledAgent, false);
     assert.match(cutover.reason, /cannot select .*installed agent/iu);
     assert.match(cutover.recovery ?? "", /goat-flow install .* --agent codex/u);
     assert.doesNotMatch(cutover.recovery ?? "", /run:.*--force/iu);
@@ -216,7 +224,7 @@ describe("managed install status evidence", () => {
     const legacy = evidenceEntry(report, "legacy-unconfirmed");
     assert.deepEqual(legacy.subjects.agents, ["codex"]);
     assert.deepEqual(legacy.subjects.paths, [SHARED_PATH]);
-    assert.equal(legacy.selectsInstalledAgent, false);
+    assert.equal(legacy.canSelectInstalledAgent, false);
     assert.match(legacy.reason, /no v2 receipt.*current.*target bytes/iu);
     assert.match(legacy.recovery ?? "", /goat-flow install .* --agent codex/u);
     assert.doesNotMatch(legacy.recovery ?? "", /run:.*--force/iu);
@@ -235,9 +243,12 @@ describe("managed install status evidence", () => {
     const malformed = evidenceEntry(report, "malformed-blocking");
     assert.deepEqual(malformed.subjects.agents, ["antigravity"]);
     assert.deepEqual(malformed.subjects.paths, [evidencePath]);
-    assert.equal(malformed.selectsInstalledAgent, false);
+    assert.equal(malformed.canSelectInstalledAgent, false);
     assert.match(malformed.reason, /blocks every agent/iu);
-    assert.match(malformed.recovery ?? "", /goat-flow status .* --format json/u);
+    assert.match(
+      malformed.recovery ?? "",
+      /goat-flow status .* --format json/u,
+    );
     assert.doesNotMatch(malformed.recovery ?? "", /run:.*--force/iu);
   });
 
@@ -251,10 +262,13 @@ describe("managed install status evidence", () => {
     const conflicting = evidenceEntry(report, "conflicting");
     assert.deepEqual(conflicting.subjects.agents, ["antigravity", "codex"]);
     assert.deepEqual(conflicting.subjects.paths, [SHARED_PATH]);
-    assert.equal(conflicting.selectsInstalledAgent, false);
+    assert.equal(conflicting.canSelectInstalledAgent, false);
     assert.match(conflicting.reason, /cannot select .*installed agent/iu);
     assert.match(conflicting.recovery ?? "", /one verified historical hash/iu);
-    assert.match(conflicting.recovery ?? "", /goat-flow status .* --format json/u);
+    assert.match(
+      conflicting.recovery ?? "",
+      /goat-flow status .* --format json/u,
+    );
     assert.doesNotMatch(conflicting.recovery ?? "", /run:.*--force/iu);
   });
 

@@ -6,7 +6,7 @@
  */
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, describe, it } from "node:test";
@@ -260,5 +260,42 @@ describe("contextual CLI help", () => {
     assert.match(setupHelpProcess.stdout, /^  --force-user-owned\s+/mu);
     assert.equal(learnHelpProcess.status, 0, learnHelpProcess.stderr);
     assert.match(learnHelpProcess.stdout, /^  --format <type>\s+/mu);
+  });
+
+  it("explains managed-state migration and recovery from install help", () => {
+    const installHelpProcess = runHelpCommand(["install", "--help"]);
+
+    assert.equal(installHelpProcess.status, 0, installHelpProcess.stderr);
+    assert.match(installHelpProcess.stdout, /^Managed state:$/mu);
+    for (const expectedGuidance of [
+      "Apply may update managed.json and every supported agent's cutover marker.",
+      "After managed.json exists, legacy hashes are non-authoritative; ambiguous legacy history blocks every agent.",
+      "Package, path-set, row-generation, target-byte, or cutover-marker drift makes a receipt stale.",
+      "After verified bytes but a failed state write, repair .goat-flow/install-state/ and rerun the printed command.",
+      "After cutover, workflow/install-goat-flow.sh refuses before mutation; use the public CLI.",
+      "Force cannot repair install evidence, and ordinary install does not automatically prune it.",
+    ]) {
+      assert.ok(
+        installHelpProcess.stdout.includes(expectedGuidance),
+        `install help must include: ${expectedGuidance}`,
+      );
+    }
+
+    const cliReference = readFileSync(
+      join(repositoryRoot, "docs", "cli.md"),
+      "utf8",
+    );
+    for (const expectedReferenceGuidance of [
+      ".goat-flow/install-state/managed.json` is the sole project-wide baseline",
+      "every supported agent's `.goat-flow/install-state/<agent>.json` cutover marker",
+      "equal or unrankable versions that disagree on a path hash, blocks every agent",
+      "The previous baseline remains intact and no new confirmed receipt is published.",
+      "it never prunes them by inference.",
+    ]) {
+      assert.ok(
+        cliReference.includes(expectedReferenceGuidance),
+        `docs/cli.md must include: ${expectedReferenceGuidance}`,
+      );
+    }
   });
 });
