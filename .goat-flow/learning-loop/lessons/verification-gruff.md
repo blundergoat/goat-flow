@@ -54,6 +54,7 @@ last_reviewed: 2026-08-23
 ## Lesson: Gruff doc comments can expose hidden complexity warnings
 
 **Status:** active | **Created:** 2026-05-30
+**Incident count:** 3 | **Latest occurrence:** 2026-08-27
 
 **What happened:** Adding a maintainer comment to `src/dashboard/app.ts` `_uploadTerminalImages` cleared a docs finding but exposed new `complexity.npath` and `design.god-function` warnings. The helper extraction then passed TypeScript but failed preflight ESLint on an unnecessary assertion.
 
@@ -112,9 +113,11 @@ last_reviewed: 2026-08-23
 
 **Recurrence update (2026-08-06):** Windows discovery described its purpose and fallback but did not explicitly name the `where.exe` process side effect. Adding that concrete process action cleared the three targeted side-effect findings.
 
+**Recurrence 2026-08-27:** A new audit helper said it “launches one bounded child process,” but Gruff still reported `docs.missing-side-effect-doc`. Naming the contract explicitly as `Side effect: spawns one bounded child process` cleared the finding without adding compensating prose. Evidence anchor: `src/cli/audit/check-agent-deny-runtime.ts` (search: `Side effect: spawns one bounded child process`).
+
 **Root cause:** I wrote purpose comments for side-effecting helpers but did not include analyzer-recognised side-effect language. For gruff-ts docs rules, a human-useful purpose sentence is not enough when the helper mutates filesystem state or runs a subprocess.
 
-**Prevention:** For helpers that write files, mutate fixtures, or run subprocesses, include the side effect in plain maintainer language (`Write`, `Run`, `filesystem`) instead of a generic purpose sentence. After large docs batches, check the full rule delta, not only the original docs cluster. Evidence anchors: `test/integration/audit-drift.helpers.ts` (search: `Write canonical skill stubs`), `test/integration/setup-install.helpers.ts` (search: `Run the shell installer`), `CHANGELOG.md` (search: `gruff-ts cleanup follow-up`).
+**Prevention:** For helpers that write files, mutate fixtures, or run subprocesses, include the side effect in plain maintainer language (`Write`, `Run`, `Spawn`, `filesystem`) instead of a generic purpose sentence. After large docs batches, check the full rule delta, not only the original docs cluster. Evidence anchors: `test/integration/audit-drift.helpers.ts` (search: `Write canonical skill stubs`), `test/integration/setup-install.helpers.ts` (search: `Run the shell installer`), `CHANGELOG.md` (search: `gruff-ts cleanup follow-up`).
 
 ---
 

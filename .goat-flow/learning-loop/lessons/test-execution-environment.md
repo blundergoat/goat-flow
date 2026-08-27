@@ -52,7 +52,7 @@ last_reviewed: 2026-08-21
 
 **Root cause:** The test suite verified internal function behavior but never exercised the actual entry-point guard through the `.bin/` symlink path that `npx` uses. The refactor commit was titled "update goat-critique documentation," making it easy to overlook a CLI entry-point change during review.
 
-**Recurrence 2026-08-10:** A new packed-bin release fixture inferred that `--version` would print the package value `1.15.1`. The real archived `.bin/goat-flow` command printed `goat-flow v1.15.1`, so the first run failed before fresh-install and migration checks began. The assertion now preserves the complete public string. Evidence anchor: `test/integration/packaged-hook-install.test.ts` (search: `runs fresh install and 1.15.0 sync through the archived CLI bin`).
+**Recurrence 2026-08-10:** A new packed-bin release fixture inferred that `--version` would print the package value `1.15.1`. The real archived `.bin/goat-flow` command printed `goat-flow v1.15.1`, so the first run failed before fresh-install and migration checks began. The assertion now preserves the complete public string. Evidence anchor: `test/integration/packaged-hook-install.test.ts` (search: `runs fresh install through the archived CLI bin`).
 
 **Prevention:**
 1. `test/integration/main-guard.test.ts` now tests the CLI via a temp-dir symlink - the exact path that broke. This test would have caught the regression.

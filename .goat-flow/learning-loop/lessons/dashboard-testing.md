@@ -1,6 +1,6 @@
 ---
 category: dashboard-testing
-last_reviewed: 2026-08-23
+last_reviewed: 2026-08-27
 ---
 
 **Scope:** Testing the dashboard as a built, served application - stale dist copies, servers needing a restart after template edits, Knip registration for classic scripts, route-scoped verification, and performance probes that need the real shell. Asserting against source and VM-loaded helpers is [dashboard-unit-tests.md](dashboard-unit-tests.md).
@@ -10,7 +10,7 @@ last_reviewed: 2026-08-23
 **Status:** active | **Created:** 2026-05-26
 **Decision changed:** Treat provider input, command execution, result delivery, and model visibility as separate support gates.
 **Trigger phase:** VERIFY
-**Incident count:** 6 | **Latest occurrence:** 2026-08-22
+**Incident count:** 7 | **Latest occurrence:** 2026-08-27
 
 **What happened:** The Hooks dashboard first used `not supported`, then `unavailable`, for Antigravity Gruff before the local command path had been tested. Antigravity had project-local config, file-tool matchers, and a changed-file fallback, so the agent-wide label was too broad. That evidence proved local command feasibility, not model-visible Gruff feedback.
 
@@ -20,9 +20,11 @@ last_reviewed: 2026-08-23
 
 **Recurrence update (2026-08-10):** A registrar test still treated Antigravity's runnable PostToolUse command as usable Gruff support. The full suite showed that current setup intentionally removes the registration because its output cannot reach the active model. The corrected fixture keeps the user's desired toggle visible, leaves the hook unregistered, reports `result-undelivered`, and offers no local repair command. Evidence anchors: `src/cli/server/hooks-registry.ts` (search: `cannot deliver Gruff feedback to the active model`), `src/cli/server/hook-registrar.ts` (search: `doesProviderExclusionOwnState`), and `test/unit/hook-registrar-surfaces.test.ts` (search: `keeps gruff-code-quality unregistered for Antigravity without result delivery`).
 
-**Recurrence update (2026-08-10):** Fresh Codex canaries promoted Gruff and Stop to effective support, but the registry used the nonexistent final status `scenario-verified` and an integration test still selected Codex as its unsupported-provider example. Typecheck rejected the status, then the focused effective-state suite exposed the stale provider choice. At that capture boundary the registry used `effective`, while the unsupported assertion named Antigravity and preserved its absent-capture outcome. Evidence anchors: `src/cli/server/hooks-registry.ts` (search: `hook-provider-adapter.v1:codex:post-tool`), `test/integration/hook-effective-state.test.ts` (search: `antigravityState`), and `test/integration/hook-effective-state.test.ts` (search: `expires exact Codex proof and keeps invalidated result hooks stale`).
+**Recurrence update (2026-08-10):** Fresh Codex canaries promoted Gruff and Stop to effective support, but the registry used the nonexistent final status `scenario-verified` and an integration test still selected Codex as its unsupported-provider example. Typecheck rejected the status, then the focused effective-state suite exposed the stale provider choice. At that capture boundary the registry used `effective`, while the unsupported assertion named Antigravity and preserved its absent-capture outcome. Evidence anchors: `src/cli/server/hooks-registry.ts` (search: `hook-provider-adapter.v1:codex:post-tool`), `test/integration/hook-effective-state.test.ts` (search: `antigravityState`), and `test/integration/hook-effective-state.test.ts` (search: `expires exact Codex proof while keeping uncaptured Stop stale`).
 
 **Recurrence update (2026-08-22):** Adding Codex's Windows-only registration override invalidated the earlier Gruff and Stop capture. An initial disposable 0.149.0 session did not load project hooks; a subsequent session in the already-trusted project delivered the exact PreToolUse denial but no Gruff or Stop result. The registry now keeps those two event gates stale, and registration-surface tests assert the separate local `isRegistered` fact without allowing it to hide the earlier provider-capture gap. Evidence anchors: `src/cli/server/hooks-registry.ts` (search: `effectiveSupportGate: "provider-capture-stale"`), `test/integration/hook-effective-state.test.ts` (search: `replays Codex Stop results without upgrading stale provider proof`), and `workflow/hooks/README.md` (search: `initial disposable Codex CLI 0.149.0`).
+
+**Recurrence update (2026-08-27):** A bypass-trust PostToolUse capture still could not renew the trusted-provider gate. The follow-up Codex CLI 0.149.1 run used the already trusted project and exact hash-trusted handler without the bypass flag, completed `apply_patch`, ran Gruff, and exposed an analyzer-only marker to the model. The registry now dates only Codex Gruff as `scenario-unverified`; Stop stays stale because no Stop result was captured. Evidence anchors: `src/cli/server/hooks-registry.ts` (search: `2026-09-25T20:17:22.830Z`), `test/integration/hook-effective-state.test.ts` (search: `expires exact Codex proof while keeping uncaptured Stop stale`), and `workflow/hooks/README.md` (search: `without the bypass flag`).
 
 **Recurrence update (2026-08-10):** The Hooks-view unit test also required at least one Codex exclusion after fresh live proof removed the last one. The dashboard slice failed even though ambient declarations and rendering were unchanged. The test now asserts the current explicit exclusions for Antigravity and Copilot and checks that each carries a provider-named reason. Evidence anchors: `test/unit/dashboard-hooks-view.test.ts` (search: `keeps current provider exclusions paired with reasons`) and `src/cli/server/hooks-registry.ts` (search: `unsupportedAgents`).
 

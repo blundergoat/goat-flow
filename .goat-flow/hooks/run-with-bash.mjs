@@ -1,6 +1,7 @@
 // goat-flow-hook-version: 1.16.0
 /**
  * Cross-platform launcher for goat-flow's Bash hook scripts.
+ *
  * Agent hook commands use Node so native Windows avoids the System32 WSL shim.
  * The launcher preserves the user's stdin, output, cwd, deadline, and hook status.
  */
@@ -482,8 +483,8 @@ function stopHookProcessTree(hookProcess, hostPlatform, hookEnvironment) {
  * @param {NodeJS.ProcessEnv} hookEnvironment - Hook environment; missing values remain unavailable to the script.
  * @param {number} launchTimeout - Positive deadline in milliseconds; zero would time out immediately.
  * @param {NodeJS.Platform} hostPlatform - Active host used for process-tree cleanup.
- * @param {Function | null} appendCapturedHookOutput - adapter writer; null preserves direct legacy streams.
- * @returns {Promise<{status: number | null, timedOut: boolean, launchError: Error | null, stdout: string, stderr: string, hasExceededOutputLimit: boolean}>} Result for the user; empty streams mean legacy passthrough or no child output.
+ * @param {Function | null} appendCapturedHookOutput - adapter writer; null relays legacy streams without exposing provider handles to descendants.
+ * @returns {ReturnType<typeof captureHookProcessUntilDeadline>} Result for the user; empty streams mean legacy relay or no child output.
  */
 function runHookProcessUntilDeadline(
   bashExecutable,
@@ -506,10 +507,20 @@ function runHookProcessUntilDeadline(
       detached: hostPlatform !== "win32",
       env: hookEnvironment,
       shell: false,
-      stdio: shouldCaptureResult ? ["inherit", "pipe", "pipe"] : "inherit",
+      // Launcher-owned pipes keep an escaped descendant from retaining provider-facing handles.
+      stdio: ["inherit", "pipe", "pipe"],
       windowsHide: true,
     },
   );
+  // Legacy output stays live while the launcher retains ownership of the underlying handles.
+  if (!shouldCaptureResult && hookProcess.stdout && hookProcess.stderr) {
+    hookProcess.stdout.on("data", (outputChunk) => {
+      process.stdout.write(outputChunk);
+    });
+    hookProcess.stderr.on("data", (outputChunk) => {
+      process.stderr.write(outputChunk);
+    });
+  }
   return captureHookProcessUntilDeadline(
     hookProcess,
     hookEnvironment,
@@ -632,7 +643,7 @@ function renderHookExecutionResult(
       providerAdapterRuntime,
       launchContract,
       "execution-timeout",
-      "hook exceeded its deadline and was killed",
+      "hook exceeded its deadline; process-tree termination was requested",
       hookExecution.stderr,
       launchTimeout,
     );
@@ -688,12 +699,15 @@ function renderHookExecutionResult(
 
 /**
  * Run a managed project hook through Bash while preserving its host-facing result.
- * Error behavior: expected validation, adapter, launch, and delivery failures return host-specific status.
+ *
+ * Use when an agent event must reach the selected project's managed policy or feedback script.
+ * Expected failures return host-specific status; unexpected host I/O rejects the promise so the agent can report a launcher fault.
  *
  * @param {string} hookScriptArgument - Project-relative hook path; empty is rejected.
  * @param {string} hookResponseMode - Agent response protocol; empty uses policy behavior.
  * @param {object} launchOptions - Test/platform overrides; omitted values use the live project.
  * @returns {Promise<number>} Hook exit status, or the protocol-specific unavailable result.
+ * @throws {Error} When unexpected filesystem or process I/O prevents a host-specific result.
  */
 export async function runHookWithBash(
   hookScriptArgument,
@@ -711,7 +725,7 @@ export async function runHookWithBash(
     containmentProjectRoot = realpathSync(projectRoot);
     containmentHookScriptPath = realpathSync(hookScriptPath);
   } catch {
-    // The existence and shape checks below retain their more specific unavailable reason.
+    // For example, a user may sync hooks between path lookup and launch; later checks then report the missing or replaced script.
     containmentProjectRoot = resolve(projectRoot);
     containmentHookScriptPath = resolve(hookScriptPath);
   }
@@ -814,6 +828,7 @@ if (launchedModuleArgument) {
   try {
     launchedModulePath = realpathSync(resolvedLaunchPath);
   } catch {
+    // For example, an upgrade may replace the launcher path after Node loads it; the lexical path keeps import detection deterministic.
     launchedModulePath = resolvedLaunchPath;
   }
 }

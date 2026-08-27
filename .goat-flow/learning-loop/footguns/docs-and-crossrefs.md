@@ -93,8 +93,8 @@ last_reviewed: 2026-08-26
 **Decision changed:** Stage a rename before registering its destination; search all tracked files, not only Markdown, for old paths.
 **Trigger phase:** SCOPE
 **Caught at:** VERIFY
-**Incident count:** 6
-**Latest occurrence:** 2026-08-09
+**Incident count:** 8
+**Latest occurrence:** 2026-08-27
 
 **Symptoms:** A renamed or moved file breaks links in multiple documents. Dense pointer maps mean one stale path can mislead setup, glossary, or architecture readers at multiple entry points.
 
@@ -107,9 +107,11 @@ last_reviewed: 2026-08-26
 
 **Recurrences:** On 2026-07-27, M01 registered a destination before M02 created it, so audit failed `evidence_path does not exist`; M02 also missed two synthetic config references. On 2026-08-09, correcting M02's timeout premise left removed-phrase anchors in two roadmaps and two analysis reports; `rg --hidden --no-ignore` caught them. The roadmap files are gitignored, so their same-session before/after sweep is not a durable anchor. Enforcers: `src/cli/audit/provenance-types.ts` (search: `evidence_path does not exist`), `scripts/profile-dashboard-audit.mjs` (search: `Synthetic. Commit rules`), and `src/cli/facts/shared/search-anchors.ts` (search: `Validate one parsed citation`).
 
+**Recurrence 2026-08-27:** Renaming the Codex capture-expiry integration test updated the new learning-loop recurrence but left an older recurrence pointing at the previous test title. The focused test and typecheck passed; `goat-flow stats --check` caught the stale semantic anchor before handoff. Later that day, Git auto-merged concurrent edits to a learning-loop bucket and its generated index without a textual conflict, but the combined index retained the old decision text and token estimate. The same check reported `index-stale` and its in-memory comparison located the mismatched row before handoff. Evidence anchors: `test/integration/hook-effective-state.test.ts` (search: `expires exact Codex proof while keeping uncaptured Stop stale`), `src/cli/stats/stats.ts` (search: `stale file ref`), and `src/cli/stats/index-freshness.ts` (search: `const expected = formatIndex`).
+
 ~~**Evidence (historical - resolved):** the M13 Phase 3 setup-step renumber left three stale pointers - `.goat-flow/glossary.md` and an evidence-lifecycle ADR entry at removed `workflow/setup/09-customise-to-project.md`, and the removed historical `ADR-011-critique-mob-core-features.md` at removed `05-install-skills.md`~~ (resolved: now `workflow/setup/05-customise-to-project.md` and `workflow/setup/03-install-skills.md`; the ADR carrying the second pointer later left the active set).
 
-**Prevention:** Before a rename, use `git grep` for the exact path and bare filename across all tracked files. Stage the destination before changing existence-validated pointers. Repeat both sweeps after edits and classify old-path hits as compatibility, legacy, or history; include hidden-file `rg` when ignored state matters. This is DoD gate #6.
+**Prevention:** Before a rename, use `git grep` for the exact path and bare filename across all tracked files. Stage the destination before changing existence-validated pointers. Repeat both sweeps after edits and classify old-path hits as compatibility, legacy, or history; include hidden-file `rg` when ignored state matters. After merging a learning-loop bucket or generated index, run `goat-flow index` and `goat-flow stats --check` even when Git reports a clean auto-merge. This is DoD gate #6.
 
 ---
 
