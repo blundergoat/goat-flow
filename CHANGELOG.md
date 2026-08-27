@@ -7,12 +7,12 @@
 - **Deny hooks block downstream shell `eval`** - A safe first stage cannot hide later evaluation; `yq eval` and quoted evidence still work.
 - **BREAKING: audits require `audit`** - Use `goat-flow audit <path>`; bare `goat-flow` still opens the menu, and unknown commands exit `2`.
 - **Installer dependencies fail before writes** - Missing `js-yaml` gives one repair message; direct Bash does not verify or record install state.
-- **Codex hooks handle apostrophes in Windows paths** - Native preflight replays `commandWindows`; docs separate local checks from delivery proof.
+- **Codex hooks start from complex Windows paths** - `commandWindows` preserves the literal cwd, and trusted Codex CLI 0.149.1 PostToolUse delivery now covers that handler. Affected 1.16.0 installs need a fixed-release `hooks sync` and a fresh Codex session.
 - **Hook tests expose real fixture failures** - Symlink skips require a confirmed Windows host restriction, and missing `node.exe` stays a failure.
 - **`/goat-plan` wires new milestones into an existing plan** - It also updates the terminal milestone's `Depends on` and the ISSUE band and totals.
 - **One command refreshes every hook scenario** - `goat-flow hooks verify --scenario all` runs the deny, post-turn, and Gruff groups in sequence, keeps every verdict when one fails, and wraps them in a `goat-flow.hook-runtime-batch.v1` report.
 - **Installs say why a hook was left unregistered** - A non-Git workspace that cannot satisfy the post-turn scan-root contract now names the hook, the reason, and the fix instead of skipping it silently.
-- **New `writing-for-agents.md` playbook** - Installs with the shared pack and states what earns a line in a skill, playbook, or instruction file; the instruction files' prose-surface READ line and `skill-conventions.md` route that authoring to it.
+- **Writing playbooks now match their readers** - Agent controls use `writing-agent-facing-instructions.md`; human prose uses `writing-human-facing-prose.md`.
 
 ## v1.16.0 - 2026-08-20
 
