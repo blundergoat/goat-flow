@@ -126,11 +126,12 @@ interface ClaimSnapshot {
   bytes: Buffer;
 }
 
-/** Marker snapshot retained until owner-checked release. */
+/** Live descriptor and marker snapshot retained until owner-checked release. */
 interface OwnedPathWriteClaim {
   targetPath: string;
   markerPath: string;
   snapshot: ClaimSnapshot;
+  descriptor: number;
 }
 
 type ClaimSnapshotResult =
@@ -607,11 +608,11 @@ function acquireOneClaim(
   );
   const descriptor = createClaimMarker(markerPath, markerBytes, targetPath);
   const claim = readOwnedClaimSnapshot(markerPath, descriptor, markerBytes);
-  const descriptorClosed = closeClaimDescriptor(descriptor);
-  if (claim.status !== "present" || !descriptorClosed) {
+  if (claim.status !== "present") {
+    closeClaimDescriptor(descriptor);
     throw new PathWriteClaimError("claim-integrity", targetPath);
   }
-  return { targetPath, markerPath, snapshot: claim.snapshot };
+  return { targetPath, markerPath, snapshot: claim.snapshot, descriptor };
 }
 
 /** Release one marker only when its entry and exact bytes still identify this owner. */
@@ -620,22 +621,32 @@ function releaseOneClaim(
 ): PathWriteClaimReleaseResult {
   const current = readClaimSnapshot(claim.markerPath);
   if (current.status === "missing") {
-    return { targetPath: claim.targetPath, status: "missing" };
+    const status = closeClaimDescriptor(claim.descriptor)
+      ? "missing"
+      : "unreadable";
+    return { targetPath: claim.targetPath, status };
   }
   if (
     current.status !== "present" ||
     !claimSnapshotsMatch(current.snapshot, claim.snapshot)
   ) {
-    return { targetPath: claim.targetPath, status: "ownership-changed" };
+    const status = closeClaimDescriptor(claim.descriptor)
+      ? "ownership-changed"
+      : "unreadable";
+    return { targetPath: claim.targetPath, status };
   }
   try {
     fs.unlinkSync(claim.markerPath);
-    return { targetPath: claim.targetPath, status: "released" };
+    const status = closeClaimDescriptor(claim.descriptor)
+      ? "released"
+      : "unreadable";
+    return { targetPath: claim.targetPath, status };
   } catch (error) {
+    const descriptorClosed = closeClaimDescriptor(claim.descriptor);
     return {
       targetPath: claim.targetPath,
       status:
-        (error as NodeJS.ErrnoException).code === "ENOENT"
+        descriptorClosed && (error as NodeJS.ErrnoException).code === "ENOENT"
           ? "missing"
           : "unreadable",
     };

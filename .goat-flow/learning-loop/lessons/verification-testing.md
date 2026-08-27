@@ -1,6 +1,6 @@
 ---
 category: verification-testing
-last_reviewed: 2026-08-26
+last_reviewed: 2026-08-27
 ---
 
 **Scope:** What a test must actually establish - observable contracts over incidental shape, deadlines independent of the thing under test, telling a transient failure apart from a regression, and the ways a passing suite still fails to prove its claim. Proving a guard or scanner works is [verification-scanners.md](verification-scanners.md); building fixtures is [test-fixtures.md](test-fixtures.md).
@@ -39,18 +39,20 @@ last_reviewed: 2026-08-26
 ## Lesson: Cache-behaviour tests need observable contracts
 
 **Status:** active | **Created:** 2026-05-20
-**Decision changed:** Cache-aware tests now assert a boundary-level signal or rebuild any read-caching fixture after its backing files change.
+**Decision changed:** Tests now observe a boundary-level signal or, when instrumenting a shared API, filter calls to the exact resource identity under test; read-caching fixtures are rebuilt after backing files change.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
-**Incident count:** 2 | **Latest occurrence:** 2026-08-26
+**Incident count:** 3 | **Latest occurrence:** 2026-08-27
 
 **What happened:** While replacing a flaky Quality cache timing assertion, my first counter-based test tried to observe deny-hook self-test executions by monkeypatching `child_process.execFileSync`. The route path imports `execFileSync` as a named binding before the test patch, so the counter stayed at zero and the focused dashboard integration test failed even though the product behavior was the target.
 
 **Recurrence 2026-08-26:** A Windows hook-audit regression test changed `.codex/hooks.json` after its first `checkHookRuntimeSmoke` call, then expected the same audit context to observe the empty `commandWindows`. `createFS` had already cached the first read, so the second assertion exercised stale bytes and failed before it could distinguish fallback from platform-override selection. Splitting the scenarios into fresh disposable audit contexts produced the intended proof. Evidence anchors: `src/cli/facts/fs.ts` (search: `const readFile = createCachedReadFile(resolvePath)`) and `test/unit/audit-command/agent-deny-hooks-drift.test.ts` (search: `selects any present Codex Windows override`).
 
-**Root cause:** Both tests assumed a late mutation would remain observable through production wiring that had already captured or cached its dependency. Imported Node builtins, transitive helpers, and cached filesystem adapters are not reliable public signals for a changed state.
+**Recurrence 2026-08-27:** M41's first descriptor-lifetime test monkeypatched `fs.closeSync` and counted every close in the process. The focused run saw nine closes before claim release and failed, even though only two claim descriptors mattered. Recording descriptors returned by `.claim` opens with `"wx"` and filtering close observations to that set produced the intended assertion: no owned claim descriptor closes before release, and both close during release. Evidence anchor: `test/unit/path-write-claim.test.ts` (search: `acquires canonical target order and owner-releases every marker`).
 
-**Prevention:** For server cache behavior, expose a narrow response/debug contract or inject an explicit dependency, then assert that contract at the route boundary. When a fixture uses `createFS`, write its final state before the first consumer call or construct a fresh filesystem and audit context after each mutation. Avoid timing ratios, late monkeypatches of already-imported helpers, and reuse of a read-caching context to model a second on-disk state. Evidence anchors: `src/cli/server/dashboard-quality-routes.ts` (search: `getOrRunQualityAudit`), `test/integration/dashboard-server-dashboard-api-quality.test.ts` (search: `reuses cached quality audits unless fresh=true is requested`), and `src/cli/audit/check-agent-deny-mechanism.ts` (search: `checkHookSelfTest`).
+**Root cause:** These tests assumed their observation mechanism represented the behavior under test. Imported Node builtins, transitive helpers, cached filesystem adapters, and unfiltered process-wide mocks can hide or overcount the relevant event.
+
+**Prevention:** For server cache behavior, expose a narrow response/debug contract or inject an explicit dependency, then assert that contract at the route boundary. When a fixture uses `createFS`, write its final state before the first consumer call or construct a fresh filesystem and audit context after each mutation. When a test must instrument a shared API, first capture the resources selected by the system under test, then count only calls involving that identity set. Avoid timing ratios, late monkeypatches of already-imported helpers, and reuse of a read-caching context to model a second on-disk state. Evidence anchors: `src/cli/server/dashboard-quality-routes.ts` (search: `getOrRunQualityAudit`), `test/integration/dashboard-server-dashboard-api-quality.test.ts` (search: `reuses cached quality audits unless fresh=true is requested`), and `src/cli/audit/check-agent-deny-mechanism.ts` (search: `checkHookSelfTest`).
 
 ---
 

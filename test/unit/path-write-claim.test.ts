@@ -45,6 +45,12 @@ function makeProject(): string {
   return root;
 }
 
+/** POSIX exposes claim mode bits; Windows does not implement the same permission contract. */
+function assertPrivateClaimModeWhenSupported(markerPath: string): void {
+  if (process.platform === "win32") return;
+  assert.equal(fs.statSync(markerPath).mode & 0o777, 0o600);
+}
+
 /**
  * Change a live marker and return the exact foreign bytes left at its path.
  * Filesystem side effects: mutates bytes on Windows and replaces the inode with the same bytes on POSIX.
@@ -80,25 +86,37 @@ function assertClaimFailure(
   return captured;
 }
 
-/** Run a separate cooperating writer that mutates only after admission succeeds. */
-function runContender(
-  projectRoot: string,
-  targetPath: string,
-  mutationPath: string,
-): {
+/** Stable child-process outcome shared by contention and abandoned-owner fixtures. */
+interface ClaimProcessResult {
   acquired: boolean;
   reason?: string;
   targetPath?: string;
-} {
+}
+
+type ClaimProcessMode = "abandon" | "mutate-and-release";
+
+/**
+ * Run one separate cooperating writer so process exit owns abandoned-descriptor cleanup.
+ * Filesystem side effects: may write the requested mutation or leave one claim marker behind after the child exits.
+ * Error behavior: asserts a clean child exit before parsing its bounded JSON result.
+ */
+function runClaimProcess(
+  projectRoot: string,
+  targetPath: string,
+  mode: ClaimProcessMode,
+  mutationPath = "",
+): ClaimProcessResult {
   const script = String.raw`
     import { writeFileSync } from "node:fs";
-    const [moduleUrl, projectRoot, targetPath, mutationPath] = process.argv.slice(1);
+    const [moduleUrl, projectRoot, targetPath, mode, mutationPath] = process.argv.slice(1);
     const claims = await import(moduleUrl);
     try {
       const expectedIdentity = claims.readPathWriteTargetIdentity(projectRoot, targetPath);
       const batch = claims.acquirePathWriteClaims(projectRoot, [{ targetPath, expectedIdentity }]);
-      writeFileSync(mutationPath, "mutated\n", "utf8");
-      claims.releasePathWriteClaims(batch);
+      if (mode === "mutate-and-release") {
+        writeFileSync(mutationPath, "mutated\n", "utf8");
+        claims.releasePathWriteClaims(batch);
+      }
       process.stdout.write(JSON.stringify({ acquired: true }));
     } catch (error) {
       process.stdout.write(JSON.stringify({
@@ -119,16 +137,35 @@ function runContender(
       CLAIM_MODULE_URL,
       projectRoot,
       targetPath,
+      mode,
       mutationPath,
     ],
     { cwd: PROJECT_ROOT, encoding: "utf8" },
   );
   assert.equal(result.status, 0, result.stderr);
-  return JSON.parse(result.stdout) as {
-    acquired: boolean;
-    reason?: string;
-    targetPath?: string;
-  };
+  return JSON.parse(result.stdout) as ClaimProcessResult;
+}
+
+/** Run a separate cooperating writer that mutates only after admission succeeds. */
+function runContender(
+  projectRoot: string,
+  targetPath: string,
+  mutationPath: string,
+): ClaimProcessResult {
+  return runClaimProcess(
+    projectRoot,
+    targetPath,
+    "mutate-and-release",
+    mutationPath,
+  );
+}
+
+/** Leave one real marker behind after process exit closes its owning descriptor. */
+function runAbandoningOwner(
+  projectRoot: string,
+  targetPath: string,
+): ClaimProcessResult {
+  return runClaimProcess(projectRoot, targetPath, "abandon");
 }
 
 describe("path write claims", () => {
@@ -146,8 +183,37 @@ describe("path write claims", () => {
     });
   });
 
-  it("acquires canonical target order and owner-releases every marker", () => {
+  /**
+   * Pins deterministic ordering and proves descriptors remain open until owner release.
+   * Filesystem side effects: creates two targets and temporary claim markers, then owner-releases both markers.
+   */
+  it("acquires canonical target order and owner-releases every marker", (context: TestContext) => {
     const projectRoot = makeProject();
+    const originalOpenSync = fs.openSync;
+    const originalCloseSync = fs.closeSync;
+    const claimDescriptors = new Set<number>();
+    const closedClaimDescriptors = new Set<number>();
+    context.mock.method(
+      fs,
+      "openSync",
+      (path: fs.PathLike, flags: fs.OpenMode, mode?: fs.Mode | null) => {
+        const descriptor = originalOpenSync(path, flags, mode);
+        if (
+          typeof path === "string" &&
+          path.endsWith(".claim") &&
+          flags === "wx"
+        ) {
+          claimDescriptors.add(descriptor);
+        }
+        return descriptor;
+      },
+    );
+    context.mock.method(fs, "closeSync", (descriptor: number) => {
+      if (claimDescriptors.has(descriptor)) {
+        closedClaimDescriptors.add(descriptor);
+      }
+      originalCloseSync(descriptor);
+    });
     fs.writeFileSync(join(projectRoot, "b.txt"), "b\n");
     fs.writeFileSync(join(projectRoot, "a.txt"), "a\n");
     const batch = acquirePathWriteClaims(projectRoot, [
@@ -164,13 +230,14 @@ describe("path write claims", () => {
     assert.deepEqual(batch.targetPaths, ["a.txt", "b.txt"]);
     const aEvidence = inspectPathWriteClaim(projectRoot, "a.txt");
     assert.ok(aEvidence);
-    if (process.platform !== "win32") {
-      assert.equal(fs.statSync(aEvidence.markerPath).mode & 0o777, 0o600);
-    }
+    assertPrivateClaimModeWhenSupported(aEvidence.markerPath);
+    assert.equal(claimDescriptors.size, 2);
+    assert.equal(closedClaimDescriptors.size, 0);
     assert.deepEqual(releasePathWriteClaims(batch), [
       { targetPath: "a.txt", status: "released" },
       { targetPath: "b.txt", status: "released" },
     ]);
+    assert.equal(closedClaimDescriptors.size, 2);
     assert.equal(inspectPathWriteClaim(projectRoot, "a.txt"), null);
     assert.equal(inspectPathWriteClaim(projectRoot, "b.txt"), null);
   });
@@ -258,11 +325,17 @@ describe("path write claims", () => {
     ]);
     const original = inspectPathWriteClaim(projectRoot, targetPath);
     assert.ok(original);
-    const markerBytes = fs.readFileSync(original.markerPath);
-    const foreignMarkerBytes = tamperWithOwnedClaimMarker(
-      original.markerPath,
-      markerBytes,
-    );
+    let foreignMarkerBytes: Buffer;
+    try {
+      const markerBytes = fs.readFileSync(original.markerPath);
+      foreignMarkerBytes = tamperWithOwnedClaimMarker(
+        original.markerPath,
+        markerBytes,
+      );
+    } catch (error) {
+      releasePathWriteClaims(batch);
+      throw error;
+    }
 
     assert.deepEqual(releasePathWriteClaims(batch), [
       { targetPath, status: "ownership-changed" },
@@ -291,8 +364,9 @@ describe("path write claims", () => {
       const markerName = fs.readdirSync(claimDirectory)[0];
       assert.ok(markerName);
       replacementPath = join(claimDirectory, markerName);
-      const markerBytes = fs.readFileSync(replacementPath);
-      tamperWithOwnedClaimMarker(replacementPath, markerBytes);
+      const foreignBytes = Buffer.from("foreign-marker-state\n", "utf8");
+      fs.writeSync(descriptor, foreignBytes, 0, foreignBytes.length, null);
+      originalFsyncSync(descriptor);
     });
 
     assertClaimFailure(
@@ -349,13 +423,9 @@ describe("path write claims", () => {
     const projectRoot = makeProject();
     const targetPath = "managed.txt";
     const mutationPath = join(projectRoot, "contender-mutated.txt");
-    const abandoned = acquirePathWriteClaims(projectRoot, [
-      {
-        targetPath,
-        expectedIdentity: readPathWriteTargetIdentity(projectRoot, targetPath),
-      },
-    ]);
-    assert.deepEqual(abandoned.targetPaths, [targetPath]);
+    assert.deepEqual(runAbandoningOwner(projectRoot, targetPath), {
+      acquired: true,
+    });
     const firstEvidence = inspectPathWriteClaim(projectRoot, targetPath);
     assert.ok(firstEvidence);
     const markerBytes = fs.readFileSync(firstEvidence.markerPath);
