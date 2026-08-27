@@ -159,7 +159,7 @@ describe("hook launcher script validation", () => {
         assert.match(result[fixture.stream], fixture.pattern);
         assert.match(
           result[fixture.stream],
-          /exceeded its deadline and was killed/u,
+          /exceeded its deadline; process-tree termination was requested/u,
         );
         assert.ok(Date.now() - startedAt < 1_500, launcherDiagnostics(result));
       });
@@ -205,7 +205,7 @@ describe("hook launcher script validation", () => {
       );
       assert.match(
         launcherResult.stderr,
-        /exceeded its deadline and was killed/u,
+        /exceeded its deadline; process-tree termination was requested/u,
       );
       assert.equal(readFileSync(childStartedMarkerPath, "utf8"), "started\n");
       assert.ok(

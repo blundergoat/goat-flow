@@ -22,6 +22,10 @@ import { PROFILES } from "../../src/cli/detect/agents.js";
 import { agentHookSpawnDescriptor } from "../../src/cli/server/agent-hook-command.js";
 import { writeAgentHookState } from "../../src/cli/server/agent-hook-writer.js";
 import { getHookSpec } from "../../src/cli/server/hooks-registry.js";
+import {
+  FINDING_GRUFF_CONTRACT_ENVELOPE,
+  writeContractGruffBinary,
+} from "./gruff-code-quality-smoke.helpers.js";
 
 const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
 const WORKFLOW_HOOKS = join(PROJECT_ROOT, "workflow", "hooks");
@@ -315,6 +319,63 @@ describe("hook command spawn matrix", () => {
         !String(blocked.stdout).includes(ENV_CANARY) &&
           !String(blocked.stderr).includes(ENV_CANARY),
         "the canary secret must never appear in a Codex handler stream",
+      );
+    },
+  );
+
+  it(
+    "delivers a managed Gruff result through Codex's registered Windows override",
+    { skip: process.platform !== "win32" },
+    () => {
+      const projectRoot = createRegisteredHostileProject("codex");
+      writeContractGruffBinary(projectRoot, FINDING_GRUFF_CONTRACT_ENVELOPE);
+      writeFileSync(join(projectRoot, ".gruff-ts.yaml"), "rules: {}\n");
+      mkdirSync(join(projectRoot, "src"), { recursive: true });
+      writeFileSync(
+        join(projectRoot, "src", "sample.ts"),
+        "a\nb\nchanged\nd\n",
+      );
+      const gruffHandler = registeredCodexHandler(projectRoot, "PostToolUse");
+      const patchText = [
+        "*** Begin Patch",
+        "*** Update File: src/sample.ts",
+        "@@ -3,1 +3,1 @@",
+        "-c",
+        "+changed",
+        "*** End Patch",
+      ].join("\n");
+
+      const result = runRegisteredCodexHandler(
+        projectRoot,
+        gruffHandler,
+        JSON.stringify({
+          session_id: "codex-windows-spawn-matrix",
+          tool_name: "apply_patch",
+          tool_input: { patch: patchText },
+        }),
+      );
+      assert.equal(result.status, 0, handlerDiagnostics(result));
+      const providerResult = JSON.parse(result.stdout) as {
+        hookSpecificOutput?: {
+          hookEventName?: string;
+          additionalContext?: string;
+        };
+      };
+      assert.equal(
+        providerResult.hookSpecificOutput?.hookEventName,
+        "PostToolUse",
+      );
+      assert.match(
+        providerResult.hookSpecificOutput?.additionalContext ?? "",
+        /gruff-code-quality: ADVISORY/u,
+      );
+      assert.match(
+        readFileSync(join(projectRoot, "gruff-capabilities.log"), "utf8"),
+        /capabilities/u,
+      );
+      assert.match(
+        readFileSync(join(projectRoot, "gruff-hook-args.log"), "utf8"),
+        /hook --format json src\/sample\.ts/u,
       );
     },
   );

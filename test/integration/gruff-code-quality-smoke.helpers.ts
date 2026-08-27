@@ -1,9 +1,8 @@
 /**
- * Shared fixtures for the gruff-code-quality hook integration suites: disposable git
- * roots, mock gruff binaries (legacy analyse, native changed-region, gruff.hook.v1
- * contract, config-error shapes), the hook spawner, and invocation-log readers.
- * Imported by the smoke, contract, and provider-contract suites; each consumer
- * registers `after(cleanupHookTestDirs)` so temporary user projects are removed.
+ * Provides disposable projects, mock analyzers, hook launchers, and log readers for Gruff integration tests.
+ *
+ * Use these fixtures to reproduce a user's PostToolUse flow without changing their real checkout.
+ * Each consuming suite registers `after(cleanupHookTestDirs)` so temporary user projects are removed.
  */
 import {
   chmodSync,
@@ -15,7 +14,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { delimiter, dirname, extname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import assert from "node:assert/strict";
 
@@ -33,22 +32,97 @@ let payloadCounter = 0;
  * @returns nothing - deletes the registered temp directories from the filesystem
  */
 export function cleanupHookTestDirs(): void {
-  for (const dir of disposables) rmSync(dir, { recursive: true, force: true });
+  // Every registered fixture belongs to this test process and must disappear before the user sees a clean workspace.
+  for (const disposablePath of disposables) {
+    rmSync(disposablePath, { recursive: true, force: true });
+  }
 }
 
 /**
  * Resolve a tool's absolute path from PATH.
+ * Use when a fixture must launch the same Git, Bash, or jq executable available to the user's shell.
  *
- * @param name - binary name to look up (e.g. "bash")
- * @returns the first matching absolute path; throws when the tool is missing
+ * @param toolName - non-empty binary name such as `bash`; empty text cannot identify a user-installed tool
+ * @returns First matching absolute path; never empty when lookup succeeds.
+ * @throws When no matching executable exists on the user's PATH.
  */
-export function resolveTool(name: string): string {
-  for (const dir of (process.env.PATH ?? "").split(":")) {
-    if (!dir) continue;
-    const candidate = join(dir, name);
-    if (existsSync(candidate)) return candidate;
+export function resolveTool(toolName: string): string {
+  // Windows command shims may add PATHEXT suffixes; an explicit extension is already exact.
+  const executableSuffixes =
+    process.platform === "win32" && extname(toolName).length === 0
+      ? [
+          "",
+          ...(process.env.PATHEXT ?? ".COM;.EXE;.BAT;.CMD")
+            .split(";")
+            .filter((executableSuffix) => executableSuffix.length > 0),
+        ]
+      : [""];
+  // Search in host order so the fixture selects the same tool a user would launch.
+  for (const pathEntry of (process.env.PATH ?? "").split(delimiter)) {
+    const pathDirectory = pathEntry.replace(/^"(.*)"$/u, "$1");
+    // Empty PATH entries cannot identify a stable executable location for the fixture.
+    if (!pathDirectory) continue;
+    // Try each host-supported suffix before moving to the user's next PATH directory.
+    for (const executableSuffix of executableSuffixes) {
+      const executableCandidatePath = join(
+        pathDirectory,
+        `${toolName}${executableSuffix}`,
+      );
+      // The first existing candidate preserves the user's normal PATH precedence.
+      if (existsSync(executableCandidatePath)) return executableCandidatePath;
+    }
   }
-  throw new Error(`required tool not found on PATH: ${name}`);
+  throw new Error(`required tool not found on PATH: ${toolName}`);
+}
+
+/**
+ * Convert a native PATH list into drive-mounted paths Git Bash accepts.
+ * Use before hook launch so Windows users exercise the same fixture sandbox as POSIX users.
+ *
+ * @param nativePathList - host PATH text; empty remains empty and exposes missing-tool behavior
+ * @returns Git Bash-compatible PATH text, or the original text on non-Windows hosts.
+ */
+function convertToGitBashPathList(nativePathList: string): string {
+  // POSIX paths already use the spelling Bash expects, including an intentionally empty sandbox.
+  if (process.platform !== "win32") return nativePathList;
+  return nativePathList
+    .replace(
+      /(^|:)([A-Za-z]):[\\/]/gu,
+      (_matchedDrivePrefix, pathSeparatorPrefix: string, driveLetter: string) =>
+        `${pathSeparatorPrefix}/${driveLetter.toLowerCase()}/`,
+    )
+    .replaceAll("\\", "/");
+}
+
+/**
+ * Build the hook PATH while preserving each fixture's analyzer sandbox.
+ * Use when `/usr/bin` means system tools are allowed; custom paths that omit jq stay isolated.
+ *
+ * @param pathPrefix - requested fixture PATH; empty deliberately prevents tool discovery
+ * @returns Host-compatible PATH passed to the user's simulated hook process.
+ */
+function buildHookSearchPath(pathPrefix: string): string {
+  const normalizedPathPrefix = convertToGitBashPathList(pathPrefix);
+  // Only Windows needs native Git and jq folders added to the fixture's POSIX system-path sentinel.
+  if (
+    process.platform !== "win32" ||
+    !normalizedPathPrefix
+      .split(":")
+      .some((pathEntry) => pathEntry === "/usr/bin")
+  ) {
+    return normalizedPathPrefix;
+  }
+  const requiredHostToolDirectories = ["git", "jq"].map((toolName) =>
+    convertToGitBashPathList(dirname(resolveTool(toolName))),
+  );
+  return [
+    ...new Set([
+      ...normalizedPathPrefix.split(":"),
+      ...requiredHostToolDirectories,
+    ]),
+  ]
+    .filter((pathEntry) => pathEntry.length > 0)
+    .join(":");
 }
 
 /**
@@ -139,7 +213,7 @@ exit 1
  * @returns nothing - mutates the repo and fails the test on a non-zero exit
  */
 export function git(root: string, args: string[]): void {
-  const result = spawnSync("git", args, {
+  const result = spawnSync(resolveTool("git"), args, {
     cwd: root,
     encoding: "utf-8",
     env: { ...process.env, PATH: "/usr/bin:/bin" },
@@ -189,12 +263,16 @@ export function runHook(
     // File-backed stdin keeps Bash `cat` readers from waiting forever for EOF
     // under Codex's sandboxed child-process plumbing.
     return spawnSync(
-      "bash",
+      resolveTool("bash"),
       ["-c", 'bash "$1" < "$2"', "gruff-code-quality-test", HOOK, payloadPath],
       {
         cwd: root,
         encoding: "utf-8",
-        env: { ...process.env, ...extraEnv, PATH: pathPrefix },
+        env: {
+          ...process.env,
+          ...extraEnv,
+          PATH: buildHookSearchPath(pathPrefix),
+        },
         stdio: ["ignore", "pipe", "pipe"],
       },
     );
@@ -551,6 +629,7 @@ export function readInvocations(root: string): string[] {
     ).trim();
     return content.length > 0 ? content.split("\n") : [];
   } catch (error) {
+    // A missing log means the simulated user action never reached Gruff, which is valid for skip and fail-open scenarios.
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
     throw error;
   }
@@ -568,6 +647,7 @@ export function readArgumentInvocations(root: string): string[] {
     const content = readFileSync(join(root, "gruff-args.log"), "utf-8").trim();
     return content.length > 0 ? content.split("\n") : [];
   } catch (error) {
+    // A missing argv log means the simulated user action never invoked Gruff, while other read errors still expose fixture failure.
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
     throw error;
   }

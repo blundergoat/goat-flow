@@ -1,8 +1,8 @@
 /**
  * Proves an unpublished npm tarball contains a working Codex feedback launcher.
- * The fixture extracts real package bytes into a disposable consumer and runs them.
- * Use before release so source-only success cannot hide missing or stale packaged hooks.
- * Provider delivery itself is established by the separate live Codex canary.
+ *
+ * The fixture runs real package bytes in disposable consumer projects so source-only success cannot hide a broken release.
+ * Use before release; a separate live Codex canary owns provider delivery evidence.
  */
 import { after, describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -17,8 +17,9 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
+import { agentHookSpawnDescriptor } from "../../src/cli/server/agent-hook-command.js";
 
 const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
 const CODEX_GRUFF_LAUNCHER_DEADLINE_MS = 75_000;
@@ -26,17 +27,17 @@ const CODEX_GRUFF_HOST_TIMEOUT_SECONDS = 90;
 const CODEX_GRUFF_LAUNCH_CONTRACT = `codex:gruff:goat-flow.hook-result.v1:post-tool:1:${CODEX_GRUFF_LAUNCHER_DEADLINE_MS}`;
 const disposablePackagePaths: string[] = [];
 
-/** Paths a release test uses to distinguish archived package code from its npm-style command. */
-interface PackedCliInstallation {
+/** Paths a release test uses to launch archived code without falling back to the source checkout. */
+interface PackedCliLaunch {
   packedPackageRoot: string;
-  packedCliExecutablePath: string;
+  packedCliLaunchPath: string;
 }
 
 /** Minimal installed Codex shape needed to replay the exact user-facing deny command. */
 interface CodexHookConfiguration {
   hooks?: {
     PreToolUse?: Array<{
-      hooks?: Array<{ command?: string }>;
+      hooks?: Array<{ command?: string; commandWindows?: string }>;
     }>;
   };
 }
@@ -77,24 +78,37 @@ function extractPackedCandidate(): string {
   const extractedDirectoryPath = join(packageWorkspacePath, "extracted");
   mkdirSync(archiveDirectoryPath, { recursive: true });
   mkdirSync(extractedDirectoryPath, { recursive: true });
-  const packResult = spawnSync(
-    "npm",
-    [
-      "pack",
-      "--json",
-      "--ignore-scripts",
-      // `npm publish --dry-run` exports npm_config_dry_run=true to prepublishOnly,
-      // and a nested pack inherits it: npm still reports a filename it never wrote.
-      "--dry-run=false",
-      "--pack-destination",
-      archiveDirectoryPath,
-    ],
-    {
-      cwd: PROJECT_ROOT,
-      encoding: "utf8",
-      timeout: 30_000,
-    },
-  );
+  const npmPackArguments = [
+    "pack",
+    "--json",
+    "--ignore-scripts",
+    // `npm publish --dry-run` exports npm_config_dry_run=true to prepublishOnly,
+    // and a nested pack inherits it: npm still reports a filename it never wrote.
+    "--dry-run=false",
+    "--pack-destination",
+    archiveDirectoryPath,
+  ];
+  // Native Windows has an npm command shim, so launch its JavaScript entry through Node.
+  const npmLaunchCommand =
+    process.platform === "win32" ? process.execPath : "npm";
+  const npmLaunchArguments =
+    process.platform === "win32"
+      ? [
+          join(
+            dirname(process.execPath),
+            "node_modules",
+            "npm",
+            "bin",
+            "npm-cli.js",
+          ),
+          ...npmPackArguments,
+        ]
+      : npmPackArguments;
+  const packResult = spawnSync(npmLaunchCommand, npmLaunchArguments, {
+    cwd: PROJECT_ROOT,
+    encoding: "utf8",
+    timeout: 30_000,
+  });
   assert.equal(packResult.status, 0, packResult.stderr || packResult.stdout);
   const packRecords = JSON.parse(packResult.stdout) as Array<{
     filename?: string;
@@ -108,8 +122,9 @@ function extractPackedCandidate(): string {
   );
   const extractionResult = spawnSync(
     "tar",
-    ["-xzf", packedArchivePath, "-C", extractedDirectoryPath],
+    ["-xzf", basename(packedArchivePath), "-C", "../extracted"],
     {
+      cwd: archiveDirectoryPath,
       encoding: "utf8",
       timeout: 30_000,
     },
@@ -123,13 +138,14 @@ function extractPackedCandidate(): string {
 }
 
 /**
- * Expose the archived package's declared CLI at a disposable npm-style bin path.
- * Use before release to run package code while borrowing only installed dependencies offline.
- * Side effect: writes disposable package paths and spawns npm and tar before later cleanup.
+ * Prepare the archived package's declared CLI for direct Node execution.
  *
- * @returns Packed package and executable paths; neither is empty after archive validation.
+ * POSIX gets an npm-style bin link; Windows uses the declared JavaScript target that Node can launch without a command shim.
+ * Use before release; writes disposable package paths and spawns npm and tar before cleanup.
+ *
+ * @returns Packed package root and launch path; neither is empty after archive validation.
  */
-function installPackedCliExecutable(): PackedCliInstallation {
+function preparePackedCliLaunch(): PackedCliLaunch {
   const packedPackageRoot = extractPackedCandidate();
   const packedPackageManifest = JSON.parse(
     readFileSync(join(packedPackageRoot, "package.json"), "utf8"),
@@ -137,8 +153,8 @@ function installPackedCliExecutable(): PackedCliInstallation {
   // Missing bin metadata means npm users have no goat-flow command to run.
   const packedCliRelativePath = packedPackageManifest.bin?.["goat-flow"] ?? "";
   assert.notEqual(packedCliRelativePath, "");
-  const packedCliTargetPath = join(packedPackageRoot, packedCliRelativePath);
-  assert.equal(existsSync(packedCliTargetPath), true);
+  const declaredCliEntryPath = join(packedPackageRoot, packedCliRelativePath);
+  assert.equal(existsSync(declaredCliEntryPath), true);
 
   const packedCliWorkspacePath = makeDisposablePackageWorkspace("packed-cli");
   const packedCliBinDirectoryPath = join(
@@ -147,39 +163,42 @@ function installPackedCliExecutable(): PackedCliInstallation {
     ".bin",
   );
   mkdirSync(packedCliBinDirectoryPath, { recursive: true });
-  const packedCliExecutablePath = join(packedCliBinDirectoryPath, "goat-flow");
-  symlinkSync(packedCliTargetPath, packedCliExecutablePath, "file");
+  // Windows launches the declared JavaScript target; POSIX models the npm-style bin link a shell user receives.
+  const packedCliLaunchPath =
+    process.platform === "win32"
+      ? declaredCliEntryPath
+      : join(packedCliBinDirectoryPath, "goat-flow");
+  // POSIX package users receive the bin symlink this fixture replays through Node.
+  if (process.platform !== "win32") {
+    symlinkSync(declaredCliEntryPath, packedCliLaunchPath, "file");
+  }
   symlinkSync(
     join(PROJECT_ROOT, "node_modules"),
     join(packedPackageRoot, "node_modules"),
     "junction",
   );
-  return { packedPackageRoot, packedCliExecutablePath };
+  return { packedPackageRoot, packedCliLaunchPath };
 }
 
 /**
  * Spawns the disposable npm-style command exactly where a package user would run it.
  * Use for version, fresh-install, and hook-sync checks against archived CLI bytes.
  *
- * @param packedCliExecutablePath - non-empty `.bin/goat-flow` path; empty cannot start the package
+ * @param packedCliLaunchPath - non-empty bin link or declared JavaScript entry; empty cannot start the package
  * @param cliArguments - user-entered CLI arguments; empty means the package should show its default flow
  * @param workingDirectoryPath - existing user cwd; empty would make root resolution meaningless
  * @returns Captured process result; empty output is valid only when the selected command is silent.
  */
 function runPackedCli(
-  packedCliExecutablePath: string,
+  packedCliLaunchPath: string,
   cliArguments: string[],
   workingDirectoryPath: string,
 ) {
-  return spawnSync(
-    process.execPath,
-    [packedCliExecutablePath, ...cliArguments],
-    {
-      cwd: workingDirectoryPath,
-      encoding: "utf8",
-      timeout: 120_000,
-    },
-  );
+  return spawnSync(process.execPath, [packedCliLaunchPath, ...cliArguments], {
+    cwd: workingDirectoryPath,
+    encoding: "utf8",
+    timeout: 120_000,
+  });
 }
 
 /**
@@ -218,18 +237,25 @@ const V1_15_0_PACKAGE_MIGRATION_UNAVAILABLE =
  * Use before replaying safe and dangerous shell requests through configured policy.
  *
  * @param targetProjectPath - non-empty installed project root; empty has no Codex configuration
- * @returns Configured command; never empty after a successful managed installation.
+ * @returns Configured shell descriptor; its cross-platform command is never empty after a successful managed installation.
  */
-function readInstalledCodexDenyCommand(targetProjectPath: string): string {
+function readInstalledCodexDenyHandler(targetProjectPath: string): {
+  command: string;
+  commandWindows?: string;
+} {
   const installedHookConfiguration = JSON.parse(
     readFileSync(join(targetProjectPath, ".codex", "hooks.json"), "utf8"),
   ) as CodexHookConfiguration;
   // Empty registration means the package left the user's shell without the managed deny guard.
-  const installedDenyCommand =
-    installedHookConfiguration.hooks?.PreToolUse?.[0]?.hooks?.[0]?.command ??
-    "";
-  assert.notEqual(installedDenyCommand, "");
-  return installedDenyCommand;
+  const installedDenyHandler =
+    installedHookConfiguration.hooks?.PreToolUse?.[0]?.hooks?.[0];
+  assert.equal(typeof installedDenyHandler?.command, "string");
+  return {
+    command: installedDenyHandler.command,
+    ...(typeof installedDenyHandler.commandWindows === "string"
+      ? { commandWindows: installedDenyHandler.commandWindows }
+      : {}),
+  };
 }
 
 /**
@@ -241,16 +267,24 @@ function readInstalledCodexDenyCommand(targetProjectPath: string): string {
  * @returns Nothing; failed policy outcomes throw assertions with captured user-facing output.
  */
 function assertInstalledCodexPolicy(targetProjectPath: string): void {
-  const installedDenyCommand = readInstalledCodexDenyCommand(targetProjectPath);
-  const safePolicyResult = spawnSync("bash", ["-lc", installedDenyCommand], {
-    cwd: targetProjectPath,
-    encoding: "utf8",
-    input: JSON.stringify({
-      tool_name: "Bash",
-      tool_input: { command: "echo safe" },
-    }),
-    timeout: 30_000,
+  const installedDenyHandler = readInstalledCodexDenyHandler(targetProjectPath);
+  const platformDenyLaunch = agentHookSpawnDescriptor({
+    form: "shell",
+    ...installedDenyHandler,
   });
+  const safePolicyResult = spawnSync(
+    platformDenyLaunch.command,
+    platformDenyLaunch.args,
+    {
+      cwd: targetProjectPath,
+      encoding: "utf8",
+      input: JSON.stringify({
+        tool_name: "Bash",
+        tool_input: { command: "echo safe" },
+      }),
+      timeout: 30_000,
+    },
+  );
   assert.equal(
     safePolicyResult.status,
     0,
@@ -258,8 +292,8 @@ function assertInstalledCodexPolicy(targetProjectPath: string): void {
   );
 
   const dangerousPolicyResult = spawnSync(
-    "bash",
-    ["-lc", installedDenyCommand],
+    platformDenyLaunch.command,
+    platformDenyLaunch.args,
     {
       cwd: targetProjectPath,
       encoding: "utf8",
@@ -427,7 +461,7 @@ describe("packaged hook installation canary", () => {
     assert.match(modelVisibleContext, /execution-timeout/u);
     assert.match(
       modelVisibleContext,
-      /hook exceeded its deadline and was killed/u,
+      /hook exceeded its deadline; process-tree termination was requested/u,
     );
     assert.equal(canaryResult.stderr, "");
     assert.ok(
@@ -437,52 +471,56 @@ describe("packaged hook installation canary", () => {
     );
   });
 
-  // A user installs into a bare folder, then repairs a tagged 1.15.0 project from another shell.
+  // A new user must be able to install and run the archived CLI even when CI has no historical Git tags.
+  it("runs fresh install through the archived CLI bin", () => {
+    const { packedPackageRoot, packedCliLaunchPath } = preparePackedCliLaunch();
+    const packedVersionResult = runPackedCli(
+      packedCliLaunchPath,
+      ["--version"],
+      packedPackageRoot,
+    );
+    assert.equal(
+      packedVersionResult.status,
+      0,
+      packedVersionResult.stderr || packedVersionResult.stdout,
+    );
+    assert.equal(packedVersionResult.stdout.trim(), "goat-flow v1.16.0");
+
+    const freshProjectPath = makeDisposablePackageWorkspace("fresh-non-git");
+    const freshInstallResult = runPackedCli(
+      packedCliLaunchPath,
+      ["install", freshProjectPath, "--agent", "codex"],
+      freshProjectPath,
+    );
+    assert.equal(
+      freshInstallResult.status,
+      0,
+      freshInstallResult.stderr || freshInstallResult.stdout,
+    );
+    assert.equal(existsSync(join(freshProjectPath, ".git")), false);
+    assert.equal(
+      readFileSync(
+        join(freshProjectPath, ".goat-flow", "hooks", "run-with-bash.mjs"),
+        "utf8",
+      ),
+      readFileSync(
+        join(packedPackageRoot, "workflow", "hooks", "run-with-bash.mjs"),
+        "utf8",
+      ),
+    );
+    assertInstalledCodexPolicy(freshProjectPath);
+  });
+
+  // Existing 1.15.0 users get migration proof only when the exact released fixture is available.
   it(
-    "runs fresh install and 1.15.0 sync through the archived CLI bin",
+    "syncs a 1.15.0 install through the archived CLI bin",
     { skip: V1_15_0_PACKAGE_MIGRATION_UNAVAILABLE },
     () => {
       // The skip above handles shallow clones; these assertions narrow the exact tagged bytes.
       assert.ok(V1_15_0_CODEX_HOOKS);
       assert.ok(V1_15_0_BASH_RUNNER);
-      const { packedPackageRoot, packedCliExecutablePath } =
-        installPackedCliExecutable();
-      const packedVersionResult = runPackedCli(
-        packedCliExecutablePath,
-        ["--version"],
-        packedPackageRoot,
-      );
-      assert.equal(
-        packedVersionResult.status,
-        0,
-        packedVersionResult.stderr || packedVersionResult.stdout,
-      );
-      assert.equal(packedVersionResult.stdout.trim(), "goat-flow v1.16.0");
-
-      const freshProjectPath = makeDisposablePackageWorkspace("fresh-non-git");
-      const freshInstallResult = runPackedCli(
-        packedCliExecutablePath,
-        ["install", freshProjectPath, "--agent", "codex"],
-        freshProjectPath,
-      );
-      assert.equal(
-        freshInstallResult.status,
-        0,
-        freshInstallResult.stderr || freshInstallResult.stdout,
-      );
-      assert.equal(existsSync(join(freshProjectPath, ".git")), false);
-      assert.equal(
-        readFileSync(
-          join(freshProjectPath, ".goat-flow", "hooks", "run-with-bash.mjs"),
-          "utf8",
-        ),
-        readFileSync(
-          join(packedPackageRoot, "workflow", "hooks", "run-with-bash.mjs"),
-          "utf8",
-        ),
-      );
-      assertInstalledCodexPolicy(freshProjectPath);
-
+      const { packedPackageRoot, packedCliLaunchPath } =
+        preparePackedCliLaunch();
       const upgradedProjectPath =
         makeDisposablePackageWorkspace("upgrade-1-15-0");
       mkdirSync(join(upgradedProjectPath, ".codex"), { recursive: true });
@@ -498,7 +536,7 @@ describe("packaged hook installation canary", () => {
         V1_15_0_BASH_RUNNER,
       );
       const migrationResult = runPackedCli(
-        packedCliExecutablePath,
+        packedCliLaunchPath,
         ["hooks", "sync", upgradedProjectPath],
         upgradedProjectPath,
       );

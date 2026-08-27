@@ -250,6 +250,69 @@ describe("agent deny hook template comparison", () => {
     });
   });
 
+  it(
+    "selects any present Codex Windows override instead of falling back to its default shell command",
+    { skip: process.platform !== "win32" },
+    () => {
+      withRealCodexAudit((targetProjectPath, auditContext) => {
+        const hookConfigPath = join(targetProjectPath, ".codex", "hooks.json");
+        const hookConfig = JSON.parse(
+          readFileSync(hookConfigPath, "utf-8"),
+        ) as {
+          hooks: {
+            PreToolUse: Array<{
+              hooks: Array<{
+                command?: string;
+                commandWindows?: string;
+              }>;
+            }>;
+          };
+        };
+        const registeredHook = hookConfig.hooks.PreToolUse[0]?.hooks[0];
+        assert.ok(registeredHook);
+        assert.equal(typeof registeredHook?.commandWindows, "string");
+        assert.equal(typeof registeredHook?.command, "string");
+        const defaultCommand = registeredHook.command;
+
+        // This remains a recognizable managed row but fails if audit incorrectly selects the Bash field on Windows.
+        registeredHook.command = `${defaultCommand}; printf "default command selected\\n" >&2; exit 99`;
+        writeFileSync(
+          hookConfigPath,
+          `${JSON.stringify(hookConfig, null, 2)}\n`,
+        );
+
+        assert.equal(checkHookRuntimeSmoke(auditContext), null);
+      });
+
+      withRealCodexAudit((targetProjectPath, auditContext) => {
+        const hookConfigPath = join(targetProjectPath, ".codex", "hooks.json");
+        const hookConfig = JSON.parse(
+          readFileSync(hookConfigPath, "utf-8"),
+        ) as {
+          hooks: {
+            PreToolUse: Array<{
+              hooks: Array<{
+                commandWindows?: string;
+              }>;
+            }>;
+          };
+        };
+        const registeredHook = hookConfig.hooks.PreToolUse[0]?.hooks[0];
+        assert.ok(registeredHook);
+
+        // Presence controls Codex's platform selection, so an empty override is invalid instead of falling back to Bash.
+        registeredHook.commandWindows = "";
+        writeFileSync(
+          hookConfigPath,
+          `${JSON.stringify(hookConfig, null, 2)}\n`,
+        );
+        const emptyOverrideFailure = checkHookRuntimeSmoke(auditContext);
+        assert.ok(emptyOverrideFailure);
+        assert.match(emptyOverrideFailure.message, /empty commandWindows/u);
+      });
+    },
+  );
+
   it("fails when an exact configured hook command points at a stale path", () => {
     assert.ok(denyCheck, "agent deny check should exist");
     const templates = guardrailTemplates();

@@ -249,6 +249,7 @@ function countManagedHookRegistrations(
     : [];
   const ownsManagedCommand = [
     configEntry.command,
+    configEntry.commandWindows,
     configEntry.bash,
     configEntry.powershell,
     ...argumentOperands,
@@ -775,6 +776,19 @@ function seedDuplicateAndStaleDenyRows(
     matcher: "Bash",
     hooks: [{ type: "command", command: STALE_DENY_COMMAND }],
   });
+  if (agentProfile.id === "codex") {
+    // A partially migrated row can retain the managed script only in its Windows override.
+    hooks.PreToolUse.push({
+      matcher: "Bash",
+      hooks: [
+        {
+          type: "command",
+          command: "exit 0",
+          commandWindows: STALE_DENY_COMMAND,
+        },
+      ],
+    });
+  }
   hooks.PreToolUse.push({
     matcher: "Bash",
     hooks: [{ type: "command", command: USER_HOOK_MARKER }],
