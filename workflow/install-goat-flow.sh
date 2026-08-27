@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # =============================================================================
-# install-goat-flow.sh is the low-level helper that copies canonical goat-flow files into a selected project.
-# Use it through `goat-flow install` or `setup --apply` when refreshing one agent.
-# Direct use skips CLI preview, post-write verification, and the verified install-state receipt.
-# Each file is completed beside its destination before becoming user-visible.
-# System files refresh after managed preflight; user-owned settings and config remain authoritative.
-# `--force` admits inspected system-owned conflicts but never resets user content or bypasses path safety.
-# Project-specific instruction and architecture content remains a later setup step.
+# Installs canonical Goat Flow files into one selected project; use it through `goat-flow install` or `setup --apply` when refreshing an agent.
+# Direct use skips the CLI preview, post-write verification, and verified install-state receipt.
+#
+# - System-owned files become user-visible only after managed preflight and destination-side completion.
+# - User-owned settings and configuration remain authoritative.
+# - `--force` accepts inspected system conflicts but never resets user content or bypasses path safety.
+#
+# Project-specific instructions and architecture remain a later setup step.
 # Usage: bash workflow/install-goat-flow.sh /path/to/project --agent claude
 # =============================================================================
 set -euo pipefail
@@ -1370,7 +1371,14 @@ function commandReferencesScriptToken(commandText, scriptName) {
   return scriptTokenPattern.test(commandText);
 }
 
-/** Detect a direct provider command owned by any current or retired managed hook script. */
+/**
+ * Detect a provider command owned by any current or retired managed hook script.
+ * Use during install or sync so stale Windows-only registrations are replaced without touching user commands.
+ *
+ * @param {object} entry - provider row; null, primitive, or array values cannot be direct commands
+ * @param {string[]} scriptNames - managed filenames; empty means no command belongs to Goat Flow
+ * @returns {boolean} true when any platform command names a managed script; false preserves the user's row
+ */
 function entryReferencesManagedScript(entry, scriptNames) {
   // Null, primitive, and array values cannot be direct runnable command objects.
   if (!isObject(entry)) return false;
@@ -1382,6 +1390,7 @@ function entryReferencesManagedScript(entry, scriptNames) {
     : "";
   const commandText = [
     typeof entry.command === "string" ? entry.command : "",
+    typeof entry.commandWindows === "string" ? entry.commandWindows : "",
     typeof entry.bash === "string" ? entry.bash : "",
     typeof entry.powershell === "string" ? entry.powershell : "",
     structuredArgumentText,
