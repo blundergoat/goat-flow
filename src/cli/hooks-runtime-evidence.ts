@@ -4,8 +4,16 @@
  * process text.
  */
 import { spawnSync } from "node:child_process";
-import { realpathSync } from "node:fs";
-import { relative, resolve, sep } from "node:path";
+import {
+  closeSync,
+  mkdtempSync,
+  openSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join, relative, resolve, sep } from "node:path";
 import { performance } from "node:perf_hooks";
 
 import { AUDIT_VERSION } from "./constants.js";
@@ -56,7 +64,6 @@ const MANAGED_CONFIGURED_PROBE_TIMEOUT_MS =
   managedHookTimeoutSeconds === undefined
     ? PROBE_TIMEOUT_MS
     : managedHookTimeoutSeconds * 1000;
-const CONFIGURED_PROBE_PAYLOAD_ENVIRONMENT_NAME = "GOAT_HOOK_SMOKE_PAYLOAD";
 
 /** One fixed classifier input; `command` is never copied into reports or events. */
 export interface HookProbeScenario {
@@ -290,25 +297,20 @@ export interface ManagedConfiguredProbeTransport {
   command: string;
   args: string[];
   environment: NodeJS.ProcessEnv;
-  input?: string;
-  stdin: "ignore" | "pipe";
-}
-
-/** Quote one fixed argument so an outer PowerShell process passes its bytes to the registered command. */
-function quotePowerShellLiteral(argumentValue: string): string {
-  return `'${argumentValue.replaceAll("'", "''")}'`;
+  input: string;
+  stdin: "file" | "pipe";
 }
 
 /**
- * Select the standard-input owner for one exact configured-handler replay.
- * Windows shell handlers receive the fixed payload from PowerShell because Node-owned synchronous input can stall across the nested launcher chain.
- * Other handlers retain direct Node input and their current-platform executable tuple.
+ * Select the standard-input source for one exact configured-handler replay.
+ * Windows shell handlers use a finite file because nested PowerShell, Node, and Bash processes must observe EOF without depending on a parent pipe.
+ * Other handlers retain direct Node input, and every platform keeps the registered executable tuple unchanged.
  *
  * @param projectPath - selected checkout used for the scrubbed child environment
  * @param configuredHandler - exact managed handler whose current-platform command must run
  * @param payload - fixed provider-shaped policy input; never user-authored content
  * @param hostEnvironment - host variables filtered before the configured command starts
- * @param platform - host platform selecting the Windows-only pipe transport
+ * @param platform - host platform selecting the Windows-only file transport
  * @returns executable, argv, environment, and standard-input ownership for one bounded spawn
  */
 export function managedConfiguredProbeTransport(
@@ -324,44 +326,72 @@ export function managedConfiguredProbeTransport(
     hostEnvironment,
     platform,
   );
-  if (
-    platform !== "win32" ||
-    configuredHandler.form !== "shell" ||
-    configuredHandler.commandWindows === undefined
-  ) {
-    return {
-      ...probe,
-      environment,
-      input: payload,
-      stdin: "pipe",
-    };
+  const needsFileBackedInput =
+    platform === "win32" &&
+    configuredHandler.form === "shell" &&
+    configuredHandler.commandWindows !== undefined;
+  return {
+    ...probe,
+    environment,
+    input: payload,
+    stdin: needsFileBackedInput ? "file" : "pipe",
+  };
+}
+
+/**
+ * Spawn one configured built-in probe with either Node-owned input or a finite read-only file.
+ * Side effects: creates and removes one uniquely named temporary directory in file mode, and starts the registrar-derived child command.
+ * Error behavior: filesystem failures propagate so the caller cannot classify an incomplete cleanup as successful evidence.
+ */
+function spawnManagedConfiguredProbe(
+  projectPath: string,
+  probe: ManagedConfiguredProbeTransport,
+) {
+  const spawnOptions = {
+    cwd: projectPath,
+    encoding: "utf-8" as const,
+    env: probe.environment,
+    shell: false,
+    timeout: MANAGED_CONFIGURED_PROBE_TIMEOUT_MS,
+    maxBuffer: PROBE_OUTPUT_CAP_BYTES,
+  };
+  if (probe.stdin === "pipe") {
+    return spawnSync(probe.command, probe.args, {
+      ...spawnOptions,
+      input: probe.input,
+      stdio: ["pipe", "pipe", "pipe"],
+    });
   }
 
-  const registeredCommand = [
-    `$env:${CONFIGURED_PROBE_PAYLOAD_ENVIRONMENT_NAME} | &`,
-    quotePowerShellLiteral(probe.command),
-    ...probe.args.map(quotePowerShellLiteral),
-  ].join(" ");
-  const pipeCommand = [
-    "$global:LASTEXITCODE = $null",
-    registeredCommand,
-    "if ($null -eq $LASTEXITCODE) { exit 1 }",
-    "exit $LASTEXITCODE",
-  ].join("; ");
-  return {
-    command: probe.command,
-    args: [...probe.args.slice(0, -1), pipeCommand],
-    environment: {
-      ...environment,
-      [CONFIGURED_PROBE_PAYLOAD_ENVIRONMENT_NAME]: payload,
-    },
-    stdin: "ignore",
-  };
+  const payloadDirectory = mkdtempSync(join(tmpdir(), "goat-flow-hook-probe-"));
+  const payloadPath = join(payloadDirectory, "payload.json");
+  let payloadDescriptor: number | null = null;
+  try {
+    writeFileSync(payloadPath, probe.input, {
+      encoding: "utf-8",
+      flag: "wx",
+      mode: 0o600,
+    });
+    payloadDescriptor = openSync(payloadPath, "r");
+    return spawnSync(probe.command, probe.args, {
+      ...spawnOptions,
+      stdio: [payloadDescriptor, "pipe", "pipe"],
+    });
+  } finally {
+    if (payloadDescriptor !== null) closeSync(payloadDescriptor);
+    rmSync(payloadDirectory, {
+      recursive: true,
+      force: true,
+      maxRetries: 3,
+      retryDelay: 20,
+    });
+  }
 }
 
 /**
  * Replay one inert policy input through the exact handler setup the user registered.
  * It spawns that registered launcher, so verification proves the same path the user's agent takes rather than an equivalent one.
+ * Error behavior: swallows temporary-input and process-startup failures as a rejected-result fallback without captured process text.
  *
  * @param projectPath - selected checkout; empty text cannot provide a safe working directory
  * @param configuredHandler - exact managed handler; a missing executable produces a bounded spawn error
@@ -381,16 +411,15 @@ function executeManagedConfiguredHookProbe(
     configuredHandler,
     configuredDenyHookPayload(agent, scenario),
   );
-  const execution = spawnSync(probe.command, probe.args, {
-    cwd: projectPath,
-    encoding: "utf-8",
-    env: probe.environment,
-    shell: false,
-    stdio: [probe.stdin, "pipe", "pipe"],
-    timeout: MANAGED_CONFIGURED_PROBE_TIMEOUT_MS,
-    maxBuffer: PROBE_OUTPUT_CAP_BYTES,
-    ...(probe.input === undefined ? {} : { input: probe.input }),
-  });
+  let execution: ReturnType<typeof spawnManagedConfiguredProbe>;
+  try {
+    execution = spawnManagedConfiguredProbe(projectPath, probe);
+  } catch {
+    return {
+      ...rejectedProbeExecution(),
+      durationMs: Math.max(0, Math.round(performance.now() - startedAt)),
+    };
+  }
   return {
     exitCode: execution.status,
     stdout: execution.stdout,

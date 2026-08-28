@@ -126,7 +126,7 @@ describe("hooks runtime evidence", () => {
     assert.equal(environment.SECRET_TOKEN, undefined);
   });
 
-  it("pipes Windows configured payloads outside Node while preserving the registered handler", () => {
+  it("selects file-backed Windows input while preserving the registered handler", () => {
     const payload =
       '{"tool_name":"Bash","tool_input":{"command":"git status"}}';
     const commandWindows =
@@ -149,27 +149,20 @@ describe("hooks runtime evidence", () => {
       hostEnvironment,
       "win32",
     );
-    const windowsPipeCommand = windowsTransport.args.at(-1) ?? "";
-
     assert.equal(windowsTransport.command, "powershell.exe");
-    assert.deepEqual(windowsTransport.args.slice(0, 3), [
+    assert.deepEqual(windowsTransport.args, [
       "-NoProfile",
       "-NonInteractive",
       "-Command",
+      commandWindows,
     ]);
-    assert.equal(windowsTransport.stdin, "ignore");
-    assert.equal(windowsTransport.input, undefined);
-    assert.equal(windowsTransport.environment.GOAT_HOOK_SMOKE_PAYLOAD, payload);
+    assert.equal(windowsTransport.stdin, "file");
+    assert.equal(windowsTransport.input, payload);
+    assert.equal(
+      windowsTransport.environment.GOAT_HOOK_SMOKE_PAYLOAD,
+      undefined,
+    );
     assert.equal(windowsTransport.environment.SECRET_TOKEN, undefined);
-    assert.match(
-      windowsPipeCommand,
-      /\$env:GOAT_HOOK_SMOKE_PAYLOAD \| & 'powershell\.exe'/u,
-    );
-    assert.ok(
-      windowsPipeCommand.includes(`'${commandWindows.replaceAll("'", "''")}'`),
-      "the inner PowerShell receives the exact registered commandWindows bytes",
-    );
-    assert.match(windowsPipeCommand, /exit \$LASTEXITCODE$/u);
 
     const posixTransport = managedConfiguredProbeTransport(
       "/fixture",

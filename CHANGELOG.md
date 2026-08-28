@@ -2,9 +2,7 @@
 
 ## Unreleased
 
-## v1.17.0 - 2026-08-29
-
-1.17.0 adds per-command `--help`, path-aware learning recall, one project-wide install baseline, whole-suite hook verification, and stricter `--strict` plan checks, and it untangles Claude and Copilot hook registrations.
+The next release adds per-command `--help`, path-aware learning recall, one project-wide install baseline, whole-suite hook verification, and stricter `--strict` plan checks, and it untangles Claude and Copilot hook registrations.
 
 - **BREAKING: audits need the `audit` command** - Replace `goat-flow <path>` with `goat-flow audit <path>`. Bare `goat-flow` opens the menu, and a misspelled command now exits `2` instead of auditing a path of that name.
 - **BREAKING: `writing-style.md` is removed** - Install deletes it, so instruction files written by 1.16.0 setup point at a missing playbook; change them to `writing-human-facing-prose.md` (human prose) or `writing-agent-facing-instructions.md` (agent controls).
