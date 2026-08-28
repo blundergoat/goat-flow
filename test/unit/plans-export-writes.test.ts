@@ -77,6 +77,49 @@ describe("plans export: CLI previews and protected writes", () => {
   });
 
   /**
+   * Fixture purpose: prove an exceptional-status explanation survives both portable formats without leaking pasted credentials.
+   * Process/filesystem side effects: spawns two previews and writes only the temporary source milestone.
+   */
+  it("redacts status reasons in JSON and Markdown previews", () => {
+    const temporaryRoot = mkdtempSync(
+      join(tmpdir(), "goat-flow-plan-status-reason-"),
+    );
+    const planPath = join(temporaryRoot, "1.17.0");
+    const fakeToken = ["ghp", "r".repeat(36)].join("_");
+    const body = completeMilestoneBody().replace(
+      "**Status:** in-progress",
+      [
+        "**Status:** abandoned",
+        `**Status reason:** Human stopped after ${fakeToken} appeared in evidence.`,
+      ].join("\n"),
+    );
+    writePlanFixture(planPath, body);
+
+    try {
+      const jsonPreview = runPlansExport(planPath, "--format", "json");
+      const markdownPreview = runPlansExport(planPath, "--format", "markdown");
+
+      assert.equal(jsonPreview.status, 0, jsonPreview.stderr);
+      assert.equal(markdownPreview.status, 0, markdownPreview.stderr);
+      const records = JSON.parse(jsonPreview.stdout) as Array<{
+        statusReason: string;
+      }>;
+      assert.equal(
+        records[0]?.statusReason,
+        "Human stopped after [REDACTED:token] appeared in evidence.",
+      );
+      assert.match(
+        markdownPreview.stdout,
+        /\*\*Status reason:\*\* Human stopped after \[REDACTED:token\] appeared in evidence\./u,
+      );
+      assert.doesNotMatch(jsonPreview.stdout, new RegExp(fakeToken, "u"));
+      assert.doesNotMatch(markdownPreview.stdout, new RegExp(fakeToken, "u"));
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
+  /**
    * Fixture purpose: cover the JSON persistence adapter rather than only its stdout preview.
    * Process/filesystem side effects: spawns the CLI and writes one bundle inside a temp directory.
    */

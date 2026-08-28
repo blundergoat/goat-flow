@@ -94,6 +94,10 @@ Write from the incident in Context, not by shortening the Objective - that sente
 - BAD: "Ships as a registered hook, default-on for verified agents, gated elsewhere."
 - GOOD: "Your agent starts a session already knowing the project's rules."
 
+## Status reason
+
+Add `**Status reason:**` directly after Status only while `blocked` or `abandoned`. For blocked work, name the condition and evidence/action needed to resume. For abandoned work, preserve the human decision and why work stops. Remove the field when leaving either state.
+
 ## High-risk additions
 
 Add only sections that prevent a named failure:

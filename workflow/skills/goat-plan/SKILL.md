@@ -170,7 +170,7 @@ Successful AI proof records structured `Actual:` and sets `human-verification-pe
 
 **BLOCKING GATE (Human Verification):** Present changed files, exit evidence, estimate versus Actual, and assumption outcomes. "M[N] evidence is ready. Approve completion and M[N+1], or adjust?"
 
-After approval for a non-final milestone, capture learnings, complete it, re-read/update the next milestone, and start it only when `Depends on` permits. Human-requested changes return the milestone to `in-progress`; never amend silently. Rerun strict validation after each transition.
+After approval for a non-final milestone, capture learnings, complete it, re-read/update the next milestone, and start it only when `Depends on` permits. Human-requested changes return the milestone to `in-progress`; never amend silently. Current-reason rule: `Status reason:`—`blocked`: condition+resume evidence/action; `abandoned`: human-decision+stop-rationale; remove-on-exit. Rerun strict validation after each transition.
 
 The final pending milestone enters the combined Phase 4 review; do not mark it complete in Phase 3.
 

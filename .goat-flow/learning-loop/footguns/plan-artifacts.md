@@ -1,6 +1,6 @@
 ---
 category: plan-artifacts
-last_reviewed: 2026-08-27
+last_reviewed: 2026-08-28
 ---
 
 **Scope:** The grammar and validation of plan, milestone, and review artifacts - evidence fields, proof gates, machine-parsed dependency links, effort accounting, and when a validator runs relative to persistence. CLI process behaviour and output streams live in [cli.md](cli.md).
@@ -126,31 +126,25 @@ last_reviewed: 2026-08-27
 **Decision changed:** Reforecast every estimate line together, and when the local likely rate implies fewer minutes than there are work units, keep the planning-time basis and record the local figure in prose.
 **Trigger phase:** SCOPE
 **Caught at:** VERIFY
-**Incident count:** 7 | **Latest occurrence:** 2026-08-26
+**Incident count:** 8 | **Latest occurrence:** 2026-08-28
+
+**Prevention:** Treat a reforecast as one atomic edit to basis, range, headline, split, and every `(est: ...)` entry, then run strict validation before starting the timing receipt. Preserve planning-time estimates when the likely rate implies fewer minutes than positive integer work items can express. Derive bounds with floor/nearest/ceiling, and never rescale an in-progress or completed milestone to newer calibration data.
 
 **Symptoms:** `plans check --strict` printed `reforecast required: ... use 0.61-0.93-1.04 min/unit before implementation` (advisory, exit 0). Updating only `**Forecast basis:**` and `**Forecast range:**` to those rates - a handoff note said to update "the Forecast basis/range lines" - flipped the plan to exit 1: `forecast range likely (8 min) must equal the Effort estimate total (22 min)`. Measured 2026-08-19 on `.goat-flow/plans/1.16.0-golive` M04 (9 units) and M05 (8 units).
 
-**Recurrence 2026-08-23:** M10's first reforecast used a descriptive `Forecast basis` sentence that omitted the parser's canonical semicolon-delimited low-likely-high shape. `plans check --strict` exited 1 with `forecast basis is not parseable`. Reading `FORECAST_BASIS_PATTERN` and rewriting the forecast fields together restored exit 0 before implementation. Evidence anchor: `src/cli/plans-effort.ts` (search: `FORECAST_BASIS_PATTERN`).
+**Root-cause summary:** The validator ties one forecast across canonical grammar, derived rounding, the headline and category split, and every positive integer work-item estimate. Editing only part of that graph makes the artifact internally contradictory.
 
-**Recurrence 2026-08-23 (M11 split reconciliation):** M11's pre-implementation reforecast changed the headline from 20 to 21 minutes and the product split from 14 to 15, but left the four product task estimates totaling 14. The first closeout strict check exited 1 with `product counted work (14 min) does not equal the split component (15 min)`. The correction assigned the missing minute to the fixed-evaluation task and recorded that this reconciled the pre-work forecast rather than using observed timing to rewrite it.
+**Incident ledger:**
 
-**Recurrence 2026-08-23 (M13 split reconciliation):** M13's first reforecast changed the headline from 20 to 21 minutes and the product split from 14 to 15 while its four product tasks still totaled 14. The activation strict check exited 1 with the same counted-work error. The correction kept product and proof aligned with their checklist estimates and changed plan/admin overhead from 2 to 3 minutes, which made the headline, split, and likely forecast agree before implementation continued.
-
-**Recurrence 2026-08-23 (M21 closeout):** M21's pre-work reforecast omitted the required `source:` marker and its product tasks totaled 15 minutes against a 14-minute split.
-The closeout strict check exited 1 with both parser and counted-work errors.
-The correction restored canonical basis grammar and changed the clean-fixture task from 3 to 2 minutes, preserving the pre-work 22-minute forecast without using measured timing.
-
-**Recurrence 2026-08-24 (M24 low-bound rounding):** Reducing an approved milestone from eight to six agent work units changed its calibrated range. I rounded `6 x 0.80` to 5 by intuition, but the validator deliberately floors the low bound and exited 1 with `forecast basis derives 4-25 agent-time minutes; likely 15, but Forecast range says 5-25; likely 15`. Replacing the low bound with 4 restored a zero exit before product work resumed. Evidence anchor: `src/cli/plans-effort.ts` (search: `deriveForecastRangeFromBasis`) applies floor/nearest/ceiling to the low/likely/high values.
-
-**Recurrence 2026-08-26 (M55 unit/range reconciliation):** The first resumed forecast amendment declared 14 agent work units even though the plan grammar counted 16, and its high bound did not match the declared basis. `plans check --strict` exited 1 before source edits with `forecast basis declares 14 agent work units but plan contains 16` and a derived-range mismatch. The correction retained the planning-time `0.80-2.64-7.59` basis, declared 16 units, derived `12-122` with likely 42, and reconciled the headline, split, and item estimates; the strict check then exited 0. Evidence anchors: `src/cli/plans-effort.ts` (search: `forecast basis declares`) and (search: `deriveForecastRangeFromBasis`).
+- **Recurrence 2026-08-23 (M10 grammar):** A descriptive basis omitted the canonical semicolon-delimited shape; strict validation reported `forecast basis is not parseable`. Rewriting all forecast fields with `src/cli/plans-effort.ts` (search: `FORECAST_BASIS_PATTERN`) restored exit 0.
+- **Recurrence 2026-08-23 (M11 split):** The headline and product split rose to 21/15 while product tasks still totaled 14; strict validation reported the counted-work mismatch. Assigning the missing minute to the fixed-evaluation task reconciled the pre-work forecast.
+- **Recurrence 2026-08-23 (M13 split):** The headline and product split rose to 21/15 while product tasks still totaled 14. Keeping task totals intact and changing plan/admin overhead from 2 to 3 reconciled the forecast before implementation.
+- **Recurrence 2026-08-23 (M21 grammar and split):** The basis omitted `source:` and product tasks exceeded the split by one minute. Restoring canonical grammar and changing the clean-fixture task from 3 to 2 preserved the pre-work 22-minute forecast.
+- **Recurrence 2026-08-24 (M24 rounding):** Intuitive rounding produced a low bound of 5 where the validator floors `6 x 0.80` to 4. Using `src/cli/plans-effort.ts` (search: `deriveForecastRangeFromBasis`) restored exit 0.
+- **Recurrence 2026-08-26 (M55 units and range):** The basis declared 14 units for 16 counted items and a mismatched high bound. Declaring 16 units and deriving `12-122` at likely 42 reconciled the headline, split, and item estimates; `src/cli/plans-effort.ts` (search: `forecast basis declares`) owns the unit check.
+- **Recurrence 2026-08-28 (M57 headline):** Activation changed the derived likely value and range to 36 minutes but left `Effort estimate` at 34. Strict validation exited 1 with `forecast range likely (36 min) must equal the Effort estimate total (34 min)`; updating headline, split, and item estimates together restored exit 0 before implementation. Evidence anchor: `src/cli/plans-check.ts` (search: `must equal the Effort estimate total`).
 
 **Why it happens:** `src/cli/plans-check-summary.ts` (search: `renderRequiredReforecasts`) advises the new rates, but `src/cli/plans-effort.ts` (search: `forecast basis derives`) requires the range to be derived from the basis, `src/cli/plans-check.ts` (search: `must equal the Effort estimate total`) requires the `**Effort estimate:**` headline to equal the range's likely, and that headline is the sum of the per-item `(est: n min category)` entries whose grammar is integer-only (`plans-effort.ts`, search: `TASK_ESTIMATE_PATTERN`). With a likely rate under 1 min/unit, round(units × rate) is below the unit count and N positive integer items cannot sum to fewer than N minutes, so the strict shape is unsatisfiable rather than merely tedious. `.claude/skills/goat-plan/references/milestone-examples.md` (search: `Reforecast all estimates`) already says "all"; the partial edit ignored it.
-
-**Prevention:**
-1. Treat "reforecast" as basis, range, headline, and every `(est: ...)` entry together, and run the strict check before starting the timing receipt.
-2. When round(units × likely rate) is below the unit count, do not reforecast: keep the planning-time basis and range (calibration then compares measured seconds against the planning-time estimate, as it does for milestones never reforecast) and record the local-rate figure in a note in the milestone.
-3. Never rescale a completed or in-progress milestone's estimate to a newer rate; that rewrites the calibration sample after the fact.
-4. Derive all three range bounds with the validator's rule: floor the low product, round the likely product, and ceil the high product. Do not apply one intuitive rounding rule to all three.
 
 ---
 

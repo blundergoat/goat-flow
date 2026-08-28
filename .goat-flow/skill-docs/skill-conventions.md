@@ -127,8 +127,8 @@ Lifecycle:
 1. Authorized work enters `in-progress`; completed implementation tasks enter `testing-gate`.
 2. Successful AI proof records structured `Actual:` and sets `human-verification-pending`; only human-owned items remain open and no later milestone activates.
 3. Human approval sets a non-final milestone `complete`, then the agent re-reads and starts an eligible dependency.
-4. Human-requested changes return it to `in-progress`; invalidation or a kill trigger sets `blocked` and preserves evidence.
-5. `abandoned` requires an explicit human decision; reopening makes prior proof stale.
+4. Human-requested changes return the milestone to `in-progress`; invalidation/kill sets `blocked` and `Status reason:` names the condition and evidence/action to resume.
+5. `abandoned` requires a human decision and `Status reason:` records why work stops. Leaving either state removes the reason; reopening invalidates proof.
 
 At the gate, record learnings, resolve assumptions, and propose any amendment before applying it. A final pending milestone with complete predecessors enters the combined Phase 4 review.
 

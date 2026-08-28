@@ -367,9 +367,55 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
       );
       assert.match(
         conventions,
-        /Human-requested changes return it to `in-progress`/u,
+        /Human-requested changes return the milestone to `in-progress`/u,
         conventionsPath,
       );
+    }
+  });
+
+  it("requires current reasons only for blocked and abandoned milestones", () => {
+    const compactSkillRule =
+      /Current-reason rule: `Status reason:`—`blocked`: condition\+resume evidence\/action; `abandoned`: human-decision\+stop-rationale; remove-on-exit/u;
+    const blockedRule =
+      /`blocked` and `Status reason:` names the condition and evidence\/action to resume/u;
+    const abandonedRule =
+      /`abandoned` requires a human decision and `Status reason:` records why work stops/u;
+    const removalRule = /Leaving either state removes the reason/u;
+
+    assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
+      const skillGuidance = readProjectFile(skillPath);
+      assert.match(skillGuidance, compactSkillRule, skillPath);
+    });
+
+    assertForEachTarget(
+      installedSkillReferencePaths(
+        "goat-plan",
+        "references/milestone-examples.md",
+      ),
+      (referencePath) => {
+        const reference = readProjectFile(referencePath);
+        assert.match(
+          reference,
+          /Add `\*\*Status reason:\*\*` directly after Status only while `blocked` or `abandoned`/u,
+          referencePath,
+        );
+        assert.match(reference, /evidence\/action needed to resume/u);
+        assert.match(
+          reference,
+          /preserve the human decision and why work stops/u,
+        );
+        assert.match(reference, /Remove the field when leaving either state/u);
+      },
+    );
+
+    for (const conventionsPath of [
+      "workflow/skills/reference/skill-conventions.md",
+      ".goat-flow/skill-docs/skill-conventions.md",
+    ]) {
+      const conventions = readProjectFile(conventionsPath);
+      assert.match(conventions, blockedRule, conventionsPath);
+      assert.match(conventions, abandonedRule, conventionsPath);
+      assert.match(conventions, removalRule, conventionsPath);
     }
   });
 

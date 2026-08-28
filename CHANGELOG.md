@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Stopped milestones explain why** - Blocked and abandoned plans export one redacted current-state reason; strict authoring rejects missing, legacy, conflicting, or stale reason fields.
 - **Gruff playbooks find project wrappers again** - Plain `<tool>.sh` scripts retain wrapper-owned config, paths, and reports.
 - **Deny hooks parse quoted shell boundaries precisely** - JavaScript arrows and escaped literals stay usable; background commands and compact lockfile redirects are blocked.
 - **Deny hooks block downstream shell `eval`** - A safe first stage cannot hide later evaluation; `yq eval` and quoted evidence still work.

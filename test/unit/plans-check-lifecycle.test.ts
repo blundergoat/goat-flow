@@ -112,14 +112,20 @@ describe("plans check: lifecycle states and timing receipts", () => {
     {
       name: "blocked-active-receipt",
       body: withActiveTimingReceipt(
-        canonicalMilestoneBody({ status: "blocked" }),
+        canonicalMilestoneBody({
+          status: "blocked",
+          statusReason: "Waiting for the provider capture before resuming.",
+        }),
       ),
       expected: /blocked milestone must not have an active Timing Receipt/u,
     },
     {
       name: "abandoned-active-receipt",
       body: withActiveTimingReceipt(
-        canonicalMilestoneBody({ status: "abandoned" }),
+        canonicalMilestoneBody({
+          status: "abandoned",
+          statusReason: "Human approved stopping after the premise failed.",
+        }),
       ),
       expected: /abandoned milestone must not have an active Timing Receipt/u,
     },
@@ -141,6 +147,125 @@ describe("plans check: lifecycle states and timing receipts", () => {
         const result = runPlansCheck(planPath, "--strict");
         assert.equal(result.status, 1, result.stdout + result.stderr);
         assertSourceLabelledErrors(result.stdout);
+        assert.match(result.stdout, testCase.expected);
+      } finally {
+        rmSync(temporaryRoot, { recursive: true, force: true });
+      }
+    });
+  }
+
+  for (const status of ["blocked", "abandoned"] as const) {
+    /** Fixture purpose: compare the missing exceptional field with the canonical authoring shape. */
+    it(`strict mode requires one canonical status reason while ${status}`, () => {
+      const temporaryRoot = mkdtempSync(
+        join(tmpdir(), `goat-flow-plan-${status}-reason-`),
+      );
+      try {
+        const missingPath = writeCheckFixture(
+          join(temporaryRoot, "missing"),
+          canonicalMilestoneBody({ status }),
+        );
+        const validPath = writeCheckFixture(
+          join(temporaryRoot, "valid"),
+          canonicalMilestoneBody({
+            status,
+            statusReason:
+              status === "blocked"
+                ? "Waiting for callback evidence before resuming."
+                : "Human approved stopping after the premise failed.",
+          }),
+        );
+
+        const missing = runPlansCheck(missingPath, "--strict");
+        const valid = runPlansCheck(validPath, "--strict");
+        assert.equal(missing.status, 1, missing.stdout + missing.stderr);
+        assert.match(
+          missing.stdout,
+          new RegExp(`${status} milestone requires Status reason`, "u"),
+        );
+        assert.equal(valid.status, 0, valid.stdout + valid.stderr);
+      } finally {
+        rmSync(temporaryRoot, { recursive: true, force: true });
+      }
+    });
+  }
+
+  /**
+   * Fixture purpose: preserve a historical abandoned snapshot in default mode while refusing it as current authoring.
+   * Process/filesystem side effects: spawns two CLI checks and writes one temporary milestone.
+   */
+  it("warns on legacy Abandoned fallback and rejects it in strict mode", () => {
+    const temporaryRoot = mkdtempSync(
+      join(tmpdir(), "goat-flow-plan-legacy-abandoned-"),
+    );
+    try {
+      const planPath = writeCheckFixture(
+        temporaryRoot,
+        canonicalMilestoneBody({
+          status: "abandoned",
+          abandonedReason: "Human approved stopping after the premise failed.",
+        }),
+      );
+
+      const compatible = runPlansCheck(planPath);
+      const strict = runPlansCheck(planPath, "--strict");
+      assert.equal(compatible.status, 0, compatible.stdout + compatible.stderr);
+      assert.equal(strict.status, 1, strict.stdout + strict.stderr);
+      assert.match(
+        strict.stdout,
+        /legacy Abandoned field supplied; use Status reason/u,
+      );
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
+  const invalidReasonCases = [
+    {
+      name: "blank exceptional reason",
+      body: canonicalMilestoneBody({ status: "blocked", statusReason: "" }),
+      expected: /blank Status reason supplied/u,
+    },
+    {
+      name: "duplicate canonical reasons",
+      body: canonicalMilestoneBody({
+        status: "blocked",
+        statusReason: "First reason.",
+      }).replace(
+        "Status reason: First reason.",
+        "Status reason: First reason.\nStatus reason: Second reason.",
+      ),
+      expected: /multiple Status reason values supplied/u,
+    },
+    {
+      name: "competing canonical and legacy reasons",
+      body: canonicalMilestoneBody({
+        status: "abandoned",
+        statusReason: "Canonical decision.",
+        abandonedReason: "Legacy decision.",
+      }),
+      expected: /conflicting status reason representations/u,
+    },
+    {
+      name: "stale reason after work resumes",
+      body: canonicalMilestoneBody({
+        status: "in-progress",
+        statusReason: "This field belongs only to exceptional states.",
+      }),
+      expected: /in-progress milestone must not include Status reason/u,
+    },
+  ] as const;
+
+  for (const testCase of invalidReasonCases) {
+    /** Fixture purpose: each malformed authority fails at its exact current-plan boundary. */
+    it(`strict mode rejects ${testCase.name}`, () => {
+      const temporaryRoot = mkdtempSync(
+        join(tmpdir(), "goat-flow-plan-invalid-reason-"),
+      );
+      try {
+        const planPath = writeCheckFixture(temporaryRoot, testCase.body);
+        const result = runPlansCheck(planPath, "--strict");
+        assert.equal(result.status, 1, result.stdout + result.stderr);
         assert.match(result.stdout, testCase.expected);
       } finally {
         rmSync(temporaryRoot, { recursive: true, force: true });

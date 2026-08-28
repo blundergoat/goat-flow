@@ -23,7 +23,10 @@ describe("plans check: effort arithmetic and plan shapes", () => {
     {
       name: "an open segment on an inactive milestone",
       body: withActiveTimingReceipt(
-        canonicalMilestoneBody({ status: "blocked" }),
+        canonicalMilestoneBody({
+          status: "blocked",
+          statusReason: "Waiting for receipt recovery before resuming.",
+        }),
       ).replace("**Receipt state:** active", "**Receipt state:** incomplete"),
       expected: /blocked milestone must not have an active Timing Receipt/u,
     },

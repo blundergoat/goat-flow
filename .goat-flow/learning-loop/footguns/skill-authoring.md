@@ -1,6 +1,6 @@
 ---
 category: skill-authoring
-last_reviewed: 2026-08-26
+last_reviewed: 2026-08-28
 ---
 
 **Scope:** Authoring and editing skill, playbook, and slash-command bodies - candidacy, word-budget and contract-phrase caps, tool-isolation constraints on prescribed commands, and pressure to reword load-bearing language. Keeping workflow templates and installed copies in sync lives in [skills.md](skills.md).
@@ -160,18 +160,26 @@ the length and identifier list into strict validation while the reference retain
 ## Footgun: goat-plan surface additions collide with near-full word-budget contract caps
 
 **Status:** active | **Created:** 2026-08-15 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Measure both caps and enumerate every phrase pin before drafting; preserve existing pins and compact only new wording unless the human approves a cap or semantic change.
+**Trigger phase:** SCOPE
+**Caught at:** VERIFY
+**Incident count:** 4 | **Latest occurrence:** 2026-08-28
+
+**Prevention:** Before editing goat-plan, measure both caps and grep every contract that reads the target path. Preserve pinned semantics; compact only new wording, or ask the human to choose a cap or semantic change. Sync all four mirrors and rerun the fast contracts. After a cap change, grep ignored plans and docs for its old number and assertion text.
 
 **Symptoms:** A small approved addition to goat-plan's SKILL.md or reference files passes every phrase-pinning assertion and the mirror byte-identical check, then fails `keeps the redesigned goat-plan canonical surface within its tighter budget` in the contract suite.
 
 **Why it happens:** Two caps bound the goat-plan canonical surface: the SKILL.md body alone, and SKILL.md plus `references/milestone-examples.md` plus `references/issue-format.md` combined. The redesign left both within a few words of their caps (2099/2100 and 4499/4500 before 2026-08-15), so any addition overflows and forces a choice: condense existing prose, much of which is pinned by regex assertions, or raise the caps with user approval. Same trap class as the ADR-023 playbook word cap (search: "Playbook content edits collide with the ADR-023 word cap"), on a different surface with different caps in a different test file.
 
-**Evidence:** 2026-08-15, adding `## How users will notice the difference` and `## Why` (renamed to `## Motivation` later the same day) to the Standard milestone template plus one SKILL.md sentence (97 words total) tipped both caps: 2117/2100 and 4596/4500. `test/contract/skill-hardening-plan-2.test.ts` (search: `redesign target of 2150 words`) holds the SKILL.md body cap; the same file (search: `canonical goat-plan surface has`) holds the combined cap; `test/contract/skill-hardening.helpers.ts` (search: `countSkillBodyWords`) excludes frontmatter from the body count. Resolved by raising the caps to 2150/4650 with user approval. Recurred 2026-08-16 renaming those two sections to `## What we lose without this` / `## Why this helps` and adding the derivation rules: the obvious trim - the `### Verification baseline` and `### Maintenance notes` subsections, which restate bullets six lines above them - is itself pinned by `keeps goat-plan handoff artifacts drift-aware without burdening small plans` in the same file, so the only trim on offer cost a shipped contract. Combined cap raised 4650 -> 4700 (4671 used); body cap unchanged.
+**Evidence:** 2026-08-15, adding `## How users will notice the difference` and `## Why` (renamed to `## Motivation` later the same day) to the Standard milestone template plus one SKILL.md sentence (97 words total) tipped both caps: 2117/2100 and 4596/4500. `test/contract/skill-hardening-plan-2.test.ts` (search: `redesign target of 2150 words`) holds the SKILL.md body cap; the same file (search: `canonical goat-plan surface has`) holds the combined cap; `test/contract/skill-hardening.helpers.ts` (search: `countSkillBodyWords`) excludes frontmatter from the body count. Resolved by raising the caps to 2150/4650 with user approval.
+
+**Recurrence 2026-08-16:** Renaming those two sections to `## What we lose without this` / `## Why this helps` and adding derivation rules overflowed the combined cap. The obvious trim - `### Verification baseline` and `### Maintenance notes` - was pinned by `keeps goat-plan handoff artifacts drift-aware without burdening small plans`, so the approved resolution raised 4650 to 4700 (4671 used); the body cap stayed unchanged.
 
 **Recurrence 2026-08-18:** a 27-token rewrite of goat-plan's Shared Conventions line (defining which modes read `skill-conventions.md`) passed every phrase pin and mirror check, then failed the combined cap at 4717/4700 - the surface had 3 words of headroom. Resolved by compacting to a 7-token line (`Modes R/1/3/4 also read`), the same length as the sentence it replaced.
 
 **Update 2026-08-19:** combined cap raised 4700 -> 5450 with user approval for the ISSUE.md plain-language redesign (checkable rules, a word swap table, two worked pairs, and a labelled worked sample moved inline into `issue-format.md`; 5373 used). The sweep for the old number found no live citations; old-format ISSUE and milestone artifacts under `.goat-flow/plans/` were left as historical outputs. Body cap unchanged (2128/2150 used). Raised again the same day, 5450 -> 5650, for the cut-words-never-facts rules and a third worked pair (5564 used).
 
-**Prevention:** Before adding content to goat-plan's SKILL.md or references, measure both counts against the caps in `test/contract/skill-hardening-plan-2.test.ts`. On overflow, present condense-versus-raise to the user instead of silently trimming pinned prose. Enumerate what the contract suite pins in the target file *before* choosing a trim - grep the test file for regexes read against that path - because the most redundant-looking prose here is disproportionately likely to be pinned, and discovering that after the edit turns a trim into a choice between reverting and weakening someone else's check. Edit all four skill mirrors (`workflow/skills/`, `.claude/skills/`, `.agents/skills/`, `.github/skills/`) in the same batch and rerun the fast contract suite. After raising a cap, grep gitignored plan files and docs for the old numbers and the old assertion-message text: a milestone that budgeted against the old cap keeps citing it, and its `(search:)` anchor into the assertion message stops resolving the moment the message changes. That happened the same day to `.goat-flow/plans/1.16.0/M38-goat-plan-dispatchable-tasks.md`, which cited `redesign target of 2100 words` in a Read-first line plus the old caps in its Commands table and stop condition.
+**Recurrence 2026-08-28:** M57 measured all caps but missed older plan-1 pins. Mid-proof failed its amendment and dependency-transition contracts, and the body measured 2151/2150. Restoring those pins and compacting only the new rule produced 2144/2150 and `# pass 51`, `# fail 0`. Evidence anchors: `test/contract/skill-hardening-plan-1.test.ts` (search: `keeps goat-plan amendments behind the milestone approval gate`) and `test/contract/skill-hardening-plan-2.test.ts` (search: `redesign target of 2150 words`).
 
 ---
 

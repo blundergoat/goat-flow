@@ -52,6 +52,97 @@ describe("plans export: milestone parsing", () => {
     assert.deepEqual(record.warnings, []);
   });
 
+  // Exceptional milestones export one canonical current-state explanation beside Status.
+  it("parses a canonical status reason without warning", () => {
+    const record = parseMilestoneMarkdown(
+      [
+        "# M43: Waiting on provider evidence",
+        "",
+        "**Status:** blocked",
+        "**Status reason:** The provider capture must show the callback before work can resume.",
+        "",
+      ].join("\n"),
+      "M43-waiting-on-provider-evidence.md",
+    );
+
+    assert.equal(
+      record.statusReason,
+      "The provider capture must show the callback before work can resume.",
+    );
+    assert.doesNotMatch(record.warnings.join("\n"), /Status reason|Abandoned/u);
+  });
+
+  // Historical abandoned snapshots remain readable, but canonical input is the sole authority when both labels exist.
+  it("warns on legacy, blank, duplicate, and competing status reasons", () => {
+    const legacy = parseMilestoneMarkdown(
+      [
+        "# M44: Historical abandonment",
+        "",
+        "**Status:** abandoned",
+        "**Abandoned:** Human approved stopping after the premise failed.",
+        "",
+      ].join("\n"),
+      "M44-historical-abandonment.md",
+    );
+    const competing = parseMilestoneMarkdown(
+      [
+        "# M45: Competing reasons",
+        "",
+        "**Status:** abandoned",
+        "**Status reason:** Canonical decision text.",
+        "**Status reason:** Duplicate canonical text.",
+        "**Abandoned:** Legacy decision text.",
+        "",
+      ].join("\n"),
+      "M45-competing-reasons.md",
+    );
+    const blank = parseMilestoneMarkdown(
+      [
+        "# M46: Blank reason",
+        "",
+        "**Status:** blocked",
+        "**Status reason:**",
+        "",
+      ].join("\n"),
+      "M46-blank-reason.md",
+    );
+    const staleLegacy = parseMilestoneMarkdown(
+      [
+        "# M47: Resumed work",
+        "",
+        "**Status:** in-progress",
+        "**Abandoned:** This old decision must not become the current reason.",
+        "",
+      ].join("\n"),
+      "M47-resumed-work.md",
+    );
+
+    assert.equal(
+      legacy.statusReason,
+      "Human approved stopping after the premise failed.",
+    );
+    assert.ok(
+      legacy.warnings.includes(
+        "legacy Abandoned field supplied; use Status reason",
+      ),
+    );
+    assert.equal(competing.statusReason, "Canonical decision text.");
+    assert.ok(
+      competing.warnings.includes("multiple Status reason values supplied"),
+    );
+    assert.ok(
+      competing.warnings.includes("conflicting status reason representations"),
+    );
+    assert.equal(blank.statusReason, "");
+    assert.ok(blank.warnings.includes("blank Status reason supplied"));
+    assert.equal(staleLegacy.statusReason, "");
+    assert.ok(
+      staleLegacy.warnings.includes(
+        "legacy Abandoned field supplied; use Status reason",
+      ),
+    );
+  });
+
   // A partial plan remains portable but tells users exactly which verification context is absent.
   it("exports missing optional fields as explicit warnings", () => {
     const record = parseMilestoneMarkdown(

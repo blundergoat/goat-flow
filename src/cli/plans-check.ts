@@ -93,6 +93,8 @@ function isStrictValidationWarning(
     return true;
   return (
     warning.includes("actual effort not parseable") ||
+    warning === "blank Status reason supplied" ||
+    warning === "legacy Abandoned field supplied; use Status reason" ||
     ((isReceiptClaimed || isReceiptActive) &&
       warning.startsWith("timing receipt")) ||
     /^multiple .+ values supplied$/u.test(warning) ||
@@ -600,39 +602,65 @@ function collectTestingGateErrors(
   ];
 }
 
+/** Enforce the one current reason allowed only for exceptional lifecycle states. */
+function collectStatusReasonErrors(
+  record: PlanExportRecord,
+  status: string,
+): string[] {
+  const errors: string[] = [];
+  const statusReason = record.statusReason.trim();
+  const hasExceptionalStatus = status === "blocked" || status === "abandoned";
+  if (hasExceptionalStatus && statusReason.length === 0) {
+    errors.push(
+      `${record.sourceFile}: ${status} milestone requires Status reason`,
+    );
+  } else if (!hasExceptionalStatus && statusReason.length > 0) {
+    errors.push(
+      `${record.sourceFile}: ${status} milestone must not include Status reason`,
+    );
+  }
+  return errors;
+}
+
 /** Validate one milestone's current lifecycle snapshot without reconstructing history. */
 function collectLifecycleErrors(record: PlanExportRecord): string[] {
   const status = record.status.trim().toLowerCase();
-  const errors: string[] = [];
 
   // Missing status already has a dedicated structural diagnostic.
-  if (status === "unknown" || status.length === 0) return errors;
+  if (status === "unknown" || status.length === 0) return [];
   // An unfamiliar label cannot tell the user which lifecycle obligations apply.
   if (!VALID_STATUSES.has(status)) {
     return [`${record.sourceFile}: unsupported status \`${status}\``];
   }
 
+  const errors = collectStatusReasonErrors(record, status);
+
   const openTasks = countOpenItems(record.tasks);
   const checkedTasks = record.tasks.length - openTasks;
   switch (status) {
     case "not-started":
-      return collectNotStartedSnapshotErrors(record, checkedTasks);
+      return [
+        ...errors,
+        ...collectNotStartedSnapshotErrors(record, checkedTasks),
+      ];
     case "in-progress":
       return errors;
     case "testing-gate":
-      return collectTestingGateErrors(record, openTasks);
+      return [...errors, ...collectTestingGateErrors(record, openTasks)];
     case "human-verification-pending":
       return [
+        ...errors,
         ...collectInactiveReceiptErrors(record, status),
         ...collectHumanPendingErrors(record, openTasks),
       ];
     case "complete":
       return [
+        ...errors,
         ...collectInactiveReceiptErrors(record, status),
         ...collectCompleteSnapshotErrors(record, openTasks),
       ];
     default:
-      return collectInactiveReceiptErrors(record, status);
+      return [...errors, ...collectInactiveReceiptErrors(record, status)];
   }
 }
 

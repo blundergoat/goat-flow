@@ -52,6 +52,7 @@ export interface PlanExportRecord {
   sourceFile: string;
   title: string;
   status: string;
+  statusReason: string;
   dependencies: string;
   objective: string;
   scopeMarkdown: string;
@@ -109,6 +110,54 @@ function readMilestoneField(
   }
   // A missing or empty first field stays empty so existing missing-field guidance remains authoritative.
   return fieldValues.at(0) ?? "";
+}
+
+/** Report ambiguous or deprecated exceptional-status reason fields. */
+function addStatusReasonWarnings(
+  canonicalValues: readonly string[],
+  legacyValues: readonly string[],
+  warnings: string[],
+): void {
+  const canonicalValue = canonicalValues.at(0);
+  const legacyValue = legacyValues.at(0);
+
+  if (canonicalValues.length > 1) {
+    warnings.push("multiple Status reason values supplied");
+  }
+  if (legacyValues.length > 1) {
+    warnings.push("multiple Abandoned values supplied");
+  }
+  if (canonicalValue !== undefined && canonicalValue.length === 0) {
+    warnings.push("blank Status reason supplied");
+  }
+  if (legacyValue !== undefined) {
+    warnings.push("legacy Abandoned field supplied; use Status reason");
+  }
+  if (canonicalValue !== undefined && legacyValue !== undefined) {
+    warnings.push("conflicting status reason representations");
+  }
+}
+
+/** Read the canonical exceptional-status explanation while preserving legacy abandoned snapshots. */
+function readStatusReason(
+  content: string,
+  status: string,
+  warnings: string[],
+): string {
+  const canonicalValues = readRenderedMarkdownFieldValues(
+    content,
+    "Status reason",
+  );
+  const legacyValues = readRenderedMarkdownFieldValues(content, "Abandoned");
+  const canonicalValue = canonicalValues.at(0);
+  const legacyValue = legacyValues.at(0);
+  addStatusReasonWarnings(canonicalValues, legacyValues, warnings);
+
+  // Canonical presence owns the field even when blank; strict mode reports that invalid authoring state.
+  if (canonicalValue !== undefined) return canonicalValue;
+  // Historical Abandoned text is a fallback only for abandoned snapshots, never for resumed work.
+  if (status.trim().toLowerCase() === "abandoned") return legacyValue ?? "";
+  return "";
 }
 
 /** Split level-two sections while preserving nested headings and user-authored Markdown. */
@@ -443,6 +492,7 @@ export function parseMilestoneMarkdown(
   const warnings: string[] = [];
   const sections = readMilestoneSections(content);
   const status = readMilestoneField(content, "Status", warnings);
+  const statusReason = readStatusReason(content, status, warnings);
   const dependencies = readMilestoneField(content, "Depends on", warnings);
   const objective = readObjective(content, title, sections, warnings);
   const scopeMarkdown = readFieldOrSectionMarkdown(
@@ -539,6 +589,7 @@ export function parseMilestoneMarkdown(
     sourceFile,
     title,
     status: firstPopulated(status, "unknown"),
+    statusReason,
     dependencies,
     objective,
     scopeMarkdown,

@@ -86,6 +86,7 @@ export function redactPlanExportRecord(
     sourceFile: scrubDurableText(record.sourceFile),
     title: scrubDurableText(record.title),
     status: scrubDurableText(record.status),
+    statusReason: scrubDurableText(record.statusReason),
     dependencies: scrubDurableText(record.dependencies),
     objective: scrubDurableText(record.objective),
     scopeMarkdown: scrubDurableText(record.scopeMarkdown),
@@ -181,6 +182,9 @@ export function renderPlanExportMarkdown(record: PlanExportRecord): string {
     `# ${record.title}`,
     "",
     `**Status:** ${record.status}`,
+    ...(record.statusReason
+      ? [`**Status reason:** ${record.statusReason}`]
+      : []),
     `**Depends on:** ${providedOrMissing(record.dependencies, "none declared")}`,
     ...renderEffortMetadata(record),
     `**Objective:** ${providedOrMissing(record.objective, missingText)}`,
