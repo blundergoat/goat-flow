@@ -104,12 +104,12 @@ export interface ProjectSignals {
   codeGenTools: string[];
   /** Deployment/infrastructure platforms found (amplify, terraform, docker, fly, vercel) */
   deployPlatforms: string[];
-  /** LLM integration signals (model provider env vars, SDK imports) */
-  llmIntegration: boolean;
+  /** True when model provider env vars or SDK imports were found */
+  hasLlmIntegration: boolean;
   /** Static analysis tools with detected strictness level */
   staticAnalysis: Array<{ tool: string; level: string | null }>;
-  /** PHI/compliance keywords detected in docs or instructions */
-  complianceSignals: boolean;
+  /** True when PHI/compliance keywords were found in docs or instructions */
+  hasComplianceSignals: boolean;
   /** Formatter coverage: languages with detected formatters vs languages without */
   formatterGaps: string[];
 }

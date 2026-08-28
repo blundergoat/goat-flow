@@ -121,7 +121,7 @@ export interface DashboardAuditProfiler extends Record<"enabled", boolean> {
  */
 export interface DashboardRouteDependencies {
   absDefault: string;
-  devMode: boolean;
+  isDevMode: boolean;
   getTemplate: () => string;
   packageVersion: string;
   dashboardToken: string;

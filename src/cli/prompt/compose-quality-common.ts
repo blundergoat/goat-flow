@@ -424,9 +424,9 @@ function renderPriorFindingSummary(summary: string): string {
   );
 }
 
-/** Rationale: three rows match the finding preview and keep both history lists equally bounded. */
+/** Rationale: three rows, because that matches the finding preview and keeps both history lists equally bounded. */
 const PRIOR_REFUTATION_PREVIEW_LIMIT = 3;
-/** Rationale: 240 characters preserve two short sentences without letting one row dominate the prompt. */
+/** Rationale: 240 characters, because two short sentences fit in that budget and a longer row would dominate the prompt. */
 const PRIOR_REFUTATION_TEXT_LIMIT = 240;
 
 /**

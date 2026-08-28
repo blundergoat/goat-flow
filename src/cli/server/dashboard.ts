@@ -445,7 +445,7 @@ async function dispatchDashboardRequest(
   context: {
     server: Server;
     dashboardToken: string;
-    devMode: boolean;
+    isDevMode: boolean;
     routes: (
       req: IncomingMessage,
       url: URL,
@@ -462,7 +462,7 @@ async function dispatchDashboardRequest(
   if (rejectUnauthorizedApi(req, url, res, context)) return;
 
   // Log API requests in dev mode
-  if (context.devMode && url.pathname.startsWith("/api/")) {
+  if (context.isDevMode && url.pathname.startsWith("/api/")) {
     console.log(`[dashboard] ${req.method} ${url.pathname}${url.search}`);
   }
 
@@ -607,7 +607,7 @@ async function handleDashboardUpgrade(
   context: {
     server: Server;
     dashboardToken: string;
-    devMode: boolean;
+    isDevMode: boolean;
     liveReloadClients: Set<WsWebSocket>;
     getLiveReloadWSS: () => Promise<WebSocketServer>;
     handleTerminalUpgrade: (
@@ -620,7 +620,7 @@ async function handleDashboardUpgrade(
 ): Promise<void> {
   const url = new URL(req.url ?? "/", `http://127.0.0.1`);
 
-  if (url.pathname === "/ws/livereload" && context.devMode) {
+  if (url.pathname === "/ws/livereload" && context.isDevMode) {
     // Hostile Host or Origin: drop the socket before the reload handshake.
     if (
       !hostAllowed(req, context.server) ||
@@ -706,15 +706,15 @@ export function serveDashboard(
   return new Promise((resolveStart) => {
     const shellPath = getTemplatePath("dist/dashboard/index.html");
     const dashboardPresets = loadDashboardPresets();
-    const devMode = options.isDevMode === true;
+    const isDevMode = options.isDevMode === true;
     const dashboardToken = randomBytes(32).toString("base64url");
     // In dev mode, re-read on every request. In prod, cache once.
-    let cachedTemplate: string | null = devMode
+    let cachedTemplate: string | null = isDevMode
       ? null
       : assembleDashboardHtml(shellPath);
     /** Read the current dashboard HTML shell, using the cache when possible. */
     function getTemplate(): string {
-      if (devMode) return assembleDashboardHtml(shellPath);
+      if (isDevMode) return assembleDashboardHtml(shellPath);
       if (!cachedTemplate) cachedTemplate = assembleDashboardHtml(shellPath);
       return cachedTemplate;
     }
@@ -741,7 +741,7 @@ export function serveDashboard(
       handleIndexRegenerateRequest,
     } = createDashboardRouteHandlers({
       absDefault,
-      devMode,
+      isDevMode,
       getTemplate,
       packageVersion: PACKAGE_VERSION,
       dashboardToken,
@@ -812,7 +812,7 @@ export function serveDashboard(
       dispatchDashboardRequest(req, res, {
         server,
         dashboardToken,
-        devMode,
+        isDevMode,
         routes,
       }).catch((err: unknown) => {
         reportDashboardRequestFailure(req, res, err);
@@ -820,7 +820,7 @@ export function serveDashboard(
     });
 
     // Dev mode: watch dashboard files and notify connected browsers.
-    const closeDevWatcher = devMode
+    const closeDevWatcher = isDevMode
       ? startDashboardDevWatcher(dirname(shellPath), liveReloadClients)
       : null;
 
@@ -829,7 +829,7 @@ export function serveDashboard(
       void handleDashboardUpgrade(req, socket, head, {
         server,
         dashboardToken,
-        devMode,
+        isDevMode,
         liveReloadClients,
         getLiveReloadWSS,
         handleTerminalUpgrade,

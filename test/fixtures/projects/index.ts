@@ -395,9 +395,9 @@ export function makeCtx(overrides: Partial<AuditContext> = {}): AuditContext {
         signals: {
           codeGenTools: [],
           deployPlatforms: [],
-          llmIntegration: false,
+          hasLlmIntegration: false,
           staticAnalysis: [],
-          complianceSignals: false,
+          hasComplianceSignals: false,
           formatterGaps: [],
         },
       },

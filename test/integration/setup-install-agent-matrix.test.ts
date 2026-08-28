@@ -926,8 +926,16 @@ describe("cross-agent install smoke matrix", () => {
           `${agentProfile.id} ${fixture.state} registration target disagrees with config`,
         );
         if (fixture.expectedResult === "blocked-conflict") {
-          assert.deepEqual(expectedWritePaths, []);
-          assert.equal(fixture.expectedManagedFiles, "preserved-local");
+          assert.deepEqual(
+            expectedWritePaths,
+            [],
+            `${agentProfile.id} ${fixture.state} writes despite a blocked conflict`,
+          );
+          assert.equal(
+            fixture.expectedManagedFiles,
+            "preserved-local",
+            `${agentProfile.id} ${fixture.state} does not preserve local managed files`,
+          );
         }
       }
     }

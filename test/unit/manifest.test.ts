@@ -544,7 +544,11 @@ describe("manifest snapshot coverage (real repo)", () => {
       } = JSON.parse(
         readFileSync(join(snapshotDirectory, `v${version}.json`), "utf8"),
       );
-      assert.equal(snapshot.version, version);
+      assert.equal(
+        snapshot.version,
+        version,
+        `v${version}.json records the wrong version`,
+      );
       assert.ok(
         typeof snapshot.snapshot_facts === "object" &&
           snapshot.snapshot_facts !== null &&

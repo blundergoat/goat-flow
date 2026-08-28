@@ -58,7 +58,7 @@ Commands-table proof and owns checkbox completion.
 
 ## Rollout
 
-This record is promotion-only; no consumer wording has changed yet. 1.18.0 M13 owns applying the exact
+This record is promotion-only; no consumer wording has changed yet. 1.17.0 M63 owns applying the exact
 single-line replacements to the six documentation surfaces (`AGENTS.md`, `CLAUDE.md`,
 `.github/copilot-instructions.md`, `.goat-flow/skill-docs/skill-conventions.md`,
 `workflow/skills/reference/skill-conventions.md`, `workflow/setup/reference/execution-loop.md`) and the

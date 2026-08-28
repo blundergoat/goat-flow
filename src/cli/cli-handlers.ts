@@ -432,7 +432,7 @@ async function handleAuditCommand(options: ParsedCLI): Promise<void> {
     denyMechanismEvidenceLevel: options.isTargetTrusted ? "full" : "static",
   });
 
-  const reportForRender = options.auditDetails
+  const reportForRender = options.includeAuditDetails
     ? report
     : stripAuditDetails(report);
 

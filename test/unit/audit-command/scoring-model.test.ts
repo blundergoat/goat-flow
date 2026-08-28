@@ -215,7 +215,7 @@ describe("Audit scoring model", () => {
 describe("Audit scoring model", () => {
   it("audit details flag defaults on and can strip structured payloads", () => {
     const parsed = parseCLIArgs(["audit", ".", "--no-audit-details"]);
-    assert.equal(parsed.auditDetails, false);
+    assert.equal(parsed.includeAuditDetails, false);
     assert.throws(
       () => parseCLIArgs(["quality", ".", "--no-audit-details"]),
       /--no-audit-details is only valid for the audit command/,

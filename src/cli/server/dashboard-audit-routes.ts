@@ -296,7 +296,7 @@ function createHandleAuditRequest(
     const agentFilter = parseAgentFilter(url.searchParams.get("agent"));
     const fresh = url.searchParams.get("fresh") === "true";
     const profiler = createDashboardAuditProfiler(
-      shouldProfileAuditRequest(url, ctx.devMode),
+      shouldProfileAuditRequest(url, ctx.isDevMode),
     );
 
     try {

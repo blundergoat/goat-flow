@@ -37,7 +37,7 @@ function handleHtmlRequest(
   if (url.pathname !== "/") return false;
 
   const injection = `<script>window.__GOAT_FLOW_DEFAULT_PATH__ = ${JSON.stringify(ctx.absDefault)}; window.__GOAT_FLOW_VERSION__ = ${JSON.stringify(ctx.packageVersion)}; window.__GOAT_FLOW_DASHBOARD_TOKEN__ = ${JSON.stringify(ctx.dashboardToken)}; window.__GOAT_FLOW_AGENTS__ = ${JSON.stringify(SUPPORTED_AGENTS)}; window.__GOAT_FLOW_RUNNER_IDS__ = ${JSON.stringify(KNOWN_AGENT_IDS)}; window.__GOAT_FLOW_PRESETS__ = ${JSON.stringify(ctx.dashboardPresets)};</script>`;
-  const liveReloadScript = ctx.devMode
+  const liveReloadScript = ctx.isDevMode
     ? `<script>(function(){var ws=new WebSocket('ws://'+location.host+'/ws/livereload');ws.onmessage=function(){location.reload()};ws.onclose=function(){setTimeout(function(){location.reload()},1000)}})()</script>`
     : "";
   const html = ctx

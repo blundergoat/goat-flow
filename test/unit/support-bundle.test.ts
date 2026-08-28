@@ -58,9 +58,9 @@ function supportFacts(instructionBody: string): ProjectFacts {
       signals: {
         codeGenTools: [],
         deployPlatforms: [],
-        llmIntegration: false,
+        hasLlmIntegration: false,
         staticAnalysis: [{ tool: "gruff-ts", level: "strict" }],
-        complianceSignals: false,
+        hasComplianceSignals: false,
         formatterGaps: [],
       },
     },

@@ -424,10 +424,15 @@ describe("goat-qa application of test-selection doctrine", () => {
       "utf8",
     );
     for (const qaRoot of QA_ROOTS.slice(1)) {
-      assert.equal(readFileSync(`${qaRoot}/SKILL.md`, "utf8"), canonicalSkill);
+      assert.equal(
+        readFileSync(`${qaRoot}/SKILL.md`, "utf8"),
+        canonicalSkill,
+        `${qaRoot}/SKILL.md drifted from the canonical root`,
+      );
       assert.equal(
         readFileSync(`${qaRoot}/references/output-templates.md`, "utf8"),
         canonicalTemplates,
+        `${qaRoot}/references/output-templates.md drifted from the canonical root`,
       );
     }
   });

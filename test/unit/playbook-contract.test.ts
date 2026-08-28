@@ -271,7 +271,7 @@ describe("standalone playbook audit contract", () => {
         assert.match(
           scopeText,
           requiredScope,
-          `${scopePath}: incomplete scope`,
+          `${scopePath}: incomplete scope, missing ${requiredScope.source}`,
         );
       }
     }

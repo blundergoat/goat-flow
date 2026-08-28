@@ -180,7 +180,7 @@ export interface ParsedCLI extends CLIOptions {
   checkContent: boolean;
   isTargetTrusted: boolean;
   isTargetUntrusted: boolean;
-  auditDetails: boolean;
+  includeAuditDetails: boolean;
   shouldCheck: boolean;
   shouldApply: boolean;
   shouldDryRun: boolean;

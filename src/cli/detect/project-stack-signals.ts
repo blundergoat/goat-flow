@@ -283,9 +283,9 @@ export function detectProjectSignals(
       PROJECT_STACK_CODE_GENERATION_SIGNALS,
     ),
     deployPlatforms: collectNamedSignals(fs, PROJECT_STACK_DEPLOYMENT_SIGNALS),
-    llmIntegration: detectLLMIntegration(fs),
+    hasLlmIntegration: detectLLMIntegration(fs),
     staticAnalysis: detectStaticAnalysis(fs),
-    complianceSignals: detectComplianceSignals(fs),
+    hasComplianceSignals: detectComplianceSignals(fs),
     formatterGaps: detectFormatterGaps(languages, formatCommand),
   };
 }
