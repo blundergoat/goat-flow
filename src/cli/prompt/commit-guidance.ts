@@ -39,14 +39,15 @@ type CommitGuidanceStatus =
 interface CommitGuidanceWriteResult {
   status: CommitGuidanceStatus;
   path: string;
-  blockers?: string[];
+  blockingInstructionPaths?: string[];
 }
 
+/** Exact instruction bytes and file mode needed to update one selected bridge and restore it after a failed migration. */
 interface InstructionBridgeUpdate {
   path: string;
-  original: string;
-  updated: string;
-  mode: number;
+  originalInstructionText: string;
+  updatedInstructionText: string;
+  fileMode: number;
 }
 
 /** Render caught non-Error values without default object stringification. */
@@ -55,105 +56,156 @@ function errorMessage(error: unknown): string {
   return typeof error === "string" ? error : "unknown error";
 }
 
-/** Locate the selected bridge section without treating another level-two section as writable. */
+/**
+ * Locate the selected Commit Messages bridge without treating another level-two section as writable.
+ * Use before migration; null means the selected instruction file has no section that setup can safely rewrite.
+ *
+ * @param instructionContent - complete selected instruction file; empty content contains no writable Commit Messages section
+ * @returns section offsets, or null when the required heading is absent
+ */
 function commitMessagesRange(
-  content: string,
+  instructionContent: string,
 ): { start: number; end: number } | null {
-  const heading = /^##[ \t]+Commit Messages[ \t]*$/mu.exec(content);
+  const heading = /^##[ \t]+Commit Messages[ \t]*$/mu.exec(instructionContent);
+  // Without the recognised heading, setup must leave the user's instruction file unchanged.
   if (heading === null) return null;
   const sectionBodyStart = heading.index + heading[0].length;
-  const nextHeading = /^##[ \t]+/mu.exec(content.slice(sectionBodyStart));
+  const nextHeading = /^##[ \t]+/mu.exec(
+    instructionContent.slice(sectionBodyStart),
+  );
   return {
     start: heading.index,
     end:
       nextHeading === null
-        ? content.length
+        ? instructionContent.length
         : sectionBodyStart + nextHeading.index,
   };
 }
 
-/** Preflight every supported instruction surface before any migration write occurs. */
+/**
+ * Inspect every supported instruction surface before setup migrates a user's existing guide.
+ * Use to find the one selected bridge that can move safely and every foreign reference that must block the rename.
+ *
+ * @returns the selected bridge or null when none needs rewriting, plus any instruction paths that keep the former guide in place
+ */
 function preflightLegacyReferences(
-  root: string,
+  projectRoot: string,
   selectedAgent: AgentId,
-): { bridge: InstructionBridgeUpdate | null; blockers: string[] } {
-  const selectedPath = getAgentProfile(selectedAgent).instructionFile;
-  let bridge: InstructionBridgeUpdate | null = null;
-  const blockers: string[] = [];
+): {
+  instructionBridge: InstructionBridgeUpdate | null;
+  blockingInstructionPaths: string[];
+} {
+  const selectedInstructionPath =
+    getAgentProfile(selectedAgent).instructionFile;
+  let instructionBridge: InstructionBridgeUpdate | null = null;
+  const blockingInstructionPaths: string[] = [];
   const instructionPaths = new Set(
     getAgentProfiles().map((profile) => profile.instructionFile),
   );
+  // Every installed agent instruction is checked so setup never strands a user-visible link to the former guide.
   for (const relativePath of instructionPaths) {
-    const absolutePath = join(root, relativePath);
+    const absolutePath = join(projectRoot, relativePath);
+    // An agent without an installed instruction file has no legacy reference that can block this migration.
     if (!existsSync(absolutePath)) continue;
-    const original = readFileSync(absolutePath, "utf-8");
+    const originalInstructionText = readFileSync(absolutePath, "utf-8");
     const referenceOffsets: number[] = [];
+    // Every former-path occurrence is recorded because a reference outside Commit Messages makes the whole rename unsafe.
     for (
-      let offset = original.indexOf(LEGACY_GIT_COMMIT_INSTRUCTIONS_PATH);
+      let offset = originalInstructionText.indexOf(
+        LEGACY_GIT_COMMIT_INSTRUCTIONS_PATH,
+      );
       offset >= 0;
-      offset = original.indexOf(
+      offset = originalInstructionText.indexOf(
         LEGACY_GIT_COMMIT_INSTRUCTIONS_PATH,
         offset + LEGACY_GIT_COMMIT_INSTRUCTIONS_PATH.length,
       )
     ) {
       referenceOffsets.push(offset);
     }
+    // Files that do not mention the former guide need no rewrite and cannot block its rename.
     if (referenceOffsets.length === 0) continue;
-    const range = commitMessagesRange(original);
+    const commitMessagesSection = commitMessagesRange(originalInstructionText);
+    // Only the selected agent's Commit Messages section is owned by this setup run; every other reference keeps the former guide available.
     if (
-      relativePath !== selectedPath ||
-      range === null ||
+      relativePath !== selectedInstructionPath ||
+      commitMessagesSection === null ||
       referenceOffsets.some(
-        (offset) => offset < range.start || offset >= range.end,
+        (offset) =>
+          offset < commitMessagesSection.start ||
+          offset >= commitMessagesSection.end,
       )
     ) {
-      blockers.push(relativePath);
+      blockingInstructionPaths.push(relativePath);
       continue;
     }
-    bridge = {
+    instructionBridge = {
       path: absolutePath,
-      original,
-      updated: original.replaceAll(
+      originalInstructionText,
+      updatedInstructionText: originalInstructionText.replaceAll(
         LEGACY_GIT_COMMIT_INSTRUCTIONS_PATH,
         GIT_COMMIT_INSTRUCTIONS_PATH,
       ),
-      mode: statSync(absolutePath).mode & 0o777,
+      fileMode: statSync(absolutePath).mode & 0o777,
     };
   }
-  return { bridge, blockers };
+  return { instructionBridge, blockingInstructionPaths };
 }
 
-/** Copy first, update the selected bridge atomically, then remove the former guide. */
+/**
+ * Copy first, update the selected bridge atomically, then remove the former guide.
+ *
+ * Use after setup proves no other agent still needs the old path; null bridge input means only the guide filename changes.
+ * Error behavior: restores user instruction bytes and removes the new guide before rethrowing; incomplete rollback throws a replacement error.
+ *
+ * @param instructionBridge - selected Commit Messages rewrite, or null when the user's instructions contain no former-path reference
+ */
 function renameLegacyGuide(
-  root: string,
+  projectRoot: string,
   legacyPath: string,
   outputPath: string,
-  bridge: InstructionBridgeUpdate | null,
+  instructionBridge: InstructionBridgeUpdate | null,
 ): void {
   copyFileSync(legacyPath, outputPath, constants.COPYFILE_EXCL);
-  let bridgeWritten = false;
+  let didWriteInstructionBridge = false;
   try {
-    if (bridge !== null) {
-      writeFileAtomic(bridge.path, bridge.updated, root, bridge.mode);
-      bridgeWritten = true;
+    // A selected bridge is rewritten before the old guide disappears, so the user's instructions never point at a missing file.
+    if (instructionBridge !== null) {
+      writeFileAtomic(
+        instructionBridge.path,
+        instructionBridge.updatedInstructionText,
+        projectRoot,
+        instructionBridge.fileMode,
+      );
+      didWriteInstructionBridge = true;
     }
     unlinkSync(legacyPath);
   } catch (error) {
+    // A failed bridge write or guide removal starts rollback before the optional setup step reports its skipped result.
     let rollbackError: unknown = null;
-    if (bridgeWritten && bridge !== null) {
+    // Once the bridge changed, restore its exact bytes and mode before removing the newly copied guide.
+    if (didWriteInstructionBridge && instructionBridge !== null) {
       try {
-        writeFileAtomic(bridge.path, bridge.original, root, bridge.mode);
+        writeFileAtomic(
+          instructionBridge.path,
+          instructionBridge.originalInstructionText,
+          projectRoot,
+          instructionBridge.fileMode,
+        );
       } catch (restoreError) {
+        // A permission or filesystem failure during restoration leaves rollback incomplete and replaces the original migration error.
         rollbackError = restoreError;
       }
     }
+    // The copied guide is removed only when bridge restoration succeeded or no bridge was changed.
     if (rollbackError === null) {
       try {
         unlinkSync(outputPath);
       } catch (cleanupError) {
+        // A permission or filesystem failure can leave the copied guide behind, so setup reports an incomplete rollback.
         rollbackError = cleanupError;
       }
     }
+    // An incomplete rollback is more actionable to the user than the original migration failure it interrupted.
     if (rollbackError !== null) {
       throw new Error(
         `commit-guide migration failed and rollback was incomplete: ${errorMessage(rollbackError)}`,
@@ -175,12 +227,12 @@ function ensureGitCommitInstructions(
   targetRoot: string,
   selectedAgent: AgentId,
 ): CommitGuidanceWriteResult {
-  const root = resolve(targetRoot);
-  const outputPath = join(root, GIT_COMMIT_INSTRUCTIONS_PATH);
-  const legacyPath = join(root, LEGACY_GIT_COMMIT_INSTRUCTIONS_PATH);
+  const projectRoot = resolve(targetRoot);
+  const outputPath = join(projectRoot, GIT_COMMIT_INSTRUCTIONS_PATH);
+  const legacyPath = join(projectRoot, LEGACY_GIT_COMMIT_INSTRUCTIONS_PATH);
 
   // No version control here, so a commit convention would have nothing to apply to and the project is left untouched.
-  if (!existsSync(join(root, ".git"))) {
+  if (!existsSync(join(projectRoot, ".git"))) {
     return {
       status: "skipped-no-git",
       path: GIT_COMMIT_INSTRUCTIONS_PATH,
@@ -197,15 +249,24 @@ function ensureGitCommitInstructions(
 
   // Only the former filename exists, so the user keeps their own content and simply finds it under the current name.
   if (existsSync(legacyPath)) {
-    const preflight = preflightLegacyReferences(root, selectedAgent);
-    if (preflight.blockers.length > 0) {
+    const migrationPreflight = preflightLegacyReferences(
+      projectRoot,
+      selectedAgent,
+    );
+    // Another installed agent still links to the old guide, so setup preserves every referenced user file.
+    if (migrationPreflight.blockingInstructionPaths.length > 0) {
       return {
         status: "skipped-references",
         path: LEGACY_GIT_COMMIT_INSTRUCTIONS_PATH,
-        blockers: preflight.blockers,
+        blockingInstructionPaths: migrationPreflight.blockingInstructionPaths,
       };
     }
-    renameLegacyGuide(root, legacyPath, outputPath, preflight.bridge);
+    renameLegacyGuide(
+      projectRoot,
+      legacyPath,
+      outputPath,
+      migrationPreflight.instructionBridge,
+    );
     return {
       status: "renamed",
       path: GIT_COMMIT_INSTRUCTIONS_PATH,
@@ -239,8 +300,7 @@ export function emitCommitGuidanceInstallResult(
   try {
     result = ensureGitCommitInstructions(projectPath, selectedAgent);
   } catch (error) {
-    // A read-only docs tree, a Windows permission error, or the race that renameLegacyGuide
-    // documents must read as a skipped extra, not as a failed install.
+    // A read-only docs tree, a Windows permission error, or a migration race is a skipped extra, not a failed install.
     const reason = errorMessage(error);
     console.log("");
     console.log("Git commit instructions:");
@@ -251,7 +311,7 @@ export function emitCommitGuidanceInstallResult(
     console.log("");
     console.log("Git commit instructions:");
     console.log(
-      `  ! kept ${result.path} (legacy references in ${(result.blockers ?? []).join(", ")})`,
+      `  ! kept ${result.path} (legacy references in ${(result.blockingInstructionPaths ?? []).join(", ")})`,
     );
     return;
   }

@@ -1,9 +1,9 @@
 /**
- * setup --apply installer behaviour: scaffolds config.yaml without an agents allowlist and manages
- * that allowlist on existing configs (removing single/multi-agent lists or a null value, leaving an
- * absent one absent), does not duplicate an existing node_modules gitignore entry, and installs
- * deterministic Git commit instructions only for Git projects. Upgrade migration and prune cases live in
- * setup-install-migrations.test.ts.
+ * Proves the files and settings a user receives from `setup --apply`.
+ * Use when config allowlists, the `node_modules` ignore rule, or Git commit-guidance installation changes.
+ *
+ * The suite covers absent, null, single-agent, and multi-agent config states without duplicating existing user content.
+ * Upgrade migration and prune cases remain in `setup-install-migrations.test.ts`.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -372,6 +372,8 @@ describe("setup --apply installer", () => {
     );
   });
 
+  // Fixture purpose: the selected Copilot instruction holds the only former-path link; a following section proves other bytes and mode survive.
+  // Side effects: creates and mutates a disposable project owned by this test.
   it("commit guidance rewrites the selected Commit Messages bridge before renaming", () => {
     const root = makeTempProject();
     const guidanceDir = join(root, "docs", "coding-standards");
@@ -402,6 +404,8 @@ describe("setup --apply installer", () => {
     assertPosixFileMode(instructionPath, 0o640);
   });
 
+  // Fixture purpose: a Claude-owned former-path link blocks a Copilot install from renaming the shared guide, preserving every involved file.
+  // Side effects: creates and mutates a disposable project owned by this test.
   it("commit guidance keeps the former guide when another agent instruction still references it", () => {
     const root = makeTempProject();
     const guidanceDir = join(root, "docs", "coding-standards");

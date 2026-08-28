@@ -1,7 +1,7 @@
 /**
  * Proves the hook status chain users see after setup, drift, or tampering.
- * Use these fixtures when registry evidence, registration commands, installed
- * bytes, trust checks, or repair guidance changes across CLI and dashboard views.
+ *
+ * Use these fixtures when hook registry, installation, trust, or repair changes affect CLI or dashboard views.
  * Every project is disposable and no provider model is launched.
  */
 import assert from "node:assert/strict";
@@ -88,7 +88,10 @@ function createClaudeProject(): string {
   return projectPath;
 }
 
-/** Create the smallest Codex project whose generated handlers can be replayed on Windows. */
+/**
+ * Create the smallest Codex project whose generated handlers can be replayed on Windows.
+ * Side effects: creates and writes one disposable project removed by suite cleanup.
+ */
 function createCodexProject(): string {
   const projectPath = mkdtempSync(join(tmpdir(), "goat-flow-codex-state-"));
   disposableProjects.push(projectPath);
@@ -104,6 +107,7 @@ function createCodexProject(): string {
 
 /**
  * Record previous managed hook bytes for one disposable agent install.
+ *
  * Filesystem side effects: writes that fixture's hash-only install-state JSON.
  * Invariant: each stored hash represents the exact fixture bytes present when this helper runs.
  */
@@ -134,6 +138,7 @@ function recordManagedHookBaseline(
 
 /**
  * Publish canonical v2 rows for the fixture bytes currently present on disk.
+ *
  * Filesystem side effects: atomically writes managed.json inside the disposable project.
  * Invariant: retained v1 files cannot override these path-keyed hashes.
  */

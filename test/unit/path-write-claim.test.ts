@@ -1,7 +1,8 @@
 /**
  * Process and filesystem contract for cooperative path-write claims.
  *
- * The helper protects writers that share this protocol; direct file edits remain outside its guarantee.
+ * Use when `install` or `learn new` changes claim admission, contention, cleanup, or operator-confirmed recovery.
+ * These tests cover cooperating writers; direct file edits remain outside the helper's guarantee.
  */
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
@@ -33,16 +34,17 @@ const TSX_LOADER_URL = pathToFileURL(
 const disposableRoots: string[] = [];
 
 after(() => {
-  for (const root of disposableRoots) {
-    fs.rmSync(root, { recursive: true, force: true });
+  // Every recorded directory is a suite-owned project fixture, never a user's workspace.
+  for (const disposableProjectRoot of disposableRoots) {
+    fs.rmSync(disposableProjectRoot, { recursive: true, force: true });
   }
 });
 
 /** Create one real project root that claim tests may mutate freely. */
 function makeProject(): string {
-  const root = fs.mkdtempSync(join(tmpdir(), "goat-flow-write-claim-"));
-  disposableRoots.push(root);
-  return root;
+  const projectRoot = fs.mkdtempSync(join(tmpdir(), "goat-flow-write-claim-"));
+  disposableRoots.push(projectRoot);
+  return projectRoot;
 }
 
 /** POSIX exposes claim mode bits; Windows does not implement the same permission contract. */
@@ -88,7 +90,7 @@ function assertClaimFailure(
 
 /** Stable child-process outcome shared by contention and abandoned-owner fixtures. */
 interface ClaimProcessResult {
-  acquired: boolean;
+  didAcquireClaim: boolean;
   reason?: string;
   targetPath?: string;
 }
@@ -97,6 +99,7 @@ type ClaimProcessMode = "abandon" | "mutate-and-release";
 
 /**
  * Run one separate cooperating writer so process exit owns abandoned-descriptor cleanup.
+ *
  * Filesystem side effects: may write the requested mutation or leave one claim marker behind after the child exits.
  * Error behavior: asserts a clean child exit before parsing its bounded JSON result.
  */
@@ -117,10 +120,11 @@ function runClaimProcess(
         writeFileSync(mutationPath, "mutated\n", "utf8");
         claims.releasePathWriteClaims(batch);
       }
-      process.stdout.write(JSON.stringify({ acquired: true }));
+      process.stdout.write(JSON.stringify({ didAcquireClaim: true }));
     } catch (error) {
+      // Contention and unsafe targets become structured child output so the parent test can assert what a user-facing command would receive.
       process.stdout.write(JSON.stringify({
-        acquired: false,
+        didAcquireClaim: false,
         reason: error instanceof claims.PathWriteClaimError ? error.reason : "unexpected",
         targetPath: error instanceof claims.PathWriteClaimError ? error.targetPath : undefined,
       }));
@@ -255,7 +259,7 @@ describe("path write claims", () => {
     ]);
     try {
       assert.deepEqual(runContender(projectRoot, targetPath, mutationPath), {
-        acquired: false,
+        didAcquireClaim: false,
         reason: "busy",
         targetPath,
       });
@@ -323,16 +327,17 @@ describe("path write claims", () => {
         expectedIdentity: readPathWriteTargetIdentity(projectRoot, targetPath),
       },
     ]);
-    const original = inspectPathWriteClaim(projectRoot, targetPath);
-    assert.ok(original);
+    const originalEvidence = inspectPathWriteClaim(projectRoot, targetPath);
+    assert.ok(originalEvidence);
     let foreignMarkerBytes: Buffer;
     try {
-      const markerBytes = fs.readFileSync(original.markerPath);
+      const markerBytes = fs.readFileSync(originalEvidence.markerPath);
       foreignMarkerBytes = tamperWithOwnedClaimMarker(
-        original.markerPath,
+        originalEvidence.markerPath,
         markerBytes,
       );
     } catch (error) {
+      // If fixture tampering fails after admission, release the suite-owned marker before surfacing the test failure.
       releasePathWriteClaims(batch);
       throw error;
     }
@@ -340,11 +345,14 @@ describe("path write claims", () => {
     assert.deepEqual(releasePathWriteClaims(batch), [
       { targetPath, status: "ownership-changed" },
     ]);
-    assert.deepEqual(fs.readFileSync(original.markerPath), foreignMarkerBytes);
-    const replacement = inspectPathWriteClaim(projectRoot, targetPath);
-    assert.ok(replacement);
+    assert.deepEqual(
+      fs.readFileSync(originalEvidence.markerPath),
+      foreignMarkerBytes,
+    );
+    const replacementEvidence = inspectPathWriteClaim(projectRoot, targetPath);
+    assert.ok(replacementEvidence);
     assert.equal(
-      removeConfirmedAbandonedPathWriteClaim(replacement),
+      removeConfirmedAbandonedPathWriteClaim(replacementEvidence),
       "removed",
     );
   });
@@ -472,7 +480,7 @@ describe("path write claims", () => {
     const targetPath = "managed.txt";
     const mutationPath = join(projectRoot, "contender-mutated.txt");
     assert.deepEqual(runAbandoningOwner(projectRoot, targetPath), {
-      acquired: true,
+      didAcquireClaim: true,
     });
     const firstEvidence = inspectPathWriteClaim(projectRoot, targetPath);
     assert.ok(firstEvidence);
@@ -483,7 +491,7 @@ describe("path write claims", () => {
     assert.ok(recoveryEvidence);
 
     assert.deepEqual(runContender(projectRoot, targetPath, mutationPath), {
-      acquired: false,
+      didAcquireClaim: false,
       reason: "busy",
       targetPath,
     });

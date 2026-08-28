@@ -201,7 +201,12 @@ function selectCommandPositionals(
     : positionals;
 }
 
-/** Reject shared flags when they are attached to commands that do not support them. */
+/**
+ * Reject shared flags when they are attached to commands that do not support them.
+ *
+ * Use after parsing so the user sees the first incompatible flag before any command starts.
+ * Error behavior: throws `CLIError` with exit code 2 for the first incompatible flag.
+ */
 function validateCommonFlags(command: Command, values: ParsedArgValues): void {
   rejectFlagOutsideCommand(
     command,
@@ -233,13 +238,16 @@ function validateCommonFlags(command: Command, values: ParsedArgValues): void {
     "--no-audit-details",
     parsedFlag(values, "no-audit-details"),
   );
+  // Recall is read-only and owns stricter output choices than the shared parser can express.
   if (command === "recall") {
+    // Writing recall results to a file would violate the command's read-only user contract.
     if (parsedString(values, "output") !== undefined) {
       throw new CLIError(
         "recall is read-only and does not support --output.",
         2,
       );
     }
+    // Recall renders only its text and JSON views, so Markdown is rejected instead of silently changing format.
     if (parsedString(values, "format") === "markdown") {
       throw new CLIError("recall supports only text or json output.", 2);
     }
@@ -248,6 +256,7 @@ function validateCommonFlags(command: Command, values: ParsedArgValues): void {
 
 /**
  * Reject runtime scenario flags outside the explicit hooks verification route.
+ *
  * Error behavior: throws CLIError with exit code 2; a scenario name has no meaning for listing, toggling, or syncing, so accepting it silently would
  * imply a check that never ran.
  *
@@ -311,6 +320,7 @@ function validatePlansStrictFlag(
 
 /**
  * Require a category on timing starts and reject it everywhere else.
+ *
  * Error behavior: throws CLIError with exit code 2 in both directions, because a start with no category would record time that no later report can
  * attribute.
  *
@@ -346,6 +356,7 @@ function validatePlansCategoryFlag(
 
 /**
  * Keep pause recovery and finalization flags on timing stops, and mutually exclusive.
+ *
  * Error behavior: throws CLIError with exit code 2 for a misplaced flag and again for the combined pair, because finalizing and discarding open
  * entries are opposite resolutions of the same state.
  *
@@ -381,6 +392,7 @@ function validatePlansStopFlags(
 
 /**
  * Keep plan-force semantics limited to generated export replacement.
+ *
  * Error behavior: throws CLIError with exit code 2 when `--force` is used on another plans route, so force can never mean "overwrite" for a command
  * that was not designed to replace a file.
  *
@@ -585,6 +597,7 @@ function validateTargetTrustFlags(
 
 /**
  * Validate quality mode flags against the selected quality subcommand.
+ *
  * Error behavior: throws CLIError with exit code 2 for `--mode` off its three routes, and for `--output` on save, which owns its report destination
  * and must not be redirected.
  *

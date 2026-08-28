@@ -90,7 +90,7 @@ interface MenuAction {
   key: string;
   label: string;
   command: "dashboard" | "install" | "setup" | "audit" | "status";
-  needsAgent: boolean;
+  requiresAgentSelection: boolean;
 }
 
 const MENU_ACTIONS: MenuAction[] = [
@@ -98,31 +98,31 @@ const MENU_ACTIONS: MenuAction[] = [
     key: "1",
     label: "Start dashboard",
     command: "dashboard",
-    needsAgent: false,
+    requiresAgentSelection: false,
   },
   {
     key: "2",
     label: "Install/update goat-flow files",
     command: "install",
-    needsAgent: true,
+    requiresAgentSelection: true,
   },
   {
     key: "3",
     label: "Generate setup prompt",
     command: "setup",
-    needsAgent: true,
+    requiresAgentSelection: true,
   },
   {
     key: "4",
     label: "Audit current project",
     command: "audit",
-    needsAgent: false,
+    requiresAgentSelection: false,
   },
   {
     key: "5",
     label: "Show project status",
     command: "status",
-    needsAgent: false,
+    requiresAgentSelection: false,
   },
 ];
 
@@ -195,6 +195,7 @@ async function promptForce(
 
 /**
  * Read all menu answers and build the command options to run.
+ *
  * Error behavior: throws CLIError with exit code 2 for an unrecognised menu choice, before any further question is asked, so the user is not walked
  * through a flow that cannot run.
  *
@@ -207,24 +208,27 @@ async function promptMenuCommand(
   readlineInterface: ReturnType<typeof createInterface>,
 ): Promise<ParsedCLI> {
   console.log(renderMenuText());
-  const choice = await readlineInterface.question("\nChoice [1] ");
-  const action = findMenuAction(choice || "1");
-  if (!action) {
+  const menuChoice = await readlineInterface.question("\nChoice [1] ");
+  const selectedAction = findMenuAction(menuChoice || "1");
+  // An unknown menu choice stops before asking for project or agent details that the CLI cannot use.
+  if (!selectedAction) {
     throw new CLIError("Unknown menu choice.", 2);
   }
 
   const projectPath = await promptProjectPath(readlineInterface);
-  const agent = action.needsAgent
+  const selectedAgent = selectedAction.requiresAgentSelection
     ? await promptAgent(readlineInterface)
     : options.agent;
   const shouldForce =
-    action.command === "install" ? await promptForce(readlineInterface) : false;
+    selectedAction.command === "install"
+      ? await promptForce(readlineInterface)
+      : false;
 
   return {
     ...options,
-    command: action.command,
+    command: selectedAction.command,
     projectPath,
-    agent,
+    agent: selectedAgent,
     shouldForce,
     shouldApply: false,
   };
@@ -349,6 +353,7 @@ function writeMultiAgentSyncBanner(withDivider: boolean): void {
 
 /**
  * Handle the setup command: compose and render setup prompts per agent.
+ *
  * Error behavior: throws CLIError when the selected agent has no composable setup, so a user asking for an unsupported agent gets that message rather
  * than an empty prompt.
  */
@@ -461,6 +466,7 @@ async function handleQualityCommand(options: ParsedCLI): Promise<void> {
 
 /**
  * Handle `events tail`, reading the most recent local evidence-envelope events for the project.
+ *
  * Throws a usage CLIError (exit 2) for any subcommand other than `tail`.
  * Emits the events as a JSON array under `--format json`, otherwise one compact JSON object per line (JSONL) for piping.
  */
@@ -479,6 +485,7 @@ async function handleEventsCommand(options: ParsedCLI): Promise<void> {
 
 /**
  * Print the resolved manifest or run its `--check` CI gate.
+ *
  * Branches stay separate because check mode owns exit status while default only renders.
  * Both paths preserve the same format contract without mixing their outputs.
  */
@@ -670,20 +677,25 @@ async function handleSkillNewCommand(options: ParsedCLI): Promise<void> {
     );
   }
   const { runSkillNew, SkillNewInputError } = await import("./skill-author.js");
-  let result: Awaited<ReturnType<typeof runSkillNew>>;
+  let skillCreationResult: Awaited<ReturnType<typeof runSkillNew>>;
   try {
-    result = await runSkillNew(skillNewRequest(options));
-  } catch (err) {
-    if (err instanceof SkillNewInputError) {
-      throw new CLIError(err.message, 2);
+    skillCreationResult = await runSkillNew(skillNewRequest(options));
+  } catch (error) {
+    // Invalid `skill new` answers or flags become a usage message without an internal stack trace.
+    if (error instanceof SkillNewInputError) {
+      throw new CLIError(error.message, 2);
     }
-    throw err;
+    throw error;
   }
-  writeOutput(options, renderSkillNewResult(result, options.format === "json"));
+  writeOutput(
+    options,
+    renderSkillNewResult(skillCreationResult, options.format === "json"),
+  );
 }
 
 /**
  * Dispatch one parsed CLI command to its handler.
+ *
  * The handler table is consulted first; setup preview and apply are routed separately because both use the deterministic install path rather than
  * prompt composition.
  *

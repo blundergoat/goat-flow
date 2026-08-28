@@ -139,6 +139,9 @@ function entrySortDate(
 /**
  * Parse the optional author-declared incident total for stats and dashboard users.
  * Missing or non-numeric values stay null so malformed metadata never invents incidents.
+ *
+ * @param entryContent - complete learning-loop entry text; empty content means no incident total was declared
+ * @returns the declared positive safe integer, or null when the field is absent or invalid
  */
 export function extractIncidentCount(entryContent: string): number | null {
   const incidentCountText = extractEntryMetadata(
