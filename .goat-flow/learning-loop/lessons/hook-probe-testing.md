@@ -1,6 +1,6 @@
 ---
 category: hook-probe-testing
-last_reviewed: 2026-08-19
+last_reviewed: 2026-08-29
 ---
 
 **Scope:** Driving a hook with realistic input - per-agent payload shapes, sandbox and interpreter controls, registered-path smokes, and grammar probes that catch false positives. The script under test is [hook-script-authoring.md](hook-script-authoring.md).
@@ -31,7 +31,7 @@ last_reviewed: 2026-08-19
 
 ## Lesson: Codex sandbox hook probes must distinguish direct Bash from Node child-process
 
-**Status:** active | **Created:** 2026-06-05
+**Status:** active | **Created:** 2026-06-05 | **Incident count:** 2 | **Latest occurrence:** 2026-08-29
 
 **What happened:** During the v1.9.1 quality follow-up, I first rejected a Codex sandbox finding after `codex sandbox --permissions-profile goat-flow ... bash .goat-flow/hooks/deny-dangerous/deny-dangerous-self-test.sh --self-test=smoke` passed. A stricter repro then showed the real failing layer: the same sandbox allowed direct Bash, but a Node script using `execFileSync("bash", ["-n", hook])` and `spawnSync("bash", ...)` returned `EPERM`. The audit therefore reported `bash -n failed` even though direct `bash -n` on the hook passed.
 
@@ -40,6 +40,8 @@ last_reviewed: 2026-08-19
 **Prevention:** When a sandbox finding involves audit/preflight hook checks, reproduce the exact runtime layer: direct hook script, configured command smoke, and a Node `child_process` probe. Audit and preflight diagnostics must surface `EPERM`/`ENOENT`/timeout as environment failures instead of syntax or hook-behavior defects. Evidence anchors: `src/cli/audit/check-agent-deny-runtime.ts` (search: `spawnFailureFor`), `scripts/preflight-checks.sh` (search: `spawnFailureMessage`), and `test/unit/audit-command/agent-deny-hooks.test.ts` (search: `reports sandbox spawn denial`).
 
 **Updated 2026-06-05:** A follow-up probe showed two subtler cases: Node `execFileSync` / `spawnSync` can attach `EPERM` error metadata while also reporting a successful child status and expected stdout/stderr, and `spawnSync(..., { input })` can hang while a shell-side `printf` pipe completes. Treating any `result.error` as fatal caused a false audit failure after the hook had actually completed; pushing runtime JSON through Node-owned stdin caused configured-command smoke timeouts. Prevention: check `status` before classifying child-process errors, and feed hook runtime payloads through a shell-side pipe when validating from Node in the Codex sandbox. Evidence anchors: `src/cli/audit/check-agent-deny-runtime.ts` (search: `pipeRuntimeProbeTo`), `scripts/preflight-checks.sh` (search: `GOAT_HOOK_SMOKE_PAYLOAD`), and `test/unit/audit-command/agent-deny-hooks.test.ts` (search: `ignores sandbox error metadata when hook commands completed`).
+
+**Recurrence 2026-08-29:** PR #61's configured-handler verifier reintroduced Node-owned `spawnSync` input on Windows. In the hosted `windows-hook-contracts` job under Node 20.11.0, three deny scenarios crossed the 30-second probe timeout while the read-only control completed just below it. A single native Windows 11 control did not reproduce the hosted stall, so local success could not disprove a runner-specific failure. The correction keeps the registered PowerShell executable and arguments but moves the fixed payload into an outer PowerShell-owned pipe, with a unit control that keeps direct Node input on Linux. The exact post-fix native-Windows Node 20 two-file CI command passed 33 of 33 tests with no skips, including the configured replay. Evidence anchors: `src/cli/hooks-runtime-evidence.ts` (search: `managedConfiguredProbeTransport`) and `test/unit/hooks-runtime-evidence.test.ts` (search: `pipes Windows configured payloads outside Node`).
 
 ---
 

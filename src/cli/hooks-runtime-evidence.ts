@@ -56,6 +56,7 @@ const MANAGED_CONFIGURED_PROBE_TIMEOUT_MS =
   managedHookTimeoutSeconds === undefined
     ? PROBE_TIMEOUT_MS
     : managedHookTimeoutSeconds * 1000;
+const CONFIGURED_PROBE_PAYLOAD_ENVIRONMENT_NAME = "GOAT_HOOK_SMOKE_PAYLOAD";
 
 /** One fixed classifier input; `command` is never copied into reports or events. */
 export interface HookProbeScenario {
@@ -284,6 +285,80 @@ function configuredDenyHookPayload(
   });
 }
 
+/** Process inputs for one configured-hook replay, including who owns its standard-input stream. */
+export interface ManagedConfiguredProbeTransport {
+  command: string;
+  args: string[];
+  environment: NodeJS.ProcessEnv;
+  input?: string;
+  stdin: "ignore" | "pipe";
+}
+
+/** Quote one fixed argument so an outer PowerShell process passes its bytes to the registered command. */
+function quotePowerShellLiteral(argumentValue: string): string {
+  return `'${argumentValue.replaceAll("'", "''")}'`;
+}
+
+/**
+ * Select the standard-input owner for one exact configured-handler replay.
+ * Windows shell handlers receive the fixed payload from PowerShell because Node-owned synchronous input can stall across the nested launcher chain.
+ * Other handlers retain direct Node input and their current-platform executable tuple.
+ *
+ * @param projectPath - selected checkout used for the scrubbed child environment
+ * @param configuredHandler - exact managed handler whose current-platform command must run
+ * @param payload - fixed provider-shaped policy input; never user-authored content
+ * @param hostEnvironment - host variables filtered before the configured command starts
+ * @param platform - host platform selecting the Windows-only pipe transport
+ * @returns executable, argv, environment, and standard-input ownership for one bounded spawn
+ */
+export function managedConfiguredProbeTransport(
+  projectPath: string,
+  configuredHandler: AgentHookHandlerDescriptor,
+  payload: string,
+  hostEnvironment: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform,
+): ManagedConfiguredProbeTransport {
+  const probe = agentHookSpawnDescriptor(configuredHandler, platform);
+  const environment = managedHookEnvironment(
+    projectPath,
+    hostEnvironment,
+    platform,
+  );
+  if (
+    platform !== "win32" ||
+    configuredHandler.form !== "shell" ||
+    configuredHandler.commandWindows === undefined
+  ) {
+    return {
+      ...probe,
+      environment,
+      input: payload,
+      stdin: "pipe",
+    };
+  }
+
+  const registeredCommand = [
+    `$env:${CONFIGURED_PROBE_PAYLOAD_ENVIRONMENT_NAME} | &`,
+    quotePowerShellLiteral(probe.command),
+    ...probe.args.map(quotePowerShellLiteral),
+  ].join(" ");
+  const pipeCommand = [
+    "$global:LASTEXITCODE = $null",
+    registeredCommand,
+    "if ($null -eq $LASTEXITCODE) { exit 1 }",
+    "exit $LASTEXITCODE",
+  ].join("; ");
+  return {
+    command: probe.command,
+    args: [...probe.args.slice(0, -1), pipeCommand],
+    environment: {
+      ...environment,
+      [CONFIGURED_PROBE_PAYLOAD_ENVIRONMENT_NAME]: payload,
+    },
+    stdin: "ignore",
+  };
+}
+
 /**
  * Replay one inert policy input through the exact handler setup the user registered.
  * It spawns that registered launcher, so verification proves the same path the user's agent takes rather than an equivalent one.
@@ -301,15 +376,20 @@ function executeManagedConfiguredHookProbe(
   scenario: HookProbeScenario,
 ): HookProbeExecution {
   const startedAt = performance.now();
-  const probe = agentHookSpawnDescriptor(configuredHandler);
+  const probe = managedConfiguredProbeTransport(
+    projectPath,
+    configuredHandler,
+    configuredDenyHookPayload(agent, scenario),
+  );
   const execution = spawnSync(probe.command, probe.args, {
     cwd: projectPath,
     encoding: "utf-8",
-    env: managedHookEnvironment(projectPath),
-    input: configuredDenyHookPayload(agent, scenario),
+    env: probe.environment,
     shell: false,
+    stdio: [probe.stdin, "pipe", "pipe"],
     timeout: MANAGED_CONFIGURED_PROBE_TIMEOUT_MS,
     maxBuffer: PROBE_OUTPUT_CAP_BYTES,
+    ...(probe.input === undefined ? {} : { input: probe.input }),
   });
   return {
     exitCode: execution.status,

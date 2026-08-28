@@ -2,36 +2,38 @@
 
 ## Unreleased
 
-The next release adds path-aware learning, project-wide install evidence, full hook-group verification, stricter plan authoring, and guarded durable writes.
+## v1.17.0 - 2026-08-29
 
-- **BREAKING: audits require an explicit command** - Replace `goat-flow <path>` with `goat-flow audit <path>`; bare `goat-flow` opens the menu, and unknown commands exit `2`. The old fallback treated misspelled commands as project paths.
-- **BREAKING: `redact --output` is create-only** - Use a fresh project-local path for every run; existing files, linked parents, and paths outside the project are refused. Overwrite compatibility was removed to keep durable evidence inside its selected project.
-- **BREAKING: current quality reports require a refutation ledger** - Add `"refuted_candidates":[]` before `quality save`; historical reports remain readable through `validate`, `history`, and `diff`. New saves require the ledger so excluded findings stay auditable.
-- **BREAKING: managed install state is project-wide** - Clean `.goat-flow/install-state/<agent>.json` baselines migrate to `.goat-flow/install-state/managed.json`; repair conflicts named by `goat-flow status . --format json`. One path-keyed project baseline replaces divergent per-agent authority.
-- **BREAKING: direct Bash installs stop after state cutover** - Replace `workflow/install-goat-flow.sh` with `goat-flow install <path> --agent <id>` once `managed.json` or a cutover marker exists. The script refuses before writes because it cannot verify or record managed state.
-- **BREAKING: writing playbook paths changed** - Replace `writing-style.md` with `writing-human-facing-prose.md`; use `writing-agent-facing-instructions.md` for agent controls. Install removes the retired path so stale routing cannot survive an upgrade.
-- **BREAKING: strict plan lifecycle checks match recorded work** - Blocked and abandoned milestones need one `Status reason:`; remove it for every other status and reconcile `Status` with tasks, proof, and `Actual`. Exports retain the redacted current reason; default checks remain legacy-compatible.
-- **BREAKING: strict multi-milestone plans use a validated graph** - Use `M<digits>` filenames and titles, exact local `Depends on` IDs, resolved acyclic dependencies, completed prerequisites, and at most one active milestone. Default checks retain the compatibility path.
-- **BREAKING: strict plan summaries are reader-facing** - `What problem are we solving` and `Who benefits and how` must each be one 70–120-character sentence with no milestone ID, ADR number, version, flag, or internal path. Legacy headings remain advisory because `--strict` is the current-authoring gate.
-- **Command help is contextual** - `goat-flow <command> --help` shows that command's usage, subcommands, flags, and examples without running it.
-- **Learning-loop recall is path-aware** - `goat-flow recall <path> [path...]` lists active entries citing those files or directories.
-- **Learning entries get a guarded scaffold** - `goat-flow learn new` validates one requested entry, previews with `--dry-run`, and refreshes indexes.
-- **Learning indexes show age and cost** - Rows show declared dates and token estimates; `stats` lists recurring entries for structural enforcement.
-- **Quality prompts reuse relevant project evidence** - Failed audit checks select bounded learning context; prior refutations stay out of findings.
-- **Managed installs coordinate concurrent writers** - Competing runs stop before writes; `status` explains stale or conflicting evidence.
-- **Installer dependencies fail before project writes** - Missing `js-yaml` names the package root and gives the `npm install` or reinstall repair.
-- **Dashboard state survives interrupted writes** - Project identity, registry, and active-plan selections use atomic replacement.
-- **Claude and Copilot hooks no longer collide** - Claude uses argv-safe handlers; Copilot ignores cross-loaded rows and runs native hooks.
-- **Codex hooks start from Windows paths** - `commandWindows` preserves cwd; a 2026-08-27 Codex CLI 0.149.1 capture recorded PostToolUse delivery, with fixed-scenario proof pending and Stop evidence stale. After upgrading 1.16.0, run `goat-flow hooks sync .` and restart Codex.
-- **Hook verification can run every scenario group** - `goat-flow hooks verify <path> --agent <id> --scenario all --trusted-target` keeps every verdict and exits `1` unless all groups pass. JSON uses `goat-flow.hook-runtime-batch.v1`.
-- **Non-Git hook omissions are actionable** - Install and sync name the hook, why no safe post-turn scan root exists, and how to configure one.
-- **Deny hooks respect shell syntax** - Quoted arrows and escapes stay usable; background commands and direct lockfile redirects are blocked.
-- **Deny hooks block downstream shell `eval`** - Every executable pipeline stage is checked; `yq eval` and quoted evidence remain usable.
-- **Gruff finds project wrappers again** - `gruff-<language>.sh` in `bin/test/`, `bin/`, or `scripts/` retains project config, paths, and reports.
-- **`/goat-plan` keeps plans connected** - New milestones link through the prior terminal milestone; `ISSUE.md` bands and totals are recalculated.
+1.17.0 adds per-command `--help`, path-aware learning recall, one project-wide install baseline, whole-suite hook verification, and stricter `--strict` plan checks, and it untangles Claude and Copilot hook registrations.
+
+- **BREAKING: audits need the `audit` command** - Replace `goat-flow <path>` with `goat-flow audit <path>`. Bare `goat-flow` opens the menu, and a misspelled command now exits `2` instead of auditing a path of that name.
+- **BREAKING: `writing-style.md` is removed** - Install deletes it, so instruction files written by 1.16.0 setup point at a missing playbook; change them to `writing-human-facing-prose.md` (human prose) or `writing-agent-facing-instructions.md` (agent controls).
+- **BREAKING: `plans check --strict` matches status to recorded work** - Blocked and abandoned milestones need one `Status reason:` line, every other status must have none, and `Status` must agree with tasks, proof, and `Actual`. `/goat-plan` runs this check, so fix in-flight plans first; exports keep the redacted reason, and default checks are unchanged.
+- **BREAKING: `plans check --strict` validates the milestone graph** - Use `M<digits>` filenames and titles, exact local `Depends on` IDs, an acyclic graph whose prerequisites are complete, and at most one active milestone.
+- **BREAKING: `plans check --strict` requires plain summaries** - `What problem are we solving` and `Who benefits and how` must each be one 70–120-character sentence with no milestone ID, ADR number, version, flag, or internal path; legacy headings remain advisory.
+- **BREAKING: `quality save` requires a refutation ledger** - Add `"refuted_candidates":[]` to a report before saving it. The shipped quality prompt already emits the field, and older saved reports still open in `validate`, `history`, and `diff`.
+- **BREAKING: install state is one project-wide file** - The first 1.17.0 install moves clean `.goat-flow/install-state/<agent>.json` baselines into `.goat-flow/install-state/managed.json`. If the per-agent files disagree, install stops and `goat-flow status . --format json` names the paths to repair.
+- **BREAKING: `redact --output` never overwrites** - Give each run a fresh project-local path; an existing file, a linked parent directory, or a path outside the project is refused.
+- **BREAKING: `workflow/install-goat-flow.sh` refuses managed projects** - Once `managed.json` or a cutover marker exists, the script exits before writing and prints the `goat-flow install <path> --agent <id>` command to run instead.
+- **Every command has its own `--help`** - `goat-flow <command> --help` shows that command's usage, subcommands, flags, and examples without running it.
+- **`recall` finds learning entries by file** - `goat-flow recall <path> [path...]` lists active entries whose evidence cites those files or directories.
+- **`learn new` scaffolds one guarded entry** - `goat-flow learn new` validates the requested entry, previews it with `--dry-run`, and refreshes the indexes.
+- **Learning indexes show age and token cost** - Index rows carry declared dates and token estimates; `stats` lists recurring entries for structural enforcement.
+- **Claude and Copilot hooks no longer collide** - Claude uses argv-safe handlers, and Copilot ignores cross-loaded rows and runs its native hooks.
+- **Codex hooks start from Windows paths** - After upgrading from 1.16.0, run `goat-flow hooks sync .` and restart Codex; `commandWindows` keeps the working directory. A 2026-08-27 Codex CLI 0.149.1 capture recorded PostToolUse delivery; fixed-scenario proof is pending and Stop evidence is stale.
+- **`hooks verify --scenario all` runs every scenario group** - `goat-flow hooks verify <path> --agent <id> --scenario all --trusted-target` keeps every verdict and exits `1` unless all groups pass; JSON uses `goat-flow.hook-runtime-batch.v1`.
+- **Competing installs stop before writing** - Concurrent install runs halt before touching the project, and `status` explains stale or conflicting evidence.
+- **Missing installer dependencies fail before any project write** - A missing `js-yaml` names the goat-flow package root and the `npm install` or reinstall that repairs it.
+- **Skipped hooks in non-Git workspaces say why** - Install and sync name the hook, why no safe post-turn scan root exists, and how to configure one.
+- **Deny hooks follow shell syntax** - Quoted arrows and escapes stay usable; background commands and direct lockfile redirects are blocked.
+- **Deny hooks catch downstream shell `eval`** - Every executable pipeline stage is checked; `yq eval` and quoted evidence remain usable.
+- **Gruff finds project wrappers again** - `gruff-<language>.sh` in `bin/test/`, `bin/`, or `scripts/` keeps the project's config, paths, and reports.
+- **Quality prompts reuse relevant project evidence** - Failed audit checks pull in bounded learning context, and previously refuted candidates stay out of findings.
+- **`/goat-plan` keeps plans connected** - New milestones link through the prior terminal milestone, and `ISSUE.md` bands and totals are recalculated.
 - **Milestone work follows one agent contract** - Start timing before source edits, pause at gates, finalize at exit, and run `goat-clarity` once.
-- **Content audits catch semantic drift** - `--check-content` compares documented states, limits, routes, and inventories with shipped sources.
-- **Skill qualification is model-scoped** - Retirement needs repeated provider/model/config ablations; retained cases guard against reintroduction.
+- **`audit --check-content` catches semantic drift** - It compares documented states, limits, routes, and inventories with the shipped sources.
+- **Dashboard state survives interrupted writes** - Project identity, registry, and active-plan selections are replaced atomically, so an interrupted write cannot leave a half-written file.
+- **Skill qualification is model-scoped** - Retirement needs repeated provider/model/config ablations, and retained cases guard against reintroduction.
 
 ## v1.16.0 - 2026-08-20
 

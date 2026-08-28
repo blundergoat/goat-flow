@@ -35,6 +35,7 @@ import {
   renderHookRuntimeBatchReportJson,
   renderHookRuntimeReportJson,
   renderHookRuntimeReportText,
+  managedConfiguredProbeTransport,
   summarizeHookRuntimeBatch,
   verifyManagedDenyHook,
   type HookProbeExecution,
@@ -123,6 +124,65 @@ describe("hooks runtime evidence", () => {
     );
     assert.equal(environment.TMPDIR, environment.TEMP);
     assert.equal(environment.SECRET_TOKEN, undefined);
+  });
+
+  it("pipes Windows configured payloads outside Node while preserving the registered handler", () => {
+    const payload =
+      '{"tool_name":"Bash","tool_input":{"command":"git status"}}';
+    const commandWindows =
+      "Set-Location -LiteralPath 'C:\\goat''s flow'; & node.exe -e 'fixture'; exit $LASTEXITCODE";
+    const configuredHandler = {
+      form: "shell" as const,
+      command: 'node -e "fixture"',
+      commandWindows,
+    };
+    const hostEnvironment = {
+      PATH: "C:\\Windows\\System32",
+      SystemRoot: "C:\\Windows",
+      SECRET_TOKEN: "must-not-leak",
+    };
+
+    const windowsTransport = managedConfiguredProbeTransport(
+      "C:\\fixture",
+      configuredHandler,
+      payload,
+      hostEnvironment,
+      "win32",
+    );
+    const windowsPipeCommand = windowsTransport.args.at(-1) ?? "";
+
+    assert.equal(windowsTransport.command, "powershell.exe");
+    assert.deepEqual(windowsTransport.args.slice(0, 3), [
+      "-NoProfile",
+      "-NonInteractive",
+      "-Command",
+    ]);
+    assert.equal(windowsTransport.stdin, "ignore");
+    assert.equal(windowsTransport.input, undefined);
+    assert.equal(windowsTransport.environment.GOAT_HOOK_SMOKE_PAYLOAD, payload);
+    assert.equal(windowsTransport.environment.SECRET_TOKEN, undefined);
+    assert.match(
+      windowsPipeCommand,
+      /\$env:GOAT_HOOK_SMOKE_PAYLOAD \| & 'powershell\.exe'/u,
+    );
+    assert.ok(
+      windowsPipeCommand.includes(`'${commandWindows.replaceAll("'", "''")}'`),
+      "the inner PowerShell receives the exact registered commandWindows bytes",
+    );
+    assert.match(windowsPipeCommand, /exit \$LASTEXITCODE$/u);
+
+    const posixTransport = managedConfiguredProbeTransport(
+      "/fixture",
+      configuredHandler,
+      payload,
+      { PATH: "/usr/bin:/bin" },
+      "linux",
+    );
+    assert.equal(posixTransport.command, "bash");
+    assert.deepEqual(posixTransport.args, ["-c", configuredHandler.command]);
+    assert.equal(posixTransport.stdin, "pipe");
+    assert.equal(posixTransport.input, payload);
+    assert.equal(posixTransport.environment.GOAT_HOOK_SMOKE_PAYLOAD, undefined);
   });
 
   for (const [flag, field] of [
