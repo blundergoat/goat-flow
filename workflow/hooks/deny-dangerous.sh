@@ -1687,7 +1687,12 @@ normalize_command_candidate() {
 
   while true; do
     c="${c#"${c%%[![:space:]]*}"}"
-    c=$(normalize_leading_command_word "$c")
+    word="${c%%[[:space:]]*}"
+    # Plain command words are already normalized. Quotes and backslashes are
+    # the only syntax this helper removes, so keep ordinary commands in-process.
+    if [[ "$word" == *\'* || "$word" == *\"* || "$word" == *\\* ]]; then
+      c=$(normalize_leading_command_word "$c")
+    fi
 
     if [[ "$c" == \(* ]]; then
       c="${c#\(}"
@@ -1823,7 +1828,8 @@ normalize_command_candidate() {
         fi
         ;;
     esac
-    if stripped=$(strip_one_assignment_prefix "$c"); then
+    # The parser cannot strip anything unless the command starts with an assignment.
+    if [[ "$c" =~ ^[a-zA-Z_][a-zA-Z0-9_]*= ]] && stripped=$(strip_one_assignment_prefix "$c"); then
       c="$stripped"
       continue
     fi
@@ -2086,7 +2092,12 @@ prepare_segment_context() {
   local saved_cmd_trimmed saved_cmd_normalized saved_cmd_verb saved_cmd_unquoted saved_cmd_lower
   local saved_has_redirect saved_has_pipe
 
-  policy_cmd=$(strip_unquoted_shell_comments "$cmd")
+  if [[ "$cmd" == *"#"* ]]; then
+    policy_cmd=$(strip_unquoted_shell_comments "$cmd")
+  else
+    # Match the comment parser's trailing trim without spawning its character scan.
+    policy_cmd="${cmd%"${cmd##*[![:space:]]}"}"
+  fi
   check_command_substitutions "$policy_cmd" "$depth" || return $?
 
   CMD_TRIMMED="${policy_cmd#"${policy_cmd%%[![:space:]]*}"}"
@@ -2314,7 +2325,12 @@ main() {
     allow
   fi
 
-  command_policy="$(mask_safe_quoted_heredoc_bodies "$command")"
+  if [[ "$command" == *"<<"* || "$command" == *$'\n'* ]]; then
+    command_policy="$(mask_safe_quoted_heredoc_bodies "$command")"
+  else
+    # A single-line command without a heredoc opener cannot contain a body to mask.
+    command_policy="$command"
+  fi
 
   # Keep the parser's ordinary 16KB ceiling. The quality prompt is the sole
   # larger transport: a quoted body consumed as data may reach 256KB only when
@@ -2342,7 +2358,9 @@ main() {
   # policy-parser DoS (~10s at 300). This flat O(len) count bounds the work;
   # real commands use a handful, so pathological input blocks ("run it manually").
   local _goat_subst_n=0
-  _goat_subst_n="$(count_substitution_openers "$command_policy")"
+  if [[ "$command_policy" == *'$('* || "$command_policy" == *'<('* || "$command_policy" == *'>('* ]]; then
+    _goat_subst_n="$(count_substitution_openers "$command_policy")"
+  fi
   if (( _goat_subst_n > 32 )); then
     block "Command has too many command substitutions; review and run manually if intended."
   fi

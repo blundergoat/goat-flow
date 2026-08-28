@@ -265,19 +265,26 @@ key_material_path_touch() {
 # Decide whether text names a protected credential file or directory.
 # Use for direct operands after command-specific parsers reveal their file meaning.
 is_secret_path_touch() {
-  local c windows_path_view
-  c=$(strip_shell_quotes_for_path_scan "$1")
-  windows_path_view=$(windows_path_scan_view "$1")
+  local input="$1"
+  local c="$input"
+  local windows_path_view=""
+  if [[ "$input" == *\'* || "$input" == *\"* || "$input" == *\\* ]]; then
+    c=$(strip_shell_quotes_for_path_scan "$input")
+  fi
+  # Only backslash-rooted Windows operands need the secondary slash-normalized view.
+  if [[ "$input" == *\\* ]]; then
+    windows_path_view=$(windows_path_scan_view "$input")
+  fi
   if [[ -n "$windows_path_view" ]]; then
     c+=" $windows_path_view"
   fi
-  # Fast path: only spawn sed if .env.example is even mentioned. The sed below
+  # Fast path: only spawn sed if the allowed .env.example spelling is mentioned. The sed below
   # masks .env.example so the subsequent .env regex doesn't false-match.
   # Drive-relative operands such as `C:.env` are deliberately not masked here: Windows resolves
   # them against the current directory on that drive, so they address the checkout's own
   # credential file. Only the `.env.example` spelling is exempt, on any drive.
   local env_scan="$c"
-  if [[ "$c" == *.env* ]]; then
+  if [[ "$c" == *.env.example* ]]; then
     # shellcheck disable=SC2001  # multi-pattern ERE with capture groups
     env_scan=$(sed -E \
       "s#(^|[[:space:]=:/'\"])\\.env\\.example([[:space:]]|$|['\"])#\\1__goat_env_example__\\2#g; s#(>|>>|>\\|)[[:space:]]*(['\"]?)\\.env\\.example([[:space:]]|$|['\"])#\\1\\2__goat_env_example__\\3#g" \
@@ -655,11 +662,16 @@ check_secret_segment() {
   # Curl needs option-aware file parsing before the generic path scanner runs.
   if [[ "$CMD_VERB" == "curl" ]] && curl_file_operands_touch_secret "$cmd"; then
     touches_secret=1
-  elif search_candidate=$(secret_search_command_candidate "$cmd"); then
+  # Ordered-letter globs are deliberate supersets: shell quotes or escapes can
+  # split the visible grep/log spelling, but cannot remove those ordered letters.
+  elif { is_search_command_verb "$CMD_VERB" ||
+          [[ "$CMD_VERB" == "git" && "$CMD_NORMALIZED" == *g*r*e*p* ]]; } &&
+       search_candidate=$(secret_search_command_candidate "$cmd"); then
     if search_file_operands_touch_secret "$search_candidate"; then
       touches_secret=1
     fi
-  elif [[ "$CMD_VERB" == "git" ]] && git_log_candidate=$(git_log_candidate_without_search_values "$cmd"); then
+  elif [[ "$CMD_VERB" == "git" && "$CMD_NORMALIZED" == *l*o*g* ]] &&
+       git_log_candidate=$(git_log_candidate_without_search_values "$cmd"); then
     if is_secret_path_touch "$git_log_candidate"; then
       touches_secret=1
     fi

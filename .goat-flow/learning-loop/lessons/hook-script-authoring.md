@@ -1,6 +1,6 @@
 ---
 category: hook-script-authoring
-last_reviewed: 2026-08-16
+last_reviewed: 2026-08-28
 ---
 
 **Scope:** The generated hook script and its helpers as code - ShellCheck on generated bodies, regex placement, template delimiters, helper dependencies, and PATH assumptions. Driving a hook with payloads is [hook-probe-testing.md](hook-probe-testing.md); coverage strategy is [hook-testing.md](hook-testing.md).
@@ -8,12 +8,16 @@ last_reviewed: 2026-08-16
 ## Lesson: Bash case patterns need syntax proof for template delimiters
 
 **Status:** active | **Created:** 2026-06-19
+**Decision changed:** Treat Bash glob literals as shell syntax, not inert pattern text; run both parser and static-analysis checks before copying a hook edit into its mirrors.
+**Incident count:** 2 | **Latest occurrence:** 2026-08-28
+
+**Prevention:** Use parser-safe spellings for glob metacharacters, then run `bash -n` and the repository's exact ShellCheck command before mirror fanout or behavior tests. Evidence anchors: `workflow/hooks/post-turn-safety.sh` (search: `is_reference_or_interpolation`), `workflow/hooks/deny-dangerous.sh` (search: `Plain command words are already normalized`), and `workflow/hooks/deny-dangerous/patterns-paths.sh` (search: `Only backslash-rooted Windows operands`).
 
 **What happened:** While adding `post-turn-safety` false-positive coverage for Twig/Jinja/ERB interpolation delimiters, the first Bash `case` pattern used unescaped `<`, `>`, `{`, and `}` tokens. The focused runtime tests then failed before scanner logic ran with `syntax error near unexpected token '<'`, and ShellCheck flagged the brace literals after the parse error was fixed.
 
-**Root cause:** I treated delimiter strings as inert glob text inside a Bash `case` arm. In shell syntax, redirection-looking characters and brace literals still need quoting or escaping for a clean parser/static-analysis pass, even when the surrounding intent is just pattern matching.
+**Recurrence 2026-08-28:** While reducing deny-hook process creation, I used `*'\'*` to detect a backslash inside `[[ ... ]]`. Bash accepted the expression, but the repository ShellCheck command raised SC1003 in the workflow and installed mirrors. Replacing it with the shell-native `*\\*` spelling preserved the predicate and passed static analysis before the policy corpus ran.
 
-**Prevention:** For hook scanner changes that add template or shell delimiter patterns, run `bash -n` and ShellCheck before trusting behavior tests, and escape delimiter metacharacters in `case` arms. Evidence anchors: `workflow/hooks/post-turn-safety.sh` (search: `is_reference_or_interpolation`) and `test/integration/post-turn-safety-hook.test.ts` (search: `template interpolations`).
+**Root cause:** I treated delimiter and backslash text as inert glob data. Bash parsing and ShellCheck both interpret the spelling, so a pattern can be parse-clean while still violating the repository's static-analysis contract.
 
 ## Lesson: Generated hook templates need template-safe ShellCheck annotations
 
