@@ -1,6 +1,6 @@
 ---
 category: verification-gruff
-last_reviewed: 2026-08-28
+last_reviewed: 2026-08-29
 ---
 
 **Scope:** The Gruff analyzer specifically - comment rules, doc-comment complexity, binary discovery, and baseline handling. Other repo-wide gates are [verification-preflight.md](verification-preflight.md).
@@ -137,3 +137,18 @@ last_reviewed: 2026-08-28
 **Root cause:** I treated comment prose as local text. The learning loop cites source comments as evidence anchors, so the comment is a cross-file contract and the audit enforces it.
 
 **Prevention:** When a docs pass rewords an existing comment, keep the cited substring intact and add the analyzer vocabulary in a second sentence rather than editing the first. Run `stats --check` (or the harness audit) after any batch that rewrites existing comments, not only the targeted Gruff rerun. Evidence anchors: `test/integration/audit-drift.helpers.ts` (search: `Write canonical skill stubs`), `.goat-flow/learning-loop/lessons/verification-gruff.md` (search: `Gruff side-effect comments must name the side effect`).
+
+---
+
+## Lesson: Probe an analyzer rule's real trigger before fixing findings against your model of it
+
+**Status:** active | **Created:** 2026-08-29
+**Decision changed:** Before editing source to clear an analyzer finding, build a two-case isolated probe - one that should fire and one that should not - and confirm the rule behaves as you believe. Read the finding's own wording as a hypothesis, never as the mechanism.
+**Trigger phase:** VERIFY
+**Caught at:** VERIFY
+
+**What happened:** Triaging 18 `test-quality.loop-in-test` findings, I read the rule description ("loops whose assertions do not identify the failing item") and classified each finding by hand: 13 whose assertions already interpolated the loop variable were called false positives, 5 with missing or incomplete messages were called real. I edited those 5 to add identifying messages across `test/contract/test-selection-playbook-doctrine.test.ts`, `test/unit/dashboard-hooks-view.test.ts`, `test/unit/manifest.test.ts`, `test/unit/playbook-contract.test.ts`, and `test/integration/setup-install-agent-matrix.test.ts`. The rerun still reported 18 - not one cleared. An isolated probe then showed the real trigger: the rule only reads the message when the assertion call sits on a single line, so every prettier-wrapped assertion looks message-less regardless of content. A second probe found a related miss - a message built from a loop-derived local is not credited either.
+
+**Root cause:** I inferred the mechanism from the finding's prose and my own idea of what the rule ought to check, then spent five edits on that model. The prose described the rule's intent; the implementation keyed on line shape. Hand-classifying 18 findings produced a confident split that measurement contradicted.
+
+**Prevention:** For any rule whose findings you intend to fix in bulk, first write a probe file holding one compliant and one non-compliant case, run the analyzer on it, and confirm both directions before touching real source. Two probes cost under a minute and would have redirected all five edits. Keep edits that stand on their own merits when the probe invalidates the model - the added assertion messages are still correct diagnosability improvements - but report that the finding count did not move and say why. Evidence anchors: `.goat-flow/learning-loop/lessons/verification-gruff.md` (search: `Probe an analyzer rule's real trigger`), `test/unit/playbook-contract.test.ts` (search: `incomplete scope, missing`).
