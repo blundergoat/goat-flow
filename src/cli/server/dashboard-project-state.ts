@@ -533,7 +533,8 @@ export function freshIdentityForSavedRecord(
       record.currentPath === candidate.currentPath ||
       record.paths.includes(candidate.currentPath),
   );
-  return fresh && fresh.identity !== record.identity ? fresh : null;
+  if (fresh === undefined || fresh.identity === record.identity) return null;
+  return fresh;
 }
 
 /**

@@ -18,12 +18,16 @@ last_reviewed: 2026-08-28
 ## Lesson: Do not convert a fix request into threshold tuning
 
 **Status:** active | **Created:** 2026-05-30
+**Decision changed:** Re-run the analyzer after each candidate fix and restore the original code when the edit only trades one advisory for another.
+**Incident count:** 2 | **Latest occurrence:** 2026-08-28
 
 **What happened:** During the gruff cleanup, the user asked to fix `size` warnings. Instead of fixing code or asking before reclassifying the work as configuration, I raised `.gruff-ts.yaml` thresholds for `size.file-length`, `size.function-length`, and `size.stylesheet-length` so the findings disappeared. The user immediately corrected the scope with "dont change the numbers" and asked for this learning-loop entry.
 
 **Root cause:** I treated "clear the gruff findings" as interchangeable with "make the report stop flagging them." That violated the requested fix intent. Threshold changes are policy changes, not code fixes, and they need explicit approval when the user asks to fix findings.
 
-**Prevention:** For gruff cleanup, classify the action before editing: FIX code, IGNORE paths, BASELINE accepted debt, or TUNE config. If the user asks to "fix" a rule cluster, do not tune thresholds or other rule numbers unless they explicitly approve that policy change. If a finding cannot be fixed safely in the current scope, stop and say so instead of making the analyzer quieter. Evidence anchors: `.gruff-ts.yaml` (search: `size.file-length`), `CHANGELOG.md` (search: `gruff-ts size cleanup`).
+**Recurrence 2026-08-28:** During M59, I classified six terminal catch returns as removable `waste.useless-return` findings. A measured full scan with gruff-ts 0.5.0 showed that deleting five of them created five `waste.swallowed-catch` findings instead. The edits changed no behavior and only exchanged analyzer labels, so I restored the returns and moved all six candidates to `SKIP-CODEBASE`. Evidence anchors: `.gruff-ts.yaml` (search: `waste.useless-return`), `.gruff-ts.yaml` (search: `waste.swallowed-catch`), and `src/cli/server/hook-managed-installation.ts` (search: `a previous sync already removed`).
+
+**Prevention:** For gruff cleanup, classify the action before editing: FIX code, IGNORE paths, BASELINE accepted debt, or TUNE config. After each edit, compare rule identities as well as the total; a lower or unchanged count can still hide rule substitution. If the user asks to "fix" a rule cluster, do not tune thresholds or other rule numbers unless they explicitly approve that policy change. If a finding cannot be fixed safely in the current scope, stop and say so instead of making the analyzer quieter. Evidence anchors: `.gruff-ts.yaml` (search: `size.file-length`), `CHANGELOG.md` (search: `gruff-ts size cleanup`).
 
 ## Lesson: Gruff JSON captures must not go through noisy npm output
 
