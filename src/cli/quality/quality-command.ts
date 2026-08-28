@@ -21,6 +21,7 @@ import {
   realpathSync,
   statSync,
   type Stats,
+  unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { basename, join, resolve } from "node:path";
@@ -52,11 +53,12 @@ export interface QualityCommandDeps {
 
 /**
  * Dependencies needed by the one CLI/dashboard report persistence path.
- * Production uses the real directory creator; tests can reproduce two users saving at once.
+ * Contract: production uses real filesystem operations; optional callbacks reproduce the same allocation and write boundaries.
  */
 interface QualityPersistenceDeps extends Pick<QualityCommandDeps, "CLIError"> {
   createReportDirectory?: (directoryPath: string) => void;
   openReportFile?: (reportPath: string) => number;
+  writeReportFile?: (reportDescriptor: number, report: string) => void;
 }
 
 /**
@@ -540,13 +542,82 @@ function assertAllocatedQualityReport(
   }
 }
 
-/** Zero and close a rejected allocation so a post-write identity failure cannot leave report bytes behind. */
-function discardRejectedQualityReport(reportDescriptor: number): void {
+/** Whether two snapshots still identify the same single-link regular report allocation. */
+function qualityReportSnapshotsMatch(left: Stats, right: Stats): boolean {
+  return (
+    left.isFile() &&
+    right.isFile() &&
+    left.nlink === 1 &&
+    right.nlink === 1 &&
+    left.dev === right.dev &&
+    left.ino === right.ino &&
+    left.ctimeMs === right.ctimeMs &&
+    left.size === right.size
+  );
+}
+
+/**
+ * Read an identity-bound rejected allocation only while its directory chain remains local.
+ * Swallows filesystem and safety errors as a null fallback when ancestry or identity cannot be proven.
+ */
+function readRejectedQualityReportSnapshot(
+  projectRoot: string,
+  reportPath: string,
+  reportDescriptor: number,
+  deps: QualityPersistenceDeps,
+): Stats | null {
+  try {
+    assertCurrentQualitySaveDirectories(
+      qualitySaveDirectoryComponents(projectRoot),
+      deps,
+    );
+    const descriptorStats = fstatSync(reportDescriptor);
+    const pathStats = lstatSync(reportPath);
+    return qualityReportSnapshotsMatch(descriptorStats, pathStats)
+      ? pathStats
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Zero, close, and owner-safely unlink a rejected project-local allocation.
+ * Throws on truncation, close, or unlink failures, but preserves unsafe or changed paths for inspection.
+ */
+function discardRejectedQualityReport(
+  projectRoot: string,
+  reportPath: string,
+  reportDescriptor: number,
+  deps: QualityPersistenceDeps,
+): void {
+  let ownedSnapshot: Stats | null = null;
   try {
     ftruncateSync(reportDescriptor, 0);
     fsyncSync(reportDescriptor);
+    ownedSnapshot = readRejectedQualityReportSnapshot(
+      projectRoot,
+      reportPath,
+      reportDescriptor,
+      deps,
+    );
   } finally {
     closeSync(reportDescriptor);
+  }
+  // An unsafe or redirected path is left empty for explicit inspection rather than unlinking outside the selected project.
+  if (ownedSnapshot === null) return;
+  try {
+    assertCurrentQualitySaveDirectories(
+      qualitySaveDirectoryComponents(projectRoot),
+      deps,
+    );
+    const currentSnapshot = lstatSync(reportPath);
+    if (!qualityReportSnapshotsMatch(currentSnapshot, ownedSnapshot)) return;
+    unlinkSync(reportPath);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+    if (error instanceof deps.CLIError) return;
+    throw error;
   }
 }
 
@@ -596,7 +667,12 @@ function writeQualityReport(
         0,
         deps,
       );
-      writeFileSync(reportDescriptor, serializedReport, { encoding: "utf8" });
+      const writeReportFile =
+        deps.writeReportFile ??
+        ((descriptor: number, report: string) => {
+          writeFileSync(descriptor, report, { encoding: "utf8" });
+        });
+      writeReportFile(reportDescriptor, serializedReport);
       fsyncSync(reportDescriptor);
       assertAllocatedQualityReport(
         projectRoot,
@@ -610,7 +686,12 @@ function writeQualityReport(
     } catch (error) {
       if (reportDescriptor !== null) {
         try {
-          discardRejectedQualityReport(reportDescriptor);
+          discardRejectedQualityReport(
+            projectRoot,
+            reportPath,
+            reportDescriptor,
+            deps,
+          );
         } catch {
           throw new deps.CLIError(
             "quality save: could not discard a rejected report allocation.",

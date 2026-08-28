@@ -26,6 +26,7 @@ import {
   type ManagedSetupPreview,
 } from "./managed-setup-preview.js";
 import { managedSetupAdmissionFailure } from "./managed-setup-admission.js";
+import { quoteManagedInstallProjectArgument } from "./managed-install-evidence.js";
 import type { ManagedSetupAuthority } from "./managed-setup-authority.js";
 import { readManagedTargetEvidence } from "./managed-setup-write-set.js";
 import {
@@ -791,7 +792,7 @@ function managedInstallStateRecovery(
   agent: AgentId,
 ): CLIError {
   return new CLIError(
-    `Managed files were verified, but install state was not recorded. The previous managed baseline is intact and no confirmed receipt was written. Repair write access to .goat-flow/install-state/, then rerun: goat-flow install ${projectPath} --agent ${agent}`,
+    `Managed files were verified, but install state was not recorded. The previous managed baseline is intact and no confirmed receipt was written. Repair write access to .goat-flow/install-state/, then rerun: goat-flow install ${quoteManagedInstallProjectArgument(projectPath)} --agent ${agent}`,
     1,
   );
 }

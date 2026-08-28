@@ -46,10 +46,18 @@ import { collectFootgunStructureDiagnostics } from "./facts/shared/learning-loop
 import { evaluateSearchAnchors } from "./facts/shared/search-anchors.js";
 import { generateIndexes } from "./learning-loop-index/generate.js";
 import {
+  INDEX_BUCKETS,
   parseActiveBucketSections,
   resolveIndexBucketPaths,
   type IndexBucket,
 } from "./learning-loop-index/parse-bucket.js";
+import {
+  acquirePathWriteClaims,
+  PathWriteClaimError,
+  readPathWriteTargetIdentity,
+  releasePathWriteClaims,
+  type PathWriteClaimBatch,
+} from "./path-write-claim.js";
 import { maskNonRenderedMarkdown } from "./rendered-markdown.js";
 import { collectIndexFreshness } from "./stats/index-freshness.js";
 import {
@@ -722,6 +730,75 @@ function regenerateLearningLoopIndexes(projectRoot: string): void {
   );
 }
 
+/**
+ * Acquire the bucket and every configured generated index as one cooperative write set.
+ * Throws a CLIError that translates a reusable claim refusal into a no-write learn-new diagnostic.
+ */
+function acquireLearningLoopWriteClaims(
+  projectRoot: string,
+  targetPath: string,
+  bucketDirectories: Record<IndexBucket, string>,
+): PathWriteClaimBatch {
+  const targetPaths = [
+    targetPath,
+    ...INDEX_BUCKETS.map(
+      (bucket) => `${bucketDirectories[bucket].replace(/\/+$/u, "")}/INDEX.md`,
+    ),
+  ];
+  try {
+    return acquirePathWriteClaims(
+      projectRoot,
+      [...new Set(targetPaths)].map((claimTargetPath) => ({
+        targetPath: claimTargetPath,
+        expectedIdentity: readPathWriteTargetIdentity(
+          projectRoot,
+          claimTargetPath,
+        ),
+      })),
+    );
+  } catch (error) {
+    if (error instanceof PathWriteClaimError) {
+      const unreleasedTargets = error.cleanupResults.flatMap((result) =>
+        result.status === "released" ? [] : [result.targetPath],
+      );
+      const recovery =
+        unreleasedTargets.length === 0
+          ? "re-run learn new against the current project."
+          : `inspect .goat-flow/write-claims before retrying; cleanup was not confirmed for ${unreleasedTargets.join(", ")}.`;
+      throw new CLIError(
+        `${error.message} No learning-loop files were changed; ${recovery}`,
+        2,
+      );
+    }
+    throw error;
+  }
+}
+
+/**
+ * Release one learning-loop write set without hiding an earlier publication failure.
+ * Error behavior: reports unsafe cleanup on stderr during failure, or throws after an otherwise successful publication.
+ */
+function releaseLearningLoopWriteClaims(
+  claims: PathWriteClaimBatch,
+  didPublicationFail: boolean,
+): void {
+  let unreleasedTargets: string[];
+  try {
+    unreleasedTargets = releasePathWriteClaims(claims).flatMap((result) =>
+      result.status === "released" ? [] : [result.targetPath],
+    );
+  } catch {
+    unreleasedTargets = [...claims.targetPaths];
+  }
+  if (unreleasedTargets.length === 0) return;
+  const diagnostic = `Learning-loop write completed without confirmed claim release for ${unreleasedTargets.join(", ")}. Inspect .goat-flow/write-claims before retrying.`;
+  if (didPublicationFail) {
+    console.error(diagnostic);
+    return;
+  }
+  throw new CLIError(diagnostic, 1);
+}
+
 /** Run the same invariant as `goat-flow stats --check`; null means no blocking finding remains and both command paths agree. */
 function verifyLearningLoopStats(projectRoot: string): string | null {
   const projectFiles = createFS(projectRoot);
@@ -904,19 +981,32 @@ export function runLearnScaffold(
       ),
     };
   }
-  replaceBucketAtomically(
-    snapshot,
-    bucketDirectory,
-    request.category,
+  const claims = acquireLearningLoopWriteClaims(
     projectRoot,
-    prospectiveContent,
-    dependencies.beforeBucketReplacement,
-  );
-  publishLearningLoopFollowUps(
     snapshot.projectRelativePath,
-    projectRoot,
-    dependencies,
+    bucketDirectories,
   );
+  let publicationError: unknown = null;
+  try {
+    replaceBucketAtomically(
+      snapshot,
+      bucketDirectory,
+      request.category,
+      projectRoot,
+      prospectiveContent,
+      dependencies.beforeBucketReplacement,
+    );
+    publishLearningLoopFollowUps(
+      snapshot.projectRelativePath,
+      projectRoot,
+      dependencies,
+    );
+  } catch (error) {
+    publicationError = error;
+    throw error;
+  } finally {
+    releaseLearningLoopWriteClaims(claims, publicationError !== null);
+  }
   return {
     targetPath: snapshot.projectRelativePath,
     skeleton,

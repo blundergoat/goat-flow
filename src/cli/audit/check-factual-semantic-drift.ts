@@ -211,6 +211,69 @@ function readTopLevelSkillPlaybooks(auditContext: AuditContext): string[] {
     .sort();
 }
 
+/** Orientation documents whose established grammar can make a complete playbook claim. */
+type PlaybookInventoryDocumentPath =
+  ".goat-flow/architecture.md" | ".goat-flow/code-map.md";
+
+/** Normalize one documented playbook name to the installed filename shape. */
+function normalizeDocumentedPlaybookName(name: string): string | null {
+  const trimmedName = name.trim().replace(/`/gu, "");
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*(?:\.md)?$/u.test(trimmedName)) {
+    return null;
+  }
+  return trimmedName.endsWith(".md") ? trimmedName : `${trimmedName}.md`;
+}
+
+/**
+ * Read the code map's comma-separated `playbooks/ = ...` inventory, when present.
+ * Invariant: returns normalized Markdown filenames only for a list-shaped declaration.
+ */
+function readCodeMapPlaybookInventory(codeMap: string): string[] | null {
+  const inventoryLine = codeMap
+    .split(/\r?\n/u)
+    .find((line) => /[├└]──\s+playbooks\/\s*=\s*\S/u.test(line));
+  const inventoryText = inventoryLine?.split("=").slice(1).join("=").trim();
+  if (inventoryText === undefined || inventoryText.length === 0) return null;
+  const playbookNames = inventoryText
+    .split(",")
+    .map(normalizeDocumentedPlaybookName)
+    .filter((name): name is string => name !== null);
+  return playbookNames.length === 0 ? null : [...new Set(playbookNames)].sort();
+}
+
+/**
+ * Read the architecture row that explicitly enumerates every standalone playbook.
+ * Invariant: an index pointer without the colon-led filename list returns null.
+ */
+function readArchitecturePlaybookInventory(
+  architecture: string,
+): string[] | null {
+  const inventoryLine = architecture
+    .split(/\r?\n/u)
+    .find(
+      (line) =>
+        line.includes("standalone playbooks indexed by") &&
+        line.includes("playbooks/README.md`:"),
+    );
+  const inventoryText = inventoryLine?.split(":").slice(1).join(":");
+  if (inventoryText === undefined) return null;
+  const playbookNames = Array.from(
+    inventoryText.matchAll(/`([a-z0-9]+(?:-[a-z0-9]+)*\.md)`/gu),
+    (match) => match[1],
+  ).filter((name): name is string => name !== undefined);
+  return playbookNames.length === 0 ? null : [...new Set(playbookNames)].sort();
+}
+
+/** Select the document-specific grammar instead of treating every mention as exhaustive. */
+function readExplicitPlaybookInventory(
+  path: PlaybookInventoryDocumentPath,
+  text: string,
+): string[] | null {
+  return path === ".goat-flow/code-map.md"
+    ? readCodeMapPlaybookInventory(text)
+    : readArchitecturePlaybookInventory(text);
+}
+
 /**
  * Report top-level playbooks omitted from a committed user-facing inventory.
  * Use when architecture or code-map prose claims to enumerate every available playbook.
@@ -221,16 +284,19 @@ function readTopLevelSkillPlaybooks(auditContext: AuditContext): string[] {
  * @returns one warning listing omissions, or an empty list when no playbooks exist or every name is present
  */
 function driftSkillPlaybookInventory(
-  path: ".goat-flow/architecture.md" | ".goat-flow/code-map.md",
+  path: PlaybookInventoryDocumentPath,
   text: string,
   auditContext: AuditContext,
 ): ContentFinding[] {
+  const documentedPlaybookNames = readExplicitPlaybookInventory(path, text);
+  // A pointer or incidental filename is useful orientation prose, not a promise to enumerate every playbook.
+  if (documentedPlaybookNames === null) return [];
   const installedPlaybookNames = readTopLevelSkillPlaybooks(auditContext);
   // No installed playbooks means the document cannot hide a user-facing workflow.
   if (installedPlaybookNames.length === 0) return [];
 
   const missingPlaybookNames = installedPlaybookNames.filter(
-    (playbookName) => !text.includes(playbookName),
+    (playbookName) => !documentedPlaybookNames.includes(playbookName),
   );
   // A complete inventory already points users to every installed playbook.
   if (missingPlaybookNames.length === 0) return [];

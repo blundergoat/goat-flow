@@ -1,6 +1,6 @@
 ---
 category: milestone-accounting
-last_reviewed: 2026-08-25
+last_reviewed: 2026-08-28
 ---
 
 **Scope:** Milestone state and effort accounting - activation order, where human gates belong, what a task section may contain, and why estimates counted from work units beat estimates written as durations. Multi-agent council coordination is [coordination.md](coordination.md).
@@ -26,10 +26,12 @@ last_reviewed: 2026-08-25
 ## Lesson: Activate prerequisites before the numerically next milestone
 
 **Status:** active | **Created:** 2026-07-13
-**Incident count:** 2
-**Latest occurrence:** 2026-07-31
+**Incident count:** 3
+**Latest occurrence:** 2026-08-28
 
 **What happened:** After M05 approval, M06 was marked in progress before its dependency header was read. A later parent-plan run also started final evidence while four semantic prerequisites remained unfinished, then initially amended `Depends on` with explanatory prose that strict validation rejected.
+
+**Recurrence 2026-08-28:** M37's timing receipt was paused for the PR #61 follow-up, but its lifecycle status remained `in-progress`. When M58 reached `human-verification-pending`, strict plan validation correctly reported two active milestones. Marking M37 `blocked` with a current-state reason makes the hold and resume action machine-readable before handoff. Evidence anchor: `src/cli/plans-check-structure.ts` (search: `multiple active milestones`).
 
 **Root cause:** Execution order was inferred from milestone position or incomplete prose instead of a complete, parseable dependency contract.
 
@@ -68,8 +70,8 @@ last_reviewed: 2026-08-25
 **Decision changed:** Start a timestamped timing receipt before milestone work; never reconstruct Actual from planned task estimates.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
-**Incident count:** 9
-**Latest occurrence:** 2026-08-24
+**Incident count:** 10
+**Latest occurrence:** 2026-08-28
 
 **What happened:** A completed goat-debug planning milestone recorded `~225 min` as Actual by summing reconstructed product/proof/other effort buckets. The user challenged it because the elapsed work felt closer to minutes than hours. No start/end timestamps existed, so neither figure was measurable; replacing one precise-looking number with another would preserve the same error.
 
@@ -89,6 +91,8 @@ last_reviewed: 2026-08-25
 pre-stop receipt state was restored, then `plans time stop --discard-open` preserved the valid 933 seconds and marked the receipt incomplete. A timer
 must be stopped before yielding control; once waiting and work share a span, discard it instead of subtracting an inferred idle duration. Evidence
 anchor: `src/cli/plans-time.ts` (search: `receipt contains a discarded open span`).
+
+**Recurrence 2026-08-28:** M58 finalized a 2,529-second receipt before the plan-wide strict check. That check then found M37 and M58 simultaneously active, so the blocked-status correction, required learning update, and regenerated index fell outside the receipt. M58 now labels Actual incomplete instead of presenting the partial receipt as complete milestone time. Evidence anchor: `src/cli/plans-check-structure.ts` (search: `multiple active milestones`).
 
 **Root cause:** Planned effort, active wall-clock time, aggregate multi-agent effort, command duration, and human waiting were treated as one quantity. Task estimates were available, so they were mistakenly reused as observations.
 

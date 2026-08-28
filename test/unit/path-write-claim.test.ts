@@ -384,6 +384,54 @@ describe("path write claims", () => {
     );
   });
 
+  it("removes an unchanged marker after transient ownership readback failure", (context: TestContext) => {
+    const projectRoot = makeProject();
+    const targetPath = "managed.txt";
+    const expectedIdentity = readPathWriteTargetIdentity(
+      projectRoot,
+      targetPath,
+    );
+    const originalFstatSync = fs.fstatSync;
+    const originalFsyncSync = fs.fsyncSync;
+    let shouldFailOwnershipReadback = false;
+    let hasInjectedReadbackFailure = false;
+    context.mock.method(fs, "fsyncSync", (descriptor: number) => {
+      originalFsyncSync(descriptor);
+      if (!hasInjectedReadbackFailure) {
+        shouldFailOwnershipReadback = true;
+        hasInjectedReadbackFailure = true;
+      }
+    });
+    context.mock.method(
+      fs,
+      "fstatSync",
+      (descriptor: number, options: { bigint: true }) => {
+        if (shouldFailOwnershipReadback) {
+          shouldFailOwnershipReadback = false;
+          const error = new Error("fixture transient readback failure");
+          Object.assign(error, { code: "EIO" });
+          throw error;
+        }
+        return originalFstatSync(descriptor, options);
+      },
+    );
+
+    assertClaimFailure(
+      () =>
+        acquirePathWriteClaims(projectRoot, [{ targetPath, expectedIdentity }]),
+      "claim-integrity",
+      targetPath,
+    );
+    assert.equal(inspectPathWriteClaim(projectRoot, targetPath), null);
+
+    const retry = acquirePathWriteClaims(projectRoot, [
+      { targetPath, expectedIdentity },
+    ]);
+    assert.deepEqual(releasePathWriteClaims(retry), [
+      { targetPath, status: "released" },
+    ]);
+  });
+
   it("removes its marker when claim initialization fails", (context: TestContext) => {
     const projectRoot = makeProject();
     const targetPath = "managed.txt";

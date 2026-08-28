@@ -630,6 +630,23 @@ describe("formatIndex", () => {
     assert.equal(row, establishedRow);
   });
 
+  it("escapes Markdown delimiters in link labels without changing anchors", () => {
+    const title = "Close ](unsafe) [path\\name";
+    const content = formatIndex("lessons", [
+      {
+        ...entryWithDecisionGuidance,
+        title,
+        anchor: `## Lesson: ${title}`,
+      },
+    ]);
+    const [row] = content.split("\n").filter((line) => line.startsWith("- ["));
+
+    assert.ok(
+      row?.startsWith("- [Close \\](unsafe) \\[path\\\\name](commands.md) "),
+    );
+    assert.match(row ?? "", /search:.*Close \]\(unsafe\).*path/u);
+  });
+
   it("keeps long decision guidance within one balanced 100-character hook", () => {
     const longPlainGuidance =
       "Run each repository check before reporting success to the caller and repeat the complete verification sequence for every changed surface.";

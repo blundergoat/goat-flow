@@ -1,6 +1,6 @@
 ---
 category: gruff-cleanup
-last_reviewed: 2026-08-27
+last_reviewed: 2026-08-28
 ---
 
 **Scope:** Using the Gruff analyzer - reading its findings before acting on them, capturing clean JSON, masking blind spots, and not converting a fix request into threshold tuning. What breaks downstream when code is split or renamed is [refactor-fallout.md](refactor-fallout.md); proving comment fixes satisfy it is [verification-gruff.md](verification-gruff.md).
@@ -93,7 +93,7 @@ last_reviewed: 2026-08-27
 
 **Status:** active | **Created:** 2026-05-31
 
-**Incident count:** 7 | **Latest occurrence:** 2026-08-15
+**Incident count:** 8 | **Latest occurrence:** 2026-08-28
 
 **What happened:** During the gruff naming cleanup, the full `npm test` run reached the installer round-trip fixture and failed its temp-repo preflight because local style gates still had issues: ESLint flagged a non-null assertion in `src/cli/cli-parser.ts`, and Prettier found an unformatted modified contract test.
 
@@ -110,6 +110,8 @@ last_reviewed: 2026-08-27
 **Recurrence 2026-08-10:** The release-wide format gate found `scripts/check-versions.mjs` unformatted after focused hook tests were green. Because formatting ran before the full regression and preflight, the correction stayed isolated to that file and the exact format check then passed. Evidence anchor: `scripts/check-versions.mjs` (search: `const hookRuntimeTemplates`).
 
 **Recurrence 2026-08-15:** The goat-clarity enrollment pass ran focused contracts and the full test suite before the repository preflight's style stage. Preflight then rejected `buildPreviewFile` at complexity 14 and named four changed files that Prettier had not formatted. Extracting the loaded-baseline ownership predicate and formatting those exact files cleared targeted ESLint, Prettier, and 81 affected tests before preflight was repeated. Evidence anchors: `src/cli/managed-setup-preview.ts` (search: `loadedBaselineProtectsExistingDifferentTarget`) and `test/integration/setup-install-preview.test.ts` (search: `protects an existing goat-clarity path`).
+
+**Recurrence 2026-08-28:** The PR #61 follow-up ran focused regressions, typecheck, Prettier, Gruff, audit, stats, and the full test suite before repository-wide ESLint. Preflight then found `cleanupFailedClaimInitialization` at complexity 11 and rejected a shorthand arrow returning `writeFileSync`. Extracting the ownership predicate and bracing the writer cleared targeted ESLint, but every earlier proof became stale. Evidence anchors: `src/cli/path-write-claim.ts` (search: `isOwnedInitializationClaim`) and `src/cli/quality/quality-command.ts` (search: `const writeReportFile`).
 
 **Prevention:** After broad gruff edits, run `npx eslint src/cli src/dashboard` and `npm run format:check` before full tests or preflight. Treat any non-null assertion introduced during naming cleanup as unfinished parsing code; bind the typed value once and branch on it. Evidence anchors: `src/cli/skill-command-parser.ts` (search: `resolvedSkillPath`), `scripts/check-instruction-parity.mjs` (search: `CANONICAL_SECTIONS`), `src/cli/plans-time.ts` (search: `beforeMilestoneReplacement`).
 

@@ -810,7 +810,7 @@ describe("one baseline per managed path", () => {
       assert.equal(failedInstall.status, 1, failedInstall.stdout);
       assert.equal(
         failedInstall.stderr.trim().split("\n").at(-1),
-        `Managed files were verified, but install state was not recorded. The previous managed baseline is intact and no confirmed receipt was written. Repair write access to .goat-flow/install-state/, then rerun: goat-flow install ${projectPath} --agent codex`,
+        `Managed files were verified, but install state was not recorded. The previous managed baseline is intact and no confirmed receipt was written. Repair write access to .goat-flow/install-state/, then rerun: goat-flow install '${projectPath.replace(/\\/gu, "/")}' --agent codex`,
       );
       assert.equal(readFileSync(cutoverMarkerPath, "utf-8"), oldCutoverMarker);
       assert.equal(readFileSync(hookPath, "utf-8"), expectedHookBytes);

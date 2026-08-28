@@ -19,6 +19,12 @@ import { spawnSync } from "node:child_process";
 import type { TestContext } from "node:test";
 import { symlinkSync } from "node:fs";
 import { getHookSpec } from "../../src/cli/server/hooks-registry.js";
+import {
+  createManagedInstallStateRow,
+  managedInstallStateV2Path,
+  writeManagedInstallStateV2,
+  type ManagedInstallStateV2,
+} from "../../src/cli/managed-setup-state.js";
 
 /** Codex mirror of the newest skill, used by baseline-downgrade fixtures. */
 const CODEX_GOAT_CLARITY_PATH = ".agents/skills/goat-clarity/SKILL.md";
@@ -207,10 +213,11 @@ export function addCommit(root: string, subject: string): void {
 /**
  * Rewrite recorded baseline hashes so the named paths read as changed package templates.
  * Divergent bytes alone are preserved now, so any fixture that needs a blocking managed
- * conflict must also move the baseline. This writes only the target's install-state file.
+ * conflict must also move the baseline. This writes either the selected legacy
+ * state or the canonical project-wide state, matching the installed format.
  *
  * @param projectPath - disposable target whose recorded baseline is rewritten
- * @param agent - agent whose install-state file holds the baseline
+ * @param agent - agent whose legacy state or cutover marker selects the installed format
  * @param managedPaths - project-relative managed paths whose expected hash becomes stale
  */
 export function recordStaleBaselineHashes(
@@ -224,9 +231,53 @@ export function recordStaleBaselineHashes(
     "install-state",
     `${agent}.json`,
   );
-  const state = JSON.parse(readFileSync(statePath, "utf-8")) as {
+  const selectedState = JSON.parse(readFileSync(statePath, "utf-8")) as {
+    schemaVersion?: string;
+    files?: Array<{ path: string; expectedSha256: string }>;
+  };
+  if (selectedState.schemaVersion === "goat-flow.install-state.v1-cutover") {
+    const managedStatePath = managedInstallStateV2Path(projectPath);
+    const managedState = JSON.parse(
+      readFileSync(managedStatePath, "utf-8"),
+    ) as ManagedInstallStateV2;
+    const replacementGenerationsByPath = new Map<string, string>();
+    for (const managedPath of managedPaths) {
+      const baselineIndex = managedState.files.findIndex(
+        (file) => file.path === managedPath,
+      );
+      assert.notEqual(
+        baselineIndex,
+        -1,
+        `${managedPath} must appear in the baseline`,
+      );
+      const baselineRow = managedState.files[baselineIndex];
+      assert.ok(baselineRow);
+      const staleRow = createManagedInstallStateRow({
+        path: baselineRow.path,
+        expectedSha256: "0".repeat(64),
+        provenance: baselineRow.provenance,
+      });
+      managedState.files[baselineIndex] = staleRow;
+      replacementGenerationsByPath.set(staleRow.path, staleRow.generation);
+    }
+    // Keep receipts aligned with rewritten rows so the fixture isolates baseline drift instead of also creating stale receipts.
+    for (const receipt of managedState.receipts) {
+      for (const reference of receipt.files) {
+        const replacementGeneration = replacementGenerationsByPath.get(
+          reference.path,
+        );
+        if (replacementGeneration !== undefined) {
+          reference.generation = replacementGeneration;
+        }
+      }
+    }
+    writeManagedInstallStateV2(projectPath, managedState);
+    return;
+  }
+  const state = selectedState as {
     files: Array<{ path: string; expectedSha256: string }>;
   };
+  assert.ok(Array.isArray(state.files), `${statePath} must contain a baseline`);
   for (const managedPath of managedPaths) {
     const baselineRow = state.files.find((file) => file.path === managedPath);
     assert.ok(baselineRow, `${managedPath} must appear in the baseline`);

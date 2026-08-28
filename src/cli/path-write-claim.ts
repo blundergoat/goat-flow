@@ -530,6 +530,20 @@ function closeClaimDescriptor(descriptor: number): boolean {
   }
 }
 
+/** Confirm a failed initialization path still contains the descriptor-created marker bytes. */
+function isOwnedInitializationClaim(
+  claim: ClaimSnapshotResult,
+  descriptorStats: fs.BigIntStats,
+  expectedMarkerBytes?: Buffer,
+): claim is { status: "present"; snapshot: ClaimSnapshot } {
+  return (
+    claim.status === "present" &&
+    claimSnapshotMatchesDescriptor(claim.snapshot, descriptorStats) &&
+    (expectedMarkerBytes === undefined ||
+      claim.snapshot.bytes.equals(expectedMarkerBytes))
+  );
+}
+
 /**
  * Remove a failed initialization marker only when the path still names the descriptor-created entry.
  * Side effects: closes the descriptor and may unlink that exact marker; identity/read/cleanup failures return without throwing.
@@ -537,14 +551,14 @@ function closeClaimDescriptor(descriptor: number): boolean {
 function cleanupFailedClaimInitialization(
   markerPath: string,
   descriptor: number,
+  expectedMarkerBytes?: Buffer,
 ): void {
   let ownedSnapshot: ClaimSnapshot | null = null;
   try {
     const descriptorStats = fs.fstatSync(descriptor, { bigint: true });
     const claim = readClaimSnapshot(markerPath);
     if (
-      claim.status === "present" &&
-      claimSnapshotMatchesDescriptor(claim.snapshot, descriptorStats)
+      isOwnedInitializationClaim(claim, descriptorStats, expectedMarkerBytes)
     ) {
       ownedSnapshot = claim.snapshot;
     }
@@ -609,7 +623,7 @@ function acquireOneClaim(
   const descriptor = createClaimMarker(markerPath, markerBytes, targetPath);
   const claim = readOwnedClaimSnapshot(markerPath, descriptor, markerBytes);
   if (claim.status !== "present") {
-    closeClaimDescriptor(descriptor);
+    cleanupFailedClaimInitialization(markerPath, descriptor, markerBytes);
     throw new PathWriteClaimError("claim-integrity", targetPath);
   }
   return { targetPath, markerPath, snapshot: claim.snapshot, descriptor };

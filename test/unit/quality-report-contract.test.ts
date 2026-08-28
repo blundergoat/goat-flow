@@ -6,12 +6,22 @@
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
+import {
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { CLIError } from "../../src/cli/cli-error.js";
+import { getPackageVersion } from "../../src/cli/paths.js";
 import { composeQuality } from "../../src/cli/prompt/compose-quality.js";
 import type { QualityInput } from "../../src/cli/prompt/compose-quality-common.js";
+import { persistQualityReportText } from "../../src/cli/quality/quality-command.js";
 import type { LearningLoopEntryFact } from "../../src/cli/types.js";
 import {
   QUALITY_EVIDENCE_METHODS,
@@ -940,6 +950,66 @@ describe("quality report contract: staged-draft persistence variant", () => {
       assert.equal(prompt.includes(safetyGuidance), false, safetyGuidance);
     });
   }
+});
+
+describe("quality report contract: rejected persistence", () => {
+  // Fixture purpose: writes partial bytes, throws, and proves cleanup removes only that owned filesystem path.
+  it("removes an owned allocation when report writing fails", () => {
+    const projectRoot = mkdtempSync(resolve(tmpdir(), "quality-rejected-"));
+    execFileSync("git", ["-C", projectRoot, "init", "--quiet"]);
+    writeFileSync(
+      resolve(projectRoot, ".gitignore"),
+      ".goat-flow/logs/quality/*.json\n",
+    );
+    const version = getPackageVersion();
+    const priorReport = makePriorQualityReport("skills").report;
+    const currentReport = {
+      ...priorReport,
+      goat_flow_version: version,
+      project_path: projectRoot,
+      run_date: "2026-08-28",
+      audit_status: "pass",
+      scope: "framework-self",
+      rubric_version: version,
+      prior_report_id: null,
+      assessment_context: {
+        project_revision: "a".repeat(40),
+        working_tree_state: "clean",
+        grounding_status: "complete",
+        unverified_probes: [],
+        score_confidence: "high",
+      },
+      findings: [],
+      refuted_candidates: [],
+    };
+
+    try {
+      assert.throws(
+        () =>
+          persistQualityReportText(
+            {
+              projectPath: projectRoot,
+              rawText: JSON.stringify(currentReport),
+            },
+            {
+              CLIError,
+              /** Writes partial bytes to the allocated descriptor, then throws the transient failure under test. */
+              writeReportFile(reportDescriptor: number): void {
+                writeFileSync(reportDescriptor, "partial report bytes");
+                throw new Error("fixture report write failure");
+              },
+            },
+          ),
+        /could not persist the validated report/u,
+      );
+      assert.deepEqual(
+        readdirSync(resolve(projectRoot, ".goat-flow/logs/quality")),
+        [],
+      );
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("quality report contract: dashboard mirror", () => {

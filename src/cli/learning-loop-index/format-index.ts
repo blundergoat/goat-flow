@@ -60,9 +60,14 @@ export function formatIndex(
       ? ["_No active entries._"]
       : entries.map((entry) => {
           const selectedHook = formatEntryHook(bucket, entry);
-          return `- [${entry.title}](${entry.sourceFile}) (search: ${quoteAnchor(entry.anchor)}) - ${selectedHook}${formatRowSuffix(entry)}`;
+          return `- [${escapeMarkdownLinkLabel(entry.title)}](${entry.sourceFile}) (search: ${quoteAnchor(entry.anchor)}) - ${selectedHook}${formatRowSuffix(entry)}`;
         });
   return [...header, ...rows].join("\n") + "\n";
+}
+
+/** Escape Markdown link-label delimiters without changing the source heading text. */
+function escapeMarkdownLinkLabel(label: string): string {
+  return label.replace(/\\/gu, "\\\\").replace(/([\[\]])/gu, "\\$1");
 }
 
 /**

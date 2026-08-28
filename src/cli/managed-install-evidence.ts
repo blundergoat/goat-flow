@@ -56,19 +56,31 @@ export interface ManagedInstallEvidenceReport {
   entries: ManagedInstallEvidenceEntry[];
 }
 
-/** Normalize a project path before embedding it in user-visible recovery commands. */
-function projectArgument(projectPath: string): string {
-  return projectPath.replace(/\\/gu, "/");
+/**
+ * Quote one normalized project path for the user's current platform shell.
+ *
+ * @param projectPath - absolute or relative path that must remain one command argument
+ * @returns slash-normalized single-quoted syntax for PowerShell on Windows or a POSIX shell elsewhere
+ */
+export function quoteManagedInstallProjectArgument(
+  projectPath: string,
+): string {
+  const normalizedPath = projectPath.replace(/\\/gu, "/");
+  const escapedPath =
+    process.platform === "win32"
+      ? normalizedPath.replace(/'/gu, "''")
+      : normalizedPath.replace(/'/gu, "'\\''");
+  return `'${escapedPath}'`;
 }
 
 /** Build the public install command that can verify one agent without force. */
 function installCommand(projectPath: string, agent: AgentId): string {
-  return `goat-flow install ${projectArgument(projectPath)} --agent ${agent}`;
+  return `goat-flow install ${quoteManagedInstallProjectArgument(projectPath)} --agent ${agent}`;
 }
 
 /** Build the read-only recheck command used after repairing blocking global evidence. */
 function statusCommand(projectPath: string): string {
-  return `goat-flow status ${projectArgument(projectPath)} --format json`;
+  return `goat-flow status ${quoteManagedInstallProjectArgument(projectPath)} --format json`;
 }
 
 /** Sort portable paths by their UTF-8 bytes, matching managed-state ordering. */

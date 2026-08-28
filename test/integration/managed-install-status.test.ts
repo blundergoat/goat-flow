@@ -10,6 +10,8 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 
+import { quoteManagedInstallProjectArgument } from "../../src/cli/managed-install-evidence.js";
+
 import {
   createManagedInstallStateRow,
   managedInstallStateV2Path,
@@ -139,6 +141,17 @@ function writeLegacyState(
 }
 
 describe("managed install status evidence", () => {
+  it("quotes recovery project paths as one shell argument", () => {
+    const projectPath = String.raw`C:\team dir\$cache's project`;
+    const normalizedPath = projectPath.replace(/\\/gu, "/");
+    const expected =
+      process.platform === "win32"
+        ? `'${normalizedPath.replace(/'/gu, "''")}'`
+        : `'${normalizedPath.replace(/'/gu, "'\\''")}'`;
+
+    assert.equal(quoteManagedInstallProjectArgument(projectPath), expected);
+  });
+
   it("renders confirmed and orphan evidence in JSON and text", () => {
     const projectPath = installedCodexProject();
     const facade = readManagedInstallStateFacade(projectPath);
@@ -203,6 +216,9 @@ describe("managed install status evidence", () => {
     assert.equal(stale.canSelectInstalledAgent, false);
     assert.match(stale.reason, /target bytes|cutover marker/iu);
     assert.match(stale.recovery ?? "", /goat-flow install .* --agent codex/u);
+    assert.ok(
+      stale.recovery?.includes(quoteManagedInstallProjectArgument(projectPath)),
+    );
     assert.doesNotMatch(stale.recovery ?? "", /run:.*--force/iu);
 
     const cutover = evidenceEntry(report, "cutover-incompatible");
@@ -248,6 +264,11 @@ describe("managed install status evidence", () => {
     assert.match(
       malformed.recovery ?? "",
       /goat-flow status .* --format json/u,
+    );
+    assert.ok(
+      malformed.recovery?.includes(
+        quoteManagedInstallProjectArgument(projectPath),
+      ),
     );
     assert.doesNotMatch(malformed.recovery ?? "", /run:.*--force/iu);
   });

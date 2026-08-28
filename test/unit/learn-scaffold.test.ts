@@ -621,6 +621,49 @@ last_reviewed: 2026-08-01
     }
   });
 
+  it("serializes concurrent scaffolds across the shared index write set", () => {
+    const projectRoot = createLearningProject();
+    const firstBucketPath = join(
+      projectRoot,
+      LEARNING_ROOT,
+      "lessons/verification.md",
+    );
+    const competingBucketPath = join(
+      projectRoot,
+      LEARNING_ROOT,
+      "lessons/parallel-write.md",
+    );
+
+    try {
+      runLearnScaffold(lessonRequest(projectRoot), {
+        ...fixedClock(),
+        beforeBucketReplacement: () => {
+          assert.throws(
+            () =>
+              runLearnScaffold(
+                lessonRequest(projectRoot, {
+                  category: "parallel-write",
+                  title: "Competing scaffold",
+                }),
+                fixedClock(),
+              ),
+            /Another cooperating writer owns .*INDEX\.md.*No learning-loop files were changed/u,
+          );
+          assert.equal(existsSync(competingBucketPath), false);
+        },
+      });
+
+      assert.match(
+        readFileSync(firstBucketPath, "utf-8"),
+        /^## Lesson: Keep literal proof$/mu,
+      );
+      assert.equal(existsSync(competingBucketPath), false);
+      assertAllIndexFiles(projectRoot, true);
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
   it("dry-run validates content while writing neither bucket nor index", () => {
     const projectRoot = createLearningProject();
     const bucketPath = join(

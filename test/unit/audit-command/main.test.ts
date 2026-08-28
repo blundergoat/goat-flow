@@ -224,6 +224,76 @@ describe("audit on well-configured project", () => {
     assert.equal(report.filesScanned, 1);
   });
 
+  it("checks playbooks only when orientation prose claims a complete inventory", () => {
+    const installedPlaybooks = ["browser-use.md", "test-selection.md"];
+    const ordinaryContext = makeCtx({
+      fs: stubFS({
+        readFile: (path) => {
+          if (path === ".goat-flow/code-map.md") {
+            return "Open browser-use.md when browser evidence is required.";
+          }
+          if (path === ".goat-flow/architecture.md") {
+            return "Playbooks are indexed by .goat-flow/skill-docs/playbooks/README.md.";
+          }
+          return null;
+        },
+        listDir: (path) =>
+          path === ".goat-flow/skill-docs/playbooks" ? installedPlaybooks : [],
+      }),
+    });
+    assert.deepEqual(
+      scanSemanticDrift(ordinaryContext).findings.filter(
+        (finding) => finding.rule === "skill-playbook-inventory-drift",
+      ),
+      [],
+    );
+
+    const explicitContext = makeCtx({
+      fs: stubFS({
+        readFile: (path) =>
+          path === ".goat-flow/code-map.md"
+            ? "└── playbooks/ = browser-use"
+            : null,
+        listDir: (path) =>
+          path === ".goat-flow/skill-docs/playbooks" ? installedPlaybooks : [],
+      }),
+    });
+    assert.deepEqual(
+      scanSemanticDrift(explicitContext).findings.filter(
+        (finding) => finding.rule === "skill-playbook-inventory-drift",
+      ),
+      [
+        {
+          severity: "warning",
+          rule: "skill-playbook-inventory-drift",
+          path: ".goat-flow/code-map.md",
+          message:
+            ".goat-flow/code-map.md omits top-level skill playbook(s): test-selection.md. Live playbooks are browser-use.md, test-selection.md.",
+          suggestion:
+            "Update the committed skill-docs playbook inventory to include every top-level .goat-flow/skill-docs/playbooks/*.md playbook except README.md.",
+        },
+      ],
+    );
+
+    const architectureContext = makeCtx({
+      fs: stubFS({
+        readFile: (path) =>
+          path === ".goat-flow/architecture.md"
+            ? "The standalone playbooks indexed by `.goat-flow/skill-docs/playbooks/README.md`: `browser-use.md`."
+            : null,
+        listDir: (path) =>
+          path === ".goat-flow/skill-docs/playbooks" ? installedPlaybooks : [],
+      }),
+    });
+    const [architectureFinding] = scanSemanticDrift(
+      architectureContext,
+    ).findings.filter(
+      (finding) => finding.rule === "skill-playbook-inventory-drift",
+    );
+    assert.equal(architectureFinding?.path, ".goat-flow/architecture.md");
+    assert.match(architectureFinding?.message ?? "", /test-selection\.md/u);
+  });
+
   it("checks glossary totals and accepts non-goat canonical skill rows", () => {
     assert.deepEqual(
       findSkillInventoryDrift(

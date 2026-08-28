@@ -48,6 +48,14 @@ export type {
 } from "./hooks-configured-runtime-evidence.js";
 
 const MANAGED_HOOK_IDENTIFIER = HOOK_VERIFICATION_CONTRACTS["deny-hook"].hookId;
+const managedHookTimeoutSeconds = getHookSpec(
+  MANAGED_HOOK_IDENTIFIER,
+)?.timeoutSec;
+/** Exact configured-launcher replay gets the registered hook budget; direct classifier probes keep the shared fast cap. */
+const MANAGED_CONFIGURED_PROBE_TIMEOUT_MS =
+  managedHookTimeoutSeconds === undefined
+    ? PROBE_TIMEOUT_MS
+    : managedHookTimeoutSeconds * 1000;
 
 /** One fixed classifier input; `command` is never copied into reports or events. */
 export interface HookProbeScenario {
@@ -300,7 +308,7 @@ function executeManagedConfiguredHookProbe(
     env: managedHookEnvironment(projectPath),
     input: configuredDenyHookPayload(agent, scenario),
     shell: false,
-    timeout: PROBE_TIMEOUT_MS,
+    timeout: MANAGED_CONFIGURED_PROBE_TIMEOUT_MS,
     maxBuffer: PROBE_OUTPUT_CAP_BYTES,
   });
   return {
