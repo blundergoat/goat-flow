@@ -50,7 +50,7 @@ const WRITE_SCOPE_RECONCILIATION_PATHS = [
 const MILESTONE_TIMING_RULE =
   "For milestone work, load `goat-plan`; start timing before the first source edit, pause it at human gates, and finalize it at exit.";
 const MILESTONE_CLARITY_RULE =
-  "If a milestone changes source, run `goat-clarity` once before exit.";
+  "If a milestone changes source, run `goat-clarity` once before exit on the explicit folder/file paths written by that milestone; never widen the selector to all uncommitted files when unrelated changes exist.";
 const WRITE_SCOPE_CAPTURE_RULE =
   "Before writing, record the write allowlist and starting dirty paths; keep an in-session list of every path this session writes.";
 const SCOPE_EXPANSION_RULE =

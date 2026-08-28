@@ -340,10 +340,15 @@ const COMMAND_HELP_CATALOG = {
     visibility: "advanced",
     summary: "Scrub durable text read from stdin.",
     usage: ["goat-flow redact [path] [--output <file>]"],
-    flags: [["--output <file>", "Write only the scrubbed text to this file."]],
+    flags: [
+      [
+        "--output <file>",
+        "Create a private project-local file containing only scrubbed text.",
+      ],
+    ],
     examples: [
       "goat-flow redact",
-      "goat-flow redact --output .goat-flow/logs/sessions/handoff.md",
+      "goat-flow redact --output .goat-flow/logs/sessions/YYYY-MM-DD-HHMM-handoff-rand5.md",
     ],
   },
   review: {

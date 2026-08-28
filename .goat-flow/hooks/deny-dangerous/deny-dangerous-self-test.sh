@@ -1122,6 +1122,14 @@ run_full() {
   local _report_json='{"detail":"Keep `file + semantic anchor`; rm -rf / and git push are quoted evidence."}'
   expect_allow shell "goat-flow redact --output .goat-flow/logs/review/probe.md <<'TEXT'"$'\n'"${_report_json}"$'\n'"TEXT" "bounded redactor treats Markdown prose as data"
   expect_allow shell "/usr/local/bin/goat-flow quality save /tmp/project <<'JSON'"$'\n'"${_report_json}"$'\n'"JSON" "absolute bounded quality saver treats report JSON as data"
+  local _large_report_body=""
+  printf -v _large_report_body '%*s' 17000 ''
+  _large_report_body="${_large_report_body// /x}"
+  local _large_report_json="{\"detail\":\"${_large_report_body}\"}"
+  expect_allow shell "goat-flow quality save /tmp/project <<'JSON'"$'\n'"${_large_report_json}"$'\n'"JSON" "large bounded quality saver treats report JSON as data"
+  expect_allow shell "node --import tsx src/cli/cli.ts quality save /tmp/project <<'JSON'"$'\n'"${_large_report_json}"$'\n'"JSON" "large source quality saver treats report JSON as data"
+  expect_block shell "goat-flow quality save /tmp/project <<JSON"$'\n'"${_large_report_json}"$'\n'"JSON" "large unquoted quality heredoc stays blocked"
+  expect_block shell "printf '%s' '${_large_report_body}'" "generic long command stays blocked"
   expect_allow shell "command goat-flow redact <<'TEXT'"$'\n'"${_report_json}"$'\n'"TEXT" "command-wrapped bounded redactor treats prose as data"
   expect_block shell "goat-flow install /tmp/project <<'TEXT'"$'\n'"rm -rf /"$'\n'"TEXT" "unrelated goat-flow subcommand heredoc stays inspectable"
   expect_block shell "goat-flow quality history <<'JSON'"$'\n'"rm -rf /"$'\n'"JSON" "non-save quality subcommand heredoc stays inspectable"

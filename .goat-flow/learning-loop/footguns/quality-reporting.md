@@ -1,6 +1,6 @@
 ---
 category: quality-reporting
-last_reviewed: 2026-08-27
+last_reviewed: 2026-08-28
 ---
 
 **Scope:** The quality prompt-to-report pipeline - prompt generation, the agent session that runs it, report persistence, and `quality diff` comparison. How audit checks score and temper concerns lives in [quality.md](quality.md).
@@ -8,6 +8,10 @@ last_reviewed: 2026-08-27
 ## Footgun: Quality reviews disappear when the agent skips the final JSON write
 
 **Status:** active | **Created:** 2026-04-19 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Test the prompt's complete persistence transport at realistic report size; a saver that works only below an upstream hook limit is unavailable in practice.
+**Trigger phase:** VERIFY
+**Incident count:** 2
+**Latest occurrence:** 2026-08-28
 
 **Symptoms:** A quality review ran end-to-end, but `goat-flow quality history` reports no saved runs and `goat-flow quality diff` has nothing to compare. No file appears under `.goat-flow/logs/quality/`.
 
@@ -18,11 +22,16 @@ last_reviewed: 2026-08-27
 - `src/cli/quality/quality-command.ts` (search: `handleQualitySaveSubcommand`) - the CLI owns redaction, strict validation, and the project-local write.
 - `src/cli/prompt/compose-quality-contract.ts` (search: `Wrote quality report to`) - the prompt requires a single-line confirmation that references the saved filename.
 - `src/cli/quality/history-render.ts` (search: `No saved quality history`) - `history` and `diff` only read files that were actually written to disk.
+- `.goat-flow/hooks/deny-dangerous.sh` (search: `large_quality_save_heredoc_is_bounded_data`) - the hook retains its ordinary command ceiling while admitting the prompt's quoted data transport.
+- `test/unit/quality-report-contract.test.ts` (search: `sends a thorough report block through the actual deny hook`) - the prompt-derived command exceeds 16KB and must reach the saver.
+
+**Recurrence 2026-08-28:** A 17,065-byte quoted `quality save` command was refused before the saver ran with `BLOCKED: Policy deny-dangerous: Command exceeds 16KB`. A 15,065-byte control passed. The prompt mandates this heredoc transport, so testing a small 60-field placeholder did not cover a thorough report's real command shape.
 
 **Prevention:**
 1. After any `/quality` run, verify the save landed: `ls .goat-flow/logs/quality/*.json | tail -3`. If the latest mtime is older than the review you just ran, the agent skipped the write.
 2. If the agent reports `persist-skipped` or emits JSON inline, rerun through the exact `quality save` command. Do not write the raw report with a filesystem tool.
 3. Only after the file exists on disk is `quality history` / `quality diff` meaningful - both silently return empty when nothing is saved, so a missing save looks identical to "no prior runs."
+4. Exercise the prompt-derived heredoc above the ordinary hook ceiling, with large unquoted and generic-command controls that must remain blocked.
 
 See `.goat-flow/learning-loop/patterns/refactoring.md` (search: `Put prompt side effects on the CLI side`) for the durable boundary rule that came out of this incident.
 
@@ -86,9 +95,11 @@ See `.goat-flow/learning-loop/patterns/refactoring.md` (search: `Put prompt side
 ## Footgun: Path validation does not pin a later pathname write
 
 **Status:** active | **Created:** 2026-08-27 | **Evidence:** ACTUAL_MEASURED
-**Decision changed:** Allocate an empty report exclusively, revalidate its ancestry and descriptor/path identity, then write sensitive bytes through the pinned descriptor.
+**Decision changed:** Allocate an empty destination exclusively, revalidate its ancestry and descriptor/path identity, then write sensitive bytes through the pinned descriptor.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
+**Incident count:** 2
+**Latest occurrence:** 2026-08-28
 
 **Prevention:** Any persistence path that validates directories before writing must allocate an empty destination exclusively, recheck every trusted ancestor, compare descriptor and pathname device/inode identity, write through the descriptor, fsync, and check again. On rejection after allocation, truncate through the descriptor before closing it so a raced rename cannot retain sensitive bytes.
 
@@ -97,6 +108,8 @@ See `.goat-flow/learning-loop/patterns/refactoring.md` (search: `Put prompt side
 **Why it happens:** `lstat` proves what a pathname names only at the instant of the check. Opening the same pathname later performs a new traversal, so a parent can become a symlink during the check-to-write gap. Validating the final file after writing detects neither that its ancestors changed nor where sensitive bytes landed.
 
 **Evidence:** A 2026-08-27 runtime probe replaced `.goat-flow/logs/quality` with a symlink immediately before the former pathname write. The saver returned normally, and `realpath` placed the complete report under the external fixture root. `src/cli/quality/quality-command.ts` (search: `function assertAllocatedQualityReport`) now checks the directory chain and descriptor/path identity before and after the descriptor write. `test/unit/quality-subcommands.test.ts` (search: `fails closed when report allocation follows a swapped parent`) reproduces the allocation-boundary swap and proves the external allocation remains empty.
+
+**Recurrence 2026-08-28:** The generic `goat-flow redact --output` sink followed a symlinked `.goat-flow/logs/review` parent and replaced a pre-existing receipt outside the selected project. `src/cli/redact-command.ts` (search: `function assertRedactAllocation`) now gives redacted artifacts the same pinned create-only boundary. `test/unit/redact-command.test.ts` (search: `refuses a symlinked parent without changing the outside file`) preserves the outside sentinel and pairs it with direct outside-path and existing-file controls.
 
 ---
 

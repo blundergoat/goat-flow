@@ -301,10 +301,10 @@ Scrub readable continuation text before it reaches disk. Pipe a session, handoff
 
 ```bash
 npx @blundergoat/goat-flow@latest redact
-npx @blundergoat/goat-flow@latest redact --output .goat-flow/logs/sessions/handoff.md
+npx @blundergoat/goat-flow@latest redact --output .goat-flow/logs/sessions/YYYY-MM-DD-HHMM-handoff-rand5.md
 ```
 
-Paste the candidate text into stdin and send EOF. Without `--output`, the safe text is written to stdout. With `--output`, only the scrubbed result is persisted. This is a practical pre-write guard, not perfect DLP; review sensitive artifacts before sharing them. The separate `redactEvidenceText` API remains a hash-and-length evidence contract and does not produce readable output.
+Paste the candidate text into stdin and send EOF. Without `--output`, the safe text is written to stdout. With `--output`, the command creates one private file inside the selected project, rejects linked parent paths, and revalidates the create-only allocation before and after writing. It refuses existing files, so choose a fresh filename for every run. This is a practical pre-write guard, not perfect DLP; review sensitive artifacts before sharing them. The separate `redactEvidenceText` API remains a hash-and-length evidence contract and does not produce readable output.
 
 ### `goat-flow review validate [report-file] [--output <path>]`
 
@@ -511,7 +511,7 @@ Common tasks and the commands to run:
 | Get a harness quality prompt | `npx @blundergoat/goat-flow@latest quality . --agent claude --mode harness` |
 | Review quality trend history | `npx @blundergoat/goat-flow@latest quality history --agent claude` |
 | Compare two saved quality runs | `npx @blundergoat/goat-flow@latest quality diff --agent claude` |
-| Scrub a durable handoff before saving it | `npx @blundergoat/goat-flow@latest redact --output .goat-flow/logs/sessions/handoff.md`, then paste stdin and send EOF |
+| Scrub a durable handoff before saving it | `npx @blundergoat/goat-flow@latest redact --output .goat-flow/logs/sessions/YYYY-MM-DD-HHMM-handoff-rand5.md`, then paste stdin and send EOF |
 | Inspect local dashboard/session events | `npx @blundergoat/goat-flow@latest events tail . --limit 20` |
 | Generate a setup prompt | `npx @blundergoat/goat-flow@latest setup . --agent claude` |
 | Decide what kind of artifact to author | `npx @blundergoat/goat-flow@latest quality candidacy "..."` |

@@ -415,6 +415,29 @@ goat_flow_cli_consumes_heredoc_as_data() {
   return 1
 }
 
+large_quality_save_heredoc_is_bounded_data() {
+  local command_policy="$1"
+  local opener normalized word base arguments
+
+  [[ "$command_policy" == *"__goat_quoted_heredoc_body__"* ]] || return 1
+  opener="${command_policy%%$'\n'*}"
+  normalized="$(normalize_command_candidate "$opener")"
+  word="${normalized%%[[:space:]]*}"
+  base="${word##*/}"
+  arguments="${normalized#"$word"}"
+  arguments="${arguments#"${arguments%%[![:space:]]*}"}"
+
+  if [[ "$base" == "goat-flow" ]]; then
+    [[ "$arguments" =~ ^quality[[:space:]]+save([[:space:]]|$) ]]
+    return $?
+  fi
+  if [[ "$base" == "node" || "$base" == "nodejs" ]]; then
+    [[ "$arguments" =~ ^--import(=tsx|[[:space:]]+tsx)[[:space:]]+src/cli/cli\.ts[[:space:]]+quality[[:space:]]+save([[:space:]]|$) ]]
+    return $?
+  fi
+  return 1
+}
+
 heredoc_command_list_is_inert() {
   local scan segment first normalized inner match ps_re substitution_count iterations
   local -a segs=()
@@ -2291,11 +2314,20 @@ main() {
     allow
   fi
 
-  if (( ${#command} > 16384 )); then
+  command_policy="$(mask_safe_quoted_heredoc_bodies "$command")"
+
+  # Keep the parser's ordinary 16KB ceiling. The quality prompt is the sole
+  # larger transport: a quoted body consumed as data may reach 256KB only when
+  # masking removes every byte above the ordinary policy surface.
+  if (( ${#command} > 262144 )); then
     block "Command exceeds 16KB; review and run manually if intended."
   fi
-
-  command_policy="$(mask_safe_quoted_heredoc_bodies "$command")"
+  if (( ${#command} > 16384 )) && {
+    (( ${#command_policy} > 16384 )) ||
+      ! large_quality_save_heredoc_is_bounded_data "$command_policy"
+  }; then
+    block "Command exceeds 16KB; review and run manually if intended."
+  fi
 
   declare -a _goat_chain_segments=()
   split_command_segments_into _goat_chain_segments "$command_policy"

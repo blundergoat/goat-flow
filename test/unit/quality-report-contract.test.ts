@@ -649,21 +649,28 @@ describe("quality report contract: CLI surfaces", () => {
     });
   }
 
-  // Covers a realistic 60-field report through the real deny hook: writes it and expects it to pass.
-  it("sends a realistic 60-field report block through the actual deny hook", () => {
+  /**
+   * Fixture purpose: cover a prompt-derived report above the generic command cap.
+   * Process side effect: spawns the real installed deny hook as a classifier only.
+   */
+  it("sends a thorough report block through the actual deny hook", () => {
     const prompt = composeQuality(makeInput("agent-setup")).prompt;
     const writeBlock = extractReportWriteBlock(prompt);
     const reportObject = JSON.stringify(
       Object.fromEntries(
         Array.from({ length: 60 }, (_, index) => [
           `field_${index}`,
-          `value_${index}`,
+          `value_${index}_${"x".repeat(400)}`,
         ]),
       ),
     );
     const realisticBlock = writeBlock.replace(
       "<insert the complete report object as one JSON line here>",
       reportObject,
+    );
+    assert.ok(
+      realisticBlock.length > 16_384,
+      "fixture must exercise the large-command policy branch",
     );
     const hookResult = spawnSync(
       "bash",
@@ -675,6 +682,37 @@ describe("quality report contract: CLI surfaces", () => {
     );
 
     assert.equal(hookResult.status, 0, hookResult.stderr || hookResult.stdout);
+  });
+
+  it("matches goat-clarity's declared target-selector count", () => {
+    const prompt = composeQuality(makeInput("agent-setup")).prompt;
+    const claritySkill = readFileSync(
+      resolve(REPOSITORY_ROOT, "workflow/skills/goat-clarity/SKILL.md"),
+      "utf-8",
+    );
+    const selectorBlock = claritySkill.match(
+      /Accept one target form:\s*\n((?:\s*- `\/goat-clarity[^\n]+`\s*\n)+)/u,
+    );
+    assert.ok(selectorBlock, "goat-clarity target forms must stay parseable");
+    const selectorCount = selectorBlock[1]?.match(/^\s*- /gmu)?.length ?? 0;
+    const countWords = [
+      "zero",
+      "one",
+      "two",
+      "three",
+      "four",
+      "five",
+      "six",
+      "seven",
+      "eight",
+    ] as const;
+    const selectorCountWord = countWords[selectorCount];
+    assert.ok(selectorCountWord, "selector count must have a prompt word");
+
+    assert.match(
+      prompt,
+      new RegExp(`inspect the ${selectorCountWord} selector contracts`, "u"),
+    );
   });
 
   it("keeps compatibility selection outside the report body and names failure honestly", () => {

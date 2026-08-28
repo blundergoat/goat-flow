@@ -147,7 +147,7 @@ npx @blundergoat/goat-flow@latest audit . --format sarif       # SARIF output fo
 npx @blundergoat/goat-flow@latest install . --agent claude     # Copy/update system files
 npx @blundergoat/goat-flow@latest setup . --agent claude       # Generate setup prompt
 npx @blundergoat/goat-flow@latest quality . --agent claude     # Generate quality-assessment prompt
-npx @blundergoat/goat-flow@latest redact --output .goat-flow/logs/sessions/handoff.md
+npx @blundergoat/goat-flow@latest redact --output .goat-flow/logs/sessions/YYYY-MM-DD-HHMM-handoff-rand5.md
 npx @blundergoat/goat-flow@latest plans export .goat-flow/plans/<version> --format markdown
 npx @blundergoat/goat-flow@latest status .                     # Project state (bare/partial/v0.9/outdated/current/error)
 npx @blundergoat/goat-flow@latest manifest                     # Agent support matrix
@@ -155,7 +155,7 @@ npx @blundergoat/goat-flow@latest manifest                     # Agent support m
 
 Audit-backed CLI commands inspect checkout hook configuration statically by default. Add `--trusted-target` to a selected-agent audit, setup prompt, quality prompt, or `hooks verify` only after confirming that the checkout's configured hook launcher and managed scripts are safe to execute. The dashboard never runs target hook code.
 
-Use `redact` before saving a session, handoff, review, quality, security, or export draft. It replaces common credential shapes while preserving useful continuation context; it is not perfect DLP or a substitute for reviewing the output.
+Use `redact` before saving a session, handoff, review, quality, security, or export draft. It replaces common credential shapes while preserving useful continuation context. File output must stay inside the selected project, uses private create-only persistence, and never replaces an existing artifact; choose a fresh filename for every run. Redaction is not perfect DLP or a substitute for reviewing the output.
 
 For interrupted work without an active milestone, `.goat-flow/logs/sessions/README.md` provides the optional handoff receipt schema. Run the command, paste the receipt into stdin, and send EOF so raw text is scrubbed before the output file is created.
 

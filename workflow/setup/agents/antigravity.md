@@ -85,7 +85,7 @@ MUST declare: `State: [MODE] | Goal: [one line] | Exit: [condition]`
 | Review | Investigate first. Never blindly apply suggestions |
 
 For milestone work, load `goat-plan`; start timing before the first source edit, pause it at human gates, and finalize it at exit.
-If a milestone changes source, run `goat-clarity` once before exit.
+If a milestone changes source, run `goat-clarity` once before exit on the explicit folder/file paths written by that milestone; never widen the selector to all uncommitted files when unrelated changes exist.
 
 For Antigravity setup, ACT means updating only Antigravity-owned surfaces from the shared skeleton and adapting commands, boundaries, and Router Table rows to the target project. Coordinate with Codex setup if `AGENTS.md` already exists.
 

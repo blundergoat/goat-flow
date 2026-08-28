@@ -124,7 +124,7 @@ export function appendSkillTesting(lines: string[]): void {
     "7. **`/goat-qa`** - find testing gaps in recent changes or audit coverage for a module without creating new tests",
   );
   lines.push(
-    "8. **`/goat-clarity`** - inspect the four selector contracts, frozen write-set rules, naming-before-comments order, and receipt completeness. Prefer file analysis; if live invocation is available, use only a disposable copy of current project source and verify that compliant bytes and out-of-scope paths stay unchanged.",
+    "8. **`/goat-clarity`** - inspect the three selector contracts, frozen write-set rules, naming-before-comments order, and receipt completeness. Prefer file analysis; if live invocation is available, use only a disposable copy of current project source and verify that compliant bytes and out-of-scope paths stay unchanged.",
   );
   lines.push("");
   lines.push(

@@ -5,9 +5,19 @@
  * commands, and issue links remain readable.
  */
 import { describe, it } from "node:test";
+import type { TestContext } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { parseCLIArgs } from "../../src/cli/cli-parser.js";
@@ -25,6 +35,55 @@ const BARE_SECRET_NAMES = [
   "SECRET",
   "TOKEN",
 ] as const;
+
+/**
+ * Run the public redactor against one temporary project and destination.
+ *
+ * Side effects: spawns the CLI, which may create the requested fixture output.
+ */
+function runRedact(
+  projectPath: string,
+  outputPath: string,
+  input = "Authorization: Bearer fixture-secret\n",
+) {
+  return spawnSync(
+    process.execPath,
+    [
+      "--import",
+      "tsx",
+      CLI_PATH,
+      "redact",
+      projectPath,
+      "--output",
+      outputPath,
+    ],
+    {
+      cwd: PROJECT_ROOT,
+      encoding: "utf-8",
+      input,
+    },
+  );
+}
+
+/**
+ * Create a directory symlink or skip only when Windows forbids the fixture.
+ *
+ * Error behavior: throws unexpected filesystem errors; an EPERM skips the fixture.
+ */
+function symlinkDirectoryOrSkip(
+  testContext: TestContext,
+  target: string,
+  link: string,
+): boolean {
+  try {
+    symlinkSync(target, link, "dir");
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EPERM") throw error;
+    testContext.skip("host blocks unprivileged directory symlinks");
+    return false;
+  }
+}
 
 /** Build fake credential shapes at runtime so tracked fixtures never contain usable-looking values. */
 function buildFakeSecrets(): {
@@ -208,8 +267,99 @@ describe("durable artifact redaction", () => {
         "Authorization: Bearer [REDACTED:authorization]\n",
       );
       assert.doesNotMatch(persistedText, new RegExp(fakeSecrets.openAi, "u"));
+      assert.ok(
+        process.platform === "win32" ||
+          (statSync(outputPath).mode & 0o077) === 0,
+        "POSIX output must not grant group or other permissions",
+      );
     } finally {
       rmSync(temporaryProject, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses to overwrite an existing durable artifact", () => {
+    const temporaryProject = mkdtempSync(join(tmpdir(), "goat-flow-redact-"));
+    const outputPath = join(
+      temporaryProject,
+      ".goat-flow",
+      "logs",
+      "sessions",
+      "handoff.md",
+    );
+    mkdirSync(join(outputPath, ".."), { recursive: true });
+    writeFileSync(outputPath, "existing receipt\n", "utf-8");
+
+    try {
+      const result = runRedact(temporaryProject, outputPath);
+
+      assert.equal(result.status, 2);
+      assert.match(result.stderr, /already exists|create-only/iu);
+      assert.equal(readFileSync(outputPath, "utf-8"), "existing receipt\n");
+    } finally {
+      rmSync(temporaryProject, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses an output path outside the selected project", () => {
+    const temporaryProject = mkdtempSync(join(tmpdir(), "goat-flow-redact-"));
+    const outsideDirectory = mkdtempSync(
+      join(tmpdir(), "goat-flow-redact-outside-"),
+    );
+    const outputPath = join(outsideDirectory, "handoff.md");
+
+    try {
+      const result = runRedact(temporaryProject, outputPath);
+
+      assert.equal(result.status, 2);
+      assert.match(
+        result.stderr,
+        /inside the selected project|project-local/iu,
+      );
+      assert.equal(existsSync(outputPath), false);
+    } finally {
+      rmSync(temporaryProject, { recursive: true, force: true });
+      rmSync(outsideDirectory, { recursive: true, force: true });
+    }
+  });
+
+  /**
+   * Fixture purpose: reproduce the former parent-symlink escape and prove the outside sentinel remains unchanged.
+   * Filesystem/process side effects: create two temporary roots, spawn the CLI, then remove both roots.
+   */
+  it("refuses a symlinked parent without changing the outside file", (testContext) => {
+    const temporaryProject = mkdtempSync(join(tmpdir(), "goat-flow-redact-"));
+    const outsideDirectory = mkdtempSync(
+      join(tmpdir(), "goat-flow-redact-outside-"),
+    );
+    const logsDirectory = join(temporaryProject, ".goat-flow", "logs");
+    const redirectedDirectory = join(logsDirectory, "sessions");
+    const outsideFile = join(outsideDirectory, "handoff.md");
+    mkdirSync(logsDirectory, { recursive: true });
+    writeFileSync(outsideFile, "outside sentinel\n", "utf-8");
+    if (
+      !symlinkDirectoryOrSkip(
+        testContext,
+        outsideDirectory,
+        redirectedDirectory,
+      )
+    ) {
+      rmSync(temporaryProject, { recursive: true, force: true });
+      rmSync(outsideDirectory, { recursive: true, force: true });
+      return;
+    }
+
+    try {
+      const result = runRedact(
+        temporaryProject,
+        join(redirectedDirectory, "handoff.md"),
+      );
+
+      assert.equal(result.status, 2);
+      assert.match(result.stderr, /real project-local directory|symlink/iu);
+      assert.equal(readFileSync(outsideFile, "utf-8"), "outside sentinel\n");
+    } finally {
+      rmSync(temporaryProject, { recursive: true, force: true });
+      rmSync(outsideDirectory, { recursive: true, force: true });
     }
   });
 });

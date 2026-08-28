@@ -106,7 +106,7 @@ Handoff receipts: read `.goat-flow/logs/sessions/README.md`; redact before writi
 
 For session, handoff, critique, review, quality, security, or export text, use the version-compatible CLI required by `skill-preamble.md` and send the in-memory draft via stdin to `goat-flow redact --output <destination>`; only redacted output reaches disk. Never stage raw text. Redact before disk, not after.
 
-Example after the version check: `goat-flow redact --output .goat-flow/logs/sessions/handoff.md`, then paste stdin and send EOF.
+Example after the version check: `goat-flow redact --output .goat-flow/logs/sessions/YYYY-MM-DD-HHMM-handoff-rand5.md`, then paste stdin and send EOF. Use a fresh destination every time; the redactor refuses replacement.
 
 The hash-only `redactEvidenceText` evidence API is not a readable scrubber. This reduces common credential leakage; it is not perfect DLP and does not replace secret review.
 
