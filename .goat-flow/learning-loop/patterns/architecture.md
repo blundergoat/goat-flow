@@ -51,7 +51,7 @@ The explicit `is not None` check is load-bearing — using `cost_limit or UNSET`
 
 **Approach:** Move heavy imports OUT of module scope and INTO function scope, so they only load when the function that needs them is called. The pattern is a trivial-looking refactor with outsized impact on CLI feel.
 
-**Evidence (external — mini-swe-agent):** PR #749 (merged 2026-02-19, `klieret`, "Enh: Improve startup time of mini"). Moved `from prompt_toolkit import prompt` out of `src/minisweagent/run/utilities/config.py` module scope and into a function:
+**Evidence (external — mini-swe-agent):** PR #749 (merged 2026-02-19, `klieret`, "Enh: Improve startup time of mini"). The PR moved `from prompt_toolkit import prompt` out of `src/minisweagent/run/utilities/config.py` module scope and into a function:
 
 ```python
 def prompt(*args, **kwargs):
@@ -64,7 +64,7 @@ def prompt(*args, **kwargs):
 
 **Goat-flow application:**
 - `npx @blundergoat/goat-flow@<version>` startup is user-visible. Audit `src/cli/cli.ts` and top-level imports — anything CLI-only that's only needed for specific subcommands (the dashboard server, AG-UI, large parsers, image processors) belongs behind a lazy `await import("./heavy-module.js")` inside the subcommand handler, not at the top of `cli.ts`.
-- Same pattern for hook scripts in `workflow/hooks/`: any `node` hook that imports heavy modules at top should defer them, since hooks may fire on every tool call.
+- Same pattern for hook scripts in `workflow/hooks/`: defer heavy module imports in any `node` hook, since hooks may fire on every tool call.
 - Measurement: run `node --prof dist/cli/cli.js --help`, compare baseline vs after-deferral. If `--help` startup gets faster, the deferral was worthwhile.
 
 **When NOT to use:** For modules whose import cost is genuinely small (< 10ms), the deferral adds noise without payoff. Save it for modules that contribute measurably to startup latency.

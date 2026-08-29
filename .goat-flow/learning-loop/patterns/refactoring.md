@@ -9,11 +9,11 @@ last_reviewed: 2026-08-20
 
 **Approach:** Treat a file nearing the threshold as the trigger to split, at the moment you are already editing it, while you hold the context needed to find the seam. Splitting is cheap then and expensive later: doing it retroactively means re-deriving every dependency, and a seam that looked like one module often turns out to be two once you check which private helpers are used on both sides.
 
-**Evidence (ACTUAL_MEASURED, 2026-08-04):** A goat-flow gruff sweep found 35 files over the 750-line gate totalling ~13,200 lines above threshold, topped by a 5,069-line contract test and a 2,069-line source file. Splitting the first one, `src/cli/facts/shared/learning-loop-common.ts` (836 lines), took roughly 15 tool calls and produced three modules rather than the two originally planned, because `isFileRef`, `isIntentionallyGitignored`, and `isCheckableForStaleness` were each used on both sides of the intended seam and had to become a third shared module. Evidence anchors: `src/cli/facts/shared/reference-paths.ts` (search: `isCheckableForStaleness`), `src/cli/facts/shared/search-anchors.ts` (search: `evaluateSearchAnchors`).
+**Evidence (ACTUAL_MEASURED, 2026-08-04):** A goat-flow gruff sweep found 35 files over the 750-line gate totalling ~13,200 lines above threshold, topped by a 5,069-line contract test and a 2,069-line source file. The first split, `src/cli/facts/shared/learning-loop-common.ts` (836 lines), took roughly 15 tool calls and produced three modules rather than the two originally planned, because `isFileRef`, `isIntentionallyGitignored`, and `isCheckableForStaleness` were each used on both sides of the intended seam and had to become a third shared module. Evidence anchors: `src/cli/facts/shared/reference-paths.ts` (search: `isCheckableForStaleness`), `src/cli/facts/shared/search-anchors.ts` (search: `evaluateSearchAnchors`).
 
 Three second-order effects make deferral worse than it looks. Doc-comment rules and the size gate pull against each other - adding required documentation pushed one test file from 749 to 753 lines and *created* a size finding. Clearing an entire pillar can lower the reported composite, so a long deferred cleanup shows the score sagging while the codebase improves; judge progress on per-pillar finding counts instead.
 
-**Recurrence 2026-08-13:** M01's provider migration fixture reached 751 lines after formatting; the focused behavior suite was green, but Gruff stopped closeout. Removing one non-semantic blank line restored the ceiling. Measure the formatted file, not the pre-format draft. Evidence anchor: `test/integration/setup-install-migrations.test.ts` (search: `keeps disabled hooks installed and inert`).
+**Recurrence 2026-08-13:** M01's provider migration fixture reached 751 lines after formatting; the focused behavior suite was green, but Gruff stopped closeout. Removing one non-semantic blank line brought the file back under the ceiling. Measure the formatted file, not the pre-format draft. Evidence anchor: `test/integration/setup-install-migrations.test.ts` (search: `keeps disabled hooks installed and inert`).
 
 **Recurrence 2026-08-16:** A non-Git controller fan-out suite left `test/integration/post-turn-safety-hook.test.ts` at 891 formatted lines. Its 59 focused tests and the full 2,083-test run passed, but preflight correctly rejected the new `size.file-length` warning. The controller-only cases now live in `test/integration/post-turn-safety-controller.test.ts` (search: `explicit non-Git controller roots`), leaving both test modules below the 750-line threshold. Treat a green behavior suite as incomplete proof until the size ratchet also runs.
 
@@ -37,7 +37,7 @@ Most dangerous: **moving a symbol silently breaks every learning-loop anchor tha
 
 ## Pattern: Canary-first contract changes (one consumer before all consumers)
 
-**Context:** Changing a contract that has N consumers (every env class, every audit check, every renderer, every agent config) — the change must propagate to every consumer to land. The naive shape is "change all N consumers in one PR" and ship. When a real-world edge case reveals the new contract is wrong, the revert costs the same N-file surface.
+**Context:** Changing a contract that has N consumers (every env class, every audit check, every renderer, every agent config) — the change must propagate to every consumer to land. The naive shape is "change all N consumers in one PR and ship". When a real-world edge case reveals the new contract is wrong, the revert costs the same N-file surface.
 
 **Approach:** Apply the contract change to exactly ONE consumer first as a canary. Land it. Run it through one full work cycle (a real session, a CI run, a benchmark). Only after the canary survives, propagate to the remaining N-1 consumers in a follow-up PR. The canary cost is one extra PR + one cycle's worth of delay; the saved cost is the breadth-first revert if the new contract turns out to be wrong.
 
@@ -67,7 +67,7 @@ A canary path — apply to `LocalEnvironment` only first, run mini against a rea
 
 ## Pattern: Put prompt side effects on the CLI side of the boundary
 **Context:** A prompt contract forbids tracked-file writes or unrestricted I/O, but a new feature needs persistence, capture, or report history.
-**Approach:** Keep the prompt read-only or single-path-limited and move extraction, path validation, suffix numbering, schema validation, and writes into CLI code whenever possible. If the prompt must write, pin the path to a gitignored local-state directory and make the exception explicit. Evidence anchor: `src/cli/prompt/compose-quality-static-sections.ts` (search: `No tracked-file writes`).
+**Approach:** Keep the prompt read-only or single-path-limited and move extraction, path validation, suffix numbering, schema validation, and writes into CLI code. If the prompt must write, pin the path to a gitignored local-state directory and make the exception explicit. Evidence anchor: `src/cli/prompt/compose-quality-static-sections.ts` (search: `No tracked-file writes`).
 
 ---
 

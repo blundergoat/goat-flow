@@ -5,7 +5,7 @@ last_reviewed: 2026-08-26
 
 ## Pattern: Cross-runner quality-report triage by convergence
 
-**Context:** `goat-flow quality` runs produce a JSON report per runner. When the same project is reviewed by multiple runners (Claude / Codex / Antigravity / Copilot) in a session, the resulting set of findings overlap unevenly: some issues land in every report, some only in one. Acting on every finding linearly is expensive when one finding is real and another is hallucinated. The triage discipline is to read all reports together and let the agreement shape guide verification order.
+**Context:** `goat-flow quality` runs produce a JSON report per runner. When the same project is reviewed by multiple runners (Claude / Codex / Antigravity / Copilot) in a session, the resulting findings overlap unevenly: some issues land in every report, some only in one. Acting on every finding linearly is expensive when one finding is real and another is hallucinated. The triage discipline is to read all reports together and let the agreement shape guide verification order.
 
 **Approach:** Group findings across reports into three triage tiers before opening any code:
 
@@ -137,7 +137,7 @@ else:
 **Evidence (external — promptfoo PR #9345):** Alongside the SQL injection fix in `buildSafeJsonPath()`, the PR added `test/database/sqlSafety.test.ts` which walks `src/` and asserts no production file contains `sql.raw(`. The hand-rolled escape that caused the bug can never come back via a different file because the test catches it before review.
 
 **Goat-flow application (candidate bans - no guardrail test ships yet):** As of 2026-08-20 nothing in `test/` walks `src/` for banned patterns, so the list below is the starting inventory for whoever ships the first guardrail test, not a description of enforced checks:
-- Ban `Math.random()` in `src/cli/server/` (where session IDs live) — `randomUUID()` is already the convention (`src/cli/server/terminal.ts` search: `randomUUID`, `src/cli/server/dashboard-routes.ts` search: `randomUUID`). The grep test prevents regression.
+- Ban `Math.random()` in `src/cli/server/` (where session IDs live) — `randomUUID()` is already the convention (`src/cli/server/terminal.ts` search: `randomUUID`, `src/cli/server/dashboard-routes.ts` search: `randomUUID`). The grep test would prevent regression.
 - Ban `console.log` in MCP server code (when added) — see `.goat-flow/learning-loop/footguns/cli.md` (search: `Diagnostic logs to stdout corrupt structured-output modes`).
 - Ban bare `setTimeout` / `setInterval` without an associated `clearTimeout` / `clearInterval` in the same file (dashboard server long-running handlers in `src/cli/server/`).
 

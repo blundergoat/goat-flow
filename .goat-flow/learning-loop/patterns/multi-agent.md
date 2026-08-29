@@ -10,7 +10,7 @@ last_reviewed: 2026-08-20
 
 **How to run:**
 1. Give each reviewer the same prompt. Don't share prior reviews - contamination defeats independence.
-2. Use different models, not just different instances. Different model families have different systematic blind spots than Claude - among the current supported runners, Codex, Antigravity, and Copilot. One of each covers more ground than three Claudes.
+2. Use different models, not just different instances. Different model families have different systematic blind spots than Claude - among the current supported runners, those are Codex, Antigravity, and Copilot. One of each covers more ground than three Claudes.
 3. Synthesize and verify after each review. Track first-discovery per finding. Dispute false claims with source evidence before accepting them. ~15-20% of claims per review will need verification.
 4. Stop when score variance drops. If several consecutive reviews cluster within a tight score band, coverage is probably adequate. If scores still vary widely, major categories are still being missed.
 
@@ -20,7 +20,7 @@ last_reviewed: 2026-08-20
 - Framework or architecture audit: 4-5, with explicit surface-area scoping in the prompt
 - Pre-release with audit honesty concerns: up to 7; accept the synthesis overhead
 
-**Key insight:** MAJOR findings can appear late. Late-session reviews on this repo have surfaced audit-honesty findings (Codex compaction hook false positive, ask_first glob comparison bug) that no earlier reviewer raised. Both would have shipped. Late reviews don't always find only minor things.
+**Key insight:** MAJOR findings can appear late. Late-session reviews on this repo have surfaced audit-honesty findings (Codex compaction hook false positive, ask_first glob comparison bug) that no earlier reviewer raised. Both would have shipped.
 
 **What NOT to do:**
 - Don't rank findings by how many reviewers found them. The most important findings are often found by exactly one reviewer.
