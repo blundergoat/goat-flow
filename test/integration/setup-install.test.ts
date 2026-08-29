@@ -7,10 +7,13 @@
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import {
   chmodSync,
+  closeSync,
   existsSync,
   mkdirSync,
+  openSync,
   readFileSync,
   statSync,
   symlinkSync,
@@ -30,6 +33,11 @@ import {
   runCliInstaller,
   runInstaller,
 } from "./setup-install.helpers.js";
+import {
+  readInvocations,
+  resolveTool,
+  writeMockGruffBinary,
+} from "./gruff-code-quality-smoke.helpers.js";
 
 /**
  * Groups the permission choices a Claude user sees after setup migration.
@@ -210,6 +218,74 @@ describe("setup --apply installer", () => {
     );
   });
 
+  // Fixture purpose: runs the installed hook through its persisted nested analyzer override; writes stay in the disposable project.
+  it(
+    "runs the installed Gruff hook through the detected strands_agents binary",
+    { skip: process.platform === "win32" },
+    () => {
+      const root = makeTempProject();
+      writeMockGruffBinary(
+        root,
+        "strands_agents/.venv/bin",
+        "gruff-py",
+        "installed-config.rule",
+      );
+      writeFileSync(join(root, ".gruff-py.yaml"), "rules: {}\n");
+      mkdirSync(join(root, "src"), { recursive: true });
+      writeFileSync(join(root, "src", "sample.py"), "a\nb\nc\n");
+
+      const installResult = runCliInstaller(root, "--agent", "codex");
+      assert.equal(
+        installResult.status,
+        0,
+        installResult.stderr || installResult.stdout,
+      );
+
+      const payloadPath = join(root, "post-tool-payload.json");
+      writeFileSync(
+        payloadPath,
+        JSON.stringify({
+          tool_name: "Edit",
+          tool_input: {
+            file_path: "src/sample.py",
+            changed_ranges: [{ startLine: 3, endLine: 3 }],
+          },
+        }),
+      );
+      const bashPath = resolveTool("bash");
+      const payloadHandle = openSync(payloadPath, "r");
+      let hookResult: ReturnType<typeof spawnSync>;
+      try {
+        // Argv contains only the test runner's resolved Bash and the hook installed below this disposable fixture root.
+        hookResult = spawnSync(
+          bashPath,
+          [join(root, ".goat-flow", "hooks", "gruff-code-quality.sh")],
+          {
+            cwd: root,
+            encoding: "utf-8",
+            env: {
+              ...process.env,
+              GRUFF_PY_BIN: "",
+              PATH: "/usr/bin:/bin",
+            },
+            stdio: [payloadHandle, "pipe", "pipe"],
+          },
+        );
+      } finally {
+        closeSync(payloadHandle);
+        unlinkSync(payloadPath);
+      }
+
+      assert.equal(
+        hookResult.status,
+        0,
+        hookResult.stderr || hookResult.stdout,
+      );
+      assert.match(hookResult.stdout, /installed-config\.rule/u);
+      assert.deepEqual(readInvocations(root), ["src/sample.py"]);
+    },
+  );
+
   // Fixture purpose: reproduces an enabled hook without its nested analyzer override; writes stay in the disposable project.
   it("repairs a missing gruff-py override for an enabled existing hook", () => {
     const root = makeTempProject();
@@ -242,6 +318,13 @@ describe("setup --apply installer", () => {
     assert.match(
       config,
       / {8}binaries:\n {12}py: strands_agents\/\.venv\/bin\/gruff-py/u,
+    );
+    const parsedConfig = load(config) as {
+      hooks: Record<string, { binaries?: Record<string, string> }>;
+    };
+    assert.equal(
+      parsedConfig.hooks["gruff-code-quality"].binaries?.py,
+      "strands_agents/.venv/bin/gruff-py",
     );
   });
 
@@ -327,7 +410,13 @@ describe("setup --apply installer", () => {
       configPath,
       [
         'version: "1.16.0"',
-        'hooks: { not-gruff-code-quality: { enabled: true, gruff-code-quality: { enabled: true } }, "deny-dangerous": { enabled: true }, "post-turn-safety": { enabled: true }, "gruff-code-quality": { enabled: true } }',
+        'hooks: { other-hook: { note: "#, gruff-code-quality: { enabled: true }" },',
+        "  other-flow-hook: {}, #, gruff-code-quality: { enabled: true }",
+        "  not-gruff-code-quality: { enabled: true, gruff-code-quality: { enabled: true } },",
+        '  "deny-dangerous": { enabled: true },',
+        '  "post-turn-safety": { enabled: true },',
+        '  "gruff-code-quality": { enabled: true }',
+        "}",
         "",
       ].join("\n"),
     );
@@ -356,6 +445,10 @@ describe("setup --apply installer", () => {
     assert.equal(
       parsedConfig.hooks["gruff-code-quality"].binaries?.py,
       "strands_agents/.venv/bin/gruff-py",
+    );
+    assert.match(
+      readFileSync(configPath, "utf-8"),
+      /#, gruff-code-quality: \{ enabled: true \}\n/u,
     );
   });
 

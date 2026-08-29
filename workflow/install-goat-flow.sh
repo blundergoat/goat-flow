@@ -1349,11 +1349,13 @@ let lines = content.split(/\r?\n/u);
 if (hadFinalNewline) lines.pop();
 
 function mappingCloseIndex(line, openIndex) {
+  const commentIndex = yamlCommentIndex(line);
+  if (openIndex >= commentIndex) return -1;
   let depth = 0;
   let inSingle = false;
   let inDouble = false;
   let escaped = false;
-  for (let index = openIndex; index < line.length; index += 1) {
+  for (let index = openIndex; index < commentIndex; index += 1) {
     const character = line[index];
     if (escaped) { escaped = false; continue; }
     if (inDouble && character === "\\") { escaped = true; continue; }
@@ -1370,24 +1372,48 @@ function mappingCloseIndex(line, openIndex) {
   return -1;
 }
 
+// Return the first YAML comment marker outside quoted scalars; line.length means no comment.
+function yamlCommentIndex(line) {
+  let inSingle = false;
+  let inDouble = false;
+  let escaped = false;
+  for (let index = 0; index < line.length; index += 1) {
+    const character = line[index];
+    if (escaped) { escaped = false; continue; }
+    if (inDouble && character === "\\") { escaped = true; continue; }
+    if (!inDouble && character === "'") { inSingle = !inSingle; continue; }
+    if (!inSingle && character === '"') { inDouble = !inDouble; continue; }
+    if (
+      !inSingle &&
+      !inDouble &&
+      character === "#" &&
+      (index === 0 || /\s/u.test(line[index - 1]))
+    ) {
+      return index;
+    }
+  }
+  return line.length;
+}
+
 function mappingOpenIndex(line, key) {
-  if (line.trimStart().startsWith("#")) return -1;
+  const yamlCode = line.slice(0, yamlCommentIndex(line));
+  if (yamlCode.trim().length === 0) return -1;
   const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
   const entryPattern = new RegExp(
     `(?:^|[{,])\\s*(?:"${escapedKey}"|'${escapedKey}'|${escapedKey})\\s*:\\s*\\{`,
     "gu",
   );
-  const hooksFlowLine = /^(?:hooks|"hooks"|'hooks')\s*:\s*\{/u.test(line);
+  const hooksFlowLine = /^(?:hooks|"hooks"|'hooks')\s*:\s*\{/u.test(yamlCode);
   const expectedParentDepth = hooksFlowLine ? 1 : 0;
 
-  for (const match of line.matchAll(entryPattern)) {
+  for (const match of yamlCode.matchAll(entryPattern)) {
     const openIndex = match.index + match[0].lastIndexOf("{");
     let depth = 0;
     let inSingle = false;
     let inDouble = false;
     let escaped = false;
     for (let index = 0; index < openIndex; index += 1) {
-      const character = line[index];
+      const character = yamlCode[index];
       if (escaped) { escaped = false; continue; }
       if (inDouble && character === "\\") { escaped = true; continue; }
       if (!inDouble && character === "'") { inSingle = !inSingle; continue; }
