@@ -353,7 +353,7 @@
     "id": "browser-verify",
     "name": "Browser Verification",
     "desc": "Verify UI state using browser-use - observational only, no writes",
-    "prompt": "Verify UI state using browser-use. Check browser-use is available (`command -v browser-use || command -v browser-use-python`). If missing, offer to install or ask for manual evidence (screenshots, DevTools output) instead.\n\nAsk me what to verify: a URL, a feature, or a specific visual state. If I provide expected behaviour, confirm or deny each expectation with browser evidence. If I don't provide expectations, describe what you see and ask what I want to verify.\n\nWorkflow: open the page (`browser-use open <url>`), capture state (`browser-use state`), take a screenshot (`browser-use screenshot`). Re-run `state` after any navigation or interaction to keep element indices fresh. For each claim: state what is OBSERVED (direct browser output) vs what is INFERRED (your interpretation mapped to code or expectations).\n\nDo not click buttons that mutate state, submit forms, or follow destructive links unless I explicitly ask you to. Close the browser when done (`browser-use close`).",
+    "prompt": "Verify UI state using browser-use. Read `.goat-flow/skill-docs/playbooks/browser-use.md` first. Run its read-only availability check (`command -v browser-use || command -v browser-use-python`, then `browser-use --help`) and follow the branch matching the observed CLI interface. If missing or unrecognized, offer approved installation or ask for manual evidence (screenshots, DevTools output) instead.\n\nAsk me what to verify: a URL, a feature, or a specific visual state. If I provide expected behaviour, confirm or deny each expectation with browser evidence. If I don't provide expectations, describe what you see and ask what I want to verify.\n\nUse the playbook's version-matched Observation Workflow to navigate, refresh state after navigation or interaction, and capture a screenshot. Apply its approval boundary before accessing the user's browser. For each claim, separate what is OBSERVED (direct browser output) from what is INFERRED (interpretation mapped to code or expectations).\n\nDo not click buttons that mutate state, submit forms, or follow destructive links unless I explicitly ask you to. Follow only the detected branch's cleanup guidance; never close the user's Chrome.",
     "cat": "qa",
     "route": "direct",
     "source": "goat-flow-catalog",
@@ -371,7 +371,7 @@
     "mayWriteFiles": false,
     "artifactRequired": false,
     "bestTargetSurfaces": ["ui", "app"],
-    "fallbackPrompt": "No browser-use CLI detected. Install it first (see scripts/install-browser-tools.sh), then retry. Or provide manual evidence: screenshots, DevTools output, console errors.",
+    "fallbackPrompt": "No supported browser-use CLI detected. Ask for approval before running scripts/install-browser-tools.sh, or request manual evidence: screenshots, DevTools output, console errors.",
     "costTier": "low"
   },
   {
@@ -393,10 +393,10 @@
     "requiresGoatFlowInstall": true,
     "mayCheckoutBranch": false,
     "requiresCleanWorktree": false,
-    "mayWriteFiles": false,
+    "mayWriteFiles": true,
     "artifactRequired": false,
     "bestTargetSurfaces": ["ui", "app"],
-    "fallbackPrompt": "If no Playwright path (MCP, Node, or Python) is available, ask whether to downgrade to browser-use CLI (no console error capture) or use manual fallback.",
+    "fallbackPrompt": "If no Playwright path (MCP, Node, or Python) is available, ask whether to use the detected browser-use CLI branch without project Playwright config or fixtures, or use manual fallback. Current CLI 3.0 can count Runtime console errors; Legacy CLI 0.12 records them as not captured.",
     "costTier": "medium"
   },
   {
@@ -628,7 +628,7 @@
     "id": "browser-debug",
     "name": "Debug UI in Browser",
     "desc": "Diagnose a browser-visible bug using browser-use for live evidence",
-    "prompt": "/goat-debug diagnose a UI bug using browser evidence. Check browser-use is available (`command -v browser-use`), then ask me for the URL and what's broken. Open the page, capture state and a screenshot, then read the relevant source files and write hypotheses. Use browser evidence to confirm or eliminate each hypothesis - don't guess from code alone. Stop at D2 with the diagnosis and browser evidence before proposing a fix.",
+    "prompt": "/goat-debug diagnose a UI bug using browser evidence. Read `.goat-flow/skill-docs/playbooks/browser-use.md`, run `command -v browser-use || command -v browser-use-python` and `browser-use --help`, then follow the branch matching the observed CLI interface. Ask me for the URL and what's broken. Apply the playbook's browser-state approval boundary, capture fresh state and a screenshot with its version-matched Observation Workflow, then read the relevant source files and write hypotheses. Use browser evidence to confirm or eliminate each hypothesis - don't guess from code alone. Stop at D2 with the diagnosis and browser evidence before proposing a fix.",
     "cat": "debug",
     "route": "goat-debug",
     "source": "goat-flow-catalog",
@@ -646,7 +646,7 @@
     "mayWriteFiles": false,
     "artifactRequired": false,
     "bestTargetSurfaces": ["ui"],
-    "fallbackPrompt": "No browser-use CLI detected. Install it first (see https://github.com/browser-use/browser-use), then retry. Or use /goat-debug without browser evidence and inspect manually.",
+    "fallbackPrompt": "No supported browser-use CLI detected. Offer the repository's approved installer when present, or use /goat-debug with screenshots and DevTools evidence supplied manually. Never install or upgrade browser tooling without approval.",
     "costTier": "low"
   }
 ]

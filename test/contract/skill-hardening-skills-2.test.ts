@@ -448,6 +448,34 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
     assert.match(setupGuide, /1 mandatory meta-agent/);
   });
 
+  it("redacts goat-critique persistence before disk and preserves the human gate", () => {
+    assertForEachTarget(installedSkillPaths("goat-critique"), (skillPath) => {
+      const phaseFour = readMarkdownSection(skillPath, "Phase 4 - Clarify");
+      assert.match(phaseFour, /keep.*Phase 1-3.*in memory/iu, skillPath);
+      assert.match(
+        phaseFour,
+        /stdin.*`goat-flow redact --output <fresh critique path>`.*matching source CLI/isu,
+        skillPath,
+      );
+      assert.match(
+        phaseFour,
+        /only.*redactor.*destination bytes.*disk/isu,
+        skillPath,
+      );
+      assert.match(
+        phaseFour,
+        /unavailable.*redaction fails.*write nothing.*`persist-skipped: redactor-unavailable`.*continue.*human gate/isu,
+        skillPath,
+      );
+      assert.match(phaseFour, /Phase 3 early exit/u, skillPath);
+      assert.doesNotMatch(
+        phaseFour,
+        /\bWrite Phase 1-3\b|(?:write|persist).*raw.*(?:then|before).*redact/iu,
+        skillPath,
+      );
+    });
+  });
+
   it("keeps goat-critique direct invocation as delegation consent", () => {
     assertForEachTarget(installedSkillPaths("goat-critique"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);
@@ -531,7 +559,7 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
       );
       assert.match(
         admissionGuidance,
-        /one objective, structured return, 5-call budget/,
+        /Scouts get 5 tool calls; implementation gets 5 plus the task's estimated minutes, up to 20 tool calls, with larger tasks split first/,
         referencePath,
       );
       assert.match(

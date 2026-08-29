@@ -2,17 +2,19 @@
 
 **Status:** Accepted
 **Date:** 2026-08-23
+**Updated:** 2026-08-29 - the two-tier budget landed across all six contract surfaces and the contract assertion.
 
 ## Context
 
-Every editable instruction and convention surface states one five-call sub-agent budget, so a read-only
-lookup and an authorized edit-and-verify task are given the same ceiling. Six documentation surfaces plus
-one contract test currently pin that universal wording.
+Before this rollout, every editable instruction and convention surface stated one five-call sub-agent
+budget, so a read-only lookup and an authorized edit-and-verify task had the same ceiling. Six
+documentation surfaces plus one contract test pinned that universal wording.
 
-The universal ceiling is too small for real implementation work. M18's completed parser change required
-source reading, editing, focused RED, implementation, formatting correction, clarity correction, focused
-GREEN, typecheck, and the fast suite; five tool calls could not carry that cycle. Evidence:
-`.goat-flow/plans/1.17.0/M18-plans-check-strict-self-describing.md` (search: `## Tasks`).
+The universal ceiling is too small for the repository's required implementation loop. Related source
+reading, a scoped edit, focused verification, a bounded clarity pass, typecheck, and the relevant suite can
+each require separate tool invocations. `AGENTS.md` defines that loop (search:
+`## Execution Loop: READ → SCOPE → ACT → VERIFY`) and its post-source clarity obligation (search:
+`run goat-clarity once before exit`).
 
 Two neighbouring decisions bound the problem. ADR-005 keeps implementation in the ordinary ACT step, so
 delegating one authorized ACT task creates no implementation skill. ADR-042 exempts native sub-agents
@@ -22,14 +24,14 @@ specialist scout contracts that stay fixed.
 
 Evidence anchors:
 
-- `.goat-flow/plans/1.17.0/ADR-056-draft-implementation-subagent-budget.md` (search: `## Decision matrix`) - the plan-local option analysis, decision matrix, and recorded human verdict
+- `AGENTS.md` (search: `Scouts get 5 tool calls`) - the always-loaded two-tier contract
 - `.goat-flow/learning-loop/decisions/ADR-005-no-implementation-skill.md` (search: `# ADR-005`)
 - `.goat-flow/learning-loop/decisions/ADR-042-cross-harness-invocation-ask-first.md` (search: `# ADR-042`)
-- `test/contract/skill-hardening-skills-2.test.ts` (search: `one objective, structured return, 5-call budget`) - the contract assertion that pins the current wording
+- `test/contract/skill-hardening-skills-2.test.ts` (search: `Scouts get 5 tool calls; implementation gets 5 plus`) - the assertion that pins the implementation-budget sentence
 
 ## Decision
 
-Adopt two tiers instead of one universal budget (draft Option B, accepted by the user on 2026-08-23).
+Adopt two tiers instead of one universal budget, accepted by the user on 2026-08-23.
 
 | Tier | Budget |
 |---|---|
@@ -58,16 +60,12 @@ Commands-table proof and owns checkbox completion.
 
 ## Rollout
 
-This record is promotion-only; no consumer wording has changed yet. 1.17.0 M63 owns applying the exact
-single-line replacements to the six documentation surfaces (`AGENTS.md`, `CLAUDE.md`,
-`.github/copilot-instructions.md`, `.goat-flow/skill-docs/skill-conventions.md`,
-`workflow/skills/reference/skill-conventions.md`, `workflow/setup/reference/execution-loop.md`) and the
-one contract-test assertion in `test/contract/skill-hardening-skills-2.test.ts`. 1.18.0 M14 copies the
-accepted sizing sentence into goat-plan's Standard+ dispatchability guidance. The verbatim before/after
-text for each surface lives in the draft's Option B section.
-
-Until that rollout lands, the shipped surfaces still state the universal five-call budget; this ADR is the
-authority for what they will say, not a claim about their current bytes.
+The rollout landed on 2026-08-29 as single-line replacements in the six documentation surfaces:
+`AGENTS.md`, `CLAUDE.md`, `.github/copilot-instructions.md`,
+`.goat-flow/skill-docs/skill-conventions.md`, `workflow/skills/reference/skill-conventions.md`, and
+`workflow/setup/reference/execution-loop.md`. The assertion in
+`test/contract/skill-hardening-skills-2.test.ts` pins the accepted implementation sentence. Goat-plan may
+reuse that sizing rule in its dispatchability guidance, but that guidance is separate from this rollout.
 
 ## Rejected alternatives
 

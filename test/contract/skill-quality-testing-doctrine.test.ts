@@ -271,11 +271,7 @@ describe("skill-quality-testing evaluation doctrine", () => {
       assert.match(content, /Meincke et al\. \(2026\)/u, guidePath);
       assert.match(content, /N=126,000/u, guidePath);
       assert.match(content, /35\.3%[^\n]+51\.3%/u, guidePath);
-      assert.match(
-        content,
-        /does not validate a specific skill/u,
-        guidePath,
-      );
+      assert.match(content, /does not validate a specific skill/u, guidePath);
       assert.doesNotMatch(content, /N=28,000|33%[^\n]+72%/u, guidePath);
     }
   });

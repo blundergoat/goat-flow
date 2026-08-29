@@ -90,6 +90,35 @@ describe("skill hardening contracts: security (1/2)", () => {
     });
   });
 
+  it("admits an early target read only for trusted explicit-component Quick scans", () => {
+    assertForEachTarget(installedSkillPaths("goat-security"), (skillPath) => {
+      const intake = readMarkdownSection(skillPath, "Step 0 - Intake");
+      const earlyRead = intake.indexOf("Trusted explicit-component Quick");
+      const exhaustiveInventory = intake.indexOf(
+        "Inventory every project/runtime class",
+      );
+
+      assert.ok(
+        earlyRead >= 0,
+        `${skillPath}: missing trusted early-read lane`,
+      );
+      assert.ok(
+        earlyRead < exhaustiveInventory,
+        `${skillPath}: bounded target evidence must precede exhaustive inventory`,
+      );
+      assertMatchesAll(
+        intake,
+        [
+          /trusted explicit-component Quick.*bounded, non-executing, non-rendering, no-follow.*target and adjacent-boundary read.*before exhaustive inventory/isu,
+          /MUST NOT use Git, import code, load plugins, execute configuration, or run a scanner/iu,
+          /unknown or untrusted provenance.*repo-wide.*unresolved path containment.*ambiguous applicability.*fail.*exhaustive/isu,
+          /No lead may be retained, severity assigned, zero-findings result declared, or clearance recommended until.*mandatory references.*inventory.*baseline.*family rows.*complete/isu,
+        ],
+        skillPath,
+      );
+    });
+  });
+
   it("keeps goat-security quality composition complete", () => {
     const projectRoot = process.cwd();
     const artifact = findArtifact(projectRoot, "skill:goat-security");

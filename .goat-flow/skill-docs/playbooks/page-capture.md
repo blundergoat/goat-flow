@@ -43,15 +43,19 @@ If a Python venv exposes Playwright through a `browser-use-python` wrapper (some
 
 The agent writes a Python capture script using `playwright.sync_api`, executes it, and reads the output. See "Writing a capture script" below.
 
-**Tier 4 - browser-use CLI** (downgrade: less control, missing console/network capture)
+**Tier 4 - browser-use CLI** (downgrade: no project Playwright config or fixtures)
 
 ```bash
 command -v browser-use && browser-use --help
 ```
 
-Only use browser-use for batch capture if no Playwright path (MCP, Node, or Python) is available AND the user explicitly accepts the downgrade. Ask: "No Playwright path found. Use browser-use CLI instead? Console error capture will be unavailable." Do not silently fall back.
+Only use browser-use for batch capture if no Playwright path (MCP, Node, or Python) is available AND the user explicitly accepts the downgrade. Ask: "No Playwright path found. Use the detected browser-use interface instead, without project Playwright config or fixtures?" Do not silently fall back. Read `browser-use.md` and apply its browser-state approval boundary before controlling the user's browser.
 
-Use `browser-use open`, `browser-use screenshot`, `browser-use state`. This path cannot capture console errors - mark captures with `Console errors: not captured (browser-use CLI)` and note reduced evidence quality in the index.
+Choose the branch shown by `browser-use --help`:
+
+- **Current CLI 3.0:** use stdin Python with `new_tab(url)`, `wait_for_load()`, `page_info()`, and `capture_screenshot()`. Clear `drain_events()` before navigation, then count `Runtime.exceptionThrown` plus `Runtime.consoleAPICalled` events whose `params.type` is `error`; record the count without copying message bodies.
+- **Legacy CLI 0.12:** use `browser-use open`, `browser-use state`, and `browser-use screenshot` only when help lists those subcommands. This branch cannot capture console errors; record `Console errors: not captured (Legacy CLI 0.12)` and the reduced evidence quality.
+- **Unknown shape:** do not guess. Use manual fallback or ask how to proceed.
 
 **Tier 5 - Manual fallback** (last resort: human provides evidence)
 
@@ -106,7 +110,7 @@ Adapt to the project's needs (SPA navigation, framework wait conditions, auth fl
 - Tier 1 (MCP): context-level configuration, tool-dependent
 - Tier 2 (Node): `browser.newContext({ storageState: "path/to/state.json" })`
 - Tier 3 (Python): `browser.new_context(storage_state="path/to/state.json")`
-- Tier 4 (browser-use): `browser-use --profile <name>` if supported by version
+- Tier 4 (browser-use): Current CLI 3.0 uses the approved local Chrome/CDP session and has no local profile-selection flag; Legacy CLI 0.12 may use `browser-use --profile <name>` only when help lists it and the user approves access to that profile
 
 ## Project Reference Pattern
 

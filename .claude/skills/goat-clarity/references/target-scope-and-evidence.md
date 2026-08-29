@@ -68,6 +68,26 @@ committed baseline exists. Preserve ignored, excluded, and unsupported counts. E
 consumers are read-only context unless separately admitted through Scope v2. Stop when no eligible unit
 remains.
 
+## Selector-driven Non-semantic Lane
+
+Use this lane only for an explicit folder or file selector when baseline, current bytes, and explicit
+request prove every change is limited to comments or docstrings, or local or private identifier
+spelling. Preserve all of:
+
+- test case presence, stable identity, title, registration, and parametrized membership;
+- assertions, expectations, snapshots, and failure semantics;
+- fixture values, setup and teardown, mocks, stubs, fakes, data builders, and environment controls; and
+- grouping, execution level, skip or focus state, coverage intent, observable output, and user-visible
+  meaning.
+
+A change to any preserved item is semantic and forces the full lane.
+
+If an existing PR or uncommitted diff contains a semantic test change, or equivalence is uncertain,
+run the full case-level manifest and four-part value gate. Otherwise freeze selected test-source units,
+selected spans, baseline and current identity, write set, and focused verification command. Reconcile
+every changed span and prove untouched bytes remain untouched. This lane waives only per-case value
+and disposition rows.
+
 ## Test-case Manifest Checkpoint
 
 When the test-value pass applies, complete this test-case manifest checkpoint before spending evidence

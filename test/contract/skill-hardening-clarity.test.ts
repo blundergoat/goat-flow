@@ -9,6 +9,7 @@ import {
   installedSkillPaths,
   installedSkillReferencePaths,
   readMarkdownSection,
+  readMarkdownSubsection,
   readProjectFile,
 } from "./skill-hardening.helpers.js";
 
@@ -153,6 +154,57 @@ describe("skill hardening contracts: goat-clarity", () => {
       "every case must reconcile",
       "reserve the final provider lookup for head-drift revalidation",
     ]);
+  });
+
+  it("routes proven comment or private-name-only selectors around case rows", () => {
+    assertForEachTarget(installedSkillPaths("goat-clarity"), (skillPath) => {
+      const clarityPass = readMarkdownSection(skillPath, "Clarity Pass");
+      const testValuePass = readMarkdownSubsection(
+        clarityPass,
+        "3. Run the test-value pass",
+        skillPath,
+      );
+      assertGuidanceIncludesAll(testValuePass, skillPath, [
+        "For a folder or file selector, assess every test case in selected test-source units unless",
+        "selector-driven non-semantic lane",
+        "comment/private-name-only equivalence",
+        "waives only per-case value and disposition rows",
+        "otherwise the full case-level manifest and four-part value gate apply",
+      ]);
+    });
+
+    assertForEachTarget(
+      installedSkillReferencePaths(
+        "goat-clarity",
+        "references/target-scope-and-evidence.md",
+      ),
+      (referencePath) => {
+        const reference = readProjectFile(referencePath);
+        assertGuidanceIncludesAll(reference, referencePath, [
+          "selector-driven non-semantic lane",
+          "explicit folder or file selector",
+          "baseline, current bytes, and explicit request",
+          "comments or docstrings, or local or private identifier spelling",
+          "test case presence, stable identity, title, registration, and parametrized membership",
+          "assertions, expectations, snapshots, and failure semantics",
+          "fixture values, setup and teardown, mocks, stubs, fakes, data builders, and environment controls",
+          "grouping, execution level, skip or focus state, coverage intent, observable output, and user-visible meaning",
+          "a change to any preserved item is semantic and forces the full lane",
+          "existing PR or uncommitted diff contains a semantic test change",
+          "equivalence is uncertain",
+          "full case-level manifest and four-part value gate",
+          "selected test-source units, selected spans, baseline and current identity, write set, and focused verification command",
+          "reconcile every changed span and prove untouched bytes remain untouched",
+          "waives only per-case value and disposition rows",
+        ]);
+      },
+    );
+
+    assert.match(
+      readMarkdownSection("docs/skills.md", "/goat-clarity"),
+      /every test in selected folder or file test-source units.*except.*comment.*private.*name.*only/isu,
+      "docs/skills.md",
+    );
   });
 
   it("uses an authority-aware empty-selection gate", () => {

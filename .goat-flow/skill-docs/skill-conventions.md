@@ -142,7 +142,7 @@ Plan and milestone files are verification artifacts. Agents MUST NOT delete, arc
 
 Use `.goat-flow/logs/sessions/` for session summaries. Compact at ~60% context or after 15+ turns.
 
-Sub-agents: one objective, structured return, 5-call budget.
+Sub-agents: one objective and structured return. Scouts get 5 tool calls. Implementation gets 5 plus the task's estimated minutes, up to 20 tool calls; split first if that would exceed 20.
 
 When blocked: ask one question with a recommended default.
 
@@ -169,7 +169,7 @@ Budget Ledger:
 
 A repeated pass must name a new failure class, independence boundary, or explicit user request. Admit it when the change crosses a blast-radius threshold, failed verification needs targeted evidence, an independent context adds evidence, security or correctness risk outweighs cost, or the user requested it.
 
-Same-context reassurance with no new evidence is denied. Do not parallelize tasks sharing files unless the merge boundary and conflict owner are named. Subagents keep one objective, structured return, 5-call budget.
+Same-context reassurance with no new evidence is denied. Do not parallelize tasks sharing files unless the merge boundary and conflict owner are named. Subagents keep one objective and structured return. Scouts get 5 tool calls; implementation gets 5 plus the task's estimated minutes, up to 20 tool calls, with larger tasks split first.
 
 Required skill phases and verification are pre-admitted; estimated cost cannot degrade or block them. Explicit `goat-critique` stays full delegated mode and preserves existing consent. This is rough admission control, not token accounting or a hard failure based only on estimated cost.
 

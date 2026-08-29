@@ -33,7 +33,10 @@ const DIRECT_ROUTE_PRESET_CASES = [
     id: "walkthrough-with-testing",
     deliverableMarker: /exactly three sections/iu,
   },
-  { id: "browser-verify", deliverableMarker: /browser-use state/u },
+  {
+    id: "browser-verify",
+    deliverableMarker: /skill-docs\/playbooks\/browser-use\.md/u,
+  },
   { id: "page-capture", deliverableMarker: /one MD record per page/iu },
 ] as const;
 
@@ -215,6 +218,50 @@ describe("custom prompt helpers", () => {
       assert.match(prompt, deliverableMarker, `${id} deliverable`);
     });
   }
+
+  for (const id of ["browser-verify", "browser-debug"] as const) {
+    it(`routes the ${id} preset through the detected CLI interface`, () => {
+      const presets = JSON.parse(
+        readFileSync(PRESET_PROMPTS_PATH, "utf-8"),
+      ) as Array<Record<string, unknown>>;
+      const preset = presets.find((candidate) => candidate.id === id);
+      assert.ok(preset, `missing ${id} preset`);
+      const prompt = String(preset.prompt);
+      assert.match(
+        prompt,
+        /\.goat-flow\/skill-docs\/playbooks\/browser-use\.md/u,
+        id,
+      );
+      assert.match(prompt, /browser-use --help/u, id);
+      assert.doesNotMatch(
+        prompt,
+        /browser-use (?:open|state|screenshot|close)\b/u,
+        id,
+      );
+    });
+  }
+
+  it("aligns browser preset fallbacks and write access with their workflows", () => {
+    const presets = JSON.parse(
+      readFileSync(PRESET_PROMPTS_PATH, "utf-8"),
+    ) as Array<Record<string, unknown>>;
+    const browserVerify = presets.find(
+      (candidate) => candidate.id === "browser-verify",
+    );
+    const pageCapture = presets.find(
+      (candidate) => candidate.id === "page-capture",
+    );
+
+    assert.ok(browserVerify, "missing browser-verify preset");
+    assert.ok(pageCapture, "missing page-capture preset");
+    assert.match(String(browserVerify.fallbackPrompt), /approval/u);
+    assert.doesNotMatch(
+      String(browserVerify.fallbackPrompt),
+      /Install it first/u,
+    );
+    assert.equal(pageCapture.mayWriteFiles, true);
+    assert.equal(pageCapture.artifactRequired, false);
+  });
 
   it("infers direct and goat-skill routes without forcing plain text", () => {
     const { helpers } = loadHelpers();

@@ -848,6 +848,29 @@ describe("setup-facing learning-loop retrieval", () => {
   }
 
   for (const relativePath of allInstructionPaths) {
+    it(`routes browser syntax through the detected playbook branch in ${relativePath}`, () => {
+      const content = readFileSync(
+        resolve(PROJECT_ROOT, relativePath),
+        "utf-8",
+      );
+      assert.match(
+        content,
+        /command -v browser-use \|\| command -v browser-use-python/u,
+        relativePath,
+      );
+      assert.match(content, /browser-use --help/u, relativePath);
+      assert.match(
+        content,
+        /\.goat-flow\/skill-docs\/playbooks\/browser-use\.md/u,
+        relativePath,
+      );
+      assert.doesNotMatch(
+        content,
+        /browser-use open\/state\/screenshot/u,
+        relativePath,
+      );
+    });
+
     it(`keeps ignored-state search semantics harness-specific in ${relativePath}`, () => {
       const content = readFileSync(
         resolve(PROJECT_ROOT, relativePath),

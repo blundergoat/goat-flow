@@ -17,6 +17,14 @@ command -v browser-use || command -v browser-use-python
 
 If `browser-use` is found, run `browser-use --help` as the read-only capability gate. If only the venv wrapper exists, run `browser-use-python -c "import browser_use; print('ok')"`. Do not use `profile` commands for discovery: some versions download a separate helper when it is absent. If the tool is missing, offer installation or manual evidence; never install without approval.
 
+The repository installer keeps its two wrappers distinct: `browser-use` controls an approved user/system Chrome or explicit CDP endpoint, while `browser-use-python` exposes Python Playwright and its Playwright-managed Chromium. Its isolated smoke connects the CLI to that managed browser through an explicit loopback CDP endpoint; normal CLI use does not select the Playwright browser automatically.
+
+Choose commands from the observed help shape, not a remembered version number:
+
+- **Current CLI 3.0:** help shows stdin Python usage such as `browser-use <<'PY'` and helpers such as `page_info()`.
+- **Legacy CLI 0.12:** help lists positional `open`, `state`, and `screenshot` subcommands.
+- **Unknown shape:** stop and report the captured help. Do not try commands from either branch until the interface is identified.
+
 ## Intent
 
 A coding agent uses browser evidence to turn a browser-visible claim into observed facts before editing or declaring a fix done. The useful proof is compact: URL, rendered state, screenshot or DOM/text capture, interaction sequence, and the before/after symptom.
@@ -25,17 +33,33 @@ Use `browser-use` for one-off observations and simple interactions. For repeatab
 
 ## Observation Workflow
 
-For viewing a page, checking static HTML, or capturing first evidence:
+### Current CLI 3.0
+
+The current local CLI attaches to the user's running Chrome, or may launch Chrome when none is available. It can see open tabs and logged-in state. Before the first browser-controlling call, obtain explicit approval unless the user already asked to control their current browser. A generic request to debug a URL is not approval to inspect their browser state.
+
+Pass untrusted URLs as data rather than interpolating them into Python. This command opens one new tab, waits for the page, prints state, and saves a screenshot to the path reported by the helper:
+
+```bash
+BROWSER_TARGET_URL='https://example.com' browser-use <<'PY'
+import os
+
+new_tab(os.environ["BROWSER_TARGET_URL"])
+wait_for_load()
+print(page_info())
+print(capture_screenshot())
+PY
+```
+
+Use `new_tab(url)` for first navigation and `goto_url(url)` after a real tab exists. Use `js(code)` for scoped DOM/text inspection and `cdp(method, ...)` for raw DevTools data. Run `browser-use skill show` for the full installed helper interface; `skill show` is read-only, while `skill install` or an upgrade still requires approval.
+
+### Legacy CLI 0.12
+
+Use this branch only when `--help` lists the positional subcommands:
 
 1. **Open the page:** `browser-use open <url>`
-2. **Capture state:** `browser-use state` - returns URL, title, page dimensions, scroll, and clickable elements with indices
+2. **Capture state:** `browser-use state`
 3. **Capture screenshot:** `browser-use screenshot [path.png]`
-4. **Inspect deeper when needed:**
-   - `browser-use get html [--selector "css"]` - page or scoped HTML
-   - `browser-use get text <index>` - element text content
-   - `browser-use get value <index>` - input/textarea value
-   - `browser-use get attributes <index>` - element attributes
-   - `browser-use get bbox <index>` - bounding box
+4. **Inspect deeper when needed:** `browser-use get html`, `get text`, `get value`, `get attributes`, or `get bbox` as listed by that installation's help.
 
 Treat browser output as OBSERVED evidence. Interpretations remain INFERRED until mapped to source files or reproduction steps.
 
@@ -43,7 +67,23 @@ For local HTML files, prefer serving the directory over localhost before opening
 
 ## Interaction Workflow
 
-Always run `browser-use state` before using element indices. Re-run `state` after navigation or major UI changes because indices can go stale.
+Refresh evidence before every interaction. Current CLI 3.0 uses fresh DOM/accessibility evidence and coordinates; Legacy CLI 0.12 uses element indices from the latest `state` output.
+
+Current CLI 3.0, illustrative command shape only (the coordinates must come from observed page evidence):
+
+```bash
+browser-use <<'PY'
+print(page_info())
+click_at_xy(420, 315)
+wait_for_load()
+print(page_info())
+print(capture_screenshot())
+PY
+```
+
+Prefer the accessibility tree from `cdp("Accessibility.getFullAXTree")` or a scoped `js(...)` query over guessing from a screenshot. Use `fill_input(selector, text)`, `type_text(text)`, `press_key(key)`, and `scroll(x, y)` only after identifying the target from fresh evidence.
+
+Legacy CLI 0.12:
 
 ```bash
 browser-use click <index>
@@ -60,47 +100,28 @@ For UI bugs, capture before/after evidence:
 
 1. Open the same URL or local route.
 2. Replay the original interaction sequence.
-3. Capture `browser-use screenshot [path.png]`.
-4. Capture `browser-use state`.
+3. Capture a screenshot with `capture_screenshot()` on Current CLI 3.0 or `browser-use screenshot [path.png]` on Legacy CLI 0.12.
+4. Refresh state with `page_info()` on Current CLI 3.0 or `browser-use state` on Legacy CLI 0.12.
 5. Compare against the original symptom. A fix is not verified until the browser-visible symptom is gone.
 
 ## Browser Modes
 
-```bash
-browser-use open <url>                         # Default: headless Chromium
-browser-use --headed open <url>                # Visible window for ambiguous headless results
-browser-use --connect open <url>               # Connect to user's Chrome; requires explicit approval
-browser-use --profile "Default" open <url>     # Specific Chrome profile; requires explicit approval
-browser-use --session NAME open <url>          # Named session for parallel browsers (subagent flows, multi-tab QA)
-```
+**Current CLI 3.0:** local control uses the user's visible Chrome and one default daemon. It has no legacy `--headed`, `--profile`, `--session`, or `--connect` flow. `BU_CDP_URL=<http-endpoint>` or `BU_CDP_WS=<ws-endpoint>` selects a specific approved CDP browser. `BU_NAME=<name>` selects a named cloud daemon, not a parallel local profile. Starting cloud browsers, syncing profiles, or using the user's browser requires explicit approval; cloud browsers can incur cost until stopped.
 
-Use `--headed` when headless output is ambiguous. Do not use `connect`, `--profile`, profile sync, or cloud mode without explicit user approval.
+**Legacy CLI 0.12:** only when the installed help lists these flags, `--headed` opens visible managed Chromium, `--connect` reads the user's Chrome, `--profile` reads the named profile, and `--session` selects a named local daemon. `--connect`, `--profile`, profile sync, and cloud mode require explicit approval. Do not discover profiles through `profile` commands because the missing helper path can download and execute an additional installer.
 
-### When `browser-use --connect open <url>` fails
-
-If `connect` cannot find a running Chrome with remote debugging, do not silently fall back. Surface the choice to the user with both options and let them pick - installed-Chrome and managed-Chromium are not equivalent because each touches different state:
-
-1. **Use the user's real Chrome.** They must enable remote debugging first: open `chrome://inspect/#remote-debugging` or relaunch Chrome with `--remote-debugging-port=9222`. Then retry `browser-use --connect open <url>`.
-2. **Use managed Chromium with a known Chrome profile.** Ask the user to name the profile, then run `browser-use --profile "ProfileName" open <url>`. Do not discover profiles through the CLI because some versions fetch an extra helper. This launches a separate Chromium instance with the selected profile; no Chrome relaunch is needed.
-
-Both paths require explicit user approval - they read login state. Never pick one autonomously.
+If an approved connection fails, run the version-matched diagnostics and report the choice rather than silently switching between the user's browser and managed Chromium. They touch different state.
 
 ## Navigation and Sessions
 
-```bash
-browser-use back
-browser-use sessions
-browser-use open <url>
-browser-use switch <index>
-browser-use close-tab [index]
-browser-use close
-```
+Current CLI 3.0 exposes `goto_url(url)`, `list_tabs()`, `switch_tab(target)`, and `close_tab(target)` inside the stdin Python interface. The default local daemon persists across calls. `browser-use --reload` stops that daemon so the next call starts fresh; it does not close the user's Chrome.
 
-The browser persists between commands via a background daemon. Close it when done with `browser-use close`.
+Legacy CLI 0.12 exposes `back`, `sessions`, `open`, `switch`, `close-tab`, and `close` subcommands. Verify each command in that installation's help before use.
 
 ## Security Cautions
 
 - Do NOT use `connect`, `--profile`, profile sync, or cloud mode without explicit user approval.
+- On Current CLI 3.0, the default local flow itself controls the user's Chrome; apply the same approval boundary before the first browser-controlling call.
 - Never paste cookies, tokens, auth headers, or credential-bearing URLs into commands or output.
 - Summarize sensitive network data by method, route shape, status, and sanitized field names only.
 - Screenshot files may contain sensitive rendered content. Save to temporary paths unless the user asked for an artifact.
@@ -109,8 +130,8 @@ The browser persists between commands via a background daemon. Close it when don
 
 Before using browser evidence as proof:
 
-1. **State was captured at the right time.** Run `browser-use state` after opening the page and again after navigation or major UI changes before relying on element indices.
-2. **Visual claims have a capture.** Pair any rendered-layout, screenshot, or "the UI now shows X" claim with `browser-use screenshot` or scoped DOM/text output.
+1. **State was captured at the right time.** Run `page_info()` on Current CLI 3.0 or `browser-use state` on Legacy CLI 0.12 after opening the page and again after navigation or major UI changes.
+2. **Visual claims have a capture.** Pair any rendered-layout, screenshot, or "the UI now shows X" claim with `capture_screenshot()` on Current CLI 3.0, `browser-use screenshot` on Legacy CLI 0.12, or scoped DOM/text output.
 3. **Interactions are reproducible.** Record the click/input/key sequence in enough detail that another agent can replay it.
 4. **Fix verification replays the original symptom.** A browser-visible bug is not fixed until the original URL and interaction sequence no longer reproduce it.
 5. **Sensitive data is handled.** Screenshots and copied DOM/network output omit credentials, tokens, cookies, and personal data unless the user explicitly asked for that artifact and it is safe to share.
@@ -129,25 +150,20 @@ Ask the user to provide this evidence. Manual evidence follows the same classifi
 
 ## Troubleshooting
 
-- **Browser will not start:** `browser-use close` then retry with `browser-use --headed open <url>`
-- **Browser starts then times out in a root/container environment:** run `browser-use close --all`, then retry the same smoke with `IN_DOCKER=true browser-use open <url>` before declaring the wrapper unusable
+- **Identify the interface first:** rerun `browser-use --help`; an unknown shape is unsupported evidence, not a reason to guess.
+- **Current CLI 3.0 cannot connect:** run `browser-use --doctor` and follow its Chrome remote-debugging guidance. Do not enable access to the user's browser without approval.
+- **Current CLI 3.0 daemon is stale:** run `browser-use --reload`, then retry the same stdin Python reproduction.
+- **Legacy CLI 0.12 browser will not start:** `browser-use close` then retry with `browser-use --headed open <url>`.
+- **Legacy CLI 0.12 times out in a root/container:** run `browser-use close --all`, then retry the same smoke with `IN_DOCKER=true browser-use open <url>` before declaring the wrapper unusable.
 - **Local HTML shows an empty DOM:** serve the directory over localhost and open the HTTP URL instead of `file://`
-- **Element not found after state:** `browser-use scroll down` then `browser-use state`
-- **Stale indices after navigation:** re-run `browser-use state`
-- **Stuck session after a failed command:** `browser-use close` (or `browser-use close --all` to clear every named session) before retrying
-- **Run diagnostics:** `browser-use doctor`
+- **Element is absent:** refresh `page_info()` on Current CLI 3.0 or scroll and rerun `state` on Legacy CLI 0.12 before interacting.
+- **Run diagnostics:** `browser-use --doctor` on Current CLI 3.0; use the spelling shown by Legacy CLI 0.12 help on legacy installations.
 
 ## Cleanup
 
-When you are done with a browser-driven session, close the daemon and any side resources you opened:
+When done with Current CLI 3.0 local work, close task-created tabs if appropriate and use `browser-use --reload` when the daemon must release its connection; never close the user's Chrome. A cloud browser is different: ask whether to stop it, then use `stop_remote_daemon(name)` only after approval because it terminates the remote resource.
 
-```bash
-browser-use close                  # Close the default session
-browser-use close --all            # Close every named session if you used --session
-browser-use tunnel stop --all      # Only if you started a tunnel earlier
-```
-
-Leaving the daemon running is harmless but consumes memory and keeps any open Chromium / cloud session alive.
+On Legacy CLI 0.12, use `browser-use close` for the selected session, `browser-use close --all` only when every named session is in scope, and `browser-use tunnel stop --all` only if you started those tunnels. Verify the commands in help before cleanup. Do not leave a cloud browser running accidentally; it may continue billing.
 
 ## Related References
 

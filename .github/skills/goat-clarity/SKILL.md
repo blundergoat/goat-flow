@@ -184,13 +184,14 @@ grammar, context-only documents, and protected regions.
 ### 3. Run the test-value pass
 
 For a PR or uncommitted selector, assess every added, removed, relocated, or materially changed test
-case. For a folder or file selector, assess every test case in selected test-source units.
+case. For a folder or file selector, assess every test case in selected test-source units unless the
+reference's selector-driven non-semantic lane proves comment/private-name-only equivalence, which
+waives only per-case value and disposition rows; otherwise the full case-level manifest and four-part
+value gate apply.
 
-Each assessed test gets one row from the four-part value gate: plausible regression, user or business
-impact, current overlap, and stable observable contract. Existing or materially changed tests use
-`KEEP`, `CONSOLIDATE`, `MOVE LEVEL`, `PRUNE CANDIDATE`, or `UNRESOLVED`. A `PRUNE CANDIDATE`
-must prove no replacement is required; `CONSOLIDATE` or `MOVE LEVEL` keeps the original until
-replacement coverage passes. Incomplete evidence is `UNRESOLVED`; volume is not deletion evidence.
+Each assessed test gets one row. Apply the four-part value gate: plausible regression, user or business
+impact, current overlap, and stable observable contract. `PRUNE CANDIDATE` needs proof no replacement
+is required; `CONSOLIDATE` or `MOVE LEVEL` keeps the original until replacement coverage passes.
 
 Added-test dispositions: `ADDED KEEP`, `ADDED CONSOLIDATE`, `ADDED MOVE LEVEL`, `ADDED DROP CANDIDATE`, `ADDED UNRESOLVED`
 
@@ -200,9 +201,8 @@ Relocated-test state: `RELOCATED`
 
 Apply `test-selection.md` meanings and evidence gates to every existing, added, removed, relocated,
 and materially changed row.
-Folder and file selectors reconcile
-`assessed_existing = KEEP + CONSOLIDATE + MOVE LEVEL + PRUNE CANDIDATE + UNRESOLVED`. PR and
-uncommitted selectors reconcile:
+Folder/file:
+`assessed_existing = KEEP + CONSOLIDATE + MOVE LEVEL + PRUNE CANDIDATE + UNRESOLVED`. PR/uncommitted:
 
 ```text
 assessed_added = ADDED_KEEP + ADDED_CONSOLIDATE + ADDED_MOVE_LEVEL + ADDED_DROP_CANDIDATE + ADDED_UNRESOLVED
@@ -212,8 +212,8 @@ assessed_relocated = RELOCATED
 assessed_pr_or_uncommitted = assessed_added + assessed_removed + assessed_materially_changed + assessed_relocated
 ```
 
-Use the reference checkpoint; every case must reconcile. This pass is report-only and never
-authorizes a test change. Route broader coverage work to `goat-qa`.
+Use the reference checkpoint: every case must reconcile when the full lane applies. Report-only: never
+authorize test changes; route broader coverage to `goat-qa`.
 
 ### 4. Choose the apply lane
 

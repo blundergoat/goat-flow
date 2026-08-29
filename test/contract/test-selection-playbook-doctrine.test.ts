@@ -124,6 +124,36 @@ describe("test-selection standalone doctrine", () => {
     });
   });
 
+  it("waives case rows only for selector-driven non-semantic clarity passes", () => {
+    assertForPlaybooks((content, playbookPath) => {
+      const normalized = content.replace(/\s+/gu, " ");
+      for (const requiredPhrase of [
+        "explicit folder or file selector",
+        "baseline, current bytes, and explicit request",
+        "comments or docstrings, or local or private identifier spelling",
+        "test case presence, stable identity, title, registration, and parametrized membership",
+        "assertions, expectations, snapshots, and failure semantics",
+        "fixture values, setup and teardown, mocks, stubs, fakes, data builders, and environment controls",
+        "grouping, execution level, skip or focus state, coverage intent, observable output, and user-visible meaning",
+        "a change to any preserved item is semantic and forces the full lane",
+        "full case-level manifest and four-part value gate",
+        "selected test-source units, selected spans, baseline and current identity, write set, and focused verification command",
+        "reconcile every changed span and prove untouched bytes remain untouched",
+        "waives only per-case value and disposition rows",
+      ]) {
+        assert.ok(
+          normalized.toLowerCase().includes(requiredPhrase.toLowerCase()),
+          `${playbookPath}: missing ${requiredPhrase}`,
+        );
+      }
+      assert.match(
+        normalized,
+        /existing PR or uncommitted diff.*semantic test change.*equivalence is uncertain.*full case-level manifest/iu,
+        playbookPath,
+      );
+    });
+  });
+
   it("keeps creation and existing-test dispositions exact and asymmetric", () => {
     assertForPlaybooks((content, playbookPath) => {
       assert.deepEqual(

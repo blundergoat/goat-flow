@@ -387,9 +387,10 @@ describe("comment playbook verification doctrine", () => {
         /machine-readable annotations[\s\S]+sanctioned bullet shapes[\s\S]+known false-positive classes/iu,
         playbookPath,
       );
+      assert.match(content, /Preserve current valid tags/u, playbookPath);
       assert.match(
         content,
-        /without deleting `@param`, `@return`, or `@returns`/u,
+        /Remove or repair a tag only when it is stale, invalid, or names a removed parameter/u,
         playbookPath,
       );
     });

@@ -36,7 +36,7 @@ d) Hard Rules
    - Maintain cross-file consistency for the same concept.
    - Preserve file evidence with semantic anchors, not stale line numbers.
    - Use real incidents, never hypothetical examples.
-   - Sub-agents get one objective, structured return, and a 5-call budget.
+   - Sub-agents get one objective and a structured return. Scouts get 5 tool calls. Implementation gets 5 plus the task's estimated minutes, up to 20 tool calls; split first if that would exceed 20.
    - No features, abstractions, or error handling beyond what was asked.
    - Ambiguous requirements: present interpretations; do not pick silently.
 

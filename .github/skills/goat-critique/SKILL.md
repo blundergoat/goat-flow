@@ -112,22 +112,12 @@ Mark each: RESOLVED (with winner) / STILL DISPUTED / RETRACTED (false positive c
 
 ## Phase 4 - Clarify
 
-**Persist before gate:** Write Phase 1-3 results to `.goat-flow/logs/critiques/<YYYY-MM-DD>-<HHMM>-<artifact-slug>-<rand5>.md` - delegation evidence (ids/handles, calls/limit, unavailable markers), summaries, matrix, cross-exams. Runs even on Phase 3 early exit.
+**Persist before gate:** Keep the Phase 1-3 draft in memory. Pipe it through stdin to the preamble-selected `goat-flow redact --output <fresh critique path>` or matching source CLI; only redactor destination bytes may reach disk. If unavailable or redaction fails, write nothing, emit `persist-skipped: redactor-unavailable`, and continue to the human gate. Do this after Phase 3 early exit too.
 
-Before synthesising, present the unresolved items to the human conversationally.
+Present unresolved items conversationally. Open with decision count and titles. Ask each as `Q[N]: [decision]? (A) [option] (B) [option] Default: [A/B]. Background: [one sentence]`. For 3+, use `| # | Decision | Option A (default) | Option B | Why |`, then ask for numbered overrides or default approval. Cover Phase-3 disputes, valid trade-offs, and whether context drift is intentional. End by requesting picks or pushback.
 
-**Opener:** Lead with a one-line summary of how many decisions are needed and their titles. Example: "3 decisions before synthesis: (1) SEC-01 severity, (2) remediation path, (3) attacker model scope."
-
-**Per-question format:** `Q[N]: [decision]? (A) [option] (B) [option] Default: [A/B]. Background: [1 sentence]`.
-
-**Compact table (3+ questions):** `| # | Decision | Option A (default) | Option B | Why |`. Follow with: "Reply with numbers to override defaults; or approve to proceed."
-
-Question types: (1) Disputes from Phase 3, (2) Trade-offs with two valid approaches, (3) Context drift findings - intentional vs oversight.
-
-**Closer:** After all questions, end with: "Reply with your picks (e.g. 'A, B, go with defaults on the rest') or push back on any framing."
-
-**If questions exist:** BLOCKING GATE - STOP and wait for human response.
-**If no questions (full consensus, no trade-offs, no context drift):** CHECKPOINT - note "no disputes - proceeding to synthesis" and continue.
+**Questions:** BLOCKING GATE - STOP for the human.
+**None:** CHECKPOINT - record "no disputes - proceeding to synthesis" and continue.
 
 ## Phase 5 - Synthesise
 

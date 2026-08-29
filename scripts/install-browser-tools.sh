@@ -2,9 +2,9 @@
 # =============================================================================
 # Browser Tools Installer
 # =============================================================================
-# Creates a user-local Python venv, installs browser-use, installs Python
-# Playwright, and installs Playwright's Chromium browser for local browser
-# automation checks.
+# Creates a user-local Python venv with two deliberately separate paths:
+# browser-use controls an approved user/system Chrome or explicit CDP endpoint;
+# browser-use-python exposes Python Playwright and its managed Chromium.
 #
 # Usage:
 #   scripts/install-browser-tools.sh
@@ -58,8 +58,8 @@ Options:
                       May invoke sudo through Playwright on Linux.
                       Auto-enabled on WSL unless --no-system-deps is set.
   --no-system-deps    Skip system dependency install even on WSL.
-  --force             Recreate the venv and overwrite existing wrappers in
-                      ~/.local/bin (including foreign wrappers from uv/pipx).
+  --force             Recreate the venv and overwrite existing wrappers in the
+                      selected wrapper directory, including uv/pipx wrappers.
   --help, -h          Show this help.
 
 Environment overrides:
@@ -180,6 +180,31 @@ resolve_file_path() {
     readlink -f "$1" 2>/dev/null || printf '%s\n' "$1"
 }
 
+validate_force_venv_target() {
+    local forbidden
+    local resolved_install_root
+    local resolved_project_root
+    local resolved_target
+    local resolved_user_home
+
+    resolved_target="$(resolve_file_path "$VENV_DIR")"
+    resolved_install_root="$(resolve_file_path "$INSTALL_ROOT")"
+    resolved_project_root="$(resolve_file_path "$PWD")"
+    resolved_user_home="$(resolve_file_path "$HOME")"
+
+    for forbidden in / "$resolved_user_home" "$resolved_install_root" "$resolved_project_root"; do
+        if [[ "$resolved_target" == "$forbidden" ]]; then
+            echo -e "${RED}Refusing --force removal of broad path: ${resolved_target}${NC}" >&2
+            exit 4
+        fi
+    done
+    if [[ ! -f "$VENV_DIR/pyvenv.cfg" ]]; then
+        echo -e "${RED}Refusing --force removal because this is not a recognizable Python venv: ${VENV_DIR}${NC}" >&2
+        echo -e "${WHITE}Expected marker: ${VENV_DIR}/pyvenv.cfg${NC}" >&2
+        exit 4
+    fi
+}
+
 find_python() {
     local candidate
     for candidate in python3.13 python3.12 python3.11 python3; do
@@ -254,6 +279,7 @@ guard_existing_wrapper "$WRAPPER_PY"
 guard_existing_wrapper "$WRAPPER_BU"
 
 if [[ "$FORCE" == true && -d "$VENV_DIR" ]]; then
+    validate_force_venv_target
     echo -e "${YELLOW}Removing existing venv: ${VENV_DIR}${NC}"
     rm -rf "$VENV_DIR"
 fi
@@ -270,8 +296,11 @@ VENV_PYTHON="$VENV_DIR/bin/python"
 echo -e "${CYAN}Upgrading packaging tools${NC}"
 "$VENV_PYTHON" -m pip install --upgrade --quiet pip setuptools wheel
 
-echo -e "${CYAN}Installing browser-use and Python Playwright${NC}"
-"$VENV_PYTHON" -m pip install --upgrade --quiet browser-use playwright
+echo -e "${CYAN}Installing browser-use CLI 3.0 and Python Playwright${NC}"
+# The wrapper and smoke below use browser-use's 0.13 CLI 3.0 stdin-Python
+# contract. Bound the compatible line so a future CLI migration fails here
+# instead of silently invalidating the installed instructions.
+"$VENV_PYTHON" -m pip install --upgrade --quiet "browser-use~=0.13.8" playwright
 
 echo -e "${CYAN}Installing Playwright Chromium browser${NC}"
 if [[ "$WITH_SYSTEM_DEPS" == true ]]; then
@@ -305,128 +334,7 @@ rm -f "$WRAPPER_BU"
 cat > "$WRAPPER_BU" <<EOF
 #!/usr/bin/env bash
 # $WRAPPER_MARKER
-# browser-use uses IN_DOCKER to decide whether Chrome needs --no-sandbox.
-# Root shells in some containers do not expose /.dockerenv or cgroup hints, so
-# set the hint at wrapper time before browser_use.config is imported.
-if [[ -z "\${IN_DOCKER:-}" ]] && [[ "\$(id -u)" -eq 0 ]]; then
-    export IN_DOCKER=true
-fi
-
-browser_use_target=("$VENV_DIR/bin/browser-use")
-browser_use_home="\${BROWSER_USE_HOME:-\$HOME/.browser-use}"
-browser_use_session="default"
-browser_use_close=false
-browser_use_close_all=false
-browser_use_expect_session=false
-
-for browser_use_arg in "\$@"; do
-    if [[ "\$browser_use_expect_session" == true ]]; then
-        browser_use_session="\$browser_use_arg"
-        browser_use_expect_session=false
-        continue
-    fi
-    case "\$browser_use_arg" in
-        --session)
-            browser_use_expect_session=true
-            ;;
-        --session=*)
-            browser_use_session="\${browser_use_arg#--session=}"
-            ;;
-        close)
-            browser_use_close=true
-            ;;
-        --all)
-            if [[ "\$browser_use_close" == true ]]; then
-                browser_use_close_all=true
-            fi
-            ;;
-    esac
-done
-
-browser_use_kill_pid() {
-    local pid="\$1"
-    local child_pid
-
-    if [[ ! "\$pid" =~ ^[0-9]+$ ]] || ! kill -0 "\$pid" 2>/dev/null; then
-        return 0
-    fi
-    if ! browser_use_pid_is_owned "\$pid"; then
-        return 0
-    fi
-    if command -v pgrep >/dev/null 2>&1; then
-        while IFS= read -r child_pid; do
-            if browser_use_pid_is_owned "\$child_pid"; then
-                kill "\$child_pid" 2>/dev/null || true
-            fi
-        done < <(pgrep -P "\$pid" || true)
-    fi
-    kill "\$pid" 2>/dev/null || true
-    sleep 0.2
-    if command -v pgrep >/dev/null 2>&1; then
-        while IFS= read -r child_pid; do
-            if browser_use_pid_is_owned "\$child_pid"; then
-                kill -9 "\$child_pid" 2>/dev/null || true
-            fi
-        done < <(pgrep -P "\$pid" || true)
-    fi
-    kill -9 "\$pid" 2>/dev/null || true
-}
-
-browser_use_pid_args() {
-    ps -o args= -p "\$1" 2>/dev/null || true
-}
-
-browser_use_pid_is_owned() {
-    local pid="\$1"
-    local args
-
-    if [[ ! "\$pid" =~ ^[0-9]+$ ]]; then
-        return 1
-    fi
-    args="\$(browser_use_pid_args "\$pid")"
-    if [[ -z "\$args" ]]; then
-        return 1
-    fi
-    case "\$args" in
-        *"browser_use.skill_cli.daemon --session"*|*"$VENV_DIR/bin/browser-use"*|*"$VENV_PYTHON"*browser_use*|*chrome*--remote-debugging-port*|*chromium*--remote-debugging-port*|*Chrome*--remote-debugging-port*)
-            return 0
-            ;;
-    esac
-    return 1
-}
-
-if [[ "\$browser_use_close" == true ]]; then
-    browser_use_pids=()
-    if [[ "\$browser_use_close_all" == true ]]; then
-        for browser_use_pid_file in "\$browser_use_home"/*.pid; do
-            [[ -f "\$browser_use_pid_file" ]] || continue
-            browser_use_pids+=("\$(cat "\$browser_use_pid_file" 2>/dev/null || true)")
-        done
-    elif [[ -f "\$browser_use_home/\$browser_use_session.pid" ]]; then
-        browser_use_pids+=("\$(cat "\$browser_use_home/\$browser_use_session.pid" 2>/dev/null || true)")
-    fi
-    if command -v pgrep >/dev/null 2>&1; then
-        if [[ "\$browser_use_close_all" == true ]]; then
-            while IFS= read -r browser_use_pid; do
-                browser_use_pids+=("\$browser_use_pid")
-            done < <(pgrep -f "browser_use.skill_cli.daemon --session" || true)
-        else
-            while IFS= read -r browser_use_pid; do
-                browser_use_pids+=("\$browser_use_pid")
-            done < <(pgrep -f "browser_use.skill_cli.daemon --session \$browser_use_session" || true)
-        fi
-    fi
-
-    "\${browser_use_target[@]}" "\$@"
-    browser_use_status="\$?"
-
-    for browser_use_pid in "\${browser_use_pids[@]}"; do
-        browser_use_kill_pid "\$browser_use_pid"
-    done
-    exit "\$browser_use_status"
-fi
-
-exec "\${browser_use_target[@]}" "\$@"
+exec "$VENV_DIR/bin/browser-use" "\$@"
 EOF
 chmod +x "$WRAPPER_BU"
 
@@ -514,64 +422,118 @@ else
 fi
 
 verify_browser_use_cli() {
+    local cli_help
+    local cli_output
+    local smoke_cdp_port
+    local smoke_cdp_url
+    local smoke_chrome_pid
     local smoke_dir
     local smoke_home
     local smoke_file
     local smoke_http_pid
-    local smoke_port
-    local smoke_session
-    local smoke_pid_file
-    local smoke_pid
+    local smoke_http_port
+    local smoke_ports
+    local smoke_runtime
+    local smoke_tmp
     local smoke_url
-    local open_output
-    local title_output
 
     smoke_dir="$(mktemp -d)"
-    smoke_home="$smoke_dir/browser-use-home"
+    smoke_home="$smoke_dir/home"
+    smoke_runtime="$smoke_dir/runtime"
+    smoke_tmp="$smoke_dir/tmp"
     smoke_file="$smoke_dir/browser-use-smoke.html"
     smoke_http_pid=""
-    smoke_port="$("$VENV_PYTHON" - <<'PY'
+    smoke_chrome_pid=""
+    smoke_ports="$("$VENV_PYTHON" - <<'PY'
 import socket
 
-with socket.socket() as s:
-    s.bind(("127.0.0.1", 0))
-    print(s.getsockname()[1])
+with socket.socket() as http_socket, socket.socket() as cdp_socket:
+    http_socket.bind(("127.0.0.1", 0))
+    cdp_socket.bind(("127.0.0.1", 0))
+    print(http_socket.getsockname()[1], cdp_socket.getsockname()[1])
 PY
 )"
-    smoke_session="goatflow-install-smoke"
-    smoke_pid_file="$smoke_home/$smoke_session.pid"
-    smoke_pid=""
-    smoke_url="http://127.0.0.1:$smoke_port/$(basename "$smoke_file")"
+    read -r smoke_http_port smoke_cdp_port <<< "$smoke_ports"
+    smoke_cdp_url="http://127.0.0.1:$smoke_cdp_port"
+    smoke_url="http://127.0.0.1:$smoke_http_port/$(basename "$smoke_file")"
+    mkdir -p "$smoke_home" "$smoke_runtime" "$smoke_tmp"
+
+    stop_browser_smoke_process() {
+        local pid="$1"
+
+        if [[ ! "$pid" =~ ^[0-9]+$ ]] || ! kill -0 "$pid" 2>/dev/null; then
+            return 0
+        fi
+        kill "$pid" 2>/dev/null || true
+        for _ in {1..20}; do
+            if ! kill -0 "$pid" 2>/dev/null; then
+                wait "$pid" 2>/dev/null || true
+                return 0
+            fi
+            sleep 0.1
+        done
+        kill -9 "$pid" 2>/dev/null || true
+        wait "$pid" 2>/dev/null || true
+    }
 
     cleanup_browser_use_cli_smoke() {
-        if [[ -f "$smoke_pid_file" ]]; then
-            smoke_pid="$(cat "$smoke_pid_file" 2>/dev/null || true)"
-        fi
-        BROWSER_USE_HOME="$smoke_home" browser-use --session "$smoke_session" close >/dev/null 2>&1 || true
-        if [[ -n "$smoke_pid" ]] && kill -0 "$smoke_pid" 2>/dev/null; then
-            if command_exists pgrep; then
-                while IFS= read -r child_pid; do
-                    kill "$child_pid" 2>/dev/null || true
-                done < <(pgrep -P "$smoke_pid" || true)
-            fi
-            kill "$smoke_pid" 2>/dev/null || true
-            sleep 0.2
-            if command_exists pgrep; then
-                while IFS= read -r child_pid; do
-                    kill -9 "$child_pid" 2>/dev/null || true
-                done < <(pgrep -P "$smoke_pid" || true)
-            fi
-            kill -9 "$smoke_pid" 2>/dev/null || true
-        fi
-        if [[ -n "$smoke_http_pid" ]] && kill -0 "$smoke_http_pid" 2>/dev/null; then
-            kill "$smoke_http_pid" 2>/dev/null || true
-        fi
+        BH_HOME="$smoke_home" \
+            BH_RUNTIME_DIR="$smoke_runtime" \
+            BH_TMP_DIR="$smoke_tmp" \
+            BU_CDP_URL="$smoke_cdp_url" \
+            "$WRAPPER_BU" --reload >/dev/null 2>&1 || true
+        stop_browser_smoke_process "$smoke_chrome_pid"
+        stop_browser_smoke_process "$smoke_http_pid"
         rm -rf "$smoke_dir"
     }
 
-    printf '%s\n' '<!doctype html><title>goat-flow browser-use smoke</title><h1>ok</h1>' > "$smoke_file"
-    "$VENV_PYTHON" -m http.server "$smoke_port" --bind 127.0.0.1 --directory "$smoke_dir" > "$smoke_dir/http.log" 2>&1 &
+    if ! cli_help="$("$WRAPPER_BU" --help 2>&1)"; then
+        echo "$cli_help" >&2
+        cleanup_browser_use_cli_smoke
+        return 1
+    fi
+    if [[ "$cli_help" != *"browser-use <<'PY'"* || "$cli_help" != *"page_info()"* ]]; then
+        echo "Installed browser-use does not expose the required CLI 3.0 stdin-Python interface." >&2
+        echo "$cli_help" >&2
+        cleanup_browser_use_cli_smoke
+        return 1
+    fi
+
+    printf '%s\n' '<!doctype html><title>goat-flow browser-use smoke</title><h1>ok</h1><script>console.error("goat-flow smoke error")</script>' > "$smoke_file"
+    "$VENV_PYTHON" -m http.server "$smoke_http_port" --bind 127.0.0.1 --directory "$smoke_dir" > "$smoke_dir/http.log" 2>&1 &
     smoke_http_pid="$!"
+
+    "$VENV_PYTHON" - "$smoke_cdp_port" > "$smoke_dir/chromium.log" 2>&1 <<'PY' &
+import signal
+import sys
+import time
+
+from playwright.sync_api import sync_playwright
+
+stopping = False
+
+
+def request_stop(_signum, _frame):
+    global stopping
+    stopping = True
+
+
+signal.signal(signal.SIGINT, request_stop)
+signal.signal(signal.SIGTERM, request_stop)
+
+with sync_playwright() as playwright:
+    browser = playwright.chromium.launch(
+        headless=True,
+        args=[
+            "--remote-debugging-address=127.0.0.1",
+            f"--remote-debugging-port={sys.argv[1]}",
+        ],
+    )
+    while not stopping:
+        time.sleep(0.1)
+    browser.close()
+PY
+    smoke_chrome_pid="$!"
 
     for _ in {1..50}; do
         if "$VENV_PYTHON" -c "import urllib.request; urllib.request.urlopen('$smoke_url', timeout=0.2).read()" >/dev/null 2>&1; then
@@ -579,27 +541,69 @@ PY
         fi
         sleep 0.1
     done
-
-    if ! open_output="$(BROWSER_USE_HOME="$smoke_home" browser-use --session "$smoke_session" open "$smoke_url" 2>&1)"; then
-        echo "$open_output" >&2
+    if ! "$VENV_PYTHON" -c "import urllib.request; urllib.request.urlopen('$smoke_url', timeout=0.2).read()" >/dev/null 2>&1; then
+        echo "Local browser-use smoke page did not become ready." >&2
         cleanup_browser_use_cli_smoke
         return 1
     fi
 
-    if ! title_output="$(BROWSER_USE_HOME="$smoke_home" browser-use --session "$smoke_session" get title 2>&1)"; then
-        echo "$title_output" >&2
+    for _ in {1..100}; do
+        if "$VENV_PYTHON" -c "import urllib.request; urllib.request.urlopen('$smoke_cdp_url/json/version', timeout=0.2).read()" >/dev/null 2>&1; then
+            break
+        fi
+        sleep 0.1
+    done
+    if ! "$VENV_PYTHON" -c "import urllib.request; urllib.request.urlopen('$smoke_cdp_url/json/version', timeout=0.2).read()" >/dev/null 2>&1; then
+        echo "Isolated Playwright Chromium did not expose its loopback CDP endpoint." >&2
         cleanup_browser_use_cli_smoke
         return 1
     fi
 
-    if [[ "$title_output" != *"goat-flow browser-use smoke"* ]]; then
-        echo "browser-use CLI title check returned unexpected output: $title_output" >&2
+    if ! cli_output="$(
+        BROWSER_USE_SMOKE_URL="$smoke_url" \
+            BH_HOME="$smoke_home" \
+            BH_RUNTIME_DIR="$smoke_runtime" \
+            BH_TMP_DIR="$smoke_tmp" \
+            BU_CDP_URL="$smoke_cdp_url" \
+            "$WRAPPER_BU" 2>&1 <<'PY'
+import os
+
+drain_events()
+new_tab(os.environ["BROWSER_USE_SMOKE_URL"])
+wait_for_load()
+events = drain_events()
+console_error_count = sum(
+    event.get("method") == "Runtime.exceptionThrown"
+    or (
+        event.get("method") == "Runtime.consoleAPICalled"
+        and (event.get("params") or {}).get("type") == "error"
+    )
+    for event in events
+)
+print(page_info())
+print(js("document.title"))
+print(capture_screenshot())
+print(f"console_errors={console_error_count}")
+PY
+    )"; then
+        echo "$cli_output" >&2
+        cleanup_browser_use_cli_smoke
+        return 1
+    fi
+
+    if [[ "$cli_output" != *"goat-flow browser-use smoke"* ]]; then
+        echo "browser-use CLI title check returned unexpected output: $cli_output" >&2
+        cleanup_browser_use_cli_smoke
+        return 1
+    fi
+    if [[ "$cli_output" != *"console_errors=1"* ]]; then
+        echo "browser-use CLI console-event check returned unexpected output: $cli_output" >&2
         cleanup_browser_use_cli_smoke
         return 1
     fi
 
     cleanup_browser_use_cli_smoke
-    echo "browser-use CLI opened and read a local page successfully"
+    echo "browser-use CLI 3.0 opened, read, and captured an isolated local page successfully"
 }
 
 if [[ "$BROWSER_OK" == true ]]; then
@@ -620,11 +624,13 @@ if [[ "$BROWSER_OK" == true ]]; then
 else
     echo -e "${YELLOW}Browser tools installed but Chromium cannot launch yet (see above).${NC}"
 fi
+echo -e "${WHITE}browser-use controls an approved user/system Chrome or explicit CDP endpoint.${NC}"
+echo -e "${WHITE}browser-use-python exposes Python Playwright and its managed Chromium.${NC}"
 echo -e "${WHITE}CLI wrapper:${NC}    ${GREEN}${WRAPPER_BU}${NC}"
 echo -e "${WHITE}Python wrapper:${NC} ${GREEN}${WRAPPER_PY}${NC}"
 echo -e "${WHITE}Run diagnostics:${NC}"
 echo -e "  ${GREEN}command -v browser-use${NC}"
-echo -e "  ${GREEN}browser-use doctor${NC}"
+echo -e "  ${GREEN}browser-use --doctor${NC}"
 
 if ! path_contains_dir_in "$ORIGINAL_PATH" "$BIN_DIR"; then
     echo ""

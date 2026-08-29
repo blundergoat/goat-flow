@@ -119,7 +119,7 @@ The scope is fixed; only the test-first ordering differs. A complies; B/C expose
 
 ## Elements of a good pressure scenario
 
-Use concrete options, current constraints and paths, an active decision, and no easy out. Never invent target facts.
+Use concrete options, Current constraints and paths, an active decision, and no easy out. Never invent target facts.
 
 ### Bad vs good scenarios
 

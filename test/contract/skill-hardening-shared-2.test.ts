@@ -86,7 +86,7 @@ describe("skill hardening contracts: shared surfaces (2/3)", () => {
     assert.match(settingsFootguns, /At the 2026-06-07 fix/u);
     assert.match(
       settingsFootguns,
-      /2026-07-16 follow-up below later removed unmatched Write rules/u,
+      /2026-07-16 follow-up below removed unmatched Write rules/u,
     );
     assert.match(
       settingsFootguns,

@@ -198,7 +198,7 @@ Splitting adds cognitive load and another pointer, so make the cut earn itself:
 
 Do not split at a round number or merge merely to reduce file count. Protect each invocation path.
 
-Agent-reachable skills pay context load through discovery metadata; human-invoked skills make the human the index. Choose agent reach only when the agent or another skill must discover it. When human-invoked skills become hard to remember, use one compact router rather than making every skill always discoverable.
+Agent-reachable skills pay context load through discovery metadata; human-invoked skills make the human the index. Choose agent reach only when the agent or another skill must discover it. When human-invoked skills become difficult to recall, use one compact router rather than making every skill always discoverable.
 
 ## Troubleshooting
 
