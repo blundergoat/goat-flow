@@ -22,6 +22,7 @@ import { describe, it } from "node:test";
 import { STANDALONE_PLAYBOOK_FILES } from "../../src/cli/audit/skill-docs-contract.js";
 import { getPackageVersion } from "../../src/cli/paths.js";
 import type { QualityMode } from "../../src/cli/quality/schema-types.js";
+import { makeQualityScoreRationale } from "../fixtures/quality-score-rationale.js";
 
 const CONTROLLING_WORKSPACE = resolve(import.meta.dirname, "..", "..");
 const CLI_ENTRY_PATH = join(CONTROLLING_WORKSPACE, "src", "cli", "cli.ts");
@@ -307,6 +308,7 @@ function consumerQualityReport(consumerTargetPath: string): object {
         learnability: 25,
       },
     },
+    score_rationale: makeQualityScoreRationale(),
     findings: [],
     refuted_candidates: [],
   };

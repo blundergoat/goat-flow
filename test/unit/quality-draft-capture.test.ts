@@ -39,6 +39,7 @@ import {
 } from "../../src/cli/server/quality-draft-capture.js";
 import type { QualityDraftCapture } from "../../src/cli/server/quality-draft-capture.js";
 import { runConcurrentQualityWorkers } from "../helpers/concurrent-quality-workers.js";
+import { makeQualityScoreRationale } from "../fixtures/quality-score-rationale.js";
 
 const PACKAGE_VERSION = (
   JSON.parse(readFileSync("package.json", "utf8")) as { version: string }
@@ -111,6 +112,7 @@ function validReport(projectRoot: string): string {
         learnability: 0,
       },
     },
+    score_rationale: makeQualityScoreRationale(),
     findings: [],
     refuted_candidates: [],
   });

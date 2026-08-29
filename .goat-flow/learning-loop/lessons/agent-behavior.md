@@ -1,6 +1,6 @@
 ---
 category: agent-behavior
-last_reviewed: 2026-08-26
+last_reviewed: 2026-08-29
 ---
 
 **Scope:** Reading the request and retrieving memory - parsing what was asked, honouring an explicit next step, naming the real failure class in retrieval terms, and treating end-of-task rules as deliverables. Using tools and the environment is [agent-tooling.md](agent-tooling.md); what an explicit skill invocation obliges is [skill-invocation.md](skill-invocation.md).
@@ -112,13 +112,18 @@ Related: `feedback_gruff_never_disable` (auto-memory, 2026-05-25).
 
 ## Lesson: Quality assessors can reopen ADR-settled skill modes
 
-**Status:** active | **Created:** 2026-05-27
+**Status:** active | **Created:** 2026-05-27 | **Incident count:** 2 | **Latest occurrence:** 2026-08-29
+**Decision changed:** Treat any ADR-settled constraint - skill mode, tool-call ceiling, or sub-agent budget - as decided until the decisions INDEX says otherwise, and search that index by the disputed mechanism before filing the finding.
+**Trigger phase:** READ
+**Caught at:** VERIFY
 
 **What happened:** Quality assessment agents recommended "quick critique mode" or "allow lightweight critique for smaller artifacts" as a Top 5 improvement. That would have reintroduced the exact failure ADR-021 records: single-context self-talk disguised as multi-perspective critique.
 
 **Root cause:** The assessors saw `goat-critique` spawns three sub-agents per invocation and pattern-matched the cost as over-engineering without reading history.
 
-**Prevention:** Before accepting a quality recommendation that changes a skill mode, read the relevant ADR and prompt constraints. If it contradicts an accepted ADR, fix the assessor prompt or cite the ADR; don't re-litigate the mode inside the skill file. Anchors: `.goat-flow/learning-loop/decisions/ADR-021-goat-critique-full-mode-only.md` (search: `goat-critique runs in one mode: full delegated`) and `src/cli/prompt/compose-quality-static-sections.ts` (search: `Do NOT recommend adding quick/lite/reduced modes`).
+**Recurrence 2026-08-29:** A quality assessment filed a MAJOR contradiction claiming goat-critique cannot run as specified, because its five-call sub-agent ceiling is smaller than the context maps its own rubrics prescribe. `.goat-flow/learning-loop/decisions/ADR-056-implementation-subagent-budget.md` (search: `specialist scout contracts that stay fixed`) had weighed that tension on 2026-08-23, added a second budget tier for implementation sub-agents, and deliberately left the critique ceiling alone. The finding also assumed one file read costs one tool call, where the same ADR (search: `**Tool call:**`) counts one tool invocation and a single grep can span several index files. Two things generalise past the original incident. The settled artifact was a numeric ceiling rather than a mode, so the reopening risk covers any ADR-fixed constraint. The governing surface stays deliberately silent: that ADR requires the installed goat-critique mirrors to stay byte-identical, so the ceiling ships with no pointer to the decision that fixed it, and silence at the surface is not evidence that nothing decided it.
+
+**Prevention:** Before filing or accepting a quality finding that changes an ADR-settled constraint - a skill mode, a numeric ceiling, or a budget - read the relevant ADR and prompt constraints. If it contradicts an accepted ADR, fix the assessor prompt or cite the ADR; don't re-litigate the constraint inside the skill file. Search the decisions INDEX by the disputed mechanism itself, because a decision that freezes a constraint is filed under the constraint rather than under the skill that carries it; area-shaped terms miss it, per `Retrieval terms must name the concrete failure class` in this bucket. Anchors: `.goat-flow/learning-loop/decisions/ADR-021-goat-critique-full-mode-only.md` (search: `goat-critique runs in one mode: full delegated`), `.goat-flow/learning-loop/decisions/INDEX.md` (search: `ADR-056: Separate scout and implementation sub-agent budgets`), and `src/cli/prompt/compose-quality-static-sections.ts` (search: `check the decisions INDEX for an accepted ADR`).
 
 ---
 

@@ -20,8 +20,11 @@ last_reviewed: 2026-08-21
 ## Lesson: Directory targets can break Node's test runner
 
 **Status:** active | **Created:** 2026-06-11
+**Incident count:** 2 | **Latest occurrence:** 2026-08-29
 
 **What happened:** While executing `.goat-flow/plans/1.12.0/M01-verification-score-spike-and-decision.md`, the milestone's baseline command `node --import tsx --test test/unit/` failed before running tests: Node treated the directory argument as a module target and tried to import `test/unit/index.json`, producing `ERR_MODULE_NOT_FOUND`. The canonical repo runner `node scripts/run-tests.mjs fast` immediately passed with `# pass 661`, `# fail 0`.
+
+**Recurrence (2026-08-29):** M70 named `test/unit` and `test/contract` directly in a focused `node --test` command. Node treated both directories as test modules and returned `tests 2`, `pass 0`, `fail 2` before executing any owning case. Replacing the directory arguments with the four explicit M70 `*.test.ts` paths restored the intended 166-case proof. Evidence anchors: `package.json` (search: `"test:fast": "node scripts/run-tests.mjs fast"`) and `test/contract/command-phrases.test.ts` (search: `instruction-files must remain a bounded manifest mode`).
 
 **Root cause:** I trusted a milestone's directory-shaped test command instead of checking `package.json` and `scripts/run-tests.mjs`. In this repo, test file discovery and slow/fast partitioning live in `scripts/run-tests.mjs`; direct Node `--test` invocations should name specific `*.test.ts` files, not a directory.
 

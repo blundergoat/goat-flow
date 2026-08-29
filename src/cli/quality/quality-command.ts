@@ -123,6 +123,7 @@ async function handleQualityHistorySubcommand(
       agent: options.agent,
       qualityMode: options.qualityMode,
       includeAll: options.includeAll,
+      entries: selectedEntries,
     }),
   );
 }

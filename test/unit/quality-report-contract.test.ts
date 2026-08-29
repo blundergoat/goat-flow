@@ -33,6 +33,7 @@ import {
   QUALITY_WORKTREE_STATES,
 } from "../../src/cli/quality/schema-types.js";
 import { makeSharedFacts } from "../fixtures/projects/index.js";
+import { makeQualityScoreRationale } from "../fixtures/quality-score-rationale.js";
 
 /** Top-level JSON keys every contract render must show in its body shape. */
 const REQUIRED_TOP_LEVEL_FIELDS = [
@@ -242,6 +243,7 @@ function makePriorQualityReport(
           learnability: 10,
         },
       },
+      score_rationale: makeQualityScoreRationale(),
       findings: [],
       refuted_candidates: [
         {

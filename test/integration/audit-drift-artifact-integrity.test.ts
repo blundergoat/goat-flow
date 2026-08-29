@@ -633,6 +633,36 @@ describe("checkDrift: artifact integrity", () => {
     }
   });
 
+  // Filesystem side effects: creates and removes a project without install state; content lint accepts lifecycle paths clean checkouts lack.
+  it("accepts absent managed install-state lifecycle references", () => {
+    const fixtureRoot = setupFixture();
+    try {
+      const guidePath = join(fixtureRoot, "docs", "audit-checks.md");
+      mkdirSync(dirname(guidePath), { recursive: true });
+      writeFileSync(
+        guidePath,
+        "Managed installs use `.goat-flow/install-state/managed.json`; repair access to `.goat-flow/install-state/` before retrying.\n",
+      );
+      const context = {
+        projectPath: fixtureRoot,
+        fs: createFS(fixtureRoot),
+      } as AuditContext;
+
+      const report = runFactualClaimChecks(context);
+      assert.equal(
+        report.findings.some(
+          (finding) =>
+            finding.rule === "path-ref-unresolved" &&
+            finding.message.includes(".goat-flow/install-state/"),
+        ),
+        false,
+        `managed install-state path produced an unresolved-path finding: ${JSON.stringify(report.findings)}`,
+      );
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
   // Covers a doc reference pointing nowhere: writes the dangling path, which must be reported.
   it("reports an arbitrary missing documentation path", () => {
     const fixtureRoot = setupFixture();

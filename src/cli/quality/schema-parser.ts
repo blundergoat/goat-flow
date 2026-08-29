@@ -29,6 +29,7 @@ import {
   type QualityReport,
   type QualityMode,
   type QualityReportParseOptions,
+  type QualityScoreRationale,
   type QualityScope,
   type QualityScores,
   type QualitySetupScores,
@@ -47,6 +48,7 @@ import {
   rejectUnknownKeys,
 } from "./schema-expectations.js";
 import { parseReportRefutedCandidates } from "./schema-refuted-candidates.js";
+import { parseQualityScoreRationale } from "./schema-score-rationale.js";
 
 /**
  * Confirm a formatted run date names a real Gregorian calendar day.
@@ -250,6 +252,32 @@ function parseScores(
     scores: {
       setup: setup.scores,
       system: system.scores,
+    },
+  };
+}
+
+/** Parse numeric scores and their optional-for-legacy provenance as one report boundary. */
+function parseReportScoring(
+  raw: Record<string, unknown>,
+  options: QualityReportParseOptions,
+): FieldResult<{
+  scores: QualityScores;
+  scoreRationale: QualityScoreRationale | undefined;
+}> {
+  const scores = parseScores(raw.scores, "report.scores");
+  if (!scores.ok) return scores;
+  const scoreRationale = parseOptionalCurrentField(
+    raw,
+    "score_rationale",
+    options,
+    parseQualityScoreRationale,
+  );
+  if (!scoreRationale.ok) return scoreRationale;
+  return {
+    ok: true,
+    value: {
+      scores: scores.scores,
+      scoreRationale: scoreRationale.value,
     },
   };
 }
@@ -815,6 +843,7 @@ function optionalReportFields(fields: {
   qualityMode: QualityMode | undefined;
   priorReportId: string | null | undefined;
   assessmentContext: QualityAssessmentContext | undefined;
+  scoreRationale: QualityScoreRationale | undefined;
 }): Partial<QualityReport> {
   return {
     ...(fields.scope !== undefined ? { scope: fields.scope } : {}),
@@ -829,6 +858,9 @@ function optionalReportFields(fields: {
       : {}),
     ...(fields.assessmentContext !== undefined
       ? { assessment_context: fields.assessmentContext }
+      : {}),
+    ...(fields.scoreRationale !== undefined
+      ? { score_rationale: fields.scoreRationale }
       : {}),
   };
 }
@@ -946,6 +978,7 @@ function parseReportInternal(
       "prior_report_id",
       "assessment_context",
       "scores",
+      "score_rationale",
       "findings",
       "refuted_candidates",
     ],
@@ -1006,9 +1039,9 @@ function parseReportInternal(
     priorReportId = parsedPriorReportId.value;
   }
 
-  const scores = parseScores(raw.scores, "report.scores");
-  // Score errors stop the report before any headline metrics are shown.
-  if (!scores.ok) return scores;
+  const scoring = parseReportScoring(raw, options);
+  // Score or rationale errors stop the report before any headline metrics are shown.
+  if (!scoring.ok) return scoring;
 
   const reportCollections = parseReportCollections(raw, options, priorReportId);
   // Invalid findings or exclusions stop the report before either list reaches history.
@@ -1027,8 +1060,9 @@ function parseReportInternal(
       qualityMode: qualityMode.value,
       priorReportId,
       assessmentContext: assessmentContext.value,
+      scoreRationale: scoring.value.scoreRationale,
     }),
-    scores: scores.scores,
+    scores: scoring.value.scores,
   };
 
   return {

@@ -25,6 +25,7 @@ import { parseCLIArgs } from "../../src/cli/cli-parser.js";
 import { getPackageVersion } from "../../src/cli/paths.js";
 import { persistQualityReportText } from "../../src/cli/quality/quality-command.js";
 import { parseQualityReport } from "../../src/cli/quality/schema.js";
+import { makeQualityScoreRationale } from "../fixtures/quality-score-rationale.js";
 
 const CLI_USAGE_EXIT_CODE = 2;
 const REPOSITORY_ROOT = resolve(import.meta.dirname, "..", "..");
@@ -94,6 +95,7 @@ function currentQualityReport(
         learnability: 0,
       },
     },
+    score_rationale: makeQualityScoreRationale(),
     findings: [
       {
         type: "setup_quality",

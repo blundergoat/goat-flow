@@ -50,8 +50,8 @@ Plans are local workflow state, not a setup invariant. Mode R is read-only: repo
 
 0. **Path-Only Intake / Read-Only Orientation** - path-only or ambiguous task path. Summarize status, ask next action, stop.
 R. **Reconcile Existing Plan State** - explicit reconcile/audit/refresh. Compare live state with recorded evidence, propose corrections, and stop without writes.
-1. **Named-File Update** - user asks to update, improve, tighten, rewrite, or fix a specific existing plan file. A path alone is not write approval. Proceed to Phase 2 § Mode 1 only for plan-file edits, not code implementation.
 2. **Read-Only Analysis** - analysis signals: "what would the milestones look like", "break this down for me", "plan this out", "sketch the milestones", "reporting-only", "no-implementation". No files written; inline output; Phase 3 skipped; transition to file mode available later.
+1. **Named-File Update** - update, improve, tighten, rewrite, or fix a specific plan file only when no explicit reporting-only or no-implementation signal is present. A path alone is not write approval. Use Phase 2 § Mode 1; never implement code.
 3. **Small File-Write** - Hotfix / Small Feature scope (1-2 milestones, low blast radius), no analysis signals. Same write path as Mode 4; the only difference is ceremony - concise milestone files, not full ones. Write directly to `.goat-flow/plans/<active>/`.
 4. **File-Write (default at Standard+)** - implementation signals ("create milestones", "set up the plan", "start planning") OR Standard / System / Infrastructure scope with a clear objective and no analysis signals. Write full milestone files directly to `.goat-flow/plans/<active>/`.
 

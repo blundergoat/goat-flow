@@ -1,6 +1,6 @@
 ---
 category: verification-formatting
-last_reviewed: 2026-08-28
+last_reviewed: 2026-08-29
 ---
 
 **Scope:** Formatter, lint, and Knip debt that only surfaces at repo-wide scope - style flags, copied or untracked files that inherit debt, and touched-test formatting before a verification claim. Adding or tuning a preflight gate is [verification-preflight.md](verification-preflight.md).
@@ -79,7 +79,7 @@ last_reviewed: 2026-08-28
 **Decision changed:** Run the repository formatter on touched TypeScript before treating a focused GREEN run as milestone verification.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
-**Incident count:** 22 | **Latest occurrence:** 2026-08-27
+**Incident count:** 23 | **Latest occurrence:** 2026-08-29
 
 **Prevention:** Format touched TypeScript before focused proof and retain Prettier in final verification. For goat-clarity, freeze the repository-owned check and write commands before mutation; a receipt without literal formatter proof remains incomplete.
 
@@ -102,6 +102,8 @@ last_reviewed: 2026-08-28
 **Recurrence 2026-08-26:** M55's shipped-descriptor regression was behaviourally green before an exact-path Prettier check rejected `test/unit/audit-command/hook-facts.test.ts`. Formatting only that file made the same check print `All matched files use Prettier code style!`. Evidence anchor: `test/unit/audit-command/hook-facts.test.ts` (search: `reads managed Claude exec operands before inert shell routes`).
 
 **Recurrence 2026-08-27:** M41 added a source-shape contract for the heap-safe Knip recovery command but did not format it before the first exact-path check. `npx prettier --check test/integration/preflight-progress.test.ts` rejected the file, and `set -e` stopped the proof batch before ShellCheck, Bash syntax, or runtime tests. Format only that file and restart the complete proof batch. Evidence anchor: `test/integration/preflight-progress.test.ts` (search: `keeps Knip failure guidance on the heap-safe preflight invocation`).
+
+**Recurrence 2026-08-29:** M71's schema and history tests were green before the exact-path Prettier check rejected three milestone files. Formatting only those files made the same check print `All matched files use Prettier code style!`, and the focused tests stayed green. Evidence anchors: `src/cli/quality/schema-score-rationale.ts` (search: `QUALITY_SCORE_RATIONALE_MAX_CHARACTERS`), `test/unit/quality-score-rationale.test.ts` (search: `quality score rationale schema`), and `test/unit/quality-diff-delta-tag.test.ts` (search: `quality diff score rationale`).
 
 Evidence anchors:
 
@@ -174,7 +176,7 @@ Evidence anchors:
 
 **Status:** active | **Created:** 2026-06-07
 
-**Decision changed:** Run typecheck, ESLint, Knip, and formatting before preflight after TypeScript surface changes. | **Trigger phase:** VERIFY | **Incident count:** 20 | **Latest occurrence:** 2026-08-28
+**Decision changed:** Run typecheck, ESLint, Knip, and formatting before preflight after TypeScript surface changes. | **Trigger phase:** VERIFY | **Incident count:** 21 | **Latest occurrence:** 2026-08-29
 
 **What happened:** Narrower checks repeatedly cleared before later static gates. On 2026-08-10, typecheck rejected dynamic membership against a literal-tuple union and ESLint found proof-reader and registrar complexity 13/11. Earlier recurrences included formatting drift, an undiscovered worker, and impossible fallback logic.
 
@@ -197,6 +199,8 @@ Evidence anchors:
 **Recurrence 2026-08-28 (Task 10 proof command):** During M41 Task 10 proof, I inferred an `npm run knip` script from the dependency and gate name; npm failed because no such package script exists. Reading preflight's `knip_command` restored the repository's required heap and traversal flags, and that exact command exited 0. Copy the repository-owned invocation from its gate instead of inventing a conventional package-script name. Evidence anchors: `scripts/preflight-checks.sh` (search: `knip_command=(`) and `package.json` (search: `"preflight": "bash scripts/preflight-checks.sh"`).
 
 **Recurrence 2026-08-28 (M47 routing contracts):** The edited doctrine contract and new dispatcher-fixture contract passed their focused suites before the required clarity pass found both files outside repository Prettier style. Run the repository-owned scoped formatter check immediately after TypeScript edits, before treating focused GREEN as task proof. Evidence anchors: `test/contract/skill-quality-testing-doctrine.test.ts` (search: `scopes retirement and qualification to one reproducible target`), `test/contract/dispatcher-routing-fixture.test.ts` (search: `Guards deterministic dispatcher-corpus integrity`), and `package.json` (search: `"format:check"`).
+
+**Recurrence 2026-08-29 (M71 rationale limit):** Focused schema tests, typecheck, ESLint, Prettier, and the full suite were green before preflight's exact Knip gate found the rationale character limit re-exported from the public schema barrel with no consumer. Removing only that re-export kept internal validation and prompt composition on the owning module and cleared the exact unused-export finding. Evidence anchors: `src/cli/quality/schema.ts` (search: `type QualityScoreRationale`) and `src/cli/quality/schema-score-rationale.ts` (search: `QUALITY_SCORE_RATIONALE_MAX_CHARACTERS`).
 
 **Release recurrence (2026-08-09):** Hook notes gained a dated release heading before that release's manifest snapshot existed, so the full suite failed. Keep notes under `Unreleased` until release identity and its snapshot propagate together. Evidence: `CHANGELOG.md` (search: `## Unreleased`) and `test/unit/manifest.test.ts` (search: `missing manifest snapshots`).
 

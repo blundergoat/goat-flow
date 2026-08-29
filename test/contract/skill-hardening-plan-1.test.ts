@@ -188,6 +188,34 @@ describe("skill hardening contracts: goat-plan (1/2)", () => {
     });
   });
 
+  it("makes explicit no-write signals outrank named-file mutation verbs", () => {
+    assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
+      const intake = readMarkdownSection(skillPath, "Step 0 - Intake");
+      const readOnlyIndex = intake.indexOf("2. **Read-Only Analysis**");
+      const namedFileIndex = intake.indexOf("1. **Named-File Update**");
+
+      assert.notEqual(
+        readOnlyIndex,
+        -1,
+        `${skillPath}: missing read-only mode`,
+      );
+      assert.notEqual(
+        namedFileIndex,
+        -1,
+        `${skillPath}: missing named-file update mode`,
+      );
+      assert.ok(
+        readOnlyIndex < namedFileIndex,
+        `${skillPath}: explicit no-write signals lose first-match selection`,
+      );
+      assert.match(
+        intake,
+        /Named-File Update.*only when no explicit reporting-only or no-implementation signal is present/su,
+        `${skillPath}: ordinary update verbs can override explicit no-write intent`,
+      );
+    });
+  });
+
   it("orders goat-plan path-only classification before bounded retrieval and plan reads", () => {
     assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);

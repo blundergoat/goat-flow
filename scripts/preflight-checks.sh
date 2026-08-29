@@ -117,6 +117,22 @@ if (mode === "hook-dirs") {
   process.exit(0);
 }
 
+if (mode === "instruction-files") {
+  const files = [
+    ...new Set(
+      Object.values(manifest.agents || {})
+        .map((agent) =>
+          typeof agent.instruction_file === "string"
+            ? agent.instruction_file
+            : "",
+        )
+        .filter(Boolean),
+    ),
+  ];
+  for (const file of files) console.log(file);
+  process.exit(0);
+}
+
 if (mode === "supported-skills") {
   for (const skill of manifest.skills?.canonical || []) console.log(skill);
   process.exit(0);
@@ -1378,7 +1394,7 @@ fi
 
 # Derive instruction file list from manifest once, reuse across sections
 agent_files=()
-if manifest_agent_lines=$(node -e "const m=require('./workflow/manifest.json');for(const a of Object.values(m.agents))console.log(a.instruction_file)" 2>/dev/null); then
+if manifest_agent_lines=$(manifest_eval instruction-files 2>/dev/null); then
     while IFS= read -r af; do
         [[ -f "$af" ]] && agent_files+=("$af")
     done <<< "$manifest_agent_lines"

@@ -246,6 +246,39 @@ describe("user-facing CLI package identity", () => {
       "deployed examples must not fall back to a bare package command",
     );
   });
+
+  it("deduplicates manifest instruction paths before preflight quality checks", () => {
+    const preflight = readFileSync(
+      resolve(PROJECT_ROOT, "scripts/preflight-checks.sh"),
+      "utf-8",
+    );
+    const instructionFilesStart = preflight.indexOf(
+      'if (mode === "instruction-files") {',
+    );
+    const supportedSkillsStart = preflight.indexOf(
+      'if (mode === "supported-skills") {',
+    );
+
+    assert.notEqual(
+      instructionFilesStart,
+      -1,
+      "preflight must define the instruction-files manifest mode",
+    );
+    assert.ok(
+      supportedSkillsStart > instructionFilesStart,
+      "instruction-files must remain a bounded manifest mode",
+    );
+    const instructionFilesMode = preflight.slice(
+      instructionFilesStart,
+      supportedSkillsStart,
+    );
+    assert.match(instructionFilesMode, /new Set\(/u);
+    assert.match(instructionFilesMode, /instruction_file/u);
+    assert.match(
+      preflight,
+      /manifest_agent_lines=\$\(manifest_eval instruction-files/u,
+    );
+  });
 });
 
 describe("bounded hook verification guidance", () => {

@@ -18,6 +18,7 @@ import {
   QUALITY_FINDING_SEVERITIES,
   QUALITY_FINDING_TYPES,
   QUALITY_GROUNDING_STATUSES,
+  QUALITY_SCORE_RATIONALE_MAX_CHARACTERS,
   QUALITY_SCORE_CONFIDENCES,
   QUALITY_WORKTREE_STATES,
 } from "../quality/schema-types.js";
@@ -164,6 +165,36 @@ export function appendQualityReportContract(
     '    "system": { "total": 0, "usefulness": 0, "signal_to_noise": 0, "adaptability": 0, "learnability": 0 }',
   );
   lines.push("  },");
+  lines.push('  "score_rationale": {');
+  lines.push('    "setup": {');
+  lines.push(
+    '      "accuracy": { "evidence": "Observed evidence for this score", "deduction": "Reason for points deducted, or no deduction" },',
+  );
+  lines.push(
+    '      "relevance": { "evidence": "Observed evidence for this score", "deduction": "Reason for points deducted, or no deduction" },',
+  );
+  lines.push(
+    '      "completeness": { "evidence": "Observed evidence for this score", "deduction": "Reason for points deducted, or no deduction" },',
+  );
+  lines.push(
+    '      "friction": { "evidence": "Observed evidence for this score", "deduction": "Reason for points deducted, or no deduction" }',
+  );
+  lines.push("    },");
+  lines.push('    "system": {');
+  lines.push(
+    '      "usefulness": { "evidence": "Observed evidence for this score", "deduction": "Reason for points deducted, or no deduction" },',
+  );
+  lines.push(
+    '      "signal_to_noise": { "evidence": "Observed evidence for this score", "deduction": "Reason for points deducted, or no deduction" },',
+  );
+  lines.push(
+    '      "adaptability": { "evidence": "Observed evidence for this score", "deduction": "Reason for points deducted, or no deduction" },',
+  );
+  lines.push(
+    '      "learnability": { "evidence": "Observed evidence for this score", "deduction": "Reason for points deducted, or no deduction" }',
+  );
+  lines.push("    }");
+  lines.push("  },");
   lines.push('  "findings": [');
   const sampleType = opts.sampleFindingType ?? "setup_quality";
   const sampleDelta = input.priorReport ? '"new"' : "null";
@@ -214,6 +245,9 @@ function appendReportJsonRules(
   lines.push("JSON rules:");
   lines.push(
     "- `scores.*` axis values must use exact `0 | 5 | 10 | 15 | 20 | 25` increments and each axis sum must equal its `total` exactly.",
+  );
+  lines.push(
+    `- Every score axis requires \`evidence\` and \`deduction\` as non-empty single-line strings of ${QUALITY_SCORE_RATIONALE_MAX_CHARACTERS} characters or fewer.`,
   );
   lines.push(
     `- Allowed \`type\` values: ${backtickList(QUALITY_FINDING_TYPES)}.`,

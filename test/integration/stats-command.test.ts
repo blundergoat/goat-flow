@@ -9,6 +9,7 @@ import { assertExists } from "../helpers/assert-exists.ts";
 import { createFS } from "../../src/cli/facts/fs.js";
 import { extractFootgunFacts } from "../../src/cli/facts/shared/learning-loop.js";
 import {
+  BUCKET_SIZE_HEADROOM_WARN_BYTES,
   BUCKET_SIZE_WARN_BYTES,
   checkStats,
 } from "../../src/cli/stats/stats.js";
@@ -322,6 +323,28 @@ describe("goat-flow stats --check", () => {
     assert.equal(
       finding.message,
       `.goat-flow/learning-loop/footguns/hooks.md: ${Buffer.byteLength(oversizedBucket)} bytes exceeds ${BUCKET_SIZE_WARN_BYTES}-byte threshold; split into narrower category buckets`,
+    );
+  });
+
+  it("warns before a bucket reaches the unchanged blocking size gate", () => {
+    const bucketPrefix =
+      '---\ncategory: hooks\nlast_reviewed: 2026-04-18\n---\n\n## Footgun: alpha\n\n**Status:** active | **Evidence:** ACTUAL_MEASURED\n\nEvidence: `.goat-flow/learning-loop/footguns/hooks.md` (search: "## Footgun: alpha").\n';
+    const nearLimitBucket = `${bucketPrefix}${"x".repeat(BUCKET_SIZE_HEADROOM_WARN_BYTES - Buffer.byteLength(bucketPrefix))}`;
+    const report = loadReport({
+      footguns: { "hooks.md": nearLimitBucket },
+      lessons: {},
+    });
+    const verdict = checkStats(report);
+    const warning = verdict.warnings.find(
+      (item) => item.rule === "bucket-size-headroom",
+    );
+
+    assert.equal(verdict.status, "pass");
+    assert.deepEqual(verdict.findings, []);
+    assertExists(warning, "expected a bucket-headroom warning");
+    assert.equal(
+      warning.message,
+      `.goat-flow/learning-loop/footguns/hooks.md: ${BUCKET_SIZE_HEADROOM_WARN_BYTES} bytes leaves ${BUCKET_SIZE_WARN_BYTES - BUCKET_SIZE_HEADROOM_WARN_BYTES} bytes before the ${BUCKET_SIZE_WARN_BYTES}-byte blocking threshold; split into narrower category buckets`,
     );
   });
 

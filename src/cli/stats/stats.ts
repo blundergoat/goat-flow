@@ -65,6 +65,7 @@ interface DecisionFileSummary {
 interface StatsWarning {
   file: string;
   rule:
+    | "bucket-size-headroom"
     | "decision-metadata"
     | "empty-learning-loop"
     | "index-missing"
@@ -254,6 +255,9 @@ function checkBucketLastReviewed(
 /** Shared byte threshold where one learning-loop bucket becomes costly to retrieve. */
 export const BUCKET_SIZE_WARN_BYTES = 40_000;
 
+/** Advisory threshold that leaves one kilobyte to split a bucket before the blocking limit. */
+export const BUCKET_SIZE_HEADROOM_WARN_BYTES = 39_000;
+
 /**
  * Collect every blocking problem for one learning-loop bucket.
  * It reports all of them together, because an operator fixing a bucket should see the full repair list rather than one problem per run.
@@ -366,24 +370,30 @@ function isEmptyLearningLoopDiagnostic(message: string): boolean {
 }
 
 /**
- * Collect advisory learning-loop warnings for valid empty directories.
- * Use when users need orientation without turning a fresh learning loop into a failure.
+ * Collect advisory learning-loop warnings for valid empty directories and near-limit buckets.
+ * Use when users need orientation or split headroom without turning either state into a failure.
  */
 function collectWarnings(section: BucketSection): StatsWarning[] {
-  // A clean bucket has no format diagnostic, so there is no advisory message to show users.
-  if (section.formatDiagnostic === null) return [];
-  // Only valid empty-state diagnostics become warnings; other diagnostics remain blocking findings.
-  return (
-    section.formatDiagnostic
-      .split("; ")
-      .filter(isEmptyLearningLoopDiagnostic)
-      // Each empty directory gets one explicit warning row in text and JSON output.
-      .map((message) => ({
-        file: section.path,
-        rule: "empty-learning-loop",
-        message,
-      }))
-  );
+  const emptyStateWarnings = (section.formatDiagnostic ?? "")
+    .split("; ")
+    .filter(isEmptyLearningLoopDiagnostic)
+    .map((message) => ({
+      file: section.path,
+      rule: "empty-learning-loop" as const,
+      message,
+    }));
+  const headroomWarnings = section.buckets
+    .filter(
+      (bucket) =>
+        bucket.sizeBytes >= BUCKET_SIZE_HEADROOM_WARN_BYTES &&
+        bucket.sizeBytes <= BUCKET_SIZE_WARN_BYTES,
+    )
+    .map((bucket) => ({
+      file: bucket.path,
+      rule: "bucket-size-headroom" as const,
+      message: `${bucket.path}: ${bucket.sizeBytes} bytes leaves ${BUCKET_SIZE_WARN_BYTES - bucket.sizeBytes} bytes before the ${BUCKET_SIZE_WARN_BYTES}-byte blocking threshold; split into narrower category buckets`,
+    }));
+  return [...emptyStateWarnings, ...headroomWarnings];
 }
 
 const VALID_TRIGGER_PHASES = new Set(["READ", "SCOPE", "ACT", "VERIFY"]);
