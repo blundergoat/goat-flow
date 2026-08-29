@@ -49,14 +49,20 @@ interface ClaudePermissionGroups {
   ask: string[];
 }
 
-/** Assert POSIX permission bits while treating Windows' synthetic mode as outside this filesystem contract. */
+/**
+ * Assert the permission bits a Unix user receives on an installed file.
+ * Use for security-sensitive setup output; Windows reports synthetic modes outside this contract.
+ */
 function assertPosixFileMode(filePath: string, expectedMode: number): void {
+  // Windows users receive synthetic mode bits, so this POSIX-only assertion has no meaningful UI or filesystem result there.
   if (process.platform === "win32") return;
   assert.equal(statSync(filePath).mode & 0o777, expectedMode);
 }
 
 /**
  * Reads the permission groups users receive after setup migrates their settings.
+ * Use when a test needs the same deny, allow, and ask categories a Claude user sees after upgrade.
+ *
  * @param projectRoot - non-empty fixture root containing `.claude/settings.json`
  * @returns all three groups; a missing group appears as an empty user rule list
  */
@@ -76,6 +82,8 @@ function readClaudePermissionGroups(
 
 /**
  * Finds stale rules that would show misleading permission choices after upgrade.
+ * Use after reading migrated settings so tests can report any retired tool label still visible to the user.
+ *
  * @param groups - migrated groups; empty arrays mean the user saved no rules there
  * @returns stale rule labels, or an empty list when the UI contract is current
  */
@@ -88,7 +96,12 @@ function stalePermissionRules(groups: ClaudePermissionGroups): string[] {
 
 /**
  * Create the executable nested analyzer convention inside a disposable project.
- * Side effect: writes and marks one fixture file executable below `projectRoot`.
+ *
+ * Use before setup so tests can verify the analyzer path a user receives in generated config.
+ * Side effect: writes and marks one analyzer fixture executable inside `projectRoot`; fixture calls supply a disposable project.
+ *
+ * @param projectRoot - non-empty disposable project that owns the generated analyzer fixture
+ * @returns executable analyzer path; never empty after fixture creation succeeds
  */
 function writeConventionalGruffPy(projectRoot: string): string {
   const binaryDirectory = join(projectRoot, "strands_agents", ".venv", "bin");
@@ -272,6 +285,7 @@ describe("setup --apply installer", () => {
           },
         );
       } finally {
+        // For example, a hook process can fail while reading the payload, so its file handle and one-use fixture must still be released.
         closeSync(payloadHandle);
         unlinkSync(payloadPath);
       }
@@ -564,7 +578,18 @@ describe("setup --apply installer", () => {
       "quality",
       "README.md",
     );
+    const installedPatternsReadmePath = join(
+      projectRoot,
+      ".goat-flow",
+      "learning-loop",
+      "patterns",
+      "README.md",
+    );
     writeFileSync(installedReadmePath, "user edited a system file\n");
+    writeFileSync(
+      installedPatternsReadmePath,
+      "user edited the patterns guide\n",
+    );
 
     const reinstall = runInstaller(projectRoot, "--agent", "codex");
     assert.equal(reinstall.status, 0, reinstall.stderr || reinstall.stdout);
@@ -582,6 +607,23 @@ describe("setup --apply installer", () => {
         ),
         "utf-8",
       ),
+    );
+    const canonicalPatternsReadme = readFileSync(
+      join(
+        import.meta.dirname,
+        "..",
+        "..",
+        "workflow",
+        "setup",
+        "reference",
+        "patterns-readme.md",
+      ),
+      "utf-8",
+    );
+    assert.match(canonicalPatternsReadme, /^## Bucket Size$/mu);
+    assert.equal(
+      readFileSync(installedPatternsReadmePath, "utf-8"),
+      canonicalPatternsReadme,
     );
   });
 
@@ -721,6 +763,7 @@ describe("setup --apply installer", () => {
     try {
       emitCommitGuidanceInstallResult(root, "copilot");
     } finally {
+      // For example, a failed guidance migration can throw after console capture starts, so later tests still need normal user-facing output.
       console.log = originalLog;
     }
 

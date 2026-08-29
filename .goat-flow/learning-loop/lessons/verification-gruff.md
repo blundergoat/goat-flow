@@ -112,12 +112,15 @@ last_reviewed: 2026-08-29
 ## Lesson: Gruff side-effect comments must name the side effect
 
 **Status:** active | **Created:** 2026-05-30
+**Incident count:** 4 | **Latest occurrence:** 2026-08-29
 
 **What happened:** During the M00 gruff docs continuation, the first internal-helper comment batch cleared `docs.missing-internal-function-doc` but reduced the full snapshot by only 175 findings because gruff then reported `docs.missing-side-effect-doc` on helpers that write fixture files or spawn tools. Retuning those comments to explicitly say `Writes` or `Spawns` moved the full snapshot to `summary error=0 warning=121 advisory=598 total=719` and both doc clusters to zero.
 
 **Recurrence update (2026-08-06):** The Windows discovery comment described its purpose and fallback but did not explicitly name the `where.exe` process side effect. Adding that concrete process action cleared the three targeted side-effect findings.
 
 **Recurrence 2026-08-27:** A new audit helper said it “launches one bounded child process,” but Gruff still reported `docs.missing-side-effect-doc`. Naming the contract explicitly as `Side effect: spawns one bounded child process` cleared the finding without adding compensating prose. Evidence anchor: `src/cli/audit/check-agent-deny-runtime.ts` (search: `Side effect: spawns one bounded child process`).
+
+**Recurrence 2026-08-29:** During M68's comment pass, changing a fixture helper's side-effect sentence from `writes` to `creates` introduced `docs.missing-side-effect-doc` even though the new sentence still described the file operation to a maintainer. Restoring the explicit filesystem verb returned the five-path before/after identity comparison to zero introduced findings. Evidence anchor: `test/integration/setup-install.test.ts` (search: `Side effect: writes and marks one analyzer fixture executable`).
 
 **Root cause:** I wrote purpose comments for side-effecting helpers but did not include analyzer-recognised side-effect language. For gruff-ts docs rules, a human-useful purpose sentence is not enough when the helper mutates filesystem state or runs a subprocess.
 

@@ -203,7 +203,7 @@
     "id": "test-audit",
     "name": "Coverage Audit",
     "desc": "Global coverage audit for a codebase area, suitable for libraries, APIs, CLIs, and apps",
-    "prompt": "/goat-qa audit test coverage in a codebase area. Ask which area - default to the most-changed files. Output as a table: File | Existing tests | Assertion depth | Uncovered branches | Risk. Don't conflate 'file has tests' with 'file is well-tested'.",
+    "prompt": "/goat-qa audit test coverage for a codebase area. Follow the skill's Audit Mode scope, evidence, output, and blocking-gate contract exactly; do not add diff- or recency-based defaults.",
     "cat": "qa",
     "route": "goat-qa",
     "source": "goat-flow-catalog",

@@ -1,6 +1,6 @@
 ---
 category: dashboard-testing
-last_reviewed: 2026-08-27
+last_reviewed: 2026-08-29
 ---
 
 **Scope:** Testing the dashboard as a built, served application - stale dist copies, servers needing a restart after template edits, Knip registration for classic scripts, route-scoped verification, and performance probes that need the real shell. Asserting against source and VM-loaded helpers is [dashboard-unit-tests.md](dashboard-unit-tests.md).
@@ -83,6 +83,7 @@ last_reviewed: 2026-08-27
 ## Lesson: Dashboard asset tests can read stale dist copies
 
 **Status:** active | **Created:** 2026-04-25
+**Incident count:** 3 | **Latest occurrence:** 2026-08-29
 
 **What happened:** M02 added metadata to `src/dashboard/preset-prompts.json` and the JSON/unit checks passed, but the focused `dashboard assets` integration test failed because `/assets/preset-prompts.json` served the existing `dist/dashboard/preset-prompts.json` copy, which still lacked the new metadata.
 
@@ -91,6 +92,8 @@ last_reviewed: 2026-08-27
 **Prevention:** After changing dashboard static assets that are copied by `build:dashboard`, run `npm run build:dashboard` before dashboard-server asset smoke tests, or explicitly remove stale `dist/` before relying on source fallback.
 
 **Recurrence (2026-08-14):** M03 changed the four QA-facing records in `src/dashboard/preset-prompts.json`. Focused preset and doctrine tests passed, but a later full-suite run failed the existing source/dist parity contract because `dist/dashboard/preset-prompts.json` still held the earlier catalog. Evidence anchor: `test/contract/skill-hardening-security-2.test.ts` (search: `dashboard preset source/dist parity`). Refresh the copied asset before the first expanded suite, not after a favourable focused run.
+
+**Recurrence 2026-08-29:** M68 changed the Coverage Audit preset and its focused unit contract, then the first full `npm test` run failed `dashboard preset source/dist parity` because the built catalog still held the previous prompt. Running `npm run build:dashboard` before repeating that exact contract and the full suite restored parity. Evidence anchors: `src/dashboard/preset-prompts.json` (search: `blocking-gate contract`) and `test/contract/skill-hardening-security-2.test.ts` (search: `dashboard preset source/dist parity`).
 
 ---
 

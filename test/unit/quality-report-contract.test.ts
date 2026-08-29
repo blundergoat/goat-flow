@@ -1,7 +1,8 @@
 /**
  * Cross-surface quality-prompt contract for CLI and dashboard users.
- * It keeps report fields, audit evidence limits, and validation instructions consistent across every mode.
  * Use when prompt composition changes so a report launched from one screen is not weaker than another.
+ *
+ * It keeps report fields, audit limits, score calibration, and save instructions consistent across every mode.
  * The dashboard mirror stays source-pinned because its classic script cannot import the CLI builder.
  */
 import { describe, it } from "node:test";
@@ -135,7 +136,10 @@ const STAGED_DRAFT_SAFETY_GUIDANCE = [
   "persist-skipped: <reason>",
 ] as const;
 
-/** Extract the executable report-write block from a composed prompt. */
+/**
+ * Extract the executable report-write block a CLI user receives in a composed prompt.
+ * Use when assertions need to inspect the saver command separately from the surrounding assessment instructions.
+ */
 function extractReportWriteBlock(prompt: string): string {
   const selectionIndex = prompt.indexOf(
     "**Persist through the bounded saver.**",
@@ -149,7 +153,10 @@ function extractReportWriteBlock(prompt: string): string {
   return prompt.slice(blockStart, blockEnd);
 }
 
-/** Build the prompt input a user gets before any audit evidence is available. */
+/**
+ * Build the prompt input a user gets before any audit evidence is available.
+ * Use as the empty-history baseline; a null audit means the prompt must disclose unavailable grounding.
+ */
 function makeInput(qualityMode: QualityInput["qualityMode"]): QualityInput {
   return {
     agent: "claude",
@@ -162,8 +169,11 @@ function makeInput(qualityMode: QualityInput["qualityMode"]): QualityInput {
   };
 }
 
-/** Build one active learning-loop fact for quality-prompt targeting fixtures. */
-function qualityMemory(
+/**
+ * Build one active learning-loop fact that may appear in a user's bounded quality context.
+ * Use to prove prompt targeting selects relevant project history without loading the whole learning loop.
+ */
+function makeQualityMemoryFact(
   title: string,
   overrides: Partial<LearningLoopEntryFact> = {},
 ): LearningLoopEntryFact {
@@ -248,8 +258,11 @@ function makePriorQualityReport(
   };
 }
 
-/** Build one complete concern so prompt tests can vary only the evidence limits users need to see. */
-function auditConcern(limits: string[] = []) {
+/**
+ * Build one passing audit concern so tests can vary only the evidence limits users need to see.
+ * Use in an otherwise complete audit; an empty limits list means no unverified behavior is disclosed for that concern.
+ */
+function makePassingAuditConcern(limits: string[] = []) {
   return {
     status: "pass" as const,
     score: 100,
@@ -285,14 +298,14 @@ function makeLimitedAuditReport(): NonNullable<QualityInput["auditReport"]> {
       harness: emptyScope,
     },
     concerns: {
-      context: auditConcern(),
-      constraints: auditConcern(),
-      verification: auditConcern([
+      context: makePassingAuditConcern(),
+      constraints: makePassingAuditConcern(),
+      verification: makePassingAuditConcern([
         PROJECT_VALIDATION_LIMIT,
         RED_FLAGS_METRIC_LIMIT,
       ]),
-      recovery: auditConcern([RECOVERY_RESUMABILITY_LIMIT]),
-      feedback_loop: auditConcern(),
+      recovery: makePassingAuditConcern([RECOVERY_RESUMABILITY_LIMIT]),
+      feedback_loop: makePassingAuditConcern(),
     },
     enforcement: [],
     drift: null,
@@ -301,7 +314,10 @@ function makeLimitedAuditReport(): NonNullable<QualityInput["auditReport"]> {
   };
 }
 
-/** Assert a prompt carries every field needed to save and validate the user's quality report. */
+/**
+ * Assert a prompt carries every field needed to save and validate the user's quality report.
+ * Use for each launch surface so users cannot receive a weaker schema, evidence vocabulary, or saver contract.
+ */
 function assertCarriesContract(surface: string, text: string): void {
   // Every top-level field the schema parser requires must appear in the shape.
   for (const field of REQUIRED_TOP_LEVEL_FIELDS) {
@@ -338,6 +354,7 @@ function assertCarriesContract(surface: string, text: string): void {
     text.includes("`static-analysis` or `mixed` refuted candidate"),
     `${surface}: missing mixed static provenance rule`,
   );
+  // Every context field helps the user judge whether a score came from a clean, grounded assessment.
   for (const guidance of ASSESSMENT_CONTEXT_GUIDANCE) {
     assert.ok(
       text.includes(guidance),
@@ -369,11 +386,15 @@ function assertCarriesContract(surface: string, text: string): void {
   );
 }
 
-/** Assert a focused prompt and its summary preserve every observed audit failure. */
+/**
+ * Assert a focused prompt and its summary preserve every observed audit failure.
+ * Use when a user launches from failed drift or content evidence so neither visible representation hides the problem.
+ */
 function assertCarriesAuditEvidence(
   surface: string,
   payload: ReturnType<typeof composeQuality>,
 ): void {
+  // Every observed failure must reach both the readable prompt and the compact audit summary the UI can display.
   for (const evidence of DRIFT_EVIDENCE) {
     assert.ok(
       payload.prompt.includes(evidence),
@@ -436,6 +457,7 @@ function assertStagedDraftContract(surface: string, prompt: string): void {
     false,
     `${surface}: staged variant still contains a heredoc`,
   );
+  // None of the CLI-only saver instructions can remain when the dashboard owns persistence.
   for (const forbidden of FORBIDDEN_STAGED_DRAFT_TEXT) {
     assert.equal(
       prompt.includes(forbidden),
@@ -488,8 +510,11 @@ describe("quality report contract: CLI surfaces", () => {
     const unrelatedTitle =
       "Dashboard terminal prompts can be dropped before browser attachment";
     sharedFacts.learningLoopEntries = [
-      qualityMemory(unrelatedTitle, { created: "2026-06-03", order: 1 }),
-      qualityMemory(matchingTitle, {
+      makeQualityMemoryFact(unrelatedTitle, {
+        created: "2026-06-03",
+        order: 1,
+      }),
+      makeQualityMemoryFact(matchingTitle, {
         sourcePath: ".goat-flow/learning-loop/footguns/deny-secrets.md",
         excerpt:
           "The deny-covers-secrets audit exercises workflow/hooks/deny-dangerous.sh.",
@@ -513,12 +538,14 @@ describe("quality report contract: CLI surfaces", () => {
 
   it("agent-setup prompt defines finding-validity and accuracy guardrails", () => {
     const prompt = composeQuality(makeInput("agent-setup")).prompt;
+    // Each validity phrase prevents a reviewer from turning an unsupported premise into a user-facing finding.
     for (const phrase of AGENT_SETUP_ONLY_VALIDITY_GUIDANCE) {
       assert.ok(
         prompt.includes(phrase),
         `missing finding-validity phrase: ${phrase}`,
       );
     }
+    // Every severity label must be visible so reviewers can classify findings without inventing another scale.
     for (const severity of ["`BLOCKER`", "`MAJOR`", "`MINOR`"]) {
       assert.ok(
         prompt.includes(severity),
@@ -583,6 +610,7 @@ describe("quality report contract: CLI surfaces", () => {
 
     assert.match(skillsPrompt, /Assess all eight goat-flow skills/u);
     assert.match(skillsPrompt, /After the eight sections/u);
+    // Every installed skill needs a named section so the user can see which workflows were actually assessed.
     for (const skillName of canonicalSkills) {
       assert.ok(skillsPrompt.includes(skillName), `missing ${skillName}`);
     }
@@ -593,8 +621,19 @@ describe("quality report contract: CLI surfaces", () => {
   });
 
   it("focused (harness) prompt carries the full contract", () => {
-    const payload = composeQuality(makeInput("harness"));
+    const payload = composeQuality({
+      ...makeInput("harness"),
+      agent: "codex",
+    });
     assertCarriesContract("focused/harness", payload.prompt);
+    assert.match(
+      payload.prompt,
+      /audit \. --agent codex --harness --format json from the controlling workspace/u,
+    );
+    assert.doesNotMatch(
+      payload.prompt,
+      /audit \. --harness --format json from the controlling workspace/u,
+    );
   });
 
   it("focused (process) prompt carries the full contract", () => {
@@ -602,11 +641,15 @@ describe("quality report contract: CLI surfaces", () => {
     assertCarriesContract("focused/process", payload.prompt);
   });
 
+  // Every launch mode must show the same live-audit precedence, score meaning, and calibrated rating shells.
   for (const qualityMode of QUALITY_MODES) {
     it(`defines live audit precedence and narrow harness-score interpretation in ${qualityMode} mode`, () => {
       const prompt = composeQuality(makeInput(qualityMode)).prompt;
       assert.ok(prompt.includes(AUDIT_STATUS_PRECEDENCE_RULE), qualityMode);
       assert.ok(prompt.includes(HARNESS_SCORE_INTERPRETATION), qualityMode);
+      assert.match(prompt, /### Rating bands/u, qualityMode);
+      assert.match(prompt, /\*\*Setup: __\/100\*\*/u, qualityMode);
+      assert.match(prompt, /\*\*System: __\/100\*\*/u, qualityMode);
     });
 
     it(`classifies pre-release PATH skew as saver compatibility in ${qualityMode} mode`, () => {
@@ -617,6 +660,24 @@ describe("quality report contract: CLI surfaces", () => {
     });
   }
 
+  // Each focused mode must name only the area the user selected, preventing repository-wide impressions from changing its score.
+  for (const [qualityMode, assessmentScopeLabel] of [
+    ["process", "framework process"],
+    ["harness", "selected target harness"],
+    ["skills", "eight-skill system"],
+  ] as const) {
+    it(`scopes ${qualityMode} rating bands to its own assessment`, () => {
+      const prompt = composeQuality(makeInput(qualityMode)).prompt;
+      assert.ok(
+        prompt.includes(
+          `Score only the ${assessmentScopeLabel} named in this assessment.`,
+        ),
+        qualityMode,
+      );
+    });
+  }
+
+  // Every mode must send the completed JSON through the same redacting saver before the report reaches disk.
   for (const qualityMode of QUALITY_MODES) {
     it(`redacts completed ${qualityMode} JSON before it reaches disk`, () => {
       const prompt = composeQuality(makeInput(qualityMode)).prompt;
@@ -694,6 +755,7 @@ describe("quality report contract: CLI surfaces", () => {
       /Accept one target form:\s*\n((?:\s*- `\/goat-clarity[^\n]+`\s*\n)+)/u,
     );
     assert.ok(selectorBlock, "goat-clarity target forms must stay parseable");
+    // If parsing finds no selector rows, zero makes the next assertion fail instead of hiding a broken user-facing contract.
     const selectorCount = selectorBlock[1]?.match(/^\s*- /gmu)?.length ?? 0;
     const countWords = [
       "zero",
@@ -784,6 +846,7 @@ describe("quality report contract: CLI surfaces", () => {
     });
   }
 
+  // Every focused mode must preserve drift and content failures in both prompt and summary views.
   for (const qualityMode of FOCUSED_QUALITY_MODES) {
     it(`embeds drift and content failures in ${qualityMode} prompts and summaries`, () => {
       const auditReport = makeLimitedAuditReport();
@@ -964,6 +1027,7 @@ describe("quality report contract: cross-variant boundaries", () => {
 });
 
 describe("quality report contract: staged-draft persistence variant", () => {
+  // Each dashboard-supported mode must replace the CLI saver with the same staged-draft experience.
   for (const qualityMode of STAGED_DRAFT_MODES) {
     it(`replaces the ${qualityMode} bounded saver with the dashboard draft contract (ADR-044)`, () => {
       const prompt = composeQuality({
@@ -1045,6 +1109,7 @@ describe("quality report contract: rejected persistence", () => {
         [],
       );
     } finally {
+      // For example, a simulated partial write can throw before cleanup, so the test-owned temporary project must still be removed.
       rmSync(projectRoot, { recursive: true, force: true });
     }
   });

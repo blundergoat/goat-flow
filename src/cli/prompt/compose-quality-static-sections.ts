@@ -1,16 +1,24 @@
 /**
- * Context-free Markdown sections of the agent-setup quality prompt: the finding rules, intentional-design notes, skill-testing protocol,
- * template-integrity checklist, rating rubrics/bands, and the closing reminder.
+ * Shared Markdown sections a reviewer sees in quality prompts: rules, design notes, skill checks, rating rubrics, and the closing reminder.
+ * Use when a mode-specific composer needs the same user-facing assessment contract without duplicating prompt text.
  *
- * Every helper here is pure string assembly over a shared line buffer and needs no prompt context; context-dependent sections stay in
- * compose-quality-agent-setup.ts.
+ * Helpers only assemble strings in a shared line buffer; sections that depend on the user's selected mode remain in that mode's composer.
  */
+import type { QualityMode } from "../quality/schema.js";
+
+type FocusedQualityMode = Exclude<QualityMode, "agent-setup">;
+
+const FOCUSED_ASSESSMENT_SCOPE_LABELS: Record<FocusedQualityMode, string> = {
+  process: "framework process",
+  harness: "selected target harness",
+  skills: "eight-skill system",
+};
 
 /**
- * Append the per-finding Rules section (no tracked-file writes, evidence-based,
- * content-over-existence) that constrains every finding the reviewer reports.
+ * Append the Rules section that keeps every quality finding read-only, evidence-based, and focused on content rather than file presence.
+ * Use before mode-specific instructions so CLI and dashboard users receive the same safety and evidence contract.
  *
- * @param lines - prompt line buffer; appended to in place
+ * @param lines - prompt lines shown to the reviewer; an empty buffer starts the Rules section at the beginning
  */
 export function appendRules(lines: string[]): void {
   lines.push("## Rules");
@@ -48,10 +56,10 @@ export function appendRules(lines: string[]): void {
 }
 
 /**
- * Append the intentional-design notes the reviewer must NOT flag - gitignored local state, the advisory `.active` pointer, unchecked task boxes, and
- * the lean post-ADR-014 config - so known-good shapes are not reported as findings.
+ * Append accepted design notes so reviewers do not turn supported local state or known evidence limits into user-facing findings.
+ * Use after Rules to explain the local artifacts, advisory plan pointer, task state, lean config, and audit boundaries users may encounter.
  *
- * @param lines - prompt line buffer; appended to in place
+ * @param lines - prompt lines shown to the reviewer; an empty buffer starts these notes at the beginning
  */
 export function appendDesignNotes(lines: string[]): void {
   lines.push(
@@ -79,10 +87,10 @@ export function appendDesignNotes(lines: string[]): void {
 }
 
 /**
- * Append Part 3 skill-testing instructions: the file-analysis vs live-invocation options and the per-skill reporting-only probes, including the
- * stop-and-report rule when a probe attempts a tracked-file write or implementation.
+ * Append the safe file-analysis and live-invocation choices used to assess each installed skill on real project evidence.
+ * Use in the full setup review so users can see what was exercised and whether a probe attempted an unauthorized tracked-file change.
  *
- * @param lines - prompt line buffer; appended to in place
+ * @param lines - prompt lines shown to the reviewer; an empty buffer starts skill testing at the beginning
  */
 export function appendSkillTesting(lines: string[]): void {
   lines.push("---");
@@ -141,10 +149,10 @@ export function appendSkillTesting(lines: string[]): void {
 }
 
 /**
- * Append the Part 6 skill-template integrity checklist: version-tag presence and
- * match, truncation/adaptation damage, and quick-vs-full depth coherence.
+ * Append the skill-template integrity checks for version tags, installation damage, and quick-versus-full behavior.
+ * Use near the end of setup review so users can separate a broken installation from weak skill behavior.
  *
- * @param lines - prompt line buffer; appended to in place
+ * @param lines - prompt lines shown to the reviewer; an empty buffer starts template checks at the beginning
  */
 export function appendSkillTemplateIntegrity(lines: string[]): void {
   lines.push("---");
@@ -164,10 +172,10 @@ export function appendSkillTemplateIntegrity(lines: string[]): void {
 }
 
 /**
- * Append the Setup-Quality and System-Assessment prose prompts plus the two
- * 0-100 rating rubrics (four 0-25 axes each) the reviewer must score.
+ * Append the setup and system questions plus the two calibrated 0-100 rating rubrics shown in a full agent-setup assessment.
+ * Use after setup evidence so the reviewer turns verified behavior into scores a user can compare across runs.
  *
- * @param lines - prompt line buffer; appended to in place
+ * @param lines - prompt lines shown to the reviewer; an empty buffer starts the ratings at the beginning
  */
 export function appendRatingSections(lines: string[]): void {
   lines.push("### Setup Quality");
@@ -212,10 +220,90 @@ export function appendRatingSections(lines: string[]): void {
 }
 
 /**
+ * Append score instructions calibrated to the process, harness, or skills area the user selected.
+ * Use before saving a focused report so shared Setup/System fields cannot absorb evidence from another quality mode.
+ *
+ * @param lines - prompt lines shown to the reviewer; an empty buffer starts the calibration at the beginning
+ * @param qualityMode - focused area the user selected; it bounds every score in this section
+ */
+export function appendFocusedRatingSections(
+  lines: string[],
+  qualityMode: FocusedQualityMode,
+): void {
+  const assessmentScopeLabel = FOCUSED_ASSESSMENT_SCOPE_LABELS[qualityMode];
+  lines.push("---");
+  lines.push("");
+  lines.push("## Scoring calibration");
+  lines.push("");
+  lines.push(
+    `Score only the ${assessmentScopeLabel} named in this assessment.`,
+  );
+  lines.push(
+    "Do not score unrelated setup surfaces or carry an overall repository impression into these axes.",
+  );
+  lines.push("");
+  lines.push("### Ratings");
+  lines.push("");
+  lines.push("**Setup: __/100**");
+  lines.push(
+    `- Accuracy __/25 - are claims about the ${assessmentScopeLabel} correct?`,
+  );
+  lines.push(
+    `- Relevance __/25 - does the evidence test the ${assessmentScopeLabel}?`,
+  );
+  lines.push(
+    `- Completeness __/25 - is important ${assessmentScopeLabel} evidence missing?`,
+  );
+  lines.push(
+    `- Friction __/25 - how hard is the ${assessmentScopeLabel} to use or assess?`,
+  );
+  lines.push("");
+  lines.push("**System: __/100**");
+  lines.push(
+    `- Usefulness __/25 - does the ${assessmentScopeLabel} improve real work?`,
+  );
+  lines.push("- Signal-to-noise __/25 - how much evidence carries its weight?");
+  lines.push(
+    `- Adaptability __/25 - does the ${assessmentScopeLabel} fit this codebase?`,
+  );
+  lines.push(
+    `- Learnability __/25 - how quickly can the ${assessmentScopeLabel} be used?`,
+  );
+  lines.push("");
+  lines.push("### Rating bands");
+  lines.push("Use exact 25 / 20 / 15 / 10 / 5 / 0 increments only:");
+  lines.push(
+    `- Setup / Accuracy: 25 = all ${assessmentScopeLabel} claims verify; 20 = 1-2 minor drift points; 15 = one hot-path factual error; 10 = multiple hot-path errors; 5 = a load-bearing claim is wrong; 0 = the assessed scope is materially fabricated.`,
+  );
+  lines.push(
+    `- Setup / Relevance: 25 = all evidence directly tests the ${assessmentScopeLabel}; 20 = small adjacent residue; 15 = meaningful generic or off-scope evidence; 10 = mostly indirect evidence; 5 = barely relevant; 0 = unrelated.`,
+  );
+  lines.push(
+    `- Setup / Completeness: 25 = no important ${assessmentScopeLabel} behavior is omitted; 20 = one minor omission; 15 = one important omission with a workaround; 10 = multiple gaps; 5 = a load-bearing surface is missing; 0 = evidence cannot support an assessment.`,
+  );
+  lines.push(
+    `- Setup / Friction: 25 = the ${assessmentScopeLabel} is frictionless to use and assess; 20 = minor ceremony; 15 = noticeable but workable friction; 10 = frequent unnecessary steps; 5 = heavy confusion; 0 = the workflow is blocked.`,
+  );
+  lines.push(
+    `- System / Usefulness: 25 = the ${assessmentScopeLabel} consistently improves work; 20 = useful more often than not; 15 = mixed value; 10 = occasional value; 5 = mostly overhead; 0 = no useful outcome.`,
+  );
+  lines.push(
+    "- System / Signal-to-noise: 25 = almost all evidence carries its weight; 20 = some redundancy; 15 = meaningful noise; 10 = more noise than signal; 5 = mostly ceremony; 0 = overwhelming noise.",
+  );
+  lines.push(
+    `- System / Adaptability: 25 = the ${assessmentScopeLabel} clearly fits this codebase; 20 = mostly adapted; 15 = partial adaptation; 10 = generic assumptions leak through; 5 = poor fit; 0 = incompatible.`,
+  );
+  lines.push(
+    `- System / Learnability: 25 = the ${assessmentScopeLabel} is fast to understand and apply; 20 = small onboarding tax; 15 = moderate study; 10 = confusing; 5 = hard to learn; 0 = effectively opaque.`,
+  );
+  lines.push("");
+}
+
+/**
  * Append the score anchors and closing evidence sections a user reads in the prose assessment.
  * Use after the ratings shell so improvements, disproved candidates, and remaining uncertainty appear in a stable order.
  *
- * @param lines - prompt line buffer; empty means the rating bands begin the remaining assessment
+ * @param lines - prompt lines shown to the reviewer; empty means the rating bands begin the remaining assessment
  * @returns nothing; the supplied prompt receives the rating and closing sections
  */
 function appendRatingBands(lines: string[]): void {
@@ -271,10 +359,10 @@ function appendRatingBands(lines: string[]): void {
 }
 
 /**
- * Append the closing reminder: respond with the full prose assessment, write the
- * JSON report to the file path (not inline), and make no tracked-file edits.
+ * Append the closing reminder that keeps the full assessment in the response and the validated JSON in its report file.
+ * Use as the final prompt section so the user gets readable findings without tracked-file edits or an inline JSON dump.
  *
- * @param lines - prompt line buffer; appended to in place
+ * @param lines - prompt lines shown to the reviewer; an empty buffer makes this reminder the whole prompt
  */
 export function appendClosing(lines: string[]): void {
   lines.push("---");

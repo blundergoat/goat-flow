@@ -59,11 +59,23 @@ const MANAGED_HOOK_IDENTIFIER = HOOK_VERIFICATION_CONTRACTS["deny-hook"].hookId;
 const managedHookTimeoutSeconds = getHookSpec(
   MANAGED_HOOK_IDENTIFIER,
 )?.timeoutSec;
+/**
+ * Windows spends this long starting a scrubbed replay before the hook does any work: the same registered Codex
+ * command costs ~1.4s under the host environment and 24-32s under the managed one, measured by the
+ * codex-windows-replay diagnostics in test/integration/hook-command-spawn-matrix.test.ts. That surcharge belongs to
+ * the verification harness, not to the hook, so it is added to the registered budget rather than taken out of it -
+ * otherwise a hook that answers well inside its own budget is reported as `probe-timed-out`.
+ */
+const WINDOWS_MANAGED_PROBE_STARTUP_ALLOWANCE_MS = 60_000;
+
 /** Exact configured-launcher replay gets the registered hook budget; direct classifier probes keep the shared fast cap. */
 const MANAGED_CONFIGURED_PROBE_TIMEOUT_MS =
-  managedHookTimeoutSeconds === undefined
+  (managedHookTimeoutSeconds === undefined
     ? PROBE_TIMEOUT_MS
-    : managedHookTimeoutSeconds * 1000;
+    : managedHookTimeoutSeconds * 1000) +
+  (process.platform === "win32"
+    ? WINDOWS_MANAGED_PROBE_STARTUP_ALLOWANCE_MS
+    : 0);
 
 /** One fixed classifier input; `command` is never copied into reports or events. */
 export interface HookProbeScenario {

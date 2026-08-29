@@ -26,7 +26,7 @@
   "ignoreIssues": {
     "test/**": ["exports", "types"]
   },
-  "ignoreBinaries": ["diff", "where"],
+  "ignoreBinaries": ["diff", "shellcheck", "where"],
   "ignoreDependencies": [
     "@stryker-mutator/core",
     "@tailwindcss/browser",
