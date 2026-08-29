@@ -21,7 +21,7 @@ last_reviewed: 2026-08-15
 
 The user's point: "if it wasn't for that we wouldn't have found the better name." The protocol's value is not proportional to artifact size.
 
-**Prevention:** The user decides what deserves the full protocol, not the agent. If the user types `/goat-critique`, `/goat-plan`, or any `/goat-*` command, run every phase without exception. The skill's "NOT this skill" section is pre-invocation routing guidance for the dispatcher. It does not override explicit invocation. Do not evaluate whether an artifact is "worth" the full treatment.
+**Prevention:** If the user types `/goat-critique`, `/goat-plan`, or any `/goat-*` command, run every phase without exception. Do not evaluate whether an artifact is "worth" the full treatment - the user decides what deserves the full protocol, not the agent. The skill's "NOT this skill" section is pre-invocation routing guidance for the dispatcher; it does not override explicit invocation.
 
 ---
 
@@ -29,7 +29,7 @@ The user's point: "if it wasn't for that we wouldn't have found the better name.
 
 **Created:** 2026-03-30 | **Updated:** 2026-04-19
 
-**What happened:** Earlier skill templates said "If `.goat-flow/logs/` exists → write session summary" in a closing protocol that fired after every skill run. A goat-review audit ran the full skill process but no session log was written. 0% compliance. The instruction fired at the END of a skill - after the agent had already delivered output and was mentally "done."
+**What happened:** Earlier skill templates said "If `.goat-flow/logs/` exists → write session summary" in a closing protocol that fired after every skill run. A goat-review audit ran the full skill process but wrote no session log. 0% compliance. The instruction fired at the END of a skill - after the agent had already delivered output and was mentally "done."
 
 **Current contract** (per `skill-preamble.md` + `skill-conventions.md`, post-2026-04-18): session logs are OPTIONAL continuity notes. Write one only when (a) `/compact` fires without an active milestone file, or (b) the human explicitly requests a session summary. Otherwise skip - the old blanket "every invocation" rule is retired.
 
@@ -53,7 +53,7 @@ The user's point: "if it wasn't for that we wouldn't have found the better name.
 
 **Created:** 2026-04-01
 
-**What happened:** M1 human testing gate prompt said "List all directories in .claude/skills/. The ONLY dirs should be: goat, goat-debug, ..." This would fail any project with non-goat project-specific skills. The instruction would cause a verifier to report project-specific skills as violations.
+**What happened:** M1 human testing gate prompt said "List all directories in .claude/skills/. The ONLY dirs should be: goat, goat-debug, ..." This would fail any project with non-goat project-specific skills: the verifier would report them as violations.
 
 **Prevention:** Verification prompts and audit checks must scope to goat-flow's domain: "List all goat-* directories..." not "List all directories..." Project-specific skills are not goat-flow's business.
 
@@ -67,7 +67,7 @@ The user's point: "if it wasn't for that we wouldn't have found the better name.
 
 **Root cause:** The skill's Step 0 had a "Delegation consent gate" that said "when the active runner requires explicit user consent for delegated sub-agents and that consent is not present in the current user request or caller context, stop and ask before Phase 1." The agent interpreted this as always needing to ask, even though the preceding paragraph said explicit invocation is consent. The two clauses contradicted each other and the agent chose the more cautious (wrong) interpretation.
 
-**Prevention:** When a user explicitly invokes a skill that spawns sub-agents as its core protocol, that invocation IS the consent. Do not re-ask. The skill file has been updated to make this unambiguous. For any skill with delegated agents: if the user typed the command, proceed. The only time to ask is when the skill was auto-routed by the dispatcher and the user didn't explicitly request it.
+**Prevention:** When a user explicitly invokes a skill that spawns sub-agents as its core protocol, that invocation IS the consent. Do not re-ask. For any skill with delegated agents: if the user typed the command, proceed. The only time to ask is when the skill was auto-routed by the dispatcher and the user didn't explicitly request it.
 
 ---
 

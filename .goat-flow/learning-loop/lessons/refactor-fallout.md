@@ -9,7 +9,7 @@ last_reviewed: 2026-08-23
 
 **Status:** active | **Created:** 2026-08-19
 
-**What happened:** The 1.16.0 vocabulary rename (`ccf02efb`) renamed parameters and locals across `src` and `test`. Typecheck, build, and lint stayed green locally, and the breakage only appeared 16 minutes into the CI job, as 17 failures. Two functions took a parameter renamed onto the name of the narrowed local already declared in the same body, which esbuild rejects with `The symbol "scope" has already been declared`; every one of the 15 dashboard integration files that imports those helpers failed at transform time without running a single test. A third file renamed `ms` to `elapsedMs` in a returned object literal but not in the declared return type or the call sites, so `fresh.ms` read `undefined`. A fourth pinned the pre-rename `item` identifier in a source-text assertion.
+**What happened:** The 1.16.0 vocabulary rename (`ccf02efb`) renamed parameters and locals across `src` and `test`. Typecheck, build, and lint stayed green locally, and the breakage only appeared 16 minutes into the CI job, as 17 failures. Two functions took a parameter renamed onto the name of the narrowed local already declared in the same body, which esbuild rejects with `The symbol "scope" has already been declared`; every one of the 15 dashboard integration files that import those helpers failed at transform time without running a single test. A third file renamed `ms` to `elapsedMs` in a returned object literal but not in the declared return type or the call sites, so `fresh.ms` read `undefined`. A fourth pinned the pre-rename `item` identifier in a source-text assertion.
 
 **Root cause:** `tsconfig.json` excludes `test`, so `npm run typecheck` never compiles test files. Nothing validates a rename inside `test/` until tsx transforms the file and runs it, and the files that owned all four breakages live in the slow suite at the end of the run. A same-name parameter and local is a redeclaration rather than a shadow, so the file does not load at all - a green typecheck says nothing about it, and neither does a passing fast suite.
 
@@ -29,7 +29,7 @@ last_reviewed: 2026-08-23
 
 **Status:** active | **Created:** 2026-05-31
 
-**What happened:** While splitting dashboard and terminal classic-script files to clear gruff `size` findings, the first focused terminal-launch suite failed because the VM test helper still loaded only the old monolithic browser files. Production HTML loaded the new fragment files, but the test harness had its own source bundle list.
+**What happened:** While I was splitting dashboard and terminal classic-script files to clear gruff `size` findings, the first focused terminal-launch suite failed because the VM test helper still loaded only the old monolithic browser files. Production HTML loaded the new fragment files, but the test harness had its own source bundle list.
 
 **Same-session recurrence:** The standalone dashboard-reader test later failed the same way: it evaluated `dashboard-readers.ts` without the split `dashboard-model-readers.ts`, so `readInjectedSupportedAgents` was undefined in the VM context.
 
@@ -51,7 +51,7 @@ last_reviewed: 2026-08-23
 
 **Status:** active | **Created:** 2026-05-31
 
-**What happened:** While renaming dashboard app fragment files, `npm run build:dashboard` compiled the new descriptive `dashboard-app-*.js` files but left the old generated numbered fragment assets in `dist/dashboard`.
+**What happened:** While I was renaming dashboard app fragment files, `npm run build:dashboard` compiled the new descriptive `dashboard-app-*.js` files but left the old generated numbered fragment assets in `dist/dashboard`.
 
 **Root cause:** `build:dashboard` runs the dashboard TypeScript compile and asset copy only; it does not remove `dist/dashboard` before compiling. The full `npm run build` does clean `dist` first.
 
@@ -61,7 +61,7 @@ last_reviewed: 2026-08-23
 
 **Status:** active | **Created:** 2026-05-31
 
-**What happened:** After splitting audit-drift integration cases out of the old grouped file, the renamed files ran as standalone test modules and failed with `ReferenceError: describe is not defined`, followed by missing helper constants. The code had relied on imports that existed only in the former parent module.
+**What happened:** After I split audit-drift integration cases out of the old grouped file, the renamed files ran as standalone test modules and failed with `ReferenceError: describe is not defined`, followed by missing helper constants. The code had relied on imports that existed only in the former parent module.
 
 **Root cause:** I treated test-file extraction as a filename move. Node's test runner evaluates each `*.test.ts` file as its own module, so every split file needs its own `node:test`, assertion, filesystem, and helper imports.
 

@@ -56,7 +56,7 @@ last_reviewed: 2026-08-27
 **Status:** active | **Created:** 2026-04-26
 **Incident count:** 5 | **Latest occurrence:** 2026-08-23
 
-**What happened:** During M05b verification, a malformed `rg` command accidentally left a literal `>` outside the quoted search pattern. The shell interpreted it as output redirection and truncated `src/dashboard/views/home.html` to an empty file. The mistake was caught by `wc -l`, `git diff`, and the dashboard HTML regression before final verification, then the Home template was restored.
+**What happened:** During M05b verification, a malformed `rg` command accidentally left a literal `>` outside the quoted search pattern. The shell interpreted it as output redirection and truncated `src/dashboard/views/home.html` to an empty file. The mistake was caught by `wc -l`, `git diff`, and the dashboard HTML regression before final verification, and the Home template was restored.
 
 **Recurrence 2026-06-14:** While verifying a `goat-qa` skill-doc edit, an `rg` pattern included Markdown backticks around `initialInput`. The deny-dangerous hook blocked it as command substitution before execution. No files were changed by the blocked command, but the verification pass still had to be rerun with a safer pattern. Evidence anchors: `workflow/skills/goat-qa/SKILL.md` (search: `safe to skip more PTY timing tests`) and `.goat-flow/learning-loop/lessons/verification-scanners.md` (search: `Shell metacharacters in verification searches can corrupt source files`).
 
@@ -83,7 +83,7 @@ last_reviewed: 2026-08-27
 
 **Recurrence 2026-08-27:** While regenerating the M41 learning-loop index through a temporary mirror, I put `rm -rf "$index_fixture_dir"` in an `EXIT` trap within the same shell program. The command guard rejected the complete program before `mktemp` ran, so neither temporary nor workspace files were created. The retry keeps the printed `/tmp/goat-flow-m41-index.*` directory as disposable evidence instead of coupling proof to recursive cleanup. The repository policy contract covers the same class at `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `embedded variable recursive rm`).
 
-**Root cause:** Treated a `mktemp` path as self-evidently safe, but the hook cannot prove variable-scoped recursive deletion is bounded.
+**Root cause:** I treated a `mktemp` path as self-evidently safe, but the hook cannot prove variable-scoped recursive deletion is bounded.
 
 **Prevention:** For verification scratch space, prefer non-recursive cleanup (`rm -f` known files, then `rmdir`) or an explicit literal temp path pattern that satisfies the hook. Do not combine validation and variable-scoped `rm -rf` in the same command.
 

@@ -17,7 +17,7 @@ last_reviewed: 2026-08-28
 
 **Prevention:** When a shell gate has an EXIT trap or report renderer, capture both its human-readable summary and `$?` before treating it as final evidence. A green report line is not sufficient if the process status disagrees.
 
-**Recurrence update (2026-07-12):** The new preflight runner passed focused checks, but `Doc/code drift` failed until `.goat-flow/code-map.md` listed it. Keep the top-level script inventory current. Evidence: `scripts/preflight-checks.sh` (search: `code-map.md scripts list drifts from scripts/ filesystem`).
+**Recurrence update (2026-07-12):** The new preflight runner passed focused checks, but `Doc/code drift` failed until `.goat-flow/code-map.md` listed the runner. Keep the top-level script inventory current. Evidence: `scripts/preflight-checks.sh` (search: `code-map.md scripts list drifts from scripts/ filesystem`).
 
 ---
 
@@ -29,7 +29,7 @@ last_reviewed: 2026-08-28
 
 **Prevention:** When one command renders several independent statuses, capture its exit and structured output together. Identify the scope whose status changes the exit before proposing repair; a visible `FAIL` row can remain advisory to that command.
 
-**What happened:** M41 Task 6 preflight rendered ineffective hook coverage above a failing content-lint section. I initially attributed the command failure to stale provider capture. The JSON audit showed the actual blocking finding was ADR-064's retired semantic anchor. After that anchor was repaired, the audit exited zero with content status `pass` while still reporting two required hook surfaces as ineffective.
+**What happened:** M41 Task 6 preflight rendered ineffective hook coverage above a failing content-lint section. I initially attributed the command failure to stale provider capture. The JSON audit showed the actual blocking finding was ADR-064's retired semantic anchor. After I repaired that anchor, the audit exited zero with content status `pass` while still reporting two required hook surfaces as ineffective.
 
 **Root cause:** I treated the most prominent failure label as the exit owner instead of reading the command's structured scope statuses.
 
@@ -41,7 +41,7 @@ last_reviewed: 2026-08-28
 
 **Status:** active | **Created:** 2026-05-21
 
-**What happened:** While adding `npm audit` to preflight and CI, the first fresh audit failed on the existing direct `ws@8.20.0` dependency. The gate wiring was correct, but merging it alone would have made both local preflight and CI fail immediately.
+**What happened:** While I was adding `npm audit` to preflight and CI, the first fresh audit failed on the existing direct `ws@8.20.0` dependency. The gate wiring was correct, but merging it alone would have made both local preflight and CI fail immediately.
 
 **Root cause:** I treated "add the gate" as separate from proving the current baseline satisfies the gate. Dependency-audit gates are different from pure syntax checks because their first run can reveal already-present supply-chain debt.
 
@@ -55,7 +55,7 @@ last_reviewed: 2026-08-28
 
 **Status:** active | **Created:** 2026-06-14
 
-**What happened:** During M08 self-review, `package-lock.json` appeared in `git status` only after the final `npm test` / `bash scripts/preflight-checks.sh` verification pass. A forced text diff showed registry metadata churn for transitive dev dependencies such as `@types/node`, `acorn`, `caniuse-lite`, and `eslint`, even though dependency updates were out of scope. The lockfile was reverted before closeout.
+**What happened:** During M08 self-review, `package-lock.json` appeared in `git status` only after the final `npm test` / `bash scripts/preflight-checks.sh` verification pass. A forced text diff showed registry metadata churn for transitive dev dependencies such as `@types/node`, `acorn`, `caniuse-lite`, and `eslint`, even though dependency updates were out of scope. I reverted the lockfile before closeout.
 
 **Root cause:** I treated dependency audit/preflight as read-only for the working tree. In this environment, npm tooling can refresh `package-lock.json` metadata while producing otherwise passing audit/preflight output.
 
@@ -156,7 +156,7 @@ Evidence anchors: `scripts/preflight-checks.sh` (search: `Learning-loop schema`)
 
 **Status:** active | **Created:** 2026-05-24
 
-**What happened:** While adding npm override review logic to `scripts/dependency-update.sh`, the first verification run failed ShellCheck with `SC2259` because the code piped `npm view ... --json` into `node --input-type=module - ... <<'NODE'`. The heredoc supplied Node's stdin for the script body, so the piped registry JSON would not have reached `process.stdin`.
+**What happened:** While I was adding npm override review logic to `scripts/dependency-update.sh`, the first verification run failed ShellCheck with `SC2259` because the code piped `npm view ... --json` into `node --input-type=module - ... <<'NODE'`. The heredoc supplied Node's stdin for the script body, so the piped registry JSON would not have reached `process.stdin`.
 
 **Root cause:** I treated heredoc script input and piped data input as independent streams. For `node -`, they compete for stdin; the heredoc wins and discards the pipe.
 

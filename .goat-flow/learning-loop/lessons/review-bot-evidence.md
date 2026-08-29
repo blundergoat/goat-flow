@@ -9,7 +9,7 @@ last_reviewed: 2026-08-15
 
 **Status:** active | **Created:** 2026-05-24
 
-**What happened:** Triaging bot review feedback on PR #44, CodeRabbit raised three findings tagged Critical 🔴 / Major 🟠 across multiple inline comments:
+**What happened:** On PR #44, CodeRabbit raised three findings tagged Critical 🔴 / Major 🟠 across multiple inline comments:
 - `npm run typecheck` exits non-zero with `TS2307: Cannot find module 'node:fs'` (cited as "blocks acceptance" on three different files).
 - `npm test` fails immediately with `ERR_MODULE_NOT_FOUND: Cannot find package 'tsx'`.
 - `scripts/preflight-checks.sh` fails shellcheck SC2329 because `_on_exit` and `_emit_footer` are "never invoked".
@@ -22,7 +22,7 @@ All three were wrong. Locally: `npm run typecheck` exits 0, `npm test` passes 83
 1. Triage bot review findings into two buckets: (a) "bot read the code and named a defect" → verify by reading the code; (b) "bot ran a command and reported failure" → rerun the command locally before accepting. On PR #44 every category-a finding from the Codex bot held up; every category-b finding from CodeRabbit was wrong.
 2. Hallucination red-flag #1 in CLAUDE.md ("do not claim tests pass without the literal pass/fail line") cuts both ways - do not accept a bot's failure claim either without re-running and quoting the line yourself.
 3. Bot environment claims about project-wide tooling (typecheck, test, lint) are systematically unreliable because the bot's environment is not the project's environment. Treat the finding as "worth running the command yourself" not as evidence of a defect.
-4. Stale bot findings: bots reviewing commit-at-a-time produce findings that were valid at that snapshot but stale by the time of triage. Always check the current HEAD before acting (e.g. PR #44's `acme/example` and "v1.7.1 / v1.8.0 mismatch" findings were both already fixed in later commits).
+4. Stale bot findings: bots reviewing one commit at a time produce findings that were valid at that snapshot but stale by the time of triage. Always check the current HEAD before acting (e.g. PR #44's `acme/example` and "v1.7.1 / v1.8.0 mismatch" findings were both already fixed in later commits).
 
 ---
 
@@ -49,7 +49,7 @@ All three were wrong. Locally: `npm run typecheck` exits 0, `npm test` passes 83
 
 **Status:** active | **Created:** 2026-08-10 | **Evidence:** ACTUAL_MEASURED
 
-**What happened:** While triaging 41 automated review comments on PR #58, two Codex findings were mechanically correct about the code yet wrong to act on. Codex reported that the managed hook launcher walks past a nested Git root and adopts an enclosing project's install. The code confirmed it. Applying the suggested reorder (explicit host root before the ancestor walk, walk bounded at the Git root) turned 2 test failures into 22, because `test/unit/hook-registrar.test.ts` (search: `selects Git first, then the nearest complete managed ancestor`) creates a plain `git init` directory inside a managed root and asserts the launcher still resolves the outer install. The reported hazard and the asserted behaviour are the same behaviour. Separately, blanket-rejecting `--rcfile` in the shell exemption to close a real `bash --rcfile /dev/stdin -i script.sh` bypass also broke `printf payload | bash --rcfile scripts/bashrc scripts/import-data.sh`, a legitimate checked-in startup file the self-test already covered.
+**What happened:** Among 41 automated review comments triaged on PR #58, two Codex findings were mechanically correct about the code yet wrong to act on. Codex reported that the managed hook launcher walks past a nested Git root and adopts an enclosing project's install. The code confirmed it. Applying the suggested reorder (explicit host root before the ancestor walk, walk bounded at the Git root) turned 2 test failures into 22, because `test/unit/hook-registrar.test.ts` (search: `selects Git first, then the nearest complete managed ancestor`) creates a plain `git init` directory inside a managed root and asserts the launcher still resolves the outer install. The reported hazard and the asserted behaviour are the same behaviour. Separately, blanket-rejecting `--rcfile` in the shell exemption to close a real `bash --rcfile /dev/stdin -i script.sh` bypass also broke `printf payload | bash --rcfile scripts/bashrc scripts/import-data.sh`, a legitimate checked-in startup file the self-test already covered.
 
 **What this means:** Verifying the mechanism is only half the triage. A finding can describe real code accurately and still be a proposal to change intended behaviour. The deciding evidence is whether a test, ADR, or self-test case already asserts the current behaviour on purpose - if one does, the finding is a design question for the owner, not a defect to fix in a review-response pass. When a guard's parser skips an option to reach a safe operand, the fix is to validate that option's operand with the checker already in the file (`script_file_word_is_safe`), not to reject the option and lose its valid uses.
 

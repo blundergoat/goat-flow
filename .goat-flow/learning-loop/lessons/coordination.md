@@ -3,7 +3,7 @@ category: coordination
 last_reviewed: 2026-08-26
 ---
 
-**Scope:** Running work across multiple agents or phases - council findings that need normalising before they create work, where reviewers hallucinate, and phase totals that must derive from their breakdowns. Milestone state and effort accounting is [milestone-accounting.md](milestone-accounting.md).
+**Scope:** Running work across multiple agents or phases - council findings that need normalising before they create work, the version baselines where reviewers hallucinate, and phase totals that must derive from their breakdowns. Milestone state and effort accounting is [milestone-accounting.md](milestone-accounting.md).
 
 ## Lesson: Test cross-contamination via global env vars / module-level state silently flaps in parallel CI
 
@@ -14,7 +14,7 @@ last_reviewed: 2026-08-26
 **Incident count:** 2
 **Latest occurrence:** 2026-08-06
 
-**What happened (external — mini-swe-agent PR #755, merged 2026-02-19, plus the conftest fixture pattern):** Tests modifying global state via env vars contaminated each other when CI ran in parallel. Mini's fix in the upstream mini-swe-agent repo at tests/conftest.py (search: `GLOBAL_MODEL_STATS`) wraps tests that touch `GLOBAL_MODEL_STATS` (a module-level singleton) with a threading lock + reset before AND after each test. PR #755 specifically — "Fix tests because of env var overwrite" — addressed tests setting `MSWEA_DOCKER_EXECUTABLE`, `MSWEA_SILENT_STARTUP`, etc. leaking into siblings that depended on those vars being unset. The flakiness was rank-ordering-dependent and invisible until a CI run reordered the affected pair.
+**What happened (external — mini-swe-agent PR #755, merged 2026-02-19, plus the conftest fixture pattern):** Tests modifying global state via env vars contaminated each other when CI ran in parallel. Mini's fix in the upstream mini-swe-agent repo at tests/conftest.py (search: `GLOBAL_MODEL_STATS`) wraps tests that touch `GLOBAL_MODEL_STATS` (a module-level singleton) with a threading lock + reset before AND after each test. PR #755 specifically — "Fix tests because of env var overwrite" — addressed tests that set `MSWEA_DOCKER_EXECUTABLE`, `MSWEA_SILENT_STARTUP`, and similar vars, leaking them into siblings that depended on those vars being unset. The flakiness was rank-ordering-dependent and invisible until a CI run reordered the affected pair.
 
 **Recurrence update (2026-08-06):** A Windows dry-run regression test temporarily rewrote `process.platform` and `PATH`, then skipped itself on native Windows. Gruff flagged both global-state mutation and conditional skipping. Replacing it with a pure adapter from `buildInstallerInvocation` to `managedSetupPreviewForInstallerLaunch` kept the production branch directly testable without changing shared process state.
 
@@ -25,7 +25,7 @@ last_reviewed: 2026-08-26
 **Prevention:**
 1. Audit `src/` for module-level mutable state. For every test that touches one, add a fixture/beforeEach that resets it (mini's `reset_global_stats` is the model — threading lock + reset before AND after).
 2. For env var-driven behavior, prefer explicit dependency injection in tests (`runWithEnv({ KEY: "value" }, () => { ... })`) over `process.env.KEY = "value"`. Injection auto-cleans; direct mutation does not.
-3. When a test starts flapping rank-order-dependent, the root cause is almost always global state contamination — fix at the global, not at the test.
+3. If a test's flakiness depends on rank order, fix the shared global, not the test — global state contamination is almost always the root cause.
 
 ---
 
@@ -56,7 +56,7 @@ last_reviewed: 2026-08-26
 **Status:** active | **Created:** 2026-05-01
 **What happened:** Phase 3 verification ran `wc -w` and `git show` against live repo state and found two issues that five council passes and three Phase 2 sessions missed: (1) goat-critique SKILL.md was at 2532 words (32 over ADR-023's 2500 cap), caused by 15 commits made to main between Phase 0 and Phase 3 - not by this audit's work. (2) goat-review's internal version naming (v1.4.0/v1.5.0/v1.6.0) collided with the programme's atomic version sync (all skills bump to v1.4.0 at Phase A). Both required decisions and corrections to the programme document.
 **Evidence:** Measured in the 2026-05-01 session; the programme notes and its Section 2.1 naming convention were local working files and are not durable anchors.
-**Prevention:** Future programme-style improvement work should always end with a verification phase that reads live repo state, not just the artifacts produced. Plan-level reasoning operates on stated numbers; verification operates on measured numbers. The two diverge when the repo changes underneath the audit.
+**Prevention:** End programme-style improvement work with a verification phase that reads live repo state, not just the artifacts produced. Plan-level reasoning operates on stated numbers; verification operates on measured numbers. The two diverge when the repo changes underneath the audit.
 
 ## Lesson: Verification phases must cross-reference between artifacts, not just check each internally
 
@@ -87,12 +87,12 @@ last_reviewed: 2026-08-26
 
 **Recurrence 2026-08-10:** A release plan used 15 work units and a 12.42-minute high rate, then manually recorded the high bound as 186 minutes. The deterministic ceiling was 187, so strict validation blocked closeout until the displayed range matched the formula. Evidence anchor: `src/cli/plans-effort.ts` (search: `forecast basis derives`).
 
-**Recurrence 2026-08-14:** Reforecasting three downstream milestones used nearest-integer transcription for one or both bounds instead of the deterministic floor/ceiling rule. Strict validation derived `16-42`, `12-32`, and `15-39`, then blocked reconciliation because the plan displayed `17-41`, `13-32`, and `15-38`. The ISSUE roll-up also needed recomputation from `45-111` to `43-113` after the milestone ranges were corrected.
+**Recurrence 2026-08-14:** Reforecasting three downstream milestones, I transcribed one or both bounds to the nearest integer instead of applying the deterministic floor/ceiling rule. Strict validation derived `16-42`, `12-32`, and `15-39`, then blocked reconciliation because the plan displayed `17-41`, `13-32`, and `15-38`. The ISSUE roll-up also needed recomputation from `45-111` to `43-113` after the milestone ranges were corrected.
 
 **Recurrence 2026-08-17:** M39 multiplied 10 work units by a 1.16-minute low rate but transcribed the range floor as 12. Strict validation derived 11 and rejected the plan until both the milestone and ISSUE roll-up used `11-72`. Evidence anchor: `src/cli/plans-effort.ts` (search: `forecast basis derives`).
 
 **Recurrence 2026-08-26:** After trimming two milestones, I adjusted the 1.17.0 ISSUE headline by subtracting only those deltas from its stale prior total. A fresh exact sum over all 53 milestone files measured `557-2,997`, likely `1,368`, rather than `537-3,331`, likely `1,338`. Strict validation still passed because its milestone inventory excludes `ISSUE.md`. Evidence anchor: `src/cli/plans-export.ts` (search: `function listMilestoneFiles`).
 
-**Prevention:** Programme documents should show effort accounting explicitly and derive each roll-up from the milestone headlines after strict validation. If two totals intentionally differ, name the accounting difference; do not transcribe a mental sum into the summary.
+**Prevention:** Show effort accounting explicitly in programme documents and derive each roll-up from the milestone headlines after strict validation. If two totals intentionally differ, name the accounting difference; do not transcribe a mental sum into the summary.
 
 ---

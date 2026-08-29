@@ -73,7 +73,7 @@ The final closeout then used `## Proof closure`, which the export parser treats 
 
 **Status:** active | **Created:** 2026-05-09
 
-**What happened:** Verifying the new dashboard skill-quality workbench in a browser, ran `npx goat-flow dashboard .` to launch the dashboard. The Quality view loaded but the Skill Quality artifact list was empty - `skillQualityArtifacts` never populated. The new `loadSkillQualityInventory` method I had just added to `src/dashboard/app.ts` was missing from the served `/assets/app.js`. `curl -s ... /assets/app.js | grep -c loadSkillQualityInventory` returned `0`.
+**What happened:** Verifying the new dashboard skill-quality workbench in a browser, I ran `npx goat-flow dashboard .`. The Quality view loaded but the Skill Quality artifact list was empty - `skillQualityArtifacts` never populated. The new `loadSkillQualityInventory` method I had just added to `src/dashboard/app.ts` was missing from the served `/assets/app.js`. `curl -s ... /assets/app.js | grep -c loadSkillQualityInventory` returned `0`.
 
 **Root cause:** `npx goat-flow ...` resolves the published `@blundergoat/goat-flow` from `~/.npm/_npx/...`, not the local source tree. The dashboard CLI from the published package bundles the package's own compiled assets - local source edits to `src/dashboard/app.ts` are invisible to it.
 
@@ -87,7 +87,7 @@ The final closeout then used `## Proof closure`, which the export parser treats 
 
 **Status:** active | **Created:** 2026-05-09
 
-**What happened:** While chunking dashboard terminal initial prompt writes, the first `npm run typecheck` failed with `TS2367` because the loop checked `session.status === "terminated"` after an earlier guard had already narrowed the status to active/starting. The runtime intent was a defensive recheck, but the write loop was synchronous and no local status mutation could make that branch true.
+**What happened:** While I was chunking dashboard terminal initial prompt writes, the first `npm run typecheck` failed with `TS2367` because the loop checked `session.status === "terminated"` after an earlier guard had already narrowed the status to active/starting. The runtime intent was a defensive recheck, but the write loop was synchronous and no local status mutation could make that branch true.
 
 **Root cause:** Treated a defensive runtime status check as free inside a narrowed synchronous scope. TypeScript correctly rejected a comparison that could not happen in that scope.
 
@@ -141,7 +141,7 @@ The final closeout then used `## Proof closure`, which the export parser treats 
 
 **Prevention:** Keep a written list of the files you actually edited; that list, not `git diff`, is your change set. Prove a failure is not yours by reading its assertion and showing it names a file outside that list - a filename overlap is not proof either way, since one test file can hold both a failing gitignore assertion and an unrelated reference to your files. Run the focused contracts covering your change as the gate you claim, and report the full-suite number separately with its attribution stated. Treat build commands that replace shared outputs such as `dist` as writers, and run package/archive tests only after those builds finish. Never `git stash` to isolate; a second session can commit between the stash and the pop. Related: [[Parallel sessions need concurrency-safe file patterns]] covers write contention on the same files, which is a different failure from this one.
 
-**Recurrence 2026-08-23:** M17's no-schema gate first used broad `src/cli` and `test` status as an ownership signal. It ran clean before M17 wrote its decision, then a concurrent `writing-agent-facing-instructions.md` batch made twelve paths appear dirty even though M17 had not edited them. After stopping for approval, proof was narrowed to the exact M17-owned paths and an all-diff search for checkpoint-schema vocabulary. Evidence anchors: `src/cli/audit/skill-docs-contract.ts` (search: `.goat-flow/skill-docs/playbooks/writing-agent-facing-instructions.md`) and `workflow/skills/goat-plan/SKILL.md` (search: `mid-proof before switching modules`).
+**Recurrence 2026-08-23:** M17's no-schema gate first used broad `src/cli` and `test` status as an ownership signal. It ran clean before M17 wrote its decision, then a concurrent `writing-agent-facing-instructions.md` batch made twelve paths appear dirty even though M17 had not edited them. After stopping for approval, I narrowed proof to the exact M17-owned paths and an all-diff search for checkpoint-schema vocabulary. Evidence anchors: `src/cli/audit/skill-docs-contract.ts` (search: `.goat-flow/skill-docs/playbooks/writing-agent-facing-instructions.md`) and `workflow/skills/goat-plan/SKILL.md` (search: `mid-proof before switching modules`).
 
 **Recurrence 2026-08-27:** Running `npm run build` and the packaged-hook canary concurrently let the build delete and recreate `dist` while the test archived the package. The archive exposed the declared CLI path without the corresponding file, so the combined run failed 91/92 at `existsSync(declaredCliEntryPath)`. The isolated canary after build completion passed 2/2, proving verification-command interference rather than a package regression. Evidence anchors: `package.json` (search: `rmSync('dist'`) and `test/integration/packaged-hook-install.test.ts` (search: `existsSync(declaredCliEntryPath)`).
 
@@ -151,14 +151,14 @@ The final closeout then used `## Proof closure`, which the export parser treats 
 
 **Status:** active | **Created:** 2026-04-05
 
-**What happened:** Observed during parallel Claude sessions: two agents writing to the same learning-loop file simultaneously. Learning loop files (`.goat-flow/logs/`, `.goat-flow/learning-loop/lessons/`, `.goat-flow/learning-loop/footguns/`) are append-only by convention, but nothing prevents concurrent writes. Session logs use date-slug filenames which reduces collisions, but category bucket files (e.g. `.goat-flow/learning-loop/lessons/verification.md`) are shared write targets.
+**What happened:** Observed during parallel Claude sessions: two agents writing to the same learning-loop file simultaneously. Learning loop files (`.goat-flow/logs/`, `.goat-flow/learning-loop/lessons/`, `.goat-flow/learning-loop/footguns/`) are append-only by convention, but nothing prevents concurrent writes. Session logs use date-slug filenames, which reduce collisions, but category bucket files (e.g. `.goat-flow/learning-loop/lessons/verification.md`) are shared write targets.
 
 **Root cause:** goat-flow was designed for single-agent sessions. The category bucket format (multiple entries in one file) creates write contention that per-entry files (one file per lesson) wouldn't have.
 
 **Prevention:**
 1. Document which files are safe for concurrent access in the plugin instructions
 2. For learning loop writes during parallel sessions, use unique filenames (date-agent-slug) rather than appending to shared buckets
-3. Session logs already use unique filenames - extend this pattern to footgun/lesson entries when multi-agent mode is detected
+3. Extend the unique-filename pattern to footgun/lesson entries when multi-agent mode is detected
 
 ---
 

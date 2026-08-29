@@ -3,7 +3,7 @@ category: agent-behavior
 last_reviewed: 2026-08-26
 ---
 
-**Scope:** Reading the request and retrieving memory - parsing what was asked, honouring an explicit next step, retrieval terms that name the real failure class, and treating end-of-task rules as deliverables. Using tools and the environment is [agent-tooling.md](agent-tooling.md); what an explicit skill invocation obliges is [skill-invocation.md](skill-invocation.md).
+**Scope:** Reading the request and retrieving memory - parsing what was asked, honouring an explicit next step, naming the real failure class in retrieval terms, and treating end-of-task rules as deliverables. Using tools and the environment is [agent-tooling.md](agent-tooling.md); what an explicit skill invocation obliges is [skill-invocation.md](skill-invocation.md).
 
 ## Lesson: Agent proposed disabling gruff-ts rules to silence high-volume advisory findings
 
@@ -13,7 +13,7 @@ last_reviewed: 2026-08-26
 
 **Root cause:** The agent treated high-volume advisory findings as configuration noise to mute rather than signal to act on or threshold-tune. The framing "the rule fights your stated philosophy" used a real project norm (the comment playbook's then-current "default to no comments" rule) to justify silencing a tool, but a tool-vs-norm conflict is resolved by satisfying the rule selectively, tuning via threshold/allowlist/path-filter, or accepting the noise while triaging - never by disabling. It also misread the score: F (12.9) with 0 errors is no emergency, and disabling rules raises the score without changing the codebase - exactly the gaming the analyser is designed to prevent.
 
-**Why it matters:** Disabling a rule erases its signal permanently: a future agent running `gruff-ts summary` sees fewer findings and concludes the codebase is clean in that dimension when the rule was silenced. Worse, the user committed to the gruff-ts rule set as the project's quality vocabulary - disablement weakens that contract. The cost is one-directional: a wrongly-disabled rule stays disabled until noticed, while a wrongly-noisy rule prompts a conversation about thresholds.
+**Why it matters:** Disabling a rule erases its signal permanently: a future agent running `gruff-ts summary` sees fewer findings and concludes the codebase is clean in that dimension when in fact the rule was silenced. Worse, the user committed to the gruff-ts rule set as the project's quality vocabulary - disablement weakens that contract. The cost is one-directional: a wrongly-disabled rule stays disabled until noticed, while a wrongly-noisy rule prompts a conversation about thresholds.
 
 **Prevention:**
 
@@ -108,7 +108,7 @@ Related: `feedback_gruff_never_disable` (auto-memory, 2026-05-25).
 
 **Evidence:** `.goat-flow/learning-loop/lessons/agent-behavior.md` (search: "Retrieval terms must name the concrete failure class"; "Recurring terminal bugs must start with learning-loop retrieval"); `.goat-flow/skill-docs/skill-preamble.md` (search: "Relevant prior learnings:").
 
-**Prevention:** `skill-preamble.md` now requires every functional goat-* skill Step 0 to emit `Relevant prior learnings:`; misses include `Terms searched:`. `test/contract/skill-hardening-contracts.test.ts` pins both preamble copies, and `test/contract/skill-hardening-clarity.test.ts` (search: `runs visible learning-loop retrieval before freezing write authority`) closes the goat-clarity omission. Local TDD receipt filename: `2026-08-18-goat-clarity-tdd.md`.
+**Prevention:** `skill-preamble.md` now requires every functional goat-* skill Step 0 to emit `Relevant prior learnings:`; a miss must also emit `Terms searched:`. `test/contract/skill-hardening-contracts.test.ts` pins both preamble copies, and `test/contract/skill-hardening-clarity.test.ts` (search: `runs visible learning-loop retrieval before freezing write authority`) closes the goat-clarity omission. Local TDD receipt filename: `2026-08-18-goat-clarity-tdd.md`.
 
 ## Lesson: Quality assessors can reopen ADR-settled skill modes
 
@@ -118,7 +118,7 @@ Related: `feedback_gruff_never_disable` (auto-memory, 2026-05-25).
 
 **Root cause:** The assessors saw `goat-critique` spawns three sub-agents per invocation and pattern-matched the cost as over-engineering without reading history.
 
-**Prevention:** Before accepting a quality recommendation that changes a skill mode, read the relevant ADR and prompt constraints first. If it contradicts an accepted ADR, fix the assessor prompt or cite the ADR; don't re-litigate the mode inside the skill file. Anchors: `.goat-flow/learning-loop/decisions/ADR-021-goat-critique-full-mode-only.md` (search: `goat-critique runs in one mode: full delegated`) and `src/cli/prompt/compose-quality-static-sections.ts` (search: `Do NOT recommend adding quick/lite/reduced modes`).
+**Prevention:** Before accepting a quality recommendation that changes a skill mode, read the relevant ADR and prompt constraints. If it contradicts an accepted ADR, fix the assessor prompt or cite the ADR; don't re-litigate the mode inside the skill file. Anchors: `.goat-flow/learning-loop/decisions/ADR-021-goat-critique-full-mode-only.md` (search: `goat-critique runs in one mode: full delegated`) and `src/cli/prompt/compose-quality-static-sections.ts` (search: `Do NOT recommend adding quick/lite/reduced modes`).
 
 ---
 

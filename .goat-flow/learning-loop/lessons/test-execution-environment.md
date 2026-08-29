@@ -33,9 +33,9 @@ last_reviewed: 2026-08-21
 
 **Status:** active | **Created:** 2026-04-18
 
-**What happened:** A focused verification run used `npm test -- test/unit/quality-command.test.ts`, expecting only the quality prompt tests to run. In this repo, `package.json` defines `test` as `node --import tsx --test test/*/*.test.ts`, so npm appended the file argument without removing the existing glob. The command still executed the full suite and surfaced unrelated audit failures, obscuring whether the changed file actually passed its own regression.
+**What happened:** A focused verification run used `npm test -- test/unit/quality-command.test.ts` to run only the quality prompt tests. In this repo, `package.json` defines `test` as `node --import tsx --test test/*/*.test.ts`, so npm appended the file argument without removing the existing glob. The command still executed the full suite and surfaced unrelated audit failures, obscuring whether the changed file actually passed its own regression.
 
-**Root cause:** Assumed npm positional passthrough would replace the script's built-in test target. It only appends arguments, so any existing glob or file list in the script still runs unless the underlying command supports overriding it.
+**Root cause:** I assumed npm positional passthrough would replace the script's built-in test target. It only appends arguments, so any existing glob or file list in the script still runs unless the underlying command supports overriding it.
 
 **Fix:** For focused test verification in this repo, invoke the underlying command directly: `node --import tsx --test test/unit/quality-command.test.ts`. Reserve `npm test` for deliberate full-suite runs.
 
@@ -52,7 +52,7 @@ last_reviewed: 2026-08-21
 
 **Root cause:** The test suite verified internal function behavior but never exercised the actual entry-point guard through the `.bin/` symlink path that `npx` uses. The refactor commit was titled "update goat-critique documentation," making it easy to overlook a CLI entry-point change during review.
 
-**Recurrence 2026-08-10:** A new packed-bin release fixture inferred that `--version` would print the package value `1.15.1`. The real archived `.bin/goat-flow` command printed `goat-flow v1.15.1`, so the first run failed before fresh-install and migration checks began. The assertion now preserves the complete public string. Evidence anchor: `test/integration/packaged-hook-install.test.ts` (search: `runs fresh install through the archived CLI bin`).
+**Recurrence 2026-08-10:** A new packed-bin release fixture asserted that `--version` would print the package value `1.15.1`. The real archived `.bin/goat-flow` command printed `goat-flow v1.15.1`, so the first run failed before fresh-install and migration checks began. The assertion now preserves the complete public string. Evidence anchor: `test/integration/packaged-hook-install.test.ts` (search: `runs fresh install through the archived CLI bin`).
 
 **Prevention:**
 1. `test/integration/main-guard.test.ts` now tests the CLI via a temp-dir symlink - the exact path that broke. This test would have caught the regression.
@@ -83,7 +83,7 @@ last_reviewed: 2026-08-21
 
 **Root cause:** I guessed a focused invocation instead of resolving the path and runner contract first.
 
-**Recurrence 2026-08-01:** I derived nonexistent `test/unit/preflight-command-runner.test.mjs` from the source name. `rg --files | rg 'preflight|command-runner'` found `test/integration/preflight-progress.test.ts`; the corrected command passed all nine cases.
+**Recurrence 2026-08-01:** I derived the nonexistent path `test/unit/preflight-command-runner.test.mjs` from the source name. `rg --files | rg 'preflight|command-runner'` found `test/integration/preflight-progress.test.ts`; the corrected command passed all nine cases.
 
 **Recurrence 2026-08-16:** I ran the documented focused command under WSL against a checkout whose `node_modules` had been installed by Windows. The `tsx` loader stopped before test discovery because `@esbuild/win32-x64` was present while Linux required `@esbuild/linux-x64`. A native Windows retry was not equivalent because the suite spawns `/bin/bash` with POSIX paths. Keeping the Linux runtime and setting `ESBUILD_BINARY_PATH` to the Linux binary from a same-version clone with the same lockfile hash made the exact local `tsx` command pass all 24 tests.
 
@@ -103,7 +103,7 @@ last_reviewed: 2026-08-21
 
 **Root cause:** I treated an archive extraction as equivalent to a fresh clone. In this repo, deny-hook and audit tests intentionally rely on git-root discovery, so an archive is a different execution environment.
 
-**Recurrence 2026-06-04:** While fixing PR #47 CI, a clean temporary worktree with symlinked `node_modules` and `dist` produced a false installer round-trip `Skill Template Drift` failure. Re-running the same patch from a clean worktree with real `npm ci` and `npm run build` passed. For installer round-trip proof, symlink shortcuts are not CI-equivalent because the fixture copies the source tree before preflight rebuilds it. Evidence anchors: `test/integration/audit-drift.helpers.ts` (search: `cpSync(PROJECT_ROOT, root`), `package.json` (search: `rmSync('dist'`).
+**Recurrence 2026-06-04:** While I was fixing PR #47 CI, a clean temporary worktree with symlinked `node_modules` and `dist` produced a false installer round-trip `Skill Template Drift` failure. Re-running the same patch from a clean worktree with real `npm ci` and `npm run build` passed. For installer round-trip proof, symlink shortcuts are not CI-equivalent because the fixture copies the source tree before preflight rebuilds it. Evidence anchors: `test/integration/audit-drift.helpers.ts` (search: `cpSync(PROJECT_ROOT, root`), `package.json` (search: `rmSync('dist'`).
 
 **Prevention:** For "clean checkout" proofs, use a real clone when the test suite includes hooks, audit checks, or git-root discovery. Use `git archive` only for tests that are explicitly gitless. If an archive run fails with `deny-dangerous-self-test.sh --self-test=smoke failed`, rerun in a real clone before changing hook logic. Evidence anchors: `workflow/hooks/deny-dangerous.sh` (search: `resolve_goat_flow_root`), `.goat-flow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `expect_allow shell "echo safe"`), `test/unit/audit-command/agent-deny-hooks-drift.test.ts` (search: `passes when the installed deny hook matches the canonical template`), `package.json` (search: `"test:fast"`).
 

@@ -33,7 +33,7 @@ last_reviewed: 2026-08-28
 
 The same surfaces also leaked third-party / competitor skill names (MySQL, Valyu, the writing-skills prime pack, an external frontend-design skill) into goat-flow's committed docs plus an env-var example (`VALYU_API_KEY`).
 
-**Root cause:** When seeding pattern docs from external material temporarily staged under `.goat-flow/scratchpad/`, the authoring agent kept the verbatim citations instead of (a) committing the source material first, (b) restating the principle without the citation, or (c) marking the section guidance-only. It treated the scratchpad path as cite-able because it lives inside `.goat-flow/`, missing that the whole `scratchpad/` subtree is gitignored. Naming the external skills (MySQL, Valyu, frontend-design) compounded it: the agent imported provider vocabulary with the structural pattern.
+**Root cause:** When seeding pattern docs from external material temporarily staged under `.goat-flow/scratchpad/`, the authoring agent kept the verbatim citations instead of (a) committing the source material first, (b) restating the principle without the citation, or (c) marking the section guidance-only. It treated the scratchpad path as citable because it lives inside `.goat-flow/`, missing that the whole `scratchpad/` subtree is gitignored. Naming the external skills (MySQL, Valyu, frontend-design) compounded it: the agent imported provider vocabulary with the structural pattern.
 
 **Why it matters:** (1) **Broken evidence chain.** A cloned checkout cannot follow the cited path or its `(search: "...")` anchor; the Evidence Standard (`workflow/skills/reference/skill-preamble.md`, search: `Re-read each cited file`) requires citations anyone can re-read. (2) **Competitor/third-party leakage.** Naming external skills in committed docs implies goat-flow ships, endorses, or derives from those vendors' work, and pins generic patterns to one provider.
 
@@ -57,7 +57,7 @@ Round 4 entries in `.goat-flow/learning-loop/footguns/docs-drift.md` (search: `R
 
 **Created:** 2026-03-31
 
-**What happened:** goat-flow once scored 100% on its own scanner system (removed per ADR-013) while `preflight-checks.sh` failed with 8 errors. The scanner checked structural presence (files exist, have right headings); preflight checked functional correctness (commands work, paths resolve, versions match).
+**What happened:** goat-flow once scored 100% on its own scanner system (removed per ADR-013) while `preflight-checks.sh` failed with 8 errors. The scanner checked structural presence (files exist, have the right headings); preflight checked functional correctness (commands work, paths resolve, versions match).
 
 **Prevention:** Don't treat a structural audit/check pass as a quality gate for the whole project. Use structural checks for what they cover and preflight/targeted verification for functional correctness; when they disagree, investigate.
 
@@ -152,7 +152,7 @@ Evidence anchors: `test/integration/setup-install-agent-matrix.test.ts` (search:
 
 **Recurrence 2026-08-27 (plan command shape):** After stopping M41 timing with its milestone-file path, I passed the same file to `plans check --strict`; the checker rejected it with `ENOTDIR` because `plans check` consumes the version directory while `plans time` consumes one milestone file. A failed invocation is not strict-plan evidence even when the corrected command follows immediately. Use the literal help example, capture each exit separately, and label only the directory-scoped run. Evidence anchors: `src/cli/help.ts` (search: `goat-flow plans check .goat-flow/plans/1.17.0 --strict`) and `src/cli/plans-export.ts` (search: `Cannot read plan directory`).
 
-**Recurrence 2026-08-27:** M41 ran `npx eslint test/integration/preflight-progress.test.ts` and appended a PASS label because the command exited zero, even though ESLint's only diagnostic said the file was ignored. `eslint.config.mjs` (search: `"test/**"`) makes that path outside the repository's ESLint scope. An ignored-file warning is not lint evidence: keep the repository-owned source lint scope, and cover ignored tests with typecheck, Prettier, and their runtime suite instead of forcing `--no-ignore`.
+**Recurrence 2026-08-27:** M41 ran `npx eslint test/integration/preflight-progress.test.ts` and appended a PASS label because the command exited zero, even though ESLint's only diagnostic said the file was ignored. `eslint.config.mjs` (search: `"test/**"`) puts that path outside the repository's ESLint scope. An ignored-file warning is not lint evidence: keep the repository-owned source lint scope, and cover ignored tests with typecheck, Prettier, and their runtime suite instead of forcing `--no-ignore`.
 
 **Recurrence 2026-08-14:** M03 ran `scripts/generate-managed-hook-desired-state.mjs` with plain Node.
 Plain Node could not resolve `registry.ts`'s `.js` import of the TypeScript manifest.
@@ -223,7 +223,7 @@ Evidence anchor: `src/cli/prompt/commit-guidance.ts` (search: `type CommitGuidan
 First, `test/integration/dashboard-server.test.ts` still matched `alpinejs@3` after the asset was vendored at `/assets/alpine.js`.
 Second, `appendQualityReportContract` shipped at complexity 21 because scoped ESLint checked only the file's diff, not the full `src/cli` tree.
 This repeated the M01 recurrence above.
-Its branchy `full ? a : b` and `if (full)` lines needed small `pushVariant` and `pushFull` helpers.
+That function's branchy `full ? a : b` and `if (full)` lines needed small `pushVariant` and `pushFull` helpers.
 Third, deleting `coming-soon` left its name in `.goat-flow/code-map.md`, `docs/dashboard.md`, and `.goat-flow/architecture.md`.
 It also left seven backticked learning-loop references.
 Those references tripped the round-trip fixture's embedded preflight.

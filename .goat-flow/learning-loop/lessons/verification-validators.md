@@ -100,7 +100,7 @@ last_reviewed: 2026-08-26
 
 **Recurrence (2026-08-17):** Moving instruction-parity phrases from the parity script into `workflow/manifest.json` passed the new focused tests, but the fast suite still had a contract test pinned to the old owner and a copied-repository fixture without the manifest. The live stats check also found a lesson anchor pointing at the removed script-owned phrase. When ownership moves, grep the old semantic anchors and fixture copy lists before declaring the focused slice complete. Evidence anchors: `workflow/manifest.json` (search: `"label": "test-selection READ route"`), `test/contract/test-selection-playbook-doctrine.test.ts` (search: `registers the exact route with instruction parity`), and `test/unit/local-instructions.test.ts` (search: `workflow/manifest.json`).
 
-A relocation also destroys its own evidence: once the inline list was deleted, the reader and its tests both resolved to the manifest, so a phrase dropped in transit would have vanished from the rule and the assertion in the same commit and still gone green. Green tests cannot show that a move preserved membership; only the pre-move copy can. Diff it structurally - parse the old literal out of `git show HEAD:<file>` and compare label, section, and phrase content rather than eyeballing labels, because a label survives a shortened phrase list. Verified for this move on 2026-08-17: 8 rules before and after, zero content differences.
+A relocation also destroys its own evidence: once the inline list was deleted, the reader and its tests both resolved to the manifest, so a phrase dropped in transit would have vanished from the rule and the assertion in the same commit, and the tests would still have gone green. Green tests cannot show that a move preserved membership; only the pre-move copy can. Diff it structurally - parse the old literal out of `git show HEAD:<file>` and compare label, section, and phrase content rather than eyeballing labels, because a label survives a shortened phrase list. Verified for this move on 2026-08-17: 8 rules before and after, zero content differences.
 
 ---
 
@@ -141,7 +141,7 @@ A relocation also destroys its own evidence: once the inline list was deleted, t
 
 **Status:** historical | **Created:** 2026-04-03 | **Reason:** Rubric check 2.4.3 no longer exists (ADR-013); normalization-invariant principle applies to any parser
 
-**What happened:** After normalizing router references by trimming trailing slashes, the follow-up `2.4.3` filter still looked for the literal substring `/skills/`. That turned `.claude/skills/` into `.claude/skills`, so the canonical passing fixture dropped from `100` to `99` even though the router row was correct.
+**What happened:** After normalizing router references by trimming trailing slashes, the follow-up `2.4.3` filter still looked for the literal substring `/skills/`. The trimming turned `.claude/skills/` into `.claude/skills`, so the canonical passing fixture dropped from `100` to `99` even though the router row was correct.
 **Root cause:** Mixed two phases of logic without rechecking the invariant after normalization. The filter assumed the original slash shape still existed after the normalizer had deliberately removed it.
 **Fix:** When a parser normalizes paths, downstream checks must use shape tests that still hold after normalization, such as segment-boundary regexes (`/\/skills(?:\/|$)/`) instead of raw substring checks that depend on trailing separators.
 

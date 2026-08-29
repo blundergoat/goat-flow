@@ -3,7 +3,7 @@ category: agent-tooling
 last_reviewed: 2026-08-22
 ---
 
-**Scope:** How the agent uses its tools and environment - resolving install-copy against source paths, recovering rather than bypassing a blocked command, shell quoting under `set -u`, and which artifact is the source of truth. Reading instructions and retrieving memory is [agent-behavior.md](agent-behavior.md).
+**Scope:** How the agent uses its tools and environment - resolving install-copy against source paths, recovering rather than bypassing a blocked command, variable scoping under `set -u`, and which artifact is the source of truth. Reading instructions and retrieving memory is [agent-behavior.md](agent-behavior.md).
 
 ## Lesson: Confused install-copy path pair for a directory move
 
@@ -18,7 +18,7 @@ last_reviewed: 2026-08-22
 
 **Recurrence 2026-08-16:** Copying `workflow/hooks/post-turn-safety.sh` from the NTFS-backed source checkout into a Linux controller with `cp --preserve=mode` propagated mode `0777` over the controller's intended `0755`. The content was correct, but the installation metadata was not. An immediate `chmod 0755` plus `stat` and byte-parity checks restored the expected installation.
 
-**Root cause:** It inferred concept-shaped names instead of resolving the manifest, generated index, or ignored-plan inventory; the install cases also collapsed workflow sources into installed copies or assumed source filesystem metadata was portable.
+**Root cause:** The agent inferred concept-shaped names instead of resolving the manifest, generated index, or ignored-plan inventory; the install cases also collapsed workflow sources into installed copies or assumed source filesystem metadata was portable.
 
 **Why it matters:** A wrong move can remove consumer templates, an invented source path makes planning fail before useful work begins, and copied mode bits can silently broaden permissions on an otherwise correct installed hook.
 
@@ -83,7 +83,7 @@ last_reviewed: 2026-08-22
 
 **Root cause:** Variable scoping. `setup_count` was set on a line that only executes when `build_count` is non-empty, but referenced unconditionally later. The original code never triggered this because without sanitization the node command always produced *some* stdout (even if garbage), so `build_count` was never empty - just wrong. Sanitization made the empty case reachable for the first time.
 
-**Prevention:** When adding a filter that can turn non-empty output into empty, trace every downstream reference to the captured variable. In `set -u` scripts, any variable set inside a conditional must be initialized before it or only referenced inside the same branch.
+**Prevention:** When adding a filter that can turn non-empty output into empty, trace every downstream reference to the captured variable. In `set -u` scripts, any variable set inside a conditional must be initialized before the conditional or only referenced inside the same branch.
 
 ---
 

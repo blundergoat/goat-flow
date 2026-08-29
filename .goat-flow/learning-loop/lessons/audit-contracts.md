@@ -10,11 +10,11 @@ last_reviewed: 2026-08-25
 **Status:** active | **Created:** 2026-07-12
 **Incident count:** 7 | **Latest occurrence:** 2026-08-23
 
-**What happened:** The first live M01 artifact-integrity audit failed two valid files after focused fixtures were green. References to the installed `.goat-flow/skill-docs/skill-quality-testing/README.md` were resolved by directory convention to a nonexistent canonical `skill-quality-testing/README.md`, even though the explicit mirror maps that installed README from `skill-quality-testing.md`. The removed-command scanner also treated prose saying "goat-flow check IDs" as an invocation of the retired `check` command.
+**What happened:** The first live M01 artifact-integrity audit failed two valid files after focused fixtures were green. The artifact-integrity check resolved references to the installed `.goat-flow/skill-docs/skill-quality-testing/README.md` by directory convention to a nonexistent canonical `skill-quality-testing/README.md`, even though the explicit mirror maps that installed README from `skill-quality-testing.md`. The removed-command scanner also treated prose saying "goat-flow check IDs" as an invocation of the retired `check` command.
 
 **Root cause:** I validated common path and token shapes without pressure-testing the repository's exceptional source/install mapping or a producer-language prose control. The implementation had the authoritative mirror table and CLI registry available but used a naming convention and a broad word-boundary regex instead.
 
-**Recurrence 2026-07-29:** `plans check` dogfooded on its own live plan failed both milestones with "task(s) missing an (est: ...) entry" although every task carried one: synthetic fixtures used single-line tasks while real milestone tasks wrap across indented continuation lines with the est entry at block end. `readChecklistItems` was reworked so each checkbox owns every line up to the next checkbox or heading, with wrapped-task and nested-gate regression fixtures. Evidence anchors: `src/cli/plans-export.ts` (search: `Headings also end an item so nested Testing Gate labels do not swallow its trailing estimate`), `test/unit/plans-export-parsing.test.ts` (search: `parses est entries at the end of wrapped multi-line tasks` and `parses every counted work item from the worked-example shape`).
+**Recurrence 2026-07-29:** `plans check`, dogfooded on its own live plan, failed both milestones with "task(s) missing an (est: ...) entry" although every task carried one: synthetic fixtures used single-line tasks while real milestone tasks wrap across indented continuation lines with the est entry at block end. `readChecklistItems` was reworked so each checkbox owns every line up to the next checkbox or heading, with wrapped-task and nested-gate regression fixtures. Evidence anchors: `src/cli/plans-export.ts` (search: `Headings also end an item so nested Testing Gate labels do not swallow its trailing estimate`), `test/unit/plans-export-parsing.test.ts` (search: `parses est entries at the end of wrapped multi-line tasks` and `parses every counted work item from the worked-example shape`).
 
 **Recurrence 2026-07-31:** Human-approval and mid-run evidence continuations were appended after already-final `(est: ...)` suffixes. Strict dogfood then reported each item as unestimated because `readChecklistItems` correctly owned the continuation while `readTaskEstimate` no longer saw an estimate at the block end. The bounded correction moved approval onto its estimate-bearing line and put evidence before a final Accounting continuation. Decision changed: after adding lifecycle or evidence notes beneath estimated checkboxes, keep the estimate last and rerun strict immediately. Evidence anchors: `src/cli/plans-export.ts` (search: `An item owns every line until the next checkbox or heading`) and `src/cli/plans-effort.ts` (search: `Parse one task line's trailing est entry`).
 
@@ -26,7 +26,7 @@ last_reviewed: 2026-08-25
 
 **Recurrence 2026-08-23:** M11's first negative persistence probe searched prompt modules for producer names plus the path phrase `quality/history`. It failed on the existing type-only `QualityHistoryEntry` import even though the touched modules contain no write or event call. The corrected proof searched for actual producer call syntax, then reported the read-only `readFileSync` and type import separately. Decision changed: negative mutation proof must target executable producer calls; module names and concept vocabulary are classification context, not write evidence.
 
-**Prevention:** Artifact reference resolution must consult the exact installed-to-canonical mirror map before applying path conventions. Removed-command checks must distinguish executable code-span/shell grammar from product prose, with paired positive and negative fixtures. Run the live combined audit after focused tests because real documentation supplies exceptions synthetic fixtures miss. Evidence anchors: `src/cli/audit/check-artifact-integrity.ts` (search: `SHARED_ARTIFACT_MIRRORS`), `src/cli/audit/check-factual-claims.ts` (search: `REMOVED_COMMAND_CHECKS`), and `test/integration/audit-drift-artifact-integrity.test.ts` (search: `resolves installed shared-document paths`).
+**Prevention:** Resolve artifact references through the exact installed-to-canonical mirror map before applying path conventions. Removed-command checks must distinguish executable code-span/shell grammar from product prose, with paired positive and negative fixtures. Run the live combined audit after focused tests because real documentation supplies exceptions synthetic fixtures miss. Evidence anchors: `src/cli/audit/check-artifact-integrity.ts` (search: `SHARED_ARTIFACT_MIRRORS`), `src/cli/audit/check-factual-claims.ts` (search: `REMOVED_COMMAND_CHECKS`), and `test/integration/audit-drift-artifact-integrity.test.ts` (search: `resolves installed shared-document paths`).
 
 ---
 
@@ -34,7 +34,7 @@ last_reviewed: 2026-08-25
 
 **Status:** active | **Created:** 2026-05-20
 
-**What happened:** While making `instruction-file-skill-docs-pointer` fail when the shared skill-docs/playbook pack is absent, the focused unit test was updated but the first full `npm test` run still failed four `test/integration/audit-build.test.ts` cases. The integration fixture still asserted `skillDocsCheck.skip?.(ctx)` was `false` or `true`; the production check was now correctly non-skippable and returned `undefined`.
+**What happened:** While making `instruction-file-skill-docs-pointer` fail when the shared skill-docs/playbook pack is absent, I updated the focused unit test, but the first full `npm test` run still failed four `test/integration/audit-build.test.ts` cases. The integration fixture still asserted `skillDocsCheck.skip?.(ctx)` was `false` or `true`; the production check was now correctly non-skippable and returned `undefined`.
 
 **Root cause:** I treated the unit audit report contract as the only caller. Integration tests also assert the lower-level `BuildCheck` shape, including optional `skip` behavior. Removing the skip gate also left unused directory constants that `npm run typecheck` caught before the full suite.
 
@@ -50,13 +50,13 @@ last_reviewed: 2026-08-25
 
 **What happened:** Adding `AuditReport.enforcement` and updating the main audit fixtures left an older contract fixture that called `renderAuditText` with a minimal report object lacking the new field. The first full `npm test` run failed because the text renderer had become stricter than historical report-shaped fixtures.
 
-**Root cause:** I treated an additive report field as universally present at every renderer call site. Tests had multiple report construction paths, and only the obvious unit helper was updated before the full suite.
+**Root cause:** I treated an additive report field as universally present at every renderer call site. Tests had multiple report construction paths, and I updated only the obvious unit helper before the full suite.
 
 **Prevention:** When adding fields to `AuditReport` or other shared CLI/dashboard payloads, grep for direct renderer/reader fixture construction and either update every fixture or make consumers default missing additive fields. Evidence anchors: `src/cli/audit/render.ts` (search: `Array.isArray(report.enforcement)`), `test/contract/command-phrases.test.ts` (search: `renderAuditText does not mention scan`).
 
 **Recurrence update (2026-07-31):** The first JSON proof queried pass findings on a per-check result, but `toCheckResult` exposes status/details there and aggregates pass findings under the owning concern. Inspect the output mapper before scripting field-level proof. Evidence: `src/cli/audit/harness-scoring.ts` (search: `function toCheckResult`).
 
-**Recurrence update (2026-08-10):** Adding required `hookCoverage` data reached the main audit builders but missed two direct renderer fixtures. The full suite found both because the source typecheck does not inspect those test-only object literals. Completing `hookCoverage` in the contract fixture and shared scoring helper restored terminal and Markdown rendering. Evidence anchors: `test/contract/command-phrases.test.ts` (search: `hookCoverage:`) and `test/unit/audit-command/helpers.ts` (search: `This minimal fixture selects no agent surfaces`).
+**Recurrence update (2026-08-10):** I added required `hookCoverage` data to the main audit builders but missed two direct renderer fixtures. The full suite found both because the source typecheck does not inspect those test-only object literals. Completing `hookCoverage` in the contract fixture and shared scoring helper restored terminal and Markdown rendering. Evidence anchors: `test/contract/command-phrases.test.ts` (search: `hookCoverage:`) and `test/unit/audit-command/helpers.ts` (search: `This minimal fixture selects no agent surfaces`).
 
 ---
 
@@ -81,9 +81,9 @@ last_reviewed: 2026-08-25
 
 **Status:** active | **Created:** 2026-05-27 | **Merged during:** M11 learning-loop consolidation
 
-**What happened:** Historical scanner/rubric changes and current audit detector changes both invalidated "known failing" fixture expectations even when the implementation was correct. The failure mode recurs whenever a check is renamed, tightened, or moves responsibility to a different detector.
+**What happened:** Historical scanner/rubric changes and current audit detector changes both invalidated "known failing" fixture expectations even when the implementation was correct. The failure mode recurs whenever a check is renamed or tightened, or when responsibility moves to a different detector.
 
-**Root cause:** Expected check ids were treated as stable facts instead of outputs of the current detector contract.
+**Root cause:** I treated expected check ids as stable facts instead of outputs of the current detector contract.
 
 **Prevention:** For fixture-driven audit tests, reproduce the failing audit/check output first, capture the current check ids, then update test assertions and fixture metadata together. A healthy virtual filesystem must also satisfy every newly enforced content invariant; existence-only stubs are no longer healthy after a content detector lands. Do not trust older expected ids or fixture bodies after check-contract work. M12 recurrence anchor: `test/fixtures/projects/index.ts` (search: "healthyPlaybook").
 
@@ -124,7 +124,7 @@ last_reviewed: 2026-08-25
 
 **Root cause:** The priority matrix classified buckets correctly, so tests covered bucket membership without checking the independent numeric ranking's direction. The prose label and constants could disagree while every matrix assertion remained green.
 
-**Prevention:** Pin inverse metrics with endpoint and monotonic assertions: no coverage must maximize uncovered fraction, full behavioural coverage must make it zero, and every intermediate level must decrease as coverage improves. Re-run application scenarios with varied risk/coverage combinations rather than checking one literal sequence. Evidence: `workflow/skills/goat-qa/SKILL.md` (search: `Risk × uncovered fraction`), `test/contract/skill-hardening-skills-2.test.ts` (search: `uncovered fraction must decrease`), and local receipt `.goat-flow/logs/sessions/2026-07-18-goat-qa-tdd.md`.
+**Prevention:** Pin inverse metrics with endpoint and monotonic assertions: no coverage must maximize uncovered fraction, full behavioural coverage must make it zero, and the value must decrease at every intermediate level as coverage improves. Re-run application scenarios with varied risk/coverage combinations rather than checking one literal sequence. Evidence: `workflow/skills/goat-qa/SKILL.md` (search: `Risk × uncovered fraction`), `test/contract/skill-hardening-skills-2.test.ts` (search: `uncovered fraction must decrease`), and local receipt `.goat-flow/logs/sessions/2026-07-18-goat-qa-tdd.md`.
 
 ---
 

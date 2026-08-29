@@ -3,7 +3,7 @@ category: hook-testing
 last_reviewed: 2026-08-27
 ---
 
-**Scope:** Hook test coverage strategy - what a self-test actually exercised, matrices that interfere with the live guard, fixtures that must not carry real secrets, and splits that only look like coverage. The script under test is [hook-script-authoring.md](hook-script-authoring.md); driving it with payloads is [hook-probe-testing.md](hook-probe-testing.md).
+**Scope:** Hook test coverage strategy - what a self-test actually exercises, matrices that interfere with the live guard, fixtures that must not carry real secrets, and splits that only look like coverage. The script under test is [hook-script-authoring.md](hook-script-authoring.md); driving it with payloads is [hook-probe-testing.md](hook-probe-testing.md).
 
 ## Lesson: Hook tests should inspect executable lines when checking failure masking
 
@@ -23,7 +23,7 @@ last_reviewed: 2026-08-27
 
 **Root cause:** The test generated dangerous fixture content by storing the exact dangerous strings in the source file. That made the repository source itself look like changed secret material, even though the test only needed the dangerous value inside a temporary repo at runtime.
 
-**Prevention:** Secret-scanner tests should construct secret-shaped fixture values from split constants or helpers so the runtime fixture still exercises the scanner, but the committed source does not contain contiguous token/private-key patterns. After adding or editing scanner fixtures, run the scanner against the current repo, not only against temp repos. Evidence anchors: `test/integration/post-turn-safety-hook.test.ts` (search: `TEST_AWS_ACCESS_KEY`) and `workflow/hooks/post-turn-safety.sh` (search: `scan_line`).
+**Prevention:** In secret-scanner tests, construct secret-shaped fixture values from split constants or helpers so the runtime fixture still exercises the scanner, but the committed source does not contain contiguous token/private-key patterns. After adding or editing scanner fixtures, run the scanner against the current repo, not only against temp repos. Evidence anchors: `test/integration/post-turn-safety-hook.test.ts` (search: `TEST_AWS_ACCESS_KEY`) and `workflow/hooks/post-turn-safety.sh` (search: `scan_line`).
 
 ## Lesson: Drift render helpers must apply every hook toggle
 
@@ -43,7 +43,7 @@ last_reviewed: 2026-08-27
 
 **Root cause:** The corpus over-indexed on dangerous block cases plus a few canonical allow cases. Parser regressions surface as false positives on benign-but-structurally-varied input (operators inside substitutions, arithmetic, redirects on allowlisted reads), which the curated allow set did not vary.
 
-**Prevention:** For guardrail parsers, vary shell *structure* in the allow corpus, not just verbs: substitutions with/without inner operators, quoted vs unquoted, arithmetic expansion, process substitution, and redirects (`2>&1`, `2>/dev/null`, redirect-to-other-file) on allowlisted-readable files - each paired with its dangerous counterpart. A green smoke run proves only the cases present. Also: when a report fingers a downstream rule (a catch-all), trace the token that rule sees back to the tokenizer before relaxing it - here the catch-all was correct and the orphan `$(` was manufactured upstream by the segment splitter. Evidence anchors: `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `unquoted subst with || fallback`), (search: `arithmetic expansion`), (search: `.env.example read with stderr dup`); root-cause anchor in `.goat-flow/learning-loop/footguns/deny-shell.md` (search: `track substitution depth`).
+**Prevention:** For guardrail parsers, vary shell *structure* in the allow corpus, not just verbs: substitutions with/without inner operators, quoted vs unquoted, arithmetic expansion, process substitution, and redirects (`2>&1`, `2>/dev/null`, redirect-to-other-file) on allowlisted-readable files - each paired with its dangerous counterpart. A green smoke run proves only the cases present. When a report fingers a downstream rule (a catch-all), trace the token that rule sees back to the tokenizer before relaxing it - here the catch-all was correct and the orphan `$(` was manufactured upstream by the segment splitter. Evidence anchors: `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `unquoted subst with || fallback`), (search: `arithmetic expansion`), (search: `.env.example read with stderr dup`); root-cause anchor in `.goat-flow/learning-loop/footguns/deny-shell.md` (search: `track substitution depth`).
 
 ## Lesson: Exact hook-copy assertions must derive from owned policy text
 

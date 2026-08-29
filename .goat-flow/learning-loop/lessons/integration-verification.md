@@ -13,7 +13,7 @@ last_reviewed: 2026-08-28
 
 **Root cause:** A contract test proved two sources agreed, but both sources were wrong in the same direction; neither was checked against ground truth on disk or the installer list.
 
-**Prevention:** Agreement tests need a ground-truth leg. For skill counts, validate manifest/constants against actual skill directories or installer inputs, not only against each other. Evidence anchors: `workflow/install-goat-flow.sh` (search: `for skill in`), `workflow/manifest.json` (search: `canonical`), `src/cli/constants.ts` (search: `getSkillNames`).
+**Prevention:** Give agreement tests a ground-truth leg. For skill counts, validate manifest/constants against actual skill directories or installer inputs, not only against each other. Evidence anchors: `workflow/install-goat-flow.sh` (search: `for skill in`), `workflow/manifest.json` (search: `canonical`), `src/cli/constants.ts` (search: `getSkillNames`).
 
 ---
 
@@ -27,7 +27,7 @@ last_reviewed: 2026-08-28
 
 **Fix:** Deleted RULES.md. Moved 2 unique lines to skill-preamble.md. Removed audit check and install script special-case.
 
-**Prevention:** When reviewing shared-context files (anything loaded on every turn or every skill invocation), compare section-by-section against other loaded files. If >80% duplicates existing loaded content, merge the unique lines and delete the file. Architecture changes that add new shared surfaces (like skill-preamble.md) should include a cleanup pass of older surfaces they subsume.
+**Prevention:** When reviewing shared-context files (anything loaded on every turn or every skill invocation), compare section-by-section against other loaded files. If >80% duplicates existing loaded content, merge the unique lines and delete the file. When an architecture change adds a new shared surface (like skill-preamble.md), run a cleanup pass over the older surfaces it subsumes.
 
 ---
 
@@ -54,7 +54,7 @@ last_reviewed: 2026-08-28
 
 **What happened:** Moving the dashboard preset catalog into `src/dashboard/preset-prompts.json` compiled cleanly and updated the production build copy step, but the first focused verification run failed every dashboard-server integration test. `serveDashboard()` immediately tried to read `dist/dashboard/preset-prompts.json`, and the source-run test harness starts the server from `src/cli/server/dashboard.ts` without guaranteeing that newly added static files already exist under `dist/`.
 
-**Root cause:** Verified the TypeScript surface but missed the dashboard server's dual runtime shape. The server can be exercised from built artifacts and from source-driven test runs. The new JSON asset was only wired for the built path, so verification exposed a runtime assumption that typecheck could not see.
+**Root cause:** I verified the TypeScript surface but missed the dashboard server's dual runtime shape. The server can be exercised from built artifacts and from source-driven test runs. The new JSON asset was only wired for the built path, so verification exposed a runtime assumption that typecheck could not see.
 
 **Fix:** Keep the production copy step in `package.json`, but make the dashboard server prefer `dist/dashboard/preset-prompts.json` and fall back to `src/dashboard/preset-prompts.json` when the built copy is absent. Re-run the focused dashboard + manifest tests after the fallback lands.
 
@@ -86,7 +86,7 @@ last_reviewed: 2026-08-28
 **Status:** active | **Created:** 2026-04-21
 
 **What happened:** A small doc-only fix changed one `Sessions rail (cap=7)` claim to `cap=10`, but the first patch missed a second occurrence later in the same release note and briefly introduced a copy-edit typo in `CHANGELOG.md` while applying the correction.
-**Root cause:** Treated the first matching line as the whole problem instead of verifying all repeated claims for that concept across the touched docs before closing the edit.
+**Root cause:** I treated the first matching line as the whole problem instead of verifying all repeated claims for that concept across the touched docs before closing the edit.
 **Fix:** After a doc truthfulness fix, run a focused `rg` for both the old phrase and the corrected concept across every touched doc before claiming the update is complete.
 
 **Recurrence 2026-08-03:** A patch intended for the `Pre-release prompts can resolve an older global CLI` metadata matched the first generic `Incident count` block in `quality.md` and briefly changed an unrelated footgun. Reading the exact diff caught it before validation; the corrected patch included the target heading as context.

@@ -13,7 +13,7 @@ last_reviewed: 2026-08-06
 
 **Root cause:** The agent combined the generic "assume implementation" coding default with goat-plan's existing milestone discovery and skipped the blocking gate. The skill also treated named existing plan files as write approval too broadly, so a context path could be misread as a target.
 
-**Prevention:** A bare or ambiguous task path is read-only context. The correct first response is an orientation summary plus a next-action question. `.active` changes, milestone status changes, task checkboxes, and code edits require explicit verbs such as "start", "implement", "resume", "update", or "write". Evidence anchors: `workflow/skills/goat-plan/SKILL.md` (search: `Path-only guard runs first`), `workflow/skills/goat/SKILL.md` (search: `Bare or ambiguous task paths are read-only context`), `test/contract/skill-hardening-plan-1.test.ts` (search: `path-only task intake`).
+**Prevention:** Treat a bare or ambiguous task path as read-only context. Respond first with an orientation summary plus a next-action question. `.active` changes, milestone status changes, task checkboxes, and code edits require explicit verbs such as "start", "implement", "resume", "update", or "write". Evidence anchors: `workflow/skills/goat-plan/SKILL.md` (search: `Path-only guard runs first`), `workflow/skills/goat/SKILL.md` (search: `Bare or ambiguous task paths are read-only context`), `test/contract/skill-hardening-plan-1.test.ts` (search: `path-only task intake`).
 
 ---
 
@@ -34,7 +34,7 @@ last_reviewed: 2026-08-06
 
 **Why it matters:** The user controls when code changes happen. Writing a plan and executing a plan are two completely separate actions. The user may want to review, share with others, or revise before any code is touched.
 
-**Prevention:** Listen for the verb. "update the plan", "create M31", "write a plan" = write markdown only. "execute", "implement", "do it", "fix it" = make code changes. When in doubt, write the plan and ask if they want it executed. Never auto-execute a plan the user just asked you to write.
+**Prevention:** Listen for the verb. "update the plan", "create M31", "write a plan" = write markdown only. "execute", "implement", "do it", "fix it" = make code changes. If the verb is absent or ambiguous, write the plan and ask whether to execute it. Never auto-execute a plan the user just asked you to write.
 
 ---
 
@@ -103,7 +103,7 @@ On 2026-08-06, the user asked for each changelog bullet to be at most 150 charac
 - Evidence: `.goat-flow/learning-loop/lessons/README.md` (search: `Mistakes the agent made`) defines lessons as documentation artifacts
 - Evidence: Artifact Routing section now added to all four instruction files (CLAUDE.md, AGENTS.md, GEMINI.md, `.github/copilot-instructions.md`)
 
-**Prevention:** The Artifact Routing section in instruction files and skill-preamble.md now explicitly maps user requests to target directories. When the user says "add a footgun," open `.goat-flow/learning-loop/footguns/README.md` and create/update a bucket entry. Do not write runtime code unless the user separately asks for a code change.
+**Prevention:** When the user says "add a footgun," open `.goat-flow/learning-loop/footguns/README.md` and create/update a bucket entry. Do not write runtime code unless the user separately asks for a code change. The Artifact Routing section in instruction files and skill-preamble.md now explicitly maps user requests to target directories.
 
 ---
 

@@ -3,7 +3,7 @@ category: verification-gruff
 last_reviewed: 2026-08-29
 ---
 
-**Scope:** The Gruff analyzer specifically - comment rules, doc-comment complexity, binary discovery, and baseline handling. Other repo-wide gates are [verification-preflight.md](verification-preflight.md).
+**Scope:** The Gruff analyzer specifically - comment rules, doc-comment complexity, binary discovery, and baseline handling. Other repo-wide gates live in [verification-preflight.md](verification-preflight.md).
 
 ## Lesson: Gruff comment fixes must satisfy both humans and the analyzer
 
@@ -113,9 +113,9 @@ last_reviewed: 2026-08-29
 
 **Status:** active | **Created:** 2026-05-30
 
-**What happened:** During the M00 gruff docs continuation, the first internal-helper comment batch cleared `docs.missing-internal-function-doc` but left the full snapshot at only 175 findings down because gruff then reported `docs.missing-side-effect-doc` on helpers that write fixture files or spawn tools. Retuning those comments to explicitly say `Writes` or `Spawns` moved the full snapshot to `summary error=0 warning=121 advisory=598 total=719` and both doc clusters to zero.
+**What happened:** During the M00 gruff docs continuation, the first internal-helper comment batch cleared `docs.missing-internal-function-doc` but reduced the full snapshot by only 175 findings because gruff then reported `docs.missing-side-effect-doc` on helpers that write fixture files or spawn tools. Retuning those comments to explicitly say `Writes` or `Spawns` moved the full snapshot to `summary error=0 warning=121 advisory=598 total=719` and both doc clusters to zero.
 
-**Recurrence update (2026-08-06):** Windows discovery described its purpose and fallback but did not explicitly name the `where.exe` process side effect. Adding that concrete process action cleared the three targeted side-effect findings.
+**Recurrence update (2026-08-06):** The Windows discovery comment described its purpose and fallback but did not explicitly name the `where.exe` process side effect. Adding that concrete process action cleared the three targeted side-effect findings.
 
 **Recurrence 2026-08-27:** A new audit helper said it “launches one bounded child process,” but Gruff still reported `docs.missing-side-effect-doc`. Naming the contract explicitly as `Side effect: spawns one bounded child process` cleared the finding without adding compensating prose. Evidence anchor: `src/cli/audit/check-agent-deny-runtime.ts` (search: `Side effect: spawns one bounded child process`).
 

@@ -66,7 +66,7 @@ last_reviewed: 2026-08-04
 
 **What happened:** A retired pre-v1.1 system-spec document showed the old 5-step execution loop while `workflow/setup/reference/execution-loop.md` had the updated 6-step version with SCOPE. The setup prompt told agents to read the retired spec first. Both rampart and sus-form-detector agents absorbed the stale loop and either didn't notice or couldn't override the newer execution-loop file. 7 of 8 gaps in sus-form-detector traced to this single contradiction.
 
-**Prevention:** When updating any concept that appears in multiple files, update the file agents read FIRST before or at the same time as the authoritative source. Never assume agents will reconcile contradictions - they follow the first version they encounter. Retiring the old system-spec doc in v1.1.0 removes this specific duplication, but the general principle remains.
+**Prevention:** When updating any concept that appears in multiple files, update the file agents read FIRST, before or at the same time as the authoritative source. Never assume agents will reconcile contradictions - they follow the first version they encounter. Retiring the old system-spec doc in v1.1.0 removes this specific duplication, but the general principle remains.
 
 ---
 
@@ -109,7 +109,7 @@ last_reviewed: 2026-08-04
 **Created:** 2026-04-26
 
 **What happened:** Multi-agent quality reports found `.claude/settings.json` had `Bash(*git push*--force*)` while the workflow template (`workflow/hooks/agent-config/claude.json`) had the correct `Bash(*git push*)`. The installed copy was weaker than intended, allowing feature-branch pushes that the template blocked. `.gemini/settings.json` was correct. At incident time, the drift was invisible because no preflight or audit check compared installed settings patterns against their templates.
-**Root cause:** Preflight had parity checks for skill files (`Skill SKILL.md Parity`) and shared references (`Preamble/Conventions Sync`), but did not yet have equivalent coverage for settings.json deny patterns. The settings files are hand-maintained after install, and edits to one agent's settings don't automatically propagate or verify against the template.
+**Root cause:** Preflight had parity checks for skill files (`Skill SKILL.md Parity`) and shared references (`Preamble/Conventions Sync`), but did not yet have equivalent coverage for settings.json deny patterns. The settings files are hand-maintained after install, and edits to one agent's settings don't automatically propagate or get verified against the template.
 **Prevention:** After changing deny patterns in `workflow/hooks/agent-config/*.json`, run `bash scripts/preflight-checks.sh` and confirm `Agent Config Parity` still passes. If a new settings surface or deny family is added, extend the parity map and `covers()` validation in `scripts/preflight-checks.sh` in the same change.
 
 ---

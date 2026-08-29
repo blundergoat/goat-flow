@@ -76,7 +76,7 @@ last_reviewed: 2026-08-28
 
 **Status:** active | **Created:** 2026-05-11
 
-**What happened:** While fixing dashboard terminal paste submission, focused `test/unit/dashboard-terminal-launch.test.ts` first passed. After formatting touched files, the rerun failed only because the "warms xterm" source assertion expected a multi-line `if` block shape that Prettier collapsed into one line. The runtime behavior was still correct; the test was over-specified to formatting.
+**What happened:** During the dashboard terminal paste-submission fix, focused `test/unit/dashboard-terminal-launch.test.ts` first passed. After Prettier formatted the touched files, the rerun failed only because the "warms xterm" source assertion expected a multi-line `if` block shape that Prettier collapsed into one line. The runtime behavior was still correct; the test was over-specified to formatting.
 
 **Root cause:** A classic-script source grep test used a whitespace-sensitive regex to assert control-flow structure. Formatter reflow changed the syntax layout without changing semantics.
 
@@ -146,7 +146,7 @@ last_reviewed: 2026-08-28
 
 **Prevention:**
 1. Consider an optional post-write hook that runs the project's test command after file changes (configured via `config.yaml`, off by default)
-2. Skills with implementation phases should include a "run tests" checkpoint every N edits, not just at phase boundaries
+2. Add a "run tests" checkpoint every N edits to skills with implementation phases, not just at phase boundaries
 3. For test-heavy projects (1000+ tests), a focused test subset (changed files only) avoids the full-suite penalty while still catching regressions early
 4. Treat an explicit mid-implementation proof as a write boundary: stop later edits until the named focused slice is green.
 ---
@@ -198,7 +198,7 @@ parameter. Evidence anchor: `src/cli/classify-state.ts` (search: `let canonicalS
 **Trigger phase:** ACT | **Incident count:** 6 | **Latest occurrence:** 2026-08-17
 **Caught at:** VERIFY
 
-**What happened:** The first partial GREEN for test-selection rejected correct prose because heading and table capitalization differed, stopped a template block at a nested heading before its records, and scanned an entire shared preset catalog instead of the four owned prompts. Evidence anchors: `test/contract/test-selection-playbook-doctrine.test.ts` (search: `function templateBlock`) and (search: `affectedPresetIds`).
+**What happened:** The first partial GREEN for test-selection rejected correct prose because heading and table capitalization differed; it also stopped a template block at a nested heading before its records and scanned an entire shared preset catalog instead of the four owned prompts. Evidence anchors: `test/contract/test-selection-playbook-doctrine.test.ts` (search: `function templateBlock`) and (search: `affectedPresetIds`).
 
 **Recurrence (2026-08-14):** The first portability sweep repeated the shared-container mistake by scanning every complete ledger file. It stopped on an older absolute path in the generated lessons index, while the local milestone necessarily contained the deny patterns it documented. The corrected proof keeps ledger existence exhaustive but binds residue assertions to the redacted receipts, new doctrine, byte-identical catalog mirror, and exact QA-facing owner slices. Evidence anchor: `test/contract/test-selection-playbook-doctrine.test.ts` (search: `test-selection source neutrality`).
 

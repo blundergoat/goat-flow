@@ -13,7 +13,7 @@ last_reviewed: 2026-08-29
 
 **Prevention:** Use parser-safe spellings for glob metacharacters, then run `bash -n` and the repository's exact ShellCheck command before mirror fanout or behavior tests. Evidence anchors: `workflow/hooks/post-turn-safety.sh` (search: `is_reference_or_interpolation`), `workflow/hooks/deny-dangerous.sh` (search: `Plain command words are already normalized`), and `workflow/hooks/deny-dangerous/patterns-paths.sh` (search: `Only backslash-rooted Windows operands`).
 
-**What happened:** While adding `post-turn-safety` false-positive coverage for Twig/Jinja/ERB interpolation delimiters, the first Bash `case` pattern used unescaped `<`, `>`, `{`, and `}` tokens. The focused runtime tests then failed before scanner logic ran with `syntax error near unexpected token '<'`, and ShellCheck flagged the brace literals after the parse error was fixed.
+**What happened:** While adding `post-turn-safety` false-positive coverage for Twig/Jinja/ERB interpolation delimiters, the first Bash `case` pattern used unescaped `<`, `>`, `{`, and `}` tokens. The focused runtime tests then failed with `syntax error near unexpected token '<'` before scanner logic ran, and ShellCheck flagged the brace literals once I fixed the parse error.
 
 **Recurrence 2026-08-28:** While reducing deny-hook process creation, I used `*'\'*` to detect a backslash inside `[[ ... ]]`. Bash accepted the expression, but the repository ShellCheck command raised SC1003 in the workflow and installed mirrors. Replacing it with the shell-native `*\\*` spelling preserved the predicate and passed static analysis before the policy corpus ran.
 
@@ -27,7 +27,7 @@ last_reviewed: 2026-08-29
 
 **Root cause:** The template and generated installed script have different control-flow shapes. The function is intentionally unreachable in the fail-closed template but reachable in the installed copy, so checking both files with the same command needs a scoped annotation.
 
-**Prevention:** Generated shell templates should keep the unrendered template syntactically valid and fail-closed, but annotate template-only unreachable helpers with a narrow `shellcheck disable=SC2317` plus a comment naming the render-time call path. Regenerate installed output after changing a template before rerunning ShellCheck. This specific generated-hook path was removed before release; current replacement decision: `.goat-flow/learning-loop/decisions/ADR-037-separate-post-turn-safety-from-validation.md` (search: `does not ship a generated project-validation Stop hook`).
+**Prevention:** Keep the unrendered template syntactically valid and fail-closed, and annotate template-only unreachable helpers with a narrow `shellcheck disable=SC2317` plus a comment naming the render-time call path. Regenerate installed output after changing a template before rerunning ShellCheck. This specific generated-hook path was removed before release; current replacement decision: `.goat-flow/learning-loop/decisions/ADR-037-separate-post-turn-safety-from-validation.md` (search: `does not ship a generated project-validation Stop hook`).
 
 ## Lesson: Generated hook bodies must expose literal validation commands
 
@@ -63,7 +63,7 @@ last_reviewed: 2026-08-29
 
 **Status:** active | **Created:** 2026-05-27
 
-**What happened:** After extracting `deny-dangerous.sh`, I expected `# shellcheck source=deny-dangerous.sh` above the runtime-computed source line to satisfy linting. The repo's hook lint command does not run ShellCheck with `-x`, so ShellCheck failed or warned every mirrored policy hook with SC1091/SC1090 before any behavior checks could matter.
+**What happened:** After extracting `deny-dangerous.sh`, I expected `# shellcheck source=deny-dangerous.sh` above the runtime-computed source line to satisfy linting. The repo's hook lint command does not run ShellCheck with `-x`, so ShellCheck failed or warned with SC1091/SC1090 on every mirrored policy hook before any behavior checks could matter.
 
 **Root cause:** I treated the source directive as enough without checking it against the exact lint invocation used by preflight and CI.
 
@@ -71,7 +71,7 @@ last_reviewed: 2026-08-29
 
 **Updated 2026-08-07:** Release ShellCheck caught SC2016 because gruff guidance put Markdown backticks inside a single-quoted `printf` in both hook mirrors. Escape command backticks in a double-quoted string, then lint the full workflow and installed hook sets before treating the mirrors as ready. Evidence anchors: `workflow/hooks/gruff-code-quality.sh` (search: `structural findings are review cost`) and `.goat-flow/hooks/gruff-code-quality.sh` (search: `structural findings are review cost`).
 
-**Updated 2026-05-27:** When git parsing moved into `deny-dangerous.sh`, ShellCheck still warned in thin hooks with SC2154 because helper-owned output variables (`__goat_git_rest`, `__goat_git_aliased_push`) were assigned dynamically in the sourced file. Initialize helper output variables in each thin hook before first reference so static analysis sees the contract. Evidence anchors: `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `__goat_git_aliased_push=0`) and `workflow/hooks/deny-dangerous/patterns-paths.sh` (search: `__goat_git_rest=""`).
+**Updated 2026-05-27:** When git parsing moved into `deny-dangerous.sh`, ShellCheck still warned with SC2154 in thin hooks because helper-owned output variables (`__goat_git_rest`, `__goat_git_aliased_push`) were assigned dynamically in the sourced file. Initialize helper output variables in each thin hook before first reference so static analysis sees the contract. Evidence anchors: `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `__goat_git_aliased_push=0`) and `workflow/hooks/deny-dangerous/patterns-paths.sh` (search: `__goat_git_rest=""`).
 
 ## Lesson: Shared hook helpers need missing-dependency runtime tests
 

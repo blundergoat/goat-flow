@@ -24,7 +24,7 @@ last_reviewed: 2026-08-27
 
 **Recurrence update (2026-08-22):** Adding Codex's Windows-only registration override invalidated the earlier Gruff and Stop capture. An initial disposable 0.149.0 session did not load project hooks; a subsequent session in the already-trusted project delivered the exact PreToolUse denial but no Gruff or Stop result. The registry now keeps those two event gates stale, and registration-surface tests assert the separate local `isRegistered` fact without allowing it to hide the earlier provider-capture gap. Evidence anchors: `src/cli/server/hooks-registry.ts` (search: `effectiveSupportGate: "provider-capture-stale"`), `test/integration/hook-effective-state.test.ts` (search: `replays Codex Stop results without upgrading stale provider proof`), and `workflow/hooks/README.md` (search: `initial disposable Codex CLI 0.149.0`).
 
-**Recurrence update (2026-08-27):** A bypass-trust PostToolUse capture still could not renew the trusted-provider gate. The follow-up Codex CLI 0.149.1 run used the already trusted project and exact hash-trusted handler without the bypass flag, completed `apply_patch`, ran Gruff, and exposed an analyzer-only marker to the model. The registry now dates only Codex Gruff as `scenario-unverified`; Stop stays stale because no Stop result was captured. Evidence anchors: `src/cli/server/hooks-registry.ts` (search: `2026-09-25T20:17:22.830Z`), `test/integration/hook-effective-state.test.ts` (search: `expires exact Codex proof while keeping uncaptured Stop stale`), and `workflow/hooks/README.md` (search: `without the bypass flag`).
+**Recurrence update (2026-08-27):** A bypass-trust PostToolUse capture still could not renew the trusted-provider gate. The follow-up Codex CLI 0.149.1 run used the already trusted project and exact hash-trusted handler without the bypass flag, completed `apply_patch`, ran Gruff, and exposed an analyzer-only marker to the model. The registry now dates only Codex Gruff's `scenario-unverified` gate; Stop stays stale because no Stop result was captured. Evidence anchors: `src/cli/server/hooks-registry.ts` (search: `2026-09-25T20:17:22.830Z`), `test/integration/hook-effective-state.test.ts` (search: `expires exact Codex proof while keeping uncaptured Stop stale`), and `workflow/hooks/README.md` (search: `without the bypass flag`).
 
 **Recurrence update (2026-08-10):** The Hooks-view unit test also required at least one Codex exclusion after fresh live proof removed the last one. The dashboard slice failed even though ambient declarations and rendering were unchanged. The test now asserts the current explicit exclusions for Antigravity and Copilot and checks that each carries a provider-named reason. Evidence anchors: `test/unit/dashboard-hooks-view.test.ts` (search: `keeps current provider exclusions paired with reasons`) and `src/cli/server/hooks-registry.ts` (search: `unsupportedAgents`).
 
@@ -122,7 +122,7 @@ last_reviewed: 2026-08-27
 
 **Status:** active | **Created:** 2026-04-29
 
-**What happened:** While fixing the Home page's multi-minute `Auditing...` stall, the first focused verification tried to use the entire `test/integration/dashboard-server.test.ts` suite as the gate. That suite still includes endpoints whose deeper behavior is intentionally slower than the Home summary path, so the broad run timed out before producing a useful pass/fail signal for the changed route.
+**What happened:** While fixing the Home page's multi-minute `Auditing...` stall, the first verification attempt used the entire `test/integration/dashboard-server.test.ts` suite as the gate. That suite still includes endpoints whose deeper behavior is intentionally slower than the Home summary path, so the broad run timed out before producing a useful pass/fail signal for the changed route.
 
 **Root cause:** I used a verification scope wider than the code change. The fix only changed `/api/audit` summary behavior, but the suite also exercises other dashboard routes whose latency profile is different. That diluted the signal and made the timeout look like uncertainty in the changed path.
 
@@ -134,7 +134,7 @@ last_reviewed: 2026-08-27
 
 **Status:** active | **Created:** 2026-04-29
 
-**What happened:** While optimizing `/api/quality`, my first localhost timing probes inside the default environment made the route look subsecond and led to a bad footgun draft: `/api/quality` appeared to take about 379 ms, with `runAudit` around 160 ms. A later timing probe against the built dashboard outside the sandbox measured fresh `?fresh=true` requests at about 30,573 ms and 30,182 ms, with only the cached repeat at about 5 ms.
+**What happened:** While optimizing `/api/quality`, my first localhost timing probes inside the sandbox made the route look subsecond and led to a bad footgun draft: `/api/quality` appeared to take about 379 ms, with `runAudit` around 160 ms. A later timing probe against the built dashboard outside the sandbox measured fresh `?fresh=true` requests at about 30,573 ms and 30,182 ms, with only the cached repeat at about 5 ms.
 
 **Root cause:** I treated a sandbox timing probe as representative for a route that shells out to `bash` through the deny-hook self-test. When the verification surface depends on external shell/runtime behavior, the sandbox path can understate real latency or skip the expensive branch entirely.
 

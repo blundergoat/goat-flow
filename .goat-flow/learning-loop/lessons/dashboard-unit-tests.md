@@ -80,7 +80,8 @@ last_reviewed: 2026-08-15
 **Prevention:**
 1. In VM-loaded dashboard helper tests, compare stable error-message content or normalize the error into the host realm before strict equality checks.
 2. When a helper uses `instanceof Error`, expect VM-based tests to surface the `String(err)` fallback unless the test injects same-realm errors deliberately.
-3. Evidence anchors: `test/unit/dashboard-terminal-launch/launch-flow-03.test.ts` (search: `xterm.js load failed`), `src/dashboard/dashboard-terminal-runtime.ts` (search: `const msg = err instanceof Error ? err.message : String(err)`).
+
+Evidence anchors: `test/unit/dashboard-terminal-launch/launch-flow-03.test.ts` (search: `xterm.js load failed`), `src/dashboard/dashboard-terminal-runtime.ts` (search: `const msg = err instanceof Error ? err.message : String(err)`).
 
 ---
 

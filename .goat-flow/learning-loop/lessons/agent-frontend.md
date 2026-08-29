@@ -50,7 +50,7 @@ Map mockup classes onto existing `gf-*` classes rather than reorganising the DOM
 ## Lesson: UI state matrices must include partial data states
 **Created:** 2026-04-26
 
-**What happened:** The M05b Home view treated every non-passing setup audit as the same "not installed" state. A project with a partial goat-flow install (`1 of 13` setup components present) rendered the fresh-install top section, disabled preview cards, and "Not installed" label even though the audit response included partial setup evidence and agent scores.
+**What happened:** The M05b Home view treated every non-passing setup audit as the same "not installed" state. A project with a partial goat-flow install (`1 of 13` setup components present) rendered the fresh-install top section, disabled preview cards, and the "Not installed" label even though the audit response included partial setup evidence and agent scores.
 
 **Root cause:** Verification covered the fully installed and fresh-install branches, but not the intermediate state where setup fails while some checks and agent audit data are present. The view used a broad `setupFailed()` predicate for identity, preview copy, and learning-loop visibility instead of explicit `setupMissing()`, `setupPartial()`, and `setupComplete()` branches.
 
@@ -76,7 +76,7 @@ Map mockup classes onto existing `gf-*` classes rather than reorganising the DOM
 
 **Created:** 2026-04-27
 
-**What happened:** User asked the agent to view two static site pages (`docs/site/goat-flow-landing.html` and `docs/site/goat-flow-harness-engineering.html`). The agent checked for Playwright, Chromium, Firefox, and text browsers, then claimed there was no headless browser installed. The user pointed at the repo's browser-use skill reference, now canonical at `.goat-flow/skill-docs/playbooks/browser-use.md`, which documents the local `browser-use` CLI. `browser-use` was installed and worked immediately: `browser-use doctor` reported 4/5 checks passed, and the agent was able to open both local routes, capture rendered state, and save screenshots.
+**What happened:** The user asked the agent to view two static site pages (`docs/site/goat-flow-landing.html` and `docs/site/goat-flow-harness-engineering.html`). The agent checked for Playwright, Chromium, Firefox, and text browsers, then claimed there was no headless browser installed. The user pointed at the repo's browser-use skill reference, now canonical at `.goat-flow/skill-docs/playbooks/browser-use.md`, which documents the local `browser-use` CLI. `browser-use` was installed and worked immediately: `browser-use doctor` reported 4/5 checks passed, and the agent opened both local routes, captured rendered state, and saved screenshots.
 
 **Root cause:** The agent treated "view this HTML" as a generic static-file inspection task instead of a UI/browser-evidence task. It searched for familiar tools from habit and failed to check repository-provided skill references before making a broad tooling claim.
 

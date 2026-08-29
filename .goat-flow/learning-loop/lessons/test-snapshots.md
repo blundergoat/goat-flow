@@ -34,7 +34,7 @@ advisory lane with existing empty-input and legacy-output contracts. Evidence an
 
 **Root cause:** I updated the npm test scripts as the canonical suite entry points but did not update CI to call them, leaving Actions on an older invocation shape that no longer matched the test layout.
 
-**Prevention:** After splitting, renaming, or serialising test files, compare `.github/workflows/ci.yml` against `package.json` test scripts before trusting local runs. CI should call the package script that encodes exclusions/concurrency instead of duplicating a raw test glob. Evidence anchors: `.github/workflows/ci.yml` (search: `npm run test:fast`, `npm run test:slow:ci`), `CHANGELOG.md` (search: `CI uses the split test contract`), `package.json` (search: `"test:slow": "npm run build && node scripts/run-tests.mjs slow"`), `test/integration/audit-drift.helpers.ts` (search: `export {`), `test/integration/dashboard-server.helpers.ts` (search: `DASHBOARD_STATE_PATH`).
+**Prevention:** After splitting, renaming, or serialising test files, compare `.github/workflows/ci.yml` against `package.json` test scripts before trusting local runs. Point CI at the package script that encodes exclusions/concurrency instead of duplicating a raw test glob. Evidence anchors: `.github/workflows/ci.yml` (search: `npm run test:fast`, `npm run test:slow:ci`), `CHANGELOG.md` (search: `CI uses the split test contract`), `package.json` (search: `"test:slow": "npm run build && node scripts/run-tests.mjs slow"`), `test/integration/audit-drift.helpers.ts` (search: `export {`), `test/integration/dashboard-server.helpers.ts` (search: `DASHBOARD_STATE_PATH`).
 
 ---
 
@@ -100,7 +100,7 @@ advisory lane with existing empty-input and legacy-output contracts. Evidence an
 
 **Status:** resolved | **Created:** 2026-05-30 | **Resolved:** 2026-08-02
 
-**What happened:** During the M00 gruff cleanup, `test-quality.setup-bloat` reported 158 advisory findings at the default 12-line threshold. The top offenders were not opaque unit tests; they were harness, dashboard, quality-history, and terminal tests that build temp projects, fake servers, injected browser globals, or serialized audit payloads before the assertion.
+**What happened:** During the M00 gruff cleanup, `test-quality.setup-bloat` reported 158 advisory findings at the default 12-line threshold. The top offenders were not opaque unit tests; they were harness, dashboard, quality-history, and terminal tests that build temp projects, create fake servers, inject browser globals, or serialize audit payloads before the assertion.
 
 **Root cause:** The default threshold is tuned for small unit tests. goat-flow has many contract tests where visible fixture construction is part of the evidence. Extracting all of that setup into generic helpers would hide the behavioural contract the test is meant to preserve.
 

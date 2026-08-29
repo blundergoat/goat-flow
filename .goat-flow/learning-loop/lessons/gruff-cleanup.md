@@ -3,7 +3,7 @@ category: gruff-cleanup
 last_reviewed: 2026-08-28
 ---
 
-**Scope:** Using the Gruff analyzer - reading its findings before acting on them, capturing clean JSON, masking blind spots, and not converting a fix request into threshold tuning. What breaks downstream when code is split or renamed is [refactor-fallout.md](refactor-fallout.md); proving comment fixes satisfy it is [verification-gruff.md](verification-gruff.md).
+**Scope:** Using the Gruff analyzer - reading its findings before acting on them, capturing clean JSON, working around masker blind spots, and not converting a fix request into threshold tuning. What breaks downstream when code is split or renamed is [refactor-fallout.md](refactor-fallout.md); proving comment fixes satisfy the analyzer is [verification-gruff.md](verification-gruff.md).
 
 ## Lesson: Nested template literals hide entire code regions from gruff-ts masking
 
@@ -45,7 +45,7 @@ last_reviewed: 2026-08-28
 
 **Incident count:** 4 | **Latest occurrence:** 2026-08-27
 
-**What happened:** During M01 gruff cleanup, extracting `src/cli/facts/fs.ts` cache helpers added comments that said "read errors cache and return null", "stat errors cache and return false", and "readdir errors cache and return []". Humans could infer the behavior, but `gruff-ts` still reported `docs.missing-error-behavior-doc` until the comments used the installed rule vocabulary: `swallows ... fallback`.
+**What happened:** During M01 gruff cleanup, I extracted `src/cli/facts/fs.ts` cache helpers and added comments that said "read errors cache and return null", "stat errors cache and return false", and "readdir errors cache and return []". Humans could infer the behavior, but `gruff-ts` still reported `docs.missing-error-behavior-doc` until the comments used the installed rule vocabulary: `swallows ... fallback`.
 
 **Recurrence update (2026-08-06):** New Windows Bash discovery comments said lookup errors returned no choices, but the rule stayed open until the text explicitly said the process errors `recover` to fallback discovery. The targeted report then cleared all three error-behavior findings.
 
@@ -75,7 +75,7 @@ last_reviewed: 2026-08-28
 
 **What happened:** After adding `*.css` / `**/*.css` to `paths.ignore` in `.gruff-ts.yaml`, I tried to verify it by running `gruff-ts analyse src/dashboard/styles.css` directly. The file was still flagged with `size.stylesheet-length` and `paths.ignoredPaths` came back empty, which looked like the ignore was broken. It was not: passing a file explicitly as a CLI argument bypasses config path-ignores - gruff-ts treats a named path as "analyse this regardless." Re-running against the directory (`gruff-ts analyse src/dashboard`) listed `styles.css` under `ignoredPaths` with zero findings.
 
-**Root cause:** Conflated two gruff-ts invocation modes. Config `paths.ignore` filters files discovered during directory/project traversal; it does not suppress a file the user names directly on the command line (the same distinction the `--include-ignored` flag notes when it says config ignores still apply only to discovered paths).
+**Root cause:** I conflated two gruff-ts invocation modes. Config `paths.ignore` filters files discovered during directory/project traversal; it does not suppress a file the user names directly on the command line (the same distinction the `--include-ignored` flag notes when it says config ignores still apply only to discovered paths).
 
 **Prevention:** Verify a path-ignore the way it is actually consumed - a directory or project scan (`gruff-ts analyse <dir>`), then confirm the file appears under `paths.ignoredPaths` and produces no findings. Never verify by passing the ignored file as an explicit argument; that path is analysed unconditionally and will read like a broken ignore. Evidence anchor: `.gruff-ts.yaml` (search: `**/*.css`); reproduction: `gruff-ts analyse src/dashboard --format json` -> `ignoredPaths: ["src/dashboard/styles.css"]`, zero `size.stylesheet-length` findings.
 
@@ -124,7 +124,7 @@ last_reviewed: 2026-08-28
 **Status:** active | **Created:** 2026-05-31
 **Incident count:** 2 | **Latest occurrence:** 2026-08-24
 
-**What happened:** During the same size cleanup, several long inline Node shell snippets were blocked by the guardrail hook before they could run. The commands were meant to perform mechanical test-file edits, but their length and nested shell shape crossed the safety rules and slowed the cleanup.
+**What happened:** During the gruff size cleanup, several long inline Node shell snippets were blocked by the guardrail hook before they could run. The commands were meant to perform mechanical test-file edits, but their length and nested shell shape crossed the safety rules and slowed the cleanup.
 
 **Root cause:** I optimized for one-off shell compactness instead of for the repository's hook contract. A command that is easy to paste can still be the wrong operational shape when hooks inspect chained segments and command substitution.
 

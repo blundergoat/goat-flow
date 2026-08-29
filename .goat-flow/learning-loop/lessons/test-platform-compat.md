@@ -27,9 +27,9 @@ last_reviewed: 2026-08-27
 
 **Status:** active | **Created:** 2026-05-11
 
-**What happened:** Two `runCLI` test helpers (`test/unit/quality-command.test.ts`, `test/integration/quality-history-diff.test.ts`) passed `join(PROJECT_ROOT, "node_modules", "tsx", "dist", "loader.mjs")` to `spawnSync(process.execPath, ["--import", TSX_LOADER_PATH, ...])`. On Windows the path is `D:\dev-lab\...\loader.mjs`. Node's ESM loader rejected it with `ERR_UNSUPPORTED_ESM_URL_SCHEME: Only URLs with a scheme in: file, data, and node are supported by the default ESM loader. On Windows, absolute paths must be valid file:// URLs. Received protocol 'd:'.` Every test that shelled out via the helper failed with exit 1 - looked like CLI bugs, was actually the spawn shape. 25-test full-suite failure baseline on 2026-05-11 included these as 7-8 of the original count.
+**What happened:** Two `runCLI` test helpers (`test/unit/quality-command.test.ts`, `test/integration/quality-history-diff.test.ts`) passed `join(PROJECT_ROOT, "node_modules", "tsx", "dist", "loader.mjs")` to `spawnSync(process.execPath, ["--import", TSX_LOADER_PATH, ...])`. On Windows the path is `D:\dev-lab\...\loader.mjs`. Node's ESM loader rejected it with `ERR_UNSUPPORTED_ESM_URL_SCHEME: Only URLs with a scheme in: file, data, and node are supported by the default ESM loader. On Windows, absolute paths must be valid file:// URLs. Received protocol 'd:'.` Every test that shelled out via the helper failed with exit 1 - the failures looked like CLI bugs but came from the spawn shape. The 25-test full-suite failure baseline on 2026-05-11 included these as 7-8 of the original count.
 
-**Root cause:** Node's `--import` flag goes through the ESM loader, which parses the value as a URL. Drive-letter `D:` looks like a scheme. POSIX absolute paths happen to be valid `file://` -less URLs on Linux/macOS so the bug never surfaces there.
+**Root cause:** Node's `--import` flag goes through the ESM loader, which parses the value as a URL. Drive-letter `D:` looks like a scheme. POSIX absolute paths happen to be valid `file://`-less URLs on Linux/macOS so the bug never surfaces there.
 
 **Fix:** Convert the loader path via `pathToFileURL(...).href` before passing to `--import`:
 ```ts
