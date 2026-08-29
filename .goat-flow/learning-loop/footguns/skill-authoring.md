@@ -1,6 +1,6 @@
 ---
 category: skill-authoring
-last_reviewed: 2026-08-28
+last_reviewed: 2026-08-29
 ---
 
 **Scope:** Authoring and editing skill, playbook, and slash-command bodies - candidacy, word-budget and contract-phrase caps, tool-isolation constraints on prescribed commands, and pressure to reword load-bearing language. Keeping workflow templates and installed copies in sync lives in [skills.md](skills.md).
@@ -31,7 +31,7 @@ Applies wherever goat-flow ships a SKILL.md or command body that orchestrates mu
 
 **Status:** active | **Created:** 2026-04-18 | **Evidence:** ACTUAL_MEASURED
 
-**Symptoms:** A skill rename can look complete on directory, manifest, and docs surfaces but still fail verification because release-coupled helpers lag the version bump. On 2026-04-18, the M07 rename run first failed `npm test` in `test/integration/audit-build.test.ts` because the shared config stub still encoded the previous release version. After fixing that, the same verification pass exposed a second break: setup routing still hardcoded `1.1.x` as the only current branch, so a healthy `1.2.0` project was misclassified as needing an upgrade.
+**Symptoms:** A skill rename can look complete on directory, manifest, and docs surfaces but still fail verification because release-coupled helpers lag the version bump. On 2026-04-18, a skill-rename verification run first failed `npm test` in `test/integration/audit-build.test.ts` because the shared config stub still encoded the previous release version. After that fix, the same verification pass exposed a second break: setup routing still hardcoded `1.1.x` as the only current branch, so a healthy `1.2.0` project was misclassified as needing an upgrade.
 
 **Evidence:**
 - `src/cli/audit/check-goat-flow.ts` (search: `configVersionCurrent`) enforces exact equality between `.goat-flow/config.yaml` and `AUDIT_VERSION`.
@@ -39,7 +39,7 @@ Applies wherever goat-flow ships a SKILL.md or command body that orchestrates mu
 - `src/cli/classify-state.ts` (search: `CURRENT_VERSION_FAMILY`) derives the current version family and routes current vs outdated installs; hardcoding a previous family breaks `composeSetup()` as soon as the package version advances.
 - `workflow/install-goat-flow.sh` (search: `Read version from package.json`) must derive the install version from `package.json`; a hardcoded fallback recreates the same stale-version trap at install time.
 
-**Recurrence 2026-08-26:** M56 renamed two writing playbooks, but the quality snapshot kept `reference:writing-style`, omitted both replacements, and retained old bands for two linked playbooks. Fresh validation found 29 artifacts versus 28 rows, then measured changelog at 80% and release notes at 84% outside 72-76%. Evidence: `package.json` (search: `skill-quality:snapshot`).
+**Recurrence 2026-08-26:** A change renamed two writing playbooks, but the quality snapshot kept `reference:writing-style`, omitted both replacements, and retained old bands for two linked playbooks. Fresh validation found 29 artifacts versus 28 rows, then measured changelog at 80% and release notes at 84% outside 72-76%. Evidence: `package.json` (search: `skill-quality:snapshot`).
 
 **Prevention:** Treat version-sensitive helpers as rename scope: update classifiers, config fixtures, quality snapshot ids and bands, installer version discovery, and setup-routing tests before trusting `npm test`.
 
@@ -66,21 +66,25 @@ Applies wherever goat-flow ships a SKILL.md or command body that orchestrates mu
 ## Footgun: Linter or security-scanner output can pressure rewrites of load-bearing skill language
 
 **Status:** active | **Created:** 2026-05-26 | **Evidence:** OBSERVED
+**Decision changed:** Treat forceful wording as a behavioural-control candidate, not an untouchable string: preserve or replace it according to behavioural evidence, then update every durable anchor.
+**Trigger phase:** READ | **Caught at:** VERIFY | **Incident count:** 2 | **Latest occurrence:** 2026-08-29
 
-**Symptoms:** An automated tool (security scanner, prompt-injection detector, prose linter) flags a phrase or framing inside a canonical SKILL.md - `**EXTREMELY IMPORTANT**`-style emphasis, the Excuse | Reality tables, a forceful "Iron Law" line, the deliberate "your AI partner" phrasing. A well-meaning PR rewrites the flagged language to "comply" with the tool's guidance. The rewrite passes the tool, passes typecheck, passes structural skill-quality scoring (`src/cli/quality/skill-quality-score.ts` — search: `scoreContent`), and silently degrades the skill's behaviour-shaping power because the flagged phrasing was load-bearing.
+**Prevention:**
+1. Before rewriting a tool-flagged phrase, name the behaviour it controls and the evidence that the control is useful.
+2. Require before/after behavioural evidence proportionate to the risk. Evidence that a phrase seeds bias is a valid reason to replace it; evidence that a softer replacement loses the control is a reason to retain or redesign it.
+3. Treat structural skill scores as shape evidence only. Update contract and learning-loop anchors whenever the chosen wording changes.
 
-**Why it happens:** Excuse | Reality tables and forceful framing exist precisely *because* they shift agent behaviour under pressure. They look like editorial emphasis to an external tool (and to agents reading them cold) but they are the persuasion mechanism the skill depends on. goat-flow's existing structural scorer measures shape (presence of gates, table rows, frontmatter) but not behaviour, so a "compliance" rewrite passes every CI check while quietly weakening the runtime contract. The trap is structural: load-bearing prose has no machine-distinguishable signature from decorative prose.
+**Symptoms:** An automated tool flags forceful framing inside a canonical skill. A rewrite then either softens the phrase merely to satisfy the tool or freezes the exact sentence merely because an older record called it load-bearing. Structural checks can pass in both cases while the actual behavioural control weakens or becomes biased.
+
+**Why it happens:** Forceful framing can shift agent behaviour under pressure, but exact phrasing has no machine-readable marker that distinguishes useful control from conclusion-seeding rhetoric. goat-flow's structural scorer measures shape, not behaviour, so neither preservation nor replacement is justified by a structural pass alone.
 
 **Evidence:**
-- `.goat-flow/skill-docs/skill-quality-testing/adversarial-framing.md` (search: "cynical reviewer with zero patience") documents that specific phrasing in review-class skills is the mechanism, not the message.
+- `.goat-flow/skill-docs/skill-quality-testing/adversarial-framing.md` (search: "skeptical, neutral reviewer") records the corrected control: role framing is a behavioural mechanism, but it must direct falsification without seeding a finding quota or conclusion. The former "cynical reviewer with zero patience" wording was retired because it biased the result rather than testing it.
 - `src/cli/quality/skill-quality-score.ts` (search: `scoreContent`, `scoreAllArtifacts`) — the scorer composes text and runs rubric metrics; it does not execute the skill against agent prompts, so a "compliance" rewrite that preserves shape can pass scoring.
 - `.claude/skills/goat-plan/SKILL.md` (search: `Excuse`, `Reality`) — the Excuse | Reality table is the persuasion surface most likely to attract a "this is unprofessional / aggressive / could be softened" rewrite suggestion.
 - External corroboration: obra/superpowers PR #1608 ("fix(skill): remove prompt-injection marker") was closed as slop. The maintainer's comment: "the framing the scanner flagged is intentional — it's the mechanism that makes Superpowers actually shape agent behavior." Same shape of trap applies here.
 
-**Prevention:**
-1. Mark known-load-bearing prose surfaces (Excuse | Reality tables, hard gates, forceful framing lines, the `your AI partner` term) as protected in `docs/skill-authoring.md` so authors know rewording requires evidence.
-2. Treat any PR that rewords skill text in response to *tool output* (scanner, linter, model review) as requiring before/after behavioural eval evidence, not just passing structural checks. When the M10 behavioural eval harness lands, this becomes enforceable.
-3. CI rule (cheap, valuable): fail PRs whose bodies match canned scanner output patterns (`Risk score:`, `Matched signals:`, `pre-flight guardrails passed`) unless an explicit `[manual-review]` marker is present in the body.
+**Recurrence 2026-08-29:** The quality pack correctly replaced a conclusion-seeding reviewer role with a neutral-skeptical one, but this footgun still cited the retired sentence as protected mechanism. `stats --check` found the stale anchor. The correction preserves the behavioural-control rule without treating one biased phrase as immutable evidence.
 
 ---
 
@@ -100,7 +104,7 @@ Applies wherever goat-flow ships a SKILL.md or command body that orchestrates mu
 
 **Recurrence 2026-08-16:** Adding validator-anchor, refutation-ledger, and resumable-chunk guidance raised `workflow/skills/goat-review/SKILL.md` from 2499 to 2593 body words. The first compression returned it to 2499 but changed pinned phrases and failed 14 focused skill contracts. The next focused set passed 45/45 but omitted two shared-surface contracts, which the full suite caught. An all-file skill-hardening run then caught a case-sensitive prefix mismatch and a contract regressed while reclaiming words. Inventorying every direct reader before the final correction produced a 2499-word body with all 181 skill-hardening contracts passing. Evidence anchors: `test/contract/skill-hardening-contracts.test.ts` (search: `functional skills stay within the 2500-word cap`), `test/contract/skill-hardening-review-1.test.ts` (search: `forbids goat-review setup mutation and branch checkout`), `test/contract/skill-hardening-review-2.test.ts` (search: `calibrates goat-review severity from evidence before labels`), `test/contract/skill-hardening-review-2.test.ts` (search: `documents validator-ready anchors, REFUTED-only ledgers, and resumable chunks`), `test/contract/skill-hardening-shared-1.test.ts` (search: `defines two evidence-producing area audit passes`), and `test/contract/skill-hardening-shared-2.test.ts` (search: `keeps direction audits advisory, grounded, and separate from defect verdicts`).
 
-**Recurrence 2026-08-17:** ADR-023's 3000-word cap was not binding: `test/contract/skill-hardening-contracts.test.ts` (search: `M02 playbooks stay within their rollout budgets`) capped `.goat-flow/skill-docs/playbooks/code-comments.md` at 2880, while its M51 case capped `.goat-flow/skill-docs/playbooks/writing-sentence-diagnostics.md` at 900-1100. Six and two words of real headroom appeared as 126 and 1902 against the ADR; two additions failed. The comments playbook also had 84 `assert.match` pins, so compression there requires its own scope.
+**Recurrence 2026-08-17:** ADR-023's 3000-word cap was not binding: `test/contract/skill-hardening-contracts.test.ts` (search: `M02 playbooks stay within their rollout budgets`) capped `.goat-flow/skill-docs/playbooks/code-comments.md` at 2880, while the writing-diagnostics case in the same test capped `.goat-flow/skill-docs/playbooks/writing-sentence-diagnostics.md` at 900-1100. Six and two words of real headroom appeared as 126 and 1902 against the ADR; two additions failed. The comments playbook also had 84 `assert.match` pins, so compression there requires its own scope.
 
 **Recurrence 2026-08-17 (mode-aware clarity gate):** A focused new contract proved both replacement empty-selection branches, but two older assertions in the same clarity contract still pinned phrases removed by the approved rewrite. The aggregate skill gate failed first on `zero eligible source files`, then on the comma-sensitive `binary or generated`. Re-reading the complete assertion block against the source diff preserved the binary/generated fail-closed invariant while removing only the superseded mode-agnostic phrase. Evidence anchors: `workflow/skills/goat-clarity/SKILL.md` (search: `when no selected unit is source code`; the 2026-08-19 write-authority rewrite replaced the mode-aware sentence with this clause) and `test/contract/skill-hardening-clarity.test.ts` (search: `fails closed on unsupported path state`).
 
@@ -134,10 +138,10 @@ Restore pinned phrases verbatim after any compression, take compensating words f
 **Why it happens:** An adjective is self-assessed. An agent that writes a 33-word paragraph naming three internal identifiers can believe in good faith it wrote a concrete, jargon-free line, so the rule never binds. Worked BAD/GOOD examples help but carry their own trap: a single example reads as a special case for whatever surface it was drawn from.
 
 **Evidence:** 2026-08-16, goat-plan's `What we lose without this` / `Why this helps` sections. Guidance shipped with the adjective rule plus one
-security-flavoured BAD/GOOD pair; an external coding agent converted `.goat-flow/plans/1.18.0/` (14 milestones plus ISSUE.md) and produced sections
-averaging 33 words against a stated one-line bar. Eleven of 14 benefit lines described what ships rather than what a person gets, while `1.17.0 M12`,
-`ADR-056` (an external draft token, not a repository decision file), and `v1 verdicts` survived "jargon-free". The same author had written 10-18 word
-lines by hand for two other plan trains, so the gap was the guidance, not the corpus. Checkable rules first replaced the adjectives; M22 then moved
+security-flavoured BAD/GOOD pair; an external coding agent converted a 14-milestone plan train plus its issue summary and produced sections
+averaging 33 words against a stated one-line bar. Eleven of 14 benefit lines described what ships rather than what a person gets, while an internal
+release/milestone label, an external draft ADR token, and `v1 verdicts` survived "jargon-free". The same author had written 10-18 word lines by hand
+for two other plan trains, so the gap was the guidance, not the corpus. Checkable rules first replaced the adjectives; a follow-up then moved
 the length and identifier list into strict validation while the reference retained the checker pointer, subject rule, and second BAD/GOOD pair:
 `workflow/skills/goat-plan/references/milestone-examples.md` (search: `enforces current-heading length and internal identifiers`).
 
@@ -151,7 +155,7 @@ the length and identifier list into strict validation while the reference retain
 
 **Why it happens:** Consumer-installed skills must be self-contained, while framework ADRs remain internal. A skill edit can therefore add useful operational detail without forcing a review of the decision that owns its authority. Mirror-parity tests prove delivery, not policy consistency.
 
-**Evidence:** On 2026-08-20, `workflow/skills/goat-clarity/SKILL.md` Scope v2 allowed one public/exported rename, while `.goat-flow/learning-loop/decisions/ADR-009-skill-consolidation.md` still routed broader or public refactoring outside goat-clarity. The Codex quality report `2026-08-20-0432-codex-04868.json` identified the contradiction. The repair now aligns the skill (search: `enumerated set of public or exported identifier renames`) and ADR-009 (search: `enumerated set of public or exported identifier spelling changes`), and `test/contract/skill-hardening-clarity.test.ts` (search: `keeps the accepted clarity authority aligned`) pins the cross-surface rule. Deterministic RED/GREEN evidence is recorded in `.goat-flow/logs/sessions/2026-08-20-goat-clarity-tdd.md`.
+**Evidence:** On 2026-08-20, `workflow/skills/goat-clarity/SKILL.md` Scope v2 allowed one public/exported rename, while `.goat-flow/learning-loop/decisions/ADR-009-skill-consolidation.md` still routed broader or public refactoring outside goat-clarity. A Codex quality review identified the contradiction. The repair now aligns the skill (search: `enumerated set of public or exported identifier renames`) and ADR-009 (search: `enumerated set of public or exported identifier spelling changes`), and `test/contract/skill-hardening-clarity.test.ts` (search: `keeps the accepted clarity authority aligned`) pins the cross-surface rule.
 
 **Prevention:** Treat any new skill permission or write-mode exception as an authority change. Before editing the skill, identify the accepted ADR that owns its boundary, update or supersede that decision in the same approved change, and add one contract that reads both surfaces. Mirror parity remains necessary but is not policy proof.
 
@@ -175,11 +179,11 @@ the length and identifier list into strict validation while the reference retain
 
 **Recurrence 2026-08-16:** Renaming those two sections to `## What we lose without this` / `## Why this helps` and adding derivation rules overflowed the combined cap. The obvious trim - `### Verification baseline` and `### Maintenance notes` - was pinned by `keeps goat-plan handoff artifacts drift-aware without burdening small plans`, so the approved resolution raised 4650 to 4700 (4671 used); the body cap stayed unchanged.
 
-**Recurrence 2026-08-18:** a 27-token rewrite of goat-plan's Shared Conventions line (defining which modes read `skill-conventions.md`) passed every phrase pin and mirror check, then failed the combined cap at 4717/4700 - the surface had 3 words of headroom. Resolved by compacting to a 7-token line (`Modes R/1/3/4 also read`), the same length as the sentence it replaced.
+**Recurrence 2026-08-18:** A 27-token rewrite of goat-plan's Shared Conventions line (defining which modes read `skill-conventions.md`) passed every phrase pin and mirror check, then failed the combined cap at 4717/4700 - the surface had 3 words of headroom. Resolved by compacting to a 7-token line (`Modes R/1/3/4 also read`), the same length as the sentence it replaced.
 
-**Update 2026-08-19:** combined cap raised 4700 -> 5450 with user approval for the ISSUE.md plain-language redesign (checkable rules, a word swap table, two worked pairs, and a labelled worked sample moved inline into `issue-format.md`; 5373 used). The sweep for the old number found no live citations; old-format ISSUE and milestone artifacts under `.goat-flow/plans/` were left as historical outputs. Body cap unchanged (2128/2150 used). Raised again the same day, 5450 -> 5650, for the cut-words-never-facts rules and a third worked pair (5564 used).
+**Update 2026-08-19:** Combined cap raised 4700 -> 5450 with user approval for the ISSUE.md plain-language redesign (checkable rules, a word swap table, two worked pairs, and a labelled worked sample moved inline into `issue-format.md`; 5373 used). The sweep for the old number found no live citations; old-format ISSUE and milestone artifacts under `.goat-flow/plans/` were left as historical outputs. Body cap unchanged (2128/2150 used). Raised again the same day, 5450 -> 5650, for the cut-words-never-facts rules and a third worked pair (5564 used).
 
-**Recurrence 2026-08-28:** M57 measured all caps but missed older plan-1 pins. Mid-proof failed its amendment and dependency-transition contracts, and the body measured 2151/2150. Restoring those pins and compacting only the new rule produced 2144/2150 and `# pass 51`, `# fail 0`. Evidence anchors: `test/contract/skill-hardening-plan-1.test.ts` (search: `keeps goat-plan amendments behind the milestone approval gate`) and `test/contract/skill-hardening-plan-2.test.ts` (search: `redesign target of 2150 words`).
+**Recurrence 2026-08-28:** A cap audit measured every configured limit but missed older plan-contract pins. Mid-proof failed its amendment and dependency-transition contracts, and the body measured 2151/2150. Restoring those pins and compacting only the new rule produced 2144/2150 and `# pass 51`, `# fail 0`. Evidence anchors: `test/contract/skill-hardening-plan-1.test.ts` (search: `keeps goat-plan amendments behind the milestone approval gate`) and `test/contract/skill-hardening-plan-2.test.ts` (search: `redesign target of 2150 words`).
 
 ---
 
@@ -189,7 +193,7 @@ the length and identifier list into strict validation while the reference retain
 
 **Symptoms:** A functional skill sits under the ADR-023 2,500-word cap and passes every contract, yet the dashboard's deterministic skill-quality score shows Token / Load Cost 7/10 (`~5127 tokens` / `~5750 tokens`), and relocating whole sections into a progressive reference recovers less than the section sizes suggest.
 
-**Why it happens:** The two budgets use different units. ADR-023 counts body words in `test/contract/skill-hardening.helpers.ts` (search: "countSkillBodyWords"); the rubric estimates tokens as `Math.ceil(content.length / 4)` over the raw SKILL.md including frontmatter and steps 10/10 down to 7/10 above 5,000 tokens (`src/cli/quality/skill-quality-metrics.ts`, search: `tokens > 5000`). At about 8 chars per word the two agree; goat-security's pipe-delimited compound tokens run about 10 chars per word, so 2,072 body words is 20,604 chars and 5,151 tokens, while goat-review at 2,413 words is 19,972 chars and 4,993 tokens with 28 chars of headroom. Relocation also pays pointer overhead and cannot add a sixth `references/` file without a separate 3-point deduction (search: `subRefs > 5`), so estimated savings from section sizes alone overstate the result.
+**Why it happens:** The two budgets use different units. ADR-023 counts body words in `test/contract/skill-hardening.helpers.ts` (search: "countSkillBodyWords"); the rubric estimates tokens as `Math.ceil(content.length / 4)` over the raw SKILL.md including frontmatter, and steps 10/10 down to 7/10 above 5,000 tokens (`src/cli/quality/skill-quality-metrics.ts`, search: `tokens > 5000`). At about 8 chars per word the two agree; goat-security's pipe-delimited compound tokens run about 10 chars per word, so 2,072 body words is 20,604 chars and 5,151 tokens, while goat-review at 2,413 words is 19,972 chars and 4,993 tokens with 28 chars of headroom. Relocation also pays pointer overhead and cannot add a sixth `references/` file without a separate 3-point deduction (search: `subRefs > 5`), so estimated savings from section sizes alone overstate the result.
 
 **Evidence:** 2026-08-16, moving goat-security's Step 0 exception-validity tuple (1,328 chars) and Compliance Mode body (1,546 chars) into `references/project-policy-template.md` netted 2,395 chars after pointers, leaving 20,604 chars and the same 7/10; a phrase-repeat scan found no remaining literal duplication, only contract-pinned procedure. The user chose to keep that 96% as a true density signal rather than move Full-only phases into `common-threats.md`, which the skill loads on every run anyway.
 
@@ -211,7 +215,7 @@ the length and identifier list into strict validation while the reference retain
 
 **Resolution:** Goat-security now routes Full depth to conventions and names all five packs with explicit `references/` paths. The scorer's bounded composition window is 128 KiB, below the existing 256 KiB artifact ceiling; measured current functional compositions range from 40.5 to 79.1 KiB. A general contract scores every functional skill and rejects any truncation, while the security contract checks its exact composed sources.
 
-**Resolution evidence:** `src/cli/quality/quality-config.ts` (search: `Current full functional contexts measure 40.5-79.1 KiB`), `test/contract/skill-hardening-contracts.test.ts` (search: `against its complete configured context`), and `test/contract/skill-hardening-security-1.test.ts` (search: `goat-security quality composition must include its full configured context`). Local TDD receipt filename: `2026-08-18-goat-security-tdd.md`.
+**Resolution evidence:** `src/cli/quality/quality-config.ts` (search: `Current full functional contexts measure 40.5-79.1 KiB`), `test/contract/skill-hardening-contracts.test.ts` (search: `against its complete configured context`), and `test/contract/skill-hardening-security-1.test.ts` (search: `goat-security quality composition must include its full configured context`).
 
 **Prevention:** Treat every required route and reference pointer as runtime truth first and evaluator input second. Measure all functional compositions after changing shared guidance, keep the bounded ceiling below `maxArtifactBytes`, and never remove binding guidance merely to satisfy a scorer cap.
 

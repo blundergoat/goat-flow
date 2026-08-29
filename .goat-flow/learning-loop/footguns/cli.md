@@ -19,7 +19,7 @@ last_reviewed: 2026-08-27
 
 **Status:** active | **Created:** 2026-05-11 | **Evidence:** ACTUAL_MEASURED
 
-**Symptoms:** Windows users see `C:\Users\developer\...` style backslash paths in setup prompts, audit `evidence` fields, skill scaffold output, glob results, and the `getCliCommand()` re-run hint. When an agent reads the prompt and runs a host-native path inside a Bash subshell, the backslashes can act as escape characters and the command fails. Tests written with POSIX-shape assertions also fail (string-equality on `.endsWith(".claude/skills/...")` etc.). A full-suite run on 2026-05-11 had 25 failures all rooted here.
+**Symptoms:** Windows users see `C:\Users\developer\...`-style backslash paths in setup prompts, audit `evidence` fields, skill scaffold output, glob results, and the `getCliCommand()` re-run hint. When an agent reads the prompt and runs a host-native path inside a Bash subshell, the backslashes can act as escape characters and the command fails. Tests written with POSIX-shape assertions also fail (string-equality on `.endsWith(".claude/skills/...")` etc.). A full-suite run on 2026-05-11 had 25 failures all rooted here.
 
 **Why it happens:** `path.join`, `path.resolve`, and `path.relative` from `node:path` use OS-native separators on Windows. Every place a path is composed for *user-visible* output (prompts, audit findings, JSON payloads, dashboard strings) inherits that shape. The same path is fine for `node:fs` operations (which accept either separator), so the bug is invisible until output is rendered.
 
@@ -58,7 +58,7 @@ last_reviewed: 2026-08-27
 
 **Prevention:**
 1. Never compare `resolve(process.argv[1])` directly to `fileURLToPath(import.meta.url)`. Always wrap both sides in `realpathSync()`.
-2. `test/integration/main-guard.test.ts` locks this in - any future change to the entry-point guard must pass the symlink test.
+2. Run `test/integration/main-guard.test.ts` after any change to the entry-point guard; the symlink case must pass.
 3. When Node 24+ is the minimum, replace the entire guard with `import.meta.main`.
 
 ---
@@ -67,13 +67,13 @@ last_reviewed: 2026-08-27
 
 **Status:** active | **Created:** 2026-05-25 | **Evidence:** EXTERNAL_REFERENCE
 
-**Symptoms:** A CLI command emits structured output (JSON, SARIF, JSONL, CSV) to stdout for a downstream consumer (CI parser, GitHub Code Scanning upload, jq pipeline, MCP client). The consumer fails to parse — sometimes silently (jq returns empty), sometimes loudly ("unexpected token at line N"). The bug is intermittent: only fires when a code path that calls `logger.*` or `console.*` happens to run during the structured emission. Test runs pass because the test invocation may not trigger that code path; production runs fail because (e.g.) a single deprecation warning prints to stdout right before the JSON payload.
+**Symptoms:** A CLI command emits structured output (JSON, SARIF, JSONL, CSV) to stdout for a downstream consumer (CI parser, GitHub Code Scanning upload, jq pipeline, MCP client). The consumer fails to parse — sometimes silently (jq returns empty), sometimes loudly ("unexpected token at line N"). The bug is intermittent: it only fires when a code path that calls `logger.*` or `console.*` happens to run during the structured emission. Test runs pass because the test invocation may not trigger that code path; production runs fail because (e.g.) a single deprecation warning prints to stdout right before the JSON payload.
 
 **Why it happens:** Most logger libraries default to writing all levels to stdout. The structured-output code path assumes it owns stdout exclusively, but any module imported anywhere in the process can `console.log` during import or initialization. Even one `winston` line on the default Console transport interleaves and breaks the payload. Set-once env-var fixes (`PROMPTFOO_LOG_TO_STDERR=1` in the source PR) only work if they're set BEFORE the logger module is imported, which means before ANY module that might transitively trigger logger initialization.
 
 **Evidence (external — promptfoo PR #9329):** `code-scan --format sarif|json` printed the payload via `console.log`. Winston's Console transport had no `stderrLevels` set, so any `logger.warn` / `logger.info` from cache loading, telemetry, or update-check code silently interleaved with the SARIF payload. GitHub Code Scanning rejected the upload as malformed. Fix: detect structured-output mode early in CLI dispatch, set `PROMPTFOO_LOG_TO_STDERR=1` BEFORE the logger import, route all log levels to stderr unconditionally in that mode.
 
-**Goat-flow applicability — HIGH:** Goat-flow CLI surfaces that emit structured stdout:
+**Goat-flow applicability — HIGH:** CLI surfaces that emit structured stdout:
 - `src/cli/audit/render.ts` (search: "renderAuditJson") and `src/cli/audit/sarif.ts` (search: "renderAuditSarif") — SARIF and JSON output modes for audit results.
 - `src/cli/quality/` — JSON quality report exports.
 - Any future `--json` or `--format` flag added to a goat-flow command.

@@ -7,7 +7,7 @@ last_reviewed: 2026-08-15
 
 **Status:** active | **Created:** 2026-05-25 | **Evidence:** EXTERNAL_REFERENCE
 
-**Symptoms:** Submit/completion markers written by an agent at the END of stdout fail to detect when anything prints afterwards — shell prompts, deprecation warnings, debug noise, a TUI program's terminal-reset escape sequence, or even a trailing newline normalization that's "off by one." Conversely, FIRST-line markers are unambiguous but only if the framework ignores everything before them (`lstrip()` then check `lines[0]`).
+**Symptoms:** Submit/completion markers written by an agent at the END of stdout go undetected when anything prints afterwards — shell prompts, deprecation warnings, debug noise, a TUI program's terminal-reset escape sequence, or even a trailing newline normalization that's "off by one." Conversely, FIRST-line markers are unambiguous but only if the framework ignores everything before them (`lstrip()` then check `lines[0]`).
 
 **Why it happens:** Sentinel position is a design choice made silently in env/parse code. There is no test that exercises "what if the model puts an extra line after the marker." The decision is invisible to maintainers reading either side of the contract (the prompt that asks the agent to emit the marker, and the parser that detects it). Without an ADR or a comment naming the trade-off, the next refactor swaps the position and rediscovers the problem.
 
@@ -23,7 +23,7 @@ last_reviewed: 2026-08-15
       submission = "".join(lines[1:])
   ```
 
-**Goat-flow applicability:** One live surface already pattern-matches a marker out of a stream it does not control. `src/cli/server/terminal-spawn.ts` (search: `export function looksLikePromptSend`) classifies dashboard terminal input, and `src/cli/server/terminal.ts` (search: `looksLikePromptSend(msg.data)`) branches on it mid-session. PTY output carries shell prompts, TUI redraws, and terminal-reset escapes exactly like the upstream case, so position and anchoring assumptions there are load-bearing today, not hypothetically.
+**Goat-flow applicability:** One live surface already pattern-matches a marker out of a stream it does not control. `src/cli/server/terminal-spawn.ts` (search: `export function looksLikePromptSend`) classifies dashboard terminal input, and `src/cli/server/terminal.ts` (search: `looksLikePromptSend(msg.data)`) branches on it mid-session. PTY output carries shell prompts, TUI redraws, and terminal-reset escapes exactly like the upstream case, so position and anchoring assumptions there are load-bearing today, not hypothetical.
 
 Goat-flow does not parse a submit sentinel out of agent output, and this entry does not claim it does. The rule below applies when a parser is introduced; the existing PTY matcher is what makes it a present concern rather than a filed-away idea.
 
@@ -39,7 +39,7 @@ Goat-flow does not parse a submit sentinel out of agent output, and this entry d
 
 **Symptoms:** When the agent's action delimiter is a generic syntax (e.g. ` ```bash `, ` ```python `, ` <command> `), any content the agent must read or write that legitimately contains the same syntax gets mis-parsed as additional agent actions. The most painful case: the agent cannot edit any README or technical doc that contains code fences, because the delimiter parser splits the file content into "multiple actions."
 
-**Why it happens:** Generic delimiters are convenient and look natural in prompts, but they overlap with real document content. The trap only fires when the agent works on documentation, code repositories, or tutorial material — exactly the cases where it's most useful. By the time you notice, every example response and every test fixture uses the generic delimiter and the migration is large.
+**Why it happens:** Generic delimiters are convenient and look natural in prompts, but they overlap with real document content. The trap only fires when the agent works on documentation, code repositories, or tutorial material — exactly the cases where the agent is most useful. By the time you notice, every example response and every test fixture uses the generic delimiter and the migration is large.
 
 **Evidence (external — mini-swe-agent):**
 - mini-swe-agent PR #696 (`10dfc4ea`, 2026-01-08, +257/-221 lines). PR body: "Previously we were using ```bash, but this had the problem that this is a sequence that can quite naturally appear in README files etc, causing the agent being unable to edit it/write such content because it would be interpreted as multiple actions."
@@ -52,7 +52,7 @@ Goat-flow does not parse a submit sentinel out of agent output, and this entry d
 - `src/dashboard/globals.d.ts` (search: `__GOAT_FLOW_REPORT__`) — window globals exposed to dashboard JS; the double-underscore + `GOAT_FLOW_` prefix avoids collision with anything the surrounding page may inject.
 
 **Prevention:**
-1. Any new sentinel — block markers, env vars, window globals, log prefixes — must be namespaced enough that grepping for it returns only goat-flow's own usage. Single-word generic names (`bash`, `runner`, `report`) are forbidden.
-2. The namespace itself must be searchable. `goat-` is good (returns only goat-flow hits). `mw` would not be (collides with many things). Pick a unique 4+ character namespace and use it consistently across every sentinel surface.
+1. Namespace every new sentinel — block markers, env vars, window globals, log prefixes — enough that grepping for it returns only goat-flow's own usage. Single-word generic names (`bash`, `runner`, `report`) are forbidden.
+2. The namespace itself must be searchable. `goat-` is good (returns only goat-flow hits). `mw` is not (collides with many things). Pick a unique 4+ character namespace and use it consistently across every sentinel surface.
 3. Before adding a sentinel, grep the broader ecosystem (popular READMEs, common docs) for the proposed string. If it appears naturally in content the agent might process, namespace it harder.
-4. Migration cost is real (mini's swap touched ~250 lines across configs and tests). Better to namespace at creation than to migrate later.
+4. Namespace at creation rather than migrating later — the migration cost is real (mini's swap touched ~250 lines across configs and tests).

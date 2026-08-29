@@ -9,7 +9,7 @@ last_reviewed: 2026-08-26
 
 **Status:** active | **Created:** 2026-05-21 | **Evidence:** ACTUAL_MEASURED
 
-**Symptoms:** A normal `goat-flow install . --agent codex` upgrade refreshes skills and hook scripts but preserves an existing `.codex/config.toml`. If that file predates the permission-profile template, setup and agent checks pass while `audit --harness` still reports incomplete direct literal secret-path blocking for Codex - the setup prompt shows "0 audit checks failed" unless run in harness mode.
+**Symptoms:** A normal `goat-flow install . --agent codex` upgrade refreshes skills and hook scripts but preserves an existing `.codex/config.toml`. If that file predates the permission-profile template, setup and agent checks pass while `audit --harness` still reports incomplete direct literal secret-path blocking for Codex - the setup prompt shows "0 audit checks failed" unless the audit runs in harness mode.
 
 **Why it happens:** The installer skips existing settings to avoid clobbering local config. For Codex, `.codex/config.toml` is both a settings file and the provider-native filesystem deny surface (hook registration lives separately in `.codex/hooks.json`). Preserving it is safe for local customizations but doesn't migrate `default_permissions = "goat-flow"` or `[permissions.goat-flow.filesystem]`.
 
@@ -21,7 +21,7 @@ last_reviewed: 2026-08-26
 **Prevention:**
 1. After Codex upgrades, run `goat-flow audit . --agent codex --harness`, not just the default setup audit.
 2. If Codex settings were preserved, compare `.codex/config.toml` with `workflow/hooks/agent-config/codex.toml` and add the permission profile plus exact denies only for sensitive root files present in the checkout.
-3. Improve the installer/setup prompt to distinguish "hook registration" (`.codex/hooks.json`) from "filesystem deny profile" (`.codex/config.toml`) when settings are preserved.
+3. When settings are preserved, report hook registration (`.codex/hooks.json`) and filesystem deny profile (`.codex/config.toml`) as separate surfaces in the installer and setup prompt.
 
 ---
 
@@ -135,7 +135,7 @@ This is provider behavior, not duplicate JSON inside one config. GitHub's [hook-
 
 **Recurrence 2026-08-25:** The second incident exposed field selection, not just duplicate invocation. Copilot selected `command: "node"` from Goat Flow's structured Claude row without its `args`, so a safe `pwd` request failed before policy startup with a Node syntax error. The accepted descriptor keeps Claude's real `command` plus `args` and adds `bash: "exit 0"` and `powershell: "exit 0"`. Copilot's cross-loaded copy becomes inert, while `.github/hooks/hooks.json` remains the sole managed Copilot policy source. Owners: `src/cli/server/agent-hook-command.ts` (search: `bash: "exit 0"`), `src/cli/server/agent-hook-writer.ts` (search: `handlerDescriptor.bash`), and `test/unit/hooks-runtime-evidence.test.ts` (search: `requires Copilot native registration`).
 
-**Recurrence 2026-08-26:** After inert cross-provider shell routes were added, the generic hook fact reader returned top-level `bash: "exit 0"` before examining structured `command` plus `args`. The full harness audit then reported both managed Claude hooks as unregistered even though the shipped descriptors retained their executable script operands. A regression built from the shipped Claude descriptor confirms both paths resolve when structured exec operands are selected first. Evidence anchors: `src/cli/facts/agent/hook-registration.ts` (search: `function readHookCommand`) and `test/unit/audit-command/hook-facts.test.ts` (search: `reads managed Claude exec operands before inert shell routes`).
+**Recurrence 2026-08-26:** After inert cross-provider shell routes were added, the generic hook fact reader returned top-level `bash: "exit 0"` before examining structured `command` plus `args`. The full harness audit then reported both managed Claude hooks as unregistered even though the shipped descriptors retained their executable script operands. A regression test built from the shipped Claude descriptor confirms both paths resolve when structured exec operands are selected first. Evidence anchors: `src/cli/facts/agent/hook-registration.ts` (search: `function readHookCommand`) and `test/unit/audit-command/hook-facts.test.ts` (search: `reads managed Claude exec operands before inert shell routes`).
 
 ---
 

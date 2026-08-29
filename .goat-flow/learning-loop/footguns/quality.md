@@ -25,7 +25,7 @@ last_reviewed: 2026-08-23
 
 **Symptoms:** A harness concern can remain capped below 100 for an agent even after all fixable setup work is complete, because the audit treats an unavailable platform feature as missing evidence. The 1.12.0 Verification workstream hit this with Copilot: `workflow/manifest.json` declares `hook_events.post_turn: null`, so Copilot cannot host a project-local post-turn hook, yet `post-turn-hook-integrity` originally lowered its Verification score to 75.
 
-**Why it happens:** Missing evidence and not-applicable evidence look similar unless the check consults manifest-backed capability metadata. A neutral pass would inflate evidence; a failure punishes an unfixable runtime gap. The correct representation is a skipped check that stays out of the concern denominator, while supported agents with missing or masked hooks still lose the score.
+**Why it happens:** Missing evidence and not-applicable evidence look similar unless the check consults manifest-backed capability metadata. A neutral pass would inflate evidence; a failure would punish an unfixable runtime gap. The correct representation is a skipped check that stays out of the concern denominator, while supported agents with missing or masked hooks still lose the score.
 
 **Evidence:**
 - `workflow/manifest.json` (search: `"post_turn": null`) - Copilot has no post-turn hook event.
@@ -33,7 +33,7 @@ last_reviewed: 2026-08-23
 - `src/cli/audit/harness/check-verification.ts` (search: `supportsPostTurnHook === false`) - `post-turn-hook-integrity` skips unsupported agents but still evaluates supported agents.
 - `test/unit/audit-command/scoring-model.test.ts` (search: `skips post-turn hook integrity for agents without a post-turn hook event`) - Copilot reaches Verification 100 without a fake hook pass, while supporting-agent no-hook and masked-hook fixtures keep the 25-point loss.
 
-**Prevention:** Any audit check tied to a runtime capability must first ask whether the selected agent can host that capability. Use manifest-backed `supports*` facts to choose between fail and skip. Never use a neutral pass for unavailable capability evidence, and always keep a regression fixture proving the same missing state still fails for at least one supporting agent.
+**Prevention:** When adding or changing an audit check tied to a runtime capability, determine whether the selected agent can host that capability. Use manifest-backed `supports*` facts to choose between fail and skip. Never use a neutral pass for unavailable capability evidence, and always keep a regression fixture proving the same missing state still fails for at least one supporting agent.
 
 
 ## Footgun: Structural validation passes while content is still unanswerable
@@ -103,7 +103,7 @@ A warning that fires on 100% of the corpus is not a safety net.
 
 **Symptoms:** `bash scripts/preflight-checks.sh` failed on a clean checkout of `dev` even though CI was green and a prior-day preflight passed. Observed 2026-07-04: `FAIL 75 checks` with `Prettier (17 unformatted files)` on files last touched weeks earlier with no red build anywhere.
 
-**Why it happened:** `.github/workflows/ci.yml` declared only a `pull_request` trigger for `[main, dev]` - there was no `push:` trigger. Commits made directly to `main` or `dev`, including `Merge branch 'main' into dev` merge commits, never ran `npm run format:check`, shellcheck, or the test job, so gate-breaking state accumulated on those branches and surfaced later on whoever ran preflight. The hallucination risk cuts both ways: a reviewer who sees the `format:check` step concludes "CI enforces formatting" (that reads the job, not the trigger), and a reviewer who sees the failure assumes the CI check is missing (a 2026-07-04 quality assessment claimed "no enforcement point exists" without reading the workflow).
+**Why it happened:** `.github/workflows/ci.yml` declared only a `pull_request` trigger for `[main, dev]` - there was no `push:` trigger. Commits made directly to `main` or `dev`, including `Merge branch 'main' into dev` merge commits, never ran `npm run format:check`, shellcheck, or the test job, so gate-breaking state accumulated on those branches and surfaced later on whoever ran preflight. The hallucination risk cuts both ways: a reviewer who sees the `format:check` step concludes "CI enforces formatting" (reading the job, not the trigger), and a reviewer who sees the failure assumes the CI check is missing (a 2026-07-04 quality assessment claimed "no enforcement point exists" without reading the workflow).
 
 **Evidence:** Incident: 17 files under `src/` and `test/` failed Prettier on `dev` after the 2026-07-04 main-into-dev merge; they were last touched by direct-to-main commits between 2026-05-31 and 2026-07-03, none of which triggered CI. The format gate step existed in the workflow the whole time (search: `npm run format:check`).
 

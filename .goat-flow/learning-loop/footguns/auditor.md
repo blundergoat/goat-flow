@@ -9,7 +9,7 @@ last_reviewed: 2026-08-23
 
 The selected-agent audit with explicit `--trusted-target` validates hook syntax, self-test behavior, registration, and a runtime-shaped blocked Bash payload through the registered hook path. It still does not prove that the external agent runtime itself delivered the hook payload for a real Bash tool invocation. A hook that passes every local check can still fail at the provider/runtime boundary if the agent ignores the configured hook event or changes its payload contract.
 
-**Residual scope** (after an explicitly trusted selected-agent guardrail check started invoking the hook's `--self-test` and a runtime-shaped blocked payload):
+**Residual scope** (after an explicitly trusted selected-agent guardrail check started invoking the hook's `--self-test` and sending a runtime-shaped blocked payload):
 
 1. Hook registration cross-check (file exists ↔ registered in settings). The `deny-hook-registered` check in `harness/check-constraints.ts` covers this, and the selected-agent guardrail check now exercises the registered hook path with a runtime-shaped payload. Neither launches the external agent binary to prove provider-side delivery.
 2. `goat-flow hooks verify --agent <id> --scenario deny-hook --trusted-target` closes only the checkout-local half: it drives the fixed deny scenarios through the managed hook and returns a per-scenario verdict at `evidenceLevel: managed-hook-classifier`. Its evidence budget explicitly forbids an external-agent delivery claim, so a smoke-test that launches the real agent binary and proves the provider delivered the hook event is still not built. Do not read this item as "no verify surface exists".
@@ -41,7 +41,7 @@ The selected-agent audit with explicit `--trusted-target` validates hook syntax,
 - **Reach, measured 2026-08-16.** Only a selected-agent CLI audit using explicit full evidence executes. `test/unit/audit-deny-runtime-flag.test.ts` (search: `does not run a managed self-test or configured launcher`) intercepts both runtime surfaces and records zero calls when the library evidence level is omitted; its explicit-full control records configured launcher calls. `src/cli/audit/audit.ts` (search: `denyMechanismEvidenceLevel`) resolves omission to `"static"`, while aggregate audit still skips agent-scope checks. The dashboard per-agent route remains explicitly static.
 - Inverse concern (audit proving too *little*, not too much): the "Audit does not prove end-to-end deny enforcement at runtime" footgun above. Side-effect cousin: [internal-run-isolation.md](internal-run-isolation.md).
 
-**Prevention:** Keep target execution opt-in. Preserve the invariant that passive selected-project requests and omitted library options stop at static evidence; runtime proof belongs to an explicit `--trusted-target` choice. Before citing a surface as `"static"` or `"full"`, re-read the call site and its route-level test. Treat any change to the default evidence level as a security decision - and note it can also flip a CI audit gate, because runtime smoke catches launcher / `$root` failures that static checks do not. Do not "harden" this by parsing the launcher and running only the managed script: that reintroduces the stale-path / broken-glue blind spot the full-command smoke exists to catch (see [hooks.md](hooks.md) search: `Hook command strings can fail before guard code starts`).
+**Prevention:** Keep target execution opt-in. Preserve the invariant that passive selected-project requests and omitted library options stop at static evidence; runtime proof belongs to an explicit `--trusted-target` choice. Before citing a surface as `"static"` or `"full"`, re-read the call site and its route-level test. Treat any change to the default evidence level as a security decision - it can also flip a CI audit gate, because runtime smoke catches launcher / `$root` failures that static checks do not. Do not "harden" this by parsing the launcher and running only the managed script: that reintroduces the stale-path / broken-glue blind spot the full-command smoke exists to catch (see [hooks.md](hooks.md) search: `Hook command strings can fail before guard code starts`).
 
 ---
 
@@ -94,7 +94,7 @@ Build checks in `src/cli/audit/check-goat-flow.ts` and `src/cli/audit/check-agen
 - `src/cli/audit/check-drift.ts` (search: `selectedInstalledSkillRoots`) filters agent-owned skills, orphan scans, and hook registrations while leaving shared references and central hook policy global.
 - `test/integration/audit-drift-checkdrift-hook-templates.test.ts` (search: `limits hook drift to the selected agent`) reproduces the Codex-only consumer and fails if another agent leaks back into the report.
 
-**Prevention:** Any new drift surface must declare whether it is agent-owned or shared. Apply `agentFilter` to agent-owned files and keep shared framework assets global; prove both with a single-agent consumer fixture.
+**Prevention:** Declare whether each new drift surface is agent-owned or shared. Apply `agentFilter` to agent-owned files and keep shared framework assets global; prove both with a single-agent consumer fixture.
 
 ---
 
@@ -134,7 +134,7 @@ Build checks in `src/cli/audit/check-goat-flow.ts` and `src/cli/audit/check-agen
 
 **Status:** resolved | **Created:** 2026-04-15 | **Resolved:** 2026-04-16 | **Evidence:** ACTUAL_MEASURED
 
-**Resolution:** `src/cli/audit/check-agent-setup.ts` (search: `Remove the deprecated`) now emits text guidance ("Delete the SKILL.md inside each, then remove the empty directory") instead of shell commands. No longer triggers deny hook blocks.
+**Resolution:** `src/cli/audit/check-agent-setup.ts` (search: `Remove the deprecated`) now emits text guidance ("Delete the SKILL.md inside each, then remove the empty directory") instead of shell commands. That guidance no longer triggers deny hook blocks.
 
 **Original symptoms:** Running `goat-flow audit` and following its fix suggestions triggered deny-hook blocks because howToFix emitted `rm -rf ${path}` for deprecated skill directories.
 

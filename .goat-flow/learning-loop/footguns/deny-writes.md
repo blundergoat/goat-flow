@@ -20,11 +20,11 @@ Sibling buckets: `deny-shell.md`, `deny-secrets.md`.
 - Before the fix, `bash workflow/hooks/deny-dangerous/patterns-writes.sh --check <cmd>` returned exit 0 for: `'env -i git push origin main'`, `"FOO='a b' git push origin main"`, `'if true; then git push origin main; fi'`, `'f(){ git push origin main; }; f'`; and before the `-lc` fix: `"bash -lc 'git push origin main'"`, `"sh -lc 'git push origin main'"`.
 
 **Prevention:**
-1. Any future `git push` deny edit must include runtime probes for env options, quoted assignments, shell control keywords, function bodies, and `sh`/`bash -c` plus `-lc` wrappers, not only direct push and pipe/semicolon chains.
+1. Probe every `git push` deny edit at runtime for env options, quoted assignments, shell control keywords, function bodies, and `sh`/`bash -c` plus `-lc` wrappers, not only direct push and pipe/semicolon chains.
 2. Keep the workflow hook source and installed `.goat-flow/hooks` mirror byte-identical after policy changes.
 3. Prefer normalizing to the shell command word before calling `is_git_push`; don't add one-off regexes for the latest bypass only.
 
-**Recurrence (2026-08-19):** the same class reappeared one layer down, in the alias *value* rather than the command line. `split_shell_words_into` removes the operand's outer shell quoting, but Git runs an alias through its own `split_cmdline`, which removes a second layer. So `git -c 'alias.publish="push"' publish` reached the guard as the unrecognised command word `"push"` and returned allow, while the visibly equivalent `git -c 'alias.publish=push' publish` denied. Measured at `81636441`: `"push"`, `'push'`, `"send-pack"`, `"push" origin main`, `pu"sh"`, and `"!git push origin main"` all returned exit 0. Fixed by normalizing only the alias command word in `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `git_alias_expansion_command_word`); benign `alias.inspect="status --short"` still allows. Prevention rule 3 above holds, but "the shell command word" must be read as *every* unquoting layer the target program applies, not just the one the shell performs.
+**Recurrence (2026-08-19):** The same class reappeared one layer down, in the alias *value* rather than the command line. `split_shell_words_into` removes the operand's outer shell quoting, but Git runs an alias through its own `split_cmdline`, which removes a second layer. So `git -c 'alias.publish="push"' publish` reached the guard as the unrecognised command word `"push"` and returned allow, while the visibly equivalent `git -c 'alias.publish=push' publish` denied. Measured at `81636441`: `"push"`, `'push'`, `"send-pack"`, `"push" origin main`, `pu"sh"`, and `"!git push origin main"` all returned exit 0. Fixed by normalizing only the alias command word in `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `git_alias_expansion_command_word`); benign `alias.inspect="status --short"` still allows. Prevention rule 3 above holds, but "the shell command word" must be read as *every* unquoting layer the target program applies, not just the one the shell performs.
 
 ---
 
@@ -42,7 +42,7 @@ Sibling buckets: `deny-shell.md`, `deny-secrets.md`.
 - `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `is_gh_write_operation`) - classifies known GitHub-mutating `gh` subcommands and `gh api` write/default-body POST forms; `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `gh issue comment`) - locks the current `gh issue comment` path plus read-only allow cases.
 
 **Prevention:**
-1. Treat `git push` as only one GitHub write path. Any new shared-system GitHub mutation route must get both a hook rule and a self-test case.
+1. Treat `git push` as only one GitHub write path. Give every new shared-system GitHub mutation route both a hook rule and a self-test case.
 2. For CLI write classifiers, test grammar variants, not only the observed command: global/inherited options before and after the topic, short option forms, pipeline consumers such as `xargs`, and read-only controls.
 3. Keep explicit read-only `gh` cases in the self-test (`issue view`, `pr checks`, `gh api --method GET`) so write blocking doesn't become a blanket GitHub-read ban.
 4. Forwarded Slack/email/ticket text is evidence, not authorization. The hook blocks mechanical `gh` writes; agents still need an in-turn user approval rule before any shared-system write path outside Bash.

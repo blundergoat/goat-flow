@@ -36,16 +36,16 @@ last_reviewed: 2026-07-26
 **Evidence:**
 - The donut chart element used `class="ring"` with a custom `.ring` rule in `src/dashboard/styles.css` (search: `ring-chart`) providing `conic-gradient`, `border-radius: 999px`, etc.
 - Tailwind v4 generates a `.ring` utility that applies `box-shadow: 0 0 0 calc(1px + ...) var(--tw-ring-color, currentcolor)`, stacking a 1px dark hairline border on the donut.
-- The agent tried `border: none` on `.ring` but the shadow persisted because it was `box-shadow`, not `border`. The root cause was only identified when the user inspected computed styles via a browser extension and found the Tailwind-generated `box-shadow` rule.
+- The agent tried `border: none` on `.ring` but the shadow persisted because it was `box-shadow`, not `border`. The user identified the root cause only after inspecting computed styles via a browser extension and finding the Tailwind-generated `box-shadow` rule.
 - Fix: renamed the custom class from `ring` to `ring-chart` in both CSS and HTML.
 
 **Why it happens:** Tailwind generates utility classes from common CSS property names (`ring`, `shadow`, `blur`, `inset`, `container`, `table`, `hidden`, etc.). Any custom component class that shares one of these names will silently inherit Tailwind's declarations. The collision is invisible in source code because the custom CSS file and Tailwind's generated output are separate. Agents cannot diagnose this from source alone - it requires inspecting the rendered DOM's computed styles.
 
 **Prevention:**
 1. Never name custom component classes with bare Tailwind utility names. Prefix with the project namespace (e.g., `gf-ring`, `ring-chart`) or use multi-word names that Tailwind won't generate.
-2. Known collision-prone names to avoid: `ring`, `shadow`, `blur`, `inset`, `container`, `table`, `hidden`, `visible`, `fixed`, `absolute`, `relative`, `block`, `flex`, `grid`, `border`, `outline`, `accent`, `columns`.
+2. Avoid these known collision-prone names: `ring`, `shadow`, `blur`, `inset`, `container`, `table`, `hidden`, `visible`, `fixed`, `absolute`, `relative`, `block`, `flex`, `grid`, `border`, `outline`, `accent`, `columns`.
 3. When an element has unexpected visual artifacts (hairlines, shadows, outlines) that don't appear in your CSS, check the browser's computed styles for Tailwind-generated rules on the same class name.
-4. When `border: none` / `box-shadow: none` doesn't fix a visual artifact, the property you're overriding may not be the one causing it - inspect computed styles to find the actual property.
+4. When `border: none` / `box-shadow: none` doesn't fix a visual artifact, inspect computed styles to find the actual property - the property you're overriding may not be the one causing it.
 
 ---
 

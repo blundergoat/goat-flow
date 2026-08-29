@@ -7,7 +7,7 @@ last_reviewed: 2026-08-15
 
 **Status:** active | **Created:** 2026-04-21 | **Evidence:** ACTUAL_MEASURED
 
-**Symptoms:** A skill edit looks complete because `workflow/skills/`, `.agents/skills/`, and `.claude/skills/` match, but repo verification still fails. The remaining drift lives in `.github/skills/`, so `test/integration/audit-drift.test.ts` fails on the repo root even though the more obvious mirrors were updated.
+**Symptoms:** A skill edit looks complete because `workflow/skills/`, `.agents/skills/`, and `.claude/skills/` match, but repo verification still fails. The remaining drift lives in `.github/skills/`, so `test/integration/audit-drift.test.ts` fails on the repo root even though the edit updated the more obvious mirrors.
 
 **Why it happens:** The installed skill surface is broader than the two local agent mirrors most edits cover. `workflow/manifest.json` includes a GitHub agent with `skills_dir: ".github/skills/"`, the manifest helper exposes that root to the drift fixture, and path-integrity checks treat it as a first-class installed mirror. A hand-written file list that omits `.github/skills/` is incomplete.
 
@@ -28,7 +28,7 @@ last_reviewed: 2026-08-15
 
 **Status:** active | **Created:** 2026-04-25 | **Evidence:** ACTUAL_MEASURED
 
-**Symptoms:** An edit to shared skill guidance can look correct in the loaded runtime copy but leave the workflow template behind, causing consumers installed from the template to miss the rule and causing preflight/drift tests to fail.
+**Symptoms:** An edit to shared skill guidance can look correct in the loaded runtime copy but leave the workflow template behind, so projects installed from that template miss the rule and preflight/drift tests fail.
 
 **Why it happens:** Shared skill reference files have two live surfaces: `workflow/skills/reference/` is the install template source, while `.goat-flow/skill-docs/` is the installed runtime copy loaded by this repo's agents. Agents naturally edit the file they just read at runtime, but the package source of truth also has to move in the same change.
 
@@ -72,7 +72,7 @@ last_reviewed: 2026-08-15
 **Prevention (retained):**
 1. Skill SKILL.md files and their reference packs must be self-contained. The rule and its rationale must be stated inline - never behind an ADR citation the consumer doesn't have.
 2. ADR references are fine in framework-internal files (footguns, lessons, architecture, code-map, instruction files) because those live in the framework repo. The boundary is: if the file gets copied to consumer projects by the installer, it must not reference framework ADRs.
-3. When adding a rule to a skill that came from an ADR, state the rule and a one-line "why" inline. Cross-reference the ADR only in the framework's own learning-loop artifacts.
+3. When adding an ADR-derived rule to a skill, state the rule and a one-line "why" inline. Cross-reference the ADR only in the framework's own learning-loop artifacts.
 
 ## Footgun: Installed skill copies can drift on punctuation-only edits and fail unrelated test runs
 

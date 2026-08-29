@@ -56,7 +56,7 @@ Prevention has two layers. Keep PostToolUse fast and attributable, but expose in
 **Prevention:**
 1. For default blocking Stop hooks, define "changed content" as committable content. Do not add `git ls-files --others -i --exclude-standard` scans unless the hook is explicitly opt-in or advisory.
 2. Preserve staged-diff scanning so `git add -f .env` still blocks even though the path is ignored.
-3. Any scanner expansion needs paired block/allow tests: one real staged hazard that must block and one ignored local-state fixture that must not wedge the agent.
+3. Pair every scanner expansion with block/allow tests: one real staged hazard that must block and one ignored local-state fixture that must not wedge the agent.
 
 ## Footgun: Gitignored local artifacts make repository scans diverge between local and CI
 
@@ -77,7 +77,7 @@ Prevention has two layers. Keep PostToolUse fast and attributable, but expose in
 
 **Evidence:** Measured on 2026-08-07: with nested templates in `reportUnavailable`, the analyzer reported `size.function-length` of 226 lines attributed to `reportUnavailable` (a ~40-line function) and zero process-exec findings for the file; after replacing the nested template with plain concatenation, the phantom finding disappeared and the file's real `spawnSync` warning appeared for the first time. Anchors: `workflow/hooks/run-with-bash.mjs` (search: `a template literal`) and (search: `const windowsTreeKillResult = spawnSync`).
 
-**Prevention:** Treat a suspiciously clean gruff result on a file with nested template literals as unparsed, not clean. Prefer plain concatenation or an extracted variable over templates nested inside interpolations in analyzed source, and when a size/complexity finding names a function far smaller than the reported span, suspect scanner blinding before refactoring the named function.
+**Prevention:** Treat a suspiciously clean gruff result on a file with nested template literals as unparsed, not clean. Prefer plain concatenation or an extracted variable over templates nested inside interpolations in analyzed source. If a size/complexity finding names a function far smaller than the reported span, suspect scanner blinding before refactoring the named function.
 
 ---
 
@@ -114,7 +114,7 @@ Prevention has two layers. Keep PostToolUse fast and attributable, but expose in
 
 All instances above were corrected in the same session; the trap is the rule surface, not an open defect list. Anchors: `src/cli/cli-parser.ts` (search: `Return whether a raw \`parseArgs\` boolean flag was explicitly set`), `src/cli/config/reader-validators.ts` (search: `accumulator this block's unrecognized nested keys are appended to`), `src/cli/review-validate-anchors.ts` (search: `export function validateFindingLine`), rule enablement in `.gruff-ts.yaml` (search: `docs.stale-param-tag`).
 
-**Prevention:** Read the symbol under each docblock you touch; a clean analyzer is not attribution evidence, and ADR-059 already treats a Gruff documentation finding as a candidate rather than a mandate. Two comment blocks with nothing between them means one is orphaned - find the symbol it was written for instead of deleting it. Treat `@param` and `@return` accuracy on non-exported functions as wholly unchecked, and confirm a repeated tag line still describes each site before trusting any copy of it. When `docs.stale-param-tag` does fire, count the tags against the signature before editing, because the reported symbol may already be correct.
+**Prevention:** Read the symbol under each docblock you touch; a clean analyzer is not attribution evidence, and ADR-059 already treats a Gruff documentation finding as a candidate rather than a mandate. Two comment blocks with nothing between them mean one is orphaned - find the symbol it was written for instead of deleting it. Treat `@param` and `@return` accuracy on non-exported functions as wholly unchecked, and confirm a repeated tag line still describes each site before trusting any copy of it. When `docs.stale-param-tag` does fire, count the tags against the signature before editing, because the reported symbol may already be correct.
 
 ## Resolved Entries
 
@@ -122,11 +122,11 @@ All instances above were corrected in the same session; the trap is the rule sur
 
 **Status:** resolved | **Created:** 2026-06-09 | **Resolved:** 2026-07-17 | **Evidence:** OBSERVED
 
-**Resolution:** Missing project configuration still exits silently, but a matching `.gruff-<lang>.yaml` with no discoverable analyzer now emits a targeted stderr diagnostic while preserving fail-soft exit 0. The focused regression `test/integration/gruff-code-quality-smoke.test.ts` (search: `exits silently when project config is missing and diagnoses configured languages without a binary`) verifies both sides of that boundary.
+**Resolution:** The hook still exits silently when project configuration is missing, but now emits a targeted stderr diagnostic when a matching `.gruff-<lang>.yaml` has no discoverable analyzer, while preserving fail-soft exit 0. The focused regression `test/integration/gruff-code-quality-smoke.test.ts` (search: `exits silently when project config is missing and diagnoses configured languages without a binary`) verifies both sides of that boundary.
 
 **Original symptoms:** A project had a root `.gruff-<lang>.yaml` config, the matching language file was edited, and the PostToolUse hook exited 0 with no output. The agent saw no gruff feedback and could infer the changed lines were clean while the analyzer never ran.
 
-**Why it happened:** `gruff-code-quality.sh` is intentionally fail-soft for missing config, unsupported files, no `jq`, and no changed-line range. It was dangerous when a matching config existed but `discover_binary` missed the analyzer, because the project had opted that language into gruff coverage. A measured monorepo incident kept `gruff-py` only under `strands_agents/.venv/bin/gruff-py`; ADR-032 correctly rejected automatic `*/.venv/bin` discovery, so the old hook returned 0 silently and left Python uncovered.
+**Why it happened:** `gruff-code-quality.sh` is intentionally fail-soft for missing config, unsupported files, no `jq`, and no changed-line range. It was dangerous when a matching config existed but `discover_binary` missed the analyzer, because the project had opted that language into gruff coverage. In a measured monorepo incident, `gruff-py` lived only under `strands_agents/.venv/bin/gruff-py`; ADR-032 correctly rejected automatic `*/.venv/bin` discovery, so the old hook returned 0 silently and left Python uncovered.
 
 **Durable anchors:**
 - Diagnostic path: `workflow/hooks/gruff-code-quality.sh` (search: `present but %s not found on search paths`).

@@ -13,7 +13,7 @@ last_reviewed: 2026-08-27
 
 **Why it happens:** `ignore` is a report filter by definition. The installed schema at `node_modules/knip/schema.json` titles it "Files to exclude from the report (any issue type)", and `ignoreFiles` as "Unused files to exclude from the report". Neither governs the file walk. `project` and `entry` do define the analysed set, and in this repo they are already narrow - `src/**/*.ts`, `scripts/**/*.mjs`, `test/**/*.ts` - so gitignored local state was never in the analysed set to begin with. `knip --debug` names the real cost: it builds a `gitignoreFiles` list by walking the entire checkout to collect every nested `.gitignore`, and a scratchpad holding cloned repositories contributes hundreds. The heap is spent deciding what to skip, before any analysis starts.
 
-**Evidence:** Measured 2026-08-16. `.goat-flow/scratchpad` held 31,249 `.ts` files across 5.4 GB. A detached `git worktree` at the same commit, carrying the same source, passed the identical command under the identical 5120 MB cap; this tree exhausted it. Adding `.goat-flow/**` and `_temp/**` to `ignore` in the real repo-root config still exhausted it. Running with a 10240 MB heap completed and reported zero findings, so there was never a real finding behind the failure.
+**Evidence:** Measured 2026-08-16. `.goat-flow/scratchpad` held 31,249 `.ts` files across 5.4 GB. A detached `git worktree` at the same commit, carrying the same source, passed the identical command under the identical 5120 MB cap; this tree exhausted it. With `.goat-flow/**` and `_temp/**` added to `ignore` in the real repo-root config, the run still exhausted it. Running with a 10240 MB heap completed and reported zero findings, so there was never a real finding behind the failure.
 
 **Fix applied 2026-08-16:** `scripts/preflight-checks.sh` (search: `--no-gitignore keeps Knip from walking`) passes `--no-gitignore`, which skips the collection walk entirely. Measured on the same tree that had been exhausting 5120 MB: 0.845 s, exit 0, and the whole TypeScript phase fell from about 250 s to 15.9 s.
 
@@ -35,7 +35,7 @@ The flag costs no coverage here, proven rather than assumed. Diffing the analyse
 
 **Prevention:**
 1. Wrap every `node -e "console.log(...)"` value consumed by shell arithmetic in `String(...)`. Treat a bare number as a formatting decision the shell cannot parse.
-2. A check that can emit no verdict is worse than one that fails - a skipped branch reads as success. When a loop's only outputs are inside conditional branches, add an `else` that reports the unexpected state.
+2. If a loop's only outputs are inside conditional branches, add an `else` that reports the unexpected state. A check that can emit no verdict is worse than one that fails - a skipped branch reads as success.
 3. Do not accept a PASS summary as proof that every check ran. Compare the reported check count against the previous run; a drop with no removed checks means something stopped reporting.
 
 ---

