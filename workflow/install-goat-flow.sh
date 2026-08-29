@@ -1283,6 +1283,239 @@ NODE
   complete_staged_transform "$path" "$transform_result"
 }
 
+# Persist an exact repository-owned Gruff path that the runtime deliberately does not discover recursively.
+# Existing binary configuration remains authoritative; this only fills an absent override for the supported strands_agents layout.
+ensure_config_gruff_binary_entry() {
+  local path="$1"
+  local transform_result
+  stage_existing_destination "$path"
+  if ! transform_result="$(node - "$STAGED_PAYLOAD_PATH" "$GOAT_FLOW_ROOT" <<'NODE'
+const fs = require("node:fs");
+const path = require("node:path");
+
+const configPath = process.argv[2];
+const frameworkRoot = process.argv[3];
+const yaml = require(require.resolve("js-yaml", { paths: [frameworkRoot] }));
+const relativeBinaryPath = "strands_agents/.venv/bin/gruff-py";
+const projectRoot = fs.realpathSync(process.cwd());
+const candidatePath = path.join(projectRoot, relativeBinaryPath);
+
+function candidateIsContainedExecutable() {
+  try {
+    fs.accessSync(candidatePath, fs.constants.X_OK);
+    const binaryRealPath = fs.realpathSync(candidatePath);
+    const relativeRealPath = path.relative(projectRoot, binaryRealPath);
+    if (
+      relativeRealPath === ".." ||
+      relativeRealPath.startsWith(`..${path.sep}`) ||
+      path.isAbsolute(relativeRealPath)
+    ) {
+      return false;
+    }
+    return fs.statSync(binaryRealPath).isFile();
+  } catch {
+    return false;
+  }
+}
+
+if (!candidateIsContainedExecutable()) {
+  console.log("unchanged");
+  process.exit(0);
+}
+
+const content = fs.readFileSync(configPath, "utf8");
+let parsedConfig;
+try {
+  parsedConfig = yaml.load(content);
+} catch {
+  console.log("unchanged");
+  process.exit(0);
+}
+const hooks = parsedConfig?.hooks;
+const gruffHook = hooks?.["gruff-code-quality"];
+if (
+  gruffHook === null ||
+  typeof gruffHook !== "object" ||
+  Array.isArray(gruffHook) ||
+  Object.prototype.hasOwnProperty.call(gruffHook, "binaries")
+) {
+  console.log("unchanged");
+  process.exit(0);
+}
+
+const eol = content.includes("\r\n") ? "\r\n" : "\n";
+const hadFinalNewline = /\r?\n$/u.test(content);
+let lines = content.split(/\r?\n/u);
+if (hadFinalNewline) lines.pop();
+
+function mappingCloseIndex(line, openIndex) {
+  let depth = 0;
+  let inSingle = false;
+  let inDouble = false;
+  let escaped = false;
+  for (let index = openIndex; index < line.length; index += 1) {
+    const character = line[index];
+    if (escaped) { escaped = false; continue; }
+    if (inDouble && character === "\\") { escaped = true; continue; }
+    if (!inDouble && character === "'") { inSingle = !inSingle; continue; }
+    if (!inSingle && character === '"') { inDouble = !inDouble; continue; }
+    if (inSingle || inDouble) continue;
+    if (character === "{") { depth += 1; continue; }
+    if (character === "}") {
+      depth -= 1;
+      if (depth === 0) return index;
+      if (depth < 0) return -1;
+    }
+  }
+  return -1;
+}
+
+function mappingOpenIndex(line, key) {
+  if (line.trimStart().startsWith("#")) return -1;
+  const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  const entryPattern = new RegExp(
+    `(?:^|[{,])\\s*(?:"${escapedKey}"|'${escapedKey}'|${escapedKey})\\s*:\\s*\\{`,
+    "gu",
+  );
+  const hooksFlowLine = /^(?:hooks|"hooks"|'hooks')\s*:\s*\{/u.test(line);
+  const expectedParentDepth = hooksFlowLine ? 1 : 0;
+
+  for (const match of line.matchAll(entryPattern)) {
+    const openIndex = match.index + match[0].lastIndexOf("{");
+    let depth = 0;
+    let inSingle = false;
+    let inDouble = false;
+    let escaped = false;
+    for (let index = 0; index < openIndex; index += 1) {
+      const character = line[index];
+      if (escaped) { escaped = false; continue; }
+      if (inDouble && character === "\\") { escaped = true; continue; }
+      if (!inDouble && character === "'") { inSingle = !inSingle; continue; }
+      if (!inSingle && character === '"') { inDouble = !inDouble; continue; }
+      if (inSingle || inDouble) continue;
+      if (character === "{" || character === "[") depth += 1;
+      if (character === "}" || character === "]") depth -= 1;
+    }
+    if (!inSingle && !inDouble && depth === expectedParentDepth) return openIndex;
+  }
+  return -1;
+}
+
+function appendFlowProperty(line, openIndex, entry) {
+  const closeIndex = mappingCloseIndex(line, openIndex);
+  if (closeIndex === -1) return null;
+  const body = line.slice(openIndex + 1, closeIndex);
+  const nextBody = body.trim().length === 0
+    ? ` ${entry} `
+    : `${body.replace(/\s+$/u, "")}, ${entry} `;
+  return `${line.slice(0, openIndex + 1)}${nextBody}${line.slice(closeIndex)}`;
+}
+
+const hooksIndex = lines.findIndex((line) => /^(?:hooks|"hooks"|'hooks')\s*:/u.test(line));
+if (hooksIndex === -1) {
+  console.log("unchanged");
+  process.exit(0);
+}
+let hooksEnd = hooksIndex + 1;
+while (hooksEnd < lines.length) {
+  const line = lines[hooksEnd];
+  if (
+    line.trim() !== "" &&
+    !line.trimStart().startsWith("#") &&
+    !/^\s/u.test(line)
+  ) {
+    break;
+  }
+  hooksEnd += 1;
+}
+
+let changed = false;
+for (let index = hooksIndex; index < hooksEnd; index += 1) {
+  const openIndex = mappingOpenIndex(lines[index], "gruff-code-quality");
+  if (openIndex === -1) continue;
+  const nextLine = appendFlowProperty(
+    lines[index],
+    openIndex,
+    `binaries: { py: ${relativeBinaryPath} }`,
+  );
+  if (nextLine !== null) {
+    lines[index] = nextLine;
+    changed = true;
+  }
+  break;
+}
+
+if (!changed) {
+  const directHookIndent = lines
+    .slice(hooksIndex + 1, hooksEnd)
+    .filter((line) => line.trim() !== "" && !line.trimStart().startsWith("#"))
+    .map((line) => line.length - line.trimStart().length)
+    .filter((indent) => indent > 0)
+    .reduce((smallest, indent) => Math.min(smallest, indent), Infinity);
+  const gruffIndex = lines.findIndex(
+    (line, index) => {
+      if (index <= hooksIndex || index >= hooksEnd) return false;
+      const match = /^( *)(?:gruff-code-quality|"gruff-code-quality"|'gruff-code-quality')\s*:\s*(?:#.*)?$/u.exec(line);
+      return match !== null && match[1].length === directHookIndent;
+    },
+  );
+  if (gruffIndex !== -1) {
+    let gruffEnd = gruffIndex + 1;
+    while (gruffEnd < hooksEnd) {
+      const line = lines[gruffEnd];
+      const indent = line.length - line.trimStart().length;
+      if (
+        line.trim() !== "" &&
+        !line.trimStart().startsWith("#") &&
+        indent <= directHookIndent
+      ) {
+        break;
+      }
+      gruffEnd += 1;
+    }
+    const configuredFieldIndents = lines
+      .slice(gruffIndex + 1, gruffEnd)
+      .filter((line) => line.trim() !== "" && !line.trimStart().startsWith("#"))
+      .map((line) => line.length - line.trimStart().length)
+      .filter((indent) => indent > directHookIndent);
+    const fieldIndent = configuredFieldIndents.length > 0
+      ? Math.min(...configuredFieldIndents)
+      : directHookIndent + 2;
+    const indentStep = fieldIndent - directHookIndent;
+    let insertAt = gruffEnd;
+    const enabledIndex = lines.findIndex(
+      (line, index) => {
+        if (index <= gruffIndex || index >= gruffEnd) return false;
+        const match = /^( *)enabled\s*:/u.exec(line);
+        return match !== null && match[1].length === fieldIndent;
+      },
+    );
+    if (enabledIndex !== -1) insertAt = enabledIndex + 1;
+    lines.splice(
+      insertAt,
+      0,
+      `${" ".repeat(fieldIndent)}binaries:`,
+      `${" ".repeat(fieldIndent + indentStep)}py: ${relativeBinaryPath}`,
+    );
+    changed = true;
+  }
+}
+
+if (!changed) {
+  console.log("unchanged");
+  process.exit(0);
+}
+fs.writeFileSync(configPath, `${lines.join(eol)}${hadFinalNewline ? eol : ""}`);
+console.log("changed");
+NODE
+  )"; then
+    echo "ERROR: could not stage Gruff binary detection for '$path'; previous destination was preserved" >&2
+    discard_staged_payload
+    return 1
+  fi
+  complete_staged_transform "$path" "$transform_result"
+}
+
 remove_config_plan_guard_entry() {
   local path="$1"
   local transform_result
@@ -2970,6 +3203,12 @@ if [[ -f "$CONFIG_PATH" ]]; then
     CONFIG_CHANGED=true
     CONFIG_NOTES+=("hook toggles added")
   fi
+  ensure_config_gruff_binary_entry "$CONFIG_PATH"
+  # Detection persists one reviewed project convention without widening runtime discovery.
+  if [[ "$LAST_TRANSFORM_RESULT" == "changed" ]]; then
+    CONFIG_CHANGED=true
+    CONFIG_NOTES+=("strands_agents gruff-py path detected")
+  fi
   remove_config_plan_guard_entry "$CONFIG_PATH"
   # A changed result removes configuration for the retired plan guard.
   if [[ "$LAST_TRANSFORM_RESULT" == "changed" ]]; then
@@ -2990,7 +3229,12 @@ else
   # A first install may scaffold config, but a concurrent or existing user file wins.
   commit_staged_payload "$CONFIG_PATH" "create-only"
   COPIED=$((COPIED + 1))
-  echo "  ✓ $CONFIG_PATH (scaffolded)"
+  ensure_config_gruff_binary_entry "$CONFIG_PATH"
+  if [[ "$LAST_TRANSFORM_RESULT" == "changed" ]]; then
+    echo "  ✓ $CONFIG_PATH (scaffolded; strands_agents gruff-py path detected)"
+  else
+    echo "  ✓ $CONFIG_PATH (scaffolded)"
+  fi
 fi
 echo ""
 

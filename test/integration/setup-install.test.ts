@@ -13,10 +13,12 @@ import {
   mkdirSync,
   readFileSync,
   statSync,
+  symlinkSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
+import { load } from "js-yaml";
 
 import { emitCommitGuidanceInstallResult } from "../../src/cli/prompt/commit-guidance.js";
 import {
@@ -74,6 +76,19 @@ function stalePermissionRules(groups: ClaudePermissionGroups): string[] {
   return [groups.deny, groups.allow, groups.ask]
     .flat()
     .filter((rule) => stalePrefixes.some((prefix) => rule.startsWith(prefix)));
+}
+
+/**
+ * Create the executable nested analyzer convention inside a disposable project.
+ * Side effect: writes and marks one fixture file executable below `projectRoot`.
+ */
+function writeConventionalGruffPy(projectRoot: string): string {
+  const binaryDirectory = join(projectRoot, "strands_agents", ".venv", "bin");
+  const binaryPath = join(binaryDirectory, "gruff-py");
+  mkdirSync(binaryDirectory, { recursive: true });
+  writeFileSync(binaryPath, "#!/usr/bin/env python3\n");
+  chmodSync(binaryPath, 0o755);
+  return binaryPath;
 }
 
 describe("setup --apply installer", () => {
@@ -156,6 +171,191 @@ describe("setup --apply installer", () => {
         ),
       ),
       true,
+    );
+  });
+
+  // Fixture purpose: installs with the nested analyzer and proves an explicit path wins; writes stay in the disposable project.
+  it("pins a conventional strands_agents gruff-py during install", () => {
+    const root = makeTempProject();
+    writeConventionalGruffPy(root);
+
+    const result = runInstaller(root, "--agent", "codex");
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const config = readFileSync(
+      join(root, ".goat-flow", "config.yaml"),
+      "utf-8",
+    );
+    assert.match(
+      config,
+      /binaries:\n {6}py: strands_agents\/\.venv\/bin\/gruff-py/u,
+    );
+
+    const configPath = join(root, ".goat-flow", "config.yaml");
+    writeFileSync(
+      configPath,
+      config.replace("strands_agents/.venv/bin/gruff-py", "tools/gruff-py"),
+    );
+    const secondResult = runInstaller(root, "--agent", "codex");
+    assert.equal(
+      secondResult.status,
+      0,
+      secondResult.stderr || secondResult.stdout,
+    );
+    const preservedConfig = readFileSync(configPath, "utf-8");
+    assert.match(preservedConfig, /binaries:\n {6}py: tools\/gruff-py/u);
+    assert.doesNotMatch(
+      preservedConfig,
+      /strands_agents\/\.venv\/bin\/gruff-py/u,
+    );
+  });
+
+  // Fixture purpose: reproduces an enabled hook without its nested analyzer override; writes stay in the disposable project.
+  it("repairs a missing gruff-py override for an enabled existing hook", () => {
+    const root = makeTempProject();
+    writeConventionalGruffPy(root);
+    mkdirSync(join(root, ".goat-flow"), { recursive: true });
+    writeFileSync(
+      join(root, ".goat-flow", "config.yaml"),
+      [
+        'version: "1.16.0"',
+        "hooks:",
+        "    deny-dangerous:",
+        "        enabled: true",
+        "    post-turn-safety:",
+        "        enabled: true",
+        "# Keep the project-specific Gruff choice visible.",
+        "    gruff-code-quality:",
+        "        enabled: true",
+        "",
+      ].join("\n"),
+    );
+
+    const result = runInstaller(root, "--agent", "codex");
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const config = readFileSync(
+      join(root, ".goat-flow", "config.yaml"),
+      "utf-8",
+    );
+    assert.match(config, /gruff-code-quality:\n {8}enabled: true/u);
+    assert.match(
+      config,
+      / {8}binaries:\n {12}py: strands_agents\/\.venv\/bin\/gruff-py/u,
+    );
+  });
+
+  // Fixture purpose: redirects the conventional analyzer outside the selected target; side effects: writes only inside cleaned temp projects.
+  it(
+    "does not pin a conventional gruff-py symlink that escapes the project",
+    { skip: process.platform === "win32" },
+    () => {
+      const outsideRoot = makeTempProject();
+      const outsideBinary = join(outsideRoot, "gruff-py");
+      writeFileSync(outsideBinary, "#!/usr/bin/env python3\n");
+      chmodSync(outsideBinary, 0o755);
+      const root = makeTempProject();
+      const binaryDirectory = join(root, "strands_agents", ".venv", "bin");
+      mkdirSync(binaryDirectory, { recursive: true });
+      symlinkSync(outsideBinary, join(binaryDirectory, "gruff-py"));
+
+      const result = runInstaller(root, "--agent", "codex");
+
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+      const config = readFileSync(
+        join(root, ".goat-flow", "config.yaml"),
+        "utf-8",
+      );
+      assert.doesNotMatch(config, /binaries:/u);
+    },
+  );
+
+  // Fixture purpose: removes execute permission from the nested analyzer; writes stay in the disposable project.
+  it(
+    "does not pin a non-executable conventional gruff-py during install",
+    { skip: process.platform === "win32" },
+    () => {
+      const root = makeTempProject();
+      chmodSync(writeConventionalGruffPy(root), 0o644);
+
+      const result = runInstaller(root, "--agent", "codex");
+
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+      const config = readFileSync(
+        join(root, ".goat-flow", "config.yaml"),
+        "utf-8",
+      );
+      assert.doesNotMatch(config, /binaries:/u);
+    },
+  );
+
+  // Fixture purpose: keeps compact hook YAML while detecting the nested analyzer; writes stay in the disposable project.
+  it("pins gruff-py without expanding a flow-style hooks mapping", () => {
+    const root = makeTempProject();
+    writeConventionalGruffPy(root);
+    mkdirSync(join(root, ".goat-flow"), { recursive: true });
+    const configPath = join(root, ".goat-flow", "config.yaml");
+    writeFileSync(
+      configPath,
+      'version: "1.16.0"\nhooks: { "gruff-code-quality": { enabled: true } }\n',
+    );
+
+    const result = runInstaller(root, "--agent", "codex");
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const config = readFileSync(configPath, "utf-8");
+    assert.match(
+      config,
+      /^hooks: \{.*"gruff-code-quality": \{ enabled: true, binaries: \{ py: strands_agents\/\.venv\/bin\/gruff-py \} \}.*\}$/mu,
+    );
+    const parsedConfig = load(config) as {
+      hooks: Record<string, { binaries?: Record<string, string> }>;
+    };
+    assert.equal(
+      parsedConfig.hooks["gruff-code-quality"].binaries?.py,
+      "strands_agents/.venv/bin/gruff-py",
+    );
+  });
+
+  // Fixture purpose: puts colliding and nested keys before Gruff; writes stay in the disposable project.
+  it("pins gruff-py to the exact flow-style hook key", () => {
+    const root = makeTempProject();
+    writeConventionalGruffPy(root);
+    mkdirSync(join(root, ".goat-flow"), { recursive: true });
+    const configPath = join(root, ".goat-flow", "config.yaml");
+    writeFileSync(
+      configPath,
+      [
+        'version: "1.16.0"',
+        'hooks: { not-gruff-code-quality: { enabled: true, gruff-code-quality: { enabled: true } }, "deny-dangerous": { enabled: true }, "post-turn-safety": { enabled: true }, "gruff-code-quality": { enabled: true } }',
+        "",
+      ].join("\n"),
+    );
+
+    const result = runInstaller(root, "--agent", "codex");
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const parsedConfig = load(readFileSync(configPath, "utf-8")) as {
+      hooks: Record<
+        string,
+        {
+          binaries?: Record<string, string>;
+          "gruff-code-quality"?: { binaries?: Record<string, string> };
+        }
+      >;
+    };
+    assert.equal(
+      parsedConfig.hooks["not-gruff-code-quality"].binaries,
+      undefined,
+    );
+    assert.equal(
+      parsedConfig.hooks["not-gruff-code-quality"]["gruff-code-quality"]
+        ?.binaries,
+      undefined,
+    );
+    assert.equal(
+      parsedConfig.hooks["gruff-code-quality"].binaries?.py,
+      "strands_agents/.venv/bin/gruff-py",
     );
   });
 

@@ -6,6 +6,7 @@
 **Ticket/Context:** 1.8.0 user report "F7" - gruff hook auto-executes repo-local binaries
 **Updated:** 2026-06-09 - explicit per-language analyzer binary overrides accepted for non-standard monorepos
 **Updated:** 2026-07-03 - repo-owned config override `hooks.gruff-code-quality.binaries.<lang>` in `.goat-flow/config.yaml` accepted alongside the env override because a repository-local virtual-environment analyzer otherwise required every session to export `GRUFF_PY_BIN`
+**Updated:** 2026-08-29 - approved install and explicit hook enablement may detect and persist the exact `strands_agents/.venv/bin/gruff-py` convention
 
 ## Context
 
@@ -70,12 +71,18 @@ fails loudly rather than silently running a different binary. Toggle writes
 preserve the block (`setHookEnabled` spreads the existing entry), and the
 config reader/writer carry `binaries` through managed-block rewrites.
 
-The change applies to all five shipped copies: `workflow/hooks/`, `.claude/hooks/`,
-`.github/hooks/`, `.codex/hooks/`, `.agents/hooks/`. It is locked by a regression
-test in `test/integration/gruff-code-quality-smoke.test.ts` asserting a binary at
-`*/.venv/bin` or `target/debug` is neither discovered nor executed. The hook
-comment states the exclusions and reason inline (no repo-internal path reference),
-so downstream installs carry the rationale.
+Approved installation and explicit `gruff-code-quality` enablement may populate
+the repo-owned override when `strands_agents/.venv/bin/gruff-py` already exists,
+is executable, resolves to a regular file, and remains inside the selected
+project. An existing `binaries` block remains authoritative. This is an exact
+project convention, not a recursive search or a new runtime discovery path.
+
+The runtime is shipped from `workflow/hooks/gruff-code-quality.sh` and installed
+centrally at `.goat-flow/hooks/gruff-code-quality.sh` for provider registrations.
+A regression test in `test/integration/gruff-code-quality-smoke.test.ts` asserts
+that a binary at `*/.venv/bin` or `target/debug` is neither discovered nor
+executed. The hook comment states the exclusions and reason inline, so downstream
+installs carry the rationale.
 
 ## Failure Mode Comparison
 
@@ -84,15 +91,17 @@ so downstream installs carry the rationale.
 | Keep all paths | Glob/build-output binary auto-executed on edit; F7 stands | Rejected - residual surface for no benefit |
 | PATH-only by default | Breaks npm (`node_modules/.bin`) and composer (`vendor/bin`) installs - gruff's normal distribution | Rejected - regresses the supported install method |
 | Explicit per-language env override | Extra config surface; a user may still point at an untrusted binary | Accepted as a narrow exception - needed for real monorepos with managed subproject venvs, while preserving no arbitrary-subtree auto-discovery |
+| Detect one exact convention during install or hook enablement | The path must exist at configuration time; projects using another layout still configure it explicitly | Accepted - persists visible repo-owned intent without making every edit scan arbitrary subtrees |
 | Drop `*/.venv/bin` + `target/debug`, keep ecosystem paths | A binary committed directly to a remaining standard path still runs | Accepted - removes the unanchored/low-value entries while preserving normal installs; residual is below the npm/cargo baseline |
 
 ## Reversibility
 
-Two-way door. Re-adding either automatic path is a one-line edit per copy plus
-removing the regression test, but it would reopen the F7 surface. Revisit only if
+Two-way door. Re-adding either automatic path is a runtime edit plus a
+regression-test change, but it would reopen the F7 surface. Revisit only if
 a future requirement genuinely needs nested-venv or build-output auto-discovery;
-the current mechanism for non-standard locations is explicit per-language env
-override, not always-on globbing.
+the current mechanism for non-standard locations is an explicit env/config
+override, optionally populated from the one accepted project convention during
+approved configuration, not always-on globbing.
 
 ## Consequences
 
@@ -102,6 +111,9 @@ override, not always-on globbing.
   `node_modules/.bin`, `vendor/bin`, `bin/`, `~/.local/bin`), put it on PATH, or
   set the matching explicit override such as `GRUFF_PY_BIN`. Low impact - these
   are non-standard layouts and override use is visible configuration.
+- Projects using `strands_agents/.venv/bin/gruff-py` receive that explicit
+  configuration during install or hook enablement when the executable is
+  already present; another nested layout is never inferred.
 - A reply to the F7 reporter should explain the npm/cargo baseline, so the residual
   (a directly-committed binary at a standard path) is understood as accepted, not
   missed.

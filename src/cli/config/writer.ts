@@ -4,8 +4,16 @@
  * The writer only replaces targeted top-level blocks so comments and ordering
  * in the rest of the config file survive normal dashboard toggles.
  */
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import {
+  accessSync,
+  constants,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  realpathSync,
+  statSync,
+} from "node:fs";
+import { dirname, isAbsolute, join, relative, sep } from "node:path";
 import { dump, load } from "js-yaml";
 import { writeFileAtomic } from "../server/safe-exec.js";
 import { readHookBinaries, readHookScanRootList } from "./reader.js";
@@ -25,6 +33,9 @@ const HOOK_IDENTIFIER_ALIASES = new Map([
   ["guard-secret-paths", "deny-dangerous"],
   ["guard-repository-writes", "deny-dangerous"],
 ]);
+const CONVENTIONAL_GRUFF_BINARIES = [
+  ["py", "strands_agents/.venv/bin/gruff-py"],
+] as const;
 const HOOK_BLOCK_COMMENT_LINES = new Set([
   "# Togglable goat-flow hook state. Missing entries use registry defaults.",
   "# Manage with the dashboard Hooks page or `goat-flow hooks <enable|disable|sync>`.",
@@ -63,6 +74,41 @@ function readConfigText(projectPath: string): string {
   return readFileSync(path, "utf-8");
 }
 
+/**
+ * Return executable analyzers at exact project conventions without searching arbitrary subtrees.
+ * A resolved path must remain a regular file inside the selected project; existing config overrides win when the caller merges this result.
+ * Error behavior: swallows inaccessible roots or candidates into an omitted result instead of blocking hook configuration.
+ */
+function conventionalGruffBinaries(
+  projectPath: string,
+): Record<string, string> | null {
+  let projectRealPath: string;
+  try {
+    projectRealPath = realpathSync(projectPath);
+  } catch {
+    return null;
+  }
+
+  const binaries: Record<string, string> = {};
+  for (const [language, relativeBinaryPath] of CONVENTIONAL_GRUFF_BINARIES) {
+    try {
+      const candidatePath = join(projectPath, relativeBinaryPath);
+      accessSync(candidatePath, constants.X_OK);
+      const binaryRealPath = realpathSync(candidatePath);
+      const relativeRealPath = relative(projectRealPath, binaryRealPath);
+      const escapesProject =
+        relativeRealPath === ".." ||
+        relativeRealPath.startsWith(`..${sep}`) ||
+        isAbsolute(relativeRealPath);
+      if (escapesProject || !statSync(binaryRealPath).isFile()) continue;
+      binaries[language] = relativeBinaryPath;
+    } catch {
+      // A missing, unreadable, or non-executable convention leaves discovery unchanged.
+    }
+  }
+  return Object.keys(binaries).length > 0 ? binaries : null;
+}
+
 /** Map legacy hook ids to canonical ids so old config entries keep their state. */
 function normalizeHookIdentifier(hookIdentifier: string): string {
   return HOOK_IDENTIFIER_ALIASES.get(hookIdentifier) ?? hookIdentifier;
@@ -83,13 +129,15 @@ function readHookEntry(
   // Entry without a boolean `enabled` is malformed -> ignore it entirely.
   if (!isRecord(hookEntry) || typeof hookEntry.enabled !== "boolean")
     return null;
-  const binaries = readHookBinaries(hookEntry.binaries);
+  const configuredBinaries =
+    readHookBinaries(hookEntry.binaries) ??
+    (isRecord(hookEntry.binaries) ? {} : null);
   const scanRoots = readHookScanRootList(hookEntry["scan-roots"]);
   return {
     id: normalizeHookIdentifier(hookId),
     state: {
       enabled: hookEntry.enabled,
-      ...(binaries ? { binaries } : {}),
+      ...(configuredBinaries ? { binaries: configuredBinaries } : {}),
       ...(scanRoots ? { "scan-roots": scanRoots } : {}),
     },
   };
@@ -375,7 +423,19 @@ export function setHookEnabled(
   const path = configPath(projectPath);
   const text = readConfigText(projectPath);
   const hooks = readRawHooks(text);
-  hooks[hookId] = { ...hooks[hookId], enabled: isEnabled };
+  const currentHook = hooks[hookId];
+  const detectedBinaries =
+    hookId === "gruff-code-quality" &&
+    isEnabled &&
+    currentHook?.binaries === undefined
+      ? conventionalGruffBinaries(projectPath)
+      : null;
+  const binaries = currentHook?.binaries ?? detectedBinaries;
+  hooks[hookId] = {
+    ...currentHook,
+    enabled: isEnabled,
+    ...(binaries ? { binaries } : {}),
+  };
   mkdirSync(dirname(path), { recursive: true });
   writeFileAtomic(
     path,
