@@ -8,17 +8,21 @@ import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import {
   chmodSync,
+  closeSync,
   cpSync,
   mkdirSync,
   mkdtempSync,
+  openSync,
   readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { performance } from "node:perf_hooks";
 import { after, describe, it } from "node:test";
 import { PROFILES } from "../../src/cli/detect/agents.js";
+import { managedHookEnvironment } from "../../src/cli/hooks-configured-runtime-evidence.js";
 import { agentHookSpawnDescriptor } from "../../src/cli/server/agent-hook-command.js";
 import { writeAgentHookState } from "../../src/cli/server/agent-hook-writer.js";
 import { getHookSpec } from "../../src/cli/server/hooks-registry.js";
@@ -238,14 +242,42 @@ function runRegisteredCodexHandler(
   projectRoot: string,
   handler: { command: string; commandWindows: string },
   payload: string,
+  options: {
+    environment?: NodeJS.ProcessEnv;
+    stdin?: "file" | "pipe";
+  } = {},
 ): ReturnType<typeof spawnSync> {
   const selected = agentHookSpawnDescriptor({ form: "shell", ...handler });
-  return spawnSync(selected.command, selected.args, {
+  const spawnOptions = {
     cwd: projectRoot,
-    encoding: "utf8",
-    input: payload,
+    encoding: "utf8" as const,
+    env: options.environment ?? process.env,
     timeout: 60_000,
-  });
+  };
+  if ((options.stdin ?? "pipe") === "pipe") {
+    return spawnSync(selected.command, selected.args, {
+      ...spawnOptions,
+      input: payload,
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+  }
+
+  const payloadDirectory = mkdtempSync(
+    join(tmpdir(), "goat-flow-codex-matrix-"),
+  );
+  const payloadPath = join(payloadDirectory, "payload.json");
+  let payloadDescriptor: number | null = null;
+  try {
+    writeFileSync(payloadPath, payload, { mode: 0o600 });
+    payloadDescriptor = openSync(payloadPath, "r");
+    return spawnSync(selected.command, selected.args, {
+      ...spawnOptions,
+      stdio: [payloadDescriptor, "pipe", "pipe"],
+    });
+  } finally {
+    if (payloadDescriptor !== null) closeSync(payloadDescriptor);
+    rmSync(payloadDirectory, { recursive: true, force: true });
+  }
 }
 
 /** Render one captured result for assertion failures. */
@@ -295,7 +327,7 @@ describe("hook command spawn matrix", () => {
   it(
     "delivers allow and exit-2 deny results through Codex's registered Windows override",
     { skip: process.platform !== "win32" },
-    () => {
+    (testContext) => {
       const projectRoot = createRegisteredHostileProject("codex");
       const denyHandler = registeredCodexHandler(projectRoot, "PreToolUse");
 
@@ -308,18 +340,51 @@ describe("hook command spawn matrix", () => {
       assert.equal(allowed.stdout, "");
       assert.equal(allowed.stderr, "");
 
-      const blocked = runRegisteredCodexHandler(
+      const managedEnvironment = managedHookEnvironment(
         projectRoot,
-        denyHandler,
-        denyPayload("cat .env"),
+        process.env,
+        process.platform,
       );
-      assert.equal(blocked.status, 2, handlerDiagnostics(blocked));
-      assert.match(String(blocked.stderr), /BLOCKED: Policy secret/u);
-      assert.ok(
-        !String(blocked.stdout).includes(ENV_CANARY) &&
-          !String(blocked.stderr).includes(ENV_CANARY),
-        "the canary secret must never appear in a Codex handler stream",
-      );
+      const replayVariants: Array<{
+        environment: "full" | "managed";
+        values: NodeJS.ProcessEnv;
+        stdin: "file" | "pipe";
+      }> = [
+        { environment: "full", values: process.env, stdin: "pipe" },
+        { environment: "managed", values: managedEnvironment, stdin: "pipe" },
+        { environment: "full", values: process.env, stdin: "file" },
+        { environment: "managed", values: managedEnvironment, stdin: "file" },
+      ];
+      const blockedPayload = denyPayload("cat .env");
+      const blockedReplays = replayVariants.map((variant) => {
+        const startedAt = performance.now();
+        const result = runRegisteredCodexHandler(
+          projectRoot,
+          denyHandler,
+          blockedPayload,
+          { environment: variant.values, stdin: variant.stdin },
+        );
+        const durationMs = Math.max(
+          0,
+          Math.round(performance.now() - startedAt),
+        );
+        const errorCode =
+          (result.error as NodeJS.ErrnoException | undefined)?.code ?? "none";
+        testContext.diagnostic(
+          `codex-windows-replay environment=${variant.environment} stdin=${variant.stdin} duration_ms=${durationMs} status=${String(result.status)} error=${errorCode}`,
+        );
+        return result;
+      });
+
+      for (const blocked of blockedReplays) {
+        assert.equal(blocked.status, 2, handlerDiagnostics(blocked));
+        assert.match(String(blocked.stderr), /BLOCKED: Policy secret/u);
+        assert.ok(
+          !String(blocked.stdout).includes(ENV_CANARY) &&
+            !String(blocked.stderr).includes(ENV_CANARY),
+          "the canary secret must never appear in a Codex handler stream",
+        );
+      }
     },
   );
 

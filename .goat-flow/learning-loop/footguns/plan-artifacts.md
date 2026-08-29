@@ -1,6 +1,6 @@
 ---
 category: plan-artifacts
-last_reviewed: 2026-08-28
+last_reviewed: 2026-08-29
 ---
 
 **Scope:** The grammar and validation of plan, milestone, and review artifacts - evidence fields, proof gates, machine-parsed dependency links, effort accounting, and when a validator runs relative to persistence. CLI process behaviour and output streams live in [cli.md](cli.md).
@@ -82,7 +82,7 @@ last_reviewed: 2026-08-28
 **Decision changed:** Draft the Review Integrity block and refutation ledger against the validator's field grammar before redacting them to disk, because a rejected ledger has to be rewritten, re-redacted, and re-persisted under a new random path.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
-**Incident count:** 2 | **Latest occurrence:** 2026-08-27
+**Incident count:** 3 | **Latest occurrence:** 2026-08-29
 
 **Symptoms:** `goat-flow review validate` exits 1 on a finished review whose content is correct. Three rules produced it in one session: a refutation ledger record was rejected for not matching the one-line grammar, the `Verdicts:` counts were rejected as inconsistent with the findings list, and a scope-snapshot value was rejected despite naming every required field.
 
@@ -91,6 +91,8 @@ last_reviewed: 2026-08-28
 **Evidence:** Measured 2026-08-11 while reviewing PR #58. First run: `review validate: FAIL (3 violations)` covering `V5/integrity-format` twice and `V8/refutation-ledger` once. Rewriting pipe-bearing prose as `curl-into-bash`, dropping the ledger title line, reconciling `Verdicts: 5/0/13/0` with five findings, and replacing a bare filename anchor with its repository-relative path produced `review validate: PASS`. The bare-filename anchor also failed as `V1/anchor-unresolved` because anchors are resolved against the declared head OID. The ledger grammar is defined in `src/cli/review-validate-common.ts` (search: "REFUTATION_LEDGER_RECORD").
 
 **Recurrence 2026-08-27:** A staged merge review counted ten refutations and two pre-existing pointers in `Evidence: 13 OBSERVED / 0 INFERRED`, although only one visible finding carried an evidence tag. `goat-flow review validate` exited 1 with `V5/integrity-format`; changing the line to `1 OBSERVED / 0 INFERRED` produced `review validate: PASS`. The refutation ledger had already been persisted, reproducing the ordering trap even though its own grammar was valid. Evidence anchor: `src/cli/review-validate-sections.ts` (search: "validateIntegrityCounts").
+
+**Recurrence 2026-08-29:** An area-audit report was redacted to disk before validation. Its first validation found one finding without evidence and proof tags, an evidence total that counted a refutation, and a verdict total that counted a suspicion without a visible finding. A fresh redacted report added the tags, reconciled both totals to visible findings, and produced `review validate: PASS`. Evidence anchors: `src/cli/review-validate-anchors.ts` (search: "finding is missing Evidence") and `src/cli/review-validate-sections.ts` (search: "validateIntegrityCounts").
 
 **Prevention:**
 1. Write pipeline examples in ledger records as prose (`curl into bash`) or a fenced form the grammar does not split. Reserve `|` for the field separator.
