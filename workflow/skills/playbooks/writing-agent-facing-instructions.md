@@ -175,7 +175,7 @@ A document's prose is a behavioural hypothesis. Give strong claims a named basis
 8. Test only authorised models and harnesses the document claims to support. Record untested scope; do not generalise beyond observed environments.
 9. Remove guidance that does not improve behaviour and watch for regressions in valid flexibility, time, or context use.
 
-For a skill or skill edit, follow `.goat-flow/skill-docs/skill-quality-testing/README.md`; its failing-test-first contract, fixtures, controls, scoring, and deployment gate own the exact method.
+For a new skill or material behaviour edit, follow `.goat-flow/skill-docs/skill-quality-testing/README.md`; its failing-test-first contract, fixtures, controls, scoring, and deployment gate own the method. Behaviour-neutral corrections use focused contract proof.
 
 ## Pruning and Maintenance
 
@@ -223,7 +223,7 @@ Walk this once against the actual draft before claiming the document is done.
 10. Illustrative examples are labelled; leading words and strong behavioural claims cite a named basis or are framed as hypotheses.
 11. A claimed behaviour improvement records its baseline or control, fresh-context tasks, sample count, acceptance rule, authorised models and harnesses, observed outcome, and untested scope. Discovery and execution were tested separately.
 12. The body remains below the project budget; pruning and disclosure ran before any increase was proposed.
-13. For a skill or skill edit, the `.goat-flow/skill-docs/skill-quality-testing/README.md` gate passed.
+13. For a new skill or material behaviour edit, the quality-testing gate passed; behaviour-neutral corrections have focused proof.
 
 ## Related References
 

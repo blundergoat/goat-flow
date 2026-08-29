@@ -9,13 +9,13 @@ Use this when a task involves a URL, local HTML file, localhost page, screenshot
 
 ## Availability Check
 
-Before first use in a session, verify the tool is installed:
+Before first use in a session, verify the tool is installed without invoking a subcommand that can fetch a helper:
 
 ```bash
 command -v browser-use || command -v browser-use-python
 ```
 
-If found, run `browser-use doctor` (or `browser-use-python -c "import browser_use; print('ok')"` for the venv wrapper). If missing, offer to install: "browser-use is not installed. Want me to install it (`pip install browser-use`)? Or I can work from manual evidence (screenshots, DevTools output) instead." Never install it without approval. If the user declines or installation fails, use the manual fallback section below.
+If `browser-use` is found, run `browser-use --help` as the read-only capability gate. If only the venv wrapper exists, run `browser-use-python -c "import browser_use; print('ok')"`. Do not use `profile` commands for discovery: some versions download a separate helper when it is absent. If the tool is missing, offer installation or manual evidence; never install without approval.
 
 ## Intent
 
@@ -69,19 +69,19 @@ For UI bugs, capture before/after evidence:
 ```bash
 browser-use open <url>                         # Default: headless Chromium
 browser-use --headed open <url>                # Visible window for ambiguous headless results
-browser-use connect                            # Connect to user's Chrome; requires explicit approval
+browser-use --connect open <url>               # Connect to user's Chrome; requires explicit approval
 browser-use --profile "Default" open <url>     # Specific Chrome profile; requires explicit approval
 browser-use --session NAME open <url>          # Named session for parallel browsers (subagent flows, multi-tab QA)
 ```
 
 Use `--headed` when headless output is ambiguous. Do not use `connect`, `--profile`, profile sync, or cloud mode without explicit user approval.
 
-### When `browser-use connect` fails
+### When `browser-use --connect open <url>` fails
 
 If `connect` cannot find a running Chrome with remote debugging, do not silently fall back. Surface the choice to the user with both options and let them pick - installed-Chrome and managed-Chromium are not equivalent because each touches different state:
 
-1. **Use the user's real Chrome.** They must enable remote debugging first: open `chrome://inspect/#remote-debugging` or relaunch Chrome with `--remote-debugging-port=9222`. Then retry `browser-use connect`.
-2. **Use managed Chromium with a Chrome profile.** Run `browser-use profile list` to show available profiles, ask which one, then run `browser-use --profile "ProfileName" open <url>`. This launches a separate Chromium instance with the chosen profile (cookies, logins, extensions); no Chrome relaunch needed.
+1. **Use the user's real Chrome.** They must enable remote debugging first: open `chrome://inspect/#remote-debugging` or relaunch Chrome with `--remote-debugging-port=9222`. Then retry `browser-use --connect open <url>`.
+2. **Use managed Chromium with a known Chrome profile.** Ask the user to name the profile, then run `browser-use --profile "ProfileName" open <url>`. Do not discover profiles through the CLI because some versions fetch an extra helper. This launches a separate Chromium instance with the selected profile; no Chrome relaunch is needed.
 
 Both paths require explicit user approval - they read login state. Never pick one autonomously.
 
@@ -151,5 +151,5 @@ Leaving the daemon running is harmless but consumes memory and keeps any open Ch
 
 ## Related References
 
-- `page-capture.md` - batch capture across many known pages (screenshot each, emit one MD record per page); load it instead when the task is multi-page evidence rather than a single observation
-- `skill-preamble.md` - the Proof Gate and the OBSERVED / INFERRED evidence tagging this playbook applies to browser output
+- `.goat-flow/skill-docs/playbooks/page-capture.md` - batch capture across many known pages (screenshot each, emit one MD record per page); load it instead when the task is multi-page evidence rather than a single observation
+- `.goat-flow/skill-docs/skill-preamble.md` - the Proof Gate and the OBSERVED / INFERRED evidence tagging this playbook applies to browser output

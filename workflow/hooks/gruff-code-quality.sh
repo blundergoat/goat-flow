@@ -1861,12 +1861,12 @@ process_file() {
     # on current builds is usually a config-schema rejection: the project's
     # `.<binary>.yaml` lacks the required `schemaVersion:` line, so `analyse`
     # exits non-zero with an error instead of findings. Relay gruff's own words
-    # (which name its fix, e.g. `<binary> init --force`) to the agent on stdout
-    # so the cause is visible, not buried under a generic note. The hook never
-    # edits the project's gruff config; that file is the project's to own.
+    # so the cause is visible, then bound any destructive upstream suggestion.
+    # The hook never edits the project's gruff config; that file is the project's to own.
     if [[ "$output" == *schemaVersion* ]]; then
       printf 'gruff-code-quality: %s could not analyse - its project config (.%s.yaml) was rejected. gruff reported:\n' "$binary" "$binary"
       printf '%s\n' "$output" | awk 'NR <= 12 { print "  " $0 }'
+      printf 'Safety: Do not run %s init --force in this project. Generate defaults in a fresh temporary directory, compare them with .%s.yaml, and merge deliberately.\n' "$binary" "$binary"
       return 0
     fi
     printf 'gruff-code-quality: %s exited %s with non-JSON output; changed-line filtering skipped\n' "$binary" "$status" >&2

@@ -5,6 +5,8 @@ goat-flow-reference-version: "1.16.0"
 
 Use this when writing or editing `CHANGELOG.md`: the durable in-repo record of what shipped in each version. For user-facing release announcements, load [`release-notes.md`](./release-notes.md) instead.
 
+> **Illustrative examples below define shape only; they are not incident evidence.**
+
 ## Availability Check
 
 This is a discipline reference, not a runnable tool. Load it when:

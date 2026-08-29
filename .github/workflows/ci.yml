@@ -73,7 +73,7 @@ jobs:
           # The runner image ships shellcheck; install only covers an image that ever stops shipping it.
           command -v shellcheck >/dev/null || sudo apt-get install -y shellcheck
           shellcheck --exclude=SC2001 scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh
-          shellcheck --exclude=SC2001,SC2016 workflow/hooks/*.sh workflow/hooks/deny-dangerous/*.sh .goat-flow/hooks/*.sh .goat-flow/hooks/deny-dangerous/*.sh
+          shellcheck --exclude=SC2001 workflow/hooks/*.sh workflow/hooks/deny-dangerous/*.sh .goat-flow/hooks/*.sh .goat-flow/hooks/deny-dangerous/*.sh
 
       - name: Shell syntax
         run: bash -n scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh workflow/hooks/*.sh workflow/hooks/deny-dangerous/*.sh .goat-flow/hooks/*.sh .goat-flow/hooks/deny-dangerous/*.sh

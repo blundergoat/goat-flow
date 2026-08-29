@@ -473,7 +473,38 @@ function renderBrokenReferenceFlags(entry: SelectedLearningLoopEntry): string {
  * @returns one prompt line; never empty
  */
 function renderEntry(entry: SelectedLearningLoopEntry): string {
-  return `- [${entry.kind}] ${entry.title} (\`${entry.sourcePath}\`) - ${entry.reasonSelected}.${renderBrokenReferenceFlags(entry)} ${entry.excerpt}`;
+  // Neutralize at the interpolation site, not only in the builder: `renderLearningLoopContext` is exported and can be
+  // handed entries assembled elsewhere, so the boundary has to hold for every caller. The transform is idempotent,
+  // because a neutralized tag no longer contains the `<` the pattern needs.
+  const kind = neutralizeBlockDelimiter(entry.kind);
+  const title = neutralizeBlockDelimiter(entry.title);
+  const sourcePath = neutralizeBlockDelimiter(entry.sourcePath);
+  const reasonSelected = neutralizeBlockDelimiter(entry.reasonSelected);
+  const excerpt = neutralizeBlockDelimiter(entry.excerpt);
+  return `- [${kind}] ${title} (\`${sourcePath}\`) - ${reasonSelected}.${renderBrokenReferenceFlags(entry)} ${excerpt}`;
+}
+
+/**
+ * Matches this block's own element delimiter in any case, with or without a closing slash, attributes, or inner spacing.
+ * Kept deliberately narrow: only the `goat-learning-loop` tag is structural here, so other angle brackets in evidence survive untouched.
+ */
+const BLOCK_DELIMITER_PATTERN = /<(\s*\/?\s*goat-learning-loop\b[^>]*)>/giu;
+
+/**
+ * Neutralize the block's own delimiter inside selected-project text so an excerpt cannot close the element that contains it.
+ *
+ * The angle brackets become entities rather than being deleted, so a reviewer still reads the original claim and no
+ * security-relevant statement disappears.
+ *
+ * Proof limit: this is structural containment, not semantic trust. It stops selected-project text from closing the
+ * element that labels it; it does not stop that text from *reading* as an instruction. The rule that embedded target
+ * instructions are evidence rather than commands stays with the consuming agent, not with this function.
+ *
+ * @param text - target-controlled value about to be interpolated into the block
+ * @returns the same text with any `goat-learning-loop` tag rendered inert
+ */
+function neutralizeBlockDelimiter(text: string): string {
+  return text.replace(BLOCK_DELIMITER_PATTERN, "&lt;$1&gt;");
 }
 
 /**
@@ -497,11 +528,17 @@ function buildSelectedLearningEntry(
       ? `; task match: ${matchedTaskTerms.join(", ")}`
       : "";
   return {
-    sourcePath: entry.sourcePath,
+    // Every field below is selected-project text, so each is neutralized before the cap is applied and the bytes are counted.
+    sourcePath: neutralizeBlockDelimiter(entry.sourcePath),
     kind: entry.kind,
-    title: entry.title,
-    reasonSelected: `${describeSelectionReason(entry)}${taskMatchReasonSuffix}`,
-    excerpt: truncateToUtf8ByteLimit(entry.excerpt, maxExcerptBytes),
+    title: neutralizeBlockDelimiter(entry.title),
+    reasonSelected: neutralizeBlockDelimiter(
+      `${describeSelectionReason(entry)}${taskMatchReasonSuffix}`,
+    ),
+    excerpt: truncateToUtf8ByteLimit(
+      neutralizeBlockDelimiter(entry.excerpt),
+      maxExcerptBytes,
+    ),
     staleRefs: [...entry.staleRefs],
     invalidLineRefs: [...entry.invalidLineRefs],
     ...(matchedTaskTerms.length > 0 ? { matchedTaskTerms } : {}),

@@ -530,3 +530,134 @@ goat-flow-reference-version: "${AUDIT_VERSION}"
     assert.equal(playbookContractCheck.run(playbookContractContext()), null);
   });
 });
+
+describe("skill playbook safety and evidence contracts", () => {
+  /** Return the canonical and installed paths for one standalone playbook. */
+  const pairedPlaybooks = (name: string) => [
+    `workflow/skills/playbooks/${name}`,
+    `.goat-flow/skill-docs/playbooks/${name}`,
+  ];
+
+  it("uses read-only browser and Playwright availability probes", () => {
+    for (const playbookPath of pairedPlaybooks("browser-use.md")) {
+      const content = readFileSync(join(process.cwd(), playbookPath), "utf8");
+      assert.match(content, /browser-use --help/u, playbookPath);
+      assert.match(content, /browser-use --connect open <url>/u, playbookPath);
+      assert.doesNotMatch(
+        content,
+        /browser-use profile list|browser-use --version/u,
+        playbookPath,
+      );
+    }
+
+    for (const playbookPath of pairedPlaybooks("page-capture.md")) {
+      const content = readFileSync(join(process.cwd(), playbookPath), "utf8");
+      assert.match(content, /command -v playwright/u, playbookPath);
+      assert.doesNotMatch(
+        content,
+        /\bnpx\s+playwright\s+--version\b/u,
+        playbookPath,
+      );
+    }
+  });
+
+  it("makes failed page captures representable without invented screenshots", () => {
+    for (const playbookPath of pairedPlaybooks("page-capture.md")) {
+      const content = readFileSync(join(process.cwd(), playbookPath), "utf8");
+      assert.match(content, /HTTP 4xx\/5xx/u, playbookPath);
+      assert.match(content, /screenshot: not captured/u, playbookPath);
+      assert.match(content, /project-defined failure predicate/u, playbookPath);
+    }
+  });
+
+  it("labels generic playbook examples as illustrative non-evidence", () => {
+    for (const playbookName of [
+      "README.md",
+      "changelog.md",
+      "release-notes.md",
+      "observability.md",
+    ]) {
+      for (const playbookPath of pairedPlaybooks(playbookName)) {
+        const content = readFileSync(join(process.cwd(), playbookPath), "utf8");
+        assert.match(
+          content,
+          /Illustrative examples[^\n]+not incident evidence/u,
+          playbookPath,
+        );
+      }
+    }
+  });
+
+  it("keeps the preamble discovery row aligned with its actual Step 0 owner", () => {
+    for (const referencePath of [
+      "workflow/skills/reference/README.md",
+      ".goat-flow/skill-docs/README.md",
+    ]) {
+      const content = readFileSync(join(process.cwd(), referencePath), "utf8");
+      const preambleRow = content
+        .split("\n")
+        .find((line) => line.includes("skill-preamble.md"));
+      assert.ok(preambleRow, `${referencePath}: missing skill-preamble row`);
+      assert.match(preambleRow, /Step 0 budget/u, referencePath);
+      assert.doesNotMatch(preambleRow, /retry budget/u, referencePath);
+    }
+  });
+
+  it("names the real authoring-sync owner and byte-parity contract", () => {
+    for (const playbookPath of pairedPlaybooks(
+      "skill-playbook-authoring-sync.md",
+    )) {
+      const content = readFileSync(join(process.cwd(), playbookPath), "utf8");
+      assert.match(
+        content,
+        /SHARED_ARTIFACT_MIRRORS[\s\S]{0,120}src\/cli\/audit\/artifact-templates\.ts/u,
+        playbookPath,
+      );
+      assert.match(content, /byte-identical/u, playbookPath);
+      assert.doesNotMatch(
+        content,
+        /SHARED_ARTIFACT_MIRRORS[\s\S]{0,120}check-artifact-integrity\.ts/u,
+        playbookPath,
+      );
+    }
+  });
+
+  it("uses current OpenTelemetry causality, units, and semantic names", () => {
+    for (const playbookPath of pairedPlaybooks("observability.md")) {
+      const content = readFileSync(join(process.cwd(), playbookPath), "utf8");
+      assert.match(content, /message creation contexts/u, playbookPath);
+      assert.match(content, /http\.request\.method/u, playbookPath);
+      assert.match(content, /`\{request\}`[^\n]+`\{thread\}`/u, playbookPath);
+      assert.match(
+        content,
+        /Expected validation[^\n]+no log or `INFO`/u,
+        playbookPath,
+      );
+      assert.match(
+        content,
+        /Raw exception messages require an approved, sanitized storage path/u,
+        playbookPath,
+      );
+      assert.doesNotMatch(
+        content,
+        /must start their own root span|http_method|\{requests\}|\{threads\}|svc\.api\.requests\.duration/u,
+        playbookPath,
+      );
+    }
+  });
+
+  it("distinguishes fresh-clone evidence from workflow-local contract paths", () => {
+    for (const playbookPath of pairedPlaybooks(
+      "writing-human-facing-prose.md",
+    )) {
+      const content = readFileSync(join(process.cwd(), playbookPath), "utf8");
+      assert.match(content, /Committed evidence references[^\n]+fresh clone/u, playbookPath);
+      assert.match(
+        content,
+        /workflow-local paths[^\n]+never cited as committed evidence/u,
+        playbookPath,
+      );
+      assert.doesNotMatch(content, /never a gitignored path/u, playbookPath);
+    }
+  });
+});

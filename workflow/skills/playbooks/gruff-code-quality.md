@@ -135,7 +135,7 @@ A documentation pass edits comments and doc blocks. Route every naming finding t
 
 The identity diff proves no new finding, not that the pass earned its review cost. Report compliant comments left untouched and any whitespace-only churn, and size the pass like any cluster: one subsystem a human can actually review, not the whole tree.
 
-Read the JSON from stdout alone. The wrapper writes progress lines to stderr, so merging the streams corrupts the document. Redirect to a file and read the file rather than piping into an inline interpreter, which a project deny policy may block.
+Read JSON from stdout alone; merging wrapper progress from stderr corrupts the document. Treat raw analyzer JSON as a machine diagnostic, not durable narrative: capture it in a fresh, permission-restricted temporary file, extract the required identities, then discard it. If a durable receipt is required, summarize approved fields in memory and send that narrative through the compatible redactor. Do not pipe into an inline interpreter when project policy blocks that shape.
 
 ## Triage Actions
 
@@ -271,7 +271,7 @@ Before claiming gruff work is done:
 - **Complexity on rendering/parser code:** preserve public output/order compatibility unless extraction clearly lowers risk.
 - **Global score still bad:** report global state plus targeted cluster delta; unrelated debt can remain.
 - **Ignore seems broken:** config ignores apply during directory traversal; an explicit file path may still be analysed. Verify ignores with a directory scan or `check-ignore`.
-- **`analyse` exits non-zero with no findings and mentions `schemaVersion`:** regenerate config with the installed tool's `init --force` flow, then reapply custom allowlists/severities. Do not hand-invent schema strings.
+- **`analyse` exits non-zero with no findings and mentions `schemaVersion`:** never run `<binary> init --force` in the project because it can overwrite the existing config. Create a fresh temporary directory, run the installed tool's init there, compare the generated default with the project config, and merge the required schema fields deliberately. Do not hand-invent schema strings or replace custom allowlists and severities wholesale.
 
 ## Related References
 

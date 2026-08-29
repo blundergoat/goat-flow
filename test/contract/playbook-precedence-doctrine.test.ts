@@ -16,6 +16,7 @@ const AUTHORITY_PLAYBOOKS = [
   "release-notes.md",
   "observability.md",
   "gruff-code-quality.md",
+  "skill-playbook-authoring-sync.md",
   "naming-and-placement.md",
   "test-selection.md",
   "writing-agent-facing-instructions.md",

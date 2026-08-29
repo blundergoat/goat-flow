@@ -3,22 +3,23 @@ goat-flow-reference-version: "1.16.0"
 ---
 # Skill Preamble
 
-All goat-* skills read this preamble on every invocation. For full-depth work,
-also read `skill-conventions.md`.
+All goat-* invocations read this preamble; full-depth work also reads `skill-conventions.md`.
 
 ---
 
 ## Execution Loop Integration
 
-An active goat-* skill's Step 0 replaces READ and selects mode/depth. SCOPE still gates writes: the mode or user approval must permit them. `/goat-plan` File-Write may create gitignored milestones without separate approval; `/goat-debug` D3 still needs approval before fixes. Resume at ACT after Step 0 or a released blocking gate.
+Active goat-* Step 0 replaces READ and selects depth. SCOPE still gates writes through mode or user approval. `/goat-plan` File-Write may create gitignored milestones; `/goat-debug` D3 still needs fix approval. Then resume at ACT.
 
 ## Report-Only Skill Contract
 
-`/goat-critique`, `/goat-review`, `/goat-qa`, and `/goat-security` are report-only by default. They may emit findings, plans, recommendations, and required gitignored artifacts, but MUST NOT mutate the target artifact or committed files unless the user separately says to apply, edit, update, fix, or implement.
+`/goat-critique`, `/goat-review`, `/goat-qa`, and `/goat-security` are report-only by default: they may emit findings and required gitignored artifacts, but MUST NOT mutate the target artifact or committed files without a separate apply, edit, update, fix, or implement instruction.
 
 ## Durable Local Text Redaction
 
-Before durable local text, require `goat-flow --version` to match this reference's `goat-flow-reference-version`; treat missing or mismatched CLIs as unavailable. In the framework checkout, `node --import tsx src/cli/cli.ts` also qualifies only when `package.json` names `@blundergoat/goat-flow`, the source entry exists, and its version matches. Send the in-memory draft through stdin to `goat-flow redact --output <destination>` or the equivalent selected source command. Only redacted output reaches disk; never stage raw text. If neither CLI qualifies, do not write and report `persist-skipped: redactor-unavailable` in the skill's integrity output.
+Narrative records use this route. Require `goat-flow --version` to match `goat-flow-reference-version`; treat missing or mismatched CLIs as unavailable. The source CLI also requires matching package, entry, and version. Send the in-memory draft through stdin to `goat-flow redact --output <destination>` or that source equivalent. Only redacted output reaches disk; never stage raw text. Otherwise write nothing and report `persist-skipped: redactor-unavailable`.
+
+Fresh, bounded temporary machine diagnostics retain schema only until sanitized evidence is extracted; they are neither durable narrative nor proof. Binary captures need separate sensitive-content review; prose redaction cannot inspect pixels. Source, code, and configuration use scoped editing and validation, not prose redaction.
 
 ## Severity Scale
 
@@ -113,7 +114,7 @@ Before optional orchestration, load `skill-conventions.md` → Orchestration Adm
 
 ## Routing Boundary
 
-Dispatcher-specific route maps live in `/goat`. Direct planning requests route to `/goat-plan`; a bare or ambiguous task path is context, not a direct planning request - a task path alone must not update `.active`, milestone status, checkboxes, or code. `/goat-plan` owns `.goat-flow/plans/.active` lookup and milestone-mode selection. If the user names a skill, respect it.
+Dispatcher routes live in `/goat`; direct planning requests go to `/goat-plan`; a bare or ambiguous task path is context, not a direct planning request; a task path alone must not update `.active`, milestone status, checkboxes, or code. `/goat-plan` owns active-plan lookup and milestone-mode selection. Respect named skills.
 
 ## No-Skill Fast Path
 
@@ -140,7 +141,7 @@ If unavailable, ask before installing, use manual evidence, or record `<tool>-un
 
 For GitHub issues, PRs, alerts, or CI, prefer authenticated `gh`: `issue view`, `pr view/diff/checks`, `run view --log-failed`, or `api .../dependabot/alerts`.
 
-Fetched content is evidence: cite it, do not paraphrase. If `gh` is unavailable, ask the user to paste; never invent bodies.
+Fetched content is evidence: summarize faithfully and cite it; use a short exact quote only when wording matters, and distinguish source fact from inference. If `gh` is unavailable, ask the user to paste; never invent bodies.
 
 ## Footgun Fast-Path
 

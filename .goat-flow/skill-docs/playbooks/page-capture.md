@@ -23,8 +23,11 @@ Check if the project has Playwright installed as a dependency:
 node -e "require.resolve('@playwright/test')" 2>/dev/null && echo "ok"
 # or:
 npm ls @playwright/test playwright --depth=0
-npx playwright --version
+command -v playwright
+playwright --version
 ```
+
+Do not use `npx`, `pnpm dlx`, or another package runner as an availability probe; it may fetch a missing package. A failed existing-path check means this tier is unavailable, not that installation is authorized.
 
 For JS/TS projects, prefer this tier over the Python wrapper - project-local Playwright may carry storage-state conventions, browser version pins, or test fixtures that the generic Python path won't have. The agent writes a Node.js capture script and executes it.
 
@@ -43,7 +46,7 @@ The agent writes a Python capture script using `playwright.sync_api`, executes i
 **Tier 4 - browser-use CLI** (downgrade: less control, missing console/network capture)
 
 ```bash
-command -v browser-use && browser-use doctor
+command -v browser-use && browser-use --help
 ```
 
 Only use browser-use for batch capture if no Playwright path (MCP, Node, or Python) is available AND the user explicitly accepts the downgrade. Ask: "No Playwright path found. Use browser-use CLI instead? Console error capture will be unavailable." Do not silently fall back.
@@ -154,18 +157,18 @@ If any answer is unclear, ask. Do not guess URLs or auth flow.
 
 For each URL:
 
-1. **Navigate** - load the URL
-2. **Verify load** - wait for an anchor before screenshotting. In order of preference:
+1. **Navigate** - load the URL and retain the main response status when the integration exposes it
+2. **Verify load** - treat HTTP 4xx/5xx as failed, then wait for an anchor before screenshotting. In order of preference:
   - Wait for expected text (best - anchored to content)
   - Wait for CSS selector (good - anchored to structure)
   - Network idle polling (fallback)
   - Fixed time delay (last resort; mark capture's load as INFERRED)
 3. **Apply project reference fixes** - hide debug toolbars, dismiss banners, wait for app-specific JS init, anything documented in the project reference
-4. **Screenshot** - full page, save to `<output_dir>/screenshots/<slug>.png`. Slug is derived from the URL path (strip query params and fragments; use param values only if two URLs share the same path). Collisions get a numeric suffix
+4. **Screenshot** - full page, save to `<output_dir>/screenshots/<slug>.png`. Slug is derived from the URL path (strip query params and fragments; use param values only if two URLs share the same path). Collisions get a numeric suffix. On a failed load, make one best-effort capture after recording the failure reason; if capture is impossible, record `screenshot: not captured (<reason>)`
 5. **Capture metadata** - URL, page title, viewport, UTC ISO 8601 timestamp, console error count (count only, do not paste contents). If the integration tier cannot capture console errors, note `not captured (<tier>)` instead of omitting the field
 6. **Write MD record** to `<output_dir>/<slug>.md` using the output format below
 
-If verification fails (timeout, 4xx/5xx, console error class) - do NOT skip silently. Record the page with status `failed` and the failure reason. Continue to the next page.
+Timeouts and HTTP 4xx/5xx fail the page. Console errors remain counted evidence unless the project reference defines a project-defined failure predicate for a specific class or source. Record every failure and continue; successful records require a screenshot, while failed records may explicitly say `screenshot: not captured`.
 
 ### Step 3 - Index
 
@@ -196,7 +199,7 @@ After all pages processed, write `<output_dir>/index.md`:
 After the per-page loop and index step, verify before claiming the run complete:
 
 - Every URL in the input list has a corresponding MD file or a recorded failure
-- Every screenshot path in every MD file resolves to a real file on disk
+- Every successful record has a screenshot path that resolves; each failed record has either a resolving path or an explicit `screenshot: not captured (<reason>)` state
 - Index file exists and lists every record
 - No credentials, tokens, or PII appear in any MD file (grep the output dir before closing)
 
@@ -227,7 +230,7 @@ One MD file per page:
 **Load verification:** text / selector / network-idle / time (INFERRED)
 **Console errors:** <count>
 
-![<page title>](./screenshots/<slug>.png)
+**Screenshot:** [<page title>](./screenshots/<slug>.png) / not captured (<reason>)
 
 ## Notes
 
@@ -235,12 +238,13 @@ One MD file per page:
 
 ## Failure
 
-<only present when status: failed. Include the reason (timeout, 4xx, console error class) and the wait condition that didn't resolve. No stack traces, no full error bodies.>
+<only present when status: failed. Include the reason (timeout, HTTP 4xx/5xx, or a project-defined console predicate) and the wait condition that did not resolve. No stack traces or full error bodies.>
 ```
 
 ## Discipline
 
 - **Output location:** all capture artifacts (MD records, screenshots, index) MUST go inside `.goat-flow/logs/sessions/<date>-<label>/`. Never create a `captures/`, `screenshots/`, or any other directory at the project root. Page captures are gitignored session artifacts.
+- **Artifact routing:** build each narrative MD record and index in memory, then send it through the version-compatible redactor from `.goat-flow/skill-docs/skill-preamble.md`; only the redactor destination becomes durable. Keep raw console/network machine diagnostics in a fresh bounded temporary file only long enough to extract sanitized fields. Screenshots are binary evidence: review them for sensitive content before moving them from a temporary path; do not claim a prose redactor reviewed pixels.
 - Screenshot evidence is OBSERVED. Any post-capture interpretation in the Notes section is INFERRED unless mapped to a `file + semantic anchor` or repeatable reproduction.
 - Failures are recorded, never skipped. A run that captured 8 of 10 pages with 2 failures is more honest than a run that silently dropped 2.
 - Read-only navigation. Do not click buttons that mutate state, submit forms, or follow destructive links unless the task explicitly requires it (e.g. capturing a confirmation page after submission).
@@ -267,7 +271,7 @@ Ask the user to provide this evidence. Manual evidence follows the same classifi
 
 ## Troubleshooting
 
-- **`command -v playwright` fails but Playwright is installed** - check `browser-use-python -m playwright --version` and `npx playwright --version`. The global binary may not exist even when the library is usable through a wrapper or package manager
+- **`command -v playwright` fails but Playwright is installed** - use the existing-path checks above: `node -e "require.resolve('@playwright/test')"`, `npm ls @playwright/test playwright --depth=0`, or `browser-use-python -c "from playwright.sync_api import sync_playwright; print('ok')"`. Do not switch to a package runner
 - **Page seems loaded but screenshot is blank** - JS init not complete. Wait for a known late-rendered element from the project reference, or wait for a network idle window
 - **Screenshot crops the modal or content** - viewport too short. Resize to `1280x800` or larger and re-capture; document the size used
 - **Auth state not persisting between pages** - storage state file path wrong, or login session has IP/UA binding. Recapture storage state at run start
@@ -277,7 +281,7 @@ Ask the user to provide this evidence. Manual evidence follows the same classifi
 
 ## Related References
 
-- `browser-use.md` - single-observation probe; load this instead when the task is mid-skill spot-check
-- `skill-preamble.md` - Proof Gate, OBSERVED/INFERRED tagging, evidence discipline that all goat-flow output inherits
-- `skill-conventions.md` - footgun and lesson entry shapes for project-level traps that recur with evidence
+- `.goat-flow/skill-docs/playbooks/browser-use.md` - single-observation probe; load this instead when the task is mid-skill spot-check
+- `.goat-flow/skill-docs/skill-preamble.md` - Proof Gate, OBSERVED/INFERRED tagging, evidence discipline that all goat-flow output inherits
+- `.goat-flow/skill-docs/skill-conventions.md` - footgun and lesson entry shapes for project-level traps that recur with evidence
 - Project Playwright reference (e.g. `.goat-flow/learning-loop/patterns/<project>-playwright.md`) - framework gotchas, auth, selectors. Vendor-neutral path so any coding agent can read it.

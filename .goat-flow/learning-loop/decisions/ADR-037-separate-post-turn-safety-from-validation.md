@@ -2,6 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-06-12
+**Updated:** 2026-08-29 - names the durable owner of milestone-timing and post-source clarity reminders (decision point 6). No hook is added; the reminders were only ever instruction-file obligations, and ignored local milestone state was the sole place that said so.
 **Updated:** 2026-08-15 - absorbed ADR-015 (remove `stop-lint.sh`) and the ADR-038/ADR-039 plan-checkbox-guard pair. All three decide which Stop hooks goat-flow ships; the guard pair was a shipped-then-reverted round whose durable content is the rejection.
 
 ## Decision
@@ -13,6 +14,7 @@ Ship one goat-flow post-turn hook: `post-turn-safety`.
 3. goat-flow does not ship a generated project-validation Stop hook. Remove the unreleased `post-turn-validate` hook and the `toolchain.post-turn-fast` profile. Do not recreate `workflow/hooks/post-turn-validate.sh`, `.goat-flow/hooks/post-turn-validate.sh`, or a compatibility shim for that hook unless a later ADR explicitly supersedes this one.
 4. Audit, dashboard, docs, and drift wording must distinguish the shipped safety guard from project verification. A project with only `post-turn-safety` installed has a universal safety guard, not project-validation evidence.
 5. Copilot still has no project-local Stop hook support. Do not invent a fake post-turn safety event for it.
+6. Milestone timing and post-source clarity reminders are **always-loaded ACT instruction obligations**, not hook-enforced ones. The instruction files own the reminder; `goat-plan` owns timing-receipt mechanics only after it is invoked, and `goat-clarity` owns the bounded selector pass only after it is invoked. Neither skill restates the reminder, and no Stop hook enforces either. A future hook proposal for them needs observed bypass evidence plus a superseding ADR, exactly like the two expansions already paid for and reverted.
 
 ### Removed Stop hooks - do not reintroduce blind
 
@@ -65,6 +67,8 @@ Evidence anchors:
 - Secret scanning must prefer high-confidence changed-content findings and bounded false positives over whole-repo scanning.
 - Future work must not collapse safety and project verification back into one ambiguous "post-turn" concept.
 - Future plan or hook work must treat `post-turn-validate` and `plan-checkbox-guard` references in historical milestones as evidence, not as work to restore.
+- Timing and clarity reminders have a named owner in a committed decision record. Before this, the only statement of that ownership lived in ignored local milestone state, so it could not survive a clean checkout and could not be cited.
+- Nothing about timing or clarity may be described as hook-enforced or runtime-enforced. They are instruction-file obligations an agent can skip; the honest claim is guidance, not enforcement.
 - Two Stop-hook expansions have now been paid for and reverted. A third proposal needs evidence that it avoids both failure modes: stack guessing and unverified cross-agent delivery.
 
 ## Reversibility

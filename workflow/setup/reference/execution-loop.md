@@ -57,7 +57,14 @@ g) Essential Commands
 h) Execution Loop: READ -> SCOPE -> ACT -> VERIFY
    When a goat-* skill is active, the skill's Step 0 replaces READ and selects the skill's mode/depth. SCOPE still applies before writes: a skill may write when its selected mode permits writes or the user explicitly approves them. `/goat-plan` File-Write may create gitignored milestone files without a separate approval gate; `/goat-debug` D3 still requires approval before fixes. Resume at ACT after Step 0 output or when a blocking gate releases.
    ### READ
-   MUST read relevant files before changes. Never fabricate codebase facts. Check browser evidence first for URL, local HTML, localhost, screenshot, rendered UI, or browser-visible behaviour. Use INDEX-first retrieval across `.goat-flow/learning-loop/{footguns,lessons,patterns}/INDEX.md`; include `.goat-flow/learning-loop/decisions/INDEX.md` for architecture, policy, or setup work. Open source entries only on candidate hits; grep bucket files only after the INDEX pass or on a known retrieval miss; reword once on zero hits, then record a retrieval miss instead of broad-loading a bucket. Recursive searches under `.goat-flow/` that must reach gitignored `plans/` or `logs/` (reference sweeps, rename checks) MUST use `command grep -rn --exclude-dir=.git --exclude-dir=scratchpad <pattern> .goat-flow/`: the Claude Code session `grep` is a ugrep shim that honours `.goat-flow/.gitignore` - it sees the committed surface only because the template spells its re-includes `**/name/**` (2026-08-18; older installs hide `learning-loop/` and `skill-docs/` too) and it never sees the ignored plans and logs, and `git grep` is tracked-only for the same reason; zero hits from either is not evidence of absence there. Before declaring any tool or capability unavailable, read the matching playbook in `.goat-flow/skill-docs/playbooks/` (e.g. `browser-use.md`, `page-capture.md`) and run that doc's "Availability Check" section verbatim - project-local CLI tools at `~/.local/bin/` are valid; do not conflate "no harness/MCP tool" with "no tool". Before creating, changing, reviewing, consolidating, moving, or pruning tests, read `.goat-flow/skill-docs/playbooks/test-selection.md`.
+   MUST read relevant files before changes. Never fabricate codebase facts.
+   Check browser evidence first for URL, local HTML, localhost, screenshot, rendered UI, or browser-visible behaviour.
+   Use INDEX-first retrieval across `.goat-flow/learning-loop/{footguns,lessons,patterns}/INDEX.md`; include `.goat-flow/learning-loop/decisions/INDEX.md` for architecture, policy, or setup work.
+   Open source entries only on candidate hits; grep bucket files only after the INDEX pass or on a known retrieval miss; reword once on zero hits, then record a retrieval miss instead of broad-loading a bucket.
+   Recursive searches under `.goat-flow/` that must reach gitignored `plans/` or `logs/` (reference sweeps, rename checks) MUST use `command grep -rn --exclude-dir=.git --exclude-dir=scratchpad <pattern> .goat-flow/`.
+   The Claude Code session `grep` is a ugrep shim that honours `.goat-flow/.gitignore` - it sees the committed surface only because the template spells its re-includes `**/name/**` (2026-08-18; older installs hide `learning-loop/` and `skill-docs/` too) and it never sees the ignored plans and logs, and `git grep` is tracked-only for the same reason; zero hits from either is not evidence of absence there.
+   Before declaring any tool or capability unavailable, read the matching playbook in `.goat-flow/skill-docs/playbooks/` (e.g. `browser-use.md`, `page-capture.md`) and run that doc's "Availability Check" section verbatim - project-local CLI tools at `~/.local/bin/` are valid; do not conflate "no harness/MCP tool" with "no tool".
+   Before creating, changing, reviewing, consolidating, moving, or pruning tests, read `.goat-flow/skill-docs/playbooks/test-selection.md`.
    ### SCOPE
    Declare intent, complexity tier, mode, files allowed to change, non-goals, and blast radius. Expanding beyond scope = stop and re-scope with human. Before writing, record the write allowlist and starting dirty paths; keep an in-session list of every path this session writes. Reads and searches stay unrestricted.
    ### ACT
@@ -65,7 +72,13 @@ h) Execution Loop: READ -> SCOPE -> ACT -> VERIFY
    For milestone work, load `goat-plan`; start timing before the first source edit, pause it at human gates, and finalize it at exit.
    If a milestone changes source, run `goat-clarity` once before exit on the explicit folder/file paths written by that milestone; never widen the selector to all uncommitted files when unrelated changes exist.
    ### VERIFY
-   Run required checks for changed files. Check cross-references after renames. Tick milestone checkboxes immediately. Do not claim checks passed without the literal pass/fail line from this session. Stop the line when tests break, builds fail, or behaviour regresses. Reconcile the write allowlist, starting dirty paths, session write paths, and final changed state before delivery. A new in-scope write is deliverable. A new out-of-scope write requires the agent to stop and obtain human approval for the expanded scope before delivery. Do not attribute a starting dirty path to this session unless the session also recorded writing it.
+   Run required checks for changed files. Check cross-references after renames. Tick milestone checkboxes immediately.
+   Do not claim checks passed without the literal pass/fail line from this session.
+   Stop the line when tests break, builds fail, or behaviour regresses.
+   Reconcile the write allowlist, starting dirty paths, session write paths, and final changed state before delivery.
+   A new in-scope write is deliverable.
+   A new out-of-scope write requires the agent to stop and obtain human approval for the expanded scope before delivery.
+   Do not attribute a starting dirty path to this session unless the session also recorded writing it.
    If VERIFY caught a failure or you corrected course, update the learning loop before DoD.
 
 i) Definition of Done

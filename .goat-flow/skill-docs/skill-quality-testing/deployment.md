@@ -13,7 +13,7 @@ Load this file when finalising any skill before merge.
 
 ## Common rationalisations for skipping testing itself
 
-Agents and authors rationalise away skill testing the same way they rationalise away code testing. Capture these in your own RED phase for new skills:
+Agents and authors rationalise away proportionate skill testing the same way they rationalise away code testing. Capture these in your own RED phase for new skills:
 
 | Excuse for skipping testing | Reality |
 |------------------------------|---------|
@@ -26,11 +26,11 @@ Agents and authors rationalise away skill testing the same way they rationalise 
 | "Academic review is enough" | Reading ≠ using. Test application scenarios. |
 | "No time to test" | Deploying untested skill wastes more time fixing it later. |
 
-All of these mean: **test before deploying. No exceptions.**
+All of these mean: **select and run proof proportionate to the change before deploying.**
 
 ## Skill deployment checklist
 
-For a new skill or a material behavioural change to an existing skill, this checklist is a release gate before merging. For already-shipped skills where a later audit finds missing TDD evidence, record the gap as hardening debt and do not claim the skill is bulletproof until fresh logs satisfy the checklist. Track each item as a todo in your agent's planning tool - don't work from memory.
+For a new skill or a material behavioural change to an existing skill, this checklist is a release gate before merging. Behaviour-neutral typo, link, citation, and formatting corrections use a focused contract proving behaviour stayed unchanged. For already-shipped skills where a later audit finds missing TDD evidence, record the gap as hardening debt and do not claim three-pass pressure evidence until fresh logs satisfy the checklist. Track each applicable item as a todo in your agent's planning tool - don't work from memory.
 
 ## Evidence classification
 
@@ -39,12 +39,12 @@ Use these labels when summarising existing TDD logs:
 | Label | Meaning | Completion claim allowed |
 |-------|---------|--------------------------|
 | `no evidence` | No relevant TDD log found | No pressure-test claim |
-| `RED no-repro` | RED scenarios did not reproduce the target failure class | Scenario tested; not bulletproof |
-| `stay-GREEN smoke` | One loaded-skill pass or regression check | Smoke-tested; not bulletproof |
-| `partial hardening` | RED/GREEN happened, but fewer than 3 max-pressure passes | Hardened against captured failures; not bulletproof |
-| `bulletproof` | 3 consecutive max-pressure scenarios pass with no new rationalisations | Bulletproof for the tested failure class |
+| `RED no-repro` | RED scenarios did not reproduce the target failure class | Scenario tested; no reproduced failure |
+| `stay-GREEN smoke` | One loaded-skill pass or regression check | Smoke evidence only |
+| `partial hardening` | RED/GREEN happened, but fewer than 3 qualifying passes | Hardened against captured failures only |
+| `three-pass pressure evidence` | 3 consecutive pre-registered pressure scenarios pass with no new rationalisations | Qualified evidence for the named failure class and provider/model/config only |
 
-If current logs do not meet `bulletproof`, say so directly. Do not backfill missing evidence by creating summary records; rerun the pressure tests instead.
+Three-pass pressure evidence is scoped to the named failure class and provider/model/config recorded in the trials. If current logs do not meet that threshold, say so directly. Do not backfill missing evidence by creating summary records; rerun the pre-registered pressure tests instead.
 
 ## Verification claim evidence
 
@@ -79,7 +79,7 @@ deterministic scorer rules.
 - [ ] Create pressure scenarios (3+ combined pressures for discipline skills)
 - [ ] Run scenarios WITHOUT skill - document baseline behaviour verbatim
 - [ ] Identify patterns in rationalisations / failures
-- [ ] Verify RED with a second subagent (scenario strength check)
+- [ ] Verify RED with the pre-registered independent trial count; retain mixed results as evidence
 
 **GREEN phase - write minimal skill:**
 - [ ] Name describes what you DO or the core insight
@@ -96,7 +96,7 @@ deterministic scorer rules.
 - [ ] Add explicit counters inline beside the rules they defend
 - [ ] Build / extend the rationalisation table from all iterations
 - [ ] Create red-flags list
-- [ ] Re-test until bulletproof (3 consecutive passes, no new rationalisations)
+- [ ] Re-test until three-pass pressure evidence is met (3 consecutive pre-registered passes, no new rationalisations)
 
 **Quality checks:**
 - [ ] Small flowchart only if decision non-obvious
@@ -107,19 +107,19 @@ deterministic scorer rules.
 - [ ] Token budget met per the four-tier model: dispatcher ≤600 words, functional skill <2500 words, always-loaded shared content <1500 words per file, progressive reference pack <3000 words per file. Skills or packs that exceed their tier must either shed content or split into a sub-pack.
 
 **Deployment:**
-- [ ] Write TDD iteration log to `.goat-flow/logs/sessions/YYYY-MM-DD-<skill>-tdd.md`
+- [ ] Build the TDD iteration log in memory, pass it through the compatible redactor, then write `.goat-flow/logs/sessions/YYYY-MM-DD-<skill>-tdd.md`
 - [ ] Cross-reference the log filename in the relevant lesson or footgun entry (not in SKILL.md frontmatter - that leaks dev paths to consumer installs)
 - [ ] Cross-link into sibling SKILL.md files if relevant
-- [ ] Announce in commit message: which rationalisations were closed, which pressures tested
+- [ ] Propose a commit message naming which rationalisations were closed and which pressures were tested; the user commits
 
 ## STOP: before moving to the next skill
 
-After writing ANY skill, STOP and complete the deployment checklist.
+After writing a new skill or materially changing skill behaviour, STOP and complete the applicable deployment checklist.
 
 Do NOT:
-- Create multiple skills in a batch without testing each
-- Move to the next skill before the current one is verified
-- Skip testing because "batching is more efficient"
+- Create multiple new or materially changed skills in a batch without testing each
+- Move to the next material behaviour change before the current one is verified
+- Treat behaviour-neutral maintenance as exempt from focused contract proof
 
 Deploying untested skills = deploying untested code. It's a violation of quality standards.
 

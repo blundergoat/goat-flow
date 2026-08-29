@@ -69,7 +69,7 @@ layout is a ceiling, not a target: never add filler or merge distinct points to 
 5. **Journey context only when useful.** Add verified arrival context only when it changes the
    reader's interpretation and remains hidden from the code.
 
-Tighten without deleting `@param`, `@return`, or `@returns`. Fix stale comments in scope; outside the authorized
+Preserve current valid tags. Remove or repair a tag only when it is stale, invalid, or names a removed parameter. Fix stale comments in scope; outside the authorized
 scope, report or defer it and do not delete it. The project or language formatter's enforced width governs. Resolve it
 from `.editorconfig`, lint, then a formatter that actually reflows comments. When neither defines a
 width, 150 characters is the fallback ceiling.
@@ -129,7 +129,7 @@ Reserve PHP file-level PHPDoc for classless scripts, bootstrap/config, or genera
   it never removes a separately required description. A scalar, optional, configured, or side-effectful
   input is not pure DI and keeps its tag.
 
-When a doc comment is verbose, tighten the prose; a `@param`, `@return`, or `@returns` line is never the thing you cut.
+When a doc comment is verbose, tighten its prose while preserving every current valid tag; repair or remove only tags that no longer describe the code.
 
 ## Shape of a Comment Block
 
@@ -199,7 +199,7 @@ The next reader cannot use these; fix them when already editing the surrounding 
 
 - **Restating the mechanics.** `i++; // increment i`, `// check if invoice is paid`. Context lines must add reader meaning, not narrate syntax.
 - **One sentence template for every line.** Drop what code already states.
-- **Stripping tags while tightening.** Concision never removes `@param`, `@return`, or `@returns` lines.
+- **Stripping valid tags while tightening.** Concision never removes a tag that still describes the code.
 - **Codebase jargon.** Translate it for the selected reader.
 - **Compensating prose.** A comment explaining what a better name, type, or structure would show. This
   is compensating prose, not a remedy. Make an already-authorised code change or report or defer the

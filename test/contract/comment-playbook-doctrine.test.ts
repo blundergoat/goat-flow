@@ -120,6 +120,22 @@ describe("comment playbook verification doctrine", () => {
     });
   });
 
+  it("preserves valid tags while repairing tags made stale by the code", () => {
+    assertForPlaybook("code-comments.md", (content, playbookPath) => {
+      assert.match(content, /Preserve current valid tags/u, playbookPath);
+      assert.match(
+        content,
+        /Remove or repair a tag only when it is stale, invalid, or names a removed parameter/u,
+        playbookPath,
+      );
+      assert.doesNotMatch(
+        content,
+        /Tighten without deleting `@param`, `@return`, or `@returns`|a `@param`, `@return`, or `@returns` line is never the thing you cut/u,
+        playbookPath,
+      );
+    });
+  });
+
   it("names acting components conditionally and governs em dashes", () => {
     assertForPlaybook("code-comments.md", (content, playbookPath) => {
       assert.match(

@@ -76,9 +76,11 @@ output is not a hook classifier result. Record that denial separately; do not sp
 guarded text to evade it.
 
 Use the sanctioned self-test for corpus coverage. If an exact one-off shape still needs classification,
-write the provider event to a gitignored JSON payload file with a non-Bash file tool, then pass that
-file on stdin using a command line that contains only its path. This keeps the guarded phrase in stdin,
-not provider-matched command text, so the resulting hook output has a truthful attribution boundary.
+first choose a fresh absent path. Write the provider event to a gitignored JSON payload file with a non-Bash
+file tool, then pass that file on stdin using a command line that contains only its path. This keeps the
+guarded phrase in stdin, not provider-matched command text, so the resulting hook output has a truthful
+attribution boundary. Treat the payload as a temporary machine diagnostic, not durable narrative: include
+no secrets, retain only the exit and sanitized result, and remove the payload after the probe.
 
 ```bash
 bash .goat-flow/hooks/deny-dangerous.sh < .goat-flow/scratchpad/payload.json
@@ -221,11 +223,12 @@ goat-flow hooks verify . --agent <id> --scenario deny-hook --trusted-target
 goat-flow hooks verify . --agent <id> --scenario all --trusted-target
 ```
 
-The command passes four fixed inert classifier operands to the managed script as
-`--check` arguments; it inspects but never executes those operands. A proven run
-exits `0`, reports `pass` for all four scenarios, and records one local
-`hook.verify` event per scenario. `fail`, `unsupported`, `not-configured`,
-`error`, or a missing evidence event means the requested proof is incomplete.
+The `deny-hook` command passes four fixed inert classifier operands to the managed
+script as `--check` arguments; it inspects but never executes them. The `all`
+command runs nine scenarios total: four deny-hook, three Gruff, and two post-turn.
+A proven run exits `0`, reports `pass` for every selected scenario, and records one
+local `hook.verify` event per scenario. `fail`, `unsupported`, `not-configured`,
+`error`, a wrong total, or a missing evidence event means the requested proof is incomplete.
 
 The selected checkout's hook code runs only with `--trusted-target`. Omit that
 flag until you have inspected and trust the checkout; the CLI then returns
@@ -233,8 +236,8 @@ explicit `unsupported` results without starting the hook, so the safe default
 is not classifier proof. The deprecated `--untrusted-target` flag remains an
 explicit static alias throughout v1.16.x.
 
-This command proves only the selected checkout's managed script, registration
-state, and four fixed decisions. It does not launch the external coding agent
+These commands prove only the selected checkout's managed scripts, registration
+state, and fixed scenario decisions. They do not launch the external coding agent
 and does not prove provider-side hook delivery. Never cite it as external-agent
 delivery evidence.
 
@@ -243,11 +246,11 @@ delivery evidence.
 After any hook-policy or registration change, require all of the following:
 
 - installed smoke suite passes;
-- installed and workflow full suites pass;
+- installed full suites pass; framework maintainers also run workflow-source suites;
 - every new deny case has a nearby allow control;
 - dispatcher and policy-module mirrors are identical;
 - supported agent configs point to the installed central dispatcher;
-- any requested managed-hook proof reports four passes and recorded events;
+- any requested managed-hook proof reports its selected scenario total and recorded events;
 - manifest, drift audit, shell syntax, and ShellCheck pass;
 - the original bypass or false-positive reproduction now has the intended exit.
 

@@ -191,6 +191,6 @@ Before handing off a selection:
 
 ## Related References
 
-- `skill-quality-testing/README.md` and `skill-quality-testing/tdd-iteration.md` — capability-aware fixtures and application-not-citation scoring when testing a skill.
-- `skill-preamble.md` — shared proof classes, evidence discipline, and actor boundaries.
-- `goat-qa` — report-only coverage analysis that applies this playbook before emitting recommendations.
+- `.goat-flow/skill-docs/skill-quality-testing/README.md` and `.goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md` - capability-aware fixtures and application-not-citation scoring when testing a skill.
+- `.goat-flow/skill-docs/skill-preamble.md` - shared proof classes, evidence discipline, and actor boundaries.
+- `.agents/skills/goat-qa/SKILL.md` - report-only coverage analysis that applies this playbook before emitting recommendations.

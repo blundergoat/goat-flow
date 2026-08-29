@@ -67,7 +67,7 @@ The router grants no rewrite authority. Keep scope and apply the lightest effect
 Run this before every style rule on every in-scope surface, against the source of truth: the diff, manifest, issue, decision, evidence, or cited source described.
 
 - Correct typos, wrong word forms, dangling subjects, and broken parallelism.
-- Check names, numbers, units, versions, flags, options, and paths; a code identifier named in prose must resolve in a fresh clone - never a gitignored path - and a diagram abbreviation is marked or spelled out once.
+- Check names, numbers, units, versions, flags, options, and paths. Committed evidence references and code identifiers must resolve in a fresh clone. Documented workflow-local paths may name the contract, but are never cited as committed evidence. Mark or spell out a diagram abbreviation once.
 - Open a cited document, issue, or benchmark and confirm it supports the claim.
 - When prose describes code behaviour, open the function, query, or getter it describes and confirm the claim; code is a citation like any other.
 - Match claim strength and specificity to the evidence. Do not inflate a narrow result or hedge a supported conclusion.

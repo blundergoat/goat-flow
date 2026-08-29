@@ -11,8 +11,8 @@ For tool/capability playbooks, see `playbooks/`. For skill-authoring methodology
 
 | File | Role | When loaded |
 |---|---|---|
-| [`skill-preamble.md`](./skill-preamble.md) | Universal goat-flow contract: Proof Gate, OBSERVED/INFERRED tagging, evidence discipline, retry budget. | Composed into every `/goat-*` skill at scoring time and at runtime; agents inherit its gate vocabulary. |
-| [`skill-conventions.md`](./skill-conventions.md) | Authoring conventions: footgun/lesson entry shapes, frontmatter contracts, status / created / evidence blocks. | Composed into a skill when its body references `skill-conventions`. |
+| [`skill-preamble.md`](./skill-preamble.md) | Universal goat-flow contract: Proof Gate, evidence classes, durable-text redaction, and Step 0 budget. | Composed into every `/goat-*` skill at scoring time and at runtime; agents inherit its gate vocabulary. |
+| [`skill-conventions.md`](./skill-conventions.md) | Full-depth execution contract: Adaptive Step 0, contradiction check and stuck protocol, task tracking, durable-artifact redaction, presenting findings, milestone retrospective, sub-agent Orchestration Admission, recovery, Interrupt Freeze, autonomy awareness, skill authoring, and footgun/lesson/pattern entry formats. | Composed into a skill when its body references `skill-conventions`. |
 
 These are meta because they describe the *shape* of skills, not how to use a specific tool. Adding a new shared meta reference here means committing every existing skill to inherit it - do that intentionally, not by accident.
 

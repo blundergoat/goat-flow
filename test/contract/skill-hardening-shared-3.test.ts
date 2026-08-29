@@ -180,6 +180,18 @@ describe("skill hardening contracts: shared surfaces (3/3)", () => {
         referencePath,
       );
       assert.match(redactionGuidance, /never stage raw text/, referencePath);
+      assert.match(redactionGuidance, /Narrative records/u, referencePath);
+      assert.match(
+        redactionGuidance,
+        /temporary machine diagnostics/u,
+        referencePath,
+      );
+      assert.match(redactionGuidance, /Binary captures/u, referencePath);
+      assert.match(
+        redactionGuidance,
+        /Source, code, and configuration/u,
+        referencePath,
+      );
     });
 
     const conventionPaths = [
@@ -218,6 +230,26 @@ describe("skill hardening contracts: shared surfaces (3/3)", () => {
         referencePath,
       );
     });
+  });
+
+  it("permits faithful source summaries while preserving citation", () => {
+    for (const preamblePath of [
+      "workflow/skills/reference/skill-preamble.md",
+      ".goat-flow/skill-docs/skill-preamble.md",
+    ]) {
+      const content = readProjectFile(preamblePath);
+      assert.match(content, /summarize faithfully and cite/u, preamblePath);
+      assert.match(
+        content,
+        /short exact quote only when wording matters/u,
+        preamblePath,
+      );
+      assert.doesNotMatch(
+        content,
+        /Fetched content is evidence: cite it, do not paraphrase/u,
+        preamblePath,
+      );
+    }
   });
 
   it("keeps consumer-installed guidance honest about framework-only paths", () => {
@@ -538,7 +570,7 @@ describe("skill hardening contracts: shared surfaces (3/3)", () => {
     }
   });
 
-  it("clarifies deployment bulletproof evidence as a release gate or hardening debt", () => {
+  it("scopes deployment evidence as a release gate or hardening debt", () => {
     // Both authoring surfaces must set the same expectation before users trust a skill claim.
     for (const referencePath of [
       "workflow/skills/playbooks/skill-quality-testing/deployment.md",
@@ -553,7 +585,12 @@ describe("skill hardening contracts: shared surfaces (3/3)", () => {
       assert.match(deploymentGuidance, /hardening debt/, referencePath);
       assert.match(
         deploymentGuidance,
-        /do not claim the skill is bulletproof/,
+        /do not claim three-pass pressure evidence/,
+        referencePath,
+      );
+      assert.match(
+        deploymentGuidance,
+        /Behaviour-neutral[^\n]+focused contract/,
         referencePath,
       );
     }

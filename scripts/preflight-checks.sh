@@ -724,10 +724,11 @@ if command -v shellcheck >/dev/null 2>&1; then
         fail "Shellcheck (scripts) - run shellcheck scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh for details"
     fi
 
-    # Also shellcheck installed hooks (SC2016 excluded: sed patterns intentionally use single quotes)
+    # Also shellcheck installed hooks. SC2001 stays excluded (sed rewrites are deliberate); SC2016 no longer is,
+    # because the one literal that raised it now carries a narrow directive at its own site.
     while IFS= read -r hookdir; do
         if compgen -G "$hookdir/*.sh" >/dev/null 2>&1; then
-            if shellcheck --exclude=SC2001,SC2016 "$hookdir"/*.sh >/dev/null 2>&1; then
+            if shellcheck --exclude=SC2001 "$hookdir"/*.sh >/dev/null 2>&1; then
                 pass "Shellcheck ($hookdir/)"
             else
                 fail "Shellcheck ($hookdir/) - run shellcheck $hookdir/*.sh for details"

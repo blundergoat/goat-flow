@@ -15,8 +15,8 @@ Non-runnable authoring methodology - no CLI check applies. Load when creating or
 
 | File | Content | Load when |
 |------|---------|-----------|
-| `tdd-iteration.md` | Iron law, RED/GREEN/REFACTOR loop, pressure scenarios, rationalisations, bulletproofing | Creating or hardening any skill. Load first. |
-| `adversarial-framing.md` | Cynical-reviewer role, zero-findings HALT, parallel reviewer pattern, finding schema | Authoring or hardening review-class skills. |
+| `tdd-iteration.md` | RED/GREEN/REFACTOR loop, pre-registered pressure trials, rationalisations, calibrated evidence | Creating a skill or materially changing its behaviour. Load first. |
+| `adversarial-framing.md` | Neutral-skeptical reviewer role, coverage ledger, parallel reviewer pattern, finding schema | Authoring or hardening review-class skills. |
 | `deployment.md` | Deployment checklist, verification claim evidence, consumer/API skill guardrails, STOP rule | Finalising before merge. |
 
 ## Evaluation contract
@@ -25,10 +25,11 @@ Match fixtures and controls to the skill's capability and risk in `tdd-iteration
 
 ## The iron law (always-loaded anchor)
 
-> **No skill without a failing test first.**
+> **No new skill or material behavioural rule without a failing test first.**
 
-This applies to NEW skills AND to EDITS of existing skills. See
-`tdd-iteration.md` for the full methodology.
+Behaviour-neutral typo, link, and citation corrections use a focused contract
+that proves behaviour stayed unchanged. See `tdd-iteration.md` for the full
+methodology.
 
 ## Cross-references
 

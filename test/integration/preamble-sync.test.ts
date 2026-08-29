@@ -230,6 +230,37 @@ describe("preamble/conventions sync: current state", () => {
     );
   });
 
+  it("the skill-conventions discovery row names every load-bearing role it governs", () => {
+    // Byte parity alone lets two identical rows be identically wrong. Before 2026-08-29 both READMEs described this
+    // file as learning-entry formats only, hiding Adaptive Step 0, Orchestration Admission, recovery and authoring
+    // from any agent deciding whether to load it. A discovery row is the agent's whole context before that decision.
+    const governedRoles = [
+      "Adaptive Step 0",
+      "task tracking",
+      "Orchestration Admission",
+      "recovery",
+      "Interrupt Freeze",
+      "autonomy",
+      "authoring",
+    ];
+
+    for (const readmePath of [
+      TEMPLATE_REFERENCE_README,
+      INSTALLED_REFERENCE_README,
+    ]) {
+      const row = readFileSync(readmePath, "utf8")
+        .split("\n")
+        .find((line) => line.includes("[`skill-conventions.md`]"));
+      assert.ok(row, `${readmePath}: no skill-conventions discovery row`);
+      for (const role of governedRoles) {
+        assert.ok(
+          row.toLowerCase().includes(role.toLowerCase()),
+          `${readmePath}: the skill-conventions row does not name "${role}", so an agent cannot tell the file governs it`,
+        );
+      }
+    }
+  });
+
   it("template and installed skill-conventions.md match", () => {
     assertMirrorExists(
       TEMPLATE_CONVENTIONS,

@@ -2358,6 +2358,7 @@ main() {
   # policy-parser DoS (~10s at 300). This flat O(len) count bounds the work;
   # real commands use a handful, so pathological input blocks ("run it manually").
   local _goat_subst_n=0
+  # shellcheck disable=SC2016  # literal substitution openers are matched, not expanded
   if [[ "$command_policy" == *'$('* || "$command_policy" == *'<('* || "$command_policy" == *'>('* ]]; then
     _goat_subst_n="$(count_substitution_openers "$command_policy")"
   fi

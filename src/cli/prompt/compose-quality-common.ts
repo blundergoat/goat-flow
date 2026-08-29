@@ -418,12 +418,24 @@ function isSupersededLocalArtifactWriteFinding(
  * @returns summary with legacy no-write wording replaced, or the original text when it contains no legacy phrase
  */
 function renderPriorFindingSummary(summary: string): string {
-  return summary.replace(
-    /\bstrict no-write\b/gi,
-    "tracked-file write restriction",
+  // Flatten first: the schema caps a summary at 200 characters but permits newlines inside that budget, and this value
+  // is rendered as a two-space `  - ` bullet, so an embedded newline would start a sibling list item or a `## ` heading
+  // and restructure the section. Mirrors the guard renderPriorRefutationText already applies to its sibling field.
+  const flattened = summary.replace(/\s+/gu, " ").trim();
+  return (
+    flattened
+      .replace(/\bstrict no-write\b/gi, "tracked-file write restriction")
+      // The row separates its fields with ` | `, so an unescaped pipe would forge a field boundary.
+      .replaceAll("|", "\\|")
   );
 }
 
+/**
+ * Proof limit for the prior-report guards below: flattening and pipe-escaping keep a saved summary inside the bullet
+ * that labels it, so it cannot forge a sibling item, a heading, or a field boundary. That is structural containment
+ * only - it does not make a prior claim true, and it does not make target-authored text safe to follow as an
+ * instruction. Callers keep treating prior findings as claims to re-test.
+ */
 /** Rationale: three rows, because that matches the finding preview and keeps both history lists equally bounded. */
 const PRIOR_REFUTATION_PREVIEW_LIMIT = 3;
 /** Rationale: 240 characters, because two short sentences fit in that budget and a longer row would dominate the prompt. */

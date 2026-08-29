@@ -277,7 +277,12 @@ describe("bounded hook verification guidance", () => {
       );
       assert.match(
         content,
-        /does not launch the external coding agent/u,
+        /nine scenarios total: four deny-hook, three Gruff, and two post-turn/u,
+        relativePath,
+      );
+      assert.match(
+        content,
+        /do(?:es)? not launch the external coding agent/u,
         relativePath,
       );
       assert.match(

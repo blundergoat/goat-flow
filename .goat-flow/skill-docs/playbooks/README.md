@@ -7,6 +7,8 @@ This directory holds **standalone playbooks for tools and capabilities available
 
 For shared meta-references inherited by goat-* skills (preamble on every invocation, conventions on full-depth), see the parent `skill-docs/` directory.
 
+> **Illustrative examples below define shape only; they are not incident evidence.**
+
 ## How agents should use this directory
 
 1. When the request names a tool or discipline (browser, screenshots, skill testing, changelog, release notes, logging/instrumentation, naming and placement, code comments, prose and writing style, or writing for agents), check this index for a matching playbook. Also check it when the work touches a discipline's surface without naming it: editing `CHANGELOG.md`, release notes, README or `docs/` prose, PR/issue text, a learning-loop entry body, or a skill, playbook, or instruction file an agent reads.
@@ -57,8 +59,8 @@ Use the smallest artifact that fits the evidence:
 | Deterministic transform or validation | CLI/check/script |
 | One-off or speculative advice | no new artifact yet |
 
-## Why this index exists (provenance)
+## Why this index exists
 
-A 2026-05-03 downstream incident: an agent was asked to "use browser-use" to inspect a page; it ran `ToolSearch` looking for an MCP, found only auth tools, and declared "no browser MCP available, can't drive a browser session". The user pushed back with the literal path `.goat-flow/skill-docs/browser-use.md` (now `.goat-flow/skill-docs/playbooks/browser-use.md`), which documents the local availability check. Running `command -v browser-use` returned a user-local wrapper under `~/.local/bin/` - the tool was always installed.
+Illustrative failure pattern: an agent asked to use browser-use searches only its harness tools, finds no browser MCP, and declares browser automation unavailable without checking the project-local wrapper.
 
-This index plus a Router Table pointer in every supported instruction file is the structural fix: agents must read project-local capability playbooks before treating harness-tool absence as capability absence.
+This index plus a Router Table pointer prevents that error: agents read project-local capability playbooks before treating harness-tool absence as capability absence.

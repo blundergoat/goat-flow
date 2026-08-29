@@ -64,7 +64,7 @@ function focusedQualityModePrompt(
       "",
       "Assess all eight goat-flow skills: /goat, /goat-debug, /goat-plan, /goat-review, /goat-critique, /goat-security, /goat-qa, and /goat-clarity. Use .goat-flow/skill-docs/skill-quality-testing/README.md plus the relevant files under .goat-flow/skill-docs/skill-quality-testing/. Read the workflow template SKILL.md files and installed mirrors under .claude/skills/, .agents/skills/, and .github/skills/ where relevant.",
       "",
-      "Method rule: prefer live skill invocation only when the runner supports it safely. Run a mutation-capable workflow only against a disposable copy of current project evidence with a frozen write boundary; never let a quality probe edit the assessed checkout. If live invocation or delegated/sub-agent calls are unavailable, perform a file-grounded protocol run against SKILL.md and label the evidence limit. Never imply a dry run is bulletproof TDD evidence.",
+      "Method rule: prefer live skill invocation only when the runner supports it safely. Run a mutation-capable workflow only against a disposable copy of current project evidence with a frozen write boundary; never let a quality probe edit the assessed checkout. If live invocation or delegated/sub-agent calls are unavailable, perform a file-grounded protocol run against SKILL.md and label the evidence limit. Never present a dry run as three-pass pressure evidence.",
       "",
       "For each skill, output exactly these fields: Method used; Evidence limit; Worked; Failed/confusing; Useless ceremony; RED scenario; GREEN result; minimal REFACTOR; Verification command or grep that would prove the fix. Do not stop after one skill and do not ask which skill.",
       "",

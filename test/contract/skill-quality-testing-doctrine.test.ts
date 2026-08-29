@@ -21,6 +21,10 @@ const ADVERSARIAL_GUIDES = [
   "workflow/skills/playbooks/skill-quality-testing/adversarial-framing.md",
   ".goat-flow/skill-docs/skill-quality-testing/adversarial-framing.md",
 ] as const;
+const DEPLOYMENT_GUIDES = [
+  "workflow/skills/playbooks/skill-quality-testing/deployment.md",
+  ".goat-flow/skill-docs/skill-quality-testing/deployment.md",
+] as const;
 
 /** Apply one section-scoped assertion to each canonical and installed guide. */
 function assertForEachSection(
@@ -219,6 +223,72 @@ describe("skill-quality-testing evaluation doctrine", () => {
         readProjectFile(installedPath),
         readProjectFile(canonicalPath),
         installedPath,
+      );
+    }
+  });
+
+  it("scopes three-pass pressure evidence without broad robustness claims", () => {
+    for (const guidePath of [
+      ...ROOT_GUIDES,
+      ...TDD_GUIDES,
+      ...ADVERSARIAL_GUIDES,
+      ...DEPLOYMENT_GUIDES,
+    ]) {
+      const content = readProjectFile(guidePath);
+      assert.doesNotMatch(content, /\bbulletproof(?:ing)?\b/iu, guidePath);
+    }
+
+    for (const guidePath of [...TDD_GUIDES, ...DEPLOYMENT_GUIDES]) {
+      assert.match(
+        readProjectFile(guidePath),
+        /three-pass pressure evidence[\s\S]+named failure class[\s\S]+provider\/model\/config/iu,
+        guidePath,
+      );
+    }
+  });
+
+  it("treats mixed RED trials as evidence instead of forcing a failure", () => {
+    for (const guidePath of TDD_GUIDES) {
+      const content = readProjectFile(guidePath);
+      assert.match(content, /pre-register[^\n]+trial count/iu, guidePath);
+      assert.match(content, /mixed results are evidence/iu, guidePath);
+      assert.match(
+        content,
+        /Do not add pressure solely to force a failure/u,
+        guidePath,
+      );
+      assert.doesNotMatch(
+        content,
+        /If second subagent complies, the scenario is too weak[^\n]+add pressure/u,
+        guidePath,
+      );
+    }
+  });
+
+  it("uses the published persuasion study without claiming skill validation", () => {
+    for (const guidePath of TDD_GUIDES) {
+      const content = readProjectFile(guidePath);
+      assert.match(content, /Meincke et al\. \(2026\)/u, guidePath);
+      assert.match(content, /N=126,000/u, guidePath);
+      assert.match(content, /35\.3%[^\n]+51\.3%/u, guidePath);
+      assert.match(
+        content,
+        /does not validate a specific skill/u,
+        guidePath,
+      );
+      assert.doesNotMatch(content, /N=28,000|33%[^\n]+72%/u, guidePath);
+    }
+  });
+
+  it("keeps review pressure skeptical and permits supported zero-finding results", () => {
+    for (const guidePath of ADVERSARIAL_GUIDES) {
+      const content = readProjectFile(guidePath);
+      assert.match(content, /skeptical, neutral reviewer/u, guidePath);
+      assert.match(content, /coverage ledger/u, guidePath);
+      assert.doesNotMatch(
+        content,
+        /cynical reviewer|expect to find problems|zero-findings HALT/iu,
+        guidePath,
       );
     }
   });

@@ -5,6 +5,8 @@ goat-flow-reference-version: "1.16.0"
 
 Use this when writing a user-facing release announcement: GitHub release body, app-store notes, email, in-app "what's new", or short social copy. For the durable in-repo change ledger, load [`changelog.md`](./changelog.md) first.
 
+> **Illustrative examples below define shape only; they are not incident evidence.**
+
 ## Availability Check
 
 This is a discipline reference, not a runnable tool. Load it when:
