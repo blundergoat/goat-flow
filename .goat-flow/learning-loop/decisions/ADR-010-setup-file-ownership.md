@@ -6,7 +6,7 @@
 
 ## Context
 
-goat-flow v1.0.0 setups caused damage to existing projects. The worst case: ambient-scribe's AGENTS.md (447 lines of real repo guidance) was replaced with a 104-line goat-flow mirror. The setup agent treated the instruction file as something goat-flow "owned" and could rewrite freely.
+goat-flow v1.0.0 setups caused damage to existing projects. The worst case: the setup agent replaced ambient-scribe's AGENTS.md (447 lines of real repo guidance) with a 104-line goat-flow mirror. It treated the instruction file as something goat-flow "owned" and could rewrite freely.
 
 Users also don't typically want every supported agent set up at once. A Claude setup that rewrites AGENTS.md or Copilot instructions disrupts workflows the user hasn't asked to change.
 

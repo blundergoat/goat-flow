@@ -10,7 +10,7 @@ Two independent Codex critiques (the-summit-chatroom, ambient-scribe) identified
 
 ## Options evaluated
 
-- **Option A: goat-doer + goat-verifier** - Two new skills. Rejected 6/6. Doer-verifier in single-agent context is theater; the verifier has full context of the doer's reasoning.
+- **Option A: goat-doer + goat-verifier** - Two new skills. Rejected 6/6. Doer-verifier in a single-agent context is theater; the verifier has full context of the doer's reasoning.
 - **Option B: goat-implement** - One new skill. Rejected 5/6. One reviewer favored it but for DoD enforcement (hooks), not code editing. Implementation is "the thing the agent does when it's not running a skill."
 - **Option C: Extend existing skills** - No new skills. Favored 5/6. Reviewers proposed adding a goat-plan execution phase, but the shipped resolution kept implementation in the ordinary execution loop instead. The gap is carry-through, not capability.
 - **Option D: Mode, not skill** - Codex's variant of C. The system spec already defines Implement as a core execution mode. The bug is no user-facing path into it. Fix the dispatcher routing, not the skill set.
@@ -32,7 +32,7 @@ Three changes:
 - ADR-009 says implementation belongs in the normal ACT step, not inside a separate implementation skill
 - Skills must NOT jump into implementation early - investigation/diagnosis/planning must complete first
 - Real verification comes from /goat-review or /goat-qa in a fresh invocation, not from the same agent re-reading its own diff
-- Adding skills increases the count that critics already say is too many (see ADR-009 for the skill-consolidation doctrine)
+- Adding skills increases the count that critics already call too high (see ADR-009 for the skill-consolidation doctrine)
 
 ## Consequences
 

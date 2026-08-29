@@ -16,7 +16,7 @@ The task workspace is local working state for milestone files and is gitignored 
 
 Adopt **Option B - marker file `.goat-flow/plans/.active`**. Format: one-line, content = name of the active subdir relative to the task workspace. No trailing slash, no leading dot in the value.
 
-`/goat-plan` owns `.active` lookup. If it exists and names an existing subdir, `/goat-plan` scans only that subdir. If `.active` is missing or names a missing subdir, `/goat-plan` treats that as normal local churn (completed plan, project switch, or no task workflow), lists top-level entries excluding archive directories, prefers dirs with recent `M*.md` files, and asks the user which is current. `/goat` remains a router only: it classifies planning intent and routes to `/goat-plan` without reading task-state markers.
+`/goat-plan` owns `.active` lookup. If `.active` exists and names an existing subdir, `/goat-plan` scans only that subdir. If `.active` is missing or names a missing subdir, `/goat-plan` treats that as normal local churn (completed plan, project switch, or no task workflow), lists top-level entries excluding archive directories, prefers directories with recent `M*.md` files, and asks the user which is current. `/goat` remains a router only: it classifies planning intent and routes to `/goat-plan` without reading task-state markers.
 
 A referenced task path does not update or override `.active` by itself. If a user mentions a task directory without an explicit action verb, `/goat-plan` treats it as read-only orientation context, may report that `.active` currently points elsewhere, and must ask before switching `.active`, changing milestone status, or implementing code.
 

@@ -7,7 +7,7 @@
 
 ## Context
 
-Every tester across 5 Codex critiques bypassed BLOCKING GATEs. Skills were unusable in batch/sub-agent contexts because gates stalled the process. Later hardening separated two concerns that the original decision combined: choosing an appropriate workflow before invocation, and preserving required gates after a workflow is selected.
+Every tester across 5 Codex critiques bypassed BLOCKING GATEs. Skills were unusable in batch/sub-agent contexts because gates stalled the process. Later hardening separated two concerns that the original decision combined: choosing an appropriate workflow before invocation, and preserving required gates after selection.
 
 ## Decision
 
