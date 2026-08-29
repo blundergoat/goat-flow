@@ -3,8 +3,7 @@ goat-flow-reference-version: "1.16.0"
 ---
 # Skill Conventions
 
-Read this file on **full-depth** invocations only. The essential preamble
-in `skill-preamble.md` is always loaded first.
+Read on **full-depth** invocations only; `skill-preamble.md` always loads first.
 
 ---
 
@@ -104,11 +103,9 @@ Handoff receipts: read `.goat-flow/logs/sessions/README.md`; redact before writi
 
 ## Durable Artifact Redaction
 
-For session, handoff, critique, review, quality, security, or export text, use the version-compatible CLI required by `skill-preamble.md` and send the in-memory draft via stdin to `goat-flow redact --output <destination>`; only redacted output reaches disk. Never stage raw text. Redact before disk, not after.
+For session, handoff, critique, review, quality, security, or export text, use the version-compatible CLI required by `skill-preamble.md`: `goat-flow redact --output .goat-flow/logs/<fresh-path>`. Send the in-memory draft via stdin and EOF; only redacted bytes may reach disk. Redact before disk, not after. Never stage raw text; existing destinations are refused.
 
-Example after the version check: `goat-flow redact --output .goat-flow/logs/sessions/YYYY-MM-DD-HHMM-handoff-rand5.md`, then paste stdin and send EOF. Use a fresh destination every time; the redactor refuses replacement.
-
-The hash-only `redactEvidenceText` evidence API is not a readable scrubber. This reduces common credential leakage; it is not perfect DLP and does not replace secret review.
+The hash-only `redactEvidenceText` API is not a readable scrubber. Redaction reduces credential leakage but neither provides DLP nor replaces secret review.
 
 ## Presenting Findings
 
@@ -132,15 +129,13 @@ Lifecycle:
 
 At the gate, record learnings, resolve assumptions, and propose any amendment before applying it. A final pending milestone with complete predecessors enters the combined Phase 4 review.
 
-Session logs remain optional continuity notes: write one only when `/compact` fires without an active milestone or the human requests one.
-
 ### Plan Completion Protocol
 
 See goat-plan Phase 4. Audit the final snapshot, present the **BLOCKING** human gate, and wait. Approval completes the final milestone; plan files remain until the human archives or removes them.
 
 Plan and milestone files are verification artifacts. Agents MUST NOT delete, archive, or include self-destruct instructions in them.
 
-Use `.goat-flow/logs/sessions/` for session summaries. Compact at ~60% context or after 15+ turns.
+Compact at ~60% context or after 15+ turns.
 
 Sub-agents: one objective and structured return. Scouts get 5 tool calls. Implementation gets 5 plus the task's estimated minutes, up to 20 tool calls; split first if that would exceed 20.
 
