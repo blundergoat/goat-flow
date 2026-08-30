@@ -311,7 +311,7 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
         // Asserting the wrong one here is what let this file drift out of version parity.
         assert.match(
           referenceGuidance,
-          /goat-flow-reference-version: "1\.16\.0"/u,
+          /goat-flow-reference-version: "1\.17\.0"/u,
           referencePath,
         );
       },

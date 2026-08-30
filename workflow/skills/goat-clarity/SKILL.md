@@ -1,7 +1,7 @@
 ---
 name: goat-clarity
 description: "Use when a developer asks to improve code comments, documentation, naming, or private placement for a GitHub pull request, uncommitted files, or any repository folders and files."
-goat-flow-skill-version: "1.16.0"
+goat-flow-skill-version: "1.17.0"
 ---
 # /goat-clarity
 

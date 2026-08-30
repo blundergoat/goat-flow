@@ -36,6 +36,7 @@ interface PackedCliLaunch {
 /** Minimal installed Codex shape needed to replay the exact user-facing deny command. */
 interface CodexHookConfiguration {
   hooks?: {
+    [eventName: string]: unknown;
     PreToolUse?: Array<{
       hooks?: Array<{ command?: string; commandWindows?: string }>;
     }>;
@@ -206,31 +207,47 @@ function runPackedCli(
  * Use when migration behavior must not be approximated from current source.
  * Side effects: starts a read-only Git process without changing the checkout.
  *
+ * @param releaseVersion - release version used to select the exact `v`-prefixed tag
  * @param relativePath - non-empty tagged file path; empty cannot identify prior release bytes
  * @returns Tagged bytes, or `null` when a shallow checkout cannot provide the release fixture.
  */
-function readTaggedReleaseFile(relativePath: string): string | null {
+function readTaggedReleaseFile(
+  releaseVersion: string,
+  relativePath: string,
+): string | null {
   const taggedFileResult = spawnSync(
     "git",
-    ["show", `v1.15.0:${relativePath}`],
+    ["show", `v${releaseVersion}:${relativePath}`],
     {
       cwd: PROJECT_ROOT,
       encoding: "utf8",
     },
   );
-  // A shallow checkout cannot claim the exact 1.15.0 migration scenario ran.
+  // A shallow checkout cannot claim that an exact tagged migration scenario ran.
   return taggedFileResult.status === 0 ? taggedFileResult.stdout : null;
 }
 
 const V1_15_0_CODEX_HOOKS = readTaggedReleaseFile(
+  "1.15.0",
   "workflow/hooks/agent-config/codex-hooks.json",
 );
 const V1_15_0_BASH_RUNNER = readTaggedReleaseFile(
+  "1.15.0",
   "workflow/hooks/run-with-bash.mjs",
 );
 // Missing tagged bytes skips only the unavailable release fixture, never a synthetic substitute.
 const V1_15_0_PACKAGE_MIGRATION_UNAVAILABLE =
   V1_15_0_CODEX_HOOKS === null || V1_15_0_BASH_RUNNER === null;
+const V1_16_0_CODEX_HOOKS = readTaggedReleaseFile(
+  "1.16.0",
+  "workflow/hooks/agent-config/codex-hooks.json",
+);
+const V1_16_0_BASH_RUNNER = readTaggedReleaseFile(
+  "1.16.0",
+  "workflow/hooks/run-with-bash.mjs",
+);
+const V1_16_0_PACKAGE_MIGRATION_UNAVAILABLE =
+  V1_16_0_CODEX_HOOKS === null || V1_16_0_BASH_RUNNER === null;
 
 /**
  * Read the exact deny command a Codex user receives after install or sync.
@@ -484,7 +501,7 @@ describe("packaged hook installation canary", () => {
       0,
       packedVersionResult.stderr || packedVersionResult.stdout,
     );
-    assert.equal(packedVersionResult.stdout.trim(), "goat-flow v1.16.0");
+    assert.equal(packedVersionResult.stdout.trim(), "goat-flow v1.17.0");
 
     const freshProjectPath = makeDisposablePackageWorkspace("fresh-non-git");
     const freshInstallResult = runPackedCli(
@@ -510,6 +527,108 @@ describe("packaged hook installation canary", () => {
     );
     assertInstalledCodexPolicy(freshProjectPath);
   });
+
+  // The release gate combines a fresh archived install with the exact direct-predecessor sync users will run.
+  it(
+    "runs fresh install and 1.16.0 sync through the archived CLI bin",
+    { skip: V1_16_0_PACKAGE_MIGRATION_UNAVAILABLE },
+    () => {
+      // The skip above handles shallow clones; release proof preflights both tagged objects before selecting this case.
+      assert.ok(V1_16_0_CODEX_HOOKS);
+      assert.ok(V1_16_0_BASH_RUNNER);
+      const { packedPackageRoot, packedCliLaunchPath } =
+        preparePackedCliLaunch();
+      const packedVersionResult = runPackedCli(
+        packedCliLaunchPath,
+        ["--version"],
+        packedPackageRoot,
+      );
+      assert.equal(
+        packedVersionResult.status,
+        0,
+        packedVersionResult.stderr || packedVersionResult.stdout,
+      );
+      assert.equal(packedVersionResult.stdout.trim(), "goat-flow v1.17.0");
+
+      const freshProjectPath = makeDisposablePackageWorkspace(
+        "fresh-direct-predecessor",
+      );
+      const freshInstallResult = runPackedCli(
+        packedCliLaunchPath,
+        ["install", freshProjectPath, "--agent", "codex"],
+        freshProjectPath,
+      );
+      assert.equal(
+        freshInstallResult.status,
+        0,
+        freshInstallResult.stderr || freshInstallResult.stdout,
+      );
+      assertInstalledCodexPolicy(freshProjectPath);
+
+      const upgradedProjectPath =
+        makeDisposablePackageWorkspace("upgrade-1-16-0");
+      mkdirSync(join(upgradedProjectPath, ".codex"), { recursive: true });
+      mkdirSync(join(upgradedProjectPath, ".goat-flow", "hooks"), {
+        recursive: true,
+      });
+      const taggedHookConfiguration = JSON.parse(
+        V1_16_0_CODEX_HOOKS,
+      ) as CodexHookConfiguration;
+      assert.ok(taggedHookConfiguration.hooks);
+      const userOwnedSibling = [{ command: "node custom-user-hook.mjs" }];
+      taggedHookConfiguration.hooks.CustomEvent = userOwnedSibling;
+      const predecessorHookBytes = `${JSON.stringify(taggedHookConfiguration, null, 2)}\n`;
+      writeFileSync(
+        join(upgradedProjectPath, ".codex", "hooks.json"),
+        predecessorHookBytes,
+      );
+      writeFileSync(
+        join(upgradedProjectPath, ".goat-flow", "hooks", "run-with-bash.mjs"),
+        V1_16_0_BASH_RUNNER,
+      );
+
+      const migrationResult = runPackedCli(
+        packedCliLaunchPath,
+        ["hooks", "sync", upgradedProjectPath],
+        upgradedProjectPath,
+      );
+      assert.equal(
+        migrationResult.status,
+        0,
+        migrationResult.stderr || migrationResult.stdout,
+      );
+      const installedHookBytes = readFileSync(
+        join(upgradedProjectPath, ".codex", "hooks.json"),
+        "utf8",
+      );
+      assert.notEqual(installedHookBytes, predecessorHookBytes);
+      const installedHookConfiguration = JSON.parse(
+        installedHookBytes,
+      ) as CodexHookConfiguration;
+      assert.deepEqual(
+        installedHookConfiguration.hooks?.CustomEvent,
+        userOwnedSibling,
+      );
+      const packedBashRunner = readFileSync(
+        join(packedPackageRoot, "workflow", "hooks", "run-with-bash.mjs"),
+        "utf8",
+      );
+      assert.notEqual(packedBashRunner, V1_16_0_BASH_RUNNER);
+      assert.equal(
+        readFileSync(
+          join(upgradedProjectPath, ".goat-flow", "hooks", "run-with-bash.mjs"),
+          "utf8",
+        ),
+        packedBashRunner,
+      );
+      assert.equal(
+        typeof readInstalledCodexDenyHandler(upgradedProjectPath)
+          .commandWindows,
+        "string",
+      );
+      assertInstalledCodexPolicy(upgradedProjectPath);
+    },
+  );
 
   // Existing 1.15.0 users get migration proof only when the exact released fixture is available.
   it(

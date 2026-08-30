@@ -1,4 +1,4 @@
-// goat-flow-hook-version: 1.16.0
+// goat-flow-hook-version: 1.17.0
 /**
  * Owns the bounded lifecycle result for an already-started managed hook.
  *

@@ -1,4 +1,4 @@
-// goat-flow-hook-version: 1.16.0
+// goat-flow-hook-version: 1.17.0
 /**
  * Decodes bounded provider-neutral hook results and renders one host response.
  * Use at the managed launcher boundary after a migrated hook finishes, so users

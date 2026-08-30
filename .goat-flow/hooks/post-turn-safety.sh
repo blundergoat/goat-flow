@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # post-turn-safety.sh
-# goat-flow-hook-version: 1.16.0
+# goat-flow-hook-version: 1.17.0
 #
 # Purpose:
 #   Universal Stop-event safety guard for supported agents. This hook checks
@@ -54,7 +54,7 @@ fallback_max_bytes="${GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES:-1048576}"
 fallback_max_findings="${GOAT_FLOW_POST_TURN_SAFETY_MAX_FINDINGS:-20}"
 post_turn_native_workspace=""
 post_turn_action="scan"
-post_turn_hook_version="1.16.0"
+post_turn_hook_version="1.17.0"
 post_turn_result_schema="goat-flow.hook-result.v1"
 post_turn_migrated_result_mode=0
 post_turn_result_records_path=""

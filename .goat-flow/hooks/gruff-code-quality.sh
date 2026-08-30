@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # gruff-code-quality.sh
-# goat-flow-hook-version: 1.16.0
+# goat-flow-hook-version: 1.17.0
 # Runs the matching Gruff analyzer after a user or agent edits a supported file.
 # It attributes line/symbol findings to the edit while retaining file/project findings.
 # Package-local configs select monorepo targets; explicit overrides cover other layouts.
@@ -17,7 +17,7 @@ if (( BASH_VERSINFO[0] < 4 || (BASH_VERSINFO[0] == 4 && BASH_VERSINFO[1] < 4) ))
 fi
 
 FOOTER="For triage: consult .goat-flow/skill-docs/playbooks/gruff-code-quality.md"
-HOOK_VERSION="1.16.0"
+HOOK_VERSION="1.17.0"
 HOOK_RESULT_SCHEMA="goat-flow.hook-result.v1"
 SUPPORTED_TOOLS=" edit write multiedit apply_patch write_to_file replace_file_content multi_replace_file_content "
 SKIP_DIR_PATTERN='(^|/)(node_modules|vendor|\.goat-flow|dist|build|coverage|\.git|target|\.venv|\.mypy_cache|\.pytest_cache|\.ruff_cache)(/|$)'
@@ -2233,7 +2233,7 @@ emit_hook_result() {
     return 0
   fi
   # A minimal fixed envelope keeps parser loss visible without interpolating unsafe text.
-  printf '%s\n' '{"schema":"goat-flow.hook-result.v1","hookId":"gruff-code-quality","event":"post-tool","outcome":"unavailable","coverage":{"status":"none","attemptedUnits":0,"completedUnits":0,"skippedUnits":0},"reasonCode":"hook-unavailable","findings":[{"code":"result-parser-missing","message":"jq is unavailable, so Gruff could not emit validated feedback","target":"project"}],"execution":{"hookVersion":"1.16.0","provider":"claude","providerMode":"fallback","adapterName":"claude-post-tool","adapterVersion":"1","durationMs":0}}'
+  printf '%s\n' '{"schema":"goat-flow.hook-result.v1","hookId":"gruff-code-quality","event":"post-tool","outcome":"unavailable","coverage":{"status":"none","attemptedUnits":0,"completedUnits":0,"skippedUnits":0},"reasonCode":"hook-unavailable","findings":[{"code":"result-parser-missing","message":"jq is unavailable, so Gruff could not emit validated feedback","target":"project"}],"execution":{"hookVersion":"1.17.0","provider":"claude","providerMode":"fallback","adapterName":"claude-post-tool","adapterVersion":"1","durationMs":0}}'
 }
 
 main() {

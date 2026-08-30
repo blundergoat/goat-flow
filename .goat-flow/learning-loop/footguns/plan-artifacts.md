@@ -11,7 +11,7 @@ last_reviewed: 2026-08-30
 **Decision changed:** Keep machine-parsed checklist sections contiguous, leave `(est: ...)` as each row's final token, and put explanatory prose and tables under their own headings outside the checklist.
 **Trigger phase:** SCOPE
 **Caught at:** VERIFY
-**Incident count:** 5 | **Latest occurrence:** 2026-08-27
+**Incident count:** 6 | **Latest occurrence:** 2026-08-30
 
 **Symptoms:** `plans check --strict` starts failing on a milestone whose checklist was only ticked, with three errors at once: `proof counted work (N min) does not equal the split component`, `N testing gate item(s) missing an (est: ...) entry`, and `forecast basis declares N agent work units but the plan contains N-1`. The arithmetic looks corrupted even though no estimate was edited, and the named item visibly still carries its `(est: ...)`.
 
@@ -24,6 +24,8 @@ last_reviewed: 2026-08-30
 **Recurrence 2026-08-23:** M15 put one indented evidence bullet after every completed P1/C1-C3 row. Strict validation then counted zero proof minutes, reported all four gates as missing estimates, and saw only 8 of 12 forecast work units even though every checklist row still ended in `(est: ...)`. Moving those notes unchanged under `## Verification evidence` restored the checklist boundaries.
 
 **Recurrence 2026-08-27:** While closing M41's MP1 gate, appending a `Satisfied on ...` sentence after the row's `(est: 2 min proof)` suffix made strict validation report the same three-error cluster: proof work fell by two minutes, one mid-proof estimate disappeared, and the forecast lost one work unit. Moving the sentence before the unchanged estimate suffix restored the parsed row. The tracked parser owner is `src/cli/plans-effort.ts` (search: `TASK_ESTIMATE_PATTERN`).
+
+**Recurrence 2026-08-30:** M37 placed two checkpoint paragraphs directly after its sole completed mid-proof row. Strict validation reported proof work dropping from five to three minutes, one missing mid-proof estimate, and 11 parsed units against the forecast's 12. Adding the `## Mid-implementation evidence` heading before the unchanged paragraphs restored the row boundary and all three counts. Evidence anchor: `src/cli/plans-export.ts` (search: `Headings also end an item`).
 
 **Why it happens:** An item's body is not one line. `src/cli/plans-export.ts` (search: `Headings also end an item so nested Testing Gate labels do not swallow its trailing estimate`) runs each item from its checkbox to the next checkbox or the next heading, so a paragraph after the last row is absorbed into that row's body. The estimate is then read by `src/cli/plans-effort.ts` (search: `TASK_ESTIMATE_PATTERN`), whose regex is anchored to the end of the body text - the appended prose pushes `(est: ...)` away from that anchor and the item reads as unestimated. One insertion therefore produces three errors, and none of them names prose as the cause. A heading terminates an item, which is why prose under the *next* `##` heading is safe.
 
@@ -169,6 +171,23 @@ last_reviewed: 2026-08-30
 that the same file's audit fixture omitted a required field. Repairing the fixture cost 14 substantive lines and put the file back to 1,014. A file
 resolved to exactly its threshold has no margin for the follow-on edits its own fix requires, so plan a split to land clearly under the gate rather
 than just below it. Evidence anchor: `src/cli/prompt/compose-quality-common.ts` (search: `appendHookCoverageSummary`).
+
+---
+
+## Footgun: Release boundary approval goes stale when HEAD moves at the human gate
+
+**Status:** active | **Created:** 2026-08-30 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Re-establish HEAD, status, destination contents, and the exact scripted write set after every release boundary wait; obtain fresh approval when any candidate input or path membership changed.
+**Trigger phase:** SCOPE
+**Caught at:** ACT
+
+**Prevention:** Treat release boundary approval as bound to the recorded commit and candidate inventory, not as a lease over later repository state. On resume, compare HEAD and status with the approved receipt, re-read every manual destination, and rerun the bump preview from the new commit. Preserve work that now satisfies a task. If candidate bytes or write-set membership changed, present the replacement baseline and wait for approval before writing.
+
+**Symptoms:** A release bump can have a clean, approved path list and still resume against different bytes. Applying the prepared manual patch then conflicts with content the user already committed, while running a previously previewed bulk writer would attribute its results to the wrong candidate.
+
+**Why it happens:** The human gate and the repository are independent state machines. A user may legitimately commit in-scope work while the milestone is paused, but the milestone's recorded HEAD, starting dirty paths, release ledger, and disposable bump preview do not advance automatically.
+
+**Evidence:** Measured during 1.17.0 M37 on 2026-08-30. The user committed the prepared changelog and review fixes while the release boundary was waiting. Revalidation found clean replacement HEAD `406eddd0e8ce0de19c385b61520d512b5530037a`, and the planned changelog edit no longer applied because `CHANGELOG.md` already contained the exact `v1.17.0 - 2026-08-30` section. A fresh isolated bump preview at that HEAD still produced the approved 164-path set, so the user reapproved the replacement baseline before the live script ran. Anchors: `CHANGELOG.md` (search: `## v1.17.0 - 2026-08-30`) and `scripts/bump-version.sh` (search: `# Updated files:`).
 
 ---
 
