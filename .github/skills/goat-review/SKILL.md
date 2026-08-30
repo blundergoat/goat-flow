@@ -51,7 +51,7 @@ Read `.goat-flow/skill-docs/skill-preamble.md`; on full-depth also read `.goat-f
 
 For `worktree`, bind the combined tracked diff plus untracked membership; do not merge independently captured states.
 
-Required `n/a` is resolved, not degraded. Unknowns degrade.
+Required `n/a` is resolved, not degraded; unknowns degrade.
 
 ### Step 0.5 - Intent Reconstruction (mandatory)
 
@@ -89,12 +89,12 @@ Open full files from the declared authority, never unqualified checkout paths. F
 - **Try to DISPROVE it** using the anchor, guards, upstream checks, framework mitigation, and contracts.
 - **CONFIRMED** needs positive reachability; failed disproof → **UNRESOLVED**. **ADJUSTED** is real but narrower and restates severity; **REFUTED** cites a removing guard/contract. Forbid "confirmed with caveat", "matches prior behaviour", and "sloppy but not exploitable".
 - **Blast Radius Rule:** search consumers symbol-aware (LSP/MCP) → AST (`ast-grep`) → text (`rg`/`grep`); text-only adds `callsite-completeness-grep-only`. Include dynamic dispatch, reflection, DI, string keys, generated code, and external consumers. Verify one consumer or mark UNRESOLVED with `coverage-degraded`.
-- **Refutation Ledger:** draft REFUTED suspicions only in memory, one record per line with R-ID: `- R-NNN | Suspicion: ... | Evidence: ... | Rationale: ...`; host: `goat-flow redact --output .goat-flow/logs/review/goat-review-refutations.<random>.txt`; report exact path. CONFIRMED/ADJUSTED → Findings; UNRESOLVED → verdict counts, never ledger; `Refutations logged` equals ledger record count. If redactor is unavailable, do not persist; emit `Refutations logged: <N> (persist-skipped)` and ledger `persist-skipped`.
+- **Refutation Ledger:** keep REFUTED suspicions only, transient, one record per line: `- R-NNN | Suspicion: ... | Evidence: ... | Rationale: ...`. CONFIRMED/ADJUSTED → Findings; UNRESOLVED → verdict counts. Do not redact in Pass 2; Pass 3 may change it.
 - Add verified context; re-verify output anchors.
 
 ### Pass 2.5 - Inline Re-framings
 
-Re-frame only Pass 0 result lines and Pass 2 reads already gathered; make no new tool, file, command, or model calls. A passing test means its literal Pass 0 result from this session. **Additive:** sweep silent failures, trust boundaries, and integration seams when the diff is >200 lines, any MUST survives, or the change is a verification mechanism. **Subtractive:** when a MUST or correctness-SHOULD survives, try to kill it with a named guard, pinned-version framework behaviour, or passing test. Any subagent promotion requires Orchestration Admission.
+Re-frame only gathered Pass 0 lines and Pass 2 reads; no new tool, file, command, or model calls. A test passes only from its literal current-session Pass 0 result. **Additive:** sweep silent failures, trust boundaries, and integration seams when diff >200 lines, a MUST survives, or the change is a verification mechanism. **Subtractive:** for a surviving MUST/correctness-SHOULD, try to kill it with a named guard, pinned-version framework behaviour, or passing test. Subagent promotion requires Orchestration Admission.
 
 ### Automated-Review Overlap (PR mode, after local findings)
 
@@ -127,11 +127,9 @@ Check findings against INDEX-first footguns and `references/review-traps.md`; in
 
 **BLOCKING GATE:** Present Findings, risks, and Review Integrity; pause. Pending Pass 3 requires `PENDING REFUTER/HUMAN`; afterward, give the final verdict.
 
-**Review DoD gate:** reporting-only review verifies findings, references, and scope; run implementation tests only when needed. “Implement” invokes instruction-file DoD.
+**Review DoD gate:** reporting-only review verifies findings, references, and scope; run implementation tests as needed. “Implement” invokes instruction DoD.
 
-**Convergence guard:** after two review→fix cycles without the finding count dropping, stop, re-derive whether the original defect was real, and re-scope with the human.
-
-**Proof Gate:** Version-matched CLI: pipe draft through `goat-flow review validate`; record `Review validator: validated` or `Review validator: validator-unavailable`. Validator-unavailable does not block.
+**Convergence guard:** after two review→fix cycles without fewer findings, stop, re-test the original defect, and re-scope with the human.
 
 ## Area Audit (Full)
 
@@ -143,7 +141,7 @@ Per cluster, inventory responsibilities, interfaces, trust/state boundaries, and
 
 ### Area Pass 2 - Implementation and Consumer Verification
 
-Open implementation, tests, and consumers. Apply Blast Radius; disprove via guards/call-sites. Mark each suspicion `CONFIRMED`, `ADJUSTED`, `REFUTED`, or `UNRESOLVED` and retain the Refutation Ledger. Area findings may use `[SEVERITY:pre-existing]`.
+Open implementation, tests, and consumers. Apply Blast Radius; disprove via guards/call-sites. Mark each suspicion `CONFIRMED`, `ADJUSTED`, `REFUTED`, or `UNRESOLVED` and retain the Refutation Ledger through Proof Gate. Area findings may use `[SEVERITY:pre-existing]`.
 
 Without a release/merge question, emit `N/A - AREA AUDIT ONLY`.
 
@@ -174,6 +172,8 @@ Offer Pass 3 on user opt-in, `coverage-degraded`/`high-inference`, or a MUST-nee
 **Synthesis:** Refuter output is advisory; only host-reproduced evidence changes findings (Finding authority). After host proof, tag unverifiable citations `refuter-citation-unverified`, unresolved claims `cross-model-unresolved`, and return leads to Pass 2.
 
 **Constraints:** Before approval, only reference-listed availability/auth checks may run; versions do not prove auth. Without an authenticated refuter, skip with `cross-model-refuter-failed`.
+
+**Proof Gate:** After optional Pass 3, follow `references/examples.md` (search: `Pre-persistence Proof Envelope`). For N>0, validate the transient ledger and combined pending draft before redaction. Final version-matched CLI `goat-flow review validate` PASS licenses `Review validator: validated`; draft PASS excludes persistence; `validator-unavailable` does not block.
 
 ## Review Integrity (confidence signal)
 
@@ -211,7 +211,7 @@ Never emit a whole field for `n/a` alone; applicable rows may contain `n/a` subv
 
 ## Output Format
 
-Emit `## Top 5 Risks` only when there are more than five surfaced findings; otherwise Findings is the risk surface. Render only with content: `Systemic Patterns`, `Spec Drift`, `Pre-existing Nearby`, `Pre-existing Issues`, `Breaking Changes`. `What's Good` needs substantive evidence, never generic praise. Clean PR: scope line, verdict, defended zero-findings statement, one-line integrity summary, one-line unexamined surface.
+Emit `## Top 5 Risks` only when there are more than five surfaced findings; otherwise use Findings. Render only with content: `Systemic Patterns`, `Spec Drift`, `Pre-existing Nearby`, `Pre-existing Issues`, `Breaking Changes`. `What's Good` needs substantive evidence, never generic praise. Clean PR: scope line ending `chunking=no|accepted`, verdict, defended zero-findings statement, one-line integrity summary, one-line unexamined surface.
 
 Machine-valid anchors use repo-relative paths such as `<repo-relative-path>` (search: `literal`) in Findings, Systemic Patterns, and Top 5 Risks; resolve them against the reviewed project.
 

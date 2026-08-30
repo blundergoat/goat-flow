@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-08-23
-**Updated:** 2026-08-24 - M29 made optional decision guidance the single bounded hook for footgun and lesson rows.
+**Updated:** 2026-08-31 - Step 0 now bounds matching-row output, so raw aggregate-index bytes remain telemetry rather than a retrieval-cost warning.
 **Ticket/Context:** `.goat-flow/plans/1.17.0/M05-index-cost-and-date-columns.md`
 
 ## Context
@@ -31,6 +31,10 @@ context hook when that field is absent. Pattern and decision hooks do not use th
 The complete labelled hook remains within 100 characters. Long guidance first ends at a word boundary with an ellipsis. The shortened text is then
 checked for an open Markdown code span and backs up before its opening delimiter when needed. The rule is derived only from entry text.
 
+Step 0 searches the generated indexes instead of loading one wholesale. Search output is capped at 13 rows across the four buckets; the thirteenth row is a breadth signal, so the agent refines its terms before inspection and reads at most 12 matching rows. This makes context cost depend on the bounded result set rather than aggregate file bytes.
+
+Index `sizeBytes` remains visible stats telemetry. `stats --check` does not warn solely on aggregate index size: active entries have no lossless shrink lever under ADR-033's one-index-per-bucket layout, and raw size no longer predicts the bounded context read.
+
 ## Failure Mode Comparison
 
 | Option | What fails | Why rejected or accepted |
@@ -41,6 +45,8 @@ checked for an open Markdown code span and backs up before its opening delimiter
 | Derive both fields from entry text | Repeated generation is stable, missing dates stay honest, and every row exposes comparable reading cost. | Accepted. |
 | Append guidance | Rows repeat summaries; measured growth was 4,323 footgun bytes and 8,815 lesson bytes. | Rejected after the corpus measurement. |
 | Replace the hook | Rows expose the future action within the existing 100-character budget. | Accepted. |
+| Warn when aggregate index bytes exceed a fixed threshold | The warning prescribes retiring still-active evidence even though bounded search prevents a whole-file context read. | Rejected because raw size is telemetry, not retrieval cost. |
+| Cap search output and refine broad terms | Aggregate indexes remain deterministic and complete while Step 0 context stays bounded. | Accepted. |
 
 ## Consequences
 
@@ -49,7 +55,7 @@ All four committed `INDEX.md` files gain the suffix and must be regenerated toge
 The 2026-08-24 regeneration replaced hooks in place and increased the footguns index by 174 bytes and the lessons index by 490 bytes. Pattern rows
 were byte-identical; the decisions index changed only because this ADR's reading-cost estimate changed.
 
-The suffix increases the mandatory Step 0 index read size. The implementation must measure the generated indexes and revisit this decision if the added columns make index-first retrieval impractical.
+The suffix increases each matching row's size, but only bounded search output reaches Step 0 context. Stats continues to expose aggregate bytes for diagnosis without turning size alone into remediation debt. Revisit the cap if measured matching-row output makes index-first retrieval impractical.
 
 ## Reversibility
 

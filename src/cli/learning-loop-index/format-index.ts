@@ -26,7 +26,7 @@ const BUCKET_ROW_NOUN: Record<IndexBucket, string> = {
   decisions: "one Architectural Decision Record with its current status",
 };
 
-/** Row hooks stay at 100 characters because every skill reads the generated index before deciding which entry to open. */
+/** Keep row hooks at 100 characters because longer summaries would dominate the bounded Step 0 result set. */
 const ROW_HOOK_MAX_CHARS = 100;
 
 /** Label that distinguishes future guidance from an incident or context summary. */

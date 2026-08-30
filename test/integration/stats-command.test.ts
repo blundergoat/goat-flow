@@ -348,7 +348,7 @@ describe("goat-flow stats --check", () => {
     );
   });
 
-  it("keeps oversized-index remediation inside the supported one-index layout", () => {
+  it("keeps raw index size as telemetry without treating it as retrieval cost", () => {
     const report = loadReport({ footguns: {}, lessons: {} });
     report.indexes = [
       {
@@ -360,21 +360,13 @@ describe("goat-flow stats --check", () => {
       },
     ];
 
-    const warning = checkStats(report).warnings.find(
-      (item) => item.rule === "index-size",
-    );
+    const checked = checkStats(report);
 
-    assertExists(warning, "expected an oversized-index warning");
-    assert.match(
-      warning.message,
-      /resolve entries that no longer change a decision/u,
+    assert.equal(report.indexes[0]?.sizeBytes, 50_000);
+    assert.equal(
+      checked.warnings.map((item) => String(item.rule)).includes("index-size"),
+      false,
     );
-    assert.match(
-      warning.message,
-      /no supported index layout currently reduces this file/u,
-    );
-    assert.match(warning.message, /splitting bucket files does not shrink it/u);
-    assert.doesNotMatch(warning.message, /per-category indexes/u);
   });
 
   it("fails when footgun entries do not have exactly one canonical evidence label", () => {

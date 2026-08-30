@@ -232,13 +232,13 @@ flowchart TD
     end
 
     R3 -->|"BLOCKING GATE"| DoD["DoD Gate Check"]
-    DoD --> V["Version-matched CLI\nreview validate when available"]
+    DoD --> V["Version-matched CLI\nledger → draft → final validation"]
     V -->|"CHECKPOINT"| Close["Closing"]
 ```
 
 Pass 1 never surfaces findings. Pass 2 is the source of truth: it opens full files and classifies each suspicion as confirmed, adjusted, refuted, or unresolved; refuted items stay in the local ledger rather than Findings. Automated-review conclusions stay unread until both local passes finish, then locally verified bot-only findings may enter the same evidence pipeline. MUST NOT flag pre-existing issues as part of this change.
 
-Findings use `R-NNN [SEVERITY:ACTION]`, semantic anchors, Evidence/Proof, and `Harm:` for MUST/SHOULD; every result includes Review Integrity. With a version-matched CLI, pipe the draft through `goat-flow review validate`; validator unavailability does not block reporting.
+Findings use `R-NNN [SEVERITY:ACTION]`, semantic anchors, Evidence/Proof, and `Harm:` for MUST/SHOULD; every result includes Review Integrity. With a version-matched CLI and nonzero refutations, run `goat-flow review validate-ledger`, run `goat-flow review validate-draft` on the count-bound pending envelope before redaction, then run final `goat-flow review validate` against the persisted ledger. Validator unavailability does not block reporting.
 
 Pass 2.5 re-frames only evidence already gathered and makes no new tool, file, command, or model calls. Refutation ledgers use a declared exact path and counted one-line records; ledgers and captured refuter JSON use host-owned pre-write redaction. Unavailable redaction skips persistence but preserves the count. Full and compact integrity output records `Review validator: validated | validator-unavailable`.
 

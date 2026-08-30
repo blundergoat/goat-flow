@@ -306,13 +306,14 @@ npx @blundergoat/goat-flow@latest redact --output .goat-flow/logs/sessions/YYYY-
 
 Paste the candidate text into stdin and send EOF. Without `--output`, the safe text is written to stdout. With `--output`, the command creates one private file inside the selected project, rejects linked parent paths, and revalidates the create-only allocation before and after writing. It refuses existing files, so choose a fresh filename for every run. This is a practical pre-write guard, not perfect DLP; review sensitive artifacts before sharing them. The separate `redactEvidenceText` API remains a hash-and-length evidence contract and does not produce readable output.
 
-### `goat-flow review validate [report-file] [--output <path>]`
+### `goat-flow review validate-ledger|validate-draft|validate [input-file] [--output <path>]`
 
-Validate a drafted goat-review Markdown report from a file or stdin. Semantic anchors and the declared refutation ledger resolve against the current working directory, so run it from the reviewed project's root. Structural V1-V6/V8 failures exit `1`; advisory V7 shape warnings and unknown degradation flags are printed but retain exit `0`. By default the result prints to stdout; `--output` writes the same PASS/FAIL report to the selected file.
+Run the three goat-review proof gates from a file or stdin. `validate-ledger` checks raw transient refutation records and returns the exact record count. `validate-draft` requires `Review validator: pending`; when refutations are nonzero, its draft envelope is the complete report, a line containing only `<!-- goat-flow-review-ledger-draft -->`, then the exact transient records. It checks report grammar, ledger grammar, and count together while explicitly leaving persistence unverified. After redaction creates the declared ledger, change the report field to `validated`; `validate` checks the report and that exact persisted artifact and rejects the transient marker. Run report validation from the reviewed project's root so semantic anchors and ledger paths resolve there. Structural V1-V6/V8 failures exit `1`; advisory V7 shape warnings and unknown degradation flags are printed but retain exit `0`. By default the result prints to stdout; `--output` writes the same PASS/FAIL result to the selected file.
 
 ```bash
+npx @blundergoat/goat-flow@latest review validate-ledger
+npx @blundergoat/goat-flow@latest review validate-draft
 npx @blundergoat/goat-flow@latest review validate review.md
-npx @blundergoat/goat-flow@latest review validate < review.md
 npx @blundergoat/goat-flow@latest review validate review.md --output validation.txt
 ```
 

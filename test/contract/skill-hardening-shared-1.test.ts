@@ -256,6 +256,11 @@ describe("skill hardening contracts: shared surfaces (1/3)", () => {
         assert.match(examples, /Clean review compact surface/u, referencePath);
         assert.match(
           examples,
+          /Scope:[^\n]+chunking=<no\|accepted>/u,
+          referencePath,
+        );
+        assert.match(
+          examples,
           /More than five surfaced findings/u,
           referencePath,
         );
@@ -490,7 +495,7 @@ describe("skill hardening contracts: shared surfaces (1/3)", () => {
     assert.match(reviewDocumentation, /R-NNN \[SEVERITY:ACTION\]/u);
     assert.match(
       reviewDocumentation,
-      /version-matched CLI[^\n]+goat-flow review validate[^\n]+does not block/iu,
+      /version-matched CLI[^\n]+goat-flow review validate-ledger[^\n]+goat-flow review validate-draft[^\n]+before redaction[^\n]+final `goat-flow review validate`[^\n]+does not block/iu,
     );
     assert.match(
       reviewDocumentation,
@@ -537,6 +542,33 @@ describe("skill hardening contracts: shared surfaces (1/3)", () => {
       assert.match(
         retrievalContract,
         /Otherwise run `goat-flow index` only with user authorization/u,
+        preamblePath,
+      );
+    }
+  });
+
+  it("bounds aggregate INDEX retrieval independently of raw file size", () => {
+    for (const preamblePath of [
+      "workflow/skills/reference/skill-preamble.md",
+      ".goat-flow/skill-docs/skill-preamble.md",
+    ]) {
+      const retrievalContract = readMarkdownSection(
+        preamblePath,
+        "Learning-Loop Retrieval",
+      );
+      assert.match(
+        retrievalContract,
+        /Cap search output across all four INDEXes at 13 rows; never load one wholesale/u,
+        preamblePath,
+      );
+      assert.match(
+        retrievalContract,
+        /Row 13 requires refinement; inspect at most 12 matches/u,
+        preamblePath,
+      );
+      assert.match(
+        retrievalContract,
+        /Open footgun\/lesson hits at `Prevention` or `Decision changed` first/u,
         preamblePath,
       );
     }

@@ -52,8 +52,9 @@ export type LearnEntryType = "footgun" | "lesson" | "pattern";
 export type LearnEvidenceKind =
   "ACTUAL_MEASURED" | "OBSERVED" | "EXTERNAL_REFERENCE";
 
-/** Deterministic checks for drafted goat-review Markdown. */
-export type ReviewSubcommand = "validate";
+/** Deterministic checks for review drafts, transient ledgers, and completed reports. */
+export type ReviewSubcommand =
+  "validate" | "validate-draft" | "validate-ledger";
 
 /** Read-only diagnostics views an operator can run without changing the selected project. */
 export type DiagnosticsSubcommand =

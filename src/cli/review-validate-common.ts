@@ -24,6 +24,9 @@ export interface ReviewValidationResult {
   warnings: ReviewValidationViolation[];
 }
 
+/** Validation phase controls whether the report is still awaiting its final proof. */
+export type ReviewValidationStage = "draft" | "final";
+
 /** One report line with its one-based source location. */
 export interface LocatedLine {
   line: number;
@@ -117,12 +120,26 @@ export interface VerdictCountClaim {
 export interface ParsedScopeSnapshot {
   authority: string;
   bundle: string;
+  chunking: string;
   drift: string;
   head: string;
   isAreaAudit: boolean;
   signals: string;
   source: string;
   uncommitted: string;
+}
+
+/** Numeric scope evidence parsed from a full or compact report receipt. */
+export interface ReviewSizeClaim {
+  fileCount: number;
+  unitCount: number;
+  unitLabel: string;
+  line: number;
+}
+
+/** Compact scope evidence plus the terminal chunking state it declares. */
+export interface CompactReviewSizeClaim extends ReviewSizeClaim {
+  chunking: string;
 }
 
 /** Stable V-number shown beside each issue so a user can look the check up. */
@@ -207,6 +224,14 @@ export const REVIEW_BUNDLE_PATH =
 export const IMMUTABLE_OBJECT_IDENTIFIER = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/iu;
 export const SCOPE_SNAPSHOT =
   /^source=(worktree|staged|unstaged|PR(?:\s+#[^,\s]+)?|branch diff|area|explicit path list),\s*base=([^,]+),\s*head=([^,]+),\s*authority=([^,]+),\s*drift=([^,]+),\s*uncommitted=(yes|no|n\/a),\s*signals=(\d+),\s*bundle=([^,]+),\s*chunking=(\S.*)$/iu;
+/** Twenty is binding because goat-review forbids larger file scopes from entering Pass 1 unchunked. */
+export const REVIEW_CHUNK_FILE_LIMIT = 20;
+/** Three thousand is binding because goat-review forbids larger diffs from entering Pass 1 unchunked. */
+export const REVIEW_CHUNK_CHANGED_LINE_LIMIT = 3000;
+export const FULL_REVIEW_SIZE_VALUE =
+  /^(\d+)\s+files?,\s*(\d+)\s+(changed[- ]lines?|clusters?)\b/iu;
+export const COMPACT_REVIEW_SCOPE_SIZE =
+  /^\s*Scope:\s*\S.*?\b(\d+)\s+files?\s+(?:and|,)\s*(\d+)\s+changed[- ]lines?\b.*;\s*chunking=(no|none|accepted)\.?\s*$/iu;
 
 export const REQUIRED_INTEGRITY_FIELDS: ReadonlyArray<
   readonly [label: string, valuePattern: RegExp]
@@ -236,14 +261,17 @@ export const AUTOMATED_REVIEW_VALUE =
   /^(?:n\/a|no-automated-review-present|overlap-confirmed=\d+,\s*local-only=\d+,\s*bot-only-locally-verified=\d+,\s*disputed-match=\d+;\s*.+)$/u;
 export const REFUTER_VALUE =
   /^(?:yes|no|skipped);\s*confirmed=\d+,\s*refuted=\d+,\s*unresolved=\d+,\s*leads-verified=\d+,\s*model=\S.+$/u;
-export const COMPACT_INTEGRITY =
-  /^\s*Review Integrity:\s*(confident|coverage-degraded|high-inference|partial);\s*\d+\/\d+\s+files opened;\s*no degradation flags;\s*validator=(?:validated|validator-unavailable)\.?\s*$/u;
+const COMPACT_INTEGRITY =
+  /^\s*Review Integrity:\s*(confident|coverage-degraded|high-inference|partial);\s*(\d+)\/(\d+)\s+files opened;\s*no degradation flags;\s*validator=(?:validated|validator-unavailable)\.?\s*$/u;
+const COMPACT_DRAFT_INTEGRITY =
+  /^\s*Review Integrity:\s*(confident|coverage-degraded|high-inference|partial);\s*(\d+)\/(\d+)\s+files opened;\s*no degradation flags;\s*validator=pending\.?\s*$/u;
 export const COMPACT_CLEAN_REVIEW_FIELDS = [
   {
     label: "Scope",
     prefix: /^\s*Scope:/u,
-    value: /^\s*Scope:\s*\S.*$/u,
-    requirement: "must not be empty",
+    value: /^\s*Scope:\s*\S.*;\s*chunking=(?:no|none|accepted)\.?\s*$/iu,
+    requirement:
+      "must end with chunking=no, chunking=none, or chunking=accepted",
   },
   {
     label: "Zero findings",
@@ -270,16 +298,18 @@ export const SHIP_VERDICT_LADDER = [
   "NO",
 ] as const;
 
-/** One durable ledger record; every field is mandatory and single-line. */
+/** One ledger record; every field is mandatory, single-line, and free of separator pipes. */
 export const REFUTATION_LEDGER_RECORD =
-  /^-\s+R-\d{3}\s+\|\s+Suspicion:\s+[^|]*\S[^|]*\s+\|\s+Evidence:\s+[^|]*\S[^|]*\s+\|\s+Rationale:\s+\S.*$/u;
+  /^-\s+R-\d{3}\s+\|\s+Suspicion:\s+[^|]*[^\s|][^|]*\s+\|\s+Evidence:\s+[^|]*[^\s|][^|]*\s+\|\s+Rationale:\s+[^|]*[^\s|][^|]*$/u;
+
+/** Exact in-memory separator between a report draft and its transient ledger. */
+export const REVIEW_DRAFT_LEDGER_MARKER =
+  "<!-- goat-flow-review-ledger-draft -->";
 
 export const KNOWN_DEGRADATION_FLAGS = new Set([
   "none",
   "persist-skipped: redactor-unavailable",
   "chunked-partial",
-  "large-diff-unchunked",
-  "large-area-unchunked",
   "gates-not-run",
   "gate-evidence-incomplete",
   "risk-depth-declined",
@@ -299,6 +329,12 @@ export const KNOWN_DEGRADATION_FLAGS = new Set([
   "cross-model-refuter-failed",
   "cross-model-unresolved",
   "refuter-citation-unverified",
+]);
+
+/** Historical flags that described a workflow state the current skill forbids. */
+export const RETIRED_DEGRADATION_FLAGS = new Set([
+  "large-diff-unchunked",
+  "large-area-unchunked",
 ]);
 
 /**
@@ -404,3 +440,94 @@ export interface IntegrityField {
 
 /** Review Integrity rows keyed by field name; an absent key means the author omitted that row. */
 export type IntegrityFieldMap = Map<string, IntegrityField>;
+
+/**
+ * Select the stage-specific grammar for one validator receipt.
+ *
+ * @param label - integrity row label being checked
+ * @param valuePattern - final-report grammar owned by the row registry
+ * @param validationStage - pending draft or completed final report
+ * @returns the value grammar that binds at the selected stage
+ */
+export function reviewIntegrityValuePattern(
+  label: string,
+  valuePattern: RegExp,
+  validationStage: ReviewValidationStage,
+): RegExp {
+  return label === "Review validator" && validationStage === "draft"
+    ? /^pending$/u
+    : valuePattern;
+}
+
+/**
+ * Explain one malformed integrity row in stage-aware terms.
+ *
+ * @param label - integrity row label being checked
+ * @param field - parsed row, or undefined when the row is absent
+ * @param validationStage - pending draft or completed final report
+ * @returns a user-facing violation message
+ */
+export function reviewIntegrityFormatMessage(
+  label: string,
+  field: IntegrityField | undefined,
+  validationStage: ReviewValidationStage,
+): string {
+  if (!field) return `Review Integrity is missing ${label}`;
+  if (label === "Review validator" && validationStage === "draft") {
+    return "Review validator must remain pending until final validation passes";
+  }
+  return `Review Integrity ${label} has an invalid value`;
+}
+
+/**
+ * Return whether measured scope requires accepted chunks under the skill contract.
+ *
+ * @param fileCount - files declared by the review receipt
+ * @param unitCount - changed-line or cluster count declared by the receipt
+ * @param unitLabel - unit paired with unitCount
+ * @returns true only when a binding file or changed-line threshold is exceeded
+ */
+export function reviewScopeExceedsChunkLimit(
+  fileCount: number,
+  unitCount: number,
+  unitLabel: string,
+): boolean {
+  const changedLines = /^changed/iu.test(unitLabel) ? unitCount : 0;
+  return (
+    fileCount > REVIEW_CHUNK_FILE_LIMIT ||
+    changedLines > REVIEW_CHUNK_CHANGED_LINE_LIMIT
+  );
+}
+
+/**
+ * Read the full receipt's scoped-file denominator after its own grammar check.
+ *
+ * @param fields - parsed full Review Integrity rows
+ * @returns the safe denominator, or null when another grammar check owns the defect
+ */
+export function fullReviewCoverageFileCount(
+  fields: IntegrityFieldMap,
+): number | null {
+  const denominator = fields
+    .get("Files opened in Pass 2")
+    ?.value.match(/^\d+\/(\d+)\b/u)?.[1];
+  if (denominator === undefined) return null;
+  const parsed = Number(denominator);
+  return Number.isSafeInteger(parsed) ? parsed : null;
+}
+
+/**
+ * Match the stage-specific compact validator receipt.
+ *
+ * @param line - compact Review Integrity line
+ * @param validationStage - pending draft or completed final report
+ * @returns the stage-specific match, or null for malformed input
+ */
+export function matchCompactReviewIntegrity(
+  line: string,
+  validationStage: ReviewValidationStage,
+): RegExpMatchArray | null {
+  const pattern =
+    validationStage === "draft" ? COMPACT_DRAFT_INTEGRITY : COMPACT_INTEGRITY;
+  return line.match(pattern);
+}

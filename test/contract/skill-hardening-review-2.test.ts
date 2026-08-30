@@ -12,6 +12,7 @@ import {
   installedSkillPaths,
   installedSkillReferencePaths,
   readMarkdownSection,
+  readMarkdownSubsection,
   readProjectFile,
   verifyNamedAnchorsResolve,
 } from "./skill-hardening.helpers.js";
@@ -50,12 +51,8 @@ describe("skill hardening contracts: goat-review (2/3)", () => {
       assert.match(skill, /demote both one rung/u, skillPath);
       assert.match(skill, /Tension with R-0NN/u, skillPath);
       assert.match(skill, /two review→fix cycles/u, skillPath);
-      assert.match(skill, /finding count dropping/u, skillPath);
-      assert.match(
-        skill,
-        /re-derive whether the original defect was real/u,
-        skillPath,
-      );
+      assert.match(skill, /without fewer findings/u, skillPath);
+      assert.match(skill, /re-test the original defect/u, skillPath);
       assert.match(skill, /re-scope with the human/u, skillPath);
     });
   });
@@ -71,7 +68,7 @@ describe("skill hardening contracts: goat-review (2/3)", () => {
       );
       assert.match(
         skill,
-        />200 lines[^\n]+MUST[^\n]+verification mechanism/u,
+        /diff >200 lines[^\n]+MUST[^\n]+verification mechanism/u,
         skillPath,
       );
       assert.match(
@@ -79,10 +76,10 @@ describe("skill hardening contracts: goat-review (2/3)", () => {
         /Subtractive[^\n]+named guard[^\n]+pinned-version framework behaviour[^\n]+passing test/u,
         skillPath,
       );
-      assert.match(skill, /MUST or correctness-SHOULD/u, skillPath);
+      assert.match(skill, /surviving MUST\/correctness-SHOULD/u, skillPath);
       assert.match(
         skill,
-        /Re-frame only Pass 0 result lines and Pass 2 reads already gathered/u,
+        /Re-frame only gathered Pass 0 lines and Pass 2 reads/u,
         skillPath,
       );
       assert.match(
@@ -92,10 +89,10 @@ describe("skill hardening contracts: goat-review (2/3)", () => {
       );
       assert.match(
         skill,
-        /passing test[^\n]+literal Pass 0 result[^\n]+this session/iu,
+        /test passes only[^\n]+literal current-session Pass 0 result/iu,
         skillPath,
       );
-      assert.match(skill, /subagent[^\n]+Orchestration Admission/u, skillPath);
+      assert.match(skill, /subagent[^\n]+Orchestration Admission/iu, skillPath);
     });
   });
 
@@ -130,6 +127,11 @@ describe("skill hardening contracts: goat-review (2/3)", () => {
       assert.match(
         output,
         /Clean PR[^\n]+scope line[^\n]+verdict[^\n]+defended zero-findings statement[^\n]+one-line integrity summary[^\n]+one-line unexamined surface/iu,
+        skillPath,
+      );
+      assert.match(
+        output,
+        /Clean PR[^\n]+scope line ending `chunking=no\|accepted`/iu,
         skillPath,
       );
     });
@@ -348,7 +350,11 @@ describe("skill hardening contracts: goat-review (2/3)", () => {
       const output = readMarkdownSection(skillPath, "Output Format");
 
       assert.match(diffReview, /stable `R-001…` IDs/u, skillPath);
-      assert.match(diffReview, /Refutation Ledger:[^\n]+with R-ID/u, skillPath);
+      assert.match(
+        diffReview,
+        /Refutation Ledger:[^\n]+one record per line:[^\n]+R-NNN/u,
+        skillPath,
+      );
       assert.match(diffReview, /`pre-existing` is area-audit-only/u, skillPath);
       assert.match(diffReview, /Evidence tags measure certainty/u, skillPath);
       assert.match(diffReview, /proof classes method/u, skillPath);
@@ -422,18 +428,23 @@ describe("skill hardening contracts: goat-review (2/3)", () => {
 
   it("routes goat-review durable artifacts through host-owned redaction", () => {
     assertForEachTarget(installedSkillPaths("goat-review"), (skillPath) => {
+      const skill = readProjectFile(skillPath);
       const diffReview = readMarkdownSection(
         skillPath,
         "Diff Review (Quick) - Two-Pass Discipline",
       );
-      assert.match(
-        diffReview,
-        /Refutation Ledger:[^\n]+draft[^\n]+in memory[^\n]+host[^\n]+`goat-flow redact --output/iu,
+      const passThree = readMarkdownSection(
         skillPath,
+        "Pass 3 - Cross-Model Refuter (explicit approval only)",
       );
       assert.match(
         diffReview,
-        /redactor is unavailable[^\n]+do not persist[^\n]+`Refutations logged: <N> \(persist-skipped\)`/iu,
+        /Refutation Ledger:[^\n]+transient[^\n]+Do not redact in Pass 2/iu,
+        skillPath,
+      );
+      assert.match(
+        passThree,
+        /After optional Pass 3[^\n]+references\/examples\.md[^\n]+Pre-persistence Proof Envelope[^\n]+transient ledger[^\n]+pending draft[^\n]+before redaction/iu,
         skillPath,
       );
       assert.match(
@@ -441,12 +452,52 @@ describe("skill hardening contracts: goat-review (2/3)", () => {
         /one record per line[^\n]+R-NNN[^\n]+Suspicion:[^\n]+Evidence:[^\n]+Rationale:/u,
         skillPath,
       );
-      assert.match(
-        diffReview,
-        /goat-review-refutations\.<random>\.txt[^\n]+exact path/u,
+      assert.ok(
+        skill.indexOf("## Pass 3 - Cross-Model Refuter") <
+          skill.indexOf("**Proof Gate:**"),
         skillPath,
       );
     });
+
+    assertForEachTarget(
+      installedSkillReferencePaths("goat-review", "references/examples.md"),
+      (referencePath) => {
+        const scopeProcedure = readMarkdownSection(
+          referencePath,
+          "Scope, Gates, and Frozen Bundle Procedure",
+        );
+        const proofEnvelope = readMarkdownSubsection(
+          scopeProcedure,
+          "Pre-persistence Proof Envelope",
+          referencePath,
+        );
+        assert.match(
+          proofEnvelope,
+          /`goat-flow review validate-ledger`[^\n]+exact count[^\n]+`Review validator: pending`/iu,
+          referencePath,
+        );
+        assert.match(
+          proofEnvelope,
+          /compatible redactor[^\n]+fresh intended[^\n]+goat-review-refutations\.<random>\.txt[^\n]+otherwise declare[^\n]+persist-skipped fields now/iu,
+          referencePath,
+        );
+        assert.match(
+          proofEnvelope,
+          /`goat-flow review validate-draft`[^\n]+`<!-- goat-flow-review-ledger-draft -->`[^\n]+exact transient records/iu,
+          referencePath,
+        );
+        assert.match(
+          proofEnvelope,
+          /already-validated intended path[^\n]+otherwise write nothing/iu,
+          referencePath,
+        );
+        assert.ok(
+          proofEnvelope.indexOf("goat-flow review validate-draft") <
+            proofEnvelope.indexOf("use the redactor to write"),
+          referencePath,
+        );
+      },
+    );
 
     assertForEachTarget(
       installedSkillReferencePaths("goat-review", "references/refuter-spec.md"),
@@ -503,11 +554,7 @@ describe("skill hardening contracts: goat-review (2/3)", () => {
         /CONFIRMED\/ADJUSTED[^\n]+Findings[^\n]+UNRESOLVED[^\n]+verdict counts/iu,
         skillPath,
       );
-      assert.match(
-        diffReview,
-        /`Refutations logged`[^\n]+ledger record count/iu,
-        skillPath,
-      );
+      assert.match(skill, /Pre-persistence Proof Envelope/u, skillPath);
       assert.match(
         constraints,
         /\.goat-flow\/logs\/review\/goat-review-chunks\.<random>\.md/u,

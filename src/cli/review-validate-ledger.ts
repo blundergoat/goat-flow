@@ -1,5 +1,5 @@
 /**
- * Checks the refutation ledger a review cites when it says suspicions were disproved.
+ * Checks transient refutation records and the persisted ledger a completed review cites.
  *
  * "I considered this and ruled it out" is only meaningful if the reasoning was written down, so a report claiming refutations must point at a real
  * local ledger with records in the expected grammar - not just assert a number.
@@ -19,6 +19,7 @@ import {
   REFUTATION_LEDGER_PATH,
   REFUTATION_LEDGER_RECORD,
   addViolation,
+  type ReviewValidationResult,
   type ReviewValidationViolation,
   type IntegrityResult,
 } from "./review-validate-common.js";
@@ -87,7 +88,7 @@ function readDeclaredLedgerLines(
     .filter((line) => line.trim().length > 0);
 }
 
-/** Fail the first non-canonical durable ledger record. */
+/** Fail the first non-canonical ledger record. */
 function validateLedgerRecordGrammar(
   lines: string[],
   claimLine: number | null,
@@ -101,7 +102,7 @@ function validateLedgerRecordGrammar(
     violations,
     "refutation-ledger",
     claimLine,
-    `declared ledger record ${invalidLine + 1} does not match the required one-line grammar`,
+    `ledger record ${invalidLine + 1} does not match the required one-line grammar`,
   );
   return false;
 }
@@ -112,6 +113,7 @@ function validatePersistedRefutationLedger(
   integrity: IntegrityResult,
   claimLine: number | null,
   violations: ReviewValidationViolation[],
+  shouldVerifyPersistedLedger: boolean,
 ): void {
   const ledgerClaim = integrity.refutationLedger;
   if (!ledgerClaim || !REFUTATION_LEDGER_PATH.test(ledgerClaim)) {
@@ -123,6 +125,8 @@ function validatePersistedRefutationLedger(
     );
     return;
   }
+
+  if (!shouldVerifyPersistedLedger) return;
 
   try {
     const ledgerLines = readDeclaredLedgerLines(projectRoot, ledgerClaim);
@@ -152,11 +156,13 @@ function validatePersistedRefutationLedger(
  * @param projectRoot - reviewed project root; anchors are confined to it so a report cannot cite files it was never authorised to read
  * @param integrity - the parsed Review Integrity block; absent fields are reported individually rather than failing the whole block
  * @param violations - shared violation list, appended in report order so a reader sees issues top-down; a violation makes the report fail
+ * @param shouldVerifyPersistedLedger - false checks the declaration only, before the transient bytes are persisted
  */
 export function validateRefutationLedger(
   projectRoot: string,
   integrity: IntegrityResult,
   violations: ReviewValidationViolation[],
+  shouldVerifyPersistedLedger = true,
 ): void {
   const claimLine = integrity.refutationLedgerLine ?? integrity.refutationsLine;
   if (integrity.refutationsLogged === 0) {
@@ -176,5 +182,35 @@ export function validateRefutationLedger(
     integrity,
     claimLine,
     violations,
+    shouldVerifyPersistedLedger,
   );
+}
+
+/**
+ * Validate transient ledger bytes before the redactor is allowed to persist them.
+ *
+ * @param text - raw in-memory ledger records, one per non-empty line
+ * @returns structural status and the exact record count a report draft must declare
+ */
+export function validateRefutationLedgerText(
+  text: string,
+): ReviewValidationResult & { recordCount: number } {
+  const lines = text.split(/\r?\n/u).filter((line) => line.trim().length > 0);
+  const violations: ReviewValidationViolation[] = [];
+  if (lines.length === 0) {
+    addViolation(
+      violations,
+      "refutation-ledger",
+      null,
+      "refutation ledger must contain at least one canonical record",
+    );
+  } else {
+    validateLedgerRecordGrammar(lines, null, violations);
+  }
+  return {
+    status: violations.length === 0 ? "pass" : "fail",
+    violations,
+    warnings: [],
+    recordCount: lines.length,
+  };
 }

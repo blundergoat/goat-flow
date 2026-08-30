@@ -13,13 +13,24 @@ export interface ReviewCLIFields {
   reviewValidatePath: string | null;
 }
 
+const REVIEW_SUBCOMMANDS = new Set<ReviewSubcommand>([
+  "validate",
+  "validate-draft",
+  "validate-ledger",
+]);
+const REVIEW_INPUT_LABELS: Record<ReviewSubcommand, string> = {
+  validate: "[report-file]",
+  "validate-draft": "[draft-envelope-file]",
+  "validate-ledger": "[ledger-file]",
+};
+
 /**
- * Parse stdin-first `review validate [report-file]` positionals.
+ * Parse stdin-first review validation positionals.
  *
  * @param command - selected top-level command
  * @param positionals - namespace positionals after shared flag parsing
  * @returns review fields, or null fields for every unrelated command
- * @throws CLIError when review is missing `validate` or receives multiple report paths
+ * @throws CLIError when review is missing a validation operation or receives multiple input paths
  */
 export function buildReviewCLIFields(
   command: Command,
@@ -29,14 +40,21 @@ export function buildReviewCLIFields(
     return { reviewSubcommand: null, reviewValidatePath: null };
   }
   const [subcommand, reportPath, ...extraPositionals] = positionals;
-  if (subcommand !== "validate") {
-    throw new CLIError('review requires subcommand "validate".', 2);
+  if (!REVIEW_SUBCOMMANDS.has(subcommand as ReviewSubcommand)) {
+    throw new CLIError(
+      'review requires subcommand "validate", "validate-draft", or "validate-ledger".',
+      2,
+    );
   }
+  const reviewSubcommand = subcommand as ReviewSubcommand;
   if (extraPositionals.length > 0) {
-    throw new CLIError("review validate accepts at most one [report-file].", 2);
+    throw new CLIError(
+      `review ${reviewSubcommand} accepts at most one ${REVIEW_INPUT_LABELS[reviewSubcommand]}.`,
+      2,
+    );
   }
   return {
-    reviewSubcommand: "validate",
+    reviewSubcommand,
     reviewValidatePath: reportPath ? resolve(reportPath) : null,
   };
 }

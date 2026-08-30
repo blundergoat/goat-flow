@@ -185,4 +185,20 @@ describe("local data contract", () => {
       assert.match(policy, /durable project knowledge/iu);
     }
   });
+
+  it("lists the optional security policy in canonical committed knowledge", () => {
+    const architecture = readContractFile(".goat-flow/architecture.md");
+    const committedKnowledge = architecture
+      .split(/\r?\n/u)
+      .find((line) => line.includes("**Committed knowledge**"));
+
+    assert.ok(
+      committedKnowledge,
+      "architecture is missing committed knowledge",
+    );
+    assert.match(
+      committedKnowledge,
+      /`\.goat-flow\/security-policy\.md` \(optional, user-owned security guardrails\)/u,
+    );
+  });
 });

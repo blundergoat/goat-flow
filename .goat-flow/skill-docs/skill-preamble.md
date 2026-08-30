@@ -126,10 +126,11 @@ After five Step 0 reads, checkpoint. Planning/interview questions: load `skill-c
 
 ## Learning-Loop Retrieval
 
-- Derive 2-4 terms from the target, symptom, and named file/tool.
-- Read matching `.goat-flow/learning-loop/{footguns,lessons,patterns,decisions}/INDEX.md` rows first. Open sources only on hits; follow at most 2 hops. Grep buckets only after the INDEX pass or a known miss.
-- With zero hits, reword once; then record the miss without broad-loading.
-- Every functional skill Step 0 MUST emit `Relevant prior learnings: <matches or none found>`. After `none found`, emit `Terms searched: <terms>`. Emit even for familiar/continued work. If stale, emit `index-stale`; reporting-only/read-only/no-write/no-implementation modes defer regeneration. Otherwise run `goat-flow index` only with user authorization.
+- Derive 2-4 target/symptom terms.
+- Cap search output across all four INDEXes at 13 rows; never load one wholesale. Row 13 requires refinement; inspect at most 12 matches.
+- Open footgun/lesson hits at `Prevention` or `Decision changed` first; ≤2 hops. Grep buckets only after INDEX or a known miss.
+- Zero hits: reword once; record miss without broad-loading.
+- Functional Step 0 MUST emit `Relevant prior learnings: <matches or none found>`. After `none found`, emit `Terms searched: <terms>`. Emit on continuation. If stale, emit `index-stale`; reporting-only/read-only/no-write/no-implementation modes defer regeneration. Otherwise run `goat-flow index` only with user authorization.
 
 ## Availability Check
 

@@ -46,6 +46,32 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
     });
   });
 
+  it("keeps Audit inspection role separate from impact-based risk", () => {
+    assertForEachTarget(installedSkillPaths("goat-qa"), (skillPath) => {
+      const auditMode = readMarkdownSection(skillPath, "Audit Mode");
+      assert.match(
+        auditMode,
+        /File role sets inspection priority, not risk/u,
+        skillPath,
+      );
+      assert.match(
+        auditMode,
+        /Assign risk from each named behaviour's demonstrated impact and blast radius/u,
+        skillPath,
+      );
+      assert.match(
+        auditMode,
+        /A public export or route alone does not force CRITICAL or HIGH/u,
+        skillPath,
+      );
+      assert.doesNotMatch(
+        auditMode,
+        /Load-bearing \+ Interface files get CRITICAL or HIGH risk ratings by default/u,
+        skillPath,
+      );
+    });
+  });
+
   it("keeps goat-qa Audit priorities coherent through the post-gate plan", () => {
     assertForEachTarget(installedSkillPaths("goat-qa"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);

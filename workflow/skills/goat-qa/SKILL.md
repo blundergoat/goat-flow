@@ -179,7 +179,7 @@ Without any diff, classify each in-scope file by its *role*, not its recency:
 | UI / presentation | views, templates, styling |
 | Support | types, constants, pure helpers |
 
-Load-bearing + Interface files get CRITICAL or HIGH risk ratings by default.
+File role sets inspection priority, not risk. Assign risk from each named behaviour's demonstrated impact and blast radius after inventory. A public export or route alone does not force CRITICAL or HIGH.
 
 ### A3 - Coverage Analysis
 

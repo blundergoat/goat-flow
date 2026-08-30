@@ -69,7 +69,6 @@ interface StatsWarning {
     | "decision-metadata"
     | "empty-learning-loop"
     | "index-missing"
-    | "index-size"
     | "memory-quality";
   message: string;
 }
@@ -258,14 +257,6 @@ export const BUCKET_SIZE_WARN_BYTES = 40_000;
 
 /** Advisory threshold that leaves one kilobyte to split a bucket before the blocking limit. */
 export const BUCKET_SIZE_HEADROOM_WARN_BYTES = 39_000;
-
-/**
- * Size at which a generated index costs enough to report, matching the bucket threshold because both describe one expensive read.
- *
- * This stays advisory rather than blocking: an index is generated, and splitting source buckets keeps every row. Resolving entries that no longer
- * change a decision is the only currently supported way to shrink a generated index, so projects with an entirely active corpus retain visible debt.
- */
-const INDEX_SIZE_WARN_BYTES = 40_000;
 
 /**
  * Collect every blocking problem for one learning-loop bucket.
@@ -677,23 +668,16 @@ function collectIndexFindings(indexes: IndexFreshness[]): StatsFinding[] {
  */
 function collectIndexWarnings(indexes: IndexFreshness[]): StatsWarning[] {
   // Missing indexes are valid on fresh installs and remain advisory for users.
-  const missingWarnings = indexes
-    .filter((indexStatus) => indexStatus.state === "missing")
-    // Each absent index receives one copyable generation instruction.
-    .map((indexStatus) => ({
-      file: indexStatus.indexPath,
-      rule: "index-missing" as const,
-      message: `${indexStatus.indexPath}: INDEX.md not generated yet; run \`goat-flow index\``,
-    }));
-  // An oversized index is read in full on every skill's Step 0, so users get the supported shrink lever and the current limitation.
-  const sizeWarnings = indexes
-    .filter((indexStatus) => indexStatus.sizeBytes > INDEX_SIZE_WARN_BYTES)
-    .map((indexStatus) => ({
-      file: indexStatus.indexPath,
-      rule: "index-size" as const,
-      message: `${indexStatus.indexPath}: ${indexStatus.sizeBytes} bytes exceeds the ${INDEX_SIZE_WARN_BYTES}-byte retrieval-cost threshold; every skill Step 0 reads this index, so resolve entries that no longer change a decision. If all entries remain active, no supported index layout currently reduces this file; splitting bucket files does not shrink it`,
-    }));
-  return [...missingWarnings, ...sizeWarnings];
+  return (
+    indexes
+      .filter((indexStatus) => indexStatus.state === "missing")
+      // Each absent index receives one copyable generation instruction.
+      .map((indexStatus) => ({
+        file: indexStatus.indexPath,
+        rule: "index-missing" as const,
+        message: `${indexStatus.indexPath}: INDEX.md not generated yet; run \`goat-flow index\``,
+      }))
+  );
 }
 
 /**

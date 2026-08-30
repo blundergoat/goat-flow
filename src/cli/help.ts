@@ -355,15 +355,25 @@ const COMMAND_HELP_CATALOG = {
     command: "review",
     visibility: "advanced",
     summary:
-      "Validate a saved goat-review report. Structural failures exit 1; advisory warnings retain exit 0.",
-    usage: ["goat-flow review validate [report-file] [--output <path>]"],
+      "Validate transient goat-review ledgers, complete drafts, and persisted reports. Structural failures exit 1; advisory warnings retain exit 0.",
+    usage: [
+      "goat-flow review validate-ledger [ledger-file] [--output <path>]",
+      "goat-flow review validate-draft [draft-envelope-file] [--output <path>]",
+      "goat-flow review validate [report-file] [--output <path>]",
+    ],
     subcommands: [
-      ["validate", "Validate goat-review structure and advisory anchors."],
+      ["validate-ledger", "Check transient ledger grammar and record count."],
+      [
+        "validate-draft",
+        "Check one pending report and transient ledger envelope before persistence.",
+      ],
+      ["validate", "Check the report and its exact persisted ledger."],
     ],
     flags: [["--output <path>", "Write the validation result to a file."]],
     examples: [
+      "goat-flow review validate-ledger",
+      "goat-flow review validate-draft",
       "goat-flow review validate review.md",
-      "goat-flow review validate < review.md",
     ],
   },
   plans: {

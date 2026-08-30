@@ -117,6 +117,15 @@ authority, do not run it against the checkout; disclose `callsite-completeness-g
    unit once and report `<covered>/<total>`; truncation, missing, or overlapping coverage is
    `chunked-partial`, never `n/a` or complete.
 
+### Pre-persistence Proof Envelope
+
+When refutations are nonzero, keep the report and ledger in memory through this ordered gate:
+
+1. Run `goat-flow review validate-ledger` on the transient records. Put its exact count in the report and use `Review validator: pending`. When a compatible redactor is available, declare one fresh intended `.goat-flow/logs/review/goat-review-refutations.<random>.txt` path; otherwise declare the documented persist-skipped fields now.
+2. Send one stdin envelope to `goat-flow review validate-draft`: the complete report, a line containing only `<!-- goat-flow-review-ledger-draft -->`, then the exact transient records. A count or grammar mismatch fails before persistence.
+3. Remove the marker and ledger appendix. When available, use the redactor to write the same records to the already-validated intended path; otherwise write nothing.
+4. Change only the validator field from `pending` to `validated`, then run final `goat-flow review validate`. Publish only after PASS. The final input must not contain the draft marker.
+
 ## Conditional Output and Provenance Shapes
 
 > **Illustrative scenario - input/output shape only; never evidence.** Replace every placeholder with current target-project evidence.
@@ -124,7 +133,7 @@ authority, do not run it against the checkout; disclose `callsite-completeness-g
 ### Clean review compact surface
 
 ```markdown
-Scope: reviewed `<source>` at `<base>...<head>`; `<n>` files and `<m>` changed lines.
+Scope: reviewed `<source>` at `<base>...<head>`; `<n>` files and `<m>` changed lines; chunking=<no|accepted>.
 Ship Verdict: **YES** — no blocking finding survived Pass 2.
 Zero findings: checked boundary conditions, error paths, and integration seams; named guards or tests disproved every suspicion.
 Review Integrity: confident; `<k>/<n>` files opened; no degradation flags; validator=validated | validator-unavailable.
