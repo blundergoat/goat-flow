@@ -591,6 +591,30 @@ const parserBoundaryCases: ParserBoundaryCase[] = [
       /Policy destructive: eval hides commands from safety checks/u,
   },
   {
+    name: "builtin option terminator before shell eval",
+    userCommand: "builtin -- eval 'git status'",
+    expectedStatus: 2,
+    expectedPolicyMessage:
+      /Policy destructive: eval hides commands from safety checks/u,
+  },
+  {
+    name: "leading shell negation before shell eval",
+    userCommand: "! eval 'git status'",
+    expectedStatus: 2,
+    expectedPolicyMessage:
+      /Policy destructive: eval hides commands from safety checks/u,
+  },
+  {
+    name: "builtin option terminator before benign printf",
+    userCommand: "builtin -- printf '%s\\n' safe",
+    expectedStatus: 0,
+  },
+  {
+    name: "leading shell negation before yq eval subcommand",
+    userCommand: "! yq eval '.metadata.key' file.yaml",
+    expectedStatus: 0,
+  },
+  {
     name: "downstream yq eval subcommand",
     userCommand: "printf document | yq eval '.metadata.key'",
     expectedStatus: 0,

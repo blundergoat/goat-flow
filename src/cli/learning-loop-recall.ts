@@ -52,6 +52,17 @@ function compareStable(left: string, right: string): number {
   return left < right ? -1 : left > right ? 1 : 0;
 }
 
+/** Render C0, DEL, and C1 controls as visible Unicode escapes before text reaches a terminal. */
+function escapeTerminalControlCharacters(terminalField: string): string {
+  return terminalField.replace(
+    /[\u0000-\u001f\u007f-\u009f]/gu,
+    (character) => {
+      const codePoint = character.codePointAt(0) ?? 0;
+      return `\\u${codePoint.toString(16).padStart(4, "0")}`;
+    },
+  );
+}
+
 /**
  * Normalize one caller path without letting it escape the selected project.
  * Error behavior: throws CLIError with exit code 2 for empty, absolute, or escaping paths.
@@ -187,12 +198,20 @@ export function collectLearningLoopRecall(
 
 /** Render one entry as locator metadata without copying its Markdown body. */
 function formatTextMatch(match: LearningLoopRecallMatch): string[] {
+  const sourcePath = escapeTerminalControlCharacters(match.sourcePath);
+  const heading = escapeTerminalControlCharacters(
+    JSON.stringify(match.heading),
+  );
+  const bucket = escapeTerminalControlCharacters(match.bucket);
+  const status = escapeTerminalControlCharacters(match.status);
   return [
-    `- ${match.sourcePath} (search: ${JSON.stringify(match.heading)}) [${match.bucket}; ${match.status}]`,
+    `- ${sourcePath} (search: ${heading}) [${bucket}; ${status}]`,
     ...(match.decisionChanged === null
       ? []
-      : [`  Decision changed: ${match.decisionChanged}`]),
-    `  Cites: ${match.matchedPaths.join(", ")}`,
+      : [
+          `  Decision changed: ${escapeTerminalControlCharacters(match.decisionChanged)}`,
+        ]),
+    `  Cites: ${match.matchedPaths.map(escapeTerminalControlCharacters).join(", ")}`,
   ];
 }
 
@@ -210,12 +229,15 @@ export function formatLearningLoopRecall(
   if (format === "json") {
     return JSON.stringify({ command: "recall", ...result }, null, 2);
   }
+  const recalledPaths = result.paths
+    .map(escapeTerminalControlCharacters)
+    .join(", ");
   if (result.totalMatches === 0) {
-    return `No active learning-loop entries cite: ${result.paths.join(", ")}`;
+    return `No active learning-loop entries cite: ${recalledPaths}`;
   }
   const noun = result.totalMatches === 1 ? "entry cites" : "entries cite";
   const lines = [
-    `Learning-loop recall: ${result.totalMatches} active ${noun} ${result.paths.join(", ")}`,
+    `Learning-loop recall: ${result.totalMatches} active ${noun} ${recalledPaths}`,
     ...result.matches.flatMap(formatTextMatch),
   ];
   if (result.overflowCount > 0) {

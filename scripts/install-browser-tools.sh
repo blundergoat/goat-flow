@@ -180,20 +180,36 @@ resolve_file_path() {
     readlink -f "$1" 2>/dev/null || printf '%s\n' "$1"
 }
 
+path_is_same_or_ancestor() {
+    local candidate="$1"
+    local protected_path="$2"
+
+    if [[ "$candidate" == "/" ]]; then
+        return 0
+    fi
+    candidate="${candidate%/}"
+    protected_path="${protected_path%/}"
+    [[ "$candidate" == "$protected_path" || "$protected_path" == "$candidate/"* ]]
+}
+
 validate_force_venv_target() {
     local forbidden
+    local resolved_checkout_root
     local resolved_install_root
-    local resolved_project_root
+    local resolved_working_directory
     local resolved_target
     local resolved_user_home
+    local script_directory
 
     resolved_target="$(resolve_file_path "$VENV_DIR")"
     resolved_install_root="$(resolve_file_path "$INSTALL_ROOT")"
-    resolved_project_root="$(resolve_file_path "$PWD")"
+    resolved_working_directory="$(resolve_file_path "$PWD")"
     resolved_user_home="$(resolve_file_path "$HOME")"
+    script_directory="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+    resolved_checkout_root="$(git -C "$script_directory" rev-parse --show-toplevel 2>/dev/null || resolve_file_path "$script_directory/..")"
 
-    for forbidden in / "$resolved_user_home" "$resolved_install_root" "$resolved_project_root"; do
-        if [[ "$resolved_target" == "$forbidden" ]]; then
+    for forbidden in / "$resolved_user_home" "$resolved_install_root" "$resolved_working_directory" "$resolved_checkout_root"; do
+        if path_is_same_or_ancestor "$resolved_target" "$forbidden"; then
             echo -e "${RED}Refusing --force removal of broad path: ${resolved_target}${NC}" >&2
             exit 4
         fi

@@ -43,7 +43,10 @@ import {
   type PathWriteClaimReleaseResult,
 } from "./path-write-claim.js";
 import { emitIndexGenerationInstallResult } from "./learning-loop-index/command.js";
-import { emitCommitGuidanceInstallResult } from "./prompt/commit-guidance.js";
+import {
+  emitCommitGuidanceInstallResult,
+  pendingCommitGuidanceMigrationInstructionPath,
+} from "./prompt/commit-guidance.js";
 import {
   readAgentHookState,
   type AgentHookReadState,
@@ -672,6 +675,15 @@ function pendingMigrations(
       migrations,
       ".gitignore",
       "Install appends the node_modules/ dependency ignore and preserves every existing line.",
+    );
+  }
+  const commitGuidanceBridgePath =
+    pendingCommitGuidanceMigrationInstructionPath(options.projectPath, agent);
+  if (commitGuidanceBridgePath !== null) {
+    addPendingMigration(
+      migrations,
+      commitGuidanceBridgePath,
+      "Install edits only the selected Commit Messages section to reference docs/coding-standards/git-commit-message.md before renaming the former guide; every other instruction byte and its file mode stay unchanged.",
     );
   }
   return migrations;

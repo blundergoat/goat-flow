@@ -25,6 +25,11 @@ import { load } from "js-yaml";
 
 import { emitCommitGuidanceInstallResult } from "../../src/cli/prompt/commit-guidance.js";
 import {
+  acquirePathWriteClaims,
+  readPathWriteTargetIdentity,
+  releasePathWriteClaims,
+} from "../../src/cli/path-write-claim.js";
+import {
   git,
   makeTempProject,
   POST_TURN_SAFETY_TIMEOUT_SECONDS,
@@ -737,6 +742,68 @@ describe("setup --apply installer", () => {
       ),
     );
     assertPosixFileMode(instructionPath, 0o640);
+  });
+
+  // Fixture purpose: the same selected bridge must appear in dry-run and contend through the public install claim boundary.
+  // Side effects: writes one disposable target, spawns dry-run and install subprocesses, and acquires then releases one owner-checked claim.
+  it("previews and claims the selected commit-guidance migration bridge", () => {
+    const root = makeTempProject();
+    const guidanceDir = join(root, "docs", "coding-standards");
+    const legacyGuidancePath = join(guidanceDir, "git-commit.md");
+    const preferredGuidancePath = join(guidanceDir, "git-commit-message.md");
+    const instructionRelativePath = ".github/copilot-instructions.md";
+    const instructionPath = join(root, instructionRelativePath);
+    const legacyGuidance = "# Team Commit Rules\n\nKeep this project rule.\n";
+    const instructionContent =
+      "# Copilot\n\n## Commit Messages\n\nRead docs/coding-standards/git-commit.md before proposing a commit.\n";
+    mkdirSync(join(root, ".git"));
+    mkdirSync(guidanceDir, { recursive: true });
+    mkdirSync(join(root, ".github"), { recursive: true });
+    writeFileSync(legacyGuidancePath, legacyGuidance);
+    writeFileSync(instructionPath, instructionContent);
+
+    const dryRun = runCliInstaller(
+      root,
+      "--agent",
+      "copilot",
+      "--dry-run",
+      "--format",
+      "json",
+    );
+    assert.equal(dryRun.status, 0, dryRun.stderr || dryRun.stdout);
+    const report = JSON.parse(dryRun.stdout) as {
+      files: Array<{ path: string; action: string; reason: string }>;
+    };
+    const bridgeRow = report.files.find(
+      (file) => file.path === instructionRelativePath,
+    );
+    assert.equal(bridgeRow?.action, "migrate");
+    assert.match(bridgeRow?.reason ?? "", /Commit Messages/u);
+
+    const bridgeClaim = acquirePathWriteClaims(root, [
+      {
+        targetPath: instructionRelativePath,
+        expectedIdentity: readPathWriteTargetIdentity(
+          root,
+          instructionRelativePath,
+        ),
+      },
+    ]);
+    let blockedInstall: ReturnType<typeof runCliInstaller> | null = null;
+    try {
+      blockedInstall = runCliInstaller(root, "--agent", "copilot");
+    } finally {
+      assert.deepEqual(releasePathWriteClaims(bridgeClaim), [
+        { targetPath: instructionRelativePath, status: "released" },
+      ]);
+    }
+
+    assert.ok(blockedInstall, "the claimed public install must return");
+    assert.equal(blockedInstall.status, 1, blockedInstall.stdout);
+    assert.match(blockedInstall.stderr, /copilot-instructions\.md/u);
+    assert.equal(readFileSync(legacyGuidancePath, "utf-8"), legacyGuidance);
+    assert.equal(existsSync(preferredGuidancePath), false);
+    assert.equal(readFileSync(instructionPath, "utf-8"), instructionContent);
   });
 
   // Fixture purpose: a Claude-owned former-path link blocks a Copilot install from renaming the shared guide, preserving every involved file.

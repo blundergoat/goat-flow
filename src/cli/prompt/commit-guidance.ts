@@ -152,6 +152,41 @@ function preflightLegacyReferences(
 }
 
 /**
+ * Name the selected instruction bridge a pending legacy-guide migration will rewrite.
+ * Use while building preview and claim inputs; null means this install cannot or need not migrate a bridge.
+ *
+ * @param targetRoot - selected project root to inspect without mutation
+ * @param selectedAgent - only this agent's recognised Commit Messages bridge may be returned
+ * @returns one project-relative instruction path, or null when no bridge write is pending
+ */
+export function pendingCommitGuidanceMigrationInstructionPath(
+  targetRoot: string,
+  selectedAgent: AgentId,
+): string | null {
+  const projectRoot = resolve(targetRoot);
+  const outputPath = join(projectRoot, GIT_COMMIT_INSTRUCTIONS_PATH);
+  const legacyPath = join(projectRoot, LEGACY_GIT_COMMIT_INSTRUCTIONS_PATH);
+  if (
+    !existsSync(join(projectRoot, ".git")) ||
+    existsSync(outputPath) ||
+    !existsSync(legacyPath)
+  ) {
+    return null;
+  }
+  const migrationPreflight = preflightLegacyReferences(
+    projectRoot,
+    selectedAgent,
+  );
+  if (
+    migrationPreflight.instructionBridge === null ||
+    migrationPreflight.blockingInstructionPaths.length > 0
+  ) {
+    return null;
+  }
+  return getAgentProfile(selectedAgent).instructionFile;
+}
+
+/**
  * Copy first, update the selected bridge atomically, then remove the former guide.
  *
  * Use after setup proves no other agent still needs the old path; null bridge input means only the guide filename changes.

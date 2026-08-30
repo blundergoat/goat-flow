@@ -777,9 +777,13 @@ run_full() {
   expect_block paths "cat 'fixtures/private key.key'" "quoted key-material filename with spaces"
   expect_block_message shell "eval 'git status'" "direct shell eval" destructive "eval hides commands from safety checks"
   expect_block_message shell "command eval 'git status'" "command-wrapped shell eval" destructive "eval hides commands from safety checks"
+  expect_block_message shell "builtin -- eval 'git status'" "builtin option terminator before shell eval" destructive "eval hides commands from safety checks"
+  expect_block_message shell "! eval 'git status'" "leading shell negation before shell eval" destructive "eval hides commands from safety checks"
   expect_block_message shell "printf safe | eval 'git status'" "downstream shell eval" destructive "eval hides commands from safety checks"
   expect_block_message shell "printf safe | command eval 'git status'" \
     "command-wrapped downstream shell eval" destructive "eval hides commands from safety checks"
+  expect_allow shell "builtin -- printf '%s\\n' safe" "builtin option terminator before benign printf"
+  expect_allow shell "! yq eval '.metadata.key' file.yaml" "leading shell negation before yq eval subcommand"
   expect_allow shell "printf document | yq eval '.metadata.key'" "downstream yq eval subcommand"
   expect_allow shell "rg -n 'printf safe | eval \"rm -rf /\"' docs | head -n 1" "quoted downstream eval evidence"
   expect_allow paths "echo .key" "bare key literal"

@@ -1694,6 +1694,11 @@ normalize_command_candidate() {
       c=$(normalize_leading_command_word "$c")
     fi
 
+    # `!` changes only the pipeline's exit status; reveal the command it negates.
+    if [[ "$c" =~ ^\![[:space:]]+ ]]; then
+      c="${c#"${BASH_REMATCH[0]}"}"
+      continue
+    fi
     if [[ "$c" == \(* ]]; then
       c="${c#\(}"
       continue
@@ -1736,6 +1741,11 @@ normalize_command_candidate() {
     fi
     if [[ "$c" =~ ^builtin[[:space:]]+ ]]; then
       c="${c#"${BASH_REMATCH[0]}"}"
+      c="${c#"${c%%[![:space:]]*}"}"
+      # Bash accepts `--` before a builtin name; it does not make the builtin inert.
+      if [[ "$c" =~ ^--([[:space:]]+|$) ]]; then
+        c="${c#"${BASH_REMATCH[0]}"}"
+      fi
       continue
     fi
     word="${c%%[[:space:]]*}"

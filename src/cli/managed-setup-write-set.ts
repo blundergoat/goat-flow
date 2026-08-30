@@ -17,6 +17,7 @@ import {
   resolveIndexBucketPaths,
 } from "./learning-loop-index/parse-bucket.js";
 import { loadManifest } from "./manifest/manifest.js";
+import { pendingCommitGuidanceMigrationInstructionPath } from "./prompt/commit-guidance.js";
 import { KNOWN_AGENT_IDS, type AgentId } from "./types.js";
 
 /** Filesystem evidence for a destination, gathered without following target symlinks. */
@@ -218,8 +219,11 @@ function agentProjectWrites(agent: AgentId): ProjectWriteDefinition[] {
  */
 function conditionalProjectWrites(
   projectPath: string,
+  agent: AgentId,
 ): ProjectWriteDefinition[] {
   const bucketPaths = resolveIndexBucketPaths(loadConfig(projectPath).config);
+  const commitGuidanceBridgePath =
+    pendingCommitGuidanceMigrationInstructionPath(projectPath, agent);
   return [
     {
       path: ".gitignore",
@@ -245,6 +249,18 @@ function conditionalProjectWrites(
       reason:
         "Install seeds commit guidance only in a Git project that has no guide at this path.",
     },
+    ...(commitGuidanceBridgePath === null
+      ? []
+      : [
+          {
+            path: commitGuidanceBridgePath,
+            ownership: "user-owned" as const,
+            seedable: false,
+            replaceable: false,
+            reason:
+              "Install rewrites only the selected Commit Messages bridge while renaming the former commit guide; all other instruction bytes are preserved.",
+          },
+        ]),
     {
       path: ".goat-flow/install-state/managed.json",
       ownership: "generated",
@@ -288,7 +304,7 @@ export function collectProjectWriteDefinitions(
   for (const definition of [
     ...manifestProjectWrites(),
     ...agentProjectWrites(agent),
-    ...conditionalProjectWrites(projectPath),
+    ...conditionalProjectWrites(projectPath, agent),
   ]) {
     const existing = definitions.get(definition.path);
     // Two different ownership claims for one path would make the preview action unverifiable.

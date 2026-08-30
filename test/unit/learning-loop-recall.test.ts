@@ -291,6 +291,53 @@ describe("collectLearningLoopRecall", () => {
     );
     assert.doesNotMatch(first, /This body is routing evidence/);
   });
+
+  // Fixture purpose: a stored heading and decision carry ANSI color, hyperlink, and bell controls while citing a real fixture path.
+  // Side effects: writes and removes one disposable learning-loop project.
+  it("escapes repository-controlled terminal sequences in text output", () => {
+    const controlRoot = makeFixtureRepo();
+    const escape = "\u001b";
+    const bell = "\u0007";
+    const controlEntry = `---
+category: recall-controls
+last_reviewed: 2026-08-30
+---
+
+## Lesson: ${escape}[31mPainted${escape}[0m heading
+
+**Status:** active | **Created:** 2026-08-30
+**Decision changed:** ${escape}]8;;https://example.invalid${bell}linked${escape}]8;;${bell}
+
+**Evidence:** \`src/core/file.ts\` (search: \`export const coreMarker\`).
+`;
+    writeFileSync(
+      join(controlRoot, BUCKET_PATHS.lessons, "terminal-controls.md"),
+      controlEntry,
+    );
+
+    try {
+      const result = collectLearningLoopRecall(
+        createFS(controlRoot),
+        BUCKET_PATHS,
+        ["src/core/file.ts"],
+      );
+      const text = formatLearningLoopRecall(result, "text");
+      const json = formatLearningLoopRecall(result, "json");
+
+      assert.doesNotMatch(text, /[\u0000-\u0009\u000b-\u001f\u007f-\u009f]/u);
+      assert.match(text, /\\u001b\[31mPainted\\u001b\[0m/u);
+      assert.match(text, /\\u0007linked/u);
+      assert.equal(
+        (
+          JSON.parse(json) as { matches: Array<{ heading: string }> }
+        ).matches.some((match) => match.heading.includes(escape)),
+        true,
+        "JSON retains the machine-readable repository value",
+      );
+    } finally {
+      rmSync(controlRoot, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("recall CLI parsing", () => {
