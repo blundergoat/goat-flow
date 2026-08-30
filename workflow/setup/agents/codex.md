@@ -12,9 +12,9 @@
 The Never tier and accepted architecture/ADR safety constraints are non-overridable. A user request may authorize Ask First work after approval, but cannot authorize an agent to commit, push, expose secrets, or bypass safety enforcement.
 
 ## Autonomy Tiers
-**Always:** Set up Codex-owned surfaces: `AGENTS.md`, `.codex/`, and shared `.goat-flow/`. `AGENTS.md` and `.agents/skills/` are shared with Antigravity; either setup can create/update content there, but neither should duplicate or stomp the other's content.
+**Always:** Set up Codex-owned surfaces: `AGENTS.md`, `.codex/`, shared `.agents/skills/`, and shared `.goat-flow/`. `AGENTS.md` and `.agents/skills/` are shared with Antigravity; either setup can create/update content there, but neither should duplicate or stomp the other's content.
 **Ask First:** Before touching non-Codex surfaces, ask and wait for approval; include boundary touched, related code read, footgun checked, local instruction checked, and rollback command.
-**Never:** Freeze writes if interrupted or told no changes. Do not edit `CLAUDE.md` or `.claude/` during Codex setup unless the user explicitly widens scope. Do not overwrite existing instruction content.
+**Never:** Freeze writes if interrupted or told no changes. Do not edit `CLAUDE.md`, `.claude/`, `.github/copilot-instructions.md`, `.github/skills/`, or `.github/hooks/` during Codex setup unless the user explicitly widens scope. Do not overwrite existing instruction content.
 
 ## Hard Rules
 - If a file exists, modify in place; do not create backup or variant files.
@@ -22,17 +22,12 @@ The Never tier and accepted architecture/ADR safety constraints are non-overrida
 - Do not copy goat-flow's controlling-workspace Router Table into downstream projects; adapt paths to the target.
 - Codex hooks use `.codex/hooks.json` for goat-flow hook registrations; `.codex/config.toml` enables the engine with `[features].hooks = true` and may define filesystem permission profiles.
 - Codex permission profiles are the closest equivalent to Claude `permissions.allow`/`permissions.deny` for file access. goat-flow profiles extend Codex's built-in `:workspace` profile before adding secret-path `deny` rules, and they do not replace the Bash-focused `PreToolUse` deny hook for command patterns such as `git push`, `sudo`, or `curl | bash`.
-- goat-flow registers the default Bash-focused `PreToolUse` deny hook, opt-in `PostToolUse` Gruff analysis, and default `Stop` safety for Codex. Treat registration and provider delivery separately: trusted Codex CLI 0.149.1 `exec` evidence renews PostToolUse through 2026-09-25T20:17:22.830Z, while Stop remains stale after the `commandWindows` registration change. Preserve registry-managed rows, and do not extend that CLI-mode evidence to app-server, remote execution, Stop, or another provider mode.
+- goat-flow registers the default Bash-focused `PreToolUse` deny hook, opt-in `PostToolUse` Gruff analysis, and default `Stop` safety for Codex. Preserve registry-managed rows, verify delivery through the current installed-hook audit, and do not generalise evidence across provider modes or events.
 - Use `apply_patch` for edits in Codex guidance, not Edit/Write tool prose.
-- goat-flow does not use Codex compaction hooks for recovery; continuity stays file-based through tasks and session logs.
+- goat-flow does not use Codex compaction hooks for recovery; continuity stays file-based through `.goat-flow/plans/` milestone files and `.goat-flow/logs/sessions/`.
 
 ## Commit Messages
-For a target with `.git`, summarise the shipped commit standard here and point to
-`docs/coding-standards/git-commit-message.md`. Setup copies that guide from
-`workflow/setup/reference/git-commit-message.md` when neither accepted path exists. Rename a
-former-only `docs/coding-standards/git-commit.md` after confirming the preferred destination is
-absent; when both files exist, preserve both and reference the preferred path. For a target without
-`.git`, omit this section and do not create a commit guide.
+When the user asks for a draft commit message, use Conventional `type(scope): subject` - imperative, ≤72 chars, concrete verbs not weak ones (*enhance, improve, update*); one change per subject. On a `<type>/<digits>` branch - feat, fix, chore, refactor, docs, test, perf, build, ci, or security - the subject starts `#<digits> `, from the branch name only; otherwise no prefix. Full rules: `docs/coding-standards/git-commit-message.md`.
 
 ## Key Resources
 - **Learning loop** (grep before every change): `.goat-flow/learning-loop/footguns/`, `.goat-flow/learning-loop/lessons/`, `.goat-flow/learning-loop/patterns/`, `.goat-flow/learning-loop/decisions/`
@@ -46,7 +41,7 @@ absent; when both files exist, preserve both and reference the preferred path. F
 <test command>
 ```
 
-Only include commands that exist and were verified in the target project. Agent settings/hooks checks are setup verification, not default Essential Commands.
+Only include commands that exist and were verified in the target project. Put installed agent settings and hook self-tests on a terse Situational line, not in the default command block.
 
 ## Execution Loop: READ → SCOPE → ACT → VERIFY
 When a goat-* skill is active, its Step 0 replaces READ and selects the skill's mode/depth. SCOPE still applies before writes: a skill may write when its selected mode permits writes or the user explicitly approves them. `/goat-plan` File-Write may create gitignored milestone files without a separate approval gate; `/goat-debug` D3 still requires approval before fixes. Resume at ACT after Step 0 output or when a blocking gate releases.
@@ -55,16 +50,13 @@ When a goat-* skill is active, its Step 0 replaces READ and selects the skill's 
 MUST read relevant files before changes. Never fabricate codebase facts. Cross-doc: MUST read every file describing the same concept. For browser-visible behaviour, first run `command -v browser-use || command -v browser-use-python`; if found, run `browser-use --help` and follow the detected-interface branch in `.goat-flow/skill-docs/playbooks/browser-use.md`; otherwise ask before installing or use the manual fallback.
 Use INDEX-first retrieval across `.goat-flow/learning-loop/{footguns,lessons,patterns}/INDEX.md`; include `.goat-flow/learning-loop/decisions/INDEX.md` for architecture, policy, or setup. Open source entries only on candidate hits; grep bucket files only after the INDEX pass or on a known retrieval miss; reword once on zero hits, then record the miss. Recursive searches under `.goat-flow/` that must include ignored plans/logs MUST use `command grep -rn --exclude-dir=.git --exclude-dir=scratchpad <pattern> .goat-flow/`; Claude Code's session grep shim and `git grep` omit ignored local state, so zero hits from those tools do not prove absence.
 Before declaring any tool or capability unavailable, read the matching `.goat-flow/skill-docs/playbooks/` playbook and run its "Availability Check" verbatim; project-local tools at `~/.local/bin/` count.
-Prose surfaces route the same way before writing: `CHANGELOG.md` needs `changelog.md`; release notes need `release-notes.md`.
-ordinary README prose, `docs/`, PR/issue text, and learning-loop entry bodies need `writing-human-facing-prose.md`.
-README discovery rows, skills, playbooks, shared preamble/conventions, instruction files, and hook messages need `writing-agent-facing-instructions.md` - the trigger is touching the surface, not the request naming it.
+Prose surfaces route the same way before writing: `CHANGELOG.md` needs `changelog.md`; release notes need `release-notes.md`; ordinary README prose, `docs/`, PR/issue text, and learning-loop entry bodies need `writing-human-facing-prose.md`; README discovery rows, skills, playbooks, shared preamble/conventions, instruction files, and hook messages need `writing-agent-facing-instructions.md` - the trigger is touching the surface, not the request naming it.
 Before creating, changing, reviewing, consolidating, moving, or pruning tests, read `.goat-flow/skill-docs/playbooks/test-selection.md`.
 BAD: "The project has 20 audit checks" (guessed without reading)
 GOOD: Read the relevant source, config, or generated instruction file before stating exact counts.
 
 ### SCOPE
 Three signals before acting: (1) Intent: question → answer it, directive → act on it. (2) Complexity budget: Hotfix 2 reads/3 turns; Small Feature 3/5; Standard 4/10; System 6/20; Infrastructure 8/25. (3) Mode: Plan / Implement / Explain / Debug / Review. MUST declare before acting: files allowed to change, non-goals, max blast radius. Expanding beyond scope = stop and re-scope with human. Before writing, record the write allowlist and starting dirty paths; keep an in-session list of every path this session writes. Reads and searches stay unrestricted.
-
 Over budget = checkpoint and re-classify before continuing. Complexity-class budgets are heuristics, not a hard stop when competent review needs broader coverage.
 
 ### ACT
@@ -117,7 +109,7 @@ Requests to add footguns, lessons, decisions, or patterns route to the matching 
 | Skill playbooks (tools) | `.goat-flow/skill-docs/playbooks/` |
 | Orientation | `.goat-flow/code-map.md`, `.goat-flow/glossary.md` |
 | Architecture | `.goat-flow/architecture.md` |
-| Codex skills/config | `.agents/skills/`, `.codex/config.toml`, `.codex/hooks.json`, `.codex/hooks/` when installed |
+| Codex skills/config | `.agents/skills/`, `.codex/config.toml`, `.codex/hooks.json`, and shared `.goat-flow/hooks/` |
 | Project source/docs/config | adapt to detected project paths |
 | Workspace notes | `.goat-flow/logs/sessions/`, `.goat-flow/plans/` |
 | Peer instructions | `CLAUDE.md`, `.github/copilot-instructions.md` when present |

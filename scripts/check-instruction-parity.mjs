@@ -26,6 +26,11 @@ const LIVE_FILES = [
 
 const ALL_FILES = [...SETUP_FILES, ...LIVE_FILES];
 
+const COMMIT_GUIDE_FILES = [
+  "docs/coding-standards/git-commit-message.md",
+  "workflow/setup/reference/git-commit-message.md",
+];
+
 // A newline-only budget can hide several independent rules in one unreadable physical line.
 const MAX_INSTRUCTION_LINE_CHARACTERS = 800;
 
@@ -51,6 +56,30 @@ const SHARED_PHRASES = JSON.parse(
 /** Render a repository-relative path for deterministic failure messages. */
 function pathLabel(path) {
   return relative(ROOT, resolve(ROOT, path)) || path;
+}
+
+/** Record byte drift between repository mirrors while allowing fixtures that omit both files. */
+function validateByteParity(files, label, failures) {
+  const existingFiles = files.filter((file) => existsSync(resolve(ROOT, file)));
+  if (existingFiles.length === 0) return;
+  if (existingFiles.length !== files.length) {
+    for (const file of files) {
+      if (!existsSync(resolve(ROOT, file))) {
+        failures.push(`${pathLabel(file)}: missing ${label} mirror`);
+      }
+    }
+    return;
+  }
+
+  const [reference, ...mirrors] = files;
+  const referenceBytes = readFileSync(resolve(ROOT, reference));
+  for (const mirror of mirrors) {
+    const mirrorBytes = readFileSync(resolve(ROOT, mirror));
+    if (mirrorBytes.equals(referenceBytes)) continue;
+    failures.push(
+      `${pathLabel(mirror)}: ${label} drifted from ${pathLabel(reference)}`,
+    );
+  }
 }
 
 /** Escape a package version before matching its exact CHANGELOG heading. */
@@ -342,6 +371,8 @@ function validateInstructionParity() {
   const failures = [];
   const setupLoopBodies = [];
   const releaseMetadata = readReleaseMetadata(failures);
+
+  validateByteParity(COMMIT_GUIDE_FILES, "commit guide", failures);
 
   for (const file of ALL_FILES) {
     validateInstructionFile(file, failures, setupLoopBodies, releaseMetadata);

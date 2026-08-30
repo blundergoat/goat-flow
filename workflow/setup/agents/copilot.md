@@ -12,7 +12,7 @@
 The Never tier and accepted architecture/ADR safety constraints are non-overridable. A user request may authorize Ask First work after approval, but cannot authorize an agent to commit, push, expose secrets, or bypass safety enforcement.
 
 ## Autonomy Tiers
-**Always:** Set up Copilot-owned surfaces: `.github/copilot-instructions.md`, `.github/skills/`, `.github/hooks/`, `.copilotignore`, and shared `.goat-flow/`. When the target contains `.git`, also set up its `## Commit Messages` bridge and preferred `docs/coding-standards/git-commit-message.md`; omit both for a non-Git target.
+**Always:** Set up Copilot-owned surfaces: `.github/copilot-instructions.md`, `.github/skills/`, `.github/hooks/`, and shared `.goat-flow/`.
 
 **Ask First:** Before touching non-Copilot surfaces, ask and wait for approval; include boundary touched, related code read, footgun checked, local instruction checked, and rollback command.
 
@@ -23,17 +23,12 @@ The Never tier and accepted architecture/ADR safety constraints are non-overrida
 - `.github/copilot-instructions.md` is standalone and must not defer to `AGENTS.md`.
 - Do not copy goat-flow's controlling-workspace Router Table into downstream projects; adapt paths to the target.
 - Keep `.github/copilot-instructions.md` within the 150-line hard limit and 125-line target.
-- Commit guidance applies only when the target contains `.git`. The preferred guide is `docs/coding-standards/git-commit-message.md`, copied from `workflow/setup/reference/git-commit-message.md` when neither guide exists. Rename a former-only `docs/coding-standards/git-commit.md` after confirming the preferred destination is absent. Preserve both files when both already exist. For a Git target, `.github/copilot-instructions.md` summarises and points to the preferred guide; for a non-Git target, omit that bridge.
 - Keep a single Copilot hook config file at `.github/hooks/hooks.json`; do not split one file per event.
+- Preserve existing `.github/instructions/**/*.instructions.md`; do not invent one solely to satisfy setup.
 - Do not create `.github/agents/` unless a future concrete gap justifies it.
 
 ## Commit Messages
-For a target with `.git`, summarise the shipped commit standard here and point to
-`docs/coding-standards/git-commit-message.md`. Setup copies that guide from
-`workflow/setup/reference/git-commit-message.md` when neither accepted path exists. Rename a
-former-only `docs/coding-standards/git-commit.md` after confirming the preferred destination is
-absent; when both files exist, preserve both and reference the preferred path. For a target without
-`.git`, omit this section and do not create a commit guide.
+When the user asks for a draft commit message, use Conventional `type(scope): subject` - imperative, ≤72 chars, concrete verbs not weak ones (*enhance, improve, update*); one change per subject. On a `<type>/<digits>` branch - feat, fix, chore, refactor, docs, test, perf, build, ci, or security - the subject starts `#<digits> `, from the branch name only; otherwise no prefix. Full rules: `docs/coding-standards/git-commit-message.md`.
 
 ## Key Resources
 - **Learning loop** (grep before every change): `.goat-flow/learning-loop/footguns/`, `.goat-flow/learning-loop/lessons/`, `.goat-flow/learning-loop/patterns/`, `.goat-flow/learning-loop/decisions/`
@@ -47,7 +42,7 @@ absent; when both files exist, preserve both and reference the preferred path. F
 <test command>
 ```
 
-Only include commands that exist and were verified in the target project. Agent settings/hooks checks are setup verification, not default Essential Commands.
+Only include commands that exist and were verified in the target project. Put installed agent settings and hook self-tests on a terse Situational line, not in the default command block.
 
 ## Execution Loop: READ → SCOPE → ACT → VERIFY
 When a goat-* skill is active, its Step 0 replaces READ and selects the skill's mode/depth. SCOPE still applies before writes: a skill may write when its selected mode permits writes or the user explicitly approves them. `/goat-plan` File-Write may create gitignored milestone files without a separate approval gate; `/goat-debug` D3 still requires approval before fixes. Resume at ACT after Step 0 output or when a blocking gate releases.
@@ -56,9 +51,7 @@ When a goat-* skill is active, its Step 0 replaces READ and selects the skill's 
 MUST read relevant files before changes. Never fabricate codebase facts. Cross-doc: MUST read every file describing the same concept. For browser-visible behaviour, first run `command -v browser-use || command -v browser-use-python`; if found, run `browser-use --help` and follow the detected-interface branch in `.goat-flow/skill-docs/playbooks/browser-use.md`; otherwise ask before installing or use the manual fallback.
 Use INDEX-first retrieval across `.goat-flow/learning-loop/{footguns,lessons,patterns}/INDEX.md`; include `.goat-flow/learning-loop/decisions/INDEX.md` for architecture, policy, or setup. Open source entries only on candidate hits; grep bucket files only after the INDEX pass or on a known retrieval miss; reword once on zero hits, then record the miss. Recursive searches under `.goat-flow/` that must include ignored plans/logs MUST use `command grep -rn --exclude-dir=.git --exclude-dir=scratchpad <pattern> .goat-flow/`; Claude Code's session grep shim and `git grep` omit ignored local state, so zero hits from those tools do not prove absence.
 Before declaring any tool or capability unavailable, read the matching `.goat-flow/skill-docs/playbooks/` playbook and run its "Availability Check" verbatim; project-local tools at `~/.local/bin/` count.
-Prose surfaces route the same way before writing: `CHANGELOG.md` needs `changelog.md`; release notes need `release-notes.md`.
-ordinary README prose, `docs/`, PR/issue text, and learning-loop entry bodies need `writing-human-facing-prose.md`.
-README discovery rows, skills, playbooks, shared preamble/conventions, instruction files, and hook messages need `writing-agent-facing-instructions.md` - the trigger is touching the surface, not the request naming it.
+Prose surfaces route the same way before writing: `CHANGELOG.md` needs `changelog.md`; release notes need `release-notes.md`; ordinary README prose, `docs/`, PR/issue text, and learning-loop entry bodies need `writing-human-facing-prose.md`; README discovery rows, skills, playbooks, shared preamble/conventions, instruction files, and hook messages need `writing-agent-facing-instructions.md` - the trigger is touching the surface, not the request naming it.
 Before creating, changing, reviewing, consolidating, moving, or pruning tests, read `.goat-flow/skill-docs/playbooks/test-selection.md`.
 BAD: "The project has 20 audit checks" (guessed without reading)
 GOOD: Read the relevant source, config, or generated instruction file before stating exact counts.
@@ -99,8 +92,8 @@ MUST run `shellcheck` on .sh changes. MUST check cross-references after renames.
 If VERIFY caught a failure or you corrected course, update the learning loop before DoD: behavioural mistakes go in `.goat-flow/learning-loop/lessons/<category>.md`, cross-doc architectural traps go in `.goat-flow/learning-loop/footguns/<category>.md` with `**Status:** active | **Created:** YYYY-MM-DD | **Evidence:** <choose one: ACTUAL_MEASURED, OBSERVED, or EXTERNAL_REFERENCE>` (measured locally, read directly, or cited external incident with local applicability), significant technical decisions go in `.goat-flow/learning-loop/decisions/`, and optional continuity notes go in `.goat-flow/logs/sessions/`.
 
 ## Definition of Done
-- `.github/copilot-instructions.md` exists, follows the canonical section order where compatible with Copilot compression, and stays under the hard line limit.
-- Commit guidance matches target applicability: a Git target has the preferred guide and Copilot bridge, while a non-Git target has neither; a former-only guide was renamed without collision and pre-existing dual guides were preserved.
+- `.github/copilot-instructions.md` exists, follows the canonical section order, and stays within the 150-line hard limit.
+- Commit guidance matches target applicability: a Git target has the preferred guide and Copilot bridge unless `skipped-references` preserves the former guide and valid bridge; a non-Git target has neither; safe former-only guides are renamed and pre-existing dual guides are preserved.
 - Essential Commands list only real target-project commands.
 - Router Table contains installed project resources only; no `workflow/setup/`, `workflow/hooks/`, or manifest paths.
 - Tool playbook pointer to `.goat-flow/skill-docs/playbooks/` is present.
@@ -118,7 +111,7 @@ Requests to add footguns, lessons, decisions, or patterns route to the matching 
 | Skill playbooks (tools) | `.goat-flow/skill-docs/playbooks/` |
 | Orientation | `.goat-flow/code-map.md`, `.goat-flow/glossary.md` |
 | Architecture | `.goat-flow/architecture.md` |
-| Copilot skills/config | `.github/skills/`, `.github/hooks/`, `.copilotignore`, and preferred `docs/coding-standards/git-commit-message.md` when `.git` is present |
+| Copilot skills/config | `.github/skills/`, `.github/hooks/hooks.json`, existing `.github/instructions/**/*.instructions.md`, and preferred `docs/coding-standards/git-commit-message.md` when `.git` is present |
 | Project source/docs/config | adapt to detected project paths |
 | Workspace notes | `.goat-flow/logs/sessions/`, `.goat-flow/plans/` |
 | Peer instructions | `CLAUDE.md`, `AGENTS.md` when present |

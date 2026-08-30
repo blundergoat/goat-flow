@@ -12,27 +12,22 @@
 The Never tier and accepted architecture/ADR safety constraints are non-overridable. A user request may authorize Ask First work after approval, but cannot authorize an agent to commit, push, expose secrets, or bypass safety enforcement.
 
 ## Autonomy Tiers
-**Always:** Set up Antigravity-owned surfaces: `AGENTS.md`, `.agents/skills/`, `.agents/hooks.json`, `.agents/hooks/`, and shared `.goat-flow/`. `AGENTS.md` and `.agents/skills/` are shared with Codex; either setup can create/update them, but neither should duplicate or stomp the other's content.
+**Always:** Set up Antigravity-owned surfaces: `AGENTS.md`, `.agents/skills/`, `.agents/hooks.json`, and shared `.goat-flow/`. `AGENTS.md` and `.agents/skills/` are shared with Codex; either setup can create/update them, but neither should duplicate or stomp the other's content.
 **Ask First:** Before touching non-Antigravity surfaces, ask and wait for approval; include boundary touched, related code read, footgun checked, local instruction checked, and rollback command.
-**Never:** Freeze writes if interrupted or told no changes. Do not edit `CLAUDE.md`, `.claude/`, or `.codex/` during Antigravity setup unless the user explicitly widens scope. Do not overwrite existing instruction content; preserve or route domain knowledge to `.goat-flow/`.
+**Never:** Freeze writes if interrupted or told no changes. Do not edit `CLAUDE.md`, `.claude/`, `.codex/`, `.github/copilot-instructions.md`, `.github/skills/`, or `.github/hooks/` during Antigravity setup unless the user explicitly widens scope. Do not overwrite existing instruction content; preserve or route domain knowledge to `.goat-flow/`.
 
 ## Hard Rules
 - If a file exists, modify in place; do not create backup or variant files.
 - `AGENTS.md` is the Antigravity root instruction file and is shared with Codex; both agents read it.
 - Do not copy goat-flow's controlling-workspace Router Table into downstream projects; adapt paths to the target.
-- Antigravity uses `agy` as the terminal binary; verify a current build is installed with `agy --version` (older builds predate the OAuth-persistence fix).
+- Antigravity uses `agy` as the terminal binary; verify the installed build with `agy --version`.
 - Plugin migration from other agents: `agy plugin import gemini` or `agy plugin import claude` populates Antigravity from existing setups.
 - Antigravity hook wiring uses `.agents/hooks.json` for PreToolUse guardrails. Gruff feedback is not registered because Antigravity PostToolUse cannot return command output to the active model.
-- User-level config lives at `~/.config/antigravity/config.toml`; it is not a repo-local surface and is out of scope for per-project setup.
+- User-level settings live at `~/.gemini/antigravity-cli/settings.json`; this is not a repo-local surface and is out of scope for per-project setup.
 - Sandbox/approval settings: Antigravity exposes `--sandbox` and `proceed-in-sandbox` permission modes through the binary, not via repo-local config files.
 
 ## Commit Messages
-For a target with `.git`, summarise the shipped commit standard here and point to
-`docs/coding-standards/git-commit-message.md`. Setup copies that guide from
-`workflow/setup/reference/git-commit-message.md` when neither accepted path exists. Rename a
-former-only `docs/coding-standards/git-commit.md` after confirming the preferred destination is
-absent; when both files exist, preserve both and reference the preferred path. For a target without
-`.git`, omit this section and do not create a commit guide.
+When the user asks for a draft commit message, use Conventional `type(scope): subject` - imperative, ≤72 chars, concrete verbs not weak ones (*enhance, improve, update*); one change per subject. On a `<type>/<digits>` branch - feat, fix, chore, refactor, docs, test, perf, build, ci, or security - the subject starts `#<digits> `, from the branch name only; otherwise no prefix. Full rules: `docs/coding-standards/git-commit-message.md`.
 
 ## Key Resources
 - **Learning loop** (grep before every change): `.goat-flow/learning-loop/footguns/`, `.goat-flow/learning-loop/lessons/`, `.goat-flow/learning-loop/patterns/`, `.goat-flow/learning-loop/decisions/`
@@ -46,7 +41,7 @@ absent; when both files exist, preserve both and reference the preferred path. F
 <test command>
 ```
 
-Only include commands that exist and were verified in the target project. Agent settings/hooks checks are setup verification, not default Essential Commands.
+Only include commands that exist and were verified in the target project. Put installed agent settings and hook self-tests on a terse Situational line, not in the default command block.
 
 ## Execution Loop: READ → SCOPE → ACT → VERIFY
 When a goat-* skill is active, its Step 0 replaces READ and selects the skill's mode/depth. SCOPE still applies before writes: a skill may write when its selected mode permits writes or the user explicitly approves them. `/goat-plan` File-Write may create gitignored milestone files without a separate approval gate; `/goat-debug` D3 still requires approval before fixes. Resume at ACT after Step 0 output or when a blocking gate releases.
@@ -55,9 +50,7 @@ When a goat-* skill is active, its Step 0 replaces READ and selects the skill's 
 MUST read relevant files before changes. Never fabricate codebase facts. Cross-doc: MUST read every file describing the same concept. For browser-visible behaviour, first run `command -v browser-use || command -v browser-use-python`; if found, run `browser-use --help` and follow the detected-interface branch in `.goat-flow/skill-docs/playbooks/browser-use.md`; otherwise ask before installing or use the manual fallback.
 Use INDEX-first retrieval across `.goat-flow/learning-loop/{footguns,lessons,patterns}/INDEX.md`; include `.goat-flow/learning-loop/decisions/INDEX.md` for architecture, policy, or setup. Open source entries only on candidate hits; grep bucket files only after the INDEX pass or on a known retrieval miss; reword once on zero hits, then record the miss. Recursive searches under `.goat-flow/` that must include ignored plans/logs MUST use `command grep -rn --exclude-dir=.git --exclude-dir=scratchpad <pattern> .goat-flow/`; Claude Code's session grep shim and `git grep` omit ignored local state, so zero hits from those tools do not prove absence.
 Before declaring any tool or capability unavailable, read the matching `.goat-flow/skill-docs/playbooks/` playbook and run its "Availability Check" verbatim; project-local tools at `~/.local/bin/` count.
-Prose surfaces route the same way before writing: `CHANGELOG.md` needs `changelog.md`; release notes need `release-notes.md`.
-ordinary README prose, `docs/`, PR/issue text, and learning-loop entry bodies need `writing-human-facing-prose.md`.
-README discovery rows, skills, playbooks, shared preamble/conventions, instruction files, and hook messages need `writing-agent-facing-instructions.md` - the trigger is touching the surface, not the request naming it.
+Prose surfaces route the same way before writing: `CHANGELOG.md` needs `changelog.md`; release notes need `release-notes.md`; ordinary README prose, `docs/`, PR/issue text, and learning-loop entry bodies need `writing-human-facing-prose.md`; README discovery rows, skills, playbooks, shared preamble/conventions, instruction files, and hook messages need `writing-agent-facing-instructions.md` - the trigger is touching the surface, not the request naming it.
 Before creating, changing, reviewing, consolidating, moving, or pruning tests, read `.goat-flow/skill-docs/playbooks/test-selection.md`.
 BAD: "The project has 20 audit checks" (guessed without reading)
 GOOD: Read the relevant source, config, or generated instruction file before stating exact counts.
@@ -117,7 +110,7 @@ Requests to add footguns, lessons, decisions, or patterns route to the matching 
 | Orientation | `.goat-flow/code-map.md`, `.goat-flow/glossary.md` |
 | Architecture | `.goat-flow/architecture.md` |
 | Antigravity skills | `.agents/skills/` (shared with Codex) |
-| Antigravity hooks | `.agents/hooks.json`, `.agents/hooks/` |
+| Antigravity hooks | `.agents/hooks.json` and shared `.goat-flow/hooks/` |
 | Project source/docs/config | adapt to detected project paths |
 | Workspace notes | `.goat-flow/logs/sessions/`, `.goat-flow/plans/` |
 | Peer instructions | `CLAUDE.md`, `.github/copilot-instructions.md` when present |

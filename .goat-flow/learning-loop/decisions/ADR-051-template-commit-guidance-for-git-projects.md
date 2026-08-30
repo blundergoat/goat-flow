@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-08-08
-**Updated:** 2026-08-15 - absorbed ADR-031 (single canonical commit doc) and ADR-043 (prefer `git-commit-message.md`). The three were one chain on the same question; only the endpoint constrains current work, and the intermediate rulings survive below as the compatibility contract.
+**Updated:** 2026-08-30 - documented the installed-instruction reference preflight and byte-parity enforcer; 2026-08-15 - absorbed ADR-031 (single canonical commit doc) and ADR-043 (prefer `git-commit-message.md`). The three were one chain on the same question; only the endpoint constrains current work, and the intermediate rulings survive below as the compatibility contract.
 
 ## Decision
 
@@ -11,7 +11,7 @@ Commit conventions live in exactly one file per project. The preferred path is `
 Commit guidance is applicable only when the target project contains a `.git` entry. For an applicable target, setup uses these ordered branches:
 
 1. Preserve an existing `docs/coding-standards/git-commit-message.md`.
-2. When only `docs/coding-standards/git-commit.md` exists, copy it exclusively to the preferred path and remove the former path only after the copy succeeds.
+2. When only `docs/coding-standards/git-commit.md` exists, inspect every installed agent instruction file first. If former-path references are absent or confined to the selected agent's `## Commit Messages` section, copy the guide exclusively to the preferred path, rewrite that selected bridge when needed, and remove the former path only after the copy and any bridge rewrite succeed. If another instruction file or another section references the former path, preserve it and report `skipped-references`.
 3. When neither guide exists, copy `workflow/setup/reference/git-commit-message.md` without deriving policy from commit history.
 4. When both guides exist, preserve both and resolve the preferred path.
 
@@ -38,7 +38,7 @@ The commit-guidance installer sampled up to 100 commit messages and treated the 
 
 The reported downstream workspace at `/home/devgoat/projects/gruff-workspace` contains no `.git`. A commit-message guide there has no repository workflow to govern, so creating or requiring one adds an irrelevant project file.
 
-The intermediate rule preferred the descriptive filename but preserved the former filename indefinitely. The approved upgrade contract now favors convergence while retaining collision safety: setup moves the former guide only when the preferred destination is absent and never overwrites either file.
+The intermediate rule preferred the descriptive filename but preserved the former filename indefinitely. The approved upgrade contract now favors convergence while retaining collision and reference safety: setup moves the former guide only when the preferred destination is absent, every installed instruction reference remains valid, and neither user-owned guide is overwritten.
 
 ## Failure Mode Comparison
 
@@ -57,8 +57,8 @@ The template copy and no-Git skip are two-way changes: setup can restore a diffe
 ## Consequences
 
 - `workflow/setup/reference/git-commit-message.md` is the packaged source for new Git-project guides.
-- Framework and workflow copies require byte-parity verification.
+- Framework and workflow copies require byte-parity verification by `scripts/check-instruction-parity.mjs`.
 - Setup and audit must check `.git` before creating, requiring, or bridging commit guidance.
-- Upgrade output reports a former-path rename; collisions remain untouched.
+- Upgrade output reports a former-path rename or a `skipped-references` preservation result; collisions remain untouched.
 - Commit-history detection and insufficient-history stubs are removed from the setup contract.
 - `src/cli/audit/check-factual-claims.ts` keeps a compatibility alias for the former path; remove that entry only when support for `git-commit.md` retires.
