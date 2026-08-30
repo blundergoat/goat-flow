@@ -6,13 +6,11 @@ goat-flow is a harness - guardrails, memory, and workflows for AI coding agents.
 This repo is the goat-flow controlling workspace. When the dashboard or CLI operates on a selected target project, commands like `audit` and `quality` run against that target - not this repo. Keep the two contexts separate: framework code lives here, project-specific harness content lives in the target.
 
 ## Truth Order
-
 User's explicit instruction (this session) > CLAUDE.md > `.goat-flow/architecture.md` > skills / templates (on-demand).
 
 The Never tier and accepted architecture/ADR safety constraints are non-overridable. A user request may authorize Ask First work after approval, but cannot authorize an agent to commit, push, expose secrets, or bypass safety enforcement.
 
 ## Autonomy Tiers
-
 **Always:** Read any file, lint scripts, edit within assigned scope. Session logs at `.goat-flow/logs/sessions/` are OPTIONAL continuity notes - write one when `/compact` fires without an active milestone file; otherwise skip. Learning-loop updates (lessons/footguns/decisions) are conditional: update only when VERIFY caught a failure or you corrected course.
 
 **Ask First** - before touching a boundary, ask and wait for approval. Include: boundary touched, related code read (yes/no), footgun entry checked (or "none"), local instruction checked, rollback command. For cross-harness invocation, replace rollback command with: target harness, prompt subject, why a second model rather than more reading (a sent prompt cannot be rolled back).
@@ -37,11 +35,9 @@ Boundaries: instruction files (`CLAUDE.md`, `AGENTS.md`, `.github/copilot-instru
 - No features, abstractions, or error handling beyond what was asked. Gold-plating is scope creep. Ambiguous requirements: present interpretations, don't pick silently.
 
 ## Commit Messages
-
 Conventional `type(scope): subject` - imperative, ≤72 chars, concrete verbs not weak ones (*enhance, improve, update*); one change per subject. On a `<type>/<digits>` branch - feat, fix, chore, refactor, docs, test, perf, build, ci, or security - the subject starts `#<digits> ` (e.g. `#123 feat(audit): add drift cache`), from the branch name only; otherwise no prefix. Full rules + bad→good rewrites: `docs/coding-standards/git-commit-message.md`.
 
 ## Key Resources
-
 - **Learning loop** (grep before every change): `.goat-flow/learning-loop/footguns/`, `.goat-flow/learning-loop/lessons/`, `.goat-flow/learning-loop/patterns/`, `.goat-flow/learning-loop/decisions/`
 - **Tool playbooks**: `.goat-flow/skill-docs/playbooks/README.md` is the full index (examples: `.goat-flow/skill-docs/playbooks/browser-use.md`, `.goat-flow/skill-docs/playbooks/page-capture.md`; disciplines: changelog, release notes, observability, comments, prose style, writing for agents) - read when named or when the work touches that discipline's surface, and read BEFORE declaring a tool unavailable
 
@@ -58,7 +54,6 @@ bash scripts/preflight-checks.sh
 Situational: `bash scripts/bump-version.sh <ver>` (release), `npm run test:full` (pre-release), `node --import tsx src/cli/cli.ts stats --check` (learning-loop), `bash .goat-flow/hooks/deny-dangerous.sh --self-test=full` (hook check; full workflow: `.goat-flow/skill-docs/playbooks/hook-policy-testing.md`).
 
 ## Execution Loop: READ → SCOPE → ACT → VERIFY
-
 When a goat-* skill is active, its Step 0 replaces READ and selects the skill's mode/depth. SCOPE still applies before writes: a skill may write when its selected mode permits writes or the user explicitly approves them. `/goat-plan` File-Write may create gitignored milestone files without a separate approval gate; `/goat-debug` D3 still requires approval before fixes. Resume at ACT after Step 0 output or when a blocking gate releases.
 
 ### READ
@@ -105,11 +100,9 @@ The red-flags above name WHAT not to claim. The Excuse/Reality table in `.goat-f
 If VERIFY caught a failure or you corrected course, update the learning loop before DoD: behavioural mistakes go in `.goat-flow/learning-loop/lessons/<category>.md`, cross-doc architectural traps go in `.goat-flow/learning-loop/footguns/<category>.md` with `**Status:** active | **Created:** YYYY-MM-DD | **Evidence:** <choose one: ACTUAL_MEASURED, OBSERVED, or EXTERNAL_REFERENCE>` (measured locally, read directly, or cited external incident with local applicability), significant technical decisions go in `.goat-flow/learning-loop/decisions/`, and optional continuity notes go in `.goat-flow/logs/sessions/`.
 
 ## Definition of Done
-
 MUST confirm ALL: (1) lint/typecheck passes on changed files (shellcheck on .sh, npm run typecheck on .ts) (2) no broken cross-references (3) no unapproved boundary changes (4) logs updated if tripped (5) working notes current (6) grep old pattern after renames. If working from a milestone file, tick `- [x]` on each completed task immediately - not at the end. `/compact` at ~60% context or after 15+ turns → split → `/clear` between unrelated tasks.
 
 ## Artifact Routing
-
 When asked to add, create, or update a goat-flow artifact, route it to the artifact directory, not runtime code: footguns -> `.goat-flow/learning-loop/footguns/<category>.md`; lessons -> `.goat-flow/learning-loop/lessons/<category>.md`; decisions -> `.goat-flow/learning-loop/decisions/ADR-NNN.md`; patterns -> `.goat-flow/learning-loop/patterns/<category>.md`. Before editing, read the target directory's `README.md`; do not treat artifact requests as runtime-code requests unless the user explicitly asks for code too.
 
 ## Router Table

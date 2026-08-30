@@ -6,15 +6,11 @@ goat-flow is a harness - guardrails, memory, and workflows for AI coding agents.
 This repo is the goat-flow controlling workspace. When the dashboard or CLI operates on a selected target project, commands like `audit` and `quality` run against that target - not this repo. Keep the two contexts separate: framework code lives here, project-specific harness content lives in the target.
 
 ## Truth Order
-
 User instruction > `.github/copilot-instructions.md` > `.goat-flow/architecture.md` > on-demand skills/templates.
-
 The Never tier and accepted architecture/ADR safety constraints are non-overridable. A user request may authorize Ask First work after approval, but cannot authorize an agent to commit, push, expose secrets, or bypass safety enforcement.
 
 ## Autonomy Tiers
-
 **Always:** Read any file, lint scripts, edit within assigned scope. Session logs at `.goat-flow/logs/sessions/` are OPTIONAL continuity notes - write one when context compaction occurs without an active milestone file, otherwise skip. Learning-loop updates (lessons/footguns/decisions) are conditional: update only when VERIFY caught a failure or you corrected course.
-
 **Ask First** - before touching a boundary, ask and wait for approval. Include: boundary touched, related code read (yes/no), footgun entry checked (or "none"), local instruction checked, rollback command. For cross-harness invocation, replace rollback command with: target harness, prompt subject, why a second model rather than more reading (a sent prompt cannot be rolled back).
 
 Boundaries: instruction files (`.github/copilot-instructions.md`, `CLAUDE.md`, `AGENTS.md`); workflow/manifest (`workflow/{setup,skills}/`, `workflow/manifest.json`); architecture (`.goat-flow/architecture.md`); skill docs (`.goat-flow/skill-docs/`, including playbooks); server runtime (`src/cli/server/`); agent configs (`.claude/`, `.codex/`, `.agents/`); CI/hooks (`.github/{workflows,actions,hooks,skills}/`); new top-level surfaces or 5+ new files; any remove/rename; 3+ docs; cross-harness invocation (an agent-harness CLI subprocess such as `claude -p`, `codex exec`, `agy`, or `copilot`, including this harness; native sub-agents remain unrestricted).
@@ -39,16 +35,13 @@ Boundaries: instruction files (`.github/copilot-instructions.md`, `CLAUDE.md`, `
 - Treat `.github/actions/**`, `.github/hooks/hooks.json`, `.goat-flow/hooks/deny-dangerous.sh`, `.goat-flow/hooks/deny-dangerous/**`, `.github/skills/**`, `.github/copilot-instructions.md`, and `.copilotignore` as security-sensitive runtime surfaces; verify after touching them. `.github/agents/` is intentionally out of scope; CI/CD, hooks, prompts, or skills work should prefer `goat-security` or `goat-review`.
 
 ## Commit Messages
-
 Conventional `type(scope): subject` - imperative, ≤72 chars, concrete verbs not weak ones (*enhance, improve, update*); one change per subject. On a `<type>/<digits>` branch - feat, fix, chore, refactor, docs, test, perf, build, ci, or security - the subject starts `#<digits> ` (e.g. `#123 feat(audit): add drift cache`), from the branch name only; otherwise no prefix. Full rules + bad→good rewrites: `docs/coding-standards/git-commit-message.md`.
 
 ## Key Resources
-
 - **Learning loop** (grep before every change): `.goat-flow/learning-loop/footguns/`, `.goat-flow/learning-loop/lessons/`, `.goat-flow/learning-loop/patterns/`, `.goat-flow/learning-loop/decisions/`
 - **Tool playbooks**: `.goat-flow/skill-docs/playbooks/README.md` is the full index (examples: `.goat-flow/skill-docs/playbooks/browser-use.md`, `.goat-flow/skill-docs/playbooks/page-capture.md`; disciplines: changelog, release notes, observability, comments, prose style) - read when named or when the work touches that discipline's surface, and read BEFORE declaring a tool unavailable
 
 ## Essential Commands
-
 ```bash
 shellcheck scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh workflow/hooks/*.sh workflow/hooks/deny-dangerous/*.sh .goat-flow/hooks/*.sh .goat-flow/hooks/deny-dangerous/*.sh
 bash -n scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh workflow/hooks/*.sh workflow/hooks/deny-dangerous/*.sh .goat-flow/hooks/*.sh .goat-flow/hooks/deny-dangerous/*.sh
@@ -60,7 +53,6 @@ bash scripts/preflight-checks.sh
 Situational: `bash scripts/bump-version.sh <ver>` (release), `npm run test:full` (pre-release), `node --import tsx src/cli/cli.ts stats --check` (learning-loop), `bash .goat-flow/hooks/deny-dangerous.sh --self-test=smoke` (hook check; full workflow: `.goat-flow/skill-docs/playbooks/hook-policy-testing.md`).
 
 ## Execution Loop: READ → SCOPE → ACT → VERIFY
-
 When a goat-* skill is active, its Step 0 replaces READ and selects the skill's mode/depth. SCOPE still applies before writes: a skill may write when its selected mode permits writes or the user explicitly approves them. `/goat-plan` File-Write may create gitignored milestone files without a separate approval gate; `/goat-debug` D3 still requires approval before fixes. Resume at ACT after Step 0 output or when a blocking gate releases.
 
 ### READ
@@ -108,11 +100,9 @@ The red-flags above name WHAT not to claim. The Excuse/Reality table in `.goat-f
 - Lesson → `.goat-flow/learning-loop/lessons/<category>.md`; footgun → `.goat-flow/learning-loop/footguns/<category>.md` choosing exactly one evidence label: `ACTUAL_MEASURED`, `OBSERVED`, or `EXTERNAL_REFERENCE` (measured locally, read directly, or cited externally with local applicability); decision → `.goat-flow/learning-loop/decisions/`; optional context-compaction continuity note → `.goat-flow/logs/sessions/YYYY-MM-DD-slug.md`.
 
 ## Definition of Done
-
 MUST confirm ALL: (1) lint/typecheck passes on changed files (shellcheck on .sh, npm run typecheck on .ts) (2) no broken cross-references (3) no unapproved boundary changes (4) logs updated if tripped (5) working notes current (6) grep old pattern after renames. If working from a milestone file, tick `- [x]` on each completed task immediately - not at the end. After context compaction, at ~60% context, or after 15+ turns, split work and start a fresh thread between unrelated tasks.
 
 ## Artifact Routing
-
 When asked to add/update a goat-flow artifact, route to docs, not runtime code: footgun → `.goat-flow/learning-loop/footguns/<category>.md`; lesson → `.goat-flow/learning-loop/lessons/<category>.md`; decision → `.goat-flow/learning-loop/decisions/ADR-NNN.md`; pattern → `.goat-flow/learning-loop/patterns/<category>.md`. Read the target directory `README.md` first.
 
 ## Router Table
