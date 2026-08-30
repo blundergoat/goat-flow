@@ -239,13 +239,18 @@ function appendContentSummary(lines: string[], report: AuditReport): void {
  *
  * @param lines - audit-summary line buffer; empty means the coverage block becomes its first content
  * @param report - completed audit report; its hook chain is always present because the audit cache rejects an envelope without one
- * @returns nothing; the coverage status and any ineffective surfaces are appended to the supplied buffer
+ * @returns nothing; the coverage status, the agents it covers, and any ineffective surfaces are appended to the supplied buffer
  */
 function appendHookCoverageSummary(lines: string[], report: AuditReport): void {
   const hookCoverage = report.hookCoverage;
+  // An agent-scoped audit and an all-agent audit produce the same sentence, so the scope is stated rather than left to the reader to assume.
+  const coveredAgents =
+    hookCoverage.selectedAgents.length > 0
+      ? `agents covered: ${hookCoverage.selectedAgents.join(", ")}`
+      : "no agent surface selected";
   lines.push("");
   lines.push(
-    `- **Effective Hook Coverage**: ${hookCoverage.status === "pass" ? "PASS" : "FAIL"} (${hookCoverage.summary.requiredIneffective} required surface(s) ineffective; offline status only)`,
+    `- **Effective Hook Coverage**: ${hookCoverage.status === "pass" ? "PASS" : "FAIL"} (${hookCoverage.summary.requiredIneffective} required surface(s) ineffective; offline status only; ${coveredAgents})`,
   );
   // Each selected agent keeps its own row because a shared hook file never proves shared provider support.
   for (const hook of hookCoverage.hooks) {

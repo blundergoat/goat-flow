@@ -14,6 +14,12 @@ last_reviewed: 2026-08-30
 
 **Prevention:** Treat every defect a plan names as a RED to reproduce first. When the claim is about which of two inputs a component uses, read the caller that supplies them before designing anything; parameter names do not carry the contract. If the RED passes against unchanged code, stop and record a refutation instead of adjusting the test until it fails. Keep the passing case as a control, and re-derive what the real defect is from the same evidence rather than abandoning the investigation.
 
+**Recurrence 2026-08-30 (delegated runner):** An M68 C5 cross-harness runner ended its assessment with a process note stating that the shipped
+`quality save` heredoc is unusable because the command parser rejects any heredoc containing `{"` as "expansion obfuscation", and supplied a
+reproduction. All three checks disagreed: the reproduction ran clean, `grep -rn 'expansion obfuscation'` over `.goat-flow/hooks/` and
+`workflow/hooks/` returned nothing, and the hook contains `large_quality_save_heredoc_is_bounded_data` admitting exactly that form. The runner hit a
+real failure and misattributed its cause. Recording it unverified would have entered a phantom contract defect into a release gate's evidence.
+
 **What happened:** 1.17.0 M74 planned a fix for `handleQualityRequest` resolving audit, prior-report, and event ownership against the wrong project for target-owned quality modes. The milestone asserted it, an accepted critique listed it, and I wrote a failing integration test plus a `qualityModeOwningProjectPath` helper on that basis. Reading the caller then showed the dashboard client already resolves mode ownership in `src/dashboard/dashboard-setup-quality.ts` (search: `function dashboardQualityReportProjectPath`) and sends the owning project as `path`, so the route was correct and the helper re-resolved an already-resolved value.
 
 **Root cause:** The request parameters are named `path` and `target`, which read as "controller" and "selected target". That reading was inferred from the names instead of from the client that populates them, and the plan's own wording reinforced it.

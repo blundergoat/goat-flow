@@ -319,6 +319,71 @@ describe("quality report contract: audit evidence", () => {
     assertDisclosesIneffectiveHook("harness", auditReport);
   });
 
+  it("names the agents a coverage result covers", () => {
+    // A one-agent audit and an all-agent audit render the same sentence, so the row must say which scope produced it.
+    const narrowed = makePassingAuditWithBrokenHooks();
+    const narrowedPrompt = composeQuality({
+      ...makeInput("process"),
+      auditReport: narrowed,
+    }).prompt;
+    assert.ok(
+      narrowedPrompt.includes("agents covered: claude"),
+      "a claude-scoped coverage row does not name the agent it covers",
+    );
+
+    // A passing chain is the dangerous case: it reads as clean coverage for every shipped agent unless the scope is stated.
+    const wideOpen = makePassingAuditWithBrokenHooks();
+    wideOpen.hookCoverage = {
+      status: "pass",
+      selectedAgents: ["claude", "codex", "antigravity", "copilot"],
+      summary: {
+        selectedSurfaces: 4,
+        requiredSurfaces: 4,
+        requiredIneffective: 0,
+        effective: 4,
+        warning: 0,
+        danger: 0,
+        disabled: 0,
+      },
+      hooks: [],
+    };
+    const widePrompt = composeQuality({
+      ...makeInput("process"),
+      auditReport: wideOpen,
+    }).prompt;
+    assert.ok(
+      widePrompt.includes(
+        "agents covered: claude, codex, antigravity, copilot",
+      ),
+      "an unscoped coverage row does not name the agents it covers",
+    );
+
+    // Selecting no agent surface is a real audit shape and must not read as covered.
+    const none = makePassingAuditWithBrokenHooks();
+    none.hookCoverage = {
+      status: "pass",
+      selectedAgents: [],
+      summary: {
+        selectedSurfaces: 0,
+        requiredSurfaces: 0,
+        requiredIneffective: 0,
+        effective: 0,
+        warning: 0,
+        danger: 0,
+        disabled: 0,
+      },
+      hooks: [],
+    };
+    const nonePrompt = composeQuality({
+      ...makeInput("process"),
+      auditReport: none,
+    }).prompt;
+    assert.ok(
+      nonePrompt.includes("no agent surface selected"),
+      "a coverage row covering nothing does not say so",
+    );
+  });
+
   it("grounds focused modes in their owning project path", () => {
     const controllerPath = "/tmp/goat-flow-controller";
     const targetPath = "/tmp/goat-flow-selected-target";

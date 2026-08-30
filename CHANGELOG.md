@@ -2,7 +2,9 @@
 
 ## Unreleased
 
-The next release adds per-command `--help`, path-aware learning recall, one project-wide install baseline, whole-suite hook verification, and stricter `--strict` plan checks, and it untangles Claude and Copilot hook registrations.
+## v1.17.0 - 2026-08-30
+
+1.17.0 adds per-command `--help`, path-aware learning recall, one project-wide install baseline, whole-suite hook verification, and stricter `--strict` plan checks, and it untangles Claude and Copilot hook registrations.
 
 - **BREAKING: audits need the `audit` command** - Replace `goat-flow <path>` with `goat-flow audit <path>`. Bare `goat-flow` opens the menu, and a misspelled command now exits `2` instead of auditing a path of that name.
 - **BREAKING: `writing-style.md` is removed** - Install deletes it, so instruction files written by 1.16.0 setup point at a missing playbook; change them to `writing-human-facing-prose.md` (human prose) or `writing-agent-facing-instructions.md` (agent controls).
@@ -32,6 +34,14 @@ The next release adds per-command `--help`, path-aware learning recall, one proj
 - **`audit --check-content` catches semantic drift** - It compares documented states, limits, routes, and inventories with the shipped sources.
 - **Dashboard state survives interrupted writes** - Project identity, registry, and active-plan selections are replaced atomically, so an interrupted write cannot leave a half-written file.
 - **Skill qualification is model-scoped** - Retirement needs repeated provider/model/config ablations, and retained cases guard against reintroduction.
+
+- **Quality prompts show effective hook coverage** - Assessments list the hook chain, the agents the result covers, and the repair for each ineffective surface, so a passing audit no longer hides a hook that never runs.
+- **Focused quality prompts name the project they assess** - Process and harness grounding commands use the requested project path instead of `.`, and a prompt no longer names a selected target the request did not send.
+- **Quality reports can explain each score** - Saved reports may carry `score_rationale` with per-axis evidence and deduction; reports without it still validate.
+- **`/goat-clarity` puts explicit intent before the documentation keyword** - Write authority resolves by first match: update/edit/fix grants it, report/review/check withholds it, then the `documentation` keyword. Asking to report on documentation now reports instead of editing it.
+- **`/goat-review` staged reviews write nothing to Git** - Staged authority uses `git ls-files -s`, `git diff --cached --binary`, and `git show :<path>` instead of `git write-tree`, so a report-only review no longer adds a tree object to the repository it reviews.
+- **Generated learning entries lead with the rule** - `learn new` and the shared conventions put `Prevention` directly under the metadata block, before symptoms and evidence.
+- **Setup separates template policy from its own writes** - Step 01 scopes `workflow/manifest.json` to exact-copy templates and points at `goat-flow install . --dry-run` for the user-owned and generated destinations it does not cover.
 
 ## v1.16.0 - 2026-08-20
 
