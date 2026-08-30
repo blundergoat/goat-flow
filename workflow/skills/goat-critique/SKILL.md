@@ -39,7 +39,7 @@ goat-critique runs only full delegated mode: Phases 1-5, 5.5 meta-audit, 5.6 out
 - Select the critique rubric for the artifact type (see Critique Rubrics below). If unclear, ask the user.
 - Use the preamble's learning-loop retrieval on relevant `.goat-flow/learning-loop/footguns/` and `.goat-flow/learning-loop/lessons/`; record explicit misses instead of broad-loading buckets.
 - Delegation consent: proceed directly to Phase 1. Skill-chained entry: skip intake confirmation, use caller context; still run retrieval + rubric selection. All phases (1-5 + 5.5 + 5.6) always run.
-- **Differential mode detection:** If `.goat-flow/logs/critiques/` has a same-artifact slug within 30 days, offer differential mode: A/B receive prior log + artifact diff; C stays cold. Phase 5 adds delta counts and `[diff-of: <prior-uuid>]`.
+- **Differential mode detection:** If `.goat-flow/logs/critiques/` has a same-artifact slug within 30 days, offer differential mode: A/B receive prior log + artifact diff; C stays cold. Phase 5 adds delta counts and `[diff-of: <rand5>]`.
 - **Read context map:** Merge the selected rubric map from `references/rubric-examples.md` into the fixed A/B/C split; never replace baseline context.
 
 ## Phase 1 - Generate Competing Critiques
@@ -112,7 +112,7 @@ Mark each: RESOLVED (with winner) / STILL DISPUTED / RETRACTED (false positive c
 
 ## Phase 4 - Clarify
 
-**Persist before gate:** Keep the Phase 1-3 draft in memory. Pipe it through stdin to the preamble-selected `goat-flow redact --output <fresh critique path>` or matching source CLI; only redactor destination bytes may reach disk. If unavailable or redaction fails, write nothing, emit `persist-skipped: redactor-unavailable`, and continue to the human gate. Do this after Phase 3 early exit too.
+**Persist before gate:** Keep the Phase 1-3 draft in memory. Pipe it through stdin to the preamble-selected `goat-flow redact --output .goat-flow/logs/critiques/<YYYY-MM-DD>-<HHMM>-<artifact-slug>-<rand5>.md` or matching source CLI; only redactor destination bytes may reach disk. That artifact slug is what a later run matches for differential mode. If unavailable or redaction fails, write nothing, emit `persist-skipped: redactor-unavailable`, and continue to the human gate. Do this after Phase 3 early exit too.
 
 Present unresolved items conversationally. Open with decision count and titles. Ask each as `Q[N]: [decision]? (A) [option] (B) [option] Default: [A/B]. Background: [one sentence]`. For 3+, use `| # | Decision | Option A (default) | Option B | Why |`, then ask for numbered overrides or default approval. Cover Phase-3 disputes, valid trade-offs, and whether context drift is intentional. End by requesting picks or pushback.
 

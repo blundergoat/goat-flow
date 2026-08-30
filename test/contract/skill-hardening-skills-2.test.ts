@@ -454,7 +454,7 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
       assert.match(phaseFour, /keep.*Phase 1-3.*in memory/iu, skillPath);
       assert.match(
         phaseFour,
-        /stdin.*`goat-flow redact --output <fresh critique path>`.*matching source CLI/isu,
+        /stdin.*`goat-flow redact --output \.goat-flow\/logs\/critiques\/<YYYY-MM-DD>-<HHMM>-<artifact-slug>-<rand5>\.md`.*matching source CLI/isu,
         skillPath,
       );
       assert.match(

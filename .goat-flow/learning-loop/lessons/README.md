@@ -86,7 +86,9 @@ Recurrence is the opposite signal. An entry with `**Incident count:**` above one
 Split a bucket at roughly 200 lines or 10 entries (ADR-033).
 Split along a real seam and extract the new bucket **out of** the existing file rather than renaming it.
 This keeps paths cited by code, ADRs, and sibling entries resolving.
-Re-run `goat-flow index` afterwards and let `stats --check` find any anchor that pointed at a moved entry.
+Re-run `goat-flow index` afterwards, then run both gates.
+`stats --check` proves the buckets and generated indexes are internally consistent, but it does not resolve citations that point *into* a moved entry from outside its bucket.
+Only `goat-flow audit --check-content` catches those, as a `stale-semantic-anchor` warning; repairing a cited ADR then stales `decisions/INDEX.md`, so regenerate once more after the repair.
 
 Those figures are guidance.
 The blocking gate is measured in bytes: `stats --check` fails with `bucket-size` above 40,000 bytes.

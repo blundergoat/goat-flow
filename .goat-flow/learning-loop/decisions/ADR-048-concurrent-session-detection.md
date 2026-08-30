@@ -8,7 +8,7 @@
 
 Atomic replacement prevents readers from seeing partial bytes, but it does not stop two writers from replacing a file from the same stale snapshot. M02 moved the dashboard's mutable local-state writers onto atomic replacement without making a lost-update claim.
 
-The failure is already present in durable project evidence. `.goat-flow/learning-loop/lessons/verification.md` (search: `Parallel sessions need concurrency-safe file patterns`) records two agents writing the same learning-loop bucket. `.goat-flow/learning-loop/footguns/cleanup-layering.md` (search: `Session-scoped cleanup over a project-scoped resource`) records cross-process duplication and deletion when process-local ownership was applied to a project-scoped resource.
+The failure is already present in durable project evidence. `.goat-flow/learning-loop/lessons/verification-environment.md` (search: `Parallel sessions need concurrency-safe file patterns`) records two agents writing the same learning-loop bucket. `.goat-flow/learning-loop/footguns/cleanup-layering.md` (search: `Session-scoped cleanup over a project-scoped resource`) records cross-process duplication and deletion when process-local ownership was applied to a project-scoped resource.
 
 `src/cli/plans-time.ts` (search: `writeMilestoneAtomically`) already compares destination identity and exact content before replacing a milestone. That catches an editor save before its final comparison, but two cooperating processes can both complete the comparison before either rename. The M03 local runner reproduced the same stale-snapshot overwrite for two checklist edits; that gitignored runner is acceptance evidence for the spike, not durable project truth.
 

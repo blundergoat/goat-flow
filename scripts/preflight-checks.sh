@@ -1528,6 +1528,18 @@ const files = [
       `.goat-flow/skill-docs/skill-quality-testing/${name}`,
     ]),
   ] },
+  // Skill bodies use the canonical workflow source alone. `Skill SKILL.md parity` separately proves the four installed mirrors are
+  // byte-identical, so listing every mirror here would report one near-cap skill four times.
+  { cap: 600, paths: ["workflow/skills/goat/SKILL.md"] },
+  { cap: 2500, paths: [
+    "goat-clarity",
+    "goat-critique",
+    "goat-debug",
+    "goat-plan",
+    "goat-qa",
+    "goat-review",
+    "goat-security",
+  ].map((name) => `workflow/skills/${name}/SKILL.md`) },
 ];
 
 function bodyWordCount(file) {
