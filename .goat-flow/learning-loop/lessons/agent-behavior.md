@@ -72,7 +72,7 @@ Related: `feedback_gruff_never_disable` (auto-memory, 2026-05-25).
 
 **Why it matters:** Commit messages are what a future maintainer reads in `git log`, `git bisect`, or a CHANGELOG pass. Subjects built from *enhance/improve/streamline/clarify* force readers to open the diff, and back-to-back synonym churn is the tell that the agent reworded instead of described.
 
-**Prevention:** `docs/coding-standards/git-commit-message.md` - the preferred commit guide, summarised in the auto-read instruction files under `## Commit Messages` - bans the weak-verb list, prescribes concrete verbs, requires a body for multi-axis or non-obvious subjects, and includes a concrete bad→good rewrite (search: "The installer failed on paths with spaces because $TARGET was unquoted").
+**Prevention:** `docs/coding-standards/git-commit-message.md` - the preferred commit guide, summarised in the auto-read instruction files under `## Commit Messages` - bans the weak-verb list, prescribes concrete verbs, requires a body for multi-axis or non-obvious subjects, and includes a concrete bad→good rewrite (search: "The installer failed on paths with spaces because $TARGET was unquoted"). When verifying this anchor, match the complete `(search: "...")` token; the historical subject above remains incident evidence, not an obsolete anchor.
 
 ## Lesson: Retrieval terms must name the concrete failure class
 
