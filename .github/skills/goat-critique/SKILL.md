@@ -38,7 +38,7 @@ goat-critique runs only full delegated mode: Phases 1-5, 5.5 meta-audit, 5.6 out
 - Confirm the artifact exists and is concrete (a file, a plan document, a specific set of findings - not a vague idea).
 - Select the critique rubric for the artifact type (see Critique Rubrics below). If unclear, ask the user.
 - Use the preamble's learning-loop retrieval on relevant `.goat-flow/learning-loop/footguns/` and `.goat-flow/learning-loop/lessons/`; record explicit misses instead of broad-loading buckets.
-- Delegation consent: proceed directly to Phase 1. Skill-chained entry: skip intake confirmation, use caller context; still run retrieval + rubric selection. All phases (1-5 + 5.5 + 5.6) always run.
+- **Host ownership:** The host/root context owns Phases 1-5.6. A forked sub-agent asked to run goat-critique returns control before Phase 1 and does not apply the shared sub-agent gate conversion. The host spawns agents, presents human gates, and resumes Phase 5.6 after the response. Direct or skill-chained host entry proceeds without another delegation prompt; chained entry skips only intake confirmation.
 - **Differential mode detection:** If `.goat-flow/logs/critiques/` has a same-artifact slug within 30 days, offer differential mode: A/B receive prior log + artifact diff; C stays cold. Phase 5 adds delta counts and `[diff-of: <rand5>]`.
 - **Read context map:** Merge the selected rubric map from `references/rubric-examples.md` into the fixed A/B/C split; never replace baseline context.
 
@@ -145,7 +145,7 @@ Then the full critique:
 
 **BLOCKING GATE:** Present the synthesised critique (including Meta-score if 5.5 produced one). "Options: (A) apply, (B) dig deeper, (C) re-run, (D) close. Default: D." After plan critique, suggest `/goat-plan`.
 
-**Phase 5.6 - Outcome capture.** After the human picks A/B/C/D, tag each surviving finding: `accepted | rejected | deferred | partial`. Defaults: A → accepted, D → deferred. Persist under `## Outcomes`. Do not show `## Outcomes` in the initial Phase 5 gate response.
+**Phase 5.6 - Outcome capture.** After the host receives the human's A/B/C/D pick, tag each surviving finding: `accepted | rejected | deferred | partial`. Defaults: A → accepted, D → deferred. Persist under `## Outcomes`. Do not show `## Outcomes` in the initial Phase 5 gate response.
 
 **Integration hooks.** Populate from surviving findings when applicable:
 - `for-goat-plan` - milestone updates, reordering

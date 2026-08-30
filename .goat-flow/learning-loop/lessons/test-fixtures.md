@@ -1,6 +1,6 @@
 ---
 category: test-fixtures
-last_reviewed: 2026-08-30
+last_reviewed: 2026-08-31
 ---
 
 **Scope:** Building and keeping fixtures true - collision branches, semantic operands, in-memory against disk-backed corpora, and fixtures that drift from the code they model. Runner behaviour is [test-execution-environment.md](test-execution-environment.md).
@@ -125,7 +125,7 @@ last_reviewed: 2026-08-30
 **Decision changed:** Before a focused run, enumerate and create every fixture-owned file, browser global, and source input the assertion reaches.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
-**Incident count:** 15 | **Latest occurrence:** 2026-08-30
+**Incident count:** 16 | **Latest occurrence:** 2026-08-31
 
 **What happened:** While adding ADR-024 enforcement to `stats --check`, the first integration test fixture used `package.json` with a line suffix to trigger an `invalid-line-ref` finding. The temp fixture repo did not contain `package.json`, so the checker correctly reported a stale ref instead and the test failed with "expected an invalid-line-ref finding."
 
@@ -158,6 +158,8 @@ last_reviewed: 2026-08-30
 **Recurrence 2026-08-28 (one-shot failure injection):** The first path-claim regression re-armed its readback failure after every `fsyncSync`, so the retry failed even after the rejected marker had been removed. A separate one-shot flag now limits the injected `EIO` to the initialization attempt and lets the same test prove retryability. Evidence anchor: `test/unit/path-write-claim.test.ts` (search: `removes an unchanged marker after transient ownership readback failure`).
 
 **Recurrence 2026-08-30 (terminal control assertion):** The first recall sanitization check rejected every C0 character in the complete rendered output, so the renderer's own newline separators failed after repository-controlled fields were already escaped. Restricting the assertion to controls forbidden inside dynamic fields preserved multiline output while proving the terminal boundary. Evidence anchor: `test/unit/learning-loop-recall.test.ts` (search: `escapes repository-controlled terminal sequences in text output`).
+
+**Recurrence 2026-08-31 (selected-consumer lifecycle):** The pre-release full suite found that the lifecycle fixture still created a non-Git consumer and omitted the current Commit Messages section. Audit correctly rejected the missing post-turn scan root first, then rejected the incomplete instruction contract after the fixture gained its own repository. Initializing the disposable consumer as a Git repository and completing its instruction fixture restored the intended Git-backed lifecycle; the dedicated non-Git fixture still proves that branch. Evidence anchors: `test/integration/setup-quality-lifecycle.test.ts` (search: `The passing lifecycle needs Git's implicit post-turn scan root`; search: `## Commit Messages`) and `test/integration/setup-install-nongit-hooks.test.ts` (search: `names the blocked post-turn registration and its fix`).
 
 **Prevention:** Treat each fixture as an isolated runtime: list the files, globals, source graph, and baseline validator invariants the SUT or assertion will read, then create or satisfy them explicitly. Before asserting one strict-check behavior, run the fixture through the unchanged strict baseline and ensure unrelated errors are absent. Keep every non-target value inside its passing bounds. Assert that every text substitution changes its fixture before using the result as simulated user input. Never assume a real-checkout file exists in a temp repo, a browser global exists in a VM, or a helper's name implies it includes an adjacent template. When an exported report schema or a hook's `scriptFiles` contract grows, update direct report builders and both source/installed fixture mirrors before running consumer assertions. Fixtures for current persisted state use production builders for coupled fields such as generations and receipts; exact registered-command probes derive their deadlines from the registry instead of reusing a faster direct-probe cap. Failure-injection mocks that must permit a retry use an explicit one-shot guard. Escaped-output assertions compare the runtime string or emitted bytes before encoding the expected source literal. Output-safety assertions distinguish renderer-owned separators from controls admitted through dynamic fields. In temp-repo stats fixtures, cite a file the fixture creates; `.goat-flow/learning-loop/footguns/hooks.md` can carry both the bucket body and a self-reference. Evidence anchor: `test/integration/stats-command.test.ts` (search: `missing semantic anchor`).
 

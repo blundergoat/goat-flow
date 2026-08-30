@@ -137,6 +137,10 @@ Always read and verify. Ask before protected changes. Never commit or push.
 Keep the controlling goat-flow workspace separate from this selected target project.
 Use target files for project evidence and controlling-workspace files only for framework behavior.
 
+## Commit Messages
+
+Follow docs/coding-standards/git-commit-message.md.
+
 ## Key Resources
 
 Architecture, code map, glossary, skills, hooks, and learning-loop paths live under .goat-flow/.
@@ -241,6 +245,16 @@ async function withTemporaryConsumerTarget(
   const consumerTargetPath = join(fixtureWorkspace, "selected-consumer");
   writeFileSync(userMarkerPath, USER_OWNED_MARKER);
   mkdirSync(consumerTargetPath);
+  // The passing lifecycle needs Git's implicit post-turn scan root; non-Git installation has its own fixture.
+  const gitInitialization = spawnSync("git", ["init", "--quiet"], {
+    cwd: consumerTargetPath,
+    encoding: "utf-8",
+  });
+  assert.equal(
+    gitInitialization.status,
+    0,
+    gitInitialization.stderr || gitInitialization.stdout,
+  );
 
   try {
     await scenario(consumerTargetPath);

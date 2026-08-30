@@ -292,23 +292,56 @@ describe("skill hardening contracts: goat-review (1/3)", () => {
 
       assert.match(
         scope,
-        /measure diff[\s\S]+20 files\/3000 lines/u,
+        /measure diff[\s\S]+20 files or 3000 changed lines/u,
         skillPath,
       );
       assert.match(
         scope,
-        /20 files\/3000 lines[\s\S]+stop before Pass 1/u,
+        /20 files or 3000 changed lines[\s\S]+stop before Pass 1/u,
         skillPath,
       );
       assert.match(scope, /never guess commit windows/u, skillPath);
       assert.match(
         scope,
-        /request PR\/base\/head[^\n]+commit\/range[^\n]+worktree[^\n]+area/u,
+        /request PR\/base\/head[^\n]+commit\/range[^\n]+worktree[^\n]+area/iu,
         skillPath,
       );
       assert.match(
         constraints,
         /MUST chunk above 20 files, or 3000 changed lines/u,
+        skillPath,
+      );
+    });
+  });
+
+  it("ends an oversized review when the user declines chunking", () => {
+    assertForEachTarget(installedSkillPaths("goat-review"), (skillPath) => {
+      const skillGuidance = readProjectFile(skillPath);
+      const scope = readMarkdownSection(
+        skillPath,
+        "Step 0 - Scope, Size, Spec",
+      );
+      const constraints = readMarkdownSection(skillPath, "Constraints");
+
+      assert.match(
+        scope,
+        /above 20 files or 3000 changed lines[^\n]+propose concrete chunks[^\n]+stop before Pass 1/iu,
+        skillPath,
+      );
+      assert.match(
+        scope,
+        /declined chunking[^\n]+scope snapshot[^\n]+`Review stopped: chunking-declined`[^\n]+stops without findings/iu,
+        skillPath,
+      );
+      assert.match(scope, /`Review stopped: chunking-declined`/u, skillPath);
+      assert.match(
+        constraints,
+        /oversized scopes never enter Pass 1 unchunked/u,
+        skillPath,
+      );
+      assert.doesNotMatch(
+        skillGuidance,
+        /skipped-by-user|large-diff-unchunked|large-area-unchunked/u,
         skillPath,
       );
     });

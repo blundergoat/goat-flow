@@ -348,6 +348,35 @@ describe("goat-flow stats --check", () => {
     );
   });
 
+  it("keeps oversized-index remediation inside the supported one-index layout", () => {
+    const report = loadReport({ footguns: {}, lessons: {} });
+    report.indexes = [
+      {
+        bucket: "lessons",
+        dirPath: ".goat-flow/learning-loop/lessons/",
+        indexPath: ".goat-flow/learning-loop/lessons/INDEX.md",
+        state: "fresh",
+        sizeBytes: 50_000,
+      },
+    ];
+
+    const warning = checkStats(report).warnings.find(
+      (item) => item.rule === "index-size",
+    );
+
+    assertExists(warning, "expected an oversized-index warning");
+    assert.match(
+      warning.message,
+      /resolve entries that no longer change a decision/u,
+    );
+    assert.match(
+      warning.message,
+      /no supported index layout currently reduces this file/u,
+    );
+    assert.match(warning.message, /splitting bucket files does not shrink it/u);
+    assert.doesNotMatch(warning.message, /per-category indexes/u);
+  });
+
   it("fails when footgun entries do not have exactly one canonical evidence label", () => {
     const report = loadReport({
       footguns: {

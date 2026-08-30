@@ -517,6 +517,33 @@ describe("preflight Tests-phase progress", () => {
     );
   });
 
+  it("surfaces passing stats advisories as non-blocking preflight warnings", () => {
+    const preflightSource = readFileSync(PREFLIGHT_SCRIPT_PATH, "utf-8");
+    const schemaStart = preflightSource.indexOf("# ── Learning-Loop Schema");
+    const schemaEnd = preflightSource.indexOf(
+      "# ── Content Drift",
+      schemaStart,
+    );
+    assert.ok(schemaStart >= 0 && schemaEnd > schemaStart);
+    const schemaSource = preflightSource.slice(schemaStart, schemaEnd);
+
+    assert.match(schemaSource, /stats \. --check --format text/u);
+    assert.match(schemaSource, /stats_warning_count/u);
+    assert.match(
+      schemaSource,
+      /stats_warning_label="warning"[\s\S]+stats_warning_count" -ne 1[\s\S]+stats_warning_label="warnings"/u,
+    );
+    assert.match(
+      schemaSource,
+      /warn "Footgun\/lesson schema passes \(\$\{stats_warning_count\} \$\{stats_warning_label\}\)"/u,
+    );
+    assert.match(schemaSource, /stats_output[\s\S]+details_pipe/u);
+    assert.match(
+      preflightSource,
+      /warning_label="warning"[\s\S]+warnings" -ne 1[\s\S]+warning_label="warnings"[\s\S]+"\$warnings" "\$warning_label"/u,
+    );
+  });
+
   it("keeps Knip failure guidance on the heap-safe preflight invocation", () => {
     const preflightSource = readFileSync(PREFLIGHT_SCRIPT_PATH, "utf-8");
 

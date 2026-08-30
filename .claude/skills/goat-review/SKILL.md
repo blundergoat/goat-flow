@@ -20,7 +20,7 @@ Read `.goat-flow/skill-docs/skill-preamble.md`; on full-depth also read `.goat-f
 > "Review [X]: diff (quick), PR review against a base branch (quick by default), or area audit + DoD cross-checks (full)?"
 
 - If user already says "quick", "PR", or "full", or the dispatcher set depth, follow it unless material risk forces Full; clarify vague scope.
-- Use explicit input, then combined dirty worktree; otherwise measure diff. Over 20 files/3000 lines, stop before Pass 1; request PR/base/head, commit/range, worktree, or area; never guess commit windows.
+- Use explicit input, then combined dirty worktree; otherwise measure diff. Above 20 files or 3000 changed lines, propose concrete chunks and stop before Pass 1. Review accepted chunks only. Declined chunking emits the scope snapshot plus `Review stopped: chunking-declined`, then stops without findings. Request PR/base/head, commit/range, worktree, or area; never guess commit windows.
 
 **PR/base, clean worktree:** without checkout, resolve explicit → configured (`.goat-flow/config.yaml` → `skills.goat-review.local_pr_base`) → remote HEAD → prompt → `main`; fetch only after network approval. Record URL/baseRefName/source/SHA/failures. Automated-review conclusions stay unread until both local passes finish.
 
@@ -43,7 +43,7 @@ Read `.goat-flow/skill-docs/skill-preamble.md`; on full-depth also read `.goat-f
 - **Authority:** `<commit OIDs | staged fingerprint | diff hash + path hashes | n/a>`
 - **Uncommitted included:** yes | no | n/a
 - **Size/signals:** diff `<files>`/`<changed-lines>`; area `<files>`/`<clusters>`; signals `<n>`
-- **Bundle:** `<path | persist-skipped: redactor-unavailable>` (redacted receipt); chunking no | proposed | accepted | skipped-by-user; coverage `<k>/<n>`
+- **Bundle:** `<path | persist-skipped: redactor-unavailable>` (redacted receipt); chunking no | proposed | accepted | declined; coverage `<k>/<n>`
 - **State drift:** verified | stopped (`<changed authority>`)
 - **Gates:** run | skipped (<reason>) | unavailable
 - **Gate evidence:** pass/changed-code/pre-existing/infrastructure/unresolved counts
@@ -177,12 +177,12 @@ Offer Pass 3 on user opt-in, `coverage-degraded`/`high-inference`, or a MUST-nee
 
 ## Review Integrity (confidence signal)
 
-**Always emit:** Scope snapshot (diff mode also lists paths); Files opened in Pass 2; Evidence; Verdicts: confirmed/adjusted/refuted/unresolved; Gates; Size. Use Output Format.
+**Always emit:** for started reviews, Scope snapshot (diff mode also lists paths); Files opened in Pass 2; Evidence; Verdicts: confirmed/adjusted/refuted/unresolved; Gates; Size. Use Output Format.
 
 - **Refutations logged:** `<N>` or `<N> (persist-skipped)` when redaction is unavailable.
 - **Review validator:** `validated` | `validator-unavailable`.
 - **Gate evidence:** pass/changed-code/pre-existing/infrastructure/unresolved counts.
-- **Degradation flags:** `persist-skipped: redactor-unavailable`, `chunked-partial`, `large-diff-unchunked`, `large-area-unchunked`, `gates-not-run`, `gate-evidence-incomplete`, `risk-depth-declined`, `high-inference-ratio`, `files-not-opened`, `unfamiliar-area`, `missing-types`, `footguns-unread`, `not-reproduced-findings`, `coverage-degraded`, `callsite-completeness-grep-only`, `configured-base-unresolved=<base>`, `base-detection-failed`, `base-fetch-skipped`, `base-fetch-failed`, `intent-unstated`, `automated-review-uningested`, `cross-model-refuter-failed`, `cross-model-unresolved`, `refuter-citation-unverified`.
+- **Degradation flags:** `persist-skipped: redactor-unavailable`, `chunked-partial`, `gates-not-run`, `gate-evidence-incomplete`, `risk-depth-declined`, `high-inference-ratio`, `files-not-opened`, `unfamiliar-area`, `missing-types`, `footguns-unread`, `not-reproduced-findings`, `coverage-degraded`, `callsite-completeness-grep-only`, `configured-base-unresolved=<base>`, `base-detection-failed`, `base-fetch-skipped`, `base-fetch-failed`, `intent-unstated`, `automated-review-uningested`, `cross-model-refuter-failed`, `cross-model-unresolved`, `refuter-citation-unverified`.
 - **Conclusion:** `confident` | `coverage-degraded` | `high-inference` | `partial`.
 
 **Emit when resolved:**
@@ -200,7 +200,7 @@ Never emit a whole field for `n/a` alone; applicable rows may contain `n/a` subv
 - MUST apply the Blast Radius Rule, severity/action tags, Footgun Cross-Check, systemic grouping, and Review Integrity
 - MUST NOT surface suspicions that Pass 2 refuted
 - MUST order findings by severity, never file or discovery order
-- MUST chunk above 20 files, or 3000 changed lines
+- MUST chunk above 20 files, or 3000 changed lines; oversized scopes never enter Pass 1 unchunked, and decline ends at the terminal Step 0 receipt
 - Cross-invocation chunks: after each accepted chunk, host-redact `.goat-flow/logs/review/goat-review-chunks.<random>.md` containing scope snapshot, bound authority, chunks completed, chunks remaining, findings with R-IDs, and refutation ledger. Resume only after re-binding the same authority and verify no drift; continue at the next chunk, then emit one consolidated verdict. Drift stops.
 - If skipped, record `Spec drift: skipped` without a degradation flag only when the opt-in was selected; otherwise omit the row
 - MUST NOT edit files unless user separately says to apply, edit, update, fix, or implement; MUST NOT frame Pass 1/Pass 2 as doer/verifier

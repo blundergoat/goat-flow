@@ -7,6 +7,7 @@
 **Updated:** 2026-07-17 - lifecycle and delegation counts aligned with mandatory meta-audit and outcome capture.
 **Updated:** 2026-08-04 - refreshed skill and factual-drift anchors after contract refactors.
 **Updated:** 2026-08-15 - absorbed ADR-011 (critique is a core feature, not optional ceremony). Its standing rule and this ADR's mode contract answer the same recurring proposal: reduce what critique costs by weakening what critique does.
+**Updated:** 2026-08-30 - made the full lifecycle host-owned so shared sub-agent gate conversion cannot bypass human clarification or outcome capture.
 
 ## Context
 
@@ -33,15 +34,17 @@ goat-critique runs only as a full delegated workflow and remains a core feature.
 ### Mode contract
 
 1. **goat-critique runs in one mode: full delegated.** The mandatory lifecycle is Phases 1-5 plus Phase 5.5 meta-audit and Phase 5.6 outcome capture. Phase 1 spawns three isolated critique sub-agents, Phase 3 may spawn up to three cross-exam agents when disputes require them, and Phase 5.5 always spawns one meta-agent. No inline role-play substitute is permitted.
-2. ~~**If delegation is unavailable in the session, the skill does not run.** Step 0 stops and redirects the user to `/goat-review`. Inline lens passes are not an acceptable fallback.~~ **Superseded (2026-04-23; updated 2026-05-27):** All four supported agents (Claude Code, Codex, Antigravity, Copilot) ship sub-agent delegation. The redirect is dead ceremony per `.goat-flow/learning-loop/lessons/agent-tooling.md` (search: `Sub-agent delegation is universal`). Removed from `docs/skills.md` and skill files.
-3. **Skill-chained entry still runs the full lifecycle (Phases 1-5, 5.5, and 5.6).** The only concession granted by skill-chaining is skipping the intake confirmation; it does not unlock a quick variant.
-4. **`Output Format` ships one template.** The dual Quick/Full template is removed.
-5. **The `SKILLS_DOC_STALE_PHRASES` detector entry that asserted "quick mode skips cross-examination and clarification" (`src/cli/audit/check-factual-semantic-drift.ts` (search: `SKILLS_DOC_STALE_PHRASES`); formerly `skills-critique-contract-drift`) is removed.** With Quick mode retired, the detector's own claim is no longer true; keeping it would false-positive on correct docs.
+2. **The lifecycle is host-owned.** The host/root runs Phases 1-5.6, spawns bounded critique, cross-exam, and meta-agent roles, presents both human gates, and captures the Phase 5.6 response. A forked sub-agent asked to run goat-critique returns control before Phase 1. This is workflow ownership, not a third safety-gate exception: shared sub-agent gate conversion never fires because the fork does not enter the lifecycle.
+3. ~~**If delegation is unavailable in the session, the skill does not run.** Step 0 stops and redirects the user to `/goat-review`. Inline lens passes are not an acceptable fallback.~~ **Superseded (2026-04-23; updated 2026-05-27):** All four supported agents (Claude Code, Codex, Antigravity, Copilot) ship sub-agent delegation. The redirect is dead ceremony per `.goat-flow/learning-loop/lessons/agent-tooling.md` (search: `Sub-agent delegation is universal`). Removed from `docs/skills.md` and skill files.
+4. **Skill-chained entry still runs the full lifecycle (Phases 1-5, 5.5, and 5.6).** The host receives the request and skips only intake confirmation; it does not delegate ownership or unlock a quick variant.
+5. **`Output Format` ships one template.** The dual Quick/Full template is removed.
+6. **The `SKILLS_DOC_STALE_PHRASES` detector entry that asserted "quick mode skips cross-examination and clarification" (`src/cli/audit/check-factual-semantic-drift.ts` (search: `SKILLS_DOC_STALE_PHRASES`); formerly `skills-critique-contract-drift`) is removed.** With Quick mode retired, the detector's own claim is no longer true; keeping it would false-positive on correct docs.
 
 ## Consequences
 
 **Positive**
 - Skill name and skill mechanism match on every invocation. The output artifact now corresponds to the work actually performed.
+- Human clarification and outcome capture stay with the host context that can pause, receive the response, and resume the lifecycle.
 - Open Questions remain a precise signal: they appear only when cross-examination was genuinely inconclusive, not as an automatic consequence of having skipped it.
 - File size drops (~210 → ~130 lines) and invocation ceremony drops with it. Closer to peer skills such as `/goat-review` and `/goat-qa` in surface area.
 - Users who previously hit Quick mode because delegation was implicit now land on `/goat-review`, which is already sized for single-context review and does not over-promise multi-agent coverage.
@@ -49,6 +52,7 @@ goat-critique runs only as a full delegated workflow and remains a core feature.
 **Negative**
 - Reduced accessibility: a user who wants lightweight multi-lens thinking without delegation overhead no longer gets an inline option from goat-critique. They must use `/goat-review` or apply the SKEPTIC/ANALYST/STRATEGIST framing themselves.
 - Existing habits and stored prompts that invoked goat-critique in Quick mode break immediately at Step 0. The redirect is explicit, but it is still a behavioural break.
+- A parent cannot outsource the whole critique lifecycle to a fork; it must remain available to own synthesis and the two human interactions.
 - Public docs referencing Quick mode (`docs/skills.md` (search: `goat-critique runs in one mode`)) must be updated in the same change. Stale references would re-introduce the expectation the skill just removed.
 - Harness / audit surfaces that referenced Quick vs Full mode as separate paths (`src/cli/audit/check-factual-semantic-drift.ts` (search: `SKILLS_DOC_STALE_PHRASES`)) need adjustment. Footgun/lesson narrative that discussed Quick mode is historical and remains as-is.
 - The 2026-04-19 quality-log Quick-mode run becomes an orphan pattern. It does not need retraction, but future readers comparing the log to the shipped skill will see a structure the skill no longer produces.

@@ -448,6 +448,48 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
     assert.match(setupGuide, /1 mandatory meta-agent/);
   });
 
+  it("keeps goat-critique host-owned so human gates cannot auto-convert", () => {
+    assertForEachTarget(installedSkillPaths("goat-critique"), (skillPath) => {
+      const intake = readMarkdownSection(skillPath, "Step 0 - Intake");
+      const synthesis = readMarkdownSection(skillPath, "Phase 5 - Synthesise");
+
+      assert.match(intake, /host\/root context owns Phases 1-5\.6/u, skillPath);
+      assert.match(
+        intake,
+        /forked sub-agent[\s\S]+return[\s\S]+before Phase 1/u,
+        skillPath,
+      );
+      assert.match(
+        intake,
+        /does not apply the shared sub-agent gate conversion/u,
+        skillPath,
+      );
+      assert.match(
+        synthesis,
+        /After the host receives the human's A\/B\/C\/D pick/u,
+        skillPath,
+      );
+    });
+
+    const acceptedDecision = readProjectFile(
+      ".goat-flow/learning-loop/decisions/ADR-021-goat-critique-full-mode-only.md",
+    );
+    assert.match(acceptedDecision, /lifecycle is host-owned/u);
+    assert.match(
+      acceptedDecision,
+      /forked sub-agent[\s\S]+returns control before Phase 1/u,
+    );
+
+    const publicSkills = readProjectFile("docs/skills.md");
+    assert.match(
+      publicSkills,
+      /host\/root owns the lifecycle and human gates/u,
+    );
+
+    const setupGuide = readProjectFile("workflow/setup/03-install-skills.md");
+    assert.match(setupGuide, /host owns the lifecycle and human gates/u);
+  });
+
   it("redacts goat-critique persistence before disk and preserves the human gate", () => {
     assertForEachTarget(installedSkillPaths("goat-critique"), (skillPath) => {
       const phaseFour = readMarkdownSection(skillPath, "Phase 4 - Clarify");

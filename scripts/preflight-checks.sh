@@ -696,7 +696,7 @@ _emit_section_row() {
 
 _emit_footer() {
     _compute_widths
-    local total_elapsed verdict verdict_color sep
+    local total_elapsed verdict verdict_color sep warning_label
     total_elapsed=$(fmt_elapsed $(( $(now_ms) - preflight_start )))
     if [[ "$errors" -gt 0 ]]; then
         verdict="FAIL"; verdict_color="$R"
@@ -707,10 +707,12 @@ _emit_footer() {
     fi
     sep="·"
     [[ "$_use_ascii" -eq 1 ]] && sep="+"
+    warning_label="warning"
+    [[ "$warnings" -ne 1 ]] && warning_label="warnings"
     printf '%s%s%s\n' "$DIM" "$RULE_MID_LINE" "$RST"
-    printf ' %s%s%s%s   %d checks %s %d warnings %s %s%s\n' \
+    printf ' %s%s%s%s   %d checks %s %d %s %s %s%s\n' \
         "$BOLD" "$verdict_color" "$verdict" "$RST" \
-        "$checks" "$sep" "$warnings" "$sep" "$total_elapsed" "$RST"
+        "$checks" "$sep" "$warnings" "$warning_label" "$sep" "$total_elapsed" "$RST"
     printf '%s%s%s\n' "$DIM" "$RULE_MID_LINE" "$RST"
 }
 
@@ -1989,12 +1991,27 @@ fi
 # file:line or (search:) evidence on active entries, resolved-below-section.
 if [[ -f dist/cli/cli.js ]]; then
     section "Learning-Loop Schema"
-    stats_output=$(node dist/cli/cli.js stats . --check 2>&1) && stats_exit=0 || stats_exit=$?
+    stats_output=$(node dist/cli/cli.js stats . --check --format text 2>&1) && stats_exit=0 || stats_exit=$?
     if [[ "$stats_exit" -eq 0 ]]; then
-        pass "Footgun/lesson schema passes"
+        stats_summary=$(printf '%s\n' "$stats_output" | head -1)
+        if [[ "$stats_summary" =~ ^stats\ --check:\ PASS\ \(([0-9]+)\ warnings?\)$ ]]; then
+            stats_warning_count="${BASH_REMATCH[1]}"
+            stats_warning_label="warning"
+            [[ "$stats_warning_count" -ne 1 ]] && stats_warning_label="warnings"
+            warn "Footgun/lesson schema passes (${stats_warning_count} ${stats_warning_label})"
+            printf '%s\n' "$stats_output" | sed -n '2,11p' | details_pipe
+            if [[ "$stats_warning_count" -gt 1 ]]; then
+                warnings=$((warnings + stats_warning_count - 1))
+            fi
+        elif [[ "$stats_summary" == "stats --check: PASS" ]]; then
+            pass "Footgun/lesson schema passes"
+        else
+            fail "stats --check returned an unrecognized passing result"
+            printf '%s\n' "$stats_output" | head -10 | details_pipe
+        fi
     else
         fail "Footgun/lesson schema violations (exit $stats_exit)"
-        echo "$stats_output" | head -10 | details_pipe
+        printf '%s\n' "$stats_output" | head -10 | details_pipe
     fi
 else
     skip "Learning-Loop Schema (dist/cli/cli.js not built)"

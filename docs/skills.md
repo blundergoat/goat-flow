@@ -252,7 +252,7 @@ Pass 3 is optional and requires explicit informed approval. An uncited or unreso
 
 ## /goat-critique
 
-Multi-perspective critique for a concrete artifact (plan, security assessment, debug hypothesis set, review findings, architecture proposal). goat-critique runs in one mode: full delegated, with Phases 1-5 plus mandatory meta-audit (5.5) and outcome capture (5.6). Rationale: `.goat-flow/learning-loop/decisions/ADR-021-goat-critique-full-mode-only.md`.
+Multi-perspective critique for a concrete artifact (plan, security assessment, debug hypothesis set, review findings, architecture proposal). goat-critique runs in one mode: full delegated, with Phases 1-5 plus mandatory meta-audit (5.5) and outcome capture (5.6). The host/root owns the lifecycle and human gates; spawned agents perform bounded critique, cross-exam, or meta-audit roles. Rationale: `.goat-flow/learning-loop/decisions/ADR-021-goat-critique-full-mode-only.md`.
 
 | Delegation | Phases |
 |------------|--------|

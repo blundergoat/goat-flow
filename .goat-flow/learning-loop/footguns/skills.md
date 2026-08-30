@@ -1,6 +1,6 @@
 ---
 category: skills
-last_reviewed: 2026-08-15
+last_reviewed: 2026-08-31
 ---
 
 ## Footgun: Skill parity edits can miss `.github/skills/` and fail repo-level drift checks
@@ -16,8 +16,10 @@ last_reviewed: 2026-08-15
 - `src/cli/manifest/manifest.ts` (search: `getInstalledSkillRoots`) exposes installed skill roots from the manifest-backed agent set.
 - `scripts/check-path-integrity.sh` (search: `skill_dirs=".claude/skills .agents/skills .github/skills"`) checks `.github/skills/` alongside the other installed mirrors.
 - `test/integration/audit-drift-checkdrift-this-repo.test.ts` (search: `goat-flow root should be drift-clean`) failed on 2026-04-21 with finding `goat-review: template (workflow/skills/goat-review/SKILL.md) and installed copy (.github/skills/goat-review/SKILL.md) differ`.
-- 2026-08-04 goat-review contract synchronization updated all four roots and recorded the RED/GREEN evidence in `.goat-flow/logs/sessions/2026-08-04-goat-review-tdd.md`; byte parity and the 105-artifact drift audit passed before goat-debug work began.
-- 2026-08-04 goat-debug disposition synchronization likewise updated all four roots; `.goat-flow/logs/sessions/2026-08-04-goat-debug-tdd.md` records the focused 2/2 and full 132/132 contract passes plus mirror/drift evidence.
+- 2026-08-04 goat-review contract synchronization updated all four roots. Durable coverage remains in `test/integration/audit-drift-checkdrift-this-repo.test.ts` (search: `goat-flow root should be drift-clean`) and `test/contract/skill-hardening-contracts.test.ts` (search: `functional skills stay within the 2500-word cap across all mirrors`).
+- 2026-08-04 goat-debug disposition synchronization likewise updated all four roots. The installed contract is pinned in `test/contract/skill-hardening-skills-1.test.ts` (search: `keeps goat-debug ADJUSTED disposition countable in its root output`), with mirror budgets covered by `test/contract/skill-hardening-contracts.test.ts` (search: `functional skills stay within the 2500-word cap across all mirrors`).
+- 2026-08-30 goat-review threshold hardening removed valid-looking unchunked terminal states from all four roots. The installed contract is pinned in `test/contract/skill-hardening-review-1.test.ts` (search: `ends an oversized review when the user declines chunking`), with mirror budgets covered by `test/contract/skill-hardening-contracts.test.ts` (search: `functional skills stay within the 2500-word cap across all mirrors`).
+- 2026-08-30 goat-critique host ownership aligned the skill, ADR-021, public guidance, and setup inventory without changing ADR-006's gate conversion. The installed contract is pinned in `test/contract/skill-hardening-skills-2.test.ts` (search: `keeps goat-critique host-owned so human gates cannot auto-convert`), with mirror budgets covered by `test/contract/skill-hardening-contracts.test.ts` (search: `functional skills stay within the 2500-word cap across all mirrors`).
 
 **Prevention:**
 1. When editing `workflow/skills/*/SKILL.md`, update every installed mirror in `.claude/skills/`, `.agents/skills/`, and `.github/skills/` in the same change.
