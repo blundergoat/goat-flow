@@ -1348,28 +1348,58 @@ const hadFinalNewline = /\r?\n$/u.test(content);
 let lines = content.split(/\r?\n/u);
 if (hadFinalNewline) lines.pop();
 
-function mappingCloseIndex(line, openIndex) {
-  const commentIndex = yamlCommentIndex(line);
-  if (openIndex >= commentIndex) return -1;
+// Find one flow mapping's closing brace across lines without counting quoted or commented braces.
+function mappingClosePosition(lines, startLineIndex, openIndex) {
   let depth = 0;
   let inSingle = false;
   let inDouble = false;
-  let escaped = false;
-  for (let index = openIndex; index < commentIndex; index += 1) {
-    const character = line[index];
-    if (escaped) { escaped = false; continue; }
-    if (inDouble && character === "\\") { escaped = true; continue; }
-    if (!inDouble && character === "'") { inSingle = !inSingle; continue; }
-    if (!inSingle && character === '"') { inDouble = !inDouble; continue; }
-    if (inSingle || inDouble) continue;
-    if (character === "{") { depth += 1; continue; }
-    if (character === "}") {
-      depth -= 1;
-      if (depth === 0) return index;
-      if (depth < 0) return -1;
+  let lastCodeCharacter = "";
+  for (let lineIndex = startLineIndex; lineIndex < lines.length; lineIndex += 1) {
+    const line = lines[lineIndex];
+    const firstIndex = lineIndex === startLineIndex ? openIndex : 0;
+    let escaped = false;
+    for (let index = firstIndex; index < line.length; index += 1) {
+      const character = line[index];
+      if (escaped) { escaped = false; continue; }
+      if (inDouble && character === "\\") { escaped = true; continue; }
+      if (!inDouble && character === "'") {
+        inSingle = !inSingle;
+        lastCodeCharacter = character;
+        continue;
+      }
+      if (!inSingle && character === '"') {
+        inDouble = !inDouble;
+        lastCodeCharacter = character;
+        continue;
+      }
+      if (inSingle || inDouble) continue;
+      if (
+        character === "#" &&
+        (index === 0 || /\s/u.test(line[index - 1]))
+      ) {
+        break;
+      }
+      if (/\s/u.test(character)) continue;
+      if (character === "{") {
+        depth += 1;
+        lastCodeCharacter = character;
+        continue;
+      }
+      if (character === "}") {
+        depth -= 1;
+        if (depth === 0) {
+          return {
+            lineIndex,
+            index,
+            hasTrailingSeparator: lastCodeCharacter === ",",
+          };
+        }
+        if (depth < 0) return null;
+      }
+      lastCodeCharacter = character;
     }
   }
-  return -1;
+  return null;
 }
 
 // Return the first YAML comment marker outside quoted scalars; line.length means no comment.
@@ -1395,7 +1425,8 @@ function yamlCommentIndex(line) {
   return line.length;
 }
 
-function mappingOpenIndex(line, key) {
+// Find a key whose value opens a flow mapping at the caller's required nesting depth.
+function mappingOpenIndex(line, key, initialDepth, expectedParentDepth) {
   const yamlCode = line.slice(0, yamlCommentIndex(line));
   if (yamlCode.trim().length === 0) return -1;
   const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
@@ -1403,12 +1434,9 @@ function mappingOpenIndex(line, key) {
     `(?:^|[{,])\\s*(?:"${escapedKey}"|'${escapedKey}'|${escapedKey})\\s*:\\s*\\{`,
     "gu",
   );
-  const hooksFlowLine = /^(?:hooks|"hooks"|'hooks')\s*:\s*\{/u.test(yamlCode);
-  const expectedParentDepth = hooksFlowLine ? 1 : 0;
-
   for (const match of yamlCode.matchAll(entryPattern)) {
     const openIndex = match.index + match[0].lastIndexOf("{");
-    let depth = 0;
+    let depth = initialDepth;
     let inSingle = false;
     let inDouble = false;
     let escaped = false;
@@ -1427,14 +1455,43 @@ function mappingOpenIndex(line, key) {
   return -1;
 }
 
-function appendFlowProperty(line, openIndex, entry) {
-  const closeIndex = mappingCloseIndex(line, openIndex);
-  if (closeIndex === -1) return null;
-  const body = line.slice(openIndex + 1, closeIndex);
-  const nextBody = body.trim().length === 0
+// Carry flow nesting forward so a nested lookalike key cannot be mistaken for a direct hook.
+function mappingDepthAfterLine(line, initialDepth) {
+  const yamlCode = line.slice(0, yamlCommentIndex(line));
+  let depth = initialDepth;
+  let inSingle = false;
+  let inDouble = false;
+  let escaped = false;
+  for (const character of yamlCode) {
+    if (escaped) { escaped = false; continue; }
+    if (inDouble && character === "\\") { escaped = true; continue; }
+    if (!inDouble && character === "'") { inSingle = !inSingle; continue; }
+    if (!inSingle && character === '"') { inDouble = !inDouble; continue; }
+    if (inSingle || inDouble) continue;
+    if (character === "{" || character === "[") depth += 1;
+    if (character === "}" || character === "]") depth -= 1;
+  }
+  return depth;
+}
+
+// Insert one property without reserializing user YAML; false means the parsed mapping was not located.
+function appendFlowProperty(lines, lineIndex, openIndex, entry, hasProperties) {
+  const close = mappingClosePosition(lines, lineIndex, openIndex);
+  if (close === null) return false;
+  if (close.lineIndex !== lineIndex) {
+    const closeLine = lines[close.lineIndex];
+    const separator = hasProperties && !close.hasTrailingSeparator ? ", " : "";
+    lines[close.lineIndex] = `${closeLine.slice(0, close.index)}${separator}${entry} ${closeLine.slice(close.index)}`;
+    return true;
+  }
+  const line = lines[lineIndex];
+  const body = line.slice(openIndex + 1, close.index);
+  const separator = close.hasTrailingSeparator ? " " : ", ";
+  const nextBody = !hasProperties
     ? ` ${entry} `
-    : `${body.replace(/\s+$/u, "")}, ${entry} `;
-  return `${line.slice(0, openIndex + 1)}${nextBody}${line.slice(closeIndex)}`;
+    : `${body.replace(/\s+$/u, "")}${separator}${entry} `;
+  lines[lineIndex] = `${line.slice(0, openIndex + 1)}${nextBody}${line.slice(close.index)}`;
+  return true;
 }
 
 const hooksIndex = lines.findIndex((line) => /^(?:hooks|"hooks"|'hooks')\s*:/u.test(line));
@@ -1456,19 +1513,29 @@ while (hooksEnd < lines.length) {
 }
 
 let changed = false;
+const hooksIsFlow = /^(?:hooks|"hooks"|'hooks')\s*:\s*\{/u.test(
+  lines[hooksIndex].slice(0, yamlCommentIndex(lines[hooksIndex])),
+);
+const expectedParentDepth = hooksIsFlow ? 1 : 0;
+let mappingDepth = 0;
 for (let index = hooksIndex; index < hooksEnd; index += 1) {
-  const openIndex = mappingOpenIndex(lines[index], "gruff-code-quality");
-  if (openIndex === -1) continue;
-  const nextLine = appendFlowProperty(
+  const openIndex = mappingOpenIndex(
     lines[index],
-    openIndex,
-    `binaries: { py: ${relativeBinaryPath} }`,
+    "gruff-code-quality",
+    mappingDepth,
+    expectedParentDepth,
   );
-  if (nextLine !== null) {
-    lines[index] = nextLine;
-    changed = true;
+  if (openIndex !== -1) {
+    changed = appendFlowProperty(
+      lines,
+      index,
+      openIndex,
+      `binaries: { py: ${relativeBinaryPath} }`,
+      Object.keys(gruffHook).length > 0,
+    );
+    break;
   }
-  break;
+  mappingDepth = mappingDepthAfterLine(lines[index], mappingDepth);
 }
 
 if (!changed) {

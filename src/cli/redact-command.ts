@@ -252,44 +252,103 @@ function redactSnapshotsMatch(left: Stats, right: Stats): boolean {
   );
 }
 
+/** Preserve native cleanup errors while making non-Error throws safe to propagate. */
+function normalizeRedactCleanupError(error: unknown): Error {
+  return error instanceof Error
+    ? error
+    : new Error("redact cleanup failed with a non-Error value");
+}
+
 /**
- * Zero sensitive bytes, close the descriptor, then unlink only its proven local pathname.
- *
- * Error behavior: throws on an unexpected truncation, close, or owner-checked unlink failure.
+ * Run one cleanup operation even when an earlier operation already failed.
+ * Error behavior: swallows cleanup failures into the first returned Error value.
  */
-function discardRejectedRedactAllocation(
+function attemptRedactCleanupStep(
+  priorError: Error | null,
+  step: () => void,
+): Error | null {
+  try {
+    step();
+    return priorError;
+  } catch (error) {
+    return priorError ?? normalizeRedactCleanupError(error);
+  }
+}
+
+/**
+ * Capture path ownership while the create-only descriptor is still available.
+ * Error behavior: swallows inspection failures into a null ownership result.
+ */
+function captureRejectedRedactOwnership(
   components: readonly RedactDirectoryComponent[],
   outputPath: string,
   descriptor: number,
-): void {
-  let ownedSnapshot: Stats | null = null;
+): Stats | null {
   try {
-    ftruncateSync(descriptor, 0);
-    fsyncSync(descriptor);
-    try {
-      assertRedactDirectories(components);
-      const descriptorStats = fstatSync(descriptor);
-      const pathStats = lstatSync(outputPath);
-      if (redactSnapshotsMatch(descriptorStats, pathStats)) {
-        ownedSnapshot = pathStats;
-      }
-    } catch {
-      ownedSnapshot = null;
-    }
-  } finally {
-    closeSync(descriptor);
+    assertRedactDirectories(components);
+    const descriptorStats = fstatSync(descriptor);
+    const pathStats = lstatSync(outputPath);
+    return redactSnapshotsMatch(descriptorStats, pathStats) ? pathStats : null;
+  } catch {
+    return null;
   }
+}
 
-  if (ownedSnapshot === null) return;
+/**
+ * Remove the rejected path only while it still matches the captured allocation.
+ * Error behavior: swallows missing-path failures into null and converts other failures into returned Error values.
+ */
+function unlinkRejectedRedactAllocation(
+  components: readonly RedactDirectoryComponent[],
+  outputPath: string,
+  ownedSnapshot: Stats | null,
+): Error | null {
+  if (ownedSnapshot === null) return null;
   try {
     assertRedactDirectories(components);
     const currentSnapshot = lstatSync(outputPath);
     if (redactSnapshotsMatch(currentSnapshot, ownedSnapshot)) {
       unlinkSync(outputPath);
     }
+    return null;
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    return (error as NodeJS.ErrnoException).code === "ENOENT"
+      ? null
+      : normalizeRedactCleanupError(error);
   }
+}
+
+/**
+ * Attempt every cleanup step, then unlink only the create-only path still matching this descriptor.
+ *
+ * Error behavior: throws the first truncation, flush, close, or unlink error after later cleanup attempts.
+ */
+function discardRejectedRedactAllocation(
+  components: readonly RedactDirectoryComponent[],
+  outputPath: string,
+  descriptor: number,
+): void {
+  let cleanupError = attemptRedactCleanupStep(null, () => {
+    ftruncateSync(descriptor, 0);
+  });
+  cleanupError = attemptRedactCleanupStep(cleanupError, () => {
+    fsyncSync(descriptor);
+  });
+  const ownedSnapshot = captureRejectedRedactOwnership(
+    components,
+    outputPath,
+    descriptor,
+  );
+  cleanupError = attemptRedactCleanupStep(cleanupError, () => {
+    closeSync(descriptor);
+  });
+  const unlinkError = unlinkRejectedRedactAllocation(
+    components,
+    outputPath,
+    ownedSnapshot,
+  );
+  cleanupError ??= unlinkError;
+  if (cleanupError !== null) throw cleanupError;
 }
 
 /**

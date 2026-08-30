@@ -163,12 +163,21 @@ function qualityPositionals(
 /**
  * One parser per `quality` subcommand, so each subcommand's argument rules and error text sit together.
  *
- * A subcommand absent from this table falls through to `prompt`, which is what lets `goat-flow quality <path>` work.
+ * An unrecognized first positional falls through to an implicit `prompt`, which is what lets `goat-flow quality <path>` work.
  */
-const QUALITY_SUBCOMMAND_PARSERS: Record<
-  string,
-  (args: QualityPositionalArgs) => QualityPositionals
-> = {
+const QUALITY_SUBCOMMAND_PARSERS = {
+  /** Prompt takes one optional project path in both its explicit and implicit forms. */
+  prompt: ({ second, rest }) => {
+    if (rest.length > 0) {
+      throw new CLIError(
+        "quality prompt accepts at most one positional project path.",
+        2,
+      );
+    }
+    return qualityPositionals("prompt", {
+      projectPath: resolve(second ?? "."),
+    });
+  },
   /** History takes an optional project path and nothing else. */
   history: ({ second, rest }) => {
     if (rest.length > 0) {
@@ -218,7 +227,20 @@ const QUALITY_SUBCOMMAND_PARSERS: Record<
     }
     return qualityPositionals("save", { projectPath: resolve(second) });
   },
-};
+} satisfies Record<
+  QualitySubcommand,
+  (args: QualityPositionalArgs) => QualityPositionals
+>;
+
+/** Narrow one first positional to a parser-table key without treating prototype names as commands. */
+function isQualitySubcommand(
+  candidate: string | undefined,
+): candidate is QualitySubcommand {
+  return (
+    candidate !== undefined &&
+    Object.prototype.hasOwnProperty.call(QUALITY_SUBCOMMAND_PARSERS, candidate)
+  );
+}
 
 /**
  * Resolve which `quality` subcommand the user invoked, and what its positional arguments mean.
@@ -245,11 +267,9 @@ export function parseQualityPositionals(
   }
 
   // Bracket lookup on an object literal resolves inherited names like __proto__, so only own keys may dispatch.
-  const parseSubcommand =
-    first !== undefined &&
-    Object.prototype.hasOwnProperty.call(QUALITY_SUBCOMMAND_PARSERS, first)
-      ? QUALITY_SUBCOMMAND_PARSERS[first]
-      : undefined;
+  const parseSubcommand = isQualitySubcommand(first)
+    ? QUALITY_SUBCOMMAND_PARSERS[first]
+    : undefined;
   if (parseSubcommand) return parseSubcommand({ second, rest, draftFlag });
 
   // No subcommand matched, so the first positional is the project path for a prompt run.

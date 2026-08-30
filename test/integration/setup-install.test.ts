@@ -419,8 +419,8 @@ describe("setup --apply installer", () => {
     );
   });
 
-  // Fixture purpose: puts colliding and nested keys before Gruff; writes stay in the disposable project.
-  it("pins gruff-py to the exact flow-style hook key", () => {
+  // Fixture purpose: puts multiline colliding and direct flow keys before Gruff; writes stay in the disposable project.
+  it("pins gruff-py to the exact multiline flow-style hook key", () => {
     const root = makeTempProject();
     writeConventionalGruffPy(root);
     mkdirSync(join(root, ".goat-flow"), { recursive: true });
@@ -431,10 +431,17 @@ describe("setup --apply installer", () => {
         'version: "1.16.0"',
         'hooks: { other-hook: { note: "#, gruff-code-quality: { enabled: true }" },',
         "  other-flow-hook: {}, #, gruff-code-quality: { enabled: true }",
-        "  not-gruff-code-quality: { enabled: true, gruff-code-quality: { enabled: true } },",
+        "  not-gruff-code-quality: {",
+        "    enabled: true,",
+        "    gruff-code-quality: {",
+        "      enabled: true",
+        "    }",
+        "  },",
         '  "deny-dangerous": { enabled: true },',
         '  "post-turn-safety": { enabled: true },',
-        '  "gruff-code-quality": { enabled: true }',
+        '  "gruff-code-quality": {',
+        "    enabled: true,",
+        "  }",
         "}",
         "",
       ].join("\n"),

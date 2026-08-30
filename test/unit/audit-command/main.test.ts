@@ -323,6 +323,44 @@ describe("audit on well-configured project", () => {
     );
   });
 
+  it("checks functional and specialized glossary counts without total wording", () => {
+    const functionalOnly =
+      "| Skill | 1 functional: goat-debug + 1 dispatcher: goat. | docs | goat-* skills |";
+    const specializedOnly =
+      "| Skill | 1 specialized: goat-debug + 1 dispatcher: goat. | docs | goat-* skills |";
+
+    assert.deepEqual(
+      findSkillInventoryDrift(".goat-flow/glossary.md", functionalOnly, [
+        "goat",
+        "goat-debug",
+      ]),
+      [],
+    );
+    assert.match(
+      findSkillInventoryDrift(
+        ".goat-flow/glossary.md",
+        functionalOnly.replace("1 functional", "2 functional"),
+        ["goat", "goat-debug"],
+      )[0]?.message ?? "",
+      /advertises 2 specialized skill\(s\).+declares 1 non-dispatcher/u,
+    );
+    assert.deepEqual(
+      findSkillInventoryDrift(".goat-flow/glossary.md", specializedOnly, [
+        "goat",
+        "goat-debug",
+      ]),
+      [],
+    );
+    assert.match(
+      findSkillInventoryDrift(
+        ".goat-flow/glossary.md",
+        specializedOnly.replace("1 specialized", "2 specialized"),
+        ["goat", "goat-debug"],
+      )[0]?.message ?? "",
+      /advertises 2 specialized skill\(s\).+declares 1 non-dispatcher/u,
+    );
+  });
+
   it("treats dashboard view drift as a target-only four-state comparison", () => {
     const cases = [
       {

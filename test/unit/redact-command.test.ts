@@ -4,10 +4,11 @@
  * these tests prove representative fake secrets disappear while useful paths,
  * commands, and issue links remain readable.
  */
-import { describe, it } from "node:test";
+import { afterEach, describe, it } from "node:test";
 import type { TestContext } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { createRequire, syncBuiltinESMExports } from "node:module";
 import {
   existsSync,
   mkdirSync,
@@ -21,10 +22,18 @@ import {
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { parseCLIArgs } from "../../src/cli/cli-parser.js";
+import { CLIError } from "../../src/cli/cli-error.js";
+import { handleRedactCommand } from "../../src/cli/redact-command.js";
 import { scrubDurableText } from "../../src/cli/evidence/redaction.js";
 
 const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
 const CLI_PATH = join(PROJECT_ROOT, "src", "cli", "cli.ts");
+const require = createRequire(import.meta.url);
+const runtimeFs = require("node:fs") as typeof import("node:fs");
+const originalCloseSync = runtimeFs.closeSync;
+const originalFsyncSync = runtimeFs.fsyncSync;
+const originalFtruncateSync = runtimeFs.ftruncateSync;
+const originalReadFileSync = runtimeFs.readFileSync;
 const BARE_SECRET_NAMES = [
   "API_KEY",
   "AUTH",
@@ -35,6 +44,52 @@ const BARE_SECRET_NAMES = [
   "SECRET",
   "TOKEN",
 ] as const;
+
+type RejectedAllocationCleanupFault = "close" | "flush" | "truncate";
+
+/** Restore built-in bindings after each in-process filesystem fault fixture. */
+function restoreRuntimeFs(): void {
+  runtimeFs.closeSync = originalCloseSync;
+  runtimeFs.fsyncSync = originalFsyncSync;
+  runtimeFs.ftruncateSync = originalFtruncateSync;
+  runtimeFs.readFileSync = originalReadFileSync;
+  syncBuiltinESMExports();
+}
+
+/**
+ * Force the initial flush and one selected cleanup operation to fail in-process.
+ * Error behavior: the injected built-in throws EIO only at the named fixture stages.
+ */
+function injectRejectedAllocationCleanupFault(
+  fault: RejectedAllocationCleanupFault,
+): void {
+  let fsyncCalls = 0;
+  runtimeFs.readFileSync = ((...args: unknown[]) => {
+    if (args[0] === 0) return "Authorization: Bearer fixture-secret\n";
+    return Reflect.apply(originalReadFileSync, runtimeFs, args);
+  }) as typeof runtimeFs.readFileSync;
+  runtimeFs.fsyncSync = ((descriptor: number) => {
+    fsyncCalls += 1;
+    if (fsyncCalls === 1 || fault === "flush") {
+      throw Object.assign(new Error("fixture fsync failure"), { code: "EIO" });
+    }
+    originalFsyncSync(descriptor);
+  }) as typeof runtimeFs.fsyncSync;
+  if (fault === "truncate") {
+    runtimeFs.ftruncateSync = (() => {
+      throw Object.assign(new Error("fixture truncate failure"), {
+        code: "EIO",
+      });
+    }) as typeof runtimeFs.ftruncateSync;
+  }
+  if (fault === "close") {
+    runtimeFs.closeSync = ((descriptor: number) => {
+      originalCloseSync(descriptor);
+      throw Object.assign(new Error("fixture close failure"), { code: "EIO" });
+    }) as typeof runtimeFs.closeSync;
+  }
+  syncBuiltinESMExports();
+}
 
 /**
  * Run the public redactor against one temporary project and destination.
@@ -106,6 +161,8 @@ function buildFakeSecrets(): {
 }
 
 describe("durable artifact redaction", () => {
+  afterEach(restoreRuntimeFs);
+
   // A copied continuation note must replace each supported secret class before reaching disk.
   it("replaces representative fake secrets with evidence-shaped placeholders", () => {
     const fakeSecrets = buildFakeSecrets();
@@ -299,6 +356,41 @@ describe("durable artifact redaction", () => {
       rmSync(temporaryProject, { recursive: true, force: true });
     }
   });
+
+  // Fixture purpose: each fallible cleanup stage fails after a rejected write; all paths stay in one disposable project.
+  for (const fault of ["truncate", "flush", "close"] as const) {
+    it(`removes its rejected create-only output when cleanup ${fault} fails`, () => {
+      const temporaryProject = mkdtempSync(join(tmpdir(), "goat-flow-redact-"));
+      const outputPath = join(
+        temporaryProject,
+        ".goat-flow",
+        "logs",
+        "sessions",
+        "rejected.md",
+      );
+      const options = parseCLIArgs([
+        "redact",
+        temporaryProject,
+        "--output",
+        outputPath,
+      ]);
+      injectRejectedAllocationCleanupFault(fault);
+
+      try {
+        assert.throws(
+          () => handleRedactCommand(options),
+          (error: unknown) =>
+            error instanceof CLIError &&
+            /could not discard a rejected output allocation/u.test(
+              error.message,
+            ),
+        );
+        assert.equal(existsSync(outputPath), false);
+      } finally {
+        rmSync(temporaryProject, { recursive: true, force: true });
+      }
+    });
+  }
 
   it("refuses an output path outside the selected project", () => {
     const temporaryProject = mkdtempSync(join(tmpdir(), "goat-flow-redact-"));

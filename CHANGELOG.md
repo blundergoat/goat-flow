@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v1.17.0 - 2026-08-30
+
 The next release adds per-command `--help`, path-aware learning recall, one project-wide install baseline, whole-suite hook verification, and stricter `--strict` plan checks, and it untangles Claude and Copilot hook registrations.
 
 - **BREAKING: path audits now require the `audit` command** - Replace `goat-flow <path>` with `goat-flow audit <path>`. Bare `goat-flow` opens the menu; a misspelled command exits `2` instead of auditing a path of that name.

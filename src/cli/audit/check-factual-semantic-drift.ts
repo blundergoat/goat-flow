@@ -324,8 +324,20 @@ type SkillInventoryDocumentPath =
 
 /** A document either names each invokable skill or advertises only the total users can expect. */
 type ExplicitSkillInventory =
-  | { kind: "names"; skillNames: string[]; skillTotal?: number }
+  | {
+      kind: "names";
+      skillNames: string[];
+      skillTotal?: number;
+      specializedSkillTotal?: number;
+    }
+  | { kind: "specialized-total"; skillTotal: number }
   | { kind: "total"; skillTotal: number };
+
+type NamedSkillInventory = Extract<ExplicitSkillInventory, { kind: "names" }>;
+
+type GlossarySkillCountClaim =
+  | { skillTotal: number; specializedSkillTotal?: number }
+  | { skillTotal?: undefined; specializedSkillTotal: number };
 
 /**
  * Read skill file rows from the code map's explicit workflow/skills subtree.
@@ -364,6 +376,65 @@ function readCodeMapSkillInventory(
   return { kind: "names", skillNames: [...new Set(skillNames)] };
 }
 
+/** Read one numeric inventory phrase without assigning meaning to its label. */
+function readAdvertisedSkillCount(
+  skillDefinition: string,
+  pattern: RegExp,
+): number | undefined {
+  const advertisedCount = skillDefinition.match(pattern)?.[1];
+  return advertisedCount === undefined ? undefined : Number(advertisedCount);
+}
+
+/** Resolve the accepted glossary count phrases into one explicit claim. */
+function readGlossarySkillCountClaim(
+  skillDefinition: string,
+): GlossarySkillCountClaim | null {
+  const skillTotal = readAdvertisedSkillCount(
+    skillDefinition,
+    /\b(\d+)\s+total\b/u,
+  );
+  const specializedSkillTotal =
+    readAdvertisedSkillCount(skillDefinition, /\b(\d+)\s+specialized\b/u) ??
+    readAdvertisedSkillCount(skillDefinition, /\b(\d+)\s+functional\b/u);
+  if (skillTotal !== undefined) {
+    return specializedSkillTotal === undefined
+      ? { skillTotal }
+      : { skillTotal, specializedSkillTotal };
+  }
+  return specializedSkillTotal === undefined ? null : { specializedSkillTotal };
+}
+
+/** Attach optional count claims to the names the glossary explicitly lists. */
+function namedGlossarySkillInventory(
+  skillNames: string[],
+  countClaim: GlossarySkillCountClaim,
+): NamedSkillInventory {
+  const inventory: NamedSkillInventory = {
+    kind: "names",
+    skillNames: [...new Set(skillNames)],
+  };
+  if (countClaim.skillTotal !== undefined) {
+    inventory.skillTotal = countClaim.skillTotal;
+  }
+  if (countClaim.specializedSkillTotal !== undefined) {
+    inventory.specializedSkillTotal = countClaim.specializedSkillTotal;
+  }
+  return inventory;
+}
+
+/** Preserve whether a count-only glossary claim covers every skill or only specialized skills. */
+function countOnlyGlossarySkillInventory(
+  countClaim: GlossarySkillCountClaim,
+): ExplicitSkillInventory {
+  if (countClaim.skillTotal !== undefined) {
+    return { kind: "total", skillTotal: countClaim.skillTotal };
+  }
+  return {
+    kind: "specialized-total",
+    skillTotal: countClaim.specializedSkillTotal,
+  };
+}
+
 /**
  * Read invokable names from the glossary's explicit Skill row.
  * Returns null when the row defines the term without claiming a numbered inventory.
@@ -381,28 +452,18 @@ function readGlossarySkillInventory(
   // A missing Skill row means this document makes no inventory claim for the audit to enforce.
   if (skillRow === undefined) return null;
   const skillDefinition = skillRow.split("|")[2]?.trim();
-
+  if (skillDefinition === undefined) return null;
+  const countClaim = readGlossarySkillCountClaim(skillDefinition);
   // A plain definition without a stated count is useful prose, not an exhaustive user-facing list.
-  if (
-    skillDefinition === undefined ||
-    !/\b\d+\s+(?:specialized|functional|total)\b/u.test(skillDefinition)
-  ) {
-    return null;
-  }
+  if (countClaim === null) return null;
   const skillNames = Array.from(
     skillDefinition.matchAll(/\bgoat(?:-[a-z0-9]+)*\b/gu),
     (match) => match[0],
   ).filter((skillName) => skillName !== "goat-flow");
-  const advertisedTotal = skillDefinition.match(/\b(\d+)\s+total\b/u)?.[1];
-  if (advertisedTotal === undefined) return null;
-  const skillTotal = Number(advertisedTotal);
-  // A total-only definition is complete without inventing names the document does not claim to list.
-  if (skillNames.length === 0) return { kind: "total", skillTotal };
-  return {
-    kind: "names",
-    skillNames: [...new Set(skillNames)],
-    skillTotal,
-  };
+  // A count-only definition is complete without inventing names the document does not claim to list.
+  return skillNames.length === 0
+    ? countOnlyGlossarySkillInventory(countClaim)
+    : namedGlossarySkillInventory(skillNames, countClaim);
 }
 
 /**
@@ -453,6 +514,114 @@ function readExplicitSkillInventory(
   }
 }
 
+/** Compare one specialized-only count with manifest names other than the `goat` dispatcher. */
+function findSpecializedSkillTotalDrift(
+  path: SkillInventoryDocumentPath,
+  advertisedSkillTotal: number,
+  expectedSkillNames: ReadonlyArray<string>,
+  suggestion: string,
+): ContentFinding[] {
+  const expectedSpecializedSkillNames = expectedSkillNames.filter(
+    (skillName) => skillName !== "goat",
+  );
+  if (advertisedSkillTotal === expectedSpecializedSkillNames.length) return [];
+  return [
+    {
+      severity: "warning",
+      rule: "skill-inventory-drift",
+      path,
+      message:
+        `${path} advertises ${advertisedSkillTotal} specialized skill(s), but the manifest ` +
+        `declares ${expectedSpecializedSkillNames.length} non-dispatcher skill(s): ${expectedSpecializedSkillNames.join(", ")}.`,
+      suggestion,
+    },
+  ];
+}
+
+/** Compare one all-skill count with the complete manifest inventory. */
+function findTotalSkillInventoryDrift(
+  path: SkillInventoryDocumentPath,
+  advertisedSkillTotal: number,
+  expectedSkillNames: ReadonlyArray<string>,
+  suggestion: string,
+): ContentFinding[] {
+  if (advertisedSkillTotal === expectedSkillNames.length) return [];
+  return [
+    {
+      severity: "warning",
+      rule: "skill-inventory-drift",
+      path,
+      message:
+        `${path} advertises ${advertisedSkillTotal} skill template(s), but workflow/manifest.json ` +
+        `declares ${expectedSkillNames.length}: ${expectedSkillNames.join(", ")}.`,
+      suggestion,
+    },
+  ];
+}
+
+/** Compare a named document inventory and each count it explicitly advertises. */
+function findNamedSkillInventoryDrift(
+  path: SkillInventoryDocumentPath,
+  explicitInventory: NamedSkillInventory,
+  expectedSkillNames: ReadonlyArray<string>,
+  suggestion: string,
+): ContentFinding[] {
+  const expectedSpecializedSkillNames = expectedSkillNames.filter(
+    (skillName) => skillName !== "goat",
+  );
+  const claimedSkillNames = new Set(explicitInventory.skillNames);
+  const expectedSkillNameSet = new Set(expectedSkillNames);
+  const missingSkillNames = expectedSkillNames.filter(
+    (skillName) => !claimedSkillNames.has(skillName),
+  );
+  const unexpectedSkillNames = explicitInventory.skillNames.filter(
+    (skillName) => !expectedSkillNameSet.has(skillName),
+  );
+  const mismatchDescriptions: string[] = [];
+
+  // A glossary can name every skill while still advertising the wrong total, so validate both claims independently.
+  if (
+    explicitInventory.skillTotal !== undefined &&
+    explicitInventory.skillTotal !== expectedSkillNames.length
+  ) {
+    mismatchDescriptions.push(
+      `advertises ${explicitInventory.skillTotal} skill(s), but the manifest declares ${expectedSkillNames.length}.`,
+    );
+  }
+  if (
+    explicitInventory.specializedSkillTotal !== undefined &&
+    explicitInventory.specializedSkillTotal !==
+      expectedSpecializedSkillNames.length
+  ) {
+    mismatchDescriptions.push(
+      `advertises ${explicitInventory.specializedSkillTotal} specialized skill(s), but the manifest declares ${expectedSpecializedSkillNames.length} non-dispatcher skill(s).`,
+    );
+  }
+  // Missing names identify invokable workflows a user would otherwise never discover in this document.
+  if (missingSkillNames.length > 0) {
+    mismatchDescriptions.push(
+      `omits manifest-canonical skill(s): ${missingSkillNames.join(", ")}.`,
+    );
+  }
+  // Unexpected names identify retired or invented workflows that the user cannot invoke from the manifest.
+  if (unexpectedSkillNames.length > 0) {
+    mismatchDescriptions.push(
+      `lists non-canonical skill(s): ${unexpectedSkillNames.join(", ")}.`,
+    );
+  }
+  // Matching names and any advertised total give users the same inventory as the manifest.
+  if (mismatchDescriptions.length === 0) return [];
+  return [
+    {
+      severity: "warning",
+      rule: "skill-inventory-drift",
+      path,
+      message: `${path} ${mismatchDescriptions.join(" ")}`,
+      suggestion,
+    },
+  ];
+}
+
 /**
  * Compare one document's explicit skill claim with the manifest-backed skills users can invoke.
  * Empty canonical input or a document without an inventory claim produces no warning.
@@ -479,69 +648,29 @@ export function findSkillInventoryDrift(
   if (explicitInventory === null) return [];
   const suggestion =
     "Update the document's explicit skill inventory to match workflow/manifest.json skills.canonical.";
-
-  // Architecture advertises only a total, so matching that number is its complete contract.
-  if (explicitInventory.kind === "total") {
-    // The advertised total already tells users how many invokable skills the manifest provides.
-    if (explicitInventory.skillTotal === expectedSkillNames.length) return [];
-    return [
-      {
-        severity: "warning",
-        rule: "skill-inventory-drift",
+  switch (explicitInventory.kind) {
+    case "specialized-total":
+      return findSpecializedSkillTotalDrift(
         path,
-        message:
-          `${path} advertises ${explicitInventory.skillTotal} skill template(s), but workflow/manifest.json ` +
-          `declares ${expectedSkillNames.length}: ${expectedSkillNames.join(", ")}.`,
+        explicitInventory.skillTotal,
+        expectedSkillNames,
         suggestion,
-      },
-    ];
+      );
+    case "total":
+      return findTotalSkillInventoryDrift(
+        path,
+        explicitInventory.skillTotal,
+        expectedSkillNames,
+        suggestion,
+      );
+    case "names":
+      return findNamedSkillInventoryDrift(
+        path,
+        explicitInventory,
+        expectedSkillNames,
+        suggestion,
+      );
   }
-
-  const claimedSkillNames = new Set(explicitInventory.skillNames);
-  const expectedSkillNameSet = new Set(expectedSkillNames);
-  const missingSkillNames = expectedSkillNames.filter(
-    (skillName) => !claimedSkillNames.has(skillName),
-  );
-  const unexpectedSkillNames = explicitInventory.skillNames.filter(
-    (skillName) => !expectedSkillNameSet.has(skillName),
-  );
-
-  const mismatchDescriptions: string[] = [];
-
-  // A glossary can name every skill while still advertising the wrong total, so validate both claims independently.
-  if (
-    explicitInventory.skillTotal !== undefined &&
-    explicitInventory.skillTotal !== expectedSkillNames.length
-  ) {
-    mismatchDescriptions.push(
-      `advertises ${explicitInventory.skillTotal} skill(s), but the manifest declares ${expectedSkillNames.length}.`,
-    );
-  }
-
-  // Missing names identify invokable workflows a user would otherwise never discover in this document.
-  if (missingSkillNames.length > 0) {
-    mismatchDescriptions.push(
-      `omits manifest-canonical skill(s): ${missingSkillNames.join(", ")}.`,
-    );
-  }
-
-  // Unexpected names identify retired or invented workflows that the user cannot invoke from the manifest.
-  if (unexpectedSkillNames.length > 0) {
-    mismatchDescriptions.push(
-      `lists non-canonical skill(s): ${unexpectedSkillNames.join(", ")}.`,
-    );
-  }
-  // Matching names and any advertised total give users the same inventory as the manifest.
-  if (mismatchDescriptions.length === 0) return [];
-  return [
-    {
-      severity: "warning",
-      rule: "skill-inventory-drift",
-      path,
-      message: `${path} ${mismatchDescriptions.join(" ")}`,
-      suggestion,
-    },
-  ];
 }
 
 /**

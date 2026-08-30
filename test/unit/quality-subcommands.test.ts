@@ -219,10 +219,10 @@ describe("quality subcommand parsing", () => {
     );
   });
 
-  it("parses prompt mode for mode-specific quality prompts", () => {
+  it("parses the explicit prompt subcommand for the current project", () => {
     const parsed = parseCLIArgs([
       "quality",
-      ".",
+      "prompt",
       "--agent",
       "claude",
       "--mode",
@@ -230,6 +230,18 @@ describe("quality subcommand parsing", () => {
     ]);
     assert.equal(parsed.qualitySubcommand, "prompt");
     assert.equal(parsed.qualityMode, "skills");
+    assert.equal(parsed.projectPath, resolve("."));
+  });
+
+  it("keeps a bare project path as the implicit prompt form", () => {
+    const parsed = parseCLIArgs(["quality", "fixture-project"]);
+
+    assert.equal(parsed.qualitySubcommand, "prompt");
+    assert.equal(parsed.projectPath, resolve("fixture-project"));
+    assert.throws(
+      () => parseCLIArgs(["quality", "prompt", ".", "extra"]),
+      /quality prompt accepts at most one positional project path/iu,
+    );
   });
 
   it("treats a prototype-named positional as an ordinary project path", () => {

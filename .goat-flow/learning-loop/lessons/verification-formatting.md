@@ -1,6 +1,6 @@
 ---
 category: verification-formatting
-last_reviewed: 2026-08-29
+last_reviewed: 2026-08-30
 ---
 
 **Scope:** Formatter, lint, and Knip debt that only surfaces at repo-wide scope - style flags, copied or untracked files that inherit debt, and touched-test formatting before a verification claim. Adding or tuning a preflight gate is [verification-preflight.md](verification-preflight.md).
@@ -176,7 +176,7 @@ Evidence anchors:
 
 **Status:** active | **Created:** 2026-06-07
 
-**Decision changed:** Run typecheck, ESLint, Knip, and formatting before preflight after TypeScript surface changes. | **Trigger phase:** VERIFY | **Incident count:** 21 | **Latest occurrence:** 2026-08-29
+**Decision changed:** Run typecheck, ESLint, Knip, and formatting before preflight after TypeScript surface changes. | **Trigger phase:** VERIFY | **Incident count:** 22 | **Latest occurrence:** 2026-08-30
 
 **What happened:** Narrower checks repeatedly cleared before later static gates. On 2026-08-10, typecheck rejected dynamic membership against a literal-tuple union and ESLint found proof-reader and registrar complexity 13/11. Earlier recurrences included formatting drift, an undiscovered worker, and impossible fallback logic.
 
@@ -201,6 +201,8 @@ Evidence anchors:
 **Recurrence 2026-08-28 (M47 routing contracts):** The edited doctrine contract and new dispatcher-fixture contract passed their focused suites before the required clarity pass found both files outside repository Prettier style. Run the repository-owned scoped formatter check immediately after TypeScript edits, before treating focused GREEN as task proof. Evidence anchors: `test/contract/skill-quality-testing-doctrine.test.ts` (search: `scopes retirement and qualification to one reproducible target`), `test/contract/dispatcher-routing-fixture.test.ts` (search: `Guards deterministic dispatcher-corpus integrity`), and `package.json` (search: `"format:check"`).
 
 **Recurrence 2026-08-29 (M71 rationale limit):** Focused schema tests, typecheck, ESLint, Prettier, and the full suite were green before preflight's exact Knip gate found the rationale character limit re-exported from the public schema barrel with no consumer. Removing only that re-export kept internal validation and prompt composition on the owning module and cleared the exact unused-export finding. Evidence anchors: `src/cli/quality/schema.ts` (search: `type QualityScoreRationale`) and `src/cli/quality/schema-score-rationale.ts` (search: `QUALITY_SCORE_RATIONALE_MAX_CHARACTERS`).
+
+**Recurrence 2026-08-30 (M77 review fixes):** Focused regressions, typecheck, and Prettier passed before preflight found four ESLint errors: excessive complexity in glossary inventory and rejected-redaction cleanup, plus a non-Error throw. Run file-scoped ESLint immediately after the first focused GREEN, before the full suite; when helper extraction adds comments, rerun the scoped Gruff analyzer at the same checkpoint. A later source-language check also caught that the first test proved only a functional-count mismatch and had mapped “functional” to the all-skill total, contradicting the repository phrase “7 functional + 1 dispatcher.” The final diff read then exposed a legal trailing comma in the multiline YAML fixture that produced a duplicate separator. Cover both matching and stale semantics, and adversarial valid syntax, before accepting a parser interpretation. Evidence anchors: `src/cli/audit/check-factual-semantic-drift.ts` (search: `readGlossarySkillCountClaim`), `src/cli/redact-command.ts` (search: `attemptRedactCleanupStep`), `workflow/setup/01-system-overview.md` (search: `7 functional + 1 dispatcher`), and `test/integration/setup-install.test.ts` (search: `exact multiline flow-style hook key`).
 
 **Release recurrence (2026-08-09):** Hook notes gained a dated release heading before that release's manifest snapshot existed, so the full suite failed. Keep notes under `Unreleased` until release identity and its snapshot propagate together. Evidence: `CHANGELOG.md` (search: `## Unreleased`) and `test/unit/manifest.test.ts` (search: `missing manifest snapshots`).
 
