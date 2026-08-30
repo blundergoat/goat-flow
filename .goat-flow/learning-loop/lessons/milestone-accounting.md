@@ -1,6 +1,6 @@
 ---
 category: milestone-accounting
-last_reviewed: 2026-08-28
+last_reviewed: 2026-08-30
 ---
 
 **Scope:** Milestone state and effort accounting - activation order, where human gates belong, what a task section may contain, and why estimates counted from work units beat estimates written as durations. Multi-agent council coordination is [coordination.md](coordination.md).
@@ -70,8 +70,8 @@ last_reviewed: 2026-08-28
 **Decision changed:** Start a timestamped timing receipt before milestone work; never reconstruct Actual from planned task estimates.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
-**Incident count:** 10
-**Latest occurrence:** 2026-08-28
+**Incident count:** 11
+**Latest occurrence:** 2026-08-30
 
 **What happened:** A completed goat-debug planning milestone recorded `~225 min` as Actual by summing reconstructed product/proof/other effort buckets. The user challenged it because the elapsed work felt closer to minutes than hours. No start/end timestamps existed, so neither figure was measurable; replacing one precise-looking number with another would preserve the same error.
 
@@ -93,6 +93,8 @@ must be stopped before yielding control; once waiting and work share a span, dis
 anchor: `src/cli/plans-time.ts` (search: `receipt contains a discarded open span`).
 
 **Recurrence 2026-08-28:** M58 finalized a 2,529-second receipt before the plan-wide strict check. That check then found M37 and M58 simultaneously active, so the blocked-status correction, required learning update, and regenerated index fell outside the receipt. M58 now labels Actual incomplete instead of presenting the partial receipt as complete milestone time. Evidence anchor: `src/cli/plans-check-structure.ts` (search: `multiple active milestones`).
+
+**Recurrence 2026-08-30:** M74's proof segment stayed open across three backgrounded verification runs. Each time the command was launched the turn ended, so roughly twenty minutes of `test:full` and preflight wall-clock shared one span with the reading and reconciliation work around it. `plans time stop --discard-open` preserved the valid 3,038 recorded seconds and marked the receipt incomplete. A backgrounded command is a yield: close the segment before launching it, not after reading its result.
 
 **Root cause:** Planned effort, active wall-clock time, aggregate multi-agent effort, command duration, and human waiting were treated as one quantity. Task estimates were available, so they were mistakenly reused as observations.
 

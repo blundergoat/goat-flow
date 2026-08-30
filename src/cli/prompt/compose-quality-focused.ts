@@ -32,25 +32,27 @@ const FOCUSED_DENIED_GROUNDING_GUIDANCE =
  * Use first so later audit, score, and save sections all inherit the user's selected process, harness, or skills scope.
  *
  * @param qualityMode - selected focused mode; agent-setup is handled by the separate installation composer
+ * @param projectPath - project this request assesses; grounding commands name it explicitly rather than leaving the root to the runner's directory
  * @param agent - selected agent; absent means process and harness commands use aggregate audit scope
  * @returns reporting-only prompt body; never empty for a supported focused mode
  */
 function focusedQualityModePrompt(
   qualityMode: Exclude<QualityMode, "agent-setup">,
+  projectPath: string,
   agent?: AgentId,
 ): string {
   // Process reviewers need controlling-workspace commands and framework-wide evidence.
   if (qualityMode === "process") {
     // Selecting a specific agent adds its harness checks; an aggregate process launch keeps the broader audit command.
     const agentAuditCommand = agent
-      ? `node --import tsx src/cli/cli.ts audit . --agent ${agent} --harness --check-drift --format json`
-      : "node --import tsx src/cli/cli.ts audit . --check-drift --format json";
+      ? `node --import tsx src/cli/cli.ts audit ${projectPath} --agent ${agent} --harness --check-drift --format json`
+      : `node --import tsx src/cli/cli.ts audit ${projectPath} --check-drift --format json`;
     return [
       "REPORTING-ONLY ASSESSMENT MODE. Do not edit tracked files. Do not use /goat-review or any goat skill as the wrapper for this assessment; this prompt is the full assessment contract. You may read files, run read-only validation commands, and write normal gitignored reporting/local-state artifacts if the runner requires them. In this contract, gitignored logs, scratchpad notes, critique snapshots, quality reports, and task-local state do not count as writes; do not report them as read-only violations.",
       "",
       "Assess the goat-flow framework process in the controlling workspace: instruction files, .goat-flow/config.yaml, .goat-flow/architecture.md, .goat-flow/code-map.md, .goat-flow/skill-docs/, .goat-flow/skill-docs/playbooks/, workflow/setup/, workflow/manifest.json, installed skill mirrors, hooks, quality prompt modes, and validation scripts.",
       "",
-      `Grounding commands to run or explicitly mark skipped: git status --short --untracked-files=all; node --import tsx src/cli/cli.ts stats . --check; ${agentAuditCommand}; node --import tsx src/cli/cli.ts audit . --check-content --format json; bash scripts/preflight-checks.sh. Command output wins over prose. ${FOCUSED_DENIED_GROUNDING_GUIDANCE}`,
+      `Grounding commands to run or explicitly mark skipped: git status --short --untracked-files=all; node --import tsx src/cli/cli.ts stats ${projectPath} --check; ${agentAuditCommand}; node --import tsx src/cli/cli.ts audit ${projectPath} --check-content --format json; bash scripts/preflight-checks.sh. Command output wins over prose. ${FOCUSED_DENIED_GROUNDING_GUIDANCE}`,
       "",
       "Use INDEX-first retrieval for .goat-flow/learning-loop/{footguns,lessons,patterns,decisions}/INDEX.md. Do not broad-load those directories.",
       "",
@@ -75,14 +77,14 @@ function focusedQualityModePrompt(
 
   // Harness reviewers need selected-target probes plus the same honest fallback as process reviews.
   const agentAuditCommand = agent
-    ? `node --import tsx src/cli/cli.ts audit . --agent ${agent} --harness --format json`
-    : "node --import tsx src/cli/cli.ts audit . --harness --format json";
+    ? `node --import tsx src/cli/cli.ts audit ${projectPath} --agent ${agent} --harness --format json`
+    : `node --import tsx src/cli/cli.ts audit ${projectPath} --harness --format json`;
   return [
     "REPORTING-ONLY ASSESSMENT MODE. Do not edit tracked files. Do not use /goat-review or any goat skill as the wrapper for this assessment; this prompt is the full assessment contract. You may read files, run read-only validation commands, and write normal gitignored reporting/local-state artifacts if the runner requires them. In this contract, gitignored logs, scratchpad notes, critique snapshots, quality reports, and task-local state do not count as writes; do not report them as read-only violations.",
     "",
     "Assess whether the selected target project's agent harness is actually usable, not only structurally present. Focus on context loading, constraint safety, verification evidence, recovery paths, feedback-loop durability, and whether instructions distinguish the controlling goat-flow workspace from the selected target.",
     "",
-    `Grounding commands to run or explicitly mark skipped: git status --short --untracked-files=all; ${agentAuditCommand} from the controlling workspace when applicable; node --import tsx src/cli/cli.ts stats . --check when the selected target is a goat-flow installation. Command output wins over prose. ${FOCUSED_DENIED_GROUNDING_GUIDANCE}`,
+    `Grounding commands to run or explicitly mark skipped: git status --short --untracked-files=all; ${agentAuditCommand} run from the controlling workspace; node --import tsx src/cli/cli.ts stats ${projectPath} --check when the selected target is a goat-flow installation. Command output wins over prose. ${FOCUSED_DENIED_GROUNDING_GUIDANCE}`,
     "",
     "Read next: target instruction files, local agent settings/hooks, .goat-flow/config.yaml when present, .goat-flow/skill-docs/ and .goat-flow/skill-docs/playbooks/ when present, controlling-workspace harness code under src/cli/audit/harness/, and any dashboard terminal/runner context text that affects selected-target execution.",
     "",
@@ -176,7 +178,7 @@ export function composeFocusedQuality(
     `# GOAT Flow ${qualityModeHeading} Assessment - ${agentProfile.name}`,
   );
   lines.push("");
-  lines.push(focusedQualityModePrompt(qualityMode, agent));
+  lines.push(focusedQualityModePrompt(qualityMode, projectPath, agent));
   lines.push("");
   appendFocusedAuditSummary(lines, input, auditSummaryText);
   lines.push("");

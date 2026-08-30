@@ -40,7 +40,7 @@ Read `.goat-flow/skill-docs/skill-preamble.md`; on full-depth also read `.goat-f
 
 - **Source:** worktree | staged | unstaged | PR | branch diff | area | explicit path list
 - **Base/Head:** `<base-oid>` / `<head-or-tree-oid>` (n/a for area audit)
-- **Authority:** `<commit OIDs | index tree OID | diff hash + path hashes | n/a>`
+- **Authority:** `<commit OIDs | staged fingerprint | diff hash + path hashes | n/a>`
 - **Uncommitted included:** yes | no | n/a
 - **Size/signals:** diff `<files>`/`<changed-lines>`; area `<files>`/`<clusters>`; signals `<n>`
 - **Bundle:** `<path | persist-skipped: redactor-unavailable>` (redacted receipt); chunking no | proposed | accepted | skipped-by-user; coverage `<k>/<n>`

@@ -1,6 +1,6 @@
 ---
 category: plan-artifacts
-last_reviewed: 2026-08-29
+last_reviewed: 2026-08-30
 ---
 
 **Scope:** The grammar and validation of plan, milestone, and review artifacts - evidence fields, proof gates, machine-parsed dependency links, effort accounting, and when a validator runs relative to persistence. CLI process behaviour and output streams live in [cli.md](cli.md).
@@ -147,6 +147,28 @@ last_reviewed: 2026-08-29
 - **Recurrence 2026-08-28 (M57 headline):** Activation changed the derived likely value and range to 36 minutes but left `Effort estimate` at 34. Strict validation exited 1 with `forecast range likely (36 min) must equal the Effort estimate total (34 min)`; updating headline, split, and item estimates together restored exit 0 before implementation. Evidence anchor: `src/cli/plans-check.ts` (search: `must equal the Effort estimate total`).
 
 **Why it happens:** `src/cli/plans-check-summary.ts` (search: `renderRequiredReforecasts`) advises the new rates, but `src/cli/plans-effort.ts` (search: `forecast basis derives`) requires the range to be derived from the basis, `src/cli/plans-check.ts` (search: `must equal the Effort estimate total`) requires the `**Effort estimate:**` headline to equal the range's likely, and that headline is the sum of the per-item `(est: n min category)` entries whose grammar is integer-only (`plans-effort.ts`, search: `TASK_ESTIMATE_PATTERN`). With a likely rate under 1 min/unit, round(units × rate) is below the unit count and N positive integer items cannot sum to fewer than N minutes, so the strict shape is unsatisfiable rather than merely tedious. `.claude/skills/goat-plan/references/milestone-examples.md` (search: `Reforecast all estimates`) already says "all"; the partial edit ignored it.
+
+---
+
+## Footgun: An approved scope can name a file whose size budget cannot accept one more line
+
+**Status:** active | **Created:** 2026-08-30 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Measure every file a milestone names as the owner of added cases against its configured size gate during planning, and record the headroom, before that scope is approved alongside a no-new-files constraint.
+**Trigger phase:** SCOPE
+**Caught at:** VERIFY
+
+**Prevention:** When a Scope names an existing file as the owner of new cases, measure that file against each configured size gate before approving the plan and write the headroom into the milestone. Zero or unknown headroom means the plan must authorise a split up front or name a different owner. Measure by writing the base blob to a disposable ignored path and bisecting appended substantive lines; raw line count is not the metric the gate uses. Do not discover the conflict after the code is written, and never resolve it by suppressing or retuning the rule.
+
+**Symptoms:** A milestone implements exactly what its Scope names, then the required post-edit analyzer run reports a new error-severity size finding on that same named file. Both constraints are approved and cannot both be satisfied, so implementation stops for a human gate after the work already exists.
+
+**Why it happens:** Size gates count substantive lines, not raw lines, so a file can sit precisely on its threshold while looking well short of it. `.gruff-ts.yaml` (search: `size.file-length`) configures `threshold: 1000` at `severity: error`, and the rule reports the measured figure only once it fires - a compliant file returns no finding and therefore no headroom reading. Planning that names an owner file has no signal short of measuring it.
+
+**Evidence:** Measured 2026-08-30 at `cd676a8e069c72e4515eec0ce5c87d221e8b1a5c` while implementing 1.17.0 M74. `test/unit/quality-report-contract.test.ts` was 1,140 raw lines and reported no finding; the HEAD blob written to a disposable ignored path and bisected showed a single appended substantive line trips the rule, placing the file at exactly 1,000 substantive lines. M74's Scope named that file as the owner of three new RED cases while also stating "No new source or test file", so the milestone stopped and the user approved splitting the file into `test/unit/quality-report-contract-audit.test.ts`. Anchors: `.gruff-ts.yaml` (search: `size.file-length`) and `test/unit/quality-report-contract-audit.test.ts` (search: `quality report contract: audit evidence`).
+
+**Recurrence 2026-08-30 (same milestone, second trip):** After the first split, removing two dead type-level guards from the production helper exposed
+that the same file's audit fixture omitted a required field. Repairing the fixture cost 14 substantive lines and put the file back to 1,014. A file
+resolved to exactly its threshold has no margin for the follow-on edits its own fix requires, so plan a split to land clearly under the gate rather
+than just below it. Evidence anchor: `src/cli/prompt/compose-quality-common.ts` (search: `appendHookCoverageSummary`).
 
 ---
 

@@ -29,7 +29,7 @@ export interface QualityInput {
   auditUnavailableReason?: AuditUnavailableReason | undefined;
   priorReport?: QualityHistoryEntry | null;
   qualityMode?: QualityMode;
-  selectedProjectPath?: string;
+  selectedProjectPath?: string | undefined;
   runDate?: string;
   sharedFacts?: SharedFacts | null;
   /** Report persistence contract; defaults to the bounded stdin saver. */
@@ -229,6 +229,44 @@ function appendContentSummary(lines: string[], report: AuditReport): void {
 }
 
 /**
+ * Add effective hook coverage so a reviewer sees a broken safety chain that the top-level audit status does not report.
+ * The rows nest hook inside selected agent because one shared hook file never proves that every agent registered it, so a per-agent row is the
+ * smallest unit that can be true or false on its own.
+ *
+ * Hook coverage is its own contract: a project can pass every audit scope while a required hook is never invoked, so omitting this block lets a
+ * quality assessment certify a harness whose guardrails do not run. The wording matches the CLI and Markdown audit renderers so the same failure
+ * reads identically wherever a user meets it.
+ *
+ * @param lines - audit-summary line buffer; empty means the coverage block becomes its first content
+ * @param report - completed audit report; its hook chain is always present because the audit cache rejects an envelope without one
+ * @returns nothing; the coverage status and any ineffective surfaces are appended to the supplied buffer
+ */
+function appendHookCoverageSummary(lines: string[], report: AuditReport): void {
+  const hookCoverage = report.hookCoverage;
+  lines.push("");
+  lines.push(
+    `- **Effective Hook Coverage**: ${hookCoverage.status === "pass" ? "PASS" : "FAIL"} (${hookCoverage.summary.requiredIneffective} required surface(s) ineffective; offline status only)`,
+  );
+  // Each selected agent keeps its own row because a shared hook file never proves shared provider support.
+  for (const hook of hookCoverage.hooks) {
+    for (const agentId of hookCoverage.selectedAgents) {
+      const agentState = hook.agents[agentId];
+      lines.push(
+        `  - ${hook.id}/${agentId}: ${agentState.effectiveState.severity.toUpperCase()} - ${agentState.effectiveStateLabel}`,
+      );
+      // Only a broken link needs repair guidance; a working one would add noise to every passing report.
+      if (agentState.effectiveState.status !== "effective") {
+        lines.push(`    - ${agentState.repairSummary}`);
+        // Provider evidence gaps have no local fix, so no command is invented where the registry supplies none.
+        if (agentState.repairCommand !== null) {
+          lines.push(`    - Next: \`${agentState.repairCommand}\``);
+        }
+      }
+    }
+  }
+}
+
+/**
  * Render the audit summary block because reviewers need setup failures before qualitative judgment.
  *
  * @param report - completed audit report whose scope results and concern scores are summarised
@@ -237,6 +275,7 @@ function appendContentSummary(lines: string[], report: AuditReport): void {
 export function renderAuditSummary(report: AuditReport): string {
   const lines: string[] = [];
   appendScopeSummary(lines, report);
+  appendHookCoverageSummary(lines, report);
   appendConcernSummary(lines, report);
   appendDriftSummary(lines, report);
   appendContentSummary(lines, report);

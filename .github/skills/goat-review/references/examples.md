@@ -93,13 +93,13 @@ the current checkout is never a substitute for a PR, branch, or staged state.
 | Source | Diff authority | Pass 2 full-file authority | Drift check |
 |---|---|---|---|
 | PR or branch | Resolve base and head commit OIDs; use `git diff <base-oid>...<head-oid>` | Use `git show <head-oid>:<path>`; read deleted paths from `<base-oid>` | Object IDs are immutable; report if the named branch or PR now resolves elsewhere |
-| staged | Record the base commit OID and index tree OID from `git write-tree`; use `git diff <base-oid> <index-tree-oid>` | Use `git show <index-tree-oid>:<path>`; read deleted paths from the base OID | Re-run `git write-tree` before each pass and final output; a different tree stops |
-| unstaged | Record the index tree OID, transient `git diff` hash, changed-path hashes, and untracked membership | Read each live path with hash-before → read → hash-after; read deleted paths from the index tree | Recompute the index tree, diff hash, path hashes, and untracked membership before each pass and final output |
+| staged | Record the base commit OID and the staged fingerprint from `git ls-files -s` plus `git diff --cached --binary`; use `git diff --cached` | Use `git show :<path>`; read deleted paths from the base OID | Recompute both staged fingerprints before each pass and final output; any change stops |
+| unstaged | Record the staged fingerprint, transient `git diff` hash, changed-path hashes, and untracked membership | Read each live path with hash-before → read → hash-after; read deleted paths with `git show :<path>` | Recompute the staged fingerprint, diff hash, path hashes, and untracked membership before each pass and final output |
 | worktree | Record HEAD OID, transient `git diff HEAD` hash, changed-path hashes, and untracked membership; include approved untracked paths with transient `git diff --no-index -- /dev/null <path>` | Read each live tracked or approved untracked path with hash-before → read → hash-after; read deleted paths from HEAD | Recompute HEAD, diff hash, path hashes, and untracked membership before each pass and final output |
 | explicit paths or area | Declare one of the authorities above for every path; an unqualified mixed list is invalid | Use the declared authority per path | Any authority or membership change stops |
 
 Use `git hash-object --no-filters <path>` without `-w` for transient dirty-path hashes; never write raw
-unstaged or untracked content into Git objects. For committed and staged authorities, consumer search
+unstaged or untracked content into Git objects, and never write a tree to name staged state. For committed and staged authorities, consumer search
 uses revision-qualified `git grep` plus `git show`. If symbol-aware or AST tooling cannot query that
 authority, do not run it against the checkout; disclose `callsite-completeness-grep-only`.
 

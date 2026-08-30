@@ -257,6 +257,74 @@ describe("learning entry skeletons", () => {
   });
 });
 
+/**
+ * Assert a rendered skeleton lists its fields in the order the learning-loop READMEs mandate.
+ *
+ * The READMEs keep the metadata block under the heading and then lead with the rule, so a reader gets the decision before the incident narrative.
+ *
+ * @param entryLabel - entry type named in assertion failures
+ * @param skeleton - rendered Markdown skeleton
+ * @param orderedFields - field labels in their required order
+ */
+function assertFieldOrder(
+  entryLabel: string,
+  skeleton: string,
+  orderedFields: readonly string[],
+): void {
+  const offsets = orderedFields.map((field) => {
+    const offset = skeleton.indexOf(field);
+    assert.ok(offset >= 0, `${entryLabel}: skeleton omits ${field}`);
+    return offset;
+  });
+  for (let index = 1; index < offsets.length; index += 1) {
+    assert.ok(
+      offsets[index - 1]! < offsets[index]!,
+      `${entryLabel}: ${orderedFields[index - 1]} must precede ${orderedFields[index]}`,
+    );
+  }
+}
+
+describe("learning entry rule-first order", () => {
+  it("leads with Prevention after metadata and keeps supplied evidence last", () => {
+    const citation = [
+      { path: "src/evidence.ts", literal: "durableEvidenceMarker" },
+    ];
+
+    const footgun = renderLearnEntrySkeleton(
+      "footgun",
+      "Hook drift",
+      "2026-08-24",
+      citation,
+      "OBSERVED",
+    );
+    const footgunOrder = [
+      "**Status:**",
+      "**Decision changed:**",
+      "**Prevention:**",
+      "**Symptoms:**",
+      "src/evidence.ts",
+    ];
+    assertFieldOrder("footgun", footgun, footgunOrder);
+
+    const lesson = renderLearnEntrySkeleton(
+      "lesson",
+      "Check proof",
+      "2026-08-24",
+      citation,
+      null,
+    );
+    const lessonOrder = [
+      "**Created:**",
+      "**Decision changed:**",
+      "**Prevention:**",
+      "**What happened:**",
+      "**Root cause:**",
+      "src/evidence.ts",
+    ];
+    assertFieldOrder("lesson", lesson, lessonOrder);
+  });
+});
+
 describe("runLearnScaffold", () => {
   it("writes one new bucket with canonical frontmatter and fresh generated indexes", () => {
     const projectRoot = createLearningProject();

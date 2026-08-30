@@ -651,6 +651,27 @@ describe("step 06 references audit", () => {
 // ---------------------------------------------------------------------------
 // Setup truth and evidence contracts
 // ---------------------------------------------------------------------------
+/**
+ * Assert no heading in a set is a prefix of another.
+ *
+ * A reader scanning for "File ownership" cannot tell which section governs the path they are holding when a longer heading starts with the same
+ * words. Prefix collisions are the failure this guards, so the message names both sides.
+ *
+ * @param headings - section headings gathered from one document
+ */
+function assertNoShadowedHeading(headings: readonly string[]): void {
+  for (const heading of headings) {
+    const shadowedBy = headings.filter(
+      (other) => other !== heading && other.startsWith(heading),
+    );
+    assert.deepEqual(
+      shadowedBy,
+      [],
+      `"${heading}" is shadowed by ${shadowedBy.join(", ")}`,
+    );
+  }
+}
+
 describe("setup truth and evidence contracts", () => {
   const contentAuditCommand =
     "goat-flow audit . --agent {agent} --check-content";
@@ -690,6 +711,41 @@ describe("setup truth and evidence contracts", () => {
       "generated setup gates must include content lint",
     );
     assert.doesNotMatch(setupPrompt, /both required setup gates|both audits/iu);
+  });
+
+  it("separates manifest ownership policy from the setup write set", () => {
+    const overview = readFileSync(
+      resolve(PROJECT_ROOT, "workflow/setup/01-system-overview.md"),
+      "utf-8",
+    );
+    const ownershipHeadings = [
+      ...overview.matchAll(/^## (.*ownership.*)$/gimu),
+    ].map((match) => match[1]!);
+
+    assertNoShadowedHeading(ownershipHeadings);
+
+    assert.ok(
+      overview.includes("## Setup write set"),
+      "Step 01 must name the conditional setup write set separately from manifest policy",
+    );
+    const writeSet = overview.slice(overview.indexOf("## Setup write set"));
+    // Template update policy has one owner, so the write set points at the manifest rather than restating it.
+    assert.match(
+      writeSet,
+      /workflow\/manifest\.json/u,
+      "the setup write set must defer template update policy to the manifest",
+    );
+    // Destinations without a package template are real and enumerated elsewhere, so claiming the manifest covers every file is false.
+    assert.doesNotMatch(
+      overview,
+      /manifest\.json` gives every required or optional file/u,
+      "the manifest owns exact-copy templates, not every destination install writes",
+    );
+    assert.match(
+      overview,
+      /goat-flow install \. --dry-run/u,
+      "Step 01 must name the preview that enumerates non-template destinations",
+    );
   });
 
   it("routes content-audit failures to their reported findings", () => {

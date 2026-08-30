@@ -23,7 +23,7 @@ If the version is older, there is no maintained in-place upgrade guide. Refresh 
 
 ## File ownership during install and setup
 
-`workflow/manifest.json` gives every required or optional file one update policy. Run `goat-flow manifest` for class totals or `goat-flow manifest --format json` for the exact path records.
+`workflow/manifest.json` gives every exact-copy template file one update policy. Run `goat-flow manifest` for class totals or `goat-flow manifest --format json` for the exact path records.
 
 - **system-owned:** the installer replaces the file from its declared workflow source.
 - **user-owned:** the installer seeds the file when missing and otherwise preserves local content; `--force` is the explicit override.
@@ -31,7 +31,7 @@ If the version is older, there is no maintained in-place upgrade guide. Refresh 
 - **deprecated:** audit reports the retired path and its supported cleanup command before removal.
 - **external:** goat-flow may verify the path but never writes it.
 
-If a destination has no ownership record, stop instead of guessing. Never treat a directory as one ownership unit: `.goat-flow/` intentionally mixes canonical templates, user knowledge, generated indexes, and gitignored local state.
+Not every destination has a template. User-owned files the installer seeds or migrates in place, and generated files the CLI rewrites from project state, carry no manifest record; `goat-flow install . --dry-run` previews that second half of the write set. If a destination appears in neither source, stop instead of guessing. Never treat a directory as one ownership unit: `.goat-flow/` intentionally mixes canonical templates, user knowledge, generated indexes, and gitignored local state.
 
 ## What goat-flow is
 
@@ -51,8 +51,10 @@ Create `.goat-flow/logs/sessions/` if it doesn't exist, then use one shared loca
 - After each numbered step, append one progress marker line (for example: `Step 03 complete: 8 skills installed`).
 - Step 06 finalises the same local continuity file with the audit result, file manifest, time spent, and tokens if available.
 
-## File ownership
+## Setup write set
 
 Setup creates/edits files in `.goat-flow/`, the agent's instruction file (CLAUDE.md / AGENTS.md / `.github/copilot-instructions.md`), and the agent's own directories (see agent config file for "Owns" list - skills, hooks, settings). Everything else in the project is hands-off - do not modify source code, tests, CI, or other agents' files.
+
+This write set is conditional: it depends on the selected agent and on what is already installed. It does not decide whether a managed file is replaced or preserved. Update policy has two sources: `workflow/manifest.json` for exact-copy templates, and the `goat-flow install . --dry-run` preview for the user-owned and generated destinations that have no template. Read both before writing any managed path.
 
 NEXT: proceed to `02-instruction-file.md`

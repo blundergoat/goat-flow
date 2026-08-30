@@ -259,10 +259,11 @@ function handleQualityRequest(
       url.searchParams.get("path"),
       "project-read",
     );
-    const selectedProjectPath = ctx.validatedPath(
-      url.searchParams.get("target"),
-      "project-read",
-    );
+    const requestedTarget = url.searchParams.get("target");
+    // Validating an absent target would substitute the server's own project, presenting a target the caller never selected.
+    const selectedProjectPath = requestedTarget
+      ? ctx.validatedPath(requestedTarget, "project-read")
+      : undefined;
     const fs = createFS(projectPath);
     const sharedFacts = extractSharedFacts(fs, loadConfig(projectPath, fs));
     const audit = getOrRunQualityAudit(ctx, projectPath, params.agent, {

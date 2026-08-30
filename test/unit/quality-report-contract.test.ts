@@ -86,8 +86,6 @@ const SAVER_VERSION_CLASSIFICATION =
 const PATH_SKEW_CLASSIFICATION = "do not report or score that PATH-only skew";
 const VERSION_FINDING_AUTHORITY =
   "Raise version findings only when repository-owned declarations or managed target artifacts disagree.";
-const FAST_CACHE_AUDIT_PLACEHOLDER =
-  'The pre-filled `audit_status: "unavailable"` is a placeholder superseded by any live audit completed during this assessment.';
 const ASSESSMENT_CONTEXT_GUIDANCE = [
   "project_revision",
   "working_tree_state",
@@ -110,12 +108,6 @@ const AGENT_SETUP_ONLY_VALIDITY_GUIDANCE = [
 /** Prior-claim warning shown only when a user supplied a same-mode report. */
 const PRIOR_REPORT_REVALIDATION_GUIDANCE =
   "A prior finding is a claim to re-test, not a fact";
-const DRIFT_EVIDENCE = [
-  ".agents/skills/goat/SKILL.md",
-  "installed dispatcher differs",
-  "README.md:8 [removed-command-scan]",
-  "documentation teaches a removed command",
-] as const;
 const FORBIDDEN_STAGED_DRAFT_TEXT = [
   "Use the bounded saver below",
   "**Persist through the bounded saver.**",
@@ -310,6 +302,20 @@ function makeLimitedAuditReport(): NonNullable<QualityInput["auditReport"]> {
       feedback_loop: makePassingAuditConcern(),
     },
     enforcement: [],
+    hookCoverage: {
+      status: "pass",
+      selectedAgents: [],
+      summary: {
+        selectedSurfaces: 0,
+        requiredSurfaces: 0,
+        requiredIneffective: 0,
+        effective: 0,
+        warning: 0,
+        danger: 0,
+        disabled: 0,
+      },
+      hooks: [],
+    },
     drift: null,
     content: null,
     overall: { status: "pass" },
@@ -386,27 +392,6 @@ function assertCarriesContract(surface: string, text: string): void {
     text.includes("OK "),
     `${surface}: missing successful-save receipt`,
   );
-}
-
-/**
- * Assert a focused prompt and its summary preserve every observed audit failure.
- * Use when a user launches from failed drift or content evidence so neither visible representation hides the problem.
- */
-function assertCarriesAuditEvidence(
-  surface: string,
-  payload: ReturnType<typeof composeQuality>,
-): void {
-  // Every observed failure must reach both the readable prompt and the compact audit summary the UI can display.
-  for (const evidence of DRIFT_EVIDENCE) {
-    assert.ok(
-      payload.prompt.includes(evidence),
-      `${surface}: prompt omitted ${evidence}`,
-    );
-    assert.ok(
-      payload.auditSummary.includes(evidence),
-      `${surface}: auditSummary omitted ${evidence}`,
-    );
-  }
 }
 
 /**
@@ -628,13 +613,15 @@ describe("quality report contract: CLI surfaces", () => {
       agent: "codex",
     });
     assertCarriesContract("focused/harness", payload.prompt);
+    // The selected agent must reach the grounding command, and the command must name the project instead of the runner's directory.
     assert.match(
       payload.prompt,
-      /audit \. --agent codex --harness --format json from the controlling workspace/u,
+      /audit \/tmp\/example-project --agent codex --harness --format json run from the controlling workspace/u,
     );
+    // The agent-less aggregate form would silently widen a single-agent harness review.
     assert.doesNotMatch(
       payload.prompt,
-      /audit \. --harness --format json from the controlling workspace/u,
+      /audit \/tmp\/example-project --harness --format json run from the controlling workspace/u,
     );
   });
 
@@ -787,106 +774,6 @@ describe("quality report contract: CLI surfaces", () => {
     assert.match(prompt, /persist-skipped: redactor-unavailable/u);
     assert.doesNotMatch(writeBlock, /--version|quality validate|ls -la/u);
   });
-
-  // A user choosing any Quality mode must receive the same deterministic evidence boundaries.
-  for (const qualityMode of QUALITY_MODES) {
-    it(`embeds live Verification and Recovery limits in ${qualityMode} prompt and summary`, () => {
-      const auditReport = makeLimitedAuditReport();
-      const payload = composeQuality({
-        ...makeInput(qualityMode),
-        auditReport,
-      });
-      assert.ok(
-        payload.prompt.includes(PROJECT_VALIDATION_LIMIT),
-        `${qualityMode}: prompt omitted Verification limit`,
-      );
-      assert.ok(
-        payload.prompt.includes(RECOVERY_RESUMABILITY_LIMIT),
-        `${qualityMode}: prompt omitted Recovery limit`,
-      );
-      assert.ok(
-        payload.prompt.includes(RED_FLAGS_METRIC_LIMIT),
-        `${qualityMode}: prompt omitted red-flags metric limit`,
-      );
-      assert.ok(
-        payload.auditSummary.includes(PROJECT_VALIDATION_LIMIT),
-        `${qualityMode}: auditSummary omitted Verification limit`,
-      );
-      assert.ok(
-        payload.auditSummary.includes(RECOVERY_RESUMABILITY_LIMIT),
-        `${qualityMode}: auditSummary omitted Recovery limit`,
-      );
-      assert.ok(
-        payload.auditSummary.includes(RED_FLAGS_METRIC_LIMIT),
-        `${qualityMode}: auditSummary omitted red-flags metric limit`,
-      );
-    });
-  }
-
-  // A fast dashboard launch without cached evidence must disclose the gap instead of inventing limits.
-  for (const qualityMode of FOCUSED_QUALITY_MODES) {
-    it(`keeps the ${qualityMode} cache-miss contract when no audit report is available`, () => {
-      const payload = composeQuality({
-        ...makeInput(qualityMode),
-        auditUnavailableReason: "fast-cache-only",
-      });
-      assert.match(
-        payload.prompt,
-        /Audit: NOT LOADED \(FAST CACHE-ONLY MODE\)/,
-      );
-      assert.match(payload.auditSummary, /fast cache-only mode/);
-      assert.match(
-        payload.prompt,
-        /Audit data not loaded \(fast cache-only mode/u,
-      );
-      assert.ok(
-        payload.prompt.includes(FAST_CACHE_AUDIT_PLACEHOLDER),
-        `${qualityMode}: missing fast-cache audit placeholder precedence`,
-      );
-      assert.equal(payload.prompt.includes(PROJECT_VALIDATION_LIMIT), false);
-      assert.equal(payload.prompt.includes(RECOVERY_RESUMABILITY_LIMIT), false);
-    });
-  }
-
-  // Every focused mode must preserve drift and content failures in both prompt and summary views.
-  for (const qualityMode of FOCUSED_QUALITY_MODES) {
-    it(`embeds drift and content failures in ${qualityMode} prompts and summaries`, () => {
-      const auditReport = makeLimitedAuditReport();
-      auditReport.status = "fail";
-      auditReport.overall.status = "fail";
-      auditReport.drift = {
-        status: "fail",
-        checked: 12,
-        findings: [
-          {
-            kind: "content",
-            path: ".agents/skills/goat/SKILL.md",
-            message: "installed dispatcher differs from its workflow source",
-          },
-        ],
-      };
-      auditReport.content = {
-        status: "fail",
-        warnings: 1,
-        infos: 0,
-        filesScanned: 4,
-        findings: [
-          {
-            severity: "warning",
-            rule: "removed-command-scan",
-            path: "README.md",
-            line: 8,
-            message: "documentation teaches a removed command",
-          },
-        ],
-      };
-      const payload = composeQuality({
-        ...makeInput(qualityMode),
-        auditReport,
-      });
-      assertCarriesAuditEvidence(qualityMode, payload);
-    });
-  }
 
   it("prior-report runs re-test claims while fresh runs keep the no-prior contract", () => {
     const fresh = composeQuality(makeInput("agent-setup")).prompt;

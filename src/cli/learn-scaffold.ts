@@ -252,6 +252,9 @@ function renderEvidenceLine(
  * Build a schema-only entry that contains no invented incident or recommendation prose.
  * Use for both dry-run preview and the exact bytes inserted into the selected bucket.
  *
+ * Field order follows the learning-loop READMEs (search: `Then lead with`): the metadata block sits under the heading, the rule comes next, and the
+ * incident narrative and its evidence follow. A reader who stops after two lines still leaves with the decision the entry exists to change.
+ *
  * @param entryType - developer-selected footgun, lesson, or pattern grammar
  * @param title - validated one-line heading text; never empty
  * @param createdDate - UTC creation date in YYYY-MM-DD form
@@ -277,9 +280,9 @@ export function renderLearnEntrySkeleton(
       `**Status:** active | **Created:** ${createdDate} | **Evidence:** ${evidenceKind ?? ""}`,
       "**Decision changed:**",
       "",
-      "**Symptoms:**",
-      "",
       "**Prevention:**",
+      "",
+      "**Symptoms:**",
     ];
   } else if (entryType === "lesson") {
     // Lessons keep status implicit as active and expose the fields an author fills after describing a real behavioural mistake.
@@ -289,11 +292,11 @@ export function renderLearnEntrySkeleton(
       `**Created:** ${createdDate}`,
       "**Decision changed:**",
       "",
+      "**Prevention:**",
+      "",
       "**What happened:**",
       "",
       "**Root cause:**",
-      "",
-      "**Prevention:**",
     ];
   } else {
     // Patterns start with only the context and reusable approach a future developer needs to decide whether to apply them.

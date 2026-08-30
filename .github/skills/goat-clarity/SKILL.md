@@ -21,9 +21,9 @@ Accept one target form:
 Listed paths form one inventory; a PR URL or `uncommitted files` cannot be combined with paths. Ask
 for a target when none is supplied; refuse an ambiguous or combined selector.
 
-Human documentation is read-only until write authority is resolved, in this order: the
-`documentation` keyword before the target, or an explicit update/edit/fix instruction, grants it; an
-explicit report/review/check request withholds it; otherwise, when the inventory holds eligible
+Human documentation is read-only until write authority resolves by first match: an explicit
+update/edit/fix instruction grants it; an explicit report/review/check request withholds it; the
+`documentation` keyword before the target grants it; otherwise, when the inventory holds eligible
 human-documentation units, ask one question before the snapshot - "Report only, or update the
 documentation?" - defaulting to report only when unanswered, including sub-agent mode. Without write
 authority, documentation is diagnosed and reported, never edited.

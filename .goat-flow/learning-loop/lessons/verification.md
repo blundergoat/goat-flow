@@ -1,9 +1,26 @@
 ---
 category: verification
-last_reviewed: 2026-08-27
+last_reviewed: 2026-08-30
 ---
 
 **Scope:** General verification discipline - what counts as proof, reading before claiming, and checking the thing you actually changed. Siblings own the narrower surfaces: [verification-validators.md](verification-validators.md) for getting a checker right, [verification-scanners.md](verification-scanners.md) for proving a guard guards, [verification-testing.md](verification-testing.md) for what a test must establish, [verification-preflight.md](verification-preflight.md) and [verification-formatting.md](verification-formatting.md) for repo-wide gates, and [verification-gruff.md](verification-gruff.md) for the analyzer.
+
+## Lesson: A plan's named defect is a claim to verify, not a finding to implement
+
+**Status:** active | **Created:** 2026-08-30
+**Decision changed:** Reproduce a planned defect against live code before building the fix or the abstraction it implies, even when the milestone, a critique, and a runtime spot-check all assert it.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Treat every defect a plan names as a RED to reproduce first. When the claim is about which of two inputs a component uses, read the caller that supplies them before designing anything; parameter names do not carry the contract. If the RED passes against unchanged code, stop and record a refutation instead of adjusting the test until it fails. Keep the passing case as a control, and re-derive what the real defect is from the same evidence rather than abandoning the investigation.
+
+**What happened:** 1.17.0 M74 planned a fix for `handleQualityRequest` resolving audit, prior-report, and event ownership against the wrong project for target-owned quality modes. The milestone asserted it, an accepted critique listed it, and I wrote a failing integration test plus a `qualityModeOwningProjectPath` helper on that basis. Reading the caller then showed the dashboard client already resolves mode ownership in `src/dashboard/dashboard-setup-quality.ts` (search: `function dashboardQualityReportProjectPath`) and sends the owning project as `path`, so the route was correct and the helper re-resolved an already-resolved value.
+
+**Root cause:** The request parameters are named `path` and `target`, which read as "controller" and "selected target". That reading was inferred from the names instead of from the client that populates them, and the plan's own wording reinforced it.
+
+**Evidence:** The replacement control case `keeps mode evidence under the requested project when a target differs` passed against unchanged route code. A real defect surfaced from the same reading: `ctx.validatedPath` substitutes the server default for an empty value, so a request sending no `target` still rendered a selected target. Anchors: `src/cli/server/dashboard-quality-routes.ts` (search: `const requestedTarget`) and `test/integration/dashboard-server-dashboard-api-quality.test.ts` (search: `names a selected target only when the request sent one`).
+
+---
 
 ## Lesson: Read a validator's pattern before reshaping text to satisfy it
 

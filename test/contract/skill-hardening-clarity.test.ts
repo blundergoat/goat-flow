@@ -46,6 +46,43 @@ function assertIncludesAll(requiredPhrases: readonly string[]): void {
   assertGuidanceIncludesAll(clarityGuidance, SKILL_PATH, requiredPhrases);
 }
 
+/**
+ * Assert the four documentation write-authority rules appear in first-match order.
+ *
+ * First match wins, so a request that says "report" must never be overridden by the later `documentation` keyword. Order is the whole contract here:
+ * every rule can be present and the precedence still be wrong.
+ *
+ * @param sourcePath - repository-relative skill path named in assertion failures
+ * @param guidance - whitespace-normalised lowercase skill text
+ */
+function assertRulePrecedence(sourcePath: string, guidance: string): void {
+  const rules: readonly (readonly [string, string])[] = [
+    ["explicit write intent", "explicit update/edit/fix instruction grants it"],
+    [
+      "explicit report intent",
+      "explicit report/review/check request withholds it",
+    ],
+    [
+      "documentation keyword",
+      "`documentation` keyword before the target grants it",
+    ],
+    ["unanswered fallback", "defaulting to report only when unanswered"],
+  ];
+  const offsets = rules.map(([label, phrase]) => {
+    const offset = guidance.indexOf(phrase);
+    assert.ok(offset >= 0, `${sourcePath}: missing the ${label} rule`);
+    return [label, offset] as const;
+  });
+  for (let index = 1; index < offsets.length; index += 1) {
+    const [previousLabel, previousOffset] = offsets[index - 1]!;
+    const [label, offset] = offsets[index]!;
+    assert.ok(
+      previousOffset < offset,
+      `${sourcePath}: ${previousLabel} must be resolved before ${label}`,
+    );
+  }
+}
+
 describe("skill hardening contracts: goat-clarity", () => {
   it("runs visible learning-loop retrieval before freezing write authority", () => {
     assertForEachTarget(installedSkillPaths("goat-clarity"), (skillPath) => {
@@ -74,13 +111,35 @@ describe("skill hardening contracts: goat-clarity", () => {
       "cannot be combined with paths",
       "ask for a target when none is supplied",
       "refuse an ambiguous or combined selector",
-      "human documentation is read-only until write authority is resolved",
-      "explicit update/edit/fix instruction, grants it",
+      "human documentation is read-only until write authority resolves by first match",
+      "explicit update/edit/fix instruction grants it",
       "explicit report/review/check request withholds it",
       "Report only, or update the documentation?",
       "defaulting to report only when unanswered, including sub-agent mode",
       "without write authority, documentation is diagnosed and reported, never edited",
     ]);
+  });
+
+  it("resolves documentation write authority by first match, intent before keyword", () => {
+    assertForEachTarget(
+      [SKILL_PATH, ...installedSkillPaths("goat-clarity")],
+      (skillPath) => {
+        const guidance = readProjectFile(skillPath)
+          .replace(/\s+/gu, " ")
+          .toLowerCase();
+        assertRulePrecedence(skillPath, guidance);
+        assert.ok(
+          guidance.includes("write authority resolves by first match"),
+          `${skillPath}: authority resolution does not declare first-match precedence`,
+        );
+        // The keyword sharing the write-granting clause is what let documentation wording outrank explicit report intent.
+        assert.equal(
+          guidance.includes("keyword before the target, or an explicit"),
+          false,
+          `${skillPath}: the documentation keyword still shares the first grant clause`,
+        );
+      },
+    );
   });
 
   it("classifies every selected unit before freezing write authority", () => {

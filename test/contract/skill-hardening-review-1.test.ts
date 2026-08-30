@@ -7,6 +7,17 @@
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join, relative } from "node:path";
 import {
   assertForEachTarget,
   installedSkillPaths,
@@ -14,6 +25,68 @@ import {
   readMarkdownSection,
   readProjectFile,
 } from "./skill-hardening.helpers.js";
+
+/**
+ * Run one git command inside a fixture repository.
+ *
+ * Spawns a real git subprocess, so it writes whatever the supplied arguments write: callers here create repositories, commits, worktrees, and index
+ * entries. Every write lands inside the caller's fixture directory and never reaches the repository under review.
+ *
+ * @param cwd - repository or linked worktree the command runs in
+ * @param args - git arguments after the implicit `-C <cwd>`
+ * @returns the command's stdout
+ */
+function git(cwd: string, ...args: string[]): string {
+  return execFileSync("git", ["-C", cwd, ...args], { encoding: "utf-8" });
+}
+
+/**
+ * Capture everything a report-only review promises not to change: the object database, refs, the staged index, and the worktree.
+ *
+ * The index is fingerprinted by its semantic contents rather than its raw bytes, because git rewrites the index stat cache on ordinary reads. Those
+ * bytes change without any staged content changing, so asserting on them would report noise instead of a real mutation.
+ *
+ * @param worktreePath - linked worktree whose state is measured
+ * @returns one fingerprint per protected surface
+ */
+function fingerprintGitState(worktreePath: string): Record<string, string> {
+  const commonDir = git(worktreePath, "rev-parse", "--git-common-dir").trim();
+  const objectsRoot = join(
+    commonDir.startsWith("/") ? commonDir : join(worktreePath, commonDir),
+    "objects",
+  );
+  const objectEntries: string[] = [];
+  // Loose objects live in two-character fan-out directories, so the count is only meaningful after descending into every one of them.
+  const walkObjects = (directory: string): void => {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const fullPath = join(directory, entry.name);
+      if (entry.isDirectory()) {
+        walkObjects(fullPath);
+        continue;
+      }
+      objectEntries.push(
+        `${relative(objectsRoot, fullPath)}:${statSync(fullPath).size}`,
+      );
+    }
+  };
+  walkObjects(objectsRoot);
+  objectEntries.sort();
+  return {
+    objects: objectEntries.join("\n"),
+    refs: git(
+      worktreePath,
+      "for-each-ref",
+      "--format=%(refname) %(objectname)",
+    ),
+    index: git(worktreePath, "ls-files", "--stage"),
+    worktree: git(
+      worktreePath,
+      "status",
+      "--porcelain=v1",
+      "--untracked-files=all",
+    ),
+  };
+}
 
 describe("skill hardening contracts: goat-review (1/3)", () => {
   it("routes GOAT Flow quality assessments outside goat-review", () => {
@@ -35,6 +108,116 @@ describe("skill hardening contracts: goat-review (1/3)", () => {
         skillPath,
       );
     });
+  });
+
+  it("keeps staged authority read-only across every review surface", () => {
+    assertForEachTarget(
+      installedSkillReferencePaths("goat-review", "references/examples.md"),
+      (referencePath) => {
+        const guidance = readProjectFile(referencePath);
+        // `git write-tree` writes a tree object into the repository a report-only review promised not to change.
+        assert.equal(
+          guidance.includes("git write-tree"),
+          false,
+          `${referencePath}: staged authority still writes a tree object`,
+        );
+        for (const required of [
+          "git ls-files -s",
+          "git diff --cached --binary",
+          "git show :<path>",
+        ]) {
+          assert.ok(
+            guidance.includes(required),
+            `${referencePath}: staged authority is missing ${required}`,
+          );
+        }
+      },
+    );
+    assertForEachTarget(installedSkillPaths("goat-review"), (skillPath) => {
+      // The snapshot must not publish an identity that only exists because the review wrote it.
+      assert.equal(
+        readProjectFile(skillPath).includes("index tree OID"),
+        false,
+        `${skillPath}: the scope snapshot still exposes a written index tree OID`,
+      );
+    });
+  });
+
+  // Creates a throwaway repository, commit, and linked worktree under the OS temp directory, writes two fixture files, stages one already-existing
+  // blob, and deletes the whole tree afterwards. Every write stays inside that temp directory, so the repository under review is never touched.
+  it("reads staged authority without writing a Git object", () => {
+    const fixtureRoot = mkdtempSync(join(tmpdir(), "goat-review-staged-"));
+    const originPath = join(fixtureRoot, "origin");
+    const worktreePath = join(fixtureRoot, "linked");
+    try {
+      mkdirSync(originPath);
+      git(originPath, "init", "--quiet");
+      git(originPath, "config", "user.email", "probe@example.test");
+      git(originPath, "config", "user.name", "Staged Authority Probe");
+      writeFileSync(join(originPath, "alpha.txt"), "alpha contents\n");
+      writeFileSync(join(originPath, "beta.txt"), "beta contents\n");
+      git(originPath, "add", "alpha.txt", "beta.txt");
+      git(originPath, "commit", "--quiet", "-m", "probe base");
+      // A linked worktree owns its own index, so staging here can never replace the index a user is working in.
+      git(
+        originPath,
+        "worktree",
+        "add",
+        "--detach",
+        "--quiet",
+        worktreePath,
+        "HEAD",
+      );
+
+      // Stage a blob that already exists, so the staging step itself adds nothing to the object database.
+      const existingBlobOid = git(
+        worktreePath,
+        "rev-parse",
+        "HEAD:beta.txt",
+      ).trim();
+      git(
+        worktreePath,
+        "update-index",
+        "--cacheinfo",
+        `100644,${existingBlobOid},alpha.txt`,
+      );
+
+      const before = fingerprintGitState(worktreePath);
+
+      git(worktreePath, "ls-files", "-s");
+      git(worktreePath, "diff", "--cached", "--binary");
+      const stagedContent = git(worktreePath, "show", ":alpha.txt");
+      // The read must return staged content, otherwise the probe proves nothing about staged authority.
+      assert.equal(
+        stagedContent,
+        "beta contents\n",
+        "staged read did not return the staged blob",
+      );
+
+      const after = fingerprintGitState(worktreePath);
+      assert.equal(
+        after.objects,
+        before.objects,
+        "staged authority reads wrote into the object database",
+      );
+      assert.equal(
+        after.refs,
+        before.refs,
+        "staged authority reads moved a ref",
+      );
+      assert.equal(
+        after.index,
+        before.index,
+        "staged authority reads changed the staged index",
+      );
+      assert.equal(
+        after.worktree,
+        before.worktree,
+        "staged authority reads changed the worktree",
+      );
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
   });
 
   it("keeps area audits independent of diff-only metadata and verdicts", () => {
@@ -371,12 +554,10 @@ describe("skill hardening contracts: goat-review (1/3)", () => {
           referencePath,
         );
         assert.match(reference, /`git show <head-oid>:<path>`/u, referencePath);
-        assert.match(reference, /`git write-tree`/u, referencePath);
-        assert.match(
-          reference,
-          /`git show <index-tree-oid>:<path>`/u,
-          referencePath,
-        );
+        // Staged authority names non-writing commands; a tree write would mutate the repository under review.
+        assert.match(reference, /`git ls-files -s`/u, referencePath);
+        assert.match(reference, /`git diff --cached --binary`/u, referencePath);
+        assert.match(reference, /`git show :<path>`/u, referencePath);
         assert.match(
           reference,
           /hash-before → read → hash-after/u,

@@ -25,9 +25,9 @@ last_reviewed: YYYY-MM-DD
 **Created:** YYYY-MM-DD
 **Decision changed:** [what future work does differently]
 **Trigger phase:** READ | SCOPE | ACT | VERIFY (optional)
+**Prevention:** [rule to prevent recurrence]
 **What happened:** [description]
 **Evidence:** `file` + semantic anchor (function name, unique string, or `(search: "pattern")`) - [what was found] (required for code-specific lessons; omit for behavioral lessons)
-**Prevention:** [rule to prevent recurrence]
 ```
 
 ```markdown
@@ -42,10 +42,10 @@ last_reviewed: YYYY-MM-DD
 **Decision changed:** [what future work does differently]
 **Trigger phase:** READ | SCOPE | ACT | VERIFY (optional)
 **hallucination-risk:** high
+**Prevention:** [rule to prevent recurrence]
 **Symptoms:** [what breaks]
 **Why it happens:** [root cause]
 **Evidence:** `file` + semantic anchor (function name, unique string, or `(search: "pattern")`) - [what was found]
-**Prevention:** [rule to prevent recurrence]
 ```
 
 Evidence labels: `ACTUAL_MEASURED` = reproduced/measured locally; `OBSERVED` = direct code/config evidence; `EXTERNAL_REFERENCE` = cited real external incident with local applicability. Never use hypotheticals.
