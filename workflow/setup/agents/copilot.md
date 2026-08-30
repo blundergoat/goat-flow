@@ -3,7 +3,6 @@
 > Canonical machine-readable source for these paths: `workflow/manifest.json`. If this doc drifts, the manifest-backed registry wins.
 
 ## Truth Order
-
 1. User's explicit setup instruction for this session
 2. This agent setup guide
 3. `workflow/manifest.json` for machine-readable paths
@@ -13,7 +12,6 @@
 The Never tier and accepted architecture/ADR safety constraints are non-overridable. A user request may authorize Ask First work after approval, but cannot authorize an agent to commit, push, expose secrets, or bypass safety enforcement.
 
 ## Autonomy Tiers
-
 **Always:** Set up Copilot-owned surfaces: `.github/copilot-instructions.md`, `.github/skills/`, `.github/hooks/`, `.copilotignore`, and shared `.goat-flow/`. When the target contains `.git`, also set up its `## Commit Messages` bridge and preferred `docs/coding-standards/git-commit-message.md`; omit both for a non-Git target.
 
 **Ask First:** Before touching non-Copilot surfaces, ask and wait for approval; include boundary touched, related code read, footgun checked, local instruction checked, and rollback command.
@@ -21,7 +19,6 @@ The Never tier and accepted architecture/ADR safety constraints are non-overrida
 **Never:** Freeze writes if interrupted or told no changes. Do not edit `CLAUDE.md`, `AGENTS.md`, `.claude/`, `.codex/`, or `.agents/` during Copilot setup unless the user explicitly widens scope.
 
 ## Hard Rules
-
 - If a file exists, modify in place; do not create backup or variant files.
 - `.github/copilot-instructions.md` is standalone and must not defer to `AGENTS.md`.
 - Do not copy goat-flow's controlling-workspace Router Table into downstream projects; adapt paths to the target.
@@ -31,7 +28,6 @@ The Never tier and accepted architecture/ADR safety constraints are non-overrida
 - Do not create `.github/agents/` unless a future concrete gap justifies it.
 
 ## Commit Messages
-
 For a target with `.git`, summarise the shipped commit standard here and point to
 `docs/coding-standards/git-commit-message.md`. Setup copies that guide from
 `workflow/setup/reference/git-commit-message.md` when neither accepted path exists. Rename a
@@ -40,12 +36,10 @@ absent; when both files exist, preserve both and reference the preferred path. F
 `.git`, omit this section and do not create a commit guide.
 
 ## Key Resources
-
 - **Learning loop** (grep before every change): `.goat-flow/learning-loop/footguns/`, `.goat-flow/learning-loop/lessons/`, `.goat-flow/learning-loop/patterns/`, `.goat-flow/learning-loop/decisions/`
 - **Tool playbooks**: `.goat-flow/skill-docs/playbooks/README.md` is the full index (examples: `.goat-flow/skill-docs/playbooks/browser-use.md`, `.goat-flow/skill-docs/playbooks/page-capture.md`) - read BEFORE declaring a tool unavailable
 
 ## Essential Commands
-
 ```bash
 # Replace with commands detected from the target project:
 <lint command>
@@ -56,7 +50,6 @@ absent; when both files exist, preserve both and reference the preferred path. F
 Only include commands that exist and were verified in the target project. Agent settings/hooks checks are setup verification, not default Essential Commands.
 
 ## Execution Loop: READ → SCOPE → ACT → VERIFY
-
 When a goat-* skill is active, its Step 0 replaces READ and selects the skill's mode/depth. SCOPE still applies before writes: a skill may write when its selected mode permits writes or the user explicitly approves them. `/goat-plan` File-Write may create gitignored milestone files without a separate approval gate; `/goat-debug` D3 still requires approval before fixes. Resume at ACT after Step 0 output or when a blocking gate releases.
 
 ### READ
@@ -72,7 +65,6 @@ GOOD: Read the relevant source, config, or generated instruction file before sta
 
 ### SCOPE
 Three signals before acting: (1) Intent: question → answer it, directive → act on it. (2) Complexity budget: Hotfix 2 reads/3 turns; Small Feature 3/5; Standard 4/10; System 6/20; Infrastructure 8/25. (3) Mode: Plan / Implement / Explain / Debug / Review. MUST declare before acting: files allowed to change, non-goals, max blast radius. Expanding beyond scope = stop and re-scope with human. Before writing, record the write allowlist and starting dirty paths; keep an in-session list of every path this session writes. Reads and searches stay unrestricted.
-
 Over budget = checkpoint and re-classify before continuing. Complexity-class budgets are heuristics, not a hard stop when competent review needs broader coverage.
 
 ### ACT
@@ -107,7 +99,6 @@ MUST run `shellcheck` on .sh changes. MUST check cross-references after renames.
 If VERIFY caught a failure or you corrected course, update the learning loop before DoD: behavioural mistakes go in `.goat-flow/learning-loop/lessons/<category>.md`, cross-doc architectural traps go in `.goat-flow/learning-loop/footguns/<category>.md` with `**Status:** active | **Created:** YYYY-MM-DD | **Evidence:** <choose one: ACTUAL_MEASURED, OBSERVED, or EXTERNAL_REFERENCE>` (measured locally, read directly, or cited external incident with local applicability), significant technical decisions go in `.goat-flow/learning-loop/decisions/`, and optional continuity notes go in `.goat-flow/logs/sessions/`.
 
 ## Definition of Done
-
 - `.github/copilot-instructions.md` exists, follows the canonical section order where compatible with Copilot compression, and stays under the hard line limit.
 - Commit guidance matches target applicability: a Git target has the preferred guide and Copilot bridge, while a non-Git target has neither; a former-only guide was renamed without collision and pre-existing dual guides were preserved.
 - Essential Commands list only real target-project commands.
@@ -116,11 +107,9 @@ If VERIFY caught a failure or you corrected course, update the learning loop bef
 - No hands-off agent files were changed.
 
 ## Artifact Routing
-
 Requests to add footguns, lessons, decisions, or patterns route to the matching `.goat-flow/` directory after reading that directory's `README.md`: footguns -> `.goat-flow/learning-loop/footguns/`, lessons -> `.goat-flow/learning-loop/lessons/`, decisions -> `.goat-flow/learning-loop/decisions/`, patterns -> `.goat-flow/learning-loop/patterns/`. Runtime code, hooks, and agent config changes are out of scope unless the user explicitly asks for them.
 
 ## Router Table
-
 | Resource | Path |
 |----------|------|
 | Instruction file | `.github/copilot-instructions.md` |

@@ -3,7 +3,6 @@
 > Canonical machine-readable source for these paths: `workflow/manifest.json`. If this doc drifts, the manifest-backed registry wins.
 
 ## Truth Order
-
 1. User's explicit setup instruction for this session
 2. This agent setup guide
 3. `workflow/manifest.json` for machine-readable paths
@@ -13,15 +12,11 @@
 The Never tier and accepted architecture/ADR safety constraints are non-overridable. A user request may authorize Ask First work after approval, but cannot authorize an agent to commit, push, expose secrets, or bypass safety enforcement.
 
 ## Autonomy Tiers
-
 **Always:** Set up Codex-owned surfaces: `AGENTS.md`, `.codex/`, and shared `.goat-flow/`. `AGENTS.md` and `.agents/skills/` are shared with Antigravity; either setup can create/update content there, but neither should duplicate or stomp the other's content.
-
 **Ask First:** Before touching non-Codex surfaces, ask and wait for approval; include boundary touched, related code read, footgun checked, local instruction checked, and rollback command.
-
 **Never:** Freeze writes if interrupted or told no changes. Do not edit `CLAUDE.md` or `.claude/` during Codex setup unless the user explicitly widens scope. Do not overwrite existing instruction content.
 
 ## Hard Rules
-
 - If a file exists, modify in place; do not create backup or variant files.
 - `AGENTS.md` is the Codex root instruction file; do not defer to `CLAUDE.md`.
 - Do not copy goat-flow's controlling-workspace Router Table into downstream projects; adapt paths to the target.
@@ -32,7 +27,6 @@ The Never tier and accepted architecture/ADR safety constraints are non-overrida
 - goat-flow does not use Codex compaction hooks for recovery; continuity stays file-based through tasks and session logs.
 
 ## Commit Messages
-
 For a target with `.git`, summarise the shipped commit standard here and point to
 `docs/coding-standards/git-commit-message.md`. Setup copies that guide from
 `workflow/setup/reference/git-commit-message.md` when neither accepted path exists. Rename a
@@ -41,12 +35,10 @@ absent; when both files exist, preserve both and reference the preferred path. F
 `.git`, omit this section and do not create a commit guide.
 
 ## Key Resources
-
 - **Learning loop** (grep before every change): `.goat-flow/learning-loop/footguns/`, `.goat-flow/learning-loop/lessons/`, `.goat-flow/learning-loop/patterns/`, `.goat-flow/learning-loop/decisions/`
 - **Tool playbooks**: `.goat-flow/skill-docs/playbooks/README.md` is the full index (examples: `.goat-flow/skill-docs/playbooks/browser-use.md`, `.goat-flow/skill-docs/playbooks/page-capture.md`) - read BEFORE declaring a tool unavailable
 
 ## Essential Commands
-
 ```bash
 # Replace with commands detected from the target project:
 <lint command>
@@ -57,7 +49,6 @@ absent; when both files exist, preserve both and reference the preferred path. F
 Only include commands that exist and were verified in the target project. Agent settings/hooks checks are setup verification, not default Essential Commands.
 
 ## Execution Loop: READ → SCOPE → ACT → VERIFY
-
 When a goat-* skill is active, its Step 0 replaces READ and selects the skill's mode/depth. SCOPE still applies before writes: a skill may write when its selected mode permits writes or the user explicitly approves them. `/goat-plan` File-Write may create gitignored milestone files without a separate approval gate; `/goat-debug` D3 still requires approval before fixes. Resume at ACT after Step 0 output or when a blocking gate releases.
 
 ### READ
@@ -108,7 +99,6 @@ MUST run `shellcheck` on .sh changes. MUST check cross-references after renames.
 If VERIFY caught a failure or you corrected course, update the learning loop before DoD: behavioural mistakes go in `.goat-flow/learning-loop/lessons/<category>.md`, cross-doc architectural traps go in `.goat-flow/learning-loop/footguns/<category>.md` with `**Status:** active | **Created:** YYYY-MM-DD | **Evidence:** <choose one: ACTUAL_MEASURED, OBSERVED, or EXTERNAL_REFERENCE>` (measured locally, read directly, or cited external incident with local applicability), significant technical decisions go in `.goat-flow/learning-loop/decisions/`, and optional continuity notes go in `.goat-flow/logs/sessions/`.
 
 ## Definition of Done
-
 - `AGENTS.md` exists and follows the canonical section order.
 - Essential Commands list only real target-project commands.
 - Router Table contains installed project resources only; no `workflow/setup/`, `workflow/hooks/`, or manifest paths.
@@ -116,11 +106,9 @@ If VERIFY caught a failure or you corrected course, update the learning loop bef
 - No hands-off agent files were changed.
 
 ## Artifact Routing
-
 Requests to add footguns, lessons, decisions, or patterns route to the matching `.goat-flow/` directory after reading that directory's `README.md`: footguns -> `.goat-flow/learning-loop/footguns/`, lessons -> `.goat-flow/learning-loop/lessons/`, decisions -> `.goat-flow/learning-loop/decisions/`, patterns -> `.goat-flow/learning-loop/patterns/`. Runtime code, hooks, and agent config changes are out of scope unless the user explicitly asks for them.
 
 ## Router Table
-
 | Resource | Path |
 |----------|------|
 | Instruction file | `AGENTS.md` |
