@@ -48,7 +48,7 @@ const WRITE_SCOPE_RECONCILIATION_PATHS = [
   ".github/copilot-instructions.md",
 ] as const;
 const MILESTONE_TIMING_RULE =
-  "For milestone work, load `goat-plan`; start timing before the first source edit, pause it at human gates, and finalize it at exit.";
+  "For milestone work, load `goat-plan`; start timing before the first source edit, stop its timer at human gates, resume after release, and finalize it at exit.";
 const MILESTONE_CLARITY_RULE =
   "If a milestone changes source, run `goat-clarity` once before exit on the explicit folder/file paths written by that milestone; never widen the selector to all uncommitted files when unrelated changes exist.";
 const WRITE_SCOPE_CAPTURE_RULE =
@@ -960,7 +960,7 @@ describe("setup-facing learning-loop retrieval", () => {
       );
     });
 
-    it(`keeps ignored-state search semantics harness-specific in ${relativePath}`, () => {
+    it(`keeps ignored-state search semantics provider-neutral in ${relativePath}`, () => {
       const content = readFileSync(
         resolve(PROJECT_ROOT, relativePath),
         "utf-8",
@@ -972,12 +972,12 @@ describe("setup-facing learning-loop retrieval", () => {
       );
       assert.match(
         content,
-        /Claude Code's session grep shim and `git grep` omit ignored local state/u,
+        /gitignore-aware search tools \(including ripgrep defaults, `git grep`, and harness search shims\) omit ignored local state/u,
         relativePath,
       );
       assert.doesNotMatch(
         content,
-        /(?:^|[^A-Za-z])the session grep shim/u,
+        /Claude Code's session grep shim/u,
         relativePath,
       );
     });

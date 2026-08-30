@@ -61,12 +61,34 @@ function fixtureJson(
         "Truth Order",
         "Autonomy Tiers",
         "Hard Rules",
+        "Commit Messages",
         "Key Resources",
         "Essential Commands",
         "Execution Loop",
         "Definition of Done",
         "Artifact Routing",
         "Router Table",
+      ],
+      shared_sections: [
+        "Truth Order",
+        "Hard Rules",
+        "Commit Messages",
+        "Key Resources",
+        "Essential Commands",
+        "Execution Loop",
+        "Definition of Done",
+        "Artifact Routing",
+      ],
+      provider_delta_sections: [
+        {
+          section: "Autonomy Tiers",
+          reason: "Provider-owned capabilities and boundary paths differ.",
+        },
+        {
+          section: "Router Table",
+          reason:
+            "Installed runtime paths and peer instruction identities differ.",
+        },
       ],
       parity_phrases: [],
       version_header_pattern: "# {FILE} - v{VERSION} ({DATE})",
@@ -567,7 +589,7 @@ describe("getRequiredInstructionSections (real repo)", () => {
     resetManifestCache();
     const rules = loadManifest().instruction_file.parity_phrases;
 
-    assert.equal(rules.length, 8);
+    assert.equal(rules.length, 9);
     assert.deepEqual(
       rules.find((rule) => rule.label === "prose-surface READ routing"),
       {
@@ -583,6 +605,37 @@ describe("getRequiredInstructionSections (real repo)", () => {
           "the trigger is touching the surface, not the request naming it",
         ],
       },
+    );
+  });
+
+  it("declares shared live sections, provider deltas, and Codex local discovery", () => {
+    resetManifestCache();
+    const manifest = loadManifest();
+
+    assert.deepEqual(manifest.instruction_file.shared_sections, [
+      "Truth Order",
+      "Hard Rules",
+      "Commit Messages",
+      "Key Resources",
+      "Essential Commands",
+      "Execution Loop",
+      "Definition of Done",
+      "Artifact Routing",
+    ]);
+    assert.deepEqual(manifest.instruction_file.provider_delta_sections, [
+      {
+        section: "Autonomy Tiers",
+        reason: "Provider-owned capabilities and boundary paths differ.",
+      },
+      {
+        section: "Router Table",
+        reason:
+          "Installed runtime paths and peer instruction identities differ.",
+      },
+    ]);
+    assert.equal(
+      manifest.agents.codex?.local_pattern,
+      "**/{AGENTS.override.md,AGENTS.md}",
     );
   });
 

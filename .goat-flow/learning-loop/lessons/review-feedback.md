@@ -119,7 +119,7 @@ last_reviewed: 2026-08-11
 
 **Status:** active | **Created:** 2026-04-18
 
-**What happens:** The 5 hallucination red-flags in AGENTS.md:51-58 forbid claims without evidence (tests pass, completion, fix verification, hedged claims, check passed). Agents still ship unverified claims under pressure by producing rationalizations that feel distinct from the forbidden claim but are logically equivalent to it. "I'm 95% confident", "the sub-agent said it passed", "the change looks correct" - each slips past the red-flags because the red-flags name the violation, not the specific excuse pattern.
+**What happens:** The four hallucination red-flags in AGENTS.md (search: "Hallucination red-flags") forbid claims without evidence: checks passed, completion, fix verification, and hedged claims. Agents still ship unverified claims under pressure by producing rationalizations that feel distinct from the forbidden claim but are logically equivalent to it. "I'm 95% confident", "the sub-agent said it passed", "the change looks correct" - each slips past the red-flags because the red-flags name the violation, not the specific excuse pattern.
 
 **Root cause:** The red-flags catalog what NOT to claim. They do not enumerate the specific rationalizations that convert "I didn't run the proof" into "it's fine." Under pressure (deadline, fatigue, long turn, trusted sub-agent report, partial run that "mostly worked"), the agent reaches for a rationalization the red-flags do not explicitly name, and the claim lands anyway.
 

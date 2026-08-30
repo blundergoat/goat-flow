@@ -2,7 +2,7 @@
 
 ## What It Is
 
-A documentation framework that provides structured AI coding agent workflows. Primarily a methodology and set of templates that users copy into their projects and run via setup prompts. The CLI auditor (`src/cli/`) validates implementations against the audit checks.
+A documentation framework that provides structured AI coding agent workflows. Primarily a methodology and set of templates that users copy into their projects and run via setup prompts. CLI and dashboard tools (`src/cli/`, `src/dashboard/`) validate implementations, guide setup, and expose quality and maintenance workflows.
 
 ## Major Components
 
@@ -15,7 +15,7 @@ A documentation framework that provides structured AI coding agent workflows. Pr
 | Hook scripts | `workflow/hooks/` | Managed launcher/runtime and provider adapters, copyable `deny-dangerous.sh` policies, opt-in `gruff-code-quality.sh`, default `post-turn-safety.sh`, and per-agent config templates |
 | Evaluation templates | `workflow/evaluation/` | Footguns/lessons/patterns templates |
 | Docs | `docs/` | CLI usage, dashboard guide |
-| CLI auditor | `src/cli/` | 20 build checks (16 setup scope + 4 agent scope) + 18 AI harness installation checks (5 concerns), audit-driven setup prompts, quality prompt/history/diff surfaces, multi-agent support |
+| CLI | `src/cli/` | 20 build checks (16 setup scope + 4 agent scope) + 18 AI harness installation checks (5 concerns), audit-driven setup prompts, quality prompt/history/diff surfaces, multi-agent support |
 | CLI diagnostics | `src/cli/diagnostics/` | Redacted support bundles, five-concern target-readiness reports, and static agent/tool threat models without executing target code |
 | Managed setup | `src/cli/install-command.ts`, `src/cli/managed-setup-command.ts`, `src/cli/managed-setup-preview.ts`, `src/cli/managed-setup-state.ts`, `src/cli/managed-setup-write-set.ts`, `src/cli/managed-setup-authority.ts`, `src/cli/managed-setup-admission.ts` | The install command flow, hash-only dry-run classification for manifest-managed templates, the user-owned and generated destinations completing the install write set, scoped replace authority, the pre-write admission gate, and local recovery state |
 | Dashboard | `src/cli/server/` (server modules), `src/dashboard/` (HTML, views, and ~20 client TypeScript modules) | HTML dashboard with views for about, home, hooks, plans, projects, prompts, quality, settings, setup, skills, workspace; `dashboard.ts` owns bootstrap/dispatch/live reload, `dashboard-routes.ts` composes non-terminal route modules, `dashboard-index-routes.ts` owns learning-loop index maintenance, `dashboard-{audit,project,quality,shell,skill-quality}-routes.ts` own route groups, and `dashboard-terminal.ts` owns terminal HTTP/WebSocket wiring |
@@ -107,6 +107,8 @@ Per-file descriptions for both `src/cli/server/` and `src/dashboard/` live in `.
 ## Key Constraints
 
 - **Setup shared templates are canonical.** `workflow/setup/reference/execution-loop.md` defines the execution loop; `workflow/setup/01-system-overview.md` defines the layer architecture and design intent. ADRs in `.goat-flow/learning-loop/decisions/` capture specific design decisions.
+- **Authority is domain-specific.** Active repository instructions govern session behavior, this architecture owns system structure and component ownership, accepted ADRs own named design decisions, and cited learning-loop entries own incident evidence.
+- **Instruction parity is manifest-owned.** `workflow/manifest.json` partitions canonical hot-path sections into byte-identical shared policy and reasoned provider deltas; `scripts/check-instruction-parity.mjs` enforces that contract without generating provider files.
 - **Managed writes stay inside the selected project.** Preview and installer paths reject symlinked or non-directory parents before scaffolding; `--force` may replace supported content but never bypass path safety.
 - **Installer atomicity is per file, not per installation.** Each supported file is completed in an adjacent staging directory and renamed without a non-atomic copy fallback; earlier files from the same multi-file run may already be visible if a later file fails.
 - **Cross-references are fragile.** 200+ markdown files with dense internal linking (committed surface plus installed skill mirrors and worktree caches). File renames require repo-wide grep.
@@ -114,7 +116,7 @@ Per-file descriptions for both `src/cli/server/` and `src/dashboard/` live in `.
 
 ## Hot Path / Cold Path
 
-Agent instruction files (CLAUDE.md, AGENTS.md, .github/copilot-instructions.md) are the hot path -- loaded every turn, with a target of about 125 lines and a hard limit of 150. Codex and Antigravity share `AGENTS.md` per the community standard. Skills and learning-loop files are cold path -- loaded on demand when skills or agent workflows reference them.
+Agent instruction files (CLAUDE.md, AGENTS.md, .github/copilot-instructions.md) are the hot path -- loaded every turn, with a target of about 125 lines and a hard limit of 150. Codex and Antigravity share `AGENTS.md` per the community standard. Copilot may combine applicable repository-wide instruction files, so manifest-declared shared sections remain byte-identical while Autonomy Tiers and Router Table retain provider-owned facts (ADR-020). Skills and learning-loop files are cold path -- loaded on demand when skills or agent workflows reference them.
 
 ## Persistence Tiers
 

@@ -66,6 +66,28 @@ const AGENT_PROFILE: AgentProfile = {
 
 const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
 
+const INSTRUCTION_PARITY_FIXTURE_FILES = [
+  "package.json",
+  "CHANGELOG.md",
+  "workflow/manifest.json",
+  "CLAUDE.md",
+  "AGENTS.md",
+  ".github/copilot-instructions.md",
+  "workflow/setup/agents/claude.md",
+  "workflow/setup/agents/codex.md",
+  "workflow/setup/agents/copilot.md",
+  "workflow/setup/agents/antigravity.md",
+] as const;
+
+/** Filesystem side effects: creates parent directories and copies live parity inputs into the isolated fixture. */
+function copyInstructionParityFixture(fixtureRoot: string): void {
+  for (const relativePath of INSTRUCTION_PARITY_FIXTURE_FILES) {
+    const destination = join(fixtureRoot, relativePath);
+    mkdirSync(dirname(destination), { recursive: true });
+    cpSync(join(PROJECT_ROOT, relativePath), destination);
+  }
+}
+
 /** Provide a representative project-conventions document for extraction tests. */
 function conventionsContent(): string {
   return [
@@ -185,25 +207,8 @@ describe("instruction release metadata", () => {
     const fixtureRoot = mkdtempSync(
       join(tmpdir(), "goat-flow-instruction-parity-"),
     );
-    const fixtureFiles = [
-      "package.json",
-      "CHANGELOG.md",
-      "workflow/manifest.json",
-      "CLAUDE.md",
-      "AGENTS.md",
-      ".github/copilot-instructions.md",
-      "workflow/setup/agents/claude.md",
-      "workflow/setup/agents/codex.md",
-      "workflow/setup/agents/copilot.md",
-      "workflow/setup/agents/antigravity.md",
-    ];
-
     try {
-      for (const relativePath of fixtureFiles) {
-        const destination = join(fixtureRoot, relativePath);
-        mkdirSync(dirname(destination), { recursive: true });
-        cpSync(join(PROJECT_ROOT, relativePath), destination);
-      }
+      copyInstructionParityFixture(fixtureRoot);
 
       const agentsPath = join(fixtureRoot, "AGENTS.md");
       const agentsContent = readFileSync(agentsPath, "utf8");
@@ -224,6 +229,41 @@ describe("instruction release metadata", () => {
       assert.equal(result.status, 1, result.stdout);
       assert.match(result.stderr, /AGENTS\.md: header must end with/);
       assert.match(result.stderr, /1999-01-01/);
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects byte drift in a manifest-declared shared live section", () => {
+    const fixtureRoot = mkdtempSync(
+      join(tmpdir(), "goat-flow-instruction-parity-"),
+    );
+
+    try {
+      copyInstructionParityFixture(fixtureRoot);
+
+      const claudePath = join(fixtureRoot, "CLAUDE.md");
+      const claudeContent = readFileSync(claudePath, "utf8");
+      assert.match(claudeContent, /^## Commit Messages$/mu);
+      writeFileSync(
+        claudePath,
+        claudeContent.replace(
+          /^## Commit Messages$/mu,
+          "## Commit Messages\nShared contract drift.",
+        ),
+      );
+
+      const result = spawnSync(
+        process.execPath,
+        [join(PROJECT_ROOT, "scripts/check-instruction-parity.mjs")],
+        { cwd: fixtureRoot, encoding: "utf8" },
+      );
+
+      assert.equal(result.status, 1, result.stdout);
+      assert.match(
+        result.stderr,
+        /CLAUDE\.md: shared section "Commit Messages" drifted from AGENTS\.md/u,
+      );
     } finally {
       rmSync(fixtureRoot, { recursive: true, force: true });
     }

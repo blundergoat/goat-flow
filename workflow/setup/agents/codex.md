@@ -12,13 +12,13 @@
 The Never tier and accepted architecture/ADR safety constraints are non-overridable. A user request may authorize Ask First work after approval, but cannot authorize an agent to commit, push, expose secrets, or bypass safety enforcement.
 
 ## Autonomy Tiers
-**Always:** Set up Codex-owned surfaces: `AGENTS.md`, `.codex/`, shared `.agents/skills/`, and shared `.goat-flow/`. `AGENTS.md` and `.agents/skills/` are shared with Antigravity; either setup can create/update content there, but neither should duplicate or stomp the other's content.
-**Ask First:** Before touching non-Codex surfaces, ask and wait for approval; include boundary touched, related code read, footgun checked, local instruction checked, and rollback command.
+**Always:** Read any permitted, non-secret file needed for setup. Set up Codex-owned surfaces: `AGENTS.md`, `.codex/`, shared `.agents/skills/`, and shared `.goat-flow/`. `AGENTS.md` and `.agents/skills/` are shared with Antigravity; either setup can create/update content there, but neither should duplicate or stomp the other's content.
+**Ask First:** before modifying a boundary outside Codex ownership, ask and wait for approval; include boundary touched, related code read, footgun checked, local instruction checked, and rollback command.
 **Never:** Freeze writes if interrupted or told no changes. Do not edit `CLAUDE.md`, `.claude/`, `.github/copilot-instructions.md`, `.github/skills/`, or `.github/hooks/` during Codex setup unless the user explicitly widens scope. Do not overwrite existing instruction content.
 
 ## Hard Rules
 - If a file exists, modify in place; do not create backup or variant files.
-- `AGENTS.md` is the Codex root instruction file; do not defer to `CLAUDE.md`.
+- `AGENTS.md` is the Codex root instruction file; nested `AGENTS.override.md` or `AGENTS.md` files provide directory-scoped guidance, with the override preferred at a given level. Do not defer to `CLAUDE.md`.
 - Do not copy goat-flow's controlling-workspace Router Table into downstream projects; adapt paths to the target.
 - Codex hooks use `.codex/hooks.json` for goat-flow hook registrations; `.codex/config.toml` enables the engine with `[features].hooks = true` and may define filesystem permission profiles.
 - Codex permission profiles are the closest equivalent to Claude `permissions.allow`/`permissions.deny` for file access. goat-flow profiles extend Codex's built-in `:workspace` profile before adding secret-path `deny` rules, and they do not replace the Bash-focused `PreToolUse` deny hook for command patterns such as `git push`, `sudo`, or `curl | bash`.
@@ -30,7 +30,7 @@ The Never tier and accepted architecture/ADR safety constraints are non-overrida
 When the user asks for a draft commit message, use Conventional `type(scope): subject` - imperative, ≤72 chars, concrete verbs not weak ones (*enhance, improve, update*); one change per subject. On a `<type>/<digits>` branch - feat, fix, chore, refactor, docs, test, perf, build, ci, or security - the subject starts `#<digits> `, from the branch name only; otherwise no prefix. Full rules: `docs/coding-standards/git-commit-message.md`.
 
 ## Key Resources
-- **Learning loop** (grep before every change): `.goat-flow/learning-loop/footguns/`, `.goat-flow/learning-loop/lessons/`, `.goat-flow/learning-loop/patterns/`, `.goat-flow/learning-loop/decisions/`
+- **Learning loop** (INDEX-first search before every change): `.goat-flow/learning-loop/footguns/`, `.goat-flow/learning-loop/lessons/`, `.goat-flow/learning-loop/patterns/`, `.goat-flow/learning-loop/decisions/`
 - **Tool playbooks**: `.goat-flow/skill-docs/playbooks/README.md` is the full index (examples: `.goat-flow/skill-docs/playbooks/browser-use.md`, `.goat-flow/skill-docs/playbooks/page-capture.md`) - read BEFORE declaring a tool unavailable
 
 ## Essential Commands
@@ -44,11 +44,11 @@ When the user asks for a draft commit message, use Conventional `type(scope): su
 Only include commands that exist and were verified in the target project. Put installed agent settings and hook self-tests on a terse Situational line, not in the default command block.
 
 ## Execution Loop: READ → SCOPE → ACT → VERIFY
-When a goat-* skill is active, its Step 0 replaces READ and selects the skill's mode/depth. SCOPE still applies before writes: a skill may write when its selected mode permits writes or the user explicitly approves them. `/goat-plan` File-Write may create gitignored milestone files without a separate approval gate; `/goat-debug` D3 still requires approval before fixes. Resume at ACT after Step 0 output or when a blocking gate releases.
+When a goat-* skill is active, its Step 0 replaces READ and selects the skill's mode/depth. SCOPE still applies before writes: a skill may write when its selected mode permits writes or the user explicitly approves them. `goat-plan` File-Write may create gitignored milestone files without a separate approval gate; `goat-debug` D3 still requires approval before fixes. Resume at ACT after Step 0 output or when a blocking gate releases.
 
 ### READ
 MUST read relevant files before changes. Never fabricate codebase facts. Cross-doc: MUST read every file describing the same concept. For browser-visible behaviour, first run `command -v browser-use || command -v browser-use-python`; if found, run `browser-use --help` and follow the detected-interface branch in `.goat-flow/skill-docs/playbooks/browser-use.md`; otherwise ask before installing or use the manual fallback.
-Use INDEX-first retrieval across `.goat-flow/learning-loop/{footguns,lessons,patterns}/INDEX.md`; include `.goat-flow/learning-loop/decisions/INDEX.md` for architecture, policy, or setup. Open source entries only on candidate hits; grep bucket files only after the INDEX pass or on a known retrieval miss; reword once on zero hits, then record the miss. Recursive searches under `.goat-flow/` that must include ignored plans/logs MUST use `command grep -rn --exclude-dir=.git --exclude-dir=scratchpad <pattern> .goat-flow/`; Claude Code's session grep shim and `git grep` omit ignored local state, so zero hits from those tools do not prove absence.
+Use INDEX-first retrieval across `.goat-flow/learning-loop/{footguns,lessons,patterns}/INDEX.md`; include `.goat-flow/learning-loop/decisions/INDEX.md` for architecture, policy, or setup. Open source entries only on candidate hits; grep bucket files only after the INDEX pass or on a known retrieval miss; reword once on zero hits, then record the miss. Recursive searches under `.goat-flow/` that must include ignored plans/logs MUST use `command grep -rn --exclude-dir=.git --exclude-dir=scratchpad <pattern> .goat-flow/`; gitignore-aware search tools (including ripgrep defaults, `git grep`, and harness search shims) omit ignored local state, so zero hits from those tools do not prove absence.
 Before declaring any tool or capability unavailable, read the matching `.goat-flow/skill-docs/playbooks/` playbook and run its "Availability Check" verbatim; project-local tools at `~/.local/bin/` count.
 Prose surfaces route the same way before writing: `CHANGELOG.md` needs `changelog.md`; release notes need `release-notes.md`; ordinary README prose, `docs/`, PR/issue text, and learning-loop entry bodies need `writing-human-facing-prose.md`; README discovery rows, skills, playbooks, shared preamble/conventions, instruction files, and hook messages need `writing-agent-facing-instructions.md` - the trigger is touching the surface, not the request naming it.
 Before creating, changing, reviewing, consolidating, moving, or pruning tests, read `.goat-flow/skill-docs/playbooks/test-selection.md`.
@@ -56,21 +56,20 @@ BAD: "The project has 20 audit checks" (guessed without reading)
 GOOD: Read the relevant source, config, or generated instruction file before stating exact counts.
 
 ### SCOPE
-Three signals before acting: (1) Intent: question → answer it, directive → act on it. (2) Complexity budget: Hotfix 2 reads/3 turns; Small Feature 3/5; Standard 4/10; System 6/20; Infrastructure 8/25. (3) Mode: Plan / Implement / Explain / Debug / Review. MUST declare before acting: files allowed to change, non-goals, max blast radius. Expanding beyond scope = stop and re-scope with human. Before writing, record the write allowlist and starting dirty paths; keep an in-session list of every path this session writes. Reads and searches stay unrestricted.
-Over budget = checkpoint and re-classify before continuing. Complexity-class budgets are heuristics, not a hard stop when competent review needs broader coverage.
+Three signals before acting: (1) Intent: question → answer it, directive → act on it. (2) Complexity class: Hotfix / Small Feature / Standard / System / Infrastructure, with a declared checkpoint proportionate to the class. (3) Mode: Plan / Implement / Explain / Debug / Review. MUST declare before acting: files allowed to change, non-goals, max blast radius. Expanding beyond scope = stop and re-scope with human. Reaching the declared checkpoint = report evidence and re-classify before continuing; competent review may need broader coverage. Before writing, record the write allowlist and starting dirty paths; keep an in-session list of every path this session writes. Reads and searches stay unrestricted.
 
 ### ACT
 MUST declare: `State: [MODE] | Goal: [one line] | Exit: [condition]`
 
 | Mode | Behaviour |
 |------|-----------|
-| Plan | Produce planning artefacts. `/goat-plan` File-Write may create gitignored milestone files when selected; committed files still require explicit approval. Exit on LGTM |
-| Implement | Edit in 2-3 turns. 4th read without writing = checkpoint or re-scope |
+| Plan | Produce planning artefacts. `goat-plan` File-Write may create gitignored milestone files when selected; committed files still require explicit approval. Exit on LGTM |
+| Implement | Edit in bounded batches. Reaching the declared checkpoint without writing = checkpoint or re-scope |
 | Explain | Walkthrough only. No changes unless asked |
 | Debug | Diagnosis with file + semantic anchor first. Fixes after human reviews |
 | Review | Investigate first. Never blindly apply suggestions |
 
-For milestone work, load `goat-plan`; start timing before the first source edit, pause it at human gates, and finalize it at exit.
+For milestone work, load `goat-plan`; start timing before the first source edit, stop its timer at human gates, resume after release, and finalize it at exit.
 If a milestone changes source, run `goat-clarity` once before exit on the explicit folder/file paths written by that milestone; never widen the selector to all uncommitted files when unrelated changes exist.
 
 For Codex setup, ACT means updating only Codex-owned surfaces from the shared skeleton and adapting commands, boundaries, and Router Table rows to the target project. Coordinate with Antigravity setup if `AGENTS.md` already exists.
@@ -85,7 +84,7 @@ MUST run `shellcheck` on .sh changes. MUST check cross-references after renames.
 4. **Hedged claims.** Do not use "should work", "probably fine", "looks good" as verification. These are guesses, not evidence.
 
 - **Stop-the-line:** When tests break, builds fail, or behaviour regresses - stop expanding scope. Preserve evidence, return to diagnosis, re-plan before continuing.
-- Level 1 (isolated): note, continue. Level 2 (cross-doc, broken refs, evidence): MUST full stop, wait for human. Two corrections on same approach = MUST rewind.
+- Continue after an isolated, in-scope verification failure only when evidence is preserved and the next diagnostic stays within scope. Stop and wait for human direction when failure crosses documentation or contracts, breaks references, invalidates evidence, or requires expanding the write allowlist. Two corrections on the same approach = MUST rewind.
 - Recovery: missing context → read first. Out-of-scope → name boundary, redirect. Conflicting sources → flag, ask.
 
 If VERIFY caught a failure or you corrected course, update the learning loop before DoD: behavioural mistakes go in `.goat-flow/learning-loop/lessons/<category>.md`, cross-doc architectural traps go in `.goat-flow/learning-loop/footguns/<category>.md` with `**Status:** active | **Created:** YYYY-MM-DD | **Evidence:** <choose one: ACTUAL_MEASURED, OBSERVED, or EXTERNAL_REFERENCE>` (measured locally, read directly, or cited external incident with local applicability), significant technical decisions go in `.goat-flow/learning-loop/decisions/`, and optional continuity notes go in `.goat-flow/logs/sessions/`.

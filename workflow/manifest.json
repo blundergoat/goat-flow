@@ -447,7 +447,7 @@
         "settings_path": ".codex/config.toml",
         "script_path": ".goat-flow/hooks/deny-dangerous.sh"
       },
-      "local_pattern": ".github/instructions/*.md",
+      "local_pattern": "**/{AGENTS.override.md,AGENTS.md}",
       "hook_events": {
         "pre_tool": "PreToolUse",
         "post_turn": "Stop"
@@ -524,6 +524,7 @@
       "Truth Order",
       "Autonomy Tiers",
       "Hard Rules",
+      "Commit Messages",
       "Key Resources",
       "Essential Commands",
       "Execution Loop",
@@ -531,7 +532,35 @@
       "Artifact Routing",
       "Router Table"
     ],
+    "shared_sections": [
+      "Truth Order",
+      "Hard Rules",
+      "Commit Messages",
+      "Key Resources",
+      "Essential Commands",
+      "Execution Loop",
+      "Definition of Done",
+      "Artifact Routing"
+    ],
+    "provider_delta_sections": [
+      {
+        "section": "Autonomy Tiers",
+        "reason": "Provider-owned capabilities and boundary paths differ."
+      },
+      {
+        "section": "Router Table",
+        "reason": "Installed runtime paths and peer instruction identities differ."
+      }
+    ],
     "parity_phrases": [
+      {
+        "label": "autonomy permissions and boundary",
+        "section": "Autonomy Tiers",
+        "phrases": [
+          "Read any permitted, non-secret file",
+          "before modifying a boundary"
+        ]
+      },
       {
         "label": "learning-loop Key Resources",
         "section": "Key Resources",

@@ -716,7 +716,7 @@ _emit_footer() {
 
 # ── Shell Scripts ────────────────────────────────────────────────────
 section "Shell Scripts"
-if bash -n scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh 2>/dev/null; then
+if bash -n scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh workflow/install-goat-flow.sh 2>/dev/null; then
     pass "Bash syntax (scripts)"
 else
     fail "Bash syntax check (scripts)"
@@ -734,10 +734,10 @@ while IFS= read -r hookdir; do
 done < <(manifest_eval hook-dirs)
 
 if command -v shellcheck >/dev/null 2>&1; then
-    if shellcheck --exclude=SC2001 scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh >/dev/null 2>&1; then
+    if shellcheck --exclude=SC2001 scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh workflow/install-goat-flow.sh >/dev/null 2>&1; then
         pass "Shellcheck (scripts)"
     else
-        fail "Shellcheck (scripts) - run shellcheck scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh for details"
+        fail "Shellcheck (scripts) - run shellcheck scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh workflow/install-goat-flow.sh for details"
     fi
 
     # Also shellcheck installed hooks. SC2001 stays excluded (sed rewrites are deliberate); SC2016 no longer is,

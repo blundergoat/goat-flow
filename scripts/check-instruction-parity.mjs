@@ -19,8 +19,8 @@ const SETUP_FILES = [
 ];
 
 const LIVE_FILES = [
-  "CLAUDE.md",
   "AGENTS.md",
+  "CLAUDE.md",
   ".github/copilot-instructions.md",
 ];
 
@@ -34,24 +34,16 @@ const COMMIT_GUIDE_FILES = [
 // A newline-only budget can hide several independent rules in one unreadable physical line.
 const MAX_INSTRUCTION_LINE_CHARACTERS = 800;
 
-const CANONICAL_SECTIONS = [
-  "Truth Order",
-  "Autonomy Tiers",
-  "Hard Rules",
-  "Commit Messages",
-  "Key Resources",
-  "Essential Commands",
-  "Execution Loop",
-  "Definition of Done",
-  "Artifact Routing",
-  "Router Table",
-];
-
 const H3_LOOP_SECTIONS = ["READ", "SCOPE", "ACT", "VERIFY"];
 
-const SHARED_PHRASES = JSON.parse(
+const INSTRUCTION_CONTRACT = JSON.parse(
   readFileSync(resolve(ROOT, "workflow/manifest.json"), "utf8"),
-).instruction_file.parity_phrases;
+).instruction_file;
+
+const CANONICAL_SECTIONS = INSTRUCTION_CONTRACT.required_sections;
+const SHARED_LIVE_SECTIONS = INSTRUCTION_CONTRACT.shared_sections;
+const PROVIDER_DELTA_SECTIONS = INSTRUCTION_CONTRACT.provider_delta_sections;
+const SHARED_PHRASES = INSTRUCTION_CONTRACT.parity_phrases;
 
 /** Render a repository-relative path for deterministic failure messages. */
 function pathLabel(path) {
@@ -171,6 +163,63 @@ function assertEqualArray(actual, expected, path, label, failures) {
   }
 }
 
+/** Validate that every canonical section is declared once as shared or provider-owned. */
+function validateSectionPartition(failures) {
+  if (!Array.isArray(SHARED_LIVE_SECTIONS)) {
+    failures.push(
+      "workflow/manifest.json: instruction_file.shared_sections must be an array",
+    );
+    return;
+  }
+  if (!Array.isArray(PROVIDER_DELTA_SECTIONS)) {
+    failures.push(
+      "workflow/manifest.json: instruction_file.provider_delta_sections must be an array",
+    );
+    return;
+  }
+
+  const deltaNames = [];
+  for (const delta of PROVIDER_DELTA_SECTIONS) {
+    if (
+      typeof delta?.section !== "string" ||
+      typeof delta?.reason !== "string" ||
+      delta.reason.trim() === ""
+    ) {
+      failures.push(
+        "workflow/manifest.json: every provider delta needs a section and non-empty reason",
+      );
+      continue;
+    }
+    deltaNames.push(delta.section);
+  }
+
+  const classified = [...SHARED_LIVE_SECTIONS, ...deltaNames];
+  const duplicates = classified.filter(
+    (section, index) => classified.indexOf(section) !== index,
+  );
+  const missing = CANONICAL_SECTIONS.filter(
+    (section) => !classified.includes(section),
+  );
+  const unknown = classified.filter(
+    (section) => !CANONICAL_SECTIONS.includes(section),
+  );
+  if (duplicates.length > 0) {
+    failures.push(
+      `workflow/manifest.json: instruction section classifications repeat [${[...new Set(duplicates)].join(", ")}]`,
+    );
+  }
+  if (missing.length > 0) {
+    failures.push(
+      `workflow/manifest.json: instruction sections lack a shared/provider classification [${missing.join(", ")}]`,
+    );
+  }
+  if (unknown.length > 0) {
+    failures.push(
+      `workflow/manifest.json: instruction section classifications are not canonical [${[...new Set(unknown)].join(", ")}]`,
+    );
+  }
+}
+
 /** Record missing required contract phrases for a specific file section. */
 function requirePhrases(path, sectionName, section, phrases, label, failures) {
   for (const phrase of phrases) {
@@ -195,6 +244,7 @@ function validateInstructionFile(
   file,
   failures,
   setupLoopBodies,
+  liveSectionBodies,
   releaseMetadata,
 ) {
   const abs = resolve(ROOT, file);
@@ -271,6 +321,7 @@ function validateInstructionFile(
     releaseMetadata,
     failures,
   );
+  liveSectionBodies.push({ label, sections: sectionBodies });
 }
 
 /** Mutate setup-guide parity state because setup files share generic commands and loop bodies. */
@@ -358,6 +409,24 @@ function validateSharedSetupLoopBodies(setupLoopBodies, failures) {
   }
 }
 
+/** Record byte drift in manifest-declared common sections across live providers. */
+function validateSharedLiveSections(liveSectionBodies, failures) {
+  if (liveSectionBodies.length <= 1 || !Array.isArray(SHARED_LIVE_SECTIONS)) {
+    return;
+  }
+  const [reference, ...rest] = liveSectionBodies;
+  for (const entry of rest) {
+    for (const sectionName of SHARED_LIVE_SECTIONS) {
+      const referenceBody = reference.sections.get(sectionName) ?? "";
+      const entryBody = entry.sections.get(sectionName) ?? "";
+      if (entryBody === referenceBody) continue;
+      failures.push(
+        `${entry.label}: shared section ${JSON.stringify(sectionName)} drifted from ${reference.label}`,
+      );
+    }
+  }
+}
+
 /** Write the complete failure report to stderr and exits non-zero when parity failed. */
 function exitOnInstructionParityFailures(failures) {
   if (failures.length === 0) return;
@@ -370,15 +439,24 @@ function exitOnInstructionParityFailures(failures) {
 function validateInstructionParity() {
   const failures = [];
   const setupLoopBodies = [];
+  const liveSectionBodies = [];
   const releaseMetadata = readReleaseMetadata(failures);
 
+  validateSectionPartition(failures);
   validateByteParity(COMMIT_GUIDE_FILES, "commit guide", failures);
 
   for (const file of ALL_FILES) {
-    validateInstructionFile(file, failures, setupLoopBodies, releaseMetadata);
+    validateInstructionFile(
+      file,
+      failures,
+      setupLoopBodies,
+      liveSectionBodies,
+      releaseMetadata,
+    );
   }
 
   validateSharedSetupLoopBodies(setupLoopBodies, failures);
+  validateSharedLiveSections(liveSectionBodies, failures);
   exitOnInstructionParityFailures(failures);
 
   console.log(

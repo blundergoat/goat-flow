@@ -26,6 +26,14 @@ const DOCUMENTING_SURFACES = [
   ".github/copilot-instructions.md",
 ] as const;
 
+const AUTOMATED_SHELL_VALIDATION_OWNERS = [
+  ".goat-flow/config.yaml",
+  "scripts/preflight-checks.sh",
+  ".github/workflows/ci.yml",
+] as const;
+
+const WORKFLOW_INSTALLER = "workflow/install-goat-flow.sh";
+
 /**
  * Read the exact `shellcheck` line a surface publishes.
  *
@@ -63,6 +71,35 @@ describe("documented shell-lint command", () => {
   it("carries no exclusion, so the documented command is the strict one", () => {
     // An exclusion here would let the instruction files promise a check the agent never actually runs.
     assert.doesNotMatch(publishedShellcheckCommand("CLAUDE.md"), /--exclude/u);
+  });
+
+  it("keeps the workflow installer in every shell lint and syntax owner", () => {
+    for (const surface of DOCUMENTING_SURFACES) {
+      const content = readFileSync(resolve(PROJECT_ROOT, surface), "utf8");
+      const commandLines = content
+        .split("\n")
+        .filter((line) => /^(?:shellcheck|bash -n) /u.test(line));
+      assert.equal(
+        commandLines.length,
+        2,
+        `${surface}: expected two shell commands`,
+      );
+      for (const command of commandLines) {
+        assert.ok(
+          command.includes(WORKFLOW_INSTALLER),
+          `${surface}: ${command.split(" ", 1)[0]} omits ${WORKFLOW_INSTALLER}`,
+        );
+      }
+    }
+
+    for (const surface of AUTOMATED_SHELL_VALIDATION_OWNERS) {
+      const content = readFileSync(resolve(PROJECT_ROOT, surface), "utf8");
+      const occurrences = content.split(WORKFLOW_INSTALLER).length - 1;
+      assert.ok(
+        occurrences >= 2,
+        `${surface}: expected ${WORKFLOW_INSTALLER} in both shell lint and syntax validation`,
+      );
+    }
   });
 
   it("exits zero when run exactly as published", () => {

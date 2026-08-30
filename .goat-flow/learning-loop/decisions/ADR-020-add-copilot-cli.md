@@ -2,18 +2,18 @@
 
 **Status:** Accepted
 **Date:** 2026-04-18
-**Updated:** 2026-08-15 - absorbed ADR-030 (Antigravity replaces Gemini) and ADR-022 (canonical source for agent identity). Who the supported agents are and where that list is authoritative is one decision; keeping the roster and its source of truth apart is how hardcoded agent-ID literals drifted from the manifest in the first place.
+**Updated:** 2026-08-30 - retained standalone provider files while adding a machine-checked shared contract for Copilot's multi-file composition. This also preserves the 2026-08-15 absorption of ADR-030 (Antigravity replaces Gemini) and ADR-022 (canonical agent identity).
 
 ## Context
 
 goat-flow supports agent runtimes through one manifest-backed registry: `workflow/manifest.json` is the writable source of truth, `src/cli/agents/registry.ts` is the runtime facade, and the CLI, dashboard, setup flow, and audit read from that registry instead of maintaining parallel allowlists.
 
-Copilot CLI exposes the same broad categories of surface the other supported agents use:
+Copilot CLI exposes the same broad categories of surface the other supported agents use. Its current custom-instruction contract detects `.github/copilot-instructions.md`, `AGENTS.md`, and `CLAUDE.md`, combines applicable repository instructions, and does not publish a general precedence rule between them ([GitHub documentation](https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/add-custom-instructions)).
 
 - **Instructions.** `.github/copilot-instructions.md` for repo-wide Copilot guidance, plus optional `.github/instructions/**/*.instructions.md` for path-specific rules.
 - **Skills.** `.github/skills/<name>/SKILL.md` using the same goat skill shape as the existing installed copies.
 - **Hooks.** `.github/hooks/hooks.json` registering on-disk guardrail scripts. Registration now points at the central dispatcher under `.goat-flow/hooks/` (ADR-033), so `.github/hooks/` holds the config file rather than per-agent script copies.
-- **Copilot commands.** Current Copilot CLI command help exposes `/agent`, `/review`, `/research`, and `/tasks`, plus `/fleet` for parallelizable work.
+- **Copilot commands.** Interactive slash commands are entered by the user. Agent instructions may recommend a relevant current command after checking help, but cannot treat that command as an agent-callable tool.
 
 The live repo already carries peer hot-path instruction files (`CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.md`), shared guardrail script templates under `workflow/hooks/`, and canonical skill templates under `workflow/skills/`. Shipping Copilot support therefore means wiring Copilot into the same standalone per-agent model rather than inventing a special-case bridge.
 
@@ -49,14 +49,14 @@ Treat `copilot` as a first-class `AgentId` and ship full runtime parity in the s
 2. Runtime surfaces (`src/cli/types.ts`, registry, setup prompt routing, dashboard, quality history/schema, state classification) accept `copilot`.
 3. Setup ships a real Copilot guide at `workflow/setup/agents/copilot.md`.
 4. Repo live surfaces include `.github/copilot-instructions.md`, `.github/hooks/`, and `.github/skills/`.
-5. Copilot uses a standalone hot-path instruction file. `.github/copilot-instructions.md` carries its own Truth Order, Execution Loop, Definition of Done, Router Table, and Autonomy Tiers, while optional `.github/instructions/**/*.instructions.md` remains path-scoped only.
+5. Copilot uses a standalone, physically complete hot-path instruction file. `workflow/manifest.json` classifies common sections that must remain byte-identical across `AGENTS.md`, `CLAUDE.md`, and `.github/copilot-instructions.md`; only reasoned provider-delta sections may differ. Optional `.github/instructions/**/*.instructions.md` remains Copilot path-scoped guidance.
 6. Hooks use one canonical Copilot config file: `.github/hooks/hooks.json` carrying the split guardrail hooks.
-7. Wave 6 relies on the current Copilot CLI command surface plus `/fleet`. Repository custom agents in `.github/agents/` stay out of scope unless a concrete specialization gap is proven later.
+7. Wave 6 uses runtime-exposed agent/task capabilities for independent work. Repository custom agents in `.github/agents/` stay out of scope unless a concrete specialization gap is proven later; interactive slash commands remain user-entered capabilities.
 
 ## Out of scope for this ADR
 
-- **Repository custom agents (`.github/agents/`).** Revisit only if the current command surface plus `/fleet` cannot cover a demonstrated need.
-- **Bridge files** between `AGENTS.md` and `.github/copilot-instructions.md`. Standalone per-agent instruction files are preferred over a second editable source of truth.
+- **Repository custom agents (`.github/agents/`).** Revisit only if current runtime capabilities cannot cover a demonstrated need.
+- **Generated bridge files** between `AGENTS.md`, `CLAUDE.md`, and `.github/copilot-instructions.md`. Standalone provider files remain reviewable in isolation; deterministic parity is enforcement, not runtime generation.
 - **Per-model guidance.** Model selection remains an agent/runtime concern, not a framework concern.
 
 ## Consequences
@@ -65,7 +65,8 @@ Treat `copilot` as a first-class `AgentId` and ship full runtime parity in the s
 - **Positive:** `.github/skills/` and `.github/hooks/` are maintained install targets rather than undocumented side surfaces.
 - **Positive:** The registry stays honest: support claims match the runtime, not just the docs.
 - **Positive:** Changing the roster is a manifest plus union edit, not a repo-wide literal hunt. A new agent that reaches the manifest but not the union fails loudly at load rather than half-working.
-- **Negative:** The repo has another installed skill root and hook surface to keep in parity, so preflight and drift checks must enforce it.
+- **Positive:** Shared hot-path policy now fails deterministic parity checks when one standalone provider file drifts.
+- **Negative:** The repo has another installed skill root, hook surface, and two explicitly provider-owned instruction sections to review, so preflight and drift checks must enforce the common contract without erasing valid differences.
 
 ## Related decisions
 
@@ -78,7 +79,7 @@ Treat `copilot` as a first-class `AgentId` and ship full runtime parity in the s
 Revisit if any of the following hold:
 
 - Copilot CLI materially changes `.github/copilot-instructions.md`, `.github/skills/`, or `.github/hooks/hooks.json`.
-- Cross-file instruction composition (`AGENTS.md` + `.github/copilot-instructions.md` + `.github/instructions/**`) becomes non-deterministic enough that structural separation no longer prevents conflicts.
+- Copilot changes which repository instruction files it composes, publishes a precedence contract, or makes the current shared/provider-delta partition insufficient.
 - `.github/skills/` parity cannot be maintained against the canonical skill templates without silent divergence.
-- A concrete specialization gap appears that the current command surface plus `/fleet` cannot cover, forcing reconsideration of `.github/agents/`.
+- A concrete specialization gap appears that current runtime capabilities cannot cover, forcing reconsideration of `.github/agents/`.
 - A fifth runtime is proposed, or a current runtime is retired - both change the canonical set and every enumeration derived from it.
