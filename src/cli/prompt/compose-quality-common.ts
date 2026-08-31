@@ -596,6 +596,9 @@ export function renderPriorReportContext(
       lines.push(
         `  - ${omittedPriorRefutationCount} additional prior refuted candidate(s) omitted from this bounded preview.`,
       );
+      lines.push(
+        `  - Read the complete refutation ledger at ${jsonString(priorReport.path)} before assessing.`,
+      );
     }
     lines.push("");
     lines.push(

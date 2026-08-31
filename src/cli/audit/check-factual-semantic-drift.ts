@@ -275,13 +275,13 @@ function readExplicitPlaybookInventory(
 }
 
 /**
- * Report top-level playbooks omitted from a committed user-facing inventory.
+ * Report top-level playbooks that differ from a committed user-facing inventory.
  * Use when architecture or code-map prose claims to enumerate every available playbook.
  *
  * @param path - orientation document path shown in the warning
  * @param text - complete document text; empty text omits every installed playbook
  * @param auditContext - selected-project files used to read installed playbooks
- * @returns one warning listing omissions, or an empty list when no playbooks exist or every name is present
+ * @returns one warning listing missing or stale names, or an empty list when the inventory is exact
  */
 function driftSkillPlaybookInventory(
   path: PlaybookInventoryDocumentPath,
@@ -298,20 +298,40 @@ function driftSkillPlaybookInventory(
   const missingPlaybookNames = installedPlaybookNames.filter(
     (playbookName) => !documentedPlaybookNames.includes(playbookName),
   );
-  // A complete inventory already points users to every installed playbook.
-  if (missingPlaybookNames.length === 0) return [];
+  const stalePlaybookNames = documentedPlaybookNames.filter(
+    (playbookName) => !installedPlaybookNames.includes(playbookName),
+  );
+  // An explicit inventory is current only when both sets contain the same names.
+  if (missingPlaybookNames.length === 0 && stalePlaybookNames.length === 0) {
+    return [];
+  }
+
+  const inventoryDriftDescriptions = [
+    ...(missingPlaybookNames.length === 0
+      ? []
+      : [
+          `omits top-level skill playbook(s): ${missingPlaybookNames.join(", ")}`,
+        ]),
+    ...(stalePlaybookNames.length === 0
+      ? []
+      : [
+          `lists removed top-level skill playbook(s): ${stalePlaybookNames.join(", ")}`,
+        ]),
+  ];
 
   return [
     {
       severity: "warning",
       rule: "skill-playbook-inventory-drift",
       path,
-      message:
-        `${path} omits top-level skill playbook(s): ${missingPlaybookNames.join(", ")}. ` +
-        `Live playbooks are ${installedPlaybookNames.join(", ")}.`,
+      message: `${path} ${inventoryDriftDescriptions.join("; ")}. Live playbooks are ${installedPlaybookNames.join(", ")}.`,
+      // Missing-only drift keeps its established recovery text; stale names require the caller to reconcile both set directions.
       suggestion:
-        "Update the committed skill-docs playbook inventory to include every top-level " +
-        ".goat-flow/skill-docs/playbooks/*.md playbook except README.md.",
+        stalePlaybookNames.length === 0
+          ? "Update the committed skill-docs playbook inventory to include every top-level " +
+            ".goat-flow/skill-docs/playbooks/*.md playbook except README.md."
+          : "Make the committed skill-docs playbook inventory exactly match the top-level " +
+            ".goat-flow/skill-docs/playbooks/*.md playbooks except README.md.",
     },
   ];
 }

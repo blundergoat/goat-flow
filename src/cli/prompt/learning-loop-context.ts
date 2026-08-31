@@ -552,7 +552,7 @@ function buildSelectedLearningEntry(
  * @param budgetMax - byte ceiling for the whole rendered block
  * @param omittedCount - entries already left out, carried forward into the block header
  * @param isRetrievalMiss - true when nothing matched at all, which the header reports as an explicit retrieval miss
- * @param isTaskZeroHit - optional targeted-retrieval result; absent means the user did not launch a targeted selection
+ * @param isTaskTargeted - true when the user launched a targeted selection and final entries need match accounting
  * @returns the final selection whose header numbers describe the block it appears in
  */
 function finalizeSelection(
@@ -560,8 +560,11 @@ function finalizeSelection(
   budgetMax: number,
   omittedCount: number,
   isRetrievalMiss: boolean,
-  isTaskZeroHit?: boolean,
+  isTaskTargeted: boolean,
 ): LearningLoopContextSelection {
+  const taskMatchedCount = entries.filter(
+    (entry) => (entry.matchedTaskTerms?.length ?? 0) > 0,
+  ).length;
   let selection: LearningLoopContextSelection = {
     entries,
     budgetUsed: 0,
@@ -569,14 +572,12 @@ function finalizeSelection(
     selectedCount: entries.length,
     omittedCount,
     zeroHit: isRetrievalMiss,
-    ...(isTaskZeroHit === undefined
+    ...(!isTaskTargeted
       ? {}
       : {
           // A selected entry without matched terms still counts toward the bounded fallback, not the targeted-match total.
-          taskMatchedCount: entries.filter(
-            (entry) => (entry.matchedTaskTerms?.length ?? 0) > 0,
-          ).length,
-          isTaskZeroHit,
+          taskMatchedCount,
+          isTaskZeroHit: taskMatchedCount === 0,
         }),
   };
   // The header prints the used-byte count, so writing that number changes the block length; three passes settle it.
@@ -596,7 +597,7 @@ function finalizeSelection(
       budgetMax,
       omittedCount + 1,
       isRetrievalMiss,
-      isTaskZeroHit,
+      isTaskTargeted,
     );
   }
   return selection;
@@ -672,9 +673,8 @@ export function selectLearningLoopContext(
     selectedBytesByKind[candidate.kind] += selectedEntryBytes;
   }
 
-  // Targeted accounting is absent for an ordinary launch and explicitly marks a zero-hit when audit terms found nothing.
-  const isTaskZeroHit =
-    selectionOptions.taskTerms.length > 0 ? !hasAnyTaskMatch : undefined;
+  // Targeted accounting is absent for an ordinary launch and is recomputed after every global-budget trim.
+  const isTaskTargeted = selectionOptions.taskTerms.length > 0;
   // When no project entry is eligible, the caller receives an explicit retrieval miss and renders no empty learning section.
   const isRetrievalMiss = eligibleEntries.length === 0;
   return finalizeSelection(
@@ -682,7 +682,7 @@ export function selectLearningLoopContext(
     selectionOptions.budgetMax,
     sourceEntries.length - selectedEntries.length,
     isRetrievalMiss,
-    isTaskZeroHit,
+    isTaskTargeted,
   );
 }
 

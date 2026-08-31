@@ -140,6 +140,19 @@ interface OwnedPathWriteClaim {
   descriptor: number;
 }
 
+/** Physical directory identity retained across claim-directory creation and marker allocation. */
+interface CoordinationDirectorySnapshot {
+  path: string;
+  dev: bigint;
+  ino: bigint;
+}
+
+/** Project-local claim storage plus every ancestor identity that must remain stable during allocation. */
+interface ClaimDirectory {
+  path: string;
+  snapshots: readonly CoordinationDirectorySnapshot[];
+}
+
 type ClaimSnapshotResult =
   | { status: "missing" }
   | { status: "unsafe" }
@@ -378,7 +391,7 @@ function identitiesMatch(
 function ensureCoordinationDirectory(
   directoryPath: string,
   targetPath: string,
-): void {
+): CoordinationDirectorySnapshot {
   try {
     fs.mkdirSync(directoryPath, { mode: 0o700 });
   } catch (error) {
@@ -388,11 +401,12 @@ function ensureCoordinationDirectory(
     }
   }
   try {
-    const stats = fs.lstatSync(directoryPath);
+    const stats = fs.lstatSync(directoryPath, { bigint: true });
     // A file or symlink at the coordination path cannot safely hold ownership markers for the selected project.
     if (!stats.isDirectory() || stats.isSymbolicLink()) {
       throw new PathWriteClaimError("claim-integrity", targetPath);
     }
+    return { path: directoryPath, dev: stats.dev, ino: stats.ino };
   } catch (error) {
     // The directory may become unreadable or disappear between creation and verification, so the command refuses admission.
     if (error instanceof PathWriteClaimError) throw error;
@@ -400,13 +414,63 @@ function ensureCoordinationDirectory(
   }
 }
 
+/**
+ * Require one coordination path to retain the exact directory entry captured before a child operation.
+ * Error behavior: throws a typed integrity or availability refusal without exposing the absolute path.
+ */
+function assertCoordinationDirectorySnapshot(
+  snapshot: CoordinationDirectorySnapshot,
+  targetPath: string,
+): void {
+  try {
+    const current = fs.lstatSync(snapshot.path, { bigint: true });
+    if (
+      !current.isDirectory() ||
+      current.isSymbolicLink() ||
+      current.dev !== snapshot.dev ||
+      current.ino !== snapshot.ino
+    ) {
+      throw new PathWriteClaimError("claim-integrity", targetPath);
+    }
+  } catch (error) {
+    if (error instanceof PathWriteClaimError) throw error;
+    throw new PathWriteClaimError("coordination-unavailable", targetPath);
+  }
+}
+
+/** Revalidate the full project-local directory chain around one marker allocation. */
+function assertClaimDirectory(
+  claimDirectory: ClaimDirectory,
+  targetPath: string,
+): void {
+  // Every ancestor must retain its identity so a concurrent symlink swap cannot redirect the marker outside the selected project.
+  for (const snapshot of claimDirectory.snapshots) {
+    assertCoordinationDirectorySnapshot(snapshot, targetPath);
+  }
+}
+
 /** Create and validate the project-local claim directory. */
-function ensureClaimDirectory(projectRoot: string, targetPath: string): string {
+function ensureClaimDirectory(
+  projectRoot: string,
+  targetPath: string,
+): ClaimDirectory {
   const goatFlowDirectory = join(projectRoot, ".goat-flow");
-  ensureCoordinationDirectory(goatFlowDirectory, targetPath);
+  const goatFlowSnapshot = ensureCoordinationDirectory(
+    goatFlowDirectory,
+    targetPath,
+  );
   const claimDirectory = join(goatFlowDirectory, "write-claims");
-  ensureCoordinationDirectory(claimDirectory, targetPath);
-  return claimDirectory;
+  const claimDirectorySnapshot = ensureCoordinationDirectory(
+    claimDirectory,
+    targetPath,
+  );
+  const validatedClaimDirectory = {
+    path: claimDirectory,
+    snapshots: [goatFlowSnapshot, claimDirectorySnapshot],
+  };
+  // Creating the child traverses its parent again, so reject a replacement before any marker allocation.
+  assertClaimDirectory(validatedClaimDirectory, targetPath);
+  return validatedClaimDirectory;
 }
 
 /**
@@ -681,7 +745,9 @@ function createClaimMarker(
   markerPath: string,
   markerBytes: Buffer,
   targetPath: string,
+  claimDirectory: ClaimDirectory,
 ): number {
+  assertClaimDirectory(claimDirectory, targetPath);
   let descriptor: number;
   try {
     descriptor = fs.openSync(markerPath, "wx", 0o600);
@@ -690,12 +756,17 @@ function createClaimMarker(
     throw exclusiveCreateFailure(error, targetPath);
   }
   try {
+    // Exclusive creation is still pathname-based, so bind the result back to the validated directory chain before writing owner bytes.
+    assertClaimDirectory(claimDirectory, targetPath);
     fs.writeFileSync(descriptor, markerBytes);
     fs.fsyncSync(descriptor);
+    // A swap during the write or flush must not return a descriptor that appears admitted for the original project.
+    assertClaimDirectory(claimDirectory, targetPath);
     return descriptor;
   } catch (error) {
     // A full disk, lost permission, or failed flush aborts admission and removes only this command's proven marker.
     cleanupFailedClaimInitialization(markerPath, descriptor);
+    if (error instanceof PathWriteClaimError) throw error;
     throw exclusiveCreateFailure(error, targetPath);
   }
 }
@@ -707,21 +778,33 @@ function createClaimMarker(
  * Error behavior: throws a categorized claim refusal after ownership-checked cleanup when creation or verification fails.
  */
 function acquireOneClaim(
-  claimDirectory: string,
+  claimDirectory: ClaimDirectory,
   targetPath: string,
 ): OwnedPathWriteClaim {
-  const markerPath = claimMarkerPath(claimDirectory, targetPath);
+  const markerPath = claimMarkerPath(claimDirectory.path, targetPath);
   const ownerToken = randomBytes(16).toString("hex");
   const markerBytes = Buffer.from(
     `${JSON.stringify({ schemaVersion: CLAIM_SCHEMA, targetPath, ownerToken })}\n`,
     "utf8",
   );
-  const descriptor = createClaimMarker(markerPath, markerBytes, targetPath);
+  const descriptor = createClaimMarker(
+    markerPath,
+    markerBytes,
+    targetPath,
+    claimDirectory,
+  );
   const claim = readOwnedClaimSnapshot(markerPath, descriptor, markerBytes);
   // If the new path no longer matches this descriptor, the user's command never receives write admission.
   if (claim.status !== "present") {
     cleanupFailedClaimInitialization(markerPath, descriptor, markerBytes);
     throw new PathWriteClaimError("claim-integrity", targetPath);
+  }
+  // Owner bytes prove who wrote the marker; this separate chain check proves the marker still belongs to the selected project.
+  try {
+    assertClaimDirectory(claimDirectory, targetPath);
+  } catch (error) {
+    cleanupFailedClaimInitialization(markerPath, descriptor, markerBytes);
+    throw error;
   }
   return { targetPath, markerPath, snapshot: claim.snapshot, descriptor };
 }
@@ -840,7 +923,7 @@ function prevalidateClaimTargets(
  */
 function acquireAndValidateClaims(
   projectRoot: string,
-  claimDirectory: string,
+  claimDirectory: ClaimDirectory,
   requests: readonly NormalizedPathWriteClaimRequest[],
   fallbackTargetPath: string,
 ): OwnedPathWriteClaim[] {

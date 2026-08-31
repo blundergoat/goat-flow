@@ -70,7 +70,8 @@ import type { ReadonlyFS } from "./types.js";
 
 const RECOVERY_COMMAND = "goat-flow index && goat-flow stats --check";
 const SAFE_CATEGORY = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
-const CONTROL_CHARACTER = /[\u0000-\u001f\u007f]/u;
+const UNSAFE_SINGLE_LINE_CHARACTER =
+  /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/u;
 const RESOLVED_ENTRIES_HEADING = "## Resolved Entries";
 
 const ENTRY_BUCKET: Record<
@@ -156,7 +157,10 @@ function validateCategory(category: string): void {
 function validateTitle(title: string): string {
   const normalizedTitle = title.trim();
   // Blank input would create an unsearchable heading, while control characters can split or hide what the author sees.
-  if (normalizedTitle.length === 0 || CONTROL_CHARACTER.test(title)) {
+  if (
+    normalizedTitle.length === 0 ||
+    UNSAFE_SINGLE_LINE_CHARACTER.test(title)
+  ) {
     throw new CLIError("--title must be one non-empty, control-free line.", 2);
   }
   // A leading hash would let the author's value inject a second Markdown heading into the bucket.
@@ -193,7 +197,7 @@ function buildEvidenceCitations(
     // Evidence paths are project-relative Markdown tokens; backticks, Windows separators, and dot segments would make their destination unclear.
     if (
       evidencePath.length === 0 ||
-      CONTROL_CHARACTER.test(evidencePath) ||
+      UNSAFE_SINGLE_LINE_CHARACTER.test(evidencePath) ||
       evidencePath.includes("`") ||
       evidencePath.includes("\\") ||
       isAbsolute(evidencePath) ||
@@ -205,7 +209,10 @@ function buildEvidenceCitations(
       );
     }
     // An empty or multiline search value cannot identify one stable literal in the cited file.
-    if (searchLiteral.length === 0 || CONTROL_CHARACTER.test(searchLiteral)) {
+    if (
+      searchLiteral.length === 0 ||
+      UNSAFE_SINGLE_LINE_CHARACTER.test(searchLiteral)
+    ) {
       throw new CLIError(
         `Invalid search literal paired with ${evidencePath}; use one non-empty, control-free literal.`,
         2,

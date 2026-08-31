@@ -397,6 +397,8 @@ export interface ReadonlyFS {
   readJson(path: string): unknown;
   /** Report whether the user can currently list a directory; files, missing paths, and unreadable directories return false. */
   isReadableDirectory(path: string): boolean;
+  /** Report whether two readable project-relative paths identify the same filesystem entry. */
+  samePathIdentity?(leftPath: string, rightPath: string): boolean;
   /** List child names; missing and unreadable directories intentionally return an empty list. */
   listDir(path: string): string[];
   /** Report whether a file can be executed by the current platform. */

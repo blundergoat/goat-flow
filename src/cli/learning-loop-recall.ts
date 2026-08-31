@@ -126,11 +126,38 @@ function prepareRecallOperands(
   );
 }
 
+/** Compare textual equality first, then use an optional filesystem identity probe for platform aliases. */
+function pathsShareIdentity(
+  fs: ReadonlyFS,
+  leftPath: string,
+  rightPath: string,
+): boolean {
+  return (
+    leftPath === rightPath ||
+    fs.samePathIdentity?.(leftPath, rightPath) === true
+  );
+}
+
 /** Return whether a cited file is exactly named or lies beneath a named directory. */
-function matchesOperand(citedPath: string, operand: RecallOperand): boolean {
-  if (!operand.isDirectory) return citedPath === operand.path;
+function matchesOperand(
+  fs: ReadonlyFS,
+  citedPath: string,
+  operand: RecallOperand,
+): boolean {
+  if (!operand.isDirectory) {
+    return pathsShareIdentity(fs, citedPath, operand.path);
+  }
+  // Selecting the project root includes every project-relative citation, regardless of how deeply its file is nested.
   if (operand.path === ".") return true;
-  return citedPath === operand.path || citedPath.startsWith(`${operand.path}/`);
+  if (pathsShareIdentity(fs, citedPath, operand.path)) return true;
+
+  const operandSegmentCount = operand.path.split("/").length;
+  const citedPathSegments = citedPath.split("/");
+  if (citedPathSegments.length <= operandSegmentCount) return false;
+  const citedAncestor = citedPathSegments
+    .slice(0, operandSegmentCount)
+    .join("/");
+  return pathsShareIdentity(fs, citedAncestor, operand.path);
 }
 
 /**
@@ -164,7 +191,7 @@ export function collectLearningLoopRecall(
           })
             .map((anchor) => anchor.filePath)
             .filter((path) =>
-              operands.some((operand) => matchesOperand(path, operand)),
+              operands.some((operand) => matchesOperand(fs, path, operand)),
             ),
         ),
       ].sort(compareStable);

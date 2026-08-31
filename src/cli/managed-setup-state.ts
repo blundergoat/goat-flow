@@ -29,6 +29,8 @@ const MANAGED_INSTALL_STATE_SCHEMA = "goat-flow.install-state.v1" as const;
 const MANAGED_INSTALL_STATE_V2_SCHEMA = "goat-flow.install-state.v2" as const;
 
 const SHA256_PATTERN = /^[a-f0-9]{64}$/u;
+const UNSAFE_SINGLE_LINE_CHARACTER =
+  /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/u;
 
 /** One managed destination and the package hash supplied by the last successful install. */
 interface ManagedInstallStateEntry {
@@ -422,12 +424,19 @@ function assertExactKeys(
 }
 
 /**
- * Require one non-empty string without retaining unsafe raw state in diagnostics.
+ * Require one non-empty display-safe line without retaining unsafe raw state in diagnostics.
  * Error behavior: throws the caller-owned field label without echoing the candidate.
  */
-function requiredNonEmptyString(candidateText: unknown, label: string): string {
-  if (typeof candidateText !== "string" || candidateText.length === 0) {
-    throw new Error(`${label} must be a non-empty string.`);
+function requiredSafeSingleLineString(
+  candidateText: unknown,
+  label: string,
+): string {
+  if (
+    typeof candidateText !== "string" ||
+    candidateText.length === 0 ||
+    UNSAFE_SINGLE_LINE_CHARACTER.test(candidateText)
+  ) {
+    throw new Error(`${label} must be one non-empty, control-free line.`);
   }
   return candidateText;
 }
@@ -491,7 +500,7 @@ function parseManagedInstallProvenance(
     );
     return {
       kind,
-      goatFlowVersion: requiredNonEmptyString(
+      goatFlowVersion: requiredSafeSingleLineString(
         rawProvenance["goatFlowVersion"],
         "Verified install provenance goatFlowVersion",
       ),
@@ -533,7 +542,7 @@ function parseManagedInstallProvenance(
     seenAgents.add(agent);
     return {
       agent,
-      goatFlowVersion: requiredNonEmptyString(
+      goatFlowVersion: requiredSafeSingleLineString(
         rawObservation["goatFlowVersion"],
         "Legacy bootstrap observation goatFlowVersion",
       ),
@@ -641,7 +650,7 @@ function parseManagedInstallReceipt(
     rawReceipt["agent"],
     "Managed install receipt agent",
   );
-  const goatFlowVersion = requiredNonEmptyString(
+  const goatFlowVersion = requiredSafeSingleLineString(
     rawReceipt["goatFlowVersion"],
     `Managed install receipt goatFlowVersion for ${agent}`,
   );
@@ -779,7 +788,7 @@ function parseLegacyInstallState(
   if (rawState["agent"] !== expectedAgent) {
     throw new Error(`Legacy install state agent must be ${expectedAgent}.`);
   }
-  const goatFlowVersion = requiredNonEmptyString(
+  const goatFlowVersion = requiredSafeSingleLineString(
     rawState["goatFlowVersion"],
     `Legacy install state goatFlowVersion for ${expectedAgent}`,
   );
