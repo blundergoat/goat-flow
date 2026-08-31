@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-## v1.17.0 - 2026-08-30
+## v1.17.0 - 2026-09-01
 
 The next release adds per-command `--help`, path-aware learning recall, one project-wide install baseline, whole-suite hook verification, and stricter `--strict` plan checks, and it untangles Claude and Copilot hook registrations.
 
@@ -33,7 +33,7 @@ The next release adds per-command `--help`, path-aware learning recall, one proj
 - **Gruff finds project wrappers again** - `gruff-<language>.sh` in `bin/test/`, `bin/`, or `scripts/` preserves project config, paths, and reports.
 - **Quality prompts reuse project evidence** - Failed audits add bounded learning context; previously refuted candidates stay out of findings.
 - **Focused quality prompts assess the requested project** - Process and harness grounding use its path instead of `.`; prompts omit selected targets absent from the request.
-- **Quality reports explain each score** - Reports may include `score_rationale` with per-axis evidence and deduction; reports without it still validate.
+- **Quality reports explain each score** - Current reports require `score_rationale` with per-axis evidence and deduction; historical reports without it remain legacy-compatible.
 - **`/goat-plan` keeps plans connected** - New milestones link through the prior terminal milestone, and `ISSUE.md` bands and totals are recalculated.
 - **Milestone work uses one agent contract** - Start timing before source edits, pause at gates, finalize at exit, and run `goat-clarity` once.
 - **`/goat-clarity` resolves explicit intent first** - Write authority uses the first matching term: update/edit/fix grants it, report/review/check withholds it, then the `documentation` keyword applies. A request to report on documentation remains report-only.
