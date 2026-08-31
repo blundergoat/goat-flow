@@ -1,6 +1,6 @@
 ---
 category: naming
-last_reviewed: 2026-08-10
+last_reviewed: 2026-08-31
 ---
 
 ## Lesson: Boundary payload names are not placeholder debt
@@ -54,17 +54,38 @@ last_reviewed: 2026-08-10
 ## Lesson: Test-file rename sweeps need a focused test rerun
 
 **Status:** active | **Created:** 2026-05-31
+**Decision changed:** Anchor a local test rename to its unique test case, then inspect the exact diff and symbol occurrences before running that file.
+**Trigger phase:** ACT
+**Incident count:** 6 | **Latest occurrence:** 2026-08-31
 
-**What happened:** During the gruff cleanup, a local `c`→`concern` rename in `test/unit/audit-command.test.ts` updated the first two assertions but left three later `c.*` references in the same loop. `npm run typecheck` completed with exit code 0 because the repo typecheck does not cover test files, and `npm test` later failed with `ReferenceError: c is not defined`.
+**Prevention:** Anchor a test-file rename to a unique test title or declaration, then inspect the diff and remaining symbol occurrences.
+Run the focused file before the full suite.
+Also run `node --import tsx src/cli/cli.ts stats --check` when a changed name or comment may be a learning-loop evidence anchor.
 
-**Root cause:** I treated the rename as a simple local cleanup and relied on source typecheck before running the touched test. The old identifier was still valid JavaScript syntax, so only executing the test surfaced the missed references.
+**What happened:** A gruff cleanup renamed local `c`→`concern` in `test/unit/audit-command.test.ts` but left three later `c.*` references.
+Source typecheck exited 0 because it does not cover test files; `npm test` later failed with `ReferenceError: c is not defined`.
 
-**Prevention:** After renaming identifiers inside test files, run a focused test for the touched file before the full suite, and grep the local block for the old identifier when it is not too generic. Evidence anchor: `test/unit/audit-command/json-contract.test.ts` (search: `has correct shape for harness mode`).
+**Root cause:** I treated the rename as local cleanup and relied on source typecheck before running the touched test.
+The old identifier remained valid JavaScript syntax, so only executing the test exposed the missed references.
 
-**Recurrence 2026-08-02:** A gruff `test-quality.loop-in-test` cleanup renamed fixture tables (`LOCAL_STATE_README_PAIRS`→`LOCAL_STATE_README_ENTRIES`) and split looped assertions into per-case `it()` names. Typecheck, the touched focused tests, and gruff were all green, but `npm test` failed one unrelated test: `diagnostics bundle` exited 1 because the harness `feedback_loop` concern dropped to 50. `stats --check` named the real cause - two learning-loop entries carried `(search: ...)` anchors pointing at the old constant and the old test name. The rename sweep is not finished when the code is green; the loop indexes code by those exact strings.
-**Recurrence 2026-08-18:** The same failure hit twice in one session, once from a comment rewrite and once from a rename. Clearing `docs.missing-side-effect-doc` reworded `test/integration/audit-drift.helpers.ts` from "Write canonical skill stubs" to "Writes…", and the `naming.identifier-quality` sweep renamed `data`→`payload` in `test/integration/dashboard-server-dashboard-terminal-endpoints.test.ts`. Both times typecheck, focused gruff, and the touched tests were green, and both times `npm test` failed only `test/unit/support-bundle.test.ts` ("emits clean JSON through the CLI", exit 1), because `diagnostics bundle` embeds the harness audit whose `feedback-loop-active` check runs `stats --check`. A cited comment string and a cited identifier are both durable artifacts. For a comment, keep the cited substring and add new wording in a second sentence; for a rename, update the citing entry in the same change. Run `stats --check` at the end of any batch that rewrites existing comments or identifiers, not only the targeted gruff rerun.
+Evidence anchor: `test/unit/audit-command/json-contract.test.ts` (search: `has correct shape for harness mode`).
 
-**Prevention:** After any rename or test-name change, run `node --import tsx src/cli/cli.ts stats --check` alongside the focused tests. A green typecheck plus green touched tests cannot see a stale learning-loop anchor, and the failure surfaces far away - as an audit concern score inside an unrelated diagnostics test. Evidence anchors: `.goat-flow/learning-loop/footguns/quality-reporting.md` (search: `does not let unscoped npx resolve the deprecated package in`), `.goat-flow/learning-loop/lessons/refactor-fallout.md` (search: `LOCAL_STATE_README_ENTRIES`).
+**Recurrence 2026-08-02:** A gruff cleanup renamed fixture tables and split looped assertions into named test cases.
+Typecheck, focused tests, and gruff were green, but `npm test` failed because two learning-loop anchors still used the old names.
+`stats --check` exposed the stale anchors; the sweep was incomplete even though the code checks were green.
+
+**Recurrence 2026-08-18:** Comment and identifier rewrites caused the same stale-anchor failure twice in one session.
+Focused checks were green, but `test/unit/support-bundle.test.ts` failed because its embedded audit runs `stats --check`.
+Keep a cited comment substring or update its learning-loop entry in the same change; do the same for renamed identifiers.
+
+**Recurrence 2026-08-31:** An under-anchored `selection`→`selectedContext` patch matched earlier declarations instead of the new test twice.
+Diff inspection exposed both wrong edits; the correction used the unique test title as its patch anchor and reran the complete file.
+Evidence anchor: `test/unit/learning-loop-context.test.ts` (search: `recomputes task zero-hit after the global byte budget drops the only match`).
+
+**Earlier anchor-drift evidence:**
+
+- `.goat-flow/learning-loop/footguns/quality-reporting.md` (search: `does not let unscoped npx resolve the deprecated package in`)
+- `.goat-flow/learning-loop/lessons/refactor-fallout.md` (search: `LOCAL_STATE_README_ENTRIES`)
 
 ---
 
