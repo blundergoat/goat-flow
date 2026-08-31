@@ -41,7 +41,7 @@ describe("comment playbook verification doctrine", () => {
       );
       assert.match(
         content,
-        /When neither defines a\s+width, 150 characters is the fallback ceiling/u,
+        /When neither defines a\s+width, the 150-character fallback is a ceiling, not a target/u,
         playbookPath,
       );
       assert.match(
@@ -52,6 +52,16 @@ describe("comment playbook verification doctrine", () => {
       assert.match(
         content,
         /never split one point across lines merely to stay short/u,
+        playbookPath,
+      );
+      assert.match(
+        content,
+        /Do not hard-wrap at an arbitrary narrower column/u,
+        playbookPath,
+      );
+      assert.match(
+        content,
+        /Keep one complete point on one line when it fits/u,
         playbookPath,
       );
       assert.doesNotMatch(
@@ -192,6 +202,41 @@ describe("comment playbook verification doctrine", () => {
       assert.match(
         content,
         /self-explanatory private\/local units need none/u,
+        playbookPath,
+      );
+      assert.match(
+        content,
+        /rejects mechanical narration, not comments above branches or loops/iu,
+        playbookPath,
+      );
+    });
+  });
+
+  it("contrasts mechanical narration with hidden consequences across control flow", () => {
+    assertForPlaybook("code-comments.md", (content, playbookPath) => {
+      assert.match(
+        content,
+        /Illustrative context examples \(not incident evidence\)/u,
+        playbookPath,
+      );
+      assert.match(
+        content,
+        /Bad: repeats exactly what the code says/u,
+        playbookPath,
+      );
+      assert.match(
+        content,
+        /A pointer is orientation prose, not a promise to enumerate every installed playbook/u,
+        playbookPath,
+      );
+      assert.match(
+        content,
+        /Every ancestor must remain unchanged so a concurrent symlink swap cannot redirect the marker/u,
+        playbookPath,
+      );
+      assert.match(
+        content,
+        /No earlier assessment exists, so findings in this run have no comparison baseline/u,
         playbookPath,
       );
     });

@@ -238,6 +238,26 @@ describe("collectLearningLoopRecall", () => {
     ]);
   });
 
+  it("uses filesystem identity for case aliases without folding a case-sensitive filesystem", () => {
+    const differentlyCasedPath = "SRC/Core/File.ts";
+    assert.equal(
+      collectLearningLoopRecall(fs, BUCKET_PATHS, [differentlyCasedPath])
+        .totalMatches,
+      0,
+    );
+
+    const caseInsensitiveFs = {
+      ...fs,
+      samePathIdentity: (leftPath: string, rightPath: string) =>
+        leftPath.toLowerCase() === rightPath.toLowerCase(),
+    };
+    const aliased = collectLearningLoopRecall(caseInsensitiveFs, BUCKET_PATHS, [
+      differentlyCasedPath,
+    ]);
+    assert.equal(aliased.totalMatches, 3);
+    assert.deepEqual(aliased.paths, [differentlyCasedPath]);
+  });
+
   it("rejects absolute, parent-escaping, and Windows drive-relative operands", () => {
     for (const unsafePath of [
       "/outside",

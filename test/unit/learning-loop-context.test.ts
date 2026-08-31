@@ -406,4 +406,34 @@ describe("selectLearningLoopContext", () => {
       /task_matches="0" task_zero_hit="true"/u,
     );
   });
+
+  it("recomputes task zero-hit after the global byte budget drops the only match", () => {
+    const unmatchedFootgun = memoryEntry({
+      title: "Higher priority unrelated safety trap",
+      excerpt: "Compact unrelated fallback evidence.",
+    });
+    const matchedPattern = memoryEntry({
+      title: "Exact websocket retry marker",
+      kind: "pattern",
+      excerpt: "The websocket retry marker is the direct task match.",
+    });
+    const selectedContext = selectLearningLoopContext(
+      { learningLoopEntries: [unmatchedFootgun, matchedPattern] },
+      {
+        taskSignals: ["websocket retry marker"],
+        maxBytes: 500,
+      },
+    );
+
+    assert.deepEqual(
+      selectedContext.entries.map((entry) => entry.title),
+      [unmatchedFootgun.title],
+    );
+    assert.equal(selectedContext.taskMatchedCount, 0);
+    assert.equal(selectedContext.isTaskZeroHit, true);
+    assert.match(
+      renderLearningLoopContext(selectedContext),
+      /task_matches="0" task_zero_hit="true"/u,
+    );
+  });
 });

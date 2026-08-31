@@ -294,6 +294,28 @@ describe("audit on well-configured project", () => {
     assert.match(architectureFinding?.message ?? "", /test-selection\.md/u);
   });
 
+  it("reports documented playbooks that are absent from the installed inventory", () => {
+    const auditContext = makeCtx({
+      fs: stubFS({
+        readFile: (path) =>
+          path === ".goat-flow/code-map.md"
+            ? "└── playbooks/ = browser-use, test-selection, writing-style"
+            : null,
+        listDir: (path) =>
+          path === ".goat-flow/skill-docs/playbooks"
+            ? ["browser-use.md", "test-selection.md"]
+            : [],
+      }),
+    });
+
+    const findings = scanSemanticDrift(auditContext).findings.filter(
+      (finding) => finding.rule === "skill-playbook-inventory-drift",
+    );
+    assert.equal(findings.length, 1);
+    assert.equal(findings[0]?.path, ".goat-flow/code-map.md");
+    assert.match(findings[0]?.message ?? "", /writing-style\.md/u);
+  });
+
   it("checks glossary totals and accepts non-goat canonical skill rows", () => {
     assert.deepEqual(
       findSkillInventoryDrift(

@@ -132,4 +132,37 @@ describe("quality score rationale prompt contract", () => {
     assert.ok(source.includes('"score_rationale"'));
     assert.ok(source.includes(RATIONALE_GUIDANCE));
   });
+
+  it("keeps the documented quality-save example on the strict current schema", () => {
+    const docs = readFileSync(
+      resolve(import.meta.dirname, "../../docs/cli.md"),
+      "utf8",
+    );
+    const qualitySaveSection = docs.match(
+      /### `goat-flow quality save <project>`[\s\S]*?(?=\n### |\n## |$)/u,
+    )?.[0];
+
+    assert.ok(qualitySaveSection, "docs must retain the quality-save section");
+    const exampleJson = qualitySaveSection.match(
+      /quality save \. <<'JSON'\n([\s\S]*?)\nJSON/u,
+    )?.[1];
+    assert.ok(exampleJson, "quality save must retain its JSON stdin example");
+
+    const materializedExampleJson = exampleJson
+      .replaceAll("<current-version>", getPackageVersion())
+      .replace("<absolute-project-path>", "/tmp/example-project")
+      .replace("YYYY-MM-DD", "2026-08-29")
+      .replace("<git-head>", "a".repeat(40));
+    const parsedReport = parseQualityReport(
+      JSON.parse(materializedExampleJson),
+      { requireCurrentFields: true },
+    );
+    assert.equal(
+      parsedReport.ok,
+      true,
+      parsedReport.ok
+        ? undefined
+        : `documented quality report is invalid: ${parsedReport.error}`,
+    );
+  });
 });

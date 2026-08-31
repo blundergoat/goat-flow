@@ -883,6 +883,20 @@ describe("managed install state v2 facade", () => {
         ],
       },
     },
+    {
+      name: "terminal controls in receipt versions",
+      state: {
+        schemaVersion: "goat-flow.install-state.v2",
+        files: [validV2Row],
+        receipts: [
+          {
+            agent: "codex",
+            goatFlowVersion: "1.16.0\u001b[2J",
+            files: [],
+          },
+        ],
+      },
+    },
   ];
 
   // Each table row protects one schema boundary and reports its own fixture name on failure.

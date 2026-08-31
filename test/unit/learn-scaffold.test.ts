@@ -391,6 +391,20 @@ describe("runLearnScaffold", () => {
           ),
         /title/iu,
       );
+      for (const unsafeTitle of [
+        "terminal\u009bcontrol",
+        "unicode\u2028line separator",
+        "unicode\u2029paragraph separator",
+      ]) {
+        assert.throws(
+          () =>
+            runLearnScaffold(
+              lessonRequest(projectRoot, { title: unsafeTitle }),
+              fixedClock(),
+            ),
+          /title/iu,
+        );
+      }
       assert.throws(
         () =>
           runLearnScaffold(

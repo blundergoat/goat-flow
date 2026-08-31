@@ -912,6 +912,10 @@ describe("quality report contract: cross-variant boundaries", () => {
         "2 additional prior refuted candidate(s) omitted from this bounded preview.",
       ),
     );
+    assert.ok(
+      prompt.includes(JSON.stringify(priorReport.path)),
+      "omitted refutations need an exact safe retrieval path",
+    );
   });
 });
 

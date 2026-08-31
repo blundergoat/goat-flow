@@ -605,8 +605,39 @@ const parserBoundaryCases: ParserBoundaryCase[] = [
       /Policy destructive: eval hides commands from safety checks/u,
   },
   {
+    name: "leading input redirection before shell eval",
+    userCommand: "</dev/null eval 'git status'",
+    expectedStatus: 2,
+    expectedPolicyMessage:
+      /Policy destructive: eval hides commands from safety checks/u,
+  },
+  {
+    name: "leading stderr redirection before shell eval",
+    userCommand: "2>/dev/null eval 'git status'",
+    expectedStatus: 2,
+    expectedPolicyMessage:
+      /Policy destructive: eval hides commands from safety checks/u,
+  },
+  {
+    name: "downstream leading redirection before shell eval",
+    userCommand: "printf safe | 2>/dev/null eval 'git status'",
+    expectedStatus: 2,
+    expectedPolicyMessage:
+      /Policy destructive: eval hides commands from safety checks/u,
+  },
+  {
     name: "builtin option terminator before benign printf",
     userCommand: "builtin -- printf '%s\\n' safe",
+    expectedStatus: 0,
+  },
+  {
+    name: "leading input redirection before benign printf",
+    userCommand: "</dev/null printf '%s\\n' safe",
+    expectedStatus: 0,
+  },
+  {
+    name: "leading stderr redirection before yq eval subcommand",
+    userCommand: "2>/dev/null yq eval '.metadata.key' file.yaml",
     expectedStatus: 0,
   },
   {

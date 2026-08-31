@@ -47,6 +47,31 @@ function makeProject(): string {
   return projectRoot;
 }
 
+/**
+ * Create a directory symlink in a disposable fixture, or skip when the host forbids unprivileged links.
+ *
+ * @returns true when the link exists; false after marking the test skipped for EPERM
+ * @throws when symlink creation fails for any reason other than EPERM
+ */
+function symlinkDirectoryOrSkip(
+  context: TestContext,
+  targetPath: string,
+  linkPath: string,
+): boolean {
+  try {
+    fs.symlinkSync(targetPath, linkPath, "dir");
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "EPERM") {
+      context.skip(
+        "Skipped: host blocks unprivileged symlinks (Windows without Developer Mode)",
+      );
+      return false;
+    }
+    throw error;
+  }
+}
+
 /** POSIX exposes claim mode bits; Windows does not implement the same permission contract. */
 function assertPrivateClaimModeWhenSupported(markerPath: string): void {
   if (process.platform === "win32") return;
@@ -185,6 +210,59 @@ describe("path write claims", () => {
       state: "present",
       sha256: createHash("sha256").update(content).digest("hex"),
     });
+  });
+
+  it("rejects a replaced coordination parent before allocating a claim marker", (context: TestContext) => {
+    const projectRoot = makeProject();
+    const outsideRoot = makeProject();
+    const probePath = join(projectRoot, "symlink-probe");
+    if (!symlinkDirectoryOrSkip(context, outsideRoot, probePath)) return;
+    fs.unlinkSync(probePath);
+
+    const targetPath = "managed.txt";
+    const expectedIdentity = readPathWriteTargetIdentity(
+      projectRoot,
+      targetPath,
+    );
+    const goatFlowDirectory = join(projectRoot, ".goat-flow");
+    const originalGoatFlowDirectory = join(projectRoot, "owned-goat-flow");
+    const claimDirectory = join(goatFlowDirectory, "write-claims");
+    const originalMkdirSync = fs.mkdirSync;
+    let hasSwappedParent = false;
+    context.mock.method(
+      fs,
+      "mkdirSync",
+      (path: fs.PathLike, options?: fs.MakeDirectoryOptions) => {
+        if (!hasSwappedParent && path === claimDirectory) {
+          hasSwappedParent = true;
+          fs.renameSync(goatFlowDirectory, originalGoatFlowDirectory);
+          fs.symlinkSync(outsideRoot, goatFlowDirectory, "dir");
+        }
+        return originalMkdirSync(path, options);
+      },
+    );
+
+    let capturedClaimError: PathWriteClaimError | null = null;
+    try {
+      const unexpectedBatch = acquirePathWriteClaims(projectRoot, [
+        { targetPath, expectedIdentity },
+      ]);
+      releasePathWriteClaims(unexpectedBatch);
+      assert.fail("claim acquisition must reject the replaced parent");
+    } catch (error) {
+      if (!(error instanceof PathWriteClaimError)) throw error;
+      capturedClaimError = error;
+    }
+    assert.equal(capturedClaimError.reason, "claim-integrity");
+    assert.equal(capturedClaimError.targetPath, targetPath);
+    const outsideClaimDirectory = join(outsideRoot, "write-claims");
+    const outsideClaimNames = fs.existsSync(outsideClaimDirectory)
+      ? fs.readdirSync(outsideClaimDirectory)
+      : [];
+    assert.equal(
+      outsideClaimNames.some((name) => name.endsWith(".claim")),
+      false,
+    );
   });
 
   /**
