@@ -1684,6 +1684,7 @@ normalize_command_candidate() {
   local base=""
   local after_word=""
   local case_arm_re='^case[[:space:]][^)]*\)[[:space:]]*'
+  local named_file_descriptor_redirection_re='^\{[a-zA-Z_][a-zA-Z0-9_]*\}(<<<|<<-|<<|<>|>>\||>>|>\||>&|<&|>|<)'
 
   while true; do
     c="${c#"${c%%[![:space:]]*}"}"
@@ -1704,6 +1705,10 @@ normalize_command_candidate() {
       continue
     fi
     if [[ "$c" == \{* ]]; then
+      # A named descriptor such as `{log}>file` is a command redirection, so leave it intact for executable classification.
+      if [[ "$c" =~ $named_file_descriptor_redirection_re ]]; then
+        break
+      fi
       c="${c#\{}"
       continue
     fi

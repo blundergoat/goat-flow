@@ -1,6 +1,6 @@
 ---
 category: cli-contracts
-last_reviewed: 2026-08-23
+last_reviewed: 2026-09-01
 ---
 
 **Scope:** The CLI's own surface contract - parser headroom before refactoring, omission tests for required choices, output shape across one and many selections, and what an id-based comparison actually compares. Cooperation between separately-correct components is [integration-verification.md](integration-verification.md).
@@ -33,7 +33,10 @@ last_reviewed: 2026-08-23
 
 **Recurrence update (2026-08-07):** Tightening Timing Receipt stamp validation passed 116 focused tests and typecheck before whole-file ESLint rejected `parseStamp` at complexity 11. The first helper extraction then made preflight report five new file-length warnings. Deriving canonical UTC from the epoch inside `parseStamp`, folding regressions into existing test cases, and restoring the accepted `plans-time.ts` size cleared targeted Gruff without weakening the invalid-calendar or rendered-heading checks.
 
-**Decision changed:** Measure whole-file ESLint and gruff immediately after the first parser GREEN, and pay for new branches by removing duplicate parsing rather than adding a late helper alone. | **Trigger phase:** ACT | **Incident count:** 4 | **Latest occurrence:** 2026-08-07
+**Recurrence 2026-09-01:** Exact playbook-inventory regressions passed before full preflight rejected `driftSkillPlaybookInventory` at complexity 11.
+Extracting problem rendering into `describePlaybookInventoryProblems` restored focused ESLint without weakening the exact-set cases.
+
+**Decision changed:** Measure whole-file ESLint and gruff immediately after the first parser GREEN, and pay for new branches by removing duplicate parsing rather than adding a late helper alone. | **Trigger phase:** ACT | **Incident count:** 5 | **Latest occurrence:** 2026-09-01
 **Caught at:** VERIFY
 
 **Prevention:**

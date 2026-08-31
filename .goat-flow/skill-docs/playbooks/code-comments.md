@@ -171,7 +171,7 @@ if (documentedPlaybooks === null) return [];
 // Bad: loops through every snapshot.
 for (const snapshot of snapshots) assertDirectoryIdentity(snapshot);
 
-// Every ancestor must remain unchanged so a concurrent symlink swap cannot redirect the marker.
+// A changed ancestor invalidates claim admission because the marker may no longer belong to the project the user selected.
 for (const snapshot of snapshots) assertDirectoryIdentity(snapshot);
 
 // Bad: checks whether the report is null.

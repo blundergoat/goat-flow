@@ -619,8 +619,22 @@ const parserBoundaryCases: ParserBoundaryCase[] = [
       /Policy destructive: eval hides commands from safety checks/u,
   },
   {
+    name: "named descriptor redirection before shell eval",
+    userCommand: "{output}>/dev/null eval 'git status'",
+    expectedStatus: 2,
+    expectedPolicyMessage:
+      /Policy destructive: eval hides commands from safety checks/u,
+  },
+  {
     name: "downstream leading redirection before shell eval",
     userCommand: "printf safe | 2>/dev/null eval 'git status'",
+    expectedStatus: 2,
+    expectedPolicyMessage:
+      /Policy destructive: eval hides commands from safety checks/u,
+  },
+  {
+    name: "wrapped named descriptor redirection before downstream shell eval",
+    userCommand: "printf safe | command {output}>/dev/null eval 'git status'",
     expectedStatus: 2,
     expectedPolicyMessage:
       /Policy destructive: eval hides commands from safety checks/u,
@@ -633,6 +647,11 @@ const parserBoundaryCases: ParserBoundaryCase[] = [
   {
     name: "leading input redirection before benign printf",
     userCommand: "</dev/null printf '%s\\n' safe",
+    expectedStatus: 0,
+  },
+  {
+    name: "named descriptor redirection before benign printf",
+    userCommand: "{output}>/dev/null printf '%s\\n' safe",
     expectedStatus: 0,
   },
   {

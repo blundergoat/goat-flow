@@ -781,13 +781,18 @@ run_full() {
   expect_block_message shell "! eval 'git status'" "leading shell negation before shell eval" destructive "eval hides commands from safety checks"
   expect_block_message shell "</dev/null eval 'git status'" "leading input redirection before shell eval" destructive "eval hides commands from safety checks"
   expect_block_message shell "2>/dev/null eval 'git status'" "leading stderr redirection before shell eval" destructive "eval hides commands from safety checks"
+  expect_block_message shell "{output}>/dev/null eval 'git status'" \
+    "named descriptor redirection before shell eval" destructive "eval hides commands from safety checks"
   expect_block_message shell "printf safe | 2>/dev/null eval 'git status'" \
     "downstream leading redirection before shell eval" destructive "eval hides commands from safety checks"
+  expect_block_message shell "printf safe | command {output}>/dev/null eval 'git status'" \
+    "wrapped named descriptor redirection before downstream shell eval" destructive "eval hides commands from safety checks"
   expect_block_message shell "printf safe | eval 'git status'" "downstream shell eval" destructive "eval hides commands from safety checks"
   expect_block_message shell "printf safe | command eval 'git status'" \
     "command-wrapped downstream shell eval" destructive "eval hides commands from safety checks"
   expect_allow shell "builtin -- printf '%s\\n' safe" "builtin option terminator before benign printf"
   expect_allow shell "</dev/null printf '%s\\n' safe" "leading input redirection before benign printf"
+  expect_allow shell "{output}>/dev/null printf '%s\\n' safe" "named descriptor redirection before benign printf"
   expect_allow shell "2>/dev/null yq eval '.metadata.key' file.yaml" "leading stderr redirection before yq eval subcommand"
   expect_allow shell "! yq eval '.metadata.key' file.yaml" "leading shell negation before yq eval subcommand"
   expect_allow shell "printf document | yq eval '.metadata.key'" "downstream yq eval subcommand"

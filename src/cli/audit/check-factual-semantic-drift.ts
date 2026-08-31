@@ -143,7 +143,10 @@ function readCodeMapDashboardViews(codeMap: string): string[] | null {
     .sort();
 }
 
-/** Read selected-project dashboard view names without substituting framework facts. */
+/**
+ * Read selected-project dashboard view names without substituting framework facts.
+ * Invariant: names are sorted, extension-free, and empty when the project ships no HTML views.
+ */
 function readDashboardViewFiles(auditContext: AuditContext): string[] {
   const dashboardViewFiles = auditContext.fs.glob("src/dashboard/views/*.html");
   // A malformed path contributes an empty name, which filtering removes before users see the comparison.
@@ -215,6 +218,15 @@ function readTopLevelSkillPlaybooks(auditContext: AuditContext): string[] {
 type PlaybookInventoryDocumentPath =
   ".goat-flow/architecture.md" | ".goat-flow/code-map.md";
 
+/**
+ * Preserve valid names and malformed items from one explicit orientation claim.
+ * The audit compares both groups so users see every reason the inventory is not exact.
+ */
+interface ParsedPlaybookInventoryClaim {
+  documentedPlaybookNames: string[];
+  malformedInventoryItems: string[];
+}
+
 /** Normalize one documented playbook name to the installed filename shape. */
 function normalizeDocumentedPlaybookName(name: string): string | null {
   const trimmedName = name.trim().replace(/`/gu, "");
@@ -226,28 +238,49 @@ function normalizeDocumentedPlaybookName(name: string): string | null {
 
 /**
  * Read the code map's comma-separated `playbooks/ = ...` inventory, when present.
- * Invariant: returns normalized Markdown filenames only for a list-shaped declaration.
+ * Use when contributors rely on the code map to find every installed workflow guide.
+ * Invariant: every declared item is retained as either a normalized filename or malformed evidence.
+ *
+ * @param codeMap - complete code-map text; an incidental pointer has no explicit inventory
+ * @returns parsed claim evidence, or null when the code map makes no exhaustive claim
  */
-function readCodeMapPlaybookInventory(codeMap: string): string[] | null {
+function readCodeMapPlaybookInventory(
+  codeMap: string,
+): ParsedPlaybookInventoryClaim | null {
   const inventoryLine = codeMap
     .split(/\r?\n/u)
     .find((line) => /[├└]──\s+playbooks\/\s*=\s*\S/u.test(line));
   const inventoryText = inventoryLine?.split("=").slice(1).join("=").trim();
   if (inventoryText === undefined || inventoryText.length === 0) return null;
-  const playbookNames = inventoryText
-    .split(",")
-    .map(normalizeDocumentedPlaybookName)
-    .filter((name): name is string => name !== null);
-  return playbookNames.length === 0 ? null : [...new Set(playbookNames)].sort();
+  const documentedPlaybookNames: string[] = [];
+  const malformedInventoryItems: string[] = [];
+  // Every comma-separated item belongs to the explicit claim, so invalid names must reach the warning instead of disappearing.
+  for (const inventoryItem of inventoryText.split(",")) {
+    const trimmedItem = inventoryItem.trim();
+    const normalizedPlaybookName = normalizeDocumentedPlaybookName(trimmedItem);
+    if (normalizedPlaybookName === null) {
+      malformedInventoryItems.push(trimmedItem || "<empty item>");
+      continue;
+    }
+    documentedPlaybookNames.push(normalizedPlaybookName);
+  }
+  return {
+    documentedPlaybookNames: [...new Set(documentedPlaybookNames)].sort(),
+    malformedInventoryItems: [...new Set(malformedInventoryItems)].sort(),
+  };
 }
 
 /**
  * Read the architecture row that explicitly enumerates every standalone playbook.
+ * Use when users rely on the committed-knowledge row to understand which guides the project ships.
  * Invariant: an index pointer without the colon-led filename list returns null.
+ *
+ * @param architecture - complete architecture text; a pointer without a list is not exhaustive
+ * @returns parsed claim evidence, or null when architecture makes no exhaustive claim
  */
 function readArchitecturePlaybookInventory(
   architecture: string,
-): string[] | null {
+): ParsedPlaybookInventoryClaim | null {
   const inventoryLine = architecture
     .split(/\r?\n/u)
     .find(
@@ -255,23 +288,83 @@ function readArchitecturePlaybookInventory(
         line.includes("standalone playbooks indexed by") &&
         line.includes("playbooks/README.md`:"),
     );
-  const inventoryText = inventoryLine?.split(":").slice(1).join(":");
-  if (inventoryText === undefined) return null;
-  const playbookNames = Array.from(
-    inventoryText.matchAll(/`([a-z0-9]+(?:-[a-z0-9]+)*\.md)`/gu),
-    (match) => match[1],
-  ).filter((name): name is string => name !== undefined);
-  return playbookNames.length === 0 ? null : [...new Set(playbookNames)].sort();
+  const inventoryText = inventoryLine
+    ?.split(":")
+    .slice(1)
+    .join(":")
+    .split(/\s+\|\s+/u)[0]
+    ?.trim();
+  if (inventoryText === undefined || inventoryText.length === 0) return null;
+  const documentedPlaybookNames: string[] = [];
+  const malformedInventoryItems: string[] = [];
+  // The colon makes this row exhaustive, so prose or invalid filenames inside its comma list must be reported to the maintainer.
+  for (const inventoryItem of inventoryText.split(",")) {
+    const trimmedItem = inventoryItem
+      .trim()
+      .replace(/^and\s+/u, "")
+      .replace(/\.$/u, "");
+    const documentedPlaybookFilename = trimmedItem.match(
+      /^`([a-z0-9]+(?:-[a-z0-9]+)*\.md)`$/u,
+    )?.[1];
+    if (documentedPlaybookFilename === undefined) {
+      malformedInventoryItems.push(trimmedItem || "<empty item>");
+      continue;
+    }
+    documentedPlaybookNames.push(documentedPlaybookFilename);
+  }
+  return {
+    documentedPlaybookNames: [...new Set(documentedPlaybookNames)].sort(),
+    malformedInventoryItems: [...new Set(malformedInventoryItems)].sort(),
+  };
 }
 
-/** Select the document-specific grammar instead of treating every mention as exhaustive. */
+/**
+ * Select the document-specific grammar instead of treating every mention as exhaustive.
+ * Returns null when users only receive a pointer and no exact inventory promise.
+ */
 function readExplicitPlaybookInventory(
   path: PlaybookInventoryDocumentPath,
   text: string,
-): string[] | null {
+): ParsedPlaybookInventoryClaim | null {
   return path === ".goat-flow/code-map.md"
     ? readCodeMapPlaybookInventory(text)
     : readArchitecturePlaybookInventory(text);
+}
+
+/**
+ * Translate an explicit inventory mismatch into the exact problems shown by audit.
+ * Use when maintainers need to distinguish invalid syntax, missing guides, and removed guides.
+ *
+ * @param malformedInventoryItems - invalid claimed items; empty means every item has valid filename syntax
+ * @param missingPlaybookNames - installed guides absent from the claim; empty means users can discover every installed guide
+ * @param stalePlaybookNames - claimed guides absent from the project; empty means the claim sends users only to existing files
+ * @returns user-facing problem phrases; empty means the explicit claim matches installed files exactly
+ */
+function describePlaybookInventoryProblems(
+  malformedInventoryItems: string[],
+  missingPlaybookNames: string[],
+  stalePlaybookNames: string[],
+): string[] {
+  const inventoryProblems: string[] = [];
+  // Invalid syntax cannot participate in filename comparison, so show the exact item the maintainer must repair.
+  if (malformedInventoryItems.length > 0) {
+    inventoryProblems.push(
+      `contains malformed playbook item(s): ${malformedInventoryItems.join(", ")}`,
+    );
+  }
+  // Missing names hide installed guidance from users who rely on the orientation document.
+  if (missingPlaybookNames.length > 0) {
+    inventoryProblems.push(
+      `omits top-level skill playbook(s): ${missingPlaybookNames.join(", ")}`,
+    );
+  }
+  // Stale names send users to guidance the selected project no longer provides.
+  if (stalePlaybookNames.length > 0) {
+    inventoryProblems.push(
+      `lists removed top-level skill playbook(s): ${stalePlaybookNames.join(", ")}`,
+    );
+  }
+  return inventoryProblems;
 }
 
 /**
@@ -279,21 +372,21 @@ function readExplicitPlaybookInventory(
  * Use when architecture or code-map prose claims to enumerate every available playbook.
  *
  * @param path - orientation document path shown in the warning
- * @param text - complete document text; empty text omits every installed playbook
+ * @param text - complete document text; empty text makes no explicit inventory claim
  * @param auditContext - selected-project files used to read installed playbooks
- * @returns one warning listing missing or stale names, or an empty list when the inventory is exact
+ * @returns one warning listing malformed, missing, or stale items; empty means no claim or an exact inventory
  */
 function driftSkillPlaybookInventory(
   path: PlaybookInventoryDocumentPath,
   text: string,
   auditContext: AuditContext,
 ): ContentFinding[] {
-  const documentedPlaybookNames = readExplicitPlaybookInventory(path, text);
+  const documentedInventory = readExplicitPlaybookInventory(path, text);
   // A pointer or incidental filename is useful orientation prose, not a promise to enumerate every playbook.
-  if (documentedPlaybookNames === null) return [];
+  if (documentedInventory === null) return [];
+  const { documentedPlaybookNames, malformedInventoryItems } =
+    documentedInventory;
   const installedPlaybookNames = readTopLevelSkillPlaybooks(auditContext);
-  // No installed playbooks means the document cannot hide a user-facing workflow.
-  if (installedPlaybookNames.length === 0) return [];
 
   const missingPlaybookNames = installedPlaybookNames.filter(
     (playbookName) => !documentedPlaybookNames.includes(playbookName),
@@ -301,37 +394,28 @@ function driftSkillPlaybookInventory(
   const stalePlaybookNames = documentedPlaybookNames.filter(
     (playbookName) => !installedPlaybookNames.includes(playbookName),
   );
-  // An explicit inventory is current only when both sets contain the same names.
-  if (missingPlaybookNames.length === 0 && stalePlaybookNames.length === 0) {
-    return [];
-  }
-
-  const inventoryDriftDescriptions = [
-    ...(missingPlaybookNames.length === 0
-      ? []
-      : [
-          `omits top-level skill playbook(s): ${missingPlaybookNames.join(", ")}`,
-        ]),
-    ...(stalePlaybookNames.length === 0
-      ? []
-      : [
-          `lists removed top-level skill playbook(s): ${stalePlaybookNames.join(", ")}`,
-        ]),
-  ];
+  const inventoryProblems = describePlaybookInventoryProblems(
+    malformedInventoryItems,
+    missingPlaybookNames,
+    stalePlaybookNames,
+  );
+  // No problem phrases means every claimed item is valid and both filename sets match.
+  if (inventoryProblems.length === 0) return [];
+  const isMissingOnlyInventoryDrift =
+    stalePlaybookNames.length === 0 && malformedInventoryItems.length === 0;
 
   return [
     {
       severity: "warning",
       rule: "skill-playbook-inventory-drift",
       path,
-      message: `${path} ${inventoryDriftDescriptions.join("; ")}. Live playbooks are ${installedPlaybookNames.join(", ")}.`,
-      // Missing-only drift keeps its established recovery text; stale names require the caller to reconcile both set directions.
-      suggestion:
-        stalePlaybookNames.length === 0
-          ? "Update the committed skill-docs playbook inventory to include every top-level " +
-            ".goat-flow/skill-docs/playbooks/*.md playbook except README.md."
-          : "Make the committed skill-docs playbook inventory exactly match the top-level " +
-            ".goat-flow/skill-docs/playbooks/*.md playbooks except README.md.",
+      message: `${path} ${inventoryProblems.join("; ")}. Live playbooks are ${installedPlaybookNames.join(", ") || "none"}.`,
+      // Missing-only drift keeps its established recovery text; stale or malformed items require an exact reconciliation.
+      suggestion: isMissingOnlyInventoryDrift
+        ? "Update the committed skill-docs playbook inventory to include every top-level " +
+          ".goat-flow/skill-docs/playbooks/*.md playbook except README.md."
+        : "Make the committed skill-docs playbook inventory exactly match the top-level " +
+          ".goat-flow/skill-docs/playbooks/*.md playbooks except README.md.",
     },
   ];
 }

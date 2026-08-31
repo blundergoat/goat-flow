@@ -265,6 +265,63 @@ describe("path write claims", () => {
     );
   });
 
+  it("writes no owner bytes when the coordination parent is swapped for the final claim open", (context: TestContext) => {
+    const projectRoot = makeProject();
+    const outsideRoot = makeProject();
+    const probePath = join(projectRoot, "symlink-probe");
+    if (!symlinkDirectoryOrSkip(context, outsideRoot, probePath)) return;
+    fs.unlinkSync(probePath);
+
+    const targetPath = "managed.txt";
+    const expectedIdentity = readPathWriteTargetIdentity(
+      projectRoot,
+      targetPath,
+    );
+    const goatFlowDirectory = join(projectRoot, ".goat-flow");
+    const originalGoatFlowDirectory = join(projectRoot, "owned-goat-flow");
+    const outsideClaimDirectory = join(outsideRoot, "write-claims");
+    fs.mkdirSync(outsideClaimDirectory);
+    const originalOpenSync = fs.openSync;
+    let hasSwappedAtClaimOpen = false;
+    context.mock.method(
+      fs,
+      "openSync",
+      (path: fs.PathLike, flags: fs.OpenMode, mode?: fs.Mode | null) => {
+        if (
+          !hasSwappedAtClaimOpen &&
+          typeof path === "string" &&
+          path.endsWith(".claim") &&
+          flags === "wx"
+        ) {
+          hasSwappedAtClaimOpen = true;
+          fs.renameSync(goatFlowDirectory, originalGoatFlowDirectory);
+          fs.symlinkSync(outsideRoot, goatFlowDirectory, "dir");
+          try {
+            return originalOpenSync(path, flags, mode);
+          } finally {
+            // Restoring the user's project before open returns reproduces the path/descriptor mismatch at the vulnerable boundary.
+            fs.unlinkSync(goatFlowDirectory);
+            fs.renameSync(originalGoatFlowDirectory, goatFlowDirectory);
+          }
+        }
+        return originalOpenSync(path, flags, mode);
+      },
+    );
+
+    assertClaimFailure(
+      () =>
+        acquirePathWriteClaims(projectRoot, [{ targetPath, expectedIdentity }]),
+      "claim-integrity",
+      targetPath,
+    );
+    const outsideClaimNames = fs.readdirSync(outsideClaimDirectory);
+    assert.equal(outsideClaimNames.length, 1);
+    assert.equal(
+      fs.statSync(join(outsideClaimDirectory, outsideClaimNames[0]!)).size,
+      0,
+    );
+  });
+
   /**
    * Pins deterministic ordering and proves descriptors remain open until owner release.
    * Filesystem side effects: creates two targets and temporary claim markers, then owner-releases both markers.

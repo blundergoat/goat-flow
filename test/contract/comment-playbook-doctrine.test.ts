@@ -231,7 +231,7 @@ describe("comment playbook verification doctrine", () => {
       );
       assert.match(
         content,
-        /Every ancestor must remain unchanged so a concurrent symlink swap cannot redirect the marker/u,
+        /A changed ancestor invalidates claim admission because the marker may no longer belong to the project the user selected/u,
         playbookPath,
       );
       assert.match(

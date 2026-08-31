@@ -606,8 +606,8 @@ strip_leading_shell_redirections() {
   local -a command_words=()
   local word_index=0
   local word=""
-  local operator_only_re='^(([0-9]+)?(<<<|<<-|<<|<>|>>\||>>|>\||>&|<&|>|<)|&>>|&>)$'
-  local attached_target_re='^(([0-9]+)?(<<<|<<-|<<|<>|>>\||>>|>\||>&|<&|>|<)|&>>|&>).+$'
+  local operator_only_re='^(([0-9]+|\{[a-zA-Z_][a-zA-Z0-9_]*\})?(<<<|<<-|<<|<>|>>\||>>|>\||>&|<&|>|<)|&>>|&>)$'
+  local attached_target_re='^(([0-9]+|\{[a-zA-Z_][a-zA-Z0-9_]*\})?(<<<|<<-|<<|<>|>>\||>>|>\||>&|<&|>|<)|&>>|&>).+$'
 
   split_shell_words_into command_words "$candidate"
   while (( word_index < ${#command_words[@]} )); do

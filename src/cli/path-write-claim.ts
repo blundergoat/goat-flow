@@ -384,7 +384,7 @@ function identitiesMatch(
 
 /**
  * Create one private coordination directory, accepting another cooperating writer that creates it first.
- * Writes filesystem state for `install` or `learn new`, then rejects any directory shape that could redirect claims outside the project.
+ * Writes filesystem state for `install` or `learn new`, then rejects a presently unsafe shape before the user receives admission.
  *
  * @throws PathWriteClaimError when the directory cannot be created or verified as a real directory
  */
@@ -443,7 +443,7 @@ function assertClaimDirectory(
   claimDirectory: ClaimDirectory,
   targetPath: string,
 ): void {
-  // Every ancestor must retain its identity so a concurrent symlink swap cannot redirect the marker outside the selected project.
+  // A changed ancestor stops the user's write; createClaimMarker separately binds the new descriptor before adding owner bytes.
   for (const snapshot of claimDirectory.snapshots) {
     assertCoordinationDirectorySnapshot(snapshot, targetPath);
   }
@@ -738,8 +738,15 @@ function cleanupFailedClaimInitialization(
 /**
  * Exclusively create, fill, and flush one marker.
  *
- * Side effects: writes one private claim file and leaves its descriptor open for identity binding by the caller.
- * Error behavior: owner-checks cleanup and throws a categorized claim error when creation, writing, or flushing fails.
+ * Side effects: allocates one private marker, writes owner bytes only after binding it, and leaves its descriptor open for the caller.
+ * Error behavior: owner-checks cleanup; an unprovable redirected allocation can remain empty when admission fails.
+ *
+ * @param markerPath - absolute claim path selected for this target; it must still identify the new descriptor
+ * @param markerBytes - owner evidence written after binding; empty input would create no usable ownership evidence
+ * @param targetPath - project-relative user target named in any refusal
+ * @param claimDirectory - previously validated directory chain that must retain its identity
+ * @returns open descriptor for the bound marker; the caller keeps it until ownership-checked release
+ * @throws PathWriteClaimError when creation, binding, writing, or flushing cannot establish a usable claim
  */
 function createClaimMarker(
   markerPath: string,
@@ -756,7 +763,16 @@ function createClaimMarker(
     throw exclusiveCreateFailure(error, targetPath);
   }
   try {
-    // Exclusive creation is still pathname-based, so bind the result back to the validated directory chain before writing owner bytes.
+    const emptyMarkerBinding = readOwnedClaimSnapshot(
+      markerPath,
+      descriptor,
+      Buffer.alloc(0),
+    );
+    // A restored parent can hide the marker just opened elsewhere, so owner bytes wait until its visible path names this descriptor.
+    if (emptyMarkerBinding.status !== "present") {
+      throw new PathWriteClaimError("claim-integrity", targetPath);
+    }
+    // A marker can match through a substituted parent, so the selected project's directory chain must also retain its identity.
     assertClaimDirectory(claimDirectory, targetPath);
     fs.writeFileSync(descriptor, markerBytes);
     fs.fsyncSync(descriptor);

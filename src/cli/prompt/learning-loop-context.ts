@@ -67,7 +67,7 @@ export interface LearningLoopContextSelection {
   zeroHit: boolean;
   /** Selected entries with at least one direct lexical task match; absent when targeting was not requested. */
   taskMatchedCount?: number;
-  /** True when normalized task terms matched no eligible entry and baseline ranking supplied the fallback. */
+  /** True when the final targeted selection contains no entry matching the task terms; absent for untargeted prompts. */
   isTaskZeroHit?: boolean;
 }
 

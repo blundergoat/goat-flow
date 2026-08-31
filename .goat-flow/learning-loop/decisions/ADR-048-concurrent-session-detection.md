@@ -22,7 +22,10 @@ For each target, the guarded writer must:
 
 1. Resolve and validate the project root and target before creating coordination state.
 2. Capture an expected identity as file existence plus a SHA-256 digest of the exact bytes read. A create-only writer captures an expected missing state.
-3. Derive a claim key from the normalized project-relative target path and acquire `.goat-flow/write-claims/<key>.claim` with exclusive creation and mode `0o600`. Claim contention fails immediately; writers do not wait, steal, or expire another claim.
+3. Derive a claim key from the normalized project-relative target path.
+   Acquire `.goat-flow/write-claims/<key>.claim` with exclusive creation and mode `0o600`.
+   Before writing owner bytes, bind the open descriptor to a stable snapshot of that empty path and revalidate the project-local directory chain.
+   Claim contention or failed binding stops admission immediately; writers do not wait, steal, or expire another claim.
 4. After acquiring the claim, re-read the target and compare its existence and exact-byte digest with the expected identity. A mismatch returns a concurrent-change result without staging or replacing bytes.
 5. Stage complete output, flush it, and use the existing atomic replacement or create-only primitive while the claim is held.
 6. Release only the exact claim identity acquired by this writer. A missing or changed claim at cleanup is reported rather than deleted by pattern.
@@ -32,6 +35,13 @@ For a multi-target operation, canonical target paths are sorted before claims ar
 An existing claim fails closed even when its process appears dead. Automated time-based cleanup is rejected because a slow live writer and a crashed writer are not distinguishable from elapsed time alone. Recovery is an explicit operator action after confirming that no writer still owns the target.
 
 The expected identity comparison from `plans time` moves inside this claim instead of being replaced by a second convention. Atomic replacement remains the byte-integrity primitive; the claim and identity comparison provide cooperative lost-update detection.
+
+Node exposes no supported cross-platform descriptor-relative create primitive.
+A non-cooperating same-user process can therefore swap a parent for the exclusive pathname open and restore it before validation.
+
+Binding the empty marker before its first write prevents owner bytes from reaching that redirected file.
+The external empty allocation may remain when its pathname is no longer reachable through the selected project.
+This guarantee does not contain arbitrary local processes.
 
 ## Collision surfaces and writer coverage
 
@@ -97,6 +107,7 @@ If implementation stalls, retain this doctrine and the reproduced limitation, bu
 ## Consequences
 
 - Cooperating writers either hold one target's claim and validate the expected bytes or fail without replacement.
+- Claim admission writes owner bytes only after identity checks; a hostile parent swap may leave an empty file elsewhere.
 - The mechanism reuses atomic replacement and `plans time` content comparison rather than creating competing write conventions.
 - A crashed writer can leave a claim that blocks later writes until reviewed; this trades availability for preservation of ambiguous state.
 - Direct agent and editor writes remain capable of bypassing the guard, so user-facing claims must say **cooperative** detection.

@@ -316,6 +316,67 @@ describe("audit on well-configured project", () => {
     assert.match(findings[0]?.message ?? "", /writing-style\.md/u);
   });
 
+  it("reports every documented playbook when the installed inventory is empty", () => {
+    const auditContext = makeCtx({
+      fs: stubFS({
+        readFile: (path) =>
+          path === ".goat-flow/code-map.md"
+            ? "└── playbooks/ = browser-use"
+            : null,
+        listDir: () => [],
+      }),
+    });
+
+    const findings = scanSemanticDrift(auditContext).findings.filter(
+      (finding) => finding.rule === "skill-playbook-inventory-drift",
+    );
+    assert.equal(findings.length, 1);
+    assert.match(findings[0]?.message ?? "", /browser-use\.md/u);
+    assert.match(findings[0]?.message ?? "", /Live playbooks are none/u);
+  });
+
+  it("reports malformed items in an explicit code-map playbook inventory", () => {
+    const auditContext = makeCtx({
+      fs: stubFS({
+        readFile: (path) =>
+          path === ".goat-flow/code-map.md"
+            ? "└── playbooks/ = browser-use, test-selection, malformed playbook!"
+            : null,
+        listDir: (path) =>
+          path === ".goat-flow/skill-docs/playbooks"
+            ? ["browser-use.md", "test-selection.md"]
+            : [],
+      }),
+    });
+
+    const findings = scanSemanticDrift(auditContext).findings.filter(
+      (finding) => finding.rule === "skill-playbook-inventory-drift",
+    );
+    assert.equal(findings.length, 1);
+    assert.match(findings[0]?.message ?? "", /malformed playbook!/u);
+  });
+
+  it("reports malformed items in an explicit architecture playbook inventory", () => {
+    const auditContext = makeCtx({
+      fs: stubFS({
+        readFile: (path) =>
+          path === ".goat-flow/architecture.md"
+            ? "The standalone playbooks indexed by `.goat-flow/skill-docs/playbooks/README.md`: `browser-use.md`, malformed playbook!, and `test-selection.md`."
+            : null,
+        listDir: (path) =>
+          path === ".goat-flow/skill-docs/playbooks"
+            ? ["browser-use.md", "test-selection.md"]
+            : [],
+      }),
+    });
+
+    const findings = scanSemanticDrift(auditContext).findings.filter(
+      (finding) => finding.rule === "skill-playbook-inventory-drift",
+    );
+    assert.equal(findings.length, 1);
+    assert.match(findings[0]?.message ?? "", /malformed playbook!/u);
+  });
+
   it("checks glossary totals and accepts non-goat canonical skill rows", () => {
     assert.deepEqual(
       findSkillInventoryDrift(
