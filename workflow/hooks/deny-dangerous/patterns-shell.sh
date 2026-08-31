@@ -600,6 +600,34 @@ check_pipeline_xargs_destructive_payloads() {
   done
 }
 
+# Remove only leading shell redirection words, leaving the executable command for policy classification.
+strip_leading_shell_redirections() {
+  local candidate="$1"
+  local -a command_words=()
+  local word_index=0
+  local word=""
+  local operator_only_re='^(([0-9]+)?(<<<|<<-|<<|<>|>>\||>>|>\||>&|<&|>|<)|&>>|&>)$'
+  local attached_target_re='^(([0-9]+)?(<<<|<<-|<<|<>|>>\||>>|>\||>&|<&|>|<)|&>>|&>).+$'
+
+  split_shell_words_into command_words "$candidate"
+  while (( word_index < ${#command_words[@]} )); do
+    word="${command_words[$word_index]}"
+    if [[ "$word" =~ $operator_only_re ]]; then
+      # An operator-only word consumes the following filename, descriptor, or here-document delimiter.
+      (( word_index + 1 < ${#command_words[@]} )) || return 1
+      word_index=$((word_index + 2))
+      continue
+    fi
+    if [[ "$word" =~ $attached_target_re ]]; then
+      word_index=$((word_index + 1))
+      continue
+    fi
+    break
+  done
+  (( word_index > 0 && word_index < ${#command_words[@]} )) || return 1
+  join_shell_words_from command_words "$word_index"
+}
+
 # Detect whether a proposed command invokes the shell's eval built-in in any executable pipeline stage.
 # Use before approval because eval can reinterpret or construct a different command after policy review.
 pipeline_contains_shell_eval_stage() {
@@ -608,6 +636,7 @@ pipeline_contains_shell_eval_stage() {
   local executable_pipeline_stage
   local normalized_pipeline_stage
   local pipeline_stage_verb
+  local stage_without_redirections
 
   split_top_level_pipeline_stages_into executable_pipeline_stages "$developer_command"
 
@@ -615,6 +644,11 @@ pipeline_contains_shell_eval_stage() {
   for executable_pipeline_stage in "${executable_pipeline_stages[@]}"; do
     normalized_pipeline_stage="$(normalize_command_candidate "$executable_pipeline_stage")"
     normalized_pipeline_stage="${normalized_pipeline_stage#"${normalized_pipeline_stage%%[![:space:]]*}"}"
+    # Bash permits redirections before a command word; peel them and re-normalize wrappers until the executable is visible.
+    while stage_without_redirections="$(strip_leading_shell_redirections "$normalized_pipeline_stage")"; do
+      normalized_pipeline_stage="$(normalize_command_candidate "$stage_without_redirections")"
+      normalized_pipeline_stage="${normalized_pipeline_stage#"${normalized_pipeline_stage%%[![:space:]]*}"}"
+    done
     pipeline_stage_verb="${normalized_pipeline_stage%%[[:space:]]*}"
     pipeline_stage_verb="${pipeline_stage_verb##*/}"
 
