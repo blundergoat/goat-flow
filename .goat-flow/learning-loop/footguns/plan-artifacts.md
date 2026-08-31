@@ -168,7 +168,7 @@ than just below it. Evidence anchor: `src/cli/prompt/compose-quality-common.ts` 
 
 **Why it happens:** The human gate and the repository are independent state machines. A user may legitimately commit in-scope work while the milestone is paused, but the milestone's recorded HEAD, starting dirty paths, release ledger, and disposable bump preview do not advance automatically.
 
-**Evidence:** Measured during 1.17.0 M37 on 2026-08-30. The user committed the prepared changelog and review fixes while the release boundary was waiting. Revalidation found clean replacement HEAD `406eddd0e8ce0de19c385b61520d512b5530037a`, and the planned changelog edit no longer applied because `CHANGELOG.md` already contained the exact `v1.17.0 - 2026-08-30` section. A fresh isolated bump preview at that HEAD still produced the approved 164-path set, so the user reapproved the replacement baseline before the live script ran. Anchors: `CHANGELOG.md` (search: `## v1.17.0 - 2026-08-30`) and `scripts/bump-version.sh` (search: `# Updated files:`).
+**Evidence:** The user committed the prepared changelog and review fixes while the release boundary was waiting. Revalidation found clean replacement HEAD `406eddd0e8ce0de19c385b61520d512b5530037a`, and the planned changelog edit no longer applied because `CHANGELOG.md` already contained the exact `v1.17.0 - 2026-08-30` section (since re-dated to 2026-09-01). A fresh isolated bump preview at that HEAD still produced the approved 164-path set, so the user reapproved the replacement baseline before the live script ran. Anchors: `CHANGELOG.md` (search: `## v1.17.0`) and `scripts/bump-version.sh` (search: `# Updated files:`).
 
 ---
 
