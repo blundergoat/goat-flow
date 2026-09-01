@@ -203,6 +203,50 @@ ${orderedBody.join("\n\n")}
   }
 }
 
+/**
+ * Build one markerless footgun with its Prevention list or incident narrative first.
+ * Use it to prove that generated INDEX guidance survives reader-focused entry reordering.
+ * Filesystem side effects: creates and removes one temporary footgun directory.
+ */
+function extractOrderedMarkerlessFootgunFacts(
+  shouldLeadWithPrevention: boolean,
+) {
+  const fixtureProjectRoot = mkdtempSync(
+    join(tmpdir(), "goatflow-llindex-markerless-order-"),
+  );
+  const footgunDirectory = join(fixtureProjectRoot, FOOTGUNS_DIR);
+  const prevention = `**Prevention:**
+1. Validate the registered launcher before citing provider delivery.
+2. Retain the incident hook when this guidance moves.`;
+  const narrative =
+    "A registered launcher failed before the managed hook received its payload. Later sentences must not leak into the hook.";
+  const orderedBody = shouldLeadWithPrevention
+    ? [prevention, narrative]
+    : [narrative, prevention];
+  const footgun = `---
+category: auditor
+last_reviewed: 2026-09-01
+---
+
+## Footgun: Markerless incident keeps its retrieval hook
+
+**Status:** active | **Created:** 2026-09-01 | **Evidence:** ACTUAL_MEASURED
+
+${orderedBody.join("\n\n")}
+`;
+  mkdirSync(footgunDirectory, { recursive: true });
+  writeFileSync(join(footgunDirectory, "markerless-order.md"), footgun);
+
+  try {
+    const fixtureFiles = createFS(fixtureProjectRoot);
+    const [indexEntry] = parseBucket(fixtureFiles, FOOTGUNS_DIR, "footguns");
+    assert.ok(indexEntry, "expected one generated footgun index row");
+    return indexEntry;
+  } finally {
+    rmSync(fixtureProjectRoot, { recursive: true, force: true });
+  }
+}
+
 /** Write a throw-away filesystem repo containing all four learning-loop buckets and return its root. */
 function makeFixtureRepo(): string {
   const root = mkdtempSync(join(tmpdir(), "goatflow-llindex-"));
@@ -263,7 +307,22 @@ describe("parseBucket", () => {
     );
   });
 
-  // Fixture purpose: puts heading and metadata lookalikes in fences beside one rendered lesson. Filesystem side effects stay in the removed temp root.
+  it("keeps a markerless incident hook when a Prevention list moves first", () => {
+    const ruleFirstFacts = extractOrderedMarkerlessFootgunFacts(true);
+    const narrativeFirstFacts = extractOrderedMarkerlessFootgunFacts(false);
+
+    assert.equal(
+      ruleFirstFacts.hook,
+      "A registered launcher failed before the managed hook received its payload.",
+    );
+    assert.deepEqual(
+      ruleFirstFacts,
+      narrativeFirstFacts,
+      "a markerless incident must remain the retrieval hook after its Prevention list moves first",
+    );
+  });
+
+  // Filesystem side effects: creates and removes a temporary lesson directory; fenced lookalikes prove only the visible lesson reaches the INDEX.
   it("ignores fenced entry headings and metadata while retaining visible controls", () => {
     const fixtureRoot = mkdtempSync(join(tmpdir(), "goatflow-llindex-fence-"));
     const lessonDirectory = join(fixtureRoot, LESSONS_DIR);

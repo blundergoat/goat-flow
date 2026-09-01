@@ -7,6 +7,8 @@ last_reviewed: 2026-08-23
 
 **Status:** active | **Created:** 2026-04-05 | **Updated:** 2026-07-26 | **Evidence:** ACTUAL_MEASURED
 
+**Prevention:** Treat trusted audit results as checkout-local evidence only. Require a fresh provider-, version-, mode-, configuration-, and trust-specific live capture before claiming end-to-end runtime delivery.
+
 The selected-agent audit with explicit `--trusted-target` validates hook syntax, self-test behavior, registration, and a runtime-shaped blocked Bash payload through the registered hook path. It still does not prove that the external agent runtime itself delivered the hook payload for a real Bash tool invocation. A hook that passes every local check can still fail at the provider/runtime boundary if the agent ignores the configured hook event or changes its payload contract.
 
 **Residual scope** (after an explicitly trusted selected-agent guardrail check started invoking the hook's `--self-test` and sending a runtime-shaped blocked payload):
@@ -30,6 +32,8 @@ The selected-agent audit with explicit `--trusted-target` validates hook syntax,
 
 **Status:** active | **Created:** 2026-06-14 | **Corrected:** 2026-08-16 | **Evidence:** ACTUAL_MEASURED
 
+**Prevention:** Keep target execution opt-in. Preserve the invariant that passive selected-project requests and omitted library options stop at static evidence; runtime proof belongs to an explicit `--trusted-target` choice. Before citing a surface as `"static"` or `"full"`, re-read the call site and its route-level test. Treat any change to the default evidence level as a security decision - it can also flip a CI audit gate, because runtime smoke catches launcher / `$root` failures that static checks do not. Do not "harden" this by parsing the launcher and running only the managed script: that reintroduces the stale-path / broken-glue blind spot the full-command smoke exists to catch (see [hooks.md](hooks.md) search: `Hook command strings can fail before guard code starts`).
+
 **Original trap:** The runtime evidence level of the agent deny-mechanism audit does not only run goat-flow's own managed script - it executes the *target project's* configured launcher string through `bash -c`. `src/cli/audit/check-agent-deny-runtime.ts` (search: `verifyConfiguredHookRuntime`, `pipeRuntimeProbeTo(configured.command)`) pipes a blocked payload into `configured.command` taken verbatim from the checkout's `.claude/settings.json` / `.codex/hooks.json` / `.agents/hooks.json`. Before the 1.16.0 correction, `goat-flow audit --agent <id>` did this unless the user supplied `--untrusted-target`, so auditing a hostile or compromised checkout could run arbitrary shell before the smoke classified anything. Full execution is deliberate because it validates the real `$root` resolution and `cd` glue, which a sanitized re-invocation would skip.
 
 **Current contract:** Omission is static. Only `--trusted-target` enables the configured launcher, managed self-test, and runtime-shaped probes. The deprecated `--untrusted-target` flag remains a static compatibility alias throughout v1.16.x; combining both flags is a usage error.
@@ -41,13 +45,13 @@ The selected-agent audit with explicit `--trusted-target` validates hook syntax,
 - **Reach, measured 2026-08-16.** Only a selected-agent CLI audit using explicit full evidence executes. `test/unit/audit-deny-runtime-flag.test.ts` (search: `does not run a managed self-test or configured launcher`) intercepts both runtime surfaces and records zero calls when the library evidence level is omitted; its explicit-full control records configured launcher calls. `src/cli/audit/audit.ts` (search: `denyMechanismEvidenceLevel`) resolves omission to `"static"`, while aggregate audit still skips agent-scope checks. The dashboard per-agent route remains explicitly static.
 - Inverse concern (audit proving too *little*, not too much): the "Audit does not prove end-to-end deny enforcement at runtime" footgun above. Side-effect cousin: [internal-run-isolation.md](internal-run-isolation.md).
 
-**Prevention:** Keep target execution opt-in. Preserve the invariant that passive selected-project requests and omitted library options stop at static evidence; runtime proof belongs to an explicit `--trusted-target` choice. Before citing a surface as `"static"` or `"full"`, re-read the call site and its route-level test. Treat any change to the default evidence level as a security decision - it can also flip a CI audit gate, because runtime smoke catches launcher / `$root` failures that static checks do not. Do not "harden" this by parsing the launcher and running only the managed script: that reintroduces the stale-path / broken-glue blind spot the full-command smoke exists to catch (see [hooks.md](hooks.md) search: `Hook command strings can fail before guard code starts`).
-
 ---
 
 ## Footgun: Missing directories can false-pass when harness checks use `listDir()` as an existence test
 
 **Status:** active | **Created:** 2026-05-05 | **Evidence:** ACTUAL_MEASURED
+
+**Prevention:** When a check promises directory storage, require both `exists(path)` and `isReadableDirectory(path)` before using `listDir()`. Use `listDir()` alone only when missing, unreadable, and empty intentionally mean the same thing.
 
 Some harness checks can report a missing directory as present if they rely on `ctx.fs.listDir(path)` throwing for absent paths. The project filesystem abstraction intentionally returns an empty array on missing or unreadable directories, so a `try/catch` around `listDir()` is not an existence check.
 
@@ -60,21 +64,19 @@ Some harness checks can report a missing directory as present if they rely on `c
 
 **Recurrence update (2026-07-12):** M33 found that existence alone still false-passed when `.goat-flow/plans` or `.goat-flow/logs/sessions` was an ordinary file. Setup and Recovery both reported PASS because `exists()` returned true and `listDir()` collapsed `ENOTDIR` to `[]`. `ReadonlyFS.isReadableDirectory` now shares the adapter's cached directory read, and both checks fail unusable paths while valid empty directories still pass. Evidence: `test/integration/audit-quality.test.ts` (search: `fails setup and recovery when required storage paths are files`).
 
-**Prevention:** When a check promises directory storage, require both `exists(path)` and `isReadableDirectory(path)` before using `listDir()`. Use `listDir()` alone only when missing, unreadable, and empty intentionally mean the same thing.
-
 ---
 
 ## Footgun: Structural Compliance Illusion
 
 **Status:** active | **Created:** 2026-04-16 | **Evidence:** ACTUAL_MEASURED
 
+**Prevention:** Keep structural audit and content-truth checks separate and explicit. Never treat a build PASS as proof that docs, ADRs, or prompts are semantically current.
+
 Build checks in `src/cli/audit/check-goat-flow.ts` and `src/cli/audit/check-agent-setup.ts` prove the install shape is present, not that the cold-path docs are semantically true. A structural PASS without content verification still creates false confidence.
 
 **Evidence:**
 - `src/cli/audit/check-goat-flow.ts` (search: "export const SETUP_CHECKS") and `src/cli/audit/check-agent-setup.ts` gate file existence / install structure.
 - `src/cli/audit/check-content-quality.ts` and `src/cli/audit/check-factual-claims.ts` exist because structural correctness alone did not catch cold-path truth drift.
-
-**Prevention:** Keep structural audit and content-truth checks separate and explicit. Never treat a build PASS as proof that docs, ADRs, or prompts are semantically current.
 
 ---
 
@@ -85,6 +87,8 @@ Build checks in `src/cli/audit/check-goat-flow.ts` and `src/cli/audit/check-agen
 **Trigger phase:** SCOPE
 **Caught at:** ACT
 
+**Prevention:** Declare whether each new drift surface is agent-owned or shared. Apply `agentFilter` to agent-owned files and keep shared framework assets global; prove both with a single-agent consumer fixture.
+
 **Trap:** Agent selection is easy to preserve in the top-level audit and lose inside a nested drift helper. Any helper that rebuilds the manifest-owned agent inventory can silently widen a selected-agent audit, producing phantom missing files for agents the consumer did not install. The current implementation prevents this for known drift surfaces; each new agent-owned surface can reintroduce it if it ignores `agentFilter`.
 
 **Original incident:** On 2026-07-12, `audit --agent codex --check-drift` against a Codex-only consumer still compared Claude and Copilot hook registrations because `checkDrift` rebuilt the full agent inventory.
@@ -94,11 +98,11 @@ Build checks in `src/cli/audit/check-goat-flow.ts` and `src/cli/audit/check-agen
 - `src/cli/audit/check-drift.ts` (search: `selectedInstalledSkillRoots`) filters agent-owned skills, orphan scans, and hook registrations while leaving shared references and central hook policy global.
 - `test/integration/audit-drift-checkdrift-hook-templates.test.ts` (search: `limits hook drift to the selected agent`) reproduces the Codex-only consumer and fails if another agent leaks back into the report.
 
-**Prevention:** Declare whether each new drift surface is agent-owned or shared. Apply `agentFilter` to agent-owned files and keep shared framework assets global; prove both with a single-agent consumer fixture.
-
 ---
 
 ## Footgun: Version checks that test inequality without direction prescribe a downgrade
+
+**Prevention:** Never drive remediation or a write from version inequality alone. Compare direction first; when the local tool is older, say so and stop, rather than proposing to bring the target back to the tool's version. Skew guards belong at the write boundary too, not only in the message.
 
 **Status:** active | **Created:** 2026-08-03 | **Evidence:** ACTUAL_MEASURED
 **Decision changed:** Any version comparison that drives user-facing remediation or a file write must branch on direction, not on `!==`.
@@ -121,8 +125,6 @@ Build checks in `src/cli/audit/check-goat-flow.ts` and `src/cli/audit/check-agen
 - `test/unit/version-compare.test.ts` (search: `flags the CLI as the stale side when the project is newer`) - locks the direction contract, including that `1.10.0` sorts above `1.9.0`.
 - `test/integration/audit-quality.test.ts` (search: `reports version skew without older-template agent or drift findings`) - simulates a newer installed config, skills, and hooks against the current CLI and pins the user-visible audit result.
 - `test/unit/hook-registrar.test.ts` (search: `refuses to overwrite a hook stamped newer than the running CLI`) - proves the write boundary preserves the newer hook byte-for-byte.
-
-**Prevention:** Never drive remediation or a write from version inequality alone. Compare direction first; when the local tool is older, say so and stop, rather than proposing to bring the target back to the tool's version. Skew guards belong at the write boundary too, not only in the message.
 
 ---
 

@@ -9,6 +9,11 @@ last_reviewed: 2026-09-01
 
 **Status:** active | **Created:** 2026-04-29 | **Evidence:** ACTUAL_MEASURED
 
+**Prevention:**
+1. Keep Windows shell selection and Windows runner-path selection in the same change set; touching only one is a partial fix.
+2. When editing dashboard terminal launch behavior, verify both `buildTerminalSpawnSpec` and `pickWindowsRunnerPath`, then run a native Windows `TerminalManager.create("", ".", "<runner>")` repro.
+3. Preserve host-independent tests that exercise both `win32` and POSIX spawn specs, even when working from a non-Windows machine.
+
 **Symptoms:** The Workspace view reports `File not found` when `Open terminal` is clicked on native Windows, even though the same runner works in WSL or a regular Windows shell. `/api/health` may also under-report available runners because runner discovery finds the extensionless npm wrapper before the runnable Windows shim.
 
 **Evidence:**
@@ -19,16 +24,16 @@ last_reviewed: 2026-09-01
 
 **Why it happens:** Native Windows and POSIX need different launch mechanics, but npm installs both kinds of runner wrapper in the same global bin directory. If terminal code assumes `/bin/bash`, native Windows cannot spawn the shell. If runner discovery trusts the first `where <runner>` hit, it can choose the extensionless POSIX wrapper instead of the runnable `.cmd` shim. Fixing only one half still leaves the feature broken.
 
-**Prevention:**
-1. Keep Windows shell selection and Windows runner-path selection in the same change set; touching only one is a partial fix.
-2. When editing dashboard terminal launch behavior, verify both `buildTerminalSpawnSpec` and `pickWindowsRunnerPath`, then run a native Windows `TerminalManager.create("", ".", "<runner>")` repro.
-3. Preserve host-independent tests that exercise both `win32` and POSIX spawn specs, even when working from a non-Windows machine.
-
 ---
 
 ## Footgun: Dashboard terminal helper tests can leak event-loop handles
 
 **Status:** active | **Created:** 2026-05-24 | **Evidence:** ACTUAL_MEASURED
+
+**Prevention:**
+1. When loading `src/dashboard/dashboard-terminal.ts` through `node:vm`, inject `setInterval` and `clearInterval` from the same fake timer harness as `setTimeout` and `clearTimeout`.
+2. For tests that intentionally use real timers, call the helper cleanup path or simulate terminal lifecycle messages that clear timer state before the test returns.
+3. Verify terminal helper suites with an outer timeout command at least once after lifecycle/timer changes; a green assertion summary alone does not prove Node can exit.
 
 **Symptoms:** A dashboard terminal helper test suite prints passing assertions but the Node test process keeps running until an outer timeout or CI job limit kills it. In GitHub Actions this presents as the `Test` step staying in progress long after setup, install, and build completed.
 
@@ -40,16 +45,22 @@ last_reviewed: 2026-09-01
 
 **Why it happens:** The dashboard terminal browser helper owns long-lived lifecycle resources: WebSocket bindings, resize observers, loading timers, paste-submit timers, launch-prompt timers, and the age-update interval. VM-loaded tests can fake only part of that environment. If `setInterval` remains real while the test controls only `setTimeout`, a fake socket open can leave a real interval in the host event loop even when every assertion has finished.
 
-**Prevention:**
-1. When loading `src/dashboard/dashboard-terminal.ts` through `node:vm`, inject `setInterval` and `clearInterval` from the same fake timer harness as `setTimeout` and `clearTimeout`.
-2. For tests that intentionally use real timers, call the helper cleanup path or simulate terminal lifecycle messages that clear timer state before the test returns.
-3. Verify terminal helper suites with an outer timeout command at least once after lifecycle/timer changes; a green assertion summary alone does not prove Node can exit.
-
 ---
 
 ## Footgun: Dashboard terminal prompts can be dropped before browser attachment
 
 **Status:** active | **Created:** 2026-05-10 | **Evidence:** ACTUAL_MEASURED
+
+**Prevention:**
+1. For dashboard launch buttons, create promptless backend terminal sessions and send the prompt after the browser terminal is attached and runner output looks ready or has gone quiet.
+2. When changing `scheduleInitialInput`, test at least two output chunks with a delay between them and assert no prompt write before the final quiet window.
+3. For browser-side sends, keep bracketed paste and Enter as separate ordered WebSocket inputs; submit on Claude Code's pasted-text echo or a short Claude-specific no-marker fallback, and do not collapse them back into one `paste + "\r"` payload.
+4. Verify built-dashboard behavior after restarting the dashboard process; a running `dist/cli/cli.js dashboard` server keeps old terminal code in memory until restart.
+5. For runner TUIs with auth or splash redraws, gate launch prompts on that runner's real composer marker and test its pasted-text marker separately; Antigravity needs both `Antigravity CLI [version]` + `for shortcuts` readiness and delayed submit after `[Pasted Text: ...]`.
+6. Do not make pasted-text marker handling instant for Claude Code; Claude Code v2.1.139 can drop an Enter sent in the same redraw burst as `[Pasted text #N +M lines]`, so marker-triggered submit needs a short quiet delay just like Gemini.
+7. Treat runner config/startup errors as prompt-delivery blockers; do not let quiet-window or absolute fallback timers force-send prompts after output such as `Error loading configuration:`.
+8. If Codex and Antigravity launches auto-submit but Claude remains parked at `[Pasted text ...]`, inspect browser-to-server WebSocket input frames first. Absence of a `data: "\r"` frame means the browser helper failed to submit; presence of repeated `"\r"` frames means Claude's accepted-submit sequence has changed.
+9. When testing `term.onData` behavior, include xterm protocol replies as non-user input. DA/DSR/focus replies must still be forwarded to the PTY, but they must not clear paste-submit timers or awaiting-commit state.
 
 **Symptoms:** Clicking a dashboard action such as "Run Quality Assessment in Runner" creates a Claude terminal session with the right title, but the terminal lands at Claude's empty `❯` prompt with no assessment prompt pasted. A related Claude Code variant shows `[Pasted text #N +... lines]` in the composer and never submits it.
 
@@ -70,22 +81,23 @@ last_reviewed: 2026-09-01
 
 **Why it happens:** Agent CLIs render startup screens in multiple PTY chunks, and Claude Code can ignore early server-side PTY pastes. Browser-side sends also fail when bracketed paste, prompt text, and Enter are collapsed into one payload; when Enter fires before Claude commits the pasted-text block; when marker callbacks never arrive; or when xterm protocol replies are misclassified as human input and clear pending timers. If the runner exits during startup, goat-flow intentionally leaves a fallback shell open, so launch-prompt timers must distinguish an agent composer from a shell prompt.
 
-**Prevention:**
-1. For dashboard launch buttons, create promptless backend terminal sessions and send the prompt after the browser terminal is attached and runner output looks ready or has gone quiet.
-2. When changing `scheduleInitialInput`, test at least two output chunks with a delay between them and assert no prompt write before the final quiet window.
-3. For browser-side sends, keep bracketed paste and Enter as separate ordered WebSocket inputs; submit on Claude Code's pasted-text echo or a short Claude-specific no-marker fallback, and do not collapse them back into one `paste + "\r"` payload.
-4. Verify built-dashboard behavior after restarting the dashboard process; a running `dist/cli/cli.js dashboard` server keeps old terminal code in memory until restart.
-5. For runner TUIs with auth or splash redraws, gate launch prompts on that runner's real composer marker and test its pasted-text marker separately; Antigravity needs both `Antigravity CLI [version]` + `for shortcuts` readiness and delayed submit after `[Pasted Text: ...]`.
-6. Do not make pasted-text marker handling instant for Claude Code; Claude Code v2.1.139 can drop an Enter sent in the same redraw burst as `[Pasted text #N +M lines]`, so marker-triggered submit needs a short quiet delay just like Gemini.
-7. Treat runner config/startup errors as prompt-delivery blockers; do not let quiet-window or absolute fallback timers force-send prompts after output such as `Error loading configuration:`.
-8. If Codex and Antigravity launches auto-submit but Claude remains parked at `[Pasted text ...]`, inspect browser-to-server WebSocket input frames first. Absence of a `data: "\r"` frame means the browser helper failed to submit; presence of repeated `"\r"` frames means Claude's accepted-submit sequence has changed.
-9. When testing `term.onData` behavior, include xterm protocol replies as non-user input. DA/DSR/focus replies must still be forwarded to the PTY, but they must not clear paste-submit timers or awaiting-commit state.
-
 ---
 
 ## Footgun: Workspace terminal waiting state has multiple derived surfaces
 
 **Status:** active | **Created:** 2026-05-19 | **Evidence:** ACTUAL_MEASURED
+
+**Prevention:**
+1. For Workspace session summaries, derive running from "active and not waiting", never from `status === 'active'` alone.
+2. Keep waiting classification shared across expanded cards, collapsed pips, top meters, and the active terminal header.
+3. When changing terminal output heuristics, test redraw frames such as `\r✻ Thinking…` separately from real progress text like `Continuing...`.
+4. Do not assume the server can classify "waiting" unless the wire contract grows a durable field; today that state is browser-local.
+5. Treat browser WebSocket close as detached/disconnected until a backend `exit`, `shutdown`, terminal-ending error, or `/api/terminal/sessions` refresh proves the PTY is gone.
+6. When changing reconnect or local-session binding, test stale ended local shells separately from live disconnected shells so an old local overlay cannot block `openServerSession`.
+7. Ground the waiting-input heuristic in real captured PTY bytes from each runner, not invented prompt text. Add a fixture under `test/unit/__fixtures__/awaiting-input/` whenever a new runner or a new prompt format is supported, and assert both a positive (must fire) and a negative (must not false-fire) case beside the existing fixture-driven cases in `test/unit/dashboard-terminal-launch/launch-flow-04.test.ts` (search: `from captured PTY bytes`); the suite is split by part, so never recreate a monolithic launch-flow file. Capture each fixture under node-pty against the live runner.
+8. When normalising terminal control codes in `dashboardPlainTerminalText`, treat CUP/HVP (`ESC[r;cH`/`ESC[r;cf`) like CHA - replace with a `\n ` token, not strip to empty - so runners that lay out rows by absolute positioning still expose newlines between numbered options. Strip Unicode box-drawing characters (U+2500–U+257F) so bordered menu cells expose their text content.
+9. When adding a new selection-bullet glyph for a runner, extend BOTH `numberedChoices` regexes (primary detector and continuation detector) and add a positive fixture so future drift is caught.
+10. Investigate any new "badge never appears" report by logging each chunk's `dashboardNextAwaitingInputState` result inside `src/dashboard/dashboard-terminal-connect.ts` (search: `function dashboardApplyTerminalOutput`) while the prompt is visibly on screen. Since Round 6, a chunk classified "not awaiting" is ignored - output never clears the badge or cancels its 1200ms reveal timer (search: `the badge is never cleared here, only set or scheduled`) - so a badge that never appears means no chunk or terminal tail ever classified as awaiting: fix the detector or fixtures per items 7-9, and never reintroduce an output-driven clear or timer reset.
 
 **Symptoms:** The Workspace header or terminal pane can show a session waiting while the summary meters still count it as running, or an active session can briefly show "Awaiting input" and then flip back to running while the terminal is still visibly blocked on a prompt. A browser-side terminal can also show "Session ended" while `/api/terminal/sessions` still lists the backend PTY as active and the terminal scrollback is visibly waiting on a runner permission prompt. The badge can also fail to fire at all for runner-specific prompt formats - workspace-trust dialogs on first launch (every runner), Codex CUP-positioned text, and Copilot/Gemini box-bordered menus all looked benign to the pre-2026-05-21 heuristic even though the runner was visibly parked on a numbered choice.
 
@@ -106,18 +118,6 @@ last_reviewed: 2026-09-01
 
 **Why it happens:** `/api/terminal/sessions` only exposes lifecycle `status` (`active` / `terminated`) plus age and idle duration. Browser-only facts such as `awaitingInput`, loading/no-output state, transient runner redraws, and the distinction between a detached WebSocket and an ended PTY live in `src/dashboard/dashboard-terminal.ts`, `src/dashboard/app.ts`, and `src/dashboard/views/workspace.html`. If a new UI surface counts sessions directly from `status === 'active'`, clears `awaitingInput` based on a single PTY output chunk instead of the still-visible terminal tail, or treats browser WebSocket close as terminal exit, the Workspace surfaces drift apart. Runner-specific rendering quirks compound the problem: Codex positions every word with CUP (`ESC[r;cH`) and never emits `\r\n` between rows, Copilot and Gemini wrap menus in box-drawing borders (`│ … │`), and Gemini uses `●` as its selection bullet - these quirks silently defeat text-based regex unless the plain-text normaliser strips and accommodates them.
 
-**Prevention:**
-1. For Workspace session summaries, derive running from "active and not waiting", never from `status === 'active'` alone.
-2. Keep waiting classification shared across expanded cards, collapsed pips, top meters, and the active terminal header.
-3. When changing terminal output heuristics, test redraw frames such as `\r✻ Thinking…` separately from real progress text like `Continuing...`.
-4. Do not assume the server can classify "waiting" unless the wire contract grows a durable field; today that state is browser-local.
-5. Treat browser WebSocket close as detached/disconnected until a backend `exit`, `shutdown`, terminal-ending error, or `/api/terminal/sessions` refresh proves the PTY is gone.
-6. When changing reconnect or local-session binding, test stale ended local shells separately from live disconnected shells so an old local overlay cannot block `openServerSession`.
-7. Ground the waiting-input heuristic in real captured PTY bytes from each runner, not invented prompt text. Add a fixture under `test/unit/__fixtures__/awaiting-input/` whenever a new runner or a new prompt format is supported, and assert both a positive (must fire) and a negative (must not false-fire) case beside the existing fixture-driven cases in `test/unit/dashboard-terminal-launch/launch-flow-04.test.ts` (search: `from captured PTY bytes`); the suite is split by part, so never recreate a monolithic launch-flow file. Capture each fixture under node-pty against the live runner.
-8. When normalising terminal control codes in `dashboardPlainTerminalText`, treat CUP/HVP (`ESC[r;cH`/`ESC[r;cf`) like CHA - replace with a `\n ` token, not strip to empty - so runners that lay out rows by absolute positioning still expose newlines between numbered options. Strip Unicode box-drawing characters (U+2500–U+257F) so bordered menu cells expose their text content.
-9. When adding a new selection-bullet glyph for a runner, extend BOTH `numberedChoices` regexes (primary detector and continuation detector) and add a positive fixture so future drift is caught.
-10. Investigate any new "badge never appears" report by logging each chunk's `dashboardNextAwaitingInputState` result inside `src/dashboard/dashboard-terminal-connect.ts` (search: `function dashboardApplyTerminalOutput`) while the prompt is visibly on screen. Since Round 6, a chunk classified "not awaiting" is ignored - output never clears the badge or cancels its 1200ms reveal timer (search: `the badge is never cleared here, only set or scheduled`) - so a badge that never appears means no chunk or terminal tail ever classified as awaiting: fix the detector or fixtures per items 7-9, and never reintroduce an output-driven clear or timer reset.
-
 ---
 
 ## Footgun: Dashboard-launched Codex access must match the task's write intent
@@ -126,6 +126,13 @@ last_reviewed: 2026-09-01
 **Decision changed:** Preserve separate workspace and reporting launch policies; never collapse every dashboard Codex session onto one sandbox shape.
 **Trigger phase:** SCOPE
 **Caught at:** ACT
+
+**Prevention:**
+1. When refactoring `buildTerminalSpawnSpec`, preserve `--sandbox danger-full-access` for workspace sessions and the native read-mostly permission profile for reporting sessions.
+2. For Codex-only preflight failures, run `codex doctor --summary` and a Node `child_process.spawnSync` probe before treating child-process test failures as product regressions.
+3. Test both directions: allowed local artifact writes and blocked tracked-file overwrite/rename/delete attempts. Prompt wording alone is not enforcement.
+4. Preserve `accessMode` through create, session metadata, retry, reconnect, and recent-session projection; a dropped field silently returns the session to workspace access.
+
 
 **Symptoms:** A write-enabled Codex session launched from the Workspace terminal fails `bash scripts/preflight-checks.sh` when it inherits the default restricted sandbox, while a reporting-only session can modify tracked files if it inherits the blanket `danger-full-access` override. The first failure shape looks like product regressions: child-process-heavy tests fail, registry DNS is unavailable, and nested npm spawns report `EPERM`.
 
@@ -138,9 +145,3 @@ last_reviewed: 2026-09-01
 - Live profile probe on 2026-07-26: ignored report/build writes exited 0; source, canonical-anchor, dynamic tracked-anchor, rename, and delete attempts exited 1 and left protected files unchanged.
 
 **Why it happens:** The dashboard starts a real agent runner, and the runner owns the command sandbox used by that agent's tool calls. Implementation and full verification need nested processes, network, and project writes; quality/reporting prompts need reads plus narrowly admitted local artifacts. A single global override cannot satisfy both contracts.
-
-**Prevention:**
-1. When refactoring `buildTerminalSpawnSpec`, preserve `--sandbox danger-full-access` for workspace sessions and the native read-mostly permission profile for reporting sessions.
-2. For Codex-only preflight failures, run `codex doctor --summary` and a Node `child_process.spawnSync` probe before treating child-process test failures as product regressions.
-3. Test both directions: allowed local artifact writes and blocked tracked-file overwrite/rename/delete attempts. Prompt wording alone is not enforcement.
-4. Preserve `accessMode` through create, session metadata, retry, reconnect, and recent-session projection; a dropped field silently returns the session to workspace access.

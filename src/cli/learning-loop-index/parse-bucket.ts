@@ -1,12 +1,9 @@
 /**
- * Parses learning-loop bucket markdown into the entry list behind generated INDEX.md files.
+ * Parses learning-loop Markdown for generated INDEX.md files.
+ * Use it when the CLI rebuilds or verifies indexes for footguns, lessons, patterns, and decisions.
  *
- * One parser covers all four buckets: footguns/lessons/patterns split per `## <Kind>:` heading (skipping `## Resolved Entries` sections and
- * `**Status:** resolved` entries), while decisions derive one entry per ADR file.
- *
- * Hooks are extracted mechanically - first sentence of the bucket-specific lead paragraph - so regeneration stays deterministic and never needs
- * hand-curated metadata. Declared dates and approximate reading costs come from the same entry text.
- * Nothing here reads the clock; `index-fresh` re-runs this parser and diffs, so any time-derived output would break freshness detection.
+ * Entry buckets are split by their kind heading; decisions produce one row per ADR file.
+ * Hooks, dates, and reading costs come only from entry text, so repeated runs stay deterministic.
  */
 import type { ReadonlyFS } from "../types.js";
 import type { GoatFlowConfig } from "../config/types.js";
@@ -180,9 +177,9 @@ function firstSentence(text: string): string {
 /** Return the first paragraph following a literal marker, or null when the marker is absent. */
 function paragraphAfter(content: string, marker: string): string | null {
   const renderedContent = maskNonRenderedMarkdown(content);
-  const idx = renderedContent.indexOf(marker);
-  if (idx === -1) return null;
-  const after = renderedContent.slice(idx + marker.length).trimStart();
+  const markerIndex = renderedContent.indexOf(marker);
+  if (markerIndex === -1) return null;
+  const after = renderedContent.slice(markerIndex + marker.length).trimStart();
   return (
     after
       .split(/\n\s*\n/)
@@ -197,12 +194,20 @@ function paragraphAfter(content: string, marker: string): string | null {
   );
 }
 
-/** First non-metadata body paragraph, with any leading `**Label:**` stripped - the hook fallback. */
-function firstBodyParagraph(content: string): string {
+/**
+ * Find fallback prose for a generated INDEX retrieval hook after ignoring metadata.
+ * For footguns and lessons, keep the incident visible when maintainers move Prevention first,
+ * including a leading Prevention list.
+ */
+function fallbackHookParagraph(
+  content: string,
+  shouldPreserveIncidentHook = false,
+): string {
   const withoutHeading = maskNonRenderedMarkdown(content).replace(
     /^#{1,2}[^\n]*\n/,
     "",
   );
+  let hasSkippedPrevention = false;
   for (const raw of withoutHeading.split(/\n\s*\n/)) {
     const paragraph = raw.trim();
     if (paragraph.length === 0 || METADATA_LABEL.test(paragraph)) continue;
@@ -213,6 +218,21 @@ function firstBodyParagraph(content: string): string {
     if (
       paragraphLines.length > 0 &&
       paragraphLines.every((line) => /^#{1,6}\s+\S/u.test(line))
+    ) {
+      continue;
+    }
+    if (
+      shouldPreserveIncidentHook &&
+      !hasSkippedPrevention &&
+      /^\*\*Prevention:\*\*/u.test(paragraph)
+    ) {
+      hasSkippedPrevention = true;
+      continue;
+    }
+    // A leading list belongs to Prevention, not the incident a maintainer expects to find through the generated INDEX.
+    if (
+      hasSkippedPrevention &&
+      /^(?:[*+-]|\d{1,9}[.)])(?:[ \t]+|$)/u.test(paragraph)
     ) {
       continue;
     }
@@ -298,7 +318,7 @@ function parseEntryFile(
     anchor: searchNeedle(section.heading),
     hook: firstSentence(
       paragraphAfter(section.content, HOOK_MARKER[bucket]) ??
-        firstBodyParagraph(section.content),
+        fallbackHookParagraph(section.content, bucket !== "patterns"),
     ),
     decisionChanged: section.decisionChanged,
     declaredDate: metadataDate(section.content, "Created"),
@@ -338,7 +358,7 @@ function decisionStatus(body: string): string {
 /** Read the first ADR decision sentence, falling back to body prose for older ADR shapes. */
 function decisionSummary(body: string): string {
   return firstSentence(
-    paragraphAfter(body, "\n## Decision") ?? firstBodyParagraph(body),
+    paragraphAfter(body, "\n## Decision") ?? fallbackHookParagraph(body),
   );
 }
 

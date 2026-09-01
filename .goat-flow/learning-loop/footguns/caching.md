@@ -7,6 +7,13 @@ last_reviewed: 2026-08-01
 
 **Status:** active | **Created:** 2026-05-25 | **Evidence:** EXTERNAL_REFERENCE
 
+**Prevention:**
+1. When introducing or modifying a TTL'd or memoized cache, do ONE grep before committing: `rg -n "<table_or_artifact_name>" src/ --type ts` and audit every mutator (insert/update/delete/bulk/import/reset/reload). Add invalidation to each one in the SAME PR. If you ship a fix that only patches the writer you observed, expect the second occurrence within weeks.
+2. Co-locate `set` and `clear` callsites where possible. If the cache is module-private (a `Map` declared at module top), put its `clearX()` export immediately under it so any writer importing the cache also sees the invalidator one screen away.
+3. When a cache exports `resetXCache()` (e.g., `resetManifestCache`), search for every reference: `rg -n "resetManifestCache" src/`. The set of callers should equal the set of mutators of the underlying resource. If there's a mutator with no reset call, that's the bug — fix before the user reports stale data.
+4. Contract test pattern: when adding a new mutator against a cached resource, the test that exercises it should also assert the cache returns the post-mutation value (not the pre-mutation cached value). The test fails if the invalidator is missing.
+
+
 **Symptoms:** A read-side cache returns stale data after a write completes. The cache eventually self-heals at TTL expiry, so the bug looks transient: "metrics seem stale right after I retry, but they come good after a few minutes." Repros are timing-dependent and easy to dismiss. Particularly insidious for COUNT-style caches (row counts, fact counts, artifact counts) — callers see plausible but wrong totals and have no way to tell whether the count is fresh or stale.
 
 **Why it happens:** Caches are usually conceived as a read-side optimization. The developer who introduces the cache adds invalidation to the path they observe. Other mutators in different files (insert vs delete vs bulk-import vs config-reload vs cleanup) do not import the invalidation primitive because the cache module's existence isn't visible from those files. The cache definition stays in one place; the invalidators are scattered across every mutation site. A single missed callsite leaves the cache stale until TTL expiry.
@@ -20,9 +27,3 @@ last_reviewed: 2026-08-01
 - `src/cli/facts/fs.ts` (search: `contentCache`, `existsCache`, `directoryReadCache`, `globCache`) — four `Map`s, each closure-scoped inside its own factory (`createCachedReadFile`, `createExistsChecker`, and the directory/glob readers), so one adapter's caches live and die with that adapter rather than persisting module-wide. That narrows the blast radius today: a facts pass cannot serve another pass stale data. The exposure returns the moment an adapter outlives a single pass — a "refresh on file watcher event" or "invalidate on write through audit" feature would need to reach all four.
 - `src/cli/manifest/manifest.ts` (search: `resetManifestCache`) — already exports an invalidator, which means callers are EXPECTED to call it. Every place that mutates the underlying manifest JSON (CLI commands, install script, repair routines) MUST grep-confirm it calls `resetManifestCache()`.
 - `src/cli/server/dashboard-assets.ts` (search: `dashboardAssetCache`) — module-level `Map`. Dev-mode source watchers must invalidate; production never mutates.
-
-**Prevention:**
-1. When introducing or modifying a TTL'd or memoized cache, do ONE grep before committing: `rg -n "<table_or_artifact_name>" src/ --type ts` and audit every mutator (insert/update/delete/bulk/import/reset/reload). Add invalidation to each one in the SAME PR. If you ship a fix that only patches the writer you observed, expect the second occurrence within weeks.
-2. Co-locate `set` and `clear` callsites where possible. If the cache is module-private (a `Map` declared at module top), put its `clearX()` export immediately under it so any writer importing the cache also sees the invalidator one screen away.
-3. When a cache exports `resetXCache()` (e.g., `resetManifestCache`), search for every reference: `rg -n "resetManifestCache" src/`. The set of callers should equal the set of mutators of the underlying resource. If there's a mutator with no reset call, that's the bug — fix before the user reports stale data.
-4. Contract test pattern: when adding a new mutator against a cached resource, the test that exercises it should also assert the cache returns the post-mutation value (not the pre-mutation cached value). The test fails if the invalidator is missing.

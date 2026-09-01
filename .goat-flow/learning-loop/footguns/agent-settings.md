@@ -5,6 +5,11 @@ last_reviewed: 2026-08-20
 
 ## Footgun: Settings-layer deny globs match guarded phrases quoted inside benign read-only commands
 
+**Prevention:**
+1. Keep guarded phrases out of the Bash command string when investigating deny/push content: use file-read/search tools instead of shell `grep`/`echo`/`sed`, or grep a fragment that omits the guarded token. Prefer new footgun/lesson titles that avoid guarded literals so future title-greps do not trip the globs.
+2. Do not weaken the settings globs to fix this (ADR-025), and do not probe with split-variable reconstructions of guarded phrases - the guard rightly refuses evasion-shaped commands.
+3. To test hook-layer classification legitimately, pipe a JSON payload file into `.goat-flow/hooks/deny-dangerous.sh` or run its sanctioned `--self-test` modes; command-line reconstruction of guarded strings is indistinguishable from evasion.
+
 **Status:** active | **Created:** 2026-07-03 | **Evidence:** ACTUAL_MEASURED
 **hallucination-risk:** high
 
@@ -16,14 +21,14 @@ last_reviewed: 2026-08-20
 - `.claude/settings.json` (search: `Bash(*git push*)`) and `workflow/hooks/agent-config/claude.json` (search: `Bash(*sudo *)`) - the substring deny globs shipped to every Claude install.
 - 2026-07-03 session: two denials of read-only evidence commands quoting deny-dangerous bucket entries; stdin probes of the identical command text through the hook returned exit 0.
 
-**Prevention:**
-1. Keep guarded phrases out of the Bash command string when investigating deny/push content: use file-read/search tools instead of shell `grep`/`echo`/`sed`, or grep a fragment that omits the guarded token. Prefer new footgun/lesson titles that avoid guarded literals so future title-greps do not trip the globs.
-2. Do not weaken the settings globs to fix this (ADR-025), and do not probe with split-variable reconstructions of guarded phrases - the guard rightly refuses evasion-shaped commands.
-3. To test hook-layer classification legitimately, pipe a JSON payload file into `.goat-flow/hooks/deny-dangerous.sh` or run its sanctioned `--self-test` modes; command-line reconstruction of guarded strings is indistinguishable from evasion.
-
 ## Footgun: Installed settings.json deny patterns can silently drift from workflow templates
 
 **Status:** active | **Created:** 2026-04-26 | **Evidence:** ACTUAL_MEASURED
+
+**Prevention:**
+1. After changing any deny pattern in a settings template (`workflow/hooks/agent-config/*.json`), run `bash scripts/preflight-checks.sh` and confirm `Agent Config Parity` still passes.
+2. When reviewing hook or settings changes, compare the installed file against its workflow template, not just the other agent mirrors.
+3. When adding a new agent config surface, extend the Agent Config Parity map and `covers()` validation in the same change.
 
 **Symptoms:** An agent can perform an action (e.g. `git push origin feature-branch`) that the workflow template blocks, because the installed settings.json drifted to a weaker deny pattern than the template it was installed from (or the hook only blocks a narrower set). Preflight's Agent Config Parity check now covers that drift, so the active trap is skipping the check or changing deny semantics without updating the parity rules.
 
@@ -33,14 +38,14 @@ last_reviewed: 2026-08-20
 - `workflow/hooks/agent-config/claude.json` (search: `git push`) - template had the correct blanket pattern; `.claude/settings.json` (search: `git push`) - installed copy had drifted to force-only, fixed 2026-04-26 per ADR-025.
 - `scripts/preflight-checks.sh` (search: `Agent Config Parity`) - parity check validates installed agent settings against workflow templates.
 
-**Prevention:**
-1. After changing any deny pattern in a settings template (`workflow/hooks/agent-config/*.json`), run `bash scripts/preflight-checks.sh` and confirm `Agent Config Parity` still passes.
-2. When reviewing hook or settings changes, compare the installed file against its workflow template, not just the other agent mirrors.
-3. When adding a new agent config surface, extend the Agent Config Parity map and `covers()` validation in the same change.
-
 ## Footgun: Re-adding a removed agent tool (MultiEdit) reprints "matches no known tool" every launch
 
 **Status:** active | **Created:** 2026-06-07 | **Evidence:** ACTUAL_MEASURED
+
+**Prevention:**
+1. Back every "fixed" config regression with a test, not just a CHANGELOG line. Guards now in place: `test/unit/agent-config-template-parity.test.ts` (search: `never carries a rule form Claude will not match`) locks every Claude permission rule (deny/allow/ask) in the template AND `.claude/settings.json` to `{Bash,Read,Edit}` (see 2026-07-16 follow-up); `test/unit/hook-registrar.test.ts` (search: `Edit|Write`) and `test/integration/setup-install-codex-config-migration.test.ts` (search: `/"matcher": "MultiEdit"/`) lock the gruff matcher.
+2. When mirroring permission or hook entries for a new tool, confirm the tool exists AND its permission-rule form is matched — file permission checks only match `Edit(path)`/`Read(path)` rules; `Write`/`NotebookEdit` are hook-matcher-only.
+3. When you edit a `workflow/hooks/*.sh` template, re-sync the installed `.goat-flow/hooks/` copy in the same change; `audit` drift (search: `differs from the current goat-flow template`) fails otherwise.
 
 **Regression symptom:** Claude Code printed `Permission deny rule "MultiEdit(**/secrets/**)" matches no known tool — check for typos.` (x12) on every launch. Claude Code v2.x removed the `MultiEdit` tool (folded into `Edit`), and permission deny rules are validated against known tools at startup, so each `MultiEdit(...)` deny rule warns. This exact issue was fixed once already (CHANGELOG: "Stale `MultiEdit` permission rules removed (Claude Code v2.x)") and then silently came back.
 
@@ -50,11 +55,6 @@ last_reviewed: 2026-08-20
 - Removed-tool deny rules surface as launch-time warnings, not test failures: pre-fix `npm run test:fast` was green with the 12 `MultiEdit(...)` rules present.
 - At the 2026-06-07 fix, the `Edit(...)` denies already covered the same 12 secret paths, so dropping `MultiEdit(...)` lost no coverage: deny count moved 57 → 45 and all paths retained Read/Edit/Write. The 2026-07-16 follow-up below removed unmatched Write rules.
 - Sources scrubbed: `.claude/settings.json`, `.codex/hooks.json`, template `workflow/hooks/agent-config/claude.json`, generators `src/cli/server/hooks-registry.ts` (matcher `Edit|Write`) + `workflow/install-goat-flow.sh` (`gruffHookEntries`), docs `workflow/hooks/README.md`, and the hook self-test in `workflow/hooks/gruff-code-quality.sh` (synced to the installed `.goat-flow/hooks/` copy or `audit` drift fails).
-
-**Prevention:**
-1. Back every "fixed" config regression with a test, not just a CHANGELOG line. Guards now in place: `test/unit/agent-config-template-parity.test.ts` (search: `never carries a rule form Claude will not match`) locks every Claude permission rule (deny/allow/ask) in the template AND `.claude/settings.json` to `{Bash,Read,Edit}` (see 2026-07-16 follow-up); `test/unit/hook-registrar.test.ts` (search: `Edit|Write`) and `test/integration/setup-install-codex-config-migration.test.ts` (search: `/"matcher": "MultiEdit"/`) lock the gruff matcher.
-2. When mirroring permission or hook entries for a new tool, confirm the tool exists AND its permission-rule form is matched — file permission checks only match `Edit(path)`/`Read(path)` rules; `Write`/`NotebookEdit` are hook-matcher-only.
-3. When you edit a `workflow/hooks/*.sh` template, re-sync the installed `.goat-flow/hooks/` copy in the same change; `audit` drift (search: `differs from the current goat-flow template`) fails otherwise.
 
 **Follow-up (2026-06-08): the template guard was necessary but NOT sufficient — upgrades didn't clean existing installs.** The 1.10.0 fix above scrubbed the templates and added `test/unit/agent-config-template-parity.test.ts` (allow-set `{Bash,Read,Edit,Write}`). Both green — yet every real user still saw the 13 warnings on launch. All five `gruff-workspace` projects (`gruff-go|rs|ts|php|py`), upgraded to 1.10.x, still carried 13 `MultiEdit(...)` rules in `.claude/settings.json`. Root cause: `workflow/install-goat-flow.sh` settings block (search: `SETTINGS_MIGRATIONS=()`) only ran *Codex* migrations on an existing settings file; for Claude it fell through to "exists, skipped", and the Claude hook-config migration `migrate_agent_hook_config` only rewrites `current.hooks`, never `permissions.deny`. **A test on the template can't see the thousands of user-owned installed files that already hold the bad value.** Removing/renaming anything that lands in a user-owned config (a deny rule, a hook matcher, a config key) needs an UPGRADE MIGRATION that prunes the orphaned value from existing files — not just a clean template (cf. the standing rule: upgrades MUST prune orphaned/renamed artifacts).
 

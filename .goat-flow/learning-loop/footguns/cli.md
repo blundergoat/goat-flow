@@ -7,17 +7,24 @@ last_reviewed: 2026-08-27
 
 **Status:** active | **Created:** 2026-08-16 | **Evidence:** ACTUAL_MEASURED
 
+**Prevention:** After adding or reordering any branch in a classifier whose output is a published contract, grep the repo for every sibling value and confirm each still has a producer. Treat a value with no producer as a contract removal, not dead code: it needs the same doc, fixture, and changelog treatment as any other breaking change. Anchors: `src/cli/managed-setup-preview.ts` (search: `classifyManagedSetupFile`) and `test/unit/managed-setup-preview.test.ts` (search: `name: "local-preserved"`).
+
 **Symptoms:** A milestone item reads as purely additive - "add state X before blocker aggregation" - and the implementation is one branch. Nothing warns that a sibling state has become unreachable, because no test constructs the classifier's inputs looking for absence, and the type union still lists it. The removed value stays in the published JSON contract and in user-facing docs until someone greps.
 
 **Evidence:** 1.16.0 M02 added `local-preserved` to `src/cli/managed-setup-preview.ts` (search: `The package has nothing new to deliver here`). That branch owns the exact condition `newExpectedSha256 === oldExpectedSha256`, which was the only producer of `local-edited`. The state became dead on the first edit while still being exported in `ManagedSetupFileState`, listed in `BLOCKING_STATES`, documented in `docs/cli.md`, and asserted by three fixtures. A repo-wide grep found all five surfaces; removing the state then required repointing those fixtures onto `both-changed`, the only managed conflict that still blocks.
 
 **Why it happens:** A classifier is a chain of guarded returns. Adding a branch changes the reachability of every branch below it that shares a condition, but TypeScript checks exhaustiveness of the union, not reachability of its members. Tests that build the classifier's inputs directly keep passing for states they still construct, so the dead value is invisible from inside the unit suite.
 
-**Prevention:** After adding or reordering any branch in a classifier whose output is a published contract, grep the repo for every sibling value and confirm each still has a producer. Treat a value with no producer as a contract removal, not dead code: it needs the same doc, fixture, and changelog treatment as any other breaking change. Anchors: `src/cli/managed-setup-preview.ts` (search: `classifyManagedSetupFile`) and `test/unit/managed-setup-preview.test.ts` (search: `name: "local-preserved"`).
-
 ## Footgun: Host-native paths leak into user-visible CLI output on Windows
 
 **Status:** active | **Created:** 2026-05-11 | **Evidence:** ACTUAL_MEASURED
+
+**Prevention:**
+1. Treat every emission of a `path.*` result into a string as a candidate for `.replace(/\\/g, "/")`. The boundaries that need this: prompt text, audit findings, JSON output, dashboard URLs/labels, log messages, shell snippets the user or agent will execute.
+2. `fs` operations can stay native (Node accepts both). The rule is about *display*, not *use*.
+3. For path *composition* (joining a host-native projectPath with a POSIX sub-path), prefer `path.posix.join(projectPath, sub).replace(/\\/g, "/")` to avoid `path.resolve`'s drive-letter prepending on Windows.
+4. Test stubs that pattern-match on path strings must normalize incoming paths the same way (`test/unit/audit-command/helpers.ts` (search: `export function stubFS`) is the canonical example).
+5. CI's Windows job (`.github/workflows/ci.yml`, search: `windows-hook-contracts`, added 2026-08-14) runs only the hook spawn-matrix and hook-state contracts, so path-emission changes still ship without Windows coverage - probe them on a Windows host before release.
 
 **Symptoms:** Windows users see `C:\Users\developer\...`-style backslash paths in setup prompts, audit `evidence` fields, skill scaffold output, glob results, and the `getCliCommand()` re-run hint. When an agent reads the prompt and runs a host-native path inside a Bash subshell, the backslashes can act as escape characters and the command fails. Tests written with POSIX-shape assertions also fail (string-equality on `.endsWith(".claude/skills/...")` etc.). A full-suite run on 2026-05-11 had 25 failures all rooted here.
 
@@ -32,18 +39,16 @@ last_reviewed: 2026-08-27
 - `src/cli/quality/skill-quality-content.ts` (search: `relPosix`) - forward-slashes artifact paths/mirrors/missingMirrors.
 - `src/cli/skill-author.ts` (search: `proposedPath`) - forward-slashes skill scaffold paths.
 
-**Prevention:**
-1. Treat every emission of a `path.*` result into a string as a candidate for `.replace(/\\/g, "/")`. The boundaries that need this: prompt text, audit findings, JSON output, dashboard URLs/labels, log messages, shell snippets the user or agent will execute.
-2. `fs` operations can stay native (Node accepts both). The rule is about *display*, not *use*.
-3. For path *composition* (joining a host-native projectPath with a POSIX sub-path), prefer `path.posix.join(projectPath, sub).replace(/\\/g, "/")` to avoid `path.resolve`'s drive-letter prepending on Windows.
-4. Test stubs that pattern-match on path strings must normalize incoming paths the same way (`test/unit/audit-command/helpers.ts` (search: `export function stubFS`) is the canonical example).
-5. CI's Windows job (`.github/workflows/ci.yml`, search: `windows-hook-contracts`, added 2026-08-14) runs only the hook spawn-matrix and hook-state contracts, so path-emission changes still ship without Windows coverage - probe them on a Windows host before release.
-
 ---
 
 ## Footgun: ESM main-module guard breaks under symlinks
 
 **Status:** active | **Created:** 2026-04-24 | **Evidence:** ACTUAL_MEASURED
+
+**Prevention:**
+1. Never compare `resolve(process.argv[1])` directly to `fileURLToPath(import.meta.url)`. Always wrap both sides in `realpathSync()`.
+2. Run `test/integration/main-guard.test.ts` after any change to the entry-point guard; the symlink case must pass.
+3. When Node 24+ is the minimum, replace the entire guard with `import.meta.main`.
 
 `path.resolve()` does not follow symlinks, but Node's ESM loader resolves symlinks for `import.meta.url` by default (via `--preserve-symlinks-main=false`). Any main-module guard that compares `resolve(process.argv[1])` against `fileURLToPath(import.meta.url)` silently fails when the script is invoked through a symlink - which is always the case for npm-installed CLIs, because `node_modules/.bin/<name>` is a symlink to the package's bin entry.
 
@@ -56,16 +61,18 @@ last_reviewed: 2026-08-27
 - `test/integration/main-guard.test.ts` (search: `launched through a symlink`) - regression test that creates a temp-dir symlink and verifies the CLI produces output.
 - Commit 918ca3e introduced the broken guard; the fix adds `realpathSync` to resolve both paths canonically before comparison.
 
-**Prevention:**
-1. Never compare `resolve(process.argv[1])` directly to `fileURLToPath(import.meta.url)`. Always wrap both sides in `realpathSync()`.
-2. Run `test/integration/main-guard.test.ts` after any change to the entry-point guard; the symlink case must pass.
-3. When Node 24+ is the minimum, replace the entire guard with `import.meta.main`.
-
 ---
 
 ## Footgun: Diagnostic logs to stdout corrupt structured-output modes
 
 **Status:** active | **Created:** 2026-05-25 | **Evidence:** EXTERNAL_REFERENCE
+
+**Prevention:**
+1. When adding or modifying a CLI mode that emits structured stdout, detect the mode in `src/cli/cli.ts` (before logger import) and set a routing env var. The logger module reads the env var on first import and routes everything to stderr in that mode.
+2. The detection must run before ANY module that might trigger logger initialization. In practice this means: parse `argv` for the format flag in the entry-point file, set the env var, THEN import the rest of the CLI.
+3. Subprocesses spawned by goat-flow (hooks, git, install scripts) must have their stdout / stderr captured separately. Never merge a subprocess's stdout into the parent's stdout when the parent is in structured-output mode.
+4. Contract test pattern: for every structured-output CLI mode, write a test that exercises a code path KNOWN to log (e.g., cache miss, telemetry init, version check). Assert that the captured stdout parses cleanly as the expected format. If logging would corrupt it, the test fails.
+5. For MCP specifically: stdout is the protocol channel. Treat any `console.log` / `process.stdout.write` outside the MCP framing as a bug. Enforce with a source-grep guardrail (see `.goat-flow/learning-loop/patterns/verification.md` search: `Source-grep guardrail`) banning `console.log` in MCP server source files.
 
 **Symptoms:** A CLI command emits structured output (JSON, SARIF, JSONL, CSV) to stdout for a downstream consumer (CI parser, GitHub Code Scanning upload, jq pipeline, MCP client). The consumer fails to parse — sometimes silently (jq returns empty), sometimes loudly ("unexpected token at line N"). The bug is intermittent: it only fires when a code path that calls `logger.*` or `console.*` happens to run during the structured emission. Test runs pass because the test invocation may not trigger that code path; production runs fail because (e.g.) a single deprecation warning prints to stdout right before the JSON payload.
 
@@ -78,13 +85,6 @@ last_reviewed: 2026-08-27
 - `src/cli/quality/` — JSON quality report exports.
 - Any future `--json` or `--format` flag added to a goat-flow command.
 - MCP server code (when added) — MCP communicates over JSON-RPC stdio; every byte on stdout must be protocol-conformant. A single stray log line breaks the entire MCP session, often with no diagnostic on the consumer side.
-
-**Prevention:**
-1. When adding or modifying a CLI mode that emits structured stdout, detect the mode in `src/cli/cli.ts` (before logger import) and set a routing env var. The logger module reads the env var on first import and routes everything to stderr in that mode.
-2. The detection must run before ANY module that might trigger logger initialization. In practice this means: parse `argv` for the format flag in the entry-point file, set the env var, THEN import the rest of the CLI.
-3. Subprocesses spawned by goat-flow (hooks, git, install scripts) must have their stdout / stderr captured separately. Never merge a subprocess's stdout into the parent's stdout when the parent is in structured-output mode.
-4. Contract test pattern: for every structured-output CLI mode, write a test that exercises a code path KNOWN to log (e.g., cache miss, telemetry init, version check). Assert that the captured stdout parses cleanly as the expected format. If logging would corrupt it, the test fails.
-5. For MCP specifically: stdout is the protocol channel. Treat any `console.log` / `process.stdout.write` outside the MCP framing as a bug. Enforce with a source-grep guardrail (see `.goat-flow/learning-loop/patterns/verification.md` search: `Source-grep guardrail`) banning `console.log` in MCP server source files.
 
 ---
 

@@ -7,13 +7,13 @@ last_reviewed: 2026-08-26
 
 **Status:** active | **Created:** 2026-06-07 | **Evidence:** ACTUAL_MEASURED
 
+**Prevention:** When adding or tightening path validation, classify paths before checking existence: committed setup/doc files must resolve; gitignored local-state paths should be treated as valid navigation vocabulary. Keep `scripts/check-path-integrity.sh` and `doc-paths-resolve` aligned so clean checkouts and installed skills use the same local-state exemption policy.
+
 **Symptoms:** A clean checkout fails the harness `doc-paths-resolve` check because a committed doc mentions an intentionally gitignored local-state file. The path is valid as workflow vocabulary, but absent by design. In the 1.10.0 release pass, `.goat-flow/glossary.md` (search: `Active Plan Marker`) referenced `.goat-flow/plans/.active`; simulating a clean checkout where that marker was absent made `goat-flow audit --harness` fail Context with `.goat-flow/glossary.md: unresolved`.
 
 **Why it happens:** Path validators usually equate "backticked repo path" with "committed file that must exist." goat-flow also has checkout-local coordination paths: plan markers, scratchpad notes, local logs, dashboard state, and project identity. Those are deliberately gitignored but still need to be named in docs and prompts.
 
 **Evidence:** `src/cli/audit/harness/check-context.ts` (search: `isGitignoredLocalStatePath`) now exempts those local-state paths before existence checks. `test/unit/audit-command/scoring-model.test.ts` (search: `absent gitignored local-state paths`) reproduces the clean-checkout case with missing `.goat-flow/plans/.active`, `.goat-flow/logs/quality/example.json`, `.goat-flow/scratchpad/notes.md`, `.goat-flow/project-id`, and `.goat-flow/dashboard-state.json`.
-
-**Prevention:** When adding or tightening path validation, classify paths before checking existence: committed setup/doc files must resolve; gitignored local-state paths should be treated as valid navigation vocabulary. Keep `scripts/check-path-integrity.sh` and `doc-paths-resolve` aligned so clean checkouts and installed skills use the same local-state exemption policy.
 
 **Recurrence update (2026-08-01):** Same script, opposite direction. `scripts/check-path-integrity.sh` section 8 resolved a `docs/*.md` ref by finding its basename anywhere under the repo, pruning only `node_modules`, `.git`, and `dist` - so untracked trees *satisfied* refs instead of failing them: worktree and scratchpad copies of the renamed commit guide resolved `docs/coding-standards/git-commit.md`, and `.goat-flow/plans/*/ISSUE.md` resolved `ISSUE.md`. The check passed on every developer machine and failed only on CI's tracked-only checkout, inside PR #57's installer round-trip preflight. Section 8 now prunes `.claude/worktrees`, `.goat-flow/plans`, `.goat-flow/scratchpad`, and `.goat-flow/logs` from that fallback, and exempts the two refs absent by design: the `/goat-plan` `ISSUE.md` artifact and the ADR-051 compatibility commit-guide path. `test/integration/path-integrity.test.ts` (search: `docs cross-references`) covers both directions. A basename fallback is only as trustworthy as the tree it searches.
 
@@ -25,13 +25,13 @@ last_reviewed: 2026-08-26
 
 **Status:** active | **Created:** 2026-05-29 | **Evidence:** ACTUAL_MEASURED
 
+**Prevention:** Keep playbook rules self-contained; reference only installed siblings (other playbooks) or the consumer's instruction files. Move goat-flow-repo-specific commands, scans, and ADR pointers to goat-flow's own instruction files, not the shipped playbook. Internal milestone files under `.goat-flow/plans/` are exempt - they are repo-local. Before declaring a playbook or shipped skill done, grep it for `\.goat-flow/(decisions|lessons|patterns|footguns)|src/cli|scripts/|ADR-|check-(drift|goat-flow)|stats --check|DESIGN_TARGET`, and confirm any `scripts/...` or other repo path it names is listed in `workflow/manifest.json` - otherwise genericize it to a portable command.
+
 **Symptoms:** A playbook under `workflow/skills/playbooks/` (installed to `.goat-flow/skill-docs/playbooks/`) or a skill under `workflow/skills/` (installed to `.claude/skills/`, `.agents/skills/`, etc.) cites goat-flow's own repo-internal files - an ADR (`.goat-flow/learning-loop/decisions/ADR-NNN`), CLI source (`check-drift.ts`, `src/cli/...`), a learning-loop file (`.goat-flow/learning-loop/lessons|patterns|footguns`), a repo-internal script under `scripts/` (e.g. `scripts/install-browser-tools.sh`, which ships via neither `workflow/manifest.json` nor the `workflow/` template tree), roadmap jargon (`DESIGN_TARGET`, milestone ids), or a not-yet-existing file ("`conventional-comments.md` (when it exists)"). The reference resolves in this repo but is dead and confusing in a consumer install where those files never ship.
 
 **Why it happens:** Playbooks are dual-purpose - goat-flow's own working docs AND shipped artifacts installed into consumer projects. Anything that resolves in this repo but is not installed becomes a dead reference downstream. Only sibling playbooks (`observability.md`, `code-comments.md`) and the consumer's own instruction files (`CLAUDE.md` / `AGENTS.md` / `.github/copilot-instructions.md`) are present in both contexts. `check-drift.ts` enforces template-vs-installed byte parity but does NOT catch this: a repo-internal reference drifts identically in both copies and passes drift.
 
 **Evidence:** The 2026-05-29 pass removed repo-only pointers from `workflow/skills/playbooks/code-comments.md` (search: `Related References`) and `workflow/skills/playbooks/gruff-code-quality.md` (search: `Related References`). On 2026-06-05, `workflow/skills/playbooks/browser-use.md` (search: `browser-use-python`), `workflow/skills/playbooks/page-capture.md` (search: `browser-use-python`), and `workflow/skills/goat-debug/SKILL.md` (search: `Browser evidence detection`) dropped the unshipped `scripts/install-browser-tools.sh` path for portable package commands.
-
-**Prevention:** Keep playbook rules self-contained; reference only installed siblings (other playbooks) or the consumer's instruction files. Move goat-flow-repo-specific commands, scans, and ADR pointers to goat-flow's own instruction files, not the shipped playbook. Internal milestone files under `.goat-flow/plans/` are exempt - they are repo-local. Before declaring a playbook or shipped skill done, grep it for `\.goat-flow/(decisions|lessons|patterns|footguns)|src/cli|scripts/|ADR-|check-(drift|goat-flow)|stats --check|DESIGN_TARGET`, and confirm any `scripts/...` or other repo path it names is listed in `workflow/manifest.json` - otherwise genericize it to a portable command.
 
 **Avoid false positives in that grep:** the installer seeds the learning-loop *directories* into consumers - `workflow/install-goat-flow.sh` (search: `for dir in .goat-flow/learning-loop/footguns`) mkdirs `.goat-flow/{footguns,lessons,patterns,decisions,...}` and seeds `.goat-flow/learning-loop/decisions/README.md`. So a reference to a learning-loop *directory the consumer is meant to populate* (e.g. `page-capture.md`'s `.goat-flow/learning-loop/patterns/<project>-playwright.md`, or "grep `.goat-flow/learning-loop/footguns/` for the target area") is portable and must NOT be "fixed". Only a *specific goat-flow-authored file or ADR number* that never ships downstream is dead: `ADR-024`, `src/cli/...`, a named goat-flow lesson/footgun file. Triage each grep hit as directory-generic-for-the-consumer (keep) vs goat-flow-specific-file (move out). 2026-06-05: a playbook critique flagged `deployment.md`'s generic `.goat-flow/learning-loop/decisions/` reference as a dead-ref; verification (`install-goat-flow.sh` seeds the dir) retracted the finding.
 
@@ -43,6 +43,8 @@ last_reviewed: 2026-08-26
 **Decision changed:** Re-check each provider, event, and result channel instead of carrying agent-level support forward.
 **Trigger phase:** READ
 **Incident count:** 4 | **Latest occurrence:** 2026-08-23
+
+**Prevention:** Check current primary docs and the local binary, then prove the exact event, payload, command, response, continuation, and model visibility separately. Treat config, matchers, and fallbacks as feasibility evidence. After a correction, grep every product, prose, template, and test consumer for the superseded claim.
 
 **Symptoms:** Hook support can drift independently by event and response channel. Antigravity's 2026-05-26 correction proved PreToolUse config, and its 2026-05-28 Gruff correction proved PostToolUse input through file matchers and a changed-file fallback. On 2026-08-10, those input paths were still cited as full Gruff support after provider evidence showed their output could not reach the active model.
 
@@ -56,8 +58,6 @@ last_reviewed: 2026-08-26
 
 **Recurrence on 2026-08-23:** M13's first report-only compatibility matrix said Claude subagents could not spawn subagents. The current [Claude Code subagent reference](https://code.claude.com/docs/en/sub-agents) says they can delegate up to three layers by default, and the installed CLI was 2.1.240. Rechecking before the ADR draft removed that false blocker; separate direct-invocation, human-gate, authority, and receipt constraints still rejected the wrapper.
 
-**Prevention:** Check current primary docs and the local binary, then prove the exact event, payload, command, response, continuation, and model visibility separately. Treat config, matchers, and fallbacks as feasibility evidence. After a correction, grep every product, prose, template, and test consumer for the superseded claim.
-
 ## Footgun: Active footgun Symptoms paragraph drifts after the underlying bug is fixed
 
 **Status:** active | **Created:** 2026-05-25 | **Evidence:** ACTUAL_MEASURED
@@ -66,6 +66,12 @@ last_reviewed: 2026-08-26
 **Caught at:** VERIFY
 **Incident count:** 4
 **Latest occurrence:** 2026-08-10
+
+**Prevention:**
+1. When you fix a bug that has a footgun entry, in the same PR EITHER (a) rewrite the Symptoms paragraph to describe the principle the fix demonstrates and update the search anchors to point at the current shape, OR (b) move the entry to the file's "Resolved Entries" section with a one-line summary of what was learned. Do not leave an `active` footgun whose Symptoms anchors don't resolve.
+2. When reviewing a footgun bucket, treat a zero-hit anchor or a resolved anchor that contradicts the prose as a SEV signal: either the evidence was always wrong or the underlying behavior changed. Rewrite or resolve the entry; documentation rot is not a guard.
+3. `stats --check` validates literal `(search: ...)` anchors in footguns and lessons, and promotes stale existing-target anchors in pattern entries to blocking findings. `audit --check-content` applies the same literal check to current guidance and accepted ADR evidence. History may explain removed code, but its pointer must still resolve to live proof rather than a moved literal.
+4. The lifecycle is: incident → footgun (active) → fix lands → footgun rewritten or moved to Resolved. Skipping the last step leaves a trap that punishes the most-careful agents (the ones who actually follow search anchors).
 
 **Symptoms:** A footgun is tagged `**Status:** active` and reads as a current trap. The Prevention rules are still good, but the Symptoms paragraph describes an obsolete code shape. Its search anchor either resolves to behavior that now contradicts the prose or resolves to nothing. Future agents following it either make the wrong current-state decision, chase a removed implementation, or distrust the entire footgun bucket because one entry is verifiably wrong.
 
@@ -79,12 +85,6 @@ last_reviewed: 2026-08-26
 
 **Recurrence 2026-08-10:** The Antigravity capability footgun and a resolved optional-hook migration entry still cited local Gruff wiring as current support after the registry and installer stopped registering it. The corrected entries now distinguish runnable input handling from model-visible result delivery. Evidence anchors: `src/cli/server/hooks-registry.ts` (search: `cannot deliver Gruff feedback to the active model`) and `test/unit/hook-registrar-surfaces.test.ts` (search: `keeps gruff-code-quality unregistered for Antigravity without result delivery`).
 
-**Prevention:**
-1. When you fix a bug that has a footgun entry, in the same PR EITHER (a) rewrite the Symptoms paragraph to describe the principle the fix demonstrates and update the search anchors to point at the current shape, OR (b) move the entry to the file's "Resolved Entries" section with a one-line summary of what was learned. Do not leave an `active` footgun whose Symptoms anchors don't resolve.
-2. When reviewing a footgun bucket, treat a zero-hit anchor or a resolved anchor that contradicts the prose as a SEV signal: either the evidence was always wrong or the underlying behavior changed. Rewrite or resolve the entry; documentation rot is not a guard.
-3. `stats --check` validates literal `(search: ...)` anchors in footguns and lessons, and promotes stale existing-target anchors in pattern entries to blocking findings. `audit --check-content` applies the same literal check to current guidance and accepted ADR evidence. History may explain removed code, but its pointer must still resolve to live proof rather than a moved literal.
-4. The lifecycle is: incident → footgun (active) → fix lands → footgun rewritten or moved to Resolved. Skipping the last step leaves a trap that punishes the most-careful agents (the ones who actually follow search anchors).
-
 ---
 
 ## Footgun: Cross-reference fragility across docs
@@ -95,6 +95,8 @@ last_reviewed: 2026-08-26
 **Caught at:** VERIFY
 **Incident count:** 8
 **Latest occurrence:** 2026-08-27
+
+**Prevention:** Before a rename, use `git grep` for the exact path and bare filename across all tracked files. Stage the destination before changing existence-validated pointers. Repeat both sweeps after edits and classify old-path hits as compatibility, legacy, or history; include hidden-file `rg` when ignored state matters. After merging a learning-loop bucket or generated index, run `goat-flow index` and `goat-flow stats --check` even when Git reports a clean auto-merge. This is DoD gate #6.
 
 **Symptoms:** A renamed or moved file breaks links in multiple documents. Dense pointer maps mean one stale path can mislead setup, glossary, or architecture readers at multiple entry points.
 
@@ -111,8 +113,6 @@ last_reviewed: 2026-08-26
 
 ~~**Evidence (historical - resolved):** the M13 Phase 3 setup-step renumber left three stale pointers - `.goat-flow/glossary.md` and an evidence-lifecycle ADR entry at removed `workflow/setup/09-customise-to-project.md`, and the removed historical `ADR-011-critique-mob-core-features.md` at removed `05-install-skills.md`~~ (resolved: now `workflow/setup/05-customise-to-project.md` and `workflow/setup/03-install-skills.md`; the ADR carrying the second pointer later left the active set).
 
-**Prevention:** Before a rename, use `git grep` for the exact path and bare filename across all tracked files. Stage the destination before changing existence-validated pointers. Repeat both sweeps after edits and classify old-path hits as compatibility, legacy, or history; include hidden-file `rg` when ignored state matters. After merging a learning-loop bucket or generated index, run `goat-flow index` and `goat-flow stats --check` even when Git reports a clean auto-merge. This is DoD gate #6.
-
 ---
 
 ## Footgun: Consolidating a rule stated several ways deletes the riders only one variant carried
@@ -123,6 +123,8 @@ last_reviewed: 2026-08-26
 **Incident count:** 2
 **Latest occurrence:** 2026-08-18
 
+**Prevention:** Enumerate the clause set across every variant before merging, and diff the merged text against that set rather than against any single source. Pin the recovered rider with a contract assertion in the same change, since a clause no test names is the one the next consolidation deletes. Prefer a pointer over a restatement at every non-owner site; a summary beside the owner is a new variant, not a reference. Evidence anchor: `test/contract/skill-hardening-shared-2.test.ts` (search: `no other style rule applies unless the user asks`).
+
 **Symptoms:** A deduplication pass makes one rule consistent and silently narrows it. Every contract still passes, because the deleted clause was never pinned - it existed in prose in exactly one of the variants being merged.
 
 **Why it happens:** Divergence analysis fixes attention on the axis where the variants disagree. Clauses orthogonal to that axis ride along in only some variants and have no advocate during the merge. The shortest consistent wording is then the one that drops them, and a word budget rewards exactly that. The same trap fires again one level down when the merged rule is restated beside its pointer, because the restatement is a fresh variant that can drift from the owner immediately.
@@ -131,21 +133,19 @@ last_reviewed: 2026-08-26
 
 **Recurrence update (2026-08-18):** A physical-line density rewrite compressed the Never and INDEX-first clauses across seven instruction surfaces. The first version kept the apparent policy but dropped the exact user-only commit rider, the current-session GitHub authorization rider, and two canonical retrieval-order phrases. Preflight failed 10 of 2,084 tests; after restoring the Never riders, the focused command-phrase suite still failed 4 of 44 tests on setup retrieval. Restoring every rider and grep-stable phrase kept the longest line at 777 characters and made all 44 focused tests pass. Enforcers: `test/contract/command-phrases.test.ts` (search: `agent mutation and external-write authority`) and `scripts/check-instruction-parity.mjs` (search: `MAX_INSTRUCTION_LINE_CHARACTERS`).
 
-**Prevention:** Enumerate the clause set across every variant before merging, and diff the merged text against that set rather than against any single source. Pin the recovered rider with a contract assertion in the same change, since a clause no test names is the one the next consolidation deletes. Prefer a pointer over a restatement at every non-owner site; a summary beside the owner is a new variant, not a reference. Evidence anchor: `test/contract/skill-hardening-shared-2.test.ts` (search: `no other style rule applies unless the user asks`).
-
 ---
 
 ## Footgun: ADR renumbering breaks cross-references
 
 **Status:** active | **Created:** 2026-05-18 | **Evidence:** ACTUAL_MEASURED
 
+**Prevention:** When deleting, compacting, or renumbering ADRs, grep `.goat-flow/learning-loop/decisions/` for every old `ADR-NNN` token and replace historical references with the deleted slug, not just the number. Then run a topic check: each remaining `ADR-NNN` reference must either match the current target title or explicitly say `now-removed ADR-NNN-slug`.
+
 **Symptoms:** ADR notes that say "absorbs ADR-NNN" or "supersedes ADR-NNN" can silently point at the wrong decision after ADR deletion and renumbering. The linked number still resolves, so a path-existence check misses the break while readers land on an unrelated topic.
 
 **Why it happens:** The ADR number is used as both identity and order. On 2026-04-18, historical ADR stubs were deleted and the surviving ADRs were compact-renumbered; old prose references kept the numeric labels but no longer named the deleted slug.
 
 **Evidence:** A 2026-05-18 ADR cleanup found three numeric references whose numbers still resolved but whose topics no longer matched the historical slug. The concrete stale references have since been rewritten; the active trap is the cross-reference class, not those fixed links. Historical examples are retained below at `.goat-flow/learning-loop/footguns/docs-and-crossrefs.md` (search: `ADR renumbering concrete examples`).
-
-**Prevention:** When deleting, compacting, or renumbering ADRs, grep `.goat-flow/learning-loop/decisions/` for every old `ADR-NNN` token and replace historical references with the deleted slug, not just the number. Then run a topic check: each remaining `ADR-NNN` reference must either match the current target title or explicitly say `now-removed ADR-NNN-slug`.
 
 ---
 
@@ -154,19 +154,24 @@ last_reviewed: 2026-08-26
 **Status:** active | **Created:** 2026-04-30 | **Evidence:** ACTUAL_MEASURED
 **Incident count:** 5 | **Latest occurrence:** 2026-08-10
 
+**Prevention:** Derive fanout from manifest ownership. After every bump, search tracked release surfaces for literal and regex-escaped old versions, capture the release snapshot, run packed-byte canaries, and run the full suite.
+
 **Symptoms:** Curated version and mirror checks pass while fixtures, examples, or newly shipped runtimes retain the previous release.
 
 **Why it happens:** The writer and checker can share the same incomplete list, so agreement does not prove coverage.
 
 **Evidence:** Earlier releases missed synthetic dashboard projects, playbook frontmatter, plan examples, and regex-escaped assertions. The 1.15.1 release initially omitted shared Node hook runtimes; final proof then found two 1.15.0 contract assertions and no frozen v1.15.1 manifest snapshot. Evidence anchors: `scripts/bump-version.sh` (search: `manifest_hook_runtime_paths`), `scripts/check-versions.mjs` (search: `hookRuntimeTemplates`), `test/contract/skill-hardening-review-1.test.ts` (search: `registers evidenced goat-review reasoning traps across every root`), and `test/unit/manifest.test.ts` (search: `provides a readable snapshot for every changelog release`).
 
-**Prevention:** Derive fanout from manifest ownership. After every bump, search tracked release surfaces for literal and regex-escaped old versions, capture the release snapshot, run packed-byte canaries, and run the full suite.
-
 ---
 
 ## Footgun: Filesystem-backed validation can miss untracked or ignored replacement files
 
 **Status:** active | **Created:** 2026-04-19 | **Evidence:** ACTUAL_MEASURED
+
+**Prevention:**
+1. After any add/rename/delete tied to setup, dashboard views, or repo-local policy files, run `git status --short` and confirm the replacement path is tracked.
+2. Use `git ls-files --error-unmatch <path>` for any new canonical path that a fix depends on.
+3. When introducing a new tracked file under `.goat-flow/`, update `.goat-flow/.gitignore` in the same change or the fix is local-only.
 
 **Symptoms:** Local validation passes, but the next commit or CI run breaks because the replacement file exists only in the working tree. The repo appears fixed to the current operator while collaborators still receive the broken state.
 
@@ -177,16 +182,16 @@ last_reviewed: 2026-08-26
 - `src/dashboard/index.html` (search: `views/setup.html`) can include a replacement view file even if that file is still untracked.
 - `.goat-flow/.gitignore` (search: `*`) ignores new `.goat-flow/*` files unless they are explicitly whitelisted, which masked `.goat-flow/security-policy.md` during local verification.
 
-**Prevention:**
-1. After any add/rename/delete tied to setup, dashboard views, or repo-local policy files, run `git status --short` and confirm the replacement path is tracked.
-2. Use `git ls-files --error-unmatch <path>` for any new canonical path that a fix depends on.
-3. When introducing a new tracked file under `.goat-flow/`, update `.goat-flow/.gitignore` in the same change or the fix is local-only.
-
 ---
 
 ## Footgun: Prose examples for agent-specific paths drift from the manifest
 
 **Status:** active | **Created:** 2026-04-21 | **Evidence:** ACTUAL_MEASURED
+
+**Prevention:**
+1. Before hand-writing an agent-specific path in prose, grep `workflow/manifest.json` for that agent's `skills_dir` / `hooks_dir` / `settings` / `instruction_file` entry and copy the exact value.
+2. When listing satellite-agent directories as examples, enumerate the *distinct* paths from the manifest (today: `.claude/skills/`, `.agents/skills/`, `.github/skills/`) - do not invent per-agent subdirectories from agent names.
+3. Consider extending `doc-paths-resolve` to validate agent-specific paths against manifest entries (existence-plus-correctness), not just filesystem existence, so agent-wrong paths that happen to resolve also get caught.
 
 **Symptoms:** A doc lists an agent-specific path (`.agents/skills/`, `.codex/skills/`, etc.) that does not match the manifest. The harness `doc-paths-resolve` check may or may not catch it depending on whether the wrong path happens to exist on disk. When the harness catches it, every agent card in the dashboard drops to 75% Context with the same finding; when it does not, the doc is silently wrong.
 
@@ -197,11 +202,6 @@ last_reviewed: 2026-08-26
 - `docs/audit-and-quality.md` (search: `satellite agents' skill dirs`) - previously named `.gemini/skills/` as a satellite-agent skill-dir example; that path never existed per the manifest, and the harness caught it only because it does not exist on disk.
 - `src/cli/audit/harness/check-context.ts` (search: `extractBacktickPaths`) - existence-only check; an agent-wrong path that exists (e.g. `.claude/skills/` in an Antigravity example) would pass.
 - `.goat-flow/learning-loop/decisions/ADR-020-add-copilot-cli.md` (search: `Canonical agents`) - current four-agent identity is Claude, Codex, Antigravity, and Copilot.
-
-**Prevention:**
-1. Before hand-writing an agent-specific path in prose, grep `workflow/manifest.json` for that agent's `skills_dir` / `hooks_dir` / `settings` / `instruction_file` entry and copy the exact value.
-2. When listing satellite-agent directories as examples, enumerate the *distinct* paths from the manifest (today: `.claude/skills/`, `.agents/skills/`, `.github/skills/`) - do not invent per-agent subdirectories from agent names.
-3. Consider extending `doc-paths-resolve` to validate agent-specific paths against manifest entries (existence-plus-correctness), not just filesystem existence, so agent-wrong paths that happen to resolve also get caught.
 
 ---
 

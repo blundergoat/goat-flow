@@ -7,6 +7,12 @@ last_reviewed: 2026-08-15
 
 **Status:** active | **Created:** 2026-05-25 | **Evidence:** EXTERNAL_REFERENCE
 
+**Prevention:**
+1. If code displays agent stdout outside an xterm.js-style ANSI-aware renderer (host shell, log file, audit report, dashboard tooltip), then call an ANSI-aware constructor or strip control characters. Minimum sanitisation: `data.replace(/\x00/g, "").replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "")` for plain-text destinations, or a library such as `strip-ansi`.
+2. Whenever introducing a new consumer of `pty.onData` output, decide explicitly: "this consumer is ANSI-aware" (xterm.js, Textual `from_ansi`) or "this consumer must strip" (log file, audit report, generic display). Document the decision in the consumer's location so a future maintainer doesn't strip the right thing for the wrong target.
+3. Add a regression fixture containing real-world TUI escape sequences. Any new agent-output renderer must pass it.
+
+
 **Symptoms:** The agent runs a TUI program (`htop`, `vim`, `tmux`, `nnn`, anything with `\x1b[` escape codes) inside its sandbox. Its stdout includes raw ANSI escape sequences and null bytes. Any framework code that displays that stdout to a real terminal (a trajectory viewer, the dashboard's terminal pane, a log printout, a copy-pasted error message) leaks those sequences directly to the host. Best case: garbled rendering. Worst case: the host terminal hangs, the inspector freezes, the dashboard view becomes unrecoverable until the page is reloaded.
 
 **Why it happens:** Frameworks treat agent stdout as opaque text by default — the agent is "internal trusted code," so the framework plumbs its output to the UI like any other string. But the agent runs arbitrary code inside its sandbox, and arbitrary code includes well-behaved TUI programs whose protocol output is hostile when rendered out-of-context. The bug is invisible in test fixtures (which use plain-text outputs) and only fires on real-world tasks where the agent runs a TUI binary.
@@ -20,8 +26,3 @@ last_reviewed: 2026-08-15
 - `src/cli/server/terminal.ts` (search: `pty.onData((data: string) =>`) — receives raw PTY output from a spawned agent CLI session, broadcasts it via `sendMessage(session.ws, { type: "output", data })` to the dashboard browser without sanitisation.
 - The browser-side terminal renderer (likely xterm.js or similar) handles ANSI escapes by design, so the dashboard case is less severe than mini's inspector. But any other surface that displays the same `data` — log files, copy-pasted error messages in audit reports, dashboard tooltips, server-side console logs that include the data — is exposed.
 - `src/cli/server/terminal.ts` (search: `detachBuffer.push(data)`) — buffered output kept for late-attaching clients; if anything other than the xterm.js receiver consumes this buffer, sanitisation is required.
-
-**Prevention:**
-1. If code displays agent stdout outside an xterm.js-style ANSI-aware renderer (host shell, log file, audit report, dashboard tooltip), then call an ANSI-aware constructor or strip control characters. Minimum sanitisation: `data.replace(/\x00/g, "").replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "")` for plain-text destinations, or a library such as `strip-ansi`.
-2. Whenever introducing a new consumer of `pty.onData` output, decide explicitly: "this consumer is ANSI-aware" (xterm.js, Textual `from_ansi`) or "this consumer must strip" (log file, audit report, generic display). Document the decision in the consumer's location so a future maintainer doesn't strip the right thing for the wrong target.
-3. Add a regression fixture containing real-world TUI escape sequences. Any new agent-output renderer must pass it.

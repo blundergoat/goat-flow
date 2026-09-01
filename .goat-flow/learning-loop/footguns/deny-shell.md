@@ -11,16 +11,16 @@ Sibling buckets: `deny-secrets.md`, `deny-writes.md`.
 
 **Status:** active | **Created:** 2026-06-06 | **Evidence:** ACTUAL_MEASURED
 
+**Prevention:**
+1. A tokenizer splitting shell control operators MUST respect `$(`/`<(`/`>(` boundaries; quotes alone are insufficient, and plain `(...)` subshells must stay splittable (nothing recurses into them).
+2. "Write to X" detection must check the redirect *target*; `2>&1`/`2>/dev/null` are not writes.
+3. When a finding fingers a downstream guard (a catch-all), trace its input token to the tokenizer before relaxing it; chain-count caps must hold at every recursion depth.
+
 **Symptoms:** Benign reads denied as `Policy destructive: Complex command substitution`: an unquoted `$(...)` holding a control operator (`echo $(date; whoami)`, `$(grep x f || echo MISS)`) and arithmetic `$((1 + 2))`; quoting it or dropping the operator passed, so it looked intermittent. Sibling: `.env.example` reads with any redirect (`ls .env.example 2>&1`) denied as writes.
 
 **Why it happens:** `split_command_segments_into` split on `&&`/`||`/`;`/newline tracking quotes but not parenthesis depth, so an operator inside an unquoted `$( ... )` split it across segments, leaving an orphan `$(` that `check_command_substitutions`' residual catch-all blocked. The catch-all is correct; the orphan was manufactured upstream, so the reported "catch-all too broad" lead was a downstream symptom. Arithmetic `$(( ))` was unrecognised by the `$( )`-only scanner; for `.env.example`, any `HAS_REDIRECT` (incl. `2>&1`) counted as a write.
 
 **Evidence:** `workflow/hooks/deny-dangerous.sh` (search: `Command/process substitution openers`) tracks `subst_depth` for `$(` `<(` `>(` (plain `(...)` stays splittable so `(cmd && rm -rf /)` cannot bypass) and enforces the chain-count cap (search: `chain-count cap at nested depths`). `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `arithmetic expansion`) covers `$(( ))`. `workflow/hooks/deny-dangerous/patterns-paths.sh` (search: `is_secret_path_touch`). The self-test also covers `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `unquoted subst with || fallback`) and (search: `rm behind || inside subst`). (That redirect-write matcher was removed 2026-07-18; `.env.example` writes are now allowed.)
-
-**Prevention:**
-1. A tokenizer splitting shell control operators MUST respect `$(`/`<(`/`>(` boundaries; quotes alone are insufficient, and plain `(...)` subshells must stay splittable (nothing recurses into them).
-2. "Write to X" detection must check the redirect *target*; `2>&1`/`2>/dev/null` are not writes.
-3. When a finding fingers a downstream guard (a catch-all), trace its input token to the tokenizer before relaxing it; chain-count caps must hold at every recursion depth.
 
 **Recurrence update (2026-07-12):** M31 rewrote the scanner's operator-facing comment and accidentally removed the semantic anchor `Command/process substitution openers`. The parser and focused tests passed, but `node --import tsx src/cli/cli.ts stats . --check` failed `stale-ref` against this entry. The fix restored that durable phrase in `split_command_segments_into`; parser refactors must grep learning-loop anchors before renaming comments, even when runtime behavior is unchanged.
 
@@ -34,6 +34,11 @@ Sibling buckets: `deny-secrets.md`, `deny-writes.md`.
 
 **Status:** active | **Created:** 2026-04-27 | **Evidence:** ACTUAL_MEASURED
 
+**Prevention:**
+1. Recursive hook paths MUST call `check_command_segments`, not `check_segment`, unless the caller already split shell control operators.
+2. Every nested execution feature (`bash -c`, `$()`, `<()`) needs at least one chained-danger self-test, not only a single-danger body.
+3. When a hook edit touches read-only whitelisting or recursive parsing, run the self-test before syncing copies so failures point at the canonical template.
+
 **Symptoms:** Pre-fix, the hook blocked top-level `true; rm -rf /` while allowing the same command nested inside `bash -c "true; rm -rf /"` or `echo "$(true; rm -rf /)"`. Current self-tests lock these as blocked; the active trap is that recursive execution paths can regress if they call `check_segment` directly instead of `check_command_segments`.
 
 **Why it happens:** Top-level input is split on `&&`, `||`, semicolons, and newlines before each segment is checked. A regression can reappear if recursive paths for command substitution, process substitution, and `bash -c` call the raw segment checker directly; if the nested string starts with a read-only verb (`echo`), the whitelist returns before the destructive segment is inspected.
@@ -43,16 +48,18 @@ Sibling buckets: `deny-secrets.md`, `deny-writes.md`.
 - Current regression anchors: `workflow/hooks/deny-dangerous.sh` (search: `check_command_segments`) recurses through the command segment splitter; `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `bash -c chained rm`; `rm behind ; inside subst`) locks nested chained destructive commands as blocked.
 - Runtime proof before the fix: `bash workflow/hooks/deny-dangerous.sh --self-test=full` returned `FAIL [bash -c semicolon dangerous]: expected 2, got 0`, `FAIL [bash -c and-chain dangerous]: expected 2, got 0`, `FAIL [bash -c semicolon git push]: expected 2, got 0`.
 
-**Prevention:**
-1. Recursive hook paths MUST call `check_command_segments`, not `check_segment`, unless the caller already split shell control operators.
-2. Every nested execution feature (`bash -c`, `$()`, `<()`) needs at least one chained-danger self-test, not only a single-danger body.
-3. When a hook edit touches read-only whitelisting or recursive parsing, run the self-test before syncing copies so failures point at the canonical template.
-
 ---
 
 ## Footgun: Heredoc masking can hide executable shell lines
 
 **Status:** active | **Created:** 2026-05-25 | **Evidence:** ACTUAL_MEASURED
+
+**Prevention:**
+1. Any heredoc masking edit must test both sides of the boundary: safe quoted report data is allowed, shell-fed heredoc bodies stay inspectable, and commands after `<<-` tab-indented delimiters are scanned.
+2. Self-test helpers must exercise the same policy path as runtime, including the 50-segment cap; testing only `check_command_segments` misses chain-cap false-positives.
+3. Keep workflow, `scripts/`, and installed agent hook mirrors byte-identical after heredoc edits.
+4. Before masking a heredoc body, ask "what executes this body?" - not just the first word. A stdin dispatcher (`xargs`/`parallel`) running a shell, or a shell anywhere downstream of a pipe, makes the body shell. Never let the chain-count cap be the only thing blocking a hidden shell body; the masking classifier must be correct on its own.
+5. Decide "is the body inert?" with an ALLOWLIST of safe consumers, never a blocklist of shells. A blocklist is a losing game (line continuations, `b"ash"`/`b\ash` quote tricks, `command`/`exec` wrappers, `read`/`mapfile` variable handoff, `ssh`). Default to "inspect"; mask only when every command in the (continuation-joined) opener pipeline is a known non-shell consumer. A masking false positive is recoverable ("run manually"); a masking miss is a silent bypass.
 
 **Symptoms:** Masking quoted heredoc bodies fixes false positives on inert report JSON/prose, but is unsafe if the masker doesn't exactly mirror Bash delimiter semantics: one that misses `<<-` tab-indented terminators keeps treating later shell lines as heredoc data, while a too-broad masker lets inert JSON/prose trip the chain-count cap.
 
@@ -69,18 +76,16 @@ Sibling buckets: `deny-secrets.md`, `deny-writes.md`.
 - **Substitution-opener DoS cap (2026-06-06):** review measured `cat <(:) <(:) ... <(:)` (300 process substitutions) taking ~10s -> SIGTERM, because each `$(`/`<(`/`>(` triggers a recursive re-scan in `check_command_substitutions`. `main` now does a flat O(len) count of substitution openers (search: `policy-parser DoS`) and blocks above 32 before the recursive walk. Benign nested substitutions (`echo $(dirname $(dirname $(pwd)))`) stay allowed. Regression case: self-test (search: `parser-DoS cap`).
 - `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `rm_has_recursive`) - split destructive guardrail owns shell execution and destructive-command checks after the M10 hook split; `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `rm -rf`) - central self-test locks representative destructive-command blocking.
 
-**Prevention:**
-1. Any heredoc masking edit must test both sides of the boundary: safe quoted report data is allowed, shell-fed heredoc bodies stay inspectable, and commands after `<<-` tab-indented delimiters are scanned.
-2. Self-test helpers must exercise the same policy path as runtime, including the 50-segment cap; testing only `check_command_segments` misses chain-cap false-positives.
-3. Keep workflow, `scripts/`, and installed agent hook mirrors byte-identical after heredoc edits.
-4. Before masking a heredoc body, ask "what executes this body?" - not just the first word. A stdin dispatcher (`xargs`/`parallel`) running a shell, or a shell anywhere downstream of a pipe, makes the body shell. Never let the chain-count cap be the only thing blocking a hidden shell body; the masking classifier must be correct on its own.
-5. Decide "is the body inert?" with an ALLOWLIST of safe consumers, never a blocklist of shells. A blocklist is a losing game (line continuations, `b"ash"`/`b\ash` quote tricks, `command`/`exec` wrappers, `read`/`mapfile` variable handoff, `ssh`). Default to "inspect"; mask only when every command in the (continuation-joined) opener pipeline is a known non-shell consumer. A masking false positive is recoverable ("run manually"); a masking miss is a silent bypass.
-
 ---
 
 ## Footgun: Dispatcher checks must inspect pipeline segments, not only the whole command
 
 **Status:** active | **Created:** 2026-06-09 | **Evidence:** ACTUAL_MEASURED
+
+**Prevention:**
+1. For every dispatcher/parser helper (`xargs`, `parallel`, `gh`, shell consumers), test direct, piped, option-bearing, and harmless literal forms.
+2. Whole-segment checks are not enough when the first command produces input for a later command; split the pipeline and run the dispatcher classifier on each executable segment.
+3. Always include a literal allow control so the fix does not become a broad "text contains rm -rf" block.
 
 **Symptoms:** Pre-fix, direct `xargs rm -rf < list.txt` blocked, but equivalent pipelines such as `printf '%s\n' /tmp/build-old | xargs rm -rf` or `find . -type f | xargs -r rm -rf` returned exit 0. Current self-tests lock these as blocked; the active trap is that dispatcher parsers must run on each pipeline segment, not only the whole command.
 
@@ -90,16 +95,16 @@ Sibling buckets: `deny-secrets.md`, `deny-writes.md`.
 - Pre-fix runtime probes returned exit 0 with no block output for `printf '%s\n' /tmp/build-old | xargs rm -rf` and `find . -type f | xargs -r rm -rf`; direct controls `rm -rf /` and `xargs rm -rf < list.txt` still returned exit 2.
 - Fix anchors: `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `check_pipeline_xargs_destructive_payloads`) scans every pipeline segment; self-test cases in `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `piped xargs recursive rm`) lock both block shapes and the allow control `xargs echo rm -rf`.
 
-**Prevention:**
-1. For every dispatcher/parser helper (`xargs`, `parallel`, `gh`, shell consumers), test direct, piped, option-bearing, and harmless literal forms.
-2. Whole-segment checks are not enough when the first command produces input for a later command; split the pipeline and run the dispatcher classifier on each executable segment.
-3. Always include a literal allow control so the fix does not become a broad "text contains rm -rf" block.
-
 ---
 
 ## Footgun: Shell substitution scanners must be quote-aware inside the substitution body
 
 **Status:** active | **Created:** 2026-06-07 | **Evidence:** ACTUAL_MEASURED
+
+**Prevention:**
+1. Never parse shell substitutions with `[^()]` regexes alone; quoted delimiters inside the body are still body text, not the close delimiter.
+2. Every substitution-parser change needs both bypass canaries (`git push` behind a quoted `)`) and false-positive canaries (single-quoted `$(` repeated past the DoS cap).
+3. Keep command substitution and process substitution tests paired; they share the matching-paren risk but route through different shell execution paths.
 
 **Symptoms:** A regex-only `$()` / `<()` scanner can stop at a `)` that appears inside a quoted string within the substitution body. PR #48 review canaries showed `echo $(echo ")"; git push origin main)` and `cat <(echo ")"; git push origin main)` were allowed because the parser treated the quoted `)` as the substitution close and left the dangerous command outside the recursive policy walk.
 
@@ -109,11 +114,6 @@ Sibling buckets: `deny-secrets.md`, `deny-writes.md`.
 - `workflow/hooks/deny-dangerous.sh` (search: `find_matching_shell_paren`) - quote-aware matching-paren scan used by `check_command_substitutions`.
 - `workflow/hooks/deny-dangerous.sh` (search: `count_substitution_openers`) - skips single-quoted substitution-looking text while still counting executable substitution openers.
 - `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `quoted paren inside command subst`) - locks the command/process substitution bypass canaries and the single-quoted false-positive allow case.
-
-**Prevention:**
-1. Never parse shell substitutions with `[^()]` regexes alone; quoted delimiters inside the body are still body text, not the close delimiter.
-2. Every substitution-parser change needs both bypass canaries (`git push` behind a quoted `)`) and false-positive canaries (single-quoted `$(` repeated past the DoS cap).
-3. Keep command substitution and process substitution tests paired; they share the matching-paren risk but route through different shell execution paths.
 
 **Recurrence 2026-08-18 (post-walk projection, same family):** the matching-paren scan was correct, but `check_command_substitutions` then discarded its own quote state and re-derived quoting twice with a line-oriented `sed -E "s/'[^']*'//g"` — once for the Complex-substitution check and once for the Backtick check, the latter over the raw input. `sed` cannot match a single-quoted span containing a newline, and naive left-to-right pairing reads the `'\''` escape idiom as an empty quoted span, exposing the characters after it. Measured: 4 false positives (backtick or `$(` text inside a quoted span crossing a newline; the same after `'\''`), 0 bypasses — strictly fail-closed. Worse, the recorded remediation in `.goat-flow/learning-loop/lessons/verification-preflight.md` (search: `Verification grep patterns must not carry Markdown backticks into Bash`) advises single-quoting, which is exactly what fails in these shapes. Fixed by accumulating `residual_unquoted` inside the existing character walk (append only when `in_single` is 0; append the `__goat_subst__`/`__goat_arith__`/`__goat_proc_subst__` placeholders whose bodies recursion already checked) and deleting both `sed` derivations. Canaries: `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `Quote-projection canaries`) — 4 allow plus 4 block, corpus 434 -> 442.
 
@@ -128,6 +128,16 @@ Sibling buckets: `deny-secrets.md`, `deny-writes.md`.
 **Trigger phase:** SCOPE
 **Caught at:** VERIFY
 
+**Prevention:**
+1. Treat guardrail splits as parser migrations, not renames. Port the old parser normalization and false-positive corpus before deleting the monolith.
+2. Compare line count and self-test case count before approving a split; a large drop is a review smell until removed coverage maps to new tests.
+3. Run representative old-case probes across all split hooks: wrapper-prefixed git pushes, global/inherited `gh` flags, read-only search literals with dangerous text, safe-scoped recursive deletion, split-quoted secret paths, and structured payloads for each registered agent.
+4. Keep the central self-test broad enough to fail on both bypasses and false positives; smoke checks alone prove only headline examples.
+5. Startup failure handlers must not unconditionally read stdin before CLI mode is known; diagnostics and self-tests need deterministic fail-closed output even when stdin is a TTY or delayed pipe.
+6. Reports must use `AgentFacts.hooks.denyBlocks*`; dispatcher text is incomplete after a policy split.
+7. A wrapper parser that abandons its unwrap on an unrecognised option fails open, because the caller then classifies the wrapper instead of the payload. Prefer skipping the unknown option to returning; if the parser must bail, the caller has to treat an unparsed wrapper as unresolved rather than allowed.
+8. Every option table needs both spellings of each option, and the self-test needs one case for an option the table does not list. A corpus drawn from the table can only prove the table, so `watch -n 1 git push` and `parallel --halt soon,fail=1 git push` passed while the long-form spellings went unblocked.
+
 **Symptoms:** A hook split looks cleaner because `patterns-shell.sh`, `patterns-paths.sh`, and `patterns-writes.sh` each block the happy-path examples (`rm -rf /`, `cat .env`, `git push`). But the pre-M10 monolith carried much broader parser coverage - wrapper normalization, quoted read-only search literals, `git -C`/`git -c` push forms, global `gh --repo` grammar, split-quoted `.env`, `.envrc`, safe-scoped recursive deletion, structured Copilot/Antigravity payloads - so a small split passes smoke tests while re-opening old bypasses and false positives.
 
 **Evidence:**
@@ -139,30 +149,20 @@ Sibling buckets: `deny-secrets.md`, `deny-writes.md`.
 - **Recurrence update (2026-07-14):** M25 labeled Codex push `permissive` while the live audit found the block. `src/cli/facts/agent/settings.ts` (`checkDenyPatterns`) saw only the dispatcher; `src/cli/facts/agent/hooks.ts` (`siblingGuardrailPaths`) saw the split policy. The report now uses `AgentFacts.hooks.denyBlocksGitPush`; its regression test keeps the legacy summary false and expects restricted push.
 - Anchors: `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `is_gh_write_operation`), `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `rm_has_recursive`), `workflow/hooks/deny-dangerous/patterns-paths.sh` (search: `is_secret_path_touch`), and `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `git -C push`, `quoted destructive search literal`).
 
-**Prevention:**
-1. Treat guardrail splits as parser migrations, not renames. Port the old parser normalization and false-positive corpus before deleting the monolith.
-2. Compare line count and self-test case count before approving a split; a large drop is a review smell until removed coverage maps to new tests.
-3. Run representative old-case probes across all split hooks: wrapper-prefixed git pushes, global/inherited `gh` flags, read-only search literals with dangerous text, safe-scoped recursive deletion, split-quoted secret paths, and structured payloads for each registered agent.
-4. Keep the central self-test broad enough to fail on both bypasses and false positives; smoke checks alone prove only headline examples.
-5. Startup failure handlers must not unconditionally read stdin before CLI mode is known; diagnostics and self-tests need deterministic fail-closed output even when stdin is a TTY or delayed pipe.
-6. Reports must use `AgentFacts.hooks.denyBlocks*`; dispatcher text is incomplete after a policy split.
-7. A wrapper parser that abandons its unwrap on an unrecognised option fails open, because the caller then classifies the wrapper instead of the payload. Prefer skipping the unknown option to returning; if the parser must bail, the caller has to treat an unparsed wrapper as unresolved rather than allowed.
-8. Every option table needs both spellings of each option, and the self-test needs one case for an option the table does not list. A corpus drawn from the table can only prove the table, so `watch -n 1 git push` and `parallel --halt soon,fail=1 git push` passed while the long-form spellings went unblocked.
-
 ---
 
 ## Footgun: Copilot preToolUse hooks must distinguish structured payloads from Bash calls
 
 **Status:** active | **Created:** 2026-04-21 | **Evidence:** ACTUAL_MEASURED
 
-**Active trap:** Copilot `preToolUse` can receive Bash and non-Bash payloads through the same hook. Bash-only deny logic that ignores `toolName` can deny safe file tools or regex structured payloads.
-
-**Original failure:** The hook once treated every payload as Bash; non-Bash `view` / `edit` / `Task` events had no `command`, so they were denied. It now checks `toolName`, allows safe file tools silently, and still denies protected paths.
-
 **Prevention:**
 1. Read `toolName` before shell checks on any broad `preToolUse` hook.
 2. Self-test every registered payload shape, including non-Bash Copilot payloads and stringified `toolArgs`.
 3. Allow tests must assert no deny JSON, not just exit 0; Copilot denies also exit 0.
+
+**Active trap:** Copilot `preToolUse` can receive Bash and non-Bash payloads through the same hook. Bash-only deny logic that ignores `toolName` can deny safe file tools or regex structured payloads.
+
+**Original failure:** The hook once treated every payload as Bash; non-Bash `view` / `edit` / `Task` events had no `command`, so they were denied. It now checks `toolName`, allows safe file tools silently, and still denies protected paths.
 
 **Evidence:**
 - `workflow/hooks/deny-dangerous.sh` (search: `detect_output_mode`; `def extract_path(value)`).
@@ -175,13 +175,13 @@ Sibling buckets: `deny-secrets.md`, `deny-writes.md`.
 
 **Status:** active | **Created:** 2026-08-22 | **Evidence:** ACTUAL_MEASURED
 
+**Prevention:** Guardrail token lists need an explicit left boundary or a qualified receiver, never a bare substring that can also be a method name. When a rule names a language primitive, add an allow case for that same word as used by the language's own standard library: the deny corpus varies shell *structure* but never varies identifier context. Narrowing either pattern is a security-policy change - re-run the full self-test and confirm the child-process and os-prefixed forms still block before shipping. Sibling lesson: `.goat-flow/learning-loop/lessons/hook-testing.md` (search: `deny-dangerous self-test missed a whole false-positive class while green`).
+
 **Symptoms:** A read-only Node `-e` one-liner is denied `Policy destructive: Interpreter -c/-e with shell-execution primitive` purely for calling `RegExp.prototype.exec`. Measured 2026-08-22 against the installed hook with a two-case probe: a payload whose only suspicious token is a regex match call returns status 2, while the identical payload using the `test` method returns 0 - the method name is the only difference. This blocked two benign log-analysis commands in one session while `--self-test=full` stayed green (`executed=481, skipped=0`), so the corpus never saw the case.
 
 **Why it happens:** `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `shell_primitive_re`) lists that word followed by optional whitespace and an open parenthesis with no left boundary, so any identifier whose tail is that word matches - a regex match call, a property access on any object, or a locally named helper. The genuine Node hazard already matches the sibling child-process alternative and the Python hazard already matches the os-prefixed alternatives, so the unqualified entry contributes mostly false positives on the most common regex idiom in JavaScript.
 
 **Related measurement (same session, needs a policy decision):** writing a Markdown file through a *quoted* heredoc was denied `Policy destructive: Backtick command substitution hides nested execution` because the prose contained Markdown code spans. A quoted heredoc delimiter suppresses all shell substitution, so that body is inert text; the scanner does not distinguish quoted from unquoted delimiters. Whether to narrow this is a deliberate call - the existing heredoc-masking footgun in this bucket documents why bodies are scanned at all.
-
-**Prevention:** Guardrail token lists need an explicit left boundary or a qualified receiver, never a bare substring that can also be a method name. When a rule names a language primitive, add an allow case for that same word as used by the language's own standard library: the deny corpus varies shell *structure* but never varies identifier context. Narrowing either pattern is a security-policy change - re-run the full self-test and confirm the child-process and os-prefixed forms still block before shipping. Sibling lesson: `.goat-flow/learning-loop/lessons/hook-testing.md` (search: `deny-dangerous self-test missed a whole false-positive class while green`).
 
 ## Resolved Entries
 
