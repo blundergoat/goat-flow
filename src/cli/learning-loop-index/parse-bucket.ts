@@ -194,6 +194,29 @@ function paragraphAfter(content: string, marker: string): string | null {
   );
 }
 
+/** True when a paragraph carries no retrievable prose: blank, metadata-only, or nothing but headings. */
+function isNonProseParagraph(paragraph: string): boolean {
+  if (paragraph.length === 0 || METADATA_LABEL.test(paragraph)) return true;
+  const paragraphLines = paragraph
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+  return (
+    paragraphLines.length > 0 &&
+    paragraphLines.every((line) => /^#{1,6}\s+\S/u.test(line))
+  );
+}
+
+/** True for a `**Prevention:**` block, whose guidance is not the incident a maintainer searches for. */
+function isPreventionParagraph(paragraph: string): boolean {
+  return /^\*\*Prevention:\*\*/u.test(paragraph);
+}
+
+/** True for a top-level Markdown list item, the shape the rules under a Prevention heading take. */
+function isListParagraph(paragraph: string): boolean {
+  return /^(?:[*+-]|\d{1,9}[.)])(?:[ \t]+|$)/u.test(paragraph);
+}
+
 /**
  * Find fallback prose for a generated INDEX retrieval hook after ignoring metadata.
  * For footguns and lessons, keep the incident visible when maintainers move Prevention first,
@@ -201,7 +224,7 @@ function paragraphAfter(content: string, marker: string): string | null {
  */
 function fallbackHookParagraph(
   content: string,
-  shouldPreserveIncidentHook = false,
+  shouldPreserveIncidentHook: boolean,
 ): string {
   const withoutHeading = maskNonRenderedMarkdown(content).replace(
     /^#{1,2}[^\n]*\n/,
@@ -210,32 +233,17 @@ function fallbackHookParagraph(
   let hasSkippedPrevention = false;
   for (const raw of withoutHeading.split(/\n\s*\n/)) {
     const paragraph = raw.trim();
-    if (paragraph.length === 0 || METADATA_LABEL.test(paragraph)) continue;
-    const paragraphLines = paragraph
-      .split("\n")
-      .map((line) => line.trim())
-      .filter((line) => line.length > 0);
-    if (
-      paragraphLines.length > 0 &&
-      paragraphLines.every((line) => /^#{1,6}\s+\S/u.test(line))
-    ) {
-      continue;
-    }
+    if (isNonProseParagraph(paragraph)) continue;
     if (
       shouldPreserveIncidentHook &&
       !hasSkippedPrevention &&
-      /^\*\*Prevention:\*\*/u.test(paragraph)
+      isPreventionParagraph(paragraph)
     ) {
       hasSkippedPrevention = true;
       continue;
     }
     // A leading list belongs to Prevention, not the incident a maintainer expects to find through the generated INDEX.
-    if (
-      hasSkippedPrevention &&
-      /^(?:[*+-]|\d{1,9}[.)])(?:[ \t]+|$)/u.test(paragraph)
-    ) {
-      continue;
-    }
+    if (hasSkippedPrevention && isListParagraph(paragraph)) continue;
     return paragraph.replace(/^\*\*[^*\n]+:\*\*\s*/, "");
   }
   return "";
@@ -358,7 +366,7 @@ function decisionStatus(body: string): string {
 /** Read the first ADR decision sentence, falling back to body prose for older ADR shapes. */
 function decisionSummary(body: string): string {
   return firstSentence(
-    paragraphAfter(body, "\n## Decision") ?? fallbackHookParagraph(body),
+    paragraphAfter(body, "\n## Decision") ?? fallbackHookParagraph(body, false),
   );
 }
 

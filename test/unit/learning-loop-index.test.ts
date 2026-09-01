@@ -206,18 +206,23 @@ ${orderedBody.join("\n\n")}
 /**
  * Build one markerless footgun with its Prevention list or incident narrative first.
  * Use it to prove that generated INDEX guidance survives reader-focused entry reordering.
+ * A separated Prevention list puts a blank line between the label and its rules, the shape real
+ * entries use, which reaches the parser as two paragraphs instead of one.
  * Filesystem side effects: creates and removes one temporary footgun directory.
  */
 function extractOrderedMarkerlessFootgunFacts(
   shouldLeadWithPrevention: boolean,
+  shouldSeparatePreventionList = false,
 ) {
   const fixtureProjectRoot = mkdtempSync(
     join(tmpdir(), "goatflow-llindex-markerless-order-"),
   );
   const footgunDirectory = join(fixtureProjectRoot, FOOTGUNS_DIR);
-  const prevention = `**Prevention:**
-1. Validate the registered launcher before citing provider delivery.
+  const preventionRules = `1. Validate the registered launcher before citing provider delivery.
 2. Retain the incident hook when this guidance moves.`;
+  const prevention = shouldSeparatePreventionList
+    ? `**Prevention:**\n\n${preventionRules}`
+    : `**Prevention:**\n${preventionRules}`;
   const narrative =
     "A registered launcher failed before the managed hook received its payload. Later sentences must not leak into the hook.";
   const orderedBody = shouldLeadWithPrevention
@@ -241,6 +246,42 @@ ${orderedBody.join("\n\n")}
     const fixtureFiles = createFS(fixtureProjectRoot);
     const [indexEntry] = parseBucket(fixtureFiles, FOOTGUNS_DIR, "footguns");
     assert.ok(indexEntry, "expected one generated footgun index row");
+    return indexEntry;
+  } finally {
+    rmSync(fixtureProjectRoot, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Build one markerless pattern whose body opens with Prevention guidance.
+ * Use it to prove only footguns and lessons trade a leading Prevention block for the prose below it.
+ * Filesystem side effects: creates and removes one temporary pattern directory.
+ */
+function extractPreventionFirstMarkerlessPatternFacts() {
+  const fixtureProjectRoot = mkdtempSync(
+    join(tmpdir(), "goatflow-llindex-pattern-prevention-"),
+  );
+  const patternDirectory = join(fixtureProjectRoot, PATTERNS_DIR);
+  const pattern = `---
+category: retrieval
+last_reviewed: 2026-09-01
+---
+
+## Pattern: Prevention-first pattern keeps its leading guidance
+
+**Status:** active | **Created:** 2026-09-01 | **Evidence:** OBSERVED
+
+**Prevention:** Register the launcher before citing provider delivery.
+
+Pattern prose that must not replace the guidance above it.
+`;
+  mkdirSync(patternDirectory, { recursive: true });
+  writeFileSync(join(patternDirectory, "prevention-first.md"), pattern);
+
+  try {
+    const fixtureFiles = createFS(fixtureProjectRoot);
+    const [indexEntry] = parseBucket(fixtureFiles, PATTERNS_DIR, "patterns");
+    assert.ok(indexEntry, "expected one generated pattern index row");
     return indexEntry;
   } finally {
     rmSync(fixtureProjectRoot, { recursive: true, force: true });
@@ -319,6 +360,26 @@ describe("parseBucket", () => {
       ruleFirstFacts,
       narrativeFirstFacts,
       "a markerless incident must remain the retrieval hook after its Prevention list moves first",
+    );
+  });
+
+  it("keeps a markerless incident hook when a blank line separates the Prevention list", () => {
+    const separatedListFacts = extractOrderedMarkerlessFootgunFacts(true, true);
+
+    assert.equal(
+      separatedListFacts.hook,
+      "A registered launcher failed before the managed hook received its payload.",
+      "Prevention rules split into their own paragraph must not become the retrieval hook",
+    );
+  });
+
+  it("keeps leading Prevention guidance as the hook for a markerless pattern", () => {
+    const patternFacts = extractPreventionFirstMarkerlessPatternFacts();
+
+    assert.equal(
+      patternFacts.hook,
+      "Register the launcher before citing provider delivery.",
+      "only footguns and lessons trade a leading Prevention block for the prose below it",
     );
   });
 
