@@ -21,9 +21,17 @@ import {
   type ReferenceValidationOptions,
 } from "./reference-paths.js";
 
-/** File tokens and search needles in citation order, including chained needles. */
+/**
+ * File tokens and search needles in citation order.
+ *
+ * Three alternatives, matched left to right:
+ *  1. the self-contained `(`path`, search: `needle`)` form, where path and needle share one
+ *     parenthesis group (groups 1-3) - without this a comma between them hid the needle;
+ *  2. a bare file token like `foo.ts` or `.env` (group 4) that a following anchor binds to;
+ *  3. a standalone `(search: ...)` anchor (groups 5-6) bound to the nearest preceding file token.
+ */
 const SEARCH_CITATION_TOKEN_REGEX =
-  /`((?:[^`]+\.[a-zA-Z0-9]{1,10}|\.[a-zA-Z0-9_-]+))`|\(search:\s*(?:`([^`]+)`|"((?:\\.|[^"\\])*)")\)/g;
+  /\(\s*`([^`]+)`\s*,\s*search:\s*(?:`([^`]+)`|"((?:\\.|[^"\\])*)")\s*\)|`((?:[^`]+\.[a-zA-Z0-9]{1,10}|\.[a-zA-Z0-9_-]+))`|\(search:\s*(?:`([^`]+)`|"((?:\\.|[^"\\])*)")\)/g;
 
 /** One concrete `(search: ...)` citation after filesystem validation. */
 export interface SearchAnchorEvaluation {
@@ -134,6 +142,18 @@ function maskMarkdownFencesPreservingLines(content: string): string {
   return visibleLines.join("\n");
 }
 
+/**
+ * Turn a raw citation needle into the single-line literal it points at.
+ * Unescapes `\"`/`\\` and folds a prose line-wrap (a newline plus its indentation) back to one
+ * space, so a needle a user wrapped across two lines still matches its single-line target.
+ *
+ * @param rawNeedle - the needle exactly as captured between the citation's backticks or quotes
+ * @returns the literal string to look for in the cited file
+ */
+function normalizeCitationNeedle(rawNeedle: string): string {
+  return rawNeedle.replace(/\\(["\\])/g, "$1").replace(/\s*\r?\n\s*/g, " ");
+}
+
 /** Return the one-based line containing a character offset. */
 function lineNumberAtOffset(content: string, offset: number): number {
   let line = 1;
@@ -143,7 +163,36 @@ function lineNumberAtOffset(content: string, offset: number): number {
   return line;
 }
 
-/** Extract direct and same-sentence chained citations from visible Markdown. */
+/** Build the citation carried by a self-contained `(`path`, search: `needle`)` match, or null. */
+function combinedCitationAt(
+  match: RegExpMatchArray,
+  content: string,
+  matchIndex: number,
+): SearchAnchorCitation | null {
+  const combinedPath = match[1];
+  const rawNeedle = match[2] ?? match[3];
+  if (combinedPath === undefined || rawNeedle === undefined) return null;
+  if (!isFileRef(combinedPath)) return null;
+  return {
+    filePath: combinedPath,
+    needle: normalizeCitationNeedle(rawNeedle),
+    line: lineNumberAtOffset(content, matchIndex),
+  };
+}
+
+/** Decide whether a preceding file token still binds to a standalone anchor across the gap. */
+function activeFilePathAfterGap(
+  gap: string,
+  isAwaitingDirectSearch: boolean,
+  activeFilePath: string | null,
+): string | null {
+  if (isAwaitingDirectSearch) {
+    return /^[ \t]*(?:\n[ \t]*)?$/.test(gap) ? activeFilePath : null;
+  }
+  return /\n|[.!?](?:\s|$)/.test(gap) ? null : activeFilePath;
+}
+
+/** Extract direct, same-sentence chained, and path-in-parens citations from visible Markdown. */
 function extractVisibleSearchAnchorCitations(
   content: string,
 ): SearchAnchorCitation[] {
@@ -157,7 +206,19 @@ function extractVisibleSearchAnchorCitations(
   )) {
     const matchIndex = match.index;
     const tokenEnd = matchIndex + match[0].length;
-    const filePath = match[1];
+
+    // A `(`path`, search: `needle`)` token carries both halves, so it stands alone rather than
+    // binding to a neighbour. Emit it directly and reset the binding state for what follows.
+    if (match[1] !== undefined) {
+      const combined = combinedCitationAt(match, content, matchIndex);
+      if (combined !== null) citations.push(combined);
+      activeFilePath = null;
+      isAwaitingDirectSearch = false;
+      previousTokenEnd = tokenEnd;
+      continue;
+    }
+
+    const filePath = match[4];
     if (filePath !== undefined) {
       activeFilePath = isFileRef(filePath) ? filePath : null;
       isAwaitingDirectSearch = activeFilePath !== null;
@@ -165,17 +226,16 @@ function extractVisibleSearchAnchorCitations(
       continue;
     }
 
-    const gap = content.slice(previousTokenEnd, matchIndex);
-    if (isAwaitingDirectSearch) {
-      if (!/^[ \t]*(?:\n[ \t]*)?$/.test(gap)) activeFilePath = null;
-    } else if (/\n|[.!?](?:\s|$)/.test(gap)) {
-      activeFilePath = null;
-    }
-    const rawNeedle = match[2] ?? match[3];
+    activeFilePath = activeFilePathAfterGap(
+      content.slice(previousTokenEnd, matchIndex),
+      isAwaitingDirectSearch,
+      activeFilePath,
+    );
+    const rawNeedle = match[5] ?? match[6];
     if (activeFilePath !== null && rawNeedle !== undefined) {
       citations.push({
         filePath: activeFilePath,
-        needle: rawNeedle.replace(/\\(["\\])/g, "$1"),
+        needle: normalizeCitationNeedle(rawNeedle),
         line: lineNumberAtOffset(content, matchIndex),
       });
     }

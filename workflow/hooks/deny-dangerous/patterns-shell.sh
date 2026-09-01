@@ -52,6 +52,10 @@ rm_is_safely_scoped() {
     # Any unresolved expansion can move a reviewed cleanup outside the project.
     # For example, `cache/$TARGET` may become `cache/../../home` at execution time.
     [[ "$target" == *'$'* || "$target" == *'`'* ]] && return 1
+    # Brace expansion (`{a,b}`, `{1..9}`) expands to several paths the reviewer never saw and
+    # can carry an absolute target that never starts with `/`, so `rm -rf {/etc,/var}` would
+    # otherwise read as project-relative below. Refuse it like the variable expansions above.
+    [[ "$target" == *'{'*','*'}'* || "$target" == *'{'*'..'*'}'* ]] && return 1
     # Dot traversal makes the path shown in review differ from what rm deletes.
     case "/$target/" in
       */../*|*/./*) return 1 ;;
@@ -526,7 +530,10 @@ check_command_chain_policy() {
   local input="$1"
   local depth="${2:-0}"
   local download_re='(^|[[:space:]])(curl|wget|fetch|http)([[:space:]]|$)'
-  local execute_re='(;|&&|\|\|)[[:space:]]*(ba)?sh[[:space:]]+[^[:space:]&|;]+'
+  # Match every POSIX shell name the pipeline path recognises (keep in sync with is_shell_name),
+  # plus any path-qualified spelling like /bin/zsh, so a download cannot reach an alternate
+  # interpreter. Matching only (ba)?sh let `curl ... ; dash file` and `/bin/bash file` through.
+  local execute_re='(;|&&|\|\|)[[:space:]]*([^[:space:];&|]*/)?(bash|dash|zsh|ksh93|ksh|mksh|ash|yash|sh)[[:space:]]+[^[:space:]&|;]+'
   if [[ "$depth" -eq 0 && "$input" =~ $download_re && "$input" =~ $execute_re ]]; then
     block "Download-then-execute (curl/wget ... && bash file). Inspect the downloaded file before running it." || return $?
   fi

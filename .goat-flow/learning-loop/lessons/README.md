@@ -65,7 +65,7 @@ Counts, thresholds, and limits that can change must not read as timeless facts.
 The reason must make clear whether the entry remains safe to apply.
 For example: "Rubric check 2.4.3 no longer exists (ADR-013); the normalization-invariant principle still applies to any parser."
 The index keeps historical entries because the principle remains retrievable.
-Only `resolved` is filtered out (`src/cli/learning-loop-index/parse-bucket.ts`, search: `Status:\*\*\s*resolved`).
+Only `resolved` is filtered out (`src/cli/learning-loop-index/parse-bucket.ts`, search: `.toLowerCase() !== "resolved"`).
 
 ## Retiring A Lesson
 

@@ -1684,10 +1684,19 @@ normalize_command_candidate() {
   local base=""
   local after_word=""
   local case_arm_re='^case[[:space:]][^)]*\)[[:space:]]*'
-  local named_file_descriptor_redirection_re='^\{[a-zA-Z_][a-zA-Z0-9_]*\}(<<<|<<-|<<|<>|>>\||>>|>\||>&|<&|>|<)'
 
   while true; do
     c="${c#"${c%%[![:space:]]*}"}"
+
+    # Leading redirections (`2>/dev/null`, `>out`, `{fd}>file`, `2> file`, here-docs) change
+    # only the command's I/O, never which program runs. Peel them first so the verb the user
+    # would execute drives every verb-gated policy module; otherwise CMD_VERB resolves to the
+    # redirection token and rm / git / find / sudo policy silently misses the real command.
+    if stripped=$(strip_leading_shell_redirections "$c"); then
+      c="$stripped"
+      continue
+    fi
+
     word="${c%%[[:space:]]*}"
     # Plain command words are already normalized. Quotes and backslashes are
     # the only syntax this helper removes, so keep ordinary commands in-process.
@@ -1705,10 +1714,6 @@ normalize_command_candidate() {
       continue
     fi
     if [[ "$c" == \{* ]]; then
-      # A named descriptor such as `{log}>file` is a command redirection, so leave it intact for executable classification.
-      if [[ "$c" =~ $named_file_descriptor_redirection_re ]]; then
-        break
-      fi
       c="${c#\{}"
       continue
     fi
