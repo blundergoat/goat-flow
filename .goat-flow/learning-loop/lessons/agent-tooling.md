@@ -1,6 +1,6 @@
 ---
 category: agent-tooling
-last_reviewed: 2026-08-22
+last_reviewed: 2026-09-01
 ---
 
 **Scope:** How the agent uses its tools and environment - resolving install-copy against source paths, recovering rather than bypassing a blocked command, variable scoping under `set -u`, and which artifact is the source of truth. Reading instructions and retrieving memory is [agent-behavior.md](agent-behavior.md).
@@ -98,6 +98,8 @@ last_reviewed: 2026-08-22
 **Recurrence 2026-06-04:** While adding review-derived footguns, `stats --check` caught an evidence anchor whose search text used `file !== "README.md"` even though the real code used `f !== "README.md"`. The entry failed stale-ref validation before closeout. Lesson: not just "avoid line numbers" - exact semantic anchors still need a grep pass after drafting.
 
 **Recurrence 2026-08-04:** A timing-receipt footgun cited the rendered title of a parameterized test. The title existed in test output but not as literal source, so `stats --check` rejected it. Dynamic fixture values and generated test names are not durable semantic anchors; cite a literal fixture constant, helper, or assertion instead.
+
+**Recurrence 2026-09-01:** A same-agent quality assessment found the active `dashboard-terminal.md` footgun (search: `Workspace terminal waiting state has multiple derived surfaces`) telling agents to instrument "the else branch at line 1916" - a branch the Round-6 redesign had removed - and to add cases to a monolithic test file that had been split months earlier. Both survived `stats --check` because a prose line number ("around line 1916") is not a `file:line` ref, and in a footgun a bare backtick path is existence-checked only on an `Evidence anchors:` line (`src/cli/facts/shared/learning-loop-common.ts`, search: `scanBareEvidenceAnchors`); lessons do check bare paths, but their prefix grammar omits `test/` (search: `const pathPattern`), so a dead `test/` path passes there too. Prevention rules are forward-looking instructions, so the scanner's blind spot matters most there: write every path in a Prevention item as `file (search: "needle")` so it is validated, and describe a mechanism by its function, never by its line.
 
 **Prevention:** Use grep-friendly semantic anchors (`(search: "pattern")`, function names, section headings) instead of line numbers or runtime-rendered names. Per ADR-024, line numbers are discouraged in evaluation templates and instruction files. `stats --check` validates `(search: ...)` anchors against literal file content - mechanical enforcement that line numbers and generated labels never had.
 

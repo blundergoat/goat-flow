@@ -137,8 +137,6 @@ Plan and milestone files are verification artifacts. Agents MUST NOT delete, arc
 
 Compact at ~60% context or after 15+ turns.
 
-Sub-agents: one objective and structured return. Scouts get 5 tool calls. Implementation gets 5 plus the task's estimated minutes, up to 20 tool calls; split first if that would exceed 20.
-
 When blocked: ask one question with a recommended default.
 
 ## Orchestration Admission

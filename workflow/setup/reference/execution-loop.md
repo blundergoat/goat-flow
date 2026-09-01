@@ -60,6 +60,7 @@ h) Execution Loop: READ -> SCOPE -> ACT -> VERIFY
    MUST read relevant files before changes. Never fabricate codebase facts.
    Check browser evidence first for URL, local HTML, localhost, screenshot, rendered UI, or browser-visible behaviour.
    Use INDEX-first retrieval across `.goat-flow/learning-loop/{footguns,lessons,patterns}/INDEX.md`; include `.goat-flow/learning-loop/decisions/INDEX.md` for architecture, policy, or setup work.
+   Cap INDEX hits at 13 rows (row 13 = refine terms; read at most 12); never load one wholesale.
    Open source entries only on candidate hits; grep bucket files only after the INDEX pass or on a known retrieval miss; reword once on zero hits, then record a retrieval miss instead of broad-loading a bucket.
    Recursive searches under `.goat-flow/` that must reach gitignored `plans/` or `logs/` (reference sweeps, rename checks) MUST use `command grep -rn --exclude-dir=.git --exclude-dir=scratchpad <pattern> .goat-flow/`.
    Gitignore-aware search tools (including ripgrep defaults, `git grep`, and harness search shims) omit ignored local state; zero hits from those tools do not prove absence in plans or logs.

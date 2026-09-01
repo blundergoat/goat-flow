@@ -16,7 +16,7 @@ A documentation framework that provides structured AI coding agent workflows. Pr
 | Evaluation templates | `workflow/evaluation/` | Footguns/lessons/patterns templates |
 | Docs | `docs/` | CLI usage, dashboard guide |
 | CLI | `src/cli/` | 20 build checks (16 setup scope + 4 agent scope) + 18 AI harness installation checks (5 concerns), audit-driven setup prompts, quality prompt/history/diff surfaces, multi-agent support |
-| CLI diagnostics | `src/cli/diagnostics/` | Redacted support bundles, five-concern target-readiness reports, and static agent/tool threat models without executing target code |
+| CLI diagnostics | `src/cli/diagnostics/` | Static context-pressure reports, redacted support bundles, five-concern target-readiness reports, and static agent/tool threat models without executing target code |
 | Managed setup | `src/cli/install-command.ts`, `src/cli/managed-setup-command.ts`, `src/cli/managed-setup-preview.ts`, `src/cli/managed-setup-state.ts`, `src/cli/managed-setup-write-set.ts`, `src/cli/managed-setup-authority.ts`, `src/cli/managed-setup-admission.ts` | The install command flow, hash-only dry-run classification for manifest-managed templates, the user-owned and generated destinations completing the install write set, scoped replace authority, the pre-write admission gate, and local recovery state |
 | Dashboard | `src/cli/server/` (server modules), `src/dashboard/` (HTML, views, and ~20 client TypeScript modules) | HTML dashboard with views for about, home, hooks, plans, projects, prompts, quality, settings, setup, skills, workspace; `dashboard.ts` owns bootstrap/dispatch/live reload, `dashboard-routes.ts` composes non-terminal route modules, `dashboard-index-routes.ts` owns learning-loop index maintenance, `dashboard-{audit,project,quality,shell,skill-quality}-routes.ts` own route groups, and `dashboard-terminal.ts` owns terminal HTTP/WebSocket wiring |
 | Hook registration, contracts, and proof | `src/cli/hooks-command.ts`, `src/cli/hook-contracts.ts`, `src/cli/hooks-runtime-evidence.ts`, `src/cli/server/hooks-registry.ts`, `src/cli/server/hook-registrar.ts`, `src/cli/server/agent-hook-writer.ts` | Provider-neutral evidence/result contracts, CLI/dashboard hook toggles, and explicit bounded managed-hook classifier proof backed by manifest specs, installed-agent detection, and per-agent config state |
@@ -38,7 +38,7 @@ Consumer runs `npx @blundergoat/goat-flow@latest install . --agent <id> --dry-ru
   -> CLI compares manifest-managed template hashes with the selected target and last successful local baseline
   -> Unsafe paths and ambiguous user edits block before the Bash installer starts
   -> User runs `install` or `setup --apply`; the CLI invokes the installer, which completes each file beside its destination before rename
-  -> Direct `workflow/install-goat-flow.sh` use skips CLI preview but retains ownership, path-safety, and atomic-write enforcement
+  -> Direct `workflow/install-goat-flow.sh` use skips CLI preview, post-write verification, and the install-state receipt while retaining ownership, path-safety, and atomic-write enforcement; once `.goat-flow/install-state/managed.json` or a cutover marker exists, the script refuses before target mutation and prints the public `goat-flow install` command
 ```
 
 ## CLI Layout
@@ -59,7 +59,7 @@ src/cli/
   config/             # Configuration (reader.ts, types.ts)
   detect/             # Agent and stack detection (agents.ts, project-stack.ts)
   evidence/           # Hash-only evidence metadata, readable text redaction, envelopes, JSONL append/tail helpers
-  diagnostics/        # Redacted support bundle, static readiness report, and agent/tool threat model
+  diagnostics/        # Static context-pressure report, redacted support bundle, static readiness report, and agent/tool threat model
   facts/              # Fact extraction (orchestrator.ts, fs.ts, agent/, shared/)
   managed-setup-command.ts # CLI validation and output for install/setup dry runs
   managed-setup-preview.ts # Hash-only managed-template comparison and install admission
