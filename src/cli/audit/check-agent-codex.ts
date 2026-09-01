@@ -369,7 +369,7 @@ function checkCodexWorkspaceRootInvalidGlobs(
       ),
       evidence: agentFacts.agent.settingsFile ?? ".codex/config.toml",
       howToFix:
-        "Run `goat-flow install . --agent codex` (without --force) to migrate the .codex/config.toml filesystem block in place. The installer rewrites filename globs to canonical subtree denies (e.g. `secrets/**`, `.ssh/**`). Filename-level protections are covered by .goat-flow/hooks/deny-dangerous.sh.",
+        "Run `goat-flow install . --agent codex` (without --force) to migrate the .codex/config.toml filesystem block in place. The installer rewrites filename globs to canonical subtree denies (e.g. `.ssh/**`, `.aws/**`) and drops retired folder-name patterns. Filename-level protections are covered by .goat-flow/hooks/deny-dangerous.sh.",
     };
   }
   return null;

@@ -340,24 +340,27 @@ function denyHookHasNormalizedSecretRoots(content: string): boolean {
   return hasRootMatcher || hasBoundaryAwareDirectoryMatcher || hasSelfTestRoots;
 }
 
-/** Detect the direct literal secret-path families the Bash hook should block. */
+/**
+ * Detect the secret-path families the Bash hook must still block: env files, the SSH and AWS stores, registry credentials, and key extensions.
+ * A bare `secrets` folder is deliberately not a family, so a project with a secrets route passes this check.
+ *
+ * @param content - text of the installed secret-path policy file; an older hook without these markers reports no coverage
+ * @returns true only when every family marker is present
+ */
 function denyHookHasSecretFamilyMarkers(content: string): boolean {
-  const hasKeys =
+  const hasKeyExtensionFamily =
     content.includes("\\.(pem|key|pfx)") ||
     content.includes("\\.(pem|key|pfx|p12)") ||
     content.includes("\\.\\(pem\\|key\\|pfx\\)");
-  const hasSecretDirectoryFamilies =
+  const hasCredentialStoreFamilies =
     (content.includes("\\.ssh/") && content.includes("\\.aws/")) ||
     content.includes("(\\.ssh|\\.aws|");
-  const hasSecretsDirectoryFamily =
-    /secrets\//.test(content) || content.includes("|secrets)");
   return [
     /\\\.env/.test(content),
     /\\\.env\\\.example/.test(content) || /\.env\.example/.test(content),
-    hasSecretDirectoryFamilies,
-    hasSecretsDirectoryFamily,
+    hasCredentialStoreFamilies,
     /credentials/.test(content) || /\\\.npmrc|\\\.pypirc/.test(content),
-    hasKeys,
+    hasKeyExtensionFamily,
   ].every(Boolean);
 }
 

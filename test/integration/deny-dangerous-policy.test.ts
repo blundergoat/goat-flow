@@ -183,8 +183,13 @@ const policyBlockCases: PolicyBlockCase[] = [
     expectedPolicyMessage: /Policy secret/u,
   },
   {
-    name: "git grep with a protected secrets path",
-    userCommand: "git grep token -- secrets",
+    name: "git grep with a protected key-store pathspec",
+    userCommand: "git grep token -- .ssh",
+    expectedPolicyMessage: /Policy secret/u,
+  },
+  {
+    name: "credentials json download read",
+    userCommand: "cat config/credentials.json",
     expectedPolicyMessage: /Policy secret/u,
   },
   {
@@ -387,6 +392,18 @@ const policyAllowCases: PolicyAllowCase[] = [
   {
     name: "near-miss secrets documentation",
     userCommand: "cat docs/secrets.md",
+  },
+  {
+    name: "application secrets route source",
+    userCommand: "cat src/pages/secrets/index.tsx",
+  },
+  {
+    name: "application credentials provider source",
+    userCommand: "cat src/auth/credentials.ts",
+  },
+  {
+    name: "git grep pathspec named secrets",
+    userCommand: "git grep token -- secrets",
   },
   {
     name: "xargs arg file feeding git status",

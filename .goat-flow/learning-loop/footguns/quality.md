@@ -7,6 +7,8 @@ last_reviewed: 2026-08-23
 
 **Status:** active | **Created:** 2026-05-19 | **Evidence:** ACTUAL_MEASURED
 
+**Prevention:** When adding or changing a non-gating audit caveat, update every audit consumer in the same patch: core type, JSON reader types, text/Markdown renderer, dashboard reader, prompt summary, and at least one unit test that fails if the caveat disappears from a human-facing surface.
+
 **Symptoms:** A harness concern can truthfully pass while still needing a visible caveat, such as "Verification has no post-turn hook evidence" or "Constraints only prove known deny patterns; broad file read/write enforcement remains unknown." If a new renderer, dashboard reader, or prompt summary drops `AuditConcern.limits`, the UI can regress to a clean-looking PASS/100 even though the JSON contract contains the caveat.
 
 **Why it happens:** Audit output fans out through several parallel consumers: `AuditConcern` JSON, text/Markdown renderers, dashboard readers/types, Home/Quality/Setup scoring views, and quality-prompt summaries. A field that tempers a score is load-bearing even though it is non-gating, so forgetting one consumer recreates the old "green but over-marketed" failure mode.
@@ -17,11 +19,11 @@ last_reviewed: 2026-08-23
 - `src/dashboard/dashboard-readers.ts` (search: `limits: readStringArray`) - dashboard payload readers preserve the field.
 - `src/cli/prompt/compose-quality-common.ts` (search: `limits: ${concern.limits.join`) - quality prompts include limits beside score and metric counts.
 
-**Prevention:** When adding or changing a non-gating audit caveat, update every audit consumer in the same patch: core type, JSON reader types, text/Markdown renderer, dashboard reader, prompt summary, and at least one unit test that fails if the caveat disappears from a human-facing surface.
-
 ## Footgun: Unsupported runtime capabilities must be skipped, not scored missing
 
 **Status:** active | **Created:** 2026-06-11 | **Evidence:** ACTUAL_MEASURED
+
+**Prevention:** When adding or changing an audit check tied to a runtime capability, determine whether the selected agent can host that capability. Use manifest-backed `supports*` facts to choose between fail and skip. Never use a neutral pass for unavailable capability evidence, and always keep a regression fixture proving the same missing state still fails for at least one supporting agent.
 
 **Symptoms:** A harness concern can remain capped below 100 for an agent even after all fixable setup work is complete, because the audit treats an unavailable platform feature as missing evidence. The 1.12.0 Verification workstream hit this with Copilot: `workflow/manifest.json` declares `hook_events.post_turn: null`, so Copilot cannot host a project-local post-turn hook, yet `post-turn-hook-integrity` originally lowered its Verification score to 75.
 
@@ -33,12 +35,15 @@ last_reviewed: 2026-08-23
 - `src/cli/audit/harness/check-verification.ts` (search: `supportsPostTurnHook === false`) - `post-turn-hook-integrity` skips unsupported agents but still evaluates supported agents.
 - `test/unit/audit-command/scoring-model.test.ts` (search: `skips post-turn hook integrity for agents without a post-turn hook event`) - Copilot reaches Verification 100 without a fake hook pass, while supporting-agent no-hook and masked-hook fixtures keep the 25-point loss.
 
-**Prevention:** When adding or changing an audit check tied to a runtime capability, determine whether the selected agent can host that capability. Use manifest-backed `supports*` facts to choose between fail and skip. Never use a neutral pass for unavailable capability evidence, and always keep a regression fixture proving the same missing state still fails for at least one supporting agent.
-
-
 ## Footgun: Structural validation passes while content is still unanswerable
 
 **Status:** active | **Created:** 2026-05-26 | **Evidence:** ACTUAL_MEASURED
+
+**Prevention:**
+1. For any audit that gates "ready" status on an artifact (spec, plan, critique report, ADR draft, milestone file), pick one content marker (`?`, `TBD`, `Answer:`, `Resolved:`) and add a check that counts unresolved instances separately from structural integrity.
+2. Don't conflate "structural pass" with "ready to ship." A structurally valid spec with five unanswered questions should not block on the structural check; it should surface as a distinct `unresolved-content: 5` finding alongside the green structural result.
+3. Treat content markers as deliberate: pick the marker word once, enforce it in the audit, so re-running detects the same resolved items every time and the workflow becomes resumable. This is the kennyjpowers PR #6 mechanism — `Answer:` is the load-bearing keyword.
+4. When goat-flow's own audit reports green but a downstream agent still can't proceed, capture the specific missing content check as a new harness concern or a new build-mode check before treating the failure as "user error."
 
 **Symptoms:** An audit reports PASS — every required section is present, every heading matches, every structural check is green — but the artifact still has unresolved open questions, unanswered specification ambiguities, or placeholder values that prevent downstream work. A fresh agent or maintainer reads the artifact and can't proceed; the audit signal was true but unhelpful. The gap between "structurally valid" and "implementation-ready" is invisible to the structural checks because they don't read inside the sections.
 
@@ -50,25 +55,19 @@ last_reviewed: 2026-08-23
 - Related committed pattern: `.goat-flow/learning-loop/patterns/verification.md` (search: `Non-gating audit gaps belong in explicit limits`) maps over-interpreted audit evidence to explicit caveats; extend the same deterministic-content path before treating a green structural audit as implementation-ready.
 - Goat-flow surfaces at risk: `src/cli/audit/check-goat-flow.ts` (search: `16 setup-scope checks`) currently asserts structural presence of `.goat-flow/architecture.md`, `code-map.md`, etc. — but does not inspect their content for unresolved questions. Same applies to milestone files in `.goat-flow/plans/**`.
 
-**Prevention:**
-1. For any audit that gates "ready" status on an artifact (spec, plan, critique report, ADR draft, milestone file), pick one content marker (`?`, `TBD`, `Answer:`, `Resolved:`) and add a check that counts unresolved instances separately from structural integrity.
-2. Don't conflate "structural pass" with "ready to ship." A structurally valid spec with five unanswered questions should not block on the structural check; it should surface as a distinct `unresolved-content: 5` finding alongside the green structural result.
-3. Treat content markers as deliberate: pick the marker word once, enforce it in the audit, so re-running detects the same resolved items every time and the workflow becomes resumable. This is the kennyjpowers PR #6 mechanism — `Answer:` is the load-bearing keyword.
-4. When goat-flow's own audit reports green but a downstream agent still can't proceed, capture the specific missing content check as a new harness concern or a new build-mode check before treating the failure as "user error."
-
 Applies to: any goat-flow audit that gates progress on artifact completeness — `src/cli/audit/check-goat-flow.ts` for setup artifacts, `src/cli/audit/harness/check-*.ts` for harness concerns, and future content-level checks proposed by M14. Cross-reference: existing footgun "Audit score tempering fields must survive every renderer" (above) for the parallel concern about caveats; this footgun is about caveats that should *exist* in the first place, not about preserving caveats already present.
 
 ## Footgun: Audit checks must not prescribe machine-specific shared content
 
 **Status:** active | **Created:** 2026-05-27 | **Evidence:** ACTUAL_MEASURED
 
+**Prevention:** Before adding an audit check, ask whether the user can satisfy it with content that remains true across machines and checkouts. If not, redesign the check or the remediation wording before shipping.
+
 **Symptoms:** A deterministic audit check can be technically satisfiable but push users toward committed content that is wrong for other developers, machines, or checkouts.
 
 **Why it happens:** Checks that validate "presence of guidance" sometimes encode remediation examples too concretely. The original workspace-boundary guidance encouraged hardcoded absolute paths in version-controlled instruction files, which made the files stale anywhere except the author's checkout.
 
 **Evidence:** `.goat-flow/learning-loop/decisions/ADR-026-keep-workspace-boundary-path-agnostic.md` (search: `path-agnostic`) records the current contract: the boundary concept stays, but remediation must be portable and current paths belong in runtime prompts.
-
-**Prevention:** Before adding an audit check, ask whether the user can satisfy it with content that remains true across machines and checkouts. If not, redesign the check or the remediation wording before shipping.
 
 ## Footgun: Advisory warnings without enforcement train users to ignore output
 

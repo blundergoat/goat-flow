@@ -102,14 +102,14 @@ Build checks in `src/cli/audit/check-goat-flow.ts` and `src/cli/audit/check-agen
 
 ## Footgun: Version checks that test inequality without direction prescribe a downgrade
 
-**Prevention:** Never drive remediation or a write from version inequality alone. Compare direction first; when the local tool is older, say so and stop, rather than proposing to bring the target back to the tool's version. Skew guards belong at the write boundary too, not only in the message.
-
 **Status:** active | **Created:** 2026-08-03 | **Evidence:** ACTUAL_MEASURED
 **Decision changed:** Any version comparison that drives user-facing remediation or a file write must branch on direction, not on `!==`.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
 **Incident count:** 2 | **Latest occurrence:** 2026-08-03
 **hallucination-risk:** high
+
+**Prevention:** Never drive remediation or a write from version inequality alone. Compare direction first; when the local tool is older, say so and stop, rather than proposing to bring the target back to the tool's version. Skew guards belong at the write boundary too, not only in the message.
 
 **Symptoms:** A globally installed `goat-flow` v1.14.0 audited a v1.15.0 checkout and returned `"overall": {"status": "fail"}` with exit 1 on a target the matching source CLI passes cleanly. It emitted `Config version 1.15.0 does not match current 1.14.0` with remediation pointing at 1.14.0, plus `deny-dangerous.sh is goat-flow-hook-version 1.15.0 but the current release is 1.14.0` telling the user to run `hooks sync` from the older release. Roughly 45 further drift findings ("templates differ", "stale installed shared artifact") were artifacts of the version gap, not target defects.
 

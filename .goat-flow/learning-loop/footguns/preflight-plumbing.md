@@ -9,6 +9,8 @@ last_reviewed: 2026-08-27
 
 **Status:** active | **Created:** 2026-08-16 | **Evidence:** ACTUAL_MEASURED
 
+**Prevention:** Do not reach for `ignore` or `ignoreFiles` to fix a Knip memory failure - by their own schema they cannot help, and neither does raising the heap alone, which only pays the walk more slowly. Reach for `--no-gitignore` after confirming the analysed globs contain no gitignored files. Before treating any Knip failure as a code defect, prove which side it is on: run once with a larger heap, and if it exits 0 with no findings the change set is clean. A detached worktree at the last commit carrying the same changed files separates change set from local state in one run.
+
 **Symptoms:** Preflight's TypeScript phase fails with `Knip: 0 | ? unused exports/types`. The `0 | ?` is parsed out of an OOM stack trace, not from findings, because `scripts/preflight-checks.sh` (search: `knip_command=(`) owns the heap-safe invocation but still counts captured result lines and falls back to `?`. Knip exits 134. Adding the offending directory to `knip.json`'s `ignore` changes nothing.
 
 **Why it happens:** `ignore` is a report filter by definition. The installed schema at `node_modules/knip/schema.json` titles it "Files to exclude from the report (any issue type)", and `ignoreFiles` as "Unused files to exclude from the report". Neither governs the file walk. `project` and `entry` do define the analysed set, and in this repo they are already narrow - `src/**/*.ts`, `scripts/**/*.mjs`, `test/**/*.ts` - so gitignored local state was never in the analysed set to begin with. `knip --debug` names the real cost: it builds a `gitignoreFiles` list by walking the entire checkout to collect every nested `.gitignore`, and a scratchpad holding cloned repositories contributes hundreds. The heap is spent deciding what to skip, before any analysis starts.
@@ -19,24 +21,22 @@ last_reviewed: 2026-08-27
 
 The flag costs no coverage here, proven rather than assumed. Diffing the analysed paths from `knip --debug` with and without it returned 425 paths on both sides and zero difference in either direction, and a temporary unused export planted in `src/` was still reported with exit 1, so analysis is running rather than being skipped. Nothing under `src/`, `test/`, or `scripts/` is gitignored - checked with both `git status --ignored --short src test scripts` and `git ls-files --others --ignored --exclude-standard`, against a `dist/` control that correctly reported `!!`. CI never invokes Knip, so the blast radius is the local gate only. Re-run the path diff if the `project` globs ever widen to a directory that holds gitignored files.
 
-**Prevention:** Do not reach for `ignore` or `ignoreFiles` to fix a Knip memory failure - by their own schema they cannot help, and neither does raising the heap alone, which only pays the walk more slowly. Reach for `--no-gitignore` after confirming the analysed globs contain no gitignored files. Before treating any Knip failure as a code defect, prove which side it is on: run once with a larger heap, and if it exits 0 with no findings the change set is clean. A detached worktree at the last commit carrying the same changed files separates change set from local state in one run.
-
 ## Footgun: Colourized `node -e` output silently disables shell numeric guards
 
 **Status:** active | **Created:** 2026-08-15 | **Evidence:** ACTUAL_MEASURED
 **Decision changed:** Whether a preflight PASS proves every check ran.
 **Trigger phase:** VERIFY
 
+**Prevention:**
+1. Wrap every `node -e "console.log(...)"` value consumed by shell arithmetic in `String(...)`. Treat a bare number as a formatting decision the shell cannot parse.
+2. If a loop's only outputs are inside conditional branches, add an `else` that reports the unexpected state. A check that can emit no verdict is worse than one that fails - a skipped branch reads as success.
+3. Do not accept a PASS summary as proof that every check ran. Compare the reported check count against the previous run; a drop with no removed checks means something stopped reporting.
+
 **Symptoms:** A preflight section reports its heading green while emitting no per-item verdicts, and the run's total check count silently drops. `bash` prints `[[: 150: syntax error: operand expected (error token is "150")` to stderr, which is easy to scroll past because the summary line still says PASS.
 
 **Why it happens:** `console.log(x)` inspects a non-string argument, and Node colourizes inspected numbers when `FORCE_COLOR` is set - an agent-harness default in some terminals. `node -e "console.log(require('./workflow/manifest.json').instruction_file.line_target)"` therefore returns `\e[33m125\e[39m`, not `125`. Command substitution captures the escape codes, `[[ "$count" -gt "$limit" ]]` fails to parse them, and both branches of the comparison are skipped - so the check emits neither pass nor fail. String-valued extractions (`.version`, `process.versions.node.split('.')[0]`) are unaffected because strings print raw, which is why the bug hides in exactly the numeric threshold checks that gate budgets.
 
 **Evidence:** Measured 2026-08-15 with `FORCE_COLOR=3`: `node -e "console.log(...line_target)" | cat -v` printed `^[[33m125^[[39m`, and wrapping the value in `String(...)` printed `125`. `scripts/preflight-checks.sh` (search: `String() is load-bearing`) carries the fix and the reason. Before the fix the instruction-file line-budget loop produced four fewer checks (82 to 78) while still reporting PASS.
-
-**Prevention:**
-1. Wrap every `node -e "console.log(...)"` value consumed by shell arithmetic in `String(...)`. Treat a bare number as a formatting decision the shell cannot parse.
-2. If a loop's only outputs are inside conditional branches, add an `else` that reports the unexpected state. A check that can emit no verdict is worse than one that fails - a skipped branch reads as success.
-3. Do not accept a PASS summary as proof that every check ran. Compare the reported check count against the previous run; a drop with no removed checks means something stopped reporting.
 
 ---
 

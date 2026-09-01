@@ -9,6 +9,8 @@ last_reviewed: 2026-08-11
 
 **Status:** active | **Created:** 2026-04-13
 
+**Prevention:** When commissioning multi-agent critique, plan for synthesis work. Budget time to: (a) verify disputed claims against source code, (b) track first-discovery of each finding, (c) dispute false claims with evidence. The critique is an input that requires judgment, not a spec that gets executed.
+
 **What happened:** A multi-agent critique run on goat-flow v1.1.0 surfaced more defects than any single reviewer caught alone. MAJOR audit-honesty findings (Codex compaction hook false positive, ask_first glob-unaware false positive) were each raised by a single reviewer. First-pass reviews established the bulk of findings; later reviews added diminishing but non-zero value, including MAJOR findings no earlier reviewer had raised.
 
 **What this means for critique practice:**
@@ -18,18 +20,11 @@ last_reviewed: 2026-08-11
 4. Sweet spot: several reviews from different model families for a framework/architecture audit; fewer for a feature or module.
 5. Score convergence across reviewers is the signal that coverage is adequate - not review count. High score variance means some reviewer missed a major category.
 
-**Prevention:** When commissioning multi-agent critique, plan for synthesis work. Budget time to: (a) verify disputed claims against source code, (b) track first-discovery of each finding, (c) dispute false claims with evidence. The critique is an input that requires judgment, not a spec that gets executed.
-
 ---
 ## Lesson: Blindly applying review feedback without verifying findings
 
 **Status:** active | **Created:** 2026-04-11
 **Incident count:** 2 | **Latest occurrence:** 2026-07-19
-**What happened:** After receiving 8 critic reviews of the goat-flow framework, the agent started fixing every cited `file:line` without first checking whether the findings were still valid. Several of the cited issues had already been fixed by sub-agents earlier in the same session. The agent was about to edit files that were already correct, potentially reintroducing bugs or making nonsensical changes.
-
-**Recurrence (2026-07-19):** A quality report treated replaying the `.codex/hooks.json` launcher directly from `/tmp` as proof that real Codex Bash calls wedge outside the repo. Before any patch, a real Codex unified-exec call with `workdir=/tmp` completed, and the current official hook contract confirmed that hook commands run from the session cwd. The proposed launcher change was dropped because the replay proved only standalone launcher behaviour, not the agent runtime path.
-
-**Root cause:** Treating review output as a task list instead of as claims to verify. The agent read "CLAUDE.md:11 still has 6-step loop" and jumped to editing without running `sed -n '11p' CLAUDE.md` first. Reviews are evidence-tagged opinions, not commands. The evidence can be stale by the time you read it - especially when multiple agents are editing the same repo in the same session.
 
 **Prevention:**
 1. Before acting on any review finding, verify the cited evidence is still current: read the actual file at the cited line
@@ -38,12 +33,26 @@ last_reviewed: 2026-08-11
 4. "8 critics agree" does not mean "8 critics are right" - they may all be reading the same stale state
 5. For hook findings, reproduce through the actual agent event path; direct command-string replay is only launcher evidence
 
+**What happened:** After receiving 8 critic reviews of the goat-flow framework, the agent started fixing every cited `file:line` without first checking whether the findings were still valid. Several of the cited issues had already been fixed by sub-agents earlier in the same session. The agent was about to edit files that were already correct, potentially reintroducing bugs or making nonsensical changes.
+
+**Recurrence (2026-07-19):** A quality report treated replaying the `.codex/hooks.json` launcher directly from `/tmp` as proof that real Codex Bash calls wedge outside the repo. Before any patch, a real Codex unified-exec call with `workdir=/tmp` completed, and the current official hook contract confirmed that hook commands run from the session cwd. The proposed launcher change was dropped because the replay proved only standalone launcher behaviour, not the agent runtime path.
+
+**Root cause:** Treating review output as a task list instead of as claims to verify. The agent read "CLAUDE.md:11 still has 6-step loop" and jumped to editing without running `sed -n '11p' CLAUDE.md` first. Reviews are evidence-tagged opinions, not commands. The evidence can be stale by the time you read it - especially when multiple agents are editing the same repo in the same session.
+
 ---
 ## Lesson: 14 self-dogfooding bugs survived 9 rounds of critique and 17 milestones
 
 **Status:** active | **Created:** 2026-04-11
 **Incident count:** 2 | **Latest occurrence:** 2026-07-19
 **Decision changed:** Multi-phase skill contracts must extract and compare the producing phase and its output template; whole-file phrase presence is insufficient.
+
+**Prevention:**
+1. Add contract tests that link canonical constants to docs: `SKILL_NAMES.length` must match README, docs, config, SKILL_TEMPLATES, and test fixtures
+2. After any rename, grep ALL file types (not just `.ts` and `.md` - also `.yaml`, `.json`, `.sh`)
+3. Periodically invite external review of the goat-flow repo itself, not just installed output
+4. `preflight-checks.sh` should verify SKILL_NAMES count consistency across surfaces
+5. For multi-phase prose contracts, assert that each classified tier reaches the phase and output where users act on it
+
 **What happened:** After M17, 6 external critics independently reviewed the goat-flow framework itself (not installed projects). They found 14 verified bugs that had survived all prior milestones: foundation.ts emitting v1.0, SKILL_TEMPLATES missing goat-sbao, config.yaml referencing a renamed script, README overclaiming hooks, stale test fixtures encoding the wrong skill count, setup fragments still creating coding-standards (removed in M13), classify-state marking "healthy" from version alone, and more. Every bug was a 1-5 line fix.
 
 **Recurrence (2026-07-19):** The goat-qa exhaustive matrix and its Phase 3 headings were contract-tested, but Standard Phase 2 still limited its test-plan mapping and Undertested Risks template to CRITICAL/HIGH, silently dropping MEDIUM High-value gaps at the blocking gate.
@@ -58,17 +67,15 @@ last_reviewed: 2026-08-11
 3. **No external review until R8+.** The first 7 rounds critiqued goat-flow as installed on OTHER projects. Nobody reviewed the goat-flow repo itself until round 8. Self-review is blind to self-consistency.
 4. **Rename survivors.** A setup-validator rename left config.yaml on the old path, and `presets.js` was renamed to `preset-prompts.js` while architecture.md kept the old name. No grep-after-rename discipline for config/docs (only code).
 
-**Prevention:**
-1. Add contract tests that link canonical constants to docs: `SKILL_NAMES.length` must match README, docs, config, SKILL_TEMPLATES, and test fixtures
-2. After any rename, grep ALL file types (not just `.ts` and `.md` - also `.yaml`, `.json`, `.sh`)
-3. Periodically invite external review of the goat-flow repo itself, not just installed output
-4. `preflight-checks.sh` should verify SKILL_NAMES count consistency across surfaces
-5. For multi-phase prose contracts, assert that each classified tier reaches the phase and output where users act on it
-
 ---
 ## Lesson: Blindly applying critique recommendations without verifying claims
 
 **Status:** active | **Created:** 2026-04-14
+
+**Prevention:**
+1. Before changing any numeric claim in a canonical doc, run the verification command yourself - never trust a critique's count.
+2. The preflight should validate sub-breakdowns, not just totals.
+3. Treat external critique findings as hypotheses, not facts. Verify each one independently before applying.
 
 **What happened:** A critique agent claimed `.goat-flow/architecture.md` (search: `20 build checks`) had the wrong build-check breakdown: "says 7+9, actual code shows 12+4." The agent accepted the claim at face value and changed the doc. A subsequent refactor restructured the checks into `SETUP_CHECKS` and `AGENT_CHECKS`; the breakdown when the lesson was written was **14 setup + 4 agent** (18 total) and has since grown to **16 setup + 4 agent** (20 total) as new checks like `goat-flow-gitignore` and `hook-version` were added. The preflight's "Architecture doc counts match code" check now validates both total and sub-breakdown because incorrect breakdowns previously passed automated gates.
 
@@ -76,21 +83,10 @@ last_reviewed: 2026-08-11
 
 **Evidence:** `node --input-type=module -e "const a=await import('./dist/cli/audit/check-goat-flow.js'); const b=await import('./dist/cli/audit/check-agent-setup.js'); console.log('setup:', a.SETUP_CHECKS.length, 'agent:', b.AGENT_CHECKS.length)"` outputs the current setup and agent counts; their sum is the build-check total.
 
-**Prevention:**
-1. Before changing any numeric claim in a canonical doc, run the verification command yourself - never trust a critique's count.
-2. The preflight should validate sub-breakdowns, not just totals.
-3. Treat external critique findings as hypotheses, not facts. Verify each one independently before applying.
-
 ---
 ## Lesson: Structural audit passing hides cold-path content drift (8-critique finding)
 
 **Status:** active | **Created:** 2026-04-15
-
-**What happened:** Eight independent critiques (3 Claude, 5 Codex) reviewed the goat-flow v1.1.0 setup on its own repo. All 8 confirmed structural integrity: 7 skills matched templates, 57 tests passed, all router paths resolved, deny hook self-test passed, architecture doc numeric claims verified. Despite this, the 8 critiques collectively found 20+ verified content-accuracy failures in cold-path surfaces that no automated check caught. Examples at the time (all since resolved or removed): ~~`docs/audit-and-critique.md` describing checks that no longer exist in code~~; `docs/coding-standards/conventions.md` claimed zero runtime deps when `package.json` had js-yaml and ws; `.goat-flow/glossary.md` pointed Task Tracking at the wrong file; `.goat-flow/code-map.md` listed a script under the wrong directory; ~~`scripts/stop-lint.sh` existing despite the removed historical `ADR-015-remove-stop-lint-from-core.md`, whose decision now lives in current `ADR-037-separate-post-turn-safety-from-validation.md`~~; `.goat-flow/plans/.gitignore` ignored all milestone files while goat-plan claimed durable shared state. Setup scored 58-90/100 across the 8 critiques - the range itself shows the split between structural soundness and content accuracy.
-
-**Root cause:** The audit validates structure (files exist, versions match, paths resolve) but not content truth. Preflight validates some doc/code counts but not descriptions, claims, or cross-file consistency. Cold-path docs are updated manually and drift as code changes. Step 01 (`workflow/setup/01-system-overview.md` (search: `## State check`)) now requires a cold-path truth spot-check before stopping (prevention #2 below, implemented), but coverage depends on which claims the agent chooses to verify.
-
-**Evidence:** All findings verified with direct file reads and command output during the critique session. The critique convergence table documents which critiques found which findings.
 
 **Prevention:**
 1. Add content-drift checks to preflight or audit: doc check descriptions match code, convention claims match package.json, glossary canonical files exist
@@ -98,10 +94,21 @@ last_reviewed: 2026-08-11
 3. Add a cold-path truth audit step to the release process: verify footguns, docs, coding-standards, glossary, and code-map against actual code before each release
 4. Consider auto-generating audit docs from check code exports to prevent drift permanently
 
+**What happened:** Eight independent critiques (3 Claude, 5 Codex) reviewed the goat-flow v1.1.0 setup on its own repo. All 8 confirmed structural integrity: 7 skills matched templates, 57 tests passed, all router paths resolved, deny hook self-test passed, architecture doc numeric claims verified. Despite this, the 8 critiques collectively found 20+ verified content-accuracy failures in cold-path surfaces that no automated check caught. Examples at the time (all since resolved or removed): ~~`docs/audit-and-critique.md` describing checks that no longer exist in code~~; `docs/coding-standards/conventions.md` claimed zero runtime deps when `package.json` had js-yaml and ws; `.goat-flow/glossary.md` pointed Task Tracking at the wrong file; `.goat-flow/code-map.md` listed a script under the wrong directory; ~~`scripts/stop-lint.sh` existing despite the removed historical `ADR-015-remove-stop-lint-from-core.md`, whose decision now lives in current `ADR-037-separate-post-turn-safety-from-validation.md`~~; `.goat-flow/plans/.gitignore` ignored all milestone files while goat-plan claimed durable shared state. Setup scored 58-90/100 across the 8 critiques - the range itself shows the split between structural soundness and content accuracy.
+
+**Root cause:** The audit validates structure (files exist, versions match, paths resolve) but not content truth. Preflight validates some doc/code counts but not descriptions, claims, or cross-file consistency. Cold-path docs are updated manually and drift as code changes. Step 01 (`workflow/setup/01-system-overview.md` (search: `## State check`)) now requires a cold-path truth spot-check before stopping (prevention #2 below, implemented), but coverage depends on which claims the agent chooses to verify.
+
+**Evidence:** All findings verified with direct file reads and command output during the critique session. The critique convergence table documents which critiques found which findings.
+
 ---
 ## Lesson: Cross-critique review catches cold-path drift that single reviews and preflight miss
 
 **Status:** active | **Created:** 2026-04-16
+
+**Prevention:**
+1. After any rename, count change, or structural reorganization, grep for the old names/numbers across ALL docs, not just the files in the diff.
+2. Run multi-agent critique on release branches -- the cross-review pattern (compare findings across 3+ independent reviewers, verify each, disprove false positives) is the most effective cold-path drift detector available.
+3. Consider automating: extract check counts from code exports and validate against doc claims in preflight.
 
 **What happened:** A single diff review of 89 files on feat/1.1.0 found 2 cross-reference breakages (setup prompt, code-map skill tree). Then 4 independent coding agent critiques were run. Together they surfaced 15 additional cold-path issues: wrong check counts in CONTRIBUTING.md (8 vs 16), stale .js extensions in architecture.md and code-map, CLI help text with wrong harness count (15 vs 16), 6 stale footgun entries, and footgun file ordering that violated the scan contract. One critique (Critique 4) also produced a false positive (PreToolUse blind spot) that was disproved by finding the check in a different file (check-constraints.ts).
 
@@ -109,15 +116,12 @@ last_reviewed: 2026-08-11
 
 **Fix:** Applied all 15 fixes. Updated cold-path drift footgun with Round 2 evidence. Preflight now passes (33 checks, 0 errors).
 
-**Prevention:**
-1. After any rename, count change, or structural reorganization, grep for the old names/numbers across ALL docs, not just the files in the diff.
-2. Run multi-agent critique on release branches -- the cross-review pattern (compare findings across 3+ independent reviewers, verify each, disprove false positives) is the most effective cold-path drift detector available.
-3. Consider automating: extract check counts from code exports and validate against doc claims in preflight.
-
 ---
 ## Lesson: Verification rationalization anti-patterns
 
 **Status:** active | **Created:** 2026-04-18
+
+**Prevention:** The Proof Gate in `skill-preamble.md` names the positive procedure (identify → run fresh → read → verify → cite). This lesson names the negative counterpart: the rationalization patterns that specifically defeat the red-flags. Before any completion, fix, or "passing" claim, check whether the next sentence you are about to write matches one of the patterns above. If it does, stop and satisfy the Proof Gate instead - or downgrade the claim to UNVERIFIED and state what evidence is still missing.
 
 **What happens:** The four hallucination red-flags in AGENTS.md (search: "Hallucination red-flags") forbid claims without evidence: checks passed, completion, fix verification, and hedged claims. Agents still ship unverified claims under pressure by producing rationalizations that feel distinct from the forbidden claim but are logically equivalent to it. "I'm 95% confident", "the sub-agent said it passed", "the change looks correct" - each slips past the red-flags because the red-flags name the violation, not the specific excuse pattern.
 
@@ -130,7 +134,5 @@ last_reviewed: 2026-08-11
 - "Partial check is enough" - a subset of tests is not the test suite. If the red-flag applies to the whole check, a partial run does not discharge it.
 - "Code changed, so probably fixed" - red-flag #3 requires re-running the reproduction that originally demonstrated the bug. "Probably fixed" is a hedged claim (red-flag #4).
 - "Looks correct to me" - structural inspection is not verification. If the red-flag demands output, reading code is not output.
-
-**Fix:** The Proof Gate in `skill-preamble.md` names the positive procedure (identify → run fresh → read → verify → cite). This lesson names the negative counterpart: the rationalization patterns that specifically defeat the red-flags. Before any completion, fix, or "passing" claim, check whether the next sentence you are about to write matches one of the patterns above. If it does, stop and satisfy the Proof Gate instead - or downgrade the claim to UNVERIFIED and state what evidence is still missing.
 
 ---

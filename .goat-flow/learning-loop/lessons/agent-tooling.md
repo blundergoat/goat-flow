@@ -14,6 +14,8 @@ last_reviewed: 2026-09-01
 **Incident count:** 5
 **Latest occurrence:** 2026-08-16
 
+**Prevention:** Resolve managed paths from `workflow/manifest.json`, learning entries from `INDEX.md`, and ignored milestones with `rg --files --hidden --no-ignore`. Never infer directory or document names. When distributing executables across WSL, NTFS, or Linux filesystems, copy content, set the destination to the intended mode explicitly, and verify both `stat` and byte parity.
+
 **What happened:** Four pre-edit reads or commands inferred paths: the agent misread a workflow source/install pair as a move, pluralized a managed source directory, guessed the removed historical `ADR-016-dispatcher-is-canonical-skill.md` path, then guessed an M06 milestone filename. Each failed. `workflow/manifest.json` (search: `"source": "workflow/skills/reference/skill-conventions.md"`), `.goat-flow/learning-loop/decisions/INDEX.md` (search: `ADR-033-goat-flow-directory-restructure.md`), and `rg --files --hidden --no-ignore` supplied the exact paths.
 
 **Recurrence 2026-08-16:** Copying `workflow/hooks/post-turn-safety.sh` from the NTFS-backed source checkout into a Linux controller with `cp --preserve=mode` propagated mode `0777` over the controller's intended `0755`. The content was correct, but the installation metadata was not. An immediate `chmod 0755` plus `stat` and byte-parity checks restored the expected installation.
@@ -22,14 +24,14 @@ last_reviewed: 2026-09-01
 
 **Why it matters:** A wrong move can remove consumer templates, an invented source path makes planning fail before useful work begins, and copied mode bits can silently broaden permissions on an otherwise correct installed hook.
 
-**Prevention:** Resolve managed paths from `workflow/manifest.json`, learning entries from `INDEX.md`, and ignored milestones with `rg --files --hidden --no-ignore`. Never infer directory or document names. When distributing executables across WSL, NTFS, or Linux filesystems, copy content, set the destination to the intended mode explicitly, and verify both `stat` and byte parity.
-
 ---
 
 ## Lesson: When deny hook blocks a command, use the unblocked equivalent
 
 **Created:** 2026-03-28
 **Updated:** 2026-08-16
+
+**Prevention:** When a command is blocked, find the unblocked equivalent. `rm -rf dir/` → `rm dir/file && rmdir dir/`. `mv old new` → `mv -n old new`. The deny hook blocks dangerous patterns, not all file ops.
 
 **What happened:** Agent needed to delete `.github/skills/goat-onboard/` and `.github/skills/goat-reflect/`. Used `rm -rf`, blocked by the destructive-shell guard. Instead of `rm file && rmdir dir` (not blocked), it asked the user to delete manually - wasting a round trip on something trivially solvable.
 
@@ -48,7 +50,6 @@ last_reviewed: 2026-09-01
 **Recurrence 2026-08-22:** While planning 1.17.0 M42-M46, two research batches were blocked in turn: a long `;`-chained read batch hit the segment cap, and a quoted heredoc carrying milestone text was blocked because its Markdown contained backticks, which the classifier reads as command substitution even inside a quoted heredoc body. The fix was not to retry variants: split read batches to well under 50 segments, and persist durable text by writing the draft to the scratchpad with the file tool and redirecting that file into `goat-flow redact --output <destination>`, so no backtick ever appears on the command line. Evidence: `workflow/hooks/deny-dangerous.sh` (search: `Backtick command substitution hides nested execution`) and (search: `Command has more than 50 chained segments`).
 
 **Root cause:** Agent defaulted to `rm -rf` out of habit and treated the block as a dead end instead of considering alternatives.
-**Fix:** When a command is blocked, find the unblocked equivalent. `rm -rf dir/` → `rm dir/file && rmdir dir/`. `mv old new` → `mv -n old new`. The deny hook blocks dangerous patterns, not all file ops.
 
 ---
 
@@ -56,22 +57,22 @@ last_reviewed: 2026-09-01
 **Created:** 2026-04-04
 **Status:** historical | **Reason:** The scanner was removed per ADR-013; the installed-files-are-real-files lesson remains active.
 
+**Prevention:** Never dismiss historical scanner failures or current audit/drift findings on installed skill files as "expected." If a check flags something in `.claude/skills/`, `.agents/skills/`, or `.github/skills/`, fix the installed artifact. Only `workflow/skills/` (distribution templates) should have ADAPT markers. Default: "fix the file", not "suppress the check."
+
 **What happened:** The historical scanner system (removed per ADR-013) flagged AP18 (ADAPT comments in installed skills), causing a -2pt deduction on all 3 agents. Instead of fixing the installed files, the agent dismissed the failure as "expected for a template repo" and proposed suppressing AP18 when scanning the goat-flow repo. The user corrected this: `.claude/skills/`, `.agents/skills/`, `.github/skills/` are real project files that must pass the relevant installed-artifact checks - not templates. The templates live in `workflow/skills/` where ADAPT markers belong.
 
 **Why it matters:** Though the scanner was removed per ADR-013, the distinction between template source (`workflow/skills/`) and installed copies (`.claude/skills/`, `.agents/skills/`, `.github/skills/`) is still fundamental to goat-flow's architecture. Dismissing installed-artifact failures as template noise undermines the current audit/drift checks the same way it undermined the scanner.
-
-**Prevention:** Never dismiss historical scanner failures or current audit/drift findings on installed skill files as "expected." If a check flags something in `.claude/skills/`, `.agents/skills/`, or `.github/skills/`, fix the installed artifact. Only `workflow/skills/` (distribution templates) should have ADAPT markers. Default: "fix the file", not "suppress the check."
 
 ---
 
 ## Lesson: Agent used setup script as source of truth instead of package.json
 **Created:** 2026-04-05
 
+**Prevention:** When version requirements conflict across files, check `package.json` first - the published contract. Scripts and docs derive from it, not the other way around.
+
 **What happened:** Investigating CI test failures on Node 20, the agent read `setup-initial.sh` (which checks for Node 22+) and concluded the project requires Node 22 - contradicting `package.json` `engines.node: ">=20.11.0"`. It then suggested updating CI to Node 22 instead of fixing the scripts. The user corrected this: `package.json` is canonical for the Node version. Three scripts (`setup-initial.sh`, `dependency-install.sh`, `start-dev.sh`) had the wrong check.
 
 **Why it matters:** Derived artifacts (scripts, docs, CI) can drift from the canonical source. When they conflict, identify which is authoritative rather than picking whichever you read first. For Node version requirements, `package.json` `engines` is canonical - what npm enforces, what CI reads, what downstream consumers see.
-
-**Prevention:** When version requirements conflict across files, check `package.json` first - the published contract. Scripts and docs derive from it, not the other way around.
 
 ---
 
@@ -79,17 +80,19 @@ last_reviewed: 2026-09-01
 
 **Created:** 2026-04-21
 
+**Prevention:** When adding a filter that can turn non-empty output into empty, trace every downstream reference to the captured variable. In `set -u` scripts, any variable set inside a conditional must be initialized before the conditional or only referenced inside the same branch.
+
 **What happened:** `preflight-checks.sh` had a flaky test: `node --input-type=module` commands occasionally emitted stray diagnostic output containing `[` characters, which `grep` interpreted as regex, producing `grep: Unmatched [` errors. The fix added `| grep -oE '^[0-9]+$' | tail -1` to strip non-numeric output and switched to `grep -Fq` for fixed-string matching. But the sanitization pipeline returned empty when the node command failed in the temp fixture (no working `dist/`), causing `build_count=""`. The outer `if [[ -n "$build_count" ]]` correctly skipped the architecture checks - but `setup_count` was only assigned inside that block. A downstream `if [[ -n "$setup_count" ]]` outside it hit `set -u` (`unbound variable`) and crashed the script.
 
 **Root cause:** Variable scoping. `setup_count` was set on a line that only executes when `build_count` is non-empty, but referenced unconditionally later. The original code never triggered this because without sanitization the node command always produced *some* stdout (even if garbage), so `build_count` was never empty - just wrong. Sanitization made the empty case reachable for the first time.
-
-**Prevention:** When adding a filter that can turn non-empty output into empty, trace every downstream reference to the captured variable. In `set -u` scripts, any variable set inside a conditional must be initialized before the conditional or only referenced inside the same branch.
 
 ---
 
 ## Lesson: Line-number evidence in footguns/lessons creates silent maintenance debt
 
 **Created:** 2026-04-24
+
+**Prevention:** Use grep-friendly semantic anchors (`(search: "pattern")`, function names, section headings) instead of line numbers or runtime-rendered names. Per ADR-024, line numbers are discouraged in evaluation templates and instruction files. `stats --check` validates `(search: ...)` anchors against literal file content - mechanical enforcement that line numbers and generated labels never had.
 
 **What happened:** Three independent Gemini quality reports in one session flagged stale `file:line` references across footgun entries. `hooks.md` cited old guardrail lines for the read-only whitelist that had moved; `skills.md` cited `skill-preamble.md` lines for the Step 0 budget that had also moved. Nine active line references across 3 footgun files had drifted. README and CLAUDE.md said "line numbers are advisory" but evaluation templates said "RECOMMENDED", so agents kept using them.
 
@@ -101,19 +104,17 @@ last_reviewed: 2026-09-01
 
 **Recurrence 2026-09-01:** A same-agent quality assessment found the active `dashboard-terminal.md` footgun (search: `Workspace terminal waiting state has multiple derived surfaces`) telling agents to instrument "the else branch at line 1916" - a branch the Round-6 redesign had removed - and to add cases to a monolithic test file that had been split months earlier. Both survived `stats --check` because a prose line number ("around line 1916") is not a `file:line` ref, and in a footgun a bare backtick path is existence-checked only on an `Evidence anchors:` line (`src/cli/facts/shared/learning-loop-common.ts`, search: `scanBareEvidenceAnchors`); lessons do check bare paths, but their prefix grammar omits `test/` (search: `const pathPattern`), so a dead `test/` path passes there too. Prevention rules are forward-looking instructions, so the scanner's blind spot matters most there: write every path in a Prevention item as `file (search: "needle")` so it is validated, and describe a mechanism by its function, never by its line.
 
-**Prevention:** Use grep-friendly semantic anchors (`(search: "pattern")`, function names, section headings) instead of line numbers or runtime-rendered names. Per ADR-024, line numbers are discouraged in evaluation templates and instruction files. `stats --check` validates `(search: ...)` anchors against literal file content - mechanical enforcement that line numbers and generated labels never had.
-
 ---
 
 ## Lesson: Remove redundant local references after promoting shared doctrine
 
 **Created:** 2026-04-27
 
+**Prevention:** When moving guidance into `.goat-flow/skill-docs/`, grep every old path, remove redundant local copies unless an explicit compatibility requirement exists, and update manifest/install references in the same pass. Compatibility copies are a conscious exception.
+
 **What happened:** M12 promoted browser-use guidance into the canonical shared playbook `.goat-flow/skill-docs/playbooks/browser-use.md`, but the first implementation kept four per-skill browser-use compatibility files under goat-debug reference directories. The user pointed out that once the shared playbook exists, those skill-local copies duplicate doctrine and add a drift surface.
 
 **Root cause:** The agent preserved a backward-compatibility shape without proving any installed project still needed the per-skill file. That weakened the migration: one canonical reference existed, but stale compatibility files could keep attracting edits or references.
-
-**Prevention:** When moving guidance into `.goat-flow/skill-docs/`, grep every old path, remove redundant local copies unless an explicit compatibility requirement exists, and update manifest/install references in the same pass. Compatibility copies are a conscious exception.
 
 ---
 
@@ -121,11 +122,11 @@ last_reviewed: 2026-09-01
 
 **Status:** active | **Created:** 2026-04-20 | **Merged during:** M11 learning-loop consolidation
 
+**Prevention:** Before accepting a finding that adds a capability pre-check, verify it against the four supported agents. If all four ship it, retract the finding. Applies to delegation, hook support, MCP, slash commands, and other historically-partial capabilities.
+
 **What happened:** Quality reports proposed a pre-check before routing to `/goat-critique`, assuming delegation might be unavailable. The user corrected the premise: Claude Code, Codex, Antigravity, and Copilot all ship sub-agent / delegated-agent capability, so the pre-check would be dead ceremony.
 
 **Root cause:** Reviewers reasoned abstractly about platform variance instead of grounding the finding in goat-flow's supported-agent list.
-
-**Prevention:** Before accepting a finding that adds a capability pre-check, verify it against the four supported agents. If all four ship it, retract the finding. Applies to delegation, hook support, MCP, slash commands, and other historically-partial capabilities.
 
 ---
 
@@ -133,10 +134,10 @@ last_reviewed: 2026-09-01
 
 **Created:** 2026-06-04
 
-**What happened:** While evaluating a GitHub PR, the agent staged scratch files in `/tmp` and ran `cd /tmp` to fetch them. From then on every Bash call was blocked by the PreToolUse guard with `BLOCKED: ... git repository root unavailable`, because the launcher runs `git rev-parse` in the session's persistent cwd and `/tmp` is outside any repo. The agent retried Bash several times, then reached for `dangerouslyDisableSandbox` before concluding it was stuck. The block also rejected the recovering `cd <repo>`, since the guard runs before the command's `cd`.
-
-**Root cause:** Two mistakes. (1) It used `/tmp` as scratch space, moving the persistent shell cwd outside the repo, when a repo-local dir (`.goat-flow/scratchpad/`) would have kept cwd inside the tree. (2) On seeing the same `git repository root unavailable` block on every Bash, it treated each as a one-off and retried or hunted for a bypass instead of recognising a cwd-wedge and asking the user to reset the shell. Trap and fix: `.goat-flow/learning-loop/footguns/hook-installation.md` (search: `outside any git repo`).
-
 **Prevention:**
 1. Keep scratch work inside the repo - use `.goat-flow/scratchpad/` (gitignored), never `cd /tmp`. The persistent Bash cwd must not leave the repo tree while a cwd-relative guard is active.
 2. A repeated `git repository root unavailable` (or `Guard cannot start`) block on every Bash means the shell cwd is outside the repo. Do not retry or disable the guard - ask the user to type `!cd <repo>` to reset the persisted cwd, and keep working through Read/Edit/Write meanwhile.
+
+**What happened:** While evaluating a GitHub PR, the agent staged scratch files in `/tmp` and ran `cd /tmp` to fetch them. From then on every Bash call was blocked by the PreToolUse guard with `BLOCKED: ... git repository root unavailable`, because the launcher runs `git rev-parse` in the session's persistent cwd and `/tmp` is outside any repo. The agent retried Bash several times, then reached for `dangerouslyDisableSandbox` before concluding it was stuck. The block also rejected the recovering `cd <repo>`, since the guard runs before the command's `cd`.
+
+**Root cause:** Two mistakes. (1) It used `/tmp` as scratch space, moving the persistent shell cwd outside the repo, when a repo-local dir (`.goat-flow/scratchpad/`) would have kept cwd inside the tree. (2) On seeing the same `git repository root unavailable` block on every Bash, it treated each as a one-off and retried or hunted for a bypass instead of recognising a cwd-wedge and asking the user to reset the shell. Trap and fix: `.goat-flow/learning-loop/footguns/hook-installation.md` (search: `outside any git repo`).

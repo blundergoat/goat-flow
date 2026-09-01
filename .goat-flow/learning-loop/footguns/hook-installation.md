@@ -11,6 +11,12 @@ last_reviewed: 2026-08-27
 
 **Status:** active | **Created:** 2026-05-27 | **Evidence:** ACTUAL_MEASURED
 
+**Prevention:**
+1. Treat hook support and agent installation as different facts. Support comes from the manifest; installation from target-project surfaces.
+2. Don't count shared markers such as `AGENTS.md` or `.agents/skills/` as a per-agent hook opt-in when multiple profiles share them.
+3. On disable, remove existing hook residue, but don't create a missing hook config file just to remove an entry from it.
+4. Regenerate installed configs through the hook writer so project toggles survive; raw template copies are only defaults.
+
 **Regression symptom:** A hook toggle against a clean target created agent config and hook files for agents the target never opted into, making setup and audit state look agent-aware when the project asked only to change one toggle.
 
 **Why it happened:** A registrar loop over supported agents treated support metadata as installation evidence. The hook config writer also treated a missing JSON config as `{}`, so an unguarded disable/enable could create `.claude/settings.json`, `.codex/hooks.json`, `.agents/hooks.json`, `.github/hooks/hooks.json`, and hook script dirs from scratch.
@@ -20,16 +26,20 @@ last_reviewed: 2026-08-27
 - Guard anchors: `src/cli/server/hook-registrar.ts` (search: `shouldReconcileAgent`) gates writes on detected installed surfaces or existing hook residue; `test/unit/hook-registrar-surfaces.test.ts` (search: `does not scaffold uninstalled agent surfaces`) locks the clean-target regression.
 - 2026-08-09 recurrence: copying Copilot's baseline template over its installed config removed the explicitly enabled Gruff hook. Audit expected the project toggle and reported drift until the writer restored it. Anchor: `src/cli/audit/check-drift-hooks.ts` (search: `applyExplicitHookToggles`).
 
-**Prevention:**
-1. Treat hook support and agent installation as different facts. Support comes from the manifest; installation from target-project surfaces.
-2. Don't count shared markers such as `AGENTS.md` or `.agents/skills/` as a per-agent hook opt-in when multiple profiles share them.
-3. On disable, remove existing hook residue, but don't create a missing hook config file just to remove an entry from it.
-4. Regenerate installed configs through the hook writer so project toggles survive; raw template copies are only defaults.
-
 ## Footgun: Hook command strings can fail before guard code starts
 
 **Status:** active | **Created:** 2026-05-27 | **Evidence:** ACTUAL_MEASURED
 **Incident count:** 8 | **Latest occurrence:** 2026-08-27
+
+**Prevention:**
+1. Treat configured guard-script replay as part of hook verification, not an optional integration smoke.
+2. Fail hard on exit 126/127 even when direct script self-tests pass.
+3. Document command-shape differences: Claude registers an exec-form `node` handler with an `args` tuple; Codex keeps its non-Windows `command` and adds `commandWindows`; Copilot and Antigravity keep command strings. Every shape uses the Node bootstrap and `run-with-bash.mjs`, all resolve the active git root, non-Codex agents may use `$CLAUDE_PROJECT_DIR` as a fallback outside git, and Codex fails closed without a complete managed root.
+4. Runtime smoke must execute the configured handler - the exec-form argv or the command string - or a parser-backed equivalent validating every wrapper component. Don't replace a configured command with `bash <scriptPath>` when it contains resolver logic or direct executable invocation.
+5. When a launcher falls back to a root variable, either `cd "$root"` before running the hook or pass root through a contract the hook consumes; resolving only the script path fails when the hook recomputes repo state from cwd.
+6. Shared support files belong in install/sync ownership, but not in per-hook registration identity. Match deny, gruff, and post-turn entries by their primary script or historical aliases, never by a launcher every spec shares.
+7. Keep configured-command replay and provider capture as separate evidence. A passing PowerShell replay proves the selected command path; it cannot renew a Codex event-delivery gate unless the provider itself demonstrably loads, fires, and delivers that exact registration.
+8. When a hook failure appears only in a consumer, compare its installed package template with the current generator before changing runtime code. A source-only correction requires a package release; running `hooks sync` from the affected package cannot materialize a field that package never shipped.
 
 **Symptoms:** Direct hook self-tests pass, but an agent session reports a PreToolUse failure with exit 126 or 127 before any `BLOCKED:` or deny JSON appears. The script exists and works when launched manually, so the failure looks like a runtime mystery rather than a stale/unsupported command string.
 
@@ -46,19 +56,14 @@ last_reviewed: 2026-08-27
 - 2026-08-22 Codex Windows recurrence (measured): Codex's unchanged inline `command` still failed under Windows PowerShell before policy startup. The first override also exposed three host-specific traps: raw bootstrap text was unsafe to transport, PowerShell changed `$PWD` to its install directory for a hostile-named cwd even though `[Environment]::CurrentDirectory` stayed correct, and an unhandled native exit 2 surfaced as hook-failure exit 1. The final `commandWindows` Base64-transports the trusted bootstrap, restores the literal OS cwd, starts `node.exe`, and explicitly exits with `$LASTEXITCODE`. A minimal verifier environment must preserve Windows `Path` casing and `PATHEXT`. Exact replay then returned safe 0 and deny 2 from a path containing spaces, `&`, parentheses, and brackets. An initial Codex CLI 0.149.0 disposable capture did not load project hooks; a fresh session in this already-trusted project then loaded the exact registration and delivered a PreToolUse secret-path block before shell execution. That event-specific proof does not renew PostToolUse or Stop. Anchors: `src/cli/server/agent-hook-command.ts` (search: `codexWindowsHookCommand`), `src/cli/hooks-configured-runtime-evidence.ts` (search: `agentHookSpawnDescriptor`), `test/integration/hook-command-spawn-matrix.test.ts` (search: `Windows override`).
 - **Recurrence 2026-08-27:** DevGoat's published 1.16.0 installation had zero `commandWindows` fields while the current goat-flow checkout had three. Replaying DevGoat's exact legacy PostToolUse command under Windows PowerShell returned status 1 before the analyzer started; the generated override returned status 0, started the analyzer, and emitted valid PostToolUse JSON from a cwd containing spaces, an apostrophe, `&`, parentheses, and brackets. A Codex CLI 0.149.1 capture in a disposable generated fixture then applied the requested change, exited 0 with empty stderr, ran Gruff, and surfaced an analyzer-only marker to the model; because that first capture bypassed hook trust, it proved only the exact fixture. A follow-up 0.149.1 `exec` capture ran from the hash-trusted goat-flow project without the bypass flag, completed `apply_patch`, started both analyzer exchanges, and delivered a fresh marker to the model. That renews trusted CLI-exec PostToolUse evidence through 2026-09-25T20:17:22.830Z, but it does not prove untouched DevGoat, Stop, app-server, or remote execution. The review also found two secondary readers that could hide or preserve drift: configured runtime audit selected only `command`, and the standalone installer did not recognize a managed script referenced only by `commandWindows`. Current anchors: `src/cli/audit/check-agent-deny-runtime.ts` (search: `configuredHookExecutable`), `workflow/install-goat-flow.sh` (search: `entryReferencesManagedScript`), `src/cli/server/hooks-registry.ts` (search: `2026-09-25T20:17:22.830Z`), and `test/integration/hook-command-spawn-matrix.test.ts` (search: `delivers a managed Gruff result through Codex's registered Windows override`).
 
-**Prevention:**
-1. Treat configured guard-script replay as part of hook verification, not an optional integration smoke.
-2. Fail hard on exit 126/127 even when direct script self-tests pass.
-3. Document command-shape differences: Claude registers an exec-form `node` handler with an `args` tuple; Codex keeps its non-Windows `command` and adds `commandWindows`; Copilot and Antigravity keep command strings. Every shape uses the Node bootstrap and `run-with-bash.mjs`, all resolve the active git root, non-Codex agents may use `$CLAUDE_PROJECT_DIR` as a fallback outside git, and Codex fails closed without a complete managed root.
-4. Runtime smoke must execute the configured handler - the exec-form argv or the command string - or a parser-backed equivalent validating every wrapper component. Don't replace a configured command with `bash <scriptPath>` when it contains resolver logic or direct executable invocation.
-5. When a launcher falls back to a root variable, either `cd "$root"` before running the hook or pass root through a contract the hook consumes; resolving only the script path fails when the hook recomputes repo state from cwd.
-6. Shared support files belong in install/sync ownership, but not in per-hook registration identity. Match deny, gruff, and post-turn entries by their primary script or historical aliases, never by a launcher every spec shares.
-7. Keep configured-command replay and provider capture as separate evidence. A passing PowerShell replay proves the selected command path; it cannot renew a Codex event-delivery gate unless the provider itself demonstrably loads, fires, and delivers that exact registration.
-8. When a hook failure appears only in a consumer, compare its installed package template with the current generator before changing runtime code. A source-only correction requires a package release; running `hooks sync` from the affected package cannot materialize a field that package never shipped.
-
 ## Footgun: Hook sync must unignore required policy files
 
 **Status:** active | **Created:** 2026-06-01 | **Evidence:** OBSERVED
+
+**Prevention:**
+1. Preserve `ensureHookGitignoreEntries` beside any code path that writes `.goat-flow/hooks/deny-dangerous/`.
+2. Keep the pre-1.9 gitignore regression fixture and `git check-ignore` assertion for `.goat-flow/hooks/deny-dangerous/patterns-shell.sh`.
+3. Before release, test the clone path: commit hook config plus hooks, clone fresh, then run `.goat-flow/hooks/deny-dangerous/deny-dangerous-self-test.sh --self-test=smoke`.
 
 **Symptoms:** Historical pre-fix failure: `goat-flow hooks enable deny-dangerous` or `goat-flow hooks sync` made local checks pass, but a fresh clone lacked `.goat-flow/hooks/deny-dangerous/` because stale `.goat-flow/.gitignore` rules still ignored the copied policy modules.
 
@@ -69,17 +74,17 @@ last_reviewed: 2026-08-27
 - Regression: `test/unit/hook-registrar-surfaces.test.ts` (search: `unignores hooks when enabling deny-dangerous on a stale goat-flow gitignore`) starts from a pre-1.9 gitignore and asserts both negations are added.
 - Broader trap: `.goat-flow/learning-loop/footguns/docs-and-crossrefs.md` (search: `Filesystem-backed validation can miss untracked or ignored replacement files`) records how filesystem checks can pass with ignored `.goat-flow/*` files.
 
-**Prevention:**
-1. Preserve `ensureHookGitignoreEntries` beside any code path that writes `.goat-flow/hooks/deny-dangerous/`.
-2. Keep the pre-1.9 gitignore regression fixture and `git check-ignore` assertion for `.goat-flow/hooks/deny-dangerous/patterns-shell.sh`.
-3. Before release, test the clone path: commit hook config plus hooks, clone fresh, then run `.goat-flow/hooks/deny-dangerous/deny-dangerous-self-test.sh --self-test=smoke`.
-
 ## Footgun: Workflow hook edits can leave the tracked installed runtime stale
 
 **Status:** active | **Created:** 2026-08-14 | **Evidence:** ACTUAL_MEASURED
 **Decision changed:** Treat every tracked workflow-hook edit as a source/install mirror change and prove byte parity before provider or repository audits.
 **Trigger phase:** SCOPE
 **Caught at:** ACT
+
+**Prevention:**
+1. Before editing a tracked workflow hook, resolve its installed destination from `workflow/manifest.json` and include both paths in scope.
+2. Keep source and installed hook bodies byte-identical; verify with `cmp` before running provider coverage or repository audit checks.
+3. A focused hook contract must exercise the active installed runtime or be paired with mirror parity. Workflow-source assertions alone are incomplete.
 
 **Symptoms:** A focused contract against `workflow/hooks/gruff-code-quality.sh` passed, but the repository audit failed because Claude, Codex, and Copilot still loaded a stale `.goat-flow/hooks/gruff-code-quality.sh`.
 
@@ -90,14 +95,15 @@ last_reviewed: 2026-08-27
 - `workflow/manifest.json` (search: `".goat-flow/hooks/gruff-code-quality.sh"`) declares the installed file's source, and `workflow/install-goat-flow.sh` (search: `copy_file "$GOAT_FLOW_ROOT/workflow/hooks/gruff-code-quality.sh"`) performs that copy for consumers.
 - After the installed mirror received the same two lines, byte comparison returned zero and `test/unit/audit-command/main.test.ts` (search: `passes on this repo`) changed from one failure to `pass 1`, `fail 0`.
 
-**Prevention:**
-1. Before editing a tracked workflow hook, resolve its installed destination from `workflow/manifest.json` and include both paths in scope.
-2. Keep source and installed hook bodies byte-identical; verify with `cmp` before running provider coverage or repository audit checks.
-3. A focused hook contract must exercise the active installed runtime or be paired with mirror parity. Workflow-source assertions alone are incomplete.
-
 ## Footgun: Legacy per-agent hook launchers using --show-toplevel resolve to the worktree, not the main repo
 
 **Status:** active | **Created:** 2026-05-28 | **Evidence:** ACTUAL_MEASURED
+
+**Prevention:**
+1. Central `.goat-flow/hooks` launchers MUST resolve to the active worktree root with `git rev-parse --show-toplevel`, because those scripts are committed with the worktree. Do not use `--git-common-dir` for central hook lookup; that can borrow stale scripts from the primary checkout.
+2. The old main-root rule only applies to legacy per-agent hook copies stored under ignored `.claude/hooks/` or `.agents/hooks/`.
+3. When renaming or splitting a guard, regenerate every launcher string the installer writes, not just the hook script; a stale launcher reproduces this even when the main repo has the new scripts.
+4. Add worktree coverage to any future configured-command smoke probe: run the literal launcher from a fresh worktree, not just the main checkout, before claiming it works.
 
 **Current scope:** Active for legacy per-agent hook copies; superseded for central `.goat-flow/hooks` launchers, which must use the active worktree root.
 
@@ -110,16 +116,18 @@ last_reviewed: 2026-08-27
 - 2026-06-09 recurrence after the 1.10 central-hook migration: PR review on `blundergoat/gruff-ts#7` caught generated `.agents/hooks.json` launchers still resolving through `git rev-parse --git-common-dir`, which now points at the primary checkout in a linked worktree and can run stale `.goat-flow/hooks` scripts from the wrong checkout. Central hooks are committed under `.goat-flow/hooks`, so the active worktree root is now the correct root.
 - Anchors: central-hook launchers in `workflow/hooks/agent-config/claude.json`, `workflow/hooks/agent-config/antigravity-hooks.json`, and `workflow/install-goat-flow.sh` (each search: `run-with-bash.mjs`); generated launcher tests in `test/unit/hook-registrar.test.ts` (search: `resolve active worktrees`); the normalizer at `src/cli/facts/agent/hook-registration.ts` (search: `Hook launchers prefix the script path`) recognizes configured script paths for audit.
 
-**Prevention:**
-1. Central `.goat-flow/hooks` launchers MUST resolve to the active worktree root with `git rev-parse --show-toplevel`, because those scripts are committed with the worktree. Do not use `--git-common-dir` for central hook lookup; that can borrow stale scripts from the primary checkout.
-2. The old main-root rule only applies to legacy per-agent hook copies stored under ignored `.claude/hooks/` or `.agents/hooks/`.
-3. When renaming or splitting a guard, regenerate every launcher string the installer writes, not just the hook script; a stale launcher reproduces this even when the main repo has the new scripts.
-4. Add worktree coverage to any future configured-command smoke probe: run the literal launcher from a fresh worktree, not just the main checkout, before claiming it works.
-
 ## Footgun: Hook launchers fail closed when the shell cwd is outside any git repo, wedging every Bash
 
 **Status:** active | **Created:** 2026-06-04 | **Evidence:** ACTUAL_MEASURED
 **Incident count:** 2 | **Latest occurrence:** 2026-08-09
+
+**Prevention:**
+1. Keep Git resolution first so worktree and submodule checkouts can win, but continue upward when that Git root has no requested-hook trace. Select only a complete managed root, then run the launcher with that verified root as child cwd.
+2. Treat the requested script or an exact registration operand as relevance. The shared launcher alone may belong to another enabled hook and cannot classify the candidate as partial.
+3. After the ancestor walk, consult the supported project-root environment fallback. Codex can use a complete managed ancestor without Git but still fails closed when its cwd has no candidate and its host supplies no root environment.
+4. Keep policy-root and diff-root claims separate: deny policy works in a complete non-Git installation, while post-turn scanning blocks without a trustworthy Git comparison baseline.
+5. Keep each launcher deadline below its supported host limit and stop the full child process tree on timeout so the user's agent can render the bounded failure.
+6. Recovery: the user types `!cd <repo>` to reset the persisted cwd. Keep scratch work in `.goat-flow/scratchpad/`, not `/tmp`; see `.goat-flow/learning-loop/lessons/agent-tooling.md` (search: "Agent wedged its own shell in /tmp and tried to bypass the guard instead of recovering").
 
 **Symptoms:** Before 1.15.1, a Claude/Antigravity session that `cd`'d outside the repo (usually `/tmp` for scratch) had every later Bash blocked by `BLOCKED: Policy hook unavailable: git repository root unavailable.` The block fired before the command, so even `cd /path/to/repo && ...` was rejected. Current launchers recover from a complete managed ancestor without Git; a cwd outside every complete candidate still fails closed.
 
@@ -131,17 +139,11 @@ last_reviewed: 2026-08-27
 - 2026-08-09 recurrence: the first managed-ancestor classifier treated the shared `run-with-bash.mjs` as a relevant requested-hook trace. A nested root with only another managed hook would therefore appear corrupt and suppress a valid outer candidate. Relevance now requires the requested script or an exact registration operand; the shared launcher is validated only after that threshold is met. Anchors: `src/cli/server/agent-hook-command.ts` (search: `const relevant=scriptSeen||registered`) and `test/unit/hook-registrar.test.ts` (search: `skips unrelated configs but stops at a partial managed trace`).
 - 2026-08-10 packaged-bin reproduction: installed archived 1.15.1 bytes into a bare non-Git project, upgraded exact tagged 1.15.0 launcher bytes through `hooks sync`, allowed safe input, and denied destructive input. Anchors: `test/integration/packaged-hook-install.test.ts` (search: `runs fresh install through the archived CLI bin`) and (search: `syncs a 1.15.0 install through the archived CLI bin`).
 
-**Prevention:**
-1. Keep Git resolution first so worktree and submodule checkouts can win, but continue upward when that Git root has no requested-hook trace. Select only a complete managed root, then run the launcher with that verified root as child cwd.
-2. Treat the requested script or an exact registration operand as relevance. The shared launcher alone may belong to another enabled hook and cannot classify the candidate as partial.
-3. After the ancestor walk, consult the supported project-root environment fallback. Codex can use a complete managed ancestor without Git but still fails closed when its cwd has no candidate and its host supplies no root environment.
-4. Keep policy-root and diff-root claims separate: deny policy works in a complete non-Git installation, while post-turn scanning blocks without a trustworthy Git comparison baseline.
-5. Keep each launcher deadline below its supported host limit and stop the full child process tree on timeout so the user's agent can render the bounded failure.
-6. Recovery: the user types `!cd <repo>` to reset the persisted cwd. Keep scratch work in `.goat-flow/scratchpad/`, not `/tmp`; see `.goat-flow/learning-loop/lessons/agent-tooling.md` (search: "Agent wedged its own shell in /tmp and tried to bypass the guard instead of recovering").
-
 ## Footgun: Copilot hook config can exist while runtime policy hooks are disabled
 
 **Status:** active | **Created:** 2026-06-05 | **Evidence:** ACTUAL_MEASURED
+
+**Prevention:** In release QA, label Copilot coverage as script/config evidence unless live capture writes a payload or emits `hook.start`. `POLICY_HOOKS: false` means runtime enforcement is unavailable/limited.
 
 **Trap:** Goat-flow can verify `.github/hooks/hooks.json` and the deny script while Copilot never invokes the repo hook. On 2026-06-05, Copilot CLI 1.0.54 reported `POLICY_HOOKS: false`; a live `view` ran; the capture hook received no stdin.
 
@@ -149,14 +151,21 @@ last_reviewed: 2026-08-27
 - `workflow/hooks/agent-config/copilot-hooks.json` and `.github/hooks/hooks.json` (search: `"preToolUse"`).
 - `src/cli/audit/check-agent-deny-runtime.ts` (search: `blockedRuntimeProbe`) validates script-shaped stdin only.
 
-**Prevention:** In release QA, label Copilot coverage as script/config evidence unless live capture writes a payload or emits `hook.start`. `POLICY_HOOKS: false` means runtime enforcement is unavailable/limited.
-
 ## Footgun: Codex permission profiles must match the local CLI grammar
 
 **Status:** active | **Created:** 2026-05-19 | **Evidence:** ACTUAL_MEASURED
 **Decision changed:** Admit writable subpaths only after checking their real layout, then exercise the generated profile with an allowed and denied runtime write.
 **Trigger phase:** READ
 **Caught at:** VERIFY
+
+**Prevention:**
+1. For Codex 0.136+, make goat-flow profiles extend `:workspace` and use `deny` access entries; don't rebuild workspace write access with `"." = "write"` and `none`.
+2. Don't convert Codex workspace permissions back to `:project_roots`; that token is runtime-invalid on Codex 0.131.0.
+3. Verify Codex config changes with `codex sandbox --permissions-profile goat-flow -C <project> pwd` as well as `codex doctor`; install health alone misses project-profile namespace failures.
+4. Keep `.codex/config.toml`, `workflow/hooks/agent-config/codex.toml`, and `src/cli/facts/agent/settings.ts` in the same patch whenever Codex permission grammar changes.
+5. Treat Codex permission-profile secret coverage as a loadable set, not a future-file deny list. Prefer recursive `deny` globs that leave `.env.example` readable over absent exact root-file entries.
+6. For generated multi-root profiles, include only real shared directories with identical protected-file layouts; prove candidate build paths are Git-ignored in every root before granting writes.
+7. Runtime-probe one allowed write and blocked tracked overwrite/rename/delete. String assertions and `doctor` output do not prove path materialization succeeds.
 
 **Symptoms:** Codex warns or fails before shell startup when the profile names a workspace-root token, access value, base-profile shape, or exact path the runtime can't load. On 0.136.0, the old profile that set `"." = "write"` and `"secrets/**" = "none"` under `:workspace_roots` failed before startup with the `bwrap: execvp ... codex: No such file or directory` error (full string in evidence). On 0.131.0, `:project_roots` was ignored and absent exact entries (`.env.example`, `.docker/config.json`, `.kube/config`) could break startup. On 0.145.0, a generated reporting profile that named absent `.goat-flow/plans` and `.goat-flow/scratchpad` write roots failed every command with `bwrap: Can't create file ... Read-only file system`.
 
@@ -170,12 +179,3 @@ last_reviewed: 2026-08-27
 - 2026-05-19 startup failure showed repeated `':project_roots' is not recognized by this version of Codex and will be ignored` warnings; a binary probe that day found `:workspace_roots` (and no `:project_roots`) in Codex 0.131.0's embedded schema.
 - `src/cli/server/terminal-reporting-profile.ts` (search: `sharedProtectedPaths`) now admits a reporting write root only when it exists and has the same protected-file layout across all selected roots; `isGitIgnoredPath` separately gates build-directory candidates.
 - Runtime capture 2026-07-26 on Codex 0.145.0: the pre-fix generated profile failed allowed report/build writes because an absent exact local-state rule prevented bwrap startup; after layout filtering, allowed writes exited 0 while tracked overwrite/rename/delete probes exited 1.
-
-**Prevention:**
-1. For Codex 0.136+, make goat-flow profiles extend `:workspace` and use `deny` access entries; don't rebuild workspace write access with `"." = "write"` and `none`.
-2. Don't convert Codex workspace permissions back to `:project_roots`; that token is runtime-invalid on Codex 0.131.0.
-3. Verify Codex config changes with `codex sandbox --permissions-profile goat-flow -C <project> pwd` as well as `codex doctor`; install health alone misses project-profile namespace failures.
-4. Keep `.codex/config.toml`, `workflow/hooks/agent-config/codex.toml`, and `src/cli/facts/agent/settings.ts` in the same patch whenever Codex permission grammar changes.
-5. Treat Codex permission-profile secret coverage as a loadable set, not a future-file deny list. Prefer recursive `deny` globs that leave `.env.example` readable over absent exact root-file entries.
-6. For generated multi-root profiles, include only real shared directories with identical protected-file layouts; prove candidate build paths are Git-ignored in every root before granting writes.
-7. Runtime-probe one allowed write and blocked tracked overwrite/rename/delete. String assertions and `doctor` output do not prove path materialization succeeds.

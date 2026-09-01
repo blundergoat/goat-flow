@@ -363,19 +363,61 @@ const CODEX_CANONICAL_DENY_PATTERNS = [
   "**/.env.test",
   "**/.envrc",
   "**/.env.*.local",
-  "**/secrets/**",
   "**/.ssh/**",
   "**/.aws/**",
-  "**/.docker/**",
   "**/.gnupg/**",
+  "**/.config/gcloud/**",
+  "**/.docker/**",
   "**/.kube/**",
-  "**/credentials*",
   "**/.npmrc",
   "**/.pypirc",
   "**/*.pem",
   "**/*.key",
   "**/*.pfx",
 ] as const;
+
+/**
+ * Codex deny patterns goat-flow used to ship and now removes on upgrade because a plain folder or file name blocks ordinary
+ * application code (a secrets route, a credentials.ts provider). A profile still carrying one is refreshed; the same pattern
+ * added by hand cannot be told apart, so the install output names each removal.
+ */
+const CODEX_RETIRED_DENY_PATTERNS = [
+  "**/secrets/**",
+  "**/credentials*",
+] as const;
+
+/** Claude deny rules goat-flow used to ship and now removes on upgrade; the Bash deny hook owns shell command policy. */
+const CLAUDE_RETIRED_DENY_RULES = new Set([
+  "Bash(*sudo *)",
+  "Bash(*mkfs*)",
+  "Bash(*dd if=*)",
+  "Bash(*git reset --hard*)",
+  "Read(**/secrets/**)",
+  "Edit(**/secrets/**)",
+  "Read(**/credentials*)",
+  "Edit(**/credentials*)",
+]);
+
+/**
+ * In-project credential-store rules rewritten to their home-directory form on upgrade.
+ * A bare `**` pattern resolves under the working directory, so the old rules never protected the real `~/.ssh` or `~/.aws`.
+ */
+const CLAUDE_HOME_ANCHOR_REWRITE_SOURCES = new Set([
+  "Read(**/.ssh/**)",
+  "Read(**/.aws/**)",
+  "Read(**/.gnupg/**)",
+  "Read(**/.docker/config.json)",
+  "Read(**/.kube/config)",
+  "Read(**/.npmrc)",
+  "Read(**/.pypirc)",
+  "Edit(**/.ssh/**)",
+  "Edit(**/.aws/**)",
+  "Edit(**/.gnupg/**)",
+  "Edit(**/.docker/config.json)",
+  "Edit(**/.kube/config)",
+  "Edit(**/.npmrc)",
+  "Edit(**/.pypirc)",
+]);
 
 /** Escape literal text before matching one TOML key. */
 function escapeRegularExpression(literalText: string): string {
@@ -450,16 +492,36 @@ function selectedCodexPermissionProfileText(
   };
 }
 
+/**
+ * Build the line matcher for one workspace-root deny entry as the profile file writes it.
+ *
+ * @param pattern - exact glob key, quoted either way in the TOML line
+ * @returns multiline regex that matches `"<pattern>" = "deny"` on its own line
+ */
+function codexDenyLinePattern(pattern: string): RegExp {
+  return new RegExp(
+    `^[ \\t]*["']${escapeRegularExpression(pattern)}["'][ \\t]*=[ \\t]*["']deny["']`,
+    "mu",
+  );
+}
+
 /** Return whether any canonical Codex deny rule is absent from the selected profile. */
 function isCanonicalCodexDenyMissing(settingsText: string): boolean {
   return CODEX_CANONICAL_DENY_PATTERNS.some(
-    (pattern) =>
-      settingsText.match(
-        new RegExp(
-          `^[ \\t]*["']${escapeRegularExpression(pattern)}["'][ \\t]*=[ \\t]*["']deny["']`,
-          "mu",
-        ),
-      ) === null,
+    (pattern) => settingsText.match(codexDenyLinePattern(pattern)) === null,
+  );
+}
+
+/**
+ * Return whether the selected profile still carries a deny pattern goat-flow retired.
+ * A user upgrading from an older template sees "refresh the Codex permission profile" in the preview and the pattern named in the output.
+ *
+ * @param settingsText - filesystem region of the active profile; an empty region reports false
+ * @returns true when at least one retired pattern is still denied
+ */
+function hasRetiredCodexDenyPattern(settingsText: string): boolean {
+  return CODEX_RETIRED_DENY_PATTERNS.some(
+    (pattern) => settingsText.match(codexDenyLinePattern(pattern)) !== null,
   );
 }
 
@@ -495,6 +557,7 @@ function codexPermissionProfileNeedsMigration(settingsText: string): boolean {
     hasLegacyAnchor,
     missingWorkspaceExtension,
     isCanonicalCodexDenyMissing(selectedProfile.filesystem),
+    hasRetiredCodexDenyPattern(selectedProfile.filesystem),
   ].some(Boolean);
 }
 
@@ -526,14 +589,29 @@ function claudePermissionsNeedMigration(settingsText: string): boolean {
   return ["deny", "allow", "ask"].some((arrayName) => {
     const rules = permissionRecord[arrayName];
     if (!Array.isArray(rules)) return false;
-    return rules.some(
-      (rule) =>
-        typeof rule === "string" &&
-        (/^(?:MultiEdit|Write|NotebookEdit|Glob)\(/u.test(rule) ||
-          (arrayName === "deny" &&
-            (rule === "Read(**/.env*)" || rule === "Edit(**/.env*)"))),
-    );
+    return rules.some((rule) => installRewritesClaudeRule(arrayName, rule));
   });
+}
+
+/**
+ * Decide whether install would change one Claude permission rule during an upgrade.
+ * Unmatched tool forms are repaired in every list; only deny rules are retired, expanded, or re-anchored,
+ * because an allow or ask rule with the same text is the user's own choice.
+ *
+ * @param arrayName - permission list the rule came from: `deny`, `allow`, or `ask`
+ * @param rule - one raw list entry; a non-string entry is left untouched and reports false
+ * @returns true when the standalone installer would remove or rewrite this entry
+ */
+function installRewritesClaudeRule(arrayName: string, rule: unknown): boolean {
+  if (typeof rule !== "string") return false;
+  if (/^(?:MultiEdit|Write|NotebookEdit|Glob)\(/u.test(rule)) return true;
+  if (arrayName !== "deny") return false;
+  return (
+    rule === "Read(**/.env*)" ||
+    rule === "Edit(**/.env*)" ||
+    CLAUDE_RETIRED_DENY_RULES.has(rule) ||
+    CLAUDE_HOME_ANCHOR_REWRITE_SOURCES.has(rule)
+  );
 }
 
 /** Name the selected provider's existing settings files that install may migrate. */
@@ -558,7 +636,7 @@ function pendingAgentSettingsEdits(
     }
   }
   if (agent === "claude" && claudePermissionsNeedMigration(settingsText)) {
-    edits.push("repair stale or unmatched Claude permission rules");
+    edits.push("repair stale, unmatched, or retired Claude permission rules");
   }
   return edits;
 }

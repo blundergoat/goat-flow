@@ -22,11 +22,15 @@ last_reviewed: YYYY-MM-DD
 ---
 
 ## Lesson: [Title]
+
 **Created:** YYYY-MM-DD
 **Decision changed:** [what future work does differently]
 **Trigger phase:** READ | SCOPE | ACT | VERIFY (optional)
+
 **Prevention:** [rule to prevent recurrence]
+
 **What happened:** [description]
+
 **Evidence:** `file` + semantic anchor (function name, unique string, or `(search: "pattern")`) - [what was found] (required for code-specific lessons; omit for behavioral lessons)
 ```
 
@@ -38,15 +42,22 @@ last_reviewed: YYYY-MM-DD
 ---
 
 ## Footgun: [Title]
+
 **Status:** active | **Created:** YYYY-MM-DD | **Evidence:** <choose one: ACTUAL_MEASURED, OBSERVED, or EXTERNAL_REFERENCE>
 **Decision changed:** [what future work does differently]
 **Trigger phase:** READ | SCOPE | ACT | VERIFY (optional)
 **hallucination-risk:** high
+
 **Prevention:** [rule to prevent recurrence]
+
 **Symptoms:** [what breaks]
+
 **Why it happens:** [root cause]
+
 **Evidence:** `file` + semantic anchor (function name, unique string, or `(search: "pattern")`) - [what was found]
 ```
+
+Keep the metadata lines as one paragraph directly under the heading, then a blank line, then `**Prevention:**` as the first body paragraph; the bucket READMEs state the same order and `learn new` scaffolds it.
 
 Evidence labels: `ACTUAL_MEASURED` = reproduced/measured locally; `OBSERVED` = direct code/config evidence; `EXTERNAL_REFERENCE` = cited real external incident with local applicability. Never use hypotheticals.
 
@@ -117,7 +128,7 @@ When summarising tasks, findings, or recommendations for user review, use this f
 
 ## Milestone Retrospective (goat-plan)
 
-**Status vocabulary:** `not-started | in-progress | testing-gate | blocked | abandoned | human-verification-pending | complete`
+**Status vocabulary:** `not-started | in-progress | testing-gate | blocked | abandoned | superseded | deferred | human-verification-pending | complete`
 
 Lifecycle:
 
@@ -126,6 +137,7 @@ Lifecycle:
 3. Human approval sets a non-final milestone `complete`, then the agent re-reads and starts an eligible dependency.
 4. Human-requested changes return the milestone to `in-progress`; invalidation/kill sets `blocked` and `Status reason:` names the condition and evidence/action to resume.
 5. `abandoned` requires a human decision and `Status reason:` records why work stops. Leaving either state removes the reason; reopening invalidates proof.
+6. `superseded` and `deferred` are terminal and need a `Status reason:`.
 
 At the gate, record learnings, resolve assumptions, and propose any amendment before applying it. A final pending milestone with complete predecessors enters the combined Phase 4 review.
 

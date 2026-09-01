@@ -518,6 +518,57 @@ function pushDetectedInstallIssues(
 }
 
 /**
+ * Append the upgrade step where the agent reconciles the user-owned permission rules with the shipped template.
+ * Install only repairs rules goat-flow itself shipped and later retired or superseded, so new template rules and the user's own
+ * additions need a judgment call the installer must not make. Agents whose hook config is fully managed have nothing to reconcile.
+ *
+ * @param lines - prompt lines built so far; the step is appended in place
+ * @param agentId - agent the prompt addresses; selects its settings file and template
+ * @param stepNumber - heading number this step takes when it is rendered
+ * @returns the number the next step should use: unchanged when the agent has no settings file
+ */
+function pushAgentSettingsReconcileStep(
+  lines: string[],
+  agentId: AgentId,
+  stepNumber: number,
+): number {
+  const settingsFile = PROFILES[agentId].settingsFile;
+  // Antigravity and Copilot keep only managed hook registrations, so there are no user-owned rules to compare.
+  if (settingsFile === null) return stepNumber;
+
+  const templateExtension = settingsFile.endsWith(".toml") ? "toml" : "json";
+  const templatePath = displayTemplatePath(
+    `workflow/hooks/agent-config/${agentId}.${templateExtension}`,
+  );
+  const isCodexProfile = templateExtension === "toml";
+
+  lines.push(`## Step ${stepNumber} - Reconcile agent settings`);
+  lines.push("");
+  lines.push(
+    `Install repairs only rules goat-flow itself shipped and later retired or superseded; it never adds a rule and never touches one you added. Compare \`${settingsFile}\` with the shipped template \`${templatePath}\` and reconcile by hand:`,
+  );
+  lines.push("");
+  lines.push(
+    isCodexProfile
+      ? "- Add each template deny pattern missing from the active permission profile, unless this project removed it on purpose; when a removal looks deliberate, ask before restoring it."
+      : "- Add each template deny or allow rule that is missing, unless this project removed it on purpose; when a removal looks deliberate, ask before restoring it.",
+  );
+  lines.push(
+    isCodexProfile
+      ? "- Keep every deny pattern that is not in the template; the profile refresh already preserves them as project additions."
+      : "- Keep every rule that is not in the template, such as project-specific allows, extra denies, and MCP rules.",
+  );
+  lines.push(
+    "- Remove a rule only when the install output already named it as retired or superseded and it is still present, which happens when the file was not valid at install time.",
+  );
+  lines.push(
+    "- Edit rules in place and show the resulting diff before saving; never replace the file with the template.",
+  );
+  lines.push("");
+  return stepNumber + 1;
+}
+
+/**
  * Render the prompt that sends an out-of-date project through the installer before any content work.
  *
  * Both routes lead with the install command, because refreshing the shipped files first keeps the follow-up setup docs matched to what is on disk.
@@ -562,7 +613,9 @@ function renderUpgradeRedirect(
     );
     lines.push("");
 
-    lines.push("## Step 2 - Rebuild project-specific content");
+    // Agents whose settings file carries user-owned permission rules get a reconcile step; hook-only agents skip straight to the rebuild.
+    const rebuildStep = pushAgentSettingsReconcileStep(lines, agentId, 2);
+    lines.push(`## Step ${rebuildStep} - Rebuild project-specific content`);
     lines.push("");
     lines.push(
       `Continue with \`${displayTemplatePath("workflow/setup/02-instruction-file.md")}\` and then the remaining numbered setup docs to refresh the instruction file and local goat-flow content in place.`,
@@ -592,7 +645,9 @@ function renderUpgradeRedirect(
     );
     lines.push("");
 
-    lines.push("## Step 3 - Rebuild project-specific content");
+    // A v0.9 settings file predates every shipped permission rule, so the reconcile step matters most on this route.
+    const rebuildStep = pushAgentSettingsReconcileStep(lines, agentId, 3);
+    lines.push(`## Step ${rebuildStep} - Rebuild project-specific content`);
     lines.push("");
     lines.push(
       `Continue with \`${displayTemplatePath("workflow/setup/02-instruction-file.md")}\` and then the remaining numbered setup docs to rebuild the project-specific goat-flow surfaces on the current layout.`,

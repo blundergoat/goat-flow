@@ -292,7 +292,9 @@ is_secret_path_touch() {
   fi
   if [[ "$env_scan" =~ (^|[[:space:]]|=|:|/|[\'\"])\.env[a-zA-Z0-9_.-]*([[:space:]]|$|[\'\"]) ]]; then return 0; fi
   if [[ "$env_scan" =~ (\>|\>\>|\>\|)[[:space:]]*[\'\"]?\.env[a-zA-Z0-9_.-]*([[:space:]]|$|[\'\"]) ]]; then return 0; fi
-  local secret_directory_re='(^|[[:space:]]|=|:|/|['\''"])(\.ssh|\.aws|\.config/gcloud|\.gnupg|secrets)(/|[[:space:]]|$|['\''"])'
+  # Credential stores are dot-directories the user never edits as source, so a bare `secrets` folder is not on this list:
+  # an application with a secrets page keeps `src/pages/secrets/` readable while `.ssh`, `.aws`, gcloud, and `.gnupg` stay blocked.
+  local secret_directory_re='(^|[[:space:]]|=|:|/|['\''"])(\.ssh|\.aws|\.config/gcloud|\.gnupg)(/|[[:space:]]|$|['\''"])'
   # Exact directory operands matter because users usually copy a whole key store without a slash.
   if [[ "$c" =~ $secret_directory_re ]]; then return 0; fi
   local secret_config_file_re='(^|[[:space:]]|=|:|/|['\''"])(\.docker/config\.json|\.kube/config)([[:space:]]|$|['\''"])'
@@ -300,7 +302,8 @@ is_secret_path_touch() {
   if [[ "$c" =~ $secret_config_file_re ]]; then return 0; fi
   if [[ "$c" =~ application_default_credentials\.json ]]; then return 0; fi
   if key_material_path_touch "$1"; then return 0; fi
-  if [[ "$c" =~ (^|[[:space:]]|=|:|/|[\'\"])(credentials|\.npmrc|\.pypirc)([[:space:]]|$|\.|[\'\"]) ]]; then return 0; fi
+  # Only the exact `credentials.json` download and the two registry auth files count; a `credentials.ts` auth provider is ordinary source.
+  if [[ "$c" =~ (^|[[:space:]]|=|:|/|[\'\"])(credentials\.json|\.npmrc|\.pypirc)([[:space:]]|$|\.|[\'\"]) ]]; then return 0; fi
   return 1
 }
 

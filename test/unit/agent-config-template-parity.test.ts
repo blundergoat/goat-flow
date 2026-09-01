@@ -128,16 +128,54 @@ describe("agent config template parity", () => {
       "sample env edit allow entry present on Claude",
     );
     assert.match(codexTemplate, /env\.example stays readable/);
+  });
 
-    assert.ok(
-      claudeReadPatterns.has("**/credentials*"),
-      "Claude template should deny Read(**/credentials*)",
+  // A folder or file name is not evidence of secret content, and no allow rule can reopen a deny.
+  // One named case per retired pattern, so a failure names the heuristic that came back.
+  for (const pattern of ["**/secrets/**", "**/credentials*"]) {
+    it(`ships no ${pattern} name heuristic on either template`, () => {
+      assert.ok(
+        !claudeDeny.some((entry) => entry.endsWith(`(${pattern})`)),
+        `Claude template must not deny ${pattern}; it blocks application code such as a secrets route or credentials.ts`,
+      );
+      assert.doesNotMatch(
+        codexTemplate,
+        new RegExp(`"${escapeRegExp(pattern)}"\\s*=\\s*"deny"`),
+        `Codex template must not deny ${pattern}`,
+      );
+    });
+  }
+
+  // Bare **/ patterns resolve under the working directory, so an in-project rule for a
+  // credential store never protects the real one in the home directory. Every store is
+  // anchored at ~/ on Claude; Codex workspace-root grammar cannot express home paths.
+  it("anchors every Claude credential-store rule at the home directory", () => {
+    const storeNames = [
+      ".ssh",
+      ".aws",
+      ".gnupg",
+      ".config/gcloud",
+      ".docker",
+      ".kube",
+      ".npmrc",
+      ".pypirc",
+    ];
+    const inProjectStoreRules = claudeDeny.filter((entry) =>
+      storeNames.some((store) => entry.includes(`(**/${store}`)),
     );
-    assert.match(
-      codexTemplate,
-      new RegExp(`"${escapeRegExp("**/credentials*")}"\\s*=\\s*"deny"`),
-      "Codex template should deny **/credentials*",
+    assert.deepEqual(
+      inProjectStoreRules,
+      [],
+      `credential-store rules must use ~/ anchors; got ${inProjectStoreRules.join(", ")}`,
     );
+  });
+
+  // The Bash deny hook owns shell command policy with a tokenizing parser; the only
+  // settings-layer command denies are the ADR-025 commit and push rules, because every
+  // other substring glob matched read-only commands that merely quoted the word.
+  it("limits settings-layer Bash denies to the ADR-025 commit and push rules", () => {
+    const bashDenies = claudeDeny.filter((entry) => entry.startsWith("Bash("));
+    assert.deepEqual(bashDenies, ["Bash(*git commit*)", "Bash(*git push*)"]);
   });
 
   // Regression guard: Claude Code v2.x removed the MultiEdit tool ("matches

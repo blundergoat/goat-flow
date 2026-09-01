@@ -9,17 +9,23 @@ last_reviewed: 2026-09-01
 
 **Status:** active | **Created:** 2026-07-12
 
+**Prevention:** Run `goat-flow quality diff --agent <id> --mode <mode>` for the latest matching pair, or pass one `<from-id>:<to-id>` argument as documented in `docs/cli.md` (search: `quality diff [<from-id>:<to-id>]`). Do not pass report filesystem paths.
+
 **What happened:** During final quality-report verification, I passed two JSON file paths to `quality diff`. The CLI exited 2 because an explicit comparison is one colon-delimited `<from-id>:<to-id>` argument; selecting the latest same-agent reports with `--agent codex --mode agent-setup` then completed successfully.
 
 **Root cause:** I inferred a conventional two-path diff interface instead of reading the command contract before the auxiliary close-out check.
-
-**Prevention:** Run `goat-flow quality diff --agent <id> --mode <mode>` for the latest matching pair, or pass one `<from-id>:<to-id>` argument as documented in `docs/cli.md` (search: `quality diff [<from-id>:<to-id>]`). Do not pass report filesystem paths.
 
 ---
 
 ## Lesson: New subcommands need parser headroom before the first GREEN refactor
 
 **Status:** active | **Created:** 2026-07-13
+
+**Prevention:**
+1. Before extending a shared parser or dispatcher, measure its line and complexity headroom; near-threshold files need an extraction in the initial GREEN design.
+2. Keep parser modules dependency-light. A diagnostic subcommand may lazy-load audit/manifest code after dispatch, but argv parsing must not import that runtime.
+3. Before the human gate, run Knip and path-integrity through full preflight; focused TypeScript and analyzer checks do not prove the command's public exports or documentation references are clean.
+4. After behavioral GREEN, run whole-file ESLint, typecheck, and gruff before documentation or task completion; the verification unit is the changed file set, not only the new test cases.
 
 **What happened:** The first M02 `skill doctor` implementation passed its behavioral suite (`20 passed`, `0 failed`) but failed the whole-file quality gate. `parseSkillPositionals` and `validateSkillFlags` exceeded ESLint complexity limits, the first doctor collector had two more complexity failures, and adding one branch pushed `cli-parser.ts` and `cli-handlers.ts` above the 750-line gruff threshold. The final preflight later caught an unnecessary `renderSkillDoctorMarkdown` export and a bare backticked filename in `docs/cli.md` (search: `Canonical workflow source`) that focused tests, ESLint, typecheck, Prettier, and targeted gruff did not cover.
 
@@ -39,12 +45,6 @@ Extracting problem rendering into `describePlaybookInventoryProblems` restored f
 **Decision changed:** Measure whole-file ESLint and gruff immediately after the first parser GREEN, and pay for new branches by removing duplicate parsing rather than adding a late helper alone. | **Trigger phase:** ACT | **Incident count:** 5 | **Latest occurrence:** 2026-09-01
 **Caught at:** VERIFY
 
-**Prevention:**
-1. Before extending a shared parser or dispatcher, measure its line and complexity headroom; near-threshold files need an extraction in the initial GREEN design.
-2. Keep parser modules dependency-light. A diagnostic subcommand may lazy-load audit/manifest code after dispatch, but argv parsing must not import that runtime.
-3. Before the human gate, run Knip and path-integrity through full preflight; focused TypeScript and analyzer checks do not prove the command's public exports or documentation references are clean.
-4. After behavioral GREEN, run whole-file ESLint, typecheck, and gruff before documentation or task completion; the verification unit is the changed file set, not only the new test cases.
-
 ---
 
 ## Lesson: Required CLI choices need omission tests
@@ -54,6 +54,18 @@ Extracting problem rendering into `describePlaybookInventoryProblems` restored f
 **Trigger phase:** ACT
 **Caught at:** VERIFY
 **Incident count:** 5 | **Latest occurrence:** 2026-08-22
+
+**Prevention:** Add omission RED tests before implementation.
+Required values must fail when absent; optional transport metadata must be omitted rather than converted to a new sentinel value.
+When the parser maps omission to a fallback, test omitted and explicit fallback forms separately.
+Preserve the invocation evidence needed by downstream behavior.
+In relationship tests, make every preceding prerequisite explicit and valid so the assertion proves the intended error path.
+Cover capture enabled with and without an owner, plus owner present with and without capture for each supported runner and mode.
+Also cover wrong-runner/mode and retry payload presence/absence.
+Evidence anchors: `src/cli/cli-parser.ts` (search: `parseHookScenarioArg`), `src/cli/server/decoders.ts`
+(search: `is supported only for Claude reporting sessions`),
+`src/dashboard/dashboard-terminal-connect.ts` (search: `qualityReportProjectPath ?`), and `test/unit/dashboard-terminal-launch/launch-flow-03.test.ts`
+(search: `carries staged-draft capture through a retried launch`).
 
 **What happened:** M17's plan and handler required `--scenario deny-hook`, but the parser returned that value when the flag was absent. Positive, invalid-value, and live explicit-command checks all passed, so only a final omission probe exposed the false choice.
 
@@ -80,18 +92,6 @@ Evidence: `src/cli/help.ts` (search: `Structural failures exit 1`) and `test/uni
 An earlier relationship could still reject the same payload first.
 The same assumption erased the difference between an omitted command and an explicitly selected fallback command.
 
-**Fix and prevention:** Add omission RED tests before implementation.
-Required values must fail when absent; optional transport metadata must be omitted rather than converted to a new sentinel value.
-When the parser maps omission to a fallback, test omitted and explicit fallback forms separately.
-Preserve the invocation evidence needed by downstream behavior.
-In relationship tests, make every preceding prerequisite explicit and valid so the assertion proves the intended error path.
-Cover capture enabled with and without an owner, plus owner present with and without capture for each supported runner and mode.
-Also cover wrong-runner/mode and retry payload presence/absence.
-Evidence anchors: `src/cli/cli-parser.ts` (search: `parseHookScenarioArg`), `src/cli/server/decoders.ts`
-(search: `is supported only for Claude reporting sessions`),
-`src/dashboard/dashboard-terminal-connect.ts` (search: `qualityReportProjectPath ?`), and `test/unit/dashboard-terminal-launch/launch-flow-03.test.ts`
-(search: `carries staged-draft capture through a retried launch`).
-
 ---
 
 ## Lesson: Command output shape must survive one and many selected files
@@ -101,10 +101,10 @@ Evidence anchors: `src/cli/cli-parser.ts` (search: `parseHookScenarioArg`), `src
 **Trigger phase:** VERIFY
 **Incident count:** 1 | **Latest occurrence:** 2026-08-09
 
+**Prevention:** When a documented command selects optional files, execute its literal body with one, many, and zero inputs. Require explicit path-labelled output when users need to identify the source, and require a named failure for empty selection. Evidence: `test/unit/playbook-contract.test.ts` (search: `runs the documented registration command in a consumer checkout`).
+
 **What happened:** Present-file selection fixed hook-registration exit handling, but the first GREEN run passed only one consumer config to `rg`. Ripgrep then omitted the filename, so users saw the matching line without knowing which registration file supplied it; the focused suite reported 8/9 until `--with-filename` made single- and multi-file output consistent.
 
 **Root cause:** The command relied on ripgrep's input-count-dependent filename default while its output was evidence about file ownership.
-
-**Prevention:** When a documented command selects optional files, execute its literal body with one, many, and zero inputs. Require explicit path-labelled output when users need to identify the source, and require a named failure for empty selection. Evidence: `test/unit/playbook-contract.test.ts` (search: `runs the documented registration command in a consumer checkout`).
 
 ---

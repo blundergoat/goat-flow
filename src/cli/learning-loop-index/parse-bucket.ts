@@ -212,7 +212,7 @@ function isPreventionParagraph(paragraph: string): boolean {
   return /^\*\*Prevention:\*\*/u.test(paragraph);
 }
 
-/** True for a top-level Markdown list item, the shape the rules under a Prevention heading take. */
+/** True for a top-level Markdown list item, the shape the rules under a Prevention label take. */
 function isListParagraph(paragraph: string): boolean {
   return /^(?:[*+-]|\d{1,9}[.)])(?:[ \t]+|$)/u.test(paragraph);
 }

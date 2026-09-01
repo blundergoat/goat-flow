@@ -13,6 +13,12 @@ last_reviewed: 2026-08-28
 **Incident count:** 2
 **Latest occurrence:** 2026-08-28
 
+**Prevention:**
+1. After any `/quality` run, verify the save landed: `ls .goat-flow/logs/quality/*.json | tail -3`. If the latest mtime is older than the review you just ran, the agent skipped the write.
+2. If the agent reports `persist-skipped` or emits JSON inline, rerun through the exact `quality save` command. Do not write the raw report with a filesystem tool.
+3. Treat `quality history` and `quality diff` as meaningful only after the file exists on disk - both silently return empty when nothing is saved, so a missing save looks identical to "no prior runs."
+4. Exercise the prompt-derived heredoc above the ordinary hook ceiling, with large unquoted and generic-command controls that must remain blocked.
+
 **Symptoms:** A quality review ran end-to-end, but `goat-flow quality history` reports no saved runs and `goat-flow quality diff` has nothing to compare. No file appears under `.goat-flow/logs/quality/`.
 
 **Why it happens:** `goat-flow quality . --agent <id>` composes a prompt that instructs the agent to send its final JSON report through the bounded `quality save` command. The CLI owns redaction, validation, filename selection, and the write, but the agent must still invoke it. If the agent emits JSON inline, skips the command, or cannot obtain permission, nothing persists. The target directory is gitignored, so there is no git-side hint that the save was skipped.
@@ -27,12 +33,6 @@ last_reviewed: 2026-08-28
 
 **Recurrence 2026-08-28:** The deny-dangerous hook refused a 17,065-byte quoted `quality save` command with `BLOCKED: Policy deny-dangerous: Command exceeds 16KB` before the saver ran. A 15,065-byte control passed. The prompt mandates this heredoc transport, so testing a small 60-field placeholder did not cover a thorough report's real command shape.
 
-**Prevention:**
-1. After any `/quality` run, verify the save landed: `ls .goat-flow/logs/quality/*.json | tail -3`. If the latest mtime is older than the review you just ran, the agent skipped the write.
-2. If the agent reports `persist-skipped` or emits JSON inline, rerun through the exact `quality save` command. Do not write the raw report with a filesystem tool.
-3. Treat `quality history` and `quality diff` as meaningful only after the file exists on disk - both silently return empty when nothing is saved, so a missing save looks identical to "no prior runs."
-4. Exercise the prompt-derived heredoc above the ordinary hook ceiling, with large unquoted and generic-command controls that must remain blocked.
-
 See `.goat-flow/learning-loop/patterns/refactoring.md` (search: `Put prompt side effects on the CLI side`) for the durable boundary rule that came out of this incident.
 
 ---
@@ -41,13 +41,13 @@ See `.goat-flow/learning-loop/patterns/refactoring.md` (search: `Put prompt side
 
 **Status:** active | **Created:** 2026-05-27 | **Evidence:** ACTUAL_MEASURED
 
+**Prevention:** For generated multi-line files inside workflow `run: |` blocks, prefer `printf '%s\n' ... > file` unless the heredoc indentation has been validated against both the YAML parser and the shell.
+
 **Symptoms:** A GitHub Actions workflow looks valid as shell, but YAML-aware tools such as Knip fail after an unindented heredoc is embedded inside a `run: |` block.
 
 **Why it happens:** The heredoc delimiter must satisfy both YAML indentation and shell parsing. Shell-focused review can miss that the workflow document itself is malformed or tool-hostile.
 
 **Evidence:** `.github/workflows/ci.yml` (search: `run: |`) and `.github/actions/goat-flow-audit/action.yml` (search: `run: |`) are the current YAML `run` block surfaces where heredoc edits would need YAML-aware validation. `scripts/preflight-checks.sh` (search: `Knip`) is the tooling gate that previously exposed workflow-shape drift.
-
-**Prevention:** For generated multi-line files inside workflow `run: |` blocks, prefer `printf '%s\n' ... > file` unless the heredoc indentation has been validated against both the YAML parser and the shell.
 
 ## Footgun: Pre-release prompts can resolve an older global CLI
 
@@ -57,6 +57,8 @@ See `.goat-flow/learning-loop/patterns/refactoring.md` (search: `Put prompt side
 **Caught at:** ACT
 **Incident count:** 8
 **Latest occurrence:** 2026-08-24
+
+**Prevention:** In the framework checkout, use `node --import tsx src/cli/cli.ts <command>` before build or `npm run goat-flow:cli -- <command>` only after a fresh build, and verify `--version` matches `package.json`; do not use bare `goat-flow` during pre-release work. Consumer examples must name the scoped `@blundergoat/goat-flow` package. When a generated prompt calls a command added in the current release, verify the exact version before any output write and gate source fallbacks on both the expected package name and source entry path. Quality prompts must treat executable version checks as saver selection only: PATH-only skew is not a finding or score input, while repository-owned declarations and managed target artifacts remain version-drift evidence.
 
 **Symptoms:** A prompt generated from the current source tree invokes a newly added CLI command, prints a success-looking write message, but exits non-zero and persists the output of an older command instead of the requested artifact.
 
@@ -76,19 +78,17 @@ See `.goat-flow/learning-loop/patterns/refactoring.md` (search: `Put prompt side
 
 **Recurrence 2026-08-24:** M24 closeout ran bare `goat-flow index` after both the installed and source CLIs reported v1.16.0. The installed command printed four successful writes, but source `stats --check` immediately marked all four indexes stale. Regenerating with `node --import tsx src/cli/cli.ts index` produced source-authoritative indexes, and the next source stats result was `"status": "pass"` with no findings or warnings. Same version remained insufficient because the dirty framework checkout contained unreleased generator bytes.
 
-**Prevention:** In the framework checkout, use `node --import tsx src/cli/cli.ts <command>` before build or `npm run goat-flow:cli -- <command>` only after a fresh build, and verify `--version` matches `package.json`; do not use bare `goat-flow` during pre-release work. Consumer examples must name the scoped `@blundergoat/goat-flow` package. When a generated prompt calls a command added in the current release, verify the exact version before any output write and gate source fallbacks on both the expected package name and source entry path. Quality prompts must treat executable version checks as saver selection only: PATH-only skew is not a finding or score input, while repository-owned declarations and managed target artifacts remain version-drift evidence.
-
 ## Footgun: A permission mode reused as a feature trigger fires on every session that shares the mode
 
 **Status:** active | **Created:** 2026-08-01 | **Evidence:** ACTUAL_MEASURED
+
+**Prevention:** A permission mode answers "what may this session do", not "what is this session for". Before deriving a side effect from one, list every launch that lands in the same mode; if that list is wider than the feature, carry an explicit opt-in field instead. Make the field default to the inert value so an omission skips the side effect rather than performing it, and check the retry/reconnect path in the same change - a flag that opens the feature but is dropped on relaunch fails silently.
 
 **Symptoms:** A feature's setup work runs for sessions that will never use the feature. Here, opening any read-only Claude terminal created `.goat-flow/logs/quality/staging/` in both the controlling workspace and the selected target - materialising a `.goat-flow/` tree inside targets that never installed goat-flow, with no `.gitignore` seeded. Because the setup call fails closed, an unrelated `.goat-flow` component of the wrong type in a target could also block a read-only session from opening at all.
 
 **Why it happens:** `src/cli/server/terminal.ts` gated staged-draft capture (ADR-044) on `runner === "claude" && accessMode === "reporting"`, reading "reporting" as "this is a quality report run". It is not: `dashboardTerminalAccessMode` in `src/dashboard/dashboard-terminal-paste.ts` returns `reporting` for every preset without `mayWriteFiles`, for every investigator-role session, and for every custom prompt - which resolves to no preset at all. The real trigger lives one request earlier, where `/api/quality` composes the `persistence: "staged-draft"` prompt, and nothing carried that fact to the launch.
 
 **Evidence:** Raised as P1 by Codex review on PR #57 and confirmed by reading the resolver: `preset?.mayWriteFiles === true` is `undefined` for a custom prompt, so the ternary yields `reporting`. Fixed by adding an explicit `captureQualityDrafts` field to the terminal-create contract in `src/cli/server/decoders.ts` (search: "decodeTerminalCaptureQualityDrafts"), set only by the quality launch and carried through retry as `retryCaptureQualityDrafts`.
-
-**Prevention:** A permission mode answers "what may this session do", not "what is this session for". Before deriving a side effect from one, list every launch that lands in the same mode; if that list is wider than the feature, carry an explicit opt-in field instead. Make the field default to the inert value so an omission skips the side effect rather than performing it, and check the retry/reconnect path in the same change - a flag that opens the feature but is dropped on relaunch fails silently.
 
 ---
 

@@ -37,7 +37,7 @@ Use when diagnosing a bug or understanding unfamiliar code. For onboarding, use 
 If depth is pre-decided, proceed. Otherwise choose:
 - **Quick** when the symptom is isolated to 1-2 files, the user wants diagnosis only, or the prompt already includes a reproduction/error output.
 - **Full** when the symptom crosses components, has no reproduction yet, affects CI/prod/user-visible behaviour, or a fix may follow. If uncertain, choose full.
-If vague, ask about: goal, symptom/error message, area involved.
+If vague, ask about: goal, symptom/error message, area involved, and what was already tried with its outcome; prior attempts enter D1 as evidence to trace, not as eliminated hypotheses.
 
 **Quick path (D1 + applicable D1.5 + D2):** diagnose and report; minimum evidence is primary file read, 2 hypothesis categories tested, reproduction attempted or no-repro gap stated. Before D2, run D1.5 or state `reproduction already minimal`, `reduction not applicable`, or `unsafe to reduce` with the literal input/command and reason. Quick never enters D3 or D4 directly.
 

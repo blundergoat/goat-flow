@@ -13,11 +13,11 @@ last_reviewed: 2026-08-31
 **Caught at:** VERIFY
 **Incident count:** 1 | **Latest occurrence:** 2026-08-15
 
+**Prevention:** Plant preservation content that names no framework path, and choose its container from the provider's shape rather than from the managed row's parent: when the config exposes a shared `hooks` container, add a sibling row there; when it keys blocks by hook id, add a sibling top-level block. Assert against whichever shape was planted so one fixture covers every agent. A cross-agent preservation test that passes for some agents and fails for one is evidence about the fixture until the planted content is proven unowned. Evidence anchors: `test/integration/setup-install-write-set.test.ts` (search: `Rewrite every runnable field inside one cloned structure`) and (search: `planted beside goat-flow's own block, never inside it`).
+
 **What happened:** The 1.16.0 M01 round-trip fixture planted an "unrelated user hook row" by cloning the installed deny row and swapping its script name, then pushed it into the array holding the managed row. Claude, Codex, and Copilot preserved it; Antigravity deleted it, and the fixture read that as a preservation defect. Both readings were wrong. The clone still invoked goat-flow's own launcher, and Antigravity keys each hook block by hook id, so the planted row landed *inside* `.agents/hooks.json` → `deny-dangerous` - a block the registrar owns and rewrites wholesale.
 
 **Root cause:** The fixture inferred ownership from adjacency. A row's position in a shared provider event array means something different from the same position inside a per-hook managed block, and a command that names the managed launcher is owned content wherever it sits.
-
-**Prevention:** Plant preservation content that names no framework path, and choose its container from the provider's shape rather than from the managed row's parent: when the config exposes a shared `hooks` container, add a sibling row there; when it keys blocks by hook id, add a sibling top-level block. Assert against whichever shape was planted so one fixture covers every agent. A cross-agent preservation test that passes for some agents and fails for one is evidence about the fixture until the planted content is proven unowned. Evidence anchors: `test/integration/setup-install-write-set.test.ts` (search: `Rewrite every runnable field inside one cloned structure`) and (search: `planted beside goat-flow's own block, never inside it`).
 
 ---
 
@@ -29,11 +29,11 @@ last_reviewed: 2026-08-31
 **Caught at:** VERIFY
 **Incident count:** 1 | **Latest occurrence:** 2026-07-14
 
+**Prevention:** Command-wrapper fixtures must scan all arguments, or parse options when operand order matters, and match a unique semantic path. Keep the failure assertion alongside source/destination byte assertions so a wrapper that never activates cannot pass silently. Evidence anchor: `test/integration/setup-install-atomic-staging.test.ts` (search: `Migration helpers add safety flags`).
+
 **What happened:** M28's migration-failure fixture wrapped `mv` and matched the legacy source only at argument one. The hardened installer invoked `mv -n -- <source> <destination>`, so the wrapper delegated to the real command, installation exited 0, and the focused suite reported one failure even though the migration helper was behaving correctly.
 
 **Root cause:** The fixture encoded the old command shape instead of the behavior under test. Safety flags and the option terminator shifted the source operand without changing its meaning.
-
-**Prevention:** Command-wrapper fixtures must scan all arguments, or parse options when operand order matters, and match a unique semantic path. Keep the failure assertion alongside source/destination byte assertions so a wrapper that never activates cannot pass silently. Evidence anchor: `test/integration/setup-install-atomic-staging.test.ts` (search: `Migration helpers add safety flags`).
 
 ---
 
@@ -41,11 +41,11 @@ last_reviewed: 2026-08-31
 
 **Status:** active | **Created:** 2026-06-07
 
+**Prevention:** For migration fixtures, align assertions with the branch under test: clean-destination fixtures assert whole-directory moves; collision fixtures assert per-entry moves and `target exists, left old entry in place`. Evidence anchor: `test/integration/setup-install-migrations.test.ts` (search: `migrates legacy skill docs without overwriting target collisions`).
+
 **What happened:** While adding the M04 installer migration fixtures, the first `setup-install.test.ts` run failed because the legacy skill-doc test expected a whole-directory move message. The fixture deliberately pre-created `.goat-flow/skill-docs/playbooks/`, so the installer correctly used its per-entry no-overwrite branch and printed file-level moves instead.
 
 **Root cause:** I asserted the clean-destination output shape even though the fixture setup was exercising the destination-exists branch.
-
-**Prevention:** For migration fixtures, align assertions with the branch under test: clean-destination fixtures assert whole-directory moves; collision fixtures assert per-entry moves and `target exists, left old entry in place`. Evidence anchor: `test/integration/setup-install-migrations.test.ts` (search: `migrates legacy skill docs without overwriting target collisions`).
 
 ---
 
@@ -54,6 +54,8 @@ last_reviewed: 2026-08-31
 **Status:** active | **Created:** 2026-04-03
 **Incident count:** 11
 **Latest occurrence:** 2026-08-23
+
+**Prevention:** For parser refactors, verify in this order: (1) print/exercise extracted intermediate values and fixture relationships, (2) run the focused regression suite, (3) run `npx tsc --noEmit`, (4) run whole-file ESLint and complexity/size analysis, then (5) freeze writes and run the full test suite. Any later write invalidates that suite result and requires a fresh run. Match heuristics to behavior patterns like `grep ... | while read ... [ ! -e ]`, not just keywords in step names.
 
 **What happened:** While tightening CI-validation checks, the first pass on the workflow `run:` parser read the wrong regex capture group and then used a router heuristic that only matched commands containing the word `router`. The focused regression suite and `tsc` both failed before the broader test run finished.
 **Root cause:** Changed parsing and heuristics together without first validating the extracted command shape. The new regression covered the shell pattern, but the implementation still assumed the old capture layout and overfit to existing workflow wording.
@@ -68,7 +70,6 @@ last_reviewed: 2026-08-31
 **Recurrence 2026-08-16 (verification authority):** A full fast-suite run remained active when the changed-file formatting gate found two fixtures. Formatting those files before the suite exited changed its authority mid-run, so its final result was discarded even though each formatted fixture passed in isolation. Evidence anchors: `package.json` (search: `prettier --write`), `test/integration/gruff-code-quality-contract.test.ts` (search: `surfaces a symbol finding when its span overlaps`), and `test/unit/review-validate-verdict.test.ts` (search: `accepts eight REFUTED ledger records`).
 **Recurrence 2026-08-23 (plan warning contract):** M18's focused checker/export command passed 95 tests after parse warnings gained expected grammar and received values, but the first fast suite failed four exact assertions in the shared effort parser's direct unit suite. The focused command covered downstream CLI behavior without including the producer's own warning contract. Future parser-message changes must grep the old diagnostic across tests and include the parser unit file in RED/GREEN proof. Evidence anchors: `src/cli/plans-effort.ts` (search: `formatActionableParseWarning`), `test/unit/plans-effort.test.ts` (search: `warns when a supplied forecast basis cannot be counted`).
 **Decision changed:** Before a prose parser, enumerate every shipped producer shape, validate the nominally valid fixture's relationships, and lock one grammar with focused fixtures. Negative mutations target a unique semantic substring; shipped path examples label placeholders explicitly, and placeholder verifiers recognize the grammar rather than one literal token. At first behavioral GREEN, check whole-file complexity and headroom before adding branches.
-**Fix:** For parser refactors, verify in this order: (1) print/exercise extracted intermediate values and fixture relationships, (2) run the focused regression suite, (3) run `npx tsc --noEmit`, (4) run whole-file ESLint and complexity/size analysis, then (5) freeze writes and run the full test suite. Any later write invalidates that suite result and requires a fresh run. Match heuristics to behavior patterns like `grep ... | while read ... [ ! -e ]`, not just keywords in step names.
 
 ---
 
@@ -80,11 +81,11 @@ last_reviewed: 2026-08-31
 **Caught at:** VERIFY
 **Incident count:** 1 | **Latest occurrence:** 2026-08-23
 
+**Prevention:** Before adding a production import to a nested test, inspect `test/src.ts`; extend that facade when the helper is intentionally test-visible, then import through the existing `../../src.js` path. Validate that RED fails on the intended missing symbol or assertion, not module resolution. Evidence anchors: `test/src.ts` (search: `findSkillInventoryDrift`) and `test/unit/audit-command/main.test.ts` (search: `warns only for stale explicit skill inventories`).
+
 **What happened:** M21's first semantic-inventory RED imported two production modules with `../../src/...` from `test/unit/audit-command/`. Node resolved that path under `test/src/` and failed with `ERR_MODULE_NOT_FOUND` before reaching the intentionally missing export. Changing it to `../../../src/...` reached production code, but Gruff then flagged both deep relative imports. Re-exporting the helper through the existing test facade produced the intended RED and kept the nested test's import shallow.
 
 **Root cause:** The test bypassed the repository's facade and treated directory depth as part of the fixture contract. The first failure therefore measured path arithmetic rather than the missing behavior the RED was meant to prove.
-
-**Prevention:** Before adding a production import to a nested test, inspect `test/src.ts`; extend that facade when the helper is intentionally test-visible, then import through the existing `../../src.js` path. Validate that RED fails on the intended missing symbol or assertion, not module resolution. Evidence anchors: `test/src.ts` (search: `findSkillInventoryDrift`) and `test/unit/audit-command/main.test.ts` (search: `warns only for stale explicit skill inventories`).
 
 ---
 
@@ -101,11 +102,11 @@ last_reviewed: 2026-08-31
 
 **Latest occurrence:** 2026-07-13
 
+**Prevention:** When adding migration-light report fields, search for every exported consumer and default absent collections at those boundaries. Run focused tests plus the package suite. Evidence anchors: `src/cli/stats/stats.ts` (search: `Older direct callers may omit entry facts`), `test/unit/index-fresh.test.ts` (search: `reportWith(indexes)`).
+
 **What happened:** M13 defaulted missing learning-loop entries in `buildStatsReport`, and focused stats tests passed. The full `npm test` run found three `TypeError: learningLoopEntries is not iterable` failures because `test/unit/index-fresh.test.ts` calls exported `checkStats` with a legacy report object that bypasses the builder.
 
 **Root cause:** The compatibility fallback lived only in the preferred construction path, not the exported verifier that also consumes report-shaped objects at runtime. Source typecheck did not inspect the TypeScript test caller.
-
-**Prevention:** When adding migration-light report fields, search for every exported consumer and default absent collections at those boundaries. Run focused tests plus the package suite. Evidence anchors: `src/cli/stats/stats.ts` (search: `Older direct callers may omit entry facts`), `test/unit/index-fresh.test.ts` (search: `reportWith(indexes)`).
 
 ---
 
@@ -113,9 +114,10 @@ last_reviewed: 2026-08-31
 
 **Status:** historical | **Created:** 2026-04-03 | **Reason:** Rubric/scanner system removed per ADR-013; specific check IDs no longer exist
 
+**Prevention:** Whenever a rubric check changes semantics, verify in this order: (1) focused in-memory regression, (2) disk-backed fixture corpus, (3) full suite. Search for the check ID in `test/fixtures/` before treating the change as complete.
+
 **What happened:** Tightened `2.2.2` so a registered stop hook only passes when it also runs real validation commands. The new focused regression passed immediately, but the disk-backed `failing-known` fixture still expected the old failure set and broke on the next verification step.
 **Root cause:** Updated the rubric logic and the in-memory regression corpus first, but forgot that `test/fixtures/projects/failing-known/fixture.json` and `test/fixtures/project-fixtures.test.ts` also encode expected failing check IDs. Scanner honesty work touches more than one fixture layer.
-**Fix:** Whenever a rubric check changes semantics, verify in this order: (1) focused in-memory regression, (2) disk-backed fixture corpus, (3) full suite. Search for the check ID in `test/fixtures/` before treating the change as complete.
 
 ---
 
@@ -126,6 +128,8 @@ last_reviewed: 2026-08-31
 **Trigger phase:** ACT
 **Caught at:** VERIFY
 **Incident count:** 16 | **Latest occurrence:** 2026-08-31
+
+**Prevention:** Treat each fixture as an isolated runtime: list the files, globals, source graph, and baseline validator invariants the SUT or assertion will read, then create or satisfy them explicitly. Before asserting one strict-check behavior, run the fixture through the unchanged strict baseline and ensure unrelated errors are absent. Keep every non-target value inside its passing bounds. Assert that every text substitution changes its fixture before using the result as simulated user input. Never assume a real-checkout file exists in a temp repo, a browser global exists in a VM, or a helper's name implies it includes an adjacent template. When an exported report schema or a hook's `scriptFiles` contract grows, update direct report builders and both source/installed fixture mirrors before running consumer assertions. Fixtures for current persisted state use production builders for coupled fields such as generations and receipts; exact registered-command probes derive their deadlines from the registry instead of reusing a faster direct-probe cap. Failure-injection mocks that must permit a retry use an explicit one-shot guard. Escaped-output assertions compare the runtime string or emitted bytes before encoding the expected source literal. Output-safety assertions distinguish renderer-owned separators from controls admitted through dynamic fields. In temp-repo stats fixtures, cite a file the fixture creates; `.goat-flow/learning-loop/footguns/hooks.md` can carry both the bucket body and a self-reference. Evidence anchor: `test/integration/stats-command.test.ts` (search: `missing semantic anchor`).
 
 **What happened:** While adding ADR-024 enforcement to `stats --check`, the first integration test fixture used `package.json` with a line suffix to trigger an `invalid-line-ref` finding. The temp fixture repo did not contain `package.json`, so the checker correctly reported a stale ref instead and the test failed with "expected an invalid-line-ref finding."
 
@@ -161,8 +165,6 @@ last_reviewed: 2026-08-31
 
 **Recurrence 2026-08-31 (selected-consumer lifecycle):** The pre-release full suite found that the lifecycle fixture still created a non-Git consumer and omitted the current Commit Messages section. Audit correctly rejected the missing post-turn scan root first, then rejected the incomplete instruction contract after the fixture gained its own repository. Initializing the disposable consumer as a Git repository and completing its instruction fixture restored the intended Git-backed lifecycle; the dedicated non-Git fixture still proves that branch. Evidence anchors: `test/integration/setup-quality-lifecycle.test.ts` (search: `The passing lifecycle needs Git's implicit post-turn scan root`; search: `## Commit Messages`) and `test/integration/setup-install-nongit-hooks.test.ts` (search: `names the blocked post-turn registration and its fix`).
 
-**Prevention:** Treat each fixture as an isolated runtime: list the files, globals, source graph, and baseline validator invariants the SUT or assertion will read, then create or satisfy them explicitly. Before asserting one strict-check behavior, run the fixture through the unchanged strict baseline and ensure unrelated errors are absent. Keep every non-target value inside its passing bounds. Assert that every text substitution changes its fixture before using the result as simulated user input. Never assume a real-checkout file exists in a temp repo, a browser global exists in a VM, or a helper's name implies it includes an adjacent template. When an exported report schema or a hook's `scriptFiles` contract grows, update direct report builders and both source/installed fixture mirrors before running consumer assertions. Fixtures for current persisted state use production builders for coupled fields such as generations and receipts; exact registered-command probes derive their deadlines from the registry instead of reusing a faster direct-probe cap. Failure-injection mocks that must permit a retry use an explicit one-shot guard. Escaped-output assertions compare the runtime string or emitted bytes before encoding the expected source literal. Output-safety assertions distinguish renderer-owned separators from controls admitted through dynamic fields. In temp-repo stats fixtures, cite a file the fixture creates; `.goat-flow/learning-loop/footguns/hooks.md` can carry both the bucket body and a self-reference. Evidence anchor: `test/integration/stats-command.test.ts` (search: `missing semantic anchor`).
-
 ---
 
 ## Lesson: Current-version fixtures must derive from package metadata
@@ -173,11 +175,11 @@ last_reviewed: 2026-08-31
 **Caught at:** VERIFY
 **Incident count:** 1 | **Latest occurrence:** 2026-07-16
 
+**Prevention:** Fixtures that mean current must import package-derived version metadata; literals are reserved for tests that intentionally model old or mismatched installs. After a release bump, search the test tree for the prior version before running the full suite. Evidence anchors: test/unit/skill-doctor.test.ts (search: skillMarkdown), src/cli/constants.ts (search: export const AUDIT_VERSION).
+
 **What happened:** After goat-flow was bumped from 1.13.1 to 1.14.0, the full test suite failed two skill-doctor cases. Their shared healthy fixture still emitted goat-flow-skill-version 1.13.1, so the runtime correctly classified the fixture as warn rather than pass.
 
 **Root cause:** The fixture represented the current installed version but hard-coded the previous release number. The version sweep covered runtime and release surfaces without checking this semantic test fixture.
-
-**Prevention:** Fixtures that mean current must import package-derived version metadata; literals are reserved for tests that intentionally model old or mismatched installs. After a release bump, search the test tree for the prior version before running the full suite. Evidence anchors: test/unit/skill-doctor.test.ts (search: skillMarkdown), src/cli/constants.ts (search: export const AUDIT_VERSION).
 
 ---
 
@@ -188,6 +190,8 @@ last_reviewed: 2026-08-31
 **Trigger phase:** SCOPE
 **Caught at:** VERIFY
 **Incident count:** 6 | **Latest occurrence:** 2026-08-16
+
+**Prevention:** Before using a pressure or application fixture, compare every option and prompt restriction with always-loaded instructions and accepted ADRs, attach a literal source anchor to every fact, and remove output fields that disclose the graded rule. Do not blend incidents, block mandatory reads, or ask the evaluator to recite the target technique. Keep non-target obligations equal so only the tested rule explains the result. Dry-run command guards with the producer's real global flags and working-directory form before launch; parse the semantic subcommand after those flags. When a canary prohibits reads, provide the exact editable source declaration or allow one bounded read; never require blind patch construction.
 
 **What happened:** The flagship skill-TDD scenario offered `Commit now` as the expected failing choice even though ADR-025 and every installed instruction file categorically forbid coding-agent commits. An agent could reject that option without following test-first discipline, so the scenario could overstate RED/GREEN evidence.
 
@@ -204,7 +208,5 @@ last_reviewed: 2026-08-31
 **Recurrence 2026-08-10:** A live provider canary prohibited reads but named only the old and new values for four edits. The coding agent guessed four incompatible declarations, every patch failed, and the run exercised Stop without exercising PostToolUse. Supplying the exact editable declaration made the bounded canary valid. The durable consumer fixture now writes its complete registration and hook inputs explicitly. Evidence anchor: `test/integration/hook-consumer-canary.test.ts` (search: `writeObservedCodexFeedbackConfig`).
 
 **Recurrence 2026-08-16:** A goat-clarity Copilot evaluator guard recognized read-only Git only when the subcommand was the first argument. Copilot prefixed identity probes with `--no-optional-locks` and sometimes `-C <worktree>`, so the guard denied them and the evaluator misclassified the disposable clone as a non-Git directory. The host discarded the run without credit. This was the same isolation failure through command grammar: a non-target restriction suppressed evidence required by `workflow/skills/goat-clarity/SKILL.md` (search: `repository root resolved from the invocation working directory`).
-
-**Prevention:** Before using a pressure or application fixture, compare every option and prompt restriction with always-loaded instructions and accepted ADRs, attach a literal source anchor to every fact, and remove output fields that disclose the graded rule. Do not blend incidents, block mandatory reads, or ask the evaluator to recite the target technique. Keep non-target obligations equal so only the tested rule explains the result. Dry-run command guards with the producer's real global flags and working-directory form before launch; parse the semantic subcommand after those flags. When a canary prohibits reads, provide the exact editable source declaration or allow one bounded read; never require blind patch construction.
 
 ---

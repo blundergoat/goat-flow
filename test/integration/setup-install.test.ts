@@ -918,6 +918,102 @@ describe("setup --apply installer", () => {
 });
 
 describe("setup --apply permission upgrade migrations", () => {
+  // Fixture purpose: a 1.16-era settings file carrying the retired shell and folder-name denies, the in-project
+  // credential-store rules, and two rules the project added itself.
+  // Filesystem side effects: creates one temporary project and runs the standalone installer against it.
+  it("retires shipped shell and folder-name denies, anchors credential-store rules at home, and keeps project rules", () => {
+    const root = makeTempProject();
+    mkdirSync(join(root, ".claude"), { recursive: true });
+    // Example: a team with a src/pages/secrets route upgrades; the folder deny goes, their own MCP and phpstan rules stay.
+    const projectOwnedDenies = [
+      "Bash(*vendor/bin/phpstan*)",
+      "mcp__github__push_files",
+    ];
+    writeFileSync(
+      join(root, ".claude", "settings.json"),
+      JSON.stringify(
+        {
+          permissions: {
+            allow: ["Read(**/.env.example)", "Bash(*sudo *)"],
+            deny: [
+              "Bash(*git commit*)",
+              "Bash(*git push*)",
+              "Bash(*sudo *)",
+              "Bash(*mkfs*)",
+              "Bash(*dd if=*)",
+              "Bash(*git reset --hard*)",
+              "Read(**/.env)",
+              "Read(**/secrets/**)",
+              "Read(**/.ssh/**)",
+              "Read(**/.docker/config.json)",
+              "Read(**/credentials*)",
+              "Edit(**/secrets/**)",
+              "Edit(**/.kube/config)",
+              "Edit(~/.kube/**)",
+              ...projectOwnedDenies,
+            ],
+          },
+        },
+        null,
+        2,
+      ) + "\n",
+    );
+
+    const result = runInstaller(root, "--agent", "claude");
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.match(result.stdout, /stale or superseded permission rules/);
+    assert.match(
+      result.stderr,
+      /retired Claude deny rule removed: Read\(\*\*\/secrets\/\*\*\)/,
+    );
+
+    const { deny, allow } = readClaudePermissionGroups(root);
+    const retiredRules = [
+      "Bash(*sudo *)",
+      "Bash(*mkfs*)",
+      "Bash(*dd if=*)",
+      "Bash(*git reset --hard*)",
+      "Read(**/secrets/**)",
+      "Read(**/credentials*)",
+      "Edit(**/secrets/**)",
+    ];
+    assert.deepEqual(
+      deny.filter((rule) => retiredRules.includes(rule)),
+      [],
+      "retired shipped denies should be gone",
+    );
+    // The in-project store rules become home-anchored, and the rewrite dedupes against a home rule already present.
+    assert.ok(deny.includes("Read(~/.ssh/**)"), "ssh rule anchored at home");
+    assert.ok(
+      deny.includes("Read(~/.docker/**)"),
+      "docker rule anchored at home",
+    );
+    assert.deepEqual(
+      deny.filter((rule) => rule === "Edit(~/.kube/**)"),
+      ["Edit(~/.kube/**)"],
+      "kube rewrite deduped into the existing home rule",
+    );
+    assert.ok(
+      !deny.includes("Read(**/.ssh/**)"),
+      "in-project ssh rule removed",
+    );
+    assert.ok(
+      !deny.includes("Edit(**/.kube/config)"),
+      "in-project kube rule removed",
+    );
+    // Rules the project wrote and the ADR-025 pair are untouched, in their original relative order.
+    assert.deepEqual(
+      deny.filter((rule) => projectOwnedDenies.includes(rule)),
+      projectOwnedDenies,
+      "project-owned denies preserved",
+    );
+    assert.ok(
+      deny.includes("Bash(*git commit*)") && deny.includes("Bash(*git push*)"),
+    );
+    // Retirement never reaches the allow list: an allow with the same text is the user's own decision.
+    assert.ok(allow.includes("Bash(*sudo *)"), "allow list left alone");
+  });
+
   // Covers removed-tool, unmatched-rule, and broad env-deny migrations together.
   // Fixture purpose: writes stale Claude rules for pruning, rewriting, and env-deny expansion.
   it("prunes removed-tool (MultiEdit) denies and rewrites unmatched Write/NotebookEdit/Glob denies on upgrade", () => {

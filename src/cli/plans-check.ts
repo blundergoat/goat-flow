@@ -49,7 +49,20 @@ const VALID_STATUSES = new Set([
   "human-verification-pending",
   "blocked",
   "abandoned",
+  "superseded",
+  "deferred",
   "complete",
+]);
+
+/**
+ * States that stop ordinary execution and therefore owe the reader one `Status reason:`.
+ * `superseded` names the milestone that carries the remainder; `deferred` names the later release or record that owns the scope.
+ */
+const EXCEPTIONAL_STATUSES = new Set([
+  "blocked",
+  "abandoned",
+  "superseded",
+  "deferred",
 ]);
 
 /** Missing canonical fields that strict mode can determine without semantic guesses. */
@@ -609,7 +622,7 @@ function collectStatusReasonErrors(
 ): string[] {
   const errors: string[] = [];
   const statusReason = record.statusReason.trim();
-  const hasExceptionalStatus = status === "blocked" || status === "abandoned";
+  const hasExceptionalStatus = EXCEPTIONAL_STATUSES.has(status);
   if (hasExceptionalStatus && statusReason.length === 0) {
     errors.push(
       `${record.sourceFile}: ${status} milestone requires Status reason`,

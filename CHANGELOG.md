@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **`plans check --strict` accepts `superseded` and `deferred`** - Both are terminal statuses that require `Status reason:`. A superseded reason must name a successor milestone ID that resolves in the plan; nothing active or complete may depend on either; open checkboxes and paused receipts are allowed and no Actual is required; their estimates leave the `plan:` total and are reported on an `excluded:` line, and each milestone row says which status excluded it.
+- **Learning-loop entries lead with the rule** - Every active footgun and lesson now opens with `**Prevention:**` right after its metadata block, so INDEX-first retrieval shows what to do before the incident history; the entry-order contract in preflight keeps new entries in that shape.
+- **`skill-conventions.md` entry templates pass the Prevention-first gate** - The lesson and footgun templates separate the metadata block from `**Prevention:**` with a blank line, and the entry-order contract treats `hallucination-risk` and `Merged` lines as metadata, so an entry copied from the template no longer fails preflight.
+- **Playbook index routes skill testing** - `.goat-flow/skill-docs/playbooks/README.md` sends skill testing and hardening to `skill-quality-testing/README.md` instead of a table with no matching row.
+- **Review artifacts are documented** - `.goat-flow/architecture.md` and `.goat-flow/logs/review/README.md` list the redacted `.diff` bundle and `.md` chunk receipt that `/goat-review` writes, so those files are no longer classified as scratch with no evidential authority.
+- **Architecture and code map match `src/cli/config/` and `src/cli/diagnostics/`** - Both name all six config modules and the threat-model collector, and the duplicate `diagnostics/` row is gone.
+- **`docs/skills.md` goat-security section is readable** - Two single-line paragraphs of about 900 and 500 words are split into topic paragraphs without changing a sentence.
+- **Empty `patterns/external-lessons.md` bucket removed** - It held frontmatter only and had no index rows, so retrieval could never reach it.
+
 ## v1.17.0 - 2026-09-01
 
 The next release adds per-command `--help`, path-aware learning recall, one project-wide install baseline, whole-suite hook verification, and stricter `--strict` plan checks, and it untangles Claude and Copilot hook registrations.

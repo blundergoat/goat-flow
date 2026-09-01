@@ -2,7 +2,8 @@
  * Checks that a plan stays readable and its milestones fit together as a set.
  *
  * Reader-facing problem and benefit sections receive actionable length and internal-identifier findings before a plan reaches review.
- * Plan-level checks then catch missing dependencies, cycles, duplicate IDs, and competing active milestones.
+ * Plan-level checks then catch missing dependencies, cycles, duplicate IDs, competing active milestones, and superseded milestones that name no
+ * resolvable successor.
  *
  * Each finding names the milestone file so an author can go directly to the sentence or relationship that needs correction.
  */
@@ -614,6 +615,50 @@ function collectDependencyStateErrors(
 }
 
 /**
+ * Require every superseded milestone to name the successor that carries its remainder.
+ * Use so a reader can follow a spent milestone to the live work without searching the plan.
+ *
+ * @param identities - parsed milestone identities with their statuses and reasons
+ * @param identitiesByNumber - zero-insensitive lookup of every local milestone
+ * @returns one error per missing, self-referential, or unresolved successor; empty means every superseded milestone points at real work
+ */
+function collectSupersededSuccessorErrors(
+  identities: MilestoneIdentity[],
+  identitiesByNumber: ReadonlyMap<string, MilestoneIdentity>,
+): string[] {
+  const errors: string[] = [];
+  // Only a superseded milestone promises a successor; the other terminal states owe no pointer.
+  for (const identity of identities) {
+    if (identity.record.status.trim().toLowerCase() !== "superseded") continue;
+    const successorIds = Array.from(
+      identity.record.statusReason.matchAll(/\bM(\d+)\b/giu),
+      (successorMatch) => successorMatch[1] ?? "",
+    ).filter((digits) => digits.length > 0);
+    // A reason without any milestone ID leaves the reader no live milestone to follow.
+    if (successorIds.length === 0) {
+      errors.push(
+        `${identity.record.sourceFile}: superseded milestone must name its successor milestone in Status reason`,
+      );
+      continue;
+    }
+    // Each named successor must be a real milestone in this plan other than the superseded one itself.
+    for (const successorDigits of successorIds) {
+      const successorNumber = successorDigits.replace(/^0+(?=\d)/u, "");
+      if (successorNumber === identity.numericId) {
+        errors.push(
+          `${identity.record.sourceFile}: superseded milestone cannot name itself as its successor`,
+        );
+      } else if (!identitiesByNumber.has(successorNumber)) {
+        errors.push(
+          `${identity.record.sourceFile}: superseded successor M${successorDigits} does not resolve in this plan`,
+        );
+      }
+    }
+  }
+  return errors;
+}
+
+/**
  * Enforce one active execution or verification boundary per plan.
  * Use so timing and next-action guidance point users to exactly one current milestone.
  */
@@ -661,6 +706,9 @@ export function collectPlanStructureErrors(
     errors.push(`plan: dependency cycle detected: ${cycle.join(" -> ")}`);
   }
   errors.push(...collectDependencyStateErrors(identities, indexes.byId));
+  errors.push(
+    ...collectSupersededSuccessorErrors(identities, indexes.byNumber),
+  );
   errors.push(...collectActiveStateErrors(identities));
   return errors;
 }

@@ -9,11 +9,11 @@ last_reviewed: 2026-08-28
 
 **Status:** active | **Created:** 2026-06-11
 
+**Prevention:** When a gruff finding contradicts code you can see (an unused-import with a visible usage, or a rule silent where it clearly should fire), probe the masked source before trusting either side - import `maskNonCode` from the installed analyzer and count occurrences. Until gruff-ts masks nested templates correctly, hoist inner template literals into named consts (clearer code anyway) and report the masker bug upstream. Evidence anchor: `test/integration/dashboard-projects-api.test.ts` (search: `Hoisted out of the fetch template`).
+
 **What happened:** `waste.unused-import` flagged `rename` in `test/integration/dashboard-projects-api.test.ts` even though `await rename(root, moved)` was plainly used later in the file. Probing `maskNonCode` from the installed gruff-ts showed the cause: a template literal nested inside another template's `${...}` interpolation corrupted the masker's interpolation-depth state, blanking roughly sixty lines of real code. Every line rule was blind to that region, so the import's only usage did not count - and any real finding in the blanked region would have been invisible too.
 
 **Root cause:** gruff-ts's masking lexer tracks template interpolation depth without a nesting stack, so `` `${fn(`${a},${b}`)}` `` leaves the state dirty and a later code `}` flips the masker into template-body mode until the next backtick.
-
-**Prevention:** When a gruff finding contradicts code you can see (an unused-import with a visible usage, or a rule silent where it clearly should fire), probe the masked source before trusting either side - import `maskNonCode` from the installed analyzer and count occurrences. Until gruff-ts masks nested templates correctly, hoist inner template literals into named consts (clearer code anyway) and report the masker bug upstream. Evidence anchor: `test/integration/dashboard-projects-api.test.ts` (search: `Hoisted out of the fetch template`).
 
 ## Lesson: Do not convert a fix request into threshold tuning
 
@@ -21,29 +21,31 @@ last_reviewed: 2026-08-28
 **Decision changed:** Re-run the analyzer after each candidate fix and restore the original code when the edit only trades one advisory for another.
 **Incident count:** 2 | **Latest occurrence:** 2026-08-28
 
+**Prevention:** For gruff cleanup, classify the action before editing: FIX code, IGNORE paths, BASELINE accepted debt, or TUNE config. After each edit, compare rule identities as well as the total; a lower or unchanged count can still hide rule substitution. If the user asks to "fix" a rule cluster, do not tune thresholds or other rule numbers unless they explicitly approve that policy change. If a finding cannot be fixed safely in the current scope, stop and say so instead of making the analyzer quieter. Evidence anchors: `.gruff-ts.yaml` (search: `size.file-length`), `CHANGELOG.md` (search: `gruff-ts size cleanup`).
+
 **What happened:** During the gruff cleanup, the user asked to fix `size` warnings. Instead of fixing code or asking before reclassifying the work as configuration, I raised `.gruff-ts.yaml` thresholds for `size.file-length`, `size.function-length`, and `size.stylesheet-length` so the findings disappeared. The user immediately corrected the scope with "dont change the numbers" and asked for this learning-loop entry.
 
 **Root cause:** I treated "clear the gruff findings" as interchangeable with "make the report stop flagging them." That violated the requested fix intent. Threshold changes are policy changes, not code fixes, and they need explicit approval when the user asks to fix findings.
 
 **Recurrence 2026-08-28:** During M59, I classified six terminal catch returns as removable `waste.useless-return` findings. A measured full scan with gruff-ts 0.5.0 showed that deleting five of them created five `waste.swallowed-catch` findings instead. The edits changed no behavior and only exchanged analyzer labels, so I restored the returns and moved all six candidates to `SKIP-CODEBASE`. Evidence anchors: `.gruff-ts.yaml` (search: `waste.useless-return`), `.gruff-ts.yaml` (search: `waste.swallowed-catch`), and `src/cli/server/hook-managed-installation.ts` (search: `a previous sync already removed`).
 
-**Prevention:** For gruff cleanup, classify the action before editing: FIX code, IGNORE paths, BASELINE accepted debt, or TUNE config. After each edit, compare rule identities as well as the total; a lower or unchanged count can still hide rule substitution. If the user asks to "fix" a rule cluster, do not tune thresholds or other rule numbers unless they explicitly approve that policy change. If a finding cannot be fixed safely in the current scope, stop and say so instead of making the analyzer quieter. Evidence anchors: `.gruff-ts.yaml` (search: `size.file-length`), `CHANGELOG.md` (search: `gruff-ts size cleanup`).
-
 ## Lesson: Gruff JSON captures must not go through noisy npm output
 
 **Status:** active | **Created:** 2026-06-10
 
+**Prevention:** For machine-readable gruff reports, use `node_modules/.bin/gruff-ts analyse --format json --fail-on none ...` or an explicitly silent npm invocation. Validate the capture with `JSON.parse` before grouping findings or writing plan evidence. Evidence anchors: `.goat-flow/skill-docs/playbooks/gruff-code-quality.md` (search: `node_modules/.bin`), `.goat-flow/skill-docs/playbooks/gruff-code-quality.md` (search: `Confirm the threshold flag against`).
+
 **What happened:** During the M01 gruff cleanup, redirecting `npm run gruff-ts -- analyse --format json --fail-on none .` to `/tmp/goat-flow-gruff-ts-before.json` produced invalid JSON because npm wrote its script banner before the analyzer payload. Parsing failed even though the analyzer itself had completed.
 
 **Root cause:** I treated an npm script as a transparent binary wrapper while capturing machine-readable output. npm can prepend lifecycle/script text unless invoked silently, which corrupts stdout-only JSON reports.
-
-**Prevention:** For machine-readable gruff reports, use `node_modules/.bin/gruff-ts analyse --format json --fail-on none ...` or an explicitly silent npm invocation. Validate the capture with `JSON.parse` before grouping findings or writing plan evidence. Evidence anchors: `.goat-flow/skill-docs/playbooks/gruff-code-quality.md` (search: `node_modules/.bin`), `.goat-flow/skill-docs/playbooks/gruff-code-quality.md` (search: `Confirm the threshold flag against`).
 
 ## Lesson: Gruff error-behavior comments need rule vocabulary
 
 **Status:** active | **Created:** 2026-06-10
 
 **Incident count:** 4 | **Latest occurrence:** 2026-08-27
+
+**Prevention:** When adding or changing a throw, return fallback, or swallowed failure, update the function's error-behavior contract in the same patch. If `docs.missing-error-behavior-doc` survives, read the installed rule vocabulary and use an explicit `@throws` tag or accepted recovery words such as `swallows`, `fallback`, or `recover` when truthful. Evidence anchors: `src/cli/facts/fs.ts` (search: `swallows read errors as a cached null fallback`) and `node_modules/@blundergoat/gruff-ts/src/context-doc-rules.ts` (search: `hasErrorBehaviorMarker`).
 
 **What happened:** During M01 gruff cleanup, I extracted `src/cli/facts/fs.ts` cache helpers and added comments that said "read errors cache and return null", "stat errors cache and return false", and "readdir errors cache and return []". Humans could infer the behavior, but `gruff-ts` still reported `docs.missing-error-behavior-doc` until the comments used the installed rule vocabulary: `swallows ... fallback`.
 
@@ -55,11 +57,11 @@ last_reviewed: 2026-08-28
 
 **Root cause:** I wrote comments that described the behavior semantically but did not satisfy the analyzer's marker vocabulary for error recovery.
 
-**Prevention:** When adding or changing a throw, return fallback, or swallowed failure, update the function's error-behavior contract in the same patch. If `docs.missing-error-behavior-doc` survives, read the installed rule vocabulary and use an explicit `@throws` tag or accepted recovery words such as `swallows`, `fallback`, or `recover` when truthful. Evidence anchors: `src/cli/facts/fs.ts` (search: `swallows read errors as a cached null fallback`) and `node_modules/@blundergoat/gruff-ts/src/context-doc-rules.ts` (search: `hasErrorBehaviorMarker`).
-
 ## Lesson: Do not leave generated gruff defaults after an init probe
 
 **Status:** active | **Created:** 2026-06-09
+
+**Prevention:** Before running `gruff-ts init --force`, classify it as a config policy rewrite and capture/compare the diff immediately. If it was only a probe, merge current generated defaults with the still-supported project tuning before broad verification; do not revive rules removed by the installed version. Evidence anchors: `.gruff-ts.yaml` (search: `acceptedAbbreviations:`), `.gruff-ts.yaml` (search: `acceptedBooleanNames:`), `scripts/preflight-checks.sh` (search: `Learning-loop schema`).
 
 **What happened:** After running `gruff-ts init --force` as a probe, I left the generated default `.gruff-ts.yaml` in place while continuing hook work. Preflight later failed `Learning-loop schema` because the generated config removed project-specific tuning anchors such as `repo-standard short names` and `dashboard state and CLI option DTOs`.
 
@@ -67,17 +69,15 @@ last_reviewed: 2026-08-28
 
 **Root cause:** I treated `init --force` as a harmless command run instead of a policy rewrite. In goat-flow, `.gruff-ts.yaml` carries durable tuning plus semantic anchors referenced by lessons, so a generated-default reset can break verification even when the hook implementation is correct.
 
-**Prevention:** Before running `gruff-ts init --force`, classify it as a config policy rewrite and capture/compare the diff immediately. If it was only a probe, merge current generated defaults with the still-supported project tuning before broad verification; do not revive rules removed by the installed version. Evidence anchors: `.gruff-ts.yaml` (search: `acceptedAbbreviations:`), `.gruff-ts.yaml` (search: `acceptedBooleanNames:`), `scripts/preflight-checks.sh` (search: `Learning-loop schema`).
-
 ## Lesson: Verify a gruff path-ignore by directory scan, not by naming the file
 
 **Status:** active | **Created:** 2026-05-30
 
+**Prevention:** Verify a path-ignore the way it is actually consumed - a directory or project scan (`gruff-ts analyse <dir>`), then confirm the file appears under `paths.ignoredPaths` and produces no findings. Never verify by passing the ignored file as an explicit argument; that path is analysed unconditionally and will read like a broken ignore. Evidence anchor: `.gruff-ts.yaml` (search: `**/*.css`); reproduction: `gruff-ts analyse src/dashboard --format json` -> `ignoredPaths: ["src/dashboard/styles.css"]`, zero `size.stylesheet-length` findings.
+
 **What happened:** After adding `*.css` / `**/*.css` to `paths.ignore` in `.gruff-ts.yaml`, I tried to verify it by running `gruff-ts analyse src/dashboard/styles.css` directly. The file was still flagged with `size.stylesheet-length` and `paths.ignoredPaths` came back empty, which looked like the ignore was broken. It was not: passing a file explicitly as a CLI argument bypasses config path-ignores - gruff-ts treats a named path as "analyse this regardless." Re-running against the directory (`gruff-ts analyse src/dashboard`) listed `styles.css` under `ignoredPaths` with zero findings.
 
 **Root cause:** I conflated two gruff-ts invocation modes. Config `paths.ignore` filters files discovered during directory/project traversal; it does not suppress a file the user names directly on the command line (the same distinction the `--include-ignored` flag notes when it says config ignores still apply only to discovered paths).
-
-**Prevention:** Verify a path-ignore the way it is actually consumed - a directory or project scan (`gruff-ts analyse <dir>`), then confirm the file appears under `paths.ignoredPaths` and produces no findings. Never verify by passing the ignored file as an explicit argument; that path is analysed unconditionally and will read like a broken ignore. Evidence anchor: `.gruff-ts.yaml` (search: `**/*.css`); reproduction: `gruff-ts analyse src/dashboard --format json` -> `ignoredPaths: ["src/dashboard/styles.css"]`, zero `size.stylesheet-length` findings.
 
 ## Lesson: Confirm gruff unused-import findings before deleting imports
 
@@ -85,19 +85,21 @@ last_reviewed: 2026-08-28
 
 **Incident count:** 3 | **Latest occurrence:** 2026-08-06
 
+**Prevention:** For every gruff `waste.unused-import` finding, run `rg "<symbol>" <file>` before editing. Delete the import only when the import specifier is the sole hit, then run the focused typecheck or test that covers the file. Evidence anchors: `src/cli/cli.ts` (search: `realpathSync(fileURLToPath(import.meta.url))`) and `test/integration/dashboard-server-dashboard-terminal-endpoints.test.ts` (search: `TERMINAL_UPLOAD_MAX_BODY_BYTES + 1`).
+
 **What happened:** During the gruff findings cleanup, I treated `waste.unused-import` findings as safe mechanical removals. Removing `realpathSync` / `fileURLToPath` from `src/cli/cli.ts` broke `npm run typecheck`, and removing `rename` / `TERMINAL_UPLOAD_MAX_BODY_BYTES` from `test/integration/dashboard-server.test.ts` broke the focused dashboard-server test.
 
 **Recurrence update (2026-08-06):** The analyzer reported `relative`, `resolve`, and `fileURLToPath` unused in both `run-with-bash.mjs` mirrors even though direct searches found executable references. The imports stayed, and Node syntax plus focused launcher tests remained green.
 
 **Root cause:** The analyzer reported imports as unused even though the symbols were referenced later in large files. I trusted the finding before doing a local symbol search or running the focused test.
 
-**Prevention:** For every gruff `waste.unused-import` finding, run `rg "<symbol>" <file>` before editing. Delete the import only when the import specifier is the sole hit, then run the focused typecheck or test that covers the file. Evidence anchors: `src/cli/cli.ts` (search: `realpathSync(fileURLToPath(import.meta.url))`) and `test/integration/dashboard-server-dashboard-terminal-endpoints.test.ts` (search: `TERMINAL_UPLOAD_MAX_BODY_BYTES + 1`).
-
 ## Lesson: Run cheap style gates before expensive gruff verification
 
 **Status:** active | **Created:** 2026-05-31
 
 **Incident count:** 8 | **Latest occurrence:** 2026-08-28
+
+**Prevention:** After broad gruff edits, run `npx eslint src/cli src/dashboard` and `npm run format:check` before full tests or preflight. Treat any non-null assertion introduced during naming cleanup as unfinished parsing code; bind the typed value once and branch on it. Evidence anchors: `src/cli/skill-command-parser.ts` (search: `resolvedSkillPath`), `scripts/check-instruction-parity.mjs` (search: `CANONICAL_SECTIONS`), `src/cli/plans-time.ts` (search: `beforeMilestoneReplacement`).
 
 **What happened:** During the gruff naming cleanup, the full `npm test` run reached the installer round-trip fixture and failed its temp-repo preflight because local style gates still had issues: ESLint flagged a non-null assertion in `src/cli/cli-parser.ts`, and Prettier found an unformatted modified contract test.
 
@@ -117,12 +119,12 @@ last_reviewed: 2026-08-28
 
 **Recurrence 2026-08-28:** The PR #61 follow-up ran focused regressions, typecheck, Prettier, Gruff, audit, stats, and the full test suite before repository-wide ESLint. Preflight then found `cleanupFailedClaimInitialization` at complexity 11 and rejected a shorthand arrow returning `writeFileSync`. Extracting the ownership predicate and bracing the writer cleared targeted ESLint, but every earlier proof became stale. Evidence anchors: `src/cli/path-write-claim.ts` (search: `isOwnedInitializationClaim`) and `src/cli/quality/quality-command.ts` (search: `const writeReportFile`).
 
-**Prevention:** After broad gruff edits, run `npx eslint src/cli src/dashboard` and `npm run format:check` before full tests or preflight. Treat any non-null assertion introduced during naming cleanup as unfinished parsing code; bind the typed value once and branch on it. Evidence anchors: `src/cli/skill-command-parser.ts` (search: `resolvedSkillPath`), `scripts/check-instruction-parity.mjs` (search: `CANONICAL_SECTIONS`), `src/cli/plans-time.ts` (search: `beforeMilestoneReplacement`).
-
 ## Lesson: Gruff cleanup automation must fit the hook surface
 
 **Status:** active | **Created:** 2026-05-31
 **Incident count:** 2 | **Latest occurrence:** 2026-08-24
+
+**Prevention:** For large mechanical rewrites, use `apply_patch` for hand edits or a small checked command with obvious arguments. Keep verification commands short enough that the hook can audit them directly, and split multi-step analysis into separate commands. Evidence anchors: `workflow/hooks/deny-dangerous.sh` (search: `more than 50 chained segments`), `.goat-flow/skill-docs/playbooks/gruff-code-quality.md` (search: `Verification Gate`).
 
 **What happened:** During the gruff size cleanup, several long inline Node shell snippets were blocked by the guardrail hook before they could run. The commands were meant to perform mechanical test-file edits, but their length and nested shell shape crossed the safety rules and slowed the cleanup.
 
@@ -131,5 +133,3 @@ last_reviewed: 2026-08-28
 **Recurrence 2026-08-24:** While verifying `learn new`, two ripgrep commands put literal backticks inside a double-quoted shell command.
 The deny-dangerous hook correctly treated them as command substitution and blocked both attempts before execution.
 Using a single-quoted plain search pattern let the read-only check run safely. Evidence anchor: `.goat-flow/hooks/deny-dangerous.sh` (search: `Backtick command substitution hides nested execution`).
-
-**Prevention:** For large mechanical rewrites, use `apply_patch` for hand edits or a small checked command with obvious arguments. Keep verification commands short enough that the hook can audit them directly, and split multi-step analysis into separate commands. Evidence anchors: `workflow/hooks/deny-dangerous.sh` (search: `more than 50 chained segments`), `.goat-flow/skill-docs/playbooks/gruff-code-quality.md` (search: `Verification Gate`).

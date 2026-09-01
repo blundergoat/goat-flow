@@ -26,6 +26,8 @@ const METADATA_LABELS = new Set([
   "Incident count",
   "Latest occurrence",
   "Reason",
+  "hallucination-risk",
+  "Merged",
 ]);
 
 /** Return true when one paragraph contains only entry-schema metadata lines. */

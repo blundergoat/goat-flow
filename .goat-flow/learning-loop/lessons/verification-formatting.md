@@ -9,17 +9,22 @@ last_reviewed: 2026-08-31
 
 **Status:** active | **Created:** 2026-04-03
 
+**Prevention:** Use the repository scripts and their owned extensions (`package.json`, search: `"format:check"`). Scope direct Prettier calls only to formatter-owned files; verify files such as `.gitignore` with byte parity or `git diff --check`. Inspect `git diff --stat` after any formatter write.
+
 **What happened:** Formatter verification twice rewrote more than intended: rubric files lost the repo's quote style, then a narrow landing-page edit reformatted most of the hand-authored HTML. On 2026-07-19, a scoped check also included `.gitignore`; Prettier correctly failed because that file has no inferred parser.
 
 **Root cause:** Formatting was treated as neutral cleanup instead of a file-type and blast-radius contract.
-
-**Prevention:** Use the repository scripts and their owned extensions (`package.json`, search: `"format:check"`). Scope direct Prettier calls only to formatter-owned files; verify files such as `.gitignore` with byte parity or `git diff --check`. Inspect `git diff --stat` after any formatter write.
 
 ---
 
 ## Lesson: Repo-wide preflight can be blocked by unrelated formatter drift
 
 **Status:** active | **Created:** 2026-04-18
+
+**Prevention:**
+1. When preflight fails, immediately identify whether the failing files are in `git status` for the current task.
+2. Treat repo-wide formatter failures in untouched files as residual baseline debt, not silent task fallout.
+3. Keep the final verification section split between "checks that passed for this change" and "repo-wide checks still blocked by unrelated drift."
 
 **What happened:** After deleting the dedicated setup validator and rewiring preflight around the remaining script surface, focused verification passed (`shellcheck`, `npm run typecheck`, targeted smoke/unit tests, and exact grep for the removed path). But `bash scripts/preflight-checks.sh` still failed because `scripts/prettier-check.sh` reported four unformatted files that were outside the change set: `src/cli/classify-state.ts`, `src/dashboard/app.ts`, `test/integration/preamble-sync.test.ts`, and `test/unit/quality-command.test.ts`.
 
@@ -31,22 +36,17 @@ last_reviewed: 2026-08-31
 
 **Recurrence updates (2026-05-10, 2026-05-19 x2, 2026-05-20, 2026-06-07) - incident count 5, identical mechanism:** focused tests, `shellcheck`, and `npm run typecheck` all passed, then a targeted `npx prettier --check` (or preflight's TypeScript gate) failed on a file the task had *touched*. Every instance resolved the same way: `npx prettier --write` over the touched set, then rerun. Affected files spanned dashboard sources, smoke and unit tests, and `src/cli/facts/agent/settings.ts`. The repeat rate is the finding - formatting a touched file is not optional cleanup, it is a gate.
 
-**Prevention:**
-1. When preflight fails, immediately identify whether the failing files are in `git status` for the current task.
-2. Treat repo-wide formatter failures in untouched files as residual baseline debt, not silent task fallout.
-3. Keep the final verification section split between "checks that passed for this change" and "repo-wide checks still blocked by unrelated drift."
-
 ---
 
 ## Lesson: Temp-repo preflight harnesses inherit formatting debt from copied test files
 
 **Status:** active | **Created:** 2026-04-19
 
+**Prevention:** For tmp-repo preflight coverage, either keep the source test file formatted in the real checkout before cloning or explicitly format any copied `src/**/*.ts` and `test/**/*.ts` files that changed in the source repo. Assume preflight sees the entire cloned repo, not only the temp patch set.
+
 **What happened:** The new M14 round-trip integration test cloned the repo into a tmpdir, patched the temp copy, and ran `bash scripts/preflight-checks.sh`. Installer, parity, and drift logic were correct, but the first verification run still failed because the cloned `test/integration/audit-drift.test.ts` was not formatted, and preflight's formatter gate checks `test/**/*.ts`, not just the files patched inside the tmp repo after cloning.
 
 **Root cause:** Treated the tmp repo like a narrow scratch fixture instead of a full repo clone. Formatting only the temp-mutated files under-approximated the real preflight surface, so the harness initially proved a weaker condition than the milestone claimed.
-
-**Fix:** For tmp-repo preflight coverage, either keep the source test file formatted in the real checkout before cloning or explicitly format any copied `src/**/*.ts` and `test/**/*.ts` files that changed in the source repo. Assume preflight sees the entire cloned repo, not only the temp patch set.
 
 **Prevention update (2026-04-20):**
 1. Treat any unformatted tracked file in the real checkout as a blocker for `checkDrift` round-trip fixtures, because the temp repo inherits that formatting debt before its own assertions run.
@@ -58,15 +58,15 @@ last_reviewed: 2026-08-31
 
 **Status:** active | **Created:** 2026-04-20
 
+**Prevention:**
+1. After adding a new TypeScript helper file, treat `prettier --check` as part of the focused verification, not only the final repo-wide gate.
+2. When preflight and the installer round-trip fixture fail together on formatting, fix the real checkout first; the temp fixture will usually heal with it.
+
 **What happened:** Extracting setup-detection helpers out of `src/cli/server/dashboard.ts` passed `npm run typecheck` and the focused dashboard integration suite, but `bash scripts/preflight-checks.sh` still failed. The real checkout had three unformatted server files (`src/cli/server/dashboard.ts`, `src/cli/server/setup-detect.ts`, `src/cli/server/dashboard-assets.ts`), so preflight's Prettier gate failed locally and the installer round-trip fixture failed too because it clones the current checkout before running temp-repo preflight.
 
 **Root cause:** Treated the structural refactor like a code-only change and stopped at type/runtime verification. In this repo, formatting debt in the source checkout is not isolated: the round-trip fixture inherits it and replays the same formatter failure inside the temp clone.
 
 **Fix:** Run Prettier on every touched `src/**/*.ts` file before trusting preflight or fixture-backed drift tests. Re-run the focused failing test (`test/integration/audit-drift.test.ts`) after formatting, not just the original happy-path suite.
-
-**Prevention:**
-1. After adding a new TypeScript helper file, treat `prettier --check` as part of the focused verification, not only the final repo-wide gate.
-2. When preflight and the installer round-trip fixture fail together on formatting, fix the real checkout first; the temp fixture will usually heal with it.
 
 **Prevention update (2026-04-20):**
 1. Treat any new `src/cli/server/*.ts` extraction as high-risk for this exact preflight + round-trip failure pair. The pattern recurred on the next dashboard-server split when `src/cli/server/dashboard-routes.ts` and the rewritten `dashboard.ts` were left unformatted.
@@ -131,11 +131,11 @@ Evidence anchors:
 **Status:** active | **Created:** 2026-04-26
 **Incident count:** 5 | **Latest occurrence:** 2026-08-25
 
+**Prevention:** Before slow installer tests, run the supported source ESLint and format gates. Reproduce a failure directly before changing installer or drift logic. Evidence anchors: `src/cli/prompt/compose-quality-common.ts` (search: `appendScopeSummary`), `src/cli/audit/check-agent-deny-runtime.ts` (search: `verifyConfiguredHookRuntime`), and `test/unit/quality-report-contract-audit.test.ts` (search: `embeds drift and content failures`).
+
 **What happened:** Prompt changes cleared focused tests and typecheck but failed the installer round-trip embedded preflight three times: on 2026-04-26 an over-complex compose-quality.ts helper and unformatted quality-command fixture; on 2026-05-24 checkHookRuntimeSmoke exceeded ESLint complexity by one; on 2026-07-16 PR #56 renderAuditSummary reached complexity 17. Extracting narrow helpers and formatting the fixture cleared the direct gates. The first 2026-07-16 recurrence note also pushed this bucket to 40,353 bytes, so the incident history was consolidated below the cap.
 
 **Root cause:** Focused behavior tests and typecheck do not run the full-source lint and format gates that the copied checkout enforces.
-
-**Prevention:** Before slow installer tests, run the supported source ESLint and format gates. Reproduce a failure directly before changing installer or drift logic. Evidence anchors: `src/cli/prompt/compose-quality-common.ts` (search: `appendScopeSummary`), `src/cli/audit/check-agent-deny-runtime.ts` (search: `verifyConfiguredHookRuntime`), and `test/unit/quality-report-contract-audit.test.ts` (search: `embeds drift and content failures`).
 
 **Recurrence 2026-08-19:** The 1.16.0 go-live milestones M02-M04 listed unit/integration suites, shellcheck, and typecheck as their gates but not ESLint or Prettier, so the commit at `451dae70` reached CI with `validateQualityField` at complexity 12 (`src/cli/config/reader-validators.ts`, search: `warnUnknownQualitySubtypeKeys`) and one unformatted test file; CI's Lint step and the round-trip fixture in slow shard 2/5 both failed, and the local lint command then also caught complexity 11 in `setDashboardProjectArchived` (search: `obsoleteIdentityAfterRekey`). A plan milestone that edits `src/` is not closable until `npx eslint src/cli src/dashboard` and `bash scripts/prettier-check.sh` have printed clean in the session; put both commands in the milestone's Commands table when the plan is written.
 
@@ -143,16 +143,15 @@ Evidence anchors:
 
 ---
 
-
 ## Lesson: Format touched TypeScript tests before repo-wide preflight
 
 **Status:** active | **Created:** 2026-04-30
 
+**Prevention:** After editing TypeScript tests or prompt/schema fixtures, run `npm run format` or `npm run format:check` before `bash scripts/preflight-checks.sh`. If preflight fails at Prettier, format, inspect the diff, and rerun preflight from scratch before claiming the final gate. Evidence anchors: `test/unit/check-content-quality.test.ts` (search: `discovers current ADR files`), `src/cli/quality/schema-types.ts` (search: `evidence_warning_count`).
+
 **What happened:** While implementing quality-assessment follow-ups, focused tests and `npm run typecheck` passed, but the first `bash scripts/preflight-checks.sh` run failed at Prettier with `2 unformatted files`. Running `npm run format` touched only the new/edited TypeScript test files, and the fresh preflight rerun passed.
 
 **Root cause:** I treated focused tests plus typecheck as enough before the repo-wide gate even though new TypeScript test assertions had not been formatter-normalized. Preflight records formatter failure before later gates, so fixing format after a failed preflight requires a clean rerun to produce valid final evidence.
-
-**Prevention:** After editing TypeScript tests or prompt/schema fixtures, run `npm run format` or `npm run format:check` before `bash scripts/preflight-checks.sh`. If preflight fails at Prettier, format, inspect the diff, and rerun preflight from scratch before claiming the final gate. Evidence anchors: `test/unit/check-content-quality.test.ts` (search: `discovers current ADR files`), `src/cli/quality/schema-types.ts` (search: `evidence_warning_count`).
 
 ---
 
@@ -160,15 +159,15 @@ Evidence anchors:
 
 **Status:** active | **Created:** 2026-04-20
 
+**Prevention:**
+1. When preflight fails with mixed ESLint + Prettier + drift-fixture errors after a small change, scan for untracked source-shadow files under `src/` before changing the requested code again.
+2. Treat `src/**/*.js` siblings of tracked `src/**/*.ts` files as suspicious unless the repo intentionally tracks them.
+
 **What happened:** A tiny Prompts view color tweak looked unrelated to the TypeScript gates, but the first verification rerun still failed preflight and the installer round-trip fixture. The real blocker was an untracked JavaScript shadow file sitting next to the canonical `src/cli/types.ts`. ESLint tried to parse the stray `.js` file against the TypeScript project config, Prettier treated it as a source file under `src/**/*.{ts,js,html}`, and the fixture cloned the same bad state into its temp repo.
 
 **Root cause:** A generated or accidental source-shadow file under `src/` can evade attention because typecheck and the visible diff for the requested change point elsewhere. The repo gates scan the filesystem, not just tracked TS files, so an untracked sibling output can contaminate lint/format/drift verification far away from the user-visible edit.
 
 **Fix:** Check `git status` and `git ls-files` when lint/prettier/fixture failures do not match the touched file. If the blocker is an untracked source-shadow file like `src/**/*.js` beside a canonical `src/**/*.ts`, delete it and rerun the exact failing gates.
-
-**Prevention:**
-1. When preflight fails with mixed ESLint + Prettier + drift-fixture errors after a small change, scan for untracked source-shadow files under `src/` before changing the requested code again.
-2. Treat `src/**/*.js` siblings of tracked `src/**/*.ts` files as suspicious unless the repo intentionally tracks them.
 
 ---
 

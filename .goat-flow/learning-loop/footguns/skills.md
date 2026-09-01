@@ -7,6 +7,11 @@ last_reviewed: 2026-08-31
 
 **Status:** active | **Created:** 2026-04-21 | **Evidence:** ACTUAL_MEASURED
 
+**Prevention:**
+1. When editing `workflow/skills/*/SKILL.md`, update every installed mirror in `.claude/skills/`, `.agents/skills/`, and `.github/skills/` in the same change.
+2. Derive installed skill roots from `workflow/manifest.json` or `getInstalledSkillRoots()` rather than from memory.
+3. Re-run `test/integration/audit-drift.test.ts` or `goat-flow audit --check-drift` after any skill-parity edit so a missed mirror fails immediately.
+
 **Symptoms:** A skill edit looks complete because `workflow/skills/`, `.agents/skills/`, and `.claude/skills/` match, but repo verification still fails. The remaining drift lives in `.github/skills/`, so `test/integration/audit-drift.test.ts` fails on the repo root even though the edit updated the more obvious mirrors.
 
 **Why it happens:** The installed skill surface is broader than the two local agent mirrors most edits cover. `workflow/manifest.json` includes a GitHub agent with `skills_dir: ".github/skills/"`, the manifest helper exposes that root to the drift fixture, and path-integrity checks treat it as a first-class installed mirror. A hand-written file list that omits `.github/skills/` is incomplete.
@@ -21,14 +26,11 @@ last_reviewed: 2026-08-31
 - 2026-08-30 goat-review threshold hardening removed valid-looking unchunked terminal states from all four roots. The installed contract is pinned in `test/contract/skill-hardening-review-1.test.ts` (search: `ends an oversized review when the user declines chunking`), with mirror budgets covered by `test/contract/skill-hardening-contracts.test.ts` (search: `functional skills stay within the 2500-word cap across all mirrors`).
 - 2026-08-30 goat-critique host ownership aligned the skill, ADR-021, public guidance, and setup inventory without changing ADR-006's gate conversion. The installed contract is pinned in `test/contract/skill-hardening-skills-2.test.ts` (search: `keeps goat-critique host-owned so human gates cannot auto-convert`), with mirror budgets covered by `test/contract/skill-hardening-contracts.test.ts` (search: `functional skills stay within the 2500-word cap across all mirrors`).
 
-**Prevention:**
-1. When editing `workflow/skills/*/SKILL.md`, update every installed mirror in `.claude/skills/`, `.agents/skills/`, and `.github/skills/` in the same change.
-2. Derive installed skill roots from `workflow/manifest.json` or `getInstalledSkillRoots()` rather than from memory.
-3. Re-run `test/integration/audit-drift.test.ts` or `goat-flow audit --check-drift` after any skill-parity edit so a missed mirror fails immediately.
-
 ## Footgun: Shared reference edits can split workflow templates from installed runtime copies
 
 **Status:** active | **Created:** 2026-04-25 | **Evidence:** ACTUAL_MEASURED
+
+**Prevention:** When changing shared skill-reference files (`skill-preamble.md`, `skill-conventions.md`) or topical files under `workflow/skills/reference/`, edit the workflow template and installed copy together. When changing standalone playbooks under `workflow/skills/playbooks/`, update the matching `.goat-flow/skill-docs/playbooks/` surfaces too. Exception: the `skill-quality-testing` methodology source starts at `workflow/skills/playbooks/skill-quality-testing.md` plus topical files under `workflow/skills/playbooks/skill-quality-testing/`, but installs to `.goat-flow/skill-docs/skill-quality-testing/README.md` plus the installed topical files. Re-run `bash scripts/preflight-checks.sh` or at minimum `node --import tsx src/cli/cli.ts audit . --check-drift --format json` before treating the change as complete.
 
 **Symptoms:** An edit to shared skill guidance can look correct in the loaded runtime copy but leave the workflow template behind, so projects installed from that template miss the rule and preflight/drift tests fail.
 
@@ -40,11 +42,11 @@ last_reviewed: 2026-08-31
 - `scripts/preflight-checks.sh` (search: `Skill Docs Sync`) fails when shared skill-doc templates and installed copies differ.
 - `src/cli/audit/check-artifact-integrity.ts` (search: `SHARED_ARTIFACT_MIRRORS`) owns the canonical shared-reference mirror registry used by the audit path.
 
-**Prevention:** When changing shared skill-reference files (`skill-preamble.md`, `skill-conventions.md`) or topical files under `workflow/skills/reference/`, edit the workflow template and installed copy together. When changing standalone playbooks under `workflow/skills/playbooks/`, update the matching `.goat-flow/skill-docs/playbooks/` surfaces too. Exception: the `skill-quality-testing` methodology source starts at `workflow/skills/playbooks/skill-quality-testing.md` plus topical files under `workflow/skills/playbooks/skill-quality-testing/`, but installs to `.goat-flow/skill-docs/skill-quality-testing/README.md` plus the installed topical files. Re-run `bash scripts/preflight-checks.sh` or at minimum `node --import tsx src/cli/cli.ts audit . --check-drift --format json` before treating the change as complete.
-
 ## Footgun: Skill reference-pack merges can leave stale installed files behind
 
 **Status:** active | **Created:** 2026-05-21 | **Evidence:** ACTUAL_MEASURED
+
+**Prevention:** After any per-skill reference merge, rename, or deletion, update `workflow/manifest.json` `skills.references`, run an installer round-trip test that starts with a stale reference file, and run `node --import tsx src/cli/cli.ts audit <target> --agent <id>` against a target containing the stale file to prove audit fails before reinstall and passes after reinstall.
 
 **Symptoms:** A target project upgraded to the current goat-flow release has current `SKILL.md` files and current manifest-listed references, but old per-skill Markdown reference files remain beside them. Agents that grep the `references/` directory can read superseded guidance with old `goat-flow-reference-version` frontmatter even though setup and agent-skill audit checks pass.
 
@@ -54,8 +56,6 @@ last_reviewed: 2026-08-31
 - `workflow/install-goat-flow.sh` (search: `prune_unlisted_skill_references`) now removes unlisted Markdown files from canonical skill `references/` directories before copying current templates.
 - `src/cli/audit/check-agent-setup.ts` (search: `checkUnexpectedSkillReferences`) fails the `agent-skills` check when installed goat skill references are not listed in the manifest.
 - Downstream gruff-php upgrade on 2026-05-21 left `auth-authz.md`, `cicd-and-agent-surfaces.md`, `dependency-and-supply-chain.md`, and `secrets-and-data-exposure.md` under `.claude/skills/goat-security/references/` after those files were merged into the v1.7.0 `identity-and-data.md` and `supply-chain-and-cicd.md` reference set.
-
-**Prevention:** After any per-skill reference merge, rename, or deletion, update `workflow/manifest.json` `skills.references`, run an installer round-trip test that starts with a stale reference file, and run `node --import tsx src/cli/cli.ts audit <target> --agent <id>` against a target containing the stale file to prove audit fails before reinstall and passes after reinstall.
 
 ---
 

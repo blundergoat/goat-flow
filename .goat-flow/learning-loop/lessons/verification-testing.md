@@ -12,6 +12,8 @@ last_reviewed: 2026-08-29
 **Trigger phase:** VERIFY
 **Incident count:** 2 | **Latest occurrence:** 2026-08-09
 
+**Prevention:** Test timeout runners with a confirmed-started descendant that retains an inherited output handle. Assert the marker, response mode, timeout message, and wall-clock bound; a kill signal or timeout message alone does not prove the user regains control.
+
 **What happened:** The seven-skill pressure matrix reproduced a preflight runner that exceeded its hard timeout window after process-group escalation. A detached test helper escaped the group, inherited stdout/stderr, and held those pipes open, so Node delayed the child's `close` event after the direct process exited.
 
 **Recurrence 2026-08-09:** A preflight run first reported `bounds gruff hooks with a timeout-specific response` as transient because its automatic full-suite retry passed. Running that named test directly reproduced the failure in 2.02 seconds: the launcher emitted the expected timeout message and status but missed its 1.5-second return bound. A deterministic fixture then wrote a marker after starting the background child and reproduced the same wait, ruling out an early Bash kill. Evidence anchors: `workflow/hooks/run-with-bash.mjs` (search: `function stopHookProcessTree`) and `test/unit/hook-launcher.test.ts` (search: `returns promptly after a started hook descendant exceeds its deadline`).
@@ -20,19 +22,17 @@ last_reviewed: 2026-08-29
 
 **Fix:** The preflight runner uses a one-shot cleanup deadline and closes its local capture streams. The hook launcher now starts a detached POSIX process group, uses Windows tree termination on native Windows, stops that tree at the configured deadline, and delivers one timeout result without waiting for a late close event. Evidence anchors: `scripts/preflight-command-runner.mjs` (search: `cleanup deadline reached after process-group escalation`) and `workflow/hooks/run-with-bash.mjs` (search: `function stopHookProcessTree`).
 
-**Prevention:** Test timeout runners with a confirmed-started descendant that retains an inherited output handle. Assert the marker, response mode, timeout message, and wall-clock bound; a kill signal or timeout message alone does not prove the user regains control.
-
 ---
 
 ## Lesson: Delegated pressure runs need persistent recovery state
 
 **Status:** active | **Created:** 2026-07-12
 
+**Prevention:** Use persistent native sessions for delegated or multi-turn pressure tests. Keep ephemeral sessions for single-turn probes only; record the thread ID early and prove a recovery path before treating a long run as the sole release evidence.
+
 **What happened:** A long `goat-critique` run launched with `codex exec --ephemeral`. The run persisted Phase 1–4 evidence but was interrupted before synthesis; `codex exec resume` then failed with `no rollout found`, so the otherwise detailed attempt remained UNVERIFIED and had to be repeated.
 
 **Root cause:** The runner contract optimized for session cleanup even though delegated critique is expensive and its completion evidence spans multiple agent results plus a meta-audit.
-
-**Prevention:** Use persistent native sessions for delegated or multi-turn pressure tests. Keep ephemeral sessions for single-turn probes only; record the thread ID early and prove a recovery path before treating a long run as the sole release evidence.
 
 ---
 
@@ -44,6 +44,8 @@ last_reviewed: 2026-08-29
 **Caught at:** VERIFY
 **Incident count:** 3 | **Latest occurrence:** 2026-08-27
 
+**Prevention:** For server cache behavior, expose a narrow response/debug contract or inject an explicit dependency, then assert that contract at the route boundary. When a fixture uses `createFS`, write its final state before the first consumer call or construct a fresh filesystem and audit context after each mutation. When a test must instrument a shared API, first capture the resources selected by the system under test, then count only calls involving that identity set. Avoid timing ratios, late monkeypatches of already-imported helpers, and reuse of a read-caching context to model a second on-disk state. Evidence anchors: `src/cli/server/dashboard-quality-routes.ts` (search: `getOrRunQualityAudit`), `test/integration/dashboard-server-dashboard-api-quality.test.ts` (search: `reuses cached quality audits unless fresh=true is requested`), and `src/cli/audit/check-agent-deny-mechanism.ts` (search: `checkHookSelfTest`).
+
 **What happened:** While I replaced a flaky Quality cache timing assertion, my first counter-based test tried to observe deny-hook self-test executions by monkeypatching `child_process.execFileSync`. The route path imports `execFileSync` as a named binding before the test patch, so the counter stayed at zero and the focused dashboard integration test failed even though the product behavior was the target.
 
 **Recurrence 2026-08-26:** A Windows hook-audit regression test changed `.codex/hooks.json` after its first `checkHookRuntimeSmoke` call, then expected the same audit context to observe the empty `commandWindows`. `createFS` had already cached the first read, so the second assertion exercised stale bytes and failed before it could distinguish fallback from platform-override selection. Splitting the scenarios into fresh disposable audit contexts produced the intended proof. Evidence anchors: `src/cli/facts/fs.ts` (search: `const readFile = createCachedReadFile(resolvePath)`) and `test/unit/audit-command/agent-deny-hooks-drift.test.ts` (search: `selects any present Codex Windows override`).
@@ -52,14 +54,15 @@ last_reviewed: 2026-08-29
 
 **Root cause:** These tests assumed their observation mechanism represented the behavior under test. Imported Node builtins, transitive helpers, cached filesystem adapters, and unfiltered process-wide mocks can hide or overcount the relevant event.
 
-**Prevention:** For server cache behavior, expose a narrow response/debug contract or inject an explicit dependency, then assert that contract at the route boundary. When a fixture uses `createFS`, write its final state before the first consumer call or construct a fresh filesystem and audit context after each mutation. When a test must instrument a shared API, first capture the resources selected by the system under test, then count only calls involving that identity set. Avoid timing ratios, late monkeypatches of already-imported helpers, and reuse of a read-caching context to model a second on-disk state. Evidence anchors: `src/cli/server/dashboard-quality-routes.ts` (search: `getOrRunQualityAudit`), `test/integration/dashboard-server-dashboard-api-quality.test.ts` (search: `reuses cached quality audits unless fresh=true is requested`), and `src/cli/audit/check-agent-deny-mechanism.ts` (search: `checkHookSelfTest`).
-
 ---
 
 ## Lesson: Contract tests pin doctrine wording and path semantics
 
 **Status:** active | **Created:** 2026-04-25
 **Incident count:** 20 | **Latest occurrence:** 2026-08-29
+
+**Prevention:** Search tests and durable semantic anchors for changed prose and adjacent commands; sibling parity proves agreement, not preservation of downstream contracts. Keep fixtures inside their consuming subtest and re-read the block before RED. When fixture size feeds a derived assertion, recalculate that assertion with the production formula after every fixture-text edit. Update a contract only when product semantics change; preserve unrelated doctrine. Before drafting in a near-cap skill, measure the current word budget; replace or condense existing wording, or move detail into a progressive reference, before GREEN. Before quoting a budget or score outcome to the user, measure the exact sizes involved (moved sections minus the pointer text that replaces them) with the same function the gate uses, and state the measured margin.
+---
 
 **What happened:** While I removed one forbidden phrase and changed dashboard quality report ownership, the first full `npm test` run failed two contract-style checks: a skill-hardening contract (now `test/contract/skill-hardening-shared-3.test.ts`, search: `hardening debt`) still required the established "hardening debt" evidence language, and a dashboard prompt-source assertion still expected the old relative quality-report path message.
 
@@ -95,9 +98,6 @@ last_reviewed: 2026-08-29
 
 **Recurrence 2026-08-29 (M71 lesson anchor):** The first M71 formatter recurrence cited `test/unit/quality-diff-delta-tag.test.ts` with `Score rationale`, but that exact case-sensitive text was absent. `stats --check` rejected the stale reference; re-reading the target and using its literal `quality diff score rationale` suite name restored the evidence chain. Evidence anchor: `test/unit/quality-diff-delta-tag.test.ts` (search: `quality diff score rationale`).
 
-**Prevention:** Search tests and durable semantic anchors for changed prose and adjacent commands; sibling parity proves agreement, not preservation of downstream contracts. Keep fixtures inside their consuming subtest and re-read the block before RED. When fixture size feeds a derived assertion, recalculate that assertion with the production formula after every fixture-text edit. Update a contract only when product semantics change; preserve unrelated doctrine. Before drafting in a near-cap skill, measure the current word budget; replace or condense existing wording, or move detail into a progressive reference, before GREEN. Before quoting a budget or score outcome to the user, measure the exact sizes involved (moved sections minus the pointer text that replaces them) with the same function the gate uses, and state the measured margin.
----
-
 ## Lesson: Mid-implementation proof gates split edit batches
 
 **Status:** active | **Created:** 2026-08-23
@@ -105,6 +105,8 @@ last_reviewed: 2026-08-29
 **Trigger phase:** ACT
 **Caught at:** VERIFY
 **Incident count:** 3 | **Latest occurrence:** 2026-08-23
+
+**Prevention:** Split mutations at every declared mid-implementation proof. Apply only the prerequisite files, run and record the exact gate with its exit status, then re-read and edit the later surfaces. Run explicit mechanical constraints, including requested line widths, immediately after each source patch. A late pass validates current state but never backfills the missed checkpoint; mark it late and preserve the sequencing correction.
 
 **What happened:** During evidence-doctrine hardening, one approved edit batch grouped the shared evidence matrix, its contract, three instruction files, and a learning-loop consolidation. The milestone required the focused contract after the matrix and test, before the instruction and lesson edits. The test later reported `# tests 16`, `# pass 16`, and `# fail 0`, but the pass was late and could validate only the combined snapshot.
 
@@ -114,8 +116,6 @@ last_reviewed: 2026-08-29
 
 **Recurrence 2026-08-23:** The first write-scope fixture list included the three local instruction files even though the midpoint gate had to run before those files changed. Leaving them in the midpoint set would have failed on expected later-stage absence rather than a generated-surface defect. The gate was narrowed to the canonical reference plus four setup templates, which reported `# pass 76` and `# fail 0`; the three local paths joined only afterward, and the final focused run reported `# pass 91` and `# fail 0`. Evidence anchor: `test/contract/command-phrases.test.ts` (search: `WRITE_SCOPE_RECONCILIATION_PATHS`).
 
-**Prevention:** Split mutations at every declared mid-implementation proof. Apply only the prerequisite files, run and record the exact gate with its exit status, then re-read and edit the later surfaces. Run explicit mechanical constraints, including requested line widths, immediately after each source patch. A late pass validates current state but never backfills the missed checkpoint; mark it late and preserve the sequencing correction.
-
 Evidence anchors: `test/contract/skill-hardening-shared-1.test.ts` (search: `requires minimum evidence and rejects false proof for every claim type`) and `workflow/skills/reference/skill-preamble.md` (search: `Claim-type controls set minimum evidence`).
 
 ---
@@ -124,11 +124,11 @@ Evidence anchors: `test/contract/skill-hardening-shared-1.test.ts` (search: `req
 
 **Status:** active | **Created:** 2026-04-26
 
+**Prevention:** When preflight fails in the test phase after unrelated gate fixes, rerun the named failing test area and then the exact suite command directly before changing task files again. Preflight runs the coverage suite exactly once and fails the gate on any `not ok`; there is no retry or warning downgrade to wait for (`scripts/preflight-checks.sh`, search: `test_reports_coverage=true`; `test/integration/preflight-progress.test.ts`, search: `pins one bounded coverage run`). Report the split explicitly: which original gate was fixed, which direct test summary passed, and whether the preflight failure reproduced on a direct rerun.
+
 **What happened:** A quality-report fix removed the ESLint error that had been blocking `bash scripts/preflight-checks.sh`. Two subsequent preflight runs reached the fast test phase but failed on different tests: first `agent deny hook template comparison`, then `harness does not affect build-only result`. A direct `npm run test:fast` run immediately after those failures completed with `# pass 373` and `# fail 0`.
 
 **Root cause:** I initially treated the preflight failure as a likely task regression because it appeared inside the final gate. The changing failed test names and the direct fast-suite pass showed the correct split: the task-local ESLint/preflight regression was fixed, while the preflight wrapper still surfaced intermittent fast-suite failures that need separate investigation.
-
-**Prevention:** When preflight fails in the test phase after unrelated gate fixes, rerun the named failing test area and then the exact suite command directly before changing task files again. Preflight runs the coverage suite exactly once and fails the gate on any `not ok`; there is no retry or warning downgrade to wait for (`scripts/preflight-checks.sh`, search: `test_reports_coverage=true`; `test/integration/preflight-progress.test.ts`, search: `pins one bounded coverage run`). Report the split explicitly: which original gate was fixed, which direct test summary passed, and whether the preflight failure reproduced on a direct rerun.
 
 **Updated 2026-08-18:** an earlier version of this Prevention described a one-shot `test:fast` retry that recorded a warning. That retry was removed on 2026-08-16 (`refactor(core): consolidate setup preflight checks`) and the removal is now test-pinned, so the retry sentence was corrected rather than the behaviour restored. Two same-day quality reports had already flagged the stale claim.
 
@@ -145,22 +145,22 @@ Evidence anchors: `test/contract/skill-hardening-shared-1.test.ts` (search: `req
 **Incident count:** 3
 **Latest occurrence:** 2026-08-23
 
+**Prevention:** Search all tests and end-to-end invocations before classifying. Inventory every named behaviour/invariant, make CRITICAL/HIGH exhaustive, and assign one coverage row per behaviour. BEHAVIOURAL applies only to what that row proves. Keep shipped examples explicitly non-evidence unless a contract locks live coverage. Evidence anchors: `workflow/skills/goat-qa/SKILL.md` (search: `A file summary cannot promote a row`), `test/contract/skill-hardening-shared-2.test.ts` (search: `keeps covered behaviours from deferring uncovered siblings`), `src/cli/audit/check-goat-flow.ts` (search: `SETUP_CHECKS`) and `test/integration/audit-build.test.ts` (search: `assertBuildChecksPass`).
+---
+
 **What happened:** A shipped Audit example classified coverage from same-name unit files and made three NONE/untested claims that integration suites disproved or later invalidated. On 2026-07-19, goat-qa A3's single label per file could likewise let one covered behaviour hide an uncovered sibling; the first correction required only CRITICAL/HIGH rows, leaving MEDIUM/LOW matrix rows ambiguous until manual verification.
 
 **Recurrence 2026-08-23:** The first quality-diff consumer inventory searched the implementation symbols `QualityDiffResult`, `buildQualityDiff`, `renderQualityDiffText`, and `.absent`, then inferred the complete test-owner set from those matches. The later shipped-contract phrase sweep exposed `test/unit/quality-report-contract.test.ts` (search: `prior-report runs re-test claims while fresh runs keep the no-prior contract`), which separately pins the prompt rule in `src/cli/prompt/compose-quality-common.ts` (search: `omission is not verified resolution`). The inventory task was reopened, the prompt-contract owner was added as a distinct KEEP row, and its focused run reported 54/54 tests passing.
 
 **Root cause:** Filename and file-level summaries are lossy coverage proxies. Tests cross filenames, and one source file can contain behaviours with different coverage depths.
 
-**Prevention:** Search all tests and end-to-end invocations before classifying. Inventory every named behaviour/invariant, make CRITICAL/HIGH exhaustive, and assign one coverage row per behaviour. BEHAVIOURAL applies only to what that row proves. Keep shipped examples explicitly non-evidence unless a contract locks live coverage. Evidence anchors: `workflow/skills/goat-qa/SKILL.md` (search: `A file summary cannot promote a row`), `test/contract/skill-hardening-shared-2.test.ts` (search: `keeps covered behaviours from deferring uncovered siblings`), `src/cli/audit/check-goat-flow.ts` (search: `SETUP_CHECKS`) and `test/integration/audit-build.test.ts` (search: `assertBuildChecksPass`).
----
-
 ## Lesson: Declined optional verification must not create a degradation flag
 
 **Status:** active | **Created:** 2026-07-12
 
-**What happened:** On 2026-07-12, declining goat-review's optional external refuter incorrectly added `coverage-degraded`; on 2026-07-18, an unselected Spec Drift pass still added `spec-drift-skipped`. Both penalized a complete local review for omitting optional verification.
-
 **Prevention:** Optional verification gets a separate status and cannot create degradation by absence alone. Name forbidden flags and pin each path. Evidence: `workflow/skills/goat-review/SKILL.md` (search: `Optional skip is not degradation`) and `test/contract/skill-hardening-review-3.test.ts` (search: `solely because the user declined`; search: `keeps an unselected optional Spec Drift pass out of review degradation`).
+
+**What happened:** On 2026-07-12, declining goat-review's optional external refuter incorrectly added `coverage-degraded`; on 2026-07-18, an unselected Spec Drift pass still added `spec-drift-skipped`. Both penalized a complete local review for omitting optional verification.
 
 ---
 
@@ -168,9 +168,9 @@ Evidence anchors: `test/contract/skill-hardening-shared-1.test.ts` (search: `req
 
 **Status:** active | **Created:** 2026-07-12
 
-**What happened:** On 2026-07-12, goat-security Quick Scan entered a Full-only specialist phase and waited about eight minutes. On 2026-07-18, goat-debug Investigate made an explicit read-only scope wait at I1. In both cases, headings implied flow but did not define the runtime boundary.
-
 **Prevention:** Every branch needs an explicit stop or continue rule plus a contract; headings are orientation, not control flow. Evidence: `workflow/skills/goat-security/SKILL.md` (search: `Quick-stop boundary`), `workflow/skills/goat-debug/SKILL.md` (search: `continue to I2 without waiting`), `test/contract/skill-hardening-security-1.test.ts` (search: `Quick Scan out of Full-only specialist work`), and `test/contract/skill-hardening-shared-2.test.ts` (search: `lets an explicit read-only investigation pass its scope checkpoint`).
+
+**What happened:** On 2026-07-12, goat-security Quick Scan entered a Full-only specialist phase and waited about eight minutes. On 2026-07-18, goat-debug Investigate made an explicit read-only scope wait at I1. In both cases, headings implied flow but did not define the runtime boundary.
 
 ---
 
@@ -178,6 +178,8 @@ Evidence anchors: `test/contract/skill-hardening-shared-1.test.ts` (search: `req
 
 **Status:** active | **Created:** 2026-08-07
 **Incident count:** 6 | **Latest occurrence:** 2026-08-29
+
+**Prevention:** Before adding comments or contract cases to a file that sits within about 20% of its size threshold, measure its headroom and plan the split first. Split by responsibility; never accept the new finding: an oversized file created by the same change that added the gate is exactly what the gate exists to stop. Evidence anchors: `scripts/check-gruff-warning-ratchet.mjs` (search: `Release gate that stops reviewed Gruff warning debt`), `scripts/gruff-warning-ratchet-checks.mjs` (search: `The rules that decide whether Gruff warning debt regressed`), `scripts/ratchet-failure-report.mjs` (search: `Collects everything blocking a warning-ratchet run`).
 
 **What happened:** Applying the mandatory comment standard to `scripts/check-gruff-warning-ratchet.mjs` grew it from 626 to 783 lines, past the 750-line `size.file-length` threshold. The warning-debt ratchet then reported its own checker as new debt on the very run that was meant to prove the release clean.
 
@@ -195,8 +197,6 @@ Evidence anchors: `test/contract/skill-hardening-shared-1.test.ts` (search: `req
 
 **Recurrence 2026-08-29:** M71 initially placed score-rationale cases in `quality-subcommands.test.ts` and `quality-report-contract.test.ts`, raising them to 1,049 and 1,005 substantive lines against Gruff's 1,000-line threshold. Moving the semantic cases into a focused owner restored both existing files below the gate without weakening the contract. Evidence anchor: `test/unit/quality-score-rationale.test.ts` (search: `quality score rationale schema`).
 
-**Prevention:** Before adding comments or contract cases to a file that sits within about 20% of its size threshold, measure its headroom and plan the split first. Split by responsibility; never accept the new finding: an oversized file created by the same change that added the gate is exactly what the gate exists to stop. Evidence anchors: `scripts/check-gruff-warning-ratchet.mjs` (search: `Release gate that stops reviewed Gruff warning debt`), `scripts/gruff-warning-ratchet-checks.mjs` (search: `The rules that decide whether Gruff warning debt regressed`), `scripts/ratchet-failure-report.mjs` (search: `Collects everything blocking a warning-ratchet run`).
-
 ---
 
 ## Lesson: A failed multi-file patch can preserve earlier edits
@@ -206,10 +206,10 @@ Evidence anchors: `test/contract/skill-hardening-shared-1.test.ts` (search: `req
 **Trigger phase:** ACT
 **Incident count:** 2 | **Latest occurrence:** 2026-08-09
 
+**Prevention:** Prefer one file or independently recoverable hunk group per patch when source is changing concurrently. After any patch failure, inspect timestamps and exact semantic anchors across every target before retrying, then generate the retry from current bytes. The affected artifacts were gitignored milestone files, so they are deliberately not cited as durable learning-loop anchors; the evidence was the failed patch result followed by the same-session target-by-target read.
+
 **What happened:** During peer-plan synthesis, one patch updated the roadmap issue and provider-contract milestone, then failed when a later post-turn hunk used a near-match instead of the file's exact wording. The failure named only the unmatched hunk, which made the operation look rejected as a whole; a target-by-target read showed the earlier file edits had persisted.
 
 **Recurrence:** While I prepared a rollback patch in disposable copies, a malformed Markdown-list hunk failed after earlier file hunks in the same request. A target-by-target diff found no retained edits this time. The patch surface has now shown both partial and atomic-looking failures, so inspection remains the recovery contract.
 
 **Root cause:** I treated a multi-file patch as a transaction and reasoned from the final failing hunk instead of checking the state of every target. The retry therefore risked applying already-landed edits twice or building new hunks against stale bytes.
-
-**Prevention:** Prefer one file or independently recoverable hunk group per patch when source is changing concurrently. After any patch failure, inspect timestamps and exact semantic anchors across every target before retrying, then generate the retry from current bytes. The affected artifacts were gitignored milestone files, so they are deliberately not cited as durable learning-loop anchors; the evidence was the failed patch result followed by the same-session target-by-target read.

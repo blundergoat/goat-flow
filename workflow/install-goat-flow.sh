@@ -2545,22 +2545,26 @@ const canonicalDenyPatterns = new Set([
   "**/.env.test",
   "**/.envrc",
   "**/.env.*.local",
-  "**/secrets/**",
   "**/.ssh/**",
   "**/.aws/**",
-  "**/.docker/**",
   "**/.gnupg/**",
+  "**/.config/gcloud/**",
+  "**/.docker/**",
   "**/.kube/**",
-  "**/credentials*",
   "**/.npmrc",
   "**/.pypirc",
   "**/*.pem",
   "**/*.key",
   "**/*.pfx",
 ]);
+// Patterns goat-flow generated in earlier releases and no longer ships. They are dropped on refresh instead of being
+// kept as user additions; a matching pattern the user added by hand cannot be told apart, so each removal is printed.
+// `**/secrets/**` and `**/credentials*` were retired because a plain folder or file name blocks ordinary application
+// code such as a secrets route or a credentials.ts provider.
 const oldGeneratedPatterns = new Set([
   ".",
   "secrets/**",
+  "**/secrets/**",
   ".ssh/**",
   ".aws/**",
   ".docker/**",
@@ -2568,6 +2572,7 @@ const oldGeneratedPatterns = new Set([
   ".kube/**",
   "**/.env*",
   "**/credentials",
+  "**/credentials*",
 ]);
 
 function escapeTomlString(value) {
@@ -2660,16 +2665,25 @@ const shouldRefreshGoatFlowProfile =
 const missingCanonicalDenyPatterns = [...canonicalDenyPatterns].some(
   (pattern) => !activeDenyPatterns.has(pattern),
 );
+// A profile written by an earlier release still denies a retired pattern, so the refresh must run to drop it.
+const retiredDenyPatterns = [...activeDenyPatterns].filter((pattern) =>
+  oldGeneratedPatterns.has(pattern),
+);
 
 if (
   !hasInvalidEntry &&
   !usesLegacyAnchor &&
   !usesLegacyAccess &&
   !shouldRefreshGoatFlowProfile &&
-  !missingCanonicalDenyPatterns
+  !missingCanonicalDenyPatterns &&
+  retiredDenyPatterns.length === 0
 ) {
   console.log("unchanged");
   process.exit(0);
+}
+// Name each dropped pattern so a user who added the same text by hand can put it back deliberately.
+for (const pattern of retiredDenyPatterns) {
+  console.error(`  - retired Codex deny pattern removed: ${pattern}`);
 }
 
 const canonicalBlock = [
@@ -2685,6 +2699,9 @@ const canonicalBlock = [
   "# .env* deny cannot be re-opened for the sample file. Real env variants are",
   "# denied individually so .env.example stays readable, matching the Bash deny",
   "# hook; nonstandard variants (e.g. .env.backup) are covered by that hook.",
+  "# Rules match secret content shapes and credential stores, never plain folder",
+  "# or file names such as secrets/ or credentials*, which collide with ordinary",
+  "# application code. The Bash deny hook covers shell access to home stores.",
   '"**/.env" = "deny"',
   '"**/.env.local" = "deny"',
   '"**/.env.development" = "deny"',
@@ -2693,13 +2710,12 @@ const canonicalBlock = [
   '"**/.env.test" = "deny"',
   '"**/.envrc" = "deny"',
   '"**/.env.*.local" = "deny"',
-  '"**/secrets/**" = "deny"',
   '"**/.ssh/**" = "deny"',
   '"**/.aws/**" = "deny"',
-  '"**/.docker/**" = "deny"',
   '"**/.gnupg/**" = "deny"',
+  '"**/.config/gcloud/**" = "deny"',
+  '"**/.docker/**" = "deny"',
   '"**/.kube/**" = "deny"',
-  '"**/credentials*" = "deny"',
   '"**/.npmrc" = "deny"',
   '"**/.pypirc" = "deny"',
   '"**/*.pem" = "deny"',
@@ -2819,6 +2835,42 @@ const ENV_DENY_EXPANSIONS = new Map([
     ],
   ],
 ]);
+// Deny rules goat-flow shipped in earlier releases and no longer ships. The shell
+// denies duplicated the Bash deny hook with a substring match that also blocked
+// read-only commands quoting the word; the folder and file-name rules blocked
+// ordinary application code such as a secrets route or a credentials.ts provider.
+// A rule the user added by hand with the same text cannot be told apart, so each
+// removal is printed for the user to put back deliberately.
+const RETIRED_DENY_RULES = new Set([
+  "Bash(*sudo *)",
+  "Bash(*mkfs*)",
+  "Bash(*dd if=*)",
+  "Bash(*git reset --hard*)",
+  "Read(**/secrets/**)",
+  "Edit(**/secrets/**)",
+  "Read(**/credentials*)",
+  "Edit(**/credentials*)",
+]);
+// A bare **/ pattern resolves under the working directory, so the old in-project
+// rules never protected the real credential stores in the home directory.
+// Each one is rewritten to its ~/ form; the whole .docker and .kube directories
+// replace the single config files so the pair matches the Codex template.
+const HOME_ANCHOR_REWRITES = new Map([
+  ["Read(**/.ssh/**)", "Read(~/.ssh/**)"],
+  ["Read(**/.aws/**)", "Read(~/.aws/**)"],
+  ["Read(**/.gnupg/**)", "Read(~/.gnupg/**)"],
+  ["Read(**/.docker/config.json)", "Read(~/.docker/**)"],
+  ["Read(**/.kube/config)", "Read(~/.kube/**)"],
+  ["Read(**/.npmrc)", "Read(~/.npmrc)"],
+  ["Read(**/.pypirc)", "Read(~/.pypirc)"],
+  ["Edit(**/.ssh/**)", "Edit(~/.ssh/**)"],
+  ["Edit(**/.aws/**)", "Edit(~/.aws/**)"],
+  ["Edit(**/.gnupg/**)", "Edit(~/.gnupg/**)"],
+  ["Edit(**/.docker/config.json)", "Edit(~/.docker/**)"],
+  ["Edit(**/.kube/config)", "Edit(~/.kube/**)"],
+  ["Edit(**/.npmrc)", "Edit(~/.npmrc)"],
+  ["Edit(**/.pypirc)", "Edit(~/.pypirc)"],
+]);
 
 let raw;
 try {
@@ -2847,9 +2899,15 @@ if (!perms || typeof perms !== "object") {
 const parseRule = (entry) =>
   typeof entry === "string" ? entry.match(/^([A-Za-z]+)\((.*)\)$/u) : null;
 
-// Return replacement entries for a stale rule, or null to keep it untouched.
-const replacementsFor = (entry, expandEnv) => {
-  if (expandEnv && ENV_DENY_EXPANSIONS.has(entry)) {
+// Return replacement entries for a stale rule, an empty list to drop it, or null to keep it untouched.
+// Retirement, env expansion, and home anchoring apply to the deny list only: an allow or ask rule
+// with the same text is the user's own choice and stays exactly as written.
+const replacementsFor = (entry, isDenyList) => {
+  if (isDenyList && RETIRED_DENY_RULES.has(entry)) return [];
+  if (isDenyList && HOME_ANCHOR_REWRITES.has(entry)) {
+    return [HOME_ANCHOR_REWRITES.get(entry)];
+  }
+  if (isDenyList && ENV_DENY_EXPANSIONS.has(entry)) {
     return ENV_DENY_EXPANSIONS.get(entry);
   }
   const rule = parseRule(entry);
@@ -2859,24 +2917,28 @@ const replacementsFor = (entry, expandEnv) => {
   return null;
 };
 
-// Drop removed-tool rules, rewrite/expand stale forms, and dedupe against
+// Drop removed-tool and retired rules, rewrite/expand stale forms, and dedupe against
 // rules already present. Untouched rules keep their exact position. Returns
 // the repaired array, or null when nothing changed.
-const repairRules = (rules, expandEnv) => {
+const repairRules = (rules, isDenyList) => {
   if (!Array.isArray(rules)) return null;
   const survivors = rules.filter((entry) => {
     const rule = parseRule(entry);
     return !(rule && REMOVED_CLAUDE_TOOLS.has(rule[1]));
   });
   const present = new Set(
-    survivors.filter((entry) => replacementsFor(entry, expandEnv) === null),
+    survivors.filter((entry) => replacementsFor(entry, isDenyList) === null),
   );
   const kept = [];
   for (const entry of survivors) {
-    const replacements = replacementsFor(entry, expandEnv);
+    const replacements = replacementsFor(entry, isDenyList);
     if (replacements === null) {
       kept.push(entry);
       continue;
+    }
+    // A retired rule has no replacement; name it so a user who typed the same rule can restore it on purpose.
+    if (replacements.length === 0) {
+      console.error(`  - retired Claude deny rule removed: ${entry}`);
     }
     for (const replacement of replacements) {
       if (present.has(replacement)) continue;
@@ -2891,14 +2953,14 @@ const repairRules = (rules, expandEnv) => {
 };
 
 let migrated = false;
-// Env expansion applies to deny only: expanding an allow would revoke the
-// user's .env.example read intent instead of preserving it.
-for (const [arrayName, expandEnv] of [
+// Retirement, env expansion, and home anchoring apply to deny only: rewriting an
+// allow would revoke the user's .env.example read intent instead of preserving it.
+for (const [arrayName, isDenyList] of [
   ["deny", true],
   ["allow", false],
   ["ask", false],
 ]) {
-  const repaired = repairRules(perms[arrayName], expandEnv);
+  const repaired = repairRules(perms[arrayName], isDenyList);
   if (repaired) {
     perms[arrayName] = repaired;
     migrated = true;

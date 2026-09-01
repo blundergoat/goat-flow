@@ -7,17 +7,19 @@ last_reviewed: 2026-08-23
 
 **Status:** active | **Created:** 2026-08-15 | **Evidence:** ACTUAL_MEASURED
 
+**Prevention:** When changing what a preview row means, identify which process performs the write. If that is the shell installer, the change is not done until a per-path decision reaches it and `copy_file` honours the decision. Prove it with an integration fixture that runs the public CLI and asserts on target bytes afterwards - `test/integration/setup-install-upgrade-1150.test.ts` (search: `the upgrade must preserve project content under an unchanged template`) is the shape. Never re-derive the classification in Bash: one contract, generated or passed, is the standing rule for this surface.
+
 **Symptoms:** The CLI reports the new classification correctly - dry-run shows the row, the verdict changes, the exit code changes - and the user's file is still overwritten. Every unit test of the classifier passes, and typecheck cannot see the gap, because the two halves are written in different languages.
 
 **Evidence:** While implementing 1.16.0 M02's `local-preserved` rule on 2026-08-15, `classifyManagedSetupFile` was changed and the CLI stopped blocking, so `install` exited 0. The integration fixture still failed: `workflow/install-goat-flow.sh` (search: `copy_file()`) replaces every system-owned destination unconditionally and had no channel to hear that one path was now preserved. The fix was a decision channel, not a second classifier - `src/cli/install-command.ts` (search: `Each row's own decision travels to Bash`) turns preview rows into `--preserve-path` and `--replace-user-path` flags, and `workflow/install-goat-flow.sh` (search: `installer_path_is_preserved`) consults them inside `copy_file`.
 
 **Why it happens:** The write path spans TypeScript and Bash. Preview classification, admission, and authority live in TypeScript; the writes live in the installer script. Nothing in the type system, the linter, or a classifier unit test crosses that boundary, so a change to what the CLI *says* looks complete while what the installer *does* is unchanged.
 
-**Prevention:** When changing what a preview row means, identify which process performs the write. If that is the shell installer, the change is not done until a per-path decision reaches it and `copy_file` honours the decision. Prove it with an integration fixture that runs the public CLI and asserts on target bytes afterwards - `test/integration/setup-install-upgrade-1150.test.ts` (search: `the upgrade must preserve project content under an unchanged template`) is the shape. Never re-derive the classification in Bash: one contract, generated or passed, is the standing rule for this surface.
-
 ## Footgun: Optional-hook agent profiles break when installer treats hooks as universal
 
 **Status:** active | **Created:** 2026-05-24 | **Evidence:** ACTUAL_MEASURED
+
+**Prevention:** Installer profile validation must require `skills_dir` for every agent, but hook fields only when any hook-related destination is present. Do not fix hookless-agent failures by removing the agent from round-trip coverage; that hides installer regressions for future capability-limited profiles.
 
 **Symptoms:** The installer round-trip test can fail for an otherwise valid agent profile with missing hook fields, even when that agent legitimately has no project-local hook mechanism yet. PR #44 hit this in `test/integration/audit-drift-checkdrift-installer-round-trip-fixture.test.ts` (search: `install for ${agentId} should pass`) when Antigravity was temporarily modeled as hookless.
 
@@ -28,11 +30,15 @@ last_reviewed: 2026-08-23
 - `workflow/install-goat-flow.sh` (search: `HOOKS_ENABLED=false`) now gates hook copying separately from skills/reference installation.
 - `test/integration/audit-drift-checkdrift-installer-round-trip-fixture.test.ts` (search: `install for ${agentId} should pass`) proves every manifest agent still participates in install round-trip coverage.
 
-**Prevention:** Installer profile validation must require `skills_dir` for every agent, but hook fields only when any hook-related destination is present. Do not fix hookless-agent failures by removing the agent from round-trip coverage; that hides installer regressions for future capability-limited profiles.
-
 ## Footgun: New-harness contributions can bypass the manifest-driven installer and modify shared core surfaces
 
 **Status:** active | **Created:** 2026-05-26 | **Evidence:** OBSERVED
+
+**Prevention:**
+1. Add a new harness through the manifest path, in this order: a `workflow/manifest.json` agent entry; the agent's hook config in `workflow/hooks/agent-config/` (if hooks are supported); a thin wrapper in `scripts/installers/`; registration of any new instruction file in `scripts/check-instruction-parity.mjs`'s `LIVE_FILES`; then run `bash workflow/install-goat-flow.sh` and confirm parity. This sequence is the contract - a harness added any other way is the failure this entry describes.
+2. Reject any PR that forks a shared instruction file (`AGENTS.md`, `CLAUDE.md`, future shared surfaces) outside the manifest/setup/parity path. "I need a separate file" is the wrong fix.
+3. Reject any PR that hardcodes a harness-specific branch inside `workflow/install-goat-flow.sh`. New harnesses arrive via manifest entries and per-agent wrappers, not by branching the core installer.
+4. When adding the 5th, 6th, or Nth harness, run the path-integrity check (`scripts/check-path-integrity.sh`) and the parity check (`scripts/check-instruction-parity.mjs`) and confirm both pass before merging.
 
 **Symptoms:** A PR proposes "add harness X support." The diff copies skill files directly into a new `.harness-x/` directory, hand-edits a CLAUDE.md or AGENTS.md to add harness-specific instructions, monkey-patches `workflow/install-goat-flow.sh` with a harness-specific branch, or forks a shared instruction surface because the new harness "needs its own copy." The PR is craft-strong (the integration works on the proposer's machine) but architecturally wrong: it bypasses the manifest-driven contract every existing harness obeys and creates a divergent install surface that no parity check defends.
 
@@ -45,12 +51,6 @@ last_reviewed: 2026-08-23
 - `scripts/check-instruction-parity.mjs` (search: `SETUP_FILES`, `LIVE_FILES`, `CANONICAL_SECTIONS`) enforces shared sections across instruction files; a harness that adds its own instruction file without registering it here is silently exempt from the parity contract.
 - `AGENTS.md` and `CLAUDE.md` are shared instruction surfaces covered by setup/parity rules; a PR that hand-edits one surface for a new harness without updating the manifest-driven setup path breaks the shared-source pattern that keeps them in sync.
 - External corroboration: obra/superpowers PR #1586 ("feat: add DeepSeek TUI harness support") was closed with "we need to use their plugin install mechanism, this would need to target the dev branch, not main, and you'd need to not turn AGENTS.md into a file instead of the symlink it is today." Same trap, same root cause: a contributor reached for the direct mechanism instead of the architectural one.
-
-**Prevention:**
-1. Add a new harness through the manifest path, in this order: a `workflow/manifest.json` agent entry; the agent's hook config in `workflow/hooks/agent-config/` (if hooks are supported); a thin wrapper in `scripts/installers/`; registration of any new instruction file in `scripts/check-instruction-parity.mjs`'s `LIVE_FILES`; then run `bash workflow/install-goat-flow.sh` and confirm parity. This sequence is the contract - a harness added any other way is the failure this entry describes.
-2. Reject any PR that forks a shared instruction file (`AGENTS.md`, `CLAUDE.md`, future shared surfaces) outside the manifest/setup/parity path. "I need a separate file" is the wrong fix.
-3. Reject any PR that hardcodes a harness-specific branch inside `workflow/install-goat-flow.sh`. New harnesses arrive via manifest entries and per-agent wrappers, not by branching the core installer.
-4. When adding the 5th, 6th, or Nth harness, run the path-integrity check (`scripts/check-path-integrity.sh`) and the parity check (`scripts/check-instruction-parity.mjs`) and confirm both pass before merging.
 
 ---
 

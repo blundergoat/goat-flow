@@ -9,6 +9,11 @@ last_reviewed: 2026-08-26
 
 **Status:** active | **Created:** 2026-05-21 | **Evidence:** ACTUAL_MEASURED
 
+**Prevention:**
+1. After Codex upgrades, run `goat-flow audit . --agent codex --harness`, not just the default setup audit.
+2. If Codex settings were preserved, compare `.codex/config.toml` with `workflow/hooks/agent-config/codex.toml` and add the permission profile plus exact denies only for sensitive root files present in the checkout.
+3. When settings are preserved, report hook registration (`.codex/hooks.json`) and filesystem deny profile (`.codex/config.toml`) as separate surfaces in the installer and setup prompt.
+
 **Symptoms:** A normal `goat-flow install . --agent codex` upgrade refreshes skills and hook scripts but preserves an existing `.codex/config.toml`. If that file predates the permission-profile template, setup and agent checks pass while `audit --harness` still reports incomplete direct literal secret-path blocking for Codex - the setup prompt shows "0 audit checks failed" unless the audit runs in harness mode.
 
 **Why it happens:** The installer skips existing settings to avoid clobbering local config. For Codex, `.codex/config.toml` is both a settings file and the provider-native filesystem deny surface (hook registration lives separately in `.codex/hooks.json`). Preserving it is safe for local customizations but doesn't migrate `default_permissions = "goat-flow"` or `[permissions.goat-flow.filesystem]`.
@@ -18,11 +23,6 @@ last_reviewed: 2026-08-26
 - `src/cli/audit/harness/check-constraints.ts` (search: `direct literal secret-path blocking incomplete`) - harness detects the missing combined file-read and Bash-hook coverage.
 - 2026-05-21 downstream upgrade: after normal Codex install, `audit --agent codex --harness` failed Constraints until exact existing root env files were added to `.codex/config.toml` alongside the template profile.
 
-**Prevention:**
-1. After Codex upgrades, run `goat-flow audit . --agent codex --harness`, not just the default setup audit.
-2. If Codex settings were preserved, compare `.codex/config.toml` with `workflow/hooks/agent-config/codex.toml` and add the permission profile plus exact denies only for sensitive root files present in the checkout.
-3. When settings are preserved, report hook registration (`.codex/hooks.json`) and filesystem deny profile (`.codex/config.toml`) as separate surfaces in the installer and setup prompt.
-
 ---
 
 ## Footgun: Registered Stop hooks can be dead config behind agent trust gates
@@ -31,6 +31,8 @@ last_reviewed: 2026-08-26
 **Incident count:** 2 | **Latest occurrence:** 2026-08-10
 **Decision changed:** Treat project-layer trust, hook-handler trust, and live model delivery as separate gates before enabling a registration.
 **Trigger phase:** VERIFY
+
+**Prevention:** Treat hook registration facts as config evidence only. Before claiming an agent runs a Stop hook, capture a live payload or hook-side log write from that exact provider version, mode, config source, and trust state. Expire the record after 30 days or any relevant provider, hook, adapter, mode, source, or trust change. Gate default registration on verified delivery, not documented support, and keep the gate consistent across every Stop hook for that agent. Gating one Stop hook for one agent is a lock-step edit: `workflow/manifest.json` `hook_events.post_turn` -> `null` (which flips `supportsPostTurnHook` in `src/cli/agents/registry.ts` (search: `supportsPostTurnHook`) so `check-verification.ts` *skips* the agent instead of penalising it), `hooks-registry.ts` `unsupportedAgents`, the generated `.agents/hooks.json` (regenerate via `goat-flow hooks sync`, never hand-edit the escaped launcher JSON), plus the README hook table / CHANGELOG / `docs/dashboard.md` and the `hook-registrar` tests.
 
 **Trap:** Writing a Stop entry into `.codex/hooks.json` or `.agents/hooks.json` does not mean the agent will ever execute it. On 2026-06-13, a capture fixture with Stop hooks registered for all three agents showed: Claude fired and delivered the full payload; Codex (codex-cli 0.139.0, `features` reports `hooks stable true`, docs document the `Stop` event) never executed the hook across four `codex exec` runs even with `--dangerously-bypass-hook-trust`, project trust, and a project config layer; Antigravity (agy 1.0.6) logged `Loaded hooks.json ... 1 total handlers` and `JSON hook "jsonhook__stop-capture_Stop_0_0": executing command` but the command never ran because execution waits on `~/.gemini/trusted_hooks.json` review (`toolPermission=request-review`) and print mode exits first.
 
@@ -45,8 +47,6 @@ Recurrence on 2026-08-10: Codex CLI 0.147.0 repeated the trust distinction. Igno
 - ADR-037 (search: `tombstone only`) removes the plan checkbox guard from current shipped hooks and keeps only a tombstone cleanup path.
 - `post-turn-safety` was held to the same standard on 2026-06-14: `antigravity` was added to its `unsupportedAgents` (codex was already gated), so goat-flow does not ship a default-on Stop hook to an agent whose delivery is unverified. A default-on *secret scanner* whose Stop event may never fire is false assurance - arguably worse than shipping nothing, because the dashboard still reports it "installed."
 
-**Prevention:** Treat hook registration facts as config evidence only. Before claiming an agent runs a Stop hook, capture a live payload or hook-side log write from that exact provider version, mode, config source, and trust state. Expire the record after 30 days or any relevant provider, hook, adapter, mode, source, or trust change. Gate default registration on verified delivery, not documented support, and keep the gate consistent across every Stop hook for that agent. Gating one Stop hook for one agent is a lock-step edit: `workflow/manifest.json` `hook_events.post_turn` -> `null` (which flips `supportsPostTurnHook` in `src/cli/agents/registry.ts` (search: `supportsPostTurnHook`) so `check-verification.ts` *skips* the agent instead of penalising it), `hooks-registry.ts` `unsupportedAgents`, the generated `.agents/hooks.json` (regenerate via `goat-flow hooks sync`, never hand-edit the escaped launcher JSON), plus the README hook table / CHANGELOG / `docs/dashboard.md` and the `hook-registrar` tests.
-
 ## Footgun: Launcher-owned failures can bypass provider feedback adapters
 
 **Status:** active | **Created:** 2026-08-10 | **Evidence:** ACTUAL_MEASURED
@@ -54,9 +54,9 @@ Recurrence on 2026-08-10: Codex CLI 0.147.0 repeated the trust distinction. Igno
 **Trigger phase:** VERIFY
 **Incident count:** 1 | **Latest occurrence:** 2026-08-10
 
-A migrated child result used the provider adapter, but timeout and adapter-failure branches returned through the legacy unavailable reporter. The terminal showed human stderr while Codex received empty stdout, so a stopped analyzer looked silent to the active model.
+**Prevention:** Route every migrated launcher-owned failure through the neutral unavailable envelope and provider adapter. Keep source and npm-archive canaries that stall the child inside the managed deadline and require non-empty model context. Evidence anchors: `workflow/hooks/run-with-bash.mjs` (search: `reportLauncherUnavailable`), `workflow/hooks/hook-launch-runtime.mjs` (search: `prepareProviderLauncherUnavailableDelivery`), `test/integration/hook-consumer-canary.test.ts` (search: `Empty stdout would reproduce the silent provider timeout`), and `test/integration/packaged-hook-install.test.ts` (search: `Empty packed stdout would mean source proof hid a release artifact failure`).
 
-Route every migrated launcher-owned failure through the neutral unavailable envelope and provider adapter. Keep source and npm-archive canaries that stall the child inside the managed deadline and require non-empty model context. Evidence anchors: `workflow/hooks/run-with-bash.mjs` (search: `reportLauncherUnavailable`), `workflow/hooks/hook-launch-runtime.mjs` (search: `prepareProviderLauncherUnavailableDelivery`), `test/integration/hook-consumer-canary.test.ts` (search: `Empty stdout would reproduce the silent provider timeout`), and `test/integration/packaged-hook-install.test.ts` (search: `Empty packed stdout would mean source proof hid a release artifact failure`).
+A migrated child result used the provider adapter, but timeout and adapter-failure branches returned through the legacy unavailable reporter. The terminal showed human stderr while Codex received empty stdout, so a stopped analyzer looked silent to the active model.
 
 ## Footgun: An aggregating hook must re-derive every terminal decision it aggregates
 
@@ -65,9 +65,9 @@ Route every migrated launcher-owned failure through the neutral unavailable enve
 **Trigger phase:** VERIFY
 **Incident count:** 1 | **Latest occurrence:** 2026-08-16
 
-The non-Git controller fan-out in `post-turn-safety.sh` collected child envelopes and computed `bounded-reentry-ended` correctly, but only the migrated branch acted on it. The provider adapter turns that reason code into a clean stop, while the legacy branch fell through to a blocking exit. Claude registers its Stop hook with response mode `post-turn`, which the launcher classifies as legacy, so a controller workspace whose children hit an unchanged infrastructure failure could never end the turn. Measured on 2026-08-16: a single-project repository went block, release, block; the identical controller went block, block, block, block.
+**Prevention:** A child result that ends a bounded cycle is a release decision, not a finding. Aggregation may summarise findings, but it must re-derive every terminal decision the single-unit path owns - release, block, and fail-closed - for each host contract the hook actually ships under. Check the same way whenever an aggregate returns a child status verbatim: a status the aggregator never produces itself (a crash or a kill) must not reach the provider as a non-blocking result. Evidence anchors: `workflow/hooks/post-turn-safety.sh` (search: `bounded-reentry-ended`), `workflow/hooks/run-with-bash.mjs` (search: `LEGACY_HOOK_DEADLINES_MS`), `workflow/hooks/hook-provider-adapters.mjs` (search: `adaptStopResult`), and `test/integration/post-turn-safety-controller.test.ts` (search: `ends an exhausted child re-entry on a legacy host`).
 
-A child result that ends a bounded cycle is a release decision, not a finding. Aggregation may summarise findings, but it must re-derive every terminal decision the single-unit path owns - release, block, and fail-closed - for each host contract the hook actually ships under. Check the same way whenever an aggregate returns a child status verbatim: a status the aggregator never produces itself (a crash or a kill) must not reach the provider as a non-blocking result. Evidence anchors: `workflow/hooks/post-turn-safety.sh` (search: `bounded-reentry-ended`), `workflow/hooks/run-with-bash.mjs` (search: `LEGACY_HOOK_DEADLINES_MS`), `workflow/hooks/hook-provider-adapters.mjs` (search: `adaptStopResult`), and `test/integration/post-turn-safety-controller.test.ts` (search: `ends an exhausted child re-entry on a legacy host`).
+The non-Git controller fan-out in `post-turn-safety.sh` collected child envelopes and computed `bounded-reentry-ended` correctly, but only the migrated branch acted on it. The provider adapter turns that reason code into a clean stop, while the legacy branch fell through to a blocking exit. Claude registers its Stop hook with response mode `post-turn`, which the launcher classifies as legacy, so a controller workspace whose children hit an unchanged infrastructure failure could never end the turn. Measured on 2026-08-16: a single-project repository went block, release, block; the identical controller went block, block, block, block.
 
 ## Footgun: Per-item subprocess spawning in hooks is ~40x more expensive on Windows Git Bash
 
@@ -75,6 +75,13 @@ A child result that ends a bounded cycle is a release decision, not a finding. A
 **Decision changed:** Whether a hook may call out to `sed`/`tr`/`awk`/`grep`/`git` once per line, per key, or per file - on Windows that design cannot meet any realistic hook timeout, so batch or use bash builtins instead.
 **Trigger phase:** SCOPE
 **Caught at:** ACT
+
+**Prevention:**
+1. In hook code, keep per-line and per-key work in bash builtins: `${var,,}` instead of `tr`, `${var##+([[:space:]])}` instead of a trim `sed`, `[[ =~ ]]` capture instead of `sed -nE 's/.../\1/p'`. Return through a global rather than `$(...)` so the call does not fork.
+2. Batch git plumbing. One `git diff --unified=0 -- <paths>` with `+++ b/<path>` header attribution replaces one diff per file; `git cat-file --batch-check` replaces per-path `cat-file -s`; `wc -c` and `grep -Il` accept many paths per call. Chunk argument lists (~64 paths) to stay under the Windows command-line limit.
+3. Put a cheap superset pre-filter in front of expensive per-line analysis, and document why each pattern is a provable superset of the real triggers so the filter cannot silently narrow detection.
+4. Benchmark hooks on Windows Git Bash, not only Linux. A Linux-only benchmark hides this entire class of defect.
+5. Give any bounded-time hook its own wall-clock budget that reports an explicit incomplete-scan message and a non-zero exit, and register a runner timeout above that budget. Silent truncation by the harness must not be reachable.
 
 **Symptoms:** A hook is comfortably fast on Linux and unusably slow on Windows Git Bash, with `sys` time near half of wall clock. Claude Code shows the turn parked on `running stop hook · 4m 40s`. Because the runner kills a hook that exceeds its registered timeout, a scan that cannot finish reports nothing and is indistinguishable from a clean pass - the correctness failure is worse than the latency.
 
@@ -86,19 +93,18 @@ A child result that ends a bounded cycle is a release decision, not a finding. A
 - The pre-fix hot path spawned two `sed` per scanned line plus per-call `sed`/`tr` in helpers, and one `git diff` per changed path. Current batched anchors: `workflow/hooks/post-turn-safety.sh` (search: `run_diff_batch`), (search: `gate_scannable_files`), and (search: `scan_content_files`).
 - This reasoning does NOT generalise to every hook: the same day, removing forks from `deny-dangerous.sh` made it slower. See the entry below before applying it elsewhere.
 
-**Prevention:**
-1. In hook code, keep per-line and per-key work in bash builtins: `${var,,}` instead of `tr`, `${var##+([[:space:]])}` instead of a trim `sed`, `[[ =~ ]]` capture instead of `sed -nE 's/.../\1/p'`. Return through a global rather than `$(...)` so the call does not fork.
-2. Batch git plumbing. One `git diff --unified=0 -- <paths>` with `+++ b/<path>` header attribution replaces one diff per file; `git cat-file --batch-check` replaces per-path `cat-file -s`; `wc -c` and `grep -Il` accept many paths per call. Chunk argument lists (~64 paths) to stay under the Windows command-line limit.
-3. Put a cheap superset pre-filter in front of expensive per-line analysis, and document why each pattern is a provable superset of the real triggers so the filter cannot silently narrow detection.
-4. Benchmark hooks on Windows Git Bash, not only Linux. A Linux-only benchmark hides this entire class of defect.
-5. Give any bounded-time hook its own wall-clock budget that reports an explicit incomplete-scan message and a non-zero exit, and register a runner timeout above that budget. Silent truncation by the harness must not be reachable.
-
 ## Footgun: Policy modules must share one prepared command context
 
 **Status:** active | **Created:** 2026-08-01 | **Evidence:** ACTUAL_MEASURED
 **Decision changed:** Whether each PreToolUse policy module may prepare its own segment context - it may not; preparation belongs to the dispatcher and adding a policy must not multiply parsing work.
 **Trigger phase:** SCOPE
 **Caught at:** ACT
+
+**Prevention:**
+1. Measure with an INTERLEAVED A/B (alternate old/new per round). A sequential "all old, then all new" run is unreliable: the first run pays cold filesystem and git cache costs, which produced a false 2x "improvement" for a build that was actually 2x slower.
+2. Do not assume a `$( )` count predicts wall clock. Substitutions actually executed per invocation are far fewer than a count of traced lines mentioning a function name suggests.
+3. Prepare segment context once in `check_segment`; policy modules consume the shared `CMD_*` and `HAS_*` values. A new module must not call `prepare_segment_context` itself.
+4. This is security-critical parsing: any restructuring needs `--self-test=full` green plus a byte-exact verdict corpus before and after, per `.goat-flow/skill-docs/playbooks/hook-policy-testing.md`.
 
 **Symptoms:** Every Bash tool call carries a visible pause before the command runs, scaling with command complexity and the number of policy modules rather than with anything about the repository. The regression signature is more than one `prepare_segment_context` trace for a simple command, or a policy module calling that function directly.
 
@@ -112,12 +118,6 @@ A child result that ends a bounded cycle is a release decision, not a finding. A
 - Current anchor: `workflow/hooks/deny-dangerous.sh` (search: `Parse once per segment`). A `bash -x` trace for `npm run typecheck` records one `prepare_segment_context` call; the pre-fix checkout records three.
 
 **Failed fix, do not repeat without new evidence:** Converting the hot tokenisers (`normalize_command_candidate`, `normalize_leading_command_word`, `first_word_base`, `drop_first_shell_word`) to fork-free `_into` forms returning through globals, plus memoizing `normalize_command_candidate`, **made the hook slower**: 272→392ms simple, 309→729ms pipeline, 652→751ms JSON, while executing ~3.3x MORE traced operations (simple 1,959→6,428). Verdicts stayed correct (272-case byte-exact corpus identical, `--self-test=full` 319/319), so it was a pure performance regression and was reverted. The cause of the 3.3x increase was not identified.
-
-**Prevention:**
-1. Measure with an INTERLEAVED A/B (alternate old/new per round). A sequential "all old, then all new" run is unreliable: the first run pays cold filesystem and git cache costs, which produced a false 2x "improvement" for a build that was actually 2x slower.
-2. Do not assume a `$( )` count predicts wall clock. Substitutions actually executed per invocation are far fewer than a count of traced lines mentioning a function name suggests.
-3. Prepare segment context once in `check_segment`; policy modules consume the shared `CMD_*` and `HAS_*` values. A new module must not call `prepare_segment_context` itself.
-4. This is security-critical parsing: any restructuring needs `--self-test=full` green plus a byte-exact verdict corpus before and after, per `.goat-flow/skill-docs/playbooks/hook-policy-testing.md`.
 
 ## Footgun: Copilot combines native and Claude project hook registrations
 

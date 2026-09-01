@@ -18,6 +18,8 @@ last_reviewed: 2026-09-01
 
 **Latest occurrence:** 2026-09-01
 
+**Prevention:** Run `node --import tsx --test test/contract/skill-hardening-contracts.test.ts` immediately after each edit, before aggregate suites; compact before expanding scope. Check bucket headroom first; several sit within tens of bytes of the 40,000-byte gate.
+
 **What happened:** Repeated wording edits and learning captures crossed caps. Unless noted, the gate is `test/contract/skill-hardening-contracts.test.ts`:
 
 - **2026-05-19/22:** TDD packs 3022/3008 words, preamble over 1500, QA over 2578 (search: `progressive reference packs stay within the 3000-word cap per file`).
@@ -46,8 +48,6 @@ last_reviewed: 2026-09-01
 
 **Root cause:** Treated capped prose as tiny.
 
-**Prevention:** Run `node --import tsx --test test/contract/skill-hardening-contracts.test.ts` immediately after each edit, before aggregate suites; compact before expanding scope. Check bucket headroom first; several sit within tens of bytes of the 40,000-byte gate.
-
 ---
 
 ## Lesson: Skill compaction must preserve indexed semantic anchors
@@ -63,6 +63,8 @@ last_reviewed: 2026-09-01
 
 **Latest occurrence:** 2026-08-09
 
+**Prevention:** Search indexes, contracts, and tracked semantic-anchor references before changing headings or compacting prose; run focused contracts and `stats --check`; repair anchors together.
+
 **What happened:** Nine prose edits removed or changed durable or contract-pinned anchors:
 
 - **2026-07-12–19:** Four compactions removed anchors; stats/contracts restored them. Evidence: `workflow/skills/reference/skill-preamble.md` (search: `Routing rule`).
@@ -72,13 +74,13 @@ last_reviewed: 2026-09-01
 
 **Root cause:** Edited prose carried durable external anchors.
 
-**Prevention:** Search indexes, contracts, and tracked semantic-anchor references before changing headings or compacting prose; run focused contracts and `stats --check`; repair anchors together.
-
 ---
 
 ## Lesson: Source-regex dashboard tests must tolerate formatter reflow
 
 **Status:** active | **Created:** 2026-05-11
+
+**Prevention:** After changing source-grep tests for dashboard classic scripts, run Prettier before the focused test rerun. If a regex only protects structure, make whitespace flexible enough for formatter reflow or use a small VM helper test instead.
 
 **What happened:** During the dashboard terminal paste-submission fix, focused `test/unit/dashboard-terminal-launch.test.ts` first passed. After Prettier formatted the touched files, the rerun failed only because the "warms xterm" source assertion expected a multi-line `if` block shape that Prettier collapsed into one line. The runtime behavior was still correct; the test was over-specified to formatting.
 
@@ -87,8 +89,6 @@ last_reviewed: 2026-09-01
 **Fix:** Keep source-regex tests focused on semantic tokens and tolerate formatter-owned whitespace. Evidence anchors: `test/unit/dashboard-terminal-launch/launch-flow-06.test.ts` (search: `warms xterm when the workspace or setup view opens`), `src/dashboard/dashboard-app-init.ts` (search: `view === "workspace" || view === "setup"`).
 
 **Recurrence (2026-08-14):** A new Gruff D6 assertion preserved the intended qualifier order but required a literal space between `non-obvious` and `contract`; Markdown wrapping inserted a newline and left correct prose RED. Allowing whitespace only at that gap kept the semantic boundary pinned without owning layout. Evidence anchor: `test/contract/comment-playbook-doctrine.test.ts` (search: `file\\/module\\/class boundary has a non-obvious\\s+contract`).
-
-**Prevention:** After changing source-grep tests for dashboard classic scripts, run Prettier before the focused test rerun. If a regex only protects structure, make whitespace flexible enough for formatter reflow or use a small VM helper test instead.
 
 **Recurrence 2026-05-12:** While self-hosting xterm assets, `test/integration/dashboard-server.test.ts` fetched `/assets/xterm.js` successfully but failed because the assertion looked for `XTerm`, a string not present in the minified upstream bundle. The route was correct; the test anchor was wrong. For vendored/minified assets, assert route status/content type and stable feature strings observed in the actual bundle, such as `bracketedPasteMode`, not package names or branding text.
 
@@ -142,12 +142,6 @@ last_reviewed: 2026-09-01
 
 **Status:** active | **Created:** 2026-04-05
 
-**What happened:** Claude Insights reported 68 buggy-code friction events across 112 sessions (61% of sessions had at least one). The `/goat-qa` skill generates test plans after implementation, and `stop-lint.sh` used to run linting after every turn before its removal from goat-flow core per ADR-037, but neither caught logic regressions mid-implementation. Tests only run when the user explicitly asks or when a milestone completes. Regressions introduced in turn 3 of a 10-turn implementation aren't caught until the end, when the debugging context is stale.
-
-**Recurrence (2026-08-14):** During comment-doctrine work, reader/layer and defect-vocabulary edits crossed a declared focused-test checkpoint before the earlier width/branch slice was proven green. The later edits were rewound and resumed only after the intended contract slice passed. Evidence anchor: `test/contract/comment-playbook-doctrine.test.ts` (search: `treats 150 as a ceiling instead of a width target`).
-
-**Root cause:** The verification loop runs at the wrong granularity. Lint after every turn catches syntax. Tests after every milestone catch logic. The gap between these two is where regressions hide.
-
 **Prevention:**
 1. Consider an optional post-write hook that runs the project's test command after file changes (configured via `config.yaml`, off by default)
 2. Add a "run tests" checkpoint every N edits to skills with implementation phases, not just at phase boundaries
@@ -155,9 +149,20 @@ last_reviewed: 2026-09-01
 4. Treat an explicit mid-implementation proof as a write boundary: stop later edits until the named focused slice is green.
 ---
 
+**What happened:** Claude Insights reported 68 buggy-code friction events across 112 sessions (61% of sessions had at least one). The `/goat-qa` skill generates test plans after implementation, and `stop-lint.sh` used to run linting after every turn before its removal from goat-flow core per ADR-037, but neither caught logic regressions mid-implementation. Tests only run when the user explicitly asks or when a milestone completes. Regressions introduced in turn 3 of a 10-turn implementation aren't caught until the end, when the debugging context is stale.
+
+**Recurrence (2026-08-14):** During comment-doctrine work, reader/layer and defect-vocabulary edits crossed a declared focused-test checkpoint before the earlier width/branch slice was proven green. The later edits were rewound and resumed only after the intended contract slice passed. Evidence anchor: `test/contract/comment-playbook-doctrine.test.ts` (search: `treats 150 as a ceiling instead of a width target`).
+
+**Root cause:** The verification loop runs at the wrong granularity. Lint after every turn catches syntax. Tests after every milestone catch logic. The gap between these two is where regressions hide.
+
 ## Lesson: Semantic drift checks must normalize natural-language lists before claiming mismatch
 
 **Status:** active | **Created:** 2026-04-18
+
+**Prevention:**
+1. When adding semantic drift checks for prose, test both a known-bad example and the current canonical wording.
+2. Normalize natural-language list glue (`and`, Oxford commas, surrounding whitespace) before comparing against code-backed enumerations.
+3. Treat a new drift rule that immediately flags corrected docs as a checker bug until the parser is disproven.
 
 **What happened:** A new semantic-drift check was added for the runner list in `docs/dashboard.md`. The first verification run still failed content audit even after the doc was corrected to "Claude, Codex, and Gemini". The checker split on commas before handling the Oxford-comma `and`, so it parsed the claim as `["Claude", "Codex", "and Gemini"]` and reported a false mismatch against the manifest-backed list.
 
@@ -165,16 +170,16 @@ last_reviewed: 2026-09-01
 
 **Fix:** Normalize list items before comparison by stripping a leading `and ` token after the split, then add a regression test that proves the current dashboard wording does not trigger `dashboard-runner-drift`.
 
-**Prevention:**
-1. When adding semantic drift checks for prose, test both a known-bad example and the current canonical wording.
-2. Normalize natural-language list glue (`and`, Oxford commas, surrounding whitespace) before comparing against code-backed enumerations.
-3. Treat a new drift rule that immediately flags corrected docs as a checker bug until the parser is disproven.
-
 ---
 
 ## Lesson: Filtered manifest ids still need explicit indexed-lookup proof in TypeScript
 
 **Status:** active | **Created:** 2026-04-21
+
+**Prevention:**
+1. After refactoring manifest/registry code that filters ids and then indexes a `Record`, run `npm run typecheck` even if the focused unit tests already pass.
+2. When a helper signature or typed callback changes in a touched `.ts` file, include `prettier --check` or `prettier --write` in the focused verification pass before closeout.
+---
 
 **What happened:** A manifest-backed registry cleanup reused one `loadManifest().agents` snapshot per public call and filtered configured ids with `isKnownAgentId()`. The focused unit tests passed, but the first `npm run typecheck` still failed on the follow-up mapping step because `agents[id]` was treated as possibly `undefined` inside `.map((id) => toRuntimeProfile(id, agents[id]))`. The same verification pass also caught a Prettier reflow issue in the touched registry file.
 
@@ -188,11 +193,6 @@ readonly result of `getSkillNames()` to a mutable `string[]`. The fix was to
 keep the manifest-derived list readonly through the local variable and helper
 parameter. Evidence anchor: `src/cli/classify-state.ts` (search: `let canonicalSkills: readonly string[]`).
 
-**Prevention:**
-1. After refactoring manifest/registry code that filters ids and then indexes a `Record`, run `npm run typecheck` even if the focused unit tests already pass.
-2. When a helper signature or typed callback changes in a touched `.ts` file, include `prettier --check` or `prettier --write` in the focused verification pass before closeout.
----
-
 ## Lesson: Semantic prose contracts must bind to the owned section
 
 **Status:** active | **Created:** 2026-08-14
@@ -201,6 +201,15 @@ parameter. Evidence anchor: `src/cli/classify-state.ts` (search: `let canonicalS
 
 **Trigger phase:** ACT | **Incident count:** 7 | **Latest occurrence:** 2026-08-29
 **Caught at:** VERIFY
+
+**Prevention:**
+1. Treat capitalization as formatter or prose presentation unless exact casing is itself the contract.
+2. Extract the narrowest semantic owner: a fenced template, named section, or explicit object set.
+3. Keep unrelated sibling content outside neutrality and doctrine assertions.
+4. Rerun the focused contract before expanding verification.
+5. When a downstream check counts prose records, define canonical values in the producer and normalize only presentation wrappers; do not infer identity from unconstrained display text.
+6. In sentence-bounded prose regexes, tolerate Markdown whitespace and grammatical inflection that do not carry policy; keep the semantic actors, action, and boundary pinned.
+---
 
 **What happened:** The first partial GREEN for test-selection rejected correct prose because heading and table capitalization differed; it also stopped a template block at a nested heading before its records and scanned an entire shared preset catalog instead of the four owned prompts. Evidence anchors: `test/contract/test-selection-playbook-doctrine.test.ts` (search: `function templateBlock`) and (search: `affectedPresetIds`).
 
@@ -219,12 +228,3 @@ parameter. Evidence anchor: `src/cli/classify-state.ts` (search: `let canonicalS
 **Root cause:** The contract parser treated presentation boundaries and a shared container as the semantic owner, or expected canonical values that the producer never promised. The assertions therefore coupled correct doctrine to incidental casing, Markdown nesting, unrelated sibling content, and free-form labels.
 
 **Fix:** Use case-insensitive semantic regular expressions, bound template extraction to its code fence, inspect only the named prompt objects owned by the change, define machine-counted values in the producer, normalize presentation-only wrappers, and separate exhaustive path-existence proof from content checks over exact semantic owners.
-
-**Prevention:**
-1. Treat capitalization as formatter or prose presentation unless exact casing is itself the contract.
-2. Extract the narrowest semantic owner: a fenced template, named section, or explicit object set.
-3. Keep unrelated sibling content outside neutrality and doctrine assertions.
-4. Rerun the focused contract before expanding verification.
-5. When a downstream check counts prose records, define canonical values in the producer and normalize only presentation wrappers; do not infer identity from unconstrained display text.
-6. In sentence-bounded prose regexes, tolerate Markdown whitespace and grammatical inflection that do not carry policy; keep the semantic actors, action, and boundary pinned.
----

@@ -204,10 +204,9 @@ ${orderedBody.join("\n\n")}
 }
 
 /**
- * Build one markerless footgun with its Prevention list or incident narrative first.
+ * Build one markerless footgun with Prevention or the incident narrative first, optionally splitting
+ * the Prevention list from its label with a blank line so the parser reads two paragraphs.
  * Use it to prove that generated INDEX guidance survives reader-focused entry reordering.
- * A separated Prevention list puts a blank line between the label and its rules, the shape real
- * entries use, which reaches the parser as two paragraphs instead of one.
  * Filesystem side effects: creates and removes one temporary footgun directory.
  */
 function extractOrderedMarkerlessFootgunFacts(
@@ -268,8 +267,6 @@ last_reviewed: 2026-09-01
 ---
 
 ## Pattern: Prevention-first pattern keeps its leading guidance
-
-**Status:** active | **Created:** 2026-09-01 | **Evidence:** OBSERVED
 
 **Prevention:** Register the launcher before citing provider delivery.
 

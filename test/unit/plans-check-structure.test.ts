@@ -652,6 +652,23 @@ describe("plans check: structure, identity, and dependencies", () => {
       expected:
         /active or complete milestone requires dependency M01 to be complete/u,
     },
+    {
+      name: "superseded-prerequisite",
+      files: {
+        "M01-one.md": canonicalMilestoneBody({
+          title: "M01: One",
+          status: "superseded",
+          statusReason: "Superseded by M02, which carries the remainder.",
+        }),
+        "M02-two.md": canonicalMilestoneBody({
+          title: "M02: Two",
+          status: "in-progress",
+          dependsOn: "M01",
+        }),
+      },
+      expected:
+        /active or complete milestone requires dependency M01 to be complete/u,
+    },
   ];
 
   // Covers each dependency failure separately so TAP names the exact one: every case writes a plan fixture.

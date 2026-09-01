@@ -11,7 +11,7 @@ For shared meta-references inherited by goat-* skills (preamble on every invocat
 
 ## How agents should use this directory
 
-1. When the request names a tool or discipline (browser, screenshots, skill testing, changelog, release notes, logging/instrumentation, naming and placement, code comments, prose and writing style, or writing for agents), check this index for a matching playbook. Also check it when the work touches a discipline's surface without naming it: editing `CHANGELOG.md`, release notes, README or `docs/` prose, PR/issue text, a learning-loop entry body, or a skill, playbook, or instruction file an agent reads.
+1. When the request names a tool or discipline (browser, screenshots, changelog, release notes, logging/instrumentation, naming and placement, code comments, prose and writing style, or writing for agents), check this index for a matching playbook. Skill testing and hardening has no playbook row: load `../skill-quality-testing/README.md`, the skill-authoring methodology pack, and open the topical file its table names. Also check it when the work touches a discipline's surface without naming it: editing `CHANGELOG.md`, release notes, README or `docs/` prose, PR/issue text, a learning-loop entry body, or a skill, playbook, or instruction file an agent reads.
 2. Open the playbook. If it has an **Availability Check** section, run the exact `command -v <tool>` or equivalent it specifies before falling back.
 3. Only after the availability check fails AND the playbook's fallback path also fails, declare the capability unavailable.
 

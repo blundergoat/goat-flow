@@ -154,7 +154,7 @@ describe("plans check: lifecycle states and timing receipts", () => {
     });
   }
 
-  for (const status of ["blocked", "abandoned"] as const) {
+  for (const status of ["blocked", "abandoned", "deferred"] as const) {
     /** Fixture purpose: compare the missing exceptional field with the canonical authoring shape. */
     it(`strict mode requires one canonical status reason while ${status}`, () => {
       const temporaryRoot = mkdtempSync(
@@ -540,6 +540,108 @@ describe("plans check: lifecycle states and timing receipts", () => {
 
       assert.equal(result.status, 1, result.stdout + result.stderr);
       assert.match(result.stdout, /multiple active milestones: M01, M02/u);
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
+  /** Fixture purpose: a spent milestone must point readers at the live work that carries its remainder.
+   * Filesystem/process side effects: writes three two-milestone plans, runs the CLI once each, and removes the fixtures. */
+  it("strict mode requires a superseded milestone to name a resolvable successor", () => {
+    const temporaryRoot = mkdtempSync(
+      join(tmpdir(), "goat-flow-plan-superseded-"),
+    );
+    try {
+      const successorCases = [
+        {
+          name: "missing-id",
+          reason: "Carried elsewhere after the lock was spent.",
+          expected:
+            /superseded milestone must name its successor milestone in Status reason/u,
+        },
+        {
+          name: "unresolved",
+          reason: "Superseded by M09, which carries the remainder.",
+          expected: /superseded successor M09 does not resolve in this plan/u,
+        },
+      ];
+      for (const successorCase of successorCases) {
+        const planPath = writeCheckPlan(
+          join(temporaryRoot, successorCase.name),
+          {
+            "M01-spent.md": canonicalMilestoneBody({
+              title: "M01: Spent",
+              status: "superseded",
+              statusReason: successorCase.reason,
+            }),
+            "M02-carrier.md": canonicalMilestoneBody({
+              title: "M02: Carrier",
+              dependsOn: "none",
+            }),
+          },
+        );
+        const result = runPlansCheck(planPath, "--strict");
+        assert.equal(result.status, 1, result.stdout + result.stderr);
+        assertSourceLabelledErrors(result.stdout);
+        assert.match(result.stdout, successorCase.expected);
+      }
+
+      const validPath = writeCheckPlan(join(temporaryRoot, "valid"), {
+        "M01-spent.md": withPausedTimingReceipt(
+          canonicalMilestoneBody({
+            title: "M01: Spent",
+            status: "superseded",
+            statusReason:
+              "Superseded by M02, which carries the remainder under a fresh lock.",
+          }),
+        ),
+        "M02-carrier.md": canonicalMilestoneBody({
+          title: "M02: Carrier",
+          dependsOn: "none",
+        }),
+      });
+      const valid = runPlansCheck(validPath, "--strict");
+      assert.equal(valid.status, 0, valid.stdout + valid.stderr);
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
+  /** Fixture purpose: terminal milestones keep their rows but leave the plan total the author steers by.
+   * Filesystem/process side effects: writes one three-milestone plan, runs the CLI once, and removes the fixture. */
+  it("reports superseded and deferred estimates on an excluded line instead of the plan total", () => {
+    const temporaryRoot = mkdtempSync(
+      join(tmpdir(), "goat-flow-plan-excluded-total-"),
+    );
+    const planPath = writeCheckPlan(temporaryRoot, {
+      "M01-spent.md": canonicalMilestoneBody({
+        title: "M01: Spent",
+        status: "superseded",
+        statusReason: "Superseded by M03, which carries the remainder.",
+      }),
+      "M02-later.md": canonicalMilestoneBody({
+        title: "M02: Later",
+        status: "deferred",
+        statusReason:
+          "Deferred to the next release by scope; disposition recorded in the backlog.",
+      }),
+      "M03-live.md": canonicalMilestoneBody({
+        title: "M03: Live",
+        dependsOn: "none",
+      }),
+    });
+    try {
+      const result = runPlansCheck(planPath, "--strict");
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.match(result.stdout, /^plan: 2 min estimated/mu);
+      assert.match(
+        result.stdout,
+        /^excluded: 4 min in 2 superseded or deferred milestones - M01-spent\.md superseded 2, M02-later\.md deferred 2$/mu,
+      );
+      assert.match(
+        result.stdout,
+        /^M01-spent\.md: ~2 min \(1 product \/ 1 proof \/ 0 other\) \| superseded - excluded from the plan total$/mu,
+      );
     } finally {
       rmSync(temporaryRoot, { recursive: true, force: true });
     }

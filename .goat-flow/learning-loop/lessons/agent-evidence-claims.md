@@ -13,16 +13,22 @@ last_reviewed: 2026-08-28
 **Caught at:** VERIFY
 **Incident count:** 1 | **Latest occurrence:** 2026-08-16
 
+**Prevention:** When an option does not do what you expected, read its definition before explaining why. Installed packages ship the answer: `node_modules/<pkg>/schema.json`, the type declarations, or the source are cheaper than another timed run and are authoritative. State symptom evidence as symptom evidence - "adding it did not stop the OOM" - and keep the mechanism claim separate until something documents it. Evidence anchor: `.goat-flow/learning-loop/footguns/preflight-plumbing.md` (search: `Knip's `ignore` cannot shrink what preflight`).
+
 **What happened:** While diagnosing a Knip out-of-memory failure in preflight, I added the large directory to `knip.json`'s `ignore`, saw the run still exhaust its heap, and reported that "`ignore` filters reported issues, not what it reads." The conclusion was correct, but I had only observed that the symptom persisted. When the user asked whether Knip really could not ignore the folder, I could not defend the claim and had to walk it back, then walk the retraction back again after reading `node_modules/knip/schema.json`, whose `ignore` title is "Files to exclude from the report (any issue type)".
 
 **Root cause:** I inferred a mechanism from a single negative result and stated it with the confidence of a read fact. A config change that does not fix a symptom has many explanations - wrong key, wrong scope, wrong file, or the option simply not governing that behaviour - and the observation alone cannot choose between them. The cost was not the wrong answer; it was a confident answer that then flip-flopped under one question.
-
-**Prevention:** When an option does not do what you expected, read its definition before explaining why. Installed packages ship the answer: `node_modules/<pkg>/schema.json`, the type declarations, or the source are cheaper than another timed run and are authoritative. State symptom evidence as symptom evidence - "adding it did not stop the OOM" - and keep the mechanism claim separate until something documents it. Evidence anchor: `.goat-flow/learning-loop/footguns/preflight-plumbing.md` (search: `Knip's `ignore` cannot shrink what preflight`).
 
 ## Lesson: Agent cited gitignored content as evidence in committed docs
 
 **Created:** 2026-05-11
 **Decision changed:** Before citing a local file as durable evidence, verify that Git tracks it or cite the committed detector/source that supports the claim.
+
+**Prevention:**
+1. **Never cite a `.goat-flow/scratchpad/`, `.goat-flow/plans/`, `.goat-flow/logs/sessions/`, `.goat-flow/logs/quality/`, or `.goat-flow/logs/critiques/` path from a committed file** - those subtrees are gitignored except anchor files (`README.md`, `.gitignore`, `.gitkeep`). Promote source material to a committed location (`lessons/`, `footguns/`, `decisions/`, or a `workflow/` file) before citing it.
+2. **Strip third-party / competitor skill or vendor names** from generic guidance. State the pattern provider-neutrally ("a domain skill", "a vendor-SDK skill", "an external frontend-design reference") and use placeholders (`<VENDOR>_API_KEY`, not `VALYU_API_KEY`).
+3. **Apply the same rule to test files and code comments** - fixtures and inline comments shape contributor authoring habits.
+4. **When auditing docs, grep both classes:** `rg -n "\.goat-flow/(scratchpad|tasks|logs)/" --glob '*.md' --glob '*.ts'` for gitignored citations, plus a project-specific list of competitor names for vendor leakage. Add to `docs-and-crossrefs` footgun resolution rounds when found.
 
 **What happened:** A 2026-05-11 documentation audit found four committed surfaces citing paths under `.goat-flow/scratchpad/` (gitignored by design) as authoritative evidence:
 
@@ -37,15 +43,9 @@ The same surfaces also leaked third-party / competitor skill names (MySQL, Valyu
 
 **Why it matters:** (1) **Broken evidence chain.** A cloned checkout cannot follow the cited path or its `(search: "...")` anchor; the Evidence Standard (`workflow/skills/reference/skill-preamble.md`, search: `re-read every cited file`) requires citations anyone can re-read. (2) **Competitor/third-party leakage.** Naming external skills in committed docs implies goat-flow ships, endorses, or derives from those vendors' work, and pins generic patterns to one provider.
 
-**Prevention:**
-1. **Never cite a `.goat-flow/scratchpad/`, `.goat-flow/plans/`, `.goat-flow/logs/sessions/`, `.goat-flow/logs/quality/`, or `.goat-flow/logs/critiques/` path from a committed file** - those subtrees are gitignored except anchor files (`README.md`, `.gitignore`, `.gitkeep`). Promote source material to a committed location (`lessons/`, `footguns/`, `decisions/`, or a `workflow/` file) before citing it.
-2. **Strip third-party / competitor skill or vendor names** from generic guidance. State the pattern provider-neutrally ("a domain skill", "a vendor-SDK skill", "an external frontend-design reference") and use placeholders (`<VENDOR>_API_KEY`, not `VALYU_API_KEY`).
-3. **Apply the same rule to test files and code comments** - fixtures and inline comments shape contributor authoring habits.
-4. **When auditing docs, grep both classes:** `rg -n "\.goat-flow/(scratchpad|tasks|logs)/" --glob '*.md' --glob '*.ts'` for gitignored citations, plus a project-specific list of competitor names for vendor leakage. Add to `docs-and-crossrefs` footgun resolution rounds when found.
-
 Round 4 entries in `.goat-flow/learning-loop/footguns/docs-drift.md` (search: `Round 4 (2026-05-11`) record the surfaces fixed.
 
-**Recurrence (2026-07-16):** Pre-1.14.0 quality report `2026-07-16-1018-codex-vwcaf` found five new `.goat-flow/scratchpad/related/` citations in `lessons/coordination.md`, `patterns/external-lessons.md`, and `patterns/refactoring.md`. Fix: cite upstream provenance (repo + PR + path + search anchor), writing the upstream path as plain prose - the stale-ref scanner (`src/cli/facts/shared/learning-loop-common.ts`, search: `isCheckableForStaleness`) resolves backticked slash-containing paths locally and fails `feedback-loop-active` when unresolved.
+**Recurrence (2026-07-16):** Pre-1.14.0 quality report `2026-07-16-1018-codex-vwcaf` found five new `.goat-flow/scratchpad/related/` citations in `lessons/coordination.md`, the external-lessons patterns bucket (empty since 2026-08-01 and removed 2026-09-02), and `patterns/refactoring.md`. Fix: cite upstream provenance (repo + PR + path + search anchor), writing the upstream path as plain prose - the stale-ref scanner (`src/cli/facts/shared/learning-loop-common.ts`, search: `isCheckableForStaleness`) resolves backticked slash-containing paths locally and fails `feedback-loop-active` when unresolved.
 
 **Recurrence update (2026-07-17):** `.goat-flow/plans/**` and one quality-report path were cited as durable evidence in seven lessons and four footguns; three anchored plan files were already deleted. All replaced with committed anchors or plain prose. The prevention is now structural: `src/cli/facts/shared/learning-loop-common.ts` (search: `gitignored path used as durable evidence anchor`) fails evidence-grammar refs to gitignored paths; committed anchor files (README.md, .gitignore, .gitkeep) exempt.
 
@@ -57,9 +57,9 @@ Round 4 entries in `.goat-flow/learning-loop/footguns/docs-drift.md` (search: `R
 
 **Created:** 2026-03-31
 
-**What happened:** goat-flow once scored 100% on its own scanner system (removed per ADR-013) while `preflight-checks.sh` failed with 8 errors. The scanner checked structural presence (files exist, have the right headings); preflight checked functional correctness (commands work, paths resolve, versions match).
-
 **Prevention:** Don't treat a structural audit/check pass as a quality gate for the whole project. Use structural checks for what they cover and preflight/targeted verification for functional correctness; when they disagree, investigate.
+
+**What happened:** goat-flow once scored 100% on its own scanner system (removed per ADR-013) while `preflight-checks.sh` failed with 8 errors. The scanner checked structural presence (files exist, have the right headings); preflight checked functional correctness (commands work, paths resolve, versions match).
 
 ---
 
@@ -67,9 +67,9 @@ Round 4 entries in `.goat-flow/learning-loop/footguns/docs-drift.md` (search: `R
 
 **Created:** 2026-04-18
 
-**What happened:** M12 moved agent support metadata into `workflow/manifest.json`, but a follow-up code review still found residual parallel authority surfaces: Codex got a fictional `post_turn: "Stop"` event in the manifest, the dashboard frontend narrowed injected agent ids back to `claude | codex | gemini`, and unknown `.goat-flow/config.yaml` `agents:` ids only warned so audit status stayed green.
-
 **Prevention:** When claiming "single writable authority", run a cold-path pass searching for hardcoded enums, literal allowlists, and docs/templates restating the same contract. The migration is not complete until manifest, installer, config validation, audit failures, and frontend payload readers all agree on one authority.
+
+**What happened:** M12 moved agent support metadata into `workflow/manifest.json`, but a follow-up code review still found residual parallel authority surfaces: Codex got a fictional `post_turn: "Stop"` event in the manifest, the dashboard frontend narrowed injected agent ids back to `claude | codex | gemini`, and unknown `.goat-flow/config.yaml` `agents:` ids only warned so audit status stayed green.
 
 ---
 
@@ -77,11 +77,11 @@ Round 4 entries in `.goat-flow/learning-loop/footguns/docs-drift.md` (search: `R
 
 **Status:** active | **Created:** 2026-04-15 | **Merged during:** M11 learning-loop consolidation
 
+**Prevention:** When a profile field says an agent "can't" do something, verify against current product docs and runtime evidence before building workarounds. For Codex permission grammar, anchors are `workflow/hooks/agent-config/codex.toml` (search: `hooks = true`), `.goat-flow/hooks/deny-dangerous/patterns-paths.sh` (search: `is_secret_path_touch`), and `src/cli/facts/agent/settings.ts` (search: `collectCodexWorkspaceRootEntries`).
+
 **What happened:** Codex was assumed to lack PreToolUse hook support, so its profile left the hook field empty and a parallel Starlark execpolicy workaround was built. Later doc/runtime checks showed Codex did support hooks, making copied guardrail scripts dead code until registration was fixed.
 
 **Root cause:** A stale platform assumption propagated through templates, install scripts, fact extraction, and setup guides without re-checking against primary docs or the binary.
-
-**Prevention:** When a profile field says an agent "can't" do something, verify against current product docs and runtime evidence before building workarounds. For Codex permission grammar, anchors are `workflow/hooks/agent-config/codex.toml` (search: `hooks = true`), `.goat-flow/hooks/deny-dangerous/patterns-paths.sh` (search: `is_secret_path_touch`), and `src/cli/facts/agent/settings.ts` (search: `collectCodexWorkspaceRootEntries`).
 
 ---
 
@@ -89,11 +89,11 @@ Round 4 entries in `.goat-flow/learning-loop/footguns/docs-drift.md` (search: `R
 
 **Status:** active | **Created:** 2026-07-03 | **Incident count:** 3 | **Latest occurrence:** 2026-08-16
 
+**Prevention:** Before claiming a pattern is absent from a file or repo, rerun the exact single pattern with no `head`/`tail` truncation (or `grep -c`). For an exact path claim, use `test -e` on that path or an exact tracked-file query; a filename filter designed for neighbouring names is only a sample. Treat any truncated or indirect filter output as presence-oriented evidence, never evidence of absence. Evidence anchor: `scripts/preflight-checks.sh` (search: `Learning-Loop Schema`).
+
 **What happened:** While assessing loop coverage, `grep -n "stats\|quality\|audit\|index" scripts/preflight-checks.sh | head -20` showed no `stats` hit, and the analysis claimed `stats --check` ran in no local gate. The `head -20` had truncated the match list; preflight's Learning-Loop Schema section already ran `node dist/cli/cli.js stats . --check`. The user's "double check" instruction exposed the false absence claim before it shaped the fix.
 
 **Root cause:** A multi-pattern grep piped through `head` answers "what appears early", not "does X appear at all". The absence conclusion was drawn from a presence-oriented, truncated probe.
-
-**Prevention:** Before claiming a pattern is absent from a file or repo, rerun the exact single pattern with no `head`/`tail` truncation (or `grep -c`). For an exact path claim, use `test -e` on that path or an exact tracked-file query; a filename filter designed for neighbouring names is only a sample. Treat any truncated or indirect filter output as presence-oriented evidence, never evidence of absence. Evidence anchor: `scripts/preflight-checks.sh` (search: `Learning-Loop Schema`).
 
 **Recurrence (2026-08-12):** A `5-call` contract-surface census scoped to six hand-picked directories returned seven paths, and the count was about to ship as an exact-count expectation inside a milestone stop condition. `git grep -ln "5-call"` over the tracked tree returned eight: `.goat-flow/learning-loop/decisions/ADR-042-cross-harness-invocation-ask-first.md` (search: `5-call`) sat outside every scanned directory, so the honest wider census would have false-fired the stop rule on its first run. Exact-count claims follow the same rule as absence claims: derive them from the widest search the claim implies - `git grep` over the tracked tree, not a hand-picked directory list - before pinning the count into a stop condition or expected-result cell.
 
@@ -107,10 +107,6 @@ Round 4 entries in `.goat-flow/learning-loop/footguns/docs-drift.md` (search: `R
 **Decision changed:** Re-read cited call sites when reusing a claim, and update the learning entry when later code changes invalidate it.
 **Trigger phase:** READ
 
-**What happened:** While prioritising work, I cited `footguns/auditor.md` to assert that `goat-flow audit` executes an untrusted checkout's hook launcher by default, and that the dashboard was already safe on `"static"`. A cross-harness review disputed both. Re-verification showed that the CLI claim needed the `--agent` qualifier and that `buildDashboardAuditReport` then requested `"full"`; commit `9007a9e` corrected the learning entry at 07:09 on 2026-08-07. Commit `19046c08` changed the dashboard branch to `"static"` at 17:06 but did not update this lesson or the footgun. Current `test/integration/dashboard-audit-api.test.ts` (search: `does not execute selected-project hook launcher in /api/audit`) proves the selected-agent endpoint does not run the configured launcher.
-
-**Root cause:** I treated a bucket entry as verified truth because it was tagged `ACTUAL_MEASURED`. That tag records what the author believed they measured, not a re-run. Three failures followed: I dropped the source's `--agent` qualifier, forwarded a claim about a dashboard call site I had not opened, and later code changed the corrected behavior without refreshing the learning entries that described it.
-
 **Prevention:**
 1. Before restating a learning-loop claim in a plan, report, or recommendation, open the cited call site. The entry gives you the anchor to check, not the answer.
 2. Prove *reach* by running the command, not by reading the gate. `audit .` reports `Agent deny mechanism: skipped`; `audit . --agent claude` reports `pass`. One command settled what two code-reading passes got wrong.
@@ -118,6 +114,10 @@ Round 4 entries in `.goat-flow/learning-loop/footguns/docs-drift.md` (search: `R
 4. When an entry is found wrong, correct the entry in place with the dating evidence, and grep for what inherited it - a wrong fact in the loop tends to be copied into the milestone that cites it.
 5. `ACTUAL_MEASURED` means "the author measured something once". Date it against the code: `git log -L <lines>:<file>` showed the disputed line predated the entry by two weeks, which is what proved it wrong-on-arrival rather than a regression.
 6. When behavior changes at a cited call site, search the learning-loop indexes for that file or symbol and update affected entries in the same change. Index freshness cannot detect a semantically obsolete claim.
+
+**What happened:** While prioritising work, I cited `footguns/auditor.md` to assert that `goat-flow audit` executes an untrusted checkout's hook launcher by default, and that the dashboard was already safe on `"static"`. A cross-harness review disputed both. Re-verification showed that the CLI claim needed the `--agent` qualifier and that `buildDashboardAuditReport` then requested `"full"`; commit `9007a9e` corrected the learning entry at 07:09 on 2026-08-07. Commit `19046c08` changed the dashboard branch to `"static"` at 17:06 but did not update this lesson or the footgun. Current `test/integration/dashboard-audit-api.test.ts` (search: `does not execute selected-project hook launcher in /api/audit`) proves the selected-agent endpoint does not run the configured launcher.
+
+**Root cause:** I treated a bucket entry as verified truth because it was tagged `ACTUAL_MEASURED`. That tag records what the author believed they measured, not a re-run. Three failures followed: I dropped the source's `--agent` qualifier, forwarded a claim about a dashboard call site I had not opened, and later code changed the corrected behavior without refreshing the learning entries that described it.
 
 ---
 

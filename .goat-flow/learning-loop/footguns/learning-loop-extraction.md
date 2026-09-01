@@ -1,6 +1,6 @@
 ---
 category: learning-loop-extraction
-last_reviewed: 2026-08-23
+last_reviewed: 2026-09-02
 ---
 
 **Scope:** How the CLI reads its own learning loop - entry counting, resolved-vs-active grammars, decision extraction, and stale-reference detection. Audit check semantics and deny-enforcement verification live in [auditor.md](auditor.md).
@@ -8,6 +8,10 @@ last_reviewed: 2026-08-23
 ## Footgun: Learning-loop record counts have two grammars that disagree on resolved entries
 
 **Status:** active | **Created:** 2026-06-10 | **Updated:** 2026-08-15 | **Evidence:** ACTUAL_MEASURED
+
+**Prevention:**
+1. Match the count source to the surface's concept: retrieval/index surfaces use `parseBucket` active counts; size/health surfaces use stats totals.
+2. Never render counts from both grammars under the same bucket label on one surface; if both must appear, label them distinctly ("active entries" vs total records).
 
 **Symptoms:** Two surfaces show different counts under the same bucket label. Measured 2026-06-10: the dashboard Home LEARNING LOOP pill said `94 footguns` while the Learning loop card's per-bucket bar said `footguns 78`. Both are correct - they use different counting grammars.
 
@@ -21,10 +25,6 @@ last_reviewed: 2026-08-23
 - Measured gap: 94 total vs 78 active footguns (16 resolved); lessons matched at 212 because they have no resolved state, so the mismatch hides on buckets without resolved entries.
 - First Learning loop card draft rendered both numbers on one card; fixed by deriving the card's status line from the same `entryCount` data as its bars (search: `learningLoopStatusDetail` in `src/dashboard/views/home.html`).
 
-**Prevention:**
-1. Match the count source to the surface's concept: retrieval/index surfaces use `parseBucket` active counts; size/health surfaces use stats totals.
-2. Never render counts from both grammars under the same bucket label on one surface; if both must appear, label them distinctly ("active entries" vs total records).
-
 ---
 
 ## Footgun: Regex-shaped search needles pass only while their file path is unresolvable
@@ -34,11 +34,11 @@ last_reviewed: 2026-08-23
 **Trigger phase:** ACT
 **Caught at:** VERIFY
 
+**Prevention:** Copy needles verbatim from the cited file - never compose them as patterns. Read a long-green anchor whose path is a bare basename as unverified, not proven: the validator's skip list, not the needle, is what kept it green. When auditing buckets, treat bare-basename citations as candidates to complete, and expect completion to surface latent needle rot.
+
 **Symptoms:** An anchor pairing a bare source basename with a pattern-shaped needle sits green in a bucket for months; then correcting the citation to a full repository path makes the same line fail `stats --check` as a stale ref - even though a regex reading of the needle matches the target file.
 
 **Why it happens:** Two validator behaviours compose. `src/cli/facts/shared/reference-paths.ts` (search: `shorthand for a deeply nested file`) skips bare source basenames that do not exist at the repo root, so the citation is never checked at all; needle matching is literal substring comparison - `src/cli/facts/shared/learning-loop-common.ts` (search: `confirm the literal string still appears`) - so `.*` matches only a literal `.*`. A pattern-shaped needle therefore survives exactly as long as its path stays unresolvable; the moment someone "improves" the citation with a full path, validation starts and correctly rejects it. Measured 2026-08-20 in `footguns/auditor.md`: `stats --check` passed with the bare basename, failed with a `stale-ref` finding naming the pattern-shaped needle once the `src/cli/audit/` path was completed, and passed again after the needle became a literal copied from the source line.
-
-**Prevention:** Copy needles verbatim from the cited file - never compose them as patterns. Read a long-green anchor whose path is a bare basename as unverified, not proven: the validator's skip list, not the needle, is what kept it green. When auditing buckets, treat bare-basename citations as candidates to complete, and expect completion to surface latent needle rot.
 
 ---
 
@@ -47,6 +47,8 @@ last_reviewed: 2026-08-23
 **Status:** active | **Created:** 2026-07-12 | **Evidence:** ACTUAL_MEASURED
 **Decision changed:** Diagnostic consumers must classify every documented state at their boundary; non-null diagnostic text is not an error flag.
 **Trigger phase:** ACT
+
+**Prevention:** Do not interpret a general-purpose diagnostic field as an error flag. Classify each documented diagnostic state at the consuming boundary, and keep a fresh-install fixture beside malformed-metadata coverage.
 
 **Trap:** A shared diagnostic channel can carry malformed-metadata errors and valid status such as an empty first-run store. Any new consumer that treats every non-null diagnostic as failure can turn a valid fresh installation into a failed harness. The current Feedback Loop consumer classifies the known empty states; new diagnostics or consumers can reintroduce the conflation.
 
@@ -57,7 +59,25 @@ last_reviewed: 2026-08-23
 - `test/integration/audit-quality.test.ts` (search: `accepts extractor diagnostics that only report zero learning-loop entries`) pins the empty-install behavior without suppressing malformed-bucket diagnostics.
 - `test/integration/setup-quality-lifecycle.test.ts` (search: `consumer setup to quality-report lifecycle`) proves a newly installed consumer reaches a passing selected-agent harness before any incident entries exist.
 
-**Prevention:** Do not interpret a general-purpose diagnostic field as an error flag. Classify each documented diagnostic state at the consuming boundary, and keep a fresh-install fixture beside malformed-metadata coverage.
+---
+
+## Footgun: Bulk learning-loop rewrites can duplicate entries and hoist Prevention above the metadata block
+
+**Status:** active | **Created:** 2026-09-02 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** A programmatic bucket rewrite proves itself with heading counts, a non-blank line multiset diff against HEAD, and a Status-first scan before `goat-flow index` runs; a green transform log and a passing order contract are not that proof.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:**
+1. When a rewriter splices entry text back into a bucket with `String.prototype.replace`, pass a replacer function such as `replace(before, () => after)`; a plain replacement string expands `$&`, `$'`, and a dollar sign followed by a backtick wherever entry prose contains them.
+2. Before writing, compare every entry heading count and the sorted non-blank line multiset against `git show HEAD:<bucket>`; the only differences allowed are the relabels and insertions the rewrite declares.
+3. Keep every documented metadata label in the classifier the rewrite and the order contract share (`hallucination-risk`, `Merged`, and any new optional field), split a metadata paragraph that has a body line glued to it before the rewrite runs, and scan afterwards for any entry whose first line after the heading is not `**Status:**` or `**Created:**`.
+
+**Symptoms:** `stats --check` fails with `bucket-size` on a lesson bucket that was under budget before the rewrite; `goat-flow index` reports more lesson entries than the audit counted; entries open with `**Prevention:**` and carry their `**Status:**` line in the middle of the body; the Prevention-first contract reports the duplicated copies as non-compliant entries.
+
+**Why it happens:** Two independent causes composed. The rewrite spliced each transformed entry back with `transformed.replace(before, after)`, and lesson prose about JavaScript regexes contains a backtick-quoted `$`, which `String.replace` reads as the "text before the match" pattern; `verification-validators.md` grew from 20,820 to 71,671 bytes with seven of its ten headings each appearing four times, and `agent-tooling.md` and `filesystem-io.md` gained duplicates. Separately, the metadata classifier in the order contract enumerated a fixed label set that omitted the documented optional `hallucination-risk` field and the `**Merged:**` audit-trail line, and some entries glued `**Symptoms:**` or `**What happened:**` to the metadata paragraph without a blank line, so those paragraphs read as body and the rewrite inserted Prevention above them in ten entries.
+
+**Evidence:** Measured 2026-09-02 while completing the migration that commit `a13f92f9` started. `test/contract/learning-loop-entry-order.test.ts` (search: `const METADATA_LABELS`) owns the classifier; `.goat-flow/learning-loop/footguns/auditor.md` (search: `Version checks that test inequality without direction prescribe a downgrade`) and `.goat-flow/learning-loop/lessons/coordination.md` (search: `Phase 0 normalisation catches council false findings`) were two of the hoisted entries; `.goat-flow/learning-loop/lessons/verification-validators.md` (search: `multiline heading regexes with`) holds the prose that triggered the duplication.
 
 ---
 
