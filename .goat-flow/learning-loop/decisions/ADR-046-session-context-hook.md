@@ -2,6 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-08-23
+**Updated:** 2026-09-03 - replaced a dead milestone owner with explicit unplanned follow-up status.
 
 ## Context
 
@@ -97,7 +98,7 @@ This keeps the claim small, excludes human-pending sources, accounts for the eff
 
 ## Rollout and acceptance
 
-The accepted first rollout is Codex startup and resume only. ADR acceptance unlocks 1.18.0 M01, but that milestone must replace its current Claude-only scope and live command with this slice before implementation. This decision does not itself authorize or implement shipped hooks.
+The accepted first rollout remains Codex startup and resume only. No current implementation milestone owns this slice, so it is an explicitly unplanned follow-up until a future roadmap admits it. This decision does not itself authorize or implement shipped hooks.
 
 Deferred providers retain instruction-based retrieval until fresh evidence supports a later decision. No shipped config changes are required while they remain deferred.
 

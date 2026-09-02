@@ -2,6 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-08-23
+**Updated:** 2026-09-03 - reconciled shipped claim adoption and replaced dead milestone owners with explicit unplanned follow-up status.
 **Ticket/Context:** `.goat-flow/plans/1.17.0/M03-concurrent-session-spike.md`
 
 ## Context
@@ -87,22 +88,23 @@ An in-memory dashboard lock can serialize requests inside one server instance, b
 
 ## Rollout slice
 
-One later implementation milestone should add a single claim/identity helper, cross-process tests with synchronized stale writers, stable busy/changed/cleanup diagnostics, and sorted multi-target admission. It should then:
+The reusable claim and identity helper, its cross-process tests, stable diagnostics, sorted multi-target admission, and the managed-install transaction guard have shipped. Writer adoption is partially shipped: `install` claims every previewed destination, including config and managed agent-config paths, and `learn new` claims its target bucket and all four generated indexes.
+
+No current milestone owns the remaining rollout:
 
 - strengthen `plans time` by moving its existing identity comparison inside the claim;
-- guard dashboard active-plan writes with a revision returned by the plan read route;
-- provide the transaction guard M41 requires for the path-keyed managed install state; and
-- let 1.18.0 M11 apply the same helper to its config and managed agent-config writers instead of adding another lock convention.
+- guard dashboard active-plan writes with a revision returned by the plan read route; and
+- cover any cooperating config or managed agent-config writer that operates outside `install`.
 
-Dashboard project-state revisioning and session-log output remain later rows unless the implementing milestone explicitly admits them. The 1.18.0 backlog already owns extensions beyond M11's selected write surfaces.
+These are explicitly unplanned follow-ups until a future roadmap admits them. Dashboard project-state revisioning and session-log output are also unplanned unless an implementing milestone explicitly includes them.
 
-Implementation must verify exclusive creation and cleanup behavior on every supported CI platform before M41 relies on the mechanism. If a supported platform cannot provide the required exclusive-create behavior, M41 and M11 stop for a revised decision rather than silently falling back to re-read-only checks.
+A future guarded writer must retain supported-platform proof for exclusive creation and cleanup before relying on the mechanism. If a supported platform cannot provide that behavior, the dependent implementation stops for a revised decision rather than silently falling back to re-read-only checks.
 
 ## Doctrine-only fallback
 
-Until a writer is routed through the guard, goat-plan must re-read the exact milestone or marker immediately before a direct edit, compare it with the snapshot used to prepare the edit, and stop on any sibling change. Session logs use unique names rather than shared date-only names. These steps are advisory and must be described as such; they do not satisfy M41 or M11's requirement that two cooperating runtime writers cannot silently overwrite each other.
+Until a writer is routed through the guard, goat-plan must re-read the exact milestone or marker immediately before a direct edit, compare it with the snapshot used to prepare the edit, and stop on any sibling change. Session logs use unique names rather than shared date-only names. These steps are advisory and must be described as such; they do not satisfy a guarded-runtime requirement that two cooperating writers cannot silently overwrite each other.
 
-If implementation stalls, retain this doctrine and the reproduced limitation, but re-sequence dependent runtime work. Do not relabel the doctrine as a lock or accept it as proof for guarded managed state.
+If remaining adoption stalls, retain this doctrine for unguarded writers and the reproduced limitation, but re-sequence dependent runtime work. Do not relabel the doctrine as a lock or accept it as proof for guarded managed state.
 
 ## Consequences
 
@@ -111,8 +113,8 @@ If implementation stalls, retain this doctrine and the reproduced limitation, bu
 - The mechanism reuses atomic replacement and `plans time` content comparison rather than creating competing write conventions.
 - A crashed writer can leave a claim that blocks later writes until reviewed; this trades availability for preservation of ambiguous state.
 - Direct agent and editor writes remain capable of bypassing the guard, so user-facing claims must say **cooperative** detection.
-- `.goat-flow/write-claims/` becomes transient gitignored coordination state and must be added to the local-state architecture and manifest when implemented.
+- `.goat-flow/write-claims/` is transient gitignored coordination state registered in the local-state architecture and manifest.
 
 ## Reversibility
 
-This is a two-way decision until guarded writers ship. The helper and claim directory can be removed if all callers return to their prior write paths and dependent milestones are re-sequenced. Revisit the decision if supported-platform proof disproves exclusive creation, stale-claim recovery causes unacceptable blocked writes, or runtime work needs cross-project or network-filesystem coordination. Those cases require a new decision; they must not weaken the claim to an mtime or process-local check.
+The shipped mechanism remains reversible if every guarded caller returns to its prior write path and dependent work is re-sequenced; the helper and claim directory can then be removed. Revisit the decision if supported-platform proof disproves exclusive creation, stale-claim recovery causes unacceptable blocked writes, or runtime work needs cross-project or network-filesystem coordination. Those cases require a new decision; they must not weaken the claim to an mtime or process-local check.
