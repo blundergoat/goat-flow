@@ -227,6 +227,27 @@ npx @blundergoat/goat-flow@latest learn new . --type footgun --category hooks --
   --evidence workflow/hooks/README.md --search "Generated index" --evidence-kind OBSERVED
 ```
 
+### `goat-flow claims inspect|recover [path] --target <project-relative-path>`
+
+Inspect one path-write ownership marker, or remove only the unchanged marker an operator has confirmed is abandoned. Use this route when `install` or `learn new` reports that another cooperating writer owns a target. Claims never expire, and the command does not infer process liveness, marker age, or abandonment.
+
+Start with the read-only inspection:
+
+```bash
+npx @blundergoat/goat-flow@latest claims inspect . --target docs/cli.md
+```
+
+When a marker is present, the text result shows its path and SHA-256 plus a copy-ready recovery command. JSON uses `goat-flow.path-write-claim-recovery.v1` and returns `command`, `subcommand`, `status`, `projectRoot`, `targetPath`, `markerPath`, and `markerSha256`. An absent marker has status `absent` and null marker fields.
+
+Before recovery, independently confirm that no writer still owns the named target. Then pass the exact lowercase digest returned by the latest inspection and the separate confirmation flag:
+
+```bash
+npx @blundergoat/goat-flow@latest claims recover . --target docs/cli.md \
+  --marker-sha256 <64-lowercase-hex> --confirm-abandoned
+```
+
+Recovery inspects the marker again and passes that same in-process evidence to the owner-safe removal helper. A missing confirmation, malformed or stale digest, unsafe marker, disappearance, or identity change leaves the marker in place and requires a fresh inspection. There is no force, expiry, process-liveness guess, claim stealing, or automatic cleanup path. Both subcommands support only terminal text or JSON output; they do not accept `--output`.
+
 ### `goat-flow diagnostics context [path] [--agent <id>] [--format text|json|markdown]`
 
 Measure static context pressure from local goat-flow files without runner telemetry, network calls, provider credentials, prompt bodies, or session logs. The report covers root agent instructions, installed skill bodies, manifest-owned skill references, shared references/playbooks, and learning-loop buckets already extracted by the shared facts pipeline.
