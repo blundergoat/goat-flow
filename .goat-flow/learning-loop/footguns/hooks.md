@@ -1,6 +1,6 @@
 ---
 category: hooks
-last_reviewed: 2026-08-26
+last_reviewed: 2026-09-02
 ---
 
 **Scope:** Hook runtime delivery, provider result adapters, policy-module execution, and performance. What a scanner can actually see - changed-file enumeration, diff/rename detection, gitignore and gitattribute blind spots - lives in [hook-scanning.md](hook-scanning.md). Install / launch / registration / config-drift plumbing lives in [hook-installation.md](hook-installation.md). The `deny-dangerous` shell-grammar policy parser lives in [deny-shell.md](deny-shell.md), [deny-secrets.md](deny-secrets.md), and [deny-writes.md](deny-writes.md).
@@ -57,6 +57,20 @@ Recurrence on 2026-08-10: Codex CLI 0.147.0 repeated the trust distinction. Igno
 **Prevention:** Route every migrated launcher-owned failure through the neutral unavailable envelope and provider adapter. Keep source and npm-archive canaries that stall the child inside the managed deadline and require non-empty model context. Evidence anchors: `workflow/hooks/run-with-bash.mjs` (search: `reportLauncherUnavailable`), `workflow/hooks/hook-launch-runtime.mjs` (search: `prepareProviderLauncherUnavailableDelivery`), `test/integration/hook-consumer-canary.test.ts` (search: `Empty stdout would reproduce the silent provider timeout`), and `test/integration/packaged-hook-install.test.ts` (search: `Empty packed stdout would mean source proof hid a release artifact failure`).
 
 A migrated child result used the provider adapter, but timeout and adapter-failure branches returned through the legacy unavailable reporter. The terminal showed human stderr while Codex received empty stdout, so a stopped analyzer looked silent to the active model.
+
+## Footgun: Bash SECONDS can inherit a parent offset and invalidate hook result timing
+
+**Status:** active | **Created:** 2026-09-02 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Establish a hook-owned timing origin before using Bash `SECONDS` for budgets or provider result metadata.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+**Incident count:** 1 | **Latest occurrence:** 2026-09-02
+
+**Prevention:** Reset or baseline `SECONDS` at the hook process boundary, then test an inherited negative value through the real Bash producer and provider-result decoder. Keep the canonical and installed hook copies byte-identical. Evidence anchors: `workflow/hooks/post-turn-safety.sh` (search: `start hook budgets and result timing at this process boundary`), `workflow/hooks/hook-provider-adapters.mjs` (search: `execution duration must be a non-negative integer`), and `test/integration/hook-provider-contracts.test.ts` (search: `owns elapsed timing before emitting a managed Stop result`).
+
+**Symptoms:** On 2026-09-02, Codex received `post-turn-safety: UNAVAILABLE` with `adapter-delivery-failed` after the safety scan emitted invalid execution metadata. Replaying the installed launcher with `SECONDS=-1` produced the same response; removing that inherited value returned the expected provider result.
+
+**Why it happens:** Bash accepts `SECONDS` from the parent environment. The hook multiplied that value directly for `durationMs`, so a negative parent offset became a negative integer that the provider adapter correctly rejected. A positive inherited offset would remain schema-valid while overstating elapsed time and consuming the scan budget before the hook owned it.
 
 ## Footgun: An aggregating hook must re-derive every terminal decision it aggregates
 

@@ -35,6 +35,9 @@
 set -uo pipefail
 shopt -s extglob
 
+# Bash imports SECONDS from the parent environment, so start hook budgets and result timing at this process boundary.
+SECONDS=0
+
 # Bash 3.2 ships with supported macOS versions. Keep this compatibility path
 # free of associative arrays, mapfile, and Bash-4 parameter expansions. The
 # force flag executes this exact path under newer Bash during integration tests.
