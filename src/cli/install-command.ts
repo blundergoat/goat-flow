@@ -11,6 +11,7 @@ import { join } from "node:path";
 import { getAgentProfile } from "./agents/registry.js";
 import { classifyProjectState } from "./classify-state.js";
 import { CLIError } from "./cli-error.js";
+import { pathWriteClaimInspectCommand } from "./claims-command.js";
 import type { ParsedCLI } from "./cli-types.js";
 import { createFS } from "./facts/fs.js";
 import {
@@ -787,10 +788,13 @@ function claimReleaseDiagnostic(
 }
 
 /** Translate reusable claim admission into the install command's no-mutation contract. */
-function managedInstallClaimError(error: PathWriteClaimError): CLIError {
+function managedInstallClaimError(
+  error: PathWriteClaimError,
+  projectPath: string,
+): CLIError {
   const baseMessage =
     error.reason === "busy"
-      ? `Managed install is busy: another process owns ${error.targetPath}. No target files were changed.`
+      ? `Managed install is busy: another process owns ${error.targetPath}. No target files were changed. Inspect the claim before retrying: ${pathWriteClaimInspectCommand(projectPath, error.targetPath)}.`
       : `Managed install could not claim ${error.targetPath}: ${error.message} No target files were changed.`;
   const cleanupDiagnostic = claimReleaseDiagnostic(error.cleanupResults);
   return new CLIError(
@@ -817,7 +821,7 @@ function acquireManagedInstallClaims(
     return acquirePathWriteClaims(projectPath, requests);
   } catch (error) {
     if (error instanceof PathWriteClaimError) {
-      throw managedInstallClaimError(error);
+      throw managedInstallClaimError(error, projectPath);
     }
     throw error;
   }

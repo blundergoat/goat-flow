@@ -86,9 +86,80 @@ const HOOK_MARKER = {
   patterns: "**Context:**",
 } as const;
 
-/** Metadata-only paragraphs skipped when falling back to the first body paragraph. */
-const METADATA_LABEL =
-  /^\*\*(?:Status|Created|Updated|Resolved|Evidence|Date|Superseded|Related):\*\*/;
+/** Labels allowed to start metadata lines for each learning-loop bucket. */
+const ENTRY_METADATA_LEAD_LABELS: Record<IndexBucket, ReadonlySet<string>> = {
+  footguns: new Set([
+    "Status",
+    "Created",
+    "Updated",
+    "Resolved",
+    "Related",
+    "Decision changed",
+    "Trigger phase",
+    "Caught at",
+    "Incident count",
+    "Latest occurrence",
+    "Reason",
+    "Corrected",
+    "Dependency note",
+    "Depends on",
+    "hallucination-risk",
+  ]),
+  lessons: new Set([
+    "Status",
+    "Created",
+    "Updated",
+    "Resolved",
+    "Related",
+    "Decision changed",
+    "Trigger phase",
+    "Caught at",
+    "Incident count",
+    "Latest occurrence",
+    "Last recurrence",
+    "Recurrences",
+    "Reason",
+    "Merged",
+    "Merged during",
+  ]),
+  patterns: new Set(["Status", "Created", "Updated", "Resolved", "Related"]),
+  decisions: new Set([
+    "Status",
+    "Date",
+    "Superseded",
+    "Related",
+    "Decision changed",
+  ]),
+};
+
+/** Every label accepted after a leading metadata label on the same line. */
+const INLINE_ENTRY_METADATA_LABELS = new Set([
+  "Status",
+  "Created",
+  "Updated",
+  "Resolved",
+  "Evidence",
+  "Date",
+  "Superseded",
+  "Related",
+  "Decision changed",
+  "Trigger phase",
+  "Caught at",
+  "Incident count",
+  "Latest occurrence",
+  "Last recurrence",
+  "Recurrences",
+  "Reason",
+  "Corrected",
+  "Dependency note",
+  "Depends on",
+  "hallucination-risk",
+  "Merged",
+  "Merged during",
+]);
+
+/** Bold `**Label:**` fields recognised only through the private metadata grammar. */
+const ENTRY_METADATA_LABEL = /\*\*([^*\n]+):\*\*/gu;
 
 /** ADR record filenames; non-ADR files in the decisions dir are a stats finding, not index rows. */
 const ADR_FILE = /^ADR-\d{3}-.+\.md$/;
@@ -194,9 +265,33 @@ function paragraphAfter(content: string, marker: string): string | null {
   );
 }
 
+/** True when every visible line is metadata owned by the selected bucket. */
+function isMetadataParagraph(paragraph: string, bucket: IndexBucket): boolean {
+  const paragraphLines = paragraph
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+  return (
+    paragraphLines.length > 0 &&
+    paragraphLines.every((line) => {
+      const labels = Array.from(line.matchAll(ENTRY_METADATA_LABEL));
+      const leadingLabel = labels[0];
+      return (
+        leadingLabel?.index === 0 &&
+        ENTRY_METADATA_LEAD_LABELS[bucket].has(leadingLabel[1] ?? "") &&
+        labels.every((match) =>
+          INLINE_ENTRY_METADATA_LABELS.has(match[1] ?? ""),
+        )
+      );
+    })
+  );
+}
+
 /** True when a paragraph carries no retrievable prose: blank, metadata-only, or nothing but headings. */
-function isNonProseParagraph(paragraph: string): boolean {
-  if (paragraph.length === 0 || METADATA_LABEL.test(paragraph)) return true;
+function isNonProseParagraph(paragraph: string, bucket: IndexBucket): boolean {
+  if (paragraph.length === 0 || isMetadataParagraph(paragraph, bucket)) {
+    return true;
+  }
   const paragraphLines = paragraph
     .split("\n")
     .map((line) => line.trim())
@@ -217,33 +312,53 @@ function isListParagraph(paragraph: string): boolean {
   return /^(?:[*+-]|\d{1,9}[.)])(?:[ \t]+|$)/u.test(paragraph);
 }
 
+/** Return rendered body paragraphs after removing the entry heading and bucket-owned metadata. */
+function learningEntryBodyParagraphs(
+  section: Pick<ActiveLearningLoopSection, "bucket" | "content">,
+): string[] {
+  const withoutHeading = maskNonRenderedMarkdown(section.content).replace(
+    /^#{1,2}[^\n]*\n/,
+    "",
+  );
+  return withoutHeading
+    .split(/\n\s*\n/)
+    .map((paragraph) => paragraph.trim())
+    .filter((paragraph) => !isNonProseParagraph(paragraph, section.bucket));
+}
+
+/**
+ * Read the first rendered body paragraph after bucket-owned, line-complete metadata.
+ * Mixed metadata and prose stays visible so a malformed entry cannot satisfy ordering checks by omission.
+ *
+ * @param section - bucket identity and complete entry section content
+ * @returns first semantic body paragraph, or an empty string when none exists
+ */
+export function firstLearningEntryBodyParagraph(
+  section: Pick<ActiveLearningLoopSection, "bucket" | "content">,
+): string {
+  return learningEntryBodyParagraphs(section)[0] ?? "";
+}
+
 /**
  * Find fallback prose for a generated INDEX retrieval hook after ignoring metadata.
  * For footguns and lessons, keep the incident visible when maintainers move Prevention first,
  * including a leading Prevention list.
  */
 function fallbackHookParagraph(
-  content: string,
+  section: Pick<ActiveLearningLoopSection, "bucket" | "content">,
   shouldPreserveIncidentHook: boolean,
 ): string {
-  const withoutHeading = maskNonRenderedMarkdown(content).replace(
-    /^#{1,2}[^\n]*\n/,
-    "",
-  );
-  let hasSkippedPrevention = false;
-  for (const raw of withoutHeading.split(/\n\s*\n/)) {
-    const paragraph = raw.trim();
-    if (isNonProseParagraph(paragraph)) continue;
-    if (
-      shouldPreserveIncidentHook &&
-      !hasSkippedPrevention &&
-      isPreventionParagraph(paragraph)
-    ) {
-      hasSkippedPrevention = true;
-      continue;
-    }
+  const firstBodyParagraph = firstLearningEntryBodyParagraph(section);
+  if (
+    !shouldPreserveIncidentHook ||
+    !isPreventionParagraph(firstBodyParagraph)
+  ) {
+    return firstBodyParagraph.replace(/^\*\*[^*\n]+:\*\*\s*/, "");
+  }
+  const [, ...paragraphsAfterPrevention] = learningEntryBodyParagraphs(section);
+  for (const paragraph of paragraphsAfterPrevention) {
     // A leading list belongs to Prevention, not the incident a maintainer expects to find through the generated INDEX.
-    if (hasSkippedPrevention && isListParagraph(paragraph)) continue;
+    if (isListParagraph(paragraph)) continue;
     return paragraph.replace(/^\*\*[^*\n]+:\*\*\s*/, "");
   }
   return "";
@@ -326,7 +441,7 @@ function parseEntryFile(
     anchor: searchNeedle(section.heading),
     hook: firstSentence(
       paragraphAfter(section.content, HOOK_MARKER[bucket]) ??
-        fallbackHookParagraph(section.content, bucket !== "patterns"),
+        fallbackHookParagraph(section, bucket !== "patterns"),
     ),
     decisionChanged: section.decisionChanged,
     declaredDate: metadataDate(section.content, "Created"),
@@ -364,9 +479,10 @@ function decisionStatus(body: string): string {
 }
 
 /** Read the first ADR decision sentence, falling back to body prose for older ADR shapes. */
-function decisionSummary(body: string): string {
+function decisionSummary(section: ActiveLearningLoopSection): string {
   return firstSentence(
-    paragraphAfter(body, "\n## Decision") ?? fallbackHookParagraph(body, false),
+    paragraphAfter(section.content, "\n## Decision") ??
+      fallbackHookParagraph(section, false),
   );
 }
 
@@ -380,7 +496,7 @@ function parseDecisionFile(file: MarkdownEntry): IndexEntry | null {
     title: section.title,
     sourceFile: baseName(section.sourcePath),
     anchor: searchNeedle(section.heading),
-    hook: `${status} - ${decisionSummary(body)}`,
+    hook: `${status} - ${decisionSummary(section)}`,
     decisionChanged: section.decisionChanged,
     declaredDate: decisionIndexDate(body, status),
     approxTokenEstimate: approximateTokenEstimate(body),

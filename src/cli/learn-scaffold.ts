@@ -29,6 +29,7 @@ import {
   sep,
 } from "node:path";
 import { CLIError } from "./cli-error.js";
+import { pathWriteClaimInspectCommand } from "./claims-command.js";
 import type { LearnEntryType, LearnEvidenceKind } from "./cli-types.js";
 import { loadConfig } from "./config/reader.js";
 import { createFS } from "./facts/fs.js";
@@ -772,9 +773,11 @@ function acquireLearningLoopWriteClaims(
         result.status === "released" ? [] : [result.targetPath],
       );
       const recovery =
-        unreleasedTargets.length === 0
-          ? "re-run learn new against the current project."
-          : `inspect .goat-flow/write-claims before retrying; cleanup was not confirmed for ${unreleasedTargets.join(", ")}.`;
+        unreleasedTargets.length > 0
+          ? `inspect .goat-flow/write-claims before retrying; cleanup was not confirmed for ${unreleasedTargets.join(", ")}.`
+          : error.reason === "busy"
+            ? `inspect the claim before retrying: ${pathWriteClaimInspectCommand(projectRoot, error.targetPath)}.`
+            : "re-run learn new against the current project.";
       throw new CLIError(
         `${error.message} No learning-loop files were changed; ${recovery}`,
         2,

@@ -23,6 +23,7 @@ import {
   COMMANDS,
   REMOVED_COMMANDS,
   VALID_FORMATS,
+  type ClaimsSubcommand,
   type Command,
   type DiagnosticsSubcommand,
   type HookSubcommand,
@@ -39,7 +40,9 @@ import {
 } from "./cli-types.js";
 import { parseDiagnosticsPositionals } from "./diagnostics-command-parser.js";
 import {
+  assertTerminalSafeClaimArgument,
   parseCommandPositionals,
+  parseClaimsPositionals,
   parseEventsPositionals,
   parseHookScenarioArg,
   parseHooksPositionals,
@@ -58,6 +61,7 @@ import {
 } from "./skill-command-parser.js";
 
 const GLOBAL_INFORMATIONAL_FLAGS = new Set(["--help", "-h", "--version", "-v"]);
+const CLAIM_MARKER_SHA256 = /^[a-f0-9]{64}$/u;
 
 /**
  * Flags a developer can use to describe one learning-loop scaffold.
@@ -70,6 +74,51 @@ const LEARN_ARG_OPTIONS = {
   evidence: { type: "string", multiple: true },
   search: { type: "string", multiple: true },
   "evidence-kind": { type: "string" },
+} as const;
+
+/** Every token accepted by strict `parseArgs`; command validators below still own placement and combinations. */
+const CLI_ARG_OPTIONS = {
+  format: { type: "string" },
+  agent: { type: "string" },
+  mode: { type: "string" },
+  verbose: { type: "boolean", default: false },
+  output: { type: "string", short: "o" },
+  all: { type: "boolean", default: false },
+  limit: { type: "string" },
+  harness: { type: "boolean", default: false },
+  "check-drift": { type: "boolean", default: false },
+  "check-content": { type: "boolean", default: false },
+  "trusted-target": { type: "boolean", default: false },
+  "untrusted-target": { type: "boolean", default: false },
+  "no-audit-details": { type: "boolean", default: false },
+  check: { type: "boolean", default: false },
+  apply: { type: "boolean", default: false },
+  "dry-run": { type: "boolean", default: false },
+  force: { type: "boolean", default: false },
+  "force-managed": { type: "boolean", default: false },
+  "force-user-owned": { type: "boolean", default: false },
+  "force-path": { type: "string", multiple: true },
+  "update-config-version": { type: "boolean", default: false },
+  "clean-deprecated": { type: "boolean", default: false },
+  dev: { type: "boolean", default: false },
+  draft: { type: "string" },
+  "red-log": { type: "string" },
+  interactive: { type: "boolean", default: false },
+  name: { type: "string" },
+  skill: { type: "string" },
+  scenario: { type: "string" },
+  strict: { type: "boolean", default: false },
+  category: { type: "string" },
+  target: { type: "string" },
+  "marker-sha256": { type: "string" },
+  "confirm-abandoned": { type: "boolean", default: false },
+  ...LEARN_ARG_OPTIONS,
+  finalize: { type: "boolean", default: false },
+  "discard-open": { type: "boolean", default: false },
+  yes: { type: "boolean", short: "y", default: false },
+  json: { type: "boolean", default: false },
+  help: { type: "boolean", short: "h", default: false },
+  version: { type: "boolean", short: "v", default: false },
 } as const;
 
 /** Parse the positional subcommand from raw CLI args; throws CLIError for removed or unknown commands. */
@@ -180,6 +229,7 @@ function parsedString(
 
 /** Supply ignored, valid namespace positionals while help or version short-circuits dispatch. */
 const INFORMATIONAL_POSITIONALS: Partial<Record<Command, string[]>> = {
+  claims: ["inspect"],
   diagnostics: ["context"],
   events: ["tail"],
   hooks: ["list"],
@@ -252,6 +302,109 @@ function validateCommonFlags(command: Command, values: ParsedArgValues): void {
       throw new CLIError("recall supports only text or json output.", 2);
     }
   }
+}
+
+/** Reject claims-only flags before another command can silently ignore them. Error behavior: throws CLIError for the first misplaced option. */
+function rejectClaimsFlagsOutsideCommand(values: ParsedArgValues): void {
+  const claimsOnlyFlags: Array<[string, boolean]> = [
+    ["--target", parsedString(values, "target") !== undefined],
+    ["--marker-sha256", parsedString(values, "marker-sha256") !== undefined],
+    ["--confirm-abandoned", parsedFlag(values, "confirm-abandoned")],
+  ];
+  for (const [flag, isSupplied] of claimsOnlyFlags) {
+    if (!isSupplied) continue;
+    throw new CLIError(
+      `${flag} is only valid for ${flag === "--target" ? "claims" : "claims recover"}.`,
+      2,
+    );
+  }
+}
+
+/** Require terminal text/JSON output because claim inspection is not a report-file writer. Error behavior: throws CLIError before dispatch. */
+function validateClaimsOutput(values: ParsedArgValues): void {
+  if (parsedString(values, "output") !== undefined) {
+    throw new CLIError(
+      "claims is terminal-only and does not support --output.",
+      2,
+    );
+  }
+  const selectedFormat = parsedString(values, "format");
+  if (
+    selectedFormat !== undefined &&
+    selectedFormat !== "text" &&
+    selectedFormat !== "json"
+  ) {
+    throw new CLIError("claims supports only text or json output.", 2);
+  }
+}
+
+/** Keep recovery-only proof away from read-only inspection. Error behavior: throws CLIError when either mutation flag is supplied. */
+function validateClaimsInspectFlags(values: ParsedArgValues): void {
+  if (parsedString(values, "marker-sha256") !== undefined) {
+    throw new CLIError("--marker-sha256 is only valid for claims recover.", 2);
+  }
+  if (parsedFlag(values, "confirm-abandoned")) {
+    throw new CLIError(
+      "--confirm-abandoned is only valid for claims recover.",
+      2,
+    );
+  }
+}
+
+/** Require exact digest syntax and a separate human confirmation before recovery dispatch. Error behavior: throws CLIError before marker access. */
+function validateClaimsRecoveryFlags(values: ParsedArgValues): void {
+  const markerSha256 = parsedString(values, "marker-sha256");
+  if (markerSha256 === undefined) {
+    throw new CLIError(
+      "claims recover requires --marker-sha256 <64-lowercase-hex>.",
+      2,
+    );
+  }
+  if (!CLAIM_MARKER_SHA256.test(markerSha256)) {
+    throw new CLIError(
+      "--marker-sha256 must be exactly 64 lowercase hexadecimal characters.",
+      2,
+    );
+  }
+  if (!parsedFlag(values, "confirm-abandoned")) {
+    throw new CLIError(
+      "claims recover requires --confirm-abandoned after you verify that no writer still owns the target.",
+      2,
+    );
+  }
+}
+
+/**
+ * Keep marker identity and explicit confirmation on the single recovery route that consumes them.
+ * The branches stay separate because inspection must remain read-only while recovery requires two independent operator inputs.
+ * Error behavior: throws CLIError with exit code 2 before marker access for misplaced, missing, malformed, or persistence-capable options.
+ */
+function validateClaimsFlags(
+  command: Command,
+  values: ParsedArgValues,
+  claimsSubcommand: ClaimsSubcommand | null,
+): void {
+  if (command !== "claims") {
+    rejectClaimsFlagsOutsideCommand(values);
+    return;
+  }
+  if (parsedFlag(values, "help") || parsedFlag(values, "version")) return;
+  validateClaimsOutput(values);
+  if (parsedString(values, "target") === undefined) {
+    throw new CLIError(
+      `claims ${claimsSubcommand ?? "inspect"} requires --target <project-relative-path>.`,
+      2,
+    );
+  }
+  assertTerminalSafeClaimArgument(
+    "target path",
+    parsedString(values, "target") ?? "",
+  );
+  if (claimsSubcommand === "inspect") {
+    validateClaimsInspectFlags(values);
+    return;
+  }
+  validateClaimsRecoveryFlags(values);
 }
 
 /**
@@ -789,14 +942,25 @@ function validateLearnFlags(command: Command, values: ParsedArgValues): void {
  * @param plansTimeAction - timing action, or null when the subcommand is not `time`
  * @returns nothing; returning means every combination check passed. It throws the first CLIError raised by any validator, all with exit code 2.
  */
+interface SelectedSubcommands {
+  claims: ClaimsSubcommand | null;
+  quality: QualitySubcommand;
+  skill: SkillSubcommand | null;
+  hooks: HookSubcommand | null;
+  plans: PlansSubcommand | null;
+  plansTimeAction: PlansTimeAction | null;
+}
+
+/**
+ * Apply every command-specific flag contract in one deterministic order.
+ * The fixed order preserves one stable diagnostic when several supplied flags conflict.
+ *
+ * @throws CLIError with usage exit code 2 for the first invalid combination
+ */
 function validateFlagCombinations(
   command: Command,
   values: ParsedArgValues,
-  qualitySubcommand: QualitySubcommand,
-  skillSubcommand: SkillSubcommand | null,
-  hookSubcommand: HookSubcommand | null,
-  plansSubcommand: PlansSubcommand | null,
-  plansTimeAction: PlansTimeAction | null,
+  selected: SelectedSubcommands,
 ): void {
   if (
     parsedFlag(values, "trusted-target") &&
@@ -807,14 +971,15 @@ function validateFlagCombinations(
       2,
     );
   }
-  validateTargetTrustFlags(command, values, qualitySubcommand, hookSubcommand);
+  validateClaimsFlags(command, values, selected.claims);
+  validateTargetTrustFlags(command, values, selected.quality, selected.hooks);
   validateCommonFlags(command, values);
   validateInstallFlags(command, values);
-  validateQualityFlags(command, values, qualitySubcommand);
+  validateQualityFlags(command, values, selected.quality);
   validateLearnFlags(command, values);
-  validateSkillFlags(command, values, qualitySubcommand, skillSubcommand);
-  validateHookFlags(command, values, hookSubcommand);
-  validatePlansFlags(command, values, plansSubcommand, plansTimeAction);
+  validateSkillFlags(command, values, selected.quality, selected.skill);
+  validateHookFlags(command, values, selected.hooks);
+  validatePlansFlags(command, values, selected.plans, selected.plansTimeAction);
 }
 
 /** Parse the events tail limit; throws CLIError for invalid values before clamping to the display cap. */
@@ -834,6 +999,7 @@ function parseEventsLimitArg(rawLimit: string | undefined): number {
  */
 interface CommandProjectPaths {
   quality: string;
+  claims: string;
   events: string;
   hooks: string;
   plans: string;
@@ -847,6 +1013,8 @@ function selectCommandProjectPath(
   command: Command,
   paths: CommandProjectPaths,
 ): string {
+  // Claim actions place the selected project after their explicit inspect/recover subcommand.
+  if (command === "claims") return paths.claims;
   // An events path follows `tail`, so it differs from the default first-position path used by simple commands.
   if (command === "events") return paths.events;
   // Hook actions can carry a hook id before the project, so their parser owns the selected path.
@@ -965,46 +1133,7 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
   /** Destructured parseArgs result containing option values and positional arguments */
   const { values, positionals } = parseArgs({
     args: filteredArgs,
-    options: {
-      format: { type: "string" },
-      agent: { type: "string" },
-      mode: { type: "string" },
-      verbose: { type: "boolean", default: false },
-      output: { type: "string", short: "o" },
-      all: { type: "boolean", default: false },
-      limit: { type: "string" },
-      harness: { type: "boolean", default: false },
-      "check-drift": { type: "boolean", default: false },
-      "check-content": { type: "boolean", default: false },
-      "trusted-target": { type: "boolean", default: false },
-      "untrusted-target": { type: "boolean", default: false },
-      "no-audit-details": { type: "boolean", default: false },
-      check: { type: "boolean", default: false },
-      apply: { type: "boolean", default: false },
-      "dry-run": { type: "boolean", default: false },
-      force: { type: "boolean", default: false },
-      "force-managed": { type: "boolean", default: false },
-      "force-user-owned": { type: "boolean", default: false },
-      "force-path": { type: "string", multiple: true },
-      "update-config-version": { type: "boolean", default: false },
-      "clean-deprecated": { type: "boolean", default: false },
-      dev: { type: "boolean", default: false },
-      draft: { type: "string" },
-      "red-log": { type: "string" },
-      interactive: { type: "boolean", default: false },
-      name: { type: "string" },
-      skill: { type: "string" },
-      scenario: { type: "string" },
-      strict: { type: "boolean", default: false },
-      category: { type: "string" },
-      ...LEARN_ARG_OPTIONS,
-      finalize: { type: "boolean", default: false },
-      "discard-open": { type: "boolean", default: false },
-      yes: { type: "boolean", short: "y", default: false },
-      json: { type: "boolean", default: false },
-      help: { type: "boolean", short: "h", default: false },
-      version: { type: "boolean", short: "v", default: false },
-    },
+    options: CLI_ARG_OPTIONS,
     allowPositionals: true,
     strict: true,
   });
@@ -1019,6 +1148,13 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
     commandPositionals,
     parsedString(parsedValues, "draft") ?? null,
   );
+  const claimsPositionals =
+    command === "claims"
+      ? parseClaimsPositionals(commandPositionals)
+      : {
+          claimsSubcommand: null,
+          projectPath: qualityPositionals.projectPath,
+        };
   const eventsPositionals =
     command === "events"
       ? parseEventsPositionals(commandPositionals)
@@ -1062,6 +1198,7 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
   );
   const projectPath = selectCommandProjectPath(command, {
     quality: qualityPositionals.projectPath,
+    claims: claimsPositionals.projectPath,
     events: eventsPositionals.projectPath,
     hooks: hooksPositionals.projectPath,
     plans: plansPositionals.projectPath,
@@ -1074,15 +1211,14 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
     parsedValues,
     skillPositionals,
   );
-  validateFlagCombinations(
-    command,
-    parsedValues,
-    qualityPositionals.qualitySubcommand,
-    skillPositionals.skillSubcommand,
-    hooksPositionals.hookSubcommand,
-    plansPositionals.plansSubcommand,
-    plansPositionals.plansTimeAction,
-  );
+  validateFlagCombinations(command, parsedValues, {
+    claims: claimsPositionals.claimsSubcommand,
+    quality: qualityPositionals.qualitySubcommand,
+    skill: skillPositionals.skillSubcommand,
+    hooks: hooksPositionals.hookSubcommand,
+    plans: plansPositionals.plansSubcommand,
+    plansTimeAction: plansPositionals.plansTimeAction,
+  });
   const learnFields = buildLearnCLIFields(
     command,
     parsedValues,
@@ -1132,6 +1268,10 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
       hooksPositionals.hookSubcommand,
       parsedString(parsedValues, "scenario"),
     ),
+    claimsSubcommand: claimsPositionals.claimsSubcommand,
+    claimsTargetPath: parsedString(parsedValues, "target") ?? null,
+    claimsMarkerSha256: parsedString(parsedValues, "marker-sha256") ?? null,
+    shouldConfirmAbandoned: parsedFlag(parsedValues, "confirm-abandoned"),
     ...reviewFields,
     plansSubcommand: plansPositionals.plansSubcommand,
     plansStrict: parsedFlag(parsedValues, "strict"),

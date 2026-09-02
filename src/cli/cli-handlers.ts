@@ -10,6 +10,7 @@ import type { AgentId, ProjectFacts } from "./types.js";
 import type { AuditReport, AuditScope, CheckResult } from "./audit/types.js";
 import { CLIError } from "./cli-error.js";
 import { writeOutput } from "./cli-output.js";
+import { handleClaimsCommand } from "./claims-command.js";
 import { handleDiagnosticsCommand } from "./diagnostics-command.js";
 import { handleStatsCommand } from "./stats-command.js";
 import {
@@ -563,6 +564,7 @@ const COMMAND_HANDLERS: Partial<
   quality: handleQualityCommand,
   events: handleEventsCommand,
   hooks: handleHooksCommand,
+  claims: handleClaimsCommand,
   skill: handleSkillCommand,
   manifest: handleManifestCommand,
   stats: handleStatsCommand,

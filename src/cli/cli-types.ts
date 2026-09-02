@@ -22,6 +22,7 @@ export type Command =
   | "manifest"
   | "events"
   | "hooks"
+  | "claims"
   | "menu"
   | "stats"
   | "recall"
@@ -71,6 +72,9 @@ export type SkillSubcommand = "new" | "doctor";
  * Named (rather than inlined) so the read-only event surface can grow without retyping the literal.
  */
 export type EventsSubcommand = "tail";
+
+/** Explicit read and confirmed-removal operations for one path-write ownership marker. */
+export type ClaimsSubcommand = "inspect" | "recover";
 
 /**
  * Second positional accepted after `hooks`: state operations, toggles, and explicit verification.
@@ -146,6 +150,7 @@ export const COMMANDS: Command[] = [
   "manifest",
   "events",
   "hooks",
+  "claims",
   "menu",
   "stats",
   "recall",
@@ -209,6 +214,10 @@ export interface ParsedCLI extends CLIOptions {
   hookSubcommand: HookSubcommand | null;
   hookId: string | null;
   hookScenario: HookScenarioSelection | null;
+  claimsSubcommand: ClaimsSubcommand | null;
+  claimsTargetPath: string | null;
+  claimsMarkerSha256: string | null;
+  shouldConfirmAbandoned: boolean;
   reviewSubcommand: ReviewSubcommand | null;
   reviewValidatePath: string | null;
   plansSubcommand: PlansSubcommand | null;

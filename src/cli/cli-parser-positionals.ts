@@ -11,6 +11,7 @@ import { join, resolve } from "node:path";
 import { CLIError } from "./cli-error.js";
 import {
   HOOK_SUBCOMMANDS,
+  type ClaimsSubcommand,
   type Command,
   type CandidacyInputArg,
   type EventsSubcommand,
@@ -301,6 +302,63 @@ export function parseEventsPositionals(positionals: string[]): {
   return {
     eventsSubcommand: "tail",
     projectPath: resolve(second ?? "."),
+  };
+}
+
+/**
+ * Keep operator-supplied claim paths from changing the shape of terminal diagnostics or copyable commands.
+ * Error behavior: throws CLIError before path resolution or marker access when C0, DEL, or C1 control characters are present.
+ *
+ * @param label - public claim field named by a refusal
+ * @param argumentValue - exact operator-supplied path checked before display
+ */
+export function assertTerminalSafeClaimArgument(
+  label: "project path" | "target path",
+  argumentValue: string,
+): void {
+  const hasControlCharacter = Array.from(argumentValue).some((character) => {
+    const codePoint = character.codePointAt(0);
+    return (
+      codePoint !== undefined &&
+      (codePoint <= 0x1f || (codePoint >= 0x7f && codePoint <= 0x9f))
+    );
+  });
+  if (hasControlCharacter) {
+    throw new CLIError(
+      `claims ${label} must not contain terminal control characters.`,
+      2,
+    );
+  }
+}
+
+/**
+ * Resolve one explicit claim inspection or recovery action and its selected project.
+ * Error behavior: unknown actions or extra project paths fail before any marker is read.
+ *
+ * @param positionals - subcommand followed by at most one project path
+ * @returns the selected claim action and absolute project path
+ * @throws CLIError when the action or positional count is invalid
+ */
+export function parseClaimsPositionals(positionals: string[]): {
+  claimsSubcommand: ClaimsSubcommand;
+  projectPath: string;
+} {
+  const [subcommand, projectPath, ...extraPositionals] = positionals;
+  if (subcommand !== "inspect" && subcommand !== "recover") {
+    throw new CLIError('claims requires subcommand "inspect" or "recover".', 2);
+  }
+  if (extraPositionals.length > 0) {
+    throw new CLIError(
+      `claims ${subcommand} accepts at most one positional project path.`,
+      2,
+    );
+  }
+  if (projectPath !== undefined) {
+    assertTerminalSafeClaimArgument("project path", projectPath);
+  }
+  return {
+    claimsSubcommand: subcommand,
+    projectPath: resolve(projectPath ?? "."),
   };
 }
 

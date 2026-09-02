@@ -252,6 +252,38 @@ const COMMAND_HELP_CATALOG = {
       "goat-flow hooks verify . --agent codex --scenario all --trusted-target",
     ],
   },
+  claims: {
+    command: "claims",
+    visibility: "advanced",
+    summary: "Inspect or explicitly recover one abandoned write claim.",
+    usage: [
+      "goat-flow claims inspect [path] --target <project-relative-path> [--format text|json]",
+      "goat-flow claims recover [path] --target <project-relative-path> --marker-sha256 <hash> --confirm-abandoned [--format text|json]",
+    ],
+    subcommands: [
+      ["inspect", "Read one marker identity without changing it."],
+      [
+        "recover",
+        "Remove only the unchanged marker you confirmed is abandoned.",
+      ],
+    ],
+    flags: [
+      [
+        "--target <path>",
+        "Select one normalized project-relative write target.",
+      ],
+      [
+        "--marker-sha256 <hash>",
+        "Require the exact digest returned by inspect.",
+      ],
+      ["--confirm-abandoned", "Confirm that no writer still owns the target."],
+      ["--format <type>", "Choose text or json output."],
+    ],
+    examples: [
+      "goat-flow claims inspect . --target docs/cli.md",
+      "goat-flow claims recover . --target docs/cli.md --marker-sha256 <hash> --confirm-abandoned",
+    ],
+  },
   menu: {
     command: "menu",
     visibility: "advanced",
