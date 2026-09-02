@@ -729,7 +729,21 @@ last_reviewed: 2026-08-01
                 }),
                 fixedClock(),
               ),
-            /Another cooperating writer owns .*INDEX\.md.*No learning-loop files were changed/u,
+            (error: unknown) => {
+              const message = String(error);
+              const ownedTarget = message.match(
+                /Another cooperating writer owns ([^;]+);/u,
+              )?.[1];
+              assert.ok(ownedTarget, message);
+              assert.match(message, /No learning-loop files were changed/u);
+              assert.ok(
+                message.includes(
+                  `goat-flow claims inspect '${projectRoot}' --target '${ownedTarget}'`,
+                ),
+                message,
+              );
+              return true;
+            },
           );
           assert.equal(existsSync(competingBucketPath), false);
         },

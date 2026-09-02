@@ -721,7 +721,7 @@ describe("one baseline per managed path", () => {
       assert.ok(loser, "one public install must lose claim contention");
       assert.match(
         loser.stderr,
-        /^Managed install is busy: another process owns [^\r\n]+\. No target files were changed\.\n$/u,
+        /^Managed install is busy: another process owns ([^\r\n]+)\. No target files were changed\. Inspect the claim before retrying: goat-flow claims inspect '[^'\r\n]+' --target '\1'\.\n$/u,
       );
       const loserSkillPath =
         loser.agent === "claude" ? CLAUDE_SKILL_PATH : SHARED_SKILL_PATH;

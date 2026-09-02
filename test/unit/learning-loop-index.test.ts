@@ -12,6 +12,7 @@ import { join } from "node:path";
 import { createFS } from "../../src/cli/facts/fs.js";
 import { generateIndexes } from "../../src/cli/learning-loop-index/generate.js";
 import {
+  firstLearningEntryBodyParagraph,
   parseActiveBucketSections,
   parseBucket,
 } from "../../src/cli/learning-loop-index/parse-bucket.js";
@@ -332,6 +333,62 @@ describe("parseBucket", () => {
     );
     assert.equal(entry?.sourceFile, "hooks.md");
     assert.equal(entry?.anchor, "## Footgun: Active trap with symptoms");
+  });
+
+  it("finds the first body paragraph with bucket-specific line metadata", () => {
+    const footgunBody = firstLearningEntryBodyParagraph({
+      bucket: "footguns",
+      content: `## Footgun: Metadata before prevention
+
+**Status:** active | **Created:** 2026-09-02 | **Evidence:** OBSERVED
+**Dependency note:** Preserve the related decision.
+
+**Prevention:** Keep the first actionable paragraph visible.`,
+    });
+    const lessonBody = firstLearningEntryBodyParagraph({
+      bucket: "lessons",
+      content: `## Lesson: Migration metadata before prevention
+
+**Status:** active | **Created:** 2026-09-02 | **Recurrences:** M1 (2026-03-31) | **Merged during:** M11 consolidation
+
+**Prevention:** Keep migrated metadata out of the body classifier.`,
+    });
+    const mixedBody = firstLearningEntryBodyParagraph({
+      bucket: "footguns",
+      content: `## Footgun: Mixed metadata and prose
+
+**Status:** active
+This unlabelled prose must keep the paragraph visible.
+
+**Prevention:** Do not hide mixed paragraphs.`,
+    });
+    const lessonEvidenceBody = firstLearningEntryBodyParagraph({
+      bucket: "lessons",
+      content: `## Lesson: Evidence is body prose
+
+**Created:** 2026-09-02
+
+**Evidence:** This paragraph must remain visible to the ordering contract.
+
+**Prevention:** Evidence cannot stand in for prevention.`,
+    });
+
+    assert.equal(
+      footgunBody,
+      "**Prevention:** Keep the first actionable paragraph visible.",
+    );
+    assert.equal(
+      lessonBody,
+      "**Prevention:** Keep migrated metadata out of the body classifier.",
+    );
+    assert.equal(
+      mixedBody,
+      "**Status:** active\nThis unlabelled prose must keep the paragraph visible.",
+    );
+    assert.equal(
+      lessonEvidenceBody,
+      "**Evidence:** This paragraph must remain visible to the ordering contract.",
+    );
   });
 
   it("keeps extracted facts identical when Prevention moves before the incident narrative", () => {

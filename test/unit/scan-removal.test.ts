@@ -100,3 +100,144 @@ describe("managed preview flags", () => {
     );
   });
 });
+
+describe("claims command routing", () => {
+  it("parses read-only inspection for one project-relative target", () => {
+    const parsed = parseCLIArgs([
+      "claims",
+      "inspect",
+      ".",
+      "--target",
+      ".goat-flow/learning-loop/lessons/INDEX.md",
+      "--format",
+      "json",
+    ]);
+
+    assert.equal(parsed.command, "claims");
+    assert.equal(parsed.claimsSubcommand, "inspect");
+    assert.equal(
+      parsed.claimsTargetPath,
+      ".goat-flow/learning-loop/lessons/INDEX.md",
+    );
+    assert.equal(parsed.claimsMarkerSha256, null);
+    assert.equal(parsed.shouldConfirmAbandoned, false);
+  });
+
+  it("parses confirmed recovery with one exact marker digest", () => {
+    const markerSha256 = "a".repeat(64);
+    const parsed = parseCLIArgs([
+      "claims",
+      "recover",
+      ".",
+      "--target",
+      "docs/cli.md",
+      "--marker-sha256",
+      markerSha256,
+      "--confirm-abandoned",
+    ]);
+
+    assert.equal(parsed.claimsSubcommand, "recover");
+    assert.equal(parsed.claimsTargetPath, "docs/cli.md");
+    assert.equal(parsed.claimsMarkerSha256, markerSha256);
+    assert.equal(parsed.shouldConfirmAbandoned, true);
+  });
+
+  it("requires target, exact lowercase SHA-256, and explicit confirmation", () => {
+    assert.throws(
+      () => parseCLIArgs(["claims", "inspect"]),
+      /claims inspect requires --target <project-relative-path>/u,
+    );
+    assert.throws(
+      () =>
+        parseCLIArgs([
+          "claims",
+          "recover",
+          "--target",
+          "docs/cli.md",
+          "--marker-sha256",
+          "ABC",
+          "--confirm-abandoned",
+        ]),
+      /--marker-sha256 must be exactly 64 lowercase hexadecimal characters/u,
+    );
+    assert.throws(
+      () =>
+        parseCLIArgs([
+          "claims",
+          "recover",
+          "--target",
+          "docs/cli.md",
+          "--marker-sha256",
+          "a".repeat(64),
+        ]),
+      /claims recover requires --confirm-abandoned/u,
+    );
+  });
+
+  it("rejects recovery flags off-route and non-terminal output", () => {
+    assert.throws(
+      () => parseCLIArgs(["audit", ".", "--target", "docs/cli.md"]),
+      /--target is only valid for claims/u,
+    );
+    assert.throws(
+      () =>
+        parseCLIArgs([
+          "claims",
+          "inspect",
+          "--target",
+          "docs/cli.md",
+          "--marker-sha256",
+          "a".repeat(64),
+        ]),
+      /--marker-sha256 is only valid for claims recover/u,
+    );
+    assert.throws(
+      () =>
+        parseCLIArgs([
+          "claims",
+          "inspect",
+          "--target",
+          "docs/cli.md",
+          "--format",
+          "markdown",
+        ]),
+      /claims supports only text or json output/u,
+    );
+    assert.throws(
+      () =>
+        parseCLIArgs([
+          "claims",
+          "inspect",
+          "--target",
+          "docs/cli.md",
+          "--output",
+          "claim.json",
+        ]),
+      /claims is terminal-only and does not support --output/u,
+    );
+  });
+
+  it("rejects terminal control characters in displayed claim paths", () => {
+    assert.throws(
+      () =>
+        parseCLIArgs([
+          "claims",
+          "inspect",
+          "project\u001b[2J",
+          "--target",
+          "docs/cli.md",
+        ]),
+      /claims project path must not contain terminal control characters/u,
+    );
+    assert.throws(
+      () =>
+        parseCLIArgs([
+          "claims",
+          "inspect",
+          "--target",
+          "docs/cli.md\nspoofed output",
+        ]),
+      /claims target path must not contain terminal control characters/u,
+    );
+  });
+});

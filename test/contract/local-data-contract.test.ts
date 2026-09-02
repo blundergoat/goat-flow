@@ -4,7 +4,7 @@
  * These checks keep runtime event kinds, local-state guides, and tool trust boundaries aligned.
  * Use them when adding an evidence producer or changing what a support artifact may expose.
  */
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
@@ -12,6 +12,14 @@ import { REQUIRED_GOAT_FLOW_GITIGNORE_PATTERNS } from "../../src/cli/audit/check
 import type { EvidenceEventKind } from "../../src/cli/evidence/envelope.js";
 
 const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
+
+const DECISION_PLAN_VERSION_PATTERNS = [
+  String.raw`\b(\d+\.\d+\.\d+)\s+M\d+\b`,
+  String.raw`\b(\d+\.\d+\.\d+)\s+backlog\b`,
+  String.raw`\.goat-flow\/plans\/(\d+\.\d+\.\d+)\/`,
+] as const;
+
+type SemanticVersion = readonly [number, number, number];
 
 const DOCUMENTED_EVENT_KINDS = {
   "terminal.create": "terminal.create",
@@ -78,6 +86,35 @@ function readContractFile(relativePath: string): string {
   return readFileSync(resolve(PROJECT_ROOT, relativePath), "utf-8");
 }
 
+/** Parse package and plan versions for the ownership contract; throws an assertion error for malformed input. */
+function parseSemanticVersion(version: string): SemanticVersion {
+  const match = /^(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/u.exec(version);
+  assert.ok(match, `expected a semantic version, received ${version}`);
+  return [Number(match[1]), Number(match[2]), Number(match[3])];
+}
+
+/** Return whether one plan version is newer than the package that could own it. */
+function isFutureVersion(
+  candidate: SemanticVersion,
+  current: SemanticVersion,
+): boolean {
+  if (candidate[0] !== current[0]) return candidate[0] > current[0];
+  if (candidate[1] !== current[1]) return candidate[1] > current[1];
+  return candidate[2] > current[2];
+}
+
+/** Find version-qualified plan ownership claims without rejecting historical provenance. */
+function decisionPlanVersionReferences(
+  decision: string,
+): Array<{ text: string; version: string }> {
+  return DECISION_PLAN_VERSION_PATTERNS.flatMap((pattern) =>
+    [...decision.matchAll(new RegExp(pattern, "giu"))].map((match) => {
+      assert.ok(match[1], `plan reference is missing a version: ${match[0]}`);
+      return { text: match[0], version: match[1] };
+    }),
+  );
+}
+
 /**
  * Confirm the architecture budget lists every runtime event kind by name.
  * Use when a producer gains a new event: the budget row is what tells a maintainer
@@ -103,6 +140,44 @@ function assertLocalStateGuide(relativePath: string): void {
 }
 
 describe("local data contract", () => {
+  // Accepted and implemented ADRs may cite package-or-earlier provenance.
+  // A higher local plan version is a dead durable owner and fails this contract.
+  it("keeps future local plan versions out of accepted decision ownership", () => {
+    const manifest = JSON.parse(readContractFile("package.json")) as {
+      version?: unknown;
+    };
+    assert.equal(typeof manifest.version, "string");
+    const currentVersion = parseSemanticVersion(manifest.version);
+    const decisionsDirectory = resolve(
+      PROJECT_ROOT,
+      ".goat-flow/learning-loop/decisions",
+    );
+    const violations = readdirSync(decisionsDirectory)
+      .filter((fileName) => /^ADR-\d{3}-.+\.md$/u.test(fileName))
+      .sort()
+      .flatMap((fileName) => {
+        const decision = readFileSync(
+          resolve(decisionsDirectory, fileName),
+          "utf-8",
+        );
+        if (
+          !/^\*\*Status:\*\*\s+(?:Accepted|Implemented)\s*$/mu.test(decision)
+        ) {
+          return [];
+        }
+        return decisionPlanVersionReferences(decision)
+          .filter((reference) =>
+            isFutureVersion(
+              parseSemanticVersion(reference.version),
+              currentVersion,
+            ),
+          )
+          .map((reference) => `${fileName}: ${reference.text}`);
+      });
+
+    assert.deepEqual(violations, []);
+  });
+
   // Users need every runtime event in the canonical budget before a producer may emit it.
   it("budgets every EvidenceEventKind and defers unowned event families", () => {
     const architecture = readContractFile(".goat-flow/architecture.md");

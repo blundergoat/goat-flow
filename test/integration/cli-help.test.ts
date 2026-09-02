@@ -24,6 +24,7 @@ const activeHelpCommands = [
   "manifest",
   "events",
   "hooks",
+  "claims",
   "menu",
   "stats",
   "recall",
@@ -133,6 +134,7 @@ describe("root CLI help", () => {
       "manifest",
       "events",
       "hooks",
+      "claims",
       "menu",
       "stats",
       "recall",
@@ -248,6 +250,19 @@ describe("contextual CLI help", () => {
     assert.match(hooksHelpProcess.stdout, /^  verify\s+/mu);
     assert.match(hooksHelpProcess.stdout, /^  --scenario <name>\s+/mu);
     assert.doesNotMatch(hooksHelpProcess.stdout, /--harness/u);
+  });
+
+  it("shows the two-step claim recovery boundary", () => {
+    const claimsHelpProcess = runHelpCommand(["claims", "--help"]);
+
+    assert.equal(claimsHelpProcess.status, 0, claimsHelpProcess.stderr);
+    assert.match(claimsHelpProcess.stdout, /^Subcommands:$/mu);
+    assert.match(claimsHelpProcess.stdout, /^  inspect\s+/mu);
+    assert.match(claimsHelpProcess.stdout, /^  recover\s+/mu);
+    assert.match(claimsHelpProcess.stdout, /^  --target <path>\s+/mu);
+    assert.match(claimsHelpProcess.stdout, /^  --marker-sha256 <hash>\s+/mu);
+    assert.match(claimsHelpProcess.stdout, /^  --confirm-abandoned\s+/mu);
+    assert.doesNotMatch(claimsHelpProcess.stdout, /--force/u);
   });
 
   it("advertises narrow setup authority and learn output formats", () => {
