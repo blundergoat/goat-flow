@@ -1,6 +1,6 @@
 ---
 category: test-shell-environment
-last_reviewed: 2026-08-23
+last_reviewed: 2026-09-03
 ---
 
 **Scope:** The shell and process layer under a test - stdin and EOF handling, tools that silently skip paths, inherited permission profiles, and why silent output is not proof a child never ran. Choosing and invoking the runner is [test-execution-environment.md](test-execution-environment.md).
@@ -10,7 +10,7 @@ last_reviewed: 2026-08-23
 **Status:** active | **Created:** 2026-06-13
 **Trigger phase:** READ
 **Caught at:** VERIFY
-**Incident count:** 9 | **Latest occurrence:** 2026-08-18
+**Incident count:** 10 | **Latest occurrence:** 2026-09-03
 **Decision changed:** Recursive ripgrep searches over gitignored plan or log trees must use `--no-ignore` or `-uuu` and a known-positive control before a zero-match result is accepted; a session-`grep` search that names `.goat-flow/` as an operand must be rerun as `command grep` whenever it has to reach ignored plans or logs, and always on installs older than the 2026-08-18 `**/` template, which also hide the committed subtrees; a negative-search proof is clean only when the search exits with its documented no-match status, not an invocation error.
 
 **Prevention:** For verification sweeps that must include gitignored content, use `rg --no-ignore` / `rg -uuu`, `command grep` (bypasses the function), `find ... | xargs grep` (child processes do not inherit the shell function), or pass the ignored files as explicit operands (direct-file grep is unaffected). For any recursive search that names `.goat-flow/` as an operand, use `command grep -rn --exclude-dir=.git --exclude-dir=scratchpad <pattern> .goat-flow/`, or run the shim with `.goat-flow/` as the working directory, which does honour the re-includes. Since the 2026-08-18 template change (`**/name/**` re-includes plus the `**/logs/*/*/` guard, pinned by `test/integration/gitignore-shape.test.ts` and `REQUIRED_GOAT_FLOW_GITIGNORE_PATTERNS`), the shim sees the committed surface from any operand in projects on that template; installs on the older anchored spelling still hide `learning-loop/` and `skill-docs/` until `goat-flow install` refreshes `.goat-flow/.gitignore`, and the `goat-flow-gitignore` audit check names the missing `**/` patterns. The ignored `plans/` and `logs/` trees are never visible to the shim, so a bucket-scoped INDEX-first pass is safe but a sweep that must reach local plans or logs is not. Inside a Claude Code session only, `grep --no-ignore-files` through the shim (embedded ugrep 7.5.0) also returns the full set; it is not portable, so written guidance keeps `command grep`. Before trusting ANY zero-hit sweep over a gitignored tree, run a known-positive control: grep for a string you just read in one of those files - if the control misses, the tool is filtered, not the tree clean. Treat a suspiciously empty recursive grep over a dot-directory as a wrapper artifact until reproduced with an ignore-bypassing search. For a negative `rg` proof, capture and classify the status explicitly: `0` means a match was found, `1` means no match, and any other status means the proof failed. Do not use one `else` branch for both no-match and error, and do not rely on quoted brace expansion to build operand lists. When the question is "is this consistent in what ships" rather than "does this string exist on disk", prefer `git grep` - it searches tracked files by construction, so local logs, plans, and scratch artifacts cannot mask a real residue or manufacture a false one. Evidence: `type grep` in-session (search: `--ignore-files`); the M02b `post-turn-validate` sweep was re-proven with `find` and `command grep`; `workflow/setup/reference/goat-flow-gitignore` (search: `Ignore everything by default`); `CLAUDE.md` (search: `Recursive searches under`).
@@ -33,7 +33,27 @@ last_reviewed: 2026-08-23
 
 **Recurrence 2026-08-18:** When I verified that a deleted ADR (`ADR-059`) had no remaining references, `grep -rl ADR-059 .goat-flow/` from the repo root returned nothing, and `stats --check` then surfaced four live references one at a time. Re-measured with a tracked needle: `grep -rl ADR-024 .goat-flow/` from the repo root found 2 files; the same shim command with `.goat-flow/` as the working directory found 10; `git grep -l ADR-024 -- .goat-flow/` found 10; `command grep -rl --exclude-dir=.git --exclude-dir=scratchpad ADR-024 .goat-flow/` found 99 (55 under `logs/`, 34 under `plans/`, 8 under `learning-loop/`, plus `architecture.md` and `glossary.md`). This corrects the 2026-06-13 explanation above: the shim does not only skip the gitignored `plans/` and `logs/` trees, it drops the committed `learning-loop/` and `skill-docs/` trees too. `.goat-flow/.gitignore` opens with `*`, and ugrep matches the `!learning-loop/**` re-includes against the path as passed (`.goat-flow/learning-loop/...`) rather than against the path relative to that `.gitignore`, so only depth-1 file re-includes such as `!architecture.md` survive. A three-file fixture reproduces it: with an ignore file of `*` then `!learning-loop/` and `!learning-loop/**`, `ugrep --ignore-files --hidden -r NEEDLE gf/` from the parent directory finds only `gf/architecture.md`, while the same search with `gf/` as the working directory, or with the re-include spelled `!gf/learning-loop/**`, also finds `gf/learning-loop/footguns/x.md`. `--hidden` is already in the shim's flags, so hidden-directory skipping is not the cause, and adding `!*/` does not repair it. `git grep` is not a substitute for a reference sweep here: it is tracked-only and missed the 89 files under `plans/` and `logs/`.
 
+**Recurrence 2026-09-03:** During M13 activation, I used default `rg` against the ignored milestone tree. I discarded that result before relying on it and reran the lookup with `command grep`, which reached the expected plan state. Evidence anchor: `AGENTS.md` (search: `Recursive searches under`).
+
 **Root cause:** I treated a search command's apparent result as filesystem truth without proving that the command had searched the intended operands successfully. Ignore filtering can false-clean the result, shell wrappers can misreport tool availability, and control flow can collapse an invocation error into the same branch as a legitimate no-match status.
+
+---
+
+## Lesson: Proof captures use fresh paths instead of pre-truncation
+
+**Status:** active | **Created:** 2026-09-03
+**Decision changed:** Give each proof command a fresh capture path instead of clearing and reusing a temporary file.
+**Trigger phase:** VERIFY
+**Caught at:** VERIFY
+**Incident count:** 1 | **Latest occurrence:** 2026-09-03
+
+**Prevention:** Create a fresh temporary directory and one never-reused output path per proof command. Let the producer create its capture, then inspect the exit status and bytes. Do not clear a capture with `: >` or another truncation pattern.
+
+**What happened:** M13's whitespace-check wrapper initialized `check.out` with `: >` before running two no-index checks. The deny-dangerous hook blocked the entire command, so no verification ran. The retry used separate new output paths and completed.
+
+**Root cause:** I treated a temporary capture as disposable and reused it even though write-once paths were simpler and preserved each command's evidence.
+
+**Evidence anchor:** `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Null-command (: / true) followed by redirect truncates the target`).
 
 ---
 

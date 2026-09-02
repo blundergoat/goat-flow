@@ -1,6 +1,6 @@
 ---
 category: milestone-accounting
-last_reviewed: 2026-08-30
+last_reviewed: 2026-09-03
 ---
 
 **Scope:** Milestone state and effort accounting - activation order, where human gates belong, what a task section may contain, and why estimates counted from work units beat estimates written as durations. Multi-agent council coordination is [coordination.md](coordination.md).
@@ -26,18 +26,20 @@ last_reviewed: 2026-08-30
 ## Lesson: Activate prerequisites before the numerically next milestone
 
 **Status:** active | **Created:** 2026-07-13
-**Incident count:** 3
-**Latest occurrence:** 2026-08-28
+**Incident count:** 4
+**Latest occurrence:** 2026-09-03
 
-**Prevention:** Before changing milestone status, read every declared prerequisite and run plan validation. Keep `Depends on` machine-only (`none` or comma-separated local IDs); put rationale in narrative fields.
+**Prevention:** Before changing milestone status or deriving proof, read every declared prerequisite and named evidence owner. Recompute mutable counts at the named revision and current worktree; never use a historical endpoint as the live expectation. Run plan validation. Keep `Depends on` machine-only (`none` or comma-separated local IDs); put rationale in narrative fields.
 
 **What happened:** After M05 approval, M06 was marked in progress before its dependency header was read. A later parent-plan run also started final evidence while four semantic prerequisites remained unfinished, then initially amended `Depends on` with explanatory prose that strict validation rejected.
 
 **Recurrence 2026-08-28:** M37's timing receipt was paused for the PR #61 follow-up, but its lifecycle status remained `in-progress`. When M58 reached `human-verification-pending`, strict plan validation correctly reported two active milestones. Marking M37 `blocked` with a current-state reason makes the hold and resume action machine-readable before handoff. Evidence anchor: `src/cli/plans-check-structure.ts` (search: `multiple active milestones`).
 
-**Root cause:** Execution order was inferred from milestone position or incomplete prose instead of a complete, parseable dependency contract.
+**Recurrence 2026-09-03:** While closing the final lesson lane, I reused M08's 121-footgun baseline without reopening its evidence. The live index returned 123 while contract and stats stayed green: the bulk-rewrite correction added row 122, then the inherited-`SECONDS` incident added row 123. Evidence anchors: `.goat-flow/learning-loop/footguns/learning-loop-extraction.md` (search: `Bulk learning-loop rewrites can duplicate entries`) and `.goat-flow/learning-loop/footguns/hooks.md` (search: `Bash SECONDS can inherit a parent offset`).
 
-**Evidence:** Both incidents occurred in local gitignored milestone files, so no durable repository anchor exists. In each case, dependency validation exposed the ordering defect before dependent implementation continued.
+**Root cause:** Execution order or proof state came from milestone position, incomplete prose, or a historical summary instead of the dependency and its owning evidence.
+
+**Evidence:** Earlier lifecycle incidents live only in gitignored plans; dependency validation caught them before dependent work. The tracked footguns above preserve the count correction.
 
 ---
 
@@ -185,11 +187,11 @@ anchor: `src/cli/plans-time.ts` (search: `receipt contains a discarded open span
 **Status:** active | **Created:** 2026-08-14
 **Decision changed:** Activate before timing starts, and remove the active receipt schema before resetting a milestone to `not-started`.
 **Trigger phase:** ACT
-**Incident count:** 7
-**Latest occurrence:** 2026-08-24
+**Incident count:** 8
+**Latest occurrence:** 2026-09-03
 
 **Prevention:**
-1. Change the milestone to `in-progress` or `testing-gate` before the first `plans time start` command.
+1. Change the milestone to `in-progress` or `testing-gate` before checking implementation work or starting the first timing segment. Use only the canonical lifecycle vocabulary; `active` is not a status.
 2. Confirm the milestone renders exactly one `Status` field, then start the category and inspect the returned open segment.
 3. If start is rejected, correct the state and retry prospectively; never fabricate or backfill the missed interval.
 4. Stop and inspect the open timing span before changing a milestone to `blocked`, `abandoned`, or `complete`; lifecycle text does not close the receipt.
@@ -210,6 +212,8 @@ second, even when every plan task is already approved.
 **Recurrence 2026-08-24 (M26 activation order):** I tried to start M26's first segment while its status was still `not-started`. The guard rejected the command without opening a receipt. Changing the status to `in-progress` before the prospective retry opened M26-S01; no interval was backfilled. Evidence anchor: `src/cli/plans-time.ts` (search: `Timing Start requires exactly one rendered Status field`).
 
 **Recurrence 2026-08-24 (reset to not-started):** I reset `windows-native-hooks` M01 to `not-started` while preserving its paused Timing Receipt. Strict plan validation rejected `not-started milestone must not include a Timing Receipt`. Moving the exact closed S01 row to Reset history, reopening the checked task, and removing the active receipt section made validation pass without erasing measured effort.
+
+**Recurrence 2026-09-03 (M13 activation):** I first wrote the unsupported status `active`, then checked M13's frozen-contract task while the milestone still read `not-started`. Reading the canonical status set exposed the first error; strict validation rejected the second snapshot. Setting `in-progress` before changing task or timing state restored the lifecycle contract. Evidence anchors: `src/cli/plans-check.ts` (search: `const VALID_STATUSES`) and (search: `not-started milestone has checked implementation tasks`).
 
 **Root cause:** I treated receipt creation as the transition that made a milestone active, then treated lifecycle text as though it also normalized timing state. The CLI models them separately: active state is required before a start, an open span must end before an inactive state can validate, and `not-started` cannot retain even a paused receipt.
 
@@ -246,25 +250,23 @@ second, even when every plan task is already approved.
 
 **Status:** active | **Created:** 2026-07-17
 **Decision changed:** After writing or restructuring `M*.md` files, validate them with the shipped plan exporter before handoff; visual Markdown completeness is insufficient. | **Trigger phase:** VERIFY
-**Incident count:** 6 | **Latest occurrence:** 2026-08-25
+**Incident count:** 8 | **Latest occurrence:** 2026-09-03
 
-**Prevention:** Treat the canonical example as an executable consumer fixture, not prose. Cover compact and expanded representations through `parseMilestoneMarkdown`, run `goat-flow plans check <plan-path> --strict`, require exporter records to have zero warnings, and resolve every cited path plus exact semantic search string before handoff. Dry-run executable plan commands against disposable inputs, including every directory or file precondition they rely on. Parser changes also run scoped ESLint before full preflight. Current objective parsing accepts a bold field, an `## Objective` section, or the outcome title. Other portable anchors are Status, compact or section Scope, Tasks, Proof, Exit/Exit criteria, and Stop/rescope at H2 or as the compact `- Stop/rescope if ...` line inside Exit. Evidence anchors: `src/cli/plans-export.ts` (search: `readFieldOrSectionMarkdown`), `src/cli/plans-export.ts` (search: `readStopMarkdown`), and `test/unit/plans-check.test.ts` (search: `accepts the compact Small rendering in strict mode`).
+**Prevention:** Treat the canonical example as an executable consumer fixture, not prose. Cover compact and expanded representations through `parseMilestoneMarkdown`, run `goat-flow plans check <plan-directory> --strict`, require exporter records to have zero warnings, and resolve every cited path plus exact semantic search string before handoff. Dry-run executable plan commands against disposable inputs, including every directory or file precondition they rely on. Parser changes also run scoped ESLint before full preflight. Current objective parsing accepts a bold field, an `## Objective` section, or the outcome title. Other portable anchors are Status, compact or section Scope, Tasks, Proof, Exit/Exit criteria, and Stop/rescope at H2 or as the compact `- Stop/rescope if ...` line inside Exit. Evidence anchors: `src/cli/plans-export.ts` (search: `readFieldOrSectionMarkdown`), `src/cli/plans-export.ts` (search: `readStopMarkdown`), and `test/unit/plans-check.test.ts` (search: `accepts the compact Small rendering in strict mode`).
 
 **What happened:** The 1.15.0 milestone files looked structurally complete and passed a custom heading/count check, but the first `plans export` preview warned that all 11 records lacked portable objectives and boundary notes. At that revision, the exporter accepted only the bold `Objective` field, while the files used a level-two `Objective` section. They also omitted `Boundary Notes` and initially placed CAO incident gates in peer sections the exporter would not include in task bodies.
 
-**Recurrence (2026-07-31):** Goat-plan's compact reference introduced an inline Scope plus canonical `## Exit` containing `Stop/rescope if`, while the parser still accepted only a Scope section, legacy `## Exit criteria`, and a separate stop heading. The first full preflight also caught three parser complexity errors missed by the focused M02 suite. The correction added an end-to-end strict Small fixture, exporter coverage for compact Exit/stop, and split parser branches before rerunning repository gates.
+**Root-cause summary:** I validated the authoring layout instead of the repository's executable consumer contract. A Markdown reader could infer fields that `parseMilestoneMarkdown`, downstream renderers, or plan commands intentionally reject.
 
-**Dashboard recurrence (2026-07-31):** The first M03 dashboard GREEN reused the filename fallback as an objective when malformed Markdown had no outcome heading. Manual diff review caught the false objective before handoff. The correction keeps filename fallback for the row title, passes only a parsed outcome heading into objective fallback, and asserts that malformed objectives remain blank.
+**Incident ledger:**
 
-**Recurrence (2026-08-03):** A new milestone followed the field guide's prose form `Plan/admin overhead: n min other`, but the parser required the bold field `**Plan/admin overhead:**`. Strict validation rejected the unparseable estimate before implementation; correcting the field cleared the error. Evidence anchor: `src/cli/plans-export.ts` (search: `readMilestoneField(content, "Plan/admin overhead"`).
-
-**Recurrence (2026-08-05):** The 1.16.0 strict checker and Markdown exporter both exited zero, but supplementary contract checks found 13 cited paths or search strings that did not resolve and one nine-word ISSUE delivery item below the documented minimum. Several references named the right concept in the wrong learning file; others preserved stale filenames or approximate headings. Correcting the citations and rerunning both validators prevented an implementation handoff built on nonexistent evidence or malformed issue copy.
-
-**Recurrence (2026-08-15):** The goat-clarity M03 fresh-consumer command passed strict plan validation but failed on first execution because the installer requires its target directory to exist. Adding an explicit `mkdir -p` precondition made the command self-contained, and the four-agent install then completed. Evidence anchor: `workflow/install-goat-flow.sh` (search: `is not a directory`).
-
-**Recurrence (2026-08-25):** A new M55 draft nested `### Stop / rescope` below `## Exit`; strict validation reported `missing stop/rescope` because the exporter reads milestone sections at H2. An ad hoc trim then shortened the required Forecast range grammar and failed again. Rewinding to the exact Standard template fixed both fields before handoff.
-
-**Root cause:** I validated the authoring layout I had produced instead of the repository's consumer contract. A Markdown reader could infer the intended fields, while `parseMilestoneMarkdown` intentionally recognizes a narrower portable schema.
+- **Recurrence 2026-07-31:** Compact Scope and Exit forms were absent from the parser, focused tests missed three complexity errors, and the dashboard reused a filename as a malformed objective. Expanded parser/fixture coverage preserved the filename only as a row title and kept malformed objectives blank.
+- **Recurrence 2026-08-03:** Prose-form `Plan/admin overhead` did not satisfy the required bold field; strict validation rejected it before implementation. Evidence anchor: `src/cli/plans-export.ts` (search: `readMilestoneField(content, "Plan/admin overhead"`).
+- **Recurrence 2026-08-05:** Although strict checking and export exited zero, supplementary checks found 13 unresolved citations and one nine-word ISSUE item. Correcting both prevented a handoff built on nonexistent evidence or malformed issue copy.
+- **Recurrence 2026-08-15:** A fresh-consumer command omitted the installer's required target directory. Adding `mkdir -p` made it executable. Evidence anchor: `workflow/install-goat-flow.sh` (search: `is not a directory`).
+- **Recurrence 2026-08-25:** A draft nested Stop/rescope at H3, then an ad hoc trim broke Forecast range grammar. Rewinding to the exact Standard template fixed both fields.
+- **Recurrence 2026-09-02:** Reconciliation produced a 220-character problem statement naming `M08`. Strict validation rejected both defects before timing; one 90-character public sentence passed. Evidence anchor: `src/cli/plans-check-structure.ts` (search: `collectPlainLanguageSectionFindings`).
+- **Recurrence 2026-09-03:** During M13 closeout, I passed the milestone file to `plans check`. The loader called `readdirSync` on that file and returned `ENOTDIR`; rerunning the command against `.goat-flow/plans/1.17.0-go-live` passed strict validation. Evidence anchor: `src/cli/plans-export.ts` (search: `function listMilestoneFiles`).
 
 ---
 
