@@ -1,6 +1,6 @@
 ---
 category: verification-formatting
-last_reviewed: 2026-08-31
+last_reviewed: 2026-09-03
 ---
 
 **Scope:** Formatter, lint, and Knip debt that only surfaces at repo-wide scope - style flags, copied or untracked files that inherit debt, and touched-test formatting before a verification claim. Adding or tuning a preflight gate is [verification-preflight.md](verification-preflight.md).
@@ -79,7 +79,7 @@ last_reviewed: 2026-08-31
 **Decision changed:** Run the repository formatter on touched TypeScript before treating a focused GREEN run as milestone verification.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
-**Incident count:** 23 | **Latest occurrence:** 2026-08-29
+**Incident count:** 24 | **Latest occurrence:** 2026-09-03
 
 **Prevention:** Format touched TypeScript before focused proof and retain Prettier in final verification. For goat-clarity, freeze the repository-owned check and write commands before mutation; a receipt without literal formatter proof remains incomplete.
 
@@ -104,6 +104,8 @@ last_reviewed: 2026-08-31
 **Recurrence 2026-08-27:** M41 added a source-shape contract for the heap-safe Knip recovery command but did not format it before the first exact-path check. `npx prettier --check test/integration/preflight-progress.test.ts` rejected the file, and `set -e` stopped the proof batch before ShellCheck, Bash syntax, or runtime tests. Format only that file and restart the complete proof batch. Evidence anchor: `test/integration/preflight-progress.test.ts` (search: `keeps Knip failure guidance on the heap-safe preflight invocation`).
 
 **Recurrence 2026-08-29:** M71's schema and history tests were green before the exact-path Prettier check rejected three milestone files. Formatting only those files made the same check print `All matched files use Prettier code style!`, and the focused tests stayed green. Evidence anchors: `src/cli/quality/schema-score-rationale.ts` (search: `QUALITY_SCORE_RATIONALE_MAX_CHARACTERS`), `test/unit/quality-score-rationale.test.ts` (search: `quality score rationale schema`), and `test/unit/quality-diff-delta-tag.test.ts` (search: `quality diff score rationale`).
+
+**Recurrence 2026-09-03:** M14's future-owner contract reported `# pass 13` and `# fail 0` before the first scoped Prettier check rejected `test/contract/local-data-contract.test.ts`. Formatting that exact file made the check print `All matched files use Prettier code style!`, and the focused contract stayed green. Evidence anchor: `test/contract/local-data-contract.test.ts` (search: `keeps future local plan versions out of accepted decision ownership`).
 
 Evidence anchors:
 
@@ -216,3 +218,18 @@ Evidence anchors:
 **Release recurrence (2026-08-09):** Hook notes gained a dated release heading before that release's manifest snapshot existed, so the full suite failed. Keep notes under `Unreleased` until release identity and its snapshot propagate together. Evidence: `CHANGELOG.md` (search: `## Unreleased`) and `test/unit/manifest.test.ts` (search: `missing manifest snapshots`).
 
 ---
+
+## Lesson: A zero-exit lint command can analyze no files
+
+**Status:** active | **Created:** 2026-09-03
+**Decision changed:** Treat lint as evidence only when output proves the selected files were analyzed; an ignored-file warning is not a pass even when exit status is zero.
+**Trigger phase:** VERIFY
+**Caught at:** VERIFY
+
+**Prevention:** Read every per-file diagnostic before appending pass text, and inspect the project's lint scope before selecting a command. If the configured parser excludes the target, record lint as not applicable; do not force the file through an incompatible parser project.
+
+**What happened:** During M14, the exact-path ESLint command exited 0 after reporting that `test/contract/local-data-contract.test.ts` was ignored, then a shell suffix printed a false PASS line. A `--no-ignore` diagnostic exited 1 because the test is absent from both configured parser projects. The focused runtime contract and repository typecheck remained valid, but neither made the ignored lint command evidence.
+
+**Root cause:** The wrapper treated process status as coverage without reading the per-file warning or checking the configured target set.
+
+**Evidence:** `eslint.config.mjs` (search: `ignores: ["dist/**", "test/**", "node_modules/**", "*.js", "*.mjs"]`) excludes the test tree, while (search: `project: ["./tsconfig.json", "./tsconfig.dashboard.json"]`) limits typed parsing to the two source projects.
