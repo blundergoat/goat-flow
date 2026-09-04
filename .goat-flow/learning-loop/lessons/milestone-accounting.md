@@ -1,6 +1,6 @@
 ---
 category: milestone-accounting
-last_reviewed: 2026-09-04
+last_reviewed: 2026-09-05
 ---
 
 **Scope:** Milestone state and effort accounting - activation order, where human gates belong, what a task section may contain, and why estimates counted from work units beat estimates written as durations. Multi-agent council coordination is [coordination.md](coordination.md).
@@ -254,7 +254,7 @@ second, even when every plan task is already approved.
 
 **Status:** active | **Created:** 2026-07-17
 **Decision changed:** After writing or restructuring `M*.md` files, validate them with the shipped plan exporter before handoff; visual Markdown completeness is insufficient. | **Trigger phase:** VERIFY
-**Incident count:** 8 | **Latest occurrence:** 2026-09-03
+**Incident count:** 10 | **Latest occurrence:** 2026-09-05
 
 **Prevention:** Treat the canonical example as an executable consumer fixture, not prose. Cover compact and expanded representations through `parseMilestoneMarkdown`, run `goat-flow plans check <plan-directory> --strict`, require exporter records to have zero warnings, and resolve every cited path plus exact semantic search string before handoff. Dry-run executable plan commands against disposable inputs, including every directory or file precondition they rely on. Parser changes also run scoped ESLint before full preflight. Current objective parsing accepts a bold field, an `## Objective` section, or the outcome title. Other portable anchors are Status, compact or section Scope, Tasks, Proof, Exit/Exit criteria, and Stop/rescope at H2 or as the compact `- Stop/rescope if ...` line inside Exit. Evidence anchors: `src/cli/plans-export.ts` (search: `readFieldOrSectionMarkdown`), `src/cli/plans-export.ts` (search: `readStopMarkdown`), and `test/unit/plans-check.test.ts` (search: `accepts the compact Small rendering in strict mode`).
 
@@ -271,6 +271,7 @@ second, even when every plan task is already approved.
 - **Recurrence 2026-08-25:** A draft nested Stop/rescope at H3, then an ad hoc trim broke Forecast range grammar. Rewinding to the exact Standard template fixed both fields.
 - **Recurrence 2026-09-02:** Reconciliation produced a 220-character problem statement naming `M08`. Strict validation rejected both defects before timing; one 90-character public sentence passed. Evidence anchor: `src/cli/plans-check-structure.ts` (search: `collectPlainLanguageSectionFindings`).
 - **Recurrence 2026-09-03:** During M13 closeout, I passed the milestone file to `plans check`. The loader called `readdirSync` on that file and returned `ENOTDIR`; rerunning the command against `.goat-flow/plans/1.17.0-go-live` passed strict validation. Evidence anchor: `src/cli/plans-export.ts` (search: `function listMilestoneFiles`).
+- **Recurrence 2026-09-05 (ACTUAL_MEASURED):** Duplicate Proof headings and linked ISSUE bands broke author checks. Evidence: `src/cli/plans-export.ts` (`addRepresentationConflict`); `workflow/skills/goat-plan/references/issue-format.md` (`## Tasks`).
 
 ---
 

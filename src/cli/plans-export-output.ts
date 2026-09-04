@@ -88,6 +88,9 @@ export function redactPlanExportRecord(
     status: scrubDurableText(record.status),
     statusReason: scrubDurableText(record.statusReason),
     dependencies: scrubDurableText(record.dependencies),
+    ...(record.lane !== undefined && {
+      lane: scrubDurableText(record.lane),
+    }),
     objective: scrubDurableText(record.objective),
     scopeMarkdown: scrubDurableText(record.scopeMarkdown),
     boundaryMarkdown: scrubDurableText(record.boundaryMarkdown),
@@ -186,6 +189,9 @@ export function renderPlanExportMarkdown(record: PlanExportRecord): string {
       ? [`**Status reason:** ${record.statusReason}`]
       : []),
     `**Depends on:** ${providedOrMissing(record.dependencies, "none declared")}`,
+    ...(record.lane === undefined
+      ? []
+      : [record.lane === "" ? "**Lane:**" : `**Lane:** ${record.lane}`]),
     ...renderEffortMetadata(record),
     `**Objective:** ${providedOrMissing(record.objective, missingText)}`,
     "",

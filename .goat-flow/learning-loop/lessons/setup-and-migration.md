@@ -1,6 +1,6 @@
 ---
 category: setup-and-migration
-last_reviewed: 2026-08-04
+last_reviewed: 2026-09-05
 ---
 
 ## Lesson: Packaged install smoke is not a completed setup audit
@@ -8,13 +8,15 @@ last_reviewed: 2026-08-04
 **Created:** 2026-08-03
 **Decision changed:** Release probes verify deterministic installation and adapted-project audit as separate stages.
 **Trigger phase:** VERIFY
-**Incident count:** 2 | **Latest occurrence:** 2026-08-03
+**Incident count:** 3 | **Latest occurrence:** 2026-09-05
 
-**Prevention:** In a package smoke, assert version and managed install results on a fresh target. Run harness/content/drift audit against a fixture or checkout whose adaptive project content is already complete; do not treat deterministic file installation as proof that the LLM-authored setup phase ran.
+**Prevention:** In a package smoke, assert version and managed install results on a fresh target. Run harness/content/drift audit against a fixture or checkout whose adaptive project content is already complete; do not treat deterministic file installation as proof that the LLM-authored setup phase ran. For settings changes, also start from an existing settings file without the new keys and follow its generated setup prompt. Reinstalling a freshly seeded target proves preservation, not upgrade coverage.
 
 **What happened:** A packaged-release probe ran `setup --apply` against an empty git repository and immediately required the full harness audit to pass. The installer correctly wrote its 69 managed files, but the audit failed because no agent had yet authored the project-specific `AGENTS.md`, architecture, or code map named in the installer's own next steps.
 
 **Recurrence 2026-08-03:** A second release-readiness pass repeated the same bare-target audit even though this lesson already existed. The packaged CLI again installed 69 managed files and correctly failed the incomplete target. Re-reading this entry redirected the actual package proof to the configured goat-flow checkout, where setup, Codex agent setup, all five harness concerns, 49 drift comparisons, and 234-file content lint passed. The failed bare-target result remains evidence of an invalid smoke contract, not a release defect.
+
+**Recurrence 2026-09-05:** Attribution verification installed a fresh target twice, missing that an existing settings file kept attribution unset and the upgrade prompt skipped the Claude guide containing the merge instruction. A second reproduction created attribution-only settings before installation; the installer preserved that file without seeding template permissions. `src/cli/prompt/compose-setup.ts` (search: `attributionGuidance`) now routes full Claude setup prompts to `workflow/setup/agents/claude.md` (search: `### Attribution settings`), which requires installer-first seeding followed by an in-place merge. `workflow/install-goat-flow.sh` (search: `const perms = settings && settings.permissions`) preserves existing files rather than supplying missing permission groups.
 
 **Evidence:** `src/cli/cli-handlers.ts` (search: `Setup preview and setup apply both use the deterministic install path`) routes `setup --apply` through managed installation, while plain `setup` composes the adaptive guidance. The packaged installer output explicitly says `Run the setup steps to create project-specific content` after the managed files are installed.
 

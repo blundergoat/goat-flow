@@ -23,6 +23,62 @@ import {
 } from "./plans-check.helpers.js";
 
 describe("plans check: lifecycle states and timing receipts", () => {
+  /**
+   * Fixture purpose: Lane metadata preserves inactive lifecycle states and report bytes.
+   * Process/filesystem side effects: runs the CLI against temporary plans and removes them afterward.
+   */
+  it("preserves inactive lifecycle behavior with declared Lane metadata", () => {
+    const temporaryRoot = mkdtempSync(
+      join(tmpdir(), "goat-flow-plan-lane-lifecycle-"),
+    );
+    try {
+      const files: Record<string, string> = {};
+      const statuses = [
+        "complete",
+        "not-started",
+        "blocked",
+        "abandoned",
+        "superseded",
+        "deferred",
+      ];
+      for (const [index, status] of statuses.entries()) {
+        const isComplete = status === "complete";
+        files[`M0${index + 1}-fixture.md`] = canonicalMilestoneBody({
+          title: `M0${index + 1}: Lifecycle fixture`,
+          status,
+          statusReason: ["complete", "not-started"].includes(status)
+            ? undefined
+            : "Human assigned the remaining work to M01.",
+          isTaskChecked: isComplete,
+          includeActual: isComplete,
+          proofLines: [
+            `- [${isComplete ? "x" : " "}] Outcome is proven. [automated] (est: 1 min proof)`,
+          ],
+        });
+      }
+      const baseline = runPlansCheck(
+        writeCheckPlan(join(temporaryRoot, "base"), files),
+        "--strict",
+      );
+      const withLanes = Object.fromEntries(
+        Object.entries(files).map(([name, body]) => [
+          name,
+          `${body}\nLane: php\n`,
+        ]),
+      );
+      const result = runPlansCheck(
+        writeCheckPlan(join(temporaryRoot, "lane"), withLanes),
+        "--strict",
+      );
+      assert.equal(baseline.status, 0, baseline.stdout + baseline.stderr);
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.equal(result.stdout, baseline.stdout);
+      assert.equal(result.stderr, baseline.stderr);
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
   const lifecycleFailureCases: Array<{
     name: string;
     body: string;

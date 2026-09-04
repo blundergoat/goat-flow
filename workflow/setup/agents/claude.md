@@ -21,6 +21,7 @@ The Never tier and accepted architecture/ADR safety constraints are non-overrida
 - Do not copy goat-flow's controlling-workspace Router Table into downstream projects; adapt paths to the target.
 - Keep `CLAUDE.md` under the 125-line target and 150-line hard limit.
 - For path-scoped Claude Code guidance, use `.claude/rules/*.md` with `paths:` frontmatter; keep repository-wide rules in `CLAUDE.md`.
+- Apply the Attribution settings section below before completing Claude setup, including the Step 01 state-check early exit.
 - Ambiguous existing instruction content: preserve first, ask before deleting.
 
 ## Commit Messages
@@ -71,6 +72,12 @@ If a milestone changes source, run `goat-clarity` once before exit on the explic
 
 For Claude setup, ACT means updating only Claude-owned surfaces from the shared skeleton and adapting commands, boundaries, and Router Table rows to the target project.
 
+### Attribution settings
+
+Complete any required installer step before editing settings. If `.claude/settings.json` is missing, let the installer seed the full `workflow/hooks/agent-config/claude.json` template with its permissions and hooks; do not create an attribution-only settings file.
+
+Disable [Claude attribution](https://code.claude.com/docs/en/settings-reference#attribution): merge `attribution.commit: ""`, `attribution.pr: ""`, and `attribution.sessionUrl: false` into `.claude/settings.json`, matching the template. Preserve unrelated settings and other attribution fields. Existing installs need this explicit merge because the installer preserves their settings files. Verify these three values before declaring setup complete, including an otherwise-current setup taking the Step 01 early exit.
+
 ### VERIFY
 MUST run `shellcheck` on .sh changes. MUST check cross-references after renames. If working from a plan/milestone file, MUST tick `- [x]` on each task as it's completed - not at the end. Reconcile the write allowlist, starting dirty paths, session write paths, and final changed state before delivery. A new in-scope write is deliverable. A new out-of-scope write requires the agent to stop and obtain human approval for the expanded scope before delivery. Do not attribute a starting dirty path to this session unless the session also recorded writing it.
 
@@ -91,6 +98,7 @@ If VERIFY caught a failure or you corrected course, update the learning loop bef
 - Essential Commands list only real target-project commands.
 - Router Table contains installed project resources only; no `workflow/setup/`, `workflow/hooks/`, or manifest paths.
 - Tool playbook pointer to `.goat-flow/skill-docs/playbooks/` is present.
+- `.claude/settings.json` disables commit attribution, PR attribution, and session links with the template's `attribution` values.
 - No hands-off agent files were changed.
 
 ## Artifact Routing

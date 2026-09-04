@@ -764,34 +764,46 @@ export function composeSetup(
   const projectFS = createFS(facts.root);
   const projectState = classifyProjectState(projectFS, agentId);
   const promptScope = options.promptScope ?? "full";
+  const attributionGuidance =
+    agentId === "claude" && promptScope === "full"
+      ? `\n\n**Claude attribution:** Before completing setup, follow the Attribution settings section in \`${displayTemplatePath(SETUP_FILES.claude)}\`. Complete any required installer step first.`
+      : "";
 
   // Nothing usable installed, or a half-finished install: the audit result cannot be trusted as a to-do list, so start from the setup guide.
   if (
     FULL_SETUP_STATES.has(projectState.state) ||
     projectState.action === "incomplete"
   ) {
-    return renderFullSetup(facts, agentId);
+    return renderFullSetup(facts, agentId) + attributionGuidance;
   }
   // Files are present but from an older release, so the user is sent to the installer before being asked to fix anything by hand.
   if (UPGRADE_STATES.has(projectState.state)) {
-    return renderUpgradeRedirect(
-      auditReport,
-      facts,
-      agentId,
-      projectState.state as "v0.9" | "outdated",
-      projectState.version,
+    return (
+      renderUpgradeRedirect(
+        auditReport,
+        facts,
+        agentId,
+        projectState.state as "v0.9" | "outdated",
+        projectState.version,
+      ) + attributionGuidance
     );
   }
   // A current install that passes its checks gets the inventory-and-next-gates prompt; the card variant keeps the harness gate on its own.
   if (auditStatusForPrompt(auditReport, promptScope) === "pass") {
-    return promptScope === "harness-card"
-      ? renderHarnessCardPass(
-          facts,
-          agentId,
-          options.denyMechanismEvidenceLevel,
-        )
-      : renderAuditPass(facts, agentId, options.denyMechanismEvidenceLevel);
+    return (
+      (promptScope === "harness-card"
+        ? renderHarnessCardPass(
+            facts,
+            agentId,
+            options.denyMechanismEvidenceLevel,
+          )
+        : renderAuditPass(facts, agentId, options.denyMechanismEvidenceLevel)) +
+      attributionGuidance
+    );
   }
   // Everything is installed and current, but checks are failing, so the user gets the numbered failure list instead.
-  return renderAuditFail(auditReport, facts, agentId, promptScope);
+  return (
+    renderAuditFail(auditReport, facts, agentId, promptScope) +
+    attributionGuidance
+  );
 }

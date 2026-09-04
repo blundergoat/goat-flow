@@ -213,11 +213,12 @@ function dashboardSkillSummaryBanner(
   const rec = report.recommendation;
   // Failing metrics mean the user should address structural issues before trusting the skill.
   if (failCount > 0) {
+    const warningSummary = warnCount
+      ? ` and ${warnCount} warning${warnCount > 1 ? "s" : ""}`
+      : "";
     return {
       title: "Critical structural issues require attention",
-      desc: `${failCount} failing metric${failCount > 1 ? "s" : ""}${
-        warnCount ? ` and ${warnCount} warning${warnCount > 1 ? "s" : ""}` : ""
-      }. Recommended: ${rec}.${evidenceLimitSuffix}`,
+      desc: `${failCount} failing metric${failCount > 1 ? "s" : ""}${warningSummary}. Recommended: ${rec}.${evidenceLimitSuffix}`,
       severity: "fail",
     };
   }
@@ -277,7 +278,7 @@ function dashboardSkillQualityReportFragment(): DashboardAppFragment {
      * Use when the user clicks a skill in the Skills tab; stale requests cannot overwrite the new selection.
      *
      * @param artifactId - selected skill artifact id; empty means no meaningful report can be fetched
-     * @returns nothing; errors surface as toasts and leave the prior visible state intact
+     * @returns nothing; failures are reported as toasts and leave an uncached selection without a report
      */
     async loadSkillQualityReport(artifactId: string) {
       this.skillQualitySelectedId = artifactId;
@@ -300,8 +301,10 @@ function dashboardSkillQualityReportFragment(): DashboardAppFragment {
           `/api/skill-quality?path=${encodeURIComponent(requestProjectPath)}&agent=${encodeURIComponent(requestRunner)}&artifact=${encodeURIComponent(artifactId)}`,
           { signal: controller.signal },
         );
-        const payload = readRecord(await res.json(), "Skill quality report");
-        const error = readErrorMessage(payload);
+        const payload: unknown = await res.json();
+        const error = readErrorMessage(
+          readRecord(payload, "Skill quality report"),
+        );
         // Server-side scoring errors become a toast instead of replacing the current report.
         if (error) {
           this.showToast(error, true);
@@ -311,8 +314,7 @@ function dashboardSkillQualityReportFragment(): DashboardAppFragment {
           this.activeRunner === requestRunner &&
           this.skillQualitySelectedId === artifactId
         ) {
-          // Same server-owned payload; this cast preserves the selected skill's report shape.
-          const report = payload as unknown as SkillQualityReport;
+          const report = payload as SkillQualityReport; // -- The same-origin scoring route owns the report; object and error checks ran above.
           this.skillQualityReport = report;
           this.skillQualityReports[artifactId] = report;
         }
@@ -560,17 +562,18 @@ function dashboardSkillEvaluatorLabelsFragment(): DashboardAppFragment {
      * @returns relative audit label; fallback means the UI has a report but no exact timestamp
      */
     skillAuditedRelative(): string {
-      const ts = this.skillQualityAuditedAt;
+      const auditedAtMs = this.skillQualityAuditedAt;
       // Missing timestamp still tells the user the current data came from a recent audit.
-      if (!ts) return "audited recently";
-      const ms = Date.now() - ts;
+      if (!auditedAtMs) return "audited recently";
+      const elapsedMs = Date.now() - auditedAtMs;
       // Very fresh audits should read as immediate instead of "0 mins".
-      if (ms < 60_000) return "audited just now";
-      const min = Math.floor(ms / 60_000);
+      if (elapsedMs < 60_000) return "audited just now";
+      const elapsedMinutes = Math.floor(elapsedMs / 60_000);
       // Recent audits fit better in the compact scope strip as minutes.
-      if (min < 60) return `audited ${min} min${min > 1 ? "s" : ""} ago`;
-      const hr = Math.floor(min / 60);
-      return `audited ${hr} hr${hr > 1 ? "s" : ""} ago`;
+      if (elapsedMinutes < 60)
+        return `audited ${elapsedMinutes} min${elapsedMinutes > 1 ? "s" : ""} ago`;
+      const elapsedHours = Math.floor(elapsedMinutes / 60);
+      return `audited ${elapsedHours} hr${elapsedHours > 1 ? "s" : ""} ago`;
     },
 
     /**
@@ -623,6 +626,7 @@ function dashboardSkillEvaluatorClipboardFragment(): DashboardAppFragment {
     /**
      * Copy the current evaluator result as Markdown.
      * Use when the user wants to paste the score into a PR, review note, or session summary.
+     * Clipboard failures are reported as toasts and clear any previous success badge.
      *
      * @returns nothing; missing result leaves the clipboard unchanged
      */
@@ -632,9 +636,9 @@ function dashboardSkillEvaluatorClipboardFragment(): DashboardAppFragment {
       if (!result) return;
       const markdown = buildEvaluatorReportMarkdown(this, result);
       try {
-        const ok = await this.copyTextToClipboard(markdown);
+        const wasCopied = await this.copyTextToClipboard(markdown);
         // Clipboard failure means the user needs a visible error instead of a false success badge.
-        if (!ok) throw new Error("Clipboard write failed");
+        if (!wasCopied) throw new Error("Clipboard write failed");
         this.skillEvaluatorReportCopied = true;
         // Existing success timers are cleared so the latest copy gets a full visible confirmation.
         if (this._skillEvaluatorReportCopiedTimer) {
@@ -711,6 +715,7 @@ function dashboardSkillEvaluatorInputActionsFragment(): DashboardAppFragment {
     /**
      * Read dropped or selected Markdown files into the Skill Evaluator.
      * Use after the user drops files or picks them from the file input.
+     * Read failures are reported in the evaluator without discarding previously loaded files.
      *
      * @param fileList - browser file list; empty or non-Markdown files show an evaluator error
      * @returns nothing; loaded files populate chips and may prefill the suggested artifact name
@@ -757,10 +762,10 @@ function dashboardSkillEvaluatorInputActionsFragment(): DashboardAppFragment {
           ),
         );
         // Add each new file once so duplicate drops do not create duplicate chips.
-        for (const item of loaded) {
+        for (const loadedFile of loaded) {
           // Duplicate filenames keep the existing chip and avoid ambiguous result rows.
-          if (existing.has(item.name)) continue;
-          this.skillEvaluatorFiles.push(item);
+          if (existing.has(loadedFile.name)) continue;
+          this.skillEvaluatorFiles.push(loadedFile);
         }
         // Empty suggested name uses the first loaded filename as a helpful default.
         if (!this.skillEvaluatorName && this.skillEvaluatorFiles[0]) {

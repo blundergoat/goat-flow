@@ -1,9 +1,24 @@
 ---
 category: test-fixtures
-last_reviewed: 2026-09-03
+last_reviewed: 2026-09-05
 ---
 
 **Scope:** Building and keeping fixtures true - collision branches, semantic operands, in-memory against disk-backed corpora, and fixtures that drift from the code they model. Runner behaviour is [test-execution-environment.md](test-execution-environment.md).
+
+## Lesson: Metadata fixtures must use the intended header section
+
+**Status:** active | **Created:** 2026-09-05
+**Decision changed:** Insert added metadata beside an existing header and assert that unrelated parsed fields stay unchanged.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Locate the fixture's metadata section before adding a field. Insert beside an existing header, then compare the complete exported record and rendered output with the original fixture plus only the intended field. A parser may recognize a header anywhere while also retaining that text in the surrounding section.
+
+**What happened:** Two Lane preview tests appended the header after the final Stop section. The parser preserved the lane but also included its text in `stopMarkdown`, so the complete-record comparison failed. Moving the fixture insertion beside `Depends on` restored the intended input shape. The focused run on 2026-09-05 changed from 129 passes and two failures to 131 passes and zero failures; runtime parsing stayed unchanged during the correction.
+
+**Evidence:** `test/unit/plans-export-writes.test.ts` (search: `adds only declared Lane metadata to previews`) inserts the header beside existing metadata and compares both complete JSON and rendered Markdown. The tracked fixture builder is `test/unit/plans-export.helpers.ts` (search: `completeMilestoneBody`).
+
+---
 
 ## Lesson: A preservation fixture's "user content" must not be a clone of the managed row
 

@@ -52,6 +52,49 @@ describe("plans export: milestone parsing", () => {
     assert.deepEqual(record.warnings, []);
   });
 
+  it("preserves absent, empty, and named Lane declarations distinctly", () => {
+    for (const lane of [undefined, "", "php", "api-2", "a".repeat(40)]) {
+      const body = completeMilestoneBody();
+      const record = parseMilestoneMarkdown(
+        lane === undefined ? body : `${body}\n**Lane:** ${lane}\n`,
+        "M42-portable-plan.md",
+      );
+      assert.equal(Object.hasOwn(record, "lane"), lane !== undefined);
+      assert.equal(record.lane, lane);
+      assert.deepEqual(record.warnings, []);
+    }
+  });
+
+  it("retains the first Lane value with portable grammar and duplicate warnings", () => {
+    const warning = "invalid Lane value; expected ^[a-z0-9][a-z0-9-]{0,39}$";
+    for (const lane of ["PHP", "api_v2", "two lanes", "-api", "a".repeat(41)]) {
+      const record = parseMilestoneMarkdown(
+        `${completeMilestoneBody()}\n**Lane:** ${lane}\n`,
+        "M42-portable-plan.md",
+      );
+      assert.equal(record.lane, lane);
+      assert.deepEqual(record.warnings, [warning]);
+    }
+    const duplicate = parseMilestoneMarkdown(
+      `${completeMilestoneBody()}\n**Lane:**\n**Lane:** php\n`,
+      "M42-portable-plan.md",
+    );
+    assert.equal(duplicate.lane, "");
+    assert.deepEqual(duplicate.warnings, ["multiple Lane values supplied"]);
+  });
+
+  it("reads only visible Lane declarations and trims their value", () => {
+    const hidden = `${completeMilestoneBody()}\n<!-- Lane: hidden -->\n\n\`\`\`md\nLane: example\n\`\`\`\n`;
+    const absent = parseMilestoneMarkdown(hidden, "M42-portable-plan.md");
+    const visible = parseMilestoneMarkdown(
+      `${hidden}\nLane:   api-2   \n`,
+      "M42-portable-plan.md",
+    );
+    assert.equal(Object.hasOwn(absent, "lane"), false);
+    assert.equal(visible.lane, "api-2");
+    assert.deepEqual(visible.warnings, []);
+  });
+
   // Exceptional milestones export one canonical current-state explanation beside Status.
   it("parses a canonical status reason without warning", () => {
     const record = parseMilestoneMarkdown(

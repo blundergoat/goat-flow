@@ -120,6 +120,47 @@ const BANNED_IDENTIFIER_CASES = [
 
 describe("plans check: structure, identity, and dependencies", () => {
   /**
+   * Fixture purpose: reject malformed Lane fields without changing default-mode reports.
+   * Process/filesystem side effects: runs the CLI against temporary plans and removes them afterward.
+   */
+  it("rejects invalid and duplicate Lane declarations only in strict mode", () => {
+    const temporaryRoot = mkdtempSync(
+      join(tmpdir(), "goat-flow-plan-lane-check-"),
+    );
+    try {
+      const body = canonicalMilestoneBody();
+      const baseline = runPlansCheck(
+        writeCheckFixture(join(temporaryRoot, "base"), body),
+      );
+      assert.equal(baseline.status, 0, baseline.stdout + baseline.stderr);
+      for (const header of [
+        "Lane: Team",
+        "Lane: php\nLane: ts",
+        "Lane:\nLane: php",
+      ]) {
+        const planPath = writeCheckFixture(
+          join(temporaryRoot, "lane"),
+          `${body}\n${header}\n`,
+        );
+        const legacy = runPlansCheck(planPath);
+        const strict = runPlansCheck(planPath, "--strict");
+        assert.equal(legacy.status, 0, legacy.stdout + legacy.stderr);
+        assert.equal(legacy.stdout, baseline.stdout);
+        assert.equal(legacy.stderr, baseline.stderr);
+        assert.equal(strict.status, 1, strict.stdout + strict.stderr);
+        assertSourceLabelledErrors(strict.stdout);
+        assert.match(
+          strict.stdout,
+          /M01-fixture\.md: (?:invalid Lane value;|multiple Lane values supplied)/u,
+        );
+        assert.doesNotMatch(strict.stdout, /Team/u);
+      }
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
+  /**
    * Writes a temporary plan and runs both CLI modes; cleanup removes every fixture file.
    * Invariant: one deterministic length finding moves from warning to error without duplication.
    */

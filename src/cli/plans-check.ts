@@ -108,6 +108,7 @@ function isStrictValidationWarning(
     warning.includes("actual effort not parseable") ||
     warning === "blank Status reason supplied" ||
     warning === "legacy Abandoned field supplied; use Status reason" ||
+    warning.startsWith("invalid Lane value;") ||
     ((isReceiptClaimed || isReceiptActive) &&
       warning.startsWith("timing receipt")) ||
     /^multiple .+ values supplied$/u.test(warning) ||

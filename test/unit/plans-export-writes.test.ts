@@ -80,7 +80,7 @@ describe("plans export: CLI previews and protected writes", () => {
    * Fixture purpose: prove an exceptional-status explanation survives both portable formats without leaking pasted credentials.
    * Process/filesystem side effects: spawns two previews and writes only the temporary source milestone.
    */
-  it("redacts status reasons in JSON and Markdown previews", () => {
+  it("redacts status reasons and Lane values in JSON and Markdown previews", () => {
     const temporaryRoot = mkdtempSync(
       join(tmpdir(), "goat-flow-plan-status-reason-"),
     );
@@ -91,6 +91,7 @@ describe("plans export: CLI previews and protected writes", () => {
       [
         "**Status:** abandoned",
         `**Status reason:** Human stopped after ${fakeToken} appeared in evidence.`,
+        `**Lane:** ${fakeToken}`,
       ].join("\n"),
     );
     writePlanFixture(planPath, body);
@@ -103,7 +104,10 @@ describe("plans export: CLI previews and protected writes", () => {
       assert.equal(markdownPreview.status, 0, markdownPreview.stderr);
       const records = JSON.parse(jsonPreview.stdout) as Array<{
         statusReason: string;
+        lane: string;
       }>;
+      assert.equal(records[0]?.lane, "[REDACTED:token]");
+      assert.match(markdownPreview.stdout, /\*\*Lane:\*\* \[REDACTED:token\]/u);
       assert.equal(
         records[0]?.statusReason,
         "Human stopped after [REDACTED:token] appeared in evidence.",
@@ -118,6 +122,55 @@ describe("plans export: CLI previews and protected writes", () => {
       rmSync(temporaryRoot, { recursive: true, force: true });
     }
   });
+
+  for (const lane of ["", "php"]) {
+    /**
+     * Fixture purpose: preserve explicit Lane metadata without changing other exported bytes.
+     * Process/filesystem side effects: spawns CLI previews and writes then removes a temporary plan.
+     */
+    it(`adds only declared Lane metadata to previews for ${lane || "an empty lane"}`, () => {
+      const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-lane-"));
+      const planPath = join(temporaryRoot, "plan");
+      try {
+        writePlanFixture(planPath, completeMilestoneBody());
+        const legacyJson = runPlansExport(planPath, "--format", "json");
+        const legacyMarkdown = runPlansExport(planPath, "--format", "markdown");
+        assert.equal(legacyJson.status, 0, legacyJson.stderr);
+        assert.equal(legacyMarkdown.status, 0, legacyMarkdown.stderr);
+        const legacy = JSON.parse(legacyJson.stdout);
+        assert.equal(Object.hasOwn(legacy[0], "lane"), false);
+        assert.doesNotMatch(legacyMarkdown.stdout, /\*\*Lane:\*\*/u);
+        writePlanFixture(
+          planPath,
+          completeMilestoneBody().replace(
+            "**Depends on:** M08; M07",
+            `**Depends on:** M08; M07\n**Lane:** ${lane}`,
+          ),
+        );
+        const jsonPreview = runPlansExport(planPath, "--format", "json");
+        const markdownPreview = runPlansExport(
+          planPath,
+          "--format",
+          "markdown",
+        );
+        assert.equal(jsonPreview.status, 0, jsonPreview.stderr);
+        assert.equal(markdownPreview.status, 0, markdownPreview.stderr);
+        assert.deepEqual(JSON.parse(jsonPreview.stdout), [
+          { ...legacy[0], lane },
+        ]);
+        const laneHeader = lane === "" ? "**Lane:**" : `**Lane:** ${lane}`;
+        assert.equal(
+          markdownPreview.stdout,
+          legacyMarkdown.stdout.replace(
+            "**Depends on:** M08; M07\n",
+            `**Depends on:** M08; M07\n${laneHeader}\n`,
+          ),
+        );
+      } finally {
+        rmSync(temporaryRoot, { recursive: true, force: true });
+      }
+    });
+  }
 
   /**
    * Fixture purpose: cover the JSON persistence adapter rather than only its stdout preview.

@@ -743,6 +743,7 @@ function regenerateLearningLoopIndexes(projectRoot: string): void {
 
 /**
  * Acquire the bucket and every configured generated index as one cooperative write set.
+ * Index regeneration rewrites every bucket's index, so claims cover them all to avoid racing another learning-loop writer.
  * Throws a CLIError that translates a reusable claim refusal into a no-write learn-new diagnostic.
  */
 function acquireLearningLoopWriteClaims(

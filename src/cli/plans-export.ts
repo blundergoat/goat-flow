@@ -54,6 +54,8 @@ export interface PlanExportRecord {
   status: string;
   statusReason: string;
   dependencies: string;
+  /** An omitted header stays absent; an empty string preserves an explicitly empty Lane header. */
+  lane?: string;
   objective: string;
   scopeMarkdown: string;
   boundaryMarkdown: string;
@@ -110,6 +112,22 @@ function readMilestoneField(
   }
   // A missing or empty first field stays empty so existing missing-field guidance remains authoritative.
   return fieldValues.at(0) ?? "";
+}
+
+/** Preserve declared Lane metadata without deriving the checker's effective default. */
+function readMilestoneLane(
+  content: string,
+  warnings: string[],
+): string | undefined {
+  const values = readRenderedMarkdownFieldValues(content, "Lane");
+  const lane = values.at(0);
+  // Older milestones must keep their existing export shape when no Lane is declared.
+  if (lane === undefined) return undefined;
+  if (values.length > 1) warnings.push("multiple Lane values supplied");
+  if (lane !== "" && !/^[a-z0-9][a-z0-9-]{0,39}$/u.test(lane)) {
+    warnings.push("invalid Lane value; expected ^[a-z0-9][a-z0-9-]{0,39}$");
+  }
+  return lane;
 }
 
 /** Report ambiguous or deprecated exceptional-status reason fields. */
@@ -494,6 +512,7 @@ export function parseMilestoneMarkdown(
   const status = readMilestoneField(content, "Status", warnings);
   const statusReason = readStatusReason(content, status, warnings);
   const dependencies = readMilestoneField(content, "Depends on", warnings);
+  const lane = readMilestoneLane(content, warnings);
   const objective = readObjective(content, title, sections, warnings);
   const scopeMarkdown = readFieldOrSectionMarkdown(
     content,
@@ -591,6 +610,7 @@ export function parseMilestoneMarkdown(
     status: firstPopulated(status, "unknown"),
     statusReason,
     dependencies,
+    ...(lane !== undefined ? { lane } : {}),
     objective,
     scopeMarkdown,
     boundaryMarkdown,

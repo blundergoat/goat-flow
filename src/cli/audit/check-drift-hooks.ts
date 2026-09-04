@@ -319,9 +319,10 @@ function managedBaselineProvenance(row: ManagedInstallStateRow): string {
   if (row.provenance.kind === "verified-install") {
     return `verified install ${row.provenance.goatFlowVersion}`;
   }
-  return `legacy bootstrap ${row.provenance.observations
+  const observations = row.provenance.observations
     .map((observation) => `${observation.agent} ${observation.goatFlowVersion}`)
-    .join(", ")}`;
+    .join(", ");
+  return `legacy bootstrap ${observations}`;
 }
 
 /**
