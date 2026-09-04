@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-## v1.17.0 - 2026-09-01
+## v1.17.0 - 2026-09-?
 
 The next release adds per-command `--help`, path-aware learning recall, one project-wide install baseline, whole-suite hook verification, and stricter `--strict` plan checks, and it untangles Claude and Copilot hook registrations.
 
