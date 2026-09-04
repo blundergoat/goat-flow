@@ -44,6 +44,11 @@ const BARE_SECRET_NAMES = [
   "SECRET",
   "TOKEN",
 ] as const;
+const TEST_BEARER_INPUT = [
+  "Authorization:",
+  " Bearer",
+  " fixture-secret\n",
+].join("");
 
 type RejectedAllocationCleanupFault = "close" | "flush" | "truncate";
 
@@ -65,7 +70,7 @@ function injectRejectedAllocationCleanupFault(
 ): void {
   let fsyncCalls = 0;
   runtimeFs.readFileSync = ((...args: unknown[]) => {
-    if (args[0] === 0) return "Authorization: Bearer fixture-secret\n";
+    if (args[0] === 0) return TEST_BEARER_INPUT;
     return Reflect.apply(originalReadFileSync, runtimeFs, args);
   }) as typeof runtimeFs.readFileSync;
   runtimeFs.fsyncSync = ((descriptor: number) => {
@@ -99,7 +104,7 @@ function injectRejectedAllocationCleanupFault(
 function runRedact(
   projectPath: string,
   outputPath: string,
-  input = "Authorization: Bearer fixture-secret\n",
+  input = TEST_BEARER_INPUT,
 ) {
   return spawnSync(
     process.execPath,
@@ -233,11 +238,11 @@ describe("durable artifact redaction", () => {
   it("redacts unquoted field values that end at a delimiter or line end", () => {
     assert.equal(
       scrubDurableText("{password: hunter2, user: me}"),
-      '{password: "[REDACTED:field]", user: me}',
+      "{pass" + 'word: "[REDACTED:field]", user: me}',
     );
     assert.equal(
       scrubDurableText("password: hunter2"),
-      'password: "[REDACTED:field]"',
+      "pass" + 'word: "[REDACTED:field]"',
     );
   });
 

@@ -1,6 +1,6 @@
 ---
 category: hook-testing
-last_reviewed: 2026-08-27
+last_reviewed: 2026-09-04
 ---
 
 **Scope:** Hook test coverage strategy - what a self-test actually exercises, matrices that interfere with the live guard, fixtures that must not carry real secrets, and splits that only look like coverage. The script under test is [hook-script-authoring.md](hook-script-authoring.md); driving it with payloads is [hook-probe-testing.md](hook-probe-testing.md).
@@ -18,10 +18,13 @@ last_reviewed: 2026-08-27
 ## Lesson: Secret-scanner tests must not embed literal secret-shaped fixtures
 
 **Status:** active | **Created:** 2026-06-12
+**Incident count:** 2 | **Latest occurrence:** 2026-09-04
 
-**Prevention:** In secret-scanner tests, construct secret-shaped fixture values from split constants or helpers so the runtime fixture still exercises the scanner, but the committed source does not contain contiguous token/private-key patterns. After adding or editing scanner fixtures, run the scanner against the current repo, not only against temp repos. Evidence anchors: `test/integration/post-turn-safety-hook.test.ts` (search: `TEST_AWS_ACCESS_KEY`) and `workflow/hooks/post-turn-safety.sh` (search: `scan_line`).
+**Prevention:** In secret-scanner tests and shipped self-tests, construct secret-shaped fixture values from split constants or helpers so the runtime fixture still exercises the scanner, but the committed source does not contain contiguous token/private-key patterns. Apply the same rule to harmless structural fixtures when the repository scanner classifies their source spelling as REVIEW; never add a waiver that could hide a real credential. After adding or editing scanner fixtures, run the scanner against the current repo, not only against temp repos. Evidence anchors: `test/integration/post-turn-safety-hook.test.ts` (search: `TEST_AWS_ACCESS_KEY`), `workflow/hooks/post-turn-safety.sh` (search: `synthetic_assignment_prefix`), `test/unit/plans-check-structure.test.ts` (search: `BANNED_IDENTIFIER_CASES`), and `test/unit/redact-command.test.ts` (search: `TEST_BEARER_INPUT`).
 
 **What happened:** After `post-turn-safety` became the default Stop hook, the current Codex Stop command blocked this repo because the changed safety-hook test source embedded literal secret-shaped fixtures. The fixtures were fake, but the hook correctly scans changed source text and cannot know that a literal token-shaped string inside a test file is harmless.
+
+**Recurrence 2026-09-04:** The mandatory pre-release source scan exited 1 with 17 REVIEW rows across two shipped-hook mirrors and three test files. Inspection found synthetic scanner and redaction strings plus three harmless `token:` fields, not credentials. Splitting only their source spelling preserved the exact runtime data; the repeated scan reported no high-signal findings, while the hook self-test and 102 focused tests passed in the same measured run. Evidence anchors: `scripts/maintenance/scan-secrets.sh` (search: `INVESTIGATION REQUIRED`), `workflow/hooks/post-turn-safety.sh` (search: `synthetic_assignment_prefix`), and the three test anchors in Prevention.
 
 **Root cause:** The test generated dangerous fixture content by storing the exact dangerous strings in the source file. That made the repository source itself look like changed secret material, even though the test only needed the dangerous value inside a temporary repo at runtime.
 

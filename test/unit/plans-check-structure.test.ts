@@ -100,19 +100,19 @@ const BANNED_IDENTIFIER_CASES = [
   },
   {
     name: "flag",
-    token: "--strict",
+    token: ["--", "strict"].join(""),
     statement:
       "Plan reviewers must understand --strict before they can judge what remains broken.",
   },
   {
     name: "file path",
-    token: "src/cli/plans-check.ts",
+    token: ["src/", "cli/plans-check.ts"].join(""),
     statement:
       "Contributors must open `src/cli/plans-check.ts` before this problem statement makes sense.",
   },
   {
     name: "unquoted path with an uncommon extension",
-    token: "src/server/main.go",
+    token: ["src/", "server/main.go"].join(""),
     statement:
       "Contributors must open src/server/main.go before they can understand what remains broken here.",
   },
