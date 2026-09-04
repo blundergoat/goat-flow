@@ -8,7 +8,7 @@
 #
 # Runs the local quality gate a developer uses before accepting risky work or a release.
 # Use it to see one phased verdict for shell policy, source checks, tests, drift, and links.
-# Interactive Tests runs show bounded progress while their output stays captured for diagnostics.
+# Interactive long-running checks show bounded progress while output stays captured for diagnostics.
 # Redirected and CI runs keep a deterministic report that automation can parse safely.
 #
 # Usage:
@@ -48,8 +48,9 @@ Usage: preflight-checks.sh [--verbose] [--no-color] [--ascii] [--help]
 Runs the local pre-flight quality gate. Exits 0 when all checks pass,
 non-zero otherwise.
 
-Interactive Tests runs show one elapsed-time heartbeat every 10 seconds.
-Redirected and CI output remains deterministic and contains no heartbeat lines.
+Interactive Tests and Dependency Audit runs show one elapsed-time heartbeat
+every 10 seconds. Redirected and CI output remains deterministic and contains
+no heartbeat lines.
 
 Options:
   -v, --verbose    Expand every sub-check (default collapses to one row per
@@ -66,6 +67,8 @@ Environment:
   CI=true        - implies --no-color unless FORCE_COLOR is set
   GOAT_FLOW_PREFLIGHT_TEST_TIMEOUT_SECONDS=N
                  - test command timeout in seconds (default: 600; 0 disables)
+  GOAT_FLOW_PREFLIGHT_AUDIT_TIMEOUT_SECONDS=N
+                 - dependency audit timeout in seconds (default: 120; 0 disables)
 HELP
             exit 0
             ;;
@@ -175,7 +178,7 @@ NODE
 # ── Capability detection ─────────────────────────────────────────────
 _is_tty=0
 [[ -t 1 ]] && _is_tty=1
-preflight_test_heartbeat_seconds=10
+preflight_heartbeat_seconds=10
 
 _use_color=1
 if [[ -n "$no_color" ]] || [[ -n "${NO_COLOR:-}" ]]; then
@@ -339,7 +342,7 @@ details_pipe() {
     done
 }
 
-# Run one Tests command while retaining final diagnostics and showing bounded TTY liveness.
+# Run one long command while retaining final diagnostics and showing bounded TTY liveness.
 run_command_capture_with_timeout() {
     local __output_var="$1"
     local __status_var="$2"
@@ -351,11 +354,11 @@ run_command_capture_with_timeout() {
     local -a command_runner_arguments=(
         scripts/preflight-command-runner.mjs
         --timeout-seconds "$timeout_seconds"
-        --heartbeat-seconds "$preflight_test_heartbeat_seconds"
+        --heartbeat-seconds "$preflight_heartbeat_seconds"
         --label "$progress_label"
     )
 
-    # e.g. a developer ran preflight before release; long Tests show liveness outside captured CI output.
+    # e.g. a developer ran preflight before release; long checks show liveness outside captured CI output.
     if [[ "$_is_tty" -eq 1 ]]; then
         exec {operator_progress_fd}>&1
         command_runner_arguments+=(--progress-fd "$operator_progress_fd")
@@ -1898,9 +1901,22 @@ fi
 # ── Dependency Audit ─────────────────────────────────────────────────
 if [[ -f package.json ]]; then
     section "Dependency Audit"
-    audit_output=$(npm audit 2>&1) && audit_exit=0 || audit_exit=$?
+    audit_output=""
+    audit_exit=1
+    audit_timeout_seconds="${GOAT_FLOW_PREFLIGHT_AUDIT_TIMEOUT_SECONDS:-120}"
+    if [[ "$audit_timeout_seconds" =~ ^[0-9]+$ ]]; then
+        :
+    else
+        warn "Invalid GOAT_FLOW_PREFLIGHT_AUDIT_TIMEOUT_SECONDS=$audit_timeout_seconds; using 120"
+        audit_timeout_seconds=120
+    fi
+    run_command_capture_with_timeout \
+        audit_output audit_exit "$audit_timeout_seconds" "Dependency Audit" npm audit
     if [[ "$audit_exit" -eq 0 ]]; then
         pass "npm audit (0 vulnerabilities)"
+    elif [[ "$audit_exit" -eq 124 ]]; then
+        fail "npm audit timed out after ${audit_timeout_seconds}s"
+        printf '%s\n' "$audit_output" | tail -20 | details_pipe || true
     else
         vuln_summary=$(printf '%s\n' "$audit_output" | grep -E '^[0-9]+ vulnerabilities? ' | tail -1 || true)
         if [[ -n "$vuln_summary" ]]; then

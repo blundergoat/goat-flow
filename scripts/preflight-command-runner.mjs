@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Runs one preflight command while retaining its output for the final quality report.
- * Use from the Tests phase when a developer needs bounded liveness without raw log streaming.
+ * Use from long-running preflight phases that need bounded liveness without raw log streaming.
  * Heartbeats use a separate descriptor, so CI output and pass/fail parsing stay deterministic.
  * Timeout and parent-exit cleanup target the child process group before returning a result.
  * A final deadline prevents an escaped output holder from hiding that result indefinitely.
@@ -19,7 +19,8 @@ const PARENT_SIGNAL_EXIT_CODES = new Map([
 /**
  * Mutates one parsed option field and throws distinct operator guidance for unsupported names.
  *
- * @param {{timeoutSeconds: number, heartbeatSeconds: number, progressLabel: string, progressFileDescriptor: number | null}} options - runner state receiving one parsed value
+ * @param {{timeoutSeconds: number, heartbeatSeconds: number, progressLabel: string, progressFileDescriptor: number | null}} options - state
+ *   receiving one parsed runner value
  * @param {string | undefined} optionName - internal option name; missing names are rejected
  * @param {string} optionValue - required option value; empty strings remain available for validation
  * @returns {void} updates exactly one field
@@ -53,7 +54,8 @@ function applyRunnerOption(options, optionName, optionValue) {
  * Validate parsed timing and progress options before any verification child starts.
  * Throws one field-specific usage error so the developer can repair the preflight invocation.
  *
- * @param {{timeoutSeconds: number, heartbeatSeconds: number, progressLabel: string, progressFileDescriptor: number | null}} options - parsed runner options; null descriptor disables progress output
+ * @param {{timeoutSeconds: number, heartbeatSeconds: number, progressLabel: string, progressFileDescriptor: number | null}} options - parsed
+ *   runner options; a null descriptor disables progress output
  * @returns {void} successful validation leaves the parsed values unchanged
  */
 function validateRunnerOptions(options) {
@@ -84,7 +86,7 @@ function validateRunnerOptions(options) {
 
 /**
  * Parse the internal runner contract used by preflight and its focused tests.
- * Use only behind preflight; it throws a usage error before invalid Tests work begins.
+ * Use only behind preflight; it throws a usage error before invalid verification work begins.
  * Explicit branches preserve distinct timeout, progress, and command guidance for the operator.
  *
  * @param {string[]} commandLineArguments - runner options followed by `--` and a child command; empty is invalid
@@ -131,7 +133,7 @@ function parseRunnerOptions(commandLineArguments) {
   const childCommand = commandLineArguments[childCommandSeparator + 1] ?? "";
   const childArguments = commandLineArguments.slice(childCommandSeparator + 2);
 
-  // An empty command would leave the Tests phase waiting without doing useful verification.
+  // An empty command would leave a preflight phase waiting without doing useful verification.
   if (childCommand.length === 0) {
     throw new Error("child command must not be empty");
   }
@@ -457,7 +459,7 @@ function startCapturedCommandHeartbeat(state) {
 
 /**
  * Spawns one captured verification command with bounded progress and process-group cleanup.
- * Use for first-run and retry Tests paths so every result preserves output, signals, and status.
+ * Use for bounded preflight paths so every result preserves output, signals, and status.
  *
  * @param {ReturnType<typeof parseRunnerOptions>} runnerOptions - validated command, timing, and progress contract
  * @returns {Promise<{status: number, capturedOutput: Buffer}>} exact status and merged output
@@ -465,7 +467,7 @@ function startCapturedCommandHeartbeat(state) {
 function runCapturedCommand(runnerOptions) {
   return new Promise((resolveCommand) => {
     const commandStartedAt = Date.now();
-    // Preflight supplies argv without a shell, so user-entered test text cannot become shell syntax.
+    // Preflight supplies argv without a shell, so command arguments cannot become shell syntax.
     const childProcess = spawn(
       runnerOptions.childCommand,
       runnerOptions.childArguments,

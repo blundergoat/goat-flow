@@ -1,6 +1,6 @@
 ---
 category: verification-preflight
-last_reviewed: 2026-09-03
+last_reviewed: 2026-09-04
 ---
 
 **Scope:** Adding, tuning, and trusting a repo-wide gate - dependency-audit baselines, count locks and provenance dates, what a PASS line does and does not prove, and the shell mechanics of the commands a gate runs. Formatter and lint debt is [verification-formatting.md](verification-formatting.md).
@@ -40,10 +40,12 @@ last_reviewed: 2026-09-03
 ## Lesson: New dependency-audit gates need a baseline audit first
 
 **Status:** active | **Created:** 2026-05-21
+**Decision changed:** Prove the current dependency tree and bound the registry call before trusting an audit gate; adjacent integration tests use a local protocol endpoint while release proof stays live.
+**Trigger phase:** SCOPE | **Caught at:** VERIFY
 
-**Incident count:** 2 | **Latest occurrence:** 2026-09-04
+**Incident count:** 3 | **Latest occurrence:** 2026-09-04
 
-**Prevention:** Before adding a repo-wide dependency-audit gate, run the raw audit command first. If it finds baseline vulnerabilities, either include the smallest compatible dependency update in the same change or stop and report the blocker before wiring a failing gate.
+**Prevention:** Before adding or trusting a repo-wide dependency-audit gate, run the raw audit command against the current tree and give its registry call an inner deadline below the outer caller's limit. If it finds vulnerabilities, include the smallest compatible dependency update or stop before wiring a failing gate. Integration tests for adjacent behavior use a local audit-protocol endpoint; release proof still queries the configured live registry.
 
 **What happened:** While I was adding `npm audit` to preflight and CI, the first fresh audit failed on the existing direct `ws@8.20.0` dependency. The gate wiring was correct, but merging it alone would have made both local preflight and CI fail immediately.
 
@@ -53,13 +55,15 @@ last_reviewed: 2026-09-03
 
 **Recurrence 2026-09-04:** M15's installer fixture reached its embedded preflight after the release candidate had passed earlier focused checks, but newly disclosed advisories made the existing `typed-rest-client` override of `qs@6.15.3` fail the dependency-audit gate. Raising only that transitive override to the patched `qs@6.16.0` and syncing the lockfile kept the repair inside the existing dependency boundary. Evidence anchors: `package.json` (search: `"qs": "6.16.0"`) and `scripts/preflight-checks.sh` (search: `Dependency Audit`).
 
+**Recurrence 2026-09-04 (timeout):** A release suite spent more than 21 minutes before its installer round-trip child returned null status at a 400-second limit. The embedded preflight had called `npm audit` without its own deadline; two later 120-second probes also expired while ordinary registry ping remained responsive. The repair routes the audit through the existing process-group runner with a blocking timeout and makes this unrelated installer fixture answer npm's real bulk-advisory request on localhost. Evidence anchors: `scripts/preflight-checks.sh` (search: `GOAT_FLOW_PREFLIGHT_AUDIT_TIMEOUT_SECONDS`), `test/integration/preflight-progress.test.ts` (search: `bounds dependency audit without exposing a release-gate bypass`), and `test/integration/audit-drift-checkdrift-installer-round-trip-fixture.test.ts` (search: `startLocalAuditRegistry`).
+
 ---
 
 ## Lesson: Dependency-audit gates can mutate lockfile metadata
 
 **Status:** active | **Created:** 2026-06-14
 
-**Prevention:** After `npm audit`, `npm test`, or full preflight, run `git status --short --untracked-files=all` before final scope claims. If `package-lock.json` changed and dependency updates are out of scope, inspect with `git diff --text -- package-lock.json` and revert only audit-generated metadata drift before rerunning any required checks. Evidence anchors: `scripts/preflight-checks.sh` (search: `audit_output=$(npm audit 2>&1)`) and `package-lock.json` (search: `node_modules/@types/node`).
+**Prevention:** After `npm audit`, `npm test`, or full preflight, run `git status --short --untracked-files=all` before final scope claims. If `package-lock.json` changed and dependency updates are out of scope, inspect with `git diff --text -- package-lock.json` and revert only audit-generated metadata drift before rerunning any required checks. Evidence anchors: `scripts/preflight-checks.sh` (search: `Dependency Audit`) and `package-lock.json` (search: `node_modules/@types/node`).
 
 **What happened:** During M08 self-review, `package-lock.json` appeared in `git status` only after the final `npm test` / `bash scripts/preflight-checks.sh` verification pass. A forced text diff showed registry metadata churn for transitive dev dependencies such as `@types/node`, `acorn`, `caniuse-lite`, and `eslint`, even though dependency updates were out of scope. I reverted the lockfile before closeout.
 
@@ -99,7 +103,7 @@ last_reviewed: 2026-09-03
 **Status:** active | **Created:** 2026-05-25
 **Decision changed:** Before accepting a file or symbol rename, grep durable references and ignored working plans for the old name, then run `stats --check`.
 **Trigger phase:** VERIFY
-**Incident count:** 6 | **Latest occurrence:** 2026-08-27
+**Incident count:** 7 | **Latest occurrence:** 2026-09-04
 
 **Prevention:** After a file or code-symbol rename, run the full preflight and treat drift failures as part of the rename, not documentation cleanup.
 Use the milestone's exact tracked-file grep, run `stats --check`, then use the required ignored-state search for active plans and local artifacts.
@@ -119,6 +123,8 @@ Evidence anchors: `scripts/preflight-checks.sh` (search: `Learning-loop schema`)
 Evidence anchors: `src/cli/cli.ts` (search: `function isMainModule`) and `.goat-flow/learning-loop/footguns/cli.md` (search: `isMainModule`).
 
 **Recurrence update (2026-08-27):** M41 Task 6 replaced a v1 preview-fixture helper and preview reader with v2 managed-state successors. Focused tests and typecheck passed, but `stats --check` found that the fixture-comment lesson still searched for the removed helper; the later content audit found ADR-064 still searched for the retired reader call. Both live evidence pointers now name their v2 successors. A closeout grep then over-scoped the retired call across all source and flagged the audit and hook-status consumers intentionally reserved for Tasks 7 and 8. Treat test-helper and production-symbol migrations alike: grep durable learning-loop and decision anchors before final verification, but scope zero-hit assertions to the migrated surface and classify remaining hits against explicit downstream ownership. Evidence anchors: `test/integration/setup-install-preview.test.ts` (search: `downgradeManagedStateToSevenCodexSkills`), `src/cli/managed-setup-preview.ts` (search: `const baseline = readManagedSetupV2Baseline`), and `.goat-flow/learning-loop/decisions/ADR-064-one-managed-path-one-baseline.md` (search: `# ADR-064: Give each managed path one install baseline`).
+
+**Recurrence update (2026-09-04):** Replacing a direct `npm audit` shell substitution with the bounded command runner removed an exact source string cited by the lockfile-metadata lesson. Shell and runner checks passed, but the installer fixture's embedded preflight rejected the stale anchor before reaching its drift assertion. Update durable semantic anchors in the same edit as the source shape, even when the behavior and owning section name stay unchanged. Evidence anchor: `scripts/preflight-checks.sh` (search: `Dependency Audit`).
 
 ---
 

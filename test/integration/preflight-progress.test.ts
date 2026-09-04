@@ -498,7 +498,7 @@ describe("preflight Tests-phase progress", () => {
     const fastSelectionIndex = preflightSource.indexOf('"test:fast"');
     const coverageSelectionIndex = preflightSource.indexOf('"test:coverage"');
 
-    assert.match(preflightSource, /preflight_test_heartbeat_seconds=10/u);
+    assert.match(preflightSource, /preflight_heartbeat_seconds=10/u);
     assert.match(preflightSource, /\[\[ "\$_is_tty" -eq 1 \]\]/u);
     assert.match(preflightSource, /"Tests" "\$\{test_command\[@\]\}"/u);
     assert.match(
@@ -512,8 +512,40 @@ describe("preflight Tests-phase progress", () => {
     assert.equal(
       [...preflightSource.matchAll(/run_command_capture_with_timeout/gu)]
         .length,
-      2,
-      "expected one helper definition plus one bounded Tests call site",
+      3,
+      "expected one helper definition plus bounded Tests and Dependency Audit call sites",
+    );
+  });
+
+  it("bounds dependency audit without exposing a release-gate bypass", () => {
+    const preflightSource = readFileSync(PREFLIGHT_SCRIPT_PATH, "utf-8");
+    const auditStart = preflightSource.indexOf("# ── Dependency Audit");
+    const auditEnd = preflightSource.indexOf(
+      "# ── Removed Patterns",
+      auditStart,
+    );
+    assert.ok(auditStart >= 0 && auditEnd > auditStart);
+    const auditSource = preflightSource.slice(auditStart, auditEnd);
+
+    assert.match(
+      preflightSource,
+      /GOAT_FLOW_PREFLIGHT_AUDIT_TIMEOUT_SECONDS=N[\s\S]+dependency audit timeout in seconds \(default: 120; 0 disables\)/u,
+    );
+    assert.match(
+      auditSource,
+      /GOAT_FLOW_PREFLIGHT_AUDIT_TIMEOUT_SECONDS:-120/u,
+    );
+    assert.match(
+      auditSource,
+      /run_command_capture_with_timeout\s+\\\s+audit_output audit_exit "\$audit_timeout_seconds" "Dependency Audit" npm audit/u,
+    );
+    assert.match(
+      auditSource,
+      /"\$audit_exit" -eq 124[\s\S]+fail "npm audit timed out after \$\{audit_timeout_seconds\}s"/u,
+    );
+    assert.doesNotMatch(
+      preflightSource,
+      /GOAT_FLOW_PREFLIGHT_(?:SKIP_AUDIT|AUDIT_COMMAND)/u,
     );
   });
 

@@ -507,6 +507,7 @@ export function patchInstallRoundTripFixture(root: string): {
  * @param command - executable to run, restricted to the three the fixtures need
  * @param args - argument vector passed without a shell, so fixture paths containing spaces stay one argument
  * @param timeout - milliseconds before the command is killed; the default is generous enough for a full audit
+ * @param environmentOverrides - variables applied only to this child on top of the inherited environment
  * @returns the finished process with its captured stdout, stderr, and exit status
  */
 export function runCommand(
@@ -514,11 +515,15 @@ export function runCommand(
   command: "bash" | "node" | "npx",
   args: string[],
   timeout = 60000,
+  environmentOverrides?: NodeJS.ProcessEnv,
 ): CommandResult {
   const spawnOptions = {
     cwd,
     encoding: "utf-8",
     timeout,
+    ...(environmentOverrides === undefined
+      ? {}
+      : { env: { ...process.env, ...environmentOverrides } }),
   } as const;
   const result =
     command === "bash"

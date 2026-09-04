@@ -30,6 +30,7 @@ The next release adds per-command `--help`, path-aware learning recall, one proj
 - **Claude and Copilot hooks no longer collide** - Claude uses argv-safe handlers; Copilot ignores cross-loaded rows and runs its native hooks.
 - **Codex hooks launch from Windows paths** - After upgrading from 1.16.0, run `goat-flow hooks sync .` and restart Codex; `commandWindows` preserves the working directory. A 2026-08-27 Codex CLI 0.149.1 capture recorded PostToolUse delivery; fixed-scenario proof remains pending, and Stop evidence is stale.
 - **Installer dependencies fail before project writes** - Missing `js-yaml` names the goat-flow package root and the required `npm install` or reinstall.
+- **Preflight bounds dependency audits** - A stalled registry now fails the gate after 120 seconds. Set `GOAT_FLOW_PREFLIGHT_AUDIT_TIMEOUT_SECONDS=N` to choose the deadline; `0` disables only this deadline, while the audit still runs and remains blocking.
 - **Skipped hooks explain non-Git limits** - Install and sync name the hook, explain why no safe post-turn scan root exists, and show how to configure one.
 - **`/goat-review` staged reviews leave Git unchanged** - Staged authority uses `git ls-files -s`, `git diff --cached --binary`, and `git show :<path>` instead of `git write-tree`, so report-only review creates no tree object.
 - **Gruff finds project wrappers again** - `gruff-<language>.sh` in `bin/test/`, `bin/`, or `scripts/` preserves project config, paths, and reports.
