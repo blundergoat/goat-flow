@@ -28,8 +28,9 @@ const BOLD = "\x1b[1m";
 const RESET = "\x1b[0m";
 
 /** Render a colored status badge for terminal output. */
-function statusBadge(status: "pass" | "fail" | "skipped"): string {
+function statusBadge(status: "pass" | "warning" | "fail" | "skipped"): string {
   if (status === "skipped") return `${YELLOW}SKIP${RESET}`;
+  if (status === "warning") return `${YELLOW}WARNING${RESET}`;
   return status === "pass" ? `${GREEN}PASS${RESET}` : `${RED}FAIL${RESET}`;
 }
 
@@ -333,7 +334,8 @@ export function renderAuditJson(report: AuditReport): string {
 
 // === Markdown renderer ===
 
-function mdScopeStatus(status: "pass" | "fail"): string {
+function mdScopeStatus(status: "pass" | "warning" | "fail"): string {
+  if (status === "warning") return "WARNING";
   return status === "pass" ? "PASS" : "FAIL";
 }
 

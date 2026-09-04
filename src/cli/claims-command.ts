@@ -17,7 +17,7 @@ import {
 const CLAIM_RECOVERY_SCHEMA = "goat-flow.path-write-claim-recovery.v1" as const;
 
 /** Stable terminal/JSON result for one successful inspection or removal. */
-export interface PathWriteClaimRecoveryReport {
+interface PathWriteClaimRecoveryReport {
   schemaVersion: typeof CLAIM_RECOVERY_SCHEMA;
   command: "claims";
   subcommand: "inspect" | "recover";
@@ -27,6 +27,12 @@ export interface PathWriteClaimRecoveryReport {
   markerPath: string | null;
   markerSha256: string | null;
 }
+
+/** Parser-validated claim options shared by inspection, recovery, and rendering helpers. */
+type ValidatedClaimsOptions = ParsedCLI & {
+  claimsSubcommand: "inspect" | "recover";
+  claimsTargetPath: string;
+};
 
 /**
  * Build the exact read-only command shown by every writer that encounters a busy target.
@@ -51,17 +57,17 @@ function pathWriteClaimRecoveryCommand(
 
 /** Convert inspected evidence into the stable public output envelope. */
 function claimReport(
-  options: ParsedCLI,
+  options: ValidatedClaimsOptions,
   evidence: AbandonedPathWriteClaimEvidence | null,
   status: PathWriteClaimRecoveryReport["status"],
 ): PathWriteClaimRecoveryReport {
   return {
     schemaVersion: CLAIM_RECOVERY_SCHEMA,
     command: "claims",
-    subcommand: options.claimsSubcommand ?? "inspect",
+    subcommand: options.claimsSubcommand,
     status,
     projectRoot: evidence?.projectRoot ?? options.projectPath,
-    targetPath: evidence?.targetPath ?? options.claimsTargetPath ?? "",
+    targetPath: evidence?.targetPath ?? options.claimsTargetPath,
     markerPath: evidence?.markerPath ?? null,
     markerSha256: evidence?.markerSha256 ?? null,
   };
@@ -119,10 +125,7 @@ function claimInspectionError(
  */
 function validateClaimsOptions(
   options: ParsedCLI,
-): asserts options is ParsedCLI & {
-  claimsSubcommand: "inspect" | "recover";
-  claimsTargetPath: string;
-} {
+): asserts options is ValidatedClaimsOptions {
   if (options.claimsSubcommand === null || options.claimsTargetPath === null) {
     throw new CLIError(
       "Usage: goat-flow claims <inspect|recover> [project-path] --target <project-relative-path> [flags]",
@@ -143,20 +146,14 @@ function validateClaimsOptions(
 }
 
 /**
- * Inspect one marker or remove only the unchanged marker the operator explicitly confirmed as abandoned.
- * Error behavior: invalid or changed evidence throws a CLI error and leaves the marker in place; unexpected filesystem errors propagate.
- *
- * @param options - parsed claim action, target, confirmation, and output format
- * @returns nothing; the command writes its successful report through the shared CLI sink
+ * Inspect one marker and preserve the helper's fail-closed diagnostics as a public CLI error.
+ * Error behavior: throws CLIError for known claim errors; unexpected filesystem errors propagate.
  */
-export function handleClaimsCommand(options: ParsedCLI): void {
-  validateClaimsOptions(options);
-  let evidence: AbandonedPathWriteClaimEvidence | null;
+function inspectClaim(
+  options: ValidatedClaimsOptions,
+): AbandonedPathWriteClaimEvidence | null {
   try {
-    evidence = inspectPathWriteClaim(
-      options.projectPath,
-      options.claimsTargetPath,
-    );
+    return inspectPathWriteClaim(options.projectPath, options.claimsTargetPath);
   } catch (error) {
     if (error instanceof PathWriteClaimError) {
       throw claimInspectionError(
@@ -167,22 +164,31 @@ export function handleClaimsCommand(options: ParsedCLI): void {
     }
     throw error;
   }
+}
 
-  if (options.claimsSubcommand === "inspect") {
-    const report = claimReport(
-      options,
-      evidence,
-      evidence === null ? "absent" : "present",
-    );
-    writeOutput(
-      options,
-      options.format === "json"
-        ? JSON.stringify(report, null, 2)
-        : renderClaimReport(report, evidence),
-    );
-    return;
-  }
+/** Write one successful claim result through the selected text or JSON output contract. */
+function writeClaimReport(
+  options: ValidatedClaimsOptions,
+  evidence: AbandonedPathWriteClaimEvidence | null,
+  status: PathWriteClaimRecoveryReport["status"],
+): void {
+  const report = claimReport(options, evidence, status);
+  writeOutput(
+    options,
+    options.format === "json"
+      ? JSON.stringify(report, null, 2)
+      : renderClaimReport(report, evidence),
+  );
+}
 
+/**
+ * Require matching inspected evidence and remove only that unchanged abandoned marker.
+ * Error behavior: throws CLIError without removal for absent, mismatched, changed, or unconfirmed evidence; unexpected helper errors propagate.
+ */
+function recoverClaim(
+  options: ValidatedClaimsOptions,
+  evidence: AbandonedPathWriteClaimEvidence | null,
+): AbandonedPathWriteClaimEvidence {
   if (options.claimsMarkerSha256 === null || !options.shouldConfirmAbandoned) {
     throw new CLIError(
       "claims recover requires --marker-sha256 and --confirm-abandoned after you verify that no writer still owns the target.",
@@ -213,11 +219,28 @@ export function handleClaimsCommand(options: ParsedCLI): void {
       1,
     );
   }
-  const report = claimReport(options, evidence, "removed");
-  writeOutput(
-    options,
-    options.format === "json"
-      ? JSON.stringify(report, null, 2)
-      : renderClaimReport(report, evidence),
-  );
+  return evidence;
+}
+
+/**
+ * Inspect one marker or remove only the unchanged marker the operator explicitly confirmed as abandoned.
+ * Error behavior: invalid or changed evidence throws a CLI error and leaves the marker in place; unexpected filesystem errors propagate.
+ *
+ * @param options - parsed claim action, target, confirmation, and output format
+ * @returns nothing; the command writes its successful report through the shared CLI sink
+ */
+export function handleClaimsCommand(options: ParsedCLI): void {
+  validateClaimsOptions(options);
+  const evidence = inspectClaim(options);
+
+  if (options.claimsSubcommand === "inspect") {
+    writeClaimReport(
+      options,
+      evidence,
+      evidence === null ? "absent" : "present",
+    );
+    return;
+  }
+
+  writeClaimReport(options, recoverClaim(options, evidence), "removed");
 }

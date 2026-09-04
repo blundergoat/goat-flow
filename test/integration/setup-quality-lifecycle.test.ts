@@ -191,6 +191,7 @@ Route lessons and footguns to their matching .goat-flow/learning-loop/ directori
 |---|---|
 | Architecture | .goat-flow/architecture.md |
 | Code map | .goat-flow/code-map.md |
+| Security policy | .goat-flow/security-policy.md |
 | Glossary | .goat-flow/glossary.md |
 | Skills | .agents/skills/ |
 | Skill playbooks (tools) | \`.goat-flow/skill-docs/playbooks/\` (README.md index) |
@@ -214,6 +215,7 @@ templates; audit and quality commands read project evidence from this consumer t
 
 - Agent instructions: AGENTS.md
 - Harness configuration: .goat-flow/config.yaml
+- Optional security policy: .goat-flow/security-policy.md
 - Installed skills: .agents/skills/
 - Local quality history: .goat-flow/logs/quality/
 `,

@@ -1031,6 +1031,17 @@ function selectCommandProjectPath(
   return paths.quality;
 }
 
+/** Read claim positionals only for the claim namespace; other commands keep their resolved project path. */
+function parseOptionalClaimsPositionals(
+  command: Command,
+  commandPositionals: string[],
+  fallbackProjectPath: string,
+): { claimsSubcommand: ClaimsSubcommand | null; projectPath: string } {
+  return command === "claims"
+    ? parseClaimsPositionals(commandPositionals)
+    : { claimsSubcommand: null, projectPath: fallbackProjectPath };
+}
+
 /** Read skill positionals only when the developer invoked `skill`; other commands receive inert fields and their existing project path. */
 function parseOptionalSkillPositionals(
   command: Command,
@@ -1148,13 +1159,11 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
     commandPositionals,
     parsedString(parsedValues, "draft") ?? null,
   );
-  const claimsPositionals =
-    command === "claims"
-      ? parseClaimsPositionals(commandPositionals)
-      : {
-          claimsSubcommand: null,
-          projectPath: qualityPositionals.projectPath,
-        };
+  const claimsPositionals = parseOptionalClaimsPositionals(
+    command,
+    commandPositionals,
+    qualityPositionals.projectPath,
+  );
   const eventsPositionals =
     command === "events"
       ? parseEventsPositionals(commandPositionals)

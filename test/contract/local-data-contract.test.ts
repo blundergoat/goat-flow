@@ -261,8 +261,9 @@ describe("local data contract", () => {
     }
   });
 
-  it("lists the optional security policy in canonical committed knowledge", () => {
+  it("lists the optional security policy in committed knowledge and code-map orientation", () => {
     const architecture = readContractFile(".goat-flow/architecture.md");
+    const codeMap = readContractFile(".goat-flow/code-map.md");
     const committedKnowledge = architecture
       .split(/\r?\n/u)
       .find((line) => line.includes("**Committed knowledge**"));
@@ -275,5 +276,6 @@ describe("local data contract", () => {
       committedKnowledge,
       /`\.goat-flow\/security-policy\.md` \(optional, user-owned security guardrails\)/u,
     );
+    assert.match(codeMap, /`\.goat-flow\/security-policy\.md` when present/u);
   });
 });

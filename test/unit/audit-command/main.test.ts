@@ -27,6 +27,7 @@ import {
   labelEvidencePathBases,
   RECOVERY_CHECKS,
   scanSemanticDrift,
+  SETUP_CHECKS,
   setupSummary,
   shouldAutoRunDrift,
   specProvenance,
@@ -35,6 +36,15 @@ import {
   VERIFICATION_CHECKS,
 } from "../../src.js";
 import type { AuditContext } from "../../src.js";
+
+const SECURITY_POLICY_PATH = ".goat-flow/security-policy.md";
+
+/** Target state varied by the optional security-policy discovery fixtures. */
+interface SecurityPolicyDiscoveryFixture {
+  hasPolicy: boolean;
+  codeMapContent: string;
+  instructionContent: string;
+}
 
 /**
  * Render the explicit skill subtree a user sees in the code map.
@@ -108,6 +118,99 @@ function helperContractContext(
     agentFilter: "codex",
   });
 }
+
+/**
+ * Build one target-project context for the optional security-policy discovery contract.
+ * The manifest still owns whether the path is optional; this fixture varies only whether the target installed it and where users can discover it.
+ */
+function securityPolicyDiscoveryContext(
+  fixture: SecurityPolicyDiscoveryFixture,
+): AuditContext {
+  return makeCtx({
+    fs: stubFS({
+      exists: (path) =>
+        path === SECURITY_POLICY_PATH ? fixture.hasPolicy : true,
+      readFile: (path) => {
+        if (path === ".goat-flow/code-map.md") {
+          return fixture.codeMapContent;
+        }
+        if (path === "AGENTS.md") {
+          return fixture.instructionContent;
+        }
+        return null;
+      },
+    }),
+    structure: {
+      ...makeCtx().structure,
+      agents: {
+        codex: {
+          instruction_file: "AGENTS.md",
+          skills_dir: ".agents/skills",
+        },
+      },
+    },
+  });
+}
+
+const otherFilesCheck = SETUP_CHECKS.find(
+  (check) => check.id === "other-files",
+);
+assert.ok(otherFilesCheck, "other-files setup check must stay registered");
+
+describe("optional security policy discovery", () => {
+  it("fails when an installed policy is absent from the code map and Router Table", () => {
+    const context = securityPolicyDiscoveryContext({
+      hasPolicy: true,
+      codeMapContent: `# Code Map\n\n${SECURITY_POLICY_PATH}.backup\n`,
+      instructionContent: [
+        "# AGENTS.md",
+        "",
+        "## Key Resources",
+        `Security policy: ${SECURITY_POLICY_PATH}`,
+        "",
+        "## Router Table",
+        "| Resource | Path |",
+        "|----------|------|",
+        "| Config | `.goat-flow/config.yaml` |",
+        `| Retired policy copy | \`${SECURITY_POLICY_PATH}.backup\` |`,
+      ].join("\n"),
+    });
+
+    const failure = otherFilesCheck.run(context);
+
+    assert.ok(failure);
+    assert.equal(failure.check, "Security policy discovery");
+    assert.match(failure.message, /\.goat-flow\/code-map\.md/u);
+    assert.match(failure.message, /AGENTS\.md/u);
+  });
+
+  it("keeps a project without the optional policy valid", () => {
+    const context = securityPolicyDiscoveryContext({
+      hasPolicy: false,
+      codeMapContent: "# Code Map\n",
+      instructionContent: "# AGENTS.md\n",
+    });
+
+    assert.equal(otherFilesCheck.run(context), null);
+  });
+
+  it("passes when an installed policy is mapped and routed", () => {
+    const context = securityPolicyDiscoveryContext({
+      hasPolicy: true,
+      codeMapContent: `# Code Map\n\n${SECURITY_POLICY_PATH}\n`,
+      instructionContent: [
+        "# AGENTS.md",
+        "",
+        "## Router Table",
+        "| Resource | Path |",
+        "|----------|------|",
+        `| Security policy | \`${SECURITY_POLICY_PATH}\` |`,
+      ].join("\n"),
+    });
+
+    assert.equal(otherFilesCheck.run(context), null);
+  });
+});
 
 /**
  * Assert every user-facing harness concern still has at least one registered check.

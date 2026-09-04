@@ -119,6 +119,56 @@ describe("skill hardening contracts: security (1/2)", () => {
     });
   });
 
+  it("allows only observed trusted-component Quick risks before exhaustive inventories", () => {
+    assertForEachTarget(installedSkillPaths("goat-security"), (skillPath) => {
+      const intake = readMarkdownSection(skillPath, "Step 0 - Intake");
+      const proportionalGate = intake.indexOf(
+        "Proportional Quick finding gate",
+      );
+      const exhaustiveGate = intake.indexOf("Exhaustive inventory gate");
+
+      assert.ok(
+        proportionalGate >= 0,
+        `${skillPath}: missing proportional Quick finding gate`,
+      );
+      assert.ok(
+        exhaustiveGate > proportionalGate,
+        `${skillPath}: proportional finding gate must precede exhaustive inventory`,
+      );
+      assertMatchesAll(
+        intake,
+        [
+          /Proportional Quick finding gate.*trusted explicit-component Quick.*retain and calibrate only.*current-session `OBSERVED`.*component risk.*before exhaustive Full inventories/isu,
+          /exact target.*deployment.*provenance.*authority\/snapshot.*entry→sink or requirement gap.*mitigation re-check.*execution-safety receipt/isu,
+          /`INFERRED`.*`UNVERIFIED`.*`HUMAN-PENDING`.*missing binding stays withheld with evidence needed/isu,
+          /no supported component finding survives.*report.*no supported component finding.*MUST NOT.*zero-findings.*complete coverage.*clearance/isu,
+        ],
+        skillPath,
+      );
+    });
+
+    assertForEachTarget(
+      installedSkillReferencePaths(
+        "goat-security",
+        "references/common-threats.md",
+      ),
+      (referencePath) => {
+        const applicationBaseline = readMarkdownSection(
+          referencePath,
+          "Application baseline",
+        );
+        assertMatchesAll(
+          applicationBaseline,
+          [
+            /Full and exhaustive-path Quick.*baseline-family inventory.*one row per family/isu,
+            /proportional trusted-component Quick.*compact coverage-gap ledger.*replaces per-family rows.*unassessed families.*coverage-degraded.*MUST NOT recommend clearance/isu,
+          ],
+          referencePath,
+        );
+      },
+    );
+  });
+
   it("keeps goat-security quality composition complete", () => {
     const projectRoot = process.cwd();
     const artifact = findArtifact(projectRoot, "skill:goat-security");

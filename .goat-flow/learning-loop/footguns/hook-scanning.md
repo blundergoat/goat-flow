@@ -1,6 +1,6 @@
 ---
 category: hook-scanning
-last_reviewed: 2026-08-23
+last_reviewed: 2026-09-04
 ---
 
 **Scope:** What a hook-driven scanner can and cannot see - changed-file enumeration, diff and rename detection, gitignore and gitattribute interactions, and language/block parsing. Hook registration, launcher runtime, and policy-module behavior live in `hooks.md`; installation and per-agent config live in `hook-installation.md`.
@@ -61,13 +61,15 @@ Recurrence on 2026-08-10: source and packed consumer canaries passed after launc
 ## Footgun: Gitignored local artifacts make repository scans diverge between local and CI
 
 **Status:** active | **Created:** 2026-08-07 | **Evidence:** ACTUAL_MEASURED
-**Incident count:** 1 | **Latest occurrence:** 2026-08-07
+**Incident count:** 2 | **Latest occurrence:** 2026-09-04
 
 **Prevention:** A shared scan contract may cover only files every environment can reproduce. Build declared generated artifacts before the scan in every environment, verify accepted-debt paths against tracked or deliberately generated inputs, and reproduce the gate from a clean tracked-tree fixture instead of trusting an existing developer build.
 
 **Trap:** A full-repository analyzer can silently depend on gitignored local state. Local `dist/cli/cli.js` satisfied the package binary check while a fresh CI checkout ran the warning ratchet before building `dist/` and reported `design.package-bin-missing`. Local verification was green only because the developer tree contained generated files absent from the clean checkout.
 
 **Evidence:** Measured from a clean `git archive` on 2026-08-07: the ratchet emitted stable identity `75483f7900f8f4f6` before the build, then passed after `npm run build` with 449 analysed files. Anchors: `scripts/check-gruff-warning-ratchet.mjs` (search: `minimumAnalysedFiles`) and `.github/workflows/ci.yml` (search: `Build package binary`).
+
+**Recurrence 2026-09-04:** M15's installer round-trip fixture copied the live checkout while filtering repository metadata, dependencies, and session logs, but inherited its gitignored managed-install receipt. The disposable repo then failed its first-install assumption at the managed-state admission guard; a clean CI checkout would not contain that local receipt. The fixture now excludes the entire install-state directory before copying. Evidence anchor: `test/integration/audit-drift.helpers.ts` (search: `localInstallStateDirectory`).
 
 ## Footgun: Nested template literals can blind the gruff-ts block scanner to everything after them
 

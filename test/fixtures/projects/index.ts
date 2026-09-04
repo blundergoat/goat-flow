@@ -79,6 +79,10 @@ export function stubFS(overrides: Partial<ReadonlyFS> = {}): ReadonlyFS {
   const defaultReadFile = (path: string): string | null => {
     // The default project keeps committed goat-flow files visible to audit users.
     if (path === ".goat-flow/.gitignore") return HEALTHY_GOAT_FLOW_GITIGNORE;
+    // A present optional policy remains discoverable from the healthy project code map.
+    if (path === ".goat-flow/code-map.md") {
+      return "Read `.goat-flow/security-policy.md` when present.\n";
+    }
     // The playbook README lets agents discover every registered built-in reference.
     if (path === ".goat-flow/skill-docs/playbooks/README.md") {
       return healthyPlaybookReadme();

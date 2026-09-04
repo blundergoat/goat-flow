@@ -91,7 +91,7 @@ type AuditHarnessJsonField = Record<"harness", boolean>;
 
 /** Read-only hook coverage chain shared by audit JSON, CLI text, and dashboard state. */
 export interface AuditHookCoverageReport {
-  status: "pass" | "fail";
+  status: "pass" | "warning" | "fail";
   selectedAgents: AgentId[];
   summary: {
     selectedSurfaces: number;

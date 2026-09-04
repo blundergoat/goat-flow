@@ -289,6 +289,7 @@ docs/                            = user and maintainer documentation
 ```text
 .goat-flow/                      = goat-flow's installed framework state for this repo
 ├── config.yaml                  = goat-flow config: version, skill install list, hook toggles, telemetry
+├── security-policy.md           = optional user-owned security guardrails; read `.goat-flow/security-policy.md` when present
 ├── architecture.md              = canonical architecture and persistence tiers
 ├── code-map.md                  = this file
 ├── glossary.md                  = project terms and canonical surfaces

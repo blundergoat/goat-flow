@@ -1,6 +1,6 @@
 ---
 category: verification-validators
-last_reviewed: 2026-08-26
+last_reviewed: 2026-09-04
 ---
 
 **Scope:** Getting a checker itself right - regex and wildcard construction, path resolution inside guards, what a validator must inventory, and counting contracts between a check and what it reports. Whether a claim was verified at all is [verification.md](verification.md).
@@ -139,12 +139,16 @@ A relocation also destroys its own evidence: once the inline list was deleted, t
 
 ## Lesson: Path normalization can invalidate later path-shape heuristics
 
-**Status:** historical | **Created:** 2026-04-03 | **Reason:** Rubric check 2.4.3 no longer exists (ADR-013); normalization-invariant principle applies to any parser
+**Status:** active | **Created:** 2026-04-03 | **Incident count:** 2 | **Latest occurrence:** 2026-09-04
+**Decision changed:** Exact path checks use token or segment boundaries plus a longer-lookalike negative control, never raw substring containment. | **Trigger phase:** ACT | **Caught at:** VERIFY
 
-**Prevention:** When a parser normalizes paths, downstream checks must use shape tests that still hold after normalization, such as segment-boundary regexes (`/\/skills(?:\/|$)/`) instead of raw substring checks that depend on trailing separators.
+**Prevention:** When a parser normalizes or extracts paths, downstream checks must use shape tests that still hold afterward, such as segment-boundary regexes (`/\/skills(?:\/|$)/`). When a validator claims exact identity, add a longer-lookalike negative control and reject raw substring containment. Evidence anchors: `src/cli/audit/skill-docs-contract.ts` (search: `textReferencesProjectPath`), `test/unit/audit-command/main.test.ts` (search: `Retired policy copy`).
 
 **What happened:** After normalizing router references by trimming trailing slashes, the follow-up `2.4.3` filter still looked for the literal substring `/skills/`. The trimming turned `.claude/skills/` into `.claude/skills`, so the canonical passing fixture dropped from `100` to `99` even though the router row was correct.
-**Root cause:** Mixed two phases of logic without rechecking the invariant after normalization. The filter assumed the original slash shape still existed after the normalizer had deliberately removed it.
+
+**Recurrence 2026-09-04:** The first optional security-policy discovery helper used `String.includes` even though its contract promised an exact routed path. The goat-clarity pass found that a Router Table or code map naming `security-policy.md.backup` would satisfy the check. Complete-token matching and a suffix-lookalike fixture replaced the substring test before closeout.
+
+**Root cause:** Treated string containment as path identity without rechecking the boundary invariant after normalization or section extraction.
 
 ---
 

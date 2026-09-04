@@ -250,7 +250,7 @@ function appendHookCoverageSummary(lines: string[], report: AuditReport): void {
       : "no agent surface selected";
   lines.push("");
   lines.push(
-    `- **Effective Hook Coverage**: ${hookCoverage.status === "pass" ? "PASS" : "FAIL"} (${hookCoverage.summary.requiredIneffective} required surface(s) ineffective; offline status only; ${coveredAgents})`,
+    `- **Effective Hook Coverage**: ${hookCoverage.status.toUpperCase()} (${hookCoverage.summary.requiredIneffective} required surface(s) ineffective; offline status only; ${coveredAgents})`,
   );
   // Each selected agent keeps its own row because a shared hook file never proves shared provider support.
   for (const hook of hookCoverage.hooks) {

@@ -97,9 +97,10 @@ k) Router Table
    - Tool playbooks (`.goat-flow/skill-docs/playbooks/`)
    - Orientation docs (`.goat-flow/code-map.md`, `.goat-flow/glossary.md`) when present
    - Architecture doc (`.goat-flow/architecture.md`)
+   - Config and optional security policy (`.goat-flow/config.yaml`, `.goat-flow/security-policy.md`; read the policy when present)
    - Installed agent skills runtime mirror (`.claude/skills/`, `.agents/skills/`, or `.github/skills/`)
    - Canonical workflow/setup source if present; identify `workflow/skills/` as the skill source rather than an installed mirror
-   - Source, scripts, config, docs, and workspace/session paths
+   - Source, scripts, docs, and workspace/session paths
    - Peer instruction files present in the project
 
 ## Quality Bar

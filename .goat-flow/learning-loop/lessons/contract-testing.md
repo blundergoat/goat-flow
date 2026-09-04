@@ -59,18 +59,20 @@ last_reviewed: 2026-09-01
 **Trigger phase:** ACT
 **Caught at:** VERIFY
 
-**Incident count:** 9
+**Incident count:** 11
 
-**Latest occurrence:** 2026-08-09
+**Latest occurrence:** 2026-09-04
 
 **Prevention:** Search indexes, contracts, and tracked semantic-anchor references before changing headings or compacting prose; run focused contracts and `stats --check`; repair anchors together.
 
-**What happened:** Nine prose edits removed or changed durable or contract-pinned anchors:
+**What happened:** Eleven prose edits removed or changed durable or contract-pinned anchors:
 
 - **2026-07-12–19:** Four compactions removed anchors; stats/contracts restored them. Evidence: `workflow/skills/reference/skill-preamble.md` (search: `Routing rule`).
 - **2026-08-01:** A review-contract rollout changed pinned wording, split one code span, and removed “with R-ID”; contracts restored all. Evidence: `test/contract/skill-hardening-review-2.test.ts` (search: `gives goat-review findings stable IDs, harm, and distinct evidence axes`).
 - **2026-08-09:** A prose-style pass changed `Decide First` to sentence case and broke a learning-loop semantic anchor. The midpoint content audit caught `stale-semantic-anchor`; restoring `docs/skill-authoring.md` (search: `## Decide First`) preserved the reference.
 - **2026-08-09 v1.15.1 goat-critique:** The new clean-attestation contract passed within budget, but the first compaction removed four phrases pinned by the adjacent meta-rubric contract. The focused suite reported 17/18 until those phrases were restored and unpinned output-list prose paid the word cost. Evidence: `test/contract/skill-hardening-skills-2.test.ts` (search: `uses one reproducible goat-critique meta-audit rubric`).
+- **2026-09-04:** M15's content audit found that ADR-006 still cited a shared-preamble phrase shortened during compaction. Updating the decision's needle to the current wording restored the semantic-anchor contract. Evidence: `.goat-flow/learning-loop/decisions/ADR-006-autonomous-skill-mode.md` (search: `an invoked skill runs its full protocol`) and `.goat-flow/skill-docs/skill-preamble.md` (search: `an invoked skill runs its full protocol`).
+- **2026-09-04 release acceptance:** Consolidating a timing recurrence removed its cited `go-live M15 activation` heading fragment. `stats --check` rejected the stale inbound reference; restoring the fragment preserved the existing anchor without dropping the expanded timing rule. Evidence: `.goat-flow/learning-loop/lessons/verification-testing.md` (search: `go-live M15 activation`) and `.goat-flow/learning-loop/lessons/milestone-accounting.md` (search: `go-live M15 activation`).
 
 **Root cause:** Edited prose carried durable external anchors.
 

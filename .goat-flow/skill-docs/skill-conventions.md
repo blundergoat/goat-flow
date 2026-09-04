@@ -9,11 +9,11 @@ Read on **full-depth** invocations only; `skill-preamble.md` always loads first.
 
 ## Learning Loop - Entry Formats
 
-Use project-specific category buckets such as `verification.md` or `runtime.md`.
+Use project-specific buckets such as `verification.md` or `runtime.md`.
 
-Route entries to `.goat-flow/learning-loop/lessons/`, `patterns/`, or `footguns/`; never append to a monolithic log or README.
+Route entries to `.goat-flow/learning-loop/lessons/`, `patterns/`, or `footguns/`; never to a monolithic log or README.
 
-Before adding, Extract / Consolidate / Skip: search the relevant INDEX and bucket; update the same root cause even when symptoms differ; create only for a distinct cause; skip non-decision-changing material.
+Before adding, Extract / Consolidate / Skip: search the relevant INDEX and bucket; update one root cause across symptoms; create only distinct causes; skip non-decision-changing material.
 ```markdown
 <!-- Lesson bucket -->
 ---
@@ -57,9 +57,9 @@ last_reviewed: YYYY-MM-DD
 **Evidence:** `file` + semantic anchor (function name, unique string, or `(search: "pattern")`) - [what was found]
 ```
 
-Keep the metadata lines as one paragraph directly under the heading, then a blank line, then `**Prevention:**` as the first body paragraph; the bucket READMEs state the same order and `learn new` scaffolds it.
+Keep metadata as one paragraph below the heading, then a blank line and `**Prevention:**` as the first body paragraph; bucket READMEs and `learn new` use this order.
 
-Evidence labels: `ACTUAL_MEASURED` = reproduced/measured locally; `OBSERVED` = direct code/config evidence; `EXTERNAL_REFERENCE` = cited real external incident with local applicability. Never use hypotheticals.
+Evidence labels: `ACTUAL_MEASURED` = reproduced/measured locally; `OBSERVED` = direct code/config evidence; `EXTERNAL_REFERENCE` = cited real incident with local applicability. Never use hypotheticals.
 
 ```markdown
 # Successful Patterns
@@ -69,28 +69,28 @@ Evidence labels: `ACTUAL_MEASURED` = reproduced/measured locally; `OBSERVED` = d
 **Approach:** [what to do]
 ```
 
-Use optional `hallucination-risk` when names alone can mislead, including generated code, environment config, or external contracts.
+Use optional `hallucination-risk` when names can mislead, including generated code, environment config, or external contracts.
 
 ## Adaptive Step 0
 
-Reuse 2-3 overlapping session logs instead of re-deriving settled context.
+Reuse 2-3 overlapping session logs instead of re-deriving context.
 
-**The gate rule:** Infer answers already supplied. If intent, target, and boundary are clear, confirm once and proceed. Ask only at a genuine fork. A detailed brief or "skip Step 0" proceeds.
+**The gate rule:** Infer supplied answers. With clear intent, target, and boundary, confirm once and proceed. Ask only at a genuine fork. A detailed brief or "skip Step 0" proceeds.
 
 **Planning/interview boundary:** Default interview budget: one decision-bearing question at a time, no more than three per message or three rounds. Extend only when the user requests a deeper interview. When the budget is exhausted, present remaining choices with a recommended default and stop. Planning permission is not implementation permission. Do not implement unless the original directive authorized implementation or the user now selects it.
 
 A clear implementation directive proceeds after required READ and SCOPE; do not manufacture interview questions. "Update the plan" means write the plan, not execute it: a plan-only request stops at the handoff while explicit implementation authorizes execution.
 
-**Dispatcher invocation:** `/goat` announces the route; Step 0 asks any remaining questions without re-announcing. One dispatch, one intake gate.
+**Dispatcher invocation:** `/goat` announces the route; Step 0 asks remaining questions without repeating it. One dispatch, one intake gate.
 
 ## Contradiction Check
 
-If the user's stated complexity doesn't match the actual scope, flag it:
+Flag mismatches between stated complexity and actual scope:
 - "hotfix" but 5+ files affected → likely Standard or System
 - "small feature" but crosses 3+ boundaries → likely System
 - "quick test" but 20+ functions in target → warn scope is larger than implied
 
-Surface the mismatch, suggest re-classification. Don't silently proceed.
+Surface the mismatch, suggest re-classification, and never proceed silently.
 
 ## Stuck Protocol
 
@@ -103,12 +103,9 @@ If 3 consecutive file reads produce no new signal relevant to the current questi
 
 ## Task Tracking
 
-When working from a plan or milestone file:
-- Tick each task `- [x]` immediately, never at batch end or closeout.
-- Checkboxes are the recovery source after interruption or compaction.
-- If a completed task was missed, tick it before continuing.
+For plan or milestone work, tick each task `- [x]` immediately, never at batch end or closeout. Checkboxes recover state after interruption or compaction; tick any missed completion before continuing.
 
-On `/compact` with no active milestone file: write a session log to `.goat-flow/logs/sessions/` summarizing current state. Milestone files are the primary continuity mechanism; session logs are the fallback.
+On `/compact` without an active milestone, write current state to `.goat-flow/logs/sessions/`. Milestones are primary continuity; session logs are fallback.
 
 Handoff receipts: read `.goat-flow/logs/sessions/README.md`; redact before writing.
 
@@ -120,7 +117,7 @@ The hash-only `redactEvidenceText` API is not a readable scrubber. Redaction red
 
 ## Presenting Findings
 
-When summarising tasks, findings, or recommendations for user review, use this format per item:
+For user-facing tasks, findings, or recommendations, use:
 
 - **Summary:** what's affected (one line)
 - **Problem:** what's wrong (one line)
@@ -139,21 +136,21 @@ Lifecycle:
 5. `abandoned` requires a human decision and `Status reason:` records why work stops. Leaving either state removes the reason; reopening invalidates proof.
 6. `superseded` and `deferred` are terminal and need a `Status reason:`.
 
-At the gate, record learnings, resolve assumptions, and propose any amendment before applying it. A final pending milestone with complete predecessors enters the combined Phase 4 review.
+At the gate, record learnings, resolve assumptions, and propose amendments before applying them. A final pending milestone with complete predecessors enters Phase 4 review.
 
 ### Plan Completion Protocol
 
-See goat-plan Phase 4. Audit the final snapshot, present the **BLOCKING** human gate, and wait. Approval completes the final milestone; plan files remain until the human archives or removes them.
+See goat-plan Phase 4. Audit the final snapshot, present the **BLOCKING** human gate, and wait. Approval completes the final milestone; plans remain until human archival or removal.
 
-Plan and milestone files are verification artifacts. Agents MUST NOT delete, archive, or include self-destruct instructions in them.
+Plans and milestones are verification artifacts. Agents MUST NOT delete, archive, or add self-destruct instructions.
 
-Compact at ~60% context or after 15+ turns.
+Compact at ~60% context or 15+ turns.
 
 When blocked: ask one question with a recommended default.
 
 ## Orchestration Admission
 
-Before any optional repeated, parallel, delegated, review, QA, or critique pass, record:
+Before an optional repeated, parallel, delegated, review, QA, or critique pass, record:
 
 Budget Ledger:
 - Phase:
@@ -172,15 +169,15 @@ Budget Ledger:
 - Stop condition:
 - Decision: admitted | deferred | denied
 
-A repeated pass must name a new failure class, independence boundary, or explicit user request. Admit it when the change crosses a blast-radius threshold, failed verification needs targeted evidence, an independent context adds evidence, security or correctness risk outweighs cost, or the user requested it.
+A repeated pass must name a new failure class, independence boundary, or explicit user request. Admit it for blast-radius risk, targeted failed-verification evidence, useful independent context, or security/correctness value above cost.
 
-Same-context reassurance with no new evidence is denied. Do not parallelize tasks sharing files unless the merge boundary and conflict owner are named. Subagents keep one objective and structured return. Scouts get 5 tool calls; implementation gets 5 plus the task's estimated minutes, up to 20 tool calls, with larger tasks split first.
+Same-context reassurance with no new evidence is denied. Parallel tasks sharing files require a named merge boundary and conflict owner. Subagents keep one objective and structured return. Scouts get 5 tool calls; implementation gets 5 plus the task's estimated minutes, up to 20 tool calls, with larger tasks split first.
 
-Required skill phases and verification are pre-admitted; estimated cost cannot degrade or block them. Explicit `goat-critique` stays full delegated mode and preserves existing consent. This is rough admission control, not token accounting or a hard failure based only on estimated cost.
+Required skill phases and verification are pre-admitted; cost cannot degrade or block them. Explicit `goat-critique` stays full delegated mode and preserves consent. This is rough admission control, not token accounting or a hard failure based only on estimated cost.
 
 ## Recovery
 
-When a skill fails mid-execution (context limit, sub-agent dies, tool error):
+When a skill fails mid-execution (context limit, sub-agent death, tool error):
 
 | Situation | Action |
 |-----------|--------|

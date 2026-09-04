@@ -1,6 +1,6 @@
 ---
 category: verification-preflight
-last_reviewed: 2026-08-28
+last_reviewed: 2026-09-03
 ---
 
 **Scope:** Adding, tuning, and trusting a repo-wide gate - dependency-audit baselines, count locks and provenance dates, what a PASS line does and does not prove, and the shell mechanics of the commands a gate runs. Formatter and lint debt is [verification-formatting.md](verification-formatting.md).
@@ -33,13 +33,15 @@ last_reviewed: 2026-08-28
 
 **Root cause:** I treated the most prominent failure label as the exit owner instead of reading the command's structured scope statuses.
 
-**Evidence anchors:** `scripts/preflight-checks.sh` (search: `audit --check-content reported drift`) and `src/cli/audit/audit.ts` (search: `status: requiredIneffective === 0`).
+**Evidence anchors:** `scripts/preflight-checks.sh` (search: `audit --check-content reported drift`) and `src/cli/audit/audit.ts` (search: `const hasRequiredDanger = requiredHookSurfaces.some`).
 
 ---
 
 ## Lesson: New dependency-audit gates need a baseline audit first
 
 **Status:** active | **Created:** 2026-05-21
+
+**Incident count:** 2 | **Latest occurrence:** 2026-09-04
 
 **Prevention:** Before adding a repo-wide dependency-audit gate, run the raw audit command first. If it finds baseline vulnerabilities, either include the smallest compatible dependency update in the same change or stop and report the blocker before wiring a failing gate.
 
@@ -48,6 +50,8 @@ last_reviewed: 2026-08-28
 **Root cause:** I treated "add the gate" as separate from proving the current baseline satisfies the gate. Dependency-audit gates are different from pure syntax checks because their first run can reveal already-present supply-chain debt.
 
 **Fix:** Patch the direct dependency to the current non-vulnerable release, sync `package-lock.json`, then rerun `npm audit` and full preflight before claiming the new gate works. Evidence anchors: `scripts/preflight-checks.sh` (search: `Dependency Audit`), `package.json` (search: `"ws": "^8.20.1"`).
+
+**Recurrence 2026-09-04:** M15's installer fixture reached its embedded preflight after the release candidate had passed earlier focused checks, but newly disclosed advisories made the existing `typed-rest-client` override of `qs@6.15.3` fail the dependency-audit gate. Raising only that transitive override to the patched `qs@6.16.0` and syncing the lockfile kept the repair inside the existing dependency boundary. Evidence anchors: `package.json` (search: `"qs": "6.16.0"`) and `scripts/preflight-checks.sh` (search: `Dependency Audit`).
 
 ---
 

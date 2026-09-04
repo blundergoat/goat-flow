@@ -2,15 +2,6 @@
 
 ## Unreleased
 
-- **`plans check --strict` accepts `superseded` and `deferred`** - Both are terminal statuses that require `Status reason:`. A superseded reason must name a successor milestone ID that resolves in the plan; nothing active or complete may depend on either; open checkboxes and paused receipts are allowed and no Actual is required; their estimates leave the `plan:` total and are reported on an `excluded:` line, and each milestone row says which status excluded it.
-- **Learning-loop entries lead with the rule** - Every active footgun and lesson now opens with `**Prevention:**` right after its metadata block, so INDEX-first retrieval shows what to do before the incident history; the entry-order contract in preflight keeps new entries in that shape.
-- **`skill-conventions.md` entry templates pass the Prevention-first gate** - The lesson and footgun templates separate the metadata block from `**Prevention:**` with a blank line, and the entry-order contract treats `hallucination-risk` and `Merged` lines as metadata, so an entry copied from the template no longer fails preflight.
-- **Playbook index routes skill testing** - `.goat-flow/skill-docs/playbooks/README.md` sends skill testing and hardening to `skill-quality-testing/README.md` instead of a table with no matching row.
-- **Review artifacts are documented** - `.goat-flow/architecture.md` and `.goat-flow/logs/review/README.md` list the redacted `.diff` bundle and `.md` chunk receipt that `/goat-review` writes, so those files are no longer classified as scratch with no evidential authority.
-- **Architecture and code map match `src/cli/config/` and `src/cli/diagnostics/`** - Both name all six config modules and the threat-model collector, and the duplicate `diagnostics/` row is gone.
-- **`docs/skills.md` goat-security section is readable** - Two single-line paragraphs of about 900 and 500 words are split into topic paragraphs without changing a sentence.
-- **Empty `patterns/external-lessons.md` bucket removed** - It held frontmatter only and had no index rows, so retrieval could never reach it.
-
 ## v1.17.0 - 2026-09-01
 
 The next release adds per-command `--help`, path-aware learning recall, one project-wide install baseline, whole-suite hook verification, and stricter `--strict` plan checks, and it untangles Claude and Copilot hook registrations.
@@ -22,17 +13,19 @@ The next release adds per-command `--help`, path-aware learning recall, one proj
 - **BREAKING: `plans check --strict` validates milestone status** - Blocked and abandoned milestones require exactly one `Status reason:` line; every other status must omit it, and `Status` must agree with tasks, proof, and `Actual`. Because `/goat-plan` runs this check, fix in-flight plans first. Exports retain the redacted reason; default checks are unchanged.
 - **BREAKING: `plans check --strict` validates the milestone graph** - Use `M<digits>` filenames and titles with exact local `Depends on` IDs; dependencies must be acyclic, prerequisites complete, and no more than one milestone active.
 - **BREAKING: `plans check --strict` validates milestone summaries** - `What problem are we solving` and `Who benefits and how` must each be one plain 70–120-character sentence without a milestone ID, ADR number, version, flag, or internal path; legacy headings remain advisory.
+- **`plans check --strict` accepts `superseded` and `deferred`** - Both are terminal statuses that require `Status reason:`. A superseded reason names a successor milestone that resolves in the plan; nothing active or complete may depend on either; open checkboxes and paused receipts are allowed without `Actual`; their estimates leave the plan total and appear on the `excluded:` line.
 - **BREAKING: `quality save` requires a refutation ledger** - Add `"refuted_candidates":[]` before saving a report. The shipped quality prompt already emits it, and older reports still open in `validate`, `history`, and `diff`.
 - **BREAKING: `redact --output` never overwrites** - Use a fresh project-local path for every run; existing files, linked parent directories, and paths outside the project are refused.
 - **`audit --check-content` detects semantic drift** - It compares documented states, limits, routes, and inventories with the shipped sources.
 - **`hooks verify --scenario all` runs every group** - `goat-flow hooks verify <path> --agent <id> --scenario all --trusted-target` retains every verdict and exits `1` unless all groups pass; JSON uses `goat-flow.hook-runtime-batch.v1`.
-- **Quality prompts expose effective hook coverage** - Assessments name the hook chain, covered agents, and repair for each ineffective surface, so a passing audit no longer hides a hook that never runs.
+- **Effective hook coverage distinguishes warnings from failures** - Audit, Markdown, dashboard, and quality prompts expose `hookCoverage.status` as `pass`, `warning`, or `fail` without changing the top-level audit verdict, so consumers must read both fields.
 - **Every command has dedicated `--help`** - `goat-flow <command> --help` shows usage, subcommands, flags, and examples without executing it.
 - **`recall` accepts evidence paths** - `goat-flow recall <path> [path...]` lists active entries whose evidence cites those files or directories.
 - **`learn new` scaffolds a validated entry** - `goat-flow learn new` previews with `--dry-run`, validates the entry, and refreshes indexes.
 - **Deny hooks inspect downstream shell `eval`** - Every executable pipeline stage is checked; `yq eval` and quoted evidence remain usable.
 - **Deny hooks respect shell syntax** - Quoted arrows and escapes remain usable; background commands and direct lockfile redirects are blocked.
 - **Competing installs stop before writing** - Concurrent runs halt before changing the project, and `status` explains stale or conflicting evidence.
+- **Interrupted writers have an identity-bound recovery path** - Run `claims inspect <path> --target <project-relative-path>`, verify that no writer remains, then pass its exact marker digest to `claims recover` with `--confirm-abandoned`; changed or unsafe markers remain untouched.
 - **Dashboard state survives interrupted writes** - Atomic replacement protects project identity, registry, and active-plan selections from partial files.
 - **Claude and Copilot hooks no longer collide** - Claude uses argv-safe handlers; Copilot ignores cross-loaded rows and runs its native hooks.
 - **Codex hooks launch from Windows paths** - After upgrading from 1.16.0, run `goat-flow hooks sync .` and restart Codex; `commandWindows` preserves the working directory. A 2026-08-27 Codex CLI 0.149.1 capture recorded PostToolUse delivery; fixed-scenario proof remains pending, and Stop evidence is stale.
@@ -48,8 +41,13 @@ The next release adds per-command `--help`, path-aware learning recall, one proj
 - **`/goat-clarity` resolves explicit intent first** - Write authority uses the first matching term: update/edit/fix grants it, report/review/check withholds it, then the `documentation` keyword applies. A request to report on documentation remains report-only.
 - **Skill qualification is model-scoped** - Retirement requires repeated provider/model/config ablations; retained cases guard against reintroduction.
 - **Learning indexes show age and token cost** - Rows include declared dates and token estimates; `stats` lists recurring entries for structural enforcement.
-- **Generated learning entries put the rule first** - `learn new` and the shared conventions place `Prevention` before symptoms and evidence.
+- **Learning-loop entries put prevention first** - Existing footguns and lessons, `learn new`, and the shared templates place `Prevention` before incident history; preflight enforces that order while accepting metadata such as `hallucination-risk` and `Merged`.
 - **Setup separates template policy from generated writes** - Step 01 limits `workflow/manifest.json` to exact-copy templates and directs user-owned and generated destinations to `goat-flow install . --dry-run`.
+- **Playbook discovery routes skill testing correctly** - The playbook index sends skill testing and hardening to `skill-quality-testing/README.md` instead of a table with no matching row.
+- **Review artifacts have documented evidence ownership** - Architecture and review-log guidance list the redacted `.diff` bundle and `.md` chunk receipt that `/goat-review` writes.
+- **Architecture and code-map inventories match current modules** - Both name all six config modules and the threat-model collector, and the duplicate diagnostics entry is gone.
+- **Security skill documentation uses topic-sized paragraphs** - The goat-security guide is split into readable sections without changing its requirements.
+- **Empty pattern bucket removed** - The frontmatter-only `patterns/external-lessons.md` bucket had no retrievable entries and was removed.
 
 ## v1.16.0 - 2026-08-20
 

@@ -4,6 +4,7 @@
 **Date:** 2026-04-03
 **Updated:** 2026-07-18 - reconciled the original phase-skipping rule with the current ceremony and goat-plan contracts.
 **Updated:** 2026-08-04 - refreshed moved semantic anchors after deterministic citation validation landed.
+**Updated:** 2026-09-04 - refreshed the shared-preamble anchor after its wording was compacted.
 
 ## Context
 
@@ -23,7 +24,7 @@ No `--autonomous` flag. Complexity and execution context choose an admitted path
 
 ## Superseded Portion
 
-The original rule told Hotfix and Small Feature work to skip closing ceremony and goat-plan Phases 2-3. That portion is no longer binding. It conflicted with `.goat-flow/skill-docs/skill-preamble.md` (search: `An explicitly invoked skill runs its full protocol`) and the compact-but-complete Small File-Write path in `workflow/skills/goat-plan/SKILL.md` (search: `Mode 3: Small File-Write`).
+The original rule told Hotfix and Small Feature work to skip closing ceremony and goat-plan Phases 2-3. That portion is no longer binding. It conflicted with `.goat-flow/skill-docs/skill-preamble.md` (search: `an invoked skill runs its full protocol`) and the compact-but-complete Small File-Write path in `workflow/skills/goat-plan/SKILL.md` (search: `Mode 3: Small File-Write`).
 
 ## Consequences
 

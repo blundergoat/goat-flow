@@ -1,6 +1,6 @@
 ---
 category: agent-tooling
-last_reviewed: 2026-09-01
+last_reviewed: 2026-09-04
 ---
 
 **Scope:** How the agent uses its tools and environment - resolving install-copy against source paths, recovering rather than bypassing a blocked command, variable scoping under `set -u`, and which artifact is the source of truth. Reading instructions and retrieving memory is [agent-behavior.md](agent-behavior.md).
@@ -29,27 +29,29 @@ last_reviewed: 2026-09-01
 ## Lesson: When deny hook blocks a command, use the unblocked equivalent
 
 **Created:** 2026-03-28
-**Updated:** 2026-08-16
+**Updated:** 2026-09-04
+**Decision changed:** After a guard rejects cleanup syntax, keep every destructive target literal and use the narrowest permitted file and directory operations.
+**Trigger phase:** ACT
+**Incident count:** 10 | **Latest occurrence:** 2026-09-04
 
-**Prevention:** When a command is blocked, find the unblocked equivalent. `rm -rf dir/` → `rm dir/file && rmdir dir/`. `mv old new` → `mv -n old new`. The deny hook blocks dangerous patterns, not all file ops.
+**Prevention:** When a command is blocked, use the narrow unblocked equivalent instead of bypassing the guard or stopping prematurely. Keep cleanup targets literal in destructive command operands even after validating a shell variable. Prefer individual file removal followed by `rmdir`; use `mv -n` for moves.
 
 **What happened:** Agent needed to delete `.github/skills/goat-onboard/` and `.github/skills/goat-reflect/`. Used `rm -rf`, blocked by the destructive-shell guard. Instead of `rm file && rmdir dir` (not blocked), it asked the user to delete manually - wasting a round trip on something trivially solvable.
 
-**Repeat incident:** During CLI menu/install verification, the installer smoke used `rm -rf "$tmp"` for temp cleanup and the deny hook blocked it. The corrected smoke used a fixed `/tmp/goat-flow-install-smoke-*` path, preserved the command status, and cleaned up with `rm -r "$tmp"` after verification.
+**Root cause:** The agent treated one rejected command shape as a dead end, or assumed a separately validated variable made an unresolved destructive operand easy for the policy hook to verify. The guard classifies the submitted command; it cannot rely on earlier shell reasoning.
 
-**Repeat incident 2026-05-17:** During release-blocker cleanup, an inline Node heredoc for splitting lesson buckets was blocked with `BLOCKED: Command has more than 50 chained segments`. The fix: put the helper in `.goat-flow/scratchpad/split-lessons-release.mjs`, run it as a plain `node` file, and delete it after the move.
+**Earlier recurrence (date not recorded):** During CLI menu/install verification, an installer smoke used recursive removal through a temporary-path variable. The recovery preserved the command status, removed files narrowly, and then removed the empty directory. The current guard owns this classification at `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `rm -r without safe scoping`).
 
-**Repeat incident 2026-07-13:** While building an ignored rollback patch, `: >` and `truncate -s 0` were both blocked as destructive truncation. After two blocked variants, the workflow rewound: verify the destination is absent, create it from the first `diff`, then append later diffs. Evidence: `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `truncate can destroy file contents`) is the shipped guard that produced the block.
+**Incident ledger:**
 
-**Recurrence update 2026-07-16:** A read-only source search embedded a destructive-command literal in the search expression, so the deny hook rejected the entire command before `rg` ran. The corrected search used semantic terms such as `destructive` and `truncate` instead of replaying an executable-looking command. Evidence: `.goat-flow/hooks/deny-dangerous/patterns-shell.sh` (search: `truncate can destroy file contents`) is the matching guard; `.goat-flow/learning-loop/lessons/agent-tooling.md` (search: `When deny hook blocks a command, use the unblocked equivalent`) records the recovery.
-
-**Recurrence 2026-07-19:** A `node -e` dry-run summarizer embedded `child_process`, so the hook blocked it before execution. Piping the direct CLI output to `jq` produced the same assertion without a shell-execution wrapper. Evidence: `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Interpreter -c/-e with shell-execution primitive`).
-
-**Recurrence 2026-08-16:** A final controller smoke piped a known JSON Stop payload into `bash .goat-flow/hooks/post-turn-safety.sh`, so the deny hook correctly blocked the pipe-to-shell shape before any checks ran. The corrected smoke created an inspected temporary payload with `apply_patch` and redirected that local file into the hook. Preserve this distinction in hook testing: the payload may be trusted, but a shell pipe is still the prohibited execution shape. Evidence: `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Pipe to shell`).
-
-**Recurrence 2026-08-22:** While planning 1.17.0 M42-M46, two research batches were blocked in turn: a long `;`-chained read batch hit the segment cap, and a quoted heredoc carrying milestone text was blocked because its Markdown contained backticks, which the classifier reads as command substitution even inside a quoted heredoc body. The fix was not to retry variants: split read batches to well under 50 segments, and persist durable text by writing the draft to the scratchpad with the file tool and redirecting that file into `goat-flow redact --output <destination>`, so no backtick ever appears on the command line. Evidence: `workflow/hooks/deny-dangerous.sh` (search: `Backtick command substitution hides nested execution`) and (search: `Command has more than 50 chained segments`).
-
-**Root cause:** Agent defaulted to `rm -rf` out of habit and treated the block as a dead end instead of considering alternatives.
+- **Recurrence 2026-05-17:** A release-blocker cleanup embedded a large helper in one command and hit the segment cap. Moving the inspected helper to a file made the invocation reviewable. Evidence: `workflow/hooks/deny-dangerous.sh` (search: `Command has more than 50 chained segments`).
+- **Recurrence 2026-07-13:** Two truncation variants were blocked while assembling a rollback patch. The recovery verified an absent destination, created it from the first diff, and appended later diffs. Evidence: `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `truncate can destroy file contents`).
+- **Recurrence 2026-07-16:** A read-only search embedded an executable-looking destructive literal and was rejected before `rg` ran. Searching for semantic terms avoided replaying the command shape. Evidence: `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `truncate can destroy file contents`).
+- **Recurrence 2026-07-19:** An inline Node summarizer embedded a shell-execution primitive. Piping direct CLI output to `jq` supplied the same assertion without an interpreter wrapper. Evidence: `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Interpreter -c/-e with shell-execution primitive`).
+- **Recurrence 2026-08-16:** A known JSON Stop payload was piped into a shell hook. Redirecting an inspected local payload file preserved the test without the prohibited pipe-to-shell shape. Evidence: `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Pipe to shell`).
+- **Recurrence 2026-08-22:** Planning reads hit both the command-segment cap and backtick classification. Smaller read batches and an inspected file-backed draft avoided both rejected shapes. Evidence: `workflow/hooks/deny-dangerous.sh` (search: `Backtick command substitution hides nested execution`) and (search: `Command has more than 50 chained segments`).
+- **Recurrence 2026-09-03:** An approved disposable-worktree cleanup used recursive removal through a validated shell variable, so PreToolUse rejected the whole batch before execution. The corrected command named the worktree literally, removed the four remaining files individually, and used `rmdir` for the two empty directories. Evidence: `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `rm -r without safe scoping`).
+- **Recurrence 2026-09-04:** Two M15 read-only diagnostics were rejected before execution: a double-quoted search embedded Markdown backticks, and an inline Node wrapper referenced `spawnSync`. Literal-safe search terms and a direct CLI-to-`jq` pipeline produced the same evidence without bypassing the guard. Evidence: `workflow/hooks/deny-dangerous.sh` (search: `Backtick command substitution hides nested execution`) and `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Interpreter -c/-e with shell-execution primitive`).
 
 ---
 

@@ -374,6 +374,8 @@ describe("dashboard /api/audit", () => {
     );
     const hooksPayload = expectRecord(hooksResponse.body, "Hooks response");
 
+    assert.equal(dashboardReport.status, "pass");
+    assert.equal(auditCoverage.status, "warning");
     assert.deepEqual(auditCoverage.hooks, hooksPayload.hooks);
   });
 

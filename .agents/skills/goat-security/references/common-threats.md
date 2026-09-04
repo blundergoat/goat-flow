@@ -9,9 +9,11 @@ When application and API surfaces both apply, select both baselines and record s
 
 ## Application baseline
 
-The authoritative baseline-family inventory MUST be independently verified complete; require one row per family. Omitted families or an unverifiably complete inventory are `not assessed`, `coverage-degraded`; MUST NOT recommend clearance.
+Full and exhaustive-path Quick require the authoritative baseline-family inventory to be independently verified complete, with one row per family. Omitted families or an unverifiably complete inventory are `not assessed`, `coverage-degraded`; MUST NOT recommend clearance.
 
-Ledger every baseline family as `scanned | skipped | not applicable | not assessed` with scope evidence. Use one row per family per selected baseline: baseline-name/version | family | scanned/skipped/not-applicable/not-assessed | assessment-evidence @ authority/snapshot | evidence-status | proof-class | scope-evidence. `scanned` requires current-session `OBSERVED` evidence at exact authority/snapshot proving family coverage at affected scope/deployment; `not-applicable` requires current `OBSERVED` applicability evidence at scope authority. Mismatched/unresolved bindings and `INFERRED`/`UNVERIFIED`/`HUMAN-PENDING` rows are `not-assessed`, `coverage-degraded`; every `skipped` row is `coverage-degraded`; MUST NOT recommend clearance:
+Full and exhaustive-path Quick ledger every baseline family as `scanned | skipped | not applicable | not assessed` with scope evidence. Use one row per family per selected baseline: baseline-name/version | family | scanned/skipped/not-applicable/not-assessed | assessment-evidence @ authority/snapshot | evidence-status | proof-class | scope-evidence. `scanned` requires current-session `OBSERVED` evidence at exact authority/snapshot proving family coverage at affected scope/deployment; `not-applicable` requires current `OBSERVED` applicability evidence at scope authority. Mismatched/unresolved bindings and `INFERRED`/`UNVERIFIED`/`HUMAN-PENDING` rows are `not-assessed`, `coverage-degraded`; every `skipped` row is `coverage-degraded`; MUST NOT recommend clearance.
+
+For proportional trusted-component Quick, SKILL's compact coverage-gap ledger replaces per-family rows: list unassessed families and evidence needed, mark `coverage-degraded`, and MUST NOT recommend clearance:
 
 - broken access control and authentication failures
 - security misconfiguration and unsafe defaults

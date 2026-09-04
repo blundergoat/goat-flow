@@ -22,6 +22,7 @@ import { after, describe, it } from "node:test";
 import { runAudit } from "../../src/cli/audit/audit.js";
 import {
   renderAuditJson,
+  renderAuditMarkdown,
   renderAuditText,
 } from "../../src/cli/audit/render.js";
 import { createFS } from "../../src/cli/facts/fs.js";
@@ -548,6 +549,21 @@ describe("effective hook state", () => {
     });
     assert.equal(denyHookState.repairCommand, null);
 
+    const auditReport = runAudit(createFS(projectPath), projectPath, {
+      agentFilter: "claude",
+      harness: false,
+      denyMechanismEvidenceLevel: "present-only",
+    });
+    const terminalCoverageLine = renderAuditText(auditReport)
+      .split("\n")
+      .find((line) => line.includes("Effective Hook Coverage:"));
+    assert.equal(auditReport.hookCoverage.status, "fail");
+    assert.match(terminalCoverageLine ?? "", /FAIL/u);
+    assert.match(
+      renderAuditMarkdown(auditReport),
+      /## Effective Hook Coverage: FAIL/u,
+    );
+
     unlinkSync(linkedConfigPath);
   });
 
@@ -672,8 +688,8 @@ describe("effective hook state", () => {
     );
   });
 
-  // Audit users must see the registrar's exact state and repair without audit editing their setup.
-  it("keeps audit JSON and terminal coverage aligned with read-only hook state", () => {
+  // Audit users must see advisory-only gaps without audit editing their setup or turning the aggregate red.
+  it("renders warning-only audit coverage across JSON, text, and Markdown", () => {
     const projectPath = createClaudeProject();
     syncHookStates(projectPath);
     const settingsPath = join(projectPath, ".claude", "settings.json");
@@ -693,11 +709,16 @@ describe("effective hook state", () => {
       hookCoverage: typeof auditReport.hookCoverage;
     };
     const terminalReport = renderAuditText(auditReport);
+    const terminalCoverageLine = terminalReport
+      .split("\n")
+      .find((line) => line.includes("Effective Hook Coverage:"));
+    const markdownReport = renderAuditMarkdown(auditReport);
 
-    assert.equal(auditReport.hookCoverage.status, "fail");
+    assert.equal(auditReport.hookCoverage.status, "warning");
     assert.deepEqual(auditDenyState, directDenyState);
     assert.deepEqual(jsonReport.hookCoverage, auditReport.hookCoverage);
-    assert.match(terminalReport, /Effective Hook Coverage:/u);
+    assert.match(terminalCoverageLine ?? "", /WARNING/u);
+    assert.match(markdownReport, /## Effective Hook Coverage: WARNING/u);
     assert.match(terminalReport, /deny-dangerous\/claude:/u);
     assert.match(terminalReport, /scenario unverified/u);
     assert.match(
@@ -705,6 +726,56 @@ describe("effective hook state", () => {
       /hooks verify .*--scenario deny-hook --trusted-target/u,
     );
     assert.equal(readFileSync(settingsPath, "utf-8"), settingsBeforeAudit);
+  });
+
+  /**
+   * Fixture purpose: prove complete required rows produce PASS while disabled optional Gruff stays neutral.
+   * Filesystem side effects: writes managed hooks, agent settings, verification receipts, and one conflict fixture inside a disposable project.
+   * Invariant: optional disabled rows cannot lower an otherwise effective aggregate.
+   */
+  it("passes effective required coverage with a disabled optional hook", () => {
+    const projectPath = createClaudeProject();
+    initializeDisposableGitProject(projectPath);
+    mkdirSync(join(projectPath, "src"), { recursive: true });
+    writeFileSync(
+      join(projectPath, "src", "example.txt"),
+      ["<<<<<<< HEAD", "left", "=======", "right", ">>>>>>> branch", ""].join(
+        "\n",
+      ),
+    );
+    syncHookStates(projectPath);
+
+    const denyReport = verifyManagedDenyHook({
+      projectPath,
+      agent: "claude",
+      scenarioGroup: "deny-hook",
+      isTargetUntrusted: false,
+    });
+    const postTurnReport = verifyManagedConfiguredHook({
+      projectPath,
+      agent: "claude",
+      scenarioGroup: "post-turn-hook",
+      isTargetUntrusted: false,
+    });
+    assert.equal(denyReport.status, "pass");
+    assert.equal(postTurnReport.status, "pass");
+
+    const auditReport = runAudit(createFS(projectPath), projectPath, {
+      agentFilter: "claude",
+      harness: false,
+      denyMechanismEvidenceLevel: "present-only",
+    });
+    const terminalCoverageLine = renderAuditText(auditReport)
+      .split("\n")
+      .find((line) => line.includes("Effective Hook Coverage:"));
+    assert.equal(auditReport.hookCoverage.status, "pass");
+    assert.equal(auditReport.hookCoverage.summary.requiredIneffective, 0);
+    assert.equal(auditReport.hookCoverage.summary.disabled, 1);
+    assert.match(terminalCoverageLine ?? "", /PASS/u);
+    assert.match(
+      renderAuditMarkdown(auditReport),
+      /## Effective Hook Coverage: PASS/u,
+    );
   });
 
   // Provider exclusions remain visible even when shared files happen to exist for another agent.

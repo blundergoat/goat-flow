@@ -70,13 +70,23 @@ function buildHookCoverageReport(
   const requiredIneffective = requiredHookSurfaces.filter(
     ({ agentState }) => agentState.effectiveState.status !== "effective",
   ).length;
+  const hasRequiredDanger = requiredHookSurfaces.some(
+    ({ agentState }) => agentState.effectiveState.severity === "danger",
+  );
+  const hasRequiredWarning = requiredHookSurfaces.some(
+    ({ agentState }) => agentState.effectiveState.severity === "warning",
+  );
   const selectedAgents = (
     selectedAgent === null
       ? Object.keys(hooks[0]?.agents ?? {})
       : [selectedAgent]
   ) as AgentId[];
   return {
-    status: requiredIneffective === 0 ? "pass" : "fail",
+    status: hasRequiredDanger
+      ? "fail"
+      : hasRequiredWarning
+        ? "warning"
+        : "pass",
     selectedAgents,
     summary: {
       selectedSurfaces: selectedHookSurfaces.length,

@@ -1,6 +1,6 @@
 ---
 category: audit-contracts
-last_reviewed: 2026-08-25
+last_reviewed: 2026-09-04
 ---
 
 **Scope:** The audit's own contracts - skip semantics, renderer defaults for new report fields, repair paths sourced from target evidence, and boundary behaviour of inverse metrics. Tests that pin wording and serialization are [contract-testing.md](contract-testing.md); the CLI surface is [cli-contracts.md](cli-contracts.md).
@@ -86,6 +86,8 @@ last_reviewed: 2026-08-25
 **What happened:** Historical scanner/rubric changes and current audit detector changes both invalidated "known failing" fixture expectations even when the implementation was correct. The failure mode recurs whenever a check is renamed or tightened, or when responsibility moves to a different detector.
 
 **Root cause:** I treated expected check ids as stable facts instead of outputs of the current detector contract.
+
+**Recurrence update (2026-09-04):** M06 added a content invariant for an installed optional security policy. Focused tests and the live audit passed, but `publish:check` exposed two older healthy-project fixtures that declared the policy present without its route: the shared `stubFS` returned no code-map content, then the consumer lifecycle overwrote both orientation files without the policy path. Keeping the policy present and adding its route to each fixture restored the integration contract. Evidence anchors: `test/fixtures/projects/index.ts` (search: `A present optional policy remains discoverable`), `test/integration/setup-quality-lifecycle.test.ts` (search: `Optional security policy`), and `src/cli/audit/check-goat-flow.ts` (search: `installedSecurityPolicyDiscoveryFailure`).
 
 ---
 

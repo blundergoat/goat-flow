@@ -346,15 +346,16 @@ export function writeHookFixtures(root: string): void {
 
 /**
  * Clone this repo into a temp fixture and git-init it, so install-then-drift round trips run
- * against a real tree. Writes the copied tree to the filesystem, skipping .git/node_modules/
- * log-session dirs, and spawns git init; symlinks node_modules back to the source to avoid a slow
- * copy. Asserts git init succeeds.
+ * against a real tree. Writes the copied tree to the filesystem without repository metadata,
+ * dependencies, session logs, or local install receipts; symlinks node_modules back to the source
+ * to avoid a slow copy; and spawns git init. Asserts git init succeeds.
  *
  * @returns the cloned repo root inside the temp fixture; the caller cleans up its parent dir
  */
 export function setupInstallRoundTripFixture(): string {
   const parent = mkdtempSync(join(tmpdir(), "goat-flow-install-roundtrip-"));
   const root = join(parent, "repo");
+  const localInstallStateDirectory = join(".goat-flow", "install-state");
   cpSync(PROJECT_ROOT, root, {
     recursive: true,
     filter: (src) => {
@@ -364,6 +365,13 @@ export function setupInstallRoundTripFixture(): string {
       const [topLevel] = rel.split(sep);
       // Repository metadata and dependencies are supplied separately to keep setup fast.
       if (topLevel === ".git" || topLevel === "node_modules") return false;
+      // Local receipts would make this clean-install fixture depend on the caller's ignored state.
+      if (
+        rel === localInstallStateDirectory ||
+        rel.startsWith(`${localInstallStateDirectory}${sep}`)
+      ) {
+        return false;
+      }
       return rel !== join(".goat-flow", "logs", "sessions");
     },
   });

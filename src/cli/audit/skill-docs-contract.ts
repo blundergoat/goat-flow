@@ -187,6 +187,46 @@ function hasSkillReferenceRouterPointer(instructionContent: string): boolean {
 }
 
 /**
+ * Check whether prose contains one complete repository-relative path rather than a longer lookalike.
+ *
+ * @param content - prose or Markdown section to inspect
+ * @param projectPath - repository-relative path that must appear as a complete token
+ * @returns `true` when the complete path appears, otherwise `false`
+ */
+export function textReferencesProjectPath(
+  content: string,
+  projectPath: string,
+): boolean {
+  const escapedPath = projectPath.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  const pathBoundary = new RegExp(
+    `(?:^|[^A-Za-z0-9._/-])${escapedPath}(?:$|[^A-Za-z0-9._/-])`,
+    "u",
+  );
+  return pathBoundary.test(content);
+}
+
+/**
+ * Check whether an instruction file routes users to one exact project path.
+ * The Router Table section is isolated before matching so an incidental mention elsewhere cannot satisfy a discovery contract.
+ *
+ * @param instructionContent - complete instruction text; an absent Router Table cannot reference the path
+ * @param projectPath - repository-relative path users must be able to discover
+ * @returns `true` only when the exact path appears inside the Router Table section
+ */
+export function instructionRouterReferencesPath(
+  instructionContent: string,
+  projectPath: string,
+): boolean {
+  const routerTable = extractMarkdownSection(
+    instructionContent,
+    /^Router Table\b/i,
+  );
+  return (
+    routerTable !== null && textReferencesProjectPath(routerTable, projectPath)
+  );
+}
+
+/**
  * Return the instruction requirements an operator still needs to add.
  * @param instructionContent - complete instruction text; empty means both discovery requirements are missing
  * @returns missing requirement labels; empty means the instruction contract is complete

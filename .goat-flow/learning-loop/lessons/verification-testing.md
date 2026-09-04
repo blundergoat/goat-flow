@@ -1,6 +1,6 @@
 ---
 category: verification-testing
-last_reviewed: 2026-08-29
+last_reviewed: 2026-09-04
 ---
 
 **Scope:** What a test must actually establish - observable contracts over incidental shape, deadlines independent of the thing under test, telling a transient failure apart from a regression, and the ways a passing suite still fails to prove its claim. Proving a guard or scanner works is [verification-scanners.md](verification-scanners.md); building fixtures is [test-fixtures.md](test-fixtures.md).
@@ -86,7 +86,7 @@ last_reviewed: 2026-08-29
 
 **Recurrence 2026-08-19:** Shortening the three live instruction files passed instruction parity and line-count checks, but `stats --check` rejected the removed durable anchor `Coding agents never run`. After that phrase was restored, full preflight still failed 3 of 2,122 tests because the rewrite had shortened the exact external-write authorization sentence. Both phrases were restored across the three mirrors before preflight passed. Evidence anchors: `.goat-flow/learning-loop/lessons/agent-behavior.md` (search: `Coding agents never run`) and `test/contract/command-phrases.test.ts` (search: `AUTHORIZATION_POLICY`).
 
-**Recurrence 2026-08-23:** Compressing the evidence matrix to restore its word budget changed a phrase cited by the new proof-boundary lesson. `stats --check` rejected the stale reference before closeout; retargeting it to the live `Claim-type controls set minimum evidence` anchor restored loop integrity. Evidence anchor: `.goat-flow/learning-loop/lessons/verification-testing.md` (search: `Mid-implementation proof gates split edit batches`).
+**Recurrence 2026-08-23:** Compressing the evidence matrix to restore its word budget changed a phrase cited by the new proof-boundary lesson. `stats --check` rejected the stale reference before closeout; retargeting it to the live `Claim controls set minimum evidence without changing proof classes` anchor restored loop integrity. Evidence anchor: `.goat-flow/learning-loop/lessons/verification-testing.md` (search: `Mid-implementation proof gates split edit batches`).
 
 **Recurrence 2026-08-23:** The focused report-schema tests passed, but the first full fast suite failed nine tests: one goat-qa contract still pinned the old gate sentence, and the shared dashboard capture fixture omitted the newly required `refuted_candidates` field, causing eight persistence scenarios to fail at schema admission. Updating the changed doctrine assertion and the one current-report fixture restored `# pass 2174` and `# fail 0`; legacy fixtures remain intentionally field-optional. Evidence anchors: `test/contract/skill-hardening-skills-1.test.ts` (search: `requires goat-qa Standard-mode gap output`) and `test/unit/quality-draft-capture.test.ts` (search: `function validReport`).
 
@@ -116,7 +116,7 @@ last_reviewed: 2026-08-29
 
 **Recurrence 2026-08-23:** The first write-scope fixture list included the three local instruction files even though the midpoint gate had to run before those files changed. Leaving them in the midpoint set would have failed on expected later-stage absence rather than a generated-surface defect. The gate was narrowed to the canonical reference plus four setup templates, which reported `# pass 76` and `# fail 0`; the three local paths joined only afterward, and the final focused run reported `# pass 91` and `# fail 0`. Evidence anchor: `test/contract/command-phrases.test.ts` (search: `WRITE_SCOPE_RECONCILIATION_PATHS`).
 
-Evidence anchors: `test/contract/skill-hardening-shared-1.test.ts` (search: `requires minimum evidence and rejects false proof for every claim type`) and `workflow/skills/reference/skill-preamble.md` (search: `Claim-type controls set minimum evidence`).
+Evidence anchors: `test/contract/skill-hardening-shared-1.test.ts` (search: `requires minimum evidence and rejects false proof for every claim type`) and `workflow/skills/reference/skill-preamble.md` (search: `Claim controls set minimum evidence without changing proof classes`).
 
 ---
 
@@ -167,17 +167,20 @@ Evidence anchors: `test/contract/skill-hardening-shared-1.test.ts` (search: `req
 ## Lesson: Depth headings do not create runtime stop boundaries
 
 **Status:** active | **Created:** 2026-07-12
+**Incident count:** 3 | **Latest occurrence:** 2026-09-03
 
-**Prevention:** Every branch needs an explicit stop or continue rule plus a contract; headings are orientation, not control flow. Evidence: `workflow/skills/goat-security/SKILL.md` (search: `Quick-stop boundary`), `workflow/skills/goat-debug/SKILL.md` (search: `continue to I2 without waiting`), `test/contract/skill-hardening-security-1.test.ts` (search: `Quick Scan out of Full-only specialist work`), and `test/contract/skill-hardening-shared-2.test.ts` (search: `lets an explicit read-only investigation pass its scope checkpoint`).
+**Prevention:** Every branch and nested requirement group needs an explicit stop, continue, or applicability rule plus a contract; headings are orientation, not control flow. Evidence: `workflow/skills/goat-security/SKILL.md` (search: `Quick-stop boundary`; search: `Proportional Quick finding gate`; search: `Exhaustive inventory gate`), `workflow/skills/goat-security/references/common-threats.md` (search: `For proportional trusted-component Quick`), `workflow/skills/goat-debug/SKILL.md` (search: `continue to I2 without waiting`), `test/contract/skill-hardening-security-1.test.ts` (search: `Quick Scan out of Full-only specialist work`; search: `allows only observed trusted-component Quick risks`), and `test/contract/skill-hardening-shared-2.test.ts` (search: `lets an explicit read-only investigation pass its scope checkpoint`).
 
 **What happened:** On 2026-07-12, goat-security Quick Scan entered a Full-only specialist phase and waited about eight minutes. On 2026-07-18, goat-debug Investigate made an explicit read-only scope wait at I1. In both cases, headings implied flow but did not define the runtime boundary.
+
+**Recurrence 2026-09-03:** Goat-security had an explicit Quick stop, but unqualified inventory and baseline-family rules still made Full-grade completeness a precondition for retaining a supported component risk. The proportional finding gate and exhaustive inventory gate now own that split explicitly. Durable controls live in `workflow/skills/goat-security/SKILL.md` (search: `Proportional Quick finding gate`) and `test/contract/skill-hardening-security-2.test.ts` (search: `uses one Quick gap-ledger row while Full keeps exhaustive rows`).
 
 ---
 
 ## Lesson: A documentation pass can push a file past a size gate it was written to enforce
 
 **Status:** active | **Created:** 2026-08-07
-**Incident count:** 6 | **Latest occurrence:** 2026-08-29
+**Incident count:** 7 | **Latest occurrence:** 2026-09-04
 
 **Prevention:** Before adding comments or contract cases to a file that sits within about 20% of its size threshold, measure its headroom and plan the split first. Split by responsibility; never accept the new finding: an oversized file created by the same change that added the gate is exactly what the gate exists to stop. Evidence anchors: `scripts/check-gruff-warning-ratchet.mjs` (search: `Release gate that stops reviewed Gruff warning debt`), `scripts/gruff-warning-ratchet-checks.mjs` (search: `The rules that decide whether Gruff warning debt regressed`), `scripts/ratchet-failure-report.mjs` (search: `Collects everything blocking a warning-ratchet run`).
 
@@ -191,11 +194,13 @@ Evidence anchors: `test/contract/skill-hardening-shared-1.test.ts` (search: `req
 
 **Recurrence 2026-08-12:** Recording two verification corrections pushed `.goat-flow/learning-loop/lessons/verification-preflight.md` to 40,736 bytes. `stats --check` stopped closeout; consolidating the new gate rule into its existing Prevention reduced the bucket to 39,999 bytes without dropping the decision or evidence anchor. Evidence: `.goat-flow/learning-loop/lessons/agent-evidence-claims.md` (search: `A predecessor may exempt one named RED fixture`).
 
-**Recurrence 2026-08-23:** The evidence matrix raised the always-loaded skill preamble to 1,507 words against its strict sub-1,500 cap. The focused 16-test doctrine contract passed, but `npm run test:fast` exposed the separate budget regression. Compressing only the new wording to 1,489 words preserved every tested control, and the exact 16-test word-budget contract then reported `# pass 16` and `# fail 0`. Evidence anchors: `workflow/skills/reference/skill-preamble.md` (search: `Claim-type controls set minimum evidence`) and `test/contract/skill-hardening-contracts.test.ts` (search: `always-loaded shared references stay within the 1500-word cap`).
+**Recurrence 2026-08-23:** The evidence matrix raised the always-loaded skill preamble to 1,507 words against its strict sub-1,500 cap. The focused 16-test doctrine contract passed, but `npm run test:fast` exposed the separate budget regression. Compressing only the new wording to 1,489 words preserved every tested control, and the exact 16-test word-budget contract then reported `# pass 16` and `# fail 0`. Evidence anchors: `workflow/skills/reference/skill-preamble.md` (search: `Claim controls set minimum evidence without changing proof classes`) and `test/contract/skill-hardening-contracts.test.ts` (search: `always-loaded shared references stay within the 1500-word cap`).
 
 **Recurrence 2026-08-23:** The initial implementation placed all refutation-ledger validation inside `schema-parser.ts`, raising it to 1,377 lines and creating the new Gruff identity `design.large-module-concentration`. Moving that responsibility into the focused ledger parser removed the new identity while preserving the exact three-item baseline on the original six-file analysis. Evidence anchors: `src/cli/quality/schema-refuted-candidates.ts` (search: `parseReportRefutedCandidates`) and `src/cli/quality/schema-parser.ts` (search: `parseReportCollections`).
 
 **Recurrence 2026-08-29:** M71 initially placed score-rationale cases in `quality-subcommands.test.ts` and `quality-report-contract.test.ts`, raising them to 1,049 and 1,005 substantive lines against Gruff's 1,000-line threshold. Moving the semantic cases into a focused owner restored both existing files below the gate without weakening the contract. Evidence anchor: `test/unit/quality-score-rationale.test.ts` (search: `quality score rationale schema`).
+
+**Recurrence 2026-09-04:** Recording M15's activation-order recurrence made `milestone-accounting.md` 40,053 bytes, so `stats --check` stopped the integration gate. Compressing only the new recurrence reduced the bucket to 39,908 bytes while retaining its decision and semantic anchor. Evidence anchors: `.goat-flow/learning-loop/lessons/milestone-accounting.md` (search: `go-live M15 activation`) and `src/cli/stats/stats.ts` (search: `BUCKET_SIZE_WARN_BYTES`).
 
 ---
 

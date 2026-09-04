@@ -1,6 +1,6 @@
 ---
 category: milestone-accounting
-last_reviewed: 2026-09-03
+last_reviewed: 2026-09-04
 ---
 
 **Scope:** Milestone state and effort accounting - activation order, where human gates belong, what a task section may contain, and why estimates counted from work units beat estimates written as durations. Multi-agent council coordination is [coordination.md](coordination.md).
@@ -49,20 +49,22 @@ last_reviewed: 2026-09-03
 **Decision changed:** Before setting `human-verification-pending`, keep every implementation Task checked, separate agent handoff work from human execution, prefix each open human-owned Proof item with `[HUMAN]`, and assign it zero agent minutes.
 **Trigger phase:** SCOPE
 **Caught at:** VERIFY
-**Incident count:** 4
-**Latest occurrence:** 2026-08-23
+**Incident count:** 5
+**Latest occurrence:** 2026-09-04
 
-**Prevention:** Before a pending transition, confirm Tasks has no unchecked boxes, agent handoff preparation has its own checked Proof item, every open human-owned Proof item starts with `[HUMAN]` and carries zero agent minutes, and the declared work-unit count still matches. Evidence anchors: `src/cli/plans-check.ts` (search: `collectHumanPendingErrors`) and `src/cli/plans-effort.ts` (search: `countAgentWorkUnits`).
+**Prevention:** Before a pending transition, require no open Tasks, keep agent handoff as checked Proof, and put each zero-minute open `[HUMAN]` item under Proof. Reconcile work units. Evidence anchors: `src/cli/plans-check.ts` (search: `collectHumanPendingErrors`) and `src/cli/plans-effort.ts` (search: `countAgentWorkUnits`).
 
-**What happened:** A release milestone had finished implementation and automated proof, but I added the final human approval checkbox under Tasks while changing the status to `human-verification-pending`. Strict plan validation rejected the snapshot as having an open implementation task.
+**What happened:** A finished release milestone put final human approval under Tasks. Strict pending validation rejected the open implementation item.
 
-**Recurrence 2026-08-10:** A later release proof put `[manual, HUMAN-PENDING]` at the end of one open item that mixed agent handoff preparation with human execution. The checker treated it as executor-owned because human ownership requires the leading `[HUMAN]` marker. Splitting the checked handoff from the zero-agent-minute human gate preserved the original forecast and left the required human work open.
+**Recurrence 2026-08-10:** A release proof used trailing `[manual, HUMAN-PENDING]` and mixed handoff preparation with human execution. Splitting checked handoff from a leading zero-minute `[HUMAN]` gate preserved the forecast.
 
-**Recurrence 2026-08-23:** The concurrent-session spike described its open ADR review with trailing `HUMAN-PENDING` prose but omitted the leading `[HUMAN]` ownership marker. Strict validation rejected the pending transition, then correctly exposed stale forecast accounting when the marker reduced the count from seven to six agent work units. Moving the marker to the front, assigning the human check zero agent minutes, and reconciling the six-unit forecast restored a valid handoff. The milestone is gitignored local state; durable enforcement anchors are `src/cli/plans-check.ts` (search: `Human ownership is explicit metadata`) and `src/cli/plans-effort.ts` (search: `keeps approval time outside coding-agent forecasts`).
+**Recurrence 2026-08-23:** An ADR review used trailing `HUMAN-PENDING`; moving `[HUMAN]` to the front and reconciling six agent units restored the handoff. Evidence: `src/cli/plans-check.ts` (search: `Human ownership is explicit metadata`) and `src/cli/plans-effort.ts` (search: `keeps approval time outside coding-agent forecasts`).
 
-**Root cause:** I treated human ownership as readable prose instead of positional machine metadata. The checker treats every open Task as executor work and recognizes human ownership only at the start of a Proof item's text.
+**Recurrence 2026-09-04:** M15 left its zero-minute candidate decision under Tasks. Moving the leading `[HUMAN]` item to Proof restored strict pending validation. Evidence: `src/cli/plans-check.ts` (search: `human-verification-pending milestone has open implementation tasks`).
 
-**Fix:** Keep the gate under Proof, prefix it with `[HUMAN]`, assign it zero agent minutes, reconcile the work-unit forecast, and rerun strict plan validation.
+**Root cause:** Human ownership is positional metadata: every open Task is executor work, and Proof recognizes it only from leading `[HUMAN]`.
+
+**Fix:** Put the leading `[HUMAN]` gate under Proof at zero minutes, reconcile work units, and rerun strict validation.
 
 ---
 
@@ -185,16 +187,16 @@ anchor: `src/cli/plans-time.ts` (search: `receipt contains a discarded open span
 ## Lesson: Activate a milestone before starting its timing receipt
 
 **Status:** active | **Created:** 2026-08-14
-**Decision changed:** Activate before timing starts, and remove the active receipt schema before resetting a milestone to `not-started`.
+**Decision changed:** Activate before timing starts, stop before an inactive handoff, never move a pending or terminal milestone backward only to time acceptance administration, and remove the active receipt schema before resetting to `not-started`.
 **Trigger phase:** ACT
-**Incident count:** 8
-**Latest occurrence:** 2026-09-03
+**Incident count:** 10
+**Latest occurrence:** 2026-09-04
 
 **Prevention:**
 1. Change the milestone to `in-progress` or `testing-gate` before checking implementation work or starting the first timing segment. Use only the canonical lifecycle vocabulary; `active` is not a status.
 2. Confirm the milestone renders exactly one `Status` field, then start the category and inspect the returned open segment.
 3. If start is rejected, correct the state and retry prospectively; never fabricate or backfill the missed interval.
-4. Stop and inspect the open timing span before changing a milestone to `blocked`, `abandoned`, or `complete`; lifecycle text does not close the receipt.
+4. Stop and inspect the open timing span before changing a milestone to `human-verification-pending`, `blocked`, `abandoned`, or `complete`; lifecycle text does not close the receipt. Once pending, leave later acceptance administration unmeasured instead of moving the status backward only to open a clock.
 5. When resetting to `not-started`, reopen every task and proof, preserve exact closed-segment evidence under Reset history, and remove the active Timing Receipt section.
 
 **What happened:** While starting code-quality-upstream M04, I ran `plans time start` while its rendered `Status` was still `not-started`. The CLI refused with `Timing Start requires exactly one rendered Status field set to in-progress or testing-gate`; I then changed the status and reran the command successfully.
@@ -214,6 +216,8 @@ second, even when every plan task is already approved.
 **Recurrence 2026-08-24 (reset to not-started):** I reset `windows-native-hooks` M01 to `not-started` while preserving its paused Timing Receipt. Strict plan validation rejected `not-started milestone must not include a Timing Receipt`. Moving the exact closed S01 row to Reset history, reopening the checked task, and removing the active receipt section made validation pass without erasing measured effort.
 
 **Recurrence 2026-09-03 (M13 activation):** I first wrote the unsupported status `active`, then checked M13's frozen-contract task while the milestone still read `not-started`. Reading the canonical status set exposed the first error; strict validation rejected the second snapshot. Setting `in-progress` before changing task or timing state restored the lifecycle contract. Evidence anchors: `src/cli/plans-check.ts` (search: `const VALID_STATUSES`) and (search: `not-started milestone has checked implementation tasks`).
+
+**Recurrence 2026-09-04 (go-live M15 activation):** I first started timing while a go-live milestone was still `not-started`; the prospective retry followed activation. Later, I tried to reopen timing for release-candidate acceptance after the milestone had entered `human-verification-pending`; the same guard opened no segment. The accepted lifecycle update remains unmeasured instead of moving status backward. Evidence anchor: `src/cli/plans-time.ts` (search: `Timing Start requires exactly one rendered Status field`).
 
 **Root cause:** I treated receipt creation as the transition that made a milestone active, then treated lifecycle text as though it also normalized timing state. The CLI models them separately: active state is required before a start, an open span must end before an inactive state can validate, and `not-started` cannot retain even a paused receipt.
 

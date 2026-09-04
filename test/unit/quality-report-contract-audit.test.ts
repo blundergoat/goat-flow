@@ -34,50 +34,61 @@ function makeInput(qualityMode: QualityInput["qualityMode"]): QualityInput {
 /**
  * Build one agent's hook link.
  *
- * @param isEffective - true when the link works; false renders the ineffective wording plus the repair guidance a reviewer acts on
+ * @param state - effective, advisory-only, or dangerous link state rendered in the prompt
  * @returns per-agent hook state carrying the effective label, repair summary, and repair command
  */
-function makeHookAgentState(isEffective: boolean) {
+function makeHookAgentState(state: "effective" | "warning" | "danger") {
+  const isEffective = state === "effective";
+  const isDanger = state === "danger";
   return {
     supported: true,
-    installed: isEffective,
-    isRegistered: isEffective,
-    isCurrentVersionInstalled: isEffective,
+    installed: isEffective || isDanger,
+    isRegistered: isEffective || isDanger,
+    isCurrentVersionInstalled: isEffective || isDanger,
     isTrusted: isEffective,
     registrationIssue: null,
     installationIssue: null,
     effectiveState: isEffective
       ? { status: "effective" as const, severity: "success" as const }
-      : { status: "not-registered" as const, severity: "danger" as const },
-    effectiveStateLabel: isEffective ? "effective" : "not registered",
+      : isDanger
+        ? { status: "runtime-untrusted" as const, severity: "danger" as const }
+        : { status: "not-registered" as const, severity: "warning" as const },
+    effectiveStateLabel: isEffective
+      ? "effective"
+      : isDanger
+        ? "runtime untrusted"
+        : "not registered",
     evidenceIdentity: null,
-    repairCommand: isEffective ? null : HOOK_REPAIR_COMMAND,
+    repairCommand: isEffective || isDanger ? null : HOOK_REPAIR_COMMAND,
     repairSummary: isEffective
       ? "Hook is registered and current."
-      : HOOK_REPAIR_SUMMARY,
+      : isDanger
+        ? "Managed hook runtime is untrusted."
+        : HOOK_REPAIR_SUMMARY,
     scriptPath: ".goat-flow/hooks/deny-dangerous.sh",
     configPath: ".claude/settings.json",
   };
 }
 
 /**
- * Build a coverage chain whose one required surface is ineffective for the selected agent.
+ * Build a coverage chain whose one required surface is warning-only or dangerous for the selected agent.
  *
- * @returns failing coverage naming a single required ineffective surface for claude while other agents stay healthy
+ * @param severity - row severity whose aggregate label and prompt rendering are under test
+ * @returns non-green coverage naming a single required ineffective surface for claude while other agents stay healthy
  */
-function makeIneffectiveHookCoverage(): NonNullable<
-  QualityInput["auditReport"]
->["hookCoverage"] {
+function makeIneffectiveHookCoverage(
+  severity: "warning" | "danger" = "warning",
+): NonNullable<QualityInput["auditReport"]>["hookCoverage"] {
   return {
-    status: "fail",
+    status: severity === "warning" ? "warning" : "fail",
     selectedAgents: ["claude"],
     summary: {
       selectedSurfaces: 1,
       requiredSurfaces: 1,
       requiredIneffective: 1,
       effective: 0,
-      warning: 0,
-      danger: 1,
+      warning: severity === "warning" ? 1 : 0,
+      danger: severity === "danger" ? 1 : 0,
       disabled: 0,
     },
     hooks: [
@@ -91,10 +102,10 @@ function makeIneffectiveHookCoverage(): NonNullable<
         enabled: true,
         scanRoots: null,
         agents: {
-          claude: makeHookAgentState(false),
-          codex: makeHookAgentState(true),
-          antigravity: makeHookAgentState(true),
-          copilot: makeHookAgentState(true),
+          claude: makeHookAgentState(severity),
+          codex: makeHookAgentState("effective"),
+          antigravity: makeHookAgentState("effective"),
+          copilot: makeHookAgentState("effective"),
         },
       },
     ],
@@ -102,13 +113,14 @@ function makeIneffectiveHookCoverage(): NonNullable<
 }
 
 /**
- * Build an audit whose every scope passes, so a hook failure cannot be mistaken for an ordinary scope failure.
+ * Build an audit whose every scope passes, so hook severity cannot be mistaken for an ordinary scope failure.
  *
- * @returns passing audit report with an ineffective hook chain attached
+ * @param severity - required hook row severity attached to the otherwise passing audit
+ * @returns passing audit report with a non-green hook chain attached
  */
-function makePassingAuditWithBrokenHooks(): NonNullable<
-  QualityInput["auditReport"]
-> {
+function makePassingAuditWithHookGap(
+  severity: "warning" | "danger" = "warning",
+): NonNullable<QualityInput["auditReport"]> {
   const passingScope = {
     status: "pass" as const,
     checks: [],
@@ -123,7 +135,7 @@ function makePassingAuditWithBrokenHooks(): NonNullable<
     scopes: { setup: passingScope, agent: passingScope, harness: passingScope },
     concerns: null,
     enforcement: [],
-    hookCoverage: makeIneffectiveHookCoverage(),
+    hookCoverage: makeIneffectiveHookCoverage(severity),
     drift: null,
     content: null,
     overall: { status: "pass" },
@@ -131,14 +143,18 @@ function makePassingAuditWithBrokenHooks(): NonNullable<
 }
 
 /**
- * Assert one mode discloses the broken chain without rewriting the audit's own verdict.
+ * Assert one mode discloses the non-green chain without rewriting the audit's own verdict.
  *
  * @param qualityMode - mode whose composed prompt is inspected
  * @param auditReport - passing audit carrying an ineffective hook chain
+ * @param aggregateLabel - aggregate coverage label the prompt must render
+ * @param rowLabel - strongest required row label the prompt must retain
  */
 function assertDisclosesIneffectiveHook(
   qualityMode: "agent-setup" | "harness",
   auditReport: NonNullable<QualityInput["auditReport"]>,
+  aggregateLabel: "WARNING" | "FAIL",
+  rowLabel: "WARNING" | "DANGER",
 ): void {
   const prompt = composeQuality({
     ...makeInput(qualityMode),
@@ -146,15 +162,19 @@ function assertDisclosesIneffectiveHook(
   }).prompt;
   for (const expected of [
     "Effective Hook Coverage",
+    `**: ${aggregateLabel}`,
     "1 required surface(s) ineffective",
     "deny-dangerous/claude",
-    HOOK_REPAIR_SUMMARY,
-    HOOK_REPAIR_COMMAND,
+    rowLabel,
   ]) {
     assert.ok(
       prompt.includes(expected),
       `${qualityMode}: prompt omits ${expected}`,
     );
+  }
+  if (aggregateLabel === "WARNING") {
+    assert.ok(prompt.includes(HOOK_REPAIR_SUMMARY));
+    assert.ok(prompt.includes(HOOK_REPAIR_COMMAND));
   }
   // Hook coverage is advisory to the audit verdict, so disclosing it must not rewrite the top-level status.
   assert.ok(
@@ -313,15 +333,36 @@ function makeLimitedAuditReport(): NonNullable<QualityInput["auditReport"]> {
 }
 
 describe("quality report contract: audit evidence", () => {
-  it("surfaces a failing effective-hook chain under a passing audit", () => {
-    const auditReport = makePassingAuditWithBrokenHooks();
-    assertDisclosesIneffectiveHook("agent-setup", auditReport);
-    assertDisclosesIneffectiveHook("harness", auditReport);
+  it("surfaces a warning-only effective-hook chain under a passing audit", () => {
+    const auditReport = makePassingAuditWithHookGap("warning");
+    assertDisclosesIneffectiveHook(
+      "agent-setup",
+      auditReport,
+      "WARNING",
+      "WARNING",
+    );
+    assertDisclosesIneffectiveHook(
+      "harness",
+      auditReport,
+      "WARNING",
+      "WARNING",
+    );
+  });
+
+  it("surfaces a dangerous effective-hook chain under a passing audit", () => {
+    const auditReport = makePassingAuditWithHookGap("danger");
+    assertDisclosesIneffectiveHook(
+      "agent-setup",
+      auditReport,
+      "FAIL",
+      "DANGER",
+    );
+    assertDisclosesIneffectiveHook("harness", auditReport, "FAIL", "DANGER");
   });
 
   it("names the agents a coverage result covers", () => {
     // A one-agent audit and an all-agent audit render the same sentence, so the row must say which scope produced it.
-    const narrowed = makePassingAuditWithBrokenHooks();
+    const narrowed = makePassingAuditWithHookGap();
     const narrowedPrompt = composeQuality({
       ...makeInput("process"),
       auditReport: narrowed,
@@ -332,7 +373,7 @@ describe("quality report contract: audit evidence", () => {
     );
 
     // A passing chain is the dangerous case: it reads as clean coverage for every shipped agent unless the scope is stated.
-    const wideOpen = makePassingAuditWithBrokenHooks();
+    const wideOpen = makePassingAuditWithHookGap();
     wideOpen.hookCoverage = {
       status: "pass",
       selectedAgents: ["claude", "codex", "antigravity", "copilot"],
@@ -359,7 +400,7 @@ describe("quality report contract: audit evidence", () => {
     );
 
     // Selecting no agent surface is a real audit shape and must not read as covered.
-    const none = makePassingAuditWithBrokenHooks();
+    const none = makePassingAuditWithHookGap();
     none.hookCoverage = {
       status: "pass",
       selectedAgents: [],

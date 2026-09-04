@@ -119,7 +119,7 @@ When asked to add, create, or update a goat-flow artifact, route it to the artif
 | CLI + dashboard | `src/cli/`, `src/dashboard/` |
 | Scripts | `scripts/` |
 | Hooks | `.github/hooks/hooks.json`, `.goat-flow/hooks/deny-dangerous.sh`, `.goat-flow/hooks/deny-dangerous/` |
-| Config | `.goat-flow/config.yaml` |
+| Config and optional security policy | `.goat-flow/config.yaml`, `.goat-flow/security-policy.md` (read policy when present) |
 | Documentation | `docs/` |
 | Session logs, workspace | `.goat-flow/logs/sessions/`, `.goat-flow/plans/` |
 | Peer instructions | `CLAUDE.md`, `AGENTS.md` |

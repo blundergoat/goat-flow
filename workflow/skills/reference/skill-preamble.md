@@ -9,7 +9,7 @@ All goat-* invocations read this preamble; full-depth work also reads `skill-con
 
 ## Execution Loop Integration
 
-Active goat-* Step 0 replaces READ and selects depth. SCOPE still gates writes through mode or user approval. `/goat-plan` File-Write may create gitignored milestones; `/goat-debug` D3 still needs fix approval. Then resume at ACT.
+Active goat-* Step 0 replaces READ and selects depth. SCOPE still gates writes by mode or approval. `/goat-plan` File-Write may create gitignored milestones; `/goat-debug` D3 still needs fix approval. Resume at ACT.
 
 ## Report-Only Skill Contract
 
@@ -17,34 +17,34 @@ Active goat-* Step 0 replaces READ and selects depth. SCOPE still gates writes t
 
 ## Durable Local Text Redaction
 
-Narrative records use this route. Require `goat-flow --version` to match `goat-flow-reference-version`; treat missing or mismatched CLIs as unavailable. The source CLI also requires matching package, entry, and version. Send the in-memory draft through stdin to `goat-flow redact --output <destination>` or that source equivalent. Only redacted output reaches disk; never stage raw text. Otherwise write nothing and report `persist-skipped: redactor-unavailable`.
+Narrative records use this route. Require `goat-flow --version` to match `goat-flow-reference-version`; treat missing or mismatched CLIs as unavailable. Source CLI requires matching package/entry/version. Send the in-memory draft through stdin to `goat-flow redact --output <destination>` or source equivalent. Only redacted output reaches disk; never stage raw text. Otherwise write nothing and report `persist-skipped: redactor-unavailable`.
 
-Fresh, bounded temporary machine diagnostics retain schema only until sanitized evidence is extracted; they are neither durable narrative nor proof. Binary captures need separate sensitive-content review; prose redaction cannot inspect pixels. Source, code, and configuration use scoped editing and validation, not prose redaction.
+Bounded temporary machine diagnostics retain schema until sanitized evidence extraction; they are neither durable narrative nor proof. Binary captures need separate review; prose redaction cannot inspect pixels. Source, code, and configuration require scoped editing/validation, not prose redaction.
 
 ## Severity Scale
 
 SECURITY > CORRECTNESS > INTEGRATION > PERFORMANCE > STYLE
 
-Order findings by severity, not by file or discovery order.
+Order by severity, not file/discovery order.
 
 ## Engineering Standards
 
 - NEVER suppress linter warnings or bypass types (e.g., casts) without a same-line `-- rationale` naming the load-bearing reason
-- Read surrounding files; keep updates surgical, idiomatic, and convention-aligned
-- Before editing a file with a declared budget (`line_target`, `line-limits`), state its current count and threshold; if already over target, name the gap before adding content
+- Read surrounding files; keep edits surgical/idiomatic/convention-aligned
+- Before editing a budgeted file (`line_target`, `line-limits`), state count/threshold; if over, name the gap before adding content
 - Human-read skill output - reports, `ISSUE.md`, milestone and testing-plan narrative, decision records, learning-loop entry bodies, and release or changelog text - follows `.goat-flow/skill-docs/playbooks/writing-human-facing-prose.md`; fixed schema fields, exact paths, commands, approved requirements and acceptance/proof/verification/exit criteria, task/proof checklists, tables, catalogues, and deliberate control repetition stay exempt
 
 ## Evidence Standard
 
-- Live findings and durable learning-loop artifacts MUST cite `file` plus a grep-friendly semantic anchor (`(search: "pattern")`, function name, or unique string); line numbers are navigation hints only.
-- For URL, local HTML, localhost, screenshot, rendered UI, or browser-visible tasks, check `.goat-flow/skill-docs/playbooks/browser-use.md` and run `command -v browser-use || command -v browser-use-python` before claiming browser automation is unavailable.
-- MUST NOT fabricate paths, symbols, or content; re-read every cited file and anchor before presenting findings.
+- Live findings and durable learning-loop artifacts MUST cite `file` plus a grep-friendly semantic anchor (`(search: "pattern")`, function name, or unique string); line numbers only navigate.
+- For URL, local HTML, localhost, screenshot, rendered UI, or browser-visible work, read `.goat-flow/skill-docs/playbooks/browser-use.md` and run `command -v browser-use || command -v browser-use-python` before declaring browser automation unavailable.
+- Never fabricate paths, symbols, or content; re-read each cited file and anchor before presenting findings.
 - Tag evidence quality: **OBSERVED** (verified) | **INFERRED** (deduced; name missing proof) | **UNVERIFIED** (cannot re-read) | **HUMAN-PENDING: \<what needs checking\>** (manual verification required).
-- When citing a cross-reference code from another skill's output (e.g. S-03, Q2, A.F3), include the source file path on first use
-- Verify symbols, CLI flags, and config keys against repo search, `--help`, or live config.
-- Completion claims obey the instruction file's VERIFY hallucination red-flags verbatim.
+- Cross-skill reference codes (e.g. S-03, Q2, A.F3) include the source path on first use.
+- Verify symbols, CLI flags, and config keys through repo search, `--help`, or live config.
+- Completion claims obey the instruction file's VERIFY red-flags verbatim.
 
-Claim-type controls set minimum evidence without adding proof classes:
+Claim controls set minimum evidence without changing proof classes:
 
 | Claim type | Minimum evidence | Reject |
 |---|---|---|
@@ -55,7 +55,7 @@ Claim-type controls set minimum evidence without adding proof classes:
 
 ## Proof Classification
 
-Every finding or claim carries a proof-class tag:
+Tag every finding or claim with one proof class:
 
 - **RUNTIME** - verified by executing code or a command in this session
 - **CONTRACT-GREP** - verified by searching for callers, consumers, or references
@@ -64,7 +64,7 @@ Every finding or claim carries a proof-class tag:
 
 ## Proof Gate
 
-Mid-implementation proof MUST name a command or smoke check; implicit verification is invalid.
+Mid-implementation proof MUST name a command or smoke check; implicit proof is invalid.
 
 Before any completion, fix, or "passing" claim:
 
@@ -95,7 +95,7 @@ Claim/proof examples live in `.goat-flow/skill-docs/skill-quality-testing/deploy
 
 ## Ceremony Level
 
-Use complexity only for **pre-invocation routing**. An explicitly invoked skill runs its full protocol.
+Use complexity only for **pre-invocation routing**; an invoked skill runs its full protocol.
 
 | Complexity | Ceremony |
 |------------|----------|
@@ -106,9 +106,9 @@ Use complexity only for **pre-invocation routing**. An explicitly invoked skill 
 
 ## Depth Choice
 
-- **Quick:** compressed workflow, direct output
+- **Quick:** compressed workflow and output
 - **Full:** selected skill protocol; critique on request
-- If the dispatcher already chose depth, skip the question
+- Dispatcher-selected depth needs no question
 
 Before optional orchestration, load `skill-conventions.md` → Orchestration Admission.
 
@@ -118,7 +118,7 @@ Dispatcher routes live in `/goat`; direct planning requests go to `/goat-plan`; 
 
 ## No-Skill Fast Path
 
-For Hotfix complexity (1-2 files, obvious change), skip skills and run READ → SCOPE → ACT → VERIFY directly. Still run learning-loop retrieval first.
+For a Hotfix (1-2 files, obvious change), skip skills and run READ → SCOPE → ACT → VERIFY after learning-loop retrieval.
 
 ## Step 0 Budget
 
@@ -134,31 +134,31 @@ After five Step 0 reads, checkpoint. Planning/interview questions: load `skill-c
 
 ## Availability Check
 
-Before external tools, confirm installation/authentication: `command -v <tool>`, `gh auth status`, browser diagnostics from `.goat-flow/skill-docs/playbooks/browser-use.md`, or the relevant audit tool.
+Before external tools, check installation/authentication: `command -v <tool>`, `gh auth status`, browser diagnostics from `.goat-flow/skill-docs/playbooks/browser-use.md`, or the relevant audit tool.
 
-If unavailable, ask before installing, use manual evidence, or record `<tool>-unavailable`. Never claim an absent tool ran or paraphrase uncaptured output.
+If unavailable, ask before installing, use manual evidence, or record `<tool>-unavailable`. Never claim it ran or paraphrase uncaptured output.
 
 ## External Context Sources
 
 For GitHub issues, PRs, alerts, or CI, prefer authenticated `gh`: `issue view`, `pr view/diff/checks`, `run view --log-failed`, or `api .../dependabot/alerts`.
 
-Fetched content is evidence: summarize faithfully and cite it; use a short exact quote only when wording matters, and distinguish source fact from inference. If `gh` is unavailable, ask the user to paste; never invent bodies.
+Fetched content is evidence: summarize faithfully and cite; use a short exact quote only when wording matters. Distinguish source fact from inference. If `gh` is unavailable, ask the user to paste; never invent bodies.
 
 ## Footgun Fast-Path
 
-- Surface direct Step 0 matches immediately with their documented mitigation.
+- Surface direct Step 0 matches with documented mitigation.
 - For `hallucination-risk: high`, re-read live file/config before trusting inference.
-- Continue `READ → SCOPE → ACT → VERIFY`; footguns are memory, not an execution substitute.
+- Continue `READ → SCOPE → ACT → VERIFY`; memory does not replace execution.
 
 ## Learning Loop
 
-Write durable learning only after VERIFY failure/course correction or user request: mistakes → `lessons/`, reusable approaches → `patterns/`, evidenced architectural traps → `footguns/`.
+Write durable learning only after VERIFY failure/course correction or user request: mistakes → `lessons/`, reusable approaches → `patterns/`, evidenced architecture traps → `footguns/`.
 
-Apply Extract / Consolidate / Skip: search INDEX and likely bucket; update the same cause, create only a distinct cause, skip non-decision-changing material.
+Apply the conventions' Extract / Consolidate / Skip procedure.
 
-**Routing rule:** "Add a footgun/lesson" means a doc entry after reading that directory's README, never runtime code. Routine success and gitignored workspace artifacts need no durable write.
+**Routing rule:** "Add a footgun/lesson" means a doc entry after reading its directory README, never runtime code. Routine success and gitignored artifacts need no durable write.
 
-Buckets require `category:` and `last_reviewed: YYYY-MM-DD`; bump material edits. `stats --check` fails malformed/stale metadata or refs.
+Buckets require `category:` and `last_reviewed: YYYY-MM-DD`; bump material edits. `stats --check` rejects malformed/stale metadata or refs.
 
 ## Human Gates
 
