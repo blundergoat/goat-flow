@@ -51,7 +51,7 @@ Everything else in this directory is a stats failure. If a note cannot earn an A
 
 ## Required Structure
 
-Every ADR must include:
+Every ADR carries `**Status:**`, `**Date:**`, `## Context`, `## Decision`, and at least one trade-off section: `## Consequences`, `## Failure Mode Comparison`, or `## Reversibility`. The template below is the recommended full shape, not the minimum:
 
 ```markdown
 # ADR-NNN: Title
