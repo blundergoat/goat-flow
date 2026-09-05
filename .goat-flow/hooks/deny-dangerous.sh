@@ -2,7 +2,7 @@
 # shellcheck disable=SC2034,SC2317,SC2319
 
 # deny-dangerous.sh
-# goat-flow-hook-version: 1.16.0
+# goat-flow-hook-version: 1.17.0
 #
 # Checks an agent's proposed shell command before the developer lets it run.
 # Use this dispatcher from an agent hook to keep safe evidence gathering available
@@ -415,6 +415,29 @@ goat_flow_cli_consumes_heredoc_as_data() {
   return 1
 }
 
+large_quality_save_heredoc_is_bounded_data() {
+  local command_policy="$1"
+  local opener normalized word base arguments
+
+  [[ "$command_policy" == *"__goat_quoted_heredoc_body__"* ]] || return 1
+  opener="${command_policy%%$'\n'*}"
+  normalized="$(normalize_command_candidate "$opener")"
+  word="${normalized%%[[:space:]]*}"
+  base="${word##*/}"
+  arguments="${normalized#"$word"}"
+  arguments="${arguments#"${arguments%%[![:space:]]*}"}"
+
+  if [[ "$base" == "goat-flow" ]]; then
+    [[ "$arguments" =~ ^quality[[:space:]]+save([[:space:]]|$) ]]
+    return $?
+  fi
+  if [[ "$base" == "node" || "$base" == "nodejs" ]]; then
+    [[ "$arguments" =~ ^--import(=tsx|[[:space:]]+tsx)[[:space:]]+src/cli/cli\.ts[[:space:]]+quality[[:space:]]+save([[:space:]]|$) ]]
+    return $?
+  fi
+  return 1
+}
+
 heredoc_command_list_is_inert() {
   local scan segment first normalized inner match ps_re substitution_count iterations
   local -a segs=()
@@ -614,7 +637,8 @@ check_command_substitutions() {
   local remaining="$1"
   local depth="$2"
   local residual=""
-  local residual_unquoted=""
+  local command_substitution_candidates=""
+  local process_substitution_candidates=""
   local i=0
   local close_index=""
   local char=""
@@ -625,24 +649,28 @@ check_command_substitutions() {
   local in_double=0
   local escaped=0
 
-  # `residual_unquoted` is built here rather than re-derived afterwards. A
-  # line-oriented strip cannot see a single-quoted span that crosses a newline
-  # and mis-pairs the '\'' escape idiom, so it reported inert text as
-  # executable. This walk already knows the exact quote state of every
-  # character. Single-quoted content is dropped; double-quoted content is kept,
-  # because backticks and $( still execute inside double quotes.
+  # Candidate projections are built during the quote walk so each substitution
+  # class sees only characters Bash can execute in that context. Command
+  # substitutions and backticks execute inside double quotes; process
+  # substitutions do not.
   for ((i = 0; i < ${#remaining}; i++)); do
     char="${remaining:i:1}"
 
     if [[ "$escaped" -eq 1 ]]; then
       residual+="$char"
-      residual_unquoted+="$char"
+      # Escaped characters separate adjacent opener text. A backslash-newline
+      # is removed by Bash, so it does not add a separator.
+      if [[ "$char" != $'\n' ]]; then
+        command_substitution_candidates+="__goat_escaped__"
+        if [[ "$in_double" -eq 0 ]]; then
+          process_substitution_candidates+="__goat_escaped__"
+        fi
+      fi
       escaped=0
       continue
     fi
     if [[ "$in_single" -eq 0 && "$char" == "\\" ]]; then
       residual+="$char"
-      residual_unquoted+="$char"
       escaped=1
       continue
     fi
@@ -662,7 +690,6 @@ check_command_substitutions() {
         in_double=1
       fi
       residual+="$char"
-      residual_unquoted+="$char"
       continue
     fi
 
@@ -674,7 +701,10 @@ check_command_substitutions() {
           inner="${remaining:i+3:close_index-i-3}"
           check_command_substitutions "$inner" "$depth" || return $?
           residual+="__goat_arith__"
-          residual_unquoted+="__goat_arith__"
+          command_substitution_candidates+="__goat_arith__"
+          if [[ "$in_double" -eq 0 ]]; then
+            process_substitution_candidates+="__goat_arith__"
+          fi
           i="$close_index"
           continue
         fi
@@ -685,7 +715,10 @@ check_command_substitutions() {
             check_command_segments "$inner" $((depth + 1)) || return $?
           fi
           residual+="__goat_subst__"
-          residual_unquoted+="__goat_subst__"
+          command_substitution_candidates+="__goat_subst__"
+          if [[ "$in_double" -eq 0 ]]; then
+            process_substitution_candidates+="__goat_subst__"
+          fi
           i="$close_index"
           continue
         fi
@@ -696,7 +729,8 @@ check_command_substitutions() {
             check_command_segments "$inner" $((depth + 1)) || return $?
           fi
           residual+="__goat_proc_subst__"
-          residual_unquoted+="__goat_proc_subst__"
+          command_substitution_candidates+="__goat_proc_subst__"
+          process_substitution_candidates+="__goat_proc_subst__"
           i="$close_index"
           continue
         fi
@@ -705,19 +739,19 @@ check_command_substitutions() {
 
     residual+="$char"
     if [[ "$in_single" -eq 0 ]]; then
-      residual_unquoted+="$char"
+      command_substitution_candidates+="$char"
+      if [[ "$in_double" -eq 0 ]]; then
+        process_substitution_candidates+="$char"
+      fi
     fi
   done
 
-  if [[ "$residual_unquoted" =~ \$\( || "$residual_unquoted" =~ [\<\>]\( ]]; then
+  if [[ "$command_substitution_candidates" =~ \$\( ||
+        "$process_substitution_candidates" =~ [\<\>]\( ]]; then
     block "Complex command substitution. Write the expanded command directly." || return $?
   fi
 
-  # An escaped backtick is literal text, so drop those pairs before the scan.
-  # Substitution bodies already left as placeholders were checked recursively.
-  local remaining_unquoted="${residual_unquoted//\\\`/}"
-
-  if [[ "$remaining_unquoted" == *\`* ]]; then
+  if [[ "$command_substitution_candidates" == *\`* ]]; then
     block "Backtick command substitution hides nested execution. Use a direct command instead, or for an inline script run it from a file (e.g. node script.js)." || return $?
   fi
 }
@@ -1653,8 +1687,28 @@ normalize_command_candidate() {
 
   while true; do
     c="${c#"${c%%[![:space:]]*}"}"
-    c=$(normalize_leading_command_word "$c")
 
+    # Leading redirections (`2>/dev/null`, `>out`, `{fd}>file`, `2> file`, here-docs) change
+    # only the command's I/O, never which program runs. Peel them first so the verb the user
+    # would execute drives every verb-gated policy module; otherwise CMD_VERB resolves to the
+    # redirection token and rm / git / find / sudo policy silently misses the real command.
+    if stripped=$(strip_leading_shell_redirections "$c"); then
+      c="$stripped"
+      continue
+    fi
+
+    word="${c%%[[:space:]]*}"
+    # Plain command words are already normalized. Quotes and backslashes are
+    # the only syntax this helper removes, so keep ordinary commands in-process.
+    if [[ "$word" == *\'* || "$word" == *\"* || "$word" == *\\* ]]; then
+      c=$(normalize_leading_command_word "$c")
+    fi
+
+    # `!` changes only the pipeline's exit status; reveal the command it negates.
+    if [[ "$c" =~ ^\![[:space:]]+ ]]; then
+      c="${c#"${BASH_REMATCH[0]}"}"
+      continue
+    fi
     if [[ "$c" == \(* ]]; then
       c="${c#\(}"
       continue
@@ -1697,6 +1751,11 @@ normalize_command_candidate() {
     fi
     if [[ "$c" =~ ^builtin[[:space:]]+ ]]; then
       c="${c#"${BASH_REMATCH[0]}"}"
+      c="${c#"${c%%[![:space:]]*}"}"
+      # Bash accepts `--` before a builtin name; it does not make the builtin inert.
+      if [[ "$c" =~ ^--([[:space:]]+|$) ]]; then
+        c="${c#"${BASH_REMATCH[0]}"}"
+      fi
       continue
     fi
     word="${c%%[[:space:]]*}"
@@ -1789,7 +1848,8 @@ normalize_command_candidate() {
         fi
         ;;
     esac
-    if stripped=$(strip_one_assignment_prefix "$c"); then
+    # The parser cannot strip anything unless the command starts with an assignment.
+    if [[ "$c" =~ ^[a-zA-Z_][a-zA-Z0-9_]*= ]] && stripped=$(strip_one_assignment_prefix "$c"); then
       c="$stripped"
       continue
     fi
@@ -1819,6 +1879,7 @@ split_command_segments_into() {
   local current_policy_stage=""
   local command_character=""
   local next_command_character=""
+  local previous_command_character=""
   local in_single_quote=0
   local in_double_quote=0
   local previous_character_escaped=0
@@ -1912,6 +1973,22 @@ split_command_segments_into() {
           command_index=$((command_index + 1))
         fi
         continue
+      fi
+
+      # A bare ampersand starts a background action. Redirection and stderr-pipe
+      # ampersands stay with their operator.
+      if [[ "$command_character" == "&" && "$next_command_character" != ">" ]]; then
+        previous_command_character=""
+        if [[ "$command_index" -gt 0 ]]; then
+          previous_command_character="${developer_command:command_index-1:1}"
+        fi
+        if [[ "$previous_command_character" != ">" &&
+              "$previous_command_character" != "<" &&
+              "$previous_command_character" != "|" ]]; then
+          __goat_split_out__+=("$current_policy_stage")
+          current_policy_stage=""
+          continue
+        fi
       fi
 
       # Semicolons and newlines start the next action the agent wants to run.
@@ -2035,7 +2112,12 @@ prepare_segment_context() {
   local saved_cmd_trimmed saved_cmd_normalized saved_cmd_verb saved_cmd_unquoted saved_cmd_lower
   local saved_has_redirect saved_has_pipe
 
-  policy_cmd=$(strip_unquoted_shell_comments "$cmd")
+  if [[ "$cmd" == *"#"* ]]; then
+    policy_cmd=$(strip_unquoted_shell_comments "$cmd")
+  else
+    # Match the comment parser's trailing trim without spawning its character scan.
+    policy_cmd="${cmd%"${cmd##*[![:space:]]}"}"
+  fi
   check_command_substitutions "$policy_cmd" "$depth" || return $?
 
   CMD_TRIMMED="${policy_cmd#"${policy_cmd%%[![:space:]]*}"}"
@@ -2263,11 +2345,25 @@ main() {
     allow
   fi
 
-  if (( ${#command} > 16384 )); then
-    block "Command exceeds 16KB; review and run manually if intended."
+  if [[ "$command" == *"<<"* || "$command" == *$'\n'* ]]; then
+    command_policy="$(mask_safe_quoted_heredoc_bodies "$command")"
+  else
+    # A single-line command without a heredoc opener cannot contain a body to mask.
+    command_policy="$command"
   fi
 
-  command_policy="$(mask_safe_quoted_heredoc_bodies "$command")"
+  # Keep the parser's ordinary 16KB ceiling. The quality prompt is the sole
+  # larger transport: a quoted body consumed as data may reach 256KB only when
+  # masking removes every byte above the ordinary policy surface.
+  if (( ${#command} > 262144 )); then
+    block "Command exceeds 16KB; review and run manually if intended."
+  fi
+  if (( ${#command} > 16384 )) && {
+    (( ${#command_policy} > 16384 )) ||
+      ! large_quality_save_heredoc_is_bounded_data "$command_policy"
+  }; then
+    block "Command exceeds 16KB; review and run manually if intended."
+  fi
 
   declare -a _goat_chain_segments=()
   split_command_segments_into _goat_chain_segments "$command_policy"
@@ -2282,7 +2378,10 @@ main() {
   # policy-parser DoS (~10s at 300). This flat O(len) count bounds the work;
   # real commands use a handful, so pathological input blocks ("run it manually").
   local _goat_subst_n=0
-  _goat_subst_n="$(count_substitution_openers "$command_policy")"
+  # shellcheck disable=SC2016  # literal substitution openers are matched, not expanded
+  if [[ "$command_policy" == *'$('* || "$command_policy" == *'<('* || "$command_policy" == *'>('* ]]; then
+    _goat_subst_n="$(count_substitution_openers "$command_policy")"
+  fi
   if (( _goat_subst_n > 32 )); then
     block "Command has too many command substitutions; review and run manually if intended."
   fi

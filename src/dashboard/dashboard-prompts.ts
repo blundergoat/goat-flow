@@ -1,9 +1,8 @@
 /**
- * Drives the dashboard's Prompts library: the search box, the category grouping, and the text a user copies or launches.
+ * Drive prompt search, category browsing, favorites, and the text copied or launched from the Prompts library.
  *
- * A user lands here to find a prepared prompt rather than writing one, then either copies it or sends it straight to a terminal.
- *
- * Filtering, grouping, and text transforms live here so the Alpine methods in app.ts stay thin bindings.
+ * Keep keyboard selection aligned with the visible list as filters and grouping change.
+ * Shared helpers adapt invocation syntax to the selected runner before the dashboard copies or launches a prompt.
  */
 
 type PresetCategory = { id: string; label: string };
@@ -21,7 +20,12 @@ const PRESET_CATEGORY_ACCENTS: Record<string, string> = {
   custom: "var(--accent)",
 };
 
-/** Dashboard state contract required by preset, custom-prompt, and favorite helpers. */
+/**
+ * Share the prompt library's current filters, favorites, selection, and runner with browsing helpers.
+ *
+ * Computed lists determine both displayed row order and keyboard navigation.
+ * Methods expose prompt adaptation, clipboard feedback, and persistence through the merged dashboard app.
+ */
 interface DashboardPromptsContext {
   presets: Preset[];
   customPrompts: CustomPrompt[];
@@ -35,26 +39,27 @@ interface DashboardPromptsContext {
   flatPresetOrder: string[];
   presetsByCategory: Array<{ id: string; label: string; items: Preset[] }>;
   filteredPresets: Preset[];
-  /** Adapt slash-command syntax for the selected runner before preview or copy. */
+  // Adapt slash-command syntax for the selected runner before preview or copy.
   adaptPrompt(prompt: string, runner?: RunnerId): string;
-  /** Copy prompt text through the shared dashboard clipboard helper. */
+  // Copy prompt text through the shared dashboard clipboard helper.
   copyText(text: string): void;
-  /** Persist dashboard favorites after prompt interactions mutate them. */
+  // Persist dashboard favorites after prompt interactions mutate them.
   _saveDashboardState(): void;
 }
 
-/** Toggle a preset favorite state and persist the combined dashboard state. */
+// Toggle a preset favorite state and persist the combined dashboard state.
 function dashboardToggleFavorite(
   ctx: DashboardPromptsContext,
   id: string,
 ): void {
   const idx = ctx.presetFavorites.indexOf(id);
+  // Favoriting a new prompt pins it for later browsing; selecting an existing favorite removes that saved preference.
   if (idx === -1) ctx.presetFavorites.push(id);
   else ctx.presetFavorites.splice(idx, 1);
   ctx._saveDashboardState();
 }
 
-/** Check whether a preset is marked as a favorite. */
+// Check whether a preset is marked as a favorite.
 function dashboardIsFavorite(
   ctx: DashboardPromptsContext,
   id: string,
@@ -62,15 +67,18 @@ function dashboardIsFavorite(
   return ctx.presetFavorites.includes(id);
 }
 
-/** Move the preview selection up (-1) or down (1) in screen order, with wrap. */
+// Move the preview selection up (-1) or down (1) in screen order, with wrap.
 function dashboardSelectPresetByOffset(
   ctx: DashboardPromptsContext,
   delta: number,
 ): void {
   const order = ctx.flatPresetOrder;
+  // A search or filter with no visible prompts leaves the current preview untouched.
   if (order.length === 0) return;
   const currentId = ctx.selectedPreset?.id;
+  // A selection hidden by the current filter is treated like no selection when choosing the next visible row.
   const currentIdx = currentId ? order.indexOf(currentId) : -1;
+  // With no visible selection, Down starts at the first row and Up at the last; further movement wraps at either end.
   const nextIdx =
     currentIdx === -1
       ? delta > 0
@@ -79,15 +87,17 @@ function dashboardSelectPresetByOffset(
       : (currentIdx + delta + order.length) % order.length;
   const nextId = order[nextIdx];
   const next = dashboardAllPresets(ctx).find((p) => p.id === nextId);
+  // If the visible-order entry has no matching prompt, retain the existing preview instead of selecting an absent card.
   if (!next) return;
   ctx.selectedPreset = next;
   requestAnimationFrame(() => {
     const rowElement = document.getElementById(`preset-row-${nextId}`);
+    // Scroll only after the selected row exists, keeping keyboard navigation visible in a long prompt list.
     if (rowElement) rowElement.scrollIntoView({ block: "nearest" });
   });
 }
 
-/** Built-in presets plus local custom prompts, without mutating the shipped JSON. */
+// Built-in presets plus local custom prompts, without mutating the shipped JSON.
 function dashboardAllPresets(ctx: DashboardPromptsContext): Preset[] {
   return [
     ...ctx.presets,
@@ -95,17 +105,19 @@ function dashboardAllPresets(ctx: DashboardPromptsContext): Preset[] {
   ];
 }
 
-/** Presets visible in normal browsing; quality prompts live only on the Quality page. */
+// Presets visible in normal browsing; quality prompts live only on the Quality page.
 function dashboardBrowsablePresets(ctx: DashboardPromptsContext): Preset[] {
   const list = dashboardAllPresets(ctx);
   return list.filter((p) => !p.qualityMode && !p.internalOnly);
 }
 
-/** Return the preset category filters. */
+// Build filters from browsable prompt categories; All and Favorites remain available even when there are no category rows.
 function dashboardPresetCats(ctx: DashboardPromptsContext): PresetCategory[] {
   const cats = new Map<string, string>();
   const labelOverrides: Record<string, string> = { custom: "Custom", qa: "QA" };
+  // Only categories with browsable prompts need their own filter chip.
   for (const p of dashboardBrowsablePresets(ctx)) {
+    // Repeated prompts in one category must not duplicate that category's filter chip.
     if (!cats.has(p.cat)) {
       cats.set(
         p.cat,
@@ -125,7 +137,7 @@ type PresetBadgeRule = {
   badge: PresetBadge;
 };
 
-/** Return flag-driven preset badges before dynamic surface/global-safe badges are appended. */
+// Return flag-driven preset badges before dynamic surface/global-safe badges are appended.
 function presetFlagBadgeRules(preset: Preset): PresetBadge[] {
   return [
     {
@@ -236,10 +248,12 @@ function presetFlagBadgeRules(preset: Preset): PresetBadge[] {
     .map((rule) => rule.badge);
 }
 
-/** Return compact prerequisite/fit badges for one preset because the card layout cannot show full metadata. */
+// Return compact prerequisite/fit badges for one preset because the card layout cannot show full metadata.
 function dashboardPresetBadges(preset: Preset): PresetBadge[] {
   const badges: PresetBadge[] = presetFlagBadgeRules(preset);
+  // Missing target-surface metadata adds no library/API suitability claim to the prompt card.
   const surfaces = new Set(preset.bestTargetSurfaces ?? []);
+  // A declared library or API target lets non-UI projects recognize suitable prompts.
   if (surfaces.has("library") || surfaces.has("api")) {
     badges.push({
       label: "Library/API friendly",
@@ -247,6 +261,7 @@ function dashboardPresetBadges(preset: Preset): PresetBadge[] {
       tone: "good",
     });
   }
+  // Global safe appears only when both the preset flag and its prerequisites allow an external target without goat-flow installed.
   if (preset.globalSafe && dashboardGlobalSafeAllowed(preset)) {
     badges.push({
       label: "Global safe",
@@ -258,24 +273,25 @@ function dashboardPresetBadges(preset: Preset): PresetBadge[] {
   return badges;
 }
 
-/** Return the route label shown on prompt cards. */
+// Show the prompt's declared route or infer it from its text; direct prompts keep a plain direct label.
 function dashboardPresetRouteLabel(preset: Preset): string {
   const route = preset.route || dashboardInferPromptRoute(preset.prompt);
   return route === "direct" ? "direct" : `/${route}`;
 }
 
-/** Return the left-edge accent color for prompt cards. */
+// Use the category accent on prompt cards; unknown categories keep the neutral border color.
 function dashboardPresetCategoryAccent(preset: Preset): string {
   return PRESET_CATEGORY_ACCENTS[preset.cat] ?? "var(--border-subtle)";
 }
 
 /**
- * Favorites stay pinned to the top unless the user explicitly switches into
- * the favorites-only filter, which keeps mixed browsing fast on large lists.
+ * Apply the selected category or Favorites filter, then search prompt names, descriptions, and text.
+ * Without search, favorite prompts lead ordinary filtered lists while Favorites-only browsing keeps its existing order.
  */
 function dashboardFilteredPresets(ctx: DashboardPromptsContext): Preset[] {
   let list: Preset[];
   const browsable = dashboardBrowsablePresets(ctx);
+  // Favorites-only browsing hides prompts the user has not saved as favorites.
   if (ctx.presetFilter === "favorites") {
     list = browsable.filter((p) => ctx.presetFavorites.includes(p.id));
   } else {
@@ -284,6 +300,7 @@ function dashboardFilteredPresets(ctx: DashboardPromptsContext): Preset[] {
         ? browsable
         : browsable.filter((p) => p.cat === ctx.presetFilter);
   }
+  // A nonblank search narrows the selected filter by prompt content instead of reprioritizing favorites.
   if (ctx.presetSearch.trim()) {
     const query = ctx.presetSearch.toLowerCase();
     list = list.filter(
@@ -292,7 +309,10 @@ function dashboardFilteredPresets(ctx: DashboardPromptsContext): Preset[] {
         p.desc.toLowerCase().includes(query) ||
         p.prompt.toLowerCase().includes(query),
     );
-  } else if (ctx.presetFilter !== "favorites") {
+  } else if (
+    // Browsing without search pins favorites first unless the entire list already consists of favorites.
+    ctx.presetFilter !== "favorites"
+  ) {
     const favSet = new Set(ctx.presetFavorites);
     list = [
       ...list.filter((p) => favSet.has(p.id)),
@@ -302,7 +322,7 @@ function dashboardFilteredPresets(ctx: DashboardPromptsContext): Preset[] {
   return list;
 }
 
-/** Presets grouped by category for the Prompts page grouped rendering. */
+// Presets grouped by category for the Prompts page grouped rendering.
 function dashboardPresetsByCategory(
   ctx: DashboardPromptsContext,
 ): Array<{ id: string; label: string; items: Preset[] }> {
@@ -317,32 +337,40 @@ function dashboardPresetsByCategory(
   }));
 }
 
-/** Build the unified list rows for the Prompts page. */
+// Build the unified list rows for the Prompts page.
 function dashboardRenderedPresetEntries(
   ctx: DashboardPromptsContext,
 ): RenderedPresetEntry[] {
   const entries: RenderedPresetEntry[] = [];
+  // Unfiltered browsing displays category sections; search and individual filters use a flat result list.
   if (ctx.presetFilter === "all" && !ctx.presetSearch.trim()) {
+    // Add one heading and its rows for each visible category section.
     for (const group of ctx.presetsByCategory) {
+      // Empty categories should not leave orphan headings in the prompt library.
       if (group.items.length === 0) continue;
       entries.push({
         kind: "header",
         id: group.id,
         label: `${group.label} (${group.items.length})`,
       });
+      // Prompt rows follow their own category heading in the same order the user navigates.
       for (const p of group.items) entries.push({ kind: "row", preset: p });
     }
     return entries;
   }
+  // Search and filter results appear as a continuous list without category headings.
   for (const p of ctx.filteredPresets) entries.push({ kind: "row", preset: p });
   return entries;
 }
 
-/** Return preset IDs in screen order for keyboard navigation. */
+// Return preset IDs in screen order for keyboard navigation.
 function dashboardFlatPresetOrder(ctx: DashboardPromptsContext): string[] {
+  // Keyboard navigation must follow category order when the user sees grouped browsing.
   if (ctx.presetFilter === "all" && !ctx.presetSearch.trim()) {
     const ids: string[] = [];
+    // Traverse the same category sections that the unfiltered library renders.
     for (const group of ctx.presetsByCategory) {
+      // Only prompt rows participate in selection; category headings are skipped.
       for (const p of group.items) ids.push(p.id);
     }
     return ids;
@@ -350,21 +378,24 @@ function dashboardFlatPresetOrder(ctx: DashboardPromptsContext): string[] {
   return ctx.filteredPresets.map((p) => p.id);
 }
 
-/** Adapt a preset prompt to the syntax expected by the selected runner. */
+// Adapt a preset prompt to the syntax expected by the selected runner.
 function dashboardAdaptPrompt(
   ctx: DashboardPromptsContext,
   prompt: string,
   runner?: RunnerId,
 ): string {
+  // Copy and preview actions without an explicit runner use the current launcher selection.
   const selectedRunner = runner ?? ctx.activeRunner;
+  // Missing runner metadata preserves slash syntax for compatibility with the default prompt form.
   const style =
     ctx.supportedAgents.find((agent) => agent.id === selectedRunner)
       ?.promptInvocationStyle ?? "slash";
+  // Dollar-style runners need the leading goat invocation adapted before the user copies or launches it.
   if (style === "dollar") return prompt.replace(/^\/goat\b/, "$goat");
   return prompt;
 }
 
-/** Copy a preset prompt after applying runner-specific syntax tweaks. */
+// Copy a preset prompt after applying runner-specific syntax tweaks.
 function dashboardCopyPreset(
   ctx: DashboardPromptsContext,
   prompt: string,

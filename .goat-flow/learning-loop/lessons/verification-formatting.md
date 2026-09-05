@@ -1,141 +1,87 @@
 ---
 category: verification-formatting
-last_reviewed: 2026-08-19
+last_reviewed: 2026-09-05
 ---
 
-**Scope:** Formatter, lint, and Knip debt that only surfaces at repo-wide scope - style flags, copied or untracked files that inherit debt, and touched-test formatting before a verification claim. Adding or tuning a preflight gate is [verification-preflight.md](verification-preflight.md).
+**Scope:** Formatter, lint, and Knip debt that only surfaces at repo-wide scope - style flags, copied or untracked files that inherit debt, and the static gates a touched TypeScript file must pass before a verification claim. Adding or tuning a preflight gate is [verification-preflight.md](verification-preflight.md).
 
 ## Lesson: Formatter verification must preserve repo style flags
 
 **Status:** active | **Created:** 2026-04-03
 
-**What happened:** Formatter verification twice rewrote more than intended: rubric files lost the repo's quote style, then a narrow landing-page edit reformatted most of the hand-authored HTML. On 2026-07-19, a scoped check also included `.gitignore`; Prettier correctly failed because that file has no inferred parser.
+**Prevention:** Format through the repository scripts (`package.json`, search: `"format:check"`). Point a direct Prettier call only at formatter-owned files, and check files such as `.gitignore` with byte parity or `git diff --check`. Read `git diff --stat` after any formatter write before trusting it.
+
+**What happened:** Two formatter runs rewrote more than intended: rubric files lost the repo quote style, then a narrow landing-page edit reformatted most of a hand-authored HTML file. On 2026-07-19 a scoped check included `.gitignore`, which Prettier rejected because that file has no inferred parser.
 
 **Root cause:** Formatting was treated as neutral cleanup instead of a file-type and blast-radius contract.
 
-**Prevention:** Use the repository scripts and their owned extensions (`package.json`, search: `"format:check"`). Scope direct Prettier calls only to formatter-owned files; verify files such as `.gitignore` with byte parity or `git diff --check`. Inspect `git diff --stat` after any formatter write.
-
 ---
 
-## Lesson: Repo-wide preflight can be blocked by unrelated formatter drift
+## Lesson: Repo-wide gates inherit checkout debt outside the change set
 
 **Status:** active | **Created:** 2026-04-18
+**Decision changed:** Attribute each file a repo-wide gate rejects to the change set or to baseline debt before touching task code, and repair the real checkout rather than a temp clone.
+**Trigger phase:** VERIFY
+**Incident count:** 5 | **Latest occurrence:** 2026-04-21
+**Merged:** 2026-09-05 - renamed from "Repo-wide preflight can be blocked by unrelated formatter drift"; absorbed "Temp-repo preflight harnesses inherit formatting debt from copied test files" (2026-04-19) and "New server helper files still count as repo-wide formatting debt" (2026-04-20); one root cause.
 
-**What happened:** After deleting the dedicated setup validator and rewiring preflight around the remaining script surface, focused verification passed (`shellcheck`, `npm run typecheck`, targeted smoke/unit tests, and exact grep for the removed path). But `bash scripts/preflight-checks.sh` still failed because `scripts/prettier-check.sh` reported four unformatted files that were outside the change set: `src/cli/classify-state.ts`, `src/dashboard/app.ts`, `test/integration/preamble-sync.test.ts`, and `test/unit/quality-command.test.ts`.
+**Prevention:** If preflight or the installer round-trip fixture fails on formatting, compare the failing files with `git status` for the task. A failing file outside the change set is baseline debt: report it in a separate "repo-wide checks still blocked" section and do not call preflight a task regression. A failing file inside the change set is a task gate: format it in the real checkout, rerun the exact failing check, then the focused test. Never format only the temp clone; the fixture copies the current checkout before its embedded preflight, so it heals when the checkout does. Evidence anchor: `test/integration/audit-drift-checkdrift-installer-round-trip-fixture.test.ts` (search: `checkDrift: installer round-trip fixture`).
 
-**Root cause:** Preflight is repo-wide, not diff-scoped. A local task can leave its own files clean and still inherit unrelated formatter debt already present in the worktree or committed baseline. If that debt is not separated from task-local regressions, the final report becomes ambiguous about whether the task itself broke verification.
+**What happened:** Preflight failed on four unformatted files outside the change set after the dedicated setup validator was deleted, although shellcheck, typecheck, targeted tests, and the removed-path grep had all passed for the change itself. `scripts/prettier-check.sh` named `src/cli/classify-state.ts`, `src/dashboard/app.ts`, `test/integration/preamble-sync.test.ts`, and the since-split quality-command unit test.
 
-**Fix:** Format any touched files first, then rerun the focused checks. If preflight still fails, run the narrower verifier (`scripts/prettier-check.sh` or equivalent) to identify whether the remaining failures are in untouched files. Report that split explicitly instead of calling preflight a task regression.
+**Root cause:** Preflight and the round-trip fixture scan the whole checkout, not the diff, so a clean change set still inherits committed or working-tree debt, and a temp clone copied from an unformatted checkout replays the same failure.
 
-**Recurrence update (2026-04-21):** A v1.2.2 version-bump run had `npm test` fail only because the installer round-trip fixture runs full preflight and found committed formatter drift in `src/dashboard/index.html`, a file *outside* the edit set. `npm run format:check` reproduced the same single-file failure. This is the distinct case: untouched committed debt, not task fallout.
-
-**Recurrence updates (2026-05-10, 2026-05-19 x2, 2026-05-20, 2026-06-07) - incident count 5, identical mechanism:** focused tests, `shellcheck`, and `npm run typecheck` all passed, then a targeted `npx prettier --check` (or preflight's TypeScript gate) failed on a file the task had *touched*. Every instance resolved the same way: `npx prettier --write` over the touched set, then rerun. Affected files spanned dashboard sources, smoke and unit tests, and `src/cli/facts/agent/settings.ts`. The repeat rate is the finding - formatting a touched file is not optional cleanup, it is a gate.
-
-**Prevention:**
-1. When preflight fails, immediately identify whether the failing files are in `git status` for the current task.
-2. Treat repo-wide formatter failures in untouched files as residual baseline debt, not silent task fallout.
-3. Keep the final verification section split between "checks that passed for this change" and "repo-wide checks still blocked by unrelated drift."
-
----
-
-## Lesson: Temp-repo preflight harnesses inherit formatting debt from copied test files
-
-**Status:** active | **Created:** 2026-04-19
-
-**What happened:** The new M14 round-trip integration test cloned the repo into a tmpdir, patched the temp copy, and ran `bash scripts/preflight-checks.sh`. Installer, parity, and drift logic were correct, but the first verification run still failed because the cloned `test/integration/audit-drift.test.ts` was not formatted, and preflight's formatter gate checks `test/**/*.ts`, not just the files patched inside the tmp repo after cloning.
-
-**Root cause:** Treated the tmp repo like a narrow scratch fixture instead of a full repo clone. Formatting only the temp-mutated files under-approximated the real preflight surface, so the harness initially proved a weaker condition than the milestone claimed.
-
-**Fix:** For tmp-repo preflight coverage, either keep the source test file formatted in the real checkout before cloning or explicitly format any copied `src/**/*.ts` and `test/**/*.ts` files that changed in the source repo. Assume preflight sees the entire cloned repo, not only the temp patch set.
-
-**Prevention update (2026-04-20):**
-1. Treat any unformatted tracked file in the real checkout as a blocker for `checkDrift` round-trip fixtures, because the temp repo inherits that formatting debt before its own assertions run.
-2. After touching `src/**/*.ts` or `test/**/*.ts`, run the formatter before trusting installer/preflight round-trip tests as evidence about drift logic.
+**Recurrence 2026-04-19:** M14's round-trip test cloned the repo, patched the copy, and failed because the cloned `test/integration/audit-drift.test.ts` was unformatted in the source checkout; the formatter gate checks every `test/**/*.ts` in the clone, not only the patched files.
+**Recurrence 2026-04-20:** Extracting setup-detection helpers left `src/cli/server/dashboard.ts`, `src/cli/server/setup-detect.ts`, and `src/cli/server/dashboard-assets.ts` unformatted; preflight and the fixture failed together, and the next server split (`src/cli/server/dashboard-routes.ts` plus the rewritten `dashboard.ts`) repeated it.
+**Recurrence 2026-04-21:** A v1.2.2 version bump failed `npm test` only because the fixture's embedded preflight found committed drift in `src/dashboard/index.html`, outside the edit set; `npm run format:check` reproduced the single-file failure.
 
 ---
 
-## Lesson: New server helper files still count as repo-wide formatting debt
-
-**Status:** active | **Created:** 2026-04-20
-
-**What happened:** Extracting setup-detection helpers out of `src/cli/server/dashboard.ts` passed `npm run typecheck` and the focused dashboard integration suite, but `bash scripts/preflight-checks.sh` still failed. The real checkout had three unformatted server files (`src/cli/server/dashboard.ts`, `src/cli/server/setup-detect.ts`, `src/cli/server/dashboard-assets.ts`), so preflight's Prettier gate failed locally and the installer round-trip fixture failed too because it clones the current checkout before running temp-repo preflight.
-
-**Root cause:** Treated the structural refactor like a code-only change and stopped at type/runtime verification. In this repo, formatting debt in the source checkout is not isolated: the round-trip fixture inherits it and replays the same formatter failure inside the temp clone.
-
-**Fix:** Run Prettier on every touched `src/**/*.ts` file before trusting preflight or fixture-backed drift tests. Re-run the focused failing test (`test/integration/audit-drift.test.ts`) after formatting, not just the original happy-path suite.
-
-**Prevention:**
-1. After adding a new TypeScript helper file, treat `prettier --check` as part of the focused verification, not only the final repo-wide gate.
-2. When preflight and the installer round-trip fixture fail together on formatting, fix the real checkout first; the temp fixture will usually heal with it.
-
-**Prevention update (2026-04-20):**
-1. This pattern recurred on the next dashboard-server split when `src/cli/server/dashboard-routes.ts` and the rewritten `dashboard.ts` were left unformatted. Treat any new `src/cli/server/*.ts` extraction as high-risk for this exact preflight + round-trip failure pair.
-
----
-
-## Lesson: New tests need formatter gate before verification claims
+## Lesson: Run Prettier, ESLint, Knip, and Gruff on touched TypeScript before claiming a focused GREEN
 
 **Status:** active | **Created:** 2026-04-25
+**Decision changed:** After the first focused GREEN on any TypeScript change, run the repository formatter, file-scoped ESLint, the exact Knip command, and targeted Gruff before any suite, preflight, or completion claim; a receipt without their literal output is incomplete.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+**Incident count:** 66 | **Latest occurrence:** 2026-09-04
+**Merged:** 2026-09-05 - renamed from "New tests need formatter gate before verification claims"; absorbed "Slow installer round-trip catches prompt/test lint debt" (2026-04-26, 5 incidents), "Format touched TypeScript tests before repo-wide preflight" (2026-04-30), "Preflight TypeScript gates include Knip binary policy and touched-test formatting" (2026-06-07, 28 incidents), and "Format patched hook test fixtures before full preflight" (2026-06-02, 2 incidents) from `.goat-flow/learning-loop/lessons/hook-testing.md`, plus five touched-file recurrences previously logged under the attribution lesson above and one 2026-08-09 static-gate recurrence from `.goat-flow/learning-loop/lessons/verification-gruff.md`; the count is the sum of the declared totals.
 
-**What happened:** M01's focused security-preset test passed before scoped Prettier rejected the new test file.
+**Prevention:** After the first focused GREEN that touches TypeScript, and before any suite, preflight, or completion claim, run these in order and quote each result: (1) `npx prettier --check <touched paths>` or `npm run format:check`; (2) file-scoped ESLint on touched `src/` files, since `test/**` sits outside the lint project; (3) the exact Knip command from `scripts/preflight-checks.sh` (search: `knip_command=(`), never an invented `npm run knip` or a bare `npx knip`, which exhausts the default heap; (4) targeted Gruff on the touched files. Keep helpers module-private until a current consumer imports them, and reference child-process fixtures with `fileURLToPath(new URL(...))` so Knip can see them, as in `test/helpers/concurrent-quality-workers.ts` (search: `quality-capture-concurrency-worker.ts`). When a later gate fails, fix it, rerun that gate, then restart the sequence; every earlier proof is stale. A milestone that edits `src/` lists `npx eslint src/cli src/dashboard` and `bash scripts/prettier-check.sh` in its Commands table. For goat-clarity, freeze the check and write commands before mutation; anchors `workflow/skills/goat-clarity/SKILL.md` (search: `Formatter proof:`) and `test/contract/skill-hardening-clarity.test.ts` (search: `freezes repository formatter commands and proof before mutation`).
 
-**Root cause:** I ran behavioural proof before the formatter gate for touched TypeScript.
+**What happened:** Focused tests and typecheck pass, then Prettier, ESLint complexity, Knip, or Gruff fails later in preflight or inside the installer round-trip fixture, and every earlier proof goes stale. The first case was M01's security-preset test, green before scoped Prettier rejected the new test file; evidence anchors `src/cli/audit/sarif.ts` (search: `buildAuditSarifLog`) and `src/cli/prompt/compose-setup.ts` (search: `contentAuditCommand`).
 
-**Recurrences through 2026-08-12:** M11 SARIF and later contract, setup, dashboard, review, and hook batches repeated the same ordering error. M01 again passed focused tests and typecheck before scoped Prettier rejected its touched TypeScript.
+**Root cause:** Typecheck and runtime tests do not exercise formatting, lint complexity, unused-export policy, static fixture reachability, or analyzer size limits; those gates run only in preflight and in the fixture's copied checkout, so a proof sequence that starts with suites pays for them last.
 
-**Recurrence (2026-08-16):** A Copilot file-selector run changed `src/cli/review-validate-anchors.ts` and reported completion after typecheck, but an exact-path Prettier check still rejected the file. The remediation now freezes formatter commands before mutation and makes literal formatter proof mandatory in the receipt.
+**Incident ledger** (one line per incident: the gate that fired, the repair, the anchor):
 
-**Recurrence (2026-08-18):** M56 ran shape, parity, contract, typecheck, and the 2071-test fast suite green, then preflight failed on `Prettier (3 unformatted files)` - all three were the milestone's own new or edited test files (`test/integration/gitignore-shape.test.ts`, `test/integration/audit-build.test.ts`, `test/contract/skill-hardening-shared-3.test.ts`). `npx prettier --write` on the exact paths and a rerun gave `PASS 84 checks`; the amendment batch ran `npx prettier --check` on touched paths before its tests and stayed clean.
+**Recurrence 2026-04-26:** Round-trip preflight rejected an over-complex compose-quality helper and an unformatted quality-command fixture after prompt tests and typecheck passed. `src/cli/prompt/compose-quality-common.ts` (search: `appendScopeSummary`).
+**Recurrence 2026-04-30:** Preflight stopped at `2 unformatted files`, both new test files; `npm run format` touched only them and a clean rerun passed. `test/unit/check-content-quality.test.ts` (search: `discovers current ADR files`), `src/cli/quality/schema-types.ts` (search: `evidence_warning_count`).
+**Recurrence 2026-06-02:** Porting gruff-py's native changed-region path into `workflow/hooks/gruff-code-quality.sh` passed the focused hook test, ShellCheck, and typecheck, but the first preflight failed its TypeScript gate on one unformatted file: the newly hand-edited integration fixture with a long embedded shell script. `test/integration/gruff-code-quality-smoke.test.ts` (search: `writeNativeChangedRegionGruffPy`), `scripts/preflight-checks.sh` (search: `Prettier`).
+**Recurrence 2026-06-03:** The same targeted check caught formatting drift in a TypeScript audit-message patch before full preflight. `src/cli/audit/check-agent-deny-runtime.ts` (search: `configured hook command exited before`).
+**Recurrences 2026-05-10, 2026-05-19 (x2), 2026-05-20, 2026-06-07:** Focused tests, shellcheck, and typecheck passed, then Prettier rejected a touched dashboard, smoke, unit, or `src/cli/facts/agent/settings.ts` file; `npx prettier --write` over the touched set fixed each.
+**Recurrence 2026-05-24:** `checkHookRuntimeSmoke` exceeded ESLint complexity by one inside the round-trip preflight. `src/cli/audit/check-agent-deny-runtime.ts` (search: `verifyConfiguredHookRuntime`).
+**Recurrence 2026-07-16:** PR #56 `renderAuditSummary` reached complexity 17 in the round-trip preflight; the note pushed this bucket to 40,353 bytes, so the history was consolidated. `test/unit/quality-report-contract-audit.test.ts` (search: `embeds drift and content failures`).
+**Recurrences through 2026-08-12:** M11 SARIF and later contract, setup, dashboard, review, and hook batches repeated the ordering error. `test/contract/skill-hardening-shared-3.test.ts` (search: `requires an evidence budget before optional orchestration`), `test/unit/dashboard-skill-quality.test.ts` (search: `shows composition truncation as a partial-evidence warning`), `test/integration/skill-author.test.ts` (search: `rejects a symlinked playbook scaffold parent`), `test/unit/review-validate-verdict.test.ts` (search: `structuralValidationCases`), `test/contract/skill-hardening-review-1.test.ts` (search: `stops oversized inferred branch scopes before review begins`), `test/unit/quality-report-contract.test.ts` (search: `cross-variant boundaries`), `test/unit/dashboard-terminal-launch/launch-flow-01.test.ts` (search: `denied-probe fallback`), `test/integration/post-turn-safety-hook.helpers.ts` (search: `withCommandShim`), `src/cli/audit/check-agent-deny-runtime.ts` (search: `configuredRuntimeProbes`), `test/contract/skill-hardening-skills-2.test.ts` (search: `truthful goat-critique`), `test/unit/hook-launcher.test.ts` (search: `returns promptly after a started hook descendant exceeds its deadline`), `src/cli/server/agent-hook-writer.ts` (search: `deriveManagedHookDesiredState`), `test/unit/hook-registrar.test.ts` (search: `repairs a duplicate registration`).
+**Recurrence 2026-08-09:** Focused tests, TypeScript, and gruff-ts passed, but full preflight rejected two hook-contract functions above ESLint's complexity limit and eight exported component types without external fixture use; splitting the support chain into named provider, install, and observed-state checks and typing fixtures with each public component contract cleared both gates. Moved from the Gruff comment-fixes lesson on 2026-09-05. `src/cli/hook-contracts.ts` (search: `classifyProviderEvidenceState`), `test/integration/hook-provider-contracts.test.ts` (search: `DELIVERED_RESPONSE_CHANNELS`).
+**Recurrence 2026-08-10:** Typecheck rejected dynamic membership against a literal-tuple union and ESLint found proof-reader and registrar complexity 13/11; the fix widened scenario ids through `Set<string>` and separated event matching from gate promotion. `src/cli/server/hook-runtime-proof.ts` (search: `requiredScenarioIds`), `src/cli/server/hook-runtime-proof.ts` (search: `hookSupportGateAfterLocalProof`).
+**Recurrence 2026-08-16:** A Copilot run changed `src/cli/review-validate-anchors.ts` and reported completion after typecheck; exact-path Prettier still rejected it. In the same period a registrar helper extraction cleared Gruff's file-length error but the changed multiline import failed Prettier; formatting the touched test before typecheck and Knip kept the failure local. `test/unit/hook-registrar.helpers.ts` (search: `SUPPORTED_PROVIDER_HOOK_CASES`), `test/unit/hook-registrar.test.ts` (search: `countOwnedCommandRows`).
+**Recurrence 2026-08-17:** Full preflight found complexity 12 in the new settings-rule collector after focused audit suites and typecheck passed; extracting single-entry classification cleared it. `src/cli/audit/harness/check-constraints.ts` (search: `collectStaleSettingsRules`), `src/cli/audit/harness/check-constraints.ts` (search: `staleRuleDetail`).
+**Recurrence 2026-08-18:** M56 ran shape, parity, contract, typecheck, and the 2071-test fast suite green, then preflight reported `Prettier (3 unformatted files)`, all milestone-owned (`test/integration/gitignore-shape.test.ts`, `test/integration/audit-build.test.ts`, `test/contract/skill-hardening-shared-3.test.ts`); `npx prettier --write` and a rerun gave `PASS 84 checks`.
+**Recurrence 2026-08-19:** The 1.16.0 go-live milestones M02-M04 listed suites, shellcheck, and typecheck as gates but not ESLint or Prettier, so commit `451dae70` reached CI with `validateQualityField` at complexity 12 and one unformatted test; CI Lint and the round-trip fixture in slow shard 2/5 both failed, and the local lint then found complexity 11 in `setDashboardProjectArchived`. `src/cli/config/reader-validators.ts` (search: `warnUnknownQualitySubtypeKeys`), `src/cli/server/dashboard-project-state.ts` (search: `obsoleteIdentityAfterRekey`).
+**Recurrence 2026-08-23:** M09's integration tests passed before exact-path Prettier rejected `test/integration/stats-command.test.ts`; M10 repeated it with `src/cli/stats/render.ts` after 69 focused tests and typecheck.
+**Recurrence 2026-08-24:** M26's recall tests and typecheck passed before exact-path Prettier rejected four touched files; anchors `src/cli/learning-loop-recall.ts` (search: `collectLearningLoopRecall`) and `test/unit/learning-loop-recall.test.ts` (search: `recall CLI parsing`). Preflight then found complexity 12 in the CLI parser and two internal recall declarations exported, fixed by `src/cli/cli-parser.ts` (search: `parsePrimaryPositionals`) and module scope in `src/cli/learning-loop-recall.ts` (search: `LEARNING_LOOP_RECALL_LIMIT`).
+**Recurrence 2026-08-25:** The round-trip preflight rejected complexity 13 in `managedHookEnvironment`, 11 in `validateRefutedCandidateProvenance`, and two unformatted files after focused tests were green. `src/cli/hooks-configured-runtime-evidence.ts` (search: `managedHookEnvironment`), `src/cli/quality/schema-refuted-candidates.ts` (search: `validateRefutedCandidateProvenance`).
+**Recurrence 2026-08-26:** M55's regression was green before exact-path Prettier rejected `test/unit/audit-command/hook-facts.test.ts` (search: `reads managed Claude exec operands before inert shell routes`).
+**Recurrence 2026-08-27:** M41's new source-shape contract failed the exact-path Prettier check on `test/integration/preflight-progress.test.ts` (search: `keeps Knip failure guidance on the heap-safe preflight invocation`), and `set -e` stopped the proof batch before ShellCheck and runtime tests. Task 4 separately passed every focused gate before preflight's Knip found five schema declarations exported for future consumers. `src/cli/managed-setup-state.ts` (search: `interface ManagedInstallLegacyObservation`), `src/cli/managed-setup-state.ts` (search: `const MANAGED_INSTALL_STATE_V2_SCHEMA`).
+**Recurrence 2026-08-28:** Task 8 removed the final import of the direct baseline reader, ran every gate except Knip, and preflight found the reader export, its result type, and their validation path unreachable; anchor `src/cli/managed-setup-state.ts` (search: `function readLegacyManagedInstallStateFacade`). Task 10 inferred an `npm run knip` script that does not exist; the invocation lives at `scripts/preflight-checks.sh` (search: `knip_command=(`) and `package.json` (search: `"preflight": "bash scripts/preflight-checks.sh"`). M47's two routing contracts passed focused suites before the clarity pass found both outside Prettier style; anchors `test/contract/skill-quality-testing-doctrine.test.ts` (search: `scopes retirement and qualification to one reproducible target`) and `test/contract/dispatcher-routing-fixture.test.ts` (search: `Guards deterministic dispatcher-corpus integrity`).
+**Recurrence 2026-08-29:** M71's schema tests were green before exact-path Prettier rejected three milestone files, and preflight's Knip found the rationale limit re-exported from the schema barrel with no consumer. `src/cli/quality/schema-score-rationale.ts` (search: `QUALITY_SCORE_RATIONALE_MAX_CHARACTERS`), `src/cli/quality/schema.ts` (search: `type QualityScoreRationale`), `test/unit/quality-score-rationale.test.ts` (search: `quality score rationale schema`), `test/unit/quality-diff-delta-tag.test.ts` (search: `quality diff score rationale`).
+**Recurrence 2026-08-30:** M77 passed focused regressions, typecheck, and Prettier before preflight found four ESLint errors: complexity in glossary inventory and rejected-redaction cleanup, plus a non-Error throw. Two riders: the first test mapped "functional" to the all-skill total against the repository phrase, and a legal trailing comma in a multiline YAML fixture produced a duplicate separator. `src/cli/audit/check-factual-semantic-drift.ts` (search: `readGlossarySkillCountClaim`), `src/cli/redact-command.ts` (search: `attemptRedactCleanupStep`), `workflow/setup/01-system-overview.md` (search: `7 functional + 1 dispatcher`), `test/integration/setup-install.test.ts` (search: `exact multiline flow-style hook key`).
+**Recurrence 2026-08-31 (four passes):** The review-validate work passed behaviour and typecheck, then static gates found a renderer at complexity 14 with an exported internal validator, four complexity violations from size enforcement, three unformatted files, an H2-only reader used on an H3 subsection, diff-only units in an area fixture, nested templates hiding later usages from Gruff, and one module two lines over the size gate; anchors `src/cli/review-validate.ts` (search: `renderReviewValidationHeader`), `src/cli/review-validate-common.ts` (search: `reviewScopeExceedsChunkLimit`), `test/contract/skill-hardening-review-2.test.ts` (search: `readMarkdownSubsection`). The formatter then rejected `test/unit/review-validate.test.ts` (search: `binds opened-file coverage to the declared review size`) and Knip found `src/cli/review-validate-common.ts` (search: `COMPACT_DRAFT_INTEGRITY`) exported without consumers. Semantic review found compaction had dropped the rule at `workflow/skills/goat-review/SKILL.md` (search: `unknowns degrade`), a duplicate location interface at `src/cli/review-validate-integrity.ts` (search: `findCompactScopeLine`), and a 100-character comment without threshold rationale at `src/cli/learning-loop-index/format-index.ts` (search: `longer summaries would dominate`). Full preflight's coverage suite then found the preamble at its 1,500-word boundary and two lost contract phrases: `workflow/skills/reference/skill-preamble.md` (search: `Cap search output across all four INDEXes`) and `workflow/skills/goat-review/SKILL.md` (search: `Final version-matched CLI`).
+**Recurrence 2026-09-03:** M14's contract reported `# pass 13` before scoped Prettier rejected `test/contract/local-data-contract.test.ts` (search: `keeps future local plan versions out of accepted decision ownership`).
+**Recurrence 2026-09-04:** M15's release proof skipped repo-wide ESLint and Knip; the installer fixture's preflight found complexity 11/13/11 in claim reporting, command dispatch, and CLI parsing plus an unused exported recovery report. The first parser helper typed both branches as the claims-only return and rejected the intentional `null`, which typecheck caught, and Gruff rejected "converts known claim errors" until the docblock stated that it throws `CLIError`. `src/cli/claims-command.ts` (search: `throws CLIError for known claim errors`), `src/cli/cli-parser.ts` (search: `parseOptionalClaimsPositionals`).
+**Release recurrence 2026-08-09 (different mechanism, kept for the suite failure):** Hook notes gained a dated release heading before that release's manifest snapshot existed, so the full suite failed; keep notes under `Unreleased` until release identity and snapshot propagate together. `CHANGELOG.md` (search: `## Unreleased`), `test/unit/manifest.test.ts` (search: `missing manifest snapshots`).
 
-Evidence anchors:
-
-- `src/cli/audit/sarif.ts` (search: `buildAuditSarifLog`); `src/cli/prompt/compose-setup.ts` (search: `contentAuditCommand`).
-- `test/contract/skill-hardening-shared-3.test.ts` (search: `requires an evidence budget before optional orchestration`).
-- `test/unit/dashboard-skill-quality.test.ts` (search: `shows composition truncation as a partial-evidence warning`).
-- `test/integration/skill-author.test.ts` (search: `rejects a symlinked playbook scaffold parent`).
-- `test/unit/review-validate-verdict.test.ts` (search: `structuralValidationCases`).
-- `test/contract/skill-hardening-review-1.test.ts` (search: `stops oversized inferred branch scopes before review begins`).
-- `test/unit/quality-report-contract.test.ts` (search: `cross-variant boundaries`).
-- `test/unit/dashboard-terminal-launch/launch-flow-01.test.ts` (search: `denied-probe fallback`).
-- `test/integration/post-turn-safety-hook.helpers.ts` (search: `withCommandShim`).
-- `src/cli/audit/check-agent-deny-runtime.ts` (search: `configuredRuntimeProbes`).
-- `test/contract/skill-hardening-skills-2.test.ts` (search: `truthful goat-critique`).
-- `test/unit/hook-launcher.test.ts` (search: `returns promptly after a started hook descendant exceeds its deadline`).
-- `src/cli/server/agent-hook-writer.ts` (search: `deriveManagedHookDesiredState`).
-- `test/unit/hook-registrar.test.ts` (search: `repairs a duplicate registration`).
-- `workflow/skills/goat-clarity/SKILL.md` (search: `Formatter proof:`).
-- `test/contract/skill-hardening-clarity.test.ts` (search: `freezes repository formatter commands and proof before mutation`).
-
-**Prevention:** Format touched TypeScript before focused proof and retain Prettier in final verification. For goat-clarity, freeze the repository-owned check and write commands before mutation; a receipt without literal formatter proof remains incomplete.
-
-**Decision changed:** Run the repository formatter on touched TypeScript before treating a focused GREEN run as milestone verification. | **Trigger phase:** VERIFY | **Incident count:** 17 | **Latest occurrence:** 2026-08-16
-
----
-
-## Lesson: Slow installer round-trip catches prompt/test lint debt
-
-**Status:** active | **Created:** 2026-04-26
-
-**What happened:** Prompt changes cleared focused tests and typecheck but failed the installer round-trip embedded preflight three times: on 2026-04-26 an over-complex compose-quality.ts helper and unformatted quality-command fixture; on 2026-05-24 checkHookRuntimeSmoke exceeded ESLint complexity by one; on 2026-07-16 PR #56 renderAuditSummary reached complexity 17. Extracting narrow helpers and formatting the fixture cleared the direct gates. The first 2026-07-16 recurrence note also pushed this bucket to 40,353 bytes, so the incident history was consolidated below the cap.
-
-**Root cause:** Focused behavior tests and typecheck do not run the full-source lint and format gates that the copied checkout enforces.
-
-**Prevention:** Before slow installer tests, run the supported source ESLint and format gates. Reproduce a failure directly before changing installer or drift logic. Evidence anchors: `src/cli/prompt/compose-quality-common.ts` (search: `appendScopeSummary`), `src/cli/audit/check-agent-deny-runtime.ts` (search: `verifyConfiguredHookRuntime`), and `test/unit/quality-report-contract.test.ts` (search: `embeds drift and content failures`).
-
-**Recurrence (2026-08-19):** The 1.16.0 go-live milestones M02-M04 listed unit/integration suites, shellcheck, and typecheck as their gates but not ESLint or Prettier, so the commit at `451dae70` reached CI with `validateQualityField` at complexity 12 (`src/cli/config/reader-validators.ts`, search: `warnUnknownQualitySubtypeKeys`) and one unformatted test file; CI's Lint step and the round-trip fixture in slow shard 2/5 both failed, and the local lint command then also caught complexity 11 in `setDashboardProjectArchived` (search: `obsoleteIdentityAfterRekey`). A plan milestone that edits `src/` is not closable until `npx eslint src/cli src/dashboard` and `bash scripts/prettier-check.sh` have printed clean in the session; put both commands in the milestone's Commands table when the plan is written.
-
----
-
-
-## Lesson: Format touched TypeScript tests before repo-wide preflight
-
-**Status:** active | **Created:** 2026-04-30
-
-**What happened:** While implementing quality-assessment follow-ups, focused tests and `npm run typecheck` passed, but the first `bash scripts/preflight-checks.sh` run failed at Prettier with `2 unformatted files`. Running `npm run format` touched only the new/edited TypeScript test files, and the fresh preflight rerun passed.
-
-**Root cause:** I treated focused tests plus typecheck as enough before the repo-wide gate even though new TypeScript test assertions had not been formatter-normalized. Preflight records formatter failure before later gates, so fixing format after a failed preflight requires a clean rerun to produce valid final evidence.
-
-**Prevention:** After editing TypeScript tests or prompt/schema fixtures, run `npm run format` or `npm run format:check` before `bash scripts/preflight-checks.sh`. If preflight fails at Prettier, format, inspect the diff, and rerun preflight from scratch before claiming the final gate. Evidence anchors: `test/unit/check-content-quality.test.ts` (search: `discovers current ADR files`), `src/cli/quality/schema-types.ts` (search: `evidence_warning_count`).
+Knip handling: run it with the repository gate's heap and traversal flags, `scripts/preflight-checks.sh` (search: `--no-gitignore keeps Knip from walking`) and `.goat-flow/learning-loop/footguns/preflight-plumbing.md` (search: `Knip's \`ignore\` cannot shrink`); a default `npx knip` out-of-memory abort is not the gate result. Binary policy lives in `knip.json` (search: `ignoreBinaries`).
 
 ---
 
@@ -143,36 +89,25 @@ Evidence anchors:
 
 **Status:** active | **Created:** 2026-04-20
 
-**What happened:** A tiny Prompts view color tweak looked unrelated to the TypeScript gates, but the first verification rerun still failed preflight and the installer round-trip fixture. The real blocker was an untracked JavaScript shadow file sitting next to the canonical `src/cli/types.ts`. ESLint tried to parse the stray `.js` file against the TypeScript project config, Prettier treated it as a source file under `src/**/*.{ts,js,html}`, and the fixture cloned the same bad state into its temp repo.
+**Prevention:** If preflight fails with mixed ESLint, Prettier, and drift-fixture errors after a small change, run `git status` and `git ls-files` for untracked `src/**/*.js` siblings of tracked `src/**/*.ts` files before editing task code again. Delete the shadow file, then rerun the exact failing gates.
 
-**Root cause:** A generated or accidental source-shadow file under `src/` can evade attention because typecheck and the visible diff for the requested change point elsewhere. The repo gates scan the filesystem, not just tracked TS files, so an untracked sibling output can contaminate lint/format/drift verification far away from the user-visible edit.
+**What happened:** A one-line Prompts view colour tweak failed preflight and the installer round-trip fixture on ESLint, Prettier, and drift at once. The cause was an untracked JavaScript shadow of `src/cli/types.ts`: ESLint parsed it against the TypeScript project config, Prettier matched it under `src/**/*.{ts,js,html}`, and the fixture cloned the same bad state.
 
-**Fix:** Check `git status` and `git ls-files` when lint/prettier/fixture failures do not match the touched file. If the blocker is an untracked source-shadow file like `src/**/*.js` beside a canonical `src/**/*.ts`, delete it and rerun the exact failing gates.
-
-**Prevention:**
-1. When preflight suddenly fails with mixed ESLint + Prettier + drift-fixture errors after a small change, scan for untracked source-shadow files under `src/` before changing the requested code again.
-2. Treat `src/**/*.js` siblings of tracked `src/**/*.ts` files as suspicious unless the repo intentionally tracks them.
+**Root cause:** The repo gates scan the filesystem, not tracked TypeScript, so an accidental sibling output far from the visible diff contaminates lint, format, and drift verification together.
 
 ---
 
-## Lesson: Preflight TypeScript gates include Knip binary policy and touched-test formatting
+## Lesson: A zero-exit lint command can analyze no files
 
-**Status:** active | **Created:** 2026-06-07
+**Status:** active | **Created:** 2026-09-03
+**Decision changed:** Treat lint as evidence only when output proves the selected files were analyzed; an ignored-file warning is not a pass even when exit status is zero.
+**Trigger phase:** VERIFY
+**Caught at:** VERIFY
 
-**Decision changed:** Run typecheck, ESLint, Knip, and formatting before preflight after TypeScript surface changes. | **Trigger phase:** VERIFY | **Incident count:** 15 | **Latest occurrence:** 2026-08-17
+**Prevention:** Read every per-file diagnostic before appending pass text, and check the lint scope before choosing a command. If the configured parser excludes the target, record lint as not applicable; do not force the file through an incompatible parser project with `--no-ignore`.
 
-**What happened:** Narrower checks repeatedly cleared before later static gates. On 2026-08-10, typecheck rejected dynamic membership against a literal-tuple union and ESLint found proof-reader and registrar complexity 13/11. Earlier recurrences included formatting drift, an undiscovered worker, and impossible fallback logic.
+**What happened:** An exact-path ESLint command exited 0 after reporting that `test/contract/local-data-contract.test.ts` was ignored, and a shell suffix printed a false PASS line. A `--no-ignore` diagnostic exited 1 because the test is absent from both parser projects. The focused runtime contract and typecheck remained valid; neither made the ignored lint command evidence.
 
-**Root cause:** Typecheck and runtime tests do not exercise lint complexity, unused-code/binary policy, static fixture reachability, or formatting. A child process launched from a string path can be reachable at runtime but invisible to Knip's dependency graph. Running a memory-heavy analyzer beside other gates can also turn a resource limit into a misleading tool failure.
+**Root cause:** The wrapper treated process status as coverage without reading the per-file warning or the configured target set.
 
-**Fix and prevention:** After TypeScript changes, run ESLint, Knip, and `npm run format:check` before preflight and fix their exact findings. Keep child-process fixtures statically discoverable with `fileURLToPath(new URL("../fixtures/worker.ts", import.meta.url))`. Run Knip independently with the repository gate's heap and traversal flags; a default `npx knip` OOM is not the gate result. Evidence anchors: `scripts/preflight-checks.sh` (search: `--no-gitignore keeps Knip from walking`), `.goat-flow/learning-loop/footguns/preflight-plumbing.md` (search: `Knip's \`ignore\` cannot shrink`), `knip.json` (search: `ignoreBinaries`), and `test/helpers/concurrent-quality-workers.ts` (search: `quality-capture-concurrency-worker.ts`).
-
-**Measured recurrences:** Static gates have found complexity, impossible conditions, internal-only exports, an undiscovered worker, and a measured Knip heap limit. The latest fix widened dynamic scenario ids through `Set<string>` and separated event matching from gate promotion. Evidence anchors: `src/cli/server/hook-runtime-proof.ts` (search: `requiredScenarioIds`) and (search: `hookSupportGateAfterLocalProof`).
-
-**Recurrence 2026-08-16 (registrar helper extraction):** Moving the provider-case matrix and recursive row counter into the existing helper removed the Gruff file-length error, but the changed multiline import in the original test failed the focused Prettier gate. Formatting the touched test before typecheck and Knip kept the failure local. Evidence anchors: `test/unit/hook-registrar.helpers.ts` (search: `SUPPORTED_PROVIDER_HOOK_CASES`) and `test/unit/hook-registrar.test.ts` (search: `countOwnedCommandRows`).
-
-**Recurrence 2026-08-17 (settings-rule collector):** The focused audit suites and typecheck passed, but full preflight found complexity 12 in the new settings-rule collector. Extracting its single-entry classification made the file-level ESLint gate pass without changing the collector contract. Evidence anchors: `src/cli/audit/harness/check-constraints.ts` (search: `collectStaleSettingsRules`) and (search: `staleRuleDetail`).
-
-**Release recurrence (2026-08-09):** Hook notes gained a dated release heading before its manifest snapshot existed, so the full suite failed. Keep notes under `Unreleased` until release identity and its snapshot propagate together. Evidence: `CHANGELOG.md` (search: `## Unreleased`) and `test/unit/manifest.test.ts` (search: `missing manifest snapshots`).
-
----
+**Evidence:** `eslint.config.mjs` (search: `ignores: ["dist/**", "test/**", "node_modules/**", "*.js", "*.mjs"]`) excludes the test tree; `eslint.config.mjs` (search: `project: ["./tsconfig.json", "./tsconfig.dashboard.json"]`) limits typed parsing to the two source projects.

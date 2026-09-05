@@ -10,6 +10,7 @@ import {
   lstatSync,
   mkdirSync,
   mkdtempSync,
+  openSync,
   readFileSync,
   readdirSync,
   renameSync,
@@ -24,6 +25,7 @@ import { parseCLIArgs } from "../../src/cli/cli-parser.js";
 import { getPackageVersion } from "../../src/cli/paths.js";
 import { persistQualityReportText } from "../../src/cli/quality/quality-command.js";
 import { parseQualityReport } from "../../src/cli/quality/schema.js";
+import { makeQualityScoreRationale } from "../fixtures/quality-score-rationale.js";
 
 const CLI_USAGE_EXIT_CODE = 2;
 const REPOSITORY_ROOT = resolve(import.meta.dirname, "..", "..");
@@ -35,6 +37,23 @@ const INVALID_CURRENT_RUN_DATES = [
   "2026-04-31",
   "2026-13-01",
 ] as const;
+
+/** Build a source-backed candidate the assessor disproved before showing the user their findings. */
+function staticRefutedCandidate(
+  overrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    claim: "The parser accepts unsupported report keys",
+    why_excluded: "Closed-schema validation rejects the extra key.",
+    file: "src/cli/quality/schema-parser.ts",
+    line: null,
+    evidence_quality: "OBSERVED",
+    evidence_method: "static-analysis",
+    evidence_summary:
+      'The parser calls rejectUnknownKeys before saving (search: "rejectUnknownKeys").',
+    ...overrides,
+  };
+}
 
 /** Build one current report accepted by the strict quality schema. */
 function currentQualityReport(
@@ -76,6 +95,7 @@ function currentQualityReport(
         learnability: 0,
       },
     },
+    score_rationale: makeQualityScoreRationale(),
     findings: [
       {
         type: "setup_quality",
@@ -89,7 +109,27 @@ function currentQualityReport(
         delta_tag: null,
       },
     ],
+    refuted_candidates: [],
   };
+}
+
+/**
+ * Assert that one disproved-candidate row is rejected before it reaches quality history.
+ * Use for malformed candidate fixtures; an empty expected error would hide the field the user must repair.
+ *
+ * @param candidate - candidate row to validate; an empty object exercises missing required fields
+ * @param expectedError - exact user-facing schema error; empty text would make the assertion ambiguous
+ * @returns nothing; the assertion fails if the report is accepted or rejects a different field
+ */
+function assertRefutedCandidateError(
+  candidate: Record<string, unknown>,
+  expectedError: string,
+): void {
+  const parsed = parseQualityReport({
+    ...currentQualityReport(resolve("quality-refutation-fixture")),
+    refuted_candidates: [candidate],
+  });
+  assert.deepEqual(parsed, { ok: false, error: expectedError });
 }
 
 /** Spawns the public source CLI saver with one raw stdin body. */
@@ -124,6 +164,20 @@ function makeIgnoredQualityRoot(): string {
   execFileSync("git", ["-C", root, "init", "--quiet"]);
   writeFileSync(join(root, ".gitignore"), ".goat-flow/logs/quality/*.json\n");
   return root;
+}
+
+/** Persist one current report through injected filesystem dependencies for race fixtures. */
+function persistCurrentQualityReport(
+  projectRoot: string,
+  deps: Parameters<typeof persistQualityReportText>[1],
+): string {
+  return persistQualityReportText(
+    {
+      projectPath: projectRoot,
+      rawText: JSON.stringify(currentQualityReport(projectRoot)),
+    },
+    deps,
+  );
 }
 
 describe("quality subcommand parsing", () => {
@@ -165,10 +219,10 @@ describe("quality subcommand parsing", () => {
     );
   });
 
-  it("parses prompt mode for mode-specific quality prompts", () => {
+  it("parses the explicit prompt subcommand for the current project", () => {
     const parsed = parseCLIArgs([
       "quality",
-      ".",
+      "prompt",
       "--agent",
       "claude",
       "--mode",
@@ -176,6 +230,18 @@ describe("quality subcommand parsing", () => {
     ]);
     assert.equal(parsed.qualitySubcommand, "prompt");
     assert.equal(parsed.qualityMode, "skills");
+    assert.equal(parsed.projectPath, resolve("."));
+  });
+
+  it("keeps a bare project path as the implicit prompt form", () => {
+    const parsed = parseCLIArgs(["quality", "fixture-project"]);
+
+    assert.equal(parsed.qualitySubcommand, "prompt");
+    assert.equal(parsed.projectPath, resolve("fixture-project"));
+    assert.throws(
+      () => parseCLIArgs(["quality", "prompt", ".", "extra"]),
+      /quality prompt accepts at most one positional project path/iu,
+    );
   });
 
   it("treats a prototype-named positional as an ordinary project path", () => {
@@ -322,6 +388,361 @@ describe("quality assessment context", () => {
   });
 });
 
+describe("quality refuted candidates", () => {
+  it("accepts an empty current ledger and source-backed disproval", () => {
+    const emptyLedger = parseQualityReport(
+      currentQualityReport(resolve("quality-refutation-fixture")),
+    );
+    assert.equal(
+      emptyLedger.ok,
+      true,
+      emptyLedger.ok ? undefined : emptyLedger.error,
+    );
+
+    const sourceBackedLedger = parseQualityReport({
+      ...currentQualityReport(resolve("quality-refutation-fixture")),
+      refuted_candidates: [staticRefutedCandidate()],
+    });
+    assert.equal(
+      sourceBackedLedger.ok,
+      true,
+      sourceBackedLedger.ok ? undefined : sourceBackedLedger.error,
+    );
+
+    const singleQuotedAnchor = parseQualityReport({
+      ...currentQualityReport(resolve("quality-refutation-fixture")),
+      refuted_candidates: [
+        staticRefutedCandidate({
+          evidence_summary:
+            "The parser rejects unknown keys (search: 'rejectUnknownKeys').",
+        }),
+      ],
+    });
+    assert.equal(
+      singleQuotedAnchor.ok,
+      true,
+      singleQuotedAnchor.ok ? undefined : singleQuotedAnchor.error,
+    );
+  });
+
+  it("accepts runtime and mixed disprovals with command provenance", () => {
+    const runtimeCandidate = staticRefutedCandidate({
+      file: null,
+      evidence_method: "runtime-probe",
+      evidence_command: "npm test -- --runInBand",
+      evidence_exit_code: 0,
+      evidence_summary: "The focused regression passed with zero failures.",
+      evidence_excerpt: "tests 12; pass 12; fail 0",
+    });
+    const mixedCandidate = staticRefutedCandidate({
+      evidence_method: "mixed",
+      evidence_command: "npm run typecheck",
+      evidence_exit_code: 0,
+      evidence_summary:
+        'Typecheck passed after source inspection (search: "parseQualityReport").',
+    });
+    const parsed = parseQualityReport({
+      ...currentQualityReport(resolve("quality-refutation-fixture")),
+      refuted_candidates: [runtimeCandidate, mixedCandidate],
+    });
+    assert.equal(parsed.ok, true, parsed.ok ? undefined : parsed.error);
+  });
+
+  it("rejects an unsafe runtime evidence exit code", () => {
+    assertRefutedCandidateError(
+      staticRefutedCandidate({
+        file: null,
+        evidence_method: "runtime-probe",
+        evidence_command: "npm test",
+        evidence_exit_code: Number.MAX_SAFE_INTEGER + 1,
+        evidence_summary: "The focused regression produced an exit status.",
+      }),
+      "refuted_candidates[0].evidence_exit_code must be a non-negative integer",
+    );
+  });
+
+  it("requires the current ledger while normalizing its legacy absence", () => {
+    const { refuted_candidates: _ledger, ...reportWithoutLedger } =
+      currentQualityReport(resolve("quality-refutation-fixture"));
+    const current = parseQualityReport(reportWithoutLedger);
+    assert.deepEqual(current, {
+      ok: false,
+      error:
+        "report.refuted_candidates is required for current quality reports",
+    });
+
+    const historical = parseQualityReport(reportWithoutLedger, {
+      requireCurrentFields: false,
+    });
+    assert.equal(
+      historical.ok,
+      true,
+      historical.ok ? undefined : historical.error,
+    );
+    // An old report has no recorded disprovals, so history exposes an honest empty ledger.
+    assert.ok(historical.ok);
+    assert.deepEqual(historical.report.refuted_candidates, []);
+  });
+
+  it("rejects each missing required candidate field", () => {
+    const withoutClaim = staticRefutedCandidate();
+    delete withoutClaim.claim;
+    assertRefutedCandidateError(
+      withoutClaim,
+      "refuted_candidates[0].claim must be a string",
+    );
+
+    const withoutReason = staticRefutedCandidate();
+    delete withoutReason.why_excluded;
+    assertRefutedCandidateError(
+      withoutReason,
+      "refuted_candidates[0].why_excluded must be a string",
+    );
+
+    const withoutFile = staticRefutedCandidate();
+    delete withoutFile.file;
+    assertRefutedCandidateError(
+      withoutFile,
+      "refuted_candidates[0].file must be a string",
+    );
+
+    const withoutLine = staticRefutedCandidate();
+    delete withoutLine.line;
+    assertRefutedCandidateError(
+      withoutLine,
+      "refuted_candidates[0].line must be a positive integer or null",
+    );
+
+    const withoutEvidenceQuality = staticRefutedCandidate();
+    delete withoutEvidenceQuality.evidence_quality;
+    assertRefutedCandidateError(
+      withoutEvidenceQuality,
+      "refuted_candidates[0].evidence_quality must be one of: OBSERVED, INFERRED",
+    );
+
+    const withoutEvidenceMethod = staticRefutedCandidate();
+    delete withoutEvidenceMethod.evidence_method;
+    assertRefutedCandidateError(
+      withoutEvidenceMethod,
+      "refuted_candidates[0].evidence_method must be one of: runtime-probe, static-analysis, mixed",
+    );
+
+    const withoutEvidenceSummary = staticRefutedCandidate();
+    delete withoutEvidenceSummary.evidence_summary;
+    assertRefutedCandidateError(
+      withoutEvidenceSummary,
+      "refuted_candidates[0].evidence_summary must be a string",
+    );
+  });
+
+  it("rejects unknown keys and unsupported evidence labels", () => {
+    assertRefutedCandidateError(
+      staticRefutedCandidate({ proof_class: "STATIC" }),
+      "refuted_candidates[0] has unknown key(s): proof_class",
+    );
+    assertRefutedCandidateError(
+      staticRefutedCandidate({ evidence_quality: "ACTUAL_MEASURED" }),
+      "refuted_candidates[0].evidence_quality must be one of: OBSERVED, INFERRED",
+    );
+    assertRefutedCandidateError(
+      staticRefutedCandidate({ evidence_method: "browser" }),
+      "refuted_candidates[0].evidence_method must be one of: runtime-probe, static-analysis, mixed",
+    );
+    assertRefutedCandidateError(
+      staticRefutedCandidate({ evidence_quality: "INFERRED" }),
+      "refuted_candidates[0].evidence_quality must be OBSERVED for a refuted candidate",
+    );
+  });
+
+  it("requires runtime command provenance for runtime and mixed evidence", () => {
+    assertRefutedCandidateError(
+      staticRefutedCandidate({
+        file: null,
+        evidence_method: "runtime-probe",
+        evidence_summary: "The focused regression passed.",
+      }),
+      "refuted_candidates[0].evidence_command is required for runtime-probe evidence",
+    );
+    assertRefutedCandidateError(
+      staticRefutedCandidate({
+        evidence_method: "mixed",
+        evidence_command: "npm run typecheck",
+        evidence_summary:
+          'Typecheck passed after source inspection (search: "parseQualityReport").',
+      }),
+      "refuted_candidates[0].evidence_exit_code is required for mixed evidence",
+    );
+  });
+
+  it("requires a file and semantic anchor for static and mixed evidence", () => {
+    assertRefutedCandidateError(
+      staticRefutedCandidate({ file: null }),
+      "refuted_candidates[0].file is required for static-analysis evidence",
+    );
+    assertRefutedCandidateError(
+      staticRefutedCandidate({
+        evidence_summary: "The parser calls rejectUnknownKeys before saving.",
+      }),
+      'refuted_candidates[0].evidence_summary must include a semantic anchor such as (search: "pattern") for static-analysis evidence',
+    );
+    assertRefutedCandidateError(
+      staticRefutedCandidate({
+        file: null,
+        evidence_method: "mixed",
+        evidence_command: "npm run typecheck",
+        evidence_exit_code: 0,
+      }),
+      "refuted_candidates[0].file is required for mixed evidence",
+    );
+    assertRefutedCandidateError(
+      staticRefutedCandidate({
+        evidence_method: "mixed",
+        evidence_command: "npm run typecheck",
+        evidence_exit_code: 0,
+        evidence_summary: "Typecheck passed after source inspection.",
+      }),
+      'refuted_candidates[0].evidence_summary must include a semantic anchor such as (search: "pattern") for mixed evidence',
+    );
+  });
+});
+
+/** Spawns the public source CLI validator against one saved report path. */
+function runQualityValidate(reportPath: string) {
+  return spawnSync(
+    process.execPath,
+    ["--import", "tsx", "src/cli/cli.ts", "quality", "validate", reportPath],
+    {
+      cwd: REPOSITORY_ROOT,
+      encoding: "utf8",
+    },
+  );
+}
+
+/**
+ * Writes one report body into a throwaway directory the public validator can open.
+ * Use when a test needs the command's real filesystem path instead of an in-memory object.
+ *
+ * @param body - report to serialise; a string is written verbatim so a malformed fixture stays malformed
+ * @returns the throwaway directory the caller must remove, and the report path to validate
+ */
+function writeQualityReportFixture(body: unknown): {
+  directory: string;
+  reportPath: string;
+} {
+  const directory = mkdtempSync(join(tmpdir(), "goat-flow-quality-validate-"));
+  const reportPath = join(directory, "report.json");
+  const serialised =
+    typeof body === "string" ? body : `${JSON.stringify(body, null, 2)}\n`;
+  writeFileSync(reportPath, serialised);
+  return { directory, reportPath };
+}
+
+/**
+ * Build one report the compatibility parser accepts and the current-report parser rejects.
+ * Use for the legacy half of every validate outcome; it omits only the provenance block.
+ *
+ * @param projectPath - project the report claims to describe, matched by the saver's ownership check
+ * @returns a report body with no `assessment_context`, so exactly one current-report rule fails
+ */
+function legacyQualityReport(projectPath: string) {
+  const { assessment_context: _assessmentContext, ...legacy } =
+    currentQualityReport(projectPath);
+  return legacy;
+}
+
+describe("quality validate", () => {
+  it("gives a current report an unqualified receipt", () => {
+    const fixture = writeQualityReportFixture(
+      currentQualityReport(resolve("quality-validate-current")),
+    );
+    try {
+      const result = runQualityValidate(fixture.reportPath);
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+      assert.equal(result.stdout.trim(), `OK ${fixture.reportPath}`);
+      // A current report has nothing to disclose, so the advisory stream stays empty for scripts.
+      assert.equal(result.stderr.trim(), "");
+    } finally {
+      rmSync(fixture.directory, { recursive: true, force: true });
+    }
+  });
+
+  it("labels a legacy-compatible report and names the rule it misses", () => {
+    const fixture = writeQualityReportFixture(
+      legacyQualityReport(resolve("quality-validate-legacy")),
+    );
+    try {
+      const result = runQualityValidate(fixture.reportPath);
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+      assert.equal(
+        result.stdout.trim(),
+        `OK LEGACY-COMPATIBLE ${fixture.reportPath}`,
+      );
+      // Naming the failed rule is what separates "old but readable" from "ready to save".
+      assert.match(
+        result.stderr,
+        /report\.assessment_context is required for current quality reports/u,
+      );
+    } finally {
+      rmSync(fixture.directory, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps the saver stricter than the validator for the same legacy bytes", () => {
+    const projectRoot = makeIgnoredQualityRoot();
+    const legacy = legacyQualityReport(projectRoot);
+    const fixture = writeQualityReportFixture(legacy);
+    try {
+      const validated = runQualityValidate(fixture.reportPath);
+      assert.equal(validated.status, 0, validated.stderr || validated.stdout);
+      assert.match(validated.stdout, /OK LEGACY-COMPATIBLE /u);
+
+      // The qualifier is only truthful while the saver still refuses the identical report.
+      const saved = runQualitySave(projectRoot, legacy);
+      assert.equal(saved.status, CLI_USAGE_EXIT_CODE);
+      assert.match(
+        saved.stderr,
+        /report\.assessment_context is required for current quality reports/u,
+      );
+    } finally {
+      rmSync(fixture.directory, { recursive: true, force: true });
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects a report both parsers refuse", () => {
+    const fixture = writeQualityReportFixture({
+      ...currentQualityReport(resolve("quality-validate-invalid")),
+      report_kind: "not-a-quality-report",
+    });
+    try {
+      const result = runQualityValidate(fixture.reportPath);
+      assert.equal(result.status, CLI_USAGE_EXIT_CODE);
+      assert.match(result.stderr, /quality validate: schema error in /u);
+      assert.ok(result.stderr.includes(fixture.reportPath));
+      assert.equal(result.stdout.trim(), "");
+    } finally {
+      rmSync(fixture.directory, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects unreadable input before either parser runs", () => {
+    const malformed = writeQualityReportFixture("not json");
+    try {
+      const invalidJson = runQualityValidate(malformed.reportPath);
+      assert.equal(invalidJson.status, CLI_USAGE_EXIT_CODE);
+      assert.match(invalidJson.stderr, /quality validate: invalid JSON in /u);
+
+      const missing = runQualityValidate(
+        join(malformed.directory, "absent.json"),
+      );
+      assert.equal(missing.status, CLI_USAGE_EXIT_CODE);
+      assert.match(missing.stderr, /quality validate: file not found: /u);
+    } finally {
+      rmSync(malformed.directory, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("quality save", () => {
   it("redacts, validates, and exclusively writes under the selected project", () => {
     const projectRoot = makeIgnoredQualityRoot();
@@ -456,30 +877,17 @@ describe("quality save", () => {
       createReportDirectory(directoryPath: string): void {
         // Example: another dashboard session completes its first save while this user is saving.
         if (competingReportPath === null) {
-          competingReportPath = persistQualityReportText(
-            {
-              projectPath: projectRoot,
-              rawText: JSON.stringify(
-                currentQualityReport(projectRoot, "Competing session"),
-              ),
-              sourceLabel: "competing draft",
-            },
-            { CLIError },
-          );
+          competingReportPath = persistCurrentQualityReport(projectRoot, {
+            CLIError,
+          });
         }
         mkdirSync(directoryPath);
       },
     };
 
     try {
-      const firstReportPath = persistQualityReportText(
-        {
-          projectPath: projectRoot,
-          rawText: JSON.stringify(
-            currentQualityReport(projectRoot, "First session"),
-          ),
-          sourceLabel: "first draft",
-        },
+      const firstReportPath = persistCurrentQualityReport(
+        projectRoot,
         firstSaveDependencies,
       );
 
@@ -514,15 +922,7 @@ describe("quality save", () => {
 
     try {
       assert.throws(
-        () =>
-          persistQualityReportText(
-            {
-              projectPath: projectRoot,
-              rawText: JSON.stringify(currentQualityReport(projectRoot)),
-              sourceLabel: "racing draft",
-            },
-            unsafeSaveDependencies,
-          ),
+        () => persistCurrentQualityReport(projectRoot, unsafeSaveDependencies),
         /must be a real project-local directory/u,
       );
       assert.equal(lstatSync(join(projectRoot, ".goat-flow")).isFile(), true);
@@ -560,18 +960,41 @@ describe("quality save", () => {
 
     try {
       assert.throws(
-        () =>
-          persistQualityReportText(
-            {
-              projectPath: projectRoot,
-              rawText: JSON.stringify(currentQualityReport(projectRoot)),
-              sourceLabel: "ancestor-swap draft",
-            },
-            unsafeSaveDependencies,
-          ),
+        () => persistCurrentQualityReport(projectRoot, unsafeSaveDependencies),
         /must be a real project-local directory/u,
       );
       assert.deepEqual(readdirSync(join(outsideRoot, "logs", "quality")), []);
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+      rmSync(outsideRoot, { recursive: true, force: true });
+    }
+  });
+
+  /**
+   * Fixture purpose: swaps the checked report directory at allocation and proves no report bytes escape.
+   * Filesystem side effects: mutates paths only inside the two temporary fixture roots.
+   */
+  it("fails closed when report allocation follows a swapped parent", () => {
+    const projectRoot = makeIgnoredQualityRoot();
+    const outsideRoot = mkdtempSync(join(tmpdir(), "quality-outside-"));
+    const qualityDirectory = join(projectRoot, ".goat-flow/logs/quality");
+    const unsafeSaveDependencies = {
+      CLIError,
+      /** Filesystem side effects: renames the checked parent, symlinks it outside, and allocates an empty report there. */
+      openReportFile(reportPath: string): number {
+        renameSync(qualityDirectory, `${qualityDirectory}-original`);
+        symlinkSync(outsideRoot, qualityDirectory, "dir");
+        return openSync(reportPath, "wx", 0o600);
+      },
+    };
+
+    try {
+      assert.throws(
+        () => persistCurrentQualityReport(projectRoot, unsafeSaveDependencies),
+        /must be a real project-local directory/u,
+      );
+      const [escapedFile] = readdirSync(outsideRoot);
+      assert.equal(lstatSync(join(outsideRoot, escapedFile ?? "")).size, 0);
     } finally {
       rmSync(projectRoot, { recursive: true, force: true });
       rmSync(outsideRoot, { recursive: true, force: true });

@@ -608,7 +608,7 @@ const settingsRulesMatched: HarnessCheck = {
       });
       if (stale.length === 0) {
         findings.push(
-          `${agentFacts.agent.id}: all permission rules use matched forms`,
+          `${agentFacts.agent.id}: managed ${settingsFile} permission rules use matched forms`,
         );
       } else {
         failures.push(

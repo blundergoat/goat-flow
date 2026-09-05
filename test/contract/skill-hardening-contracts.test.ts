@@ -1,7 +1,8 @@
 /**
- * Enforces the ADR-023 word budgets on shared skill references and playbooks.
- * These files are loaded into an agent's context on demand, so an oversized one costs the user
- * context they need for their actual task. The tiers here are the agreed ceilings.
+ * Enforce the agreed word budgets for skills, shared references, and playbooks.
+ *
+ * Agents load this guidance alongside task evidence, so oversized instructions reduce the context available for the user’s work.
+ * These contracts also require quality scores to include the complete configured context.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -34,9 +35,10 @@ describe("ADR-023 word budget tiers", () => {
     "release-notes.md",
     "skill-playbook-authoring-sync.md",
     "test-selection.md",
+    "writing-agent-facing-instructions.md",
     "writing-sentence-diagnostics.md",
     "writing-structure-diagnostics.md",
-    "writing-style.md",
+    "writing-human-facing-prose.md",
   ] as const;
 
   const FUNCTIONAL_SKILLS = [
@@ -92,6 +94,7 @@ describe("ADR-023 word budget tiers", () => {
     });
   });
 
+  // Each functional skill must be scored with all configured context so users do not receive a result based on truncated evidence.
   for (const skillName of FUNCTIONAL_SKILLS) {
     it(`scores ${skillName} against its complete configured context`, () => {
       const artifact = findArtifact(process.cwd(), `skill:${skillName}`);
@@ -198,12 +201,15 @@ describe("ADR-023 word budget tiers", () => {
   it("M02 playbooks stay within their rollout budgets", () => {
     const rolloutBudgets = [
       { filename: "naming-and-placement.md", cap: 2200 },
-      // Raised 2880 -> 2980 -> 3000 on 2026-08-17: first for width-resolution guidance and the two mechanical gate commands, then to swap
-      // "each tag adds meaning beyond its type" for the closed list of admissible contents, after a sweep found @param lines restating the signature.
+      // Keep width resolution and useful parameter/return guidance within the allocated comment-playbook budget.
       { filename: "code-comments.md", cap: 3000 },
+      // Agent-writing guidance keeps its tighter budget, including the project-authority rules authors need before editing instructions.
+      { filename: "writing-agent-facing-instructions.md", cap: 2900 },
     ] as const;
 
+    // Check each agreed rollout cap so expanded guidance leaves room for the user’s task context.
     for (const { filename, cap } of rolloutBudgets) {
+      // Canonical and installed copies share the same cap because agents can load either one.
       for (const playbookRoot of [
         "workflow/skills/playbooks",
         ".goat-flow/skill-docs/playbooks",
@@ -220,7 +226,11 @@ describe("ADR-023 word budget tiers", () => {
 
   it("M51 writing playbooks stay within their routed context budgets", () => {
     const routedWritingBudgets = [
-      { filename: "writing-style.md", minimum: 1700, maximum: 2000 },
+      {
+        filename: "writing-human-facing-prose.md",
+        minimum: 1700,
+        maximum: 2000,
+      },
       {
         filename: "writing-sentence-diagnostics.md",
         minimum: 900,
@@ -235,7 +245,9 @@ describe("ADR-023 word budget tiers", () => {
       },
     ] as const;
 
+    // Routed writing guides must retain useful instructions while staying within their allocated context range.
     for (const { filename, minimum, maximum } of routedWritingBudgets) {
+      // Both copies must stay within the same range so installation does not change the guidance budget.
       for (const playbookRoot of [
         "workflow/skills/playbooks",
         ".goat-flow/skill-docs/playbooks",

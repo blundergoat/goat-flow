@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # gruff-code-quality.sh
-# goat-flow-hook-version: 1.16.0
+# goat-flow-hook-version: 1.17.0
 # Runs the matching Gruff analyzer after a user or agent edits a supported file.
 # It attributes line/symbol findings to the edit while retaining file/project findings.
 # Package-local configs select monorepo targets; explicit overrides cover other layouts.
@@ -17,7 +17,7 @@ if (( BASH_VERSINFO[0] < 4 || (BASH_VERSINFO[0] == 4 && BASH_VERSINFO[1] < 4) ))
 fi
 
 FOOTER="For triage: consult .goat-flow/skill-docs/playbooks/gruff-code-quality.md"
-HOOK_VERSION="1.16.0"
+HOOK_VERSION="1.17.0"
 HOOK_RESULT_SCHEMA="goat-flow.hook-result.v1"
 SUPPORTED_TOOLS=" edit write multiedit apply_patch write_to_file replace_file_content multi_replace_file_content "
 SKIP_DIR_PATTERN='(^|/)(node_modules|vendor|\.goat-flow|dist|build|coverage|\.git|target|\.venv|\.mypy_cache|\.pytest_cache|\.ruff_cache)(/|$)'
@@ -1861,12 +1861,12 @@ process_file() {
     # on current builds is usually a config-schema rejection: the project's
     # `.<binary>.yaml` lacks the required `schemaVersion:` line, so `analyse`
     # exits non-zero with an error instead of findings. Relay gruff's own words
-    # (which name its fix, e.g. `<binary> init --force`) to the agent on stdout
-    # so the cause is visible, not buried under a generic note. The hook never
-    # edits the project's gruff config; that file is the project's to own.
+    # so the cause is visible, then bound any destructive upstream suggestion.
+    # The hook never edits the project's gruff config; that file is the project's to own.
     if [[ "$output" == *schemaVersion* ]]; then
       printf 'gruff-code-quality: %s could not analyse - its project config (.%s.yaml) was rejected. gruff reported:\n' "$binary" "$binary"
       printf '%s\n' "$output" | awk 'NR <= 12 { print "  " $0 }'
+      printf 'Safety: Do not run %s init --force in this project. Generate defaults in a fresh temporary directory, compare them with .%s.yaml, and merge deliberately.\n' "$binary" "$binary"
       return 0
     fi
     printf 'gruff-code-quality: %s exited %s with non-JSON output; changed-line filtering skipped\n' "$binary" "$status" >&2
@@ -2233,7 +2233,7 @@ emit_hook_result() {
     return 0
   fi
   # A minimal fixed envelope keeps parser loss visible without interpolating unsafe text.
-  printf '%s\n' '{"schema":"goat-flow.hook-result.v1","hookId":"gruff-code-quality","event":"post-tool","outcome":"unavailable","coverage":{"status":"none","attemptedUnits":0,"completedUnits":0,"skippedUnits":0},"reasonCode":"hook-unavailable","findings":[{"code":"result-parser-missing","message":"jq is unavailable, so Gruff could not emit validated feedback","target":"project"}],"execution":{"hookVersion":"1.16.0","provider":"claude","providerMode":"fallback","adapterName":"claude-post-tool","adapterVersion":"1","durationMs":0}}'
+  printf '%s\n' '{"schema":"goat-flow.hook-result.v1","hookId":"gruff-code-quality","event":"post-tool","outcome":"unavailable","coverage":{"status":"none","attemptedUnits":0,"completedUnits":0,"skippedUnits":0},"reasonCode":"hook-unavailable","findings":[{"code":"result-parser-missing","message":"jq is unavailable, so Gruff could not emit validated feedback","target":"project"}],"execution":{"hookVersion":"1.17.0","provider":"claude","providerMode":"fallback","adapterName":"claude-post-tool","adapterVersion":"1","durationMs":0}}'
 }
 
 main() {

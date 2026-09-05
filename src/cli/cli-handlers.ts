@@ -1,5 +1,6 @@
 /**
  * Routes parsed CLI commands through lazy handlers so unrelated commands avoid heavy imports.
+ *
  * User failures throw CLIError; report failures set process.exitCode so stdout can flush.
  * Use this layer when a command needs shared output and exit conventions.
  */
@@ -9,6 +10,7 @@ import type { AgentId, ProjectFacts } from "./types.js";
 import type { AuditReport, AuditScope, CheckResult } from "./audit/types.js";
 import { CLIError } from "./cli-error.js";
 import { writeOutput } from "./cli-output.js";
+import { handleClaimsCommand } from "./claims-command.js";
 import { handleDiagnosticsCommand } from "./diagnostics-command.js";
 import { handleStatsCommand } from "./stats-command.js";
 import {
@@ -22,6 +24,7 @@ import { handleInstallCommand } from "./install-command.js";
 import { handleReviewCommand } from "./review-validate.js";
 import { getPackageVersion } from "./paths.js";
 import { handleIndexCommand } from "./learning-loop-index/command.js";
+import { handleLearningLoopRecallCommand } from "./learning-loop-recall.js";
 import type { CandidacyResult } from "./quality/candidacy.js";
 import { handleQualityCommand as runQualityCommand } from "./quality/quality-command.js";
 import { handleRedactCommand } from "./redact-command.js";
@@ -88,7 +91,7 @@ interface MenuAction {
   key: string;
   label: string;
   command: "dashboard" | "install" | "setup" | "audit" | "status";
-  needsAgent: boolean;
+  requiresAgentSelection: boolean;
 }
 
 const MENU_ACTIONS: MenuAction[] = [
@@ -96,31 +99,31 @@ const MENU_ACTIONS: MenuAction[] = [
     key: "1",
     label: "Start dashboard",
     command: "dashboard",
-    needsAgent: false,
+    requiresAgentSelection: false,
   },
   {
     key: "2",
     label: "Install/update goat-flow files",
     command: "install",
-    needsAgent: true,
+    requiresAgentSelection: true,
   },
   {
     key: "3",
     label: "Generate setup prompt",
     command: "setup",
-    needsAgent: true,
+    requiresAgentSelection: true,
   },
   {
     key: "4",
     label: "Audit current project",
     command: "audit",
-    needsAgent: false,
+    requiresAgentSelection: false,
   },
   {
     key: "5",
     label: "Show project status",
     command: "status",
-    needsAgent: false,
+    requiresAgentSelection: false,
   },
 ];
 
@@ -193,6 +196,7 @@ async function promptForce(
 
 /**
  * Read all menu answers and build the command options to run.
+ *
  * Error behavior: throws CLIError with exit code 2 for an unrecognised menu choice, before any further question is asked, so the user is not walked
  * through a flow that cannot run.
  *
@@ -205,24 +209,27 @@ async function promptMenuCommand(
   readlineInterface: ReturnType<typeof createInterface>,
 ): Promise<ParsedCLI> {
   console.log(renderMenuText());
-  const choice = await readlineInterface.question("\nChoice [1] ");
-  const action = findMenuAction(choice || "1");
-  if (!action) {
+  const menuChoice = await readlineInterface.question("\nChoice [1] ");
+  const selectedAction = findMenuAction(menuChoice || "1");
+  // An unknown menu choice stops before asking for project or agent details that the CLI cannot use.
+  if (!selectedAction) {
     throw new CLIError("Unknown menu choice.", 2);
   }
 
   const projectPath = await promptProjectPath(readlineInterface);
-  const agent = action.needsAgent
+  const selectedAgent = selectedAction.requiresAgentSelection
     ? await promptAgent(readlineInterface)
     : options.agent;
   const shouldForce =
-    action.command === "install" ? await promptForce(readlineInterface) : false;
+    selectedAction.command === "install"
+      ? await promptForce(readlineInterface)
+      : false;
 
   return {
     ...options,
-    command: action.command,
+    command: selectedAction.command,
     projectPath,
-    agent,
+    agent: selectedAgent,
     shouldForce,
     shouldApply: false,
   };
@@ -256,18 +263,6 @@ async function handleStatusCommand(options: ParsedCLI): Promise<void> {
   const fs = createFS(options.projectPath);
   const result = classifyProjectState(fs, options.agent ?? undefined);
 
-  if (options.format === "json") {
-    writeOutput(
-      options,
-      JSON.stringify(
-        { path: options.projectPath, ...result, version: PACKAGE_VERSION },
-        null,
-        2,
-      ),
-    );
-    return;
-  }
-
   if (options.format === "markdown") {
     const lines = [
       `**Path:** ${options.projectPath}`,
@@ -276,6 +271,31 @@ async function handleStatusCommand(options: ParsedCLI): Promise<void> {
       `**Details:** ${result.details}`,
     ];
     writeOutput(options, lines.join("\n"));
+    return;
+  }
+
+  const {
+    buildManagedInstallEvidenceReport,
+    renderManagedInstallEvidenceText,
+  } = await import("./managed-install-evidence.js");
+  const managedInstallEvidence = buildManagedInstallEvidenceReport(
+    options.projectPath,
+  );
+
+  if (options.format === "json") {
+    writeOutput(
+      options,
+      JSON.stringify(
+        {
+          path: options.projectPath,
+          ...result,
+          version: PACKAGE_VERSION,
+          managedInstallEvidence,
+        },
+        null,
+        2,
+      ),
+    );
     return;
   }
 
@@ -295,6 +315,8 @@ async function handleStatusCommand(options: ParsedCLI): Promise<void> {
     `  State:   ${color}${result.state}${reset}`,
     `  Action:  ${result.action}`,
     `  Details: ${result.details}`,
+    "",
+    renderManagedInstallEvidenceText(managedInstallEvidence),
   ].join("\n");
   writeOutput(options, rendered);
 }
@@ -332,6 +354,7 @@ function writeMultiAgentSyncBanner(withDivider: boolean): void {
 
 /**
  * Handle the setup command: compose and render setup prompts per agent.
+ *
  * Error behavior: throws CLIError when the selected agent has no composable setup, so a user asking for an unsupported agent gets that message rather
  * than an empty prompt.
  */
@@ -410,7 +433,7 @@ async function handleAuditCommand(options: ParsedCLI): Promise<void> {
     denyMechanismEvidenceLevel: options.isTargetTrusted ? "full" : "static",
   });
 
-  const reportForRender = options.auditDetails
+  const reportForRender = options.includeAuditDetails
     ? report
     : stripAuditDetails(report);
 
@@ -444,6 +467,7 @@ async function handleQualityCommand(options: ParsedCLI): Promise<void> {
 
 /**
  * Handle `events tail`, reading the most recent local evidence-envelope events for the project.
+ *
  * Throws a usage CLIError (exit 2) for any subcommand other than `tail`.
  * Emits the events as a JSON array under `--format json`, otherwise one compact JSON object per line (JSONL) for piping.
  */
@@ -462,6 +486,7 @@ async function handleEventsCommand(options: ParsedCLI): Promise<void> {
 
 /**
  * Print the resolved manifest or run its `--check` CI gate.
+ *
  * Branches stay separate because check mode owns exit status while default only renders.
  * Both paths preserve the same format contract without mixing their outputs.
  */
@@ -539,9 +564,12 @@ const COMMAND_HANDLERS: Partial<
   quality: handleQualityCommand,
   events: handleEventsCommand,
   hooks: handleHooksCommand,
+  claims: handleClaimsCommand,
   skill: handleSkillCommand,
   manifest: handleManifestCommand,
   stats: handleStatsCommand,
+  recall: handleLearningLoopRecallCommand,
+  learn: handleLearnCommand,
   diagnostics: handleDiagnosticsCommand,
   index: handleIndexCommand,
   redact: handleRedactCommand,
@@ -551,6 +579,52 @@ const COMMAND_HANDLERS: Partial<
   dashboard: runDashboardCommand,
   info: handleInfoCommand,
 };
+
+/**
+ * Run the explicit learning-loop scaffold selected by the developer.
+ * Use after parsing has validated flag placement; it throws a usage error for incomplete programmatic calls and forwards writer failures.
+ */
+async function handleLearnCommand(options: ParsedCLI): Promise<void> {
+  // Missing authoring fields mean a programmatic caller bypassed normal parsing, so dispatch returns the same actionable usage contract.
+  if (
+    options.learnSubcommand !== "new" ||
+    options.learnEntryType === null ||
+    options.learnCategory === null ||
+    options.learnTitle === null
+  ) {
+    throw new CLIError(
+      "Usage: goat-flow learn new [project-path] --type <footgun|lesson|pattern> --category <bucket> --title <title> [flags]",
+      2,
+    );
+  }
+  const { runLearnScaffold } = await import("./learn-scaffold.js");
+  const result = runLearnScaffold({
+    projectRoot: options.projectPath,
+    entryType: options.learnEntryType,
+    category: options.learnCategory,
+    title: options.learnTitle,
+    evidencePaths: options.learnEvidencePaths,
+    searchLiterals: options.learnSearchLiterals,
+    evidenceKind: options.learnEvidenceKind,
+    shouldDryRun: options.shouldDryRun,
+  });
+  const output =
+    options.format === "json"
+      ? JSON.stringify(
+          {
+            command: "learn",
+            subcommand: "new",
+            targetPath: result.targetPath,
+            wasWritten: result.wasWritten,
+            warnings: result.warnings,
+            scaffold: result.skeleton,
+          },
+          null,
+          2,
+        )
+      : result.output;
+  writeOutput(options, output);
+}
 
 /** Route `skill new` authoring or read-only `skill doctor` diagnosis. */
 async function handleSkillCommand(options: ParsedCLI): Promise<void> {
@@ -605,20 +679,25 @@ async function handleSkillNewCommand(options: ParsedCLI): Promise<void> {
     );
   }
   const { runSkillNew, SkillNewInputError } = await import("./skill-author.js");
-  let result: Awaited<ReturnType<typeof runSkillNew>>;
+  let skillCreationResult: Awaited<ReturnType<typeof runSkillNew>>;
   try {
-    result = await runSkillNew(skillNewRequest(options));
-  } catch (err) {
-    if (err instanceof SkillNewInputError) {
-      throw new CLIError(err.message, 2);
+    skillCreationResult = await runSkillNew(skillNewRequest(options));
+  } catch (error) {
+    // Invalid `skill new` answers or flags become a usage message without an internal stack trace.
+    if (error instanceof SkillNewInputError) {
+      throw new CLIError(error.message, 2);
     }
-    throw err;
+    throw error;
   }
-  writeOutput(options, renderSkillNewResult(result, options.format === "json"));
+  writeOutput(
+    options,
+    renderSkillNewResult(skillCreationResult, options.format === "json"),
+  );
 }
 
 /**
  * Dispatch one parsed CLI command to its handler.
+ *
  * The handler table is consulted first; setup preview and apply are routed separately because both use the deterministic install path rather than
  * prompt composition.
  *

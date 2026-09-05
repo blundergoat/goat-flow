@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.16.0"
+goat-flow-reference-version: "1.17.0"
 ---
 # Code Comments
 
@@ -47,9 +47,9 @@ Then apply a separate layer lens. The reader selects who needs the fact; the lay
 All comments use plain English for the reader and layer selected above. These rules are conditions,
 not quotas; apply a rule only when its stated contract exists.
 
+This playbook rejects mechanical narration, not comments above branches or loops.
 A request to cover every method, branch, loop, catch, or null/empty path means inspect every candidate;
-it does not require a comment where no verified hidden reader information exists. A 150-character
-layout is a ceiling, not a target: never add filler or merge distinct points to approach it.
+it does not require a comment where no verified hidden reader information exists.
 
 1. **Doc comments where project or language canon requires them, for public/exported APIs, and for
    file/module/class boundaries with a non-obvious contract.** Say what the unit does, when to use it,
@@ -69,12 +69,8 @@ layout is a ceiling, not a target: never add filler or merge distinct points to 
 5. **Journey context only when useful.** Add verified arrival context only when it changes the
    reader's interpretation and remains hidden from the code.
 
-Tighten without deleting `@param`, `@return`, or `@returns`. Fix stale comments in scope; outside the authorized
-scope, report or defer it and do not delete it. The project or language formatter's enforced width governs. Resolve it
-from `.editorconfig`, lint, then a formatter that actually reflows comments. When neither defines a
-width, 150 characters is the fallback ceiling.
-The shortest complete useful comment wins; never split one point across lines merely to stay short.
-Before a width sweep, measure the longest existing comment line; many violations can expose a wrong assumed limit.
+Preserve current valid tags. Remove or repair a tag only when it is stale, invalid, or names a removed parameter.
+Fix stale comments in scope; outside the authorized scope, report or defer it and do not delete it.
 
 Plain English removes jargon, not precision. Keep exact verbs (`remove`, `compile`, `mask`), technical
 qualifiers (`case-insensitive`) plus a short why, and the code's noun (`seed`, `sidecar`) unless it
@@ -129,32 +125,61 @@ Reserve PHP file-level PHPDoc for classless scripts, bootstrap/config, or genera
   it never removes a separately required description. A scalar, optional, configured, or side-effectful
   input is not pure DI and keeps its tag.
 
-When a doc comment is verbose, tighten the prose; a `@param`, `@return`, or `@returns` line is never the thing you cut.
+When a doc comment is verbose, tighten its prose while preserving every current valid tag; repair or remove only tags that no longer describe the code.
 
-## Shape of a Comment Block
+## Width and Shape of a Comment Block
 
 Description budgets remain 3-8 content lines for a class and 1-3 for a method; tags are separate. Bullets count as content, while blank separator lines do not. Including separators, allow at most 10 physical lines for a class and 4 physical lines for a method.
 
-- Put one complete point per line when it fits. The applicable formatter or fallback ceiling never rewards filler; cut a nonessential clause before compressing a sentence into a fragment.
+The project or language formatter's enforced width governs.
+Resolve it from `.editorconfig`, lint, then a formatter that actually reflows comments.
+When neither defines a width, the 150-character fallback is a ceiling, not a target.
+
+Do not hard-wrap at an arbitrary narrower column.
+Keep one complete point on one line when it fits.
+The shortest complete useful comment wins; never split one point across lines merely to stay short.
+
+Never add filler or merge distinct points to approach the ceiling.
+Before a width sweep, measure the longest existing comment line; many violations can expose a wrong assumed limit.
+
 - Never use more than three consecutive prose lines. Separate distinct prose groups with a blank line.
 - Use bullets only when points are genuinely enumerable. A longer block may use one or two lead lines, a blank, then one lead line and 3-5 bullets.
 - Shape serves meaning: never cut a qualifier, limitation, tenancy rule, or user consequence to meet the layout.
 
 ## Context Comments (tier 3)
 
-A branch with a reader-meaningful consequence gets one local sentence stating the trigger plus
-consequence. This applies to `if`, loops, chained transformations, null/empty fallbacks, `else`,
-`switch` / `case`, `match`, ternaries, and default returns. A branch whose only honest line restates
-code gets none. Route a naming or placement defect through [`naming-and-placement.md`](./naming-and-placement.md)
-and report or defer remedies outside the current authorization.
+A branch with a reader-meaningful consequence gets one local sentence stating the trigger plus consequence.
+This applies to `if`, loops, chained transformations, null/empty fallbacks, `else`, `switch` / `case`, `match`, ternaries, and default returns.
+A branch whose only honest line restates code gets none.
 
 The line must translate, not restate; `// check if invoice is paid` is banned.
-Name the acting component only when ownership or sequence changes how the reader interprets the consequence; omit it
-when code already makes the actor clear.
+Name the acting component only when ownership or sequence changes how the reader interprets the consequence; otherwise omit it.
 
-The consequence matters, not sentence shape. Omit a line when a returned name states the outcome.
-Scrutinize compound conditions, the default, and fail-closed paths; when prose is warranted, name the
-product rule and user outcome instead of repeating a constant or saying "validate input".
+Scrutinize compound conditions, defaults, and fail-closed paths for hidden product rules or reader outcomes.
+Route naming or placement defects through [`naming-and-placement.md`](./naming-and-placement.md).
+Report or defer remedies outside the current authorization.
+
+**Illustrative context examples (not incident evidence).**
+
+```ts
+// Bad: repeats exactly what the code says.
+if (missingPlaybooks.length === 0) return [];
+
+// A pointer is orientation prose, not a promise to enumerate every installed playbook.
+if (documentedPlaybooks === null) return [];
+
+// Bad: loops through every snapshot.
+for (const snapshot of snapshots) assertDirectoryIdentity(snapshot);
+
+// A changed ancestor invalidates claim admission because the marker may no longer belong to the project the user selected.
+for (const snapshot of snapshots) assertDirectoryIdentity(snapshot);
+
+// Bad: checks whether the report is null.
+if (report === null) return freshAssessment();
+
+// No earlier assessment exists, so findings in this run have no comparison baseline.
+if (report === null) return freshAssessment();
+```
 
 ## Catch Comments
 
@@ -199,7 +224,7 @@ The next reader cannot use these; fix them when already editing the surrounding 
 
 - **Restating the mechanics.** `i++; // increment i`, `// check if invoice is paid`. Context lines must add reader meaning, not narrate syntax.
 - **One sentence template for every line.** Drop what code already states.
-- **Stripping tags while tightening.** Concision never removes `@param`, `@return`, or `@returns` lines.
+- **Stripping valid tags while tightening.** Concision never removes a tag that still describes the code.
 - **Codebase jargon.** Translate it for the selected reader.
 - **Compensating prose.** A comment explaining what a better name, type, or structure would show. This
   is compensating prose, not a remedy. Make an already-authorised code change or report or defer the
@@ -242,9 +267,6 @@ Comments ship with code and get indexed. Never include secrets, tokens, API keys
 
 **A linter rejects the house doc format.** Prefer the language's or project's native syntax. Suppress only a documented false positive, with rationale, rather than restating types.
 
-**A branch comment feels like noise.** If the code already states the complete outcome, omit it. If a
-reader consequence remains hidden, state the verified trigger and consequence once.
-
 ## Verification Gate
 
 Before claiming comment work is done, confirm the naming route is complete and check the remaining prose. **[static]** is mechanical; **[judge]** requires semantic review.
@@ -277,5 +299,5 @@ Fix a confirmed applicable failure before merging.
 ## Related References
 
 - [`naming-and-placement.md`](./naming-and-placement.md) - responsibility-first placement and verified identifier claims before comment work.
-- `writing-style.md` - comments and docstrings follow this playbook; other human-read prose follows `writing-style.md`.
+- `writing-human-facing-prose.md` - comments and docstrings follow this playbook; other human-read prose follows `writing-human-facing-prose.md`.
 - Sibling playbooks share the same scaffold; project instruction files may point here as the canonical comment policy.

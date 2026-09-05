@@ -6,13 +6,28 @@
  *
  * Install handlers use the same result to block ambiguous overwrites and record recovery state.
  */
-import { posix } from "node:path";
+import {
+  closeSync,
+  fsyncSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { dirname, posix } from "node:path";
 
 import { getPackageVersion, getTemplatePath } from "./paths.js";
 import { getSkillFiles, loadManifest } from "./manifest/manifest.js";
 import {
-  readManagedInstallBaseline,
-  writeManagedInstallState,
+  canonicalManagedInstallStateBytes,
+  createManagedInstallStateRow,
+  managedInstallStatePath,
+  readManagedInstallStateFacade,
+  writeManagedInstallStateV2,
+  type ManagedInstallStateFacade,
+  type ManagedInstallStateV2,
 } from "./managed-setup-state.js";
 import {
   collectProjectWriteDefinitions,
@@ -32,7 +47,7 @@ import type {
   InstallerInvocation,
   InstallerInvocationError,
 } from "./install-invocation.js";
-import type { AgentId } from "./types.js";
+import { KNOWN_AGENT_IDS, type AgentId } from "./types.js";
 
 export {
   managedInstallStatePath,
@@ -41,6 +56,8 @@ export {
 
 const MANAGED_SETUP_PREVIEW_SCHEMA =
   "goat-flow.managed-setup-preview.v2" as const;
+const MANAGED_INSTALL_STATE_V1_CUTOVER_SCHEMA =
+  "goat-flow.install-state.v1-cutover" as const;
 const BLOCKING_STATES = new Set<ManagedSetupFileState>([
   "both-changed",
   "missing",
@@ -49,7 +66,7 @@ const BLOCKING_STATES = new Set<ManagedSetupFileState>([
 
 const PREVIEW_LIMITS = [
   "Removals - retired templates, deprecated skills, legacy hook copies, and pre-1.9 path migrations - are cleanup rather than writes and are not enumerated here.",
-  "Direct workflow/install-goat-flow.sh execution does not use this CLI admission gate.",
+  "Direct workflow/install-goat-flow.sh execution skips CLI admission, post-write verification, and install-state recording.",
 ] as const;
 
 /**
@@ -94,7 +111,237 @@ type ManagedSetupAction =
 type ManagedSetupVerdict = "ready" | "warning" | "blocked";
 
 /** Whether a usable previous-install baseline was available for comparison. */
-export type ManagedSetupBaselineStatus = "loaded" | "missing" | "invalid";
+type ManagedSetupBaselineStatus =
+  | "loaded"
+  | "missing"
+  | "invalid"
+  | "malformed-blocking"
+  | "conflicting"
+  | "cutover-incompatible";
+
+/**
+ * Hashless compatibility marker replacing one agent-specific v1 hash store.
+ * Invariant: it names only its path-derived known agent and managed.json; it never retains hashes or target bytes.
+ */
+interface ManagedInstallCutoverMarker {
+  schemaVersion: typeof MANAGED_INSTALL_STATE_V1_CUTOVER_SCHEMA;
+  agent: AgentId;
+  managedState: "managed.json";
+  legacyEvidence: "migrated" | "absent";
+}
+
+/**
+ * Complete marker inspection for one persisted v2 authority.
+ * Invariant: every known agent appears exactly once in either migrated, absent, or incompatible evidence.
+ */
+interface ManagedInstallCutoverEvidence {
+  migratedAgents: AgentId[];
+  absentAgents: AgentId[];
+  incompatibleAgents: AgentId[];
+}
+
+/**
+ * Build the only accepted bytes for one known-agent cutover marker.
+ * Invariant: field order, two-space indentation, and one trailing newline are deterministic for old-reader refusal.
+ */
+function managedInstallCutoverMarkerBytes(
+  agent: AgentId,
+  legacyEvidence: ManagedInstallCutoverMarker["legacyEvidence"],
+): string {
+  const marker: ManagedInstallCutoverMarker = {
+    schemaVersion: MANAGED_INSTALL_STATE_V1_CUTOVER_SCHEMA,
+    agent,
+    managedState: "managed.json",
+    legacyEvidence,
+  };
+  return `${JSON.stringify(marker, null, 2)}\n`;
+}
+
+/**
+ * Inspect all known marker paths without treating their former v1 hashes as authority.
+ * Error behavior: reports marker read failures as repairable incompatible evidence instead of trusting partial bytes.
+ */
+function readManagedInstallCutoverEvidence(
+  projectPath: string,
+): ManagedInstallCutoverEvidence {
+  const migratedAgents: AgentId[] = [];
+  const absentAgents: AgentId[] = [];
+  const incompatibleAgents: AgentId[] = [];
+  for (const agent of KNOWN_AGENT_IDS) {
+    const relativePath = `.goat-flow/install-state/${agent}.json`;
+    const target = readManagedTargetEvidence(projectPath, relativePath);
+    if (target.status !== "regular") {
+      incompatibleAgents.push(agent);
+      continue;
+    }
+    let markerBytes: string;
+    try {
+      markerBytes = readFileSync(managedInstallStatePath(projectPath, agent), {
+        encoding: "utf-8",
+        flag: "r",
+      });
+    } catch {
+      incompatibleAgents.push(agent);
+      continue;
+    }
+    if (markerBytes === managedInstallCutoverMarkerBytes(agent, "migrated")) {
+      migratedAgents.push(agent);
+    } else if (
+      markerBytes === managedInstallCutoverMarkerBytes(agent, "absent")
+    ) {
+      absentAgents.push(agent);
+    } else {
+      incompatibleAgents.push(agent);
+    }
+  }
+  return { migratedAgents, absentAgents, incompatibleAgents };
+}
+
+/** Return every agent named by retained legacy provenance in canonical v2 rows. */
+function legacyProvenanceAgents(state: ManagedInstallStateV2): AgentId[] {
+  const agents = new Set<AgentId>();
+  for (const row of state.files) {
+    if (row.provenance.kind !== "legacy-v1-bootstrap") continue;
+    for (const observation of row.provenance.observations) {
+      agents.add(observation.agent);
+    }
+  }
+  return [...agents];
+}
+
+/**
+ * Atomically replace one known marker without following a non-regular destination.
+ * Side effect: writes one private adjacent filesystem temp file, flushes it, and renames it over the marker.
+ * Error behavior: throws on unsafe destinations or failed atomic publication; the prior marker remains authoritative when replacement does not finish.
+ */
+function writeManagedInstallCutoverMarker(
+  projectPath: string,
+  agent: AgentId,
+  legacyEvidence: ManagedInstallCutoverMarker["legacyEvidence"],
+): void {
+  const relativePath = `.goat-flow/install-state/${agent}.json`;
+  const markerPath = managedInstallStatePath(projectPath, agent);
+  const markerBytes = managedInstallCutoverMarkerBytes(agent, legacyEvidence);
+  const currentTarget = readManagedTargetEvidence(projectPath, relativePath);
+  if (currentTarget.status === "regular") {
+    try {
+      if (readFileSync(markerPath, "utf-8") === markerBytes) return;
+    } catch {
+      throw new Error(`Could not read ${relativePath} before cutover.`);
+    }
+  } else if (currentTarget.status !== "missing") {
+    throw new Error(`${relativePath} must be a safe regular file.`);
+  }
+
+  const temporaryPath = `${markerPath}.tmp-${process.pid}`;
+  mkdirSync(dirname(markerPath), { recursive: true });
+  let temporaryDescriptor: number | null = null;
+  try {
+    rmSync(temporaryPath, { force: true });
+    temporaryDescriptor = openSync(temporaryPath, "wx", 0o600);
+    writeFileSync(temporaryDescriptor, markerBytes, "utf-8");
+    fsyncSync(temporaryDescriptor);
+    closeSync(temporaryDescriptor);
+    temporaryDescriptor = null;
+    renameSync(temporaryPath, markerPath);
+  } catch (error) {
+    if (temporaryDescriptor !== null) closeSync(temporaryDescriptor);
+    try {
+      rmSync(temporaryPath, { force: true });
+    } catch (cleanupError) {
+      // Preserve the publication failure as primary while retaining cleanup evidence for diagnostics.
+      if (error instanceof Error && error.cause === undefined) {
+        error.cause = cleanupError;
+      }
+    }
+    throw error;
+  }
+}
+
+/**
+ * Recover the set of agents whose predecessor evidence must be labelled migrated.
+ * Invariant: persisted v2 rows and exact existing markers outrank former v1 bytes; receipt-free partial bootstrap may use only regular-file presence.
+ */
+function managedInstallMigratedAgents(
+  projectPath: string,
+  facade: ManagedInstallStateFacade,
+  state: ManagedInstallStateV2,
+): Set<AgentId> {
+  const migratedAgents = new Set<AgentId>([
+    ...facade.legacyAgents,
+    ...legacyProvenanceAgents(state),
+  ]);
+  if (facade.source !== "v2") return migratedAgents;
+
+  const existingEvidence = readManagedInstallCutoverEvidence(projectPath);
+  for (const agent of existingEvidence.migratedAgents) {
+    migratedAgents.add(agent);
+  }
+  if (state.receipts.length > 0) return migratedAgents;
+
+  // A receipt-free managed.json can be the recoverable first half of bootstrap;
+  // regular incompatible files are labelled migrated without reading their hashes as authority.
+  for (const agent of existingEvidence.incompatibleAgents) {
+    const target = readManagedTargetEvidence(
+      projectPath,
+      `.goat-flow/install-state/${agent}.json`,
+    );
+    if (target.status === "regular") migratedAgents.add(agent);
+  }
+  return migratedAgents;
+}
+
+/**
+ * Publish or repair the receipt-free v2 cutover while the caller owns every state claim.
+ * The two-phase order exists because any interruption must leave one authoritative v2 baseline before old readers are disabled path by path.
+ * Invariant: managed.json is published before every known agent path becomes an exact hashless marker, and no receipt is invented during bootstrap.
+ * Side effects: writes managed.json first, then atomically replaces all known v1 paths with hashless markers.
+ * Error behavior: throws before Bash can mutate a target; a published receipt-free state remains recoverable when a later marker write fails.
+ *
+ * @param projectPath - selected target root whose complete state paths are already held by the caller's write claims
+ */
+export function prepareManagedInstallStateForApply(projectPath: string): void {
+  const facade = readManagedInstallStateFacade(projectPath);
+  if (
+    facade.status === "malformed-blocking" ||
+    facade.status === "conflicting"
+  ) {
+    throw new Error(facade.error ?? "Managed install state blocks cutover.");
+  }
+  const state: ManagedInstallStateV2 = facade.state ?? {
+    schemaVersion: "goat-flow.install-state.v2",
+    files: [],
+    receipts: [],
+  };
+  if (facade.source !== "v2") {
+    writeManagedInstallStateV2(projectPath, state);
+  }
+
+  const migratedAgents = managedInstallMigratedAgents(
+    projectPath,
+    facade,
+    state,
+  );
+  for (const agent of KNOWN_AGENT_IDS) {
+    writeManagedInstallCutoverMarker(
+      projectPath,
+      agent,
+      migratedAgents.has(agent) ? "migrated" : "absent",
+    );
+  }
+}
+
+/** Verified target bytes whose next managed baseline could not be persisted. */
+export class ManagedInstallStateRecordError extends Error {
+  readonly writeError: unknown;
+
+  /** Preserve the typed failure boundary without exposing filesystem details to CLI users. */
+  constructor(writeError: unknown) {
+    super("Verified managed files could not be recorded in install state.");
+    this.name = "ManagedInstallStateRecordError";
+    this.writeError = writeError;
+  }
+}
 
 /** Update policy for one destination; only system-owned rows carry an exact-copy template. */
 type ManagedSetupOwnership = "system-owned" | "user-owned" | "generated";
@@ -379,7 +626,8 @@ function loadedBaselineProtectsExistingDifferentTarget(
   newExpectedSha256: string | null,
 ): boolean {
   return (
-    baselineStatus === "loaded" &&
+    (baselineStatus === "loaded" ||
+      baselineStatus === "cutover-incompatible") &&
     oldExpectedSha256 === null &&
     currentTarget.status === "regular" &&
     newExpectedSha256 !== null &&
@@ -569,8 +817,14 @@ function previewVerdict(
   files: readonly ManagedSetupPreviewFile[],
   baselineStatus: ManagedSetupBaselineStatus,
 ): ManagedSetupVerdict {
-  // Corrupt baseline data cannot authorize an overwrite even if current bytes happen to look safe.
-  if (baselineStatus === "invalid") return "blocked";
+  // Malformed or contradictory global history cannot authorize an overwrite even when current bytes happen to look safe.
+  if (
+    baselineStatus === "invalid" ||
+    baselineStatus === "malformed-blocking" ||
+    baselineStatus === "conflicting"
+  ) {
+    return "blocked";
+  }
   // Every destination belongs to the install write set, so an unsafe path blocks before Bash starts.
   if (
     files.some(
@@ -589,6 +843,168 @@ function previewVerdict(
 }
 
 /**
+ * Read one selection-independent baseline and layer marker compatibility over v2 rows.
+ * Invariant: selected-agent input never changes the expected hash map or global bootstrap outcome.
+ * Error behavior: target-controlled failures remain non-throwing status and safe diagnostic fields.
+ *
+ * @param projectPath - selected project root whose complete install-state directory supplies evidence
+ * @returns canonical facade plus marker compatibility; malformed input remains a blocking result
+ */
+export function readManagedSetupV2Baseline(projectPath: string): {
+  facade: ManagedInstallStateFacade;
+  status: ManagedInstallStateFacade["status"] | "cutover-incompatible";
+  cutoverEvidence: ManagedInstallCutoverEvidence | null;
+  error: string | null;
+} {
+  const facade = readManagedInstallStateFacade(projectPath);
+  if (facade.source !== "v2" || facade.state === null) {
+    return {
+      facade,
+      status: facade.status,
+      cutoverEvidence: null,
+      error: facade.error,
+    };
+  }
+  const cutoverEvidence = readManagedInstallCutoverEvidence(projectPath);
+  if (cutoverEvidence.incompatibleAgents.length === 0) {
+    return { facade, status: facade.status, cutoverEvidence, error: null };
+  }
+  return {
+    facade,
+    status: "cutover-incompatible",
+    cutoverEvidence,
+    error: `Managed install cutover markers are incomplete or incompatible for ${cutoverEvidence.incompatibleAgents.join(", ")}.`,
+  };
+}
+
+/** One receipt mismatch and the path it affects, when the mismatch is path-specific. */
+interface ManagedReceiptProblem {
+  path: string | null;
+  reason: string;
+}
+
+/**
+ * Check the selected receipt against its exact current path, row, generation, and target-byte set.
+ * Invariant: an absent receipt has no problems, while every mismatch in a present receipt stays available for user-facing status evidence.
+ *
+ * @param state - canonical v2 state containing the receipt and referenced row generations
+ * @param files - current selected-agent preview rows used for exact path and target-byte checks
+ * @param selectedAgent - agent whose stored receipt is evaluated; absence produces no problems
+ * @returns every authority-removing mismatch, including its path when the reason is path-specific
+ */
+export function selectedManagedReceiptProblems(
+  state: ManagedInstallStateV2,
+  files: readonly ManagedSetupPreviewFile[],
+  selectedAgent: AgentId,
+): ManagedReceiptProblem[] {
+  const selectedReceipt = state.receipts.find(
+    (receipt) => receipt.agent === selectedAgent,
+  );
+  if (selectedReceipt === undefined) return [];
+
+  const selectedFiles = files.filter(
+    (file) =>
+      file.ownership === "system-owned" && file.newExpectedSha256 !== null,
+  );
+  const rows = new Map(state.files.map((row) => [row.path, row]));
+  const references = new Map(
+    selectedReceipt.files.map((reference) => [reference.path, reference]),
+  );
+  const selectedPaths = new Set(selectedFiles.map((file) => file.path));
+  const problems: ManagedReceiptProblem[] = [];
+  for (const reference of selectedReceipt.files) {
+    if (!selectedPaths.has(reference.path)) {
+      problems.push({
+        path: reference.path,
+        reason: `Receipt references path ${reference.path}, which is not in the current managed path set for ${selectedAgent}.`,
+      });
+    }
+  }
+  for (const file of selectedFiles) {
+    const row = rows.get(file.path);
+    const reference = references.get(file.path);
+    if (reference === undefined) {
+      problems.push({
+        path: file.path,
+        reason: `Receipt does not reference current managed path ${file.path}.`,
+      });
+      continue;
+    }
+    if (row === undefined) {
+      problems.push({
+        path: file.path,
+        reason: `Receipt references missing managed-state row ${file.path}.`,
+      });
+      continue;
+    }
+    if (reference.generation !== row.generation) {
+      problems.push({
+        path: file.path,
+        reason: `Receipt generation no longer matches managed-state row ${file.path}.`,
+      });
+    }
+    if (file.currentStatus !== "regular") {
+      problems.push({
+        path: file.path,
+        reason: `Managed target ${file.path} is ${file.currentStatus}, not a safe regular file.`,
+      });
+    } else if (file.currentSha256 !== row.expectedSha256) {
+      problems.push({
+        path: file.path,
+        reason: `Current target bytes no longer match managed-state row ${file.path}.`,
+      });
+    }
+  }
+  return problems;
+}
+
+/**
+ * Derive every stale receipt visible during one selected-agent preview.
+ * Invariant: row generations, package version, markers, exact selected path set, and current selected bytes all participate without changing row authority.
+ */
+function managedInstallStaleReceiptAgents(
+  baseline: ReturnType<typeof readManagedSetupV2Baseline>,
+  files: readonly ManagedSetupPreviewFile[],
+  selectedAgent: AgentId,
+  goatFlowVersion: string,
+): AgentId[] {
+  const state = baseline.facade.state;
+  if (state === null) return [];
+  const staleAgents = new Set<AgentId>(baseline.facade.staleReceiptAgents);
+  for (const receipt of state.receipts) {
+    if (receipt.goatFlowVersion !== goatFlowVersion) {
+      staleAgents.add(receipt.agent);
+    }
+  }
+  for (const agent of baseline.cutoverEvidence?.incompatibleAgents ?? []) {
+    if (state.receipts.some((receipt) => receipt.agent === agent)) {
+      staleAgents.add(agent);
+    }
+  }
+
+  if (selectedManagedReceiptProblems(state, files, selectedAgent).length > 0) {
+    staleAgents.add(selectedAgent);
+  }
+  return KNOWN_AGENT_IDS.filter((agent) => staleAgents.has(agent));
+}
+
+/** Add global-state and stale-receipt diagnostics; invariant: limits expose no raw target bytes. */
+function appendManagedInstallPreviewLimits(
+  limits: string[],
+  baseline: ReturnType<typeof readManagedSetupV2Baseline>,
+  staleReceiptAgents: readonly AgentId[],
+): void {
+  if (baseline.error !== null) {
+    limits.push(`Install state is ${baseline.status}: ${baseline.error}`);
+  }
+  if (staleReceiptAgents.length > 0) {
+    limits.push(
+      `Install receipt evidence is stale for: ${staleReceiptAgents.join(", ")}.`,
+    );
+  }
+}
+
+/**
  * Build a hash-only managed setup preview for one selected project and agent.
  * Use before rendering dry-run output or admitting the existing installer.
  *
@@ -604,7 +1020,8 @@ export function buildManagedSetupPreview(
   authority: ManagedSetupAuthority = NO_MANAGED_SETUP_AUTHORITY,
   pendingMigrations: ReadonlyMap<string, string> = new Map(),
 ): ManagedSetupPreview {
-  const baseline = readManagedInstallBaseline(projectPath, agent);
+  const baseline = readManagedSetupV2Baseline(projectPath);
+  const goatFlowVersion = getPackageVersion();
   const currentTemplates = collectManagedTemplates(agent);
   const files: ManagedSetupPreviewFile[] = [];
   const currentTemplatePaths = new Set<string>();
@@ -614,7 +1031,7 @@ export function buildManagedSetupPreview(
     currentTemplatePaths.add(template.path);
     // No prior hash means the user sees first-install or unmanaged behavior, never an invented baseline.
     const oldExpectedSha256 =
-      baseline.expectedHashes.get(template.path) ?? null;
+      baseline.facade.expectedHashes.get(template.path) ?? null;
     files.push(
       buildPreviewFile(
         template.path,
@@ -628,7 +1045,7 @@ export function buildManagedSetupPreview(
   }
 
   // Baseline-only paths remain on disk unless the user later chooses a separate cleanup action.
-  for (const [managedPath, expectedSha256] of baseline.expectedHashes) {
+  for (const [managedPath, expectedSha256] of baseline.facade.expectedHashes) {
     // Current templates were already classified, so only retired baseline paths remain here.
     if (currentTemplatePaths.has(managedPath)) continue;
     files.push(
@@ -660,15 +1077,18 @@ export function buildManagedSetupPreview(
   files.sort((left, right) => left.path.localeCompare(right.path));
 
   const limits: string[] = [...PREVIEW_LIMITS];
-  // Invalid local state is surfaced without leaking its raw body into durable output.
-  if (baseline.error !== null) {
-    limits.push(`Install state is invalid: ${baseline.error}`);
-  }
+  const staleReceiptAgents = managedInstallStaleReceiptAgents(
+    baseline,
+    files,
+    agent,
+    goatFlowVersion,
+  );
+  appendManagedInstallPreviewLimits(limits, baseline, staleReceiptAgents);
   return {
     schemaVersion: MANAGED_SETUP_PREVIEW_SCHEMA,
     coverage: "install-write-set",
     agent,
-    goatFlowVersion: getPackageVersion(),
+    goatFlowVersion,
     baselineStatus: baseline.status,
     verdict: previewVerdict(files, baseline.status),
     limits,
@@ -704,6 +1124,74 @@ export function renderManagedSetupPreviewText(
   for (const limit of preview.limits) lines.push(`  - ${limit}`);
   return lines.join("\n");
 }
+/**
+ * Build the one post-verification state candidate without mutating persisted evidence.
+ * Invariant: only selected paths whose current bytes equal the incoming hash receive verified provenance, and the selected receipt changes only when
+ * every selected exact-copy path is verified. Rows and receipts outside the selected path set remain logically unchanged.
+ * Error behavior: throws if verified-path evidence cannot resolve to the row generation required by its receipt reference.
+ */
+function buildManagedInstallReceiptCandidate(
+  state: ManagedInstallStateV2,
+  preview: ManagedSetupPreview,
+): ManagedInstallStateV2 {
+  const selectedFiles = preview.files.filter(
+    (file) =>
+      file.ownership === "system-owned" && file.newExpectedSha256 !== null,
+  );
+  const rows = new Map(state.files.map((row) => [row.path, row]));
+  for (const file of selectedFiles) {
+    if (file.newExpectedSha256 === null) continue;
+    if (
+      file.currentStatus !== "regular" ||
+      file.currentSha256 !== file.newExpectedSha256
+    ) {
+      continue;
+    }
+    rows.set(
+      file.path,
+      createManagedInstallStateRow({
+        path: file.path,
+        expectedSha256: file.newExpectedSha256,
+        provenance: {
+          kind: "verified-install",
+          goatFlowVersion: preview.goatFlowVersion,
+        },
+      }),
+    );
+  }
+
+  const allSelectedPathsVerified = selectedFiles.every(
+    (file) =>
+      file.currentStatus === "regular" &&
+      file.currentSha256 === file.newExpectedSha256,
+  );
+  const receipts = [...state.receipts];
+  if (allSelectedPathsVerified) {
+    const selectedReceipt = {
+      agent: preview.agent,
+      goatFlowVersion: preview.goatFlowVersion,
+      files: selectedFiles.map((file) => {
+        const row = rows.get(file.path);
+        if (row === undefined) {
+          throw new Error(
+            `Verified managed path ${file.path} has no state row.`,
+          );
+        }
+        return { path: row.path, generation: row.generation };
+      }),
+    };
+    const previousReceiptIndex = receipts.findIndex(
+      (receipt) => receipt.agent === preview.agent,
+    );
+    if (previousReceiptIndex === -1) receipts.push(selectedReceipt);
+    else receipts[previousReceiptIndex] = selectedReceipt;
+  }
+  return {
+    schemaVersion: state.schemaVersion,
+    files: [...rows.values()],
+    receipts,
+  };
+}
 
 /**
  * Verify the installer wrote every managed template before recording the next baseline.
@@ -711,6 +1199,7 @@ export function renderManagedSetupPreviewText(
  * @param projectPath - selected target root; empty is invalid upstream and records nothing
  * @param agent - installed agent mirror to verify; never null after CLI validation
  * @returns mismatching relative paths; empty means hash-only state was safely recorded
+ * @throws `ManagedInstallStateRecordError` when verified bytes cannot be persisted; preview failures propagate unchanged
  */
 export function recordManagedInstallAfterVerification(
   projectPath: string,
@@ -733,6 +1222,30 @@ export function recordManagedInstallAfterVerification(
   if (installationMismatches.length > 0) {
     return installationMismatches.map((file) => file.path);
   }
-  writeManagedInstallState(projectPath, installedPreview);
+  try {
+    const facade = readManagedInstallStateFacade(projectPath);
+    if (facade.source !== "v2" || facade.state === null) {
+      throw new Error(
+        "Project-wide managed install state is unavailable after verification.",
+      );
+    }
+    const cutoverEvidence = readManagedInstallCutoverEvidence(projectPath);
+    if (cutoverEvidence.incompatibleAgents.length > 0) {
+      throw new Error(
+        "Managed install cutover markers changed before receipt publication.",
+      );
+    }
+    const candidate = buildManagedInstallReceiptCandidate(
+      facade.state,
+      installedPreview,
+    );
+    if (
+      canonicalManagedInstallStateBytes(candidate) !== facade.canonicalBytes
+    ) {
+      writeManagedInstallStateV2(projectPath, candidate);
+    }
+  } catch (error) {
+    throw new ManagedInstallStateRecordError(error);
+  }
   return [];
 }

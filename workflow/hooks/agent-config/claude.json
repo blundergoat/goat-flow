@@ -1,4 +1,9 @@
 {
+  "attribution": {
+    "commit": "",
+    "pr": "",
+    "sessionUrl": false
+  },
   "permissions": {
     "allow": [
       "Read(.env.example)",
@@ -9,10 +14,6 @@
     "deny": [
       "Bash(*git commit*)",
       "Bash(*git push*)",
-      "Bash(*sudo *)",
-      "Bash(*mkfs*)",
-      "Bash(*dd if=*)",
-      "Bash(*git reset --hard*)",
       "Read(**/.env)",
       "Read(**/.env.local)",
       "Read(**/.env.development)",
@@ -29,30 +30,28 @@
       "Edit(**/.env.test)",
       "Edit(**/.envrc)",
       "Edit(**/.env.*.local)",
-      "Read(**/secrets/**)",
       "Read(**/*.pem)",
       "Read(**/*.key)",
-      "Read(**/.ssh/**)",
-      "Read(**/.aws/**)",
-      "Read(**/.docker/config.json)",
-      "Read(**/.gnupg/**)",
-      "Read(**/.npmrc)",
-      "Read(**/.pypirc)",
       "Read(**/*.pfx)",
-      "Read(**/credentials*)",
-      "Read(**/.kube/config)",
-      "Edit(**/secrets/**)",
       "Edit(**/*.pem)",
       "Edit(**/*.key)",
-      "Edit(**/.ssh/**)",
-      "Edit(**/.aws/**)",
-      "Edit(**/.docker/config.json)",
-      "Edit(**/.gnupg/**)",
-      "Edit(**/.npmrc)",
-      "Edit(**/.pypirc)",
       "Edit(**/*.pfx)",
-      "Edit(**/credentials*)",
-      "Edit(**/.kube/config)"
+      "Read(~/.ssh/**)",
+      "Read(~/.aws/**)",
+      "Read(~/.gnupg/**)",
+      "Read(~/.config/gcloud/**)",
+      "Read(~/.docker/**)",
+      "Read(~/.kube/**)",
+      "Read(~/.npmrc)",
+      "Read(~/.pypirc)",
+      "Edit(~/.ssh/**)",
+      "Edit(~/.aws/**)",
+      "Edit(~/.gnupg/**)",
+      "Edit(~/.config/gcloud/**)",
+      "Edit(~/.docker/**)",
+      "Edit(~/.kube/**)",
+      "Edit(~/.npmrc)",
+      "Edit(~/.pypirc)"
     ]
   },
   "hooks": {
@@ -71,6 +70,8 @@
               ".claude/settings.json",
               ".goat-flow/hooks/run-with-bash.mjs"
             ],
+            "bash": "exit 0",
+            "powershell": "exit 0",
             "timeout": 30
           }
         ],
@@ -92,6 +93,8 @@
               ".claude/settings.json",
               ".goat-flow/hooks/run-with-bash.mjs"
             ],
+            "bash": "exit 0",
+            "powershell": "exit 0",
             "timeout": 90
           }
         ]

@@ -137,10 +137,13 @@ function entrySortDate(
 }
 
 /**
- * Parse an optional recurrence count for stats and dashboard users.
+ * Parse the optional author-declared incident total for stats and dashboard users.
  * Missing or non-numeric values stay null so malformed metadata never invents incidents.
+ *
+ * @param entryContent - complete learning-loop entry text; empty content means no incident total was declared
+ * @returns the declared positive safe integer, or null when the field is absent or invalid
  */
-function extractIncidentCount(entryContent: string): number | null {
+export function extractIncidentCount(entryContent: string): number | null {
   const incidentCountText = extractEntryMetadata(
     entryContent,
     "Incident count",
@@ -149,7 +152,11 @@ function extractIncidentCount(entryContent: string): number | null {
   if (incidentCountText === null || !/^\d+$/.test(incidentCountText)) {
     return null;
   }
-  return Number.parseInt(incidentCountText, 10);
+  const incidentCount = Number(incidentCountText);
+  // The contract requires a positive safe integer; zero and rounded overflow values cannot describe a trustworthy total.
+  return Number.isSafeInteger(incidentCount) && incidentCount > 0
+    ? incidentCount
+    : null;
 }
 
 /**
@@ -162,6 +169,7 @@ function extractMemoryQualityMetadata(
   LearningLoopEntryFact,
   | "hasDecisionChangedGuidance"
   | "triggerPhase"
+  | "caughtAt"
   | "incidentCount"
   | "latestOccurrence"
 > {
@@ -171,6 +179,7 @@ function extractMemoryQualityMetadata(
   return {
     hasDecisionChangedGuidance,
     triggerPhase: extractEntryMetadata(entryContent, "Trigger phase"),
+    caughtAt: extractEntryMetadata(entryContent, "Caught at"),
     incidentCount: extractIncidentCount(entryContent),
     latestOccurrence: extractEntryDate(entryContent, "Latest occurrence"),
   };
@@ -265,7 +274,7 @@ function extractFootgunEntries(
         excerpt: compactEntryExcerpt(footgunSection.content),
         staleRefs: referenceHealth.staleRefs,
         invalidLineRefs: referenceHealth.invalidLineRefs,
-        hasValidAnchor: referenceHealth.validRefs > 0,
+        hasValidAnchor: referenceHealth.validSearchAnchors > 0,
         bucketSizeBytes,
         order: nextDisplayOrder++,
       });
@@ -357,6 +366,7 @@ function extractDecisionEntries(
       resolved: null,
       hasDecisionChangedGuidance: true,
       triggerPhase: null,
+      caughtAt: null,
       incidentCount: null,
       latestOccurrence: null,
       excerpt: compactEntryExcerpt(decisionFile.content),

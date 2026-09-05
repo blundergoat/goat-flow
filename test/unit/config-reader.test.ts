@@ -45,6 +45,80 @@ describe("config defaults when file is missing", () => {
   });
 });
 
+describe("config validates active milestone policy", () => {
+  it("defaults omitted policy to one and retains the canonical plans path", () => {
+    for (const yaml of [null, "", "plans: {}", "plans:\n  path: elsewhere"]) {
+      const result = loadConfig("/tmp", configFS(yaml));
+      assert.equal(result.valid, true);
+      assert.deepEqual(result.config.plans, {
+        path: ".goat-flow/plans/",
+        maxActiveMilestones: 1,
+      });
+    }
+  });
+
+  it("loads positive safe integer caps without config warnings", () => {
+    for (const cap of [1, 2, Number.MAX_SAFE_INTEGER]) {
+      const result = loadConfig(
+        "/tmp",
+        configFS(`plans:\n  maxActiveMilestones: ${cap}`),
+      );
+      assert.equal(result.valid, true);
+      assert.equal(result.config.plans.maxActiveMilestones, cap);
+      assert.deepEqual(result.warnings, []);
+    }
+  });
+
+  it("names malformed policy values instead of silently accepting defaults", () => {
+    for (const raw of [
+      "0",
+      "-1",
+      "1.5",
+      '"2"',
+      "true",
+      ".inf",
+      ".nan",
+      "9007199254740992",
+      "null",
+    ]) {
+      const result = loadConfig(
+        "/tmp",
+        configFS(`plans:\n  maxActiveMilestones: ${raw}`),
+      );
+      assert.equal(result.valid, false, raw);
+      assert.equal(result.config.plans.maxActiveMilestones, 1);
+      assert.deepEqual(result.errors, [
+        {
+          level: "error",
+          path: "plans.maxActiveMilestones",
+          message: "must be a positive safe integer",
+        },
+      ]);
+    }
+    for (const raw of ["null", "[]", "2"]) {
+      const result = loadConfig("/tmp", configFS(`plans: ${raw}`));
+      assert.equal(result.valid, false, raw);
+      assert.equal(result.errors[0]?.path, "plans");
+    }
+  });
+
+  it("warns about a misspelled cap while preserving the default", () => {
+    const result = loadConfig(
+      "/tmp",
+      configFS("plans:\n  maxActiveMilestone: 2"),
+    );
+    assert.equal(result.valid, true);
+    assert.equal(result.config.plans.maxActiveMilestones, 1);
+    assert.deepEqual(result.warnings, [
+      {
+        level: "warning",
+        path: "plans.maxActiveMilestone",
+        message: "unknown key",
+      },
+    ]);
+  });
+});
+
 describe("config validates release versions", () => {
   it("rejects malformed versions before downstream direction checks", () => {
     const result = loadConfig("/tmp", configFS('version: "999.invalid"\n'));

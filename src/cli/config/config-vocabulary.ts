@@ -25,6 +25,7 @@ import type { LearningLoopAutoCaptureTarget } from "./types.js";
  * `quality` keys are the documented overrides `loadQualityConfig` reads, including its fixed subtype names.
  */
 export const KNOWN_NESTED_KEYS = new Map<string, ReadonlySet<string>>([
+  ["plans", new Set(["maxActiveMilestones"])],
   ["line-limits", new Set(["target", "limit"])],
   ["toolchain", new Set(["test", "lint", "build", "package", "format"])],
   ["skills", new Set(["install", "goat-review"])],

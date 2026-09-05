@@ -82,6 +82,8 @@ export function writeCheckPlan(
 interface EstimatedMilestoneOptions {
   title?: string;
   status?: string;
+  statusReason?: string;
+  abandonedReason?: string;
   dependsOn?: string;
   actualLine?: string;
   planAdminOverhead?: string;
@@ -108,6 +110,12 @@ export function estimatedMilestoneBody(
   return [
     `# ${options.title ?? "M01: Estimated milestone"}`,
     `Status: ${options.status ?? "not-started"}`,
+    ...(options.statusReason !== undefined
+      ? [`Status reason: ${options.statusReason}`]
+      : []),
+    ...(options.abandonedReason !== undefined
+      ? [`Abandoned: ${options.abandonedReason}`]
+      : []),
     `Depends on: ${options.dependsOn ?? "none"}`,
     effortLine,
     ...(options.forecastBasisLine ? [options.forecastBasisLine] : []),
@@ -151,6 +159,8 @@ export function estimatedMilestoneBody(
 interface CanonicalMilestoneOptions {
   title?: string;
   status?: string;
+  statusReason?: string;
+  abandonedReason?: string;
   dependsOn?: string;
   includeDependencies?: boolean;
   isTaskChecked?: boolean;
@@ -181,6 +191,8 @@ export function canonicalMilestoneBody(
     {
       title: options.title,
       status: options.status,
+      statusReason: options.statusReason,
+      abandonedReason: options.abandonedReason,
       dependsOn: options.dependsOn,
       actualLine: options.includeActual
         ? `Actual: ~${totalMinutes} min agent-time (1 product / ${proofLines.length} proof / 0 other)`

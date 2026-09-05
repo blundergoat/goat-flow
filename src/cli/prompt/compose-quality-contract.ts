@@ -18,6 +18,7 @@ import {
   QUALITY_FINDING_SEVERITIES,
   QUALITY_FINDING_TYPES,
   QUALITY_GROUNDING_STATUSES,
+  QUALITY_SCORE_RATIONALE_MAX_CHARACTERS,
   QUALITY_SCORE_CONFIDENCES,
   QUALITY_WORKTREE_STATES,
 } from "../quality/schema-types.js";
@@ -164,6 +165,36 @@ export function appendQualityReportContract(
     '    "system": { "total": 0, "usefulness": 0, "signal_to_noise": 0, "adaptability": 0, "learnability": 0 }',
   );
   lines.push("  },");
+  lines.push('  "score_rationale": {');
+  lines.push('    "setup": {');
+  lines.push(
+    '      "accuracy": { "evidence": "Observed evidence for this score", "deduction": "Reason for points deducted, or no deduction" },',
+  );
+  lines.push(
+    '      "relevance": { "evidence": "Observed evidence for this score", "deduction": "Reason for points deducted, or no deduction" },',
+  );
+  lines.push(
+    '      "completeness": { "evidence": "Observed evidence for this score", "deduction": "Reason for points deducted, or no deduction" },',
+  );
+  lines.push(
+    '      "friction": { "evidence": "Observed evidence for this score", "deduction": "Reason for points deducted, or no deduction" }',
+  );
+  lines.push("    },");
+  lines.push('    "system": {');
+  lines.push(
+    '      "usefulness": { "evidence": "Observed evidence for this score", "deduction": "Reason for points deducted, or no deduction" },',
+  );
+  lines.push(
+    '      "signal_to_noise": { "evidence": "Observed evidence for this score", "deduction": "Reason for points deducted, or no deduction" },',
+  );
+  lines.push(
+    '      "adaptability": { "evidence": "Observed evidence for this score", "deduction": "Reason for points deducted, or no deduction" },',
+  );
+  lines.push(
+    '      "learnability": { "evidence": "Observed evidence for this score", "deduction": "Reason for points deducted, or no deduction" }',
+  );
+  lines.push("    }");
+  lines.push("  },");
   lines.push('  "findings": [');
   const sampleType = opts.sampleFindingType ?? "setup_quality";
   const sampleDelta = input.priorReport ? '"new"' : "null";
@@ -183,7 +214,8 @@ export function appendQualityReportContract(
       `    { "type": "${sampleType}", "severity": "MAJOR", "file": ".goat-flow/architecture.md", "line": null, "summary": "One-line finding summary", "detail": "Why it matters", "evidence_quality": "OBSERVED", "evidence_method": "static-analysis", "delta_tag": ${sampleDelta} }`,
     );
   }
-  lines.push("  ]");
+  lines.push("  ],");
+  lines.push('  "refuted_candidates": []');
   lines.push("}");
   lines.push("```");
   lines.push("");
@@ -215,6 +247,9 @@ function appendReportJsonRules(
     "- `scores.*` axis values must use exact `0 | 5 | 10 | 15 | 20 | 25` increments and each axis sum must equal its `total` exactly.",
   );
   lines.push(
+    `- Every score axis requires \`evidence\` and \`deduction\` as non-empty single-line strings of ${QUALITY_SCORE_RATIONALE_MAX_CHARACTERS} characters or fewer.`,
+  );
+  lines.push(
     `- Allowed \`type\` values: ${backtickList(QUALITY_FINDING_TYPES)}.`,
   );
   lines.push(
@@ -234,6 +269,19 @@ function appendReportJsonRules(
   pushVariant(
     "- Runtime-backed findings SHOULD include compact evidence fields when useful: `evidence_command` (the command), `evidence_exit_code` (integer), `evidence_summary` (literal pass/fail or warning summary), `evidence_warning_count` (integer), and `evidence_excerpt` (short single-line excerpt). Do not paste raw terminal blocks into JSON.",
     "- Runtime-backed findings SHOULD include compact evidence fields when useful: `evidence_command`, `evidence_exit_code`, `evidence_summary`, `evidence_warning_count`, and `evidence_excerpt`. Keep these single-line and concise; do not paste raw terminal blocks.",
+  );
+  pushVariant(
+    "- `refuted_candidates` is REQUIRED and may be `[]`. Preserve every candidate you tested and excluded; never repeat those candidates in `findings`. Each row requires `claim`, `why_excluded`, nullable `file` and `line`, `evidence_quality`, `evidence_method`, and `evidence_summary`; `evidence_command`, `evidence_exit_code`, and `evidence_excerpt` are optional unless the method rule below requires them.",
+    "- `refuted_candidates` is REQUIRED and may be `[]`. Each row requires `claim`, `why_excluded`, nullable `file` and `line`, `evidence_quality`, `evidence_method`, and `evidence_summary`; excluded candidates do not belong in `findings`.",
+  );
+  lines.push(
+    "- A `runtime-probe` or `mixed` refuted candidate requires `evidence_command`, `evidence_exit_code`, and `evidence_summary` so the disproval is reproducible.",
+  );
+  lines.push(
+    '- A refuted candidate must use `evidence_quality: "OBSERVED"`; an `INFERRED` candidate remains unresolved and must not enter the refutation ledger.',
+  );
+  lines.push(
+    '- A `static-analysis` or `mixed` refuted candidate requires a non-null `file` and a grep-friendly semantic anchor such as `(search: "pattern")` in `evidence_summary`.',
   );
   pushVariant(
     '- `scope` is REQUIRED at top level. Set `framework-self` if you detect this is the goat-flow repo itself (heuristic: `package.json` contains `"name": "@blundergoat/goat-flow"`). Otherwise set `consumer`.',
@@ -401,16 +449,25 @@ function appendStagedDraftPersistence(
 }
 
 /**
- * Focused-mode wrapper over {@link appendQualityReportContract}: compact wording, trailing-section separator, framework-flavoured sample finding.
- * Kept as a named export so focused composers read naturally.
+ * Append the focused prose ledger followed by the compact shared report contract.
+ * Use for process, harness, and skills assessments so their users see the same disproval evidence as the full assessment.
  *
- * @param lines - prompt line buffer; appended to in place
- * @param input - run facts embedded into the contract
+ * @param lines - prompt line buffer; empty means the ledger starts the remaining focused output instructions
+ * @param input - run facts embedded into the contract; a null prior report keeps finding delta tags unset
+ * @returns nothing; the supplied prompt receives the prose ledger and JSON contract
  */
 export function appendFocusedReportContract(
   lines: string[],
   input: ReportContractInput,
 ): void {
+  lines.push("### Refuted Candidates");
+  lines.push(
+    "List every candidate finding you tested and excluded, why it was excluded, and the source anchor or command result that disproved it. Write `None` when no candidate was ruled out.",
+  );
+  lines.push(
+    "Keep these candidates out of findings and recommendations; the ledger exists so the user and later reviewers do not repeat disproved work.",
+  );
+  lines.push("");
   appendQualityReportContract(lines, input, {
     detail: "compact",
     hasLeadingSeparator: true,

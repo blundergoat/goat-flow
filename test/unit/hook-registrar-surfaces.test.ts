@@ -11,7 +11,6 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
-  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -43,15 +42,17 @@ import {
   runGit,
   installCodexDenyHook,
   MANAGED_SHAPE_MUTATIONS,
+  mutateOrSkip,
   runCodexLauncher,
+  symlinkOrSkip,
 } from "./hook-registrar.helpers.js";
 
 describe("hook registrar: surface detection, toggles, and sync", () => {
   it("treats Windows case and separator variants as the same physical root", () => {
     assert.equal(
       filesystemPathsAreEquivalent(
-        "C:\\Work\\HealthKit",
-        "c:/work/healthkit",
+        "C:\\Work\\Project",
+        "c:/work/project",
         win32.relative,
       ),
       true,
@@ -245,9 +246,10 @@ describe("hook registrar: surface detection, toggles, and sync", () => {
         assert.deepEqual(state.scanRoots?.roots, rootCase.roots ?? []);
         assert.equal(state.agents.codex.installed, false);
         assert.equal(state.agents.codex.isRegistered, false);
+        // ADR-052's expired provider capture precedes the separately asserted local registration gap.
         assert.equal(
           state.agents.codex.effectiveState.status,
-          "not-registered",
+          "provider-capture-stale",
         );
         assert.equal(state.agents.codex.repairCommand, null);
         assert.match(
@@ -316,21 +318,24 @@ describe("hook registrar: surface detection, toggles, and sync", () => {
         assert.equal(state?.agents.codex.isRegistered, false);
         assert.equal(
           state?.agents.codex.effectiveState.status,
-          "not-registered",
+          "provider-capture-stale",
         );
       });
     });
   }
 
   // Fixture purpose: creates and later removes an external Git repo, symlinks it, writes config, and attempts registration.
-  it("rejects a scan root that escapes through a symlink", () => {
+  it("rejects a scan root that escapes through a symlink", (testContext) => {
     const externalRoot = mkdtempSync(
       join(tmpdir(), "goat-flow-external-scan-root-"),
     );
     try {
       runGit(externalRoot, ["init", "-q"]);
       withTempProject((root) => {
-        symlinkSync(externalRoot, join(root, "linked-repo"), "dir");
+        const linkedRepo = join(root, "linked-repo");
+        if (!symlinkOrSkip(testContext, externalRoot, linkedRepo, "dir")) {
+          return;
+        }
         mkdirSync(join(root, ".codex"), { recursive: true });
         mkdirSync(join(root, ".goat-flow"), { recursive: true });
         writeFileSync(join(root, ".codex", "config.toml"), "");
@@ -1017,10 +1022,12 @@ describe("hook registrar: surface detection, toggles, and sync", () => {
 describe("hook registrar: managed surface preservation", () => {
   // Each malformed managed root represents a user project the launcher must reject safely.
   for (const fixture of MANAGED_SHAPE_MUTATIONS) {
-    it(`rejects a ${fixture.name} without exposing its root`, () => {
+    it(`rejects a ${fixture.name} without exposing its root`, (testContext) => {
       withTempProject((fixtureProjectPath) => {
         const installedLauncher = installCodexDenyHook(fixtureProjectPath);
-        fixture.mutate(fixtureProjectPath);
+        if (!mutateOrSkip(testContext, fixture, fixtureProjectPath)) {
+          return;
+        }
         const launcherResult = runCodexLauncher(
           installedLauncher,
           fixtureProjectPath,

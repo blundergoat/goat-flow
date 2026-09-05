@@ -24,7 +24,7 @@ const CONFIG_DEFAULTS: GoatFlowConfig = {
   footguns: { path: ".goat-flow/learning-loop/footguns/" },
   lessons: { path: ".goat-flow/learning-loop/lessons/" },
   decisions: { path: ".goat-flow/learning-loop/decisions/" },
-  plans: { path: ".goat-flow/plans/" },
+  plans: { path: ".goat-flow/plans/", maxActiveMilestones: 1 },
   logs: { path: ".goat-flow/logs/" },
   agents: null,
   skills: { install: "all" },
@@ -259,6 +259,7 @@ function mergeConfig(raw: unknown): GoatFlowConfig {
   if (!isRecord(raw)) return merged;
 
   mergeVersion(raw.version, merged);
+  mergePlans(raw.plans, merged);
   // Canonical `.goat-flow/*` paths are always used; old path overrides are ignored.
   mergeSkills(raw.skills, merged);
 
@@ -303,6 +304,15 @@ function mergeConfig(raw: unknown): GoatFlowConfig {
   mergeQuality(raw.quality, merged);
 
   return merged;
+}
+
+/** Merge validated scheduling policy while retaining the fixed canonical plans path. */
+function mergePlans(rawPlans: unknown, merged: GoatFlowConfig): void {
+  if (!isRecord(rawPlans)) return;
+  const cap = rawPlans.maxActiveMilestones;
+  if (typeof cap === "number" && Number.isSafeInteger(cap) && cap >= 1) {
+    merged.plans.maxActiveMilestones = cap;
+  }
 }
 
 /**

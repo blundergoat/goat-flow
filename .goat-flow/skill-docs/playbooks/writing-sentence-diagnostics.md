@@ -1,9 +1,9 @@
 ---
-goat-flow-reference-version: "1.16.0"
+goat-flow-reference-version: "1.17.0"
 ---
 # Writing Sentence Diagnostics
 
-Load this only after `writing-style.md` identifies a sentence-level reader cost. It diagnoses sentences without guessing authorship or authorizing a broad rewrite.
+Load this only after `writing-human-facing-prose.md` identifies a sentence-level reader cost. It diagnoses sentences without guessing authorship or authorizing a broad rewrite.
 
 ## Availability Check
 
@@ -15,7 +15,7 @@ Project-documented prose policy governs voice, terminology, shape, and punctuati
 
 ## Intent
 
-Find the smallest sentence edit that lowers a concrete reader cost while preserving facts, voice, social meaning, and exact public detail. Labels describe observable effects, not whether a person or an agent wrote the text.
+Find the smallest sentence edit that lowers a concrete reader cost while preserving facts, voice, social meaning, and exact public detail.
 
 ## Diagnostic Route
 
@@ -32,7 +32,7 @@ Choose register from the artifact, actual reader, and supplied voice. Neutral an
 - Documentation and decisions stay plain about ownership, evidence, and uncertainty.
 - Reports and reviews retain necessary terminology, hedging, citations, and causal relationships.
 - Release and changelog prose follows its surface owner's audience and fact-selection gates.
-- Replies to people receive only the permission `writing-style.md` defines.
+- Replies to people receive only the permission `writing-human-facing-prose.md` defines.
 
 Ask what the reader already knows from the surrounding artifact, product surface, and request. If the reader already knows a term or premise, do not define it again. If the knowledge is uncertain, preserve the explanation or verify the audience before cutting it.
 
@@ -96,6 +96,6 @@ The revision assigns actions to the component and replaces unsupported importanc
 
 ## Related References
 
-- `writing-style.md` - required core correctness, scope, and routing owner.
+- `writing-human-facing-prose.md` - required core correctness, scope, and routing owner.
 - `writing-structure-diagnostics.md` - document-level assembly defects that should be repaired first.
 - `changelog.md` and `release-notes.md` - release-surface audience and output owners.

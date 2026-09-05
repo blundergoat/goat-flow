@@ -51,6 +51,20 @@ export const QUALITY_GROUNDING_STATUSES = [
 ] as const;
 export const QUALITY_SCORE_CONFIDENCES = ["high", "medium", "low"] as const;
 export const QUALITY_SCORE_VALUES = [0, 5, 10, 15, 20, 25] as const;
+export const QUALITY_SETUP_SCORE_AXES = [
+  "accuracy",
+  "relevance",
+  "completeness",
+  "friction",
+] as const;
+export const QUALITY_SYSTEM_SCORE_AXES = [
+  "usefulness",
+  "signal_to_noise",
+  "adaptability",
+  "learnability",
+] as const;
+/** The 240-character cap keeps eight-axis history and diff ledgers scannable while leaving room for one concrete evidence sentence. */
+export const QUALITY_SCORE_RATIONALE_MAX_CHARACTERS = 240;
 
 type QualityFindingType = (typeof QUALITY_FINDING_TYPES)[number];
 type QualityFindingSeverity = (typeof QUALITY_FINDING_SEVERITIES)[number];
@@ -107,6 +121,24 @@ export interface QualityScores {
   system: QualitySystemScores;
 }
 
+/** Compact evidence and deduction recorded beside one assessor-chosen score axis. */
+export interface QualityScoreAxisRationale {
+  evidence: string;
+  deduction: string;
+}
+
+/** Complete rationale ledger for the eight setup and system score axes. */
+export interface QualityScoreRationale {
+  setup: Record<
+    (typeof QUALITY_SETUP_SCORE_AXES)[number],
+    QualityScoreAxisRationale
+  >;
+  system: Record<
+    (typeof QUALITY_SYSTEM_SCORE_AXES)[number],
+    QualityScoreAxisRationale
+  >;
+}
+
 /** Evidence coverage and workspace provenance needed to compare independently produced reports. */
 export interface QualityAssessmentContext {
   /** Git revision assessed, or null when the target is not Git-backed or the revision was unavailable. */
@@ -143,6 +175,24 @@ export interface QualityFinding {
   delta_tag: QualityDeltaTag | null;
 }
 
+/**
+ * One suspected finding the assessor tested and excluded from the user's actionable findings.
+ * The ledger keeps the disproval reason and compact evidence visible, so later reviews do not repeat the same dead end.
+ * File and line are explicit nullable fields because runtime evidence may have no source location.
+ */
+export interface QualityRefutedCandidate {
+  claim: string;
+  why_excluded: string;
+  file: string | null;
+  line: number | null;
+  evidence_quality: QualityEvidenceQuality;
+  evidence_method: QualityEvidenceMethod;
+  evidence_summary: string;
+  evidence_command?: string;
+  evidence_exit_code?: number;
+  evidence_excerpt?: string;
+}
+
 /** Persisted quality finding with a deterministic history/diff ID. */
 export interface SavedQualityFinding extends QualityFinding {
   id: string;
@@ -171,7 +221,10 @@ export interface QualityReport {
   /** Required on current emissions and optional on historical reports that predate provenance capture. */
   assessment_context?: QualityAssessmentContext;
   scores: QualityScores;
+  /** Required on current emissions; absent on legacy reports written before axis provenance was captured. */
+  score_rationale?: QualityScoreRationale;
   findings: QualityFinding[];
+  refuted_candidates: QualityRefutedCandidate[];
 }
 
 /** Saved quality report schema after `attachFindingIds` has materialized finding IDs. */

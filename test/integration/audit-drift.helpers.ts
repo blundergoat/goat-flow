@@ -62,9 +62,10 @@ const SHARED_PLAYBOOK_FILENAMES = [
   "release-notes.md",
   "skill-playbook-authoring-sync.md",
   "test-selection.md",
+  "writing-agent-facing-instructions.md",
   "writing-sentence-diagnostics.md",
   "writing-structure-diagnostics.md",
-  "writing-style.md",
+  "writing-human-facing-prose.md",
 ] as const;
 export const HOOK_STUB = "#!/usr/bin/env bash\n# deny hook stub\n";
 export const HOOK_LAUNCHER_STUB =
@@ -345,15 +346,16 @@ export function writeHookFixtures(root: string): void {
 
 /**
  * Clone this repo into a temp fixture and git-init it, so install-then-drift round trips run
- * against a real tree. Writes the copied tree to the filesystem, skipping .git/node_modules/
- * log-session dirs, and spawns git init; symlinks node_modules back to the source to avoid a slow
- * copy. Asserts git init succeeds.
+ * against a real tree. Writes the copied tree to the filesystem without repository metadata,
+ * dependencies, session logs, or local install receipts; symlinks node_modules back to the source
+ * to avoid a slow copy; and spawns git init. Asserts git init succeeds.
  *
  * @returns the cloned repo root inside the temp fixture; the caller cleans up its parent dir
  */
 export function setupInstallRoundTripFixture(): string {
   const parent = mkdtempSync(join(tmpdir(), "goat-flow-install-roundtrip-"));
   const root = join(parent, "repo");
+  const localInstallStateDirectory = join(".goat-flow", "install-state");
   cpSync(PROJECT_ROOT, root, {
     recursive: true,
     filter: (src) => {
@@ -363,6 +365,13 @@ export function setupInstallRoundTripFixture(): string {
       const [topLevel] = rel.split(sep);
       // Repository metadata and dependencies are supplied separately to keep setup fast.
       if (topLevel === ".git" || topLevel === "node_modules") return false;
+      // Local receipts would make this clean-install fixture depend on the caller's ignored state.
+      if (
+        rel === localInstallStateDirectory ||
+        rel.startsWith(`${localInstallStateDirectory}${sep}`)
+      ) {
+        return false;
+      }
       return rel !== join(".goat-flow", "logs", "sessions");
     },
   });
@@ -411,6 +420,40 @@ export function patchInstallRoundTripFixture(root: string): {
     ),
   };
   writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
+
+  const canonicalSkillTotal = manifest.skills.canonical.length;
+  const codeMapPath = join(root, ".goat-flow", "code-map.md");
+  const codeMap = readFileSync(codeMapPath, "utf8");
+  const fixtureSkillRow = `│   ├── ${INSTALL_FIXTURE_SKILL}/SKILL.md = installer round-trip fixture skill template`;
+  if (!codeMap.includes(fixtureSkillRow)) {
+    writeFileSync(
+      codeMapPath,
+      codeMap.replace(
+        "│   ├── reference/               = skill-preamble.md and skill-conventions.md templates",
+        `${fixtureSkillRow}\n│   ├── reference/               = skill-preamble.md and skill-conventions.md templates`,
+      ),
+    );
+  }
+
+  const glossaryPath = join(root, ".goat-flow", "glossary.md");
+  const glossary = readFileSync(glossaryPath, "utf8");
+  writeFileSync(
+    glossaryPath,
+    glossary.replace(
+      /^\| Skill \|.*$/mu,
+      `| Skill | A slash-command-invoked capability (${canonicalSkillTotal} total) loaded on demand. | \`docs/skills.md\` | goat-* skills |`,
+    ),
+  );
+
+  const architecturePath = join(root, ".goat-flow", "architecture.md");
+  const architecture = readFileSync(architecturePath, "utf8");
+  writeFileSync(
+    architecturePath,
+    architecture.replace(
+      /\b\d+ goat-flow skill templates\b/u,
+      `${canonicalSkillTotal} goat-flow skill templates`,
+    ),
+  );
 
   const constantsPath = join(root, "src", "cli", "constants.ts");
   const constants = readFileSync(constantsPath, "utf8");
@@ -464,6 +507,7 @@ export function patchInstallRoundTripFixture(root: string): {
  * @param command - executable to run, restricted to the three the fixtures need
  * @param args - argument vector passed without a shell, so fixture paths containing spaces stay one argument
  * @param timeout - milliseconds before the command is killed; the default is generous enough for a full audit
+ * @param environmentOverrides - variables applied only to this child on top of the inherited environment
  * @returns the finished process with its captured stdout, stderr, and exit status
  */
 export function runCommand(
@@ -471,11 +515,15 @@ export function runCommand(
   command: "bash" | "node" | "npx",
   args: string[],
   timeout = 60000,
+  environmentOverrides?: NodeJS.ProcessEnv,
 ): CommandResult {
   const spawnOptions = {
     cwd,
     encoding: "utf-8",
     timeout,
+    ...(environmentOverrides === undefined
+      ? {}
+      : { env: { ...process.env, ...environmentOverrides } }),
   } as const;
   const result =
     command === "bash"

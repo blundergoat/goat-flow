@@ -11,6 +11,7 @@ import { join } from "node:path";
 import { getAgentProfile } from "./agents/registry.js";
 import { classifyProjectState } from "./classify-state.js";
 import { CLIError } from "./cli-error.js";
+import { pathWriteClaimInspectCommand } from "./claims-command.js";
 import type { ParsedCLI } from "./cli-types.js";
 import { createFS } from "./facts/fs.js";
 import {
@@ -19,11 +20,14 @@ import {
 } from "./install-invocation.js";
 import {
   buildManagedSetupPreview,
+  ManagedInstallStateRecordError,
   managedSetupPreviewForInstallerLaunch,
+  prepareManagedInstallStateForApply,
   recordManagedInstallAfterVerification,
   type ManagedSetupPreview,
 } from "./managed-setup-preview.js";
 import { managedSetupAdmissionFailure } from "./managed-setup-admission.js";
+import { quoteManagedInstallProjectArgument } from "./managed-install-evidence.js";
 import type { ManagedSetupAuthority } from "./managed-setup-authority.js";
 import { readManagedTargetEvidence } from "./managed-setup-write-set.js";
 import {
@@ -31,8 +35,19 @@ import {
   validateManagedSetupRequest,
 } from "./managed-setup-command.js";
 import { getTemplatePath } from "./paths.js";
+import {
+  acquirePathWriteClaims,
+  PathWriteClaimError,
+  readPathWriteTargetIdentity,
+  releasePathWriteClaims,
+  type PathWriteClaimBatch,
+  type PathWriteClaimReleaseResult,
+} from "./path-write-claim.js";
 import { emitIndexGenerationInstallResult } from "./learning-loop-index/command.js";
-import { emitCommitGuidanceInstallResult } from "./prompt/commit-guidance.js";
+import {
+  emitCommitGuidanceInstallResult,
+  pendingCommitGuidanceMigrationInstructionPath,
+} from "./prompt/commit-guidance.js";
 import {
   readAgentHookState,
   type AgentHookReadState,
@@ -250,6 +265,8 @@ function pendingHookConfigEdits(projectPath: string, agent: AgentId): string[] {
     remove: [],
   };
 
+  const removalReasons: string[] = [];
+
   for (const spec of listHookSpecs()) {
     const edit = pendingHookRegistrationEdit(
       projectPath,
@@ -258,14 +275,48 @@ function pendingHookConfigEdits(projectPath: string, agent: AgentId): string[] {
       hookStates,
       spec,
     );
-    if (edit !== null) edits[edit].push(spec.id);
+    if (edit === null) continue;
+    edits[edit].push(spec.id);
+
+    // Losing a hook is the one edit a user cannot infer, so it carries the registrar's own reason and fix.
+    if (edit === "remove") {
+      removalReasons.push(
+        ...hookRemovalExplanation(hookStates.get(spec.id), agent, spec.id),
+      );
+    }
   }
 
-  return (Object.keys(edits) as HookRegistrationEdit[]).flatMap((edit) =>
-    edits[edit].length > 0
-      ? [`${HOOK_REGISTRATION_EDIT_PREFIX[edit]}: ${edits[edit].join(", ")}`]
-      : [],
-  );
+  return [
+    ...(Object.keys(edits) as HookRegistrationEdit[]).flatMap((edit) =>
+      edits[edit].length > 0
+        ? [`${HOOK_REGISTRATION_EDIT_PREFIX[edit]}: ${edits[edit].join(", ")}`]
+        : [],
+    ),
+    ...removalReasons,
+  ];
+}
+
+/**
+ * Explain one removal using the registrar's own wording instead of re-deciding why it applies.
+ * Use for a `remove` edit; other edits are self-explanatory from their verb and hook id.
+ *
+ * @param hookState - registrar state for the hook; undefined means the registry never reported it
+ * @param agent - provider whose per-agent reason and repair summary apply
+ * @param hookId - hook the removal names, echoed so grouped output stays attributable
+ * @returns reason and fix lines, or an empty array when the registrar published no reason
+ */
+function hookRemovalExplanation(
+  hookState: HookState | undefined,
+  agent: AgentId,
+  hookId: string,
+): string[] {
+  const agentState = hookState?.agents[agent];
+  // Without a published reason there is nothing truthful to add beyond the verb line already shown.
+  if (!agentState?.reason) return [];
+  return [
+    `  ${hookId}: ${agentState.reason}`,
+    `  fix: ${agentState.repairSummary}`,
+  ];
 }
 
 /** Add one path-specific edit sentence without discarding an earlier migration summary. */
@@ -313,19 +364,61 @@ const CODEX_CANONICAL_DENY_PATTERNS = [
   "**/.env.test",
   "**/.envrc",
   "**/.env.*.local",
-  "**/secrets/**",
   "**/.ssh/**",
   "**/.aws/**",
-  "**/.docker/**",
   "**/.gnupg/**",
+  "**/.config/gcloud/**",
+  "**/.docker/**",
   "**/.kube/**",
-  "**/credentials*",
   "**/.npmrc",
   "**/.pypirc",
   "**/*.pem",
   "**/*.key",
   "**/*.pfx",
 ] as const;
+
+/**
+ * Codex deny patterns goat-flow used to ship and now removes on upgrade because a plain folder or file name blocks ordinary
+ * application code (a secrets route, a credentials.ts provider). A profile still carrying one is refreshed; the same pattern
+ * added by hand cannot be told apart, so the install output names each removal.
+ */
+const CODEX_RETIRED_DENY_PATTERNS = [
+  "**/secrets/**",
+  "**/credentials*",
+] as const;
+
+/** Claude deny rules goat-flow used to ship and now removes on upgrade; the Bash deny hook owns shell command policy. */
+const CLAUDE_RETIRED_DENY_RULES = new Set([
+  "Bash(*sudo *)",
+  "Bash(*mkfs*)",
+  "Bash(*dd if=*)",
+  "Bash(*git reset --hard*)",
+  "Read(**/secrets/**)",
+  "Edit(**/secrets/**)",
+  "Read(**/credentials*)",
+  "Edit(**/credentials*)",
+]);
+
+/**
+ * In-project credential-store rules rewritten to their home-directory form on upgrade.
+ * A bare `**` pattern resolves under the working directory, so the old rules never protected the real `~/.ssh` or `~/.aws`.
+ */
+const CLAUDE_HOME_ANCHOR_REWRITE_SOURCES = new Set([
+  "Read(**/.ssh/**)",
+  "Read(**/.aws/**)",
+  "Read(**/.gnupg/**)",
+  "Read(**/.docker/config.json)",
+  "Read(**/.kube/config)",
+  "Read(**/.npmrc)",
+  "Read(**/.pypirc)",
+  "Edit(**/.ssh/**)",
+  "Edit(**/.aws/**)",
+  "Edit(**/.gnupg/**)",
+  "Edit(**/.docker/config.json)",
+  "Edit(**/.kube/config)",
+  "Edit(**/.npmrc)",
+  "Edit(**/.pypirc)",
+]);
 
 /** Escape literal text before matching one TOML key. */
 function escapeRegularExpression(literalText: string): string {
@@ -400,16 +493,36 @@ function selectedCodexPermissionProfileText(
   };
 }
 
+/**
+ * Build the line matcher for one workspace-root deny entry as the profile file writes it.
+ *
+ * @param pattern - exact glob key, quoted either way in the TOML line
+ * @returns multiline regex that matches `"<pattern>" = "deny"` on its own line
+ */
+function codexDenyLinePattern(pattern: string): RegExp {
+  return new RegExp(
+    `^[ \\t]*["']${escapeRegularExpression(pattern)}["'][ \\t]*=[ \\t]*["']deny["']`,
+    "mu",
+  );
+}
+
 /** Return whether any canonical Codex deny rule is absent from the selected profile. */
 function isCanonicalCodexDenyMissing(settingsText: string): boolean {
   return CODEX_CANONICAL_DENY_PATTERNS.some(
-    (pattern) =>
-      settingsText.match(
-        new RegExp(
-          `^[ \\t]*["']${escapeRegularExpression(pattern)}["'][ \\t]*=[ \\t]*["']deny["']`,
-          "mu",
-        ),
-      ) === null,
+    (pattern) => settingsText.match(codexDenyLinePattern(pattern)) === null,
+  );
+}
+
+/**
+ * Return whether the selected profile still carries a deny pattern goat-flow retired.
+ * A user upgrading from an older template sees "refresh the Codex permission profile" in the preview and the pattern named in the output.
+ *
+ * @param settingsText - filesystem region of the active profile; an empty region reports false
+ * @returns true when at least one retired pattern is still denied
+ */
+function hasRetiredCodexDenyPattern(settingsText: string): boolean {
+  return CODEX_RETIRED_DENY_PATTERNS.some(
+    (pattern) => settingsText.match(codexDenyLinePattern(pattern)) !== null,
   );
 }
 
@@ -445,6 +558,7 @@ function codexPermissionProfileNeedsMigration(settingsText: string): boolean {
     hasLegacyAnchor,
     missingWorkspaceExtension,
     isCanonicalCodexDenyMissing(selectedProfile.filesystem),
+    hasRetiredCodexDenyPattern(selectedProfile.filesystem),
   ].some(Boolean);
 }
 
@@ -476,14 +590,29 @@ function claudePermissionsNeedMigration(settingsText: string): boolean {
   return ["deny", "allow", "ask"].some((arrayName) => {
     const rules = permissionRecord[arrayName];
     if (!Array.isArray(rules)) return false;
-    return rules.some(
-      (rule) =>
-        typeof rule === "string" &&
-        (/^(?:MultiEdit|Write|NotebookEdit|Glob)\(/u.test(rule) ||
-          (arrayName === "deny" &&
-            (rule === "Read(**/.env*)" || rule === "Edit(**/.env*)"))),
-    );
+    return rules.some((rule) => installRewritesClaudeRule(arrayName, rule));
   });
+}
+
+/**
+ * Decide whether install would change one Claude permission rule during an upgrade.
+ * Unmatched tool forms are repaired in every list; only deny rules are retired, expanded, or re-anchored,
+ * because an allow or ask rule with the same text is the user's own choice.
+ *
+ * @param arrayName - permission list the rule came from: `deny`, `allow`, or `ask`
+ * @param rule - one raw list entry; a non-string entry is left untouched and reports false
+ * @returns true when the standalone installer would remove or rewrite this entry
+ */
+function installRewritesClaudeRule(arrayName: string, rule: unknown): boolean {
+  if (typeof rule !== "string") return false;
+  if (/^(?:MultiEdit|Write|NotebookEdit|Glob)\(/u.test(rule)) return true;
+  if (arrayName !== "deny") return false;
+  return (
+    rule === "Read(**/.env*)" ||
+    rule === "Edit(**/.env*)" ||
+    CLAUDE_RETIRED_DENY_RULES.has(rule) ||
+    CLAUDE_HOME_ANCHOR_REWRITE_SOURCES.has(rule)
+  );
 }
 
 /** Name the selected provider's existing settings files that install may migrate. */
@@ -508,7 +637,7 @@ function pendingAgentSettingsEdits(
     }
   }
   if (agent === "claude" && claudePermissionsNeedMigration(settingsText)) {
-    edits.push("repair stale or unmatched Claude permission rules");
+    edits.push("repair stale, unmatched, or retired Claude permission rules");
   }
   return edits;
 }
@@ -627,7 +756,221 @@ function pendingMigrations(
       "Install appends the node_modules/ dependency ignore and preserves every existing line.",
     );
   }
+  const commitGuidanceBridgePath =
+    pendingCommitGuidanceMigrationInstructionPath(options.projectPath, agent);
+  if (commitGuidanceBridgePath !== null) {
+    addPendingMigration(
+      migrations,
+      commitGuidanceBridgePath,
+      "Install edits only the selected Commit Messages section to reference docs/coding-standards/git-commit-message.md before renaming the former guide; every other instruction byte and its file mode stay unchanged.",
+    );
+  }
   return migrations;
+}
+
+/** Return only owner releases that need operator-visible recovery. */
+function failedClaimReleases(
+  results: readonly PathWriteClaimReleaseResult[],
+): PathWriteClaimReleaseResult[] {
+  return results.filter((result) => result.status !== "released");
+}
+
+/** Render bounded release evidence without guessing that an abandoned owner is dead. */
+function claimReleaseDiagnostic(
+  results: readonly PathWriteClaimReleaseResult[],
+): string | null {
+  const failures = failedClaimReleases(results);
+  if (failures.length === 0) return null;
+  const details = failures
+    .map((failure) => `${failure.targetPath} (${failure.status})`)
+    .join(", ");
+  return `Managed install could not confirm owner-safe claim release for ${details}. Inspect the listed write claim before retrying; do not remove it while a writer may be active.`;
+}
+
+/** Translate reusable claim admission into the install command's no-mutation contract. */
+function managedInstallClaimError(
+  error: PathWriteClaimError,
+  projectPath: string,
+): CLIError {
+  const baseMessage =
+    error.reason === "busy"
+      ? `Managed install is busy: another process owns ${error.targetPath}. No target files were changed. Inspect the claim before retrying: ${pathWriteClaimInspectCommand(projectPath, error.targetPath)}.`
+      : `Managed install could not claim ${error.targetPath}: ${error.message} No target files were changed.`;
+  const cleanupDiagnostic = claimReleaseDiagnostic(error.cleanupResults);
+  return new CLIError(
+    cleanupDiagnostic === null
+      ? baseMessage
+      : `${baseMessage} ${cleanupDiagnostic}`,
+    1,
+  );
+}
+
+/**
+ * Capture and acquire the complete previewed target-and-state write set.
+ * Error behavior: throws an install-specific CLI error for reusable claim refusals; unexpected failures propagate.
+ */
+function acquireManagedInstallClaims(
+  projectPath: string,
+  preview: ManagedSetupPreview,
+): PathWriteClaimBatch {
+  try {
+    const requests = preview.files.map((file) => ({
+      targetPath: file.path,
+      expectedIdentity: readPathWriteTargetIdentity(projectPath, file.path),
+    }));
+    return acquirePathWriteClaims(projectPath, requests);
+  } catch (error) {
+    if (error instanceof PathWriteClaimError) {
+      throw managedInstallClaimError(error, projectPath);
+    }
+    throw error;
+  }
+}
+
+/**
+ * Release one completed batch without masking a transaction failure already in flight.
+ * Error behavior: throws a CLI error for an unconfirmed release unless another error is already propagating, in which case it prints the recovery.
+ */
+function releaseManagedInstallClaims(
+  claims: PathWriteClaimBatch,
+  didTransactionFail: boolean,
+): void {
+  let diagnostic: string | null;
+  try {
+    diagnostic = claimReleaseDiagnostic(releasePathWriteClaims(claims));
+  } catch {
+    diagnostic =
+      "Managed install could not confirm owner-safe claim release. Inspect the write claims before retrying; do not remove them while a writer may be active.";
+  }
+  if (diagnostic === null) return;
+  if (didTransactionFail) {
+    console.error(diagnostic);
+    return;
+  }
+  throw new CLIError(diagnostic, 1);
+}
+
+/**
+ * Rebuild and repeat admission while every previewed destination is claimed.
+ * Error behavior: throws a CLI error when admission or any preview input changed before mutation.
+ */
+function revalidateManagedInstallPreview(
+  options: ParsedCLI,
+  agent: AgentId,
+  authority: ManagedSetupAuthority,
+  initialPreview: ManagedSetupPreview,
+): ManagedSetupPreview {
+  const revalidatedPreview = buildManagedSetupPreview(
+    options.projectPath,
+    agent,
+    authority,
+    pendingMigrations(options, agent),
+  );
+  const overwriteBlocker = managedSetupAdmissionFailure(
+    revalidatedPreview,
+    authority,
+  );
+  if (overwriteBlocker !== null) throw new CLIError(overwriteBlocker, 1);
+  if (JSON.stringify(revalidatedPreview) !== JSON.stringify(initialPreview)) {
+    throw new CLIError(
+      "Managed install inputs changed after claim admission. No target files were changed.",
+      1,
+    );
+  }
+  return revalidatedPreview;
+}
+
+/** Build the accepted installed-bytes-unrecorded recovery command. */
+function managedInstallStateRecovery(
+  projectPath: string,
+  agent: AgentId,
+): CLIError {
+  return new CLIError(
+    `Managed files were verified, but install state was not recorded. The previous managed baseline is intact and no confirmed receipt was written. Repair write access to .goat-flow/install-state/, then rerun: goat-flow install ${quoteManagedInstallProjectArgument(projectPath)} --agent ${agent}`,
+    1,
+  );
+}
+
+/** Whether the claimed installer reached post-write verification or preserved a child failure. */
+type ClaimedManagedInstallOutcome = "completed" | "installer-failed";
+
+/**
+ * Apply, verify, and record one install while its caller retains every write claim.
+ * Error behavior: preserves installer exits and translates verified-but-unrecorded state into the accepted recovery error.
+ * @returns completed after verified state and post-install writes, or installer-failed after preserving a non-zero child status
+ */
+async function runClaimedManagedInstall(
+  options: ParsedCLI,
+  agent: AgentId,
+  authority: ManagedSetupAuthority,
+  initialPreview: ManagedSetupPreview,
+): Promise<ClaimedManagedInstallOutcome> {
+  const installPreview = revalidateManagedInstallPreview(
+    options,
+    agent,
+    authority,
+    initialPreview,
+  );
+  // V2 state and every old-reader marker become visible while the complete claim batch is held, before Bash receives permission to mutate targets.
+  prepareManagedInstallStateForApply(options.projectPath);
+  const installerLaunch = buildInstallerInvocation({
+    scriptPath: getTemplatePath("workflow/install-goat-flow.sh"),
+    projectPath: options.projectPath,
+    agent,
+    installerFlags: collectInstallerFlags(options, agent, installPreview),
+    platform: process.platform,
+  });
+  if (!installerLaunch.ok) throw new CLIError(installerLaunch.error, 1);
+
+  const { spawnInheritedSync } = await import("./server/safe-exec.js");
+  const installerProcess = buildInstallerSpawnSpec(installerLaunch);
+  const installResult = spawnInheritedSync({
+    command: installerProcess.command,
+    args: installerProcess.args,
+    allowedBasenames: ["bash", "bash.exe"],
+    env: {
+      ...installerProcess.env,
+      GOAT_FLOW_INSTALL_ADMISSION: "v2",
+    },
+  });
+  if (installResult.error) {
+    throw new CLIError(
+      `Could not run installer with ${installerProcess.command}: ${installResult.error.message}`,
+      1,
+    );
+  }
+  if (installResult.signal) {
+    throw new CLIError(
+      `Installer terminated by signal ${installResult.signal}`,
+      1,
+    );
+  }
+  if (installResult.status !== 0) {
+    process.exitCode = installResult.status ?? 1;
+    return "installer-failed";
+  }
+
+  let installationMismatches: string[];
+  try {
+    installationMismatches = recordManagedInstallAfterVerification(
+      options.projectPath,
+      agent,
+    );
+  } catch (error) {
+    if (error instanceof ManagedInstallStateRecordError) {
+      throw managedInstallStateRecovery(options.projectPath, agent);
+    }
+    throw error;
+  }
+  if (installationMismatches.length > 0) {
+    throw new CLIError(
+      `Installer exited successfully, but ${installationMismatches.length} managed file(s) do not match their templates. Install state was not recorded.`,
+      1,
+    );
+  }
+  emitCommitGuidanceInstallResult(options.projectPath, agent);
+  emitIndexGenerationInstallResult(options.projectPath);
+  return "completed";
 }
 
 /**
@@ -678,46 +1021,23 @@ export async function handleInstallCommand(options: ParsedCLI): Promise<void> {
     throw new CLIError(installerLaunch.error, 1);
   }
 
-  const { spawnInheritedSync } = await import("./server/safe-exec.js");
-  const installerProcess = buildInstallerSpawnSpec(installerLaunch);
-  const installResult = spawnInheritedSync({
-    command: installerProcess.command,
-    args: installerProcess.args,
-    allowedBasenames: ["bash", "bash.exe"],
-    env: installerProcess.env,
-  });
-  // A spawn failure means the installer never started, so users receive the operating-system error.
-  if (installResult.error) {
-    throw new CLIError(
-      `Could not run installer with ${installerProcess.command}: ${installResult.error.message}`,
-      1,
-    );
-  }
-  // A signal means installation ended mid-flow and cannot be recorded as a verified baseline.
-  if (installResult.signal) {
-    throw new CLIError(
-      `Installer terminated by signal ${installResult.signal}`,
-      1,
-    );
-  }
-  // A non-zero or missing child status is preserved as failure instead of running post-install writes.
-  if (installResult.status !== 0) {
-    // Missing numeric status still maps to exit 1 so scripts never mistake it for success.
-    process.exitCode = installResult.status ?? 1;
-    return;
-  }
-
-  const installationMismatches = recordManagedInstallAfterVerification(
+  const claims = acquireManagedInstallClaims(
     options.projectPath,
-    selectedAgent,
+    installPreview,
   );
-  // A successful process exit is insufficient when managed bytes still differ from their templates.
-  if (installationMismatches.length > 0) {
-    throw new CLIError(
-      `Installer exited successfully, but ${installationMismatches.length} managed file(s) do not match their templates. Install state was not recorded.`,
-      1,
+  let didTransactionFail = false;
+  try {
+    const installOutcome = await runClaimedManagedInstall(
+      options,
+      selectedAgent,
+      authority,
+      installPreview,
     );
+    didTransactionFail = installOutcome === "installer-failed";
+  } catch (error) {
+    didTransactionFail = true;
+    throw error;
+  } finally {
+    releaseManagedInstallClaims(claims, didTransactionFail);
   }
-  emitCommitGuidanceInstallResult(options.projectPath);
-  emitIndexGenerationInstallResult(options.projectPath);
 }

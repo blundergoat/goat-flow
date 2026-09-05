@@ -20,6 +20,7 @@ import {
   originalExecFileSync,
   PROJECT_PATH,
   readFile,
+  readdir,
   rename,
   resolve,
   rm,
@@ -258,6 +259,14 @@ describe("dashboard /api/projects", () => {
       assert.ok(Object.values(projectTitles).includes("Roundtrip project"));
       const projects = expectRecord(body.projects, "dashboard state projects");
       assert.ok(Object.keys(projects).length >= 1);
+      const persisted = expectRecord(
+        JSON.parse(await readFile(DASHBOARD_STATE_PATH, "utf-8")),
+        "persisted dashboard state",
+      );
+      assert.deepEqual(
+        persistedProjectsState(persisted),
+        persistedProjectsState(body),
+      );
     } finally {
       await rm(first, { recursive: true, force: true });
       await rm(second, { recursive: true, force: true });
@@ -482,7 +491,16 @@ describe("dashboard /api/projects", () => {
         join(root, ".goat-flow", "project-id"),
         "utf-8",
       );
-      assert.match(marker, /gf_[0-9a-f-]{36}/i);
+      assert.match(
+        marker,
+        /^# Local goat-flow dashboard project identity\. Gitignored by default\.\ngf_[0-9a-f-]{36}\n$/iu,
+      );
+      assert.deepEqual(
+        (await readdir(join(root, ".goat-flow"))).filter(
+          (name) => name.startsWith(".project-id.") && name.endsWith(".tmp"),
+        ),
+        [],
+      );
 
       await rename(root, moved);
       const second = await fetchJson(

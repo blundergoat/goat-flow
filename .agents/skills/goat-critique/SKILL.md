@@ -1,62 +1,62 @@
 ---
 name: goat-critique
 description: "Use when a decision or analysis needs multi-lens critique to surface blind spots before shipping."
-goat-flow-skill-version: "1.16.0"
+goat-flow-skill-version: "1.17.0"
 ---
 # /goat-critique
 
 ## Shared Conventions
 
-Read `.goat-flow/skill-docs/skill-preamble.md` and `.goat-flow/skill-docs/skill-conventions.md` for shared conventions before proceeding.
+Read `.goat-flow/skill-docs/skill-preamble.md` and `.goat-flow/skill-docs/skill-conventions.md`.
 
 ## When to Use
 
-Use when a concrete artifact deserves multi-perspective critique before shipping: plan, security assessment, debug hypotheses, review findings, test strategy, architecture proposal, or refactor approach.
+Use for multi-perspective critique of a concrete plan, security assessment, debug hypothesis set, review, test strategy, architecture proposal, or refactor approach.
 
 ## Boundary Commands
 
-- **NEVER:** Replace delegated critique with inline role-play, skip required phases, or auto-apply recommendations.
-- **ALWAYS:** Treat explicit invocation as consent to run the full delegated protocol against a concrete artifact.
-- **DEFER TO:** Before invocation only, create a missing artifact first, answer simple facts directly, or use `/goat-review` for a trivial artifact; explicit `/goat-critique` still runs in full.
+- **NEVER:** Replace delegation with inline role-play, skip phases, or auto-apply recommendations.
+- **ALWAYS:** Treat explicit invocation as consent for the full delegated protocol on a concrete artifact.
+- **DEFER TO:** Before invocation, create a missing artifact, answer simple facts, or use `/goat-review` for a trivial artifact; explicit `/goat-critique` still runs fully.
 
 | Excuse | Reality |
 |--------|---------|
-| "The artifact is trivial - a quick critique would cover it" | Quick mode was tried and removed. A single reviewer running lens passes in one context is self-talk under three labels, not multi-perspective critique. |
-| "All three agents agree so it must be right" | Consensus without orchestrator verification is unverified self-declaration. The orchestrator's job is to verify claims, not count votes. |
-| "Inline role-play is faster than spawning agents" | Agents that role-play SKEPTIC/ANALYST/STRATEGIST inline produce indistinguishable perspectives. Isolated context is what makes findings independent. |
-| "Closing checks happen after the main answer - skip them" | End-of-task rules have near-zero voluntary compliance. Phase 5.5 meta-audit and outcome capture exist because post-deliverable steps get skipped. |
+| "The artifact is trivial - a quick critique would cover it" | Quick mode was removed: one context under three lens labels is not independent critique. |
+| "All three agents agree so it must be right" | Consensus without orchestrator verification is unverified. Verify claims; do not count votes. |
+| "Inline role-play is faster than spawning agents" | Inline lenses correlate; isolated contexts create independent findings. |
+| "Closing checks happen after the main answer - skip them" | Phase 5.5 and outcome capture exist because agents skip closing work. |
 
-**Direct invocation is binding.** `$goat-critique` or `/goat-critique` runs Phases 1-5 plus mandatory post-synthesis steps (5.5, 5.6). Dispatcher ambiguity rules do not override direct invocation; raise scope concerns after synthesis.
+**Direct invocation is binding.** `$goat-critique` or `/goat-critique` runs Phases 1-5 plus 5.5/5.6. Dispatcher ambiguity does not override it; raise scope concerns after synthesis.
 
-**Report-only by default.** `$goat-critique make X shorter` = critique only; `$goat-critique ... then apply it` = critique first, apply after gate. See Constraints for mutation and apply rules.
+**Report-only by default.** `$goat-critique make X shorter` critiques only; `then apply it` permits application after the gate. Constraints own mutation rules.
 
 ## Step 0 - Intake
 
 goat-critique runs only full delegated mode: Phases 1-5, 5.5 meta-audit, 5.6 outcome capture, three critique sub-agents, one meta-agent. Lighter-mode suggestions are the failure this design prevents.
 
 **Intake checklist:**
-- Confirm the artifact exists and is concrete (a file, a plan document, a specific set of findings - not a vague idea).
-- Select the critique rubric for the artifact type (see Critique Rubrics below). If unclear, ask the user.
-- Use the preamble's learning-loop retrieval on relevant `.goat-flow/learning-loop/footguns/` and `.goat-flow/learning-loop/lessons/`; record explicit misses instead of broad-loading buckets.
-- Delegation consent: proceed directly to Phase 1. Skill-chained entry: skip intake confirmation, use caller context; still run retrieval + rubric selection. All phases (1-5 + 5.5 + 5.6) always run.
-- **Differential mode detection:** If `.goat-flow/logs/critiques/` has a same-artifact slug within 30 days, offer differential mode: A/B receive prior log + artifact diff; C stays cold. Phase 5 adds delta counts and `[diff-of: <prior-uuid>]`.
+- Require a concrete artifact (file, plan, or findings), not a vague idea.
+- Select its Critique Rubric; ask if unclear.
+- Run preamble learning-loop retrieval for artifact/risk terms; record misses without broad-loading buckets.
+- **Host ownership:** The host/root context owns Phases 1-5.6. A forked sub-agent returns control before Phase 1 and does not apply the shared sub-agent gate conversion. The host spawns agents, presents gates, and resumes Phase 5.6 after the response. Direct/chained host entry needs no delegation prompt; chained entry skips only intake confirmation.
+- **Differential mode detection:** For a same-artifact slug under `.goat-flow/logs/critiques/` within 30 days, offer differential mode: A/B get prior log + diff; C stays cold. Phase 5 adds deltas and `[diff-of: <rand5>]`.
 - **Read context map:** Merge the selected rubric map from `references/rubric-examples.md` into the fixed A/B/C split; never replace baseline context.
 
 ## Phase 1 - Generate Competing Critiques
 
 Spawn all three sub-agents in parallel using the host's real delegation mechanism.
 
-Context varies intentionally - informational diversity catches more than tonal diversity.
+Context diversity catches more than tonal diversity.
 
 ### The Core Trio Lens
 
-Agents A and B both use the SKEPTIC/ANALYST/STRATEGIST combined lens. These three perspectives work as a unit - never split them into separate agents:
+Agents A and B each use the combined SKEPTIC/ANALYST/STRATEGIST lens; never split its perspectives across agents:
 
 - **SKEPTIC** - "What could go wrong? What assumptions are unproven? What's the worst-case scenario?"
 - **ANALYST** - "What does the evidence actually say? What's the cost/benefit? What do the numbers and code paths tell us?"
 - **STRATEGIST** - "What's the fastest path to shipping? What can we defer? What's the highest-leverage change?"
 
-A/B must use all three perspectives. Agent C is the control group: same fields, no per-lens quota; use `N/A - fresh-eyes scope` only when a lens adds nothing.
+A/B use all three perspectives. C is the same-field control with no lens quota; use `N/A - fresh-eyes scope` only when a lens adds nothing.
 
 **Context split:**
 
@@ -74,9 +74,9 @@ Full directives: `references/sub-agent-directives.md`.
 - **B (Alternatives):** SKEPTIC/ANALYST/STRATEGIST on alternatives, ranked by implementation friction. Must surface at least one alternative.
 - **C (Fresh Eyes):** No project context. Flags unstated assumptions and readability gaps. ISOLATION RULE enforced.
 
-Each sub-agent normally returns 3-7 evidence-backed findings plus required lens fields, severity, evidence, confidence, Proof class, rubric dimensions, overall assessment, and one strength. Zero findings are valid only through the reference pack's clean-result attestation after one documented second pass.
+Each sub-agent normally returns 3-7 evidence-backed findings with required fields, severity, evidence, confidence, Proof class, rubric dimensions, assessment, and one strength. Zero requires the reference pack's clean-result attestation after one documented second pass.
 
-**Lens coverage:** A/B must analyse every lens and C must probe assumptions/readability. A lens with no supported issue gets one documented second pass, then records `No supported finding` instead of inventing one. See the reference pack.
+**Lens coverage:** A/B analyse every lens; C probes assumptions/readability. After one documented second pass, a lens without an issue records `No supported finding`. See the reference pack.
 
 ## Phase 2 - Rank and Compare
 
@@ -112,22 +112,12 @@ Mark each: RESOLVED (with winner) / STILL DISPUTED / RETRACTED (false positive c
 
 ## Phase 4 - Clarify
 
-**Persist before gate:** Write Phase 1-3 results to `.goat-flow/logs/critiques/<YYYY-MM-DD>-<HHMM>-<artifact-slug>-<rand5>.md` - delegation evidence (ids/handles, calls/limit, unavailable markers), summaries, matrix, cross-exams. Runs even on Phase 3 early exit.
+**Persist before gate:** Keep the Phase 1-3 draft in memory. Pipe it through stdin to the preamble-selected `goat-flow redact --output .goat-flow/logs/critiques/<YYYY-MM-DD>-<HHMM>-<artifact-slug>-<rand5>.md` or matching source CLI; only redactor destination bytes may reach disk. That artifact slug is what a later run matches for differential mode. If unavailable or redaction fails, write nothing, emit `persist-skipped: redactor-unavailable`, and continue to the human gate. Do this after Phase 3 early exit too.
 
-Before synthesising, present the unresolved items to the human conversationally.
+Present unresolved items conversationally. Open with decision count and titles. Ask each as `Q[N]: [decision]? (A) [option] (B) [option] Default: [A/B]. Background: [one sentence]`. For 3+, use `| # | Decision | Option A (default) | Option B | Why |`, then ask for numbered overrides or default approval. Cover Phase-3 disputes, valid trade-offs, and whether context drift is intentional. End by requesting picks or pushback.
 
-**Opener:** Lead with a one-line summary of how many decisions are needed and their titles. Example: "3 decisions before synthesis: (1) SEC-01 severity, (2) remediation path, (3) attacker model scope."
-
-**Per-question format:** `Q[N]: [decision]? (A) [option] (B) [option] Default: [A/B]. Background: [1 sentence]`.
-
-**Compact table (3+ questions):** `| # | Decision | Option A (default) | Option B | Why |`. Follow with: "Reply with numbers to override defaults; or approve to proceed."
-
-Question types: (1) Disputes from Phase 3, (2) Trade-offs with two valid approaches, (3) Context drift findings - intentional vs oversight.
-
-**Closer:** After all questions, end with: "Reply with your picks (e.g. 'A, B, go with defaults on the rest') or push back on any framing."
-
-**If questions exist:** BLOCKING GATE - STOP and wait for human response.
-**If no questions (full consensus, no trade-offs, no context drift):** CHECKPOINT - note "no disputes - proceeding to synthesis" and continue.
+**Questions:** BLOCKING GATE - STOP for the human.
+**None:** CHECKPOINT - record "no disputes - proceeding to synthesis" and continue.
 
 ## Phase 5 - Synthesise
 
@@ -155,7 +145,7 @@ Then the full critique:
 
 **BLOCKING GATE:** Present the synthesised critique (including Meta-score if 5.5 produced one). "Options: (A) apply, (B) dig deeper, (C) re-run, (D) close. Default: D." After plan critique, suggest `/goat-plan`.
 
-**Phase 5.6 - Outcome capture.** After the human picks A/B/C/D, tag each surviving finding: `accepted | rejected | deferred | partial`. Defaults: A → accepted, D → deferred. Persist under `## Outcomes`. Do not show `## Outcomes` in the initial Phase 5 gate response.
+**Phase 5.6 - Outcome capture.** After the host receives the human's A/B/C/D pick, tag each surviving finding: `accepted | rejected | deferred | partial`. Defaults: A → accepted, D → deferred. Persist under `## Outcomes`. Do not show `## Outcomes` in the initial Phase 5 gate response.
 
 **Integration hooks.** Populate from surviving findings when applicable:
 - `for-goat-plan` - milestone updates, reordering

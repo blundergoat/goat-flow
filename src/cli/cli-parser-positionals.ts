@@ -1,9 +1,9 @@
 /**
- * Reads the words a user typed after a goat-flow command and turns them into a subcommand.
- * Everything here answers one question: given `goat-flow quality save draft`, which action did they mean, and did they supply the right number of
- * arguments for it?
+ * Reads the words after a goat-flow command and resolves the subcommand the developer intended.
+ * It also checks that the selected action received the right number of positional arguments.
  *
  * Mistakes are rejected loudly rather than guessed at.
+ *
  * An unknown subcommand or a missing argument raises a CLIError naming the accepted forms, because silently picking a default would run something the
  * user did not ask for - and for commands that write files, that is the difference between a helpful message and an unwanted change to their project.
  */
@@ -11,11 +11,13 @@ import { join, resolve } from "node:path";
 import { CLIError } from "./cli-error.js";
 import {
   HOOK_SUBCOMMANDS,
+  type ClaimsSubcommand,
   type Command,
   type CandidacyInputArg,
   type EventsSubcommand,
-  type HookScenario,
+  type HookScenarioSelection,
   type HookSubcommand,
+  type LearnSubcommand,
   type PlansSubcommand,
   type PlansTimeAction,
   type QualitySubcommand,
@@ -162,12 +164,21 @@ function qualityPositionals(
 /**
  * One parser per `quality` subcommand, so each subcommand's argument rules and error text sit together.
  *
- * A subcommand absent from this table falls through to `prompt`, which is what lets `goat-flow quality <path>` work.
+ * An unrecognized first positional falls through to an implicit `prompt`, which is what lets `goat-flow quality <path>` work.
  */
-const QUALITY_SUBCOMMAND_PARSERS: Record<
-  string,
-  (args: QualityPositionalArgs) => QualityPositionals
-> = {
+const QUALITY_SUBCOMMAND_PARSERS = {
+  /** Prompt takes one optional project path in both its explicit and implicit forms. */
+  prompt: ({ second, rest }) => {
+    if (rest.length > 0) {
+      throw new CLIError(
+        "quality prompt accepts at most one positional project path.",
+        2,
+      );
+    }
+    return qualityPositionals("prompt", {
+      projectPath: resolve(second ?? "."),
+    });
+  },
   /** History takes an optional project path and nothing else. */
   history: ({ second, rest }) => {
     if (rest.length > 0) {
@@ -217,7 +228,20 @@ const QUALITY_SUBCOMMAND_PARSERS: Record<
     }
     return qualityPositionals("save", { projectPath: resolve(second) });
   },
-};
+} satisfies Record<
+  QualitySubcommand,
+  (args: QualityPositionalArgs) => QualityPositionals
+>;
+
+/** Narrow one first positional to a parser-table key without treating prototype names as commands. */
+function isQualitySubcommand(
+  candidate: string | undefined,
+): candidate is QualitySubcommand {
+  return (
+    candidate !== undefined &&
+    Object.prototype.hasOwnProperty.call(QUALITY_SUBCOMMAND_PARSERS, candidate)
+  );
+}
 
 /**
  * Resolve which `quality` subcommand the user invoked, and what its positional arguments mean.
@@ -244,11 +268,9 @@ export function parseQualityPositionals(
   }
 
   // Bracket lookup on an object literal resolves inherited names like __proto__, so only own keys may dispatch.
-  const parseSubcommand =
-    first !== undefined &&
-    Object.prototype.hasOwnProperty.call(QUALITY_SUBCOMMAND_PARSERS, first)
-      ? QUALITY_SUBCOMMAND_PARSERS[first]
-      : undefined;
+  const parseSubcommand = isQualitySubcommand(first)
+    ? QUALITY_SUBCOMMAND_PARSERS[first]
+    : undefined;
   if (parseSubcommand) return parseSubcommand({ second, rest, draftFlag });
 
   // No subcommand matched, so the first positional is the project path for a prompt run.
@@ -280,6 +302,63 @@ export function parseEventsPositionals(positionals: string[]): {
   return {
     eventsSubcommand: "tail",
     projectPath: resolve(second ?? "."),
+  };
+}
+
+/**
+ * Keep operator-supplied claim paths from changing the shape of terminal diagnostics or copyable commands.
+ * Error behavior: throws CLIError before path resolution or marker access when C0, DEL, or C1 control characters are present.
+ *
+ * @param label - public claim field named by a refusal
+ * @param argumentValue - exact operator-supplied path checked before display
+ */
+export function assertTerminalSafeClaimArgument(
+  label: "project path" | "target path",
+  argumentValue: string,
+): void {
+  const hasControlCharacter = Array.from(argumentValue).some((character) => {
+    const codePoint = character.codePointAt(0);
+    return (
+      codePoint !== undefined &&
+      (codePoint <= 0x1f || (codePoint >= 0x7f && codePoint <= 0x9f))
+    );
+  });
+  if (hasControlCharacter) {
+    throw new CLIError(
+      `claims ${label} must not contain terminal control characters.`,
+      2,
+    );
+  }
+}
+
+/**
+ * Resolve one explicit claim inspection or recovery action and its selected project.
+ * Error behavior: unknown actions or extra project paths fail before any marker is read.
+ *
+ * @param positionals - subcommand followed by at most one project path
+ * @returns the selected claim action and absolute project path
+ * @throws CLIError when the action or positional count is invalid
+ */
+export function parseClaimsPositionals(positionals: string[]): {
+  claimsSubcommand: ClaimsSubcommand;
+  projectPath: string;
+} {
+  const [subcommand, projectPath, ...extraPositionals] = positionals;
+  if (subcommand !== "inspect" && subcommand !== "recover") {
+    throw new CLIError('claims requires subcommand "inspect" or "recover".', 2);
+  }
+  if (extraPositionals.length > 0) {
+    throw new CLIError(
+      `claims ${subcommand} accepts at most one positional project path.`,
+      2,
+    );
+  }
+  if (projectPath !== undefined) {
+    assertTerminalSafeClaimArgument("project path", projectPath);
+  }
+  return {
+    claimsSubcommand: subcommand,
+    projectPath: resolve(projectPath ?? "."),
   };
 }
 
@@ -330,24 +409,26 @@ export function parseHooksPositionals(positionals: string[]): {
 export function parseHookScenarioArg(
   subcommand: HookSubcommand | null,
   scenarioArg: string | undefined,
-): HookScenario | null {
+): HookScenarioSelection | null {
   // Other hooks operations do not run runtime scenarios or receive a default group.
   if (subcommand !== "verify") return null;
   // Verification must not choose a proof group the user did not explicitly request.
   if (scenarioArg === undefined) {
     throw new CLIError(
-      'hooks verify requires --scenario "deny-hook", "post-turn-hook", or "gruff-hook".',
+      'hooks verify requires --scenario "deny-hook", "post-turn-hook", "gruff-hook", or "all".',
       2,
     );
   }
   // Unknown groups must fail before the CLI can imply an unimplemented proof ran.
+  // `all` is the only non-group word accepted; every other value must fail before a proof looks like it ran.
   if (
     scenarioArg !== "deny-hook" &&
     scenarioArg !== "post-turn-hook" &&
-    scenarioArg !== "gruff-hook"
+    scenarioArg !== "gruff-hook" &&
+    scenarioArg !== "all"
   ) {
     throw new CLIError(
-      '--scenario must be "deny-hook", "post-turn-hook", or "gruff-hook".',
+      '--scenario must be "deny-hook", "post-turn-hook", "gruff-hook", or "all".',
       2,
     );
   }
@@ -492,5 +573,55 @@ export function parseCommandPositionals(
     qualityDiffPair: null,
     qualityValidatePath: null,
     candidacyInput: null,
+  };
+}
+
+/**
+ * Preserve every file/directory operand supplied to the recall command.
+ * Error behavior: throws CLIError with exit code 2 when no recall subject was named.
+ *
+ * @param positionals - project-relative files or directories typed after `recall`
+ * @returns the operands in caller order; path safety and canonicalization happen against the selected filesystem
+ */
+export function parseRecallPositionals(
+  positionals: string[],
+): readonly string[] {
+  if (positionals.length === 0) {
+    throw new CLIError(
+      "recall requires at least one file or directory path.",
+      2,
+    );
+  }
+  return positionals;
+}
+
+/**
+ * Read `learn new [project]` so an author knows which project will receive the scaffold.
+ * Use before any learning-loop file is inspected or written.
+ *
+ * @param positionals - words typed after `learn`; an omitted project path means the author's current directory
+ * @returns the `new` action and absolute project path; the returned path is never empty
+ * @throws CLIError when the action is missing or unknown, or when extra paths leave the selected project ambiguous
+ */
+export function parseLearnPositionals(positionals: string[]): {
+  learnSubcommand: LearnSubcommand;
+  projectPath: string;
+} {
+  const [subcommand, projectPath, ...extraPositionals] = positionals;
+  // A different first word names no safe authoring flow, so the developer sees the one accepted action before any file lookup.
+  if (subcommand !== "new") {
+    throw new CLIError('learn requires subcommand "new".', 2);
+  }
+  // More than one project path leaves the write target ambiguous, so the CLI rejects the request before opening the learning loop.
+  if (extraPositionals.length > 0) {
+    throw new CLIError(
+      "learn new accepts at most one positional project path.",
+      2,
+    );
+  }
+  // No path means the developer selected the current project, matching other project-scoped goat-flow commands.
+  return {
+    learnSubcommand: "new",
+    projectPath: resolve(projectPath ?? "."),
   };
 }

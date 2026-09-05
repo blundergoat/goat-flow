@@ -146,19 +146,22 @@ npx @blundergoat/goat-flow@latest quality diff 2026-04-01-0900-claude-aaaaa:2026
 
 ### `goat-flow quality validate <path-to-report>`
 
-Validate a saved quality report JSON file against the report schema. Checks that the file exists, parses as JSON, and conforms to the expected quality-report shape. Exits `2` on a missing file, invalid JSON, or a schema violation, and `0` when the report is well-formed. Use it to verify an agent-written report before consuming it.
+Validate a saved quality report JSON file. Current-report rules run first: a report that satisfies them prints `OK <path>`. A report only the compatibility parser accepts prints `OK LEGACY-COMPATIBLE <path>` and names the missing current-report rule on stderr. That label reports historical readability - the file stays loadable by validate, history, and diff - and not acceptance by `quality save`, which parses strictly and would reject it. Exits `2` on a missing file, invalid JSON, or a report both parsers reject, and `0` for either receipt. Use it to verify an agent-written report before consuming it.
 
 ```bash
 npx @blundergoat/goat-flow@latest quality validate .goat-flow/logs/quality/2026-04-01-0900-claude-aaaaa.json
+
+# OK <path>                     current report; `quality save` accepts this shape
+# OK LEGACY-COMPATIBLE <path>   readable only; stderr names the missing current-report rule
 ```
 
 ### `goat-flow quality save <project>`
 
-Persist one current quality report supplied as JSON on stdin. The command strictly accepts the report shape in memory, scrubs accepted string values, revalidates the report, verifies its project and goat-flow versions, chooses an exclusive file under the selected project's `.goat-flow/logs/quality/`, and prints `OK <absolute-report-path>`. Current reports include `assessment_context`: the assessed revision, worktree state, runtime-grounding coverage, unverified probes, and score confidence. This metadata explains comparability limits but does not alter rubric scores. Historical reports that predate it remain loadable through validate, history, and diff. The saver rejects caller-selected output paths and redirected report directories.
+Persist one current quality report supplied as JSON on stdin. The command strictly accepts the report shape in memory, scrubs accepted string values, revalidates the report, verifies its project and goat-flow versions, chooses an exclusive file under the selected project's `.goat-flow/logs/quality/`, and prints `OK <absolute-report-path>`. Current reports include `assessment_context` for run comparability, `score_rationale` with evidence and deduction for all eight score axes, and a required `refuted_candidates` array that records the suspected findings the assessor ruled out. The array may be empty. Historical reports that predate these fields remain loadable through validate, history, and diff; a missing legacy refutation ledger is exposed as `[]`. The saver rejects caller-selected output paths and redirected report directories.
 
 ```bash
 npx @blundergoat/goat-flow@latest quality save . <<'JSON'
-{"report_kind":"goat-flow-quality-report","goat_flow_version":"<current-version>","agent":"claude","project_path":"<absolute-project-path>","run_date":"YYYY-MM-DD","audit_status":"pass","scope":"framework-self","rubric_version":"<current-version>","quality_mode":"skills","prior_report_id":null,"assessment_context":{"project_revision":"<git-head>","working_tree_state":"clean","grounding_status":"complete","unverified_probes":[],"score_confidence":"high"},"scores":{"setup":{"total":0,"accuracy":0,"relevance":0,"completeness":0,"friction":0},"system":{"total":0,"usefulness":0,"signal_to_noise":0,"adaptability":0,"learnability":0}},"findings":[]}
+{"report_kind":"goat-flow-quality-report","goat_flow_version":"<current-version>","agent":"claude","project_path":"<absolute-project-path>","run_date":"YYYY-MM-DD","audit_status":"pass","scope":"framework-self","rubric_version":"<current-version>","quality_mode":"skills","prior_report_id":null,"assessment_context":{"project_revision":"<git-head>","working_tree_state":"clean","grounding_status":"complete","unverified_probes":[],"score_confidence":"high"},"scores":{"setup":{"total":0,"accuracy":0,"relevance":0,"completeness":0,"friction":0},"system":{"total":0,"usefulness":0,"signal_to_noise":0,"adaptability":0,"learnability":0}},"score_rationale":{"setup":{"accuracy":{"evidence":"<observed evidence>","deduction":"<reason or no deduction>"},"relevance":{"evidence":"<observed evidence>","deduction":"<reason or no deduction>"},"completeness":{"evidence":"<observed evidence>","deduction":"<reason or no deduction>"},"friction":{"evidence":"<observed evidence>","deduction":"<reason or no deduction>"}},"system":{"usefulness":{"evidence":"<observed evidence>","deduction":"<reason or no deduction>"},"signal_to_noise":{"evidence":"<observed evidence>","deduction":"<reason or no deduction>"},"adaptability":{"evidence":"<observed evidence>","deduction":"<reason or no deduction>"},"learnability":{"evidence":"<observed evidence>","deduction":"<reason or no deduction>"}}},"findings":[],"refuted_candidates":[]}
 JSON
 ```
 
@@ -176,13 +179,74 @@ npx @blundergoat/goat-flow@latest manifest --check            # Fail if manifest
 
 Report learning-loop health: live entry counts by bucket, stale file refs, and `last_reviewed` freshness. Use `--check` in CI - it exits non-zero if any bucket is missing `last_reviewed`, uses a malformed date, contains stale file references, or has a generated `INDEX.md` that no longer matches its bucket content (`index-stale`; a never-generated index is only an advisory warning).
 
-The report also lists **graduation candidates**: active footgun/lesson entries carrying a line-start `**Recurrence update` marker, meaning the recorded mistake happened again after the entry was written. Per the feedback-loop doctrine in [harness-engineering.md](harness-engineering.md), that prevention should be promoted to a structural gate (preflight check, CI step, deny pattern) or the entry resolved. Candidates are report-only: they never appear in `--check` output and never fail the gate, and a corpus without recurrence markers renders nothing extra.
+The report also lists **graduation candidates**. The effective incident count is the larger of a valid positive safe-integer `Incident count` and one base incident plus recognized line-start recurrence labels. Only active entries with at least two effective incidents are candidates. Per the feedback-loop doctrine in [harness-engineering.md](harness-engineering.md), that prevention should be promoted to a structural gate (preflight check, CI step, deny pattern) or the entry resolved.
+
+Graduation candidates are report-only: they are omitted from `stats --check`, cannot fail that gate, and have no graduation-specific `--check` mode. A corpus without qualifying entries renders nothing extra.
 
 ```bash
 npx @blundergoat/goat-flow@latest stats                       # Learning-loop health report
 npx @blundergoat/goat-flow@latest stats --check               # CI gate for bucket hygiene + index freshness
 npx @blundergoat/goat-flow@latest stats --format json         # Machine-readable report
 ```
+
+### `goat-flow recall <path> [path...] [--format text|json]`
+
+List active learning-loop entries whose `(search: ...)` evidence anchors cite the files or directories you name. File operands match exact normalized project-relative paths, including equivalent `./` forms. Directory operands match cited files beneath that directory.
+
+Recall prints each matching entry's source path, heading, status, matching citations, and `Decision changed` guidance when present. It never inlines entry bodies or writes output files. Results are ordered by source path and heading, capped at 25 entries, and report the number of additional matches instead of truncating silently.
+
+```bash
+npx @blundergoat/goat-flow@latest recall src/cli/server/terminal.ts
+npx @blundergoat/goat-flow@latest recall src/cli src/dashboard --format json
+```
+
+Use recall after the required INDEX-first Step 0 read when concrete files are already known. It supplements generated learning-loop indexes; it does not replace INDEX retrieval or relevance searches for symptoms and tools.
+
+### `goat-flow learn new [path] --type <kind> --category <bucket> --title <title> [flags]`
+
+Validate and scaffold one explicitly requested footgun, lesson, or pattern.
+This is manual authoring, not automatic capture: the command never reads sessions, reports, reviews, or agent output to decide what becomes durable
+project knowledge.
+Search the generated index and category bucket first; consolidation and the decision to create a new entry remain the author's responsibility.
+
+Use lowercase kebab-case for `--category` and one line for `--title`.
+Repeat `--evidence <project-relative-path>` with one same-order `--search <literal>` for each citation.
+Footguns require at least one pair plus `--evidence-kind ACTUAL_MEASURED|OBSERVED|EXTERNAL_REFERENCE`; lessons and patterns may omit evidence.
+Search values use the same literal citation validator as learning-loop audits, so regex-shaped input is not interpreted as a pattern.
+
+`--dry-run` runs the same destination, schema, duplicate-heading, and citation checks, then prints the entry without writing a bucket or index.
+With `--format json`, `learn new` emits `command`, `subcommand`, `targetPath`, `wasWritten`, `warnings`, and `scaffold`.
+A real write places the active entry above `## Resolved Entries`, regenerates learning-loop indexes, and runs `stats --check`.
+If either follow-up fails after publication, the valid entry remains and the command prints `goat-flow index && goat-flow stats --check` for recovery.
+Adjacent atomic replacement prevents partial bytes and the final recheck detects a cooperative editor save.
+It does not claim to prevent a lost update in the residual interval after that check.
+
+```bash
+npx @blundergoat/goat-flow@latest learn new --type lesson --category verification --title "Check focused proof" --dry-run
+npx @blundergoat/goat-flow@latest learn new . --type footgun --category hooks --title "Hook drift" \
+  --evidence workflow/hooks/README.md --search "Generated index" --evidence-kind OBSERVED
+```
+
+### `goat-flow claims inspect|recover [path] --target <project-relative-path>`
+
+Inspect one path-write ownership marker, or remove only the unchanged marker an operator has confirmed is abandoned. Use this route when `install` or `learn new` reports that another cooperating writer owns a target. Claims never expire, and the command does not infer process liveness, marker age, or abandonment.
+
+Start with the read-only inspection:
+
+```bash
+npx @blundergoat/goat-flow@latest claims inspect . --target docs/cli.md
+```
+
+When a marker is present, the text result shows its path and SHA-256 plus a copy-ready recovery command. JSON uses `goat-flow.path-write-claim-recovery.v1` and returns `command`, `subcommand`, `status`, `projectRoot`, `targetPath`, `markerPath`, and `markerSha256`. An absent marker has status `absent` and null marker fields.
+
+Before recovery, independently confirm that no writer still owns the named target. Then pass the exact lowercase digest returned by the latest inspection and the separate confirmation flag:
+
+```bash
+npx @blundergoat/goat-flow@latest claims recover . --target docs/cli.md \
+  --marker-sha256 <64-lowercase-hex> --confirm-abandoned
+```
+
+Recovery inspects the marker again and passes that same in-process evidence to the owner-safe removal helper. A missing confirmation, malformed or stale digest, unsafe marker, disappearance, or identity change leaves the marker in place and requires a fresh inspection. There is no force, expiry, process-liveness guess, claim stealing, or automatic cleanup path. Both subcommands support only terminal text or JSON output; they do not accept `--output`.
 
 ### `goat-flow diagnostics context [path] [--agent <id>] [--format text|json|markdown]`
 
@@ -258,26 +322,27 @@ Scrub readable continuation text before it reaches disk. Pipe a session, handoff
 
 ```bash
 npx @blundergoat/goat-flow@latest redact
-npx @blundergoat/goat-flow@latest redact --output .goat-flow/logs/sessions/handoff.md
+npx @blundergoat/goat-flow@latest redact --output .goat-flow/logs/sessions/YYYY-MM-DD-HHMM-handoff-rand5.md
 ```
 
-Paste the candidate text into stdin and send EOF. Without `--output`, the safe text is written to stdout. With `--output`, only the scrubbed result is persisted. This is a practical pre-write guard, not perfect DLP; review sensitive artifacts before sharing them. The separate `redactEvidenceText` API remains a hash-and-length evidence contract and does not produce readable output.
+Paste the candidate text into stdin and send EOF. Without `--output`, the safe text is written to stdout. With `--output`, the command creates one private file inside the selected project, rejects linked parent paths, and revalidates the create-only allocation before and after writing. It refuses existing files, so choose a fresh filename for every run. This is a practical pre-write guard, not perfect DLP; review sensitive artifacts before sharing them. The separate `redactEvidenceText` API remains a hash-and-length evidence contract and does not produce readable output.
 
-### `goat-flow review validate [report-file] [--output <path>]`
+### `goat-flow review validate-ledger|validate-draft|validate [input-file] [--output <path>]`
 
-Validate a drafted goat-review Markdown report from a file or stdin. Semantic anchors and the declared refutation ledger resolve against the current working directory, so run it from the reviewed project's root. Structural V1-V6/V8 failures exit `1`; advisory V7 shape warnings and unknown degradation flags are printed but retain exit `0`. By default the result prints to stdout; `--output` writes the same PASS/FAIL report to the selected file.
+Run the three goat-review proof gates from a file or stdin. `validate-ledger` checks raw transient refutation records and returns the exact record count. `validate-draft` requires `Review validator: pending`; when refutations are nonzero, its draft envelope is the complete report, a line containing only `<!-- goat-flow-review-ledger-draft -->`, then the exact transient records. It checks report grammar, ledger grammar, and count together while explicitly leaving persistence unverified. After redaction creates the declared ledger, change the report field to `validated`; `validate` checks the report and that exact persisted artifact and rejects the transient marker. Run report validation from the reviewed project's root so semantic anchors and ledger paths resolve there. Structural V1-V6/V8 failures exit `1`; advisory V7 shape warnings and unknown degradation flags are printed but retain exit `0`. By default the result prints to stdout; `--output` writes the same PASS/FAIL result to the selected file.
 
 ```bash
+npx @blundergoat/goat-flow@latest review validate-ledger
+npx @blundergoat/goat-flow@latest review validate-draft
 npx @blundergoat/goat-flow@latest review validate review.md
-npx @blundergoat/goat-flow@latest review validate < review.md
 npx @blundergoat/goat-flow@latest review validate review.md --output validation.txt
 ```
 
 ### `goat-flow plans export <plan-path> [--format markdown|json] [--output <path>] [--force]`
 
-Convert local `M*.md` milestones into portable, redacted Markdown issue bodies or JSON records. Exports retain title, status, dependencies, objective, scope, boundary notes, task checkboxes, proof and mid-proof items, effort/Actual fields, plan/admin overhead, exit criteria, and stop/rescope conditions. Canonical `Proof` and legacy Testing/Verification Gate headings share the existing verification fields; legacy Kill criteria and STOP conditions remain ordered in the new `stopMarkdown` field.
+Convert local `M*.md` milestones into portable, redacted Markdown issue bodies or JSON records. Exports retain title, status, the current `statusReason` (`Status reason:` in Markdown), dependencies, objective, scope, boundary notes, task checkboxes, proof and mid-proof items, effort/Actual fields, plan/admin overhead, exit criteria, and stop/rescope conditions. Canonical `Proof` and legacy Testing/Verification Gate headings share the existing verification fields; legacy Kill criteria and STOP conditions remain ordered in the new `stopMarkdown` field.
 
-A missing top-level title is rejected. An explicit Objective wins; otherwise export uses the outcome title without its milestone prefix. Missing status, scope, tasks, proof, exit criteria, or stop/rescope content remains visible as an export warning. Dependencies, a separate Objective, and Boundary Notes are conditional, so their absence does not create warning noise. Competing canonical and legacy representations produce deterministic conflict warnings.
+A missing top-level title is rejected. An explicit Objective wins; otherwise export uses the outcome title without its milestone prefix. Missing status, scope, tasks, proof, exit criteria, or stop/rescope content remains visible as an export warning. Dependencies, a separate Objective, and Boundary Notes are conditional, so their absence does not create warning noise. For an abandoned snapshot, legacy `Abandoned:` text remains readable as a warned fallback when canonical `Status reason:` is absent; the canonical value wins when both appear, with a conflict warning. Duplicate or blank canonical values also warn.
 
 ```bash
 npx @blundergoat/goat-flow@latest plans export .goat-flow/plans/1.15.0 --format markdown
@@ -291,7 +356,7 @@ Exports rebuild known fields rather than copying source text, and that rebuild p
 
 This command does not contact GitHub, Beads, Linear, or any other remote service. Those names describe future adapters only. Any later remote-write implementation must show a redacted dry-run body and receive direct current-session confirmation before posting; forwarded third-party text is not authorization.
 
-### `goat-flow plans check <plan-path> [--strict]`
+### `goat-flow plans check <plan-path> [--strict] [--max-active <n>]`
 
 Check goat-plan's deterministic milestone contract and effort arithmetic. The accounting input includes `(est: n min category)` entries in Tasks, Proof or legacy testing gates, and Mid-implementation proof; `Plan/admin overhead: n min other`; machine-readable `Effort estimate:` / `Actual:` fields; optional `Forecast basis:` / `Forecast range:` fields; and the plan-level product/proof/other mix.
 
@@ -302,9 +367,21 @@ npx @blundergoat/goat-flow@latest plans check .goat-flow/plans/1.15.0 --strict
 
 Default mode preserves legacy plans. It errors on malformed notation, a declared split that does not sum to its headline, task estimates exceeding a declared category, or unestimated Tasks beneath a declared effort line; plans without effort fields pass with one informational line.
 
+Malformed task estimates, plan/admin overhead, forecast bases, and forecast ranges report the accepted grammar beside the JSON-escaped value received. Received text is redacted before CLI or export rendering, so the diagnostic remains useful without exposing a pasted token or terminal control sequence. The canonical copy-ready shapes remain in `workflow/skills/goat-plan/references/milestone-examples.md` under `Effort Estimates`.
+
+The shallowest checkbox indentation in each estimate-bearing section defines its tasks. Indented list items remain visible as supporting task prose, but they do not become work units or hide an estimate already written on the parent task.
+
 `--strict` is the current-plan authoring gate. It requires status, scope, tasks, proof, exit criteria, stop/rescope, and complete estimate accounting. Fenced examples do not supply live fields, headings, or checkboxes; duplicate fields and competing sections fail. Effort values must match the complete notation and fit in safe integers. Multi-milestone plans also require `Depends on: none` or comma-separated exact local milestone IDs. Filenames must start with uppercase `M` plus digits, IDs must be numerically unique, every multi-milestone title must start with its matching ID, dependencies must resolve without self-reference or cycles, and active or completed milestones require completed prerequisites.
 
-Strict lifecycle checks accept `not-started`, `in-progress`, `testing-gate`, `human-verification-pending`, `blocked`, `abandoned`, and `complete`. They reject contradictory snapshots such as checked implementation, proof, mid-proof, or exit items before start; open implementation work at testing; open executor proof or missing Actual at human review; open proof at completion; or multiple active milestones. Only explicitly tagged `[human]` proof may remain open at `human-verification-pending`; checkbox state never proves who approved a gate.
+Strict lifecycle checks accept `not-started`, `in-progress`, `testing-gate`, `human-verification-pending`, `blocked`, `abandoned`, `superseded`, `deferred`, and `complete`. A blocked, abandoned, superseded, or deferred milestone requires one nonblank canonical `Status reason:`; legacy-only, duplicate, blank, or conflicting representations fail. A superseded reason must name a successor milestone ID that resolves in the plan and is not the milestone itself. Superseded and deferred milestones are terminal: they may keep open checkboxes and a paused receipt, need no Actual, cannot be depended on by active or complete work, and their estimates move from the `plan:` total to an `excluded:` line. Every other status rejects a stale reason, so authors remove the field when work resumes or otherwise leaves the exceptional state. The field describes only the current state: it does not record a transition actor, timestamp, or append-only history. Lifecycle checks also reject contradictory snapshots such as checked implementation, proof, mid-proof, or exit items before start; open implementation work at testing; open executor proof or missing Actual at human review; open proof at completion; or active milestones that collide in a lane or exceed the effective cap. Only explicitly tagged `[human]` proof may remain open at `human-verification-pending`; checkbox state never proves who approved a gate.
+
+The active cap defaults to one. A valid `--max-active <n>` overrides project configuration without reading it; otherwise a physically contained canonical `.goat-flow/plans/` path uses its owning project's `.goat-flow/config.yaml` value `plans.maxActiveMilestones`. External or symlink-escaped plan paths use one. The CLI accepts only positive safe base-ten integers without leading zeroes; config values must be positive safe integers. Malformed canonical config or an invalid explicit flag exits `2`; an explicit valid flag still works when that config is malformed. The flag is accepted only by `plans check`.
+
+Optional `Lane:` values match `^[a-z0-9][a-z0-9-]{0,39}$`; omitted or empty values share the effective `default` lane. All three active statuses, `in-progress`, `testing-gate`, and `human-verification-pending`, consume their lane and the global cap. At cap one, output and the legacy `multiple active milestones` error remain unchanged. Above one, strict checks allow at most one active milestone per lane and reject global overflow; all dependencies still need completion across lanes. Active rows and the cap summary appear above one in both strict and non-strict reports, while structural lane and cap errors remain strict-only.
+
+The planning skill separately selects one session milestone and requires one final join: the unique participating dependency sink whose transitive dependencies cover every other participant. `abandoned`, `superseded`, and `deferred` are excluded; `blocked` remains participating. Multiple sinks or uncovered work needs a plan amendment before source work or timing, even after the CLI checker passes. Every milestone retains its own human gate and receipt; the final plan review waits for the join to be `human-verification-pending`, all other participants and join dependencies complete, and no sibling active work. Concurrent lanes require disjoint scopes, applicable write claims, and an agreed merge boundary; lane names grant no writer ownership.
+
+Before using an older checker, stop every extra open receipt, retain one active milestone, and move the others to `blocked`. Each `Status reason:` records the prior state, downgrade pause, and cap-compatible resume condition. Rerun strict validation before downgrade; restore prior states only after lane-cap support returns, preserving task and receipt history.
 
 Strict validation checks supplied deterministic structure, not planning judgment. It does not infer risk level or require assumptions, manual proof, rollback, Boundary Notes, or other conditional fields. Default mode remains legacy-compatible, and neither mode reconstructs approval history or evaluates whether proof is semantically sufficient.
 
@@ -329,7 +406,7 @@ goat-flow plans time stop .goat-flow/plans/<active>/M01-example.md
 goat-flow plans time stop .goat-flow/plans/<active>/M01-example.md --finalize
 ```
 
-One span is open at a time. `stop` then `start` performs a pause, a resume, or a category change; switch category when the kind of work changes, since a single span across mixed work produces a `measured` split that measured nothing. `stop --finalize` closes the timeline at the human gate. `stop --discard-open` drops a span with no honest end time - a crash, a suspend, a forgotten pause - and permanently marks the receipt `incomplete`; no recovery path invents an end time.
+One span is open per milestone file; separate valid lanes may hold simultaneous spans. `stop` then `start` performs a pause, a resume, or a category change; switch category when the kind of work changes, since a single span across mixed work produces a `measured` split that measured nothing. `stop --finalize` closes the timeline at the human gate. `stop --discard-open` drops a span with no honest end time - a crash, a suspend, a forgotten pause - and permanently marks the receipt `incomplete`; no recovery path invents an end time.
 
 The milestone path is resolved inside its containing project, and symlinked or hardlinked milestone paths are rejected so a write cannot be redirected outside that root. Each transition also appends a metadata-only `plan.time` event to the local evidence log, but strict validation never reads it: the embedded receipt is the only authority, and deleting local events cannot rot a finalized `measured` Actual. Receipts carry bounded timing metadata only - never prompts, commands, output, or work descriptions.
 
@@ -360,11 +437,13 @@ npx @blundergoat/goat-flow@latest setup . --agent codex --dry-run
 npx @blundergoat/goat-flow@latest setup . --agent claude --apply
 ```
 
-Use `--dry-run` to inspect managed template drift without composing a prompt or invoking the installer. Use `--apply` when you want setup to run the deterministic file-copy installer instead of printing a prompt. Use `--force` with `--apply` only after inspection and only when existing settings and `.goat-flow/config.yaml` may also be overwritten.
+Use `--dry-run` to inspect managed template drift without composing a prompt or invoking the installer. Use `--apply` when you want setup to run the deterministic file-copy installer instead of printing a prompt. Use `--force` with `--apply` only after inspection to accept every inspected system-owned conflict. Settings, hook configs, and `.goat-flow/config.yaml` remain preserved; a replaceable user-owned file requires both `--force-user-owned` and a matching `--force-path`.
 
 ### `goat-flow install [path] --agent <id> [--dry-run] [--force] [--update-config-version] [--clean-deprecated]`
 
-Copy or update goat-flow system files without an agent: skills, shared skill references, hook scripts, agent settings templates, `.goat-flow/` README/gitignore anchors, and `.goat-flow/config.yaml` when it is missing. Manifest ownership controls every write: system-owned files refresh from canonical sources, user-owned files seed once, generated files name their regeneration command, deprecated files produce cleanup guidance, and external files are never overwritten. Existing user-owned content is preserved unless `--force` is passed. Existing config files are preserved, but legacy `agents:` allowlists are removed so the dashboard and aggregate CLI audit do not hide supported agent installs. The installer also appends `node_modules/` to the project root `.gitignore` when missing. For outdated or v0.9 projects the installer automatically updates the config version field and (for v0.9) removes deprecated skill directories; use `--force` for an explicit user-owned overwrite instead.
+Copy or update goat-flow system files without an agent: skills, shared skill references, hook scripts, agent settings templates, `.goat-flow/` README/gitignore anchors, and `.goat-flow/config.yaml` when it is missing. Manifest ownership controls every write: system-owned files refresh from canonical sources, user-owned files seed once, generated files name their regeneration command, deprecated files produce cleanup guidance, and external files are never overwritten. Existing user-owned content is preserved; a source-backed replaceable file needs `--force-user-owned` plus a matching `--force-path`. Existing config files are preserved, but legacy `agents:` allowlists are removed so the dashboard and aggregate CLI audit do not hide supported agent installs. The installer also appends `node_modules/` to the project root `.gitignore` when missing. For outdated or v0.9 projects the installer automatically updates the config version field and (for v0.9) removes deprecated skill directories; use both user-owned authority flags for an eligible explicit replacement instead.
+
+Agent settings files receive narrow in-place migrations and are otherwise left alone. In `.claude/settings.json`, install removes rule forms Claude never consults (`MultiEdit`, and path rules on `Write`, `NotebookEdit`, or `Glob`), removes deny rules goat-flow shipped and later retired (the `sudo`, `mkfs`, `dd`, and `git reset --hard` globs, and the `**/secrets/**` and `**/credentials*` patterns), and rewrites the old in-project credential-store rules to their `~/` form; allow and ask lists are never retired or rewritten. In `.codex/config.toml`, the active permission profile is refreshed when it is missing a canonical deny pattern or still carries a retired one, and patterns the project added survive. Every removal is printed so a rule the project typed by hand can be restored deliberately. Install never adds a new template rule to an existing file; the upgrade prompt from `goat-flow setup` includes a reconcile step for that comparison.
 
 The shared references include `.goat-flow/skill-docs/README.md` for meta-reference doctrine, while `.goat-flow/skill-docs/playbooks/README.md` indexes tool/capability playbooks such as `browser-use.md` and `page-capture.md`. Generated or repaired instruction files include a Router Table pointer to `.goat-flow/skill-docs/playbooks/` so agents check local availability playbooks before declaring a tool unavailable.
 
@@ -376,9 +455,15 @@ npx @blundergoat/goat-flow@latest install . --agent codex --force
 
 `--dry-run` prints a read-only preview of the install write set as text or stable `goat-flow.managed-setup-preview.v2` JSON. Every row carries a repository-relative path, its manifest ownership, a state, and the proposed action and reason. Exact-copy `system-owned` templates are classified as `unchanged`, `template-changed`, `local-preserved`, `both-changed`, `added`, `adopted`, `removed`, `missing`, or `unmanaged`. Destinations with no package template use four further states: `user-seeded` for a user-owned file install may create once, `user-preserved` for user-owned content install keeps, `user-migrated` for a user-owned file install edits in place, and `regenerated` for a generated file install rewrites from project state. Every row also carries an `authority` decision - `not-required`, `granted-managed`, `granted-path`, `granted-user-owned`, `withheld`, or `refused-path-safety` - resolved against the same flags apply would use, so dry-run accepts every authority and migration flag and still writes nothing. A blocked preview exits 1; invalid flags exit 2. `--output` is the only optional dry-run write and writes the requested report, not setup state or installed files.
 
-The comparison uses SHA-256 hashes only. After a successful CLI install, `.goat-flow/install-state/<agent>.json` records the package version, relative managed paths, and expected hashes for the next run; the installed `.goat-flow/.gitignore` keeps this state local. Missing state is safe for absent files and files already matching the current package. An existing differing regular file without a trusted baseline is `adopted`: targets installed before install-state existed legitimately hold older-package bytes, so the upgrade refreshes them exactly like the installer always did for system-owned templates, shows a `warning` verdict listing every adopted path, and records a baseline so later upgrades get full three-way drift protection. Malformed state, local edits, and deletions block by default. Symlinked, non-regular, or unreadable target components are path-safety failures (`unmanaged`) and stay blocked even with `--force`.
+The comparison uses SHA-256 hashes only. `.goat-flow/install-state/managed.json` is the sole project-wide baseline: each managed path has one expected hash, generation, and provenance. The same file carries hashless verified-agent receipts that bind a package version to an exact path and row-generation set. A receipt remains confirmed only while its package version, path set, referenced generations, regular target bytes, and cutover marker still match. Any mismatch makes the receipt stale, so it cannot select an installed agent; the baseline row remains available to distinguish a preserved local edit from a later template change.
 
-The preview lists every path an approved install may write: source-backed `system-owned` manifest records, the selected agent's canonical skill mirror, `.goat-flow/config.yaml`, the agent's settings and hook config, the project root `.gitignore`, seeded policy and decision guidance, the active-plan marker, commit guidance, install state, and the generated learning-loop indexes. Some of those rows are conditional, so the preview is a superset: `.goat-flow/plans/.active` is written only when exactly one version-named plan directory exists, and commit guidance only in a Git project. Removals are the one thing it does not enumerate - retired templates, deprecated skills, legacy hook copies, and pre-1.9 path migrations are cleanup rather than writes. Direct `workflow/install-goat-flow.sh` execution skips this admission gate; run the public CLI when you need it.
+Before `managed.json` exists, the public CLI inventories every supported agent's legacy `.goat-flow/install-state/<agent>.json` evidence together. Clean, version-ordered evidence bootstraps receipt-free v2 state. One malformed legacy file, or equal or unrankable versions that disagree on a path hash, blocks every agent because selecting one agent cannot resolve project-wide history. Repair the paths named by `goat-flow status . --format json`, then rerun that command; `--force` cannot choose baseline history. Once `managed.json` exists, legacy hashes never regain baseline authority. A public install publishes the v2 state and replaces every supported agent file with a hashless cutover marker under the complete write claims before target mutation. A missing or incompatible marker is reported as `cutover-incompatible` and repaired only through the public install path.
+
+The preview lists every path an approved install may write: source-backed `system-owned` manifest records and the selected agent's canonical skill mirror. It also lists `.goat-flow/config.yaml`, the agent's settings and hook config, the project root `.gitignore`, seeded policy and decision guidance, the active-plan marker, commit guidance, `.goat-flow/install-state/managed.json`, every supported agent's `.goat-flow/install-state/<agent>.json` cutover marker, and the generated learning-loop indexes. Some rows are conditional, so the preview is a superset: `.goat-flow/plans/.active` is written only when exactly one version-named plan directory exists, and commit guidance only in a Git project. It does not enumerate removals: retired templates, deprecated skills, legacy hook copies, and pre-1.9 path migrations are cleanup rather than writes.
+
+Direct `workflow/install-goat-flow.sh` execution remains a low-level copy helper only before v2 authority exists. It skips CLI admission, post-write verification, and receipt publication. After `managed.json` or any cutover marker exists, the script refuses before target mutation and prints the public `goat-flow install` command. Use the public CLI for managed installs so target verification and receipt publication stay in one claimed lifecycle.
+
+If target writes verify but the final state write fails, the CLI reports that installed bytes were not recorded. The previous baseline remains intact and no new confirmed receipt is published. Repair write access to `.goat-flow/install-state/`, then rerun the exact non-force `goat-flow install` command printed by the failure. Do not delete state or add force: force authorizes inspected target conflicts only and cannot repair malformed or conflicting history, stale receipts, cutover evidence, or orphan rows. Ordinary install retains orphan rows until a separate explicit cleanup contract can prove they are retired; it never prunes them by inference.
 
 A locally edited managed file no longer blocks an upgrade on its own. When your bytes differ but this package ships the same template as your last install, the row reads `local-preserved` and install leaves the file alone while every unrelated write proceeds. Only a genuine template change over your edit becomes `both-changed`, which is a conflict you decide.
 
@@ -435,13 +520,13 @@ npx @blundergoat/goat-flow@latest hooks verify . --agent claude --scenario post-
 npx @blundergoat/goat-flow@latest hooks verify . --agent claude --scenario gruff-hook --trusted-target
 ```
 
-Goat Flow 1.15.1 registers Codex project hooks for `PostToolUse` on `apply_patch` and for `Stop`, with a 75-second launcher deadline inside Codex's 90-second host timeout. Live delivery was captured on Codex CLI 0.147.0 in interactive and exec modes with a trusted project layer. That evidence expires at 2026-09-09T00:00:00Z, or sooner after a relevant provider, mode, trust, event, adapter, or registration change; `hooks list` then reports stale evidence. Project-layer trust and handler trust remain separate. App-server, remote execution, and other provider combinations are unclaimed. See the [hook runtime matrix](../workflow/hooks/README.md#agent-event-name-mapping) for registered and disabled combinations.
+Goat Flow registers Codex project hooks for the `PreToolUse` deny policy, opt-in `PostToolUse` Gruff analysis on `apply_patch`, and default `Stop` safety. The Windows registration adds Codex's documented `commandWindows` override, which invalidated the earlier Codex CLI 0.147.0 `PostToolUse` and `Stop` delivery capture. A Codex CLI 0.149.0 capture proved that the changed `PreToolUse` registration delivered a deny result; that evidence expires at 2026-09-21T02:17:08.834Z. A trusted Codex CLI 0.149.1 `exec` capture subsequently completed `apply_patch`, ran Gruff, and delivered its analyzer-only marker through the changed PostToolUse registration; that evidence expires at 2026-09-25T20:17:22.830Z. Both records remain `scenario-unverified` until their fixed-scenario gates pass, while Stop remains `provider-capture-stale`. Exact configured-command replay does not upgrade provider-delivery evidence. Project-layer trust and handler trust remain separate, and app-server, remote execution, Stop, and other provider combinations are unclaimed. See the [hook runtime matrix](../workflow/hooks/README.md#agent-event-name-mapping) for registered and disabled combinations.
 
 `enable` and `disable` require a `<hook-id>` (exit 2 if omitted). `sync` re-applies the `.goat-flow/config.yaml` hook state to every agent's hook config without changing which hooks are enabled.
 
-`hooks verify` requires `--agent <id>` and one explicit scenario group: `deny-hook`, `post-turn-hook`, or `gruff-hook`. Without `--trusted-target`, it returns explicit `unsupported` results and does not start the selected checkout's hook code. After you confirm the checkout is trusted, `--trusted-target` sends fixed provider-shaped inputs through the exact command generated for the selected agent, with a five-second timeout and bounded output capture. The deny group checks three blocked commands and one read-only control. The post-turn group checks a valid Stop result and an invalid event. The Gruff group checks unsupported input, a non-source edit, and a source edit whose analyzer result may be clean, advisory, incomplete, or unavailable. The inputs are inspected; their command operands are never executed. The deprecated `--untrusted-target` flag remains an explicit alias for the safe default during the v1.16.x compatibility window.
+`hooks verify` requires `--agent <id>` and an explicit `--scenario`: one group (`deny-hook`, `post-turn-hook`, `gruff-hook`) or `all` to run every group in one command. There is no default; omitting `--scenario` exits `2`. Without `--trusted-target`, it returns explicit `unsupported` results and does not start the selected checkout's hook code. After you confirm the checkout is trusted, `--trusted-target` sends fixed provider-shaped inputs through the exact command generated for the selected agent, with the hook's registered timeout and bounded output capture. Deny probes use 30 seconds; post-turn and Gruff probes use 90 seconds. The deny group checks three blocked commands and one read-only control. The post-turn group checks a valid Stop result and an invalid event. The Gruff group checks unsupported input, a non-source edit, and a source edit whose analyzer result may be clean, advisory, incomplete, or unavailable. The inputs are inspected; their command operands are never executed. The deprecated `--untrusted-target` flag remains an explicit alias for the safe default during the v1.16.x compatibility window.
 
-Each scenario reports `pass`, `fail`, `unsupported`, `not-configured`, or `error`. Only an accepted expected/observed match with a successfully written local event counts as `pass`; any other result makes the report exit 1. JSON uses `goat-flow.hook-runtime-report.v1`. Reports and `hook.verify` events carry hook and scenario ids, verdict metadata, evidence level, duration, and reason codes - never input payloads, command operands, findings, stdout, or stderr.
+Each scenario reports `pass`, `fail`, `unsupported`, `not-configured`, or `error`. Only an accepted expected/observed match with a successfully written local event counts as `pass`; any other result makes the report exit 1. JSON uses `goat-flow.hook-runtime-report.v1`. `--scenario all` runs the groups in sequence, keeps every group's result even after one fails, and wraps the unchanged per-group reports in one `goat-flow.hook-runtime-batch.v1` document; the batch exits 1 unless every group passed. Reports and `hook.verify` events carry hook and scenario ids, verdict metadata, evidence level, duration, and reason codes - never input payloads, command operands, findings, stdout, or stderr.
 
 Hook self-tests remain the broad internal regression corpus. `hooks verify` proves fixed outcomes at this checkout's exact configured-command boundary. It does not launch the external coding agent, prove provider-side hook delivery or model visibility, promote a live-support state, or change the cost or semantics of `audit --harness`.
 
@@ -458,7 +543,7 @@ Common tasks and the commands to run:
 | Get a harness quality prompt | `npx @blundergoat/goat-flow@latest quality . --agent claude --mode harness` |
 | Review quality trend history | `npx @blundergoat/goat-flow@latest quality history --agent claude` |
 | Compare two saved quality runs | `npx @blundergoat/goat-flow@latest quality diff --agent claude` |
-| Scrub a durable handoff before saving it | `npx @blundergoat/goat-flow@latest redact --output .goat-flow/logs/sessions/handoff.md`, then paste stdin and send EOF |
+| Scrub a durable handoff before saving it | `npx @blundergoat/goat-flow@latest redact --output .goat-flow/logs/sessions/YYYY-MM-DD-HHMM-handoff-rand5.md`, then paste stdin and send EOF |
 | Inspect local dashboard/session events | `npx @blundergoat/goat-flow@latest events tail . --limit 20` |
 | Generate a setup prompt | `npx @blundergoat/goat-flow@latest setup . --agent claude` |
 | Decide what kind of artifact to author | `npx @blundergoat/goat-flow@latest quality candidacy "..."` |
@@ -522,5 +607,12 @@ npx @blundergoat/goat-flow@latest dashboard .
 
 | Flag | Description |
 |------|-------------|
-| `--help, -h` | Show help |
+| `--help, -h` | Show global or contextual help without running a project command |
 | `--version, -v` | Show version |
+
+Global `goat-flow --help` stays concise so you can choose a workflow quickly.
+Run `goat-flow <command> --help` for contextual help with that command's usage, subcommands, flags, and examples.
+
+Help uses static CLI metadata and returns before command dispatch, so it remains available when the target project is missing, incomplete, or drifted.
+Help does not route nested subcommand requests separately: `goat-flow hooks verify --help` shows the top-level `hooks` topic.
+Use this reference for the full subcommand grammar.

@@ -1,9 +1,8 @@
 /**
- * Contracts for the remaining user-invocable skills and the router that selects them.
- * Grouped because each is small alone but shares the same install-mirror rules.
+ * Check the dispatcher and user-invoked workflows covered by the shared skill contracts.
  *
- * Reads the installed copies rather than sources, so a contract fails when the guidance a user
- * actually receives drifts - not merely when the template does.
+ * These contracts inspect canonical and installed guidance so supported agents apply the same mode and evidence rules.
+ * Use them when changing workflow routing, behavior, or required output.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -41,6 +40,32 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
       assert.match(
         changeRisk,
         /When classifications overlap, use the higher risk/u,
+        skillPath,
+      );
+    });
+  });
+
+  it("keeps Audit inspection role separate from impact-based risk", () => {
+    assertForEachTarget(installedSkillPaths("goat-qa"), (skillPath) => {
+      const auditMode = readMarkdownSection(skillPath, "Audit Mode");
+      assert.match(
+        auditMode,
+        /File role sets inspection priority, not risk/u,
+        skillPath,
+      );
+      assert.match(
+        auditMode,
+        /Assign risk from each named behaviour's demonstrated impact and blast radius/u,
+        skillPath,
+      );
+      assert.match(
+        auditMode,
+        /A public export or route alone does not force CRITICAL or HIGH/u,
+        skillPath,
+      );
+      assert.doesNotMatch(
+        auditMode,
+        /Load-bearing \+ Interface files get CRITICAL or HIGH risk ratings by default/u,
         skillPath,
       );
     });
@@ -122,6 +147,7 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
     assertForEachTarget(installedSkillPaths("goat-qa"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);
       assert.match(skillGuidance, /Exhaustive priority matrix/, skillPath);
+      // Every risk and coverage combination must have guidance so QA priority does not depend on an omitted case.
       for (const matrixRow of expectedMatrixCases) {
         assert.match(skillGuidance, matrixRow, skillPath);
       }
@@ -358,10 +384,7 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
     );
   });
 
-  /*
-   * A user receiving a 100/100 critique still sees what the meta-audit found.
-   * The clean attestation keeps the required section honest and non-empty.
-   */
+  // Even a 100/100 critique must show the meta-audit result, using a clean attestation when it found no issues.
   it("renders truthful goat-critique meta-audit issues for clean results", () => {
     assertForEachTarget(installedSkillPaths("goat-critique"), (skillPath) => {
       const synthesis = readMarkdownSection(skillPath, "Phase 5 - Synthesise");
@@ -448,6 +471,76 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
     assert.match(setupGuide, /1 mandatory meta-agent/);
   });
 
+  it("keeps goat-critique host-owned so human gates cannot auto-convert", () => {
+    assertForEachTarget(installedSkillPaths("goat-critique"), (skillPath) => {
+      const intake = readMarkdownSection(skillPath, "Step 0 - Intake");
+      const synthesis = readMarkdownSection(skillPath, "Phase 5 - Synthesise");
+
+      assert.match(intake, /host\/root context owns Phases 1-5\.6/u, skillPath);
+      assert.match(
+        intake,
+        /forked sub-agent[\s\S]+return[\s\S]+before Phase 1/u,
+        skillPath,
+      );
+      assert.match(
+        intake,
+        /does not apply the shared sub-agent gate conversion/u,
+        skillPath,
+      );
+      assert.match(
+        synthesis,
+        /After the host receives the human's A\/B\/C\/D pick/u,
+        skillPath,
+      );
+    });
+
+    const acceptedDecision = readProjectFile(
+      ".goat-flow/learning-loop/decisions/ADR-021-goat-critique-full-mode-only.md",
+    );
+    assert.match(acceptedDecision, /lifecycle is host-owned/u);
+    assert.match(
+      acceptedDecision,
+      /forked sub-agent[\s\S]+returns control before Phase 1/u,
+    );
+
+    const publicSkills = readProjectFile("docs/skills.md");
+    assert.match(
+      publicSkills,
+      /host\/root owns the lifecycle and human gates/u,
+    );
+
+    const setupGuide = readProjectFile("workflow/setup/03-install-skills.md");
+    assert.match(setupGuide, /host owns the lifecycle and human gates/u);
+  });
+
+  it("redacts goat-critique persistence before disk and preserves the human gate", () => {
+    assertForEachTarget(installedSkillPaths("goat-critique"), (skillPath) => {
+      const phaseFour = readMarkdownSection(skillPath, "Phase 4 - Clarify");
+      assert.match(phaseFour, /keep.*Phase 1-3.*in memory/iu, skillPath);
+      assert.match(
+        phaseFour,
+        /stdin.*`goat-flow redact --output \.goat-flow\/logs\/critiques\/<YYYY-MM-DD>-<HHMM>-<artifact-slug>-<rand5>\.md`.*matching source CLI/isu,
+        skillPath,
+      );
+      assert.match(
+        phaseFour,
+        /only.*redactor.*destination bytes.*disk/isu,
+        skillPath,
+      );
+      assert.match(
+        phaseFour,
+        /unavailable.*redaction fails.*write nothing.*`persist-skipped: redactor-unavailable`.*continue.*human gate/isu,
+        skillPath,
+      );
+      assert.match(phaseFour, /Phase 3 early exit/u, skillPath);
+      assert.doesNotMatch(
+        phaseFour,
+        /\bWrite Phase 1-3\b|(?:write|persist).*raw.*(?:then|before).*redact/iu,
+        skillPath,
+      );
+    });
+  });
+
   it("keeps goat-critique direct invocation as delegation consent", () => {
     assertForEachTarget(installedSkillPaths("goat-critique"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);
@@ -531,7 +624,7 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
       );
       assert.match(
         admissionGuidance,
-        /one objective, structured return, 5-call budget/,
+        /Scouts get 5 tool calls; implementation gets 5 plus the task's estimated minutes, up to 20 tool calls, with larger tasks split first/,
         referencePath,
       );
       assert.match(
@@ -580,7 +673,7 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
     });
   });
 
-  it("documents distinct dispatcher endpoints for inferred skills and direct execution", () => {
+  it("documents every dispatcher terminal outcome without collapsing endpoints", () => {
     const skillsDocumentation = readProjectFile("docs/skills.md");
     const dispatcherDocumentation = readMarkdownSection(
       "docs/skills.md",
@@ -591,6 +684,16 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
       dispatcherDocumentation,
       /Explicit -->\|Yes\| Execute\["Load (?:named|target) skill's Step 0"\]/u,
       "explicit skill invocations must load the named skill",
+    );
+    assert.match(
+      dispatcherDocumentation,
+      /Explicit skill invocations pass through immediately to the named skill's Step 0 without reclassification/u,
+      "explicit invocations must bypass inferred routing",
+    );
+    assert.match(
+      dispatcherDocumentation,
+      /Multi-intent requests are split into numbered intents and routed separately/u,
+      "compound requests must retain separate ordered routes",
     );
     assert.match(
       dispatcherDocumentation,
@@ -606,6 +709,41 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
       dispatcherDocumentation,
       /Destination -->\|Direct\| Direct\["Use execution loop directly"\]/u,
       "direct execution must not load a skill Step 0",
+    );
+    assert.match(
+      dispatcherDocumentation,
+      /Outcome -->\|Quality flow\| Quality\["Use goat-flow quality"\]/u,
+      "framework quality assessment must use its dedicated flow",
+    );
+    assert.match(
+      dispatcherDocumentation,
+      /Outcome -->\|Bare path\| Context\["Keep read-only context"\]/u,
+      "a bare path must remain a non-writing context outcome",
+    );
+    assert.match(
+      dispatcherDocumentation,
+      /GOAT Flow setup\/process\/harness\/skills quality assessment[^\n]+`goat-flow quality` CLI\/dashboard prompt flow; no goat skill wrapper/u,
+      "the quality-flow table row must not imply a skill wrapper",
+    );
+    assert.match(
+      dispatcherDocumentation,
+      /Comment, documentation, naming, or private-placement remediation[^\n]+`\/goat-clarity`/u,
+      "clarity remediation must have a public route",
+    );
+    assert.match(
+      dispatcherDocumentation,
+      /Bare task path \(no action verb\)[^\n]+Read-only context; do not update `\.active`, milestone status, or code/u,
+      "bare task paths must remain read-only",
+    );
+    assert.match(
+      dispatcherDocumentation,
+      /Simple implementation \(single-file, obvious\)[^\n]+Direct execution loop with a Route Snapshot; no skill/u,
+      "simple implementation must terminate in direct execution",
+    );
+    assert.match(
+      dispatcherDocumentation,
+      /Simple question[^\n]+Direct answer; no GATHER or Route Snapshot/u,
+      "simple questions must terminate in a direct answer",
     );
     assert.doesNotMatch(
       skillsDocumentation,

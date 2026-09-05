@@ -104,12 +104,12 @@ export interface ProjectSignals {
   codeGenTools: string[];
   /** Deployment/infrastructure platforms found (amplify, terraform, docker, fly, vercel) */
   deployPlatforms: string[];
-  /** LLM integration signals (model provider env vars, SDK imports) */
-  llmIntegration: boolean;
+  /** True when model provider env vars or SDK imports were found */
+  hasLlmIntegration: boolean;
   /** Static analysis tools with detected strictness level */
   staticAnalysis: Array<{ tool: string; level: string | null }>;
-  /** PHI/compliance keywords detected in docs or instructions */
-  complianceSignals: boolean;
+  /** True when PHI/compliance keywords were found in docs or instructions */
+  hasComplianceSignals: boolean;
   /** Formatter coverage: languages with detected formatters vs languages without */
   formatterGaps: string[];
 }
@@ -122,8 +122,14 @@ export interface ProjectSignals {
 export interface GraduationCandidate {
   /** Entry heading text without the `## Footgun:` / `## Lesson:` / `## Pattern:` prefix. */
   title: string;
-  /** Count of line-start `**Recurrence update` markers under this entry's heading. */
+  /** Raw count of recognized line-start recurrence labels under this entry's heading. */
   recurrenceCount: number;
+  /** Optional author-declared total from `**Incident count:**`. */
+  declaredIncidentCount: number | null;
+  /** Effective total: the greater of the declared total and recurrence labels plus the original incident. */
+  incidentCount: number;
+  /** True when recurrence labels prove more incidents than the declared total records. */
+  hasIncidentCountDivergence: boolean;
 }
 
 /** Per-bucket learning-loop freshness + health record used by `goat-flow stats`. */
@@ -149,8 +155,8 @@ export interface BucketFreshness {
   sizeBytes: number;
   /** Total line count of the bucket file. */
   lineCount: number;
-  /** Active entries with `**Recurrence update` markers - the recorded mistake happened
-   *  again, so the prevention should graduate to a structural gate or the entry resolve. */
+  /** Active entries with at least two effective incidents. Their prevention should graduate
+   *  to a structural gate or the entry should resolve. */
   graduationCandidates: GraduationCandidate[];
 }
 
@@ -173,6 +179,8 @@ export interface LearningLoopEntryFact {
   hasDecisionChangedGuidance: boolean;
   /** Raw READ/SCOPE/ACT/VERIFY value; null means the author omitted this optional field. */
   triggerPhase: string | null;
+  /** Phase where the failure surfaced when it differs from the preventive trigger phase. */
+  caughtAt: string | null;
   /** Parsed recurrence count; null means the optional field is absent or not numeric. */
   incidentCount: number | null;
   /** Latest recurrence date; null means the entry has no recorded recurrence date. */
@@ -389,6 +397,8 @@ export interface ReadonlyFS {
   readJson(path: string): unknown;
   /** Report whether the user can currently list a directory; files, missing paths, and unreadable directories return false. */
   isReadableDirectory(path: string): boolean;
+  /** Report whether two readable project-relative paths identify the same filesystem entry. */
+  samePathIdentity?(leftPath: string, rightPath: string): boolean;
   /** List child names; missing and unreadable directories intentionally return an empty list. */
   listDir(path: string): string[];
   /** Report whether a file can be executed by the current platform. */

@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.16.0"
+goat-flow-reference-version: "1.17.0"
 ---
 # Automated-Review Overlap Protocol
 
@@ -7,10 +7,6 @@ Loaded by `/goat-review` in PR mode. Defines how to ingest existing
 automated-reviewer findings (Copilot, CodeQL/github-advanced-security,
 claude[bot], or any other repo bot) after Pass 2 records local findings,
 and how to report human/automated provenance in Review Integrity.
-
-Borrowed from awslabs/cli-agent-orchestrator PR #245 review pattern, where
-the human reviewer posted a Copilot/Manual finding tally that made the
-review accountable ("Copilot 11, Manual 3, accuracy 100%").
 
 ## Post-Pass-2 Ingestion
 

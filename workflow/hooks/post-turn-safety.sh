@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # post-turn-safety.sh
-# goat-flow-hook-version: 1.16.0
+# goat-flow-hook-version: 1.17.0
 #
 # Purpose:
 #   Universal Stop-event safety guard for supported agents. This hook checks
@@ -35,6 +35,9 @@
 set -uo pipefail
 shopt -s extglob
 
+# Bash imports SECONDS from the parent environment, so start hook budgets and result timing at this process boundary.
+SECONDS=0
+
 # Bash 3.2 ships with supported macOS versions. Keep this compatibility path
 # free of associative arrays, mapfile, and Bash-4 parameter expansions. The
 # force flag executes this exact path under newer Bash during integration tests.
@@ -54,7 +57,7 @@ fallback_max_bytes="${GOAT_FLOW_POST_TURN_SAFETY_MAX_BYTES:-1048576}"
 fallback_max_findings="${GOAT_FLOW_POST_TURN_SAFETY_MAX_FINDINGS:-20}"
 post_turn_native_workspace=""
 post_turn_action="scan"
-post_turn_hook_version="1.16.0"
+post_turn_hook_version="1.17.0"
 post_turn_result_schema="goat-flow.hook-result.v1"
 post_turn_migrated_result_mode=0
 post_turn_result_records_path=""
@@ -1877,7 +1880,8 @@ post_turn_self_test() (
   local self_test_root
   local self_test_script="${BASH_SOURCE[0]}"
   local synthetic_aws_token="AKIA${POST_TURN_SELF_TEST_TOKEN_SUFFIX:-1234567890ABCDEF}"
-  local synthetic_assignment_secret="Abcdef1234567890"
+  local synthetic_assignment_prefix="Abcdef1"
+  local synthetic_assignment_value="${synthetic_assignment_prefix}234567890"
 
   # A relative invocation must remain callable after the fixture changes working directory.
   case "$self_test_script" in
@@ -1951,7 +1955,7 @@ post_turn_self_test() (
       return 2
     fi
 
-    printf 'EXPORT TOKEN=%s\n' "$synthetic_assignment_secret" >"$self_test_root/settings.env"
+    printf 'EXPORT TOKEN=%s\n' "$synthetic_assignment_value" >"$self_test_root/settings.env"
     GOAT_FLOW_POST_TURN_SAFETY_FORCE_BASH3_FALLBACK="$scanner_setting" \
       bash "$self_test_script" </dev/null >/dev/null 2>&1
     hook_result=$?

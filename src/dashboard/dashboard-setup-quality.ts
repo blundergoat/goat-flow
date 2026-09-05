@@ -4,7 +4,7 @@
  * A user lands here after picking a project on Home, then either opens Setup to get install guidance or opens Quality to assess what is installed.
  *
  * Everything in this file is a classic-script global called by thin Alpine methods in app.ts, so:
- * - state lives on the Alpine component and is mutated in place, never returned
+ * - view state lives on the Alpine component; prompt builders also return text for callers to copy or launch
  * - every network path is best-effort, because a failed fetch must leave the visible tab usable
  * - stale replies are discarded, since the user can switch project, agent, or mode mid-request
  */
@@ -28,7 +28,12 @@ const DEFAULT_EXISTING_ARTIFACTS: ExistingArtifacts = {
 const QUALITY_HISTORY_LOAD_DELAY_MS = 50;
 const SETUP_PROMPT_LOAD_DELAY_MS = 50;
 
-/** Dashboard state contract shared by setup-prompt and quality-report helpers. */
+/**
+ * Share the selected project, runner, form values, and prompt results between Setup and Quality helpers.
+ *
+ * Loading flags and request keys coordinate what the user sees while requests complete.
+ * The app supplies clipboard, toast, and generation methods; this contract keeps their shared state explicit.
+ */
 interface DashboardSetupQualityContext {
   projectPath: string;
   supportedAgents: SupportedAgent[];
@@ -52,24 +57,24 @@ interface DashboardSetupQualityContext {
   qualityHistoryWarnings: string[];
   _qualityHistoryTimer: ReturnType<typeof setTimeout> | null;
   presets: Preset[];
-  /** Surface a dashboard toast message, with error styling when requested. */
+  // Surface a dashboard toast message, with error styling when requested.
   showToast(msg: string, isError?: boolean): void;
-  /** Copy generated prompt text through the shared dashboard clipboard helper. */
+  // Copy generated prompt text through the shared dashboard clipboard helper.
   copyText(text: string): void;
-  /** Generate setup guidance for the selected agent and project. */
+  // Generate setup guidance for the selected agent and project.
   generateSetupPrompt(shouldForce?: boolean): Promise<void>;
-  /** Generate setup guidance for a specific target agent and project. */
+  // Generate setup guidance for a specific target agent and project.
   generateSetupPromptForAgent(
     targetAgent: RunnerId,
     shouldForce?: boolean,
   ): Promise<string | null>;
-  /** Generate the selected quality prompt or report request. */
+  // Prepare the selected Quality prompt for display, copying, or terminal launch.
   generateQuality(options?: DashboardQualityGenerateOptions): Promise<void>;
-  /** Load saved quality-history rows for the selected quality mode. */
+  // Load saved quality-history rows for the selected quality mode.
   generateQualityHistory(): Promise<void>;
 }
 
-/** Options that choose fast/fresh quality generation behavior from UI controls. */
+// Options that choose fast/fresh quality generation behavior from UI controls.
 type DashboardQualityGenerateOptions = Partial<
   Record<"fast" | "fresh", boolean>
 >;
@@ -79,7 +84,7 @@ type DashboardQualityGenerateOptions = Partial<
  *
  * @param ctx - dashboard state holding the supported-agent list the server sent
  * @param agentId - agent to name; an id the server did not list still renders as itself rather than vanishing from the button
- * @returns the display name, or the bare id when the list has no entry, so a label is never blank
+ * @returns the supplied display name, or the runner ID when no supported-agent entry exists
  */
 function dashboardAgentDisplayName(
   ctx: DashboardSetupQualityContext,
@@ -110,7 +115,7 @@ function dashboardSetupInstructionSurfaces(
  *
  * @param ctx - dashboard state holding presets fetched when the dashboard started
  * @param presetId - preset to find; an unknown id is a normal miss while presets are still loading
- * @returns the preset, or null when presets have not arrived yet, which the caller shows as a card without prompt text
+ * @returns the matching preset; null leaves its card without preset text when the requested preset is missing
  */
 function dashboardQualityModePreset(
   ctx: DashboardSetupQualityContext,
@@ -119,14 +124,14 @@ function dashboardQualityModePreset(
   return ctx.presets.find((preset) => preset.id === presetId) ?? null;
 }
 
-/** Reset quality-history rows and warnings before loading a new mode or project. */
+// Reset quality-history rows and warnings before loading a new mode or project.
 function dashboardClearQualityHistory(ctx: DashboardSetupQualityContext): void {
   ctx.qualityHistoryRows = [];
   ctx.qualityHistoryLatest = null;
   ctx.qualityHistoryWarnings = [];
 }
 
-/** Build the read-only harness-engineering assessment prompt used by the Quality page. */
+// Build the read-only harness-engineering assessment prompt used by the Quality page.
 function dashboardHarnessQualityPrompt(): string {
   return [
     "AI Harness Engineering Quality Assessment",
@@ -205,7 +210,7 @@ function dashboardQualityModes(
  * Resolves which Quality card the user currently has highlighted, so the launch button and prompt match their choice.
  *
  * @param ctx - dashboard state; the card the user clicked is remembered as `selectedQualityModeId`
- * @returns the selected card, or null before the user picks one, which leaves the launch button on its neutral label
+ * @returns the matching card, or null when the selected mode ID has no configured card
  */
 function dashboardSelectedQualityModeMeta(
   ctx: DashboardSetupQualityContext,
@@ -217,7 +222,7 @@ function dashboardSelectedQualityModeMeta(
   );
 }
 
-/** Return the goat-flow controlling workspace path for framework-scoped quality modes. */
+// Return the goat-flow controlling workspace path for framework-scoped quality modes.
 function dashboardQualityControllingWorkspace(): string {
   return window.__GOAT_FLOW_DEFAULT_PATH__ ?? ".";
 }
@@ -237,8 +242,8 @@ function dashboardQualityShellQuote(unquotedText: string): string {
  * Use for both prompt text and runner permissions so the UI shows and enforces one destination.
  *
  * @param ctx - Quality view state; an empty project path means target selection has not finished
- * @param mode - selected quality mode; never null after the user chooses a Quality card
- * @returns controlling workspace for process/skills, otherwise the selected target; never empty in a launch
+ * @param mode - resolved Quality card whose scope determines which project owns the saved report
+ * @returns controlling workspace for process/skills, otherwise the selected target; callers supply a usable project path before launch
  */
 function dashboardQualityReportProjectPath(
   ctx: DashboardSetupQualityContext,
@@ -298,6 +303,10 @@ function dashboardQualityReportLogPrompt(
   );
   const reportRootShell = dashboardQualityShellQuote(projectPath);
   return [
+    "### Refuted Candidates",
+    "List every candidate finding you tested and excluded, why it was excluded, and the source anchor or command result that disproved it. Write `None` when no candidate was ruled out.",
+    "Keep these candidates out of Findings and Top 5 Improvements; the ledger exists so the user and later reviewers do not repeat disproved work.",
+    "",
     "Quality report log:",
     `- Report owner project_path for this mode: ${projectPath}`,
     "- Persist the final report through the bounded saver. It redacts and validates stdin in memory, then chooses a filename under the owner project's gitignored `.goat-flow/logs/quality/`.",
@@ -326,14 +335,34 @@ function dashboardQualityReportLogPrompt(
     '    "setup": { "total": 0, "accuracy": 0, "relevance": 0, "completeness": 0, "friction": 0 },',
     '    "system": { "total": 0, "usefulness": 0, "signal_to_noise": 0, "adaptability": 0, "learnability": 0 }',
     "  },",
+    '  "score_rationale": {',
+    '    "setup": {',
+    '      "accuracy": { "evidence": "Observed evidence for this score", "deduction": "Reason for points deducted, or no deduction" },',
+    '      "relevance": { "evidence": "Observed evidence for this score", "deduction": "Reason for points deducted, or no deduction" },',
+    '      "completeness": { "evidence": "Observed evidence for this score", "deduction": "Reason for points deducted, or no deduction" },',
+    '      "friction": { "evidence": "Observed evidence for this score", "deduction": "Reason for points deducted, or no deduction" }',
+    "    },",
+    '    "system": {',
+    '      "usefulness": { "evidence": "Observed evidence for this score", "deduction": "Reason for points deducted, or no deduction" },',
+    '      "signal_to_noise": { "evidence": "Observed evidence for this score", "deduction": "Reason for points deducted, or no deduction" },',
+    '      "adaptability": { "evidence": "Observed evidence for this score", "deduction": "Reason for points deducted, or no deduction" },',
+    '      "learnability": { "evidence": "Observed evidence for this score", "deduction": "Reason for points deducted, or no deduction" }',
+    "    }",
+    "  },",
     '  "findings": [',
     '    { "type": "setup_quality", "severity": "MAJOR", "file": ".goat-flow/architecture.md", "line": null, "summary": "One-line finding summary", "detail": "Why it matters", "evidence_quality": "OBSERVED", "evidence_method": "static-analysis", "delta_tag": "new" }',
-    "  ]",
+    "  ],",
+    '  "refuted_candidates": []',
     "}",
     "```",
     "- Use exact score axis values `0 | 5 | 10 | 15 | 20 | 25`; each total must equal its axis sum.",
+    "- Every score axis requires `evidence` and `deduction` as non-empty single-line strings of 240 characters or fewer.",
     "- Allowed finding types: `setup_quality`, `skill_flaw`, `contradiction`, `false_path`, `content_quality`, `framework_flaw`.",
     "- Allowed severities: `BLOCKER`, `MAJOR`, `MINOR`. Allowed evidence methods: `runtime-probe`, `static-analysis`, `mixed`.",
+    "- `refuted_candidates` is REQUIRED and may be `[]`. Each row requires `claim`, `why_excluded`, nullable `file` and `line`, `evidence_quality`, `evidence_method`, and `evidence_summary`; excluded candidates do not belong in `findings`.",
+    "- A `runtime-probe` or `mixed` refuted candidate requires `evidence_command`, `evidence_exit_code`, and `evidence_summary` so the disproval is reproducible.",
+    '- A refuted candidate must use `evidence_quality: "OBSERVED"`; an `INFERRED` candidate remains unresolved and must not enter the refutation ledger.',
+    '- A `static-analysis` or `mixed` refuted candidate requires a non-null `file` and a grep-friendly semantic anchor such as `(search: "pattern")` in `evidence_summary`.',
     '- `prior_report_id`: keep `null` unless you can cite a specific prior report id (from `goat-flow quality history`) for this same agent/mode. When it is set, `delta_tag` is REQUIRED on every finding (`"new"` unless the finding materially matches that prior report; then `"persisted"`); when it is `null`, leave `delta_tag` as `null` or omit it.',
     "- `assessment_context`: record `project_revision`, `working_tree_state` (`clean`, `dirty`, `not-git`, or `unavailable`), `grounding_status` (`complete`, `partial`, or `blocked`), every skipped, denied, or unavailable command or skill probe in `unverified_probes`, and `score_confidence` (`high`, `medium`, or `low`). Use an empty probe array only for complete grounding. This metadata does not change or cap the rubric scores.",
     "- Live review findings should cite `file` + semantic anchor after re-reading the cited file and anchor. Durable footguns, lessons, patterns, and decisions must use file paths plus semantic anchors rather than line numbers.",
@@ -370,6 +399,7 @@ function dashboardBuildQualityModePrompt(
   mode: QualityModeOption,
 ): string {
   const prompt = mode.prompt?.trim();
+  // A mode without meaningful preset text cannot provide a usable prompt to copy or launch.
   if (!prompt) {
     return "";
   }
@@ -390,13 +420,8 @@ function dashboardBuildQualityModePrompt(
 }
 
 /**
- * Fills the Setup tab's form by asking the server what languages, commands, agents, and goat-flow artifacts the selected project already has.
- *
- * Runs when the user picks a project or hits Re-detect, and is the step that decides what the generated setup prompt will claim.
- *
- * Every field is read through a typed fallback because the reply is untrusted JSON, so:
- * - a partial response still leaves a usable form instead of half-filled inputs
- * - Error behavior: never throws; a dead endpoint or an error payload surfaces as a toast and keeps the previous values
+ * Detect project languages, commands, runners, and existing artifacts when the user opens Setup or requests detection.
+ * Missing fields use typed defaults; request and decoding failures recover through a toast before detected fields are applied.
  */
 async function dashboardDetectStack(
   ctx: DashboardSetupQualityContext,
@@ -408,12 +433,13 @@ async function dashboardDetectStack(
     );
     const payload = readRecord(await res.json(), "Setup detection response");
     const error = readErrorMessage(payload);
-    // The server refused the path itself, so the user sees why instead of an empty form that looks like a clean project.
+    // A reported detection failure preserves the previous form values and shows the server's explanation.
     if (error) {
       ctx.showToast(error, true);
       ctx.setupDetecting = false;
       return;
     }
+    // Missing command, agent, or artifact records let their field readers apply the form's defaults.
     const commands = isRecord(payload.commands) ? payload.commands : {};
     const agents = isRecord(payload.agents) ? payload.agents : {};
     const existing = isRecord(payload.existing) ? payload.existing : {};
@@ -461,7 +487,7 @@ async function dashboardDetectStack(
     };
     ctx.setupData.nonGoatFlow = readStringArray(payload.nonGoatFlow);
   } catch (err) {
-    // For example, the user stopped the dashboard server, or picked a path on a network drive that went offline mid-detect.
+    // Stopping the dashboard server or receiving malformed detection JSON leaves the existing form values and reports a toast.
     const msg = err instanceof Error ? err.message : String(err);
     ctx.showToast(msg || "Detection failed", true);
   }
@@ -492,20 +518,20 @@ function dashboardReusableSetupOutput(
   }
   // The user asked for a fresh generation, so the cache is skipped even when it holds a usable prompt.
   if (shouldForce) return null;
+  // Empty cached output cannot populate the prompt pane, so the caller must request a usable prompt.
   return ctx.setupOutputs[agent] || null;
 }
 
 /**
- * Generates the setup prompt the user copies into their agent, for one target agent and the selected project.
+ * Return cached setup guidance or fetch a prompt for the selected project and target runner.
  *
- * Guards exist because the user can switch project or agent while a request is in flight, so only the newest reply may land on screen.
- *
- * Error behavior: never throws; a failed generation reports as a toast and returns null, leaving whatever the pane already showed.
+ * Results from another project are discarded; a superseded project/agent request may still fill an empty cache for its agent.
+ * It reports applicable request failures as toasts and returns null without adding generated output.
  *
  * @param ctx - dashboard state whose prompt cache is populated on success
  * @param targetAgent - agent to generate for; supplies both the request and the cache key
  * @param options - `force` true when the user clicked Regenerate, which bypasses cached output
- * @returns the generated prompt, or null when the request went stale or the server reported an error, both of which leave the pane unchanged
+ * @returns cached or generated text; null means the project changed or the request failed, after any required cache reset
  */
 async function dashboardGenerateSetupPromptForAgent(
   ctx: DashboardSetupQualityContext,
@@ -520,18 +546,19 @@ async function dashboardGenerateSetupPromptForAgent(
     requestProjectPath,
     shouldForce,
   );
+  // A usable prompt for this project and runner can appear immediately without another server request.
   if (cachedOutput !== null) return cachedOutput;
 
   const requestKey = `${requestProjectPath}\0${agent}`;
   ctx._setupPromptRequestKey = requestKey;
   ctx.setupGenerating = true;
-  /** False once the user has switched projects, so this reply must be discarded entirely. */
+  // False once the user has switched projects, so this reply must be discarded entirely.
   const isCurrentProject = (): boolean =>
     ctx.projectPath === requestProjectPath;
-  /** False once a newer request started, so this reply may not overwrite cached output. */
+  // Check whether this project/agent request key still owns the shared Setup loading state.
   const isLatestRequest = (): boolean =>
     ctx._setupPromptRequestKey === requestKey;
-  /** A superseded reply still counts when the user has no cached output to fall back on. */
+  // A superseded reply still counts when the user has no cached output to fall back on.
   const shouldApplyResult = (): boolean =>
     isLatestRequest() || !ctx.setupOutputs[agent];
   try {
@@ -539,23 +566,29 @@ async function dashboardGenerateSetupPromptForAgent(
       `/api/setup?path=${encodeURIComponent(requestProjectPath)}&agent=${encodeURIComponent(agent)}`,
     );
     const payload = readRecord(await res.json(), "Setup response");
+    // A response from a project the user left must not populate the current Setup cache.
     if (!isCurrentProject()) return null;
     const error = readErrorMessage(payload);
     // The server could not compose a prompt for this agent, so the user is told which agent failed rather than seeing a silent no-op.
     if (error) {
+      // Only the current request key, or an agent without cached guidance, may surface this generation error.
       if (shouldApplyResult()) ctx.showToast(`${agent}: ${error}`, true);
       return null;
     }
+    // A response without prompt text needs an explicit empty-output message in the pane.
     const output = readString(payload.output) || "No output generated.";
+    // Keep an existing agent prompt when another request key owns loading, but fill an otherwise empty cache.
     if (shouldApplyResult()) ctx.setupOutputs[agent] = output;
     return output;
   } catch (err) {
-    // For example, the user closed the laptop mid-request and the fetch aborted, or they switched projects while the server was still composing.
+    // A network failure or malformed setup response reports no result; failures for a project the user left are ignored.
     if (!isCurrentProject()) return null;
     const msg = err instanceof Error ? err.message : String(err);
+    // A superseded request with usable cached guidance must not interrupt that guidance with a late error.
     if (shouldApplyResult()) ctx.showToast(msg || "Generation failed", true);
     return null;
   } finally {
+    // Only the request key still owning Setup may clear the generation spinner and release the shared key.
     if (isLatestRequest()) {
       ctx.setupGenerating = false;
       ctx._setupPromptRequestKey = null;
@@ -563,7 +596,7 @@ async function dashboardGenerateSetupPromptForAgent(
   }
 }
 
-/** Generate setup output for the agent selected in the setup view. */
+// Generate setup output for the agent selected in the setup view.
 async function dashboardGenerateSetupPrompt(
   ctx: DashboardSetupQualityContext,
   { force: shouldForce = false }: Partial<Record<"force", boolean>> = {},
@@ -573,8 +606,9 @@ async function dashboardGenerateSetupPrompt(
   });
 }
 
-/** Schedule setup prompt generation after setup detection gets a paint. */
+// Schedule setup prompt generation after setup detection gets a paint.
 function dashboardScheduleSetupPrompt(ctx: DashboardSetupQualityContext): void {
+  // Rapid context changes replace pending generation so only the latest scheduled setup action starts.
   if (ctx._setupPromptTimer !== null) {
     clearTimeout(ctx._setupPromptTimer);
   }
@@ -585,7 +619,7 @@ function dashboardScheduleSetupPrompt(ctx: DashboardSetupQualityContext): void {
 }
 
 /**
- * Generates the quality prompt or report for whichever Quality card the user selected, and drops the result into the Quality pane.
+ * Prepare the selected Quality prompt and place it in the pane for copying or terminal launch.
  *
  * Error behavior: never throws; a failure toasts and leaves the pane empty rather than showing a stale report the user might read as current.
  *
@@ -612,7 +646,7 @@ async function dashboardGenerateQuality(
   const requestAgent = ctx.qualityAgent;
   const fastParam = useFastCache ? "&fast=true" : "";
   const freshParam = includeFresh ? "&fresh=true" : "";
-  /** False once mode, project, or agent changed, so this reply must not land in the Quality view. */
+  // False once mode, project, or agent changed, so this reply must not land in the Quality view.
   const isCurrentRequest = (): boolean =>
     ctx.selectedQualityModeId === requestModeId &&
     ctx.projectPath === requestSelectedProjectPath &&
@@ -622,6 +656,7 @@ async function dashboardGenerateQuality(
       `/api/quality?path=${encodeURIComponent(requestProjectPath)}&agent=${encodeURIComponent(requestAgent)}&mode=${encodeURIComponent(requestModeId)}&target=${encodeURIComponent(requestSelectedProjectPath)}${fastParam}${freshParam}`,
     );
     const payload = readRecord(await res.json(), "Quality response");
+    // A response for a different selected mode, project, or agent must not replace the visible Quality prompt.
     if (!isCurrentRequest()) return;
     const error = readErrorMessage(payload);
     // The server rejected this mode or project, so the user sees the reason instead of an empty Quality pane.
@@ -631,20 +666,18 @@ async function dashboardGenerateQuality(
       ctx.qualityResult = readQualityResult(payload);
     }
   } catch (err) {
-    // For example, the user picked a project that was deleted from disk after the dashboard listed it.
+    // A lost server connection or incompatible Quality response leaves the prompt empty and reports a toast for the matching selection.
     if (!isCurrentRequest()) return;
     const msg = err instanceof Error ? err.message : String(err);
     ctx.showToast(msg || "Quality prompt generation failed", true);
   }
+  // A late response from an earlier selection must not clear the current prompt's loading indicator.
   if (isCurrentRequest()) ctx.qualityLoading = false;
 }
 
 /**
- * Loads the saved quality runs shown in the Quality tab's history table for the selected project and agent.
- *
- * Unparseable rows are dropped rather than failing the batch, so one corrupt saved report cannot hide the rest of the user's history.
- *
- * Error behavior: never throws; an unreachable endpoint reports as a toast and leaves the history table empty rather than stale.
+ * Load saved reviews for the selected Quality mode, project, and runner, omitting rows that cannot be decoded.
+ * It reports request failures as toasts and leaves the cleared history empty instead of retaining reviews for an earlier selection.
  *
  * @param ctx - dashboard state mutated in place with rows, the latest entry, and any warnings
  * @returns nothing; the history table reads `ctx.qualityHistoryRows` once this resolves
@@ -661,7 +694,7 @@ async function dashboardGenerateQualityHistory(
     : ctx.projectPath;
   const requestSelectedProjectPath = ctx.projectPath;
   const requestAgent = ctx.qualityAgent;
-  /** False once mode, project, or agent changed, so these rows belong to a view the user left. */
+  // False once mode, project, or agent changed, so these rows belong to a view the user left.
   const isCurrentRequest = (): boolean =>
     ctx.selectedQualityModeId === requestModeId &&
     ctx.projectPath === requestSelectedProjectPath &&
@@ -671,11 +704,14 @@ async function dashboardGenerateQualityHistory(
       `/api/quality/history?path=${encodeURIComponent(requestProjectPath)}&agent=${encodeURIComponent(requestAgent)}&mode=${encodeURIComponent(requestModeId)}&limit=20`,
     );
     const payload = readRecord(await res.json(), "Quality history response");
+    // Saved reviews from an earlier selection cannot replace the current history table.
     if (!isCurrentRequest()) return;
     const error = readErrorMessage(payload);
+    // A rejected history request leaves the cleared table empty and shows the server's explanation.
     if (error) {
       ctx.showToast(error, true);
     } else {
+      // Missing rows leave no saved reviews; malformed individual rows are omitted without hiding valid history.
       ctx.qualityHistoryRows = Array.isArray(payload.rows)
         ? payload.rows
             .map((row) => readQualityHistoryRow(row))
@@ -685,17 +721,20 @@ async function dashboardGenerateQualityHistory(
       ctx.qualityHistoryWarnings = readStringArray(payload.warnings);
     }
   } catch (err) {
+    // An unreachable server or malformed history JSON reports a toast only while this mode, project, and runner remain selected.
     if (!isCurrentRequest()) return;
     const msg = err instanceof Error ? err.message : String(err);
     ctx.showToast(msg || "Quality history loading failed", true);
   }
+  // Only the matching selection may finish the history table's loading state.
   if (isCurrentRequest()) ctx.qualityHistoryLoading = false;
 }
 
-/** Schedule quality-history loading after the prompt path gets a paint. */
+// Schedule quality-history loading after the prompt path gets a paint.
 function dashboardScheduleQualityHistory(
   ctx: DashboardSetupQualityContext,
 ): void {
+  // A newer history request replaces an earlier scheduled load before either can fetch stale selection data.
   if (ctx._qualityHistoryTimer !== null) {
     clearTimeout(ctx._qualityHistoryTimer);
   }
@@ -705,8 +744,9 @@ function dashboardScheduleQualityHistory(
   }, QUALITY_HISTORY_LOAD_DELAY_MS);
 }
 
-/** Copy the current quality prompt to the clipboard. */
+// Copy the current quality prompt to the clipboard.
 function dashboardCopyQuality(ctx: DashboardSetupQualityContext): void {
+  // Until generation supplies prompt text, Copy has no meaningful Quality content to send to the clipboard.
   if (!ctx.qualityResult?.prompt) return;
   ctx.copyText(ctx.qualityResult.prompt);
   ctx.qualityCopyLabel = "Copied!";

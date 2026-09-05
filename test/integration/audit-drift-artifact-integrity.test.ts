@@ -384,7 +384,7 @@ describe("checkDrift: artifact integrity", () => {
       mkdirSync(dirname(skillsDocPath), { recursive: true });
       writeFileSync(
         skillsDocPath,
-        "# Skills\n\nAnnounce: Routing to /goat-X\n\nFootgun matches\\nRecent git\n\nLearning loop - log lessons and footguns after completion\n",
+        "# Skills\n\nAnnounce: Routing to /goat-X\n\nFootgun matches\nRecent git\n\nLearning loop - log lessons and footguns after completion\n",
       );
       const context = {
         projectPath: fixtureRoot,
@@ -597,6 +597,66 @@ describe("checkDrift: artifact integrity", () => {
         ),
         false,
         `compatibility path produced an unresolved-path finding: ${JSON.stringify(report.findings)}`,
+      );
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
+  // Creates and removes a temporary project whose doc names a valid transient marker normally absent outside an active writer.
+  it("accepts an absent path-write claim reference", () => {
+    const fixtureRoot = setupFixture();
+    try {
+      const guidePath = join(fixtureRoot, "docs", "audit-checks.md");
+      mkdirSync(dirname(guidePath), { recursive: true });
+      writeFileSync(
+        guidePath,
+        "An active writer may own `.goat-flow/write-claims/example.claim`.\n",
+      );
+      const context = {
+        projectPath: fixtureRoot,
+        fs: createFS(fixtureRoot),
+      } as AuditContext;
+
+      const report = runFactualClaimChecks(context);
+      assert.equal(
+        report.findings.some(
+          (finding) =>
+            finding.rule === "path-ref-unresolved" &&
+            finding.message.includes("write-claims/example.claim"),
+        ),
+        false,
+        `local coordination path produced an unresolved-path finding: ${JSON.stringify(report.findings)}`,
+      );
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
+  // Filesystem side effects: creates and removes a project without install state; content lint accepts lifecycle paths clean checkouts lack.
+  it("accepts absent managed install-state lifecycle references", () => {
+    const fixtureRoot = setupFixture();
+    try {
+      const guidePath = join(fixtureRoot, "docs", "audit-checks.md");
+      mkdirSync(dirname(guidePath), { recursive: true });
+      writeFileSync(
+        guidePath,
+        "Managed installs use `.goat-flow/install-state/managed.json`; repair access to `.goat-flow/install-state/` before retrying.\n",
+      );
+      const context = {
+        projectPath: fixtureRoot,
+        fs: createFS(fixtureRoot),
+      } as AuditContext;
+
+      const report = runFactualClaimChecks(context);
+      assert.equal(
+        report.findings.some(
+          (finding) =>
+            finding.rule === "path-ref-unresolved" &&
+            finding.message.includes(".goat-flow/install-state/"),
+        ),
+        false,
+        `managed install-state path produced an unresolved-path finding: ${JSON.stringify(report.findings)}`,
       );
     } finally {
       rmSync(fixtureRoot, { recursive: true, force: true });

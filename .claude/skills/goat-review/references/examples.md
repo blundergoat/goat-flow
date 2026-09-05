@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.16.0"
+goat-flow-reference-version: "1.17.0"
 ---
 # goat-review Reference Examples
 
@@ -93,13 +93,13 @@ the current checkout is never a substitute for a PR, branch, or staged state.
 | Source | Diff authority | Pass 2 full-file authority | Drift check |
 |---|---|---|---|
 | PR or branch | Resolve base and head commit OIDs; use `git diff <base-oid>...<head-oid>` | Use `git show <head-oid>:<path>`; read deleted paths from `<base-oid>` | Object IDs are immutable; report if the named branch or PR now resolves elsewhere |
-| staged | Record the base commit OID and index tree OID from `git write-tree`; use `git diff <base-oid> <index-tree-oid>` | Use `git show <index-tree-oid>:<path>`; read deleted paths from the base OID | Re-run `git write-tree` before each pass and final output; a different tree stops |
-| unstaged | Record the index tree OID, transient `git diff` hash, changed-path hashes, and untracked membership | Read each live path with hash-before → read → hash-after; read deleted paths from the index tree | Recompute the index tree, diff hash, path hashes, and untracked membership before each pass and final output |
+| staged | Record the base commit OID and the staged fingerprint from `git ls-files -s` plus `git diff --cached --binary`; use `git diff --cached` | Use `git show :<path>`; read deleted paths from the base OID | Recompute both staged fingerprints before each pass and final output; any change stops |
+| unstaged | Record the staged fingerprint, transient `git diff` hash, changed-path hashes, and untracked membership | Read each live path with hash-before → read → hash-after; read deleted paths with `git show :<path>` | Recompute the staged fingerprint, diff hash, path hashes, and untracked membership before each pass and final output |
 | worktree | Record HEAD OID, transient `git diff HEAD` hash, changed-path hashes, and untracked membership; include approved untracked paths with transient `git diff --no-index -- /dev/null <path>` | Read each live tracked or approved untracked path with hash-before → read → hash-after; read deleted paths from HEAD | Recompute HEAD, diff hash, path hashes, and untracked membership before each pass and final output |
 | explicit paths or area | Declare one of the authorities above for every path; an unqualified mixed list is invalid | Use the declared authority per path | Any authority or membership change stops |
 
 Use `git hash-object --no-filters <path>` without `-w` for transient dirty-path hashes; never write raw
-unstaged or untracked content into Git objects. For committed and staged authorities, consumer search
+unstaged or untracked content into Git objects, and never write a tree to name staged state. For committed and staged authorities, consumer search
 uses revision-qualified `git grep` plus `git show`. If symbol-aware or AST tooling cannot query that
 authority, do not run it against the checkout; disclose `callsite-completeness-grep-only`.
 
@@ -117,6 +117,15 @@ authority, do not run it against the checkout; disclose `callsite-completeness-g
    unit once and report `<covered>/<total>`; truncation, missing, or overlapping coverage is
    `chunked-partial`, never `n/a` or complete.
 
+### Pre-persistence Proof Envelope
+
+When refutations are nonzero, keep the report and ledger in memory through this ordered gate:
+
+1. Run `goat-flow review validate-ledger` on the transient records. Put its exact count in the report and use `Review validator: pending`. When a compatible redactor is available, declare one fresh intended `.goat-flow/logs/review/goat-review-refutations.<random>.txt` path; otherwise declare the documented persist-skipped fields now.
+2. Send one stdin envelope to `goat-flow review validate-draft`: the complete report, a line containing only `<!-- goat-flow-review-ledger-draft -->`, then the exact transient records. A count or grammar mismatch fails before persistence.
+3. Remove the marker and ledger appendix. When available, use the redactor to write the same records to the already-validated intended path; otherwise write nothing.
+4. Change only the validator field from `pending` to `validated`, then run final `goat-flow review validate`. Publish only after PASS. The final input must not contain the draft marker.
+
 ## Conditional Output and Provenance Shapes
 
 > **Illustrative scenario - input/output shape only; never evidence.** Replace every placeholder with current target-project evidence.
@@ -124,7 +133,7 @@ authority, do not run it against the checkout; disclose `callsite-completeness-g
 ### Clean review compact surface
 
 ```markdown
-Scope: reviewed `<source>` at `<base>...<head>`; `<n>` files and `<m>` changed lines.
+Scope: reviewed `<source>` at `<base>...<head>`; `<n>` files and `<m>` changed lines; chunking=<no|accepted>.
 Ship Verdict: **YES** — no blocking finding survived Pass 2.
 Zero findings: checked boundary conditions, error paths, and integration seams; named guards or tests disproved every suspicion.
 Review Integrity: confident; `<k>/<n>` files opened; no degradation flags; validator=validated | validator-unavailable.

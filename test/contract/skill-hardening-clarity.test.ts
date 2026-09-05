@@ -1,6 +1,8 @@
 /**
- * Contracts for goat-clarity's bounded code-remediation workflow.
- * The source is read directly so the first run fails until the canonical skill exists.
+ * Check the scope, evidence, and write rules used by goat-clarity.
+ *
+ * The contracts read canonical guidance and shared conventions so edits remain bounded by the user’s selected files and intent.
+ * Use them when changing clarity intake, delegated work, verification, or its completion receipt.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -9,6 +11,7 @@ import {
   installedSkillPaths,
   installedSkillReferencePaths,
   readMarkdownSection,
+  readMarkdownSubsection,
   readProjectFile,
 } from "./skill-hardening.helpers.js";
 
@@ -18,11 +21,11 @@ const SCOPE_REFERENCE_PATH =
 const clarityGuidance = readProjectFile(SKILL_PATH);
 
 /**
- * Match load-bearing phrases without coupling contracts to Markdown wrapping or capitalisation.
+ * Match required instructions while allowing harmless Markdown wrapping and capitalization changes.
  *
  * @param guidance - user-facing guidance under contract
  * @param sourcePath - repository-relative path used in assertion failures
- * @param requiredPhrases - phrases that the installed workflow must retain
+ * @param requiredPhrases - instructions the workflow must retain; an empty list performs no checks
  */
 function assertGuidanceIncludesAll(
   guidance: string,
@@ -31,6 +34,7 @@ function assertGuidanceIncludesAll(
 ): void {
   const normalizedGuidance = guidance.replace(/\s+/gu, " ").toLowerCase();
 
+  // Require each instruction independently so one retained phrase cannot hide another missing safeguard.
   for (const requiredPhrase of requiredPhrases) {
     const normalizedPhrase = requiredPhrase.replace(/\s+/gu, " ").toLowerCase();
     assert.ok(
@@ -40,9 +44,45 @@ function assertGuidanceIncludesAll(
   }
 }
 
-/** Match load-bearing phrases in the canonical goat-clarity skill. */
+// Confirm the canonical goat-clarity guidance retains every required phrase.
 function assertIncludesAll(requiredPhrases: readonly string[]): void {
   assertGuidanceIncludesAll(clarityGuidance, SKILL_PATH, requiredPhrases);
+}
+
+/**
+ * Keep the four documentation write-authority rules in first-match order.
+ * A report request must withhold writes before the later documentation-keyword rule can grant them.
+ *
+ * @param sourcePath - repository-relative skill path named in assertion failures
+ * @param guidance - normalized lowercase skill text; missing rules, including an empty document, fail the contract
+ */
+function assertRulePrecedence(sourcePath: string, guidance: string): void {
+  const rules: readonly (readonly [string, string])[] = [
+    ["explicit write intent", "explicit update/edit/fix instruction grants it"],
+    [
+      "explicit report intent",
+      "explicit report/review/check request withholds it",
+    ],
+    [
+      "documentation keyword",
+      "`documentation` keyword before the target grants it",
+    ],
+    ["unanswered fallback", "defaulting to report only when unanswered"],
+  ];
+  const offsets = rules.map(([label, phrase]) => {
+    const offset = guidance.indexOf(phrase);
+    assert.ok(offset >= 0, `${sourcePath}: missing the ${label} rule`);
+    return [label, offset] as const;
+  });
+  // Compare adjacent authority rules so the first applicable user intent controls whether the agent may write.
+  for (let index = 1; index < offsets.length; index += 1) {
+    const [previousLabel, previousOffset] = offsets[index - 1]!;
+    const [label, offset] = offsets[index]!;
+    assert.ok(
+      previousOffset < offset,
+      `${sourcePath}: ${previousLabel} must be resolved before ${label}`,
+    );
+  }
 }
 
 describe("skill hardening contracts: goat-clarity", () => {
@@ -73,13 +113,35 @@ describe("skill hardening contracts: goat-clarity", () => {
       "cannot be combined with paths",
       "ask for a target when none is supplied",
       "refuse an ambiguous or combined selector",
-      "human documentation is read-only until write authority is resolved",
-      "explicit update/edit/fix instruction, grants it",
+      "human documentation is read-only until write authority resolves by first match",
+      "explicit update/edit/fix instruction grants it",
       "explicit report/review/check request withholds it",
       "Report only, or update the documentation?",
       "defaulting to report only when unanswered, including sub-agent mode",
       "without write authority, documentation is diagnosed and reported, never edited",
     ]);
+  });
+
+  it("resolves documentation write authority by first match, intent before keyword", () => {
+    assertForEachTarget(
+      [SKILL_PATH, ...installedSkillPaths("goat-clarity")],
+      (skillPath) => {
+        const guidance = readProjectFile(skillPath)
+          .replace(/\s+/gu, " ")
+          .toLowerCase();
+        assertRulePrecedence(skillPath, guidance);
+        assert.ok(
+          guidance.includes("write authority resolves by first match"),
+          `${skillPath}: authority resolution does not declare first-match precedence`,
+        );
+        // The keyword sharing the write-granting clause is what let documentation wording outrank explicit report intent.
+        assert.equal(
+          guidance.includes("keyword before the target, or an explicit"),
+          false,
+          `${skillPath}: the documentation keyword still shares the first grant clause`,
+        );
+      },
+    );
   });
 
   it("classifies every selected unit before freezing write authority", () => {
@@ -153,6 +215,57 @@ describe("skill hardening contracts: goat-clarity", () => {
       "every case must reconcile",
       "reserve the final provider lookup for head-drift revalidation",
     ]);
+  });
+
+  it("routes proven comment or private-name-only selectors around case rows", () => {
+    assertForEachTarget(installedSkillPaths("goat-clarity"), (skillPath) => {
+      const clarityPass = readMarkdownSection(skillPath, "Clarity Pass");
+      const testValuePass = readMarkdownSubsection(
+        clarityPass,
+        "3. Run the test-value pass",
+        skillPath,
+      );
+      assertGuidanceIncludesAll(testValuePass, skillPath, [
+        "For a folder or file selector, assess every test case in selected test-source units unless",
+        "selector-driven non-semantic lane",
+        "comment/private-name-only equivalence",
+        "waives only per-case value and disposition rows",
+        "otherwise the full case-level manifest and four-part value gate apply",
+      ]);
+    });
+
+    assertForEachTarget(
+      installedSkillReferencePaths(
+        "goat-clarity",
+        "references/target-scope-and-evidence.md",
+      ),
+      (referencePath) => {
+        const reference = readProjectFile(referencePath);
+        assertGuidanceIncludesAll(reference, referencePath, [
+          "selector-driven non-semantic lane",
+          "explicit folder or file selector",
+          "baseline, current bytes, and explicit request",
+          "comments or docstrings, or local or private identifier spelling",
+          "test case presence, stable identity, title, registration, and parametrized membership",
+          "assertions, expectations, snapshots, and failure semantics",
+          "fixture values, setup and teardown, mocks, stubs, fakes, data builders, and environment controls",
+          "grouping, execution level, skip or focus state, coverage intent, observable output, and user-visible meaning",
+          "a change to any preserved item is semantic and forces the full lane",
+          "existing PR or uncommitted diff contains a semantic test change",
+          "equivalence is uncertain",
+          "full case-level manifest and four-part value gate",
+          "selected test-source units, selected spans, baseline and current identity, write set, and focused verification command",
+          "reconcile every changed span and prove untouched bytes remain untouched",
+          "waives only per-case value and disposition rows",
+        ]);
+      },
+    );
+
+    assert.match(
+      readMarkdownSection("docs/skills.md", "/goat-clarity"),
+      /every test in selected folder or file test-source units.*except.*comment.*private.*name.*only/isu,
+      "docs/skills.md",
+    );
   });
 
   it("uses an authority-aware empty-selection gate", () => {
@@ -251,7 +364,7 @@ describe("skill hardening contracts: goat-clarity", () => {
       "naming-and-placement.md",
       "gruff-code-quality.md",
       "test-selection.md",
-      "writing-style.md",
+      "writing-human-facing-prose.md",
       ".goat-flow/glossary.md",
       "Naming and placement before comments",
     ]);
@@ -390,6 +503,7 @@ describe("skill hardening contracts: goat-clarity", () => {
       "freeze Target Scope Snapshot v2 before mutation",
     ]);
 
+    // Delegated agents must obey Scope v2 in both copies of the shared conventions.
     for (const conventionsPath of [
       "workflow/skills/reference/skill-conventions.md",
       ".goat-flow/skill-docs/skill-conventions.md",
@@ -414,7 +528,7 @@ describe("skill hardening contracts: goat-clarity", () => {
       "code-comments.md",
       "gruff-code-quality.md",
       "test-selection.md",
-      "writing-style.md",
+      "writing-human-facing-prose.md",
       ".goat-flow/glossary.md",
     ]);
     assert.doesNotMatch(
@@ -539,6 +653,7 @@ describe("skill hardening contracts: goat-clarity", () => {
   });
 
   it("returns a complete but proportional remediation receipt", () => {
+    // The completion receipt must account for changed, retained, deferred, and unchecked work so the user can review the actual scope.
     for (const receiptLabel of [
       "Agent:",
       "Selector:",

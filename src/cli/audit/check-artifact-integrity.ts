@@ -1,8 +1,7 @@
 /**
  * Deterministic integrity checks for workflow skills and shared skill documents.
  *
- * Use during `audit --check-drift` so operators see missing resources, duplicate identities, and stale installed files before an agent loads
- * incomplete guidance.
+ * Use during `audit --check-drift` to report missing resources, duplicate identities, and stale installed files before an agent loads them.
  * The checker compares canonical workflow sources with the selected project mirrors.
  */
 import { posix as pathPosix } from "node:path";
@@ -22,21 +21,31 @@ import {
 } from "./artifact-templates.js";
 import { checkResourceReferences } from "./resource-references.js";
 
-/** Inputs needed to validate canonical identities and installed artifact sets. */
+/**
+ * Select the sources and installed skill mirrors included in artifact integrity checks.
+ *
+ * The target filesystem supplies installed guidance; templateRoot locates package or fixture sources.
+ * The selected skill roots limit agent-mirror checks, while shared artifacts use their fixed mirror map.
+ */
 interface ArtifactIntegrityOptions {
-  /** Audited project filesystem; missing files mean the user's installed guidance is incomplete. */
+  // Audited project filesystem; missing files mean the user's installed guidance is incomplete.
   fs: ReadonlyFS;
-  /** Package or fixture root containing workflow sources; empty means no canonical source can be read. */
+  // Package or fixture root containing workflow sources; empty resolves paths from the current working directory.
   templateRoot: string;
-  /** Installed skill roots selected for this audit; empty means no agent mirror is in scope. */
+  // Installed skill roots selected for this audit; empty means no agent mirror is in scope.
   installedSkillRoots: readonly string[];
 }
 
-/** Parsed identity from one canonical SKILL.md frontmatter block. */
+/**
+ * Record the name and source path read from one canonical SKILL.md.
+ *
+ * Audit compares this identity with the directory name and other skills before reporting ambiguous user commands.
+ * A null name keeps the source available as evidence while its invalid frontmatter is reported.
+ */
 interface SkillIdentity {
-  /** User-invocable skill name; null means the contract has no usable name. */
+  // User-invocable skill name; null means the contract has no usable name.
   name: string | null;
-  /** Canonical SKILL.md path shown in audit evidence. */
+  // Canonical SKILL.md path shown in audit evidence.
   path: string;
 }
 
@@ -79,20 +88,18 @@ function readSkillFrontmatterName(skillMarkdown: string): string | null {
 }
 
 /**
- * Identify an explicitly consumer-owned installed playbook.
- * Use so that a playbook the user created with `goat-flow skill new` is not reported as a stale package artifact, while unmarked leftovers still
- * fail drift checks.
+ * Recognize a playbook created with goat-flow skill new so it is exempt from stale package-artifact findings.
+ * Unreadable files or malformed ownership metadata recover as false and remain subject to normal drift checks.
  *
- * It swallows unreadable files and malformed frontmatter as a plain false, so a broken playbook is treated as package-owned and still audited.
- *
- * @param fs - audited project filesystem; unreadable files are not trusted as user-owned
- * @param installedPath - project-relative installed Markdown path; non-playbooks never qualify
- * @returns true only for a playbook whose YAML frontmatter declares user-owned ownership
+ * @param fs - audited project filesystem; unreadable files cannot establish user ownership
+ * @param installedPath - project-relative installed Markdown path; empty or non-playbook paths never qualify
+ * @returns true only for an installed playbook whose YAML frontmatter declares user-owned ownership
  */
 function isUserOwnedConsumerPlaybook(
   fs: ReadonlyFS,
   installedPath: string,
 ): boolean {
+  // Only installed playbooks can claim this user-owned exemption from package drift.
   if (
     !installedPath.startsWith(`${INSTALLED_SHARED_ROOT}/playbooks/`) ||
     !installedPath.endsWith(".md")
@@ -101,14 +108,17 @@ function isUserOwnedConsumerPlaybook(
   }
 
   const markdown = fs.readFile(installedPath);
+  // An unreadable playbook cannot supply the ownership marker needed to exempt it.
   if (markdown === null) return false;
   const frontmatterMatch = markdown.match(
     /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/u,
   );
+  // Without frontmatter, audit has no ownership declaration to preserve as a user extension.
   if (frontmatterMatch?.[1] === undefined) return false;
 
   try {
     const frontmatter = load(frontmatterMatch[1]);
+    // Ownership must be declared in a YAML object before audit exempts the user's playbook.
     if (
       frontmatter === null ||
       typeof frontmatter !== "object" ||
@@ -121,7 +131,7 @@ function isUserOwnedConsumerPlaybook(
       USER_OWNED_PLAYBOOK_MARKER
     );
   } catch {
-    // Malformed frontmatter cannot establish ownership, so normal stale-artifact handling applies.
+    // An unfinished YAML edit can break the ownership declaration; audit then applies normal stale-artifact handling.
     return false;
   }
 }
@@ -131,8 +141,8 @@ function isUserOwnedConsumerPlaybook(
  * Use for command or skill registries where one identifier must select exactly one user action.
  *
  * @param identifiers - registry values to compare; empty means there are no IDs to validate
- * @param registryPath - canonical registry shown to the operator; empty weakens evidence but remains valid text
- * @param identifierLabel - user-facing identifier kind; empty falls back to a generic message
+ * @param registryPath - registry path included in the finding; empty leaves its repair location unspecified
+ * @param identifierLabel - identifier kind inserted in the finding; empty leaves that part of the message blank
  * @returns duplicate findings; empty means every supplied identifier is unique
  */
 export function findDuplicateArtifactIds(
@@ -144,6 +154,7 @@ export function findDuplicateArtifactIds(
 
   // Count every declared action so a repeated ID cannot silently shadow another entry.
   for (const identifier of identifiers) {
+    // Start the first declaration at zero, then count it toward any duplicate command finding.
     occurrences.set(identifier, (occurrences.get(identifier) ?? 0) + 1);
   }
 
@@ -166,7 +177,7 @@ export function findDuplicateArtifactIds(
  * Read each canonical identity and report its directory/frontmatter mismatch.
  * Use before collision checks so every invalid skill names its own repair path.
  *
- * @param templateRoot - package or fixture root; empty means no canonical skills can be read
+ * @param templateRoot - package or fixture root; empty resolves canonical paths from the current working directory
  * @param findings - shared finding list; empty means no mismatch has been reported yet
  * @returns readable skill identities; empty means no canonical SKILL.md could be read
  * @throws when the canonical manifest cannot supply its skill registry
@@ -226,6 +237,7 @@ function duplicateSkillIdentityFindings(
   for (const identity of identities) {
     // A missing name already has its own actionable frontmatter finding.
     if (identity.name === null) continue;
+    // The first skill claiming this name starts its evidence list; later sources join any collision finding.
     const paths = pathsByName.get(identity.name) ?? [];
     paths.push(identity.path);
     pathsByName.set(identity.name, paths);
@@ -239,6 +251,7 @@ function duplicateSkillIdentityFindings(
     if (skillPaths.length < 2) continue;
     findings.push({
       kind: "content",
+      // Show the first colliding source as the repair path, retaining the canonical skills root as a display fallback.
       path: skillPaths[0] ?? "workflow/skills",
       message: `duplicate skill frontmatter name "${skillName}" appears in ${skillPaths.join(", ")}`,
     });
@@ -250,8 +263,8 @@ function duplicateSkillIdentityFindings(
  * Validate directory/frontmatter alignment and cross-skill name uniqueness.
  * Use so one slash command always resolves to exactly one canonical workflow contract.
  *
- * @param templateRoot - package or fixture root; empty means no canonical skills can be read
- * @returns identity findings; empty means all canonical skills are named uniquely and correctly
+ * @param templateRoot - package or fixture root; empty resolves canonical paths from the current working directory
+ * @returns issues in readable canonical identities; empty reports none, while missing files are handled by ordinary drift checks
  * @throws when the canonical manifest cannot supply its skill registry
  */
 function checkSkillIdentities(templateRoot: string): DriftFinding[] {
@@ -264,14 +277,13 @@ function checkSkillIdentities(templateRoot: string): DriftFinding[] {
 }
 
 /**
- * Compare declared skill packs with canonical and installed Markdown file sets, and reports every mismatch as a finding.
- * The three-way comparison exists because a rename can leave unshipped source on one side and stale installed guidance on the other, and only
- * checking all three sets catches both.
+ * Report canonical or installed skill Markdown omitted from the manifest's declared file set.
+ * Compare both sides because undeclared source is not shipped and leftover installed guidance can outlive a rename.
  *
  * @param fs - audited project filesystem; empty mirrors produce no stale-file findings
- * @param templateRoot - package or fixture root; empty means no canonical set can be listed
- * @param installedSkillRoots - selected agent mirrors; empty means no installed skills are in scope
- * @returns set-integrity findings; empty means declared, source, and installed skill files agree
+ * @param templateRoot - package or fixture root; empty resolves source paths from the current working directory
+ * @param installedSkillRoots - selected agent mirrors; empty omits installed-skill checks
+ * @returns undeclared-file findings; empty means no extras were discovered, not that every declared file exists
  */
 function checkSkillFileSets(
   fs: ReadonlyFS,
@@ -329,13 +341,13 @@ function checkSkillFileSets(
 }
 
 /**
- * Compare all shared source and installed Markdown with the explicit mirror map, and reports every mismatch as a finding.
- * Use so that adding or removing a playbook cannot leave source-only or stale installed guidance behind.
+ * Report shared source and installed Markdown absent from the explicit mirror map.
+ * Preserve marked user-owned playbooks so local extensions do not appear as stale package guidance.
  *
  * @param fs - audited project filesystem; an empty installed tree yields no stale extras
- * @param templateRoot - package or fixture root; empty means no canonical shared files can be listed
- * @param sharedFiles - canonical mirror map; empty means every discovered shared file is unmapped
- * @returns shared-set findings; empty means source, mapping, and installed sets agree
+ * @param templateRoot - package or fixture root; empty resolves source paths from the current working directory
+ * @param sharedFiles - canonical mirror map; empty leaves every discovered package artifact unmapped
+ * @returns unmapped-file findings; empty does not prove every mapped source and installed file exists
  */
 function checkSharedFileSets(
   fs: ReadonlyFS,
@@ -414,7 +426,7 @@ function checkCommandIdentifiers(): DriftFinding[] {
  * Use after ordinary content comparison to add identity, reference, and stale-set evidence.
  *
  * @param options - canonical and installed artifact sources; empty collections narrow the audit scope
- * @returns actionable findings; empty means every checked integrity contract is satisfied
+ * @returns actionable findings; empty reports no detected issue, with missing or unreadable inputs limiting some checks
  */
 export function checkArtifactIntegrity(
   options: ArtifactIntegrityOptions,

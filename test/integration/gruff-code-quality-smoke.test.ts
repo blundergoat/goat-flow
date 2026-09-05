@@ -891,6 +891,11 @@ describe("gruff-code-quality hook", () => {
     // The agent sees gruff's real cause and fix on stdout, not the generic note.
     assert.match(result.stdout, /schemaVersion/);
     assert.match(result.stdout, /gruff-ts init --force/);
+    assert.match(
+      result.stdout,
+      /Do not run gruff-ts init --force in this project/u,
+    );
+    assert.match(result.stdout, /fresh temporary directory/u);
     assert.match(result.stdout, /\.gruff-ts\.yaml/);
     assert.doesNotMatch(result.stdout, /produced non-JSON output/);
   });

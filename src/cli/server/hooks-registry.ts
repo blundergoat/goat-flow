@@ -115,6 +115,7 @@ const HOOKS: HookSpec[] = [
       codex: {
         identity: "hook-provider-adapter.v1:codex:pre-tool",
         effectiveSupportGate: "scenario-unverified",
+        expiresAt: "2026-09-21T02:17:08.834Z",
       },
       antigravity: {
         identity: "hook-provider-adapter.v1:antigravity:pre-tool",
@@ -154,8 +155,8 @@ const HOOKS: HookSpec[] = [
       },
       codex: {
         identity: "hook-provider-adapter.v1:codex:post-tool",
-        effectiveSupportGate: "effective",
-        expiresAt: "2026-09-09T00:00:00.000Z",
+        effectiveSupportGate: "scenario-unverified",
+        expiresAt: "2026-09-25T20:17:22.830Z",
       },
       antigravity: {
         identity: "hook-provider-adapter.v1:antigravity:post-tool",
@@ -203,8 +204,7 @@ const HOOKS: HookSpec[] = [
       },
       codex: {
         identity: "hook-provider-adapter.v1:codex:turn-stop",
-        effectiveSupportGate: "effective",
-        expiresAt: "2026-09-09T00:00:00.000Z",
+        effectiveSupportGate: "provider-capture-stale",
       },
       antigravity: {
         identity: "hook-provider-adapter.v1:antigravity:turn-stop",

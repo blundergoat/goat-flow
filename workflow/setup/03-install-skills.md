@@ -14,7 +14,7 @@ Read the detailed templates in `workflow/skills/` (each skill is a directory con
 2. **goat-review/SKILL.md** - Structured code review + quality audit. RFC 2119 severity, negative verification, footgun matching.
 3. **goat-security/SKILL.md** - Threat-model-driven security assessment. Exploitability ranking, dependency auditing.
 4. **goat-plan/SKILL.md** - Milestone planner and manager. Routes to inline or file-write mode based on scope and signals: inline for hotfix/small features, file-write for Standard+ scope.
-5. **goat-critique/SKILL.md** - Multi-perspective critique using sub-agent orchestration. Phases 1-5 plus mandatory Phase 5.5 meta-audit and Phase 5.6 outcome capture; 3 critique agents (risk, alternatives, fresh eyes), up to 3 conditional cross-exam agents, and 1 mandatory meta-agent.
+5. **goat-critique/SKILL.md** - Multi-perspective critique using sub-agent orchestration. Phases 1-5 plus mandatory Phase 5.5 meta-audit and Phase 5.6 outcome capture; 3 critique agents (risk, alternatives, fresh eyes), up to 3 conditional cross-exam agents, and 1 mandatory meta-agent. The host owns the lifecycle and human gates; spawned agents perform only their bounded roles.
 6. **goat-qa/SKILL.md** - Testing gap analyser. Compares code changes against testing coverage to find undertested risks and misaligned test effort.
 7. **goat-clarity/SKILL.md** - Bounded comment, documentation, naming, and private-placement remediation for one pull request, uncommitted set, folder, or source file.
 8. **goat/SKILL.md** - Dispatcher. Routes natural language to the right skill. Required - audit checks for it (audit check: agent-skills).
@@ -51,9 +51,10 @@ Install the playbook pack from `workflow/skills/playbooks/`:
 - `.goat-flow/skill-docs/playbooks/release-notes.md` from `workflow/skills/playbooks/release-notes.md` - per-release narrative discipline derived from the changelog source of truth
 - `.goat-flow/skill-docs/playbooks/skill-playbook-authoring-sync.md` from `workflow/skills/playbooks/skill-playbook-authoring-sync.md` - built-in playbook shape, source/install enrollment, discovery, and verification contract
 - `.goat-flow/skill-docs/playbooks/test-selection.md` from `workflow/skills/playbooks/test-selection.md` - value-led test selection, placement, disposition, and mutation-handoff discipline
+- `.goat-flow/skill-docs/playbooks/writing-agent-facing-instructions.md` from `workflow/skills/playbooks/writing-agent-facing-instructions.md` - authoring discipline for agent-read documents: skills, playbooks, shared preamble/conventions, instruction files, hook messages, and README discovery rows
 - `.goat-flow/skill-docs/playbooks/writing-sentence-diagnostics.md` from `workflow/skills/playbooks/writing-sentence-diagnostics.md` - sentence-level reader-cost diagnostics after the writing core identifies an objective trigger
 - `.goat-flow/skill-docs/playbooks/writing-structure-diagnostics.md` from `workflow/skills/playbooks/writing-structure-diagnostics.md` - document-level assembly diagnostics before sentence work
-- `.goat-flow/skill-docs/playbooks/writing-style.md` from `workflow/skills/playbooks/writing-style.md` - compact correctness and routing owner for human-read prose, with agent-read control text explicitly exempt
+- `.goat-flow/skill-docs/playbooks/writing-human-facing-prose.md` from `workflow/skills/playbooks/writing-human-facing-prose.md` - compact correctness and routing owner for human-read prose, with agent-read control text explicitly exempt
 - `.goat-flow/skill-docs/skill-quality-testing/README.md` from `workflow/skills/playbooks/skill-quality-testing.md` - short index for skill authoring and hardening
 - `.goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md` from `workflow/skills/playbooks/skill-quality-testing/tdd-iteration.md` - RED/GREEN/REFACTOR and pressure-test methodology
 - `.goat-flow/skill-docs/skill-quality-testing/adversarial-framing.md` from `workflow/skills/playbooks/skill-quality-testing/adversarial-framing.md` - review-class skill hardening patterns
@@ -114,9 +115,10 @@ The installer prunes stale per-skill Markdown reference files automatically befo
 - [ ] `.goat-flow/skill-docs/playbooks/release-notes.md` exists
 - [ ] `.goat-flow/skill-docs/playbooks/skill-playbook-authoring-sync.md` exists
 - [ ] `.goat-flow/skill-docs/playbooks/test-selection.md` exists
+- [ ] `.goat-flow/skill-docs/playbooks/writing-agent-facing-instructions.md` exists
 - [ ] `.goat-flow/skill-docs/playbooks/writing-sentence-diagnostics.md` exists
 - [ ] `.goat-flow/skill-docs/playbooks/writing-structure-diagnostics.md` exists
-- [ ] `.goat-flow/skill-docs/playbooks/writing-style.md` exists
+- [ ] `.goat-flow/skill-docs/playbooks/writing-human-facing-prose.md` exists
 - [ ] `.goat-flow/skill-docs/skill-quality-testing/README.md` exists
 - [ ] `.goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md` exists
 - [ ] `.goat-flow/skill-docs/skill-quality-testing/adversarial-framing.md` exists

@@ -1,9 +1,8 @@
 /**
- * Contracts for planning and timing guidance: milestone structure, effort and forecast
- * obligations, and the accounting a user is promised across installed copies.
+ * Check the planning and timing guidance users receive across supported agent integrations.
  *
- * Reads the installed copies rather than sources, so a contract fails when the guidance a user
- * actually receives drifts - not merely when the template does.
+ * These contracts inspect canonical and installed instructions for milestone structure, effort records, and forecast obligations.
+ * Use them when changing the planning workflow or its reference material.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -18,6 +17,16 @@ import {
 } from "./skill-hardening.helpers.js";
 
 describe("skill hardening contracts: goat-plan (2/2)", () => {
+  it("uses plan mode selection as the shared depth decision", () => {
+    assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
+      assert.match(
+        readMarkdownSection(skillPath, "Shared Conventions"),
+        /Mode selection discharges the shared Quick\/Full depth choice; ceremony follows the preamble's complexity table\./u,
+        skillPath,
+      );
+    });
+  });
+
   it("defines proportional goat-plan renderings and a mixed-audience ISSUE contract", () => {
     assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);
@@ -154,11 +163,8 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
     );
   });
 
-  /*
-   * The two plain-language sections are the only part of a milestone a reader outside the project can act on.
-   * Renaming them back to jargon, or dropping the worked BAD/GOOD pair that carries the register, returns plans to
-   * internal vocabulary, so the demonstration is pinned alongside the names.
-   */
+  // Keep the problem and beneficiary sections understandable to readers outside the project.
+  // The worked example must demonstrate that wording as well as preserve the section names.
   it("pins the plain-language milestone sections and the example that shows their register", () => {
     assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
       assert.match(
@@ -194,12 +200,12 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
           `${examplesPath}: needs both worked BAD/GOOD pairs`,
         );
 
-        // These rules are checkable on purpose. The same run satisfied "concrete, jargon-free line" while averaging 33 words
-        // and naming milestones and ADRs, so adjectives were replaced by a word count, a banned-referent list, and a subject
-        // rule. An author trimming for the word cap deletes them first, and every other check here still passes without them.
+        // These rules are checkable on purpose. One external run satisfied adjective-only guidance while averaging 33 words and naming internal IDs.
+        // The checker now owns length and identifier enforcement; this delivery contract keeps its reference pointer and human-only subject rules.
         for (const derivationRule of [
           /not by shortening the Objective/u,
-          /70 to 120 characters, naming no milestone, ADR, version, flag, internal file, or command without its tool name/u,
+          /`goat-flow plans check --strict` enforces current-heading length and internal identifiers/u,
+          /Name commands with their tool/u,
           /names what they can now do, never what ships/u,
           /Neither restates the other/u,
           /spike that ships nothing says so/u,
@@ -225,10 +231,7 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
     );
   });
 
-  /*
-   * A user starting a Standard plan needs an ISSUE.md beside the milestone files.
-   * The format reference guides that artifact and must stay unchanged.
-   */
+  // Standard plans need an ISSUE.md beside their milestones; this contract preserves the format reference that guides authors.
   it("writes the user-facing ISSUE artifact without treating its format reference as output", () => {
     assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
       const planGuidance = readProjectFile(skillPath);
@@ -277,12 +280,27 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
     );
     assert.match(
       exporterLesson,
-      /At that revision, the exporter accepted only the bold `Objective` field/u,
+      /exporter then accepted only the bold `Objective` field/u,
     );
     assert.match(
       exporterLesson,
       /Current objective parsing accepts a bold field, an `## Objective` section, or the outcome title/u,
     );
+  });
+
+  it("wires appended or inserted milestones through the prior terminal milestone and ISSUE bands", () => {
+    // RED 2026-08-23: File-Write created M47 in the 1.17.0 train but left the terminal milestone's `Depends on` and the
+    // ISSUE band untouched, so the release cut would have closed without it (lesson: milestone-accounting.md).
+    const rule =
+      /Existing plan: identify its prior terminal milestone\. Append: new `Depends on` prior\. Insert before prior: prior `Depends on` new\. Re-derive `ISSUE\.md` bands and totals\./u;
+    assert.match(
+      readProjectFile("workflow/skills/goat-plan/SKILL.md"),
+      rule,
+      "workflow/skills/goat-plan/SKILL.md",
+    );
+    assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
+      assert.match(readProjectFile(skillPath), rule, skillPath);
+    });
   });
 
   it("keeps the redesigned goat-plan canonical surface within its tighter budget", () => {
@@ -329,6 +347,7 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
       );
     });
 
+    // Both installed convention copies must give plan authors the same boundary.
     for (const conventionsPath of [
       "workflow/skills/reference/skill-conventions.md",
       ".goat-flow/skill-docs/skill-conventions.md",
@@ -341,9 +360,56 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
       );
       assert.match(
         conventions,
-        /Human-requested changes return it to `in-progress`/u,
+        /Human-requested changes return the milestone to `in-progress`/u,
         conventionsPath,
       );
+    }
+  });
+
+  it("requires current reasons only for blocked and abandoned milestones", () => {
+    const compactSkillRule =
+      /Current-reason rule: `Status reason:`—`blocked`: condition\+resume evidence\/action; `abandoned`: human-decision\+stop-rationale; remove-on-exit/u;
+    const blockedRule =
+      /`blocked` and `Status reason:` names the condition and evidence\/action to resume/u;
+    const abandonedRule =
+      /`abandoned` requires a human decision and `Status reason:` records why work stops/u;
+    const removalRule = /Leaving either state removes the reason/u;
+
+    assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
+      const skillGuidance = readProjectFile(skillPath);
+      assert.match(skillGuidance, compactSkillRule, skillPath);
+    });
+
+    assertForEachTarget(
+      installedSkillReferencePaths(
+        "goat-plan",
+        "references/milestone-examples.md",
+      ),
+      (referencePath) => {
+        const reference = readProjectFile(referencePath);
+        assert.match(
+          reference,
+          /Add `\*\*Status reason:\*\*` directly after Status only while `blocked` or `abandoned`/u,
+          referencePath,
+        );
+        assert.match(reference, /evidence\/action needed to resume/u);
+        assert.match(
+          reference,
+          /preserve the human decision and why work stops/u,
+        );
+        assert.match(reference, /Remove the field when leaving either state/u);
+      },
+    );
+
+    // Both convention copies must limit current reasons to blocked or abandoned milestones.
+    for (const conventionsPath of [
+      "workflow/skills/reference/skill-conventions.md",
+      ".goat-flow/skill-docs/skill-conventions.md",
+    ]) {
+      const conventions = readProjectFile(conventionsPath);
+      assert.match(conventions, blockedRule, conventionsPath);
+      assert.match(conventions, abandonedRule, conventionsPath);
+      assert.match(conventions, removalRule, conventionsPath);
     }
   });
 
@@ -490,6 +556,7 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
   });
 
   it("routes planning narrative through writing style without styling plan mechanics", () => {
+    // Each installed preamble must route user-facing narrative without styling fixed plan controls.
     for (const referencePath of [
       "workflow/skills/reference/skill-preamble.md",
       ".goat-flow/skill-docs/skill-preamble.md",
@@ -505,14 +572,19 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
       );
       assert.match(
         engineeringStandards,
-        /fixed schema fields, exact paths, commands, approved requirements and acceptance\/proof\/verification\/exit criteria, task\/proof checklists, tables, catalogues, and deliberate control repetition stay exempt/u,
+        new RegExp(
+          "fixed schema fields, exact paths, commands, approved requirements and acceptance/proof/verification/exit criteria, " +
+            "task/proof checklists, tables, catalogues, and deliberate control repetition stay exempt",
+          "u",
+        ),
         referencePath,
       );
     }
 
+    // Both human-facing prose copies must expose the same plan-authoring scope gate.
     for (const playbookPath of [
-      "workflow/skills/playbooks/writing-style.md",
-      ".goat-flow/skill-docs/playbooks/writing-style.md",
+      "workflow/skills/playbooks/writing-human-facing-prose.md",
+      ".goat-flow/skill-docs/playbooks/writing-human-facing-prose.md",
     ]) {
       const scopeGate = readMarkdownSection(playbookPath, "Scope Gate");
       assert.match(
@@ -522,7 +594,11 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
       );
       assert.match(
         scopeGate,
-        /fixed schema fields, task\/proof checklists, commands, approved requirements and acceptance\/proof\/verification\/exit criteria, tables, INDEX and catalogue formats\s*\|\s*No/u,
+        new RegExp(
+          "fixed schema fields, task/proof checklists, commands, approved requirements and acceptance/proof/verification/exit criteria, " +
+            "tables, INDEX and catalogue formats\\s*\\|\\s*No",
+          "u",
+        ),
         playbookPath,
       );
       assert.match(scopeGate, /Mixed planning artifacts/u, playbookPath);

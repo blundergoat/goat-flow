@@ -22,6 +22,8 @@ import { AUDIT_VERSION } from "../../src/cli/constants.js";
 import { makeCtx, stubFS } from "../fixtures/projects/index.js";
 import { assertExists } from "../helpers/assert-exists.js";
 
+const BROWSER_TOOLS_UNSAFE_TARGET_EXIT = 4;
+
 const standalonePlaybookPaths = [
   ".goat-flow/skill-docs/playbooks/browser-use.md",
   ".goat-flow/skill-docs/playbooks/changelog.md",
@@ -34,14 +36,44 @@ const standalonePlaybookPaths = [
   ".goat-flow/skill-docs/playbooks/release-notes.md",
   ".goat-flow/skill-docs/playbooks/skill-playbook-authoring-sync.md",
   ".goat-flow/skill-docs/playbooks/test-selection.md",
+  ".goat-flow/skill-docs/playbooks/writing-agent-facing-instructions.md",
   ".goat-flow/skill-docs/playbooks/writing-sentence-diagnostics.md",
   ".goat-flow/skill-docs/playbooks/writing-structure-diagnostics.md",
-  ".goat-flow/skill-docs/playbooks/writing-style.md",
+  ".goat-flow/skill-docs/playbooks/writing-human-facing-prose.md",
 ] as const;
 
 const hookPolicyPlaybookPaths = [
   "workflow/skills/playbooks/hook-policy-testing.md",
   ".goat-flow/skill-docs/playbooks/hook-policy-testing.md",
+] as const;
+
+const agentFacingInstructionScopePaths = [
+  "workflow/setup/03-install-skills.md",
+  "workflow/manifest.json",
+  ".goat-flow/code-map.md",
+  "src/cli/prompt/compose-quality-agent-setup.ts",
+  ".goat-flow/skill-docs/skill-conventions.md",
+  "workflow/skills/reference/skill-conventions.md",
+  ".goat-flow/skill-docs/playbooks/writing-agent-facing-instructions.md",
+  "workflow/skills/playbooks/writing-agent-facing-instructions.md",
+] as const;
+
+/** The one copyable command a reader runs when a provider denies the quoted `--check` operand first. */
+const HOOK_STDIN_PROBE_COMMAND =
+  "bash .goat-flow/hooks/deny-dangerous.sh < .goat-flow/scratchpad/payload.json";
+
+/** Guidance that keeps the stdin fallback runnable and tells a reader when the direct examples apply. */
+const HOOK_PROBE_REQUIRED_PHRASES = [
+  HOOK_STDIN_PROBE_COMMAND,
+  "where the provider admits the quoted operand",
+  "route the same shapes through the stdin probe above",
+] as const;
+
+/** Per-provider results; one documented exit code would be wrong for two of the three event shapes. */
+const HOOK_PROVIDER_ATTRIBUTION_ROWS = [
+  "| Claude | `tool_name` | exits `2`, `BLOCKED:` message on stderr |",
+  "| Copilot | `toolName` | exits `0`, deny JSON on stdout |",
+  "| Antigravity | `toolCall` | exits `0`, deny JSON on stdout |",
 ] as const;
 
 /**
@@ -227,6 +259,26 @@ function playbookContractContext(
 }
 
 describe("standalone playbook audit contract", () => {
+  it("keeps agent-facing instruction scope complete across discovery surfaces", () => {
+    for (const scopePath of agentFacingInstructionScopePaths) {
+      const scopeText = readFileSync(join(process.cwd(), scopePath), "utf8");
+      for (const requiredScope of [
+        /skills?/u,
+        /playbooks?/u,
+        /preamble/u,
+        /instruction files?/u,
+        /hook messages?/u,
+        /README discovery rows?/u,
+      ]) {
+        assert.match(
+          scopeText,
+          requiredScope,
+          `${scopePath}: incomplete scope, missing ${requiredScope.source}`,
+        );
+      }
+    }
+  });
+
   it("registers hook-policy-testing.md for audit and consumer discovery", () => {
     assert.ok(
       STANDALONE_PLAYBOOK_FILES.some(
@@ -266,13 +318,40 @@ describe("standalone playbook audit contract", () => {
     }
   });
 
-  it("registers writing-style.md for audit and consumer discovery", () => {
+  it("supplies a runnable stdin probe and conditions the direct examples", () => {
+    // Collecting every gap first names all missing guidance at once, rather than only the first mirror to fail.
+    const gaps = hookPolicyPlaybookPaths.flatMap((playbookPath) => {
+      const raw = readFileSync(join(process.cwd(), playbookPath), "utf8");
+      const guidance = raw.replace(/\s+/gu, " ");
+      const fencedSections = raw
+        .split("```")
+        .filter((_section, index) => index % 2 === 1);
+      const runnableProbe = fencedSections.some((section) =>
+        section.includes(HOOK_STDIN_PROBE_COMMAND),
+      );
+      return [
+        ...HOOK_PROBE_REQUIRED_PHRASES.filter(
+          (phrase) => !guidance.includes(phrase),
+        ),
+        ...HOOK_PROVIDER_ATTRIBUTION_ROWS.filter(
+          (row) => !guidance.includes(row),
+        ),
+        ...(runnableProbe
+          ? []
+          : ["the stdin probe must sit in a runnable code block"]),
+      ].map((detail) => `${playbookPath}: ${detail}`);
+    });
+
+    assert.deepEqual(gaps, []);
+  });
+  it("registers writing-human-facing-prose.md for audit and consumer discovery", () => {
     assert.ok(
       STANDALONE_PLAYBOOK_FILES.some(
         (playbookPath) =>
-          playbookPath === ".goat-flow/skill-docs/playbooks/writing-style.md",
+          playbookPath ===
+          ".goat-flow/skill-docs/playbooks/writing-human-facing-prose.md",
       ),
-      "writing-style.md must be registered before users can discover it",
+      "writing-human-facing-prose.md must be registered before users can discover it",
     );
   });
 
@@ -452,4 +531,261 @@ goat-flow-reference-version: "${AUDIT_VERSION}"
   it("passes when every registered playbook satisfies the contract", () => {
     assert.equal(playbookContractCheck.run(playbookContractContext()), null);
   });
+});
+
+describe("skill playbook safety and evidence contracts", () => {
+  /** Return the source and installed paths for one standalone playbook. */
+  const pairedPlaybooks = (name: string) => [
+    `workflow/skills/playbooks/${name}`,
+    `.goat-flow/skill-docs/playbooks/${name}`,
+  ];
+
+  /** Assert the CLI-version and browser-ownership rules for one browser playbook copy. */
+  const assertBrowserUseContract = (playbookPath: string) => {
+    const content = readFileSync(join(process.cwd(), playbookPath), "utf8");
+    assert.match(content, /browser-use --help/u, playbookPath);
+    assert.match(content, /Current CLI 3\.0/u, playbookPath);
+    assert.match(content, /Legacy CLI 0\.12/u, playbookPath);
+    assert.match(content, /browser-use <<'PY'/u, playbookPath);
+    assert.match(content, /new_tab\(/u, playbookPath);
+    assert.match(content, /page_info\(\)/u, playbookPath);
+    assert.match(content, /capture_screenshot\(\)/u, playbookPath);
+    assert.match(content, /browser-use open <url>/u, playbookPath);
+    assert.match(
+      content,
+      /attaches to the user's running Chrome/u,
+      playbookPath,
+    );
+    assert.match(
+      content,
+      /browser-use-python.*Playwright-managed Chromium/u,
+      playbookPath,
+    );
+    assert.doesNotMatch(
+      content,
+      /browser-use profile list|browser-use --version/u,
+      playbookPath,
+    );
+  };
+
+  /** Assert safe availability and capture rules for one page-capture playbook copy. */
+  const assertPageCaptureContract = (playbookPath: string) => {
+    const content = readFileSync(join(process.cwd(), playbookPath), "utf8");
+    assert.match(content, /command -v playwright/u, playbookPath);
+    assert.doesNotMatch(
+      content,
+      /\bnpx\s+playwright\s+--version\b/u,
+      playbookPath,
+    );
+    assert.match(content, /Current CLI 3\.0/u, playbookPath);
+    assert.match(content, /Legacy CLI 0\.12/u, playbookPath);
+    assert.match(content, /capture_screenshot\(\)/u, playbookPath);
+  };
+
+  it("keeps the source browser playbook version-matched", () => {
+    assertBrowserUseContract("workflow/skills/playbooks/browser-use.md");
+  });
+
+  it("keeps the installed browser playbook version-matched", () => {
+    assertBrowserUseContract(".goat-flow/skill-docs/playbooks/browser-use.md");
+  });
+
+  it("keeps the source page-capture playbook version-matched", () => {
+    assertPageCaptureContract("workflow/skills/playbooks/page-capture.md");
+  });
+
+  it("keeps the installed page-capture playbook version-matched", () => {
+    assertPageCaptureContract(
+      ".goat-flow/skill-docs/playbooks/page-capture.md",
+    );
+  });
+
+  it("installs the current browser-use line and smokes it through isolated CDP", () => {
+    const installerPath = "scripts/install-browser-tools.sh";
+    const installer = readFileSync(join(process.cwd(), installerPath), "utf8");
+
+    assert.match(installer, /browser-use~=0\.13\.8/u, installerPath);
+    assert.match(installer, /BU_CDP_URL/u, installerPath);
+    assert.match(installer, /--remote-debugging-port/u, installerPath);
+    assert.match(installer, /Runtime\.consoleAPICalled/u, installerPath);
+    assert.match(installer, /console_errors=1/u, installerPath);
+    assert.match(installer, /"\$WRAPPER_BU" 2>&1 <<'PY'/u, installerPath);
+    assert.match(installer, /"\$WRAPPER_BU" --reload/u, installerPath);
+    assert.match(
+      installer,
+      /browser-use controls an approved user\/system Chrome or explicit CDP endpoint/u,
+      installerPath,
+    );
+    assert.match(
+      installer,
+      /browser-use-python exposes Python Playwright and its managed Chromium/u,
+      installerPath,
+    );
+    assert.doesNotMatch(
+      installer,
+      /browser_use\.skill_cli\.daemon/u,
+      installerPath,
+    );
+    assert.doesNotMatch(
+      installer,
+      /pip install --upgrade --quiet browser-use playwright/u,
+      installerPath,
+    );
+  });
+
+  /**
+   * Fixture purpose: an ordinary sentinel directory must never be mistaken for the managed virtualenv.
+   * Filesystem/process side effects: creates and removes one temp root, writes a sentinel, and spawns the installer once.
+   */
+  it("refuses to force-remove a directory that is not a Python venv", () => {
+    const fixtureRoot = mkdtempSync(join(tmpdir(), "goat-flow-browser-tools-"));
+    const victimPath = join(fixtureRoot, "victim");
+    const sentinelPath = join(victimPath, "keep.txt");
+    mkdirSync(victimPath);
+    writeFileSync(sentinelPath, "keep", "utf8");
+
+    try {
+      const result = spawnSync(
+        "bash",
+        ["scripts/install-browser-tools.sh", "--force", "--no-system-deps"],
+        {
+          cwd: process.cwd(),
+          encoding: "utf8",
+          env: {
+            ...process.env,
+            BROWSER_TOOLS_BIN_DIR: join(fixtureRoot, "bin"),
+            BROWSER_TOOLS_HOME: join(fixtureRoot, "install"),
+            BROWSER_TOOLS_VENV: victimPath,
+          },
+        },
+      );
+
+      assert.equal(
+        result.status,
+        BROWSER_TOOLS_UNSAFE_TARGET_EXIT,
+        result.stderr || result.stdout,
+      );
+      assert.match(
+        `${result.stdout}${result.stderr}`,
+        /not a recognizable Python venv/u,
+      );
+      assert.equal(readFileSync(sentinelPath, "utf8"), "keep");
+    } finally {
+      rmSync(fixtureRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps human-facing browser diagrams on the versioned playbook contract", () => {
+    const docsPath = "docs/skills.md";
+    const content = readFileSync(join(process.cwd(), docsPath), "utf8");
+
+    assert.match(content, /version-matched browser-use playbook/u, docsPath);
+    assert.doesNotMatch(
+      content,
+      /browser-use open\/state\/screenshot/u,
+      docsPath,
+    );
+  });
+
+  for (const playbookPath of pairedPlaybooks("page-capture.md")) {
+    it(`makes failed page captures representable in ${playbookPath}`, () => {
+      const content = readFileSync(join(process.cwd(), playbookPath), "utf8");
+      assert.match(content, /HTTP 4xx\/5xx/u, playbookPath);
+      assert.match(content, /screenshot: not captured/u, playbookPath);
+      assert.match(content, /project-defined failure predicate/u, playbookPath);
+    });
+  }
+
+  for (const playbookName of [
+    "README.md",
+    "changelog.md",
+    "release-notes.md",
+    "observability.md",
+  ]) {
+    for (const playbookPath of pairedPlaybooks(playbookName)) {
+      it(`labels generic examples as non-evidence in ${playbookPath}`, () => {
+        const content = readFileSync(join(process.cwd(), playbookPath), "utf8");
+        assert.match(
+          content,
+          /Illustrative examples[^\n]+not incident evidence/u,
+          playbookPath,
+        );
+      });
+    }
+  }
+
+  for (const referencePath of [
+    "workflow/skills/reference/README.md",
+    ".goat-flow/skill-docs/README.md",
+  ]) {
+    it(`keeps the preamble owner accurate in ${referencePath}`, () => {
+      const content = readFileSync(join(process.cwd(), referencePath), "utf8");
+      const preambleRow = content
+        .split("\n")
+        .find((line) => line.includes("skill-preamble.md"));
+      assert.ok(preambleRow, `${referencePath}: missing skill-preamble row`);
+      assert.match(preambleRow, /Step 0 budget/u, referencePath);
+      assert.doesNotMatch(preambleRow, /retry budget/u, referencePath);
+    });
+  }
+
+  for (const playbookPath of pairedPlaybooks(
+    "skill-playbook-authoring-sync.md",
+  )) {
+    it(`names the authoring-sync owner in ${playbookPath}`, () => {
+      const content = readFileSync(join(process.cwd(), playbookPath), "utf8");
+      assert.match(
+        content,
+        /SHARED_ARTIFACT_MIRRORS[\s\S]{0,120}src\/cli\/audit\/artifact-templates\.ts/u,
+        playbookPath,
+      );
+      assert.match(content, /byte-identical/u, playbookPath);
+      assert.doesNotMatch(
+        content,
+        /SHARED_ARTIFACT_MIRRORS[\s\S]{0,120}check-artifact-integrity\.ts/u,
+        playbookPath,
+      );
+    });
+  }
+
+  for (const playbookPath of pairedPlaybooks("observability.md")) {
+    it(`uses current OpenTelemetry semantics in ${playbookPath}`, () => {
+      const content = readFileSync(join(process.cwd(), playbookPath), "utf8");
+      assert.match(content, /message creation contexts/u, playbookPath);
+      assert.match(content, /http\.request\.method/u, playbookPath);
+      assert.match(content, /`\{request\}`[^\n]+`\{thread\}`/u, playbookPath);
+      assert.match(
+        content,
+        /Expected validation[^\n]+no log or `INFO`/u,
+        playbookPath,
+      );
+      assert.match(
+        content,
+        /Raw exception messages require an approved, sanitized storage path/u,
+        playbookPath,
+      );
+      assert.doesNotMatch(
+        content,
+        /must start their own root span|http_method|\{requests\}|\{threads\}|svc\.api\.requests\.duration/u,
+        playbookPath,
+      );
+    });
+  }
+
+  for (const playbookPath of pairedPlaybooks("writing-human-facing-prose.md")) {
+    it(`distinguishes evidence paths in ${playbookPath}`, () => {
+      const content = readFileSync(join(process.cwd(), playbookPath), "utf8");
+      assert.match(
+        content,
+        /Committed evidence references[^\n]+fresh clone/u,
+        playbookPath,
+      );
+      assert.match(
+        content,
+        /workflow-local paths[^\n]+never cited as committed evidence/u,
+        playbookPath,
+      );
+      assert.doesNotMatch(content, /never a gitignored path/u, playbookPath);
+    });
+  }
 });

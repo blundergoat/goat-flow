@@ -3,10 +3,12 @@
  */
 import assert from "node:assert/strict";
 import {
+  chmodSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -28,6 +30,19 @@ function withTempProject(scenario: (root: string) => void): void {
   } finally {
     rmSync(root, { force: true, recursive: true });
   }
+}
+
+/**
+ * Create the exact executable convention detected by Gruff hook configuration.
+ * Side effect: writes one disposable console-script fixture below the supplied test root.
+ */
+function writeConventionalGruffPy(root: string): string {
+  const binaryDirectory = join(root, "strands_agents", ".venv", "bin");
+  const binaryPath = join(binaryDirectory, "gruff-py");
+  mkdirSync(binaryDirectory, { recursive: true });
+  writeFileSync(binaryPath, "#!/usr/bin/env python3\n");
+  chmodSync(binaryPath, 0o755);
+  return binaryPath;
 }
 
 describe("config writer", () => {
@@ -88,9 +103,29 @@ describe("config writer", () => {
     });
   });
 
-  // Covers hook binaries overrides surviving a toggle: writes config, toggles, and expects them preserved.
-  it("preserves hook binaries overrides through toggle writes", () => {
+  // Fixture purpose: creates the nested analyzer that hook enablement must persist; writes stay in the disposable project.
+  it("pins the conventional strands_agents gruff-py when enabling its hook", () => {
     withTempProject((root) => {
+      writeConventionalGruffPy(root);
+
+      setHookEnabled(root, "gruff-code-quality", true);
+
+      const next = readFileSync(
+        join(root, ".goat-flow", "config.yaml"),
+        "utf-8",
+      );
+      assert.match(next, /gruff-code-quality:\n {4}enabled: true/u);
+      assert.match(
+        next,
+        /binaries:\n {6}py: strands_agents\/\.venv\/bin\/gruff-py/u,
+      );
+    });
+  });
+
+  // Fixture purpose: gives Gruff an empty binary block that enablement must preserve; writes stay in the disposable project.
+  it("keeps an empty gruff binaries block authoritative when enabling", () => {
+    withTempProject((root) => {
+      writeConventionalGruffPy(root);
       const configPath = join(root, ".goat-flow", "config.yaml");
       writeFileSync(
         configPath,
@@ -98,24 +133,99 @@ describe("config writer", () => {
           'version: "1.8.0"',
           "hooks:",
           "  gruff-code-quality:",
-          "    enabled: true",
-          "    binaries:",
-          "      py: strands_agents/.venv/bin/gruff-py",
+          "    enabled: false",
+          "    binaries: {}",
           "",
         ].join("\n"),
       );
+
+      setHookEnabled(root, "gruff-code-quality", true);
+
+      const next = readFileSync(configPath, "utf-8");
+      assert.match(next, /gruff-code-quality:\n {4}enabled: true/u);
+      assert.match(next, /binaries: \{\}/u);
+      assert.doesNotMatch(next, /strands_agents\/\.venv\/bin\/gruff-py/u);
+    });
+  });
+
+  // Fixture purpose: removes execute permission from the nested analyzer; writes stay in the disposable project.
+  it(
+    "does not pin a non-executable conventional gruff-py when enabling",
+    { skip: process.platform === "win32" },
+    () => {
+      withTempProject((root) => {
+        chmodSync(writeConventionalGruffPy(root), 0o644);
+
+        setHookEnabled(root, "gruff-code-quality", true);
+
+        const next = readFileSync(
+          join(root, ".goat-flow", "config.yaml"),
+          "utf-8",
+        );
+        assert.doesNotMatch(next, /binaries:/u);
+      });
+    },
+  );
+
+  // Covers hook binaries overrides surviving a toggle: writes config, toggles, and expects them preserved.
+  it("preserves hook binaries overrides through toggle writes", () => {
+    withTempProject((root) => {
+      writeConventionalGruffPy(root);
+      const configPath = join(root, ".goat-flow", "config.yaml");
+      writeFileSync(
+        configPath,
+        [
+          'version: "1.8.0"',
+          "hooks:",
+          "  gruff-code-quality:",
+          "    enabled: false",
+          "    binaries:",
+          "      py: tools/gruff-py",
+          "",
+        ].join("\n"),
+      );
+
+      setHookEnabled(root, "gruff-code-quality", true);
+      const enabled = readFileSync(configPath, "utf-8");
+      assert.match(enabled, /gruff-code-quality:\n {4}enabled: true/u);
+      assert.match(enabled, /binaries:\n {6}py: tools\/gruff-py/u);
+      assert.doesNotMatch(enabled, /strands_agents\/\.venv\/bin\/gruff-py/u);
 
       setHookEnabled(root, "gruff-code-quality", false);
       setHookEnabled(root, "deny-dangerous", true);
 
       const next = readFileSync(configPath, "utf-8");
       assert.match(next, /gruff-code-quality:\n {4}enabled: false/u);
-      assert.match(
-        next,
-        /binaries:\n {6}py: strands_agents\/\.venv\/bin\/gruff-py/u,
-      );
+      assert.match(next, /binaries:\n {6}py: tools\/gruff-py/u);
+      assert.doesNotMatch(next, /strands_agents\/\.venv\/bin\/gruff-py/u);
     });
   });
+
+  // Fixture purpose: redirects the conventional path outside the project; side effects: writes only inside two cleaned temp roots.
+  it(
+    "rejects a conventional gruff-py symlink that resolves outside the project",
+    { skip: process.platform === "win32" },
+    () => {
+      withTempProject((outsideRoot) => {
+        const outsideBinary = join(outsideRoot, "gruff-py");
+        writeFileSync(outsideBinary, "#!/usr/bin/env python3\n");
+        chmodSync(outsideBinary, 0o755);
+        withTempProject((root) => {
+          const binaryDirectory = join(root, "strands_agents", ".venv", "bin");
+          mkdirSync(binaryDirectory, { recursive: true });
+          symlinkSync(outsideBinary, join(binaryDirectory, "gruff-py"));
+
+          setHookEnabled(root, "gruff-code-quality", true);
+
+          const next = readFileSync(
+            join(root, ".goat-flow", "config.yaml"),
+            "utf-8",
+          );
+          assert.doesNotMatch(next, /binaries:/u);
+        });
+      });
+    },
+  );
 
   // Fixture purpose: writes a multi-root YAML block, toggles it, and reads the preserved paths back.
   it("preserves post-turn scan roots through toggle writes", () => {

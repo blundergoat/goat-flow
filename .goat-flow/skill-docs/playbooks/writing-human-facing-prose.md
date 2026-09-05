@@ -1,7 +1,7 @@
 ---
-goat-flow-reference-version: "1.16.0"
+goat-flow-reference-version: "1.17.0"
 ---
-# Writing Style
+# Writing Human-Facing Prose
 
 Apply this core prose pass after an applicable surface owner settles scope and facts. Sibling playbooks own diagnostics and release surfaces; load them only on objective triggers.
 
@@ -17,7 +17,7 @@ Project-documented prose policy governs voice, terminology, shape, and punctuati
 
 Protect meaning before style and spend context in proportion to the defect. A small edit gets the core pass; longer prose earns a sibling only on its objective trigger.
 
-Remove prose that costs the reader time and returns nothing, but do not flatten a working voice to disguise authorship. Readability and truth are the goals.
+Remove prose that costs the reader time and returns nothing, but do not flatten a working voice to disguise authorship.
 
 ## Scope Gate
 
@@ -67,7 +67,7 @@ The router grants no rewrite authority. Keep scope and apply the lightest effect
 Run this before every style rule on every in-scope surface, against the source of truth: the diff, manifest, issue, decision, evidence, or cited source described.
 
 - Correct typos, wrong word forms, dangling subjects, and broken parallelism.
-- Check names, numbers, units, versions, flags, options, and paths; a code identifier named in prose must resolve in a fresh clone - never a gitignored path - and a diagram abbreviation is marked or spelled out once.
+- Check names, numbers, units, versions, flags, options, and paths. Committed evidence references and code identifiers must resolve in a fresh clone. Documented workflow-local paths may name the contract, but are never cited as committed evidence. Mark or spell out a diagram abbreviation once.
 - Open a cited document, issue, or benchmark and confirm it supports the claim.
 - When prose describes code behaviour, open the function, query, or getter it describes and confirm the claim; code is a citation like any other.
 - Match claim strength and specificity to the evidence. Do not inflate a narrow result or hedge a supported conclusion.
@@ -156,4 +156,4 @@ If the gate passes, stop editing.
 - `writing-structure-diagnostics.md` - document-level assembly defects before sentence work.
 - `changelog.md` - audience, version state, categories, and cadence for changelog entries.
 - `release-notes.md` - audience, evidence selection, and output shape for release narratives.
-- `code-comments.md` - code comments and docstrings; this playbook applies only its correctness and integrity gates to that prose.
+- `code-comments.md` - code comments and docstrings.

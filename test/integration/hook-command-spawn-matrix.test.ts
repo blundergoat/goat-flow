@@ -8,19 +8,28 @@ import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import {
   chmodSync,
+  closeSync,
   cpSync,
   mkdirSync,
   mkdtempSync,
+  openSync,
   readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { performance } from "node:perf_hooks";
 import { after, describe, it } from "node:test";
 import { PROFILES } from "../../src/cli/detect/agents.js";
+import { managedHookEnvironment } from "../../src/cli/hooks-configured-runtime-evidence.js";
+import { agentHookSpawnDescriptor } from "../../src/cli/server/agent-hook-command.js";
 import { writeAgentHookState } from "../../src/cli/server/agent-hook-writer.js";
 import { getHookSpec } from "../../src/cli/server/hooks-registry.js";
+import {
+  FINDING_GRUFF_CONTRACT_ENVELOPE,
+  writeContractGruffBinary,
+} from "./gruff-code-quality-smoke.helpers.js";
 
 const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
 const WORKFLOW_HOOKS = join(PROJECT_ROOT, "workflow", "hooks");
@@ -55,26 +64,35 @@ after(() => {
 interface RegisteredHandler {
   command: string;
   args: string[];
+  bash: string;
+  powershell: string;
 }
 
 /**
  * Build a Git project whose name carries spaces and shell metacharacters, with
- * the shipped hook files installed and all three Claude hooks registered.
+ * the shipped hook files installed and all three selected-provider hooks registered.
  * It writes one temporary tree, recorded for suite cleanup.
  *
  * @returns hostile-named project root ready for exact handler replay
  */
-function createRegisteredHostileProject(): string {
+function createRegisteredHostileProject(
+  agentId: "claude" | "codex" = "claude",
+): string {
   const disposableParent = mkdtempSync(
     join(tmpdir(), "goat-flow-spawn-matrix-"),
   );
   disposableParents.push(disposableParent);
-  const projectRoot = join(disposableParent, "goat flow & (matrix) [m03]");
+  const projectRoot = join(disposableParent, "goat's flow & (matrix) [m03]");
   mkdirSync(join(projectRoot, ".goat-flow", "hooks", "deny-dangerous"), {
     recursive: true,
   });
-  mkdirSync(join(projectRoot, ".claude"), { recursive: true });
-  writeFileSync(join(projectRoot, ".claude", "settings.json"), "{}\n");
+  if (agentId === "claude") {
+    mkdirSync(join(projectRoot, ".claude"), { recursive: true });
+    writeFileSync(join(projectRoot, ".claude", "settings.json"), "{}\n");
+  } else {
+    mkdirSync(join(projectRoot, ".codex"), { recursive: true });
+    writeFileSync(join(projectRoot, ".codex", "config.toml"), "\n");
+  }
   // A fake secret proves the block response without ever exposing real content.
   writeFileSync(join(projectRoot, ".env"), `${ENV_CANARY}\n`);
   execFileSync("git", ["init", "-q", projectRoot]);
@@ -111,7 +129,7 @@ function createRegisteredHostileProject(): string {
   ]) {
     const hookSpec = getHookSpec(hookId);
     assert.ok(hookSpec);
-    writeAgentHookState(projectRoot, PROFILES.claude, hookSpec, true);
+    writeAgentHookState(projectRoot, PROFILES[agentId], hookSpec, true);
   }
   return projectRoot;
 }
@@ -133,7 +151,14 @@ function registeredHandler(
   ) as {
     hooks: Record<
       string,
-      Array<{ hooks: Array<{ command?: string; args?: string[] }> }>
+      Array<{
+        hooks: Array<{
+          command?: string;
+          args?: string[];
+          bash?: string;
+          powershell?: string;
+        }>;
+      }>
     >;
   };
   const registeredHook = settings.hooks[lifecycleEvent]![0]!.hooks[0]!;
@@ -142,9 +167,39 @@ function registeredHandler(
     Array.isArray(registeredHook.args),
     `${lifecycleEvent} registration should carry a structured args tuple`,
   );
+  assert.equal(registeredHook.bash, "exit 0");
+  assert.equal(registeredHook.powershell, "exit 0");
   return {
     command: registeredHook.command as string,
     args: registeredHook.args as string[],
+    bash: registeredHook.bash as string,
+    powershell: registeredHook.powershell as string,
+  };
+}
+
+/** Read one registered Codex handler whose Windows override is required on this suite's Windows CI lane. */
+function registeredCodexHandler(
+  projectRoot: string,
+  lifecycleEvent: "PreToolUse" | "PostToolUse" | "Stop",
+): { command: string; commandWindows: string } {
+  const settings = JSON.parse(
+    readFileSync(join(projectRoot, ".codex", "hooks.json"), "utf-8"),
+  ) as {
+    hooks: Record<
+      string,
+      Array<{
+        hooks: Array<{ command?: string; commandWindows?: string }>;
+      }>
+    >;
+  };
+  const registeredHook = settings.hooks[lifecycleEvent]![0]!.hooks[0]!;
+  const command = registeredHook.command;
+  const commandWindows = registeredHook.commandWindows;
+  assert.equal(typeof command, "string");
+  assert.equal(typeof commandWindows, "string");
+  return {
+    command,
+    commandWindows,
   };
 }
 
@@ -172,12 +227,57 @@ function runRegisteredHandler(
   payload: string,
   cwd: string = projectRoot,
 ): ReturnType<typeof spawnSync> {
-  return spawnSync(handler.command, handler.args, {
+  const selected = agentHookSpawnDescriptor({ form: "argv", ...handler });
+  // The public writer owns this executable and argv; fixture payloads reach stdin only.
+  return spawnSync(selected.command, selected.args, {
     cwd,
     encoding: "utf8",
     input: payload,
     timeout: 60_000,
   });
+}
+
+/** Spawn Codex's exact current-platform command field with a provider payload on stdin. */
+function runRegisteredCodexHandler(
+  projectRoot: string,
+  handler: { command: string; commandWindows: string },
+  payload: string,
+  options: {
+    environment?: NodeJS.ProcessEnv;
+    stdin?: "file" | "pipe";
+  } = {},
+): ReturnType<typeof spawnSync> {
+  const selected = agentHookSpawnDescriptor({ form: "shell", ...handler });
+  const spawnOptions = {
+    cwd: projectRoot,
+    encoding: "utf8" as const,
+    env: options.environment ?? process.env,
+    timeout: 60_000,
+  };
+  if ((options.stdin ?? "pipe") === "pipe") {
+    return spawnSync(selected.command, selected.args, {
+      ...spawnOptions,
+      input: payload,
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+  }
+
+  const payloadDirectory = mkdtempSync(
+    join(tmpdir(), "goat-flow-codex-matrix-"),
+  );
+  const payloadPath = join(payloadDirectory, "payload.json");
+  let payloadDescriptor: number | null = null;
+  try {
+    writeFileSync(payloadPath, payload, { mode: 0o600 });
+    payloadDescriptor = openSync(payloadPath, "r");
+    return spawnSync(selected.command, selected.args, {
+      ...spawnOptions,
+      stdio: [payloadDescriptor, "pipe", "pipe"],
+    });
+  } finally {
+    if (payloadDescriptor !== null) closeSync(payloadDescriptor);
+    rmSync(payloadDirectory, { recursive: true, force: true });
+  }
 }
 
 /** Render one captured result for assertion failures. */
@@ -223,6 +323,170 @@ describe("hook command spawn matrix", () => {
     assert.equal(pushBlocked.status, 2, handlerDiagnostics(pushBlocked));
     assert.match(String(pushBlocked.stderr), /BLOCKED: Policy /u);
   });
+
+  it(
+    "delivers allow and exit-2 deny results through Codex's registered Windows override",
+    { skip: process.platform !== "win32" },
+    (testContext) => {
+      const projectRoot = createRegisteredHostileProject("codex");
+      const denyHandler = registeredCodexHandler(projectRoot, "PreToolUse");
+
+      const allowed = runRegisteredCodexHandler(
+        projectRoot,
+        denyHandler,
+        denyPayload("git status"),
+      );
+      assert.equal(allowed.status, 0, handlerDiagnostics(allowed));
+      assert.equal(allowed.stdout, "");
+      assert.equal(allowed.stderr, "");
+
+      const managedEnvironment = managedHookEnvironment(
+        projectRoot,
+        process.env,
+        process.platform,
+      );
+      const replayVariants: Array<{
+        environment: "full" | "managed";
+        values: NodeJS.ProcessEnv;
+        stdin: "file" | "pipe";
+      }> = [
+        { environment: "full", values: process.env, stdin: "pipe" },
+        { environment: "managed", values: managedEnvironment, stdin: "pipe" },
+        { environment: "full", values: process.env, stdin: "file" },
+        { environment: "managed", values: managedEnvironment, stdin: "file" },
+      ];
+      const blockedPayload = denyPayload("cat .env");
+      const blockedReplays = replayVariants.map((variant) => {
+        const startedAt = performance.now();
+        const result = runRegisteredCodexHandler(
+          projectRoot,
+          denyHandler,
+          blockedPayload,
+          { environment: variant.values, stdin: variant.stdin },
+        );
+        const durationMs = Math.max(
+          0,
+          Math.round(performance.now() - startedAt),
+        );
+        const errorCode =
+          (result.error as NodeJS.ErrnoException | undefined)?.code ?? "none";
+        testContext.diagnostic(
+          `codex-windows-replay environment=${variant.environment} stdin=${variant.stdin} duration_ms=${durationMs} status=${String(result.status)} error=${errorCode}`,
+        );
+        return result;
+      });
+
+      for (const blocked of blockedReplays) {
+        assert.equal(blocked.status, 2, handlerDiagnostics(blocked));
+        assert.match(String(blocked.stderr), /BLOCKED: Policy secret/u);
+        assert.ok(
+          !String(blocked.stdout).includes(ENV_CANARY) &&
+            !String(blocked.stderr).includes(ENV_CANARY),
+          "the canary secret must never appear in a Codex handler stream",
+        );
+      }
+    },
+  );
+
+  it(
+    "delivers a managed Gruff result through Codex's registered Windows override",
+    { skip: process.platform !== "win32" },
+    () => {
+      const projectRoot = createRegisteredHostileProject("codex");
+      writeContractGruffBinary(projectRoot, FINDING_GRUFF_CONTRACT_ENVELOPE);
+      writeFileSync(join(projectRoot, ".gruff-ts.yaml"), "rules: {}\n");
+      mkdirSync(join(projectRoot, "src"), { recursive: true });
+      writeFileSync(
+        join(projectRoot, "src", "sample.ts"),
+        "a\nb\nchanged\nd\n",
+      );
+      const gruffHandler = registeredCodexHandler(projectRoot, "PostToolUse");
+      const patchText = [
+        "*** Begin Patch",
+        "*** Update File: src/sample.ts",
+        "@@ -3,1 +3,1 @@",
+        "-c",
+        "+changed",
+        "*** End Patch",
+      ].join("\n");
+
+      const result = runRegisteredCodexHandler(
+        projectRoot,
+        gruffHandler,
+        JSON.stringify({
+          session_id: "codex-windows-spawn-matrix",
+          tool_name: "apply_patch",
+          tool_input: { patch: patchText },
+        }),
+      );
+      assert.equal(result.status, 0, handlerDiagnostics(result));
+      const providerResult = JSON.parse(result.stdout) as {
+        hookSpecificOutput?: {
+          hookEventName?: string;
+          additionalContext?: string;
+        };
+      };
+      assert.equal(
+        providerResult.hookSpecificOutput?.hookEventName,
+        "PostToolUse",
+      );
+      assert.match(
+        providerResult.hookSpecificOutput?.additionalContext ?? "",
+        /gruff-code-quality: ADVISORY/u,
+      );
+      assert.match(
+        readFileSync(join(projectRoot, "gruff-capabilities.log"), "utf8"),
+        /capabilities/u,
+      );
+      assert.match(
+        readFileSync(join(projectRoot, "gruff-hook-args.log"), "utf8"),
+        /hook --format json src\/sample\.ts/u,
+      );
+    },
+  );
+
+  it(
+    "fails when node.exe cannot start instead of reusing an empty native status",
+    { skip: process.platform !== "win32" },
+    () => {
+      const projectRoot = createRegisteredHostileProject("codex");
+      const denyHandler = registeredCodexHandler(projectRoot, "PreToolUse");
+      const selected = agentHookSpawnDescriptor({
+        form: "shell",
+        ...denyHandler,
+      });
+      assert.equal(selected.command, "powershell.exe");
+
+      const windowsRoot = process.env.SystemRoot ?? process.env.WINDIR;
+      assert.ok(windowsRoot, "Windows must expose SystemRoot or WINDIR");
+      const powershellPath = join(
+        windowsRoot,
+        "System32",
+        "WindowsPowerShell",
+        "v1.0",
+        "powershell.exe",
+      );
+      const emptyExecutablePath = join(projectRoot, "empty-executable-path");
+      mkdirSync(emptyExecutablePath);
+
+      const nodeUnavailableEnvironment = { ...process.env };
+      for (const environmentName of Object.keys(nodeUnavailableEnvironment)) {
+        if (environmentName.toUpperCase() === "PATH") {
+          delete nodeUnavailableEnvironment[environmentName];
+        }
+      }
+      nodeUnavailableEnvironment.PATH = emptyExecutablePath;
+
+      const result = spawnSync(powershellPath, selected.args, {
+        cwd: projectRoot,
+        encoding: "utf8",
+        env: nodeUnavailableEnvironment,
+        input: denyPayload("git status"),
+        timeout: 60_000,
+      });
+      assert.equal(result.status, 1, handlerDiagnostics(result));
+    },
+  );
 
   it("resolves the managed root from a nested working directory", () => {
     const projectRoot = createRegisteredHostileProject();

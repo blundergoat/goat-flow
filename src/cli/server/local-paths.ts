@@ -1,13 +1,13 @@
 /**
- * Local path validation for dashboard browsing, terminal launch, state writes, and uploads.
+ * Validate local directories and state destinations before dashboard routes browse, read projects, launch terminals, or write files.
  *
- * These guards keep browser-supplied paths inside the selected project or the allowed goat-flow
- * state area before server routes touch the filesystem.
+ * Project actions reject protected locations in both typed and resolved paths; folder browsing is exempt from those location rules.
+ * State-path helpers additionally check containment and existing symlinks beneath the selected project's .goat-flow directory.
  */
 import { existsSync, lstatSync, realpathSync, statSync } from "node:fs";
 import { isAbsolute, join, relative, resolve } from "node:path";
 
-/** Allowed local-path use cases, each with a different filesystem trust boundary. */
+// Allowed local-path use cases, each with a different filesystem trust boundary.
 export type LocalPathPurpose =
   "browse" | "project-read" | "terminal-cwd" | "write-local-state" | "upload";
 
@@ -18,7 +18,12 @@ type LocalPathValidationClass =
   | "blocked-descendant"
   | "state-path-escape";
 
-/** Resolved path plus the realpath used for symlink escape checks. */
+/**
+ * Carry a directory that passed the caller's requested local-path policy.
+ *
+ * The typed path remains available for requests and display, while realPath records the symlink-resolved location checked.
+ * The purpose records which policy ran; state writers require a write or upload purpose before deriving a destination.
+ */
 export interface ValidatedLocalPath {
   path: string;
   realPath: string;
@@ -30,7 +35,12 @@ type LocalStatePathPurpose = Extract<
   "write-local-state" | "upload"
 >;
 
-/** Structured validation failure returned to dashboard callers as a safe rejection. */
+/**
+ * Explain why the server refused a directory or state destination requested through the dashboard.
+ *
+ * The purpose identifies the attempted action, and validationClass identifies the failed location rule.
+ * Routes can map this error to a request rejection without parsing the human-readable message.
+ */
 class LocalPathValidationError extends Error {
   readonly validationClass: LocalPathValidationClass;
   readonly purpose: LocalPathPurpose | "state-path";
@@ -93,24 +103,33 @@ const DESCENDANT_BLOCKED_POSIX_ROOTS = [
   "/private/etc",
 ];
 
-/** Normalize candidate paths to POSIX shape before comparing against policy roots. */
+// Normalize candidate paths to POSIX shape before comparing against policy roots.
 function toPosixPath(path: string): string {
   const normalized = path.replace(/\\/gu, "/").replace(/\/+/gu, "/");
   return normalized.length > 1 ? normalized.replace(/\/$/u, "") : normalized;
 }
 
-// Containment guard used before filesystem access: true when child resolves
-// inside parent (or equals it). Pure path arithmetic — it does NOT resolve
-// symlinks, so callers needing real-path safety must canonicalise first.
+/**
+ * Check lexical path containment before a route accesses the requested location.
+ *
+ * Equal paths count as contained; this helper does not resolve symlinks.
+ * Callers checking filesystem containment must supply canonical paths.
+ *
+ * @param parent - containment boundary; empty resolves to the process working directory
+ * @param child - requested location to compare; empty resolves to the process working directory
+ * @returns true for the boundary itself or a descendant, otherwise false for a different drive or escaping path
+ */
 export function isPathWithin(parent: string, child: string): boolean {
-  const rel = relative(parent, child);
-  if (rel === "") return true;
-  if (isAbsolute(rel)) return false;
-  const [firstSegment] = rel.split(/[\\/]/u);
+  const relativePath = relative(parent, child);
+  // Choosing the boundary directory itself remains within the caller's allowed location.
+  if (relativePath === "") return true;
+  // A path on another drive cannot be contained by the selected directory.
+  if (isAbsolute(relativePath)) return false;
+  const [firstSegment] = relativePath.split(/[\\/]/u);
   return firstSegment !== "..";
 }
 
-/** Exempt browse-only requests from terminal/write local-path restrictions. */
+// Apply protected-location rules to project reads, terminal launches, and writes; folder browsing remains exempt.
 function isPolicyEnforcedPurpose(purpose: LocalPathPurpose): boolean {
   return purpose !== "browse";
 }
@@ -126,11 +145,13 @@ function blockedClassForPath(
   path: string,
   purpose: LocalPathPurpose,
 ): LocalPathValidationClass | null {
-  // Browsing cannot damage anything, so a user can still look at a directory this server would refuse to work in.
+  // The folder picker can navigate locations that the server refuses to use for project actions.
   if (!isPolicyEnforcedPurpose(purpose)) return null;
 
   const posixPath = toPosixPath(path);
+  // A protected system root cannot become the selected project or the destination of a server action.
   if (EXACT_BLOCKED_POSIX_ROOTS.has(posixPath)) return "blocked-root";
+  // Protected system trees remain unavailable even when the caller selects a nested folder.
   if (
     DESCENDANT_BLOCKED_POSIX_ROOTS.some(
       (root) => posixPath === root || posixPath.startsWith(`${root}/`),
@@ -163,15 +184,14 @@ function assertAllowedByPurpose(
 }
 
 /**
- * Prove a path the user supplied is a real local directory this server is allowed to act on, before anything reads or writes there.
+ * Validate a directory from a dashboard request before the route uses it for the requested action.
  *
- * This is the trust boundary for every dashboard path: the project a user types into Add Project arrives here as untrusted text.
+ * The Add Project path is untrusted text; both its typed and symlink-resolved locations must pass the selected policy.
+ * Throws LocalPathValidationError for rejected locations so the route can explain which action was refused.
  *
- * Error behavior: throws LocalPathValidationError naming the purpose, so the dashboard can report which action was refused and why.
- *
- * @param rawPath - path exactly as the user supplied it, resolved to an absolute path here
- * @param purpose - what the caller intends to do with it, which selects the rules applied and appears in any error
- * @returns the validated path; holding one is the caller's evidence that the checks ran
+ * @param rawPath - submitted path; an empty string resolves to the server process's working directory
+ * @param purpose - intended use, which selects the location policy and appears in rejection messages
+ * @returns the typed and resolved directory paths with the purpose that was checked
  */
 export function validateLocalPath(
   rawPath: string,
@@ -182,8 +202,10 @@ export function validateLocalPath(
   try {
     stats = statSync(resolvedPath);
   } catch {
+    // A folder removed after selection, or one the server cannot stat, is reported as missing for the requested action.
     throw new LocalPathValidationError(purpose, "missing");
   }
+  // Selecting a file cannot provide the working directory or project root the route needs.
   if (!stats.isDirectory()) {
     throw new LocalPathValidationError(purpose, "not-directory");
   }
@@ -193,23 +215,27 @@ export function validateLocalPath(
   return { path: resolvedPath, realPath, purpose };
 }
 
-/** Return existing path components so symlink checks only touch filesystem entries that exist. */
+// List existing components toward a state destination; newly created directories have no filesystem entries to inspect yet.
 function existingPathComponents(from: string, target: string): string[] {
-  const rel = relative(from, target);
-  if (rel === "") return [from];
-  if (isAbsolute(rel) || rel.startsWith("..")) return [];
-  const components = rel.split(/[\\/]/u).filter(Boolean);
+  const relativePath = relative(from, target);
+  // Selecting the starting directory still requires checking that directory's real location.
+  if (relativePath === "") return [from];
+  // A path that does not descend from this root supplies no components for this containment walk.
+  if (isAbsolute(relativePath) || relativePath.startsWith("..")) return [];
+  const components = relativePath.split(/[\\/]/u).filter(Boolean);
   const paths = [from];
   let current = from;
+  // Check every existing ancestor, because a nested symlink could redirect the user's state write before the destination is reached.
   for (const component of components) {
     current = join(current, component);
     paths.push(current);
   }
+  // Missing suffixes are omitted here so later writers can create their directories after existing ancestors have been checked.
   return paths.filter((path) => existsSync(path));
 }
 
 /**
- * Walk every existing directory on the way to a target and prove none of them leads outside the project.
+ * Check existing path components so a state destination cannot use them to reach outside the selected project.
  * It throws `LocalPathValidationError`; returning normally is the caller's evidence that the whole chain stays inside.
  *
  * @param realRoot - project root with symlinks already resolved
@@ -219,6 +245,7 @@ function assertExistingComponentsStayInside(
   realRoot: string,
   components: string[],
 ): void {
+  // Each existing ancestor and destination must preserve the selected project's boundary before a state write can proceed.
   for (const [index, component] of components.entries()) {
     // A symlink anywhere below the root could point outside the project, so it is refused rather than followed.
     if (index > 0 && lstatSync(component).isSymbolicLink()) {
@@ -247,15 +274,12 @@ function assertLocalStatePathPurpose(
 }
 
 /**
- * Resolve a path inside an already-validated project's `.goat-flow` directory, refusing anything that would escape it.
+ * Resolve a destination within the validated project's .goat-flow directory before the caller reads or writes local state.
+ * Containment and existing symlinks must be checked again because a valid project root does not validate every requested destination.
  *
- * Containment is re-checked here rather than assumed, because a relative path or a symlinked component could still lead outside
- * a project that was itself perfectly valid.
- *
- * @param project - project already proved valid by `validateLocalPath`
- * @param relativePath - path within `.goat-flow`; traversal segments are rejected rather than normalised away
- * @returns the absolute path, safe to read or write. It throws LocalPathValidationError when the result would land outside `.goat-flow`, before
- *   any read or write.
+ * @param project - project already checked by validateLocalPath for a write or upload purpose
+ * @param relativePath - state destination; empty selects .goat-flow itself, and normalization must keep the result inside that directory
+ * @returns absolute destination; throws LocalPathValidationError when the purpose or containment checks reject it
  */
 export function resolveValidatedLocalStatePath(
   project: ValidatedLocalPath,
@@ -264,6 +288,7 @@ export function resolveValidatedLocalStatePath(
   assertLocalStatePathPurpose(project);
   const stateRoot = resolve(project.path, ".goat-flow");
   const candidate = resolve(stateRoot, relativePath);
+  // A destination resolving outside .goat-flow is refused before any caller can write state into another project location.
   if (!isPathWithin(stateRoot, candidate)) {
     throw new LocalPathValidationError("state-path", "state-path-escape");
   }
@@ -275,16 +300,15 @@ export function resolveValidatedLocalStatePath(
 }
 
 /**
- * Validate a project path and resolve one path inside its `.goat-flow` directory in a single call.
+ * Validate a project and resolve its local-state destination when the caller does not already hold a checked project path.
  *
- * This is the convenience entry point most callers use; take the two-step form when one validated project is reused for many paths.
+ * Use the two-step form when several state paths share one validated project.
+ * Throws LocalPathValidationError from either check so the caller can report a rejected project or escaping destination.
  *
- * Error behavior: throws LocalPathValidationError from either step, so an invalid project and an escaping path report the same way.
- *
- * @param projectPath - project path as supplied by the user, validated here
- * @param relativePath - path within `.goat-flow` to resolve
- * @param purpose - what the caller intends to do, defaulting to writing local state
- * @returns the absolute path, safe to read or write
+ * @param projectPath - submitted project path; empty resolves from the server process's working directory
+ * @param relativePath - path within .goat-flow; empty selects the state directory itself
+ * @param purpose - intended write use; omitted means ordinary local-state writing rather than uploading
+ * @returns absolute state destination after project and containment validation
  */
 export function resolveLocalStatePath(
   projectPath: string,
@@ -297,9 +321,13 @@ export function resolveLocalStatePath(
   );
 }
 
-// Security gate for terminal working directories: throws (via validateLocalPath)
-// unless projectPath clears the terminal-cwd policy, otherwise returns the
-// normalised absolute path safe to hand to a spawned shell.
+/**
+ * Validate the directory before a caller starts a terminal session there.
+ * Throws LocalPathValidationError for a rejected location; returns the absolute working directory for an accepted launch.
+ *
+ * @param projectPath - requested terminal directory; empty resolves to the process working directory
+ * @returns absolute working directory after the terminal location policy accepts it
+ */
 export function validateProjectPath(projectPath: string): string {
   return validateLocalPath(projectPath, "terminal-cwd").path;
 }

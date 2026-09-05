@@ -31,9 +31,10 @@ export const STANDALONE_PLAYBOOK_FILES = [
   ".goat-flow/skill-docs/playbooks/release-notes.md",
   ".goat-flow/skill-docs/playbooks/skill-playbook-authoring-sync.md",
   ".goat-flow/skill-docs/playbooks/test-selection.md",
+  ".goat-flow/skill-docs/playbooks/writing-agent-facing-instructions.md",
   ".goat-flow/skill-docs/playbooks/writing-sentence-diagnostics.md",
   ".goat-flow/skill-docs/playbooks/writing-structure-diagnostics.md",
-  ".goat-flow/skill-docs/playbooks/writing-style.md",
+  ".goat-flow/skill-docs/playbooks/writing-human-facing-prose.md",
 ] as const;
 
 /**
@@ -183,6 +184,46 @@ function hasSkillReferenceRouterPointer(instructionContent: string): boolean {
   if (routerTable === null) return false;
   // Every pointer is required so users can find both the directory and its purpose.
   return ROUTER_POINTER_PATTERNS.every((pattern) => pattern.test(routerTable));
+}
+
+/**
+ * Check whether prose contains one complete repository-relative path rather than a longer lookalike.
+ *
+ * @param content - prose or Markdown section to inspect
+ * @param projectPath - repository-relative path that must appear as a complete token
+ * @returns `true` when the complete path appears, otherwise `false`
+ */
+export function textReferencesProjectPath(
+  content: string,
+  projectPath: string,
+): boolean {
+  const escapedPath = projectPath.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  const pathBoundary = new RegExp(
+    `(?:^|[^A-Za-z0-9._/-])${escapedPath}(?:$|[^A-Za-z0-9._/-])`,
+    "u",
+  );
+  return pathBoundary.test(content);
+}
+
+/**
+ * Check whether an instruction file routes users to one exact project path.
+ * The Router Table section is isolated before matching so an incidental mention elsewhere cannot satisfy a discovery contract.
+ *
+ * @param instructionContent - complete instruction text; an absent Router Table cannot reference the path
+ * @param projectPath - repository-relative path users must be able to discover
+ * @returns `true` only when the exact path appears inside the Router Table section
+ */
+export function instructionRouterReferencesPath(
+  instructionContent: string,
+  projectPath: string,
+): boolean {
+  const routerTable = extractMarkdownSection(
+    instructionContent,
+    /^Router Table\b/i,
+  );
+  return (
+    routerTable !== null && textReferencesProjectPath(routerTable, projectPath)
+  );
 }
 
 /**

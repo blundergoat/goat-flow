@@ -1,6 +1,8 @@
 /**
- * Contracts for goat-security identity, compliance, Git, supply-chain, path, and reporting guidance.
- * Reads installed copies so user-visible drift fails regardless of the canonical source.
+ * Check the security workflow guidance users receive across supported agent integrations.
+ *
+ * These contracts inspect canonical and installed instructions for the evidence, coverage, and reporting each mode requires.
+ * Use them when changing security review modes, trust boundaries, or required disclosures.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -131,6 +133,11 @@ describe("skill hardening contracts: security (2/2)", () => {
       /authoritative applicable-control inventory.*independently verified complete.*row per applicable control.*omitted.*unverifiably complete.*not assessed.*coverage-degraded.*withhold.*clearance/iu,
       "dashboard preset security compliance inventory",
     );
+    assert.match(
+      readPresetPrompt("security"),
+      /In compliance mode, the authoritative applicable-control inventory must be independently verified complete/iu,
+      "dashboard preset security compliance inventory scope",
+    );
   });
 
   it("uses non-executing Git inspection and phase-aware persistence recovery", () => {
@@ -150,6 +157,7 @@ describe("skill hardening contracts: security (2/2)", () => {
           /resolved address.*actual connected peer.*before application data.*every redirect\/retry.*mismatch.*stop\/re-authorize/iu,
           /before every tool invocation.*apply.*common-threats\.md.*untrusted-tool-input gate.*path.*ref.*anchor.*pattern.*snippet.*failure.*`UNVERIFIED`.*no-invocation/isu,
           /every local untrusted-artifact content read.*descriptor-anchored.*race-safe no-follow.*validated root.*post-open identity\/type.*bounded raw bytes.*MUST NOT import.*render.*execute.*invoke handlers.*otherwise.*`UNVERIFIED`/isu,
+          /unavailable referenced content.*coverage gap.*coverage-degraded.*withholds clearance/iu,
           /skill-local.*narrows.*durable-artifact convention.*MUST NOT use.*redact --output.*final/iu,
           /untrusted provenance.*MUST NOT use.*source-checkout redactor fallback.*independently trusted absolute installed binary.*`persist-skipped`/iu,
           /write approval.*MUST NOT satisfy.*target-controlled execution authorization/iu,
@@ -176,7 +184,7 @@ describe("skill hardening contracts: security (2/2)", () => {
             /before invoking Git.*non-Git no-follow.*gitfile.*commondir.*resolved common directory.*bind.*--git-dir.*--work-tree/iu,
             /set `GIT_COMMON_DIR`.*independently resolved trusted absolute common directory/iu,
             /isolated read-only snapshot.*descriptor-anchored identity stability.*untrusted mutation.*throughout.*Git invocation.*`UNVERIFIED`.*Git MUST NOT run/iu,
-            /resolved Git and common directories.*config.*includes.*alternates.*`UNVERIFIED`.*Git MUST NOT run/iu,
+            /Resolved Git and common directories require validated repository config, includes, and alternates; otherwise evidence is `UNVERIFIED` and Git MUST NOT run\./u,
             /allowlisted non-executing plumbing/iu,
             /fixed allowlisted argv.*MUST NOT pass repo-controlled refs or options.*literal pathspec.*`--` before every untrusted path/iu,
             /MUST NOT pass repo-controlled data on Git stdin.*batch.*`-Z`.*full-format OIDs.*untrusted revision\/object expressions.*bounded output\/runtime.*response-to-object identity/iu,
@@ -324,8 +332,8 @@ describe("skill hardening contracts: security (2/2)", () => {
           /Full Assessment output/u,
           /retained\/withheld leads.*severity.*risk disposition/u,
           /Quick Scan output.*confidence.*evidence status.*exploit status.*finding type.*severity.*risk disposition.*proof-class/iu,
-          /Quick Scan output.*category-ledger.*baseline-name\/version.*family.*scanned.*skipped.*not-applicable.*not-assessed.*assessment-evidence.*authority\/snapshot.*evidence-status.*proof-class.*scope-evidence/iu,
-          /Quick Scan output.*class applicability\/evidence/iu,
+          /Quick Scan output.*target\/deployment\/provenance\/authority-snapshot.*reference applicability\/status/iu,
+          /Quick Scan output.*coverage-gap ledger=.*unassessed inventory kinds.*unassessed runtime\/reference\/baseline families.*reason\/evidence needed.*coverage-degraded/iu,
           /Quick Scan output.*pre-probe record.*tool\/run.*connectivity.*target effect.*target-controlled execution.*active-probing.*destination.*submitted data.*credentials.*authorization\/withheld/iu,
           /Quick Scan output.*file \+ semantic anchor.*authority.*entry→sink.*requirement gap.*recommended remediation.*proof-of-fix/iu,
           /Quick Scan output.*accepted risk.*identifier.*clause.*trusted policy source.*ref.*OID.*anchor.*independently trusted approval evidence.*owner.*named authorized approver.*rationale.*expiry.*scope/iu,
@@ -344,7 +352,7 @@ describe("skill hardening contracts: security (2/2)", () => {
           /Positive observations.*claim.*exact assessed authority\/snapshot.*affected scope\/deployment\/path.*evidence status.*proof-class.*only current-session `OBSERVED` evidence.*bound to both.*proves applicability.*supports clearance.*`INFERRED`\/`UNVERIFIED`\/`HUMAN-PENDING`.*MUST NOT support clearance/isu,
           /Positive observations.*exact assessed authority\/snapshot.*affected scope\/deployment\/path.*current-session `OBSERVED` evidence.*stale.*mismatched.*unresolved.*MUST NOT support clearance/isu,
           /apply.*common-threats\.md.*untrusted-output gate.*before terminal\/Markdown output.*failure.*`UNVERIFIED`.*raw-omitted/isu,
-          /Every Quick\/Full\/Compliance output.*one inventory-integrity row per authoritative assessment-driving inventory kind.*kind.*current-session `OBSERVED` completeness evidence.*evidence-authority\/snapshot\/status\/proof-class.*exact[- ]assessed[- ]authority\/snapshot\/scope\/deployment.*omissions.*stale.*mismatched.*missing.*unresolved.*`coverage-degraded`.*MUST NOT recommend clearance/isu,
+          /Every Full\/Compliance output.*one inventory-integrity row per authoritative assessment-driving inventory kind.*kind.*current-session `OBSERVED` completeness evidence.*evidence-authority\/snapshot\/status\/proof-class.*exact[- ]assessed[- ]authority\/snapshot\/scope\/deployment.*omissions.*stale.*mismatched.*missing.*unresolved.*`coverage-degraded`.*MUST NOT recommend clearance/isu,
           /Class-dispositions:.*class.*applicable.*not-applicable.*not-assessed.*scope\/deployment-evidence.*baseline-name\/version.*currency-evidence\/status/iu,
           /Category-ledger:.*baseline-name\/version.*family.*scanned.*skipped.*not-applicable.*not-assessed.*assessment-evidence.*authority\/snapshot.*evidence-status.*proof-class.*scope-evidence/iu,
         ],
@@ -420,11 +428,12 @@ describe("skill hardening contracts: security (2/2)", () => {
         /accepted risk.*current status evidence.*review\/revocation trigger/iu,
         /accepted risk.*status observation time/iu,
         /before terminal\/Markdown output.*every untrusted report field.*paths.*anchors.*snippets.*inert.*canonical.*backticks.*Markdown.*newlines.*ANSI.*control.*bidi.*links.*images.*HTML.*renderer fetches.*handlers.*Failure.*UNVERIFIED.*omit raw bytes/isu,
-        /every Quick\/Full\/Compliance output.*one inventory-integrity row per authoritative assessment-driving inventory kind.*kind.*current-session observed completeness evidence.*evidence authority\/snapshot\/status\/proof-class.*exact assessed authority\/snapshot\/scope\/deployment.*omissions.*stale.*mismatched.*missing.*unresolved.*coverage-degraded.*withholds? clearance/isu,
+        /every Full\/Compliance output.*one inventory-integrity row per authoritative assessment-driving inventory kind.*kind.*current-session observed completeness evidence.*evidence authority\/snapshot\/status\/proof-class.*exact assessed authority\/snapshot\/scope\/deployment.*omissions.*stale.*mismatched.*missing.*unresolved.*coverage-degraded.*withholds? clearance/isu,
         /positive observations.*claim.*exact assessed authority\/snapshot.*affected scope\/deployment\/path.*evidence status.*proof-class.*only current-session observed evidence.*bound to both.*proves applicability.*supports clearance.*inferred.*unverified.*human-pending.*must not support clearance/iu,
         /positive observations.*exact assessed authority\/snapshot.*affected scope\/deployment\/path.*current-session observed evidence.*stale.*mismatched.*unresolved.*must not support clearance/isu,
         /Full output.*per-class disposition.*scope\/deployment evidence.*baseline name\/version.*currency evidence\/status/iu,
-        /Quick and Full output.*category ledger.*family.*scanned.*skipped.*not applicable.*not assessed.*scope evidence/iu,
+        /Quick output.*one compact coverage-gap ledger.*unassessed inventory kinds.*runtime\/reference\/baseline families.*coverage-degraded.*MUST NOT.*complete coverage.*zero findings.*clearance/isu,
+        /Full output.*category ledger.*family.*scanned.*skipped.*not applicable.*not assessed.*scope evidence/iu,
         /category ledger.*one row per family per selected baseline.*baseline name\/version.*assessment evidence.*authority\/snapshot.*evidence status.*proof-class.*scope evidence/iu,
         /scanned requires current-session observed evidence.*exact authority\/snapshot.*family coverage.*affected scope\/deployment.*not applicable requires current observed applicability evidence at scope authority.*mismatched.*unresolved.*inferred.*unverified.*human-pending.*not assessed.*coverage-degraded.*withholds clearance/iu,
         /every skipped row.*coverage-degraded.*withholds clearance/iu,
@@ -443,9 +452,10 @@ describe("skill hardening contracts: security (2/2)", () => {
         /positive observations.*claim.*exact assessed authority\/snapshot.*affected scope\/deployment\/path.*evidence status.*proof-class.*only current-session `OBSERVED` evidence.*bound to both.*proves applicability.*supports clearance.*`INFERRED`.*`UNVERIFIED`.*`HUMAN-PENDING`.*MUST NOT support clearance/iu,
         /positive observations.*exact assessed authority\/snapshot.*affected scope\/deployment\/path.*current-session `OBSERVED` evidence.*stale.*mismatched.*unresolved.*MUST NOT support clearance/isu,
         /before terminal\/Markdown output.*every untrusted report field.*paths.*anchors.*snippets.*inert.*canonical.*backticks.*Markdown.*newlines.*ANSI.*control.*bidi.*links.*images.*HTML.*renderer fetches.*handlers.*Failure.*`UNVERIFIED`.*omit raw bytes/isu,
-        /every Quick\/Full\/Compliance output.*one inventory-integrity row per authoritative assessment-driving inventory kind.*kind.*current-session `OBSERVED` completeness evidence.*evidence authority\/snapshot\/status\/proof-class.*exact assessed authority\/snapshot\/scope\/deployment.*omissions.*stale.*mismatched.*missing.*unresolved.*coverage-degraded.*withholds? clearance/isu,
+        /every Full\/Compliance output.*one inventory-integrity row per authoritative assessment-driving inventory kind.*kind.*current-session `OBSERVED` completeness evidence.*evidence authority\/snapshot\/status\/proof-class.*exact assessed authority\/snapshot\/scope\/deployment.*omissions.*stale.*mismatched.*missing.*unresolved.*coverage-degraded.*withholds? clearance/isu,
         /Full output.*per-class disposition.*scope\/deployment evidence.*baseline name\/version.*currency evidence\/status/iu,
-        /Quick and Full output.*category ledger.*family.*scanned.*skipped.*not applicable.*not assessed.*scope evidence/iu,
+        /Quick output.*one compact coverage-gap ledger.*unassessed inventory kinds.*runtime\/reference\/baseline families.*coverage-degraded.*MUST NOT.*complete coverage.*zero findings.*clearance/isu,
+        /Full output.*category ledger.*family.*scanned.*skipped.*not applicable.*not assessed.*scope evidence/iu,
         /category ledger.*one row per family per selected baseline.*baseline name\/version.*assessment evidence.*authority\/snapshot.*evidence status.*proof-class.*scope evidence/iu,
         /`scanned` requires current-session `OBSERVED` evidence.*exact authority\/snapshot.*family coverage.*affected scope\/deployment.*`not applicable` requires current `OBSERVED` applicability evidence at scope authority.*mismatched.*unresolved.*`INFERRED`.*`UNVERIFIED`.*`HUMAN-PENDING`.*`not assessed`.*coverage-degraded.*withholds clearance/iu,
         /every `skipped` row.*coverage-degraded.*withholds clearance/iu,
@@ -466,5 +476,77 @@ describe("skill hardening contracts: security (2/2)", () => {
       readProjectFile("src/dashboard/preset-prompts.json"),
       "dashboard preset source/dist parity",
     );
+  });
+
+  it("uses one Quick gap-ledger row while Full keeps exhaustive rows", () => {
+    const exhaustiveInventoryKindBaseline = 12;
+
+    assertForEachTarget(installedSkillPaths("goat-security"), (skillPath) => {
+      const intake = readMarkdownSection(skillPath, "Step 0 - Intake");
+      const outputFormat = readMarkdownSection(skillPath, "Output Format");
+      const quickOutput =
+        outputFormat
+          .split("\n")
+          .find((line) => line.startsWith("**Quick Scan output:**")) ?? "";
+      const fullInventoryKinds =
+        intake
+          .match(
+            /Every authoritative assessment-driving inventory—([^—]+)—requires/iu,
+          )?.[1]
+          ?.split("|")
+          .map((kind) => kind.trim())
+          .filter(Boolean) ?? [];
+      const quickGapLedgerRows =
+        quickOutput.match(/coverage-gap ledger/giu) ?? [];
+
+      assert.equal(
+        fullInventoryKinds.length,
+        exhaustiveInventoryKindBaseline,
+        `${skillPath}: current exhaustive baseline must retain 12 inventory kinds`,
+      );
+      assert.equal(
+        quickGapLedgerRows.length,
+        1,
+        `${skillPath}: Quick must require exactly one compact gap ledger`,
+      );
+      assert.ok(
+        quickGapLedgerRows.length < fullInventoryKinds.length,
+        `${skillPath}: Quick row requirement must stay below the exhaustive baseline`,
+      );
+      assertMatchesAll(
+        quickOutput,
+        [
+          /target\/deployment\/provenance\/authority-snapshot/iu,
+          /reference applicability\/status/iu,
+          /retained\/withheld leads.*confidence.*evidence status.*proof-class/iu,
+          /coverage-gap ledger=.*unassessed inventory kinds.*unassessed runtime\/reference\/baseline families.*reason\/evidence needed.*coverage-degraded/iu,
+          /MUST NOT.*complete coverage.*zero findings.*clearance/iu,
+        ],
+        skillPath,
+      );
+      assert.doesNotMatch(
+        quickOutput,
+        /category-ledger|inventory-integrity row/iu,
+        `${skillPath}: Quick must not retain Full-grade row schemas`,
+      );
+    });
+
+    // The user guide and dashboard preset must disclose the same Quick coverage limits and Full reporting obligations.
+    for (const [consumerName, consumerText] of [
+      [
+        "docs/skills.md",
+        readMarkdownSection("docs/skills.md", "/goat-security"),
+      ],
+      ["dashboard preset security", readPresetPrompt("security")],
+    ] as const) {
+      assertMatchesAll(
+        consumerText,
+        [
+          /Quick.*one compact coverage-gap ledger.*unassessed inventory kinds.*runtime\/reference\/baseline families.*coverage-degraded.*MUST NOT.*complete coverage.*zero findings.*clearance/isu,
+          /Full.*inventory-integrity row.*baseline family.*one row per family/isu,
+        ],
+        consumerName,
+      );
+    }
   });
 });

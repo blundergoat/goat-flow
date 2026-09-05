@@ -1,7 +1,7 @@
 ---
 name: goat-debug
 description: "Use when diagnosing a bug, unexpected behaviour, system failure, or unfamiliar code that needs structured investigation."
-goat-flow-skill-version: "1.16.0"
+goat-flow-skill-version: "1.17.0"
 ---
 # /goat-debug
 
@@ -37,7 +37,7 @@ Use when diagnosing a bug or understanding unfamiliar code. For onboarding, use 
 If depth is pre-decided, proceed. Otherwise choose:
 - **Quick** when the symptom is isolated to 1-2 files, the user wants diagnosis only, or the prompt already includes a reproduction/error output.
 - **Full** when the symptom crosses components, has no reproduction yet, affects CI/prod/user-visible behaviour, or a fix may follow. If uncertain, choose full.
-If vague, ask about: goal, symptom/error message, area involved.
+If vague, ask about: goal, symptom/error message, area involved, and what was already tried with its outcome; prior attempts enter D1 as evidence to trace, not as eliminated hypotheses.
 
 **Quick path (D1 + applicable D1.5 + D2):** diagnose and report; minimum evidence is primary file read, 2 hypothesis categories tested, reproduction attempted or no-repro gap stated. Before D2, run D1.5 or state `reproduction already minimal`, `reduction not applicable`, or `unsafe to reduce` with the literal input/command and reason. Quick never enters D3 or D4 directly.
 
@@ -128,7 +128,7 @@ Every diagnose-mode report ends with this section. It tells the reader how much 
 - **Evidence states:** OBSERVED (literal result) / INFERRED (reasoned link) / UNVERIFIED (not executed) / HUMAN-PENDING: specific human-owned check
 - **Proof class:** `RUNTIME | CONTRACT-GREP | STATIC | NOT-REPRODUCED` (per `skill-preamble.md` Proof Classification)
 - **Diagnostic mutations:** none / approved and tracked / cleanup incomplete
-- **Footgun retrieval:** hit (cite entry) / miss / skip
+- **Footgun retrieval:** hit (cite entry) / miss
 - **What I Didn't Check:** files, paths, or components deliberately skipped with one-line reason each
 
 ## Investigate Mode
@@ -192,7 +192,7 @@ Keep Quick output compact. Omit D3, D4, UI, and diagnostic-mutation fields when 
 - Evidence states: OBSERVED=[n] / INFERRED=[n] / UNVERIFIED=[n] / HUMAN-PENDING=[n]
 - Proof class: [RUNTIME/CONTRACT-GREP/STATIC/NOT-REPRODUCED]
 - Diagnostic mutations: [none/approved and tracked/cleanup incomplete]
-- Footgun retrieval: [hit/miss/skip]
+- Footgun retrieval: [hit/miss]
 - What I Didn't Check: [files/paths skipped + reason]
 ```
 

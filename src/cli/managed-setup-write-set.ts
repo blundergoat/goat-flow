@@ -17,7 +17,8 @@ import {
   resolveIndexBucketPaths,
 } from "./learning-loop-index/parse-bucket.js";
 import { loadManifest } from "./manifest/manifest.js";
-import type { AgentId } from "./types.js";
+import { pendingCommitGuidanceMigrationInstructionPath } from "./prompt/commit-guidance.js";
+import { KNOWN_AGENT_IDS, type AgentId } from "./types.js";
 
 /** Filesystem evidence for a destination, gathered without following target symlinks. */
 export type ManagedTargetStatus =
@@ -221,6 +222,8 @@ function conditionalProjectWrites(
   agent: AgentId,
 ): ProjectWriteDefinition[] {
   const bucketPaths = resolveIndexBucketPaths(loadConfig(projectPath).config);
+  const commitGuidanceBridgePath =
+    pendingCommitGuidanceMigrationInstructionPath(projectPath, agent);
   return [
     {
       path: ".gitignore",
@@ -246,14 +249,34 @@ function conditionalProjectWrites(
       reason:
         "Install seeds commit guidance only in a Git project that has no guide at this path.",
     },
+    ...(commitGuidanceBridgePath === null
+      ? []
+      : [
+          {
+            path: commitGuidanceBridgePath,
+            ownership: "user-owned" as const,
+            seedable: false,
+            replaceable: false,
+            reason:
+              "Install rewrites only the selected Commit Messages bridge while renaming the former commit guide; all other instruction bytes are preserved.",
+          },
+        ]),
     {
-      path: `.goat-flow/install-state/${agent}.json`,
+      path: ".goat-flow/install-state/managed.json",
       ownership: "generated",
       seedable: true,
       replaceable: false,
       reason:
-        "Install records this hash-only baseline after verifying the managed refresh.",
+        "Install records the project-wide hash-only baseline and verified agent receipts after the managed refresh.",
     },
+    ...KNOWN_AGENT_IDS.map((knownAgent) => ({
+      path: `.goat-flow/install-state/${knownAgent}.json`,
+      ownership: "generated" as const,
+      seedable: true,
+      replaceable: false,
+      reason:
+        "Install replaces the retired agent-specific baseline with a hashless managed-state cutover marker.",
+    })),
     ...INDEX_BUCKETS.map((bucket) => ({
       path: posix.join(bucketPaths[bucket], "INDEX.md"),
       ownership: "generated" as const,

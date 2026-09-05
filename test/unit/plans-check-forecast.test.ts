@@ -7,9 +7,18 @@
 import { spawnSync } from "node:child_process";
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { parseCLIArgs } from "../../src/cli/cli-parser.js";
+import { CLIError } from "../../src/cli/cli-error.js";
 import {
   PROJECT_ROOT,
   CLI_PATH,
@@ -18,9 +27,226 @@ import {
   writeCheckFixture,
   writeCheckPlan,
   estimatedMilestoneBody,
+  canonicalMilestoneBody,
   eligibleSampleBody,
   eligibleWorkUnitSampleBody,
 } from "./plans-check.helpers.js";
+
+describe("plans check: active cap input and project authority", () => {
+  it("parses only canonical positive decimal caps", () => {
+    assert.equal(parseCLIArgs(["plans", "check", "."]).plansMaxActive, null);
+    for (const cap of [1, 2, Number.MAX_SAFE_INTEGER]) {
+      assert.equal(
+        parseCLIArgs(["plans", "check", ".", "--max-active", String(cap)])
+          .plansMaxActive,
+        cap,
+      );
+    }
+    for (const raw of [
+      "",
+      "0",
+      "-1",
+      "1.5",
+      "01",
+      "+2",
+      "2e0",
+      "0x2",
+      " 2",
+      "2 ",
+      "Infinity",
+      "NaN",
+      "9007199254740992",
+    ]) {
+      assert.throws(
+        () => parseCLIArgs(["plans", "check", ".", `--max-active=${raw}`]),
+        (error: unknown) =>
+          error instanceof CLIError &&
+          error.exitCode === 2 &&
+          error.message.includes("--max-active"),
+      );
+    }
+  });
+
+  it("rejects the cap on export, every timing action, and non-plan commands", () => {
+    for (const args of [
+      ["plans", "export", "."],
+      ["plans", "time", "start", "M01.md", "--category", "product"],
+      ["plans", "time", "stop", "M01.md"],
+      ["plans", "time", "status", "M01.md"],
+      ["audit", "."],
+    ]) {
+      assert.throws(
+        () => parseCLIArgs([...args, "--max-active", "2"]),
+        (error: unknown) =>
+          error instanceof CLIError &&
+          error.exitCode === 2 &&
+          error.message === "--max-active is only valid for plans check.",
+      );
+    }
+    const missing = runPlansCheck(".", "--max-active");
+    assert.equal(missing.status, 2);
+    assert.match(missing.stderr, /--max-active/u);
+  });
+
+  /** Temporary canonical and external plans prove config errors, precedence, and quiet warnings through the CLI. */
+  it("loads only canonical project policy and lets an explicit cap bypass malformed config", () => {
+    const root = mkdtempSync(join(tmpdir(), "goat-flow-plan-policy-"));
+    try {
+      const canonical = writeCheckFixture(
+        join(root, ".goat-flow", "plans"),
+        canonicalMilestoneBody(),
+      );
+      const external = writeCheckFixture(
+        join(root, "external"),
+        canonicalMilestoneBody(),
+      );
+      const configPath = join(root, ".goat-flow", "config.yaml");
+      const baseline = runPlansCheck(external, "--strict");
+      assert.equal(baseline.status, 0, baseline.stdout + baseline.stderr);
+      const missingConfig = runPlansCheck(canonical, "--strict");
+      assert.equal(missingConfig.stdout, baseline.stdout);
+      assert.equal(missingConfig.stderr, baseline.stderr);
+      assert.equal(missingConfig.status, 0);
+      for (const yaml of [
+        "plans:\n  maxActiveMilestones: 0",
+        "plans: []",
+        "plans: [",
+      ]) {
+        writeFileSync(configPath, yaml);
+        const invalid = runPlansCheck(canonical, "--strict");
+        assert.equal(invalid.status, 2);
+        assert.ok(invalid.stderr.includes(configPath), invalid.stderr);
+        if (yaml.includes("maxActiveMilestones"))
+          assert.match(invalid.stderr, /plans\.maxActiveMilestones/u);
+        const override = runPlansCheck(
+          canonical,
+          "--strict",
+          "--max-active",
+          "2",
+        );
+        assert.equal(override.status, 0, override.stdout + override.stderr);
+        assert.equal(override.stderr, "");
+        const outside = runPlansCheck(external, "--strict");
+        assert.equal(outside.stdout, baseline.stdout);
+        assert.equal(outside.stderr, baseline.stderr);
+        assert.equal(outside.status, baseline.status);
+      }
+      writeFileSync(
+        configPath,
+        "plans:\n  maxActiveMilestones: 1\n  future-policy: true\n",
+      );
+      const warning = runPlansCheck(canonical, "--strict");
+      assert.equal(warning.stdout, baseline.stdout);
+      assert.equal(warning.stderr, baseline.stderr);
+      assert.equal(warning.status, 0);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  /** Copies the consumer fixture into a temporary project to prove which positive cap reaches enforcement. */
+  it("uses the canonical configured cap unless an explicit flag overrides it", () => {
+    const root = mkdtempSync(join(tmpdir(), "goat-flow-plan-cap-precedence-"));
+    try {
+      const files: Record<string, string> = {};
+      for (const name of [
+        "M17-shared-baseline.md",
+        "M18-go-precision.md",
+        "M19-php-precision.md",
+      ]) {
+        files[name] = readFileSync(
+          join(
+            PROJECT_ROOT,
+            "test",
+            "fixtures",
+            "plans",
+            "parallel-lanes",
+            name,
+          ),
+          "utf-8",
+        );
+      }
+      const plan = writeCheckPlan(join(root, ".goat-flow", "plans"), files);
+      const config = join(root, ".goat-flow", "config.yaml");
+      writeFileSync(config, "plans:\n  maxActiveMilestones: 2\n");
+      const configured = runPlansCheck(plan, "--strict");
+      assert.equal(configured.status, 0, configured.stdout + configured.stderr);
+      assert.match(configured.stdout, /plan: 2 active milestones \(cap 2\)/u);
+      const overridden = runPlansCheck(plan, "--strict", "--max-active", "1");
+      assert.equal(overridden.status, 1);
+      assert.match(
+        overridden.stdout,
+        /error: plan: multiple active milestones: M18, M19/u,
+      );
+      assert.doesNotMatch(overridden.stdout, /^active:|\(cap /mu);
+      writeFileSync(config, "plans: {}\n");
+      const omitted = runPlansCheck(plan, "--strict");
+      assert.equal(omitted.status, overridden.status);
+      assert.equal(omitted.stdout, overridden.stdout);
+      assert.equal(omitted.stderr, overridden.stderr);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  /** Symlinked operands may be readable while lacking authority to use the apparent project's config. */
+  it("requires physical containment of both the plans root and selected directory", (context) => {
+    const root = mkdtempSync(join(tmpdir(), "goat-flow-plan-policy-links-"));
+    try {
+      const project = join(root, "project");
+      const canonical = writeCheckFixture(
+        join(project, ".goat-flow", "plans"),
+        canonicalMilestoneBody(),
+      );
+      const outsidePlans = writeCheckFixture(
+        join(project, "elsewhere"),
+        canonicalMilestoneBody(),
+      );
+      const escaped = join(project, ".goat-flow", "plans", "escaped");
+      const contained = join(project, ".goat-flow", "plans", "contained");
+      const redirectedProject = join(root, "redirected");
+      mkdirSync(join(redirectedProject, ".goat-flow"), { recursive: true });
+      try {
+        symlinkSync(outsidePlans, escaped, "dir");
+        symlinkSync(canonical, contained, "dir");
+        symlinkSync(
+          join(project, ".goat-flow", "plans"),
+          join(redirectedProject, ".goat-flow", "plans"),
+          "dir",
+        );
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          "code" in error &&
+          error.code === "EPERM"
+        ) {
+          context.skip("Host does not permit unprivileged symlinks.");
+          return;
+        }
+        throw error;
+      }
+      for (const owner of [project, redirectedProject]) {
+        writeFileSync(
+          join(owner, ".goat-flow", "config.yaml"),
+          "plans:\n  maxActiveMilestones: 0",
+        );
+      }
+      for (const selected of [
+        escaped,
+        join(redirectedProject, ".goat-flow", "plans", "plan"),
+      ]) {
+        const result = runPlansCheck(selected, "--strict");
+        assert.equal(result.status, 0, result.stdout + result.stderr);
+        assert.equal(result.stderr, "");
+      }
+      const within = runPlansCheck(contained, "--strict");
+      assert.equal(within.status, 2);
+      assert.match(within.stderr, /plans\.maxActiveMilestones/u);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
 
 describe("plans check: forecasts, calibration, and CLI usage", () => {
   // Covers an optional forecast band: writes one sharing the headline's unit and centre and expects a pass.

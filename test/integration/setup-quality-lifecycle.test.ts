@@ -16,10 +16,13 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { describe, it } from "node:test";
 
+import { STANDALONE_PLAYBOOK_FILES } from "../../src/cli/audit/skill-docs-contract.js";
+import { getPackageVersion } from "../../src/cli/paths.js";
 import type { QualityMode } from "../../src/cli/quality/schema-types.js";
+import { makeQualityScoreRationale } from "../fixtures/quality-score-rationale.js";
 
 const CONTROLLING_WORKSPACE = resolve(import.meta.dirname, "..", "..");
 const CLI_ENTRY_PATH = join(CONTROLLING_WORKSPACE, "src", "cli", "cli.ts");
@@ -134,6 +137,10 @@ Always read and verify. Ask before protected changes. Never commit or push.
 Keep the controlling goat-flow workspace separate from this selected target project.
 Use target files for project evidence and controlling-workspace files only for framework behavior.
 
+## Commit Messages
+
+Follow docs/coding-standards/git-commit-message.md.
+
 ## Key Resources
 
 Architecture, code map, glossary, skills, hooks, and learning-loop paths live under .goat-flow/.
@@ -184,6 +191,7 @@ Route lessons and footguns to their matching .goat-flow/learning-loop/ directori
 |---|---|
 | Architecture | .goat-flow/architecture.md |
 | Code map | .goat-flow/code-map.md |
+| Security policy | .goat-flow/security-policy.md |
 | Glossary | .goat-flow/glossary.md |
 | Skills | .agents/skills/ |
 | Skill playbooks (tools) | \`.goat-flow/skill-docs/playbooks/\` (README.md index) |
@@ -207,6 +215,7 @@ templates; audit and quality commands read project evidence from this consumer t
 
 - Agent instructions: AGENTS.md
 - Harness configuration: .goat-flow/config.yaml
+- Optional security policy: .goat-flow/security-policy.md
 - Installed skills: .agents/skills/
 - Local quality history: .goat-flow/logs/quality/
 `,
@@ -238,6 +247,16 @@ async function withTemporaryConsumerTarget(
   const consumerTargetPath = join(fixtureWorkspace, "selected-consumer");
   writeFileSync(userMarkerPath, USER_OWNED_MARKER);
   mkdirSync(consumerTargetPath);
+  // The passing lifecycle needs Git's implicit post-turn scan root; non-Git installation has its own fixture.
+  const gitInitialization = spawnSync("git", ["init", "--quiet"], {
+    cwd: consumerTargetPath,
+    encoding: "utf-8",
+  });
+  assert.equal(
+    gitInitialization.status,
+    0,
+    gitInitialization.stderr || gitInitialization.stdout,
+  );
 
   try {
     await scenario(consumerTargetPath);
@@ -263,24 +282,32 @@ async function withTemporaryConsumerTarget(
 }
 
 /**
- * Build the smallest valid prior report needed to exercise prompt history and validation.
- * Use after setup to prove the selected consumer owns its local quality history.
+ * Build the smallest current-shaped prior report needed to exercise prompt history and validation.
+ * Use after setup to prove the selected consumer owns its local quality history. The report satisfies every
+ * current-report rule, so `quality validate` returns its unqualified receipt rather than the legacy label.
  *
  * @param consumerTargetPath - installed target recorded in report history; empty is never valid
- * @returns schema-valid report with no findings; an empty findings list means this fixture found no defects
+ * @returns schema-valid current report with no findings; an empty findings list means this fixture found no defects
  */
 function consumerQualityReport(consumerTargetPath: string): object {
   return {
     report_kind: "goat-flow-quality-report",
-    goat_flow_version: "1.13.1",
+    goat_flow_version: getPackageVersion(),
     agent: "codex",
     project_path: consumerTargetPath,
     run_date: "2026-07-12",
     audit_status: "pass",
     scope: "consumer",
-    rubric_version: "1.13.1",
+    rubric_version: getPackageVersion(),
     quality_mode: "agent-setup",
     prior_report_id: null,
+    assessment_context: {
+      project_revision: null,
+      working_tree_state: "clean",
+      grounding_status: "complete",
+      unverified_probes: [],
+      score_confidence: "high",
+    },
     scores: {
       setup: {
         total: 100,
@@ -297,7 +324,9 @@ function consumerQualityReport(consumerTargetPath: string): object {
         learnability: 25,
       },
     },
+    score_rationale: makeQualityScoreRationale(),
     findings: [],
+    refuted_candidates: [],
   };
 }
 
@@ -388,10 +417,11 @@ describe("consumer setup to quality-report lifecycle", () => {
         "codex",
       ]);
       assertCliSucceeded(installResult, "consumer install");
-      for (const playbookFilename of [
-        "writing-sentence-diagnostics.md",
-        "writing-structure-diagnostics.md",
-      ]) {
+      // Iterate the audit registry so a playbook registered there can never skip fresh-install proof;
+      // an installed file the registry misses is caught separately by the stale-artifact audit check.
+      for (const playbookFilename of STANDALONE_PLAYBOOK_FILES.map(
+        (installedPath) => basename(installedPath),
+      )) {
         assert.equal(
           existsSync(
             join(
@@ -458,7 +488,7 @@ describe("consumer setup to quality-report lifecycle", () => {
         `${JSON.stringify(consumerQualityReport(consumerTargetPath), null, 2)}\n`,
       );
 
-      // Public validation proves the report can enter the consumer's quality history.
+      // A current-shaped report validates without a legacy label, so it can enter the consumer's quality history.
       const validationResult = runPublicCli([
         "quality",
         "validate",

@@ -299,6 +299,10 @@ function claudeCodexEntries(
     // Approved argv handlers register exact operands the host passes without a shell.
     if (handlerDescriptor.form === "argv") {
       command.args = [...handlerDescriptor.args];
+      command.bash = handlerDescriptor.bash;
+      command.powershell = handlerDescriptor.powershell;
+    } else if (handlerDescriptor.commandWindows !== undefined) {
+      command.commandWindows = handlerDescriptor.commandWindows;
     }
     // An owned host deadline gives the migrated hook time to return model-visible Stop feedback.
     if (

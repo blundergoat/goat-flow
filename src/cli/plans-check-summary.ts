@@ -16,6 +16,7 @@ import {
   type PlanEffortSplit,
 } from "./plans-effort.js";
 import type { PlanExportRecord } from "./plans-export.js";
+import { readActiveMilestones } from "./plans-check-structure.js";
 
 /** Plan-level effort-mix target percentages from goat-plan's estimation guidance. */
 const MIX_TARGET: PlanEffortSplit = { product: 70, proof: 20, other: 10 };
@@ -27,6 +28,19 @@ const MIX_TOLERANCE_POINTS = 15;
 
 /** Effort categories reported in plan summaries. */
 const CATEGORIES = ["product", "proof", "other"] as const;
+
+/** Terminal statuses whose estimates stay visible on their own rows but leave the plan total the author steers by. */
+const EXCLUDED_FROM_TOTAL_STATUSES = new Set(["superseded", "deferred"]);
+
+/**
+ * Decide whether a milestone's estimate belongs in the plan total.
+ *
+ * @param record - parsed milestone; a missing status counts as live work
+ * @returns true when the milestone is superseded or deferred and therefore excluded
+ */
+function isExcludedFromTotal(record: PlanExportRecord): boolean {
+  return EXCLUDED_FROM_TOTAL_STATUSES.has(record.status.trim().toLowerCase());
+}
 
 /**
  * Render `(18 product / 5 proof / 2 other)`-style split text for report lines.
@@ -62,7 +76,32 @@ export function renderMilestoneLine(record: PlanExportRecord): string | null {
     const actualReasonText = actual.reason ? ` - ${actual.reason}` : "";
     actualText = ` | actual: ${actual.state} ~${actual.totalMinutes} min${actualSplitText}${actualReasonText}`;
   }
-  return `${record.sourceFile}: ~${record.effort.totalMinutes} min${splitText}${actualText}`;
+  // A terminal row says why its minutes are missing from the plan total instead of silently dropping out.
+  const exclusionText = isExcludedFromTotal(record)
+    ? ` | ${record.status.trim().toLowerCase()} - excluded from the plan total`
+    : "";
+  return `${record.sourceFile}: ~${record.effort.totalMinutes} min${splitText}${actualText}${exclusionText}`;
+}
+
+/**
+ * Report the active lanes only when parallel policy is enabled.
+ * @param records - all parsed milestones; inactive milestones contribute no active row
+ * @param maxActive - resolved positive safe integer cap; one suppresses this entire block
+ * @returns active rows and the cap total; invalid declarations display a fixed marker
+ */
+export function renderActivePlanSummary(
+  records: PlanExportRecord[],
+  maxActive: number,
+): string[] {
+  if (maxActive === 1) return [];
+  const active = readActiveMilestones(records);
+  return [
+    ...active.map(
+      (milestone) =>
+        `active: ${milestone.id} (${milestone.status}) | lane: ${milestone.lane ?? "<invalid>"}`,
+    ),
+    `plan: ${active.length} active milestones (cap ${maxActive})`,
+  ];
 }
 
 /**
@@ -79,6 +118,8 @@ function sumPlanSplits(records: PlanExportRecord[]): PlanEffortSplit {
   for (const record of records) {
     // Milestones without a split (legacy or headline-only) cannot shape the mix.
     if (!record.effort?.split) continue;
+    // Superseded and deferred work is reported on its own line so the total describes what the plan still owes.
+    if (isExcludedFromTotal(record)) continue;
     for (const category of CATEGORIES) {
       totals[category] += record.effort.split[category];
     }
@@ -97,9 +138,10 @@ function sumPlanSplits(records: PlanExportRecord[]): PlanEffortSplit {
 export function renderPlanSummary(records: PlanExportRecord[]): string[] {
   const totals = sumPlanSplits(records);
   const totalMinutes = totals.product + totals.proof + totals.other;
+  const excludedLines = renderExcludedSummary(records);
 
-  // Without any splits there is no mix to summarise, so the summary stays out of the report.
-  if (totalMinutes === 0) return [];
+  // Without any live splits there is no mix to summarise; excluded rows may still explain where the estimate went.
+  if (totalMinutes === 0) return excludedLines;
 
   // Convert minutes to the percentage mix the author compares against 70/20/10.
   const percentages = CATEGORIES.map((category) =>
@@ -121,10 +163,38 @@ export function renderPlanSummary(records: PlanExportRecord[]): string[] {
       "advisory: plan mix drifts more than 15 percentage points from the rough ~70/20/10 guide - check for duplicated proof or missing verification; keep and explain the mix when task risk warrants it",
     );
   }
+  lines.push(...excludedLines);
   return lines;
 }
 
-/** Below this many eligible samples a correction factor would be a guess, not calibration. */
+/**
+ * Render the estimates that left the plan total because their milestones are superseded or deferred.
+ * The author sees exactly which files carry those minutes, so the total never looks like it silently shrank.
+ *
+ * @param records - parsed milestones
+ * @returns one line naming every excluded milestone with its status and minutes; empty means nothing is excluded
+ */
+function renderExcludedSummary(records: PlanExportRecord[]): string[] {
+  const excludedRecords = records.filter(
+    (record) =>
+      record.effort?.split !== undefined && isExcludedFromTotal(record),
+  );
+  // No excluded rows means the plan total already describes every estimate.
+  if (excludedRecords.length === 0) return [];
+  const excludedMinutes = excludedRecords.reduce(
+    (sum, record) => sum + (record.effort?.totalMinutes ?? 0),
+    0,
+  );
+  const excludedRows = excludedRecords
+    .map(
+      (record) =>
+        `${record.sourceFile} ${record.status.trim().toLowerCase()} ${record.effort?.totalMinutes ?? 0}`,
+    )
+    .join(", ");
+  return [
+    `excluded: ${excludedMinutes} min in ${excludedRecords.length} superseded or deferred milestone${excludedRecords.length === 1 ? "" : "s"} - ${excludedRows}`,
+  ];
+}
 const MINIMUM_CALIBRATION_SAMPLES = 3;
 
 /** One milestone's measured-versus-estimated outcome, expressed as a raw-seconds ratio. */

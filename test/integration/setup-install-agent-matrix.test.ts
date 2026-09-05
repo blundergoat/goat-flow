@@ -25,7 +25,7 @@ import {
   getHookSpec,
   listHookSpecs,
 } from "../../src/cli/server/hooks-registry.js";
-import type { AgentProfile } from "../../src/cli/types.js";
+import { KNOWN_AGENT_IDS, type AgentProfile } from "../../src/cli/types.js";
 import {
   PROJECT_ROOT,
   makeTempProject,
@@ -221,7 +221,12 @@ function expectedManagedHookWritePaths(
     ],
     "agent-hook-config": [agentProfile.hookConfigFile],
     "goat-flow-config": [".goat-flow/config.yaml"],
-    "install-state": [`.goat-flow/install-state/${agentProfile.id}.json`],
+    "install-state": [
+      ".goat-flow/install-state/managed.json",
+      ...KNOWN_AGENT_IDS.map(
+        (agent) => `.goat-flow/install-state/${agent}.json`,
+      ),
+    ],
   };
   return fixture.expectedWriteTargets.flatMap((target) => targetPaths[target]);
 }
@@ -249,6 +254,7 @@ function countManagedHookRegistrations(
     : [];
   const ownsManagedCommand = [
     configEntry.command,
+    configEntry.commandWindows,
     configEntry.bash,
     configEntry.powershell,
     ...argumentOperands,
@@ -775,6 +781,19 @@ function seedDuplicateAndStaleDenyRows(
     matcher: "Bash",
     hooks: [{ type: "command", command: STALE_DENY_COMMAND }],
   });
+  if (agentProfile.id === "codex") {
+    // A partially migrated row can retain the managed script only in its Windows override.
+    hooks.PreToolUse.push({
+      matcher: "Bash",
+      hooks: [
+        {
+          type: "command",
+          command: "exit 0",
+          commandWindows: STALE_DENY_COMMAND,
+        },
+      ],
+    });
+  }
   hooks.PreToolUse.push({
     matcher: "Bash",
     hooks: [{ type: "command", command: USER_HOOK_MARKER }],
@@ -907,8 +926,16 @@ describe("cross-agent install smoke matrix", () => {
           `${agentProfile.id} ${fixture.state} registration target disagrees with config`,
         );
         if (fixture.expectedResult === "blocked-conflict") {
-          assert.deepEqual(expectedWritePaths, []);
-          assert.equal(fixture.expectedManagedFiles, "preserved-local");
+          assert.deepEqual(
+            expectedWritePaths,
+            [],
+            `${agentProfile.id} ${fixture.state} writes despite a blocked conflict`,
+          );
+          assert.equal(
+            fixture.expectedManagedFiles,
+            "preserved-local",
+            `${agentProfile.id} ${fixture.state} does not preserve local managed files`,
+          );
         }
       }
     }

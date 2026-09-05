@@ -1,87 +1,84 @@
 ---
 category: skill-invocation
-last_reviewed: 2026-08-15
+last_reviewed: 2026-09-05
 ---
 
 **Scope:** What an explicit skill invocation obliges - not downgrading it by judgment, treating it as delegation consent, honouring plan-only scope, and not assuming goat skills are the only skills present. Reading the request itself is [agent-routing.md](agent-routing.md).
 
 ## Lesson: Never override explicit skill invocation with your own judgment about artifact size
 
-**Created:** 2026-04-27
+**Status:** active | **Created:** 2026-04-27
 
-**What happened:** User invoked `/goat-critique` to brainstorm a better name and description for a quality mode label. The agent judged the artifact (two short strings) as "too trivial" for the full 3-sub-agent protocol and skipped it entirely, citing the skill's own "NOT this skill" section: "Trivial artifact - use goat-review instead. If it is not worth 3 agents and 5 phases, do not use goat-critique." The agent brainstormed directly and gave a shallow answer ("Setup Health"). The user was furious.
+**Prevention:** If the user types `/goat-critique`, `/goat-plan`, or any `/goat-*` command, run every phase. Do not evaluate whether an artifact is worth the full treatment: the user decides that by invoking it. A skill's "NOT this skill" section is pre-invocation routing guidance for the dispatcher, not a post-invocation override. Evidence anchor: `workflow/skills/goat-critique/SKILL.md` (search: `Treat explicit invocation as consent for the full delegated protocol`).
 
-**Root cause:** The agent confused pre-invocation routing guidance with post-invocation authority. The "NOT this skill" section exists to help the dispatcher (or the agent when no skill has been chosen yet) route to the right skill. Once the user explicitly types `/goat-critique`, that section is irrelevant - the user has already made the routing decision. The agent also ignored two existing memory entries (`feedback_always_run_skills`, `feedback_never_ask_delegation_consent`) that both said to always run the full protocol on explicit invocation.
+**What happened:** The user invoked `/goat-critique` to improve a quality mode label. The agent judged two short strings too trivial for the three-sub-agent protocol, cited the skill's own "NOT this skill" section, brainstormed directly, and returned a shallow answer. The user was furious.
 
-**Why this matters:** The full protocol produced materially better results than the shortcut:
-- Agent A found a naming collision with `check-agent-setup.ts` that the solo brainstorm missed entirely
-- Agent A identified that the mode ID is persisted in JSON reports and must not change - the solo answer might have led to an ID rename
-- Agent B compared all four mode names systematically and found the noun-phrase pattern, producing "Agent Installation" which was more pattern-consistent than the solo "Setup Health"
-- Agent C (fresh eyes, no project context) identified that "Setup" implies a one-time event - a UX insight grounded in genuine unfamiliarity
+**Root cause:** Pre-invocation routing guidance was mistaken for post-invocation authority; once the user types the command, the routing decision is already made.
 
-The user's point: "if it wasn't for that we wouldn't have found the better name." The protocol's value is not proportional to artifact size.
-
-**Prevention:** The user decides what deserves the full protocol, not the agent. If the user types `/goat-critique`, `/goat-plan`, or any `/goat-*` command, run every phase without exception. The skill's "NOT this skill" section is pre-invocation routing guidance for the dispatcher. It does not override explicit invocation. Do not evaluate whether an artifact is "worth" the full treatment.
-
----
-
-## Lesson: Session-log contract is conditional, not per-skill-invocation
-
-**Created:** 2026-03-30 | **Updated:** 2026-04-19
-
-**What happened:** Earlier skill templates said "If `.goat-flow/logs/` exists → write session summary" in a closing protocol that fired after every skill run. A goat-review audit ran the full skill process but no session log was written. 0% compliance. The instruction fired at the END of a skill - after the agent had already delivered output and was mentally "done."
-
-**Current contract** (per `skill-preamble.md` + `skill-conventions.md`, post-2026-04-18): session logs are OPTIONAL continuity notes. Write one only when (a) `/compact` fires without an active milestone file, or (b) the human explicitly requests a session summary. Otherwise skip - the old blanket "every invocation" rule is retired.
-
-**Recurrence 2026-07-17:** `.goat-flow/glossary.md` (search: `| Handoff |`) still called the entire handoff concept deprecated, while `Working Memory` made every `/compact` write a session log. The glossary now distinguishes the retired mandatory workflow from the current optional redacted receipt; `test/contract/skill-hardening-shared-2.test.ts` (search: `keeps glossary continuity terms aligned with the conditional session-log contract`) pins the condition.
-
-**Prevention:** Do not put a "write a session log" bullet in every skill's closing protocol. Keep the conditional phrasing in `skill-preamble.md` / `skill-conventions.md` and let skills opt in via the Milestone Retrospective pattern. The Notification/compact hook that was meant to mechanize this was silently dead (see `.goat-flow/learning-loop/footguns/hooks.md` Resolved Entries 2026-04-19) - don't revive that approach.
-
----
-
-## Lesson: Dispatcher keeps getting excluded from patterns and glob matches
-
-**Created:** 2026-04-01
-
-**What happened:** Three separate incidents where the dispatcher was missed by glob/iteration patterns: `find -name 'goat-*.md'` skipped `goat.md`, CI template `for skill in ...; do goat-$skill` produced `goat-goat`, v0.9.3 consolidation missed counting the dispatcher.
-
-**Prevention:** Always use `goat*` (no dash) for glob patterns. Always iterate literal canonical names, never derive by prefixing. Test the dispatcher first in any skill enumeration.
-
----
-
-## Lesson: Verification prompts must not assume goat skills are the only skills
-
-**Created:** 2026-04-01
-
-**What happened:** M1 human testing gate prompt said "List all directories in .claude/skills/. The ONLY dirs should be: goat, goat-debug, ..." This would fail any project with non-goat project-specific skills. The instruction would cause a verifier to report project-specific skills as violations.
-
-**Prevention:** Verification prompts and audit checks must scope to goat-flow's domain: "List all goat-* directories..." not "List all directories..." Project-specific skills are not goat-flow's business.
+**Why it matters:** The full protocol produced materially better results than the shortcut. One agent found a naming collision with `src/cli/audit/check-agent-setup.ts` and noticed the mode ID is persisted in JSON reports and must not change, which the solo answer might have renamed. Another compared all four mode names and found the noun-phrase pattern. A third, working without project context, observed that "Setup" implies a one-time event. The user's summary: "if it wasn't for that we wouldn't have found the better name."
 
 ---
 
 ## Lesson: Explicit skill invocation IS delegation consent - never ask again
 
-**Created:** 2026-04-26
+**Status:** active | **Created:** 2026-04-26
 
-**What happened:** User invoked `/goat-critique` which requires spawning three sub-agents (Phase 1). The agent asked "Can I proceed with spawning the three critique agents?" despite the skill file explicitly stating "Explicit invocation is explicit consent to the full critique protocol." This wasted a turn and frustrated the user, who had already given consent by typing the command.
+**Prevention:** When a user explicitly invokes a skill that spawns sub-agents as its core protocol, that invocation is the consent; proceed without re-asking. Ask only when the dispatcher auto-routed to the skill and the user did not request it. Evidence anchor: `workflow/skills/goat-critique/SKILL.md` (search: `IS consent to spawn sub-agents and the full protocol`).
 
-**Root cause:** The skill's Step 0 had a "Delegation consent gate" that said "when the active runner requires explicit user consent for delegated sub-agents and that consent is not present in the current user request or caller context, stop and ask before Phase 1." The agent interpreted this as always needing to ask, even though the preceding paragraph said explicit invocation is consent. The two clauses contradicted each other and the agent chose the more cautious (wrong) interpretation.
+**What happened:** The user invoked `/goat-critique`, which spawns three sub-agents in Phase 1, and the agent asked "Can I proceed with spawning the three critique agents?" although the skill file already stated that explicit invocation is consent. The turn was wasted and the user, who had consented by typing the command, was frustrated.
 
-**Prevention:** When a user explicitly invokes a skill that spawns sub-agents as its core protocol, that invocation IS the consent. Do not re-ask. The skill file has been updated to make this unambiguous. For any skill with delegated agents: if the user typed the command, proceed. The only time to ask is when the skill was auto-routed by the dispatcher and the user didn't explicitly request it.
+**Root cause:** The skill's Step 0 carried a delegation-consent gate whose wording contradicted the preceding paragraph, and the agent chose the more cautious, wrong reading. The current skill states the rule once, without the competing gate.
 
 ---
 
 ## Lesson: Plan-only critique requests must not mutate artifacts
 
-**Created:** 2026-04-26
+**Status:** active | **Created:** 2026-04-26
 
-**What happened:** User invoked `$goat-critique make this less than 500 words: workflow/skills/goat/SKILL.md`. The agent ran the critique flow, then edited `workflow/skills/goat/SKILL.md` instead of stopping at a plan. When the user interrupted with "DONT MAKE THE CHANGES, I ONLY WANT THE GOAT-CRITIQUE TO GIVE ME A PLAN", the agent immediately began reverting through another patch while the user was still clarifying, creating a second round of unwanted file activity.
+**Prevention:** For critique, review, audit, or "give me a plan" requests, default to artifact-only output: findings, plan, recommendations, and explicit implementation options. Do not edit files unless the user separately says to apply the changes. If the user interrupts or says stop, freeze all writes immediately, run only read-only status or diff checks, and ask before any cleanup or revert.
 
-**Root cause:** The agent collapsed "critique this change" and "implement this change" because the artifact named a concrete edit target and the agent defaulted to execution. It also treated interruption as permission to perform cleanup instead of first freezing writes and reporting exact current state.
+**What happened:** The user invoked critique on a skill file with a word-count target. The agent ran the critique flow and then edited the file instead of stopping at a plan. When the user interrupted with "DONT MAKE THE CHANGES, I ONLY WANT THE GOAT-CRITIQUE TO GIVE ME A PLAN", the agent began reverting through another patch while the user was still clarifying, producing a second round of unwanted file activity.
 
-**Why this matters:** Review and critique skills are allowed to inspect, delegate, compare, and recommend. They must not auto-apply recommendations unless the user explicitly asks for implementation. Continuing to patch after an interruption compounds the original error because the user is trying to regain control of the workspace.
+**Root cause:** Critiquing a change and implementing it were collapsed because the request named a concrete edit target, and the interruption was treated as permission to clean up rather than to freeze and report exact current state.
 
-**Prevention:** For `$goat-critique`, `/goat-critique`, review, audit, or "give me a plan" requests, default to artifact-only output: findings, plan, recommendations, and explicit implementation options. Do not edit files unless the user separately says to apply the changes. If the user interrupts or says stop/no changes, freeze all writes immediately, run only read-only status/diff checks if needed, and ask before any cleanup or revert.
+**Why it matters:** Review and critique skills may inspect, delegate, compare, and recommend, but auto-applying recommendations removes the user's decision. Continuing to patch after an interruption compounds the error while the user is trying to regain control of the workspace.
 
 ---
 
+## Lesson: Session-log contract is conditional, not per-skill-invocation
+
+**Status:** active | **Created:** 2026-03-30 | **Updated:** 2026-04-19
+**Incident count:** 2 | **Latest occurrence:** 2026-07-17
+
+**Prevention:** Do not put a "write a session log" bullet in every skill's closing protocol; keep the conditional phrasing in `.goat-flow/skill-docs/skill-preamble.md` and `.goat-flow/skill-docs/skill-conventions.md`, current since 2026-04-18, and let skills opt in through the Milestone Retrospective pattern. Session logs are optional continuity notes: write one when compaction fires without an active milestone file, or when the human asks for a summary, and otherwise skip. Do not revive the Notification or compact hook that was meant to mechanize this; it was silently dead and is recorded in the resolved entries of `.goat-flow/learning-loop/footguns/hooks.md`.
+
+**What happened:** Earlier skill templates said to write a session summary whenever the logs directory existed, in a closing protocol that fired after every run. A goat-review audit ran the full process and wrote no log, for zero percent compliance, because the instruction fired after the agent had delivered its output and was mentally done.
+
+**Root cause:** An end-of-task instruction competed with the agent's sense of completion and lost, so the rule needed a condition and an owner rather than repetition in every skill.
+
+**Recurrence 2026-07-17:** The glossary still called the whole handoff concept deprecated while another entry made every compaction write a session log; it now distinguishes the retired mandatory workflow from the current optional redacted receipt. `.goat-flow/glossary.md` (search: `| Handoff |`), `test/contract/skill-hardening-shared-2.test.ts` (search: `keeps glossary continuity terms aligned with the conditional session-log contract`).
+
+---
+
+## Lesson: Dispatcher keeps getting excluded from patterns and glob matches
+
+**Status:** active | **Created:** 2026-04-01
+**Incident count:** 3 | **Latest occurrence:** 2026-04-01
+
+**Prevention:** Use `goat*` without the dash for glob patterns, iterate literal canonical names rather than deriving them by prefixing, and test the dispatcher first in any skill enumeration.
+
+**What happened:** Three incidents missed the dispatcher: `find -name 'goat-*.md'` skipped `goat.md`, a CI template looping `for skill in ...; do goat-$skill` produced `goat-goat`, and the v0.9.3 consolidation miscounted by omitting it.
+
+**Root cause:** The dispatcher's name is the prefix every other skill extends, so any pattern or derivation built from that prefix excludes it.
+
+---
+
+## Lesson: Verification prompts must not assume goat skills are the only skills
+
+**Status:** active | **Created:** 2026-04-01
+
+**Prevention:** Scope verification prompts and audit checks to goat-flow's own domain: list the `goat-*` directories, not every directory. Project-specific skills are not goat-flow's business.
+
+**What happened:** An M1 human testing gate prompt said to list all directories under the installed skills path and named the only ones allowed, which would report any project's own skills as violations.
+
+**Root cause:** A check written against this repository's contents was phrased as a universal invariant.

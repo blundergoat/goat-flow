@@ -25,9 +25,11 @@ import {
   type QualityDeltaTag,
   type QualityEvidenceMethod,
   type QualityFinding,
+  type QualityRefutedCandidate,
   type QualityReport,
   type QualityMode,
   type QualityReportParseOptions,
+  type QualityScoreRationale,
   type QualityScope,
   type QualityScores,
   type QualitySetupScores,
@@ -45,6 +47,8 @@ import {
   isRecord,
   rejectUnknownKeys,
 } from "./schema-expectations.js";
+import { parseReportRefutedCandidates } from "./schema-refuted-candidates.js";
+import { parseQualityScoreRationale } from "./schema-score-rationale.js";
 
 /**
  * Confirm a formatted run date names a real Gregorian calendar day.
@@ -248,6 +252,32 @@ function parseScores(
     scores: {
       setup: setup.scores,
       system: system.scores,
+    },
+  };
+}
+
+/** Parse numeric scores and their optional-for-legacy provenance as one report boundary. */
+function parseReportScoring(
+  raw: Record<string, unknown>,
+  options: QualityReportParseOptions,
+): FieldResult<{
+  scores: QualityScores;
+  scoreRationale: QualityScoreRationale | undefined;
+}> {
+  const scores = parseScores(raw.scores, "report.scores");
+  if (!scores.ok) return scores;
+  const scoreRationale = parseOptionalCurrentField(
+    raw,
+    "score_rationale",
+    options,
+    parseQualityScoreRationale,
+  );
+  if (!scoreRationale.ok) return scoreRationale;
+  return {
+    ok: true,
+    value: {
+      scores: scores.scores,
+      scoreRationale: scoreRationale.value,
     },
   };
 }
@@ -813,6 +843,7 @@ function optionalReportFields(fields: {
   qualityMode: QualityMode | undefined;
   priorReportId: string | null | undefined;
   assessmentContext: QualityAssessmentContext | undefined;
+  scoreRationale: QualityScoreRationale | undefined;
 }): Partial<QualityReport> {
   return {
     ...(fields.scope !== undefined ? { scope: fields.scope } : {}),
@@ -827,6 +858,9 @@ function optionalReportFields(fields: {
       : {}),
     ...(fields.assessmentContext !== undefined
       ? { assessment_context: fields.assessmentContext }
+      : {}),
+    ...(fields.scoreRationale !== undefined
+      ? { score_rationale: fields.scoreRationale }
       : {}),
   };
 }
@@ -877,6 +911,42 @@ function parseReportFindings(
 }
 
 /**
+ * Parse the actionable findings and disproved-candidate ledger as one report collection boundary.
+ * Use before constructing history output so either invalid list blocks the whole user-visible report.
+ *
+ * @param rawReport - report object carrying both arrays; missing current arrays produce their own schema errors
+ * @param options - strictness for current versus legacy reports; legacy absence is normalized only for the refutation ledger
+ * @param priorReportId - compared report id; null or absent means finding delta tags may remain null
+ * @returns both validated collections, or the first list error the report author must fix
+ */
+function parseReportCollections(
+  rawReport: Record<string, unknown>,
+  options: QualityReportParseOptions,
+  priorReportId: string | null | undefined,
+): FieldResult<{
+  findings: QualityFinding[];
+  refutedCandidates: QualityRefutedCandidate[];
+}> {
+  const findings = parseReportFindings(
+    rawReport.findings,
+    options,
+    priorReportId,
+  );
+  // Invalid findings stop the report before its actionable issue list reaches the user.
+  if (!findings.ok) return findings;
+  const refutedCandidates = parseReportRefutedCandidates(rawReport, options);
+  // Invalid exclusions stop the report before its refutation ledger reaches the user.
+  if (!refutedCandidates.ok) return refutedCandidates;
+  return {
+    ok: true,
+    value: {
+      findings: findings.value,
+      refutedCandidates: refutedCandidates.value,
+    },
+  };
+}
+
+/**
  * Parse the full quality report object.
  * Use before saving or comparing a run so every user-facing summary and finding row is trustworthy.
  *
@@ -908,7 +978,9 @@ function parseReportInternal(
       "prior_report_id",
       "assessment_context",
       "scores",
+      "score_rationale",
       "findings",
+      "refuted_candidates",
     ],
     "report",
   );
@@ -967,14 +1039,15 @@ function parseReportInternal(
     priorReportId = parsedPriorReportId.value;
   }
 
-  const scores = parseScores(raw.scores, "report.scores");
-  // Score errors stop the report before any headline metrics are shown.
-  if (!scores.ok) return scores;
+  const scoring = parseReportScoring(raw, options);
+  // Score or rationale errors stop the report before any headline metrics are shown.
+  if (!scoring.ok) return scoring;
 
-  const findings = parseReportFindings(raw.findings, options, priorReportId);
-  if (!findings.ok) return findings;
+  const reportCollections = parseReportCollections(raw, options, priorReportId);
+  // Invalid findings or exclusions stop the report before either list reaches history.
+  if (!reportCollections.ok) return reportCollections;
 
-  const reportBase: Omit<QualityReport, "findings"> = {
+  const reportBase: Omit<QualityReport, "findings" | "refuted_candidates"> = {
     report_kind: QUALITY_REPORT_KIND,
     goat_flow_version: identity.value.version,
     agent: identity.value.agent,
@@ -987,13 +1060,18 @@ function parseReportInternal(
       qualityMode: qualityMode.value,
       priorReportId,
       assessmentContext: assessmentContext.value,
+      scoreRationale: scoring.value.scoreRationale,
     }),
-    scores: scores.scores,
+    scores: scoring.value.scores,
   };
 
   return {
     ok: true,
-    report: { ...reportBase, findings: findings.value },
+    report: {
+      ...reportBase,
+      findings: reportCollections.value.findings,
+      refuted_candidates: reportCollections.value.refutedCandidates,
+    },
   };
 }
 

@@ -18,6 +18,7 @@ import {
 } from "./evidence/envelope.js";
 import { HOOK_VERIFICATION_CONTRACTS } from "./hook-verification-contracts.js";
 import {
+  agentHookSpawnDescriptor,
   buildAgentHookDescriptor,
   type AgentHookHandlerDescriptor,
 } from "./server/agent-hook-command.js";
@@ -161,25 +162,113 @@ function configuredRegistrationReasonCode(
   return null;
 }
 
+/** Host-owned Windows paths the managed launcher consumes for discovery and cleanup. */
+const WINDOWS_MANAGED_ENVIRONMENT_KEYS = [
+  "SystemRoot",
+  "WINDIR",
+  "ProgramFiles",
+  "ProgramW6432",
+  "ProgramFiles(x86)",
+  "LOCALAPPDATA",
+  "TEMP",
+  "TMP",
+] as const;
+
+/** Copy only present values from an environment allowlist. */
+function selectEnvironmentValues(
+  environment: NodeJS.ProcessEnv,
+  variableNames: ReadonlyArray<string>,
+): NodeJS.ProcessEnv {
+  const selectedEnvironment: NodeJS.ProcessEnv = {};
+  for (const variableName of variableNames) {
+    const hostPath = environment[variableName];
+    // Blank values do not identify a usable host directory.
+    if (hostPath) selectedEnvironment[variableName] = hostPath;
+  }
+  return selectedEnvironment;
+}
+
+/**
+ * Select the first non-empty host variable from an ordered allowlist.
+ *
+ * @param environment - host variables to inspect without forwarding wholesale
+ * @param variableNames - ordered aliases for the same launcher input
+ * @param fallback - inert value used when every alias is absent
+ * @returns first usable allowlisted value, or the supplied fallback
+ */
+function firstEnvironmentValue(
+  environment: NodeJS.ProcessEnv,
+  variableNames: ReadonlyArray<string>,
+  fallback: string,
+): string {
+  for (const variableName of variableNames) {
+    const hostValue = environment[variableName];
+    // The first present alias wins, matching normal process-environment lookup precedence.
+    if (hostValue) return hostValue;
+  }
+  return fallback;
+}
+
+/**
+ * Select the temporary directory used by the managed launcher and its timeout cleanup.
+ *
+ * @param projectPath - inert final fallback for Windows hosts without temp variables
+ * @param environment - host variables to inspect through the platform allowlist
+ * @param platform - host platform selecting Windows aliases or the POSIX default
+ * @returns a non-empty temporary directory path
+ */
+function managedTemporaryDirectory(
+  projectPath: string,
+  environment: NodeJS.ProcessEnv,
+  platform: NodeJS.Platform,
+): string {
+  if (platform === "win32") {
+    return firstEnvironmentValue(
+      environment,
+      ["TMPDIR", "TEMP", "TMP"],
+      projectPath,
+    );
+  }
+  return firstEnvironmentValue(environment, ["TMPDIR"], "/tmp");
+}
+
 /**
  * Build the minimal environment used by bounded local hook proof.
  * Use so verification does not forward unrelated user or agent secrets.
  *
  * @param projectPath - selected checkout; empty text becomes the inert HOME fallback
+ * @param environment - host variables to filter; defaults to the current process environment
+ * @param platform - host platform selecting the Windows-only locator variables
  * @returns required process variables; values are never null or empty after fallback
  */
-export function managedHookEnvironment(projectPath: string): NodeJS.ProcessEnv {
+export function managedHookEnvironment(
+  projectPath: string,
+  environment: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform,
+): NodeJS.ProcessEnv {
   // Missing user environment fields receive inert local defaults rather than secret-bearing fallbacks.
-  const executablePath = process.env.PATH ?? "/usr/bin:/bin";
-  const homeDirectory = process.env.HOME ?? projectPath;
-  const temporaryDirectory = process.env.TMPDIR ?? "/tmp";
-  return {
-    PATH: executablePath,
-    HOME: homeDirectory,
-    TMPDIR: temporaryDirectory,
+  const managedEnvironment: NodeJS.ProcessEnv = {
+    PATH: firstEnvironmentValue(environment, ["PATH", "Path"], "/usr/bin:/bin"),
+    HOME: firstEnvironmentValue(environment, ["HOME"], projectPath),
+    TMPDIR: managedTemporaryDirectory(projectPath, environment, platform),
     LANG: "C",
     LC_ALL: "C",
   };
+  // Windows launcher discovery and timeout cleanup need only these host-owned path variables.
+  if (platform === "win32") {
+    Object.assign(
+      managedEnvironment,
+      selectEnvironmentValues(environment, WINDOWS_MANAGED_ENVIRONMENT_KEYS),
+      {
+        PATHEXT: firstEnvironmentValue(
+          environment,
+          ["PATHEXT"],
+          ".COM;.EXE;.BAT;.CMD",
+        ),
+      },
+    );
+  }
+  return managedEnvironment;
 }
 
 /**
@@ -405,12 +494,8 @@ function executeConfiguredFeedbackProbe(
   timeoutMs: number,
 ): HookProbeExecution {
   const startedAt = performance.now();
-  // Argv handlers run exactly as the provider spawns them; shell handlers keep Bash parsing.
-  const [probeExecutable, probeArguments] =
-    configuredHandler.form === "argv"
-      ? [configuredHandler.command, configuredHandler.args]
-      : ["bash", ["-c", configuredHandler.command]];
-  const execution = spawnSync(probeExecutable, probeArguments, {
+  const probe = agentHookSpawnDescriptor(configuredHandler);
+  const execution = spawnSync(probe.command, probe.args, {
     cwd: projectPath,
     encoding: "utf-8",
     env: managedHookEnvironment(projectPath),

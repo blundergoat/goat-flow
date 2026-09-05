@@ -1,9 +1,8 @@
 /**
- * Contracts for the remaining user-invocable skills and the router that selects them.
- * Grouped because each is small alone but shares the same install-mirror rules.
+ * Check the dispatcher and user-invoked workflows covered by the shared skill contracts.
  *
- * Reads the installed copies rather than sources, so a contract fails when the guidance a user
- * actually receives drifts - not merely when the template does.
+ * These contracts inspect canonical and installed guidance so supported agents apply the same mode and evidence rules.
+ * Use them when changing workflow routing, behavior, or required output.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -15,6 +14,9 @@ import {
   readProjectFile,
   INSTALLED_SKILL_ROOTS,
 } from "./skill-hardening.helpers.js";
+
+// Users can finish goat-qa through five output variants, and each one must show what the agent disproved.
+const GOAT_QA_FINAL_OUTPUT_VARIANT_COUNT = 5;
 
 describe("skill hardening contracts: debug, qa, critique, security, dispatcher (1/2)", () => {
   it("keeps goat-debug bisect reporting-only until explicit approval", () => {
@@ -84,12 +86,21 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
     });
   });
 
-  /*
-   * D4 is where a fix gets called done, so the protections that decide closure
-   * must be stated there. A cleanup rule that lives only in D1 is not
-   * load-bearing at the moment someone declares the bug fixed, and a minimised
-   * reproducer proves a narrower claim than the one the reporter filed.
-   */
+  it("requires a hit or miss for every goat-debug footgun retrieval", () => {
+    assertForEachTarget(installedSkillPaths("goat-debug"), (skillPath) => {
+      const retrievalLines = readProjectFile(skillPath)
+        .split(/\r?\n/u)
+        .filter((line) => line.includes("Footgun retrieval:"));
+
+      assert.equal(retrievalLines.length, 2, skillPath);
+      assert.match(retrievalLines[0] ?? "", /hit.*miss/u, skillPath);
+      assert.doesNotMatch(retrievalLines[0] ?? "", /\bskip\b/u, skillPath);
+      assert.match(retrievalLines[1] ?? "", /hit.*miss/u, skillPath);
+      assert.doesNotMatch(retrievalLines[1] ?? "", /\bskip\b/u, skillPath);
+    });
+  });
+
+  // The debug closure step must require cleanup and the original reproduction before an agent declares the reported bug fixed.
 
   it("closes goat-debug only on the original reproduction with diagnostics cleaned", () => {
     assertForEachTarget(installedSkillPaths("goat-debug"), (skillPath) => {
@@ -175,6 +186,7 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
         "Investigate Mode",
       );
 
+      // Debug guidance must distinguish observed facts, inferences, unverified claims, and evidence awaiting human action.
       for (const evidenceState of [
         "OBSERVED",
         "INFERRED",
@@ -196,10 +208,7 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
     });
   });
 
-  /*
-   * A user asking for a code tour can use Investigate without inventing a bug.
-   * This contract keeps diagnosis-only work out of that user path.
-   */
+  // A code tour can use Investigate without a bug report; diagnosis-only requirements must stay outside that path.
   it("scopes goat-debug diagnosis requirements away from Investigate mode", () => {
     assertForEachTarget(installedSkillPaths("goat-debug"), (skillPath) => {
       const boundaryCommands = readMarkdownSection(
@@ -294,7 +303,7 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
         // Asserting the wrong one here is what let this file drift out of version parity.
         assert.match(
           referenceGuidance,
-          /goat-flow-reference-version: "1\.16\.0"/u,
+          /goat-flow-reference-version: "1\.17\.0"/u,
           referencePath,
         );
       },
@@ -411,7 +420,12 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
       const skillGuidance = readProjectFile(skillPath);
       assert.match(
         skillGuidance,
-        /gap analysis plus Verification Integrity/,
+        /Run the Candidate Disproval Pass, then present gap analysis, Refuted Candidates, and Verification Integrity/u,
+        skillPath,
+      );
+      assert.match(
+        skillGuidance,
+        /`confirm`[\s\S]+`kill as false positive`[\s\S]+`keep with named missing evidence`/u,
         skillPath,
       );
     });
@@ -422,6 +436,11 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
         assert.match(
           outputTemplates,
           /Intent spec: \[PR\/issue\/test plan URL or `no-intent-spec`\]/,
+          referencePath,
+        );
+        assert.equal(
+          outputTemplates.match(/^## Refuted Candidates$/gmu)?.length,
+          GOAT_QA_FINAL_OUTPUT_VARIANT_COUNT,
           referencePath,
         );
         assert.match(outputTemplates, /Evidence limit:/, referencePath);

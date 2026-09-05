@@ -1,6 +1,6 @@
 ---
 category: verification-validators
-last_reviewed: 2026-08-17
+last_reviewed: 2026-09-04
 ---
 
 **Scope:** Getting a checker itself right - regex and wildcard construction, path resolution inside guards, what a validator must inventory, and counting contracts between a check and what it reports. Whether a claim was verified at all is [verification.md](verification.md).
@@ -10,28 +10,29 @@ last_reviewed: 2026-08-17
 **Status:** active | **Created:** 2026-08-05 | **Incident count:** 2 | **Latest occurrence:** 2026-08-05
 **Decision changed:** Build permission patterns by escaping the literal directory first, then append deliberate wildcard grammar and assert the serialized rule. | **Trigger phase:** ACT
 
+**Prevention:** Pass only literal filesystem components through path escaping. Append reviewed permission wildcards afterward, then assert every server-owned filename family in the serialized deny rules. Evidence anchors: `src/cli/server/terminal-reporting-profile.ts` (search: `stagingServerFileDenies`), `test/unit/terminal-spawn.test.ts` (search: `launches Claude reporting sessions with a restrictive settings overlay`).
+
 **What happened:** While denying Claude reporting-agent writes to server-owned quality result and claim receipts, the first implementation passed each wildcard-bearing filename through `claudePermissionPath`. The focused terminal-profile test failed because that helper correctly escaped `*` as a literal path character, so the deny rule matched no receipt family.
 
 **Recurrence 2026-08-05:** The corrected wildcard construction still enumerated only result and claim markers. Full branch review of the adjacent quality-claim implementation found the separate `goat-quality-reap-*` server-owned fence, which the reporting agent could still edit. The permission inventory now names result, claim, and reaper families together.
 
 **Root cause:** I used a literal-path escaping helper to encode a permission pattern. The directory and the wildcard suffix have different grammars even though they appear in one rule string.
 
-**Prevention:** Pass only literal filesystem components through path escaping. Append reviewed permission wildcards afterward, then assert every server-owned filename family in the serialized deny rules. Evidence anchors: `src/cli/server/terminal-reporting-profile.ts` (search: `stagingServerFileDenies`), `test/unit/terminal-spawn.test.ts` (search: `launches Claude reporting sessions with a restrictive settings overlay`).
-
 ---
 
 ## Lesson: Input/output alias guards must compare resolved filesystem paths
 
 **Status:** active | **Created:** 2026-08-05 | **Incident count:** 2 | **Latest occurrence:** 2026-08-05
-**Decision changed:** Before a forced writer runs, compare every existing destination with every source after filesystem resolution, then test an alternate path spelling. | **Trigger phase:** VERIFY
+**Decision changed:** Before a forced writer runs, compare every existing destination with every source after filesystem resolution, then test an alternate path spelling. | **Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** For commands that read source files and later honor `--force`, canonicalize existing source and destination paths before collision checks, while retaining separate symlink and hardlink write guards. Re-run the destructive reproduction through a second path spelling before accepting the fix. Evidence anchors: `src/cli/plans-export-output.ts` (search: `assertOutputPathsDoNotAliasSources`), `test/unit/plans-export-writes.test.ts` (search: `refuses forced JSON output that aliases a source through the selected plan path`).
 
 **What happened:** Full branch review reproduced `plans export --format json --output <source milestone> --force` exiting 0 and replacing the milestone with generated JSON. The first guard compared `resolve()` strings and blocked that direct spelling.
 
 **Recurrence 2026-08-05:** A follow-up reproduction selected the plan through a directory symlink while naming the same source through its real path. The lexical guard again exited 0 and changed the source. The correction compares `realpathSync` results for existing sources and destinations before any export write.
 
 **Root cause:** I treated normalized path strings as filesystem identity. A symlink gives one file multiple normalized absolute names, so lexical equality cannot prove that input and output are distinct.
-
-**Prevention:** For commands that read source files and later honor `--force`, canonicalize existing source and destination paths before collision checks, while retaining separate symlink and hardlink write guards. Re-run the destructive reproduction through a second path spelling before accepting the fix. Evidence anchors: `src/cli/plans-export-output.ts` (search: `assertOutputPathsDoNotAliasSources`), `test/unit/plans-export-writes.test.ts` (search: `refuses forced JSON output that aliases a source through the selected plan path`).
 
 ---
 
@@ -41,36 +42,38 @@ last_reviewed: 2026-08-17
 
 **Incident count:** 2 | **Latest occurrence:** 2026-08-01
 
+**Prevention:** When asserting dynamic paths or rule IDs through `new RegExp(...)`, use a small `escapeRegex` helper for regex metacharacters instead of ad hoc slash replacement. If the pattern includes Markdown backticks, avoid nesting them in a template literal; concatenate the literal delimiters around the dynamic value. Evidence anchors: `test/integration/gruff-code-quality-smoke.helpers.ts` (search: `function escapeRegex`), `test/integration/gruff-code-quality-smoke.test.ts` (search: `selects the gruff binary from the edited file extension`), and `test/contract/skill-hardening-review-2.test.ts` (search: `conditionalSection`).
+
 **What happened:** While adding a hook smoke test for extension-based gruff binary selection, the first assertion escaped path separators for a `RegExp` constructor with `replaceAll("/", "\\\\/")`. The hook output used the expected slash-separated PHP fixture path, but the generated regex expected an extra backslash and the focused test failed.
 
 **Root cause:** I treated slash escaping for regex literals and `RegExp` constructor strings as the same problem. In constructor strings, `/` is not a delimiter and does not need escaping; only regex metacharacters do.
 
 **Recurrence (2026-08-01):** An M04 contract built a dynamic `RegExp` with a template literal that also contained escaped Markdown backticks. The TypeScript transform failed before any behavioural test ran. String concatenation produced the intended pattern and exposed the genuine three-failure RED.
 
-**Prevention:** When asserting dynamic paths or rule IDs through `new RegExp(...)`, use a small `escapeRegex` helper for regex metacharacters instead of ad hoc slash replacement. If the pattern includes Markdown backticks, avoid nesting them in a template literal; concatenate the literal delimiters around the dynamic value. Evidence anchors: `test/integration/gruff-code-quality-smoke.helpers.ts` (search: `function escapeRegex`), `test/integration/gruff-code-quality-smoke.test.ts` (search: `selects the gruff binary from the edited file extension`), and `test/contract/skill-hardening-review-2.test.ts` (search: `conditionalSection`).
-
 ## Lesson: Harness fixture counts must match the reported unit
 
 **Status:** active | **Created:** 2026-05-25
-**Incident count:** 2 | **Latest occurrence:** 2026-08-10
+**Incident count:** 3 | **Latest occurrence:** 2026-08-26
+
+**Prevention:** Name and assert the reported unit explicitly: profiles, unique files, unique identifiers, representations, findings, or checks. Normalize before counting identities, and assert representation cardinality separately when case or separator variants are part of the fixture. When multiple agents share one instruction file, document that duplicate-path case next to the fixture helper. Evidence anchors: `test/unit/audit-harness/check-evidence-before-claims.test.ts` (search: `unique present instruction files`), `src/cli/audit/harness/check-verification.ts` (search: `instructionFilePaths`), `test/fixtures/evidence-before-claims.ts` (search: `antigravity: "AGENTS.md"`).
 
 **What happened:** During the gruff documentation pass on `src/cli/audit/harness/check-verification.ts`, the focused evidence-before-claims test failed because the fixture expected `4 present instruction file` even though Codex and Antigravity both pointed at the same `AGENTS.md`. The harness reported the correct deduplicated count: 3 unique present instruction files.
 
 **Root cause:** The assertion counted agent profiles, while the check reports unique instruction-file paths. Shared instruction files make those units diverge.
 
-**Prevention:** In harness tests, name and assert the reported unit explicitly: profiles, unique files, findings, or checks. When a fixture deliberately maps multiple agents to the same instruction file, document that duplicate-path case next to the fixture helper. Evidence anchors: `test/unit/audit-harness/check-evidence-before-claims.test.ts` (search: `unique present instruction files`), `src/cli/audit/harness/check-verification.ts` (search: `instructionFilePaths`), `test/fixtures/evidence-before-claims.ts` (search: `antigravity: "AGENTS.md"`).
-
 **Recurrence (2026-08-10):** A migrated Gruff result fixture asserted only the first finding code. Replacing that partial check with the complete user-visible code list failed because the analyzer envelope also carries `naming.short`. The expected result now enumerates both findings, so a missing or extra detail row is visible. Evidence anchors: `test/integration/hook-provider-contracts.test.ts` (search: `expectedFindingCodes`) and `test/integration/gruff-code-quality-smoke.helpers.ts` (search: `FINDING_GRUFF_CONTRACT_ENVELOPE`).
+
+**Recurrence 2026-08-26:** M55's privacy proof described two case and separator path spellings as two restricted names. Its first derived guard normalized both spellings to one project identifier, then failed because the assertion required two unique identifiers. Separating identity from representation produced the truthful contract: one identifier, two path spellings, and zero case-insensitive tracked hits. Evidence anchor: `test/unit/hook-registrar-surfaces.test.ts` (search: `treats Windows case and separator variants as the same physical root`) preserves the two-representation invariant without retaining the historical identifier.
 
 ## Lesson: Validators can require explicit inventories and phrases despite README pointers
 
 **Status:** active | **Created:** 2026-05-24
 
+**Prevention:** Before replacing explicit inventories or required phrases with index pointers, grep content-quality, factual-drift, parity, and preflight checks. If a validator checks direct filename or phrase inclusion, keep the explicit text and add the index pointer around it. Evidence anchors: `src/cli/audit/check-factual-semantic-drift.ts` (search: `driftSkillPlaybookInventory`), `workflow/manifest.json` (search: `"label": "tool-playbook Key Resources"`).
+
 **What happened:** Replacing explicit playbook filenames in `.goat-flow/architecture.md` with a README pointer failed `skill-playbook-inventory-drift`; replacing instruction Key Resources examples with only an index pointer then failed `Instruction parity`.
 
 **Root cause:** I optimized for low-drift prose before reading the validators that require direct filenames and phrases.
-
-**Prevention:** Before replacing explicit inventories or required phrases with index pointers, grep content-quality, factual-drift, parity, and preflight checks. If a validator checks direct filename or phrase inclusion, keep the explicit text and add the index pointer around it. Evidence anchors: `src/cli/audit/check-factual-semantic-drift.ts` (search: `driftSkillPlaybookInventory`), `workflow/manifest.json` (search: `"label": "tool-playbook Key Resources"`).
 
 ---
 
@@ -79,11 +82,11 @@ last_reviewed: 2026-08-17
 **Status:** active | **Created:** 2026-05-04
 **Incident count:** 7 | **Latest occurrence:** 2026-08-17
 
+**Prevention:** Before the first focused run, grep implementation and adjacent tests for old flags, phrases, counts, routes, and errors; include install/round-trip suites when generated config shape changes. Update those assertions with the behavior. Evidence anchors: `src/cli/server/terminal.ts` (search: `initialInput`), `test/integration/audit-drift.test.ts` (search: `expectedDeprecatedHookComparisons`), `test/contract/skill-hardening-shared-1.test.ts` (search: `carries explicit build intent through planning into ordinary ACT`), `test/unit/evidence-envelope.test.ts` (search: `keeps append failures non-fatal`).
+
 **What happened:** Behavior changes left adjacent assertions pinned to old flags, phrases, counts, routes, or errors, so focused checks failed only after implementation.
 
 **Root cause:** I changed the contract and obvious test without grepping every encoded form of the old behavior.
-
-**Prevention:** Before the first focused run, grep implementation and adjacent tests for old flags, phrases, counts, routes, and errors; include install/round-trip suites when generated config shape changes. Update those assertions with the behavior. Evidence anchors: `src/cli/server/terminal.ts` (search: `initialInput`), `test/integration/audit-drift.test.ts` (search: `expectedDeprecatedHookComparisons`), `test/contract/skill-hardening-shared-1.test.ts` (search: `carries explicit build intent through planning into ordinary ACT`), `test/unit/evidence-envelope.test.ts` (search: `keeps append failures non-fatal`).
 
 **Recurrence (2026-07-19):** A path-safe evidence diagnostic replaced raw OS errors, but the adjacent non-fatal assertion still accepted only the old error forms; the first focused GREEN run stopped at 117/118.
 
@@ -97,7 +100,7 @@ last_reviewed: 2026-08-17
 
 **Recurrence (2026-08-17):** Moving instruction-parity phrases from the parity script into `workflow/manifest.json` passed the new focused tests, but the fast suite still had a contract test pinned to the old owner and a copied-repository fixture without the manifest. The live stats check also found a lesson anchor pointing at the removed script-owned phrase. When ownership moves, grep the old semantic anchors and fixture copy lists before declaring the focused slice complete. Evidence anchors: `workflow/manifest.json` (search: `"label": "test-selection READ route"`), `test/contract/test-selection-playbook-doctrine.test.ts` (search: `registers the exact route with instruction parity`), and `test/unit/local-instructions.test.ts` (search: `workflow/manifest.json`).
 
-A relocation also destroys its own evidence: once the inline list was deleted, the reader and its tests both resolved to the manifest, so a phrase dropped in transit would have vanished from the rule and the assertion in the same commit and still gone green. Green tests cannot show that a move preserved membership; only the pre-move copy can. Diff it structurally - parse the old literal out of `git show HEAD:<file>` and compare label, section, and phrase content rather than eyeballing labels, because a label survives a shortened phrase list. Verified for this move on 2026-08-17: 8 rules before and after, zero content differences.
+A relocation also destroys its own evidence: once the inline list was deleted, the reader and its tests both resolved to the manifest, so a phrase dropped in transit would have vanished from the rule and the assertion in the same commit, and the tests would still have gone green. Green tests cannot show that a move preserved membership; only the pre-move copy can. Diff it structurally - parse the old literal out of `git show HEAD:<file>` and compare label, section, and phrase content rather than eyeballing labels, because a label survives a shortened phrase list. Verified for this move on 2026-08-17: 8 rules before and after, zero content differences.
 
 ---
 
@@ -106,11 +109,11 @@ A relocation also destroys its own evidence: once the inline list was deleted, t
 **Status:** active | **Created:** 2026-04-29
 **Incident count:** 5 | **Latest occurrence:** 2026-08-05
 
+**Prevention:** After adding any validator that scans a project-wide artifact directory, run it against the live repository before the milestone gate and budget time for the live cleanup it exposes.
+
 **What happened:** M06 added decision-file validation and the fixture tests passed, but the first live `node --import tsx src/cli/cli.ts stats . --check` run failed against existing ADR files and one stale lesson reference.
 
 **Root cause:** Treated fixture coverage as enough proof for a repository-wide validator. The new rule was correct, but the live repo contained older records that predated the stricter contract.
-
-**Fix:** After adding any validator that scans a project-wide artifact directory, run it against the live repository before the milestone gate and budget time for the live cleanup it exposes.
 
 **Recurrence (2026-07-13):** M07 ownership fixtures passed focused manifest tests, but full preflight found three packaged-mode `ManifestJson` fixtures that omitted the new required `file_ownership` contract. It also caught ESLint complexity and Knip exports outside the focused commands. After a manifest schema change, grep every `ManifestJson` fixture and run the full static/test gate, not only the new validator suite. Evidence anchors: `test/unit/packaged-install.test.ts` (search: `file_ownership`), `src/cli/manifest/manifest-json.ts` (search: `OWNERSHIP_EVIDENCE_FINDERS`).
 
@@ -126,21 +129,26 @@ A relocation also destroys its own evidence: once the inline list was deleted, t
 
 **Status:** active | **Created:** 2026-04-03 | **Last recurrence:** 2026-07-18
 
+**Prevention:** For markdown section extraction, prefer a line-based parser that tracks fenced-code state over multiline heading regexes with `$`. When the invariant is file-wide, assert against the full document instead of a section helper. For new regressions, build the smallest self-contained fixture possible unless the shared fixture object is already in scope.
+
 **What happened:** Tightened `2.4.3` to parse the Router Table directly, but the first extractor used a multiline regex with `$` in the lookahead. In JavaScript regexes, `$` under `/m` matches end-of-line, so the match stopped after the `## Router Table` heading and never included the rows below it. The new regression also referenced an undefined fixture constant, so the first focused test run broke twice before the real logic was verified.
 **Root cause:** Reached for a compact heading regex instead of reusing the repo’s line-based section parsing style, then wrote a regression that depended on a fixture helper that did not exist in that file.
 **Recurrence:** A goat-review regression read the `## Constraints` section with `readMarkdownSection`, but that helper treated a `## Constraints` heading inside the skill's fenced output template as the next real section. The test therefore reported a missing rule after the production fix was already present. Reading the full skill document exposed the false failure. Evidence anchor: `test/contract/skill-hardening-review-3.test.ts` (search: `keeps an unselected optional Spec Drift pass out of review degradation`).
-
-**Fix:** For markdown section extraction, prefer a line-based parser that tracks fenced-code state over multiline heading regexes with `$`. When the invariant is file-wide, assert against the full document instead of a section helper. For new regressions, build the smallest self-contained fixture possible unless the shared fixture object is already in scope.
 
 ---
 
 ## Lesson: Path normalization can invalidate later path-shape heuristics
 
-**Status:** historical | **Created:** 2026-04-03 | **Reason:** Rubric check 2.4.3 no longer exists (ADR-013); normalization-invariant principle applies to any parser
+**Status:** active | **Created:** 2026-04-03 | **Incident count:** 2 | **Latest occurrence:** 2026-09-04
+**Decision changed:** Exact path checks use token or segment boundaries plus a longer-lookalike negative control, never raw substring containment. | **Trigger phase:** ACT | **Caught at:** VERIFY
 
-**What happened:** After normalizing router references by trimming trailing slashes, the follow-up `2.4.3` filter still looked for the literal substring `/skills/`. That turned `.claude/skills/` into `.claude/skills`, so the canonical passing fixture dropped from `100` to `99` even though the router row was correct.
-**Root cause:** Mixed two phases of logic without rechecking the invariant after normalization. The filter assumed the original slash shape still existed after the normalizer had deliberately removed it.
-**Fix:** When a parser normalizes paths, downstream checks must use shape tests that still hold after normalization, such as segment-boundary regexes (`/\/skills(?:\/|$)/`) instead of raw substring checks that depend on trailing separators.
+**Prevention:** When a parser normalizes or extracts paths, downstream checks must use shape tests that still hold afterward, such as segment-boundary regexes (`/\/skills(?:\/|$)/`). When a validator claims exact identity, add a longer-lookalike negative control and reject raw substring containment. Evidence anchors: `src/cli/audit/skill-docs-contract.ts` (search: `textReferencesProjectPath`), `test/unit/audit-command/main.test.ts` (search: `Retired policy copy`).
+
+**What happened:** After normalizing router references by trimming trailing slashes, the follow-up `2.4.3` filter still looked for the literal substring `/skills/`. The trimming turned `.claude/skills/` into `.claude/skills`, so the canonical passing fixture dropped from `100` to `99` even though the router row was correct.
+
+**Recurrence 2026-09-04:** The first optional security-policy discovery helper used `String.includes` even though its contract promised an exact routed path. The goat-clarity pass found that a Router Table or code map naming `security-policy.md.backup` would satisfy the check. Complete-token matching and a suffix-lookalike fixture replaced the substring test before closeout.
+
+**Root cause:** Treated string containment as path identity without rechecking the boundary invariant after normalization or section extraction.
 
 ---
 
@@ -148,12 +156,33 @@ A relocation also destroys its own evidence: once the inline list was deleted, t
 
 **Status:** active | **Created:** 2026-08-10
 **Decision changed:** Capture expected nonzero helper statuses before restoring shell fail-fast mode.
-**Trigger phase:** VERIFY
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** When a shell helper uses nonzero statuses as data, wrap each call in `set +e`, capture `$?` immediately, restore `set -e`, and test the top-level script exit as well as its message. Evidence anchors: `workflow/hooks/gruff-code-quality.sh` (search: `range_status=$?`) and `test/integration/gruff-code-quality-smoke.test.ts` (search: `does not print whole-file findings when no changed range is available`).
 
 **What happened:** Gruff range classification correctly returned distinct statuses for deletion-only and unavailable hunks, but the legacy caller assigned the result under `set -e`. The shell exited with status 10 or 11 before the existing fail-soft skip branch ran.
 
 **Root cause:** I added meaningful nonzero returns to a shared helper without auditing every caller for shell error-mode semantics. A command substitution assignment is still a failing command under `set -e`.
 
-**Prevention:** When a shell helper uses nonzero statuses as data, wrap each call in `set +e`, capture `$?` immediately, restore `set -e`, and test the top-level script exit as well as its message. Evidence anchors: `workflow/hooks/gruff-code-quality.sh` (search: `range_status=$?`) and `test/integration/gruff-code-quality-smoke.test.ts` (search: `does not print whole-file findings when no changed range is available`).
-
 ---
+
+## Lesson: Aggregate metadata counts can mask invalid individual entries
+
+**Status:** active | **Created:** 2026-07-17
+**Decision changed:** Schema-health and evidence gates validate every parsed value and required relation independently before aggregating counts or declaring presence.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+**Incident count:** 3
+**Latest occurrence:** 2026-07-17
+**Merged:** 2026-09-05 - moved here from `.goat-flow/learning-loop/lessons/test-snapshots.md`; this is a counting contract between a check and what it reports, which this bucket owns.
+
+**Prevention:** Split structured Markdown into entries first, classify only frontmatter, Status-line, typed, or label-shaped standalone declarations, validate each value against its documented vocabulary, validate ordering and ownership relations explicitly, reduce each entry to at most one valid schema result, then aggregate. Pair empty-input fixtures with semantic near-misses: duplicate or unknown values, negated pressure and failure claims, explicit absence presented as evidence, placeholders presented as evidence, fields in the wrong section, labels on the wrong side of a boundary, and non-file paths. Keep the existing negative fixtures for duplicate-masks-missing, multiple labels in one value, legacy labels, wrong casing, a canonical label followed by narrative `**Evidence:**` content, and the blocking `stats --check` result. Diagnostic text must not contain the aggregator's `; ` delimiter. Evidence anchors: `src/cli/facts/shared/learning-loop.ts` (search: `getEvidenceLabelDiagnostic`) separates taxonomy metadata from prose and emits the bucket error; `src/cli/stats/stats.ts` (search: `evidence-label`) maps it to a stable rule; `test/integration/stats-command.test.ts` (search: `exactly one canonical evidence label`) locks parsing and enforcement.
+
+**What happened:** Evidence-label health compared a bucket-wide label count with its entry count. A two-entry fixture with two labels in the first entry and none in the second reported `labelCount: 2` and `hasEvidenceLabels: true`; the same matcher also accepted lowercase `observed` even though every template defines uppercase canonical labels. The first per-entry correction still collapsed two declarations in one section to one valid boolean, so the regression expectation had to tighten from one accepted entry to zero before the parser enforced mutual exclusivity. A final live-repo probe then found the strict matcher recognized only 91 of 107 labels because `**Evidence:**` also introduces narrative evidence blocks; the parser had to distinguish taxonomy metadata from prose. When the corrected fact was wired into `stats --check`, the first diagnostic used the aggregator's reserved `; ` separator and split one actionable error into two findings until the message changed to a colon.
+
+**Root cause:** `countFootgunLabels` counted regex matches across the complete bucket and `hasEvidenceLabels` accepted `labelCount >= entryCount`. The aggregate could not preserve which section owned each match, the global case-insensitive flag weakened the documented enum, and one undifferentiated Markdown regex treated evidence-body headings as evidence-type declarations.
+
+**Recurrence 2026-07-17:** The first `skill new --red-log` gate counted any three comma-separated tokens as pressures, accepted `fail` inside `did not fail`, accepted `- none` as a verbatim rationalisation, and searched later GREEN sections for fields missing from RED. In the same review, the shipped-scenario contract checked only that an illustrative label existed, so moving it below `## Assumption Tracking` still satisfied the test. The focused suite and full preflight both passed before adversarial probes reproduced the two semantic bypasses. Evidence anchors: `src/cli/skill-author-red-log.ts` (search: `documentedPressureCount`) now validates the isolated RED section; `test/integration/skill-author.test.ts` (search: `rejects RED receipts whose fields describe success instead of failure`) locks the near-miss; `test/contract/skill-hardening-shared-3.test.ts` (search: `scenario label must immediately precede the assumption block`) locks the required ordering relation.
+
+**Recurrence 2026-07-17 (quality recheck):** A follow-up RED-log probe used every canonical token only inside explicit negations: `no time pressure`, `failed? no`, and `none observed because it complied`. The gate still accepted the receipt and wrote a discoverable skill because each field validator recognized tokens without validating the field's asserted meaning. The first literal fix blocked that receipt, but an immediate boundary probe reproduced the same bypass with label-prefixed absence claims: `time: no pressure`, `failed: false`, and `No rationalisation occurred`. The pressure validator now rejects a directly negated detail after a canonical label, the outcome validator rejects directly negated failure classifications, and the rationalisation validator rejects prose that explicitly reports absence. Evidence anchors: `src/cli/skill-author.ts` (search: `startsWithNegatedAssertion` and `isAbsentRationalisation`), `test/integration/skill-author.test.ts` (search: `rejects negated RED evidence that includes canonical tokens` and `rejects alternate absence claims after canonical RED labels`), and the paired acceptance control (search: `accepts positive pressure details and a substantive no-prefixed rationalisation`).

@@ -215,7 +215,7 @@ describe("Audit scoring model", () => {
 describe("Audit scoring model", () => {
   it("audit details flag defaults on and can strip structured payloads", () => {
     const parsed = parseCLIArgs(["audit", ".", "--no-audit-details"]);
-    assert.equal(parsed.auditDetails, false);
+    assert.equal(parsed.includeAuditDetails, false);
     assert.throws(
       () => parseCLIArgs(["quality", ".", "--no-audit-details"]),
       /--no-audit-details is only valid for the audit command/,
@@ -308,6 +308,7 @@ describe("Audit scoring model", () => {
               "Local scratch note `.goat-flow/scratchpad/notes.md`.",
               "Local project identity `.goat-flow/project-id`.",
               "Local dashboard state `.goat-flow/dashboard-state.json`.",
+              "Local path claim `.goat-flow/write-claims/example.claim`.",
             ].join("\n");
           }
           return null;
@@ -319,6 +320,7 @@ describe("Audit scoring model", () => {
             ".goat-flow/scratchpad/notes.md",
             ".goat-flow/project-id",
             ".goat-flow/dashboard-state.json",
+            ".goat-flow/write-claims/example.claim",
           ].includes(path),
       }),
     });
@@ -327,8 +329,8 @@ describe("Audit scoring model", () => {
 
     assert.equal(docs.status, "pass");
     assert.deepEqual(docs.details?.docPaths, {
-      totalPaths: 5,
-      resolvedCount: 5,
+      totalPaths: 6,
+      resolvedCount: 6,
       unresolved: [],
     });
   });
@@ -437,6 +439,10 @@ describe("Audit scoring model", () => {
     assert.equal(metric.status, "fail");
     assert.equal(metric.displayStatus, "warn");
     assert.equal(metric.impact, "score-only");
+    assert.equal(
+      metric.details?.verification?.[0]?.expected,
+      "universal safety guard or meaningful validation",
+    );
     assert.match(metric.failure?.evidence ?? "", /Metric/);
     assert.equal(
       concerns.verification.metrics,
@@ -459,6 +465,50 @@ describe("Audit scoring model", () => {
         recommendation.includes("post-turn safety guard"),
       ),
       JSON.stringify(concerns.verification.recommendations),
+    );
+  });
+
+  it("skips post-turn hook integrity when post-turn safety is explicitly disabled", () => {
+    const baseFacts = makeCtx().facts;
+    const evidenceFiles: Record<string, string> = {
+      ".goat-flow/skill-docs/skill-preamble.md": RATIONALISATIONS_PREAMBLE,
+      [INSTRUCTION_FILES.claude]: completeInstruction("CLAUDE.md"),
+    };
+    const ctx = makeCtx({
+      config: stubConfig({
+        hooks: { "post-turn-safety": { enabled: false } },
+      }),
+      facts: {
+        ...baseFacts,
+        shared: {
+          ...baseFacts.shared,
+          gitCommitInstructions: {
+            exists: true,
+            path: "docs/coding-standards/git-commit-message.md",
+            requiredPath: "docs/coding-standards/git-commit-message.md",
+            misplacedPaths: [],
+          },
+        },
+      },
+      fs: stubFS({
+        readFile: (path) => evidenceFiles[path] ?? null,
+      }),
+    });
+
+    const { scope, concerns } = computeHarness(ctx);
+    const metric = scope.checks.find(
+      (check) => check.id === "post-turn-hook-integrity",
+    )!;
+
+    assert.equal(metric.status, "skipped");
+    assert.equal(metric.displayStatus, "skipped");
+    assert.equal(metric.impact, "none");
+    assert.equal(concerns.verification.score, FULL_CONCERN_SCORE);
+    assert.equal(
+      concerns.verification.limits.some((limit) =>
+        limit.includes("No post-turn safety or validation hooks installed"),
+      ),
+      false,
     );
   });
 });

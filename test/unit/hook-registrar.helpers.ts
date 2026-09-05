@@ -24,15 +24,19 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { TestContext } from "node:test";
 import { PROFILES } from "../../src/cli/detect/agents.js";
 import { applyHookState } from "../../src/cli/server/hook-registrar.js";
 import { writeAgentHookState } from "../../src/cli/server/agent-hook-writer.js";
 import {
+  agentHookSpawnDescriptor,
   buildAgentHookDescriptor,
   commandEntryReferencesSpec,
+  managedAgentHookDescriptor,
   type AgentHookHandlerDescriptor,
 } from "../../src/cli/server/agent-hook-command.js";
 import {
+  getHookSpec,
   listHookSpecs,
   type HookSpec,
 } from "../../src/cli/server/hooks-registry.js";
@@ -197,6 +201,7 @@ function collectInstalledHookCommandEntries(
   // Any supported command field marks this object as an executable registration.
   if (
     typeof configEntry.command === "string" ||
+    typeof configEntry.commandWindows === "string" ||
     typeof configEntry.bash === "string" ||
     typeof configEntry.powershell === "string"
   ) {
@@ -222,7 +227,12 @@ function installedEntryRunnableText(
           typeof argumentValue === "string",
       )
     : [];
-  return [commandEntry.command, commandEntry.bash, commandEntry.powershell]
+  return [
+    commandEntry.command,
+    commandEntry.commandWindows,
+    commandEntry.bash,
+    commandEntry.powershell,
+  ]
     .filter(
       (commandValue): commandValue is string =>
         typeof commandValue === "string",
@@ -259,8 +269,14 @@ function assertManagedHookRegistration(
   if (expectedDescriptor.form === "argv") {
     assert.equal(commandEntry.command, expectedDescriptor.command);
     assert.deepEqual(commandEntry.args, expectedDescriptor.args);
+    assert.equal(commandEntry.bash, expectedDescriptor.bash);
+    assert.equal(commandEntry.powershell, expectedDescriptor.powershell);
   } else {
     assert.equal(commandEntry.command, expectedDescriptor.command);
+    assert.equal(
+      commandEntry.commandWindows,
+      expectedDescriptor.commandWindows,
+    );
     assert.equal(commandEntry.args, undefined);
   }
   // Codex uses the proven 90-second host deadline only for approved feedback and Stop lifecycles.
@@ -368,6 +384,131 @@ export function verifyAgentHookRegistrationMatrix(
     }
   }
   return installedCommandEntries.length;
+}
+
+/**
+ * Verify every provider's deny descriptor matches the standalone install contract.
+ * Use from the registrar suite so shell, argv, and Windows spawn shapes stay one assertion boundary.
+ *
+ * @returns no value; an assertion identifies the provider contract that drifted
+ */
+export function assertProviderDenyDescriptorsMatchInstallerContract(): void {
+  const denySpec = getHookSpec(HOOK_IDENTIFIER);
+  assert.ok(denySpec);
+  const contract = JSON.parse(
+    readFileSync(
+      join(
+        import.meta.dirname,
+        "..",
+        "..",
+        "workflow",
+        "hooks",
+        "agent-config",
+        "managed-hook-desired-state.json",
+      ),
+      "utf-8",
+    ),
+  ) as {
+    agents: Record<
+      string,
+      { hooks: Record<string, { config: Record<string, never> }> }
+    >;
+  };
+  /** Read one provider's deny config so every descriptor comparison uses the same generated contract. */
+  const denyContractConfig = (agentId: string): Record<string, never> =>
+    contract.agents[agentId]!.hooks[HOOK_IDENTIFIER]!.config;
+
+  // Codex keeps its deferred command bytes and adds the approved Windows override.
+  const codexDescriptor = managedAgentHookDescriptor(PROFILES.codex, denySpec);
+  if (codexDescriptor.form !== "shell") {
+    assert.fail("Codex must retain a shell registration");
+  }
+  const codexContractRow = (
+    denyContractConfig("codex") as {
+      hooks: {
+        PreToolUse: Array<{
+          hooks: Array<{ command: string; commandWindows: string }>;
+        }>;
+      };
+    }
+  ).hooks.PreToolUse[0]!.hooks[0]!;
+  assert.equal(codexContractRow.command, codexDescriptor.command);
+  assert.equal(codexContractRow.commandWindows, codexDescriptor.commandWindows);
+  assert.deepEqual(agentHookSpawnDescriptor(codexDescriptor, "linux"), {
+    command: "bash",
+    args: ["-c", codexDescriptor.command],
+  });
+  assert.deepEqual(agentHookSpawnDescriptor(codexDescriptor, "win32"), {
+    command: "powershell.exe",
+    args: [
+      "-NoProfile",
+      "-NonInteractive",
+      "-Command",
+      codexDescriptor.commandWindows,
+    ],
+  });
+
+  // Antigravity retains its one deferred command string byte-for-byte.
+  const antigravityDescriptor = managedAgentHookDescriptor(
+    PROFILES.antigravity,
+    denySpec,
+  );
+  if (antigravityDescriptor.form !== "shell") {
+    assert.fail("Antigravity stays on its deferred shell registration");
+  }
+  const antigravityContractRow = (
+    denyContractConfig("antigravity") as {
+      "deny-dangerous": {
+        PreToolUse: Array<{ hooks: Array<{ command: string }> }>;
+      };
+    }
+  )[HOOK_IDENTIFIER].PreToolUse[0]!.hooks[0]!;
+  assert.equal(antigravityContractRow.command, antigravityDescriptor.command);
+
+  // Copilot keeps the same deferred command in both shell fields.
+  const copilotDescriptor = managedAgentHookDescriptor(
+    PROFILES.copilot,
+    denySpec,
+  );
+  if (copilotDescriptor.form !== "shell") {
+    assert.fail("Copilot stays on its deferred shell registration");
+  }
+  const copilotContractRow = (
+    denyContractConfig("copilot") as {
+      hooks: {
+        preToolUse: Array<{ bash: string; powershell: string }>;
+      };
+    }
+  ).hooks.preToolUse[0]!;
+  assert.equal(copilotContractRow.bash, copilotDescriptor.command);
+  assert.equal(copilotContractRow.powershell, copilotDescriptor.command);
+
+  // Claude's approved handler remains the provider-native argv form.
+  const claudeDescriptor = managedAgentHookDescriptor(
+    PROFILES.claude,
+    denySpec,
+  );
+  if (claudeDescriptor.form !== "argv") {
+    assert.fail("Claude must register the approved argv handler");
+  }
+  const claudeContractRow = (
+    denyContractConfig("claude") as {
+      hooks: {
+        PreToolUse: Array<{
+          hooks: Array<{
+            command: string;
+            args: string[];
+            bash: string;
+            powershell: string;
+          }>;
+        }>;
+      };
+    }
+  ).hooks.PreToolUse[0]!.hooks[0]!;
+  assert.equal(claudeContractRow.command, claudeDescriptor.command);
+  assert.deepEqual(claudeContractRow.args, claudeDescriptor.args);
+  assert.equal(claudeContractRow.bash, claudeDescriptor.bash);
+  assert.equal(claudeContractRow.powershell, claudeDescriptor.powershell);
 }
 
 /** Writes a cleaned temporary target project for hook-registrar assertions.
@@ -487,22 +628,32 @@ export function readClaudeDenyLauncher(root: string): ClaudeReplayHandler {
   };
 }
 
+/** Shell-form Codex handler containing the default command and its required Windows override. */
+export interface CodexReplayHandler {
+  command: string;
+  commandWindows: string;
+}
+
 /** Read the first generated Codex deny launcher because hook arrays are nested by event and matcher.
  *
  * @param root - fixture project root
- * @returns the generated Codex launcher command, proving one was written
+ * @returns both generated Codex launcher commands, proving the platform override was written
  */
-export function readCodexDenyLauncher(root: string): string {
+export function readCodexDenyLauncher(root: string): CodexReplayHandler {
   const settings = readCodexHookConfig(root) as {
     hooks?: {
       PreToolUse?: Array<{
-        hooks?: Array<{ command?: string }>;
+        hooks?: Array<{ command?: string; commandWindows?: string }>;
       }>;
     };
   };
-  const command = settings.hooks?.PreToolUse?.[0]?.hooks?.[0]?.command;
-  assert.equal(typeof command, "string");
-  return command;
+  const registeredHook = settings.hooks?.PreToolUse?.[0]?.hooks?.[0];
+  assert.equal(typeof registeredHook?.command, "string");
+  assert.equal(typeof registeredHook?.commandWindows, "string");
+  return {
+    command: registeredHook.command,
+    commandWindows: registeredHook.commandWindows,
+  };
 }
 
 /** Read generated Codex hook config for event-key assertions.
@@ -556,18 +707,55 @@ export function installClaudeDenyHook(root: string): ClaudeReplayHandler {
 /** Writes a Codex deny hook into the fixture without requiring the root to be a Git repository.
  *
  * @param root - fixture project root
- * @returns generated Codex launcher command, ready for literal execution
+ * @returns generated Codex handler, ready for platform-selected execution
  */
-export function installCodexDenyHook(root: string): string {
+export function installCodexDenyHook(root: string): CodexReplayHandler {
   mkdirSync(join(root, ".codex"), { recursive: true });
   writeFileSync(join(root, ".codex", "config.toml"), "\n");
   applyHookState(HOOK_IDENTIFIER, true, root);
   return readCodexDenyLauncher(root);
 }
 
+/** Return whether an unknown thrown value carries one exact Node-style error code. */
+function errorHasCode(error: unknown, code: string): boolean {
+  return error instanceof Error && Reflect.get(error, "code") === code;
+}
+
+/**
+ * Create one symlink fixture, skipping when the host refuses unprivileged links.
+ * The registrar under test is platform-independent; only the fixture is unreachable.
+ *
+ * @param testContext - active test context used to register a host-specific skip
+ * @param target - filesystem path the link points to
+ * @param link - filesystem path where the link is created
+ * @param type - optional Node symlink type
+ * @returns true when the fixture exists; false when `EPERM` caused a skip
+ * @throws any fixture error other than `EPERM`
+ */
+export function symlinkOrSkip(
+  testContext: TestContext,
+  target: string,
+  link: string,
+  type?: "dir" | "file" | "junction",
+): boolean {
+  try {
+    symlinkSync(target, link, type);
+    return true;
+  } catch (error) {
+    if (errorHasCode(error, "EPERM")) {
+      testContext.skip(
+        "Skipped: host blocks unprivileged symlinks (Windows without Developer Mode)",
+      );
+      return false;
+    }
+    throw error;
+  }
+}
+
 /** Corrupt one trusted launcher surface while retaining enough trace to select the candidate. */
 export const MANAGED_SHAPE_MUTATIONS: Array<{
   name: string;
+  skipOnEperm?: boolean;
   mutate: (root: string) => void;
 }> = [
   {
@@ -596,6 +784,7 @@ export const MANAGED_SHAPE_MUTATIONS: Array<{
   },
   {
     name: "symlinked registration",
+    skipOnEperm: true,
     mutate: (root) => {
       const registration = join(root, ".codex", "hooks.json");
       const target = join(root, "registration-target.json");
@@ -606,6 +795,7 @@ export const MANAGED_SHAPE_MUTATIONS: Array<{
   },
   {
     name: "hard-linked registration",
+    skipOnEperm: true,
     mutate: (root) =>
       linkSync(
         join(root, ".codex", "hooks.json"),
@@ -614,6 +804,7 @@ export const MANAGED_SHAPE_MUTATIONS: Array<{
   },
   {
     name: "symlinked launcher",
+    skipOnEperm: true,
     mutate: (root) => {
       const launcher = join(root, ".goat-flow", "hooks", "run-with-bash.mjs");
       const target = join(root, "launcher-target.mjs");
@@ -624,6 +815,7 @@ export const MANAGED_SHAPE_MUTATIONS: Array<{
   },
   {
     name: "hard-linked launcher",
+    skipOnEperm: true,
     mutate: (root) =>
       linkSync(
         join(root, ".goat-flow", "hooks", "run-with-bash.mjs"),
@@ -645,6 +837,7 @@ export const MANAGED_SHAPE_MUTATIONS: Array<{
   },
   {
     name: "symlinked requested script",
+    skipOnEperm: true,
     mutate: (root) => {
       const script = join(root, ".goat-flow", "hooks", "deny-dangerous.sh");
       const target = join(root, "script-target.sh");
@@ -655,6 +848,7 @@ export const MANAGED_SHAPE_MUTATIONS: Array<{
   },
   {
     name: "hard-linked requested script",
+    skipOnEperm: true,
     mutate: (root) =>
       linkSync(
         join(root, ".goat-flow", "hooks", "deny-dangerous.sh"),
@@ -676,9 +870,42 @@ export const MANAGED_SHAPE_MUTATIONS: Array<{
   },
 ];
 
+/**
+ * Apply one managed-shape mutation. Only link-dependent rows may skip when the host refuses
+ * their privileged fixture; ordinary mutation failures remain visible.
+ *
+ * @param testContext - active test context used to register a host-specific skip
+ * @param fixture - mutation plus its explicit `EPERM` skip eligibility
+ * @param root - fixture project root to mutate
+ * @returns true when the mutation ran; false when an eligible `EPERM` caused a skip
+ * @throws any ordinary mutation error or non-`EPERM` link-fixture error
+ */
+export function mutateOrSkip(
+  testContext: TestContext,
+  fixture: (typeof MANAGED_SHAPE_MUTATIONS)[number],
+  root: string,
+): boolean {
+  try {
+    fixture.mutate(root);
+    return true;
+  } catch (error) {
+    if (fixture.skipOnEperm === true && errorHasCode(error, "EPERM")) {
+      testContext.skip(
+        "Skipped: host blocks the link fixture required by this test",
+      );
+      return false;
+    }
+    throw error;
+  }
+}
+
 /** One hook entry as the registrar writes it into an agent's config file. */
 export type GeneratedHookEntry = {
-  hooks?: Array<{ command?: string; args?: string[] }>;
+  hooks?: Array<{
+    command?: string;
+    commandWindows?: string;
+    args?: string[];
+  }>;
 };
 
 /** Flatten generated hook entries into runnable text for fixture assertions.
@@ -690,9 +917,11 @@ export function generatedHookCommands(
   entries: GeneratedHookEntry[] = [],
 ): string[] {
   return entries.flatMap(({ hooks = [] }) =>
-    hooks.map(({ command = "", args }) =>
+    hooks.map(({ command = "", commandWindows, args }) =>
       // Structured rows keep their response program and operands in args elements.
-      Array.isArray(args) ? [command, ...args].join("\n") : command,
+      Array.isArray(args)
+        ? [command, ...args].join("\n")
+        : [command, commandWindows].filter(Boolean).join("\n"),
     ),
   );
 }
@@ -783,9 +1012,9 @@ export function writePostTurnCapableSurfaces(root: string): void {
   writeFileSync(join(root, ".github", "hooks", "hooks.json"), "{}\n");
 }
 
-/** Execute the generated Claude launcher with a runtime-shaped payload.
+/** Execute a generated shell launcher with a runtime-shaped payload.
  *
- * @param command - generated launcher command line to execute
+ * @param command - generated shell command line to execute
  * @param cwd - working directory the process runs in
  * @param payload - hook JSON delivered on stdin, as an agent host would send it
  * @param env - extra environment merged onto the process env; absent means the plain env
@@ -871,19 +1100,40 @@ export function assertLauncherAllows(
 
 /** Execute the generated Codex launcher with a runtime-shaped payload.
  *
- * @param command - generated launcher command line to execute
+ * @param handler - generated default and Windows launcher commands
  * @param cwd - working directory the process runs in
  * @param payload - hook JSON delivered on stdin; defaults to the safe Codex payload
  * @param env - extra environment for the launcher process; omitted inherits the test environment unchanged
  * @returns the finished launcher process for the Codex payload shape
  */
 export function runCodexLauncher(
-  command: string,
+  handler: CodexReplayHandler,
   cwd: string,
   payload = CLAUDE_SAFE_PAYLOAD,
   env: NodeJS.ProcessEnv = process.env,
 ): ReturnType<typeof spawnSync> {
-  return runLauncherWithPayload(command, cwd, payload, env);
+  const spawnDescriptor = agentHookSpawnDescriptor({
+    form: "shell",
+    command: handler.command,
+    commandWindows: handler.commandWindows,
+  });
+  const payloadPath = join(
+    tmpdir(),
+    `goat-flow-hook-payload-${process.pid}-${Date.now()}.json`,
+  );
+  writeFileSync(payloadPath, payload);
+  const fileDescriptor = openSync(payloadPath, "r");
+  try {
+    return spawnSync(spawnDescriptor.command, spawnDescriptor.args, {
+      cwd,
+      encoding: "utf8",
+      env,
+      stdio: [fileDescriptor, "pipe", "pipe"],
+    });
+  } finally {
+    closeSync(fileDescriptor);
+    rmSync(payloadPath, { force: true });
+  }
 }
 
 /**

@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.16.0"
+goat-flow-reference-version: "1.17.0"
 ---
 # Naming and Placement
 
@@ -191,4 +191,4 @@ findings, and literal verification results.
 
 - [`code-comments.md`](./code-comments.md) - usefulness, accounting, and verification for source comments.
 - [`skill-playbook-authoring-sync.md`](./skill-playbook-authoring-sync.md) - shipped playbook shape and source/install enrollment.
-- [`writing-style.md`](./writing-style.md) - concise, evidence-led prose for reports and documentation.
+- [`writing-human-facing-prose.md`](./writing-human-facing-prose.md) - concise, evidence-led prose for reports and documentation.

@@ -40,7 +40,7 @@ jobs:
       - name: Create gitignored runtime dirs
         run: |
           # Project runtime dirs (gitignored, needed by path-resolution checks)
-          mkdir -p .goat-flow/learning-loop/footguns .goat-flow/learning-loop/lessons
+          mkdir -p .goat-flow/learning-loop/footguns .goat-flow/learning-loop/lessons .goat-flow/write-claims
 
       - name: Install
         run: npm ci
@@ -72,11 +72,11 @@ jobs:
         run: |
           # The runner image ships shellcheck; install only covers an image that ever stops shipping it.
           command -v shellcheck >/dev/null || sudo apt-get install -y shellcheck
-          shellcheck --exclude=SC2001 scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh
-          shellcheck --exclude=SC2001,SC2016 workflow/hooks/*.sh workflow/hooks/deny-dangerous/*.sh .goat-flow/hooks/*.sh .goat-flow/hooks/deny-dangerous/*.sh
+          shellcheck --exclude=SC2001 scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh workflow/install-goat-flow.sh
+          shellcheck --exclude=SC2001 workflow/hooks/*.sh workflow/hooks/deny-dangerous/*.sh .goat-flow/hooks/*.sh .goat-flow/hooks/deny-dangerous/*.sh
 
       - name: Shell syntax
-        run: bash -n scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh workflow/hooks/*.sh workflow/hooks/deny-dangerous/*.sh .goat-flow/hooks/*.sh .goat-flow/hooks/deny-dangerous/*.sh
+        run: bash -n scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh workflow/install-goat-flow.sh workflow/hooks/*.sh workflow/hooks/deny-dangerous/*.sh .goat-flow/hooks/*.sh .goat-flow/hooks/deny-dangerous/*.sh
 
       - name: Instruction parity
         run: node scripts/check-instruction-parity.mjs
@@ -170,13 +170,16 @@ jobs:
       - name: Create gitignored runtime dirs
         run: |
           # Project runtime dirs (gitignored, needed by path-resolution tests)
-          mkdir -p .goat-flow/learning-loop/footguns .goat-flow/learning-loop/lessons
+          mkdir -p .goat-flow/learning-loop/footguns .goat-flow/learning-loop/lessons .goat-flow/write-claims
 
       - name: Install
         run: npm ci
 
       - name: Build
         run: npm run build
+
+      - name: Path write claim contract
+        run: node --import tsx --test test/unit/path-write-claim.test.ts
 
       # Only the fast suite pins jq: gruff-code-quality-smoke.test.ts asserts against jq 1.6 behaviour.
       - name: Provision jq 1.6
@@ -216,7 +219,7 @@ jobs:
       - name: Create gitignored runtime dirs
         run: |
           # Project runtime dirs (gitignored, needed by path-resolution tests)
-          mkdir -p .goat-flow/learning-loop/footguns .goat-flow/learning-loop/lessons
+          mkdir -p .goat-flow/learning-loop/footguns .goat-flow/learning-loop/lessons .goat-flow/write-claims
 
       - name: Install
         run: npm ci
@@ -227,9 +230,8 @@ jobs:
       - name: Test (slow shard ${{ matrix.shard }}/5)
         run: npm run test:slow:ci -- --shard=${{ matrix.shard }}/5
 
-  # ADR-053 structured Claude handler coverage on the package-minimum Node.
-  # Executes the registered exec-form argv and its catchable-failure contract
-  # with only the runner's preinstalled PowerShell, Git Bash, and Node.
+  # Proves ADR-048/ADR-053 hook contracts and the Windows-only audit/package paths on the package-minimum Node.
+  # Uses only the runner's preinstalled PowerShell, Git Bash, tar, and Node.
   windows-hook-contracts:
     runs-on: windows-latest
     steps:
@@ -240,8 +242,16 @@ jobs:
           cache: "npm"
       - name: Install
         run: npm ci
+      - name: Build package binary
+        run: npm run build
+      - name: Path write claim contract
+        run: node --import tsx --test test/unit/path-write-claim.test.ts
       - name: Descriptor spawn matrix and focused hook contracts
         run: node --import tsx --test test/integration/hook-command-spawn-matrix.test.ts test/integration/hook-effective-state.test.ts
+      - name: Windows audit and packaged install contracts
+        run: |
+          node --import tsx --test test/unit/audit-command/agent-deny-hooks-drift.test.ts
+          node --import tsx --test --test-name-pattern="runs fresh install through the archived CLI bin" test/integration/packaged-hook-install.test.ts
 
   # Reviewed Gruff warning-debt ratchet (scripts/check-gruff-warning-ratchet.mjs
   # against scripts/gruff-warning-baseline.json). Runs in a dedicated job

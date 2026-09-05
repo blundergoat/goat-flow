@@ -21,6 +21,7 @@ import {
   renderReviewValidationResult,
   validateReviewReport,
 } from "../../src/cli/review-validate.js";
+import { validateRefutationLedgerText } from "../../src/cli/review-validate-ledger.js";
 import {
   FRAMEWORK_ROOT,
   CLI_PATH,
@@ -35,6 +36,20 @@ import {
 import type { ValidationIssueShape } from "./review-validate.helpers.js";
 
 describe("review output validation: ledger, sections, and verdict", () => {
+  it("rejects reserved pipe delimiters inside ledger fields", () => {
+    const compactPipe = validateRefutationLedgerText(
+      "- R-003 | Suspicion: shell pipeline | Evidence: literal curl|bash pipeline | Rationale: disproved\n",
+    );
+    const spacedPipe = validateRefutationLedgerText(
+      "- R-003 | Suspicion: shell pipeline | Evidence: literal curl | bash pipeline | Rationale: disproved\n",
+    );
+
+    assert.equal(compactPipe.status, "fail");
+    assert.equal(spacedPipe.status, "fail");
+    assert.match(compactPipe.violations[0]?.message ?? "", /one-line grammar/u);
+    assert.match(spacedPipe.violations[0]?.message ?? "", /one-line grammar/u);
+  });
+
   it("rejects duplicate finding sections and integrity fields", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
     const duplicateFindings = validReview().replace(
@@ -204,7 +219,9 @@ describe("review output validation: ledger, sections, and verdict", () => {
       "[MAY:patch] [local-only] **Cover the caller contract**",
       "[MAY:pre-existing] [local-only] **Cover the caller contract**",
     );
-    const areaReport = diffReport.replace("source=worktree", "source=area");
+    const areaReport = diffReport
+      .replace("source=worktree", "source=area")
+      .replace("1 changed lines", "1 clusters");
 
     assert.equal(
       hasCheck(
@@ -589,6 +606,15 @@ describe("review validate CLI", () => {
     const fileForm = parseCLIArgs(["review", "validate", "saved-review.md"]);
     assert.equal(fileForm.reviewValidatePath, resolve("saved-review.md"));
     assert.equal(fileForm.projectPath, resolve("."));
+
+    assert.equal(
+      parseCLIArgs(["review", "validate-draft"]).reviewSubcommand,
+      "validate-draft",
+    );
+    assert.equal(
+      parseCLIArgs(["review", "validate-ledger"]).reviewSubcommand,
+      "validate-ledger",
+    );
   });
 
   it("rejects missing, unknown, and extra review positionals", () => {
@@ -598,12 +624,157 @@ describe("review validate CLI", () => {
     );
     assert.throws(
       () => parseCLIArgs(["review", "check"]),
-      /requires subcommand "validate"/iu,
+      /requires subcommand/iu,
     );
     assert.throws(
       () => parseCLIArgs(["review", "validate", "one.md", "two.md"]),
       /at most one \[report-file\]/iu,
     );
+    assert.throws(
+      () => parseCLIArgs(["review", "validate-draft", "one.md", "two.md"]),
+      /at most one \[draft-envelope-file\]/iu,
+    );
+  });
+
+  it("validates ledger grammar and a complete report draft before persistence", () => {
+    const ledgerPath =
+      ".goat-flow/logs/review/goat-review-refutations.not-written.txt";
+    const rawLedger = `- R-003 | Suspicion: missing guard | Evidence: caller rejects empty values | Rationale: the guard removes reachability
+- R-004 | Suspicion: missing fallback | Evidence: caller supplies a default | Rationale: the fallback removes reachability
+`;
+
+    const ledger = spawnSync(
+      process.execPath,
+      ["--import", "tsx", CLI_PATH, "review", "validate-ledger"],
+      { cwd: FRAMEWORK_ROOT, encoding: "utf-8", input: rawLedger },
+    );
+    assert.equal(ledger.status, 0, ledger.stderr);
+    assert.match(ledger.stdout, /review validate-ledger: PASS \(2 records\)/u);
+
+    const report = validReview(
+      "src/cli/help.ts",
+      "renderHelp",
+      2,
+      ledgerPath,
+    ).replace("- Review validator: validated", "- Review validator: pending");
+    const draftEnvelope = `${report}<!-- goat-flow-review-ledger-draft -->\n${rawLedger}`;
+
+    const draft = spawnSync(
+      process.execPath,
+      ["--import", "tsx", CLI_PATH, "review", "validate-draft"],
+      { cwd: FRAMEWORK_ROOT, encoding: "utf-8", input: draftEnvelope },
+    );
+    assert.equal(draft.status, 0, draft.stderr);
+    assert.match(draft.stdout, /review validate-draft: PASS/u);
+    assert.match(draft.stdout, /persistence unverified/iu);
+
+    const mismatchedEnvelope = `${validReview(
+      "src/cli/help.ts",
+      "renderHelp",
+      1,
+      ledgerPath,
+    ).replace(
+      "- Review validator: validated",
+      "- Review validator: pending",
+    )}<!-- goat-flow-review-ledger-draft -->\n${rawLedger}`;
+    const mismatched = spawnSync(
+      process.execPath,
+      ["--import", "tsx", CLI_PATH, "review", "validate-draft"],
+      { cwd: FRAMEWORK_ROOT, encoding: "utf-8", input: mismatchedEnvelope },
+    );
+    assert.equal(mismatched.status, 1, mismatched.stderr);
+    assert.match(mismatched.stdout, /2 records.+claims 1/iu);
+
+    const missingAppendix = spawnSync(
+      process.execPath,
+      ["--import", "tsx", CLI_PATH, "review", "validate-draft"],
+      { cwd: FRAMEWORK_ROOT, encoding: "utf-8", input: report },
+    );
+    assert.equal(missingAppendix.status, 1, missingAppendix.stderr);
+    assert.match(
+      missingAppendix.stdout,
+      /nonzero refutations require.+goat-flow-review-ledger-draft/iu,
+    );
+
+    const prematureValidated = spawnSync(
+      process.execPath,
+      ["--import", "tsx", CLI_PATH, "review", "validate-draft"],
+      {
+        cwd: FRAMEWORK_ROOT,
+        encoding: "utf-8",
+        input: draftEnvelope.replace(
+          "- Review validator: pending",
+          "- Review validator: validated",
+        ),
+      },
+    );
+    assert.equal(prematureValidated.status, 1, prematureValidated.stderr);
+    assert.match(prematureValidated.stdout, /pending.+final validation/iu);
+
+    const duplicateMarker = spawnSync(
+      process.execPath,
+      ["--import", "tsx", CLI_PATH, "review", "validate-draft"],
+      {
+        cwd: FRAMEWORK_ROOT,
+        encoding: "utf-8",
+        input: `${draftEnvelope}<!-- goat-flow-review-ledger-draft -->\n${rawLedger}`,
+      },
+    );
+    assert.equal(duplicateMarker.status, 1, duplicateMarker.stderr);
+    assert.match(duplicateMarker.stdout, /exactly one ledger marker/iu);
+
+    const zeroRefutationDraft = validReview(
+      "src/cli/help.ts",
+      "renderHelp",
+    ).replace("- Review validator: validated", "- Review validator: pending");
+    const zeroRefutations = spawnSync(
+      process.execPath,
+      ["--import", "tsx", CLI_PATH, "review", "validate-draft"],
+      {
+        cwd: FRAMEWORK_ROOT,
+        encoding: "utf-8",
+        input: zeroRefutationDraft,
+      },
+    );
+    assert.equal(zeroRefutations.status, 0, zeroRefutations.stderr);
+
+    const unexpectedAppendix = spawnSync(
+      process.execPath,
+      ["--import", "tsx", CLI_PATH, "review", "validate-draft"],
+      {
+        cwd: FRAMEWORK_ROOT,
+        encoding: "utf-8",
+        input: `${zeroRefutationDraft}<!-- goat-flow-review-ledger-draft -->\n${rawLedger}`,
+      },
+    );
+    assert.equal(unexpectedAppendix.status, 1, unexpectedAppendix.stderr);
+    assert.match(
+      unexpectedAppendix.stdout,
+      /zero refutations must not include.+appendix/iu,
+    );
+
+    const final = spawnSync(
+      process.execPath,
+      ["--import", "tsx", CLI_PATH, "review", "validate"],
+      {
+        cwd: FRAMEWORK_ROOT,
+        encoding: "utf-8",
+        input: report.replace(
+          "- Review validator: pending",
+          "- Review validator: validated",
+        ),
+      },
+    );
+    assert.equal(final.status, 1, final.stderr);
+    assert.match(final.stdout, /declared ledger is absent/u);
+
+    const invalidLedger = spawnSync(
+      process.execPath,
+      ["--import", "tsx", CLI_PATH, "review", "validate-ledger"],
+      { cwd: FRAMEWORK_ROOT, encoding: "utf-8", input: "not a record\n" },
+    );
+    assert.equal(invalidLedger.status, 1, invalidLedger.stderr);
+    assert.match(invalidLedger.stdout, /does not match.+one-line grammar/iu);
   });
 
   it("accepts review help without a report and validates stdin end to end", () => {
@@ -614,10 +785,12 @@ describe("review validate CLI", () => {
     );
     assert.equal(help.status, 0, help.stderr);
     assert.match(help.stdout, /review validate \[report-file\]/u);
+    assert.match(help.stdout, /review validate-draft \[draft-envelope-file\]/u);
+    assert.match(help.stdout, /review validate-ledger \[ledger-file\]/u);
     assert.match(help.stdout, /structural failures exit 1/iu);
     assert.match(help.stdout, /advisory warnings.*exit 0/iu);
 
-    const report = validReview("src/cli/cli.ts", "printHelp");
+    const report = validReview("src/cli/help.ts", "renderHelp");
     const valid = spawnSync(
       process.execPath,
       ["--import", "tsx", CLI_PATH, "review", "validate"],
@@ -643,7 +816,7 @@ describe("review validate CLI", () => {
   });
 
   it("keeps warning-only CLI results at exit zero", () => {
-    const report = validReview("src/cli/cli.ts", "printHelp").replace(
+    const report = validReview("src/cli/help.ts", "renderHelp").replace(
       "- Degradation flags: gates-not-run",
       "- Degradation flags: gates-not-run, mystery-degradation",
     );
@@ -664,7 +837,7 @@ describe("review validate CLI", () => {
       rmSync(outputRoot, { recursive: true, force: true }),
     );
     const outputPath = join(outputRoot, "validation.txt");
-    const report = validReview("src/cli/cli.ts", "printHelp");
+    const report = validReview("src/cli/help.ts", "renderHelp");
     const result = spawnSync(
       process.execPath,
       [

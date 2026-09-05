@@ -246,9 +246,10 @@ function checkCodexPermissionProfileCoversSecrets(
   );
   if (denied.size === 0) return false;
 
+  // A plain secrets/ folder deny is no longer required: it blocked application code such as a secrets route,
+  // and the env, key-store, and key-extension families below are what actually hold secret material.
   return (
     hasCodexEnvDeny(denied, fs) &&
-    hasAnyCodexPattern(denied, ["secrets/**", "**/secrets/**"]) &&
     hasAnyCodexPattern(denied, [".ssh/**", "**/.ssh/**"]) &&
     hasAnyCodexPattern(denied, [".aws/**", "**/.aws/**"]) &&
     hasCodexCredentialRootDeny(denied, fs)
@@ -399,7 +400,15 @@ function hasCodexEnvDeny(denied: Set<string>, fs: ReadonlyFS): boolean {
   );
 }
 
-/** Detect exact root/subtree credential surfaces Codex can express on 0.131+. */
+/**
+ * Detect the credential-store and key-extension denies a Codex profile must carry: Docker, GnuPG, and Kubernetes stores,
+ * the npm and PyPI registry auth files, and pem, key, and pfx extensions. A `credentials*` name rule is not required,
+ * because it blocked ordinary application files such as a credentials.ts auth provider.
+ *
+ * @param denied - workspace-root patterns the active profile denies; an empty set reports no coverage
+ * @param fs - project files, used to accept exact `.npmrc` and `.pypirc` denies when those files exist
+ * @returns true only when every required family is denied
+ */
 function hasCodexCredentialRootDeny(
   denied: Set<string>,
   fs: ReadonlyFS,
@@ -410,7 +419,6 @@ function hasCodexCredentialRootDeny(
       [".gnupg/**", "**/.gnupg/**"],
       [".kube/**", "**/.kube/**"],
     ].every((patternGroup) => hasAnyCodexPattern(denied, patternGroup)) &&
-    hasAnyCodexPattern(denied, ["**/credentials*"]) &&
     (hasEveryCodexPattern(denied, ["**/.npmrc", "**/.pypirc"]) ||
       existingExactPathsAreDenied(denied, fs, [".npmrc", ".pypirc"])) &&
     ["pem", "key", "pfx"].every((extension) =>

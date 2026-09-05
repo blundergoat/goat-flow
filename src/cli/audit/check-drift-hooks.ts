@@ -12,7 +12,11 @@ import {
   classifyManagedSetupFile,
   managedSetupChangeDirection,
 } from "../managed-setup-preview.js";
-import { readManagedInstallBaseline } from "../managed-setup-state.js";
+import {
+  readManagedInstallStateFacade,
+  type ManagedInstallStateFacade,
+  type ManagedInstallStateRow,
+} from "../managed-setup-state.js";
 import type { ReadonlyFS } from "../types.js";
 import { loadManifest } from "../manifest/manifest.js";
 import { listHookSpecs, type HookSpec } from "../server/hooks-registry.js";
@@ -29,15 +33,17 @@ import type { DriftFinding } from "./types.js";
 import { readTemplateText } from "./artifact-templates.js";
 import { isAgentId, isRecord } from "./drift-values.js";
 
-/** Compare installed hook scripts against their workflow templates. */
-function hookTemplateRel(
+// Find the shipped script or agent-config template to compare with the user's installed hook.
+function hookTemplatePath(
   agentId: string,
   agent: AgentProfile,
   hookFile: string,
 ): string {
+  // Agents without a settings file use script templates for every declared hook.
   const hookConfigName = agent.hook_config_file
     ? pathPosix.basename(agent.hook_config_file)
     : null;
+  // A registered settings file has an agent-specific template rather than a shared hook script.
   if (hookConfigName && hookFile === hookConfigName) {
     return pathPosix.join(
       "workflow/hooks/agent-config",
@@ -47,8 +53,9 @@ function hookTemplateRel(
   return pathPosix.join("workflow/hooks", hookFile);
 }
 
-/** Compare installed hook scripts against their workflow templates. */
+// Choose the runner's event spelling so audit finds the hook registered for the user's tool action.
 function hookEventKey(agentId: AgentId, spec: HookSpec): string {
+  // Copilot uses lower-cased lifecycle keys, so audit must match the spelling in its settings.
   if (agentId === "copilot") {
     return spec.event === "PreToolUse" ? "preToolUse" : "postToolUse";
   }
@@ -56,11 +63,11 @@ function hookEventKey(agentId: AgentId, spec: HookSpec): string {
 }
 
 /**
- * Build the Copilot hook entry audit expects when the user enables a toggle.
- * Use to compare the installed command with the same portable launcher setup writes.
+ * Build the command entry expected after a user enables a Copilot hook.
+ * Compare against the same portable launcher that setup writes.
  *
- * @param agent - Copilot profile; an empty hook folder uses the managed default.
- * @param spec - Hook being compared; missing timeout uses the agent's 30-second default.
+ * @param agent - Copilot profile; an absent hook folder uses the managed default
+ * @param spec - registered hook; an absent timeout uses 30 seconds
  * @returns Expected Copilot command entry; never null for a registered hook.
  */
 function copilotHookEntry(agent: AgentProfile, spec: HookSpec): object {
@@ -81,9 +88,7 @@ function copilotHookEntry(agent: AgentProfile, spec: HookSpec): object {
   };
 }
 
-/**
- * Collect direct managed commands so timeout drift is checked at the runner entry users execute.
- */
+// Collect direct managed commands so timeout drift is checked at the runner entry users execute.
 function collectManagedHookCommands(
   configNode: unknown,
   spec: HookSpec,
@@ -110,28 +115,29 @@ function collectManagedHookCommands(
 }
 
 /**
- * Return the config's `hooks` object, creating it when absent or wrongly typed.
- * Side effect: assigns a fresh `hooks` object onto `config` when one was missing.
+ * Prepare the hooks object in the expected config before applying the user's choices.
+ * An absent or wrongly typed value becomes an empty object in this comparison copy.
  *
- * @param config - agent config being edited in place
+ * @param config - expected config being assembled in memory; no installed settings are written
  * @returns the hooks object callers can mutate; never null
  */
 function ensureHooksObject(
   config: Record<string, unknown>,
 ): Record<string, unknown> {
   const hooks = config.hooks;
+  // Keep existing event groups in the expected config while adjusting only managed hooks.
   if (isRecord(hooks)) return hooks;
-  const next: Record<string, unknown> = {};
-  config.hooks = next;
-  return next;
+  const newHooks: Record<string, unknown> = {};
+  config.hooks = newHooks;
+  return newHooks;
 }
 
 /**
- * Return the entry list for one hook event, creating it when absent or wrongly typed.
- * Side effect: assigns a fresh array onto the config's hooks object when one was missing.
+ * Prepare one event's command list while applying toggles to the expected config.
+ * A missing or wrongly typed list becomes empty so enabled hooks can be added.
  *
- * @param config - agent config being edited in place
- * @param event - hook event key whose entry list is wanted
+ * @param config - expected config being assembled in memory; no installed settings are written
+ * @param event - runner event key under which the expected command is registered
  * @returns the entry array callers can push onto; never null
  */
 function ensureHookEntries(
@@ -140,78 +146,90 @@ function ensureHookEntries(
 ): unknown[] {
   const hooks = ensureHooksObject(config);
   const entries = hooks[event];
+  // Keep existing commands in this event while applying the user's saved hook toggle.
   if (Array.isArray(entries)) return entries;
-  const next: unknown[] = [];
-  hooks[event] = next;
-  return next;
+  const newEntries: unknown[] = [];
+  hooks[event] = newEntries;
+  return newEntries;
 }
 
-/** Read explicit hook toggles from project config, returning null as the fallback when config is absent or invalid. */
+// Read the user's saved hook choices for drift comparison; missing or invalid config uses a null fallback.
 function readExplicitHooks(fs: ReadonlyFS): Record<string, unknown> | null {
   const config = fs.readFile(".goat-flow/config.yaml");
+  // Without readable project config, audit has no explicit hook choices to apply.
   if (config === null) return null;
   let parsed: unknown;
   try {
+    // An empty config carries no saved toggles and leaves template defaults in place.
     parsed = load(config) ?? {};
   } catch {
+    // An unfinished YAML edit can make config invalid; setup validation owns that error, so drift ignores its toggles.
     return null;
   }
+  // A config without a hooks object supplies no explicit choices for drift to honor.
   if (!isRecord(parsed) || !isRecord(parsed.hooks)) return null;
   return parsed.hooks;
 }
 
-/** Extract an explicit enabled boolean without treating missing config as disabled. */
+// Extract an explicit enabled boolean without treating missing config as disabled.
 function enabledFromHookConfig(hookEntry: unknown): boolean | null {
+  // Only a saved true/false value is a user choice; missing or mistyped values must not disable a hook.
   if (!isRecord(hookEntry) || typeof hookEntry.enabled !== "boolean") {
     return null;
   }
   return hookEntry.enabled;
 }
 
-/** Resolve a hook toggle, including the legacy gruff-on-change alias used by existing configs. */
+// Resolve a hook toggle, including the legacy gruff-on-change alias used by existing configs.
 function explicitHookEnabled(fs: ReadonlyFS, hookId: string): boolean | null {
   const hooks = readExplicitHooks(fs);
+  // No valid toggle section means the user's setup keeps its default expectation.
   if (hooks === null) return null;
   const explicit = enabledFromHookConfig(hooks[hookId]);
+  // A choice saved under the current hook name takes precedence over compatibility aliases.
   if (explicit !== null) return explicit;
+  // Only the renamed Gruff hook has an older setting to consult for an existing user's choice.
   if (hookId !== "gruff-code-quality") return null;
   return enabledFromHookConfig(hooks["gruff-on-change"]);
 }
 
-/** Remove an empty event so users do not see a registered hook with no commands. */
+// Remove an empty event so users do not see a registered hook with no commands.
 function deleteHookEventIfEmpty(
   config: Record<string, unknown>,
   event: string,
 ): void {
   const hooks = ensureHooksObject(config);
+  // Disabling the last command should not leave an empty event in the expected settings.
   if (Array.isArray(hooks[event]) && hooks[event].length === 0) {
     Reflect.deleteProperty(hooks, event);
   }
 }
 
-/** Remove one managed hook while preserving unrelated commands in the same event. */
+// Remove one managed hook while preserving unrelated commands in the same event.
 function removeHookEntries(
   config: Record<string, unknown>,
   event: string,
   spec: HookSpec,
 ): void {
   const entries = ensureHookEntries(config, event);
-  const next = entries.filter((entry) => !entryReferencesSpec(entry, spec));
+  const remainingEntries = entries.filter(
+    (entry) => !entryReferencesSpec(entry, spec),
+  );
   const hooks = ensureHooksObject(config);
-  if (next.length === 0) {
+  // No unrelated commands remain, so the event can disappear from the expected config.
+  if (remainingEntries.length === 0) {
     Reflect.deleteProperty(hooks, event);
     return;
   }
-  hooks[event] = next;
+  hooks[event] = remainingEntries;
 }
 
 /**
- * Parses hook JSON for template and installed-config comparisons; null leaves malformed input to setup validation.
- * Error behavior: throws nothing; it swallows a parse failure because a user may be mid-edit, and setup validation rather than drift owns reporting
- * malformed settings.
+ * Parse settings for drift comparison; empty, malformed, or non-object JSON returns null.
+ * It swallows JSON parse errors because setup validation owns reporting malformed settings.
  *
- * @param hookConfigText - raw config file contents
- * @returns the parsed object, or null when the text is not parseable as a JSON object
+ * @param hookConfigText - template or installed settings; empty text has no hook registry to compare
+ * @returns the settings object, or null to leave malformed settings to setup validation
  */
 function parseHookConfigJson(
   hookConfigText: string,
@@ -229,16 +247,14 @@ function parseHookConfigJson(
 }
 
 /**
- * Apply one user hook toggle to a Copilot config, adding or removing its entry.
- *
- * A hook the user never toggled is left alone entirely, so the comparison only reflects choices they actually made rather than defaults they never
- * saw.
+ * Apply one explicit enable/disable choice to the expected Copilot config.
+ * Unsupported hooks and hooks without a saved choice leave this comparison copy unchanged.
  *
  * @param fs - the audited project's filesystem, read for the explicit toggle
- * @param config - Copilot config being edited in place
+ * @param config - expected Copilot config to adjust in memory
  * @param agent - agent profile supplying the command this entry would run
  * @param spec - hook whose toggle is applied
- * @returns true when the toggle applied and the config changed shape. It mutates `config` in place.
+ * @returns true when a saved choice was applied; false means the hook was unsupported or had no explicit choice
  */
 function applyExplicitHookToggle(
   fs: ReadonlyFS,
@@ -246,12 +262,15 @@ function applyExplicitHookToggle(
   agent: AgentProfile,
   spec: HookSpec,
 ): boolean {
+  // A hook Copilot cannot run must not create an expected registration for that user.
   if (spec.unsupportedAgents?.copilot) return false;
   const enabled = explicitHookEnabled(fs, spec.id);
+  // For example, a user who never changed this toggle keeps the template's default registration.
   if (enabled === null) return false;
 
   const event = hookEventKey("copilot", spec);
   removeHookEntries(config, event, spec);
+  // An explicit disable removes the managed command while retaining any unrelated event commands.
   if (!enabled) {
     deleteHookEventIfEmpty(config, event);
     return true;
@@ -261,13 +280,12 @@ function applyExplicitHookToggle(
 }
 
 /**
- * Apply every user hook toggle to a Copilot config before comparing it with the template.
- * Side effect: mutates `config` in place.
+ * Apply saved hook choices to the expected Copilot config before comparing it with installed settings.
  *
  * @param fs - the audited project's filesystem, read for explicit toggles
- * @param config - Copilot config being edited in place
+ * @param config - expected Copilot config to adjust in memory
  * @param agent - agent profile supplying the commands these entries would run
- * @returns true when at least one toggle changed the config
+ * @returns true when at least one explicit choice was applied, even if the expected entries were already identical
  */
 function applyExplicitHookToggles(
   fs: ReadonlyFS,
@@ -285,10 +303,7 @@ function applyExplicitHookToggles(
   return hasHookToggleChanged;
 }
 
-/**
- * Build Copilot's expected hook registry from its template plus explicit toggles.
- * Use during drift checks so dashboard choices do not look like accidental edits.
- */
+// Adjust the expected Copilot registry for saved toggles so deliberate user choices do not appear as drift.
 function expectedHookConfig(
   fs: ReadonlyFS,
   agentId: string,
@@ -310,51 +325,103 @@ function expectedHookConfig(
   return `${JSON.stringify(config, null, 2)}\n`;
 }
 
-/**
- * Load the selected agent's prior managed hashes before audit describes repair safety.
- * Use only as direction evidence; missing or invalid state cannot authorize sync.
- * Invariant: hashes belong to the same selected agent and safe project-relative paths.
- *
- * @param projectPath - audited project whose local install state supplies prior hashes
- * @param agentId - selected agent; null means aggregate audit has no single baseline owner
- * @returns loaded path-to-hash evidence, or null when no trustworthy baseline is available
- */
-function managedBaselineHashes(
-  projectPath: string,
-  agentId: string | null,
-): Map<string, string> | null {
-  if (agentId === null || !isAgentId(agentId)) return null;
-  const baseline = readManagedInstallBaseline(projectPath, agentId);
-  return baseline.status === "loaded" ? baseline.expectedHashes : null;
+// Name the recorded install version in drift guidance so users know which earlier copy was compared.
+function managedBaselineProvenance(row: ManagedInstallStateRow): string {
+  // A recorded installation provides the exact version behind the user's previous managed copy.
+  if (row.provenance.kind === "verified-install") {
+    return `verified install ${row.provenance.goatFlowVersion}`;
+  }
+  const observations = row.provenance.observations
+    .map((observation) => `${observation.agent} ${observation.goatFlowVersion}`)
+    .join(", ");
+  return `legacy bootstrap ${observations}`;
 }
 
-/** Hash in-memory expected or installed text with the install baseline's exact-byte contract. */
+/**
+ * Read the previous-install baseline used to distinguish an outdated hook from a local edit.
+ *
+ * Reports conflicting or malformed install state once, then returns null so drift cannot claim a proven change direction.
+ * Every selected agent must use the same baseline rows and provenance.
+ */
+function managedBaselineRows(
+  projectPath: string,
+  findings: DriftFinding[],
+): Map<string, ManagedInstallStateRow> | null {
+  const baseline = readManagedInstallStateFacade(projectPath);
+  // Conflicting or malformed state cannot prove whether a user's hook was locally edited.
+  if (
+    baseline.status === "malformed-blocking" ||
+    baseline.status === "conflicting"
+  ) {
+    const finding: DriftFinding = {
+      kind: "content",
+      path: managedBaselineEvidencePath(baseline),
+      message: `Install state is ${baseline.status}: ${baseline.error ?? "Managed install state is malformed."}`,
+    };
+    // Multiple agent checks can encounter the same state problem; users need only one global finding.
+    if (
+      !findings.some(
+        (candidate) =>
+          candidate.path === finding.path &&
+          candidate.message === finding.message,
+      )
+    ) {
+      findings.push(finding);
+    }
+    return null;
+  }
+  // Without a loaded baseline, later findings ask the user to compare files before syncing.
+  if (baseline.status !== "loaded" || baseline.state === null) return null;
+  return new Map(baseline.state.files.map((row) => [row.path, row]));
+}
+
+// Point the drift finding at the baseline file or legacy directory the user must inspect; preserve the facade's source choice.
+function managedBaselineEvidencePath(
+  baseline: ManagedInstallStateFacade,
+): string {
+  return baseline.source === "v2"
+    ? ".goat-flow/install-state/managed.json"
+    : ".goat-flow/install-state";
+}
+
+// Hash in-memory expected or installed text with the install baseline's exact-byte contract.
 function managedContentHash(content: string): string {
   return createHash("sha256").update(content).digest("hex");
 }
 
 /**
- * Explain one content mismatch from M02's canonical three-way state.
- * Behind files may name sync; diverged files instead name the local bytes sync would discard.
+ * Explain whether the user's hook is outdated, locally edited, or missing comparison evidence.
+ *
+ * The same baseline and provenance apply regardless of the selected agent.
+ * Only proven outdated copies recommend sync directly; local edits need preservation before replacement.
  */
 function hookContentMismatchMessage(
   templateRel: string,
   installedRel: string,
   expected: string,
   installed: string,
-  baselineHashes: Map<string, string> | null,
+  baselineRows: Map<string, ManagedInstallStateRow> | null,
 ): string {
+  // A new or unrecorded file has no prior hash, so audit cannot infer its change direction from history.
+  const baselineRow = baselineRows?.get(installedRel) ?? null;
   const state = classifyManagedSetupFile({
-    oldExpectedSha256: baselineHashes?.get(installedRel) ?? null,
+    oldExpectedSha256: baselineRow?.expectedSha256 ?? null,
     currentSha256: managedContentHash(installed),
     newExpectedSha256: managedContentHash(expected),
   });
   const direction = managedSetupChangeDirection(state);
-  if (direction === "behind") {
-    return `installed hook ${installedRel} is behind template ${templateRel}; its bytes still match the previous-install baseline, so run goat-flow hooks sync`;
+  // The installed bytes still match the recorded copy, so sync can bring this hook up to the selected version.
+  if (direction === "behind" && baselineRow !== null) {
+    return `installed hook ${installedRel} is behind template ${templateRel}; its bytes still match the previous-install baseline (${managedBaselineProvenance(baselineRow)}), so run goat-flow hooks sync`;
   }
+  // Local content differs from the baseline; users need to preserve it before a replacement.
   if (direction === "diverged") {
-    return `installed hook ${installedRel} diverged from template ${templateRel}; sync would overwrite local content at ${installedRel}, so preserve or port that content before any explicit replacement`;
+    // Without a recorded row, the warning cannot name the install version that established the baseline.
+    const provenance =
+      baselineRow === null
+        ? ""
+        : `; the previous-install baseline (${managedBaselineProvenance(baselineRow)}) confirms the drift direction`;
+    return `installed hook ${installedRel} diverged from template ${templateRel}${provenance}; sync would overwrite local content at ${installedRel}, so preserve or port that content before any explicit replacement`;
   }
   return `hook template (${templateRel}) and installed copy (${installedRel}) differ, but no matching previous-install baseline proves the direction; compare them before you run goat-flow hooks sync, which replaces current managed bytes at ${installedRel}`;
 }
@@ -371,9 +438,10 @@ function compareHookArtifact(
   templateRel: string,
   installedRel: string,
   expectedFromTemplate: (template: string) => string,
-  baselineHashes: Map<string, string> | null,
+  baselineRows: Map<string, ManagedInstallStateRow> | null,
 ): void {
   const template = readTemplateText(templateRoot, templateRel);
+  // A missing shipped template prevents comparison and is reported as a missing package artifact.
   if (template === null) {
     findings.push({
       kind: "missing",
@@ -383,6 +451,7 @@ function compareHookArtifact(
     return;
   }
   const expected = expectedFromTemplate(template);
+  // The selected package provides this hook, but the user's installed copy is missing and needs sync.
   if (!fs.exists(installedRel)) {
     findings.push({
       kind: "missing",
@@ -392,7 +461,9 @@ function compareHookArtifact(
     return;
   }
   const installed = fs.readFile(installedRel);
+  // An unreadable copy has no content evidence; setup validation owns the read problem.
   if (installed === null) return;
+  // Ignore trailing whitespace so users see drift only when the hook content differs before that whitespace.
   if (installed.trimEnd() !== expected.trimEnd()) {
     findings.push({
       kind: "content",
@@ -402,25 +473,23 @@ function compareHookArtifact(
         installedRel,
         expected,
         installed,
-        baselineHashes,
+        baselineRows,
       ),
     });
   }
 }
 
 /**
- * Compare hook artifacts for the runtime scope the user selected.
- * A filter keeps one runtime from reporting another runtime's absent config.
+ * Compare installed hook files for the agent scope the user selected.
+ * A single-agent audit skips other agents' settings and hook directories.
  *
  * @param fs - the audited project's filesystem
- * @param projectPath - the audited project's root, used to resolve installed baseline hashes
+ * @param projectPath - the audited project's root, used to resolve canonical baseline rows
  * @param templateRoot - package root holding the hooks goat-flow would install
  * @param findings - shared list this appends drift to; existing entries are left alone
  * @param checkedHookArtifacts - paths already compared, so one file is not reported twice
- * @param agentFilter - single agent the user asked about; null or omitted compares every
- *   agent they have installed
- * @returns how many hook artifacts were compared; zero means the user has no installed
- *   hooks in scope, which is reported by setup checks rather than as drift
+ * @param agentFilter - selected agent; null or omitted compares all installed agents
+ * @returns the number of hook artifacts compared; zero leaves missing installation checks to setup
  */
 export function compareHooks(
   fs: ReadonlyFS,
@@ -432,6 +501,7 @@ export function compareHooks(
 ): number {
   let checked = 0;
   const manifest = loadManifest();
+  const baselineRows = managedBaselineRows(projectPath, findings);
 
   // Every selected agent contributes its own hook launcher and runtime files.
   for (const [agentId, agent] of Object.entries(manifest.agents)) {
@@ -441,14 +511,12 @@ export function compareHooks(
     // Hookless agents have no local artifacts for drift to compare.
     if (!agent.hooks_dir || !agent.hooks) continue;
 
-    const baselineHashes = managedBaselineHashes(projectPath, agentId);
-
     // An uninstalled hook root belongs to agent setup checks, not content drift.
     if (!fs.exists(agent.hooks_dir)) continue;
 
     // Each declared hook file must match what setup would install for this runtime.
     for (const hookFile of agent.hooks) {
-      const templateRel = hookTemplateRel(agentId, agent, hookFile);
+      const templateRel = hookTemplatePath(agentId, agent, hookFile);
       const installedRel = pathPosix.join(agent.hooks_dir, hookFile);
       checked++;
       checkedHookArtifacts.add(installedRel);
@@ -462,7 +530,7 @@ export function compareHooks(
           hookFile === agent.hook_config_file
             ? expectedHookConfig(fs, agentId, agent, template)
             : template,
-        baselineHashes,
+        baselineRows,
       );
     }
 
@@ -478,14 +546,19 @@ export function compareHooks(
         templateRel,
         installedRel,
         (template) => expectedHookConfig(fs, agentId, agent, template),
-        baselineHashes,
+        baselineRows,
       );
     }
   }
   return checked;
 }
 
-/** Installed settings plus the path users can pass to the repair command. */
+/**
+ * Keep installed hook settings with the path a drift finding must identify.
+ *
+ * Launcher and timeout checks share this parsed config so both describe the same registration.
+ * Missing or malformed settings produce no instance and remain the responsibility of setup validation.
+ */
 interface InstalledHookConfig {
   hookConfigPath: string;
   hookConfig: Record<string, unknown>;
@@ -511,12 +584,12 @@ function readInstalledHookConfig(
   return { hookConfigPath, hookConfig };
 }
 
-/** Names the timeout field used by the selected runner's public hook schema. */
+// Names the timeout field used by the selected runner's public hook schema.
 function hookTimeoutField(agentIdentifier: AgentId): "timeout" | "timeoutSec" {
   return agentIdentifier === "copilot" ? "timeoutSec" : "timeout";
 }
 
-/** Formats the stale timeout values users must replace, including an unset field. */
+// Formats the stale timeout values users must replace, including an unset field.
 function staleTimeoutLabels(
   staleTimeoutCommands: Record<string, unknown>[],
   timeoutField: "timeout" | "timeoutSec",
@@ -534,18 +607,15 @@ function staleTimeoutLabels(
 }
 
 /**
- * Compare one installed launcher with the command setup would give the user today.
- *
- * A mismatch adds the exact hook-sync repair to the drift report.
- * Error behavior: throws nothing; an unsupported lifecycle reports zero comparisons so one agent's missing capability cannot fail another agent's
- * audit.
+ * Compare the installed launcher with the command setup would give the user today.
+ * Reports a sync repair for stale commands; unsupported or absent registrations add no drift finding.
  *
  * @param installedConfig - the registration found in the user's config
  * @param agentIdentifier - agent whose config is being compared
  * @param agentProfile - profile supplying the command setup would install today
  * @param hookSpec - hook being compared
  * @param findings - shared list this appends drift to
- * @returns 1 when this launcher was compared, 0 when the lifecycle is unsupported
+ * @returns 1 for a compared registration; 0 means unsupported lifecycle, missing hook folder, or no matching command
  */
 function compareManagedHookCommand(
   installedConfig: InstalledHookConfig,
@@ -592,17 +662,14 @@ function compareManagedHookCommand(
 }
 
 /**
- * Compare one supported host timeout with the window setup gives the user today.
- *
- * A mismatch adds the exact hook-sync repair to the drift report.
- * Error behavior: throws nothing; a registry entry with no declared timeout reports zero, because the agent's own default remains valid and is not
- * drift.
+ * Compare registered timeouts with the duration setup gives each supported hook.
+ * Reports stale values with a sync repair; agent defaults remain valid when the registry sets no timeout.
  *
  * @param installedConfig - the registration found in the user's config
  * @param agentIdentifier - agent whose config is being compared
  * @param hookSpec - hook being compared; no declared timeout skips the check
  * @param findings - shared list this appends drift to
- * @returns 1 when a timeout was compared, 0 when the registry declares none
+ * @returns 1 for a compared timeout; 0 means no matching command, declared timeout, or supported timeout field
  */
 function compareManagedHookTimeout(
   installedConfig: InstalledHookConfig,
@@ -708,8 +775,8 @@ export function compareManagedHookRegistrations(
 }
 
 /**
- * Decide whether the registry safety-net should compare one optional hook script.
- * Setup owns missing defaults; drift checks only installed or explicitly enabled copies.
+ * Include optional scripts when installed or explicitly enabled, so users are not warned about hooks they never chose.
+ *
  * @param fs - ReadonlyFS rooted at the audited project.
  * @param spec - Registry hook spec whose script is a comparison candidate.
  * @param installedRel - Project-relative path of the installed hook script.
@@ -720,17 +787,16 @@ function shouldCompareRegistryHookScript(
   spec: HookSpec,
   installedRel: string,
 ): boolean {
+  // An installed optional hook can become outdated even when the user has no saved toggle.
   if (fs.exists(installedRel)) return true;
   return explicitHookEnabled(fs, spec.id) === true;
 }
 
 /**
- * Compare optional registry hook scripts when present or explicitly enabled.
- * Use so a user who opted into an optional hook still learns when their copy went stale, while someone who never enabled it is not nagged about a
- * file they do not have.
+ * Check optional registry scripts that the user installed or enabled, and report outdated copies with repair guidance.
  *
  * @param fs - the audited project's filesystem
- * @param projectPath - the audited project's root, used to resolve installed baseline hashes
+ * @param projectPath - the audited project's root, used to resolve canonical baseline rows
  * @param templateRoot - package root holding the scripts goat-flow would install
  * @param findings - shared list this appends drift to
  * @param checkedHookArtifacts - paths already compared, so one file is not reported twice
@@ -746,17 +812,19 @@ export function compareRegistryHookScripts(
   agentFilter: AgentId | null | undefined,
 ): number {
   let checked = 0;
-  const baselineHashes = managedBaselineHashes(
-    projectPath,
-    agentFilter ?? null,
-  );
+  const baselineRows = managedBaselineRows(projectPath, findings);
+  // Registry-only hooks still need drift checks when the user opts into them.
   for (const spec of listHookSpecs()) {
     // Agent-scoped drift must not report scripts the selected runner cannot execute.
     if (agentFilter && spec.unsupportedAgents?.[agentFilter]) continue;
+    // Shared top-level scripts can be compared once even when several agents use them.
     for (const script of spec.scriptFiles) {
+      // Nested helper files are outside this top-level script check.
       if (script.includes("/")) continue;
       const installedRel = pathPosix.join(".goat-flow/hooks", script);
+      // A script already checked through an agent profile must not produce duplicate findings.
       if (checkedHookArtifacts.has(installedRel)) continue;
+      // A user who neither installed nor enabled this optional hook has no missing copy to repair.
       if (!shouldCompareRegistryHookScript(fs, spec, installedRel)) continue;
       checked++;
       checkedHookArtifacts.add(installedRel);
@@ -767,7 +835,7 @@ export function compareRegistryHookScripts(
         `workflow/hooks/${script}`,
         installedRel,
         (template) => template,
-        baselineHashes,
+        baselineRows,
       );
     }
   }
@@ -775,17 +843,12 @@ export function compareRegistryHookScripts(
 }
 
 /**
- * Report retired central hook files without changing the user's project.
- * Use after an upgrade so operators get the supported sync command while audit stays read-only.
- *
- * Error behavior: throws nothing; a retired file that cannot be read is reported as absent, so a
- * permission problem narrows the report rather than failing the audit.
+ * Reports retired hook files left after an upgrade so users can remove them with the supported sync command.
+ * Audit checks existence only and leaves the user's files unchanged.
  *
  * @param fs - the audited project's filesystem; nothing here is ever written or deleted
- * @param findings - shared list this appends leftover files to; empty afterwards means the
- *   user's upgrade left nothing behind
- * @returns how many retired filenames were checked; this counts toward the audit's total
- *   rather than indicating how many leftovers the user actually has
+ * @param findings - shared drift list; this adds an entry for each retired file still present
+ * @returns retired filenames checked, including absent files; this contributes to the audit's comparison count
  */
 export function findDeprecatedHookFiles(
   fs: ReadonlyFS,

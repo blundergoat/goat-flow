@@ -191,7 +191,16 @@ function timestampString(timestamp: string | Date | undefined): string {
   return timestamp ?? new Date().toISOString();
 }
 
-/** Check the timestamp format expected by envelope filenames and provenance dates. */
+/** Derive the operator-local calendar bucket without weakening the UTC event timestamp. */
+function localCalendarDate(timestamp: string): string {
+  const instant = new Date(timestamp);
+  const year = String(instant.getFullYear()).padStart(4, "0");
+  const month = String(instant.getMonth() + 1).padStart(2, "0");
+  const day = String(instant.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+/** Check the timestamp format expected by envelopes and provenance dates. */
 function isIsoTimestamp(timestamp: string): boolean {
   return (
     /^\d{4}-\d{2}-\d{2}T/u.test(timestamp) &&
@@ -367,10 +376,11 @@ export function appendEvidenceEnvelope(
       return { ok: false, path: null, error };
     }
     const dir = ensureSafeEventsLogDirectory(projectRoot);
-    const path = join(dir, `${envelope.timestamp.slice(0, 10)}.jsonl`);
+    const calendarDate = localCalendarDate(envelope.timestamp);
+    const path = join(dir, `${calendarDate}.jsonl`);
     const pathStats = evidencePathStats(
       path,
-      `${EVENTS_LOG_RELATIVE_DIR}/${envelope.timestamp.slice(0, 10)}.jsonl`,
+      `${EVENTS_LOG_RELATIVE_DIR}/${calendarDate}.jsonl`,
     );
     if (pathStats !== null && (!pathStats.isFile() || pathStats.nlink !== 1)) {
       throw new Error(

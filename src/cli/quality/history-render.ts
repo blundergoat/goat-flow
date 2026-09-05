@@ -10,8 +10,14 @@ import type { QualityMode } from "./schema.js";
 import type {
   QualityDiffFindingRow,
   QualityDiffResult,
+  QualityHistoryEntry,
   QualityHistoryRow,
 } from "./history.js";
+import {
+  QUALITY_SETUP_SCORE_AXES,
+  QUALITY_SYSTEM_SCORE_AXES,
+  type QualityScoreAxisRationale,
+} from "./schema-types.js";
 
 /** Format a score delta for the compact history table, keeping first-run cells blank. */
 function formatDelta(delta: number | null): string {
@@ -21,11 +27,55 @@ function formatDelta(delta: number | null): string {
   return " (+0)";
 }
 
+/** Append one setup or system rationale group without deriving any score values. */
+function appendRationaleGroup<Axis extends string>(
+  lines: string[],
+  group: "setup" | "system",
+  axes: readonly Axis[],
+  scoreForAxis: (axis: Axis) => number,
+  rationale: Record<Axis, QualityScoreAxisRationale>,
+): void {
+  for (const axis of axes) {
+    const row = rationale[axis];
+    lines.push(
+      `  ${group}.${axis} ${scoreForAxis(axis)}/25 | evidence: ${row.evidence} | deduction: ${row.deduction}`,
+    );
+  }
+}
+
+/** Append one saved report's score provenance, or an honest legacy marker when none was recorded. */
+function appendReportScoreRationale(
+  lines: string[],
+  entry: QualityHistoryEntry,
+  label: "Report" | "From" | "To",
+): void {
+  lines.push(`${label} ${entry.id}`);
+  const rationale = entry.report.score_rationale;
+  if (rationale === undefined) {
+    lines.push("  rationale unavailable (legacy report)");
+    return;
+  }
+  appendRationaleGroup(
+    lines,
+    "setup",
+    QUALITY_SETUP_SCORE_AXES,
+    (axis) => entry.report.scores.setup[axis],
+    rationale.setup,
+  );
+  appendRationaleGroup(
+    lines,
+    "system",
+    QUALITY_SYSTEM_SCORE_AXES,
+    (axis) => entry.report.scores.system[axis],
+    rationale.system,
+  );
+}
+
 /**
  * Render quality-history rows for CLI text output.
  *
  * @param rows - Rows returned by `buildQualityHistoryRows`.
- * @param options - Active filters used to render empty-state and limit hints.
+ * @param options - Active filters, limit mode, and selected reports whose rationale rows follow the summary table.
  * @returns Markdown-like text table for terminal output.
  */
 export function renderQualityHistoryText(
@@ -34,6 +84,7 @@ export function renderQualityHistoryText(
     agent: AgentId | null;
     qualityMode: QualityMode | null;
     includeAll: boolean;
+    entries: QualityHistoryEntry[];
   },
 ): string {
   if (rows.length === 0) {
@@ -64,6 +115,11 @@ export function renderQualityHistoryText(
       ].join(" | "),
     );
   }
+  lines.push("");
+  lines.push("Score rationale");
+  for (const entry of options.entries) {
+    appendReportScoreRationale(lines, entry, "Report");
+  }
   if (!options.includeAll) {
     lines.push("");
     lines.push(
@@ -89,7 +145,10 @@ export function renderQualityHistoryText(
  */
 export function renderQualityDiffText(diff: QualityDiffResult): string {
   const header = `Setup ${diff.from.report.scores.setup.total}/100 → ${diff.to.report.scores.setup.total}/100 (${diff.setupDelta >= 0 ? `+${diff.setupDelta}` : diff.setupDelta}). System ${diff.from.report.scores.system.total}/100 → ${diff.to.report.scores.system.total}/100 (${diff.systemDelta >= 0 ? `+${diff.systemDelta}` : diff.systemDelta}).`;
-  const lines = [header, ""];
+  const lines = [header, "", "Score rationale"];
+  appendReportScoreRationale(lines, diff.from, "From");
+  appendReportScoreRationale(lines, diff.to, "To");
+  lines.push("");
 
   /** Render one labeled diff section, with an optional caveat shown only when rows exist. */
   const renderSection = (

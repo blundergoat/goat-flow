@@ -1,123 +1,147 @@
 ---
 category: setup-and-migration
-last_reviewed: 2026-08-04
+last_reviewed: 2026-09-05
 ---
+
+**Scope:** Installing goat-flow into a project and migrating an existing install - what a package smoke proves, mirror fan-out, the scope a setup agent may write, and concepts that survive their own removal. Repo-wide gates that catch the fallout are [verification-preflight.md](verification-preflight.md).
 
 ## Lesson: Packaged install smoke is not a completed setup audit
 
-**Created:** 2026-08-03
+**Status:** active | **Created:** 2026-08-03
 **Decision changed:** Release probes verify deterministic installation and adapted-project audit as separate stages.
 **Trigger phase:** VERIFY
-**Incident count:** 2 | **Latest occurrence:** 2026-08-03
+**Incident count:** 3 | **Latest occurrence:** 2026-09-05
 
-**What happened:** A packaged-release probe ran `setup --apply` against an empty git repository and immediately required the full harness audit to pass. The installer correctly wrote its 69 managed files, but the audit failed because no agent had yet authored the project-specific `AGENTS.md`, architecture, or code map named in the installer's own next steps.
+**Prevention:** In a package smoke, assert version and managed install results on a fresh target, then run the harness, content, and drift audit against a fixture or checkout whose adaptive project content is already complete. Do not treat deterministic file installation as proof that the LLM-authored setup phase ran. For settings changes, also start from an existing settings file without the new keys and follow its generated setup prompt, because reinstalling a freshly seeded target proves preservation rather than upgrade coverage. Evidence anchor: `src/cli/cli-handlers.ts` (search: `Setup preview and setup apply both use the deterministic install path`) routes `setup --apply` through managed installation while plain `setup` composes the adaptive guidance.
 
-**Recurrence 2026-08-03:** A second release-readiness pass repeated the same bare-target audit even though this lesson already existed. The packaged CLI again installed 69 managed files and correctly failed the incomplete target. Re-reading this entry redirected the actual package proof to the configured goat-flow checkout, where setup, Codex agent setup, all five harness concerns, 49 drift comparisons, and 234-file content lint passed. The failed bare-target result remains evidence of an invalid smoke contract, not a release defect.
+**What happened:** A packaged-release probe ran `setup --apply` against an empty git repository and immediately required the full harness audit to pass. The installer correctly wrote its 69 managed files and the audit correctly failed, because no agent had yet authored the project-specific `AGENTS.md`, architecture, or code map that the installer's own next steps name.
 
-**Evidence:** `src/cli/cli-handlers.ts` (search: `Setup preview and setup apply both use the deterministic install path`) routes `setup --apply` through managed installation, while plain `setup` composes the adaptive guidance. The packaged installer output explicitly says `Run the setup steps to create project-specific content` after the managed files are installed.
+**Root cause:** Installation and adaptation are two stages, and a smoke that runs both as one cannot distinguish an installer defect from an unfinished target.
 
-**Prevention:** In a package smoke, assert version and managed install results on a fresh target. Run harness/content/drift audit against a fixture or checkout whose adaptive project content is already complete; do not treat deterministic file installation as proof that the LLM-authored setup phase ran.
+**Recurrence 2026-08-03:** A second release-readiness pass repeated the bare-target audit although this lesson existed; the packaged CLI again installed 69 managed files and correctly failed. Re-reading this entry redirected the package proof to the configured goat-flow checkout, where setup, Codex agent setup, all five harness concerns, 49 drift comparisons, and a 234-file content lint passed.
+**Recurrence 2026-09-05:** Attribution verification installed a fresh target twice, missing that an existing settings file keeps attribution unset and that the upgrade prompt skipped the Claude guide holding the merge instruction. A second reproduction created attribution-only settings before installation, and the installer preserved that file without seeding template permissions. `src/cli/prompt/compose-setup.ts` (search: `attributionGuidance`), `workflow/setup/agents/claude.md` (search: `### Attribution settings`), `workflow/install-goat-flow.sh` (search: `const perms = settings && settings.permissions`).
 
 ---
 
 ## Lesson: Skill edits must fan out to all four installed mirrors, and removed anchors cascade
 
-**Created:** 2026-07-18
+**Status:** active | **Created:** 2026-07-18
 
-**What happened:** A goat-critique SKILL.md + reference-pack edit was synced to `workflow/skills/`, `.claude/skills/`, and `.agents/skills/` and the contract suite passed - but `goat-flow audit . --check-drift` failed on the fourth mirror, `.github/skills/goat-critique/` (Copilot), and the workspace-self support-bundle test failed with it. Separately, removing a hook helper (`is_env_example_redirect_write`) made two footgun evidence anchors stale, failing the `feedback-loop-active` harness check; rewriting those anchors then pushed the footgun bucket over the 39KB size gate.
+**Prevention:** Treat one canonical skill edit as a four-target fan-out, `workflow/skills/` plus the `.claude/`, `.agents/`, and `.github/` mirrors, and verify with `goat-flow audit . --check-drift`. After deleting or renaming any anchored function, run `goat-flow stats . --check`, rewrite the citing footgun and lesson anchors as dated resolved-history prose, then re-check bucket size. Evidence anchors: `test/unit/support-bundle.test.ts` (search: `emits clean JSON through the CLI`), `.goat-flow/learning-loop/footguns/deny-shell.md` (search: `removed 2026-07-18`).
 
-**Prevention:** Treat one canonical skill edit as a four-target fan-out - `workflow/skills/` plus the `.claude/`, `.agents/`, and `.github/` mirrors - and verify with `goat-flow audit . --check-drift`. After deleting or renaming any anchored function, run `goat-flow stats . --check` and rewrite the citing footgun/lesson anchors as dated resolved-history prose, then re-check bucket size. Evidence anchors: `test/unit/support-bundle.test.ts` (search: `emits clean JSON through the CLI`), `.goat-flow/learning-loop/footguns/deny-shell.md` (search: `removed 2026-07-18`).
+**What happened:** A goat-critique skill and reference-pack edit was synced to three mirrors and the contract suite passed, but `goat-flow audit . --check-drift` failed on the fourth mirror under `.github/skills/`, taking the workspace-self support-bundle test with it. Separately, removing a hook helper made two footgun evidence anchors stale, failing the `feedback-loop-active` harness check, and rewriting those anchors pushed the footgun bucket over its size gate.
+
+**Root cause:** The mirror set was treated as three targets, and anchor repair was treated as free of size consequences.
 
 ---
 
 ## Lesson: Agents given broad setup tasks rewrite shared docs as agent-specific
 
-**Created:** 2026-03-21
+**Status:** active | **Created:** 2026-03-21
 
-**What happened:** Gemini CLI was asked to set up GOAT Flow. It modified 6 shared documentation files, including several retired pre-v1.1 architecture docs now superseded by `workflow/setup/01-system-overview.md`, plus the old getting-started and enforcement docs that now live under `workflow/setup/` and `workflow/hooks/`. Those edits replaced Claude Code references with Gemini-specific equivalents. One of the retired architecture docs lost its Claude Code skills row entirely. The enforcement template ended up in a hybrid state - half `.claude/` paths, half `.gemini/` paths.
+**Prevention:** Give every agent setup prompt an explicit write scope naming that agent's own directory and instruction file, and forbid edits outside it. For any agent, shared documentation is a boundary that requires Ask First permission before a setup run touches it.
 
-**Prevention:** Agent setup prompts must include explicit scope constraints. For Gemini: "Only create/modify files under `.gemini/` and `GEMINI.md`. Do NOT modify `docs/`, `workflow/`, or any file outside the `.gemini/` directory." For any agent: treat shared documentation as a boundary that requires Ask First permission.
+**What happened:** An agent CLI asked to set up goat-flow modified six shared documentation files, including retired pre-v1.1 architecture docs now superseded by `workflow/setup/01-system-overview.md` and the old getting-started and enforcement docs now under `workflow/setup/` and `workflow/hooks/`. It replaced Claude Code references with its own equivalents, one retired architecture doc lost its Claude Code skills row, and the enforcement template ended in a hybrid state with paths from two agents.
+
+**Root cause:** The setup prompt described the goal without bounding the write scope, so shared documentation looked like fair game for agent-specific adaptation.
+
+**Note:** The incident agent was the since-removed Gemini CLI target; the supported agents are now Claude, Codex, Antigravity, and Copilot, and the rule applies unchanged to each.
 
 ---
 
 ## Lesson: Setup agents propagate errors from existing instruction files
 
-**Created:** 2026-03-22
+**Status:** active | **Created:** 2026-03-22
 
-**What happened:** Rampart's CLAUDE.md had `redaction.rs` (doesn't exist - redaction is Python only). Blundergoat's CLAUDE.md had a stale web middleware path pointing at `middleware.ts` instead of `proxy.ts`, plus a stale API SQL directory pointing at `migrations/` instead of `schema/`. Setup agents read these wrong paths from the existing instruction files and copied them into newly generated cold-path guidance, propagating the error.
-**Root cause:** The verification gate said "verify paths in the generated files" but didn't say "also audit the existing instruction file you're reading from." Agents trust the hot-path file as authoritative without checking.
-**Fix:** Added an "ALSO AUDIT EXISTING INSTRUCTION FILES" gate to the shared setup-reference guidance - verify Ask First paths exist, check router entries resolve, and fix stale paths before copying them into cold-path files.
+**Prevention:** Audit an existing instruction file before copying from it: verify that Ask First paths exist, that router entries resolve, and that stale paths are corrected before generating cold-path guidance.
+
+**What happened:** One consumer's instruction file named a Rust redaction source file in a project whose redaction is Python only, and another pointed at a middleware module that had been renamed to a proxy module plus a SQL directory that had moved from migrations to schema. Setup agents read those paths as authoritative and copied them into newly generated guidance.
+
+**Root cause:** The verification gate said to verify paths in the generated files but not to audit the existing file being read from, and agents trust the hot-path instruction file without checking it.
 
 ---
 
 ## Lesson: Agents under line pressure cut "small but required" sections
 
-**Created:** 2026-03-20
+**Status:** active | **Created:** 2026-03-20
 
-**What happened:** Both rampart and sus-form-detector agents dropped Sub-Agent Objectives (f) and Communication When Blocked (g) when compressing CLAUDE.md toward the line target. In the historical setup prompt flow, the instructions said "Do NOT skip sections (f)-(i)" in Prompt B, but Prompt A (used for new projects) didn't have this warning. That old setup-prompt path no longer exists; current per-agent setup guidance lives under `workflow/setup/agents/`.
+**Prevention:** Every constraint agents are likely to cut under pressure must appear in the shared template and, where an agent guide owns the same limit, in that guide; a rule stated in only one applicable place gets missed. Evidence anchors: `workflow/setup/reference/execution-loop.md` (search: `Target: under 125 lines. Hard limit: 150.`), `workflow/setup/agents/claude.md` (search: `125-line target and 150-line hard limit`), `workflow/setup/agents/copilot.md` (search: `150-line hard limit and 125-line target`).
 
-**Prevention:** Every constraint that agents are likely to cut under pressure must appear in the shared template (`workflow/setup/reference/execution-loop.md` (search: `Target: under 125 lines. Hard limit: 150.`)) and, where an agent guide owns the same limit, in that guide: `workflow/setup/agents/claude.md` (search: `125-line target and 150-line hard limit`) and `workflow/setup/agents/copilot.md` (search: `150-line hard limit and 125-line target`). A rule in only one applicable place is a rule that gets missed.
+**What happened:** Two consumer setup runs dropped the Sub-Agent Objectives and Communication When Blocked sections while compressing an instruction file toward its line target. The historical prompt flow warned against skipping those sections in the upgrade prompt but not in the new-project prompt; that path no longer exists and per-agent guidance now lives under `workflow/setup/agents/`.
+
+**Root cause:** A line budget and a required-section list lived in different places, so satisfying the budget silently violated the list.
 
 ---
 
 ## Lesson: Agents resolve contradictions by following whichever source they read first
 
-**Created:** 2026-03-20
+**Status:** active | **Created:** 2026-03-20
 
-**What happened:** A retired pre-v1.1 system-spec document showed the old 5-step execution loop while `workflow/setup/reference/execution-loop.md` had the updated 6-step version with SCOPE. The setup prompt told agents to read the retired spec first. Both rampart and sus-form-detector agents absorbed the stale loop and either didn't notice or couldn't override the newer execution-loop file. 7 of 8 gaps in sus-form-detector traced to this single contradiction.
+**Prevention:** When updating a concept that appears in several files, update the file agents read first, before or at the same time as the authoritative source. Never assume agents will reconcile a contradiction; they follow the first version they encounter.
 
-**Prevention:** When updating any concept that appears in multiple files, update the file agents read FIRST before or at the same time as the authoritative source. Never assume agents will reconcile contradictions - they follow the first version they encounter. Retiring the old system-spec doc in v1.1.0 removes this specific duplication, but the general principle remains.
+**What happened:** A retired pre-v1.1 system-spec document showed the old five-step execution loop while `workflow/setup/reference/execution-loop.md` had the updated version with SCOPE, and the setup prompt told agents to read the retired spec first. Two consumer setups absorbed the stale loop, and seven of eight gaps in one of them traced to that single contradiction.
+
+**Root cause:** Read order, not authority, decided which version an agent applied. Retiring the old doc removed this duplication, and the principle stands for any concept with more than one home.
 
 ---
 
 ## Lesson: Removing a concept requires full-repo grep, not just code grep
 
-**Created:** 2026-03-22
+**Status:** active | **Created:** 2026-03-22
+**Incident count:** 2 | **Latest occurrence:** 2026-08-15
 
-**What happened:** Shape was removed from scanner code under the removed historical `ADR-002-remove-project-shape.md`, but `[APP / LIBRARY / SCRIPT COLLECTION]` survived in 9 setup/workflow/doc files. Confusion-log was removed under the removed historical `ADR-001-remove-confusion-log.md`, but an agent recreated it because the constraint was not in the prompt; current authority is `ADR-033-goat-flow-directory-restructure.md`.
-**Root cause:** Grepped `src/` and `test/` but not `workflow/setup/`, `workflow/`, `docs/`.
-**Fix:** Preflight now enforces removed patterns across all live directories. ADR removals must grep the entire repo.
+**Prevention:** After removing or renaming a concept, search the entire tracked repository with `git grep -l` rather than a curated directory list, then run both `stats --check` and the harness audit, because they cover different surfaces and neither validates search anchors inside ADRs.
 
-**Recurrence 2026-08-15:** Consolidating 48 ADRs to 24 used a hand-enumerated grep target list that omitted `.goat-flow/glossary.md`, leaving its Instruction Budget row pointing at a deleted ADR. `stats --check` passed throughout, because its anchor validation covers footgun, lesson, and pattern buckets only; the harness audit's `doc-paths-resolve` check caught it (`157/158` resolved). Use `git grep -l` over the whole tracked tree for deleted filenames rather than a curated directory list, and run both checks - they cover different surfaces, and neither validates `(search: ...)` anchors inside ADRs (`.goat-flow/learning-loop/footguns/docs-drift.md`, search: `does not validate`).
+**What happened:** The project-shape concept removed under the historical ADR-002 survived in nine setup, workflow, and doc files after only `src/` and `test/` were searched, and the confusion-log concept removed under the historical ADR-001 was recreated by an agent because the constraint never reached the prompt. Current authority for both is `.goat-flow/learning-loop/decisions/ADR-033-goat-flow-directory-restructure.md`.
+
+**Root cause:** A curated grep list encodes where the author expects the concept to live, while a removed concept survives exactly where nobody expected it.
+
+**Recurrence 2026-08-15:** Consolidating 48 ADRs to 24 used a hand-enumerated target list that omitted `.goat-flow/glossary.md`, leaving its Instruction Budget row pointing at a deleted ADR. `stats --check` passed throughout because its anchor validation covers footgun, lesson, and pattern buckets only; the harness audit's `doc-paths-resolve` check caught it at 157 of 158 resolved. `.goat-flow/learning-loop/footguns/docs-drift.md` (search: `The audit validates structure`).
 
 ---
 
 ## Lesson: Optional setup fields need harness verification too
 
-**Created:** 2026-04-15
+**Status:** active | **Created:** 2026-04-15
 
-**What happened:** `toolchain` and `ask_first` were removed from the shipped 1.1.0 config scaffold and setup flow to keep base setup smaller, and a 1.2.0 revisit task was added. The initial verification pass checked the installer, setup docs, prompts, and the full test suite. A later "double check" read the harness code and found `audit --harness` still penalized projects that correctly omitted those fields.
+**Prevention:** When removing or downgrading a config concept, audit these surfaces together: the config scaffold, setup docs, prompt text, harness checks, harness summaries, and focused regressions. Run `goat-flow audit . --harness --format json` after the edit to confirm the user-facing contract matches the docs.
 
-**Root cause:** Treated the change as "simplify scaffold/docs" instead of "change the semantics of a public config concept." The same concept also lived in advisory harness checks, summary copy, and recommendations.
+**What happened:** Two config fields were removed from the shipped 1.1.0 scaffold and setup flow to keep base setup smaller. The first verification pass checked the installer, setup docs, prompts, and the full suite; a later double-check read the harness code and found `audit --harness` still penalizing projects that correctly omitted those fields.
 
-**Prevention:** When removing or downgrading a config concept, audit these surfaces together: config scaffold, setup docs, prompt text, harness checks, harness summaries, and focused regressions. Always run `goat-flow audit . --harness --format json` after the edit to confirm the user-facing contract matches the docs.
+**Root cause:** The change was treated as simplifying a scaffold rather than changing the semantics of a public config concept, which also lives in advisory harness checks, summary copy, and recommendations.
 
 ---
 
 ## Lesson: Optional workflow state must not become audit or quality gates
 
-**Created:** 2026-05-03
+**Status:** active | **Created:** 2026-05-03
 
-**What happened:** The dashboard rated Recovery low because audit treated unchecked `.goat-flow/plans/` milestone checkboxes as degraded recovery. It also rated Verification low because `test-runner-configured` required a structured/detected test command or saved validation artifact. The user corrected both assumptions: task checkboxes are optional local workflow state and can be long-term roadmap or brainstorming; project test command choice is project-specific and belongs in quality/release review, not deterministic install audit.
+**Prevention:** Deterministic audit may check that goat-flow-owned directories and hook registration surfaces exist, but must not score optional local workflow state or project-specific command calibration. Quality prompts must not flag unchecked task or milestone checkboxes, status fields, roadmap files, or completion percentages on their own; report a task-file issue only when an observed skill behaviour fails. Evidence anchors: `src/cli/audit/harness/check-recovery.ts` (search: `not audited`), `src/cli/audit/harness/check-verification.ts` (search: `evidence-before-claims`), `src/cli/prompt/compose-quality-static-sections.ts` (search: `Do NOT report them as quality findings`).
 
-**Prevention:** Deterministic audit may check that goat-flow-owned directories and hook/registration surfaces exist, but must not score optional local workflow state or project-specific command calibration. Quality prompts must also avoid flagging unchecked task/milestone checkboxes, status fields, roadmap files, or completion percentages by themselves. Only report task-file issues when an observed skill behavior fails. Evidence anchors: `src/cli/audit/harness/check-recovery.ts` (search: `not audited`), `src/cli/audit/harness/check-verification.ts` (search: `evidence-before-claims`), `src/cli/prompt/compose-quality-static-sections.ts` (search: `Do NOT report them as quality findings`).
+**What happened:** The dashboard rated Recovery low because audit treated unchecked milestone checkboxes as degraded recovery, and rated Verification low because a check required a structured or detected test command. The user corrected both: checkboxes are optional local state that can be long-term roadmap or brainstorming, and the project's test-command choice belongs in quality or release review rather than deterministic install audit.
+
+**Root cause:** Local workflow state was scored as if it were installation state.
 
 ---
 
 ## Lesson: Installed settings.json deny patterns drifted from workflow templates undetected
 
-**Created:** 2026-04-26
+**Status:** active | **Created:** 2026-04-26
 
-**What happened:** Multi-agent quality reports found `.claude/settings.json` had `Bash(*git push*--force*)` while the workflow template (`workflow/hooks/agent-config/claude.json`) had the correct `Bash(*git push*)`. The installed copy was weaker than intended, allowing feature-branch pushes that the template blocked. `.gemini/settings.json` was correct. At incident time, the drift was invisible because no preflight or audit check compared installed settings patterns against their templates.
-**Root cause:** Preflight had parity checks for skill files (`Skill SKILL.md Parity`) and shared references (`Preamble/Conventions Sync`), but did not yet have equivalent coverage for settings.json deny patterns. The settings files are hand-maintained after install, and edits to one agent's settings don't automatically propagate or verify against the template.
-**Prevention:** After changing deny patterns in `workflow/hooks/agent-config/*.json`, run `bash scripts/preflight-checks.sh` and confirm `Agent Config Parity` still passes. If a new settings surface or deny family is added, extend the parity map and `covers()` validation in `scripts/preflight-checks.sh` in the same change.
+**Prevention:** After changing deny patterns in `workflow/hooks/agent-config/`, run `bash scripts/preflight-checks.sh` and confirm `Agent Config Parity` passes. If a new settings surface or deny family is added, extend the parity map and its coverage validation in the same change. Evidence anchor: `scripts/preflight-checks.sh` (search: `Agent Config Parity`).
+
+**What happened:** Multi-agent quality reports found `.claude/settings.json` carrying a narrower force-push deny pattern than the broader push deny in its template `workflow/hooks/agent-config/claude.json`, so the installed copy was weaker than intended and allowed feature-branch pushes the template blocked; another agent's installed settings were correct. The drift was invisible because no preflight or audit check compared installed settings patterns against their templates.
+
+**Root cause:** Preflight had parity checks for skill files and shared references but none for settings deny patterns, and settings files are hand-maintained after install, so an edit to one agent's settings neither propagates nor gets verified.
 
 ---
 
 ## Lesson: mv/rename overwrites destination file without checking if it exists
 
-**Created:** 2026-03-21
+**Status:** active | **Created:** 2026-03-21
 
-**What happened:** User asked to rename `TODO_improvements_v0.3.md` to `TODO_improvements_v0.4.md`. Agent ran `mv v0.3 v0.4` without checking that v0.4 already existed. The mv overwrote v0.4 with v0.3's content. When the user said "undo", the agent moved v0.4 (now containing v0.3's content) back to v0.3, destroying v0.4's original content entirely. The file was untracked by git and unrecoverable.
+**Prevention:** Before any `mv`, `cp`, or Write that targets an existing path, run `ls` on the destination first and stop to ask if it exists; `mv -n` refuses to clobber. This is already a Never-tier rule in the instruction files, which forbid overwriting without checking the destination. Evidence anchor: `CLAUDE.md` (search: `Check the destination before overwrite`).
 
-**Prevention:** Before any `mv`, `cp`, or Write that targets an existing path, MUST run `ls` on the destination first. If the destination exists, stop and ask the user. This applies to all file operations that can overwrite - not just mv. Add to the Never tier: "Overwrite existing files without confirming destination is safe."
+**What happened:** Asked to rename a v0.3 improvements TODO file to v0.4, the agent ran `mv` without checking that v0.4 already existed, overwriting it. When the user said "undo", the agent moved v0.4, by then holding v0.3's content, back to v0.3, destroying v0.4's original content. The file was untracked and unrecoverable.
+
+**Root cause:** A rename was treated as a move of one file rather than a write to a path that might already hold something.

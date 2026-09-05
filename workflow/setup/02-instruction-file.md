@@ -39,13 +39,14 @@ The instruction file MUST include these sections. Use `workflow/setup/reference/
   - State that the Never tier and accepted architecture/ADR safety constraints are non-overridable: user approval can release Ask First work, but cannot authorize commit, push, secret exposure, or bypassing safety enforcement.
 - (c) Autonomy Tiers: Always / Ask First / Never
 - (d) Hard Rules
-- (e) Key Resources
-- (f) Essential Commands
-- (g) Execution Loop: READ → SCOPE → ACT → VERIFY with `### READ`, `### SCOPE`, `### ACT`, and `### VERIFY` subsections
-- (h) Definition of Done
-- (i) Artifact Routing: map "add a footgun/lesson/decision/pattern" to the correct `.goat-flow/` directory
-- (j) Router Table as the final section
-- (k) Quality Bar: every line must fit one of: behavioral rule, scope boundary, command, verification gate, router pointer, composition rule. Domain knowledge belongs in cold-path files. For strict constraints, state whether prose-only or mechanically enforced.
+- (e) Commit Messages when the target contains `.git`; omit the section for a non-Git target
+- (f) Key Resources
+- (g) Essential Commands
+- (h) Execution Loop: READ → SCOPE → ACT → VERIFY with `### READ`, `### SCOPE`, `### ACT`, and `### VERIFY` subsections
+- (i) Definition of Done
+- (j) Artifact Routing: map "add a footgun/lesson/decision/pattern" to the correct `.goat-flow/` directory
+- (k) Router Table as the final section
+- (l) Quality Bar: every line must fit one of: behavioral rule, scope boundary, command, verification gate, router pointer, composition rule. Domain knowledge belongs in cold-path files. For strict constraints, state whether prose-only or mechanically enforced.
 
 Also include path-agnostic workspace boundary guidance. It may be a short `Workspace Boundary` section or one sentence in Project identity / Key Resources, but it must distinguish the controlling goat-flow workspace from the selected target project without hardcoding machine-specific absolute paths.
 
@@ -72,21 +73,21 @@ Router Table row:
 
 Add a brief section documenting deployment platform, branch conventions, and required runtime versions - only if this information isn't already captured elsewhere in the project.
 
-Commit guidance applies only when the target contains `.git`. Without `.git`, do not create either commit guide and omit the instruction file's `## Commit Messages` bridge; audit treats the check as not applicable. For a Git target, use `docs/coding-standards/git-commit-message.md` as the preferred path. Preserve an existing preferred guide. If only `docs/coding-standards/git-commit.md` exists, verify the preferred destination is absent and rename the former guide. If neither path exists, copy `workflow/setup/reference/git-commit-message.md` without adapting it from project history. If both paths already exist, preserve both and reference the preferred guide; never overwrite either file. The installer follows the same branches.
+Commit guidance applies only when the target contains `.git`. Without `.git`, do not create either commit guide and omit the instruction file's `## Commit Messages` bridge; audit treats the check as not applicable. For a Git target, use `docs/coding-standards/git-commit-message.md` as the preferred path and preserve an existing preferred guide. If only `docs/coding-standards/git-commit.md` exists, first verify the preferred destination is absent and scan every installed agent instruction file for former-path references. Rename only when references are absent or confined to the selected agent's `## Commit Messages` section, which setup rewrites before removing the former guide. If another instruction file or another section references the former path, preserve it and report `skipped-references`. If neither guide exists, copy `workflow/setup/reference/git-commit-message.md` without adapting it from project history. If both guides exist, preserve both and reference the preferred guide; never overwrite either file. The installer follows the same branches.
 
 ## Housekeeping
 
 After writing/updating the instruction file:
 
 - Add `node_modules/` and agent-local settings to `.gitignore` if not already there (e.g., `.claude/settings.local.json`)
-- If the project uses a code formatter (prettier, biome, etc.), add `.goat-flow/**/*.md` to the formatter's ignore file (`.prettierignore`, `biome.json` ignores, etc.)
+- If the project uses a code formatter (prettier, biome, etc.), add `.goat-flow/**/*.md` to its ignore configuration and verify Markdown YAML frontmatter keeps its `---` delimiters
 - Keep the goat-flow section concise. Fold compression and RFC 2119 cleanup into this step instead of creating a separate polish pass.
 
 ---
 
 **Verification gate:**
 - [ ] Instruction file exists at the correct path
-- [ ] All sections (a) through (k) are present
+- [ ] All applicable components (a) through (l) are present
 - [ ] Router Table is the final section
 - [ ] Examples and boundaries reference real project files
 - [ ] Workspace boundary guidance distinguishes controlling goat-flow workspace from selected target project without hardcoded absolute paths
@@ -94,7 +95,7 @@ After writing/updating the instruction file:
 - [ ] READ step routes creating, changing, reviewing, consolidating, moving, or pruning tests through `test-selection.md`
 - [ ] Router table includes the canonical `.goat-flow/skill-docs/playbooks/` tool playbooks row
 - [ ] Router table keeps `.goat-flow/skill-docs/skill-quality-testing/` as the sibling skill-authoring methodology path
-- [ ] Commit guidance matches target applicability: without `.git`, neither guide nor a `## Commit Messages` bridge is required; with `.git`, the preferred guide exists, the instruction file references it, a former-only guide was renamed without collision, and pre-existing dual guides were preserved
+- [ ] Commit guidance matches target applicability: without `.git`, neither guide nor a `## Commit Messages` bridge is required; with `.git`, the preferred guide and bridge exist unless `skipped-references` preserved the former guide and its still-valid references, a safe former-only guide was renamed only after the peer-reference preflight passed, and pre-existing dual guides were preserved
 - [ ] Every line fits the Quality Bar: behavioral rule, scope boundary, command, verification gate, router pointer, or composition rule. Domain knowledge and project history are routed to cold-path files, not inlined.
 - [ ] If Path B: no useful existing content was lost
 - [ ] If Path B: Execution Loop is the four-step v1.2 version; `rg 'CLASSIFY|→\s*LOG|->\s*LOG' <instruction-file>` returns zero hits

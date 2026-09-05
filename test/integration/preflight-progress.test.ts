@@ -18,6 +18,7 @@ import { join } from "node:path";
 import type { Readable } from "node:stream";
 import { afterEach, describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
+import { runInNewContext } from "node:vm";
 
 const PROJECT_ROOT = fileURLToPath(new URL("../../", import.meta.url));
 const PREFLIGHT_SCRIPT_PATH = join(
@@ -497,7 +498,7 @@ describe("preflight Tests-phase progress", () => {
     const fastSelectionIndex = preflightSource.indexOf('"test:fast"');
     const coverageSelectionIndex = preflightSource.indexOf('"test:coverage"');
 
-    assert.match(preflightSource, /preflight_test_heartbeat_seconds=10/u);
+    assert.match(preflightSource, /preflight_heartbeat_seconds=10/u);
     assert.match(preflightSource, /\[\[ "\$_is_tty" -eq 1 \]\]/u);
     assert.match(preflightSource, /"Tests" "\$\{test_command\[@\]\}"/u);
     assert.match(
@@ -511,9 +512,138 @@ describe("preflight Tests-phase progress", () => {
     assert.equal(
       [...preflightSource.matchAll(/run_command_capture_with_timeout/gu)]
         .length,
-      2,
-      "expected one helper definition plus one bounded Tests call site",
+      3,
+      "expected one helper definition plus bounded Tests and Dependency Audit call sites",
     );
+  });
+
+  it("bounds dependency audit without exposing a release-gate bypass", () => {
+    const preflightSource = readFileSync(PREFLIGHT_SCRIPT_PATH, "utf-8");
+    const auditStart = preflightSource.indexOf("# ── Dependency Audit");
+    const auditEnd = preflightSource.indexOf(
+      "# ── Removed Patterns",
+      auditStart,
+    );
+    assert.ok(auditStart >= 0 && auditEnd > auditStart);
+    const auditSource = preflightSource.slice(auditStart, auditEnd);
+
+    assert.match(
+      preflightSource,
+      /GOAT_FLOW_PREFLIGHT_AUDIT_TIMEOUT_SECONDS=N[\s\S]+dependency audit timeout in seconds \(default: 120; 0 disables\)/u,
+    );
+    assert.match(
+      auditSource,
+      /GOAT_FLOW_PREFLIGHT_AUDIT_TIMEOUT_SECONDS:-120/u,
+    );
+    assert.match(
+      auditSource,
+      /run_command_capture_with_timeout\s+\\\s+audit_output audit_exit "\$audit_timeout_seconds" "Dependency Audit" npm audit/u,
+    );
+    assert.match(
+      auditSource,
+      /"\$audit_exit" -eq 124[\s\S]+fail "npm audit timed out after \$\{audit_timeout_seconds\}s"/u,
+    );
+    assert.doesNotMatch(
+      preflightSource,
+      /GOAT_FLOW_PREFLIGHT_(?:SKIP_AUDIT|AUDIT_COMMAND)/u,
+    );
+  });
+
+  it("surfaces passing stats advisories as non-blocking preflight warnings", () => {
+    const preflightSource = readFileSync(PREFLIGHT_SCRIPT_PATH, "utf-8");
+    const schemaStart = preflightSource.indexOf("# ── Learning-Loop Schema");
+    const schemaEnd = preflightSource.indexOf(
+      "# ── Content Drift",
+      schemaStart,
+    );
+    assert.ok(schemaStart >= 0 && schemaEnd > schemaStart);
+    const schemaSource = preflightSource.slice(schemaStart, schemaEnd);
+
+    assert.match(schemaSource, /stats \. --check --format text/u);
+    assert.match(schemaSource, /stats_warning_count/u);
+    assert.match(
+      schemaSource,
+      /stats_warning_label="warning"[\s\S]+stats_warning_count" -ne 1[\s\S]+stats_warning_label="warnings"/u,
+    );
+    assert.match(
+      schemaSource,
+      /warn "Footgun\/lesson schema passes \(\$\{stats_warning_count\} \$\{stats_warning_label\}\)"/u,
+    );
+    assert.match(schemaSource, /stats_output[\s\S]+details_pipe/u);
+    assert.match(
+      preflightSource,
+      /warning_label="warning"[\s\S]+warnings" -ne 1[\s\S]+warning_label="warnings"[\s\S]+"\$warnings" "\$warning_label"/u,
+    );
+  });
+
+  it("keeps Knip failure guidance on the heap-safe preflight invocation", () => {
+    const preflightSource = readFileSync(PREFLIGHT_SCRIPT_PATH, "utf-8");
+
+    assert.match(
+      preflightSource,
+      /knip_command=\(\s+node\s+--max-old-space-size=5120\s+node_modules\/knip\/bin\/knip\.js\s+--no-progress\s+--no-gitignore\s+\)/u,
+    );
+    assert.match(
+      preflightSource,
+      /knip_output=\$\("\$\{knip_command\[@\]\}" 2>&1\)/u,
+    );
+    assert.match(preflightSource, /run \$\{knip_command\[\*\]\} for details/u);
+    assert.doesNotMatch(preflightSource, /run npx knip for details/u);
+  });
+
+  it("selects Codex's Windows override for native configured-hook smokes", () => {
+    const preflightSource = readFileSync(PREFLIGHT_SCRIPT_PATH, "utf-8");
+    const functionStart = preflightSource.indexOf("function runCommand(");
+    const functionEnd = preflightSource.indexOf(
+      "\nfunction spawnFailureMessage(",
+      functionStart,
+    );
+    assert.ok(functionStart >= 0 && functionEnd > functionStart);
+    const runCommandSource = preflightSource.slice(functionStart, functionEnd);
+    const calls: unknown[][] = [];
+    const runCommand = runInNewContext(`${runCommandSource}\nrunCommand`, {
+      process: { platform: "win32", env: {} },
+      spawnSync: (...args: unknown[]) => {
+        calls.push(args);
+        return { status: 0 };
+      },
+    }) as (
+      entry: { command: string; commandWindows?: string; args?: string[] },
+      input: string,
+      cwd: string,
+    ) => unknown;
+
+    assert.match(preflightSource, /typeof value\.commandWindows === "string"/u);
+    assert.match(
+      preflightSource,
+      /process\.platform === "win32" && entry\.commandWindows !== undefined/u,
+    );
+    assert.match(
+      preflightSource,
+      /\["-NoProfile", "-NonInteractive", "-Command", entry\.commandWindows\]/u,
+    );
+    assert.match(preflightSource, /entry\.commandWindows \?\? ""/u);
+
+    runCommand(
+      { command: "echo default", commandWindows: "" },
+      "payload",
+      "C:\\fixture",
+    );
+    assert.equal(calls[0]?.[0], "powershell.exe");
+    assert.deepEqual(Array.from(calls[0]?.[1] as string[]), [
+      "-NoProfile",
+      "-NonInteractive",
+      "-Command",
+      "",
+    ]);
+
+    calls.length = 0;
+    runCommand({ command: "echo default" }, "payload", "C:\\fixture");
+    assert.equal(calls[0]?.[0], "bash");
+    assert.deepEqual(Array.from(calls[0]?.[1] as string[]), [
+      "-c",
+      'printf %s "$GOAT_HOOK_SMOKE_PAYLOAD" | { echo default; }',
+    ]);
   });
 
   it("keeps fast concurrency bounded and isolates observed subprocess-heavy suites", () => {

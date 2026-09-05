@@ -2,7 +2,7 @@
 
 ## What It Is
 
-A documentation framework that provides structured AI coding agent workflows. Primarily a methodology and set of templates that users copy into their projects and run via setup prompts. The CLI auditor (`src/cli/`) validates implementations against the audit checks.
+A documentation framework that provides structured AI coding agent workflows. Primarily a methodology and set of templates that users copy into their projects and run via setup prompts. CLI and dashboard tools (`src/cli/`, `src/dashboard/`) validate implementations, guide setup, and expose quality and maintenance workflows.
 
 ## Major Components
 
@@ -12,11 +12,11 @@ A documentation framework that provides structured AI coding agent workflows. Pr
 | Setup installer | `workflow/install-goat-flow.sh` | Manifest-driven installation with ownership checks, safe parent-path validation, and adjacent per-file atomic staging |
 | Setup steps | `workflow/setup/0*.md` | Six numbered setup steps (system overview, instruction file, skills, architecture + code map, customise, final verification) |
 | Skill templates | `workflow/skills/` | Reference prompts for the 8 goat-flow skill templates (7 functional, including direct `goat-clarity`, + 1 dispatcher) |
-| Hook scripts | `workflow/hooks/` | Managed launcher/runtime and provider adapters, copyable `deny-dangerous.sh` policies, opt-in `gruff-code-quality.sh`, default `post-turn-safety.sh`, and per-agent config templates |
+| Hook scripts | `workflow/hooks/` (source), `.goat-flow/hooks/` (installed, active) | Managed launcher/runtime and provider adapters, the `deny-dangerous.sh` shell guardrail and its `deny-dangerous/` policy modules (path, shell, and write rules plus a self-test corpus), opt-in `gruff-code-quality.sh`, default `post-turn-safety.sh`, and per-agent config templates. `workflow/hooks/` is the canonical source; its runtime scripts install in lockstep to `.goat-flow/hooks/` (this repo included), the copy the agent's shell actually runs against |
 | Evaluation templates | `workflow/evaluation/` | Footguns/lessons/patterns templates |
 | Docs | `docs/` | CLI usage, dashboard guide |
-| CLI auditor | `src/cli/` | 20 build checks (16 setup scope + 4 agent scope) + 18 AI harness installation checks (5 concerns), audit-driven setup prompts, quality prompt/history/diff surfaces, multi-agent support |
-| CLI diagnostics | `src/cli/diagnostics/` | Redacted support bundles, five-concern target-readiness reports, and static agent/tool threat models without executing target code |
+| CLI | `src/cli/` | 20 build checks (16 setup scope + 4 agent scope) + 18 AI harness installation checks (5 concerns), audit-driven setup prompts, quality prompt/history/diff surfaces, multi-agent support |
+| CLI diagnostics | `src/cli/diagnostics/` | Static context-pressure reports, redacted support bundles, five-concern target-readiness reports, and static agent/tool threat models without executing target code |
 | Managed setup | `src/cli/install-command.ts`, `src/cli/managed-setup-command.ts`, `src/cli/managed-setup-preview.ts`, `src/cli/managed-setup-state.ts`, `src/cli/managed-setup-write-set.ts`, `src/cli/managed-setup-authority.ts`, `src/cli/managed-setup-admission.ts` | The install command flow, hash-only dry-run classification for manifest-managed templates, the user-owned and generated destinations completing the install write set, scoped replace authority, the pre-write admission gate, and local recovery state |
 | Dashboard | `src/cli/server/` (server modules), `src/dashboard/` (HTML, views, and ~20 client TypeScript modules) | HTML dashboard with views for about, home, hooks, plans, projects, prompts, quality, settings, setup, skills, workspace; `dashboard.ts` owns bootstrap/dispatch/live reload, `dashboard-routes.ts` composes non-terminal route modules, `dashboard-index-routes.ts` owns learning-loop index maintenance, `dashboard-{audit,project,quality,shell,skill-quality}-routes.ts` own route groups, and `dashboard-terminal.ts` owns terminal HTTP/WebSocket wiring |
 | Hook registration, contracts, and proof | `src/cli/hooks-command.ts`, `src/cli/hook-contracts.ts`, `src/cli/hooks-runtime-evidence.ts`, `src/cli/server/hooks-registry.ts`, `src/cli/server/hook-registrar.ts`, `src/cli/server/agent-hook-writer.ts` | Provider-neutral evidence/result contracts, CLI/dashboard hook toggles, and explicit bounded managed-hook classifier proof backed by manifest specs, installed-agent detection, and per-agent config state |
@@ -38,7 +38,7 @@ Consumer runs `npx @blundergoat/goat-flow@latest install . --agent <id> --dry-ru
   -> CLI compares manifest-managed template hashes with the selected target and last successful local baseline
   -> Unsafe paths and ambiguous user edits block before the Bash installer starts
   -> User runs `install` or `setup --apply`; the CLI invokes the installer, which completes each file beside its destination before rename
-  -> Direct `workflow/install-goat-flow.sh` use skips CLI preview but retains ownership, path-safety, and atomic-write enforcement
+  -> Direct `workflow/install-goat-flow.sh` use skips CLI preview, post-write verification, and the install-state receipt while retaining ownership, path-safety, and atomic-write enforcement; once `.goat-flow/install-state/managed.json` or a cutover marker exists, the script refuses before target mutation and prints the public `goat-flow install` command
 ```
 
 ## CLI Layout
@@ -56,10 +56,10 @@ src/cli/
   redact-command.ts   # Pre-write scrubber for readable session, handoff, review, quality, security, and export text
   hook-contracts.ts   # Provider evidence, effective-state, and bounded result contracts
   hooks-runtime-evidence.ts # Explicit managed deny-hook classifier proof and metadata-only local events
-  config/             # Configuration (reader.ts, types.ts)
+  config/             # Configuration (index.ts, reader.ts, reader-validators.ts, config-vocabulary.ts, writer.ts, types.ts)
   detect/             # Agent and stack detection (agents.ts, project-stack.ts)
   evidence/           # Hash-only evidence metadata, readable text redaction, envelopes, JSONL append/tail helpers
-  diagnostics/        # Redacted support bundle, static readiness report, and agent/tool threat model
+  diagnostics/        # Static context-pressure report, redacted support bundle, static readiness report, and agent/tool threat model
   facts/              # Fact extraction (orchestrator.ts, fs.ts, agent/, shared/)
   managed-setup-command.ts # CLI validation and output for install/setup dry runs
   managed-setup-preview.ts # Hash-only managed-template comparison and install admission
@@ -107,6 +107,8 @@ Per-file descriptions for both `src/cli/server/` and `src/dashboard/` live in `.
 ## Key Constraints
 
 - **Setup shared templates are canonical.** `workflow/setup/reference/execution-loop.md` defines the execution loop; `workflow/setup/01-system-overview.md` defines the layer architecture and design intent. ADRs in `.goat-flow/learning-loop/decisions/` capture specific design decisions.
+- **Authority is domain-specific.** Active repository instructions govern session behavior, this architecture owns system structure and component ownership, accepted ADRs own named design decisions, and cited learning-loop entries own incident evidence.
+- **Instruction parity is manifest-owned.** `workflow/manifest.json` partitions canonical hot-path sections into byte-identical shared policy and reasoned provider deltas; `scripts/check-instruction-parity.mjs` enforces that contract without generating provider files.
 - **Managed writes stay inside the selected project.** Preview and installer paths reject symlinked or non-directory parents before scaffolding; `--force` may replace supported content but never bypass path safety.
 - **Installer atomicity is per file, not per installation.** Each supported file is completed in an adjacent staging directory and renamed without a non-atomic copy fallback; earlier files from the same multi-file run may already be visible if a later file fails.
 - **Cross-references are fragile.** 200+ markdown files with dense internal linking (committed surface plus installed skill mirrors and worktree caches). File renames require repo-wide grep.
@@ -114,7 +116,7 @@ Per-file descriptions for both `src/cli/server/` and `src/dashboard/` live in `.
 
 ## Hot Path / Cold Path
 
-Agent instruction files (CLAUDE.md, AGENTS.md, .github/copilot-instructions.md) are the hot path -- loaded every turn, with a target of about 125 lines and a hard limit of 150. Codex and Antigravity share `AGENTS.md` per the community standard. Skills and learning-loop files are cold path -- loaded on demand when skills or agent workflows reference them.
+Agent instruction files (CLAUDE.md, AGENTS.md, .github/copilot-instructions.md) are the hot path -- loaded every turn, with a target of about 125 lines and a hard limit of 150. Codex and Antigravity share `AGENTS.md` per the community standard. Copilot may combine applicable repository-wide instruction files, so manifest-declared shared sections remain byte-identical while Autonomy Tiers and Router Table retain provider-owned facts (ADR-020). Skills and learning-loop files are cold path -- loaded on demand when skills or agent workflows reference them.
 
 ## Persistence Tiers
 
@@ -122,10 +124,13 @@ Agent instruction files (CLAUDE.md, AGENTS.md, .github/copilot-instructions.md) 
 
 | Tier | Paths | Committed? | Purpose |
 |------|-------|-----------|---------|
-| **Committed knowledge** | `architecture.md`, `code-map.md`, `glossary.md`, `config.yaml`, `.goat-flow/learning-loop/patterns/**`, `.goat-flow/learning-loop/decisions/`, `.goat-flow/learning-loop/footguns/**`, `.goat-flow/learning-loop/lessons/**`, the meta references at `.goat-flow/skill-docs/skill-preamble.md`, `.goat-flow/skill-docs/skill-conventions.md`, the skill-authoring methodology pack under `.goat-flow/skill-docs/skill-quality-testing/`, and the standalone playbooks indexed by `.goat-flow/skill-docs/playbooks/README.md`: `browser-use.md`, `changelog.md`, `code-comments.md`, `gruff-code-quality.md`, `hook-policy-testing.md`, `naming-and-placement.md`, `observability.md`, `page-capture.md`, `release-notes.md`, `skill-playbook-authoring-sync.md`, `test-selection.md`, `writing-sentence-diagnostics.md`, `writing-structure-diagnostics.md`, and `writing-style.md` | Yes | Durable project record. Source of truth across sessions. |
+| **Committed knowledge** | `architecture.md`, `code-map.md`, `glossary.md`, `config.yaml`, `.goat-flow/security-policy.md` (optional, user-owned security guardrails), the installed hook guardrails at `.goat-flow/hooks/**` (the active `deny-dangerous.sh` policy and its `deny-dangerous/` modules, `post-turn-safety.sh`, opt-in `gruff-code-quality.sh`, and the `*.mjs` launcher runtime, installed in lockstep with the `workflow/hooks/` source), `.goat-flow/learning-loop/patterns/**`, `.goat-flow/learning-loop/decisions/`, `.goat-flow/learning-loop/footguns/**`, `.goat-flow/learning-loop/lessons/**`, the meta references at `.goat-flow/skill-docs/skill-preamble.md`, `.goat-flow/skill-docs/skill-conventions.md`, the skill-authoring methodology pack under `.goat-flow/skill-docs/skill-quality-testing/`, and the standalone playbooks indexed by `.goat-flow/skill-docs/playbooks/README.md`: `browser-use.md`, `changelog.md`, `code-comments.md`, `gruff-code-quality.md`, `hook-policy-testing.md`, `naming-and-placement.md`, `observability.md`, `page-capture.md`, `release-notes.md`, `skill-playbook-authoring-sync.md`, `test-selection.md`, `writing-agent-facing-instructions.md`, `writing-sentence-diagnostics.md`, `writing-structure-diagnostics.md`, and `writing-human-facing-prose.md` | Yes | Durable project record. Source of truth across sessions. |
 | **Local session state** | `.goat-flow/plans/**`, `.goat-flow/scratchpad/**`, `.goat-flow/logs/sessions/*.md`, `.goat-flow/dashboard-state.json`, `.goat-flow/project-id` | No (gitignored by design; only anchor files such as `README.md`, `.gitignore`, and `.gitkeep` are committed) | Personal WIP: milestone files, plan subdirs, throwaway notes, session continuity logs, and dashboard runtime state including recoverable archived-project registrations. Coordinates a single work session - not project history. |
+| **Local coordination state** | `.goat-flow/write-claims/*.claim` | No (gitignored by design; no claim is committed) | Path-keyed exclusive ownership markers held by cooperating writers across one write transaction. They do not expire, wait, or permit stealing; remove an abandoned marker only through explicit operator-confirmed recovery after confirming no active owner. |
 | **Local evidence history** | `.goat-flow/logs/events/*.jsonl` | No (gitignored by design; only the directory README is committed) | Validated `EvidenceEnvelope` metadata from local runtime producers. Supports checkout-local diagnosis and recovery; it is not durable project truth or a share-safe export. |
-| **Local report history** | `.goat-flow/logs/quality/*.json`, `.goat-flow/logs/quality/*.md`, `.goat-flow/logs/critiques/*.md`, `.goat-flow/logs/review/*.txt`, `.goat-flow/logs/review/*.json`, `.goat-flow/logs/security/*.md` | No (gitignored by design; only the directory README is committed) | Saved agent quality reports, captured prose, critique snapshots from goat-critique runs, review refutation/refuter artifacts from goat-review runs, and security assessment history from goat-security runs. Feeds `goat-flow quality history`, `goat-flow quality diff`, and prior same-agent prompt context. |
+| **Local report history** | `.goat-flow/logs/quality/*.json`, `.goat-flow/logs/quality/*.md`, `.goat-flow/logs/critiques/*.md`, `.goat-flow/logs/review/*.txt`, `.goat-flow/logs/review/*.json`, `.goat-flow/logs/review/*.diff`, `.goat-flow/logs/review/*.md`, `.goat-flow/logs/security/*.md` | No (gitignored by design; only the directory README is committed) | Saved agent quality reports, captured prose, critique snapshots from goat-critique runs, review refutation ledgers, refuter JSON, redacted diff bundles, and chunk receipts from goat-review runs, and security assessment history from goat-security runs. A redacted review bundle is a durable receipt of what was reviewed, never the byte authority for the review. Feeds `goat-flow quality history`, `goat-flow quality diff`, and prior same-agent prompt context. |
+| **Local install evidence** | `.goat-flow/install-state/managed.json`, `.goat-flow/install-state/<agent>.json` cutover markers | No (gitignored by design; no baseline is committed) | The authoritative managed-path hash baseline a later `install` or `setup --dry-run` compares against, per ADR-064. An absent baseline is the normal state for a checkout populated from Git rather than the installer, and `goat-flow status` reports it as `baselineStatus: missing` rather than as damage. |
+| **Other local run output** | Any other directory or file under `.goat-flow/logs/`, such as ad-hoc capture directories, `scan-history.jsonl`, and one-off release or analyzer logs | No (`.goat-flow/.gitignore` ignores `**/logs/*/*/` and every unlisted log path) | Throwaway operator output kept only for the current investigation. It carries no schema promise, no retention promise, and no evidential authority; treat an unfamiliar path here as scratch rather than as a surface to interpret. |
 
 **Not a persistence gap.** If local state, evidence, or report history deserves to survive the session, promote only its durable conclusion into the committed tier: lesson -> `.goat-flow/learning-loop/lessons/`, trap -> `.goat-flow/learning-loop/footguns/`, decision -> `.goat-flow/learning-loop/decisions/`. The local artifact remains checkout-local continuity and must not be cited as committed project truth.
 
@@ -134,6 +139,8 @@ Agent instruction files (CLAUDE.md, AGENTS.md, .github/copilot-instructions.md) 
 Local-only artifacts may prove that a named producer recorded bounded metadata at a stated time and that the record passed its local schema. They cannot prove an external tool's claim is true, authorize an external write, replace a fresh verification run, or become durable project knowledge by themselves. Promotion is explicit: extract the verified conclusion into a lesson, footgun, or decision with durable source evidence.
 
 `EvidenceEnvelope` is the only runtime event schema. Payloads contain JSON-compatible summary metadata; raw prompts, terminal output or scrollback, uploads, screenshots, JSON/HTML bodies, and tool output require hash-only `RedactedEvidenceValue` markers. Paths, labels, identifiers, warning text, and other metadata remain local-sensitive and must be scrubbed before any shareable export. There is no automatic retention or purge promise; users control cleanup of gitignored artifacts.
+
+Coordination claims are not generic cleanup candidates. `.goat-flow/write-claims/*.claim` remains fail-closed until owner-checked release or explicit recovery after an operator confirms no active writer; elapsed time never authorizes removal.
 
 Timing receipts are milestone-local plan state. The embedded receipt, not the local event stream, is the validation authority for a measured Actual. Removing, truncating, or moving gitignored event logs must not change a finalized receipt's validity.
 

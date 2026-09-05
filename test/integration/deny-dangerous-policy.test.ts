@@ -27,6 +27,13 @@ type PolicyAllowCase = {
   userCommand: string;
 };
 
+type ParserBoundaryCase = {
+  name: string;
+  userCommand: string;
+  expectedStatus: 0 | 2;
+  expectedPolicyMessage?: RegExp;
+};
+
 /**
  * Run one proposed user command through the hook's inert classifier.
  * This starts Bash for the hook only; the proposed command never runs and project files stay unchanged.
@@ -176,8 +183,13 @@ const policyBlockCases: PolicyBlockCase[] = [
     expectedPolicyMessage: /Policy secret/u,
   },
   {
-    name: "git grep with a protected secrets path",
-    userCommand: "git grep token -- secrets",
+    name: "git grep with a protected key-store pathspec",
+    userCommand: "git grep token -- .ssh",
+    expectedPolicyMessage: /Policy secret/u,
+  },
+  {
+    name: "credentials json download read",
+    userCommand: "cat config/credentials.json",
     expectedPolicyMessage: /Policy secret/u,
   },
   {
@@ -382,6 +394,18 @@ const policyAllowCases: PolicyAllowCase[] = [
     userCommand: "cat docs/secrets.md",
   },
   {
+    name: "application secrets route source",
+    userCommand: "cat src/pages/secrets/index.tsx",
+  },
+  {
+    name: "application credentials provider source",
+    userCommand: "cat src/auth/credentials.ts",
+  },
+  {
+    name: "git grep pathspec named secrets",
+    userCommand: "git grep token -- secrets",
+  },
+  {
     name: "xargs arg file feeding git status",
     userCommand: "xargs -a commands.txt git status",
   },
@@ -471,6 +495,236 @@ const policyAllowCases: PolicyAllowCase[] = [
   },
 ];
 
+// Each parser-boundary scenario runs through direct --check and provider-shaped input.
+const parserBoundaryCases: ParserBoundaryCase[] = [
+  {
+    name: "double-quoted JavaScript arrow remains inert",
+    userCommand: 'node -e "const f=(x)=>(x+1);console.log(f(1))"',
+    expectedStatus: 0,
+  },
+  {
+    name: "double-quoted process-substitution-looking literals remain inert",
+    userCommand: "printf '%s\\n' \"literal <(sort a) and >(cat)\"",
+    expectedStatus: 0,
+  },
+  {
+    name: "escaped command-substitution opener remains inert",
+    userCommand: "printf '%s\\n' \"\\$(literal)\"",
+    expectedStatus: 0,
+  },
+  {
+    name: "multiline double-quoted process-substitution-looking literals remain inert",
+    userCommand: "printf '%s\\n' \"line one <(sort a)\nline two >(cat)\"",
+    expectedStatus: 0,
+  },
+  {
+    name: "single-quoted process-substitution-looking control remains inert",
+    userCommand: "printf '%s\\n' 'literal <(sort a) and >(cat)'",
+    expectedStatus: 0,
+  },
+  {
+    name: "benign nested command substitution remains recursively checked and allowed",
+    userCommand: 'echo "$(dirname "$(pwd)")"',
+    expectedStatus: 0,
+  },
+  {
+    name: "dangerous nested command substitution remains blocked",
+    userCommand: 'echo "$(echo "$(rm -rf /)")"',
+    expectedStatus: 2,
+    expectedPolicyMessage: /Policy destructive/u,
+  },
+  {
+    name: "dangerous backtick substitution remains blocked",
+    userCommand: 'echo "`rm -rf /`"',
+    expectedStatus: 2,
+    expectedPolicyMessage: /Policy destructive/u,
+  },
+  {
+    name: "incomplete command substitution remains blocked",
+    userCommand: 'echo "$(date"',
+    expectedStatus: 2,
+    expectedPolicyMessage: /Policy destructive/u,
+  },
+  {
+    name: "incomplete process substitution remains blocked",
+    userCommand: "cat <(sort",
+    expectedStatus: 2,
+    expectedPolicyMessage: /Policy destructive/u,
+  },
+  {
+    name: "genuine benign process substitution remains recursively checked and allowed",
+    userCommand: "diff <(sort a) <(sort b)",
+    expectedStatus: 0,
+  },
+  {
+    name: "genuine dangerous process substitution remains blocked",
+    userCommand: "cat <(true || rm -rf /)",
+    expectedStatus: 2,
+    expectedPolicyMessage: /Policy destructive/u,
+  },
+  {
+    name: "bare background command exposes its dangerous second segment",
+    userCommand: "echo safe & git reset --hard",
+    expectedStatus: 2,
+    expectedPolicyMessage: /Policy repository/u,
+  },
+  {
+    name: "stderr duplication is not a background boundary",
+    userCommand: "echo safe 2>&1",
+    expectedStatus: 0,
+  },
+  {
+    name: "combined output redirection is not a background boundary",
+    userCommand: "echo safe &>m33-output.log",
+    expectedStatus: 0,
+  },
+  {
+    name: "stderr pipeline is not a background boundary",
+    userCommand: "git status |& cat",
+    expectedStatus: 0,
+  },
+  {
+    name: "quoted ampersand remains inert",
+    userCommand: "printf '%s\\n' \"safe & text\"",
+    expectedStatus: 0,
+  },
+  {
+    name: "escaped ampersand remains inert",
+    userCommand: "printf '%s\\n' \\&",
+    expectedStatus: 0,
+  },
+  {
+    name: "downstream shell eval",
+    userCommand: "printf safe | eval 'git status'",
+    expectedStatus: 2,
+    expectedPolicyMessage:
+      /Policy destructive: eval hides commands from safety checks/u,
+  },
+  {
+    name: "command-wrapped downstream shell eval",
+    userCommand: "printf safe | command eval 'git status'",
+    expectedStatus: 2,
+    expectedPolicyMessage:
+      /Policy destructive: eval hides commands from safety checks/u,
+  },
+  {
+    name: "builtin option terminator before shell eval",
+    userCommand: "builtin -- eval 'git status'",
+    expectedStatus: 2,
+    expectedPolicyMessage:
+      /Policy destructive: eval hides commands from safety checks/u,
+  },
+  {
+    name: "leading shell negation before shell eval",
+    userCommand: "! eval 'git status'",
+    expectedStatus: 2,
+    expectedPolicyMessage:
+      /Policy destructive: eval hides commands from safety checks/u,
+  },
+  {
+    name: "leading input redirection before shell eval",
+    userCommand: "</dev/null eval 'git status'",
+    expectedStatus: 2,
+    expectedPolicyMessage:
+      /Policy destructive: eval hides commands from safety checks/u,
+  },
+  {
+    name: "leading stderr redirection before shell eval",
+    userCommand: "2>/dev/null eval 'git status'",
+    expectedStatus: 2,
+    expectedPolicyMessage:
+      /Policy destructive: eval hides commands from safety checks/u,
+  },
+  {
+    name: "named descriptor redirection before shell eval",
+    userCommand: "{output}>/dev/null eval 'git status'",
+    expectedStatus: 2,
+    expectedPolicyMessage:
+      /Policy destructive: eval hides commands from safety checks/u,
+  },
+  {
+    name: "downstream leading redirection before shell eval",
+    userCommand: "printf safe | 2>/dev/null eval 'git status'",
+    expectedStatus: 2,
+    expectedPolicyMessage:
+      /Policy destructive: eval hides commands from safety checks/u,
+  },
+  {
+    name: "wrapped named descriptor redirection before downstream shell eval",
+    userCommand: "printf safe | command {output}>/dev/null eval 'git status'",
+    expectedStatus: 2,
+    expectedPolicyMessage:
+      /Policy destructive: eval hides commands from safety checks/u,
+  },
+  {
+    name: "builtin option terminator before benign printf",
+    userCommand: "builtin -- printf '%s\\n' safe",
+    expectedStatus: 0,
+  },
+  {
+    name: "leading input redirection before benign printf",
+    userCommand: "</dev/null printf '%s\\n' safe",
+    expectedStatus: 0,
+  },
+  {
+    name: "named descriptor redirection before benign printf",
+    userCommand: "{output}>/dev/null printf '%s\\n' safe",
+    expectedStatus: 0,
+  },
+  {
+    name: "leading stderr redirection before yq eval subcommand",
+    userCommand: "2>/dev/null yq eval '.metadata.key' file.yaml",
+    expectedStatus: 0,
+  },
+  {
+    name: "leading shell negation before yq eval subcommand",
+    userCommand: "! yq eval '.metadata.key' file.yaml",
+    expectedStatus: 0,
+  },
+  {
+    name: "downstream yq eval subcommand",
+    userCommand: "printf document | yq eval '.metadata.key'",
+    expectedStatus: 0,
+  },
+  {
+    name: "quoted downstream eval evidence",
+    userCommand: `rg -n 'printf safe | eval "rm -rf /"' docs | head -n 1`,
+    expectedStatus: 0,
+  },
+  {
+    name: "compact direct lockfile overwrite is blocked",
+    userCommand: "echo x>package-lock.json",
+    expectedStatus: 2,
+    expectedPolicyMessage: /Policy destructive/u,
+  },
+  {
+    name: "compact direct lockfile append is blocked",
+    userCommand: "echo x>>pnpm-lock.yaml",
+    expectedStatus: 2,
+    expectedPolicyMessage: /Policy destructive/u,
+  },
+  {
+    name: "lockfile read remains allowed",
+    userCommand: "cat package-lock.json",
+    expectedStatus: 0,
+  },
+  {
+    name: "lockfile read after stderr discard remains allowed",
+    userCommand: "cat 2>/dev/null package-lock.json",
+    expectedStatus: 0,
+  },
+  {
+    name: "lockfile read after stderr duplication remains allowed",
+    userCommand: "wc -l 2>&1 Cargo.lock",
+    expectedStatus: 0,
+  },
+  {
+    name: "package-manager-owned lockfile write remains allowed",
+    userCommand: "npm install --package-lock-only",
+    expectedStatus: 0,
+  },
+];
+
 describe("deny-dangerous existing policy boundaries", () => {
   // Each reproduced hazard must show the policy block the user would see before execution.
   for (const policyBlockCase of policyBlockCases) {
@@ -531,4 +785,36 @@ describe("deny-dangerous existing policy boundaries", () => {
     assert.notEqual(policyResult.status, 0, policyResult.stderr);
     assert.match(policyResult.stderr, /unsupported self-test mode: bogus/u);
   });
+});
+
+describe("deny-dangerous parser boundaries", () => {
+  const inputModes = [
+    { name: "direct --check", run: runInertPolicyCheck },
+    {
+      name: "provider payload",
+      run: (userCommand: string) => runStdinPolicyCheck(userCommand),
+    },
+  ] as const;
+
+  for (const parserCase of parserBoundaryCases) {
+    for (const inputMode of inputModes) {
+      const verdict = parserCase.expectedStatus === 0 ? "allows" : "blocks";
+      it([verdict, parserCase.name, "via", inputMode.name].join(" "), () => {
+        const policyResult = inputMode.run(parserCase.userCommand);
+
+        assert.notEqual(policyResult.status, null, policyResult.error?.message);
+        assert.equal(
+          policyResult.status,
+          parserCase.expectedStatus,
+          policyResult.stderr,
+        );
+        if (parserCase.expectedStatus === 0) {
+          assert.equal(policyResult.stderr, "");
+          return;
+        }
+        assert.ok(parserCase.expectedPolicyMessage);
+        assert.match(policyResult.stderr, parserCase.expectedPolicyMessage);
+      });
+    }
+  }
 });

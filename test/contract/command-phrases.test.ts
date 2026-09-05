@@ -1,7 +1,8 @@
 /**
- * Keeps user-facing command and authority wording consistent across setup surfaces.
- * Use these contracts when changing agent permissions or CLI language that users read.
- * They prevent one agent from presenting a different safety policy than another.
+ * Keep command wording and agent authority consistent across setup instructions and visible CLI output.
+ *
+ * These contracts check shared permissions, workflow reminders, and the audit summary users read.
+ * Run them when changing CLI language or instructions that affect an agent’s allowed actions.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -37,6 +38,46 @@ const POLICY_SURFACE_PATHS = [
   ".github/copilot-instructions.md",
   "workflow/setup/reference/execution-loop.md",
 ] as const;
+const WRITE_SCOPE_RECONCILIATION_PATHS = [
+  "workflow/setup/reference/execution-loop.md",
+  "workflow/setup/agents/claude.md",
+  "workflow/setup/agents/codex.md",
+  "workflow/setup/agents/antigravity.md",
+  "workflow/setup/agents/copilot.md",
+  "AGENTS.md",
+  "CLAUDE.md",
+  ".github/copilot-instructions.md",
+] as const;
+const MILESTONE_TIMING_RULE =
+  "For milestone work, load `goat-plan`; start timing before the first source edit, stop its timer at human gates, resume after release, and finalize it at exit.";
+const MILESTONE_CLARITY_RULE =
+  "If a milestone changes source, run `goat-clarity` once before exit on the explicit folder/file paths written by that milestone; never widen the selector to all uncommitted files when unrelated changes exist.";
+const WRITE_SCOPE_CAPTURE_RULE =
+  "Before writing, record the write allowlist and starting dirty paths; keep an in-session list of every path this session writes.";
+const SCOPE_EXPANSION_RULE =
+  "Expanding beyond scope = stop and re-scope with human.";
+const WRITE_SCOPE_RECONCILIATION_RULE =
+  "Reconcile the write allowlist, starting dirty paths, session write paths, and final changed state before delivery.";
+const WRITE_SCOPE_DECISION_CASES = [
+  {
+    userSituation: "read-only discovery outside the write allowlist",
+    expectedDecision: "Reads and searches stay unrestricted.",
+  },
+  {
+    userSituation: "a new in-scope write",
+    expectedDecision: "A new in-scope write is deliverable.",
+  },
+  {
+    userSituation: "a new out-of-scope write",
+    expectedDecision:
+      "A new out-of-scope write requires the agent to stop and obtain human approval for the expanded scope before delivery.",
+  },
+  {
+    userSituation: "a dirty path present before the session",
+    expectedDecision:
+      "Do not attribute a starting dirty path to this session unless the session also recorded writing it.",
+  },
+] as const;
 const USER_FACING_CLI_COMMAND_SURFACE_PATHS = [
   ".github/PULL_REQUEST_TEMPLATE.md",
   "README.md",
@@ -53,13 +94,30 @@ const USER_FACING_CLI_COMMAND_SURFACE_PATHS = [
   "src/dashboard/views/home.html",
 ] as const;
 
+// Require timing and clarity reminders inside ACT so wording in an unrelated section cannot satisfy the instruction contract.
+function assertMilestoneReminder(
+  instructionText: string,
+  sourceLabel: string,
+): void {
+  const actMatch = instructionText.match(
+    /(?:^|\n)[ \t]*### ACT[^\n]*\n([\s\S]*?)(?=\n[ \t]*### [^\n]+|\n[ \t]*## [^\n]+|$)/u,
+  );
+  assert.ok(actMatch, `${sourceLabel} must contain an ACT section`);
+  const actSection = actMatch[1];
+  assert.ok(
+    actSection.includes(MILESTONE_TIMING_RULE),
+    `${sourceLabel} must keep the complete timing reminder inside ACT`,
+  );
+  assert.ok(
+    actSection.includes(MILESTONE_CLARITY_RULE),
+    `${sourceLabel} must keep the source-changing clarity reminder inside ACT`,
+  );
+}
+
 /**
- * Builds the smallest passing report needed to render the user's audit summary.
- * Use it when testing visible audit wording without running a real repository audit.
+ * Build a controlled passing audit report for visible wording checks.
  *
- * Every field is constructed inline rather than loaded from a recorded fixture
- * to avoid coupling copy assertions to this repository's live audit state,
- * which would make the wording contract fail for unrelated harness changes.
+ * The fixture avoids live project state; null analysis fields and empty finding lists keep unrelated audit detail out of the rendered summary.
  */
 function makePassingReport(): AuditReport {
   return {
@@ -183,6 +241,39 @@ describe("user-facing CLI package identity", () => {
       "deployed examples must not fall back to a bare package command",
     );
   });
+
+  it("deduplicates manifest instruction paths before preflight quality checks", () => {
+    const preflight = readFileSync(
+      resolve(PROJECT_ROOT, "scripts/preflight-checks.sh"),
+      "utf-8",
+    );
+    const instructionFilesStart = preflight.indexOf(
+      'if (mode === "instruction-files") {',
+    );
+    const supportedSkillsStart = preflight.indexOf(
+      'if (mode === "supported-skills") {',
+    );
+
+    assert.notEqual(
+      instructionFilesStart,
+      -1,
+      "preflight must define the instruction-files manifest mode",
+    );
+    assert.ok(
+      supportedSkillsStart > instructionFilesStart,
+      "instruction-files must remain a bounded manifest mode",
+    );
+    const instructionFilesMode = preflight.slice(
+      instructionFilesStart,
+      supportedSkillsStart,
+    );
+    assert.match(instructionFilesMode, /new Set\(/u);
+    assert.match(instructionFilesMode, /instruction_file/u);
+    assert.match(
+      preflight,
+      /manifest_agent_lines=\$\(manifest_eval instruction-files/u,
+    );
+  });
 });
 
 describe("bounded hook verification guidance", () => {
@@ -214,7 +305,12 @@ describe("bounded hook verification guidance", () => {
       );
       assert.match(
         content,
-        /does not launch the external coding agent/u,
+        /nine scenarios total: four deny-hook, three Gruff, and two post-turn/u,
+        relativePath,
+      );
+      assert.match(
+        content,
+        /do(?:es)? not launch the external coding agent/u,
         relativePath,
       );
       assert.match(
@@ -550,6 +646,25 @@ describe("step 06 references audit", () => {
 // ---------------------------------------------------------------------------
 // Setup truth and evidence contracts
 // ---------------------------------------------------------------------------
+/**
+ * Reject headings that prefix another heading so readers can identify which section owns a setup rule.
+ *
+ * @param headings - headings from one document; an empty list performs no checks
+ */
+function assertNoShadowedHeading(headings: readonly string[]): void {
+  // Compare every heading with its peers so the failure identifies both competing navigation labels.
+  for (const heading of headings) {
+    const shadowedBy = headings.filter(
+      (other) => other !== heading && other.startsWith(heading),
+    );
+    assert.deepEqual(
+      shadowedBy,
+      [],
+      `"${heading}" is shadowed by ${shadowedBy.join(", ")}`,
+    );
+  }
+}
+
 describe("setup truth and evidence contracts", () => {
   const contentAuditCommand =
     "goat-flow audit . --agent {agent} --check-content";
@@ -589,6 +704,41 @@ describe("setup truth and evidence contracts", () => {
       "generated setup gates must include content lint",
     );
     assert.doesNotMatch(setupPrompt, /both required setup gates|both audits/iu);
+  });
+
+  it("separates manifest ownership policy from the setup write set", () => {
+    const overview = readFileSync(
+      resolve(PROJECT_ROOT, "workflow/setup/01-system-overview.md"),
+      "utf-8",
+    );
+    const ownershipHeadings = [
+      ...overview.matchAll(/^## (.*ownership.*)$/gimu),
+    ].map((match) => match[1]!);
+
+    assertNoShadowedHeading(ownershipHeadings);
+
+    assert.ok(
+      overview.includes("## Setup write set"),
+      "Step 01 must name the conditional setup write set separately from manifest policy",
+    );
+    const writeSet = overview.slice(overview.indexOf("## Setup write set"));
+    // Template update policy has one owner, so the write set points at the manifest rather than restating it.
+    assert.match(
+      writeSet,
+      /workflow\/manifest\.json/u,
+      "the setup write set must defer template update policy to the manifest",
+    );
+    // Destinations without a package template are real and enumerated elsewhere, so claiming the manifest covers every file is false.
+    assert.doesNotMatch(
+      overview,
+      /manifest\.json` gives every required or optional file/u,
+      "the manifest owns exact-copy templates, not every destination install writes",
+    );
+    assert.match(
+      overview,
+      /goat-flow install \. --dry-run/u,
+      "Step 01 must name the preview that enumerates non-template destinations",
+    );
   });
 
   it("routes content-audit failures to their reported findings", () => {
@@ -663,6 +813,81 @@ describe("setup truth and evidence contracts", () => {
   });
 });
 
+describe("end-of-run write-scope reconciliation", () => {
+  // Each supported instruction surface must capture the same three sets before it can account for the files shown to the user.
+  for (const relativePath of WRITE_SCOPE_RECONCILIATION_PATHS) {
+    it(`reconciles the three write-scope sets in ${relativePath}`, () => {
+      const instructionText = readFileSync(
+        resolve(PROJECT_ROOT, relativePath),
+        "utf-8",
+      );
+      assert.ok(
+        instructionText.includes(WRITE_SCOPE_CAPTURE_RULE),
+        `${relativePath} must capture the write boundary before work starts`,
+      );
+      assert.ok(
+        instructionText.includes(SCOPE_EXPANSION_RULE),
+        `${relativePath} must require human re-scope before expanding work`,
+      );
+      assert.ok(
+        instructionText.includes(WRITE_SCOPE_RECONCILIATION_RULE),
+        `${relativePath} must reconcile the user's final changed-file view before delivery`,
+      );
+    });
+
+    // One named case per user-visible decision makes failures identify both the situation and the drifting instruction surface.
+    for (const {
+      userSituation,
+      expectedDecision,
+    } of WRITE_SCOPE_DECISION_CASES) {
+      it(`${userSituation} has one decision in ${relativePath}`, () => {
+        const instructionText = readFileSync(
+          resolve(PROJECT_ROOT, relativePath),
+          "utf-8",
+        );
+        assert.ok(
+          instructionText.includes(expectedDecision),
+          `${relativePath} must say: ${expectedDecision}`,
+        );
+      });
+    }
+  }
+});
+
+describe("milestone reminder", () => {
+  // Every instruction copy must place the full milestone reminder where an agent begins implementation.
+  for (const relativePath of WRITE_SCOPE_RECONCILIATION_PATHS) {
+    it(`keeps the complete reminder inside ACT in ${relativePath}`, () => {
+      assertMilestoneReminder(
+        readFileSync(resolve(PROJECT_ROOT, relativePath), "utf-8"),
+        relativePath,
+      );
+    });
+  }
+
+  it("rejects a complete reminder placed outside ACT", () => {
+    assert.throws(
+      () =>
+        assertMilestoneReminder(
+          `### ACT\nKeep working.\n### VERIFY\n${MILESTONE_TIMING_RULE}\n${MILESTONE_CLARITY_RULE}`,
+          "misplaced fixture",
+        ),
+      /complete timing reminder inside ACT/u,
+    );
+  });
+
+  it("rejects an incomplete ACT reminder", () => {
+    assert.throws(
+      () =>
+        assertMilestoneReminder(
+          `### ACT\n${MILESTONE_TIMING_RULE}\n### VERIFY\nCheck the work.`,
+          "incomplete fixture",
+        ),
+      /source-changing clarity reminder inside ACT/u,
+    );
+  });
+});
+
 describe("setup-facing learning-loop retrieval", () => {
   const agentTemplatePaths = [
     "workflow/setup/agents/claude.md",
@@ -705,8 +930,32 @@ describe("setup-facing learning-loop retrieval", () => {
     });
   }
 
+  // Check browser discovery and ignored-state retrieval in each agent’s instructions so these rules do not depend on the provider.
   for (const relativePath of allInstructionPaths) {
-    it(`keeps ignored-state search semantics harness-specific in ${relativePath}`, () => {
+    it(`routes browser syntax through the detected playbook branch in ${relativePath}`, () => {
+      const content = readFileSync(
+        resolve(PROJECT_ROOT, relativePath),
+        "utf-8",
+      );
+      assert.match(
+        content,
+        /command -v browser-use \|\| command -v browser-use-python/u,
+        relativePath,
+      );
+      assert.match(content, /browser-use --help/u, relativePath);
+      assert.match(
+        content,
+        /\.goat-flow\/skill-docs\/playbooks\/browser-use\.md/u,
+        relativePath,
+      );
+      assert.doesNotMatch(
+        content,
+        /browser-use open\/state\/screenshot/u,
+        relativePath,
+      );
+    });
+
+    it(`keeps ignored-state search semantics provider-neutral in ${relativePath}`, () => {
       const content = readFileSync(
         resolve(PROJECT_ROOT, relativePath),
         "utf-8",
@@ -718,12 +967,12 @@ describe("setup-facing learning-loop retrieval", () => {
       );
       assert.match(
         content,
-        /Claude Code's session grep shim and `git grep` omit ignored local state/u,
+        /gitignore-aware search tools \(including ripgrep defaults, `git grep`, and harness search shims\) omit ignored local state/u,
         relativePath,
       );
       assert.doesNotMatch(
         content,
-        /(?:^|[^A-Za-z])the session grep shim/u,
+        /Claude Code's session grep shim/u,
         relativePath,
       );
     });
@@ -745,6 +994,7 @@ describe("setup-facing learning-loop retrieval", () => {
     );
 
     assert.ok(qualityPreset, "quality-check-goatflow preset must exist");
+    // The execution reference and quality preset must teach the same bounded learning-loop retrieval used by agent instructions.
     for (const [surface, content] of [
       ["execution-loop reference", executionLoop],
       ["quality preset", qualityPreset.prompt],

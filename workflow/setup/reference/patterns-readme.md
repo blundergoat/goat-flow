@@ -30,4 +30,10 @@ last_reviewed: 2026-05-02
 
 Inside a bucket, add entries as `## Pattern:` blocks. Each entry SHOULD include `**Context:**` and `**Approach:**` sections so a fresh agent can apply it without prior session knowledge.
 
-Entry bodies are retrieved by agents but verified by people in code review and staleness checks: write them per `.goat-flow/skill-docs/playbooks/writing-style.md`. Body prose only - frontmatter, schema lines, and semantic anchors stay exempt as fixed schema.
+Entry bodies are retrieved by agents but verified by people in code review and staleness checks: write them per `.goat-flow/skill-docs/playbooks/writing-human-facing-prose.md`. Body prose only - frontmatter, schema lines, and semantic anchors stay exempt as fixed schema.
+
+## Bucket Size
+
+Split a bucket at roughly 200 lines or 10 entries (ADR-033). Split along a real seam in the subject matter, and extract the new bucket **out of** the existing file rather than renaming it, so paths cited from code, ADRs, and sibling entries keep resolving. Re-run `goat-flow index` afterwards and let `stats --check` find any anchor that pointed at a moved entry.
+
+Those figures are guidance. The gate that actually blocks is measured in bytes: `stats --check` raises a `bucket-size` finding and fails when a bucket exceeds 40,000 bytes (`src/cli/stats/stats.ts`, search: `BUCKET_SIZE_WARN_BYTES`). A bucket can sit under ten entries and still trip it, so check size after adding a long entry rather than counting headings.

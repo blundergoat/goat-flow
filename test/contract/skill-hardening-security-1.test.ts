@@ -1,6 +1,8 @@
 /**
- * Contracts for goat-security quick-scan, specialist, policy, evidence, threat, and runtime guidance.
- * Reads installed copies so user-visible drift fails regardless of the canonical source.
+ * Check the security workflow guidance users receive across supported agent integrations.
+ *
+ * These contracts inspect canonical and installed instructions for the evidence, coverage, and reporting each mode requires.
+ * Use them when changing security review modes, trust boundaries, or required disclosures.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -88,6 +90,85 @@ describe("skill hardening contracts: security (1/2)", () => {
         skillPath,
       );
     });
+  });
+
+  it("admits an early target read only for trusted explicit-component Quick scans", () => {
+    assertForEachTarget(installedSkillPaths("goat-security"), (skillPath) => {
+      const intake = readMarkdownSection(skillPath, "Step 0 - Intake");
+      const earlyRead = intake.indexOf("Trusted explicit-component Quick");
+      const exhaustiveInventory = intake.indexOf(
+        "Inventory every project/runtime class",
+      );
+
+      assert.ok(
+        earlyRead >= 0,
+        `${skillPath}: missing trusted early-read lane`,
+      );
+      assert.ok(
+        earlyRead < exhaustiveInventory,
+        `${skillPath}: bounded target evidence must precede exhaustive inventory`,
+      );
+      assertMatchesAll(
+        intake,
+        [
+          /trusted explicit-component Quick.*bounded, non-executing, non-rendering, no-follow.*target and adjacent-boundary read.*before exhaustive inventory/isu,
+          /MUST NOT use Git, import code, load plugins, execute configuration, or run a scanner/iu,
+          /unknown or untrusted provenance.*repo-wide.*unresolved path containment.*ambiguous applicability.*fail.*exhaustive/isu,
+          /No lead may be retained, severity assigned, zero-findings result declared, or clearance recommended until.*mandatory references.*inventory.*baseline.*family rows.*complete/isu,
+        ],
+        skillPath,
+      );
+    });
+  });
+
+  it("allows only observed trusted-component Quick risks before exhaustive inventories", () => {
+    assertForEachTarget(installedSkillPaths("goat-security"), (skillPath) => {
+      const intake = readMarkdownSection(skillPath, "Step 0 - Intake");
+      const proportionalGate = intake.indexOf(
+        "Proportional Quick finding gate",
+      );
+      const exhaustiveGate = intake.indexOf("Exhaustive inventory gate");
+
+      assert.ok(
+        proportionalGate >= 0,
+        `${skillPath}: missing proportional Quick finding gate`,
+      );
+      assert.ok(
+        exhaustiveGate > proportionalGate,
+        `${skillPath}: proportional finding gate must precede exhaustive inventory`,
+      );
+      assertMatchesAll(
+        intake,
+        [
+          /Proportional Quick finding gate.*trusted explicit-component Quick.*retain and calibrate only.*current-session `OBSERVED`.*component risk.*before exhaustive Full inventories/isu,
+          /exact target.*deployment.*provenance.*authority\/snapshot.*entry→sink or requirement gap.*mitigation re-check.*execution-safety receipt/isu,
+          /`INFERRED`.*`UNVERIFIED`.*`HUMAN-PENDING`.*missing binding stays withheld with evidence needed/isu,
+          /no supported component finding survives.*report.*no supported component finding.*MUST NOT.*zero-findings.*complete coverage.*clearance/isu,
+        ],
+        skillPath,
+      );
+    });
+
+    assertForEachTarget(
+      installedSkillReferencePaths(
+        "goat-security",
+        "references/common-threats.md",
+      ),
+      (referencePath) => {
+        const applicationBaseline = readMarkdownSection(
+          referencePath,
+          "Application baseline",
+        );
+        assertMatchesAll(
+          applicationBaseline,
+          [
+            /Full and exhaustive-path Quick.*baseline-family inventory.*one row per family/isu,
+            /proportional trusted-component Quick.*compact coverage-gap ledger.*replaces per-family rows.*unassessed families.*coverage-degraded.*MUST NOT recommend clearance/isu,
+          ],
+          referencePath,
+        );
+      },
+    );
   });
 
   it("keeps goat-security quality composition complete", () => {

@@ -317,19 +317,91 @@ export function agentRegistersHostTimeout(
 /**
  * Complete handler shape one provider registers for a managed hook.
  *
- * Shell descriptors carry one host-parsed command string; argv descriptors carry an exec-form executable plus ordered arguments that no shell
- * retokenizes.
- * Readers compare the complete selected descriptor, never a reconstructed string.
+ * Shell descriptors carry one host-parsed command string and may add the provider's Windows-only override. Claude argv descriptors carry an
+ * exec-form executable plus ordered arguments and inert shell routes for hosts that also load Claude config. Readers compare the complete
+ * selected descriptor, never a reconstructed string.
  */
 export type AgentHookHandlerDescriptor =
-  | { form: "shell"; command: string }
-  | { form: "argv"; command: string; args: string[] };
+  | { form: "shell"; command: string; commandWindows?: string }
+  | {
+      form: "argv";
+      command: string;
+      args: string[];
+      bash: string;
+      powershell: string;
+    };
+
+/** Executable and ordered arguments used to replay one configured handler on the current platform. */
+export interface AgentHookSpawnDescriptor {
+  command: string;
+  args: string[];
+}
+
+/** Quote one literal argument for Windows PowerShell without exposing its contents to expression parsing. */
+function quoteWindowsPowerShellArgument(argumentValue: string): string {
+  return `'${argumentValue.replaceAll("'", "''")}'`;
+}
+
+/**
+ * Build Codex's Windows-only shell command from source and literal operands.
+ * The Base64 token keeps the generated bootstrap opaque to PowerShell; removing that token restores the argv indexes the bootstrap reads.
+ */
+function codexWindowsHookCommand(
+  bootstrapSource: string,
+  operands: string[],
+): string {
+  const decoderSource =
+    "eval(Buffer.from(process.argv.splice(1,1)[0],'base64').toString('utf8'))";
+  const nodeCommand = [
+    "node.exe",
+    "-e",
+    quoteWindowsPowerShellArgument(decoderSource),
+    quoteWindowsPowerShellArgument(
+      Buffer.from(bootstrapSource, "utf8").toString("base64"),
+    ),
+    ...operands.map(quoteWindowsPowerShellArgument),
+  ].join(" ");
+  // Literal location restoration preserves hostile-named roots that PowerShell's provider startup rejects as patterns.
+  // The null guard makes a missing Node executable fail instead of reusing PowerShell's empty native status as success.
+  // Explicit exit propagation prevents Windows PowerShell from collapsing every non-zero native status to exit 1.
+  return `Set-Location -LiteralPath ([Environment]::CurrentDirectory); $global:LASTEXITCODE = $null; & ${nodeCommand}; if ($null -eq $LASTEXITCODE) { exit 1 }; exit $LASTEXITCODE`;
+}
+
+/**
+ * Select the exact platform registration a local configured-hook probe must replay.
+ * Windows Codex shell handlers use `commandWindows`; other command strings retain their Bash contract.
+ *
+ * @param descriptor - Registered handler whose current-platform command is selected.
+ * @param platform - Host platform used for selection; defaults to the running Node process.
+ * @returns Executable and ordered arguments that replay the registered handler.
+ */
+export function agentHookSpawnDescriptor(
+  descriptor: AgentHookHandlerDescriptor,
+  platform: NodeJS.Platform = process.platform,
+): AgentHookSpawnDescriptor {
+  if (descriptor.form === "argv") {
+    // Shell-routing fields belong to host config identity, never Claude's direct exec replay.
+    return { command: descriptor.command, args: [...descriptor.args] };
+  }
+  if (platform === "win32" && descriptor.commandWindows !== undefined) {
+    return {
+      command: "powershell.exe",
+      args: [
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        descriptor.commandWindows,
+      ],
+    };
+  }
+  return { command: "bash", args: ["-c", descriptor.command] };
+}
 
 /**
  * Build the handler descriptor written into the selected agent's configuration.
  *
  * Use during install, sync, and audit so every consumer derives one launch contract.
- * Claude uses the ADR-053 argv form; providers without fresh live captures keep their deferred shell command byte-for-byte.
+ * Claude uses the ADR-053 argv form. Codex retains that deferred command for non-Windows hosts and adds a PowerShell-safe Windows override.
  *
  * @param agentId - agent receiving the handler; empty is impossible after setup validation
  * @param hooksDirectory - project hook folder; empty would produce an invalid managed path
@@ -350,7 +422,7 @@ export function buildAgentHookDescriptor(
   if (!registrationPath) throw new Error(`${agentId} has no hook config file`);
   // Codex can use managed ancestors but has no supported final host-root environment fallback.
   const rootEnvironmentName = agentId === "codex" ? "-" : "CLAUDE_PROJECT_DIR";
-  // Claude's live capture approves exec form, so its operands bypass host shells entirely.
+  // Claude's live capture approves exec form, while cross-loading shell hosts receive inert routes.
   if (agentId === "claude") {
     return {
       form: "argv",
@@ -364,14 +436,17 @@ export function buildAgentHookDescriptor(
         registrationPath,
         bashLauncherPath,
       ],
+      bash: "exit 0",
+      powershell: "exit 0",
     };
   }
-  return {
+  const bootstrapSource = hookLaunchBootstrap(hookResponseMode);
+  const shellDescriptor: AgentHookHandlerDescriptor = {
     form: "shell",
     command: [
       "node",
       "-e",
-      JSON.stringify(hookLaunchBootstrap(hookResponseMode)),
+      JSON.stringify(bootstrapSource),
       JSON.stringify(hookScriptPath),
       JSON.stringify(hookResponseMode),
       JSON.stringify(rootEnvironmentName),
@@ -379,6 +454,16 @@ export function buildAgentHookDescriptor(
       JSON.stringify(bashLauncherPath),
     ].join(" "),
   };
+  if (agentId === "codex") {
+    shellDescriptor.commandWindows = codexWindowsHookCommand(bootstrapSource, [
+      hookScriptPath,
+      hookResponseMode,
+      rootEnvironmentName,
+      registrationPath,
+      bashLauncherPath,
+    ]);
+  }
+  return shellDescriptor;
 }
 
 /**
@@ -483,6 +568,7 @@ function entryCommandSearchText(entry: AgentHookJsonObject): string {
     : [];
   return [
     typeof entry.command === "string" ? entry.command : "",
+    typeof entry.commandWindows === "string" ? entry.commandWindows : "",
     typeof entry.bash === "string" ? entry.bash : "",
     typeof entry.powershell === "string" ? entry.powershell : "",
     ...argumentOperands,
@@ -567,9 +653,25 @@ export function entryCarriesHandlerDescriptor(
       entry.powershell === descriptor.command
     );
   }
-  // Argv handlers must match the executable plus every ordered argument exactly.
+  // Argv handlers must match the executable, every ordered argument, and both inert shell routes exactly.
   if (descriptor.form === "argv") {
-    if (entry.command !== descriptor.command || !Array.isArray(entry.args)) {
+    if (!Array.isArray(entry.args)) return false;
+    const registeredIdentityFields = [
+      entry.command,
+      entry.bash,
+      entry.powershell,
+    ];
+    const expectedIdentityFields = [
+      descriptor.command,
+      descriptor.bash,
+      descriptor.powershell,
+    ];
+    if (
+      !registeredIdentityFields.every(
+        (fieldValue, fieldIndex) =>
+          fieldValue === expectedIdentityFields[fieldIndex],
+      )
+    ) {
       return false;
     }
     const registeredArguments = entry.args;
@@ -581,7 +683,11 @@ export function entryCarriesHandlerDescriptor(
       )
     );
   }
-  return entry.command === descriptor.command;
+  if (entry.command !== descriptor.command) return false;
+  return (
+    descriptor.commandWindows === undefined ||
+    entry.commandWindows === descriptor.commandWindows
+  );
 }
 
 /**

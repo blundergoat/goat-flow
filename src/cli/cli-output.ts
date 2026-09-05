@@ -1,9 +1,8 @@
 /**
- * Single sink every command uses to emit its rendered result, routing to a file or stdout.
+ * Default sink for rendered command results, routing to a file or stdout.
  *
- * Keeping all commands behind one writer means the `--output` contract (and the trailing newline convention) is defined in exactly one place.
- * Note the asymmetry callers rely on: when writing to a file the "Written to ..." confirmation goes to stderr so the file path never contaminates
- * piped stdout; with no `--output` the payload itself goes to stdout for piping.
+ * Commands with stronger persistence contracts may own their file branch; `redact` uses a project-local pinned descriptor. Other callers share this
+ * `--output` contract and trailing-newline convention. File confirmations go to stderr so paths never contaminate piped stdout.
  */
 
 import { mkdirSync, writeFileSync } from "node:fs";

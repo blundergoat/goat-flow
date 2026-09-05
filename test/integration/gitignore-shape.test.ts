@@ -1,11 +1,10 @@
 /**
- * Integration tests for the shipped `.goat-flow/.gitignore` shape (`workflow/setup/reference/goat-flow-gitignore`).
+ * Proves which project-memory paths the shipped `.goat-flow/.gitignore` keeps visible or local-only.
+ * Use when changing `workflow/setup/reference/goat-flow-gitignore`, because Git and ignore-aware search tools interpret slash rules differently.
  *
- * The template opens with `*` and re-includes committed surfaces with `!` rules. Ignore-aware search tools (Claude Code's
- * embedded ugrep) match slash-containing rules against the operand-prefixed path, so every slash-containing rule carries a
- * double-star-slash prefix; Git then needs the LOGS_SUBDIRECTORY_GUARD rule so a directory named like a committed surface
- * inside a re-included `logs/<x>/` directory stays ignored. These tests pin Git's decisions over an explicit path table in a real temporary repository and
- * prove that both the guard and the leading `*` are load-bearing.
+ * The leading `*` ignores unknown local files, while `!` rules restore committed surfaces and slash rules keep their double-star-slash search prefix.
+ * The logs guard prevents nested names from being re-included accidentally.
+ * A real disposable repository pins every decision and proves both protections are load-bearing.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -70,6 +69,7 @@ const EXPECTED_DECISIONS: ReadonlyArray<
   // Local-only content stays ignored.
   ["plans/1.16.0/M99.md", "!!"],
   ["scratchpad/x/y.md", "!!"],
+  ["write-claims/example.claim", "!!"],
   ["logs/sessions/2026.md", "!!"],
   ["logs/quality/r.json", "!!"],
   ["logs/review/r.txt", "!!"],
@@ -84,48 +84,59 @@ const EXPECTED_DECISIONS: ReadonlyArray<
 ];
 
 /**
- * Build a temporary Git repository holding the probe table under `.goat-flow/` and return Git's decision for every probed
- * path, sorted by path.
+ * Build a disposable repository and return Git's decision for every `.goat-flow/` probe.
  *
- * @param goatFlowGitignore Content written to `.goat-flow/.gitignore`; callers pass the shipped template or a mutated copy.
+ * Side effects: writes suite-owned fixtures, spawns Git twice, and removes the repository in `finally`.
+ * Invariant: results exclude `.gitignore` files and stay sorted for byte-stable comparison.
+ *
+ * @param goatFlowGitignore - root ignore text; empty content leaves root project-memory paths visible to Git
  * @returns `"<decision> <path>"` lines for every probed path, sorted, with the `.gitignore` files themselves excluded.
  */
 function gitDecisions(goatFlowGitignore: string): string[] {
-  const root = mkdtempSync(join(tmpdir(), "goat-flow-gitignore-shape-"));
+  const repositoryRoot = mkdtempSync(
+    join(tmpdir(), "goat-flow-gitignore-shape-"),
+  );
   try {
-    const init = spawnSync("git", ["init", "-q"], {
-      cwd: root,
+    const gitInitResult = spawnSync("git", ["init", "-q"], {
+      cwd: repositoryRoot,
       encoding: "utf8",
     });
-    assert.equal(init.status, 0, init.stderr);
-    const goatFlow = join(root, ".goat-flow");
-    mkdirSync(join(goatFlow, "plans"), { recursive: true });
-    mkdirSync(join(goatFlow, "scratchpad"), { recursive: true });
-    writeFileSync(join(goatFlow, ".gitignore"), goatFlowGitignore);
-    writeFileSync(join(goatFlow, "plans", ".gitignore"), PLANS_TEMPLATE);
+    assert.equal(gitInitResult.status, 0, gitInitResult.stderr);
+    const goatFlowDirectory = join(repositoryRoot, ".goat-flow");
+    mkdirSync(join(goatFlowDirectory, "plans"), { recursive: true });
+    mkdirSync(join(goatFlowDirectory, "scratchpad"), { recursive: true });
+    writeFileSync(join(goatFlowDirectory, ".gitignore"), goatFlowGitignore);
     writeFileSync(
-      join(goatFlow, "scratchpad", ".gitignore"),
+      join(goatFlowDirectory, "plans", ".gitignore"),
+      PLANS_TEMPLATE,
+    );
+    writeFileSync(
+      join(goatFlowDirectory, "scratchpad", ".gitignore"),
       SCRATCHPAD_TEMPLATE,
     );
-    for (const [path] of EXPECTED_DECISIONS) {
-      mkdirSync(dirname(join(goatFlow, path)), { recursive: true });
-      writeFileSync(join(goatFlow, path), "");
+    // Each probe becomes a real empty file so Git reports the exact visibility a user would see from `git status`.
+    for (const [fixturePath] of EXPECTED_DECISIONS) {
+      mkdirSync(dirname(join(goatFlowDirectory, fixturePath)), {
+        recursive: true,
+      });
+      writeFileSync(join(goatFlowDirectory, fixturePath), "");
     }
-    const status = spawnSync(
+    const gitStatusResult = spawnSync(
       "git",
       ["status", "--porcelain", "--ignored", "-uall", ".goat-flow/"],
       {
-        cwd: root,
+        cwd: repositoryRoot,
         encoding: "utf8",
       },
     );
-    assert.equal(status.status, 0, status.stderr);
-    return status.stdout
+    assert.equal(gitStatusResult.status, 0, gitStatusResult.stderr);
+    return gitStatusResult.stdout
       .split("\n")
       .filter((line) => line.length > 0 && !line.endsWith(".gitignore"))
       .sort();
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    // The repository belongs only to this probe, so cleanup never touches a user's project.
+    rmSync(repositoryRoot, { recursive: true, force: true });
   }
 }
 

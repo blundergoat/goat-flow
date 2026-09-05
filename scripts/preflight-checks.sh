@@ -8,7 +8,7 @@
 #
 # Runs the local quality gate a developer uses before accepting risky work or a release.
 # Use it to see one phased verdict for shell policy, source checks, tests, drift, and links.
-# Interactive Tests runs show bounded progress while their output stays captured for diagnostics.
+# Interactive long-running checks show bounded progress while output stays captured for diagnostics.
 # Redirected and CI runs keep a deterministic report that automation can parse safely.
 #
 # Usage:
@@ -48,8 +48,9 @@ Usage: preflight-checks.sh [--verbose] [--no-color] [--ascii] [--help]
 Runs the local pre-flight quality gate. Exits 0 when all checks pass,
 non-zero otherwise.
 
-Interactive Tests runs show one elapsed-time heartbeat every 10 seconds.
-Redirected and CI output remains deterministic and contains no heartbeat lines.
+Interactive Tests and Dependency Audit runs show one elapsed-time heartbeat
+every 10 seconds. Redirected and CI output remains deterministic and contains
+no heartbeat lines.
 
 Options:
   -v, --verbose    Expand every sub-check (default collapses to one row per
@@ -66,6 +67,8 @@ Environment:
   CI=true        - implies --no-color unless FORCE_COLOR is set
   GOAT_FLOW_PREFLIGHT_TEST_TIMEOUT_SECONDS=N
                  - test command timeout in seconds (default: 600; 0 disables)
+  GOAT_FLOW_PREFLIGHT_AUDIT_TIMEOUT_SECONDS=N
+                 - dependency audit timeout in seconds (default: 120; 0 disables)
 HELP
             exit 0
             ;;
@@ -117,6 +120,22 @@ if (mode === "hook-dirs") {
   process.exit(0);
 }
 
+if (mode === "instruction-files") {
+  const files = [
+    ...new Set(
+      Object.values(manifest.agents || {})
+        .map((agent) =>
+          typeof agent.instruction_file === "string"
+            ? agent.instruction_file
+            : "",
+        )
+        .filter(Boolean),
+    ),
+  ];
+  for (const file of files) console.log(file);
+  process.exit(0);
+}
+
 if (mode === "supported-skills") {
   for (const skill of manifest.skills?.canonical || []) console.log(skill);
   process.exit(0);
@@ -159,7 +178,7 @@ NODE
 # ── Capability detection ─────────────────────────────────────────────
 _is_tty=0
 [[ -t 1 ]] && _is_tty=1
-preflight_test_heartbeat_seconds=10
+preflight_heartbeat_seconds=10
 
 _use_color=1
 if [[ -n "$no_color" ]] || [[ -n "${NO_COLOR:-}" ]]; then
@@ -323,7 +342,7 @@ details_pipe() {
     done
 }
 
-# Run one Tests command while retaining final diagnostics and showing bounded TTY liveness.
+# Run one long command while retaining final diagnostics and showing bounded TTY liveness.
 run_command_capture_with_timeout() {
     local __output_var="$1"
     local __status_var="$2"
@@ -335,11 +354,11 @@ run_command_capture_with_timeout() {
     local -a command_runner_arguments=(
         scripts/preflight-command-runner.mjs
         --timeout-seconds "$timeout_seconds"
-        --heartbeat-seconds "$preflight_test_heartbeat_seconds"
+        --heartbeat-seconds "$preflight_heartbeat_seconds"
         --label "$progress_label"
     )
 
-    # e.g. a developer ran preflight before release; long Tests show liveness outside captured CI output.
+    # e.g. a developer ran preflight before release; long checks show liveness outside captured CI output.
     if [[ "$_is_tty" -eq 1 ]]; then
         exec {operator_progress_fd}>&1
         command_runner_arguments+=(--progress-fd "$operator_progress_fd")
@@ -680,7 +699,7 @@ _emit_section_row() {
 
 _emit_footer() {
     _compute_widths
-    local total_elapsed verdict verdict_color sep
+    local total_elapsed verdict verdict_color sep warning_label
     total_elapsed=$(fmt_elapsed $(( $(now_ms) - preflight_start )))
     if [[ "$errors" -gt 0 ]]; then
         verdict="FAIL"; verdict_color="$R"
@@ -691,16 +710,18 @@ _emit_footer() {
     fi
     sep="·"
     [[ "$_use_ascii" -eq 1 ]] && sep="+"
+    warning_label="warning"
+    [[ "$warnings" -ne 1 ]] && warning_label="warnings"
     printf '%s%s%s\n' "$DIM" "$RULE_MID_LINE" "$RST"
-    printf ' %s%s%s%s   %d checks %s %d warnings %s %s%s\n' \
+    printf ' %s%s%s%s   %d checks %s %d %s %s %s%s\n' \
         "$BOLD" "$verdict_color" "$verdict" "$RST" \
-        "$checks" "$sep" "$warnings" "$sep" "$total_elapsed" "$RST"
+        "$checks" "$sep" "$warnings" "$warning_label" "$sep" "$total_elapsed" "$RST"
     printf '%s%s%s\n' "$DIM" "$RULE_MID_LINE" "$RST"
 }
 
 # ── Shell Scripts ────────────────────────────────────────────────────
 section "Shell Scripts"
-if bash -n scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh 2>/dev/null; then
+if bash -n scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh workflow/install-goat-flow.sh 2>/dev/null; then
     pass "Bash syntax (scripts)"
 else
     fail "Bash syntax check (scripts)"
@@ -718,16 +739,17 @@ while IFS= read -r hookdir; do
 done < <(manifest_eval hook-dirs)
 
 if command -v shellcheck >/dev/null 2>&1; then
-    if shellcheck --exclude=SC2001 scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh >/dev/null 2>&1; then
+    if shellcheck --exclude=SC2001 scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh workflow/install-goat-flow.sh >/dev/null 2>&1; then
         pass "Shellcheck (scripts)"
     else
-        fail "Shellcheck (scripts) - run shellcheck scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh for details"
+        fail "Shellcheck (scripts) - run shellcheck scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh workflow/install-goat-flow.sh for details"
     fi
 
-    # Also shellcheck installed hooks (SC2016 excluded: sed patterns intentionally use single quotes)
+    # Also shellcheck installed hooks. SC2001 stays excluded (sed rewrites are deliberate); SC2016 no longer is,
+    # because the one literal that raised it now carries a narrow directive at its own site.
     while IFS= read -r hookdir; do
         if compgen -G "$hookdir/*.sh" >/dev/null 2>&1; then
-            if shellcheck --exclude=SC2001,SC2016 "$hookdir"/*.sh >/dev/null 2>&1; then
+            if shellcheck --exclude=SC2001 "$hookdir"/*.sh >/dev/null 2>&1; then
                 pass "Shellcheck ($hookdir/)"
             else
                 fail "Shellcheck ($hookdir/) - run shellcheck $hookdir/*.sh for details"
@@ -869,7 +891,19 @@ function collect(value, out = []) {
     );
     if (script) out.push({ command: value.command, args: argumentOperands, script });
   }
-  for (const key of ["command", "bash"]) {
+  // Shell rows retain the provider's default command and any Windows-only override as one descriptor.
+  if (typeof value.command === "string" && !Array.isArray(value.args)) {
+    const commandWindows =
+      typeof value.commandWindows === "string" ? value.commandWindows : undefined;
+    const script = guardScripts.find((name) =>
+      [value.command, commandWindows].some(
+        (commandText) =>
+          typeof commandText === "string" && commandText.includes(name),
+      ),
+    );
+    if (script) out.push({ command: value.command, commandWindows, script });
+  }
+  for (const key of ["bash"]) {
     if (typeof value[key] !== "string") continue;
     const script = guardScripts.find((name) => value[key].includes(name));
     if (script) out.push({ command: value[key], script });
@@ -898,6 +932,19 @@ function runCommand(entry, input, cwd) {
       input,
       timeout: 5000,
     });
+  }
+  // Codex documents commandWindows as the native Windows replacement for its default shell command.
+  if (process.platform === "win32" && entry.commandWindows !== undefined) {
+    return spawnSync(
+      "powershell.exe",
+      ["-NoProfile", "-NonInteractive", "-Command", entry.commandWindows],
+      {
+        cwd,
+        encoding: "utf8",
+        input,
+        timeout: 5000,
+      },
+    );
   }
   return spawnSync("bash", ["-c", `printf %s "$GOAT_HOOK_SMOKE_PAYLOAD" | { ${entry.command}; }`], {
     cwd,
@@ -931,7 +978,12 @@ for (const config of configs) {
   const seen = new Set();
   const commands = collect(parsed).filter((entry) => {
     // Args join the identity so two handlers sharing one executable stay distinct.
-    const key = [entry.command, ...(entry.args ?? []), entry.script].join("\0");
+    const key = [
+      entry.command,
+      entry.commandWindows ?? "",
+      ...(entry.args ?? []),
+      entry.script,
+    ].join("\0");
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
@@ -1347,7 +1399,7 @@ fi
 
 # Derive instruction file list from manifest once, reuse across sections
 agent_files=()
-if manifest_agent_lines=$(node -e "const m=require('./workflow/manifest.json');for(const a of Object.values(m.agents))console.log(a.instruction_file)" 2>/dev/null); then
+if manifest_agent_lines=$(manifest_eval instruction-files 2>/dev/null); then
     while IFS= read -r af; do
         [[ -f "$af" ]] && agent_files+=("$af")
     done <<< "$manifest_agent_lines"
@@ -1464,9 +1516,10 @@ const files = [
       "release-notes.md",
       "skill-playbook-authoring-sync.md",
       "test-selection.md",
+      "writing-agent-facing-instructions.md",
       "writing-sentence-diagnostics.md",
       "writing-structure-diagnostics.md",
-      "writing-style.md",
+      "writing-human-facing-prose.md",
     ].flatMap((name) => [
       `workflow/skills/playbooks/${name}`,
       `.goat-flow/skill-docs/playbooks/${name}`,
@@ -1480,6 +1533,18 @@ const files = [
       `.goat-flow/skill-docs/skill-quality-testing/${name}`,
     ]),
   ] },
+  // Skill bodies use the canonical workflow source alone. `Skill SKILL.md parity` separately proves the four installed mirrors are
+  // byte-identical, so listing every mirror here would report one near-cap skill four times.
+  { cap: 600, paths: ["workflow/skills/goat/SKILL.md"] },
+  { cap: 2500, paths: [
+    "goat-clarity",
+    "goat-critique",
+    "goat-debug",
+    "goat-plan",
+    "goat-qa",
+    "goat-review",
+    "goat-security",
+  ].map((name) => `workflow/skills/${name}/SKILL.md`) },
 ];
 
 function bodyWordCount(file) {
@@ -1727,12 +1792,19 @@ if [[ -f tsconfig.json ]]; then
     # .goat-flow/scratchpad, and Knip's own `ignore` option cannot help because it filters the report rather than the
     # file walk. Nothing under src/, test/, or scripts/ is gitignored, so the analysed set is unchanged.
     if command -v npx >/dev/null 2>&1 && npx knip --version >/dev/null 2>&1; then
-        knip_output=$(node --max-old-space-size=5120 node_modules/knip/bin/knip.js --no-progress --no-gitignore 2>&1) && knip_exit=0 || knip_exit=$?
+        knip_command=(
+            node
+            --max-old-space-size=5120
+            node_modules/knip/bin/knip.js
+            --no-progress
+            --no-gitignore
+        )
+        knip_output=$("${knip_command[@]}" 2>&1) && knip_exit=0 || knip_exit=$?
         if [[ "$knip_exit" -eq 0 ]]; then
             pass "Knip (no unused exports or deps)"
         else
             unused_count=$(echo "$knip_output" | grep -c '^[A-Za-z].*  ' || echo "?")
-            fail "Knip: $unused_count unused exports/types - run npx knip for details"
+            fail "Knip: $unused_count unused exports/types - run ${knip_command[*]} for details"
         fi
     else
         skip "Knip (not installed)"
@@ -1829,9 +1901,22 @@ fi
 # ── Dependency Audit ─────────────────────────────────────────────────
 if [[ -f package.json ]]; then
     section "Dependency Audit"
-    audit_output=$(npm audit 2>&1) && audit_exit=0 || audit_exit=$?
+    audit_output=""
+    audit_exit=1
+    audit_timeout_seconds="${GOAT_FLOW_PREFLIGHT_AUDIT_TIMEOUT_SECONDS:-120}"
+    if [[ "$audit_timeout_seconds" =~ ^[0-9]+$ ]]; then
+        :
+    else
+        warn "Invalid GOAT_FLOW_PREFLIGHT_AUDIT_TIMEOUT_SECONDS=$audit_timeout_seconds; using 120"
+        audit_timeout_seconds=120
+    fi
+    run_command_capture_with_timeout \
+        audit_output audit_exit "$audit_timeout_seconds" "Dependency Audit" npm audit
     if [[ "$audit_exit" -eq 0 ]]; then
         pass "npm audit (0 vulnerabilities)"
+    elif [[ "$audit_exit" -eq 124 ]]; then
+        fail "npm audit timed out after ${audit_timeout_seconds}s"
+        printf '%s\n' "$audit_output" | tail -20 | details_pipe || true
     else
         vuln_summary=$(printf '%s\n' "$audit_output" | grep -E '^[0-9]+ vulnerabilities? ' | tail -1 || true)
         if [[ -n "$vuln_summary" ]]; then
@@ -1922,12 +2007,27 @@ fi
 # file:line or (search:) evidence on active entries, resolved-below-section.
 if [[ -f dist/cli/cli.js ]]; then
     section "Learning-Loop Schema"
-    stats_output=$(node dist/cli/cli.js stats . --check 2>&1) && stats_exit=0 || stats_exit=$?
+    stats_output=$(node dist/cli/cli.js stats . --check --format text 2>&1) && stats_exit=0 || stats_exit=$?
     if [[ "$stats_exit" -eq 0 ]]; then
-        pass "Footgun/lesson schema passes"
+        stats_summary=$(printf '%s\n' "$stats_output" | head -1)
+        if [[ "$stats_summary" =~ ^stats\ --check:\ PASS\ \(([0-9]+)\ warnings?\)$ ]]; then
+            stats_warning_count="${BASH_REMATCH[1]}"
+            stats_warning_label="warning"
+            [[ "$stats_warning_count" -ne 1 ]] && stats_warning_label="warnings"
+            warn "Footgun/lesson schema passes (${stats_warning_count} ${stats_warning_label})"
+            printf '%s\n' "$stats_output" | sed -n '2,11p' | details_pipe
+            if [[ "$stats_warning_count" -gt 1 ]]; then
+                warnings=$((warnings + stats_warning_count - 1))
+            fi
+        elif [[ "$stats_summary" == "stats --check: PASS" ]]; then
+            pass "Footgun/lesson schema passes"
+        else
+            fail "stats --check returned an unrecognized passing result"
+            printf '%s\n' "$stats_output" | head -10 | details_pipe
+        fi
     else
         fail "Footgun/lesson schema violations (exit $stats_exit)"
-        echo "$stats_output" | head -10 | details_pipe
+        printf '%s\n' "$stats_output" | head -10 | details_pipe
     fi
 else
     skip "Learning-Loop Schema (dist/cli/cli.js not built)"
@@ -2238,15 +2338,25 @@ if [[ -f workflow/skills/playbooks/writing-structure-diagnostics.md ]] && [[ -f 
 else
     skip "writing-structure-diagnostics.md sync (one or both files missing)"
 fi
-# Consumers receive prose-style guidance; a drifted copy teaches the wrong scope gate.
-if [[ -f workflow/skills/playbooks/writing-style.md ]] && [[ -f .goat-flow/skill-docs/playbooks/writing-style.md ]]; then
-    if diff -q workflow/skills/playbooks/writing-style.md .goat-flow/skill-docs/playbooks/writing-style.md >/dev/null 2>&1; then
-        pass "writing-style.md: template and installed copy match"
+# Consumers receive agent-document authoring guidance; a drifted copy teaches the wrong ladder.
+if [[ -f workflow/skills/playbooks/writing-agent-facing-instructions.md ]] && [[ -f .goat-flow/skill-docs/playbooks/writing-agent-facing-instructions.md ]]; then
+    if diff -q workflow/skills/playbooks/writing-agent-facing-instructions.md .goat-flow/skill-docs/playbooks/writing-agent-facing-instructions.md >/dev/null 2>&1; then
+        pass "writing-agent-facing-instructions.md: template and installed copy match"
     else
-        fail "writing-style.md: template (workflow/skills/playbooks/) and installed (.goat-flow/skill-docs/playbooks/) differ"
+        fail "writing-agent-facing-instructions.md: template (workflow/skills/playbooks/) and installed (.goat-flow/skill-docs/playbooks/) differ"
     fi
 else
-    skip "writing-style.md sync (one or both files missing)"
+    skip "writing-agent-facing-instructions.md sync (one or both files missing)"
+fi
+# Consumers receive prose-style guidance; a drifted copy teaches the wrong scope gate.
+if [[ -f workflow/skills/playbooks/writing-human-facing-prose.md ]] && [[ -f .goat-flow/skill-docs/playbooks/writing-human-facing-prose.md ]]; then
+    if diff -q workflow/skills/playbooks/writing-human-facing-prose.md .goat-flow/skill-docs/playbooks/writing-human-facing-prose.md >/dev/null 2>&1; then
+        pass "writing-human-facing-prose.md: template and installed copy match"
+    else
+        fail "writing-human-facing-prose.md: template (workflow/skills/playbooks/) and installed (.goat-flow/skill-docs/playbooks/) differ"
+    fi
+else
+    skip "writing-human-facing-prose.md sync (one or both files missing)"
 fi
 # Hook maintainers need the same policy-test workflow that consumer agents receive.
 if [[ -f workflow/skills/playbooks/hook-policy-testing.md ]] && [[ -f .goat-flow/skill-docs/playbooks/hook-policy-testing.md ]]; then

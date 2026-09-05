@@ -15,22 +15,35 @@ import {
   REQUIRED_INTEGRITY_FIELDS,
   AUTOMATED_REVIEW_VALUE,
   REFUTER_VALUE,
-  COMPACT_INTEGRITY,
   COMPACT_CLEAN_REVIEW_FIELDS,
+  COMPACT_REVIEW_SCOPE_SIZE,
+  FULL_REVIEW_SIZE_VALUE,
   KNOWN_DEGRADATION_FLAGS,
+  REVIEW_CHUNK_CHANGED_LINE_LIMIT,
+  REVIEW_CHUNK_FILE_LIMIT,
+  RETIRED_DEGRADATION_FLAGS,
+  fullReviewCoverageFileCount,
+  matchCompactReviewIntegrity,
   readSections,
   addViolation,
   addWarning,
+  reviewIntegrityFormatMessage,
+  reviewIntegrityValuePattern,
+  reviewScopeExceedsChunkLimit,
   type ReviewValidationViolation,
   type MarkdownSection,
   type IntegrityResult,
   type ReviewIntegrityConclusion,
+  type ReviewValidationStage,
   type ReviewAnchorAuthority,
   type EvidenceCountClaim,
   type VerdictCountClaim,
   type ParsedScopeSnapshot,
   type IntegrityField,
   type IntegrityFieldMap,
+  type CompactReviewSizeClaim,
+  type LocatedLine,
+  type ReviewSizeClaim,
 } from "./review-validate-common.js";
 import { validateDegradationConclusion } from "./review-validate-verdict.js";
 
@@ -78,20 +91,131 @@ function validateIntegrityFieldGrammar(
   fields: IntegrityFieldMap,
   section: MarkdownSection,
   violations: ReviewValidationViolation[],
+  validationStage: ReviewValidationStage,
 ): void {
   for (const [label, valuePattern] of REQUIRED_INTEGRITY_FIELDS) {
     const field = fields.get(label);
     if (!field && OMIT_WHEN_INAPPLICABLE_INTEGRITY_FIELDS.has(label)) continue;
-    if (field && valuePattern.test(field.value)) continue;
+    if (
+      field &&
+      reviewIntegrityValuePattern(label, valuePattern, validationStage).test(
+        field.value,
+      )
+    ) {
+      continue;
+    }
     addViolation(
       violations,
       "integrity-format",
       field?.line ?? section.headingLine,
-      field
-        ? `Review Integrity ${label} has an invalid value`
-        : `Review Integrity is missing ${label}`,
+      reviewIntegrityFormatMessage(label, field, validationStage),
     );
   }
+}
+
+/** Parse the leading counts in a full-report Size row. */
+function parseFullSizeClaim(
+  field: IntegrityField,
+  violations: ReviewValidationViolation[],
+): ReviewSizeClaim | null {
+  const match = field.value.match(FULL_REVIEW_SIZE_VALUE);
+  if (!match) {
+    addViolation(
+      violations,
+      "integrity-format",
+      field.line,
+      "Size must begin with numeric files and changed lines or clusters",
+    );
+    return null;
+  }
+  const fileCount = readSafeIntegrityCount(
+    match[1] as string,
+    "Size file count",
+    field.line,
+    violations,
+  );
+  const unitCount = readSafeIntegrityCount(
+    match[2] as string,
+    "Size changed-line or cluster count",
+    field.line,
+    violations,
+  );
+  if (fileCount === null) return null;
+  if (unitCount === null) return null;
+  return {
+    fileCount,
+    unitCount,
+    unitLabel: match[3] as string,
+    line: field.line,
+  };
+}
+
+/** Keep the Size unit aligned with the source class declared by Scope snapshot. */
+function validateFullSizeUnit(
+  size: ReviewSizeClaim,
+  scope: ParsedScopeSnapshot,
+  violations: ReviewValidationViolation[],
+): boolean {
+  const expectedUnit = scope.isAreaAudit ? /^clusters?$/iu : /^changed/iu;
+  if (expectedUnit.test(size.unitLabel)) return true;
+  addViolation(
+    violations,
+    "integrity-format",
+    size.line,
+    scope.isAreaAudit
+      ? "area review Size must use clusters"
+      : "diff or path review Size must use changed lines",
+  );
+  return false;
+}
+
+/** Bind the full Size file count to the coverage denominator. */
+function validateFullSizeFileCount(
+  size: ReviewSizeClaim,
+  fields: IntegrityFieldMap,
+  violations: ReviewValidationViolation[],
+): boolean {
+  const coverageFileCount = fullReviewCoverageFileCount(fields);
+  if (coverageFileCount === null) return true;
+  if (coverageFileCount === size.fileCount) return true;
+  addViolation(
+    violations,
+    "integrity-format",
+    size.line,
+    `Size file count ${size.fileCount} does not match Files opened in Pass 2 denominator ${coverageFileCount}`,
+  );
+  return false;
+}
+
+/** Cross-check full-report size claims against the terminal chunking state. */
+function validateFullScopeSize(
+  fields: IntegrityFieldMap,
+  scope: ParsedScopeSnapshot,
+  violations: ReviewValidationViolation[],
+): boolean {
+  const field = fields.get("Size");
+  if (!field) return false;
+  const size = parseFullSizeClaim(field, violations);
+  if (!size) return false;
+  if (!validateFullSizeUnit(size, scope, violations)) return false;
+  if (!validateFullSizeFileCount(size, fields, violations)) return false;
+  if (
+    !reviewScopeExceedsChunkLimit(
+      size.fileCount,
+      size.unitCount,
+      size.unitLabel,
+    )
+  ) {
+    return true;
+  }
+  if (scope.chunking === "accepted") return true;
+  addViolation(
+    violations,
+    "integrity-format",
+    size.line,
+    `Size exceeds ${REVIEW_CHUNK_FILE_LIMIT} files or ${REVIEW_CHUNK_CHANGED_LINE_LIMIT} changed lines; completed review requires chunking=accepted`,
+  );
+  return false;
 }
 
 /** Require one conditional row after the rest of the report proves it applies. */
@@ -283,12 +407,34 @@ function warnUnknownDegradationFlags(
 ): void {
   for (const flag of flags) {
     const configuredBase = /^configured-base-unresolved=\S+$/u.test(flag);
-    if (KNOWN_DEGRADATION_FLAGS.has(flag) || configuredBase) continue;
+    if (
+      KNOWN_DEGRADATION_FLAGS.has(flag) ||
+      RETIRED_DEGRADATION_FLAGS.has(flag) ||
+      configuredBase
+    )
+      continue;
     addWarning(
       warnings,
       "degradation-flag-unknown",
       line,
       `unknown degradation flag: ${flag || "<empty>"}`,
+    );
+  }
+}
+
+/** Reject historical escape hatches that bypass the skill's mandatory size stop. */
+function rejectRetiredDegradationFlags(
+  flags: ReadonlySet<string>,
+  line: number,
+  violations: ReviewValidationViolation[],
+): void {
+  for (const flag of flags) {
+    if (!RETIRED_DEGRADATION_FLAGS.has(flag)) continue;
+    addViolation(
+      violations,
+      "integrity-format",
+      line,
+      `${flag} is retired; an oversized review must stop before Pass 1 or use accepted chunks`,
     );
   }
 }
@@ -345,6 +491,7 @@ function validateDegradationFlags(
     );
   }
 
+  rejectRetiredDegradationFlags(flags, field.line, violations);
   warnUnknownDegradationFlags(flags, field.line, warnings);
   const conclusionField = fields.get("Conclusion");
   validateDegradationConclusion(
@@ -483,11 +630,13 @@ function parseScopeSnapshot(
     uncommitted = "",
     signals = "",
     bundle = "",
+    chunking = "",
   ] = match;
   const source = sourceText.trim().toLowerCase();
   return {
     authority: authority.trim(),
     bundle: bundle.trim(),
+    chunking: chunking.trim().toLowerCase(),
     drift: drift.trim(),
     head: head.trim(),
     isAreaAudit: source === "area",
@@ -511,6 +660,9 @@ function validateScopeState(
       violations,
     ) !== null;
   const hasVerifiedDrift = scope.drift === "verified";
+  const hasCompletedChunking = ["no", "none", "accepted"].includes(
+    scope.chunking,
+  );
   if (!hasVerifiedDrift) {
     addViolation(
       violations,
@@ -530,7 +682,15 @@ function validateScopeState(
       "Scope snapshot bundle must name one review bundle receipt or the documented persist-skipped marker",
     );
   }
-  return hasSafeSignals && hasVerifiedDrift;
+  if (!hasCompletedChunking) {
+    addViolation(
+      violations,
+      "integrity-format",
+      line,
+      `completed review Scope snapshot has invalid chunking=${scope.chunking || "<empty>"}; use no, none, or accepted`,
+    );
+  }
+  return hasSafeSignals && hasVerifiedDrift && hasCompletedChunking;
 }
 
 /** Return whether the scope's Pass 2 files live in one Git object. */
@@ -613,7 +773,9 @@ function readScopeAuthority(
   if (!scope) {
     return { anchorAuthority: { kind: "invalid" }, isAreaAudit: false };
   }
-  const hasValidState = validateScopeState(scope, field.line, violations);
+  const hasValidState =
+    validateScopeState(scope, field.line, violations) &&
+    validateFullScopeSize(fields, scope, violations);
   const anchorAuthority = scopeUsesGitObject(scope.source)
     ? readGitScopeAuthority(scope, field.line, hasValidState, violations)
     : readWorktreeScopeAuthority(scope, field.line, hasValidState, violations);
@@ -626,9 +788,10 @@ function validateFullIntegrity(
   lines: string[],
   violations: ReviewValidationViolation[],
   warnings: ReviewValidationViolation[],
+  validationStage: ReviewValidationStage,
 ): IntegrityResult {
   const fields = collectIntegrityFields(section, violations);
-  validateIntegrityFieldGrammar(fields, section, violations);
+  validateIntegrityFieldGrammar(fields, section, violations, validationStage);
   validateOpenedFileCoverage(fields, violations);
   validateOptionalIntegrityField(
     fields,
@@ -697,11 +860,124 @@ function validateCompactCleanReviewFields(
   }
 }
 
+/** Locate the compact Scope disclosure that owns its size claim. */
+function findCompactScopeLine(lines: string[]): LocatedLine | undefined {
+  return lines
+    .map((text, index) => ({ line: index + 1, text }))
+    .find(({ text }) => /^\s*Scope:/u.test(text));
+}
+
+/** Parse numeric evidence and terminal chunking from a compact Scope line. */
+function parseCompactSizeClaim(
+  located: LocatedLine,
+  violations: ReviewValidationViolation[],
+): CompactReviewSizeClaim | null {
+  const match = located.text.match(COMPACT_REVIEW_SCOPE_SIZE);
+  if (!match) {
+    addViolation(
+      violations,
+      "integrity-format",
+      located.line,
+      "compact Scope must declare numeric files, changed lines, and terminal chunking",
+    );
+    return null;
+  }
+  const fileCount = readSafeIntegrityCount(
+    match[1] as string,
+    "compact Scope file count",
+    located.line,
+    violations,
+  );
+  const changedLines = readSafeIntegrityCount(
+    match[2] as string,
+    "compact Scope changed-line count",
+    located.line,
+    violations,
+  );
+  if (fileCount === null) return null;
+  if (changedLines === null) return null;
+  return {
+    fileCount,
+    unitCount: changedLines,
+    unitLabel: "changed lines",
+    line: located.line,
+    chunking: (match[3] as string).toLowerCase(),
+  };
+}
+
+/** Validate the compact opened/scoped pair and return its scope denominator. */
+function validateCompactOpenedCoverage(
+  match: RegExpMatchArray,
+  line: number,
+  violations: ReviewValidationViolation[],
+): number | null {
+  const openedFileCount = readSafeIntegrityCount(
+    match[2] as string,
+    "compact files opened numerator",
+    line,
+    violations,
+  );
+  const scopedFileCount = readSafeIntegrityCount(
+    match[3] as string,
+    "compact files opened denominator",
+    line,
+    violations,
+  );
+  if (openedFileCount === null) return null;
+  if (scopedFileCount === null) return null;
+  if (openedFileCount > scopedFileCount) {
+    addViolation(
+      violations,
+      "integrity-format",
+      line,
+      `compact files opened claims ${openedFileCount}/${scopedFileCount}; opened files cannot exceed scoped files`,
+    );
+  }
+  return scopedFileCount;
+}
+
+/** Cross-check compact scope counts against its terminal chunking state. */
+function validateCompactScopeSize(
+  lines: string[],
+  coverageFileCount: number | null,
+  violations: ReviewValidationViolation[],
+): void {
+  const located = findCompactScopeLine(lines);
+  if (!located) return;
+  const size = parseCompactSizeClaim(located, violations);
+  if (!size) return;
+  if (coverageFileCount !== null && size.fileCount !== coverageFileCount) {
+    addViolation(
+      violations,
+      "integrity-format",
+      size.line,
+      `compact Scope file count ${size.fileCount} does not match files opened denominator ${coverageFileCount}`,
+    );
+  }
+  if (
+    !reviewScopeExceedsChunkLimit(
+      size.fileCount,
+      size.unitCount,
+      size.unitLabel,
+    )
+  ) {
+    return;
+  }
+  if (size.chunking === "accepted") return;
+  addViolation(
+    violations,
+    "integrity-format",
+    size.line,
+    `compact Scope exceeds ${REVIEW_CHUNK_FILE_LIMIT} files or ${REVIEW_CHUNK_CHANGED_LINE_LIMIT} changed lines; use chunking=accepted`,
+  );
+}
+
 /** Validate M04's compact clean-review receipt and its surrounding disclosures. */
 function validateCompactIntegrity(
   lines: string[],
   findingCandidateCount: number,
   violations: ReviewValidationViolation[],
+  validationStage: ReviewValidationStage,
 ): IntegrityResult {
   const compactIntegrityLines = lines
     .map((text, lineIndex) => ({ line: lineIndex + 1, text }))
@@ -710,8 +986,9 @@ function validateCompactIntegrity(
   const compactIndex = compactIntegrityLine
     ? compactIntegrityLine.line - 1
     : -1;
-  const compactIntegrityMatch = (lines[compactIndex] ?? "").match(
-    COMPACT_INTEGRITY,
+  const compactIntegrityMatch = matchCompactReviewIntegrity(
+    lines[compactIndex] ?? "",
+    validationStage,
   );
   // Zero-finding reviews may use the shorter user-facing integrity line.
   if (compactIndex >= 0 && compactIntegrityMatch) {
@@ -724,6 +1001,12 @@ function validateCompactIntegrity(
       );
     }
     validateCompactCleanReviewFields(lines, violations);
+    const coverageFileCount = validateCompactOpenedCoverage(
+      compactIntegrityMatch,
+      compactIndex + 1,
+      violations,
+    );
+    validateCompactScopeSize(lines, coverageFileCount, violations);
     // A compact receipt cannot account for visible finding evidence or verdict totals.
     if (findingCandidateCount > 0) {
       addViolation(
@@ -778,6 +1061,7 @@ function validateCompactIntegrity(
  * @param findingCandidateCount - how many list items looked like findings, used to tell an empty section from a malformed one
  * @param violations - shared violation list, appended in report order so a reader sees issues top-down; a violation makes the report fail
  * @param warnings - shared advisory list; entries here inform the author without changing the pass/fail verdict
+ * @param validationStage - draft requires a pending receipt; final requires a completed validator state
  * @returns the parsed integrity claims used by later passes; absent fields have already been reported
  */
 export function validateIntegrity(
@@ -785,6 +1069,7 @@ export function validateIntegrity(
   findingCandidateCount: number,
   violations: ReviewValidationViolation[],
   warnings: ReviewValidationViolation[],
+  validationStage: ReviewValidationStage = "final",
 ): IntegrityResult {
   const fullSections = readSections(lines, "Review Integrity");
   const fullSection = fullSections.at(0);
@@ -810,7 +1095,18 @@ export function validateIntegrity(
         `Review Integrity duplicates the section at line ${fullSection.headingLine}`,
       );
     }
-    return validateFullIntegrity(fullSection, lines, violations, warnings);
+    return validateFullIntegrity(
+      fullSection,
+      lines,
+      violations,
+      warnings,
+      validationStage,
+    );
   }
-  return validateCompactIntegrity(lines, findingCandidateCount, violations);
+  return validateCompactIntegrity(
+    lines,
+    findingCandidateCount,
+    violations,
+    validationStage,
+  );
 }

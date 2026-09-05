@@ -1,56 +1,49 @@
 ---
 category: setup
-last_reviewed: 2026-08-15
+last_reviewed: 2026-09-05
 ---
 
 ## Footgun: A preview-layer classification change is inert until apply consumes the decision
 
 **Status:** active | **Created:** 2026-08-15 | **Evidence:** ACTUAL_MEASURED
 
-**Symptoms:** The CLI reports the new classification correctly - dry-run shows the row, the verdict changes, the exit code changes - and the user's file is still overwritten. Every unit test of the classifier passes, and typecheck cannot see the gap, because the two halves are written in different languages.
+**Prevention:** When changing what a preview row means, identify which process performs the write. If that is the shell installer, the change is not done until a per-path decision reaches it and `copy_file` honours it. Prove it with an integration fixture that runs the public CLI and asserts on target bytes, in the shape of `test/integration/setup-install-upgrade-1150.test.ts` (search: `the upgrade must preserve project content under an unchanged template`). Never re-derive the classification in Bash; one contract, generated or passed, is the rule for this surface.
 
-**Evidence:** While implementing 1.16.0 M02's `local-preserved` rule on 2026-08-15, `classifyManagedSetupFile` was changed and the CLI stopped blocking, so `install` exited 0. The integration fixture still failed: `workflow/install-goat-flow.sh` (search: `copy_file()`) replaces every system-owned destination unconditionally and had no channel to hear that one path was now preserved. The fix was a decision channel, not a second classifier - `src/cli/install-command.ts` (search: `Each row's own decision travels to Bash`) turns preview rows into `--preserve-path` and `--replace-user-path` flags, and `workflow/install-goat-flow.sh` (search: `installer_path_is_preserved`) consults them inside `copy_file`.
+**Symptoms:** Dry-run shows the new row, the verdict and exit code change, and the user's file is still overwritten. Every classifier unit test passes, and typecheck cannot see the gap because the two halves are written in different languages.
 
-**Why it happens:** The write path spans TypeScript and Bash. Preview classification, admission, and authority live in TypeScript; the writes live in the installer script. Nothing in the type system, the linter, or a classifier unit test crosses that boundary, so a change to what the CLI *says* looks complete while what the installer *does* is unchanged.
+**Why it happens:** Preview classification, admission, and authority live in TypeScript; the writes live in the installer script. Nothing in the type system, the linter, or a classifier unit test crosses that boundary.
 
-**Prevention:** When changing what a preview row means, ask which process performs the write. If that is the shell installer, the change is not done until a per-path decision reaches it and `copy_file` honours the decision. Prove it with an integration fixture that runs the public CLI and asserts on target bytes afterwards - `test/integration/setup-install-upgrade-1150.test.ts` (search: `the upgrade must preserve project content under an unchanged template`) is the shape. Never re-derive the classification in Bash: one contract, generated or passed, is the standing rule for this surface.
+**Evidence:** While implementing 1.16.0 M02's `local-preserved` rule on 2026-08-15, `classifyManagedSetupFile` changed and `install` exited 0, but `workflow/install-goat-flow.sh` (search: `copy_file()`) still replaced every system-owned destination. The fix was a decision channel: `src/cli/install-command.ts` (search: `Each row's own decision travels to Bash`) turns preview rows into `--preserve-path` and `--replace-user-path` flags, and `workflow/install-goat-flow.sh` (search: `installer_path_is_preserved`) consults them inside `copy_file`.
 
 ## Footgun: Optional-hook agent profiles break when installer treats hooks as universal
 
 **Status:** active | **Created:** 2026-05-24 | **Evidence:** ACTUAL_MEASURED
 
-**Symptoms:** The installer round-trip test can fail for an otherwise valid agent profile with missing hook fields, even when that agent legitimately has no project-local hook mechanism yet. PR #44 hit this in `test/integration/audit-drift-checkdrift-installer-round-trip-fixture.test.ts` (search: `install for ${agentId} should pass`) when Antigravity was temporarily modeled as hookless.
+**Prevention:** Installer profile validation requires `skills_dir` for every agent, but hook fields only when a hook-related destination is present. Do not fix a hookless-agent failure by removing the agent from round-trip coverage; that hides installer regressions for future capability-limited profiles.
 
-**Why it happens:** `workflow/manifest.json` allows agents whose project-local hook fields are absent, but the Bash installer previously required `hooks_dir` and `deny_hook` for every profile before copying shared files and skills. That made "no hook mechanism documented yet" indistinguishable from a corrupt manifest profile.
+**Symptoms:** The installer round-trip test fails for a valid agent profile that has no project-local hook mechanism yet. PR #44 hit this in `test/integration/audit-drift-checkdrift-installer-round-trip-fixture.test.ts` (search: `install for ${agentId} should pass`) when Antigravity was temporarily modelled as hookless.
 
-**Evidence:**
-- `src/cli/manifest/types.ts` (search: `upstream runtime has no documented project-local hook wiring`) documents optional `deny_mechanism` and `hook_events`.
-- `workflow/install-goat-flow.sh` (search: `HOOKS_ENABLED=false`) now gates hook copying separately from skills/reference installation.
-- `test/integration/audit-drift-checkdrift-installer-round-trip-fixture.test.ts` (search: `install for ${agentId} should pass`) proves every manifest agent still participates in install round-trip coverage.
+**Why it happens:** `workflow/manifest.json` allows agents without project-local hook fields, but the Bash installer once required `hooks_dir` and `deny_hook` for every profile, so "no hook mechanism documented yet" looked like a corrupt profile.
 
-**Prevention:** Installer profile validation must require `skills_dir` for every agent, but hook fields only when any hook-related destination is present. Do not fix hookless-agent failures by removing the agent from round-trip coverage; that hides installer regressions for future capability-limited profiles.
+**Evidence:** `src/cli/manifest/types.ts` (search: `upstream runtime has no documented project-local hook wiring`) documents optional `deny_mechanism` and `hook_events`; `workflow/install-goat-flow.sh` (search: `HOOKS_ENABLED=false`) gates hook copying separately from skills and references; the round-trip test above keeps every manifest agent in coverage.
 
 ## Footgun: New-harness contributions can bypass the manifest-driven installer and modify shared core surfaces
 
 **Status:** active | **Created:** 2026-05-26 | **Evidence:** OBSERVED
 
-**Symptoms:** A PR proposes "add harness X support." The diff turns out to copy skill files directly into a new `.harness-x/` directory, hand-edits a CLAUDE.md or AGENTS.md to add harness-specific instructions, monkey-patches `workflow/install-goat-flow.sh` with a harness-specific branch, or forks a shared instruction surface because the new harness "needs its own copy." The PR is craft-strong (the integration works on the proposer's machine) but architecturally wrong: it bypasses the manifest-driven contract every existing harness obeys and creates a divergent install surface that no parity check defends.
+**Prevention:**
+1. Add a harness through the manifest: a `workflow/manifest.json` agent entry, its hook config in `workflow/hooks/agent-config/` when hooks are supported, registration of any new instruction file in `scripts/check-instruction-parity.mjs` `LIVE_FILES`, then `bash workflow/install-goat-flow.sh` and a parity run.
+2. Reject a PR that forks a shared instruction file (`AGENTS.md`, `CLAUDE.md`) or hardcodes a harness-specific branch inside `workflow/install-goat-flow.sh`. "I need a separate file" is the wrong fix.
+3. Before merging any new harness, run `scripts/check-path-integrity.sh` and `scripts/check-instruction-parity.mjs`.
 
-**Why it happens:** goat-flow's clean per-harness model — `workflow/manifest.json` declares each agent with its `skills_dir`, `hooks_dir`, `hook_config_file`, and `local_pattern`; `workflow/install-goat-flow.sh` reads the manifest and writes mirrors; `scripts/check-instruction-parity.mjs` enforces shared canonical sections across instruction files — is invisible to a contributor who has not added a harness before. They reach for the most direct mechanism (copy files where the harness expects them) instead of the architectural mechanism (add a manifest entry and let the installer place the files). There is no `docs/adding-a-new-harness.md` walking the path, so each new contribution is a fresh chance to recreate the trap.
+**Symptoms:** A PR copies skill files into a new `.harness-x/` directory, hand-edits an instruction file, or patches the installer with a harness-specific branch. It works on the proposer's machine and creates a divergent install surface that no parity check defends.
+
+**Why it happens:** The per-harness model is invisible to a first-time contributor: the manifest declares each agent's `skills_dir`, `hooks_dir`, `hook_config_file`, and `local_pattern`; the installer reads it and writes mirrors; the parity script enforces shared sections. No document walks that path, so contributors reach for the direct mechanism.
 
 **Evidence:**
-- `workflow/manifest.json` (search: `"agents"`, `"skills_dir"`, `"hooks_dir"`, `"hook_config_file"`) declares every supported agent in a single contract; bypassing it creates a phantom harness invisible to manifest-driven tooling.
-- `workflow/install-goat-flow.sh` (search: `manifest_eval supported-agents`, `SKILLS_DIR`) reads the manifest and writes per-agent mirrors; any harness whose files arrive by another path will silently drift the moment a skill changes.
-- `scripts/installers/` holds `install-claude.sh`, `install-codex.sh`, `install-github-copilot.sh`, `install-antigravity.sh`, `install-kilo.sh` — each is a thin wrapper over the manifest-driven core, not a bespoke implementation. A new harness should add a sibling, not a fork.
-- `scripts/check-instruction-parity.mjs` (search: `SETUP_FILES`, `LIVE_FILES`, `CANONICAL_SECTIONS`) enforces shared sections across instruction files; a harness that adds its own instruction file without registering it here is silently exempt from the parity contract.
-- `AGENTS.md` and `CLAUDE.md` are shared instruction surfaces covered by setup/parity rules; a PR that hand-edits one surface for a new harness without updating the manifest-driven setup path breaks the shared-source pattern that keeps them in sync.
-- External corroboration: obra/superpowers PR #1586 ("feat: add DeepSeek TUI harness support") was closed with "we need to use their plugin install mechanism, this would need to target the dev branch, not main, and you'd need to not turn AGENTS.md into a file instead of the symlink it is today." Same trap, same root cause: a contributor reached for the direct mechanism instead of the architectural one.
-
-**Prevention:**
-1. Add a new harness through the manifest path, in this order: a `workflow/manifest.json` agent entry; the agent's hook config in `workflow/hooks/agent-config/` (if hooks are supported); a thin wrapper in `scripts/installers/`; registration of any new instruction file in `scripts/check-instruction-parity.mjs`'s `LIVE_FILES`; then `bash workflow/install-goat-flow.sh` and confirm parity. This sequence is the contract - a harness added any other way is the failure this entry describes.
-2. Reject any PR that forks a shared instruction file (`AGENTS.md`, `CLAUDE.md`, future shared surfaces) outside the manifest/setup/parity path. "I need a separate file" is the wrong fix.
-3. Reject any PR that hardcodes a harness-specific branch inside `workflow/install-goat-flow.sh`. New harnesses arrive via manifest entries and per-agent wrappers, not by branching the core installer.
-4. When adding the 5th, 6th, or Nth harness, run the path-integrity check (`scripts/check-path-integrity.sh`) and the parity check (`scripts/check-instruction-parity.mjs`) and confirm both pass before merging.
+- `workflow/manifest.json` (search: `"agents"`) declares every supported agent; `workflow/install-goat-flow.sh` (search: `manifest_eval supported-agents`) writes per-agent mirrors from it; `scripts/check-instruction-parity.mjs` (search: `LIVE_FILES`) enforces shared sections only for registered files.
+- `scripts/installers/*.sh` install the agent CLIs themselves and never call the goat-flow installer, so they are not where a harness is added.
+- External corroboration: obra/superpowers PR #1586 ("feat: add DeepSeek TUI harness support") was closed for bypassing the plugin install mechanism and turning a symlinked `AGENTS.md` into a file.
 
 ---
 
@@ -62,25 +55,19 @@ last_reviewed: 2026-08-15
 
 **Status:** resolved | **Created:** 2026-07-14 | **Resolved:** 2026-07-17 | **Evidence:** ACTUAL_MEASURED
 **Decision changed:** Managed-write admission must inspect every target path component before any file or directory creation and must not let force bypass an unsafe component.
-**Trigger phase:** VERIFY
+**Trigger phase:** ACT
+**Caught at:** VERIFY
 **Incident count:** 3 | **Latest occurrence:** 2026-07-14
 
-**Resolution:** Managed preview, install-state, and installer admission now inspect each existing path component before any directory scaffolding or file write. `--force` cannot bypass a symlinked or non-regular component. The focused preview, state, and atomic-installer regression suite covers the original nested redirects.
+**Resolution:** Managed preview, install state, and installer admission inspect each existing path component before scaffolding or writing, and `--force` cannot bypass a symlinked or non-regular component.
 
-**Original symptoms:** M26 negative verification placed `.goat-flow/logs/quality` as a symlink to a disposable directory outside the selected project, with an outside `README.md` matching the package template. Checking only the final `README.md` path treated those bytes as a regular managed file because filesystem calls followed the symlinked parent. M28 then proved that validating staged files was still too late: a symlinked `.goat-flow` root received 19 setup directories before the first file check blocked. A CLI or direct installer could therefore write outside the selected project before reporting the unsafe path.
+**Original symptoms:** M26 placed `.goat-flow/logs/quality` as a symlink to a directory outside the project with an outside `README.md` matching the template, and a final-path check accepted it. M28 then showed that validating staged files was still too late: a symlinked `.goat-flow` root received 19 setup directories before the first file check blocked.
 
-**Why it happened:** `lstat` does not follow a symlink when that symlink is the path being inspected, but it still resolves symlinked parent components while reaching a deeper child. A final-file type check therefore proved only the last component was regular; it did not prove the destination stayed inside the selected project.
+**Why it happened:** `lstat` does not follow the final symlink, but it resolves symlinked parents on the way to a child, so a final-file check proved only that the last component was regular.
 
-**Current evidence:**
-- `src/cli/managed-setup-write-set.ts` (search: `Every parent must remain a real directory`) inspects each parent component before hashing the final managed file; `src/cli/managed-setup-preview.ts` calls it for every previewed destination.
-- `src/cli/managed-setup-state.ts` (search: `Require project-local directories before any baseline read or write`) applies the same containment check before trusting or replacing install state.
-- `src/cli/managed-setup-admission.ts` (search: `no authority bypasses path safety`) keeps non-regular and unreadable managed destinations as hard admission failures that no authority flag can clear.
-- `workflow/install-goat-flow.sh` (search: `The shared setup root must be local before migrations`) validates the root and every setup directory before `mkdir` or staged file work.
-- `test/integration/setup-install-preview.test.ts` (search: `blocks symlinked managed parents even when force is supplied`) reproduces the nested redirect and asserts that the outside sentinel remains byte-identical.
-- `test/unit/managed-setup-preview.test.ts` (search: `rejects a valid baseline behind a symlinked install-state directory`) proves valid-looking outside hashes remain invalid evidence.
-- `test/integration/setup-install-atomic-staging.test.ts` (search: `blocks a symlinked goat-flow root before creating outside directories`) snapshots the redirected tree and proves no outside directory appears.
+**Evidence:** `src/cli/managed-setup-write-set.ts` (search: `Every parent must remain a real directory`); `src/cli/managed-setup-state.ts` (search: `Require project-local directories before any baseline read or write`); `src/cli/managed-setup-admission.ts` (search: `no authority bypasses path safety`); `workflow/install-goat-flow.sh` (search: `The shared setup root must be local before migrations`); regressions in `test/integration/setup-install-preview.test.ts` (search: `blocks symlinked managed parents even when force is supplied`), `test/unit/managed-setup-preview.test.ts` (search: `rejects a valid baseline behind a symlinked install-state directory`), and `test/integration/setup-install-atomic-staging.test.ts` (search: `blocks a symlinked goat-flow root before creating outside directories`).
 
-**Prevention retained:** Walk every destination component before directory scaffolding as well as file writes. Require real directories for parents plus a regular file or absence at file leaves. Treat symlinked, non-regular, and unreadable components as path-safety failures, not content conflicts; broad overwrite flags must never bypass them. Snapshot the outside directory tree in regression tests so a green status proves containment, not only an eventual error message.
+**Prevention retained:** Walk every destination component before scaffolding and before file writes. Treat symlinked, non-regular, and unreadable components as path-safety failures that no overwrite flag bypasses, and snapshot the outside tree in regression tests so a green status proves containment.
 
 ---
 
@@ -88,11 +75,11 @@ last_reviewed: 2026-08-15
 
 **Status:** resolved | **Created:** 2026-05-24 | **Resolved:** 2026-05-25 | **Evidence:** ACTUAL_MEASURED
 
-**Resolution:** `workflow/install-goat-flow.sh` now uses the same `isInvalidNoneKey` predicate shape in both the Codex permission migration path and the post-install validator. Current anchors: `workflow/install-goat-flow.sh` (search: `Single source of truth: a "none" key is only invalid`) for the migration helper, and `workflow/install-goat-flow.sh` (search: `Single source of truth: must match isInvalidNoneKey`) for the validator helper.
+**Resolution:** `workflow/install-goat-flow.sh` uses one `isInvalidNoneKey` predicate shape in both the Codex permission migration (search: `Single source of truth: a "none" key is only invalid`) and the post-install validator (search: `Single source of truth: must match isInvalidNoneKey`).
 
-**Original symptoms:** The migration path and validator used separate invalid-glob definitions for `"<key>" = "none"` entries under `[permissions.goat-flow.filesystem]`. That created three failure modes on PR #44: valid trailing-`/**` subtree denies could be flattened during migration, invalid inline-table globs could survive migration and fail validation, and raw substring scans could treat comments or unrelated custom tables as Codex filesystem errors.
+**Original symptoms:** Separate definitions of an invalid `"<key>" = "none"` entry under `[permissions.goat-flow.filesystem]` produced three failures on PR #44: valid trailing-`/**` subtree denies flattened during migration, invalid inline-table globs surviving migration, and raw substring scans treating comments or unrelated tables as errors.
 
-**Prevention retained:** Migration and validation must share one predicate for Codex permission key validity. TOML-shape checks that need to ignore comments, inline tables, or unrelated sections must parse the relevant section/key shape instead of scanning raw file content.
+**Prevention retained:** Migration and validation share one predicate for Codex permission key validity, and TOML-shape checks parse the relevant section instead of scanning raw file content.
 
 ---
 
@@ -100,9 +87,7 @@ last_reviewed: 2026-08-15
 
 **Status:** resolved | **Created:** 2026-04-15 | **Resolved:** 2026-04-16 | **Evidence:** ACTUAL_MEASURED
 
-**Resolution:** `goat-plan/SKILL.md` description updated to say "local working state for the current session" instead of "shared state between human and coding agent." Updated across all agent copies (.claude, .agents) and the workflow template.
-
-**Original symptoms:** The skill description over-promised persistence for gitignored task files.
+**Resolution:** The `goat-plan/SKILL.md` description now says "local working state for the current session" in the workflow template and every installed copy.
 
 ---
 
@@ -110,23 +95,17 @@ last_reviewed: 2026-08-15
 
 **Status:** resolved | **Created:** 2026-04-16 | **Evidence:** ACTUAL_MEASURED
 
-**Symptoms:** `RULES.md` (432 words) in the goat dispatcher skill loaded on every `/goat` dispatch. 6 of 6 sections duplicated content already in CLAUDE.md and the shared skill preamble. Net unique content: ~30 words. Flagged by a coding agent critique on a consumer project as a framework flaw.
+**Resolution:** `RULES.md` in the dispatcher skill loaded 432 words on every `/goat` dispatch, and 6 of 6 sections duplicated `CLAUDE.md` or the shared preamble. It was deleted and its 2 unique lines moved into the preamble's Engineering Standards section.
 
-**Why it happened:** RULES.md was created as a standalone "core mandates" file for the mono-skill dispatcher model. When the architecture split into 7 separate skills with a shared preamble (now at `.goat-flow/skill-docs/skill-preamble.md`), the preamble absorbed the same rules but RULES.md was never removed.
-
-**Evidence (historical, pre-subdir-move paths):** `RULES.md` sections mapped 1:1 to existing surfaces. Evidence Standard, Severity Scale, and Learning Loop all duplicated content already in the shared preamble; Execution Loop duplicated CLAUDE.md's loop section. Specific line numbers from 2026-04-16 are stale after the `.goat-flow/skill-docs/` subdir move and are no longer recorded here.
-
-**Resolution:** Deleted `RULES.md`. Moved 2 unique lines into the shared preamble's "Engineering Standards" section.
-
-**Prevention:** When adding a new shared-context file, check whether its content already exists in CLAUDE.md or the shared preamble. Before promoting any file to "load on every invocation," verify it provides net-new signal per token.
+**Prevention retained:** Before promoting a file to "load on every invocation", check whether its content already exists in the instruction file or the shared preamble, and verify it provides net-new signal per token.
 
 ---
 
-- **Setup creates parallel surfaces instead of migrating existing ones** (resolved 2026-04-20) - legacy_surfaces block removed from `workflow/manifest.json` and the `# 0. Legacy surface detection` block deleted from `workflow/install-goat-flow.sh` per no-backwards-compat policy. Pre-v1 installs are out of scope; consumer projects on old layouts are expected to start fresh.
-- **Setup instructions contradict spec on execution loop steps** (resolved 2026-04-14) - Retired `docs/system-spec.md` and `docs/five-layers.md` in v1.1.0; `workflow/setup/reference/execution-loop.md` is now the single authoritative source.
-- **Multi-agent setup files share structure but not vocabulary** (resolved 2026-04-14) - Updated Gemini hook event names and settings.json to use correct CLI-specific vocabulary instead of copying Claude's.
-- **Workflow skill templates lag behind installed skills** (resolved 2026-04-15) - All 7 templates now match installed skills; preflight validates version parity.
-- **Ask First config/instruction sync is documented as blocking but not validated** (resolved 2026-04-13) - Added `normalizePath()` for glob-aware comparison; downgraded Step 06 "BLOCKING" to advisory.
-- **Base setup simplification can leave harness checks enforcing removed config fields** (resolved 2026-04-15) - Harness now treats missing `toolchain` and `ask_first` as optional with explanatory findings.
-- **Deduplicated multi-agent setup drifts from per-agent setup rules** (resolved 2026-04-13) - Removed `--agent all` and `composeMultiAgentSetup()`; setup now requires explicit `--agent` flag and routes per-agent only.
-- **Setup adds skills but never removes them** (resolved 2026-04-15) - The `agent-skills` check in `check-agent-setup.ts` now detects deprecated skill directories. Upgrade docs include explicit deletion instructions. Migration script handles it automatically.
+- **Setup creates parallel surfaces instead of migrating existing ones** (resolved 2026-04-20) - the `legacy_surfaces` block and the installer's legacy-surface detection were removed per the no-backwards-compat policy; pre-v1 installs start fresh.
+- **Setup instructions contradict spec on execution loop steps** (resolved 2026-04-14) - v1.1.0 removed `docs/system-spec.md` and `docs/five-layers.md`; `workflow/setup/reference/execution-loop.md` is the single source.
+- **Multi-agent setup files share structure but not vocabulary** (resolved 2026-04-14) - hook event names and settings now use each CLI's own vocabulary instead of Claude's.
+- **Workflow skill templates lag behind installed skills** (resolved 2026-04-15) - all templates match installed skills; preflight validates version parity.
+- **Ask First config/instruction sync is documented as blocking but not validated** (resolved 2026-04-13) - `normalizePath()` added for glob-aware comparison; Step 06 downgraded from blocking to advisory.
+- **Base setup simplification can leave harness checks enforcing removed config fields** (resolved 2026-04-15) - missing `toolchain` and `ask_first` are optional with explanatory findings.
+- **Deduplicated multi-agent setup drifts from per-agent setup rules** (resolved 2026-04-13) - `--agent all` and `composeMultiAgentSetup()` removed; setup requires an explicit `--agent`.
+- **Setup adds skills but never removes them** (resolved 2026-04-15) - the `agent-skills` check in `check-agent-setup.ts` detects deprecated skill directories and the migration script removes them.

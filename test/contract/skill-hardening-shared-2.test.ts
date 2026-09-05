@@ -1,9 +1,8 @@
 /**
- * Contracts for guidance every skill inherits: the preamble, conventions, playbook wiring,
- * and the mirror parity that keeps all four install roots saying the same thing.
+ * Check the guidance shared by goat-flow skills, including preambles, conventions, and writing playbooks.
  *
- * Reads the installed copies rather than sources, so a contract fails when the guidance a user
- * actually receives drifts - not merely when the template does.
+ * These contracts inspect canonical and installed copies so supported agents receive consistent instructions.
+ * Use them when changing shared guidance, reference ownership, or installation parity.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -16,13 +15,14 @@ import {
   INSTALLED_SKILL_ROOTS,
 } from "./skill-hardening.helpers.js";
 
-/** Assert stable semantic anchors inside one named Markdown section. */
+// Assert stable semantic anchors inside one named Markdown section.
 function assertSectionPatterns(
   markdownPath: string,
   sectionHeading: string,
   patterns: readonly RegExp[],
 ): void {
   const section = readMarkdownSection(markdownPath, sectionHeading);
+  // Require each rule in the named section so unrelated examples cannot satisfy missing guidance.
   for (const pattern of patterns) assert.match(section, pattern, markdownPath);
 }
 
@@ -61,6 +61,7 @@ describe("skill hardening contracts: shared surfaces (2/3)", () => {
       /\| Rationalization Table \|[^\n]+\| `workflow\/skills\/playbooks\/skill-quality-testing\/tdd-iteration\.md` \|/u,
     );
 
+    // Canonical and installed deployment guides must send authors to the current TDD definition.
     for (const deploymentPath of [
       "workflow/skills/playbooks/skill-quality-testing/deployment.md",
       ".goat-flow/skill-docs/skill-quality-testing/deployment.md",
@@ -86,7 +87,7 @@ describe("skill hardening contracts: shared surfaces (2/3)", () => {
     assert.match(settingsFootguns, /At the 2026-06-07 fix/u);
     assert.match(
       settingsFootguns,
-      /2026-07-16 follow-up below later removed unmatched Write rules/u,
+      /2026-07-16 follow-up below removed unmatched Write rules/u,
     );
     assert.match(
       settingsFootguns,
@@ -424,10 +425,11 @@ describe("skill hardening contracts: shared surfaces (2/3)", () => {
     });
   });
 
-  it("keeps writing-style edits truth-preserving and source-aware through the routed core", () => {
+  it("keeps human-facing prose edits truth-preserving and source-aware through the routed core", () => {
+    // Both prose playbooks must preserve the user’s scope, intended meaning, and verified facts.
     for (const playbookPath of [
-      "workflow/skills/playbooks/writing-style.md",
-      ".goat-flow/skill-docs/playbooks/writing-style.md",
+      "workflow/skills/playbooks/writing-human-facing-prose.md",
+      ".goat-flow/skill-docs/playbooks/writing-human-facing-prose.md",
     ]) {
       assert.match(
         readProjectFile(playbookPath),
@@ -496,6 +498,7 @@ describe("skill hardening contracts: shared surfaces (2/3)", () => {
   });
 
   it("owns sentence diagnostics without turning lexical signals into verdicts", () => {
+    // Sentence guidance must diagnose reader cost without treating a word choice alone as a defect.
     for (const playbookPath of [
       "workflow/skills/playbooks/writing-sentence-diagnostics.md",
       ".goat-flow/skill-docs/playbooks/writing-sentence-diagnostics.md",
@@ -554,11 +557,13 @@ describe("skill hardening contracts: shared surfaces (2/3)", () => {
   });
 
   it("owns document-level structure diagnostics and protects parallel forms", () => {
+    // Both structure guides must improve readability while preserving useful tables, lists, and plan grammar.
     for (const playbookPath of [
       "workflow/skills/playbooks/writing-structure-diagnostics.md",
       ".goat-flow/skill-docs/playbooks/writing-structure-diagnostics.md",
     ]) {
       const structure = readMarkdownSection(playbookPath, "Structure");
+      // Each structure problem needs named guidance so an agent can diagnose the reader’s actual difficulty.
       for (const requiredAnchor of [
         /Duplicate representation/u,
         /Append seam/u,
@@ -595,6 +600,7 @@ describe("skill hardening contracts: shared surfaces (2/3)", () => {
   });
 
   it("makes product users and fact-preserving release state explicit", () => {
+    // Changelog guidance must describe shipped user consequences and distinguish prepared changes from published releases.
     for (const playbookPath of [
       "workflow/skills/playbooks/changelog.md",
       ".goat-flow/skill-docs/playbooks/changelog.md",
@@ -649,7 +655,7 @@ describe("skill hardening contracts: shared surfaces (2/3)", () => {
       assert.doesNotMatch(sourceOrder, /<current-tag>/u, playbookPath);
 
       assertSectionPatterns(playbookPath, "Prose Routing", [
-        /writing-style\.md[\s\S]+core prose pass/u,
+        /writing-human-facing-prose\.md[\s\S]+core prose pass/u,
         /writing-structure-diagnostics\.md[\s\S]+assembly defect/u,
         /writing-sentence-diagnostics\.md[\s\S]+sentence-level reader cost/u,
         /structure first/u,
@@ -693,6 +699,7 @@ describe("skill hardening contracts: shared surfaces (2/3)", () => {
       );
     }
 
+    // Release notes must use verified changelog content and preserve the product’s actual publication state.
     for (const playbookPath of [
       "workflow/skills/playbooks/release-notes.md",
       ".goat-flow/skill-docs/playbooks/release-notes.md",
@@ -738,7 +745,7 @@ describe("skill hardening contracts: shared surfaces (2/3)", () => {
       );
 
       assertSectionPatterns(playbookPath, "Prose Routing", [
-        /writing-style\.md[\s\S]+core prose pass/u,
+        /writing-human-facing-prose\.md[\s\S]+core prose pass/u,
         /writing-structure-diagnostics\.md[\s\S]+assembly defect/u,
         /writing-sentence-diagnostics\.md[\s\S]+sentence-level reader cost/u,
         /structure first/u,
@@ -781,12 +788,16 @@ describe("skill hardening contracts: shared surfaces (2/3)", () => {
   });
 
   it("keeps all routed writing playbooks independently discoverable", () => {
+    // Both indexes must expose each writing guide so an agent can discover the right diagnostic workflow.
     for (const readmePath of [
       "workflow/skills/playbooks/README.md",
       ".goat-flow/skill-docs/playbooks/README.md",
     ]) {
       const readme = readProjectFile(readmePath);
-      assert.match(readme, /writing-style\.md[^\n]+correctness router/u);
+      assert.match(
+        readme,
+        /writing-human-facing-prose\.md[^\n]+correctness router/u,
+      );
       assert.match(
         readme,
         /writing-sentence-diagnostics\.md[^\n]+sentence-level reader cost/u,

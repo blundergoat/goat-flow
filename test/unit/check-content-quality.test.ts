@@ -469,6 +469,35 @@ describe("semantic anchor path boundaries", () => {
     assert.deepEqual(evaluations, []);
     assert.deepEqual(inspectedPaths, []);
   });
+
+  it("checks path-in-parens combined citations and folds line-wrapped needles", () => {
+    const fs = stubFS({
+      exists: () => true,
+      readFile: (path) =>
+        path === "src/present.ts"
+          ? "the anchor text is here on one line"
+          : "unrelated file content",
+    });
+
+    const evaluations = evaluateSearchAnchors(
+      fs,
+      [
+        "(`src/present.ts`, search: `the anchor text is here`)",
+        "(`src/present.ts`, search: `the anchor text is\n   here`)",
+        "(`src/present.ts`, search: `absent needle text`)",
+      ].join("\n"),
+    );
+
+    assert.equal(evaluations.length, 3);
+    assert.equal(evaluations[0]?.status, "valid");
+    assert.equal(evaluations[0]?.filePath, "src/present.ts");
+    assert.equal(evaluations[0]?.needle, "the anchor text is here");
+    // A needle wrapped across lines folds to one space and still matches a single-line target.
+    assert.equal(evaluations[1]?.status, "valid");
+    // The combined form is now extracted, so a moved or absent needle is caught, not skipped.
+    assert.equal(evaluations[2]?.status, "stale");
+    assert.equal(evaluations[2]?.reason, "missing-needle");
+  });
 });
 
 describe("scanContentQuality: legacy execution loop", () => {

@@ -1,9 +1,8 @@
 /**
- * Contracts for planning and timing guidance: milestone structure, effort and forecast
- * obligations, and the accounting a user is promised across installed copies.
+ * Check the planning and timing guidance users receive across supported agent integrations.
  *
- * Reads the installed copies rather than sources, so a contract fails when the guidance a user
- * actually receives drifts - not merely when the template does.
+ * These contracts inspect canonical and installed instructions for milestone structure, effort records, and forecast obligations.
+ * Use them when changing the planning workflow or its reference material.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -143,19 +142,15 @@ describe("skill hardening contracts: goat-plan (1/2)", () => {
         /Do NOT mutate `\.goat-flow\/plans\/\.active`, milestone status, checkboxes, or code/,
         skillPath,
       );
+      assert.match(skillGuidance, /One session owns one milestone/u, skillPath);
       assert.match(
         skillGuidance,
-        /If exactly one milestone is in-progress, read only its first unchecked task line; no other body content/,
+        /With several active milestones and no selection,[\s\S]*?ask which milestone this session owns/u,
         skillPath,
       );
       assert.match(
         skillGuidance,
-        /Zero\/multiple in-progress: report ambiguity; read no bodies/,
-        skillPath,
-      );
-      assert.match(
-        skillGuidance,
-        /current milestone, and bounded task line when unambiguous/,
+        /Read only the bounded next item: implementation task, executor proof, or human item according to status/u,
         skillPath,
       );
       assert.match(
@@ -182,8 +177,218 @@ describe("skill hardening contracts: goat-plan (1/2)", () => {
       const milestoneExample = readProjectFile(examplePath);
       assert.match(
         milestoneExample,
-        /the bounded follow-up read returns only its first unchecked task line/,
+        /the bounded follow-up read returns only its first unchecked task line/u,
         examplePath,
+      );
+    });
+  });
+
+  // Lane metadata changes scheduling; these contracts preserve the checks that authorize a session's next action.
+  it("bounds lane orientation by current cap authority and one session milestone", () => {
+    const skillPath = "workflow/skills/goat-plan/SKILL.md";
+    const delivery = readMarkdownSection(
+      skillPath,
+      "Phase 2 - Deliver Milestones",
+    );
+    assert.match(
+      delivery,
+      /filenames plus Status, Lane, and Depends on/u,
+      skillPath,
+    );
+    assert.match(delivery, /plans check <plan-path> --strict/u, skillPath);
+    assert.match(delivery, /Checker errors stop body reads/u, skillPath);
+    assert.match(
+      delivery,
+      /--max-active.*operator supplied it for this session/u,
+      skillPath,
+    );
+    assert.match(
+      delivery,
+      /otherwise omit it for canonical config or default one/u,
+      skillPath,
+    );
+    assert.match(
+      delivery,
+      /Never infer a cap from the active count or borrow an earlier override/u,
+      skillPath,
+    );
+    assert.match(
+      delivery,
+      /absent override is needed, stop and ask/u,
+      skillPath,
+    );
+    assert.match(
+      delivery,
+      /Active means `in-progress`, `testing-gate`, or `human-verification-pending`/u,
+      skillPath,
+    );
+    assert.match(delivery, /absent or empty Lane means `default`/u, skillPath);
+    assert.match(
+      delivery,
+      /explicit path or user instruction selects it; select the sole active milestone automatically/u,
+      skillPath,
+    );
+    assert.match(
+      delivery,
+      /Report other lanes as state, never implementation authority/u,
+      skillPath,
+    );
+    assert.match(
+      delivery,
+      /Check the final join below before source work or timing/u,
+      skillPath,
+    );
+  });
+
+  it("keeps lane eligibility and one participating dependency join explicit", () => {
+    const skillPath = "workflow/skills/goat-plan/SKILL.md";
+    const lifecycle = readMarkdownSection(
+      skillPath,
+      "Phase 3 - Between Milestones",
+    );
+    const completion = readMarkdownSection(
+      skillPath,
+      "Phase 4 - Plan Complete",
+    );
+    assert.match(
+      lifecycle,
+      /every dependency is complete, its lane is free, and the active count is below the cap/u,
+      skillPath,
+    );
+    assert.match(
+      lifecycle,
+      /contention, show eligible IDs, lanes, and dependencies; ask, never select by number/u,
+      skillPath,
+    );
+    assert.match(
+      lifecycle,
+      /Each milestone retains its own receipt and blocking human gate/u,
+      skillPath,
+    );
+    assert.match(
+      lifecycle,
+      /unrelated active lanes keep their state and receipts/u,
+      skillPath,
+    );
+    assert.match(
+      lifecycle,
+      /Exclude `abandoned`, `superseded`, and `deferred`; `blocked` still participates/u,
+      skillPath,
+    );
+    assert.match(
+      lifecycle,
+      /participating dependency sink whose transitive dependency closure covers every other participating milestone/u,
+      skillPath,
+    );
+    assert.match(
+      lifecycle,
+      /Multiple sinks or uncovered work requires a plan amendment before source work or timing/u,
+      skillPath,
+    );
+    assert.match(
+      lifecycle,
+      /Authors join every participating lane tip/u,
+      skillPath,
+    );
+    assert.match(
+      lifecycle,
+      /Lanes grant no writer ownership; use disjoint scopes, applicable write claims, and an agreed merge boundary/u,
+      skillPath,
+    );
+    assert.match(
+      completion,
+      /unique final join is `human-verification-pending`/u,
+      skillPath,
+    );
+    assert.match(
+      completion,
+      /every other participating milestone and every join dependency is complete, and no sibling active work remains/u,
+      skillPath,
+    );
+    assert.match(completion, /Cap-one plans keep one final review/u, skillPath);
+    assert.doesNotMatch(
+      lifecycle,
+      /no later milestone becomes active|M\[N\+1\]/u,
+      skillPath,
+    );
+  });
+
+  it("documents optional lanes, independent receipts, and downgrade recovery at their owners", () => {
+    const examplesPath =
+      "workflow/skills/goat-plan/references/milestone-examples.md";
+    const examples = readProjectFile(examplesPath);
+    const laneGuide = readMarkdownSection(examplesPath, "Lane lifecycle");
+    assert.match(
+      examples,
+      /\*\*Depends on:\*\*[^\n]+\n\*\*Lane:\*\* <optional lowercase lane token>\n\*\*Effort estimate:/u,
+    );
+    assert.match(laneGuide, /Omitted or empty Lane means `default`/u);
+    assert.match(laneGuide, /stop every extra open receipt/u);
+    assert.match(
+      laneGuide,
+      /prior state, downgrade pause, and cap-compatible resume condition/u,
+    );
+    assert.match(
+      laneGuide,
+      /Restore each prior state only after lane-cap support returns; preserve every task and receipt history/u,
+    );
+
+    const conventions = readMarkdownSection(
+      "workflow/skills/reference/skill-conventions.md",
+      "Milestone Retrospective (goat-plan)",
+    );
+    assert.match(
+      conventions,
+      /Each milestone owns its receipt and blocking human gate; unrelated active lanes keep their state and receipts/u,
+    );
+    assert.match(
+      conventions,
+      /Human approval completes only that non-final milestone/u,
+    );
+    assert.match(
+      conventions,
+      /multiple sinks or uncovered work requires a plan amendment before source work or timing/u,
+    );
+    assert.match(conventions, /no sibling active work/u);
+    assert.doesNotMatch(conventions, /no later milestone activates/u);
+
+    const cli = readProjectFile("docs/cli.md");
+    assert.match(cli, /plans\.maxActiveMilestones/u);
+    assert.match(
+      cli,
+      /At cap one, output and the legacy `multiple active milestones` error remain unchanged/u,
+    );
+    assert.match(cli, /lane names grant no writer ownership/u);
+    assert.match(
+      cli,
+      /One span is open per milestone file; separate valid lanes may hold simultaneous spans/u,
+    );
+  });
+
+  it("makes explicit no-write signals outrank named-file mutation verbs", () => {
+    assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
+      const intake = readMarkdownSection(skillPath, "Step 0 - Intake");
+      const readOnlyIndex = intake.indexOf("2. **Read-Only Analysis**");
+      const namedFileIndex = intake.indexOf("1. **Named-File Update**");
+
+      assert.notEqual(
+        readOnlyIndex,
+        -1,
+        `${skillPath}: missing read-only mode`,
+      );
+      assert.notEqual(
+        namedFileIndex,
+        -1,
+        `${skillPath}: missing named-file update mode`,
+      );
+      assert.ok(
+        readOnlyIndex < namedFileIndex,
+        `${skillPath}: explicit no-write signals lose first-match selection`,
+      );
+      assert.match(
+        intake,
+        /Named-File Update.*only when no explicit reporting-only or no-implementation signal is present/su,
+        `${skillPath}: ordinary update verbs can override explicit no-write intent`,
       );
     });
   });
@@ -267,7 +472,7 @@ describe("skill hardening contracts: goat-plan (1/2)", () => {
       const skillGuidance = readProjectFile(skillPath);
       assert.match(
         skillGuidance,
-        /After approval for a non-final milestone, capture learnings, complete it, re-read\/update the next milestone/u,
+        /After approval for a non-final milestone, capture learnings, complete it, re-read\/update the selected eligible milestone/u,
         skillPath,
       );
       assert.match(
@@ -277,7 +482,7 @@ describe("skill hardening contracts: goat-plan (1/2)", () => {
       );
       assert.match(
         skillGuidance,
-        /Human-requested changes return the milestone to `in-progress`; never amend silently/u,
+        /Human-requested changes return the milestone to `in-progress`; this applies only to the reviewed milestone; never amend silently/u,
         skillPath,
       );
     });

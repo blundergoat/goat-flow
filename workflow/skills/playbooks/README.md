@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.16.0"
+goat-flow-reference-version: "1.17.0"
 ---
 # Skill Playbooks
 
@@ -7,9 +7,11 @@ This directory holds **standalone playbooks for tools and capabilities available
 
 For shared meta-references inherited by goat-* skills (preamble on every invocation, conventions on full-depth), see the parent `skill-docs/` directory.
 
+> **Illustrative examples below define shape only; they are not incident evidence.**
+
 ## How agents should use this directory
 
-1. When the request names a tool or discipline (browser, screenshots, skill testing, changelog, release notes, logging/instrumentation, naming and placement, code comments, or prose and writing style), check this index for a matching playbook. Also check it when the work touches a discipline's surface without naming it: editing `CHANGELOG.md`, release notes, README or `docs/` prose, PR/issue text, or a learning-loop entry body.
+1. When the request names a tool or discipline (browser, screenshots, changelog, release notes, logging/instrumentation, naming and placement, code comments, prose and writing style, or writing for agents), check this index for a matching playbook. Skill testing and hardening has no playbook row: load `../skill-quality-testing/README.md`, the skill-authoring methodology pack, and open the topical file its table names. Also check it when the work touches a discipline's surface without naming it: editing `CHANGELOG.md`, release notes, README or `docs/` prose, PR/issue text, a learning-loop entry body, or a skill, playbook, or instruction file an agent reads.
 2. Open the playbook. If it has an **Availability Check** section, run the exact `command -v <tool>` or equivalent it specifies before falling back.
 3. Only after the availability check fails AND the playbook's fallback path also fails, declare the capability unavailable.
 
@@ -30,9 +32,10 @@ For shared meta-references inherited by goat-* skills (preamble on every invocat
 | [`release-notes.md`](./release-notes.md) | Writing a per-release narrative for end users (GitHub release body, blog post, email, in-app banner, social): theme identification, user-impact lens, inverted-pyramid structure, multi-surface consistency. Derives from `changelog.md` | n/a (release-notes discipline) |
 | [`skill-playbook-authoring-sync.md`](./skill-playbook-authoring-sync.md) | Adding or materially editing a built-in playbook while keeping source/install mirrors, discovery, audit registration, and manifest ownership aligned | n/a (playbook-authoring discipline) |
 | [`test-selection.md`](./test-selection.md) | Creating, changing, reviewing, consolidating, moving, or pruning tests: value gate, coverage overlap, trustworthy level, dispositions, and mutation handoff | n/a (test-selection discipline) |
-| [`writing-style.md`](./writing-style.md) | Starting any human-read prose edit: compact correctness router, scope and source gates, meaning and precision protection, objective sibling triggers, minimum pass, and early stop. Exempts agent-read control text, plan mechanics, tables, and code | n/a (prose-style discipline) |
+| [`writing-human-facing-prose.md`](./writing-human-facing-prose.md) | Starting any human-read prose edit: compact correctness router, scope and source gates, meaning and precision protection, objective sibling triggers, minimum pass, and early stop. Exempts agent-read control text, plan mechanics, tables, and code | n/a (prose-style discipline) |
 | [`writing-sentence-diagnostics.md`](./writing-sentence-diagnostics.md) | After the writing core identifies sentence-level reader cost: actor choice, reader knowledge, assistant voice, residue, punctuation, social meaning, and non-authorizing lexical or rhythm signals | n/a (sentence-diagnostic discipline) |
 | [`writing-structure-diagnostics.md`](./writing-structure-diagnostics.md) | After the writing core identifies document-level assembly defects: duplicate representations, append seams, compound entries, parallel lists, causal order, padded triads, and chronology | n/a (structure-diagnostic discipline) |
+| [`writing-agent-facing-instructions.md`](./writing-agent-facing-instructions.md) | Creating or editing text an agent executes from: a skill, playbook, shared preamble or conventions file, instruction file, hook message, or README discovery row. Owns the two loads, pointer wording, the information ladder, completion criteria, leading words, negation, and pruning; the agent-read complement to `writing-human-facing-prose.md`'s exemption | n/a (agent-document authoring discipline) |
 
 ## Adding a new playbook
 
@@ -56,8 +59,8 @@ Use the smallest artifact that fits the evidence:
 | Deterministic transform or validation | CLI/check/script |
 | One-off or speculative advice | no new artifact yet |
 
-## Why this index exists (provenance)
+## Why this index exists
 
-A 2026-05-03 downstream incident: an agent was asked to "use browser-use" to inspect a page; it ran `ToolSearch` looking for an MCP, found only auth tools, and declared "no browser MCP available, can't drive a browser session". The user pushed back with the literal path `.goat-flow/skill-docs/browser-use.md` (now `.goat-flow/skill-docs/playbooks/browser-use.md`), which documents the local availability check. Running `command -v browser-use` returned a user-local wrapper under `~/.local/bin/` - the tool was always installed.
+Illustrative failure pattern: an agent asked to use browser-use searches only its harness tools, finds no browser MCP, and declares browser automation unavailable without checking the project-local wrapper.
 
-This index plus a Router Table pointer in every supported instruction file is the structural fix: agents must read project-local capability playbooks before treating harness-tool absence as capability absence.
+This index plus a Router Table pointer prevents that error: agents read project-local capability playbooks before treating harness-tool absence as capability absence.

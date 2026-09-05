@@ -52,6 +52,10 @@ rm_is_safely_scoped() {
     # Any unresolved expansion can move a reviewed cleanup outside the project.
     # For example, `cache/$TARGET` may become `cache/../../home` at execution time.
     [[ "$target" == *'$'* || "$target" == *'`'* ]] && return 1
+    # Brace expansion (`{a,b}`, `{1..9}`) expands to several paths the reviewer never saw and
+    # can carry an absolute target that never starts with `/`, so `rm -rf {/etc,/var}` would
+    # otherwise read as project-relative below. Refuse it like the variable expansions above.
+    [[ "$target" == *'{'*','*'}'* || "$target" == *'{'*'..'*'}'* ]] && return 1
     # Dot traversal makes the path shown in review differ from what rm deletes.
     case "/$target/" in
       */../*|*/./*) return 1 ;;
@@ -526,7 +530,10 @@ check_command_chain_policy() {
   local input="$1"
   local depth="${2:-0}"
   local download_re='(^|[[:space:]])(curl|wget|fetch|http)([[:space:]]|$)'
-  local execute_re='(;|&&|\|\|)[[:space:]]*(ba)?sh[[:space:]]+[^[:space:]&|;]+'
+  # Match every POSIX shell name the pipeline path recognises (keep in sync with is_shell_name),
+  # plus any path-qualified spelling like /bin/zsh, so a download cannot reach an alternate
+  # interpreter. Matching only (ba)?sh let `curl ... ; dash file` and `/bin/bash file` through.
+  local execute_re='(;|&&|\|\|)[[:space:]]*([^[:space:];&|]*/)?(bash|dash|zsh|ksh93|ksh|mksh|ash|yash|sh)[[:space:]]+[^[:space:]&|;]+'
   if [[ "$depth" -eq 0 && "$input" =~ $download_re && "$input" =~ $execute_re ]]; then
     block "Download-then-execute (curl/wget ... && bash file). Inspect the downloaded file before running it." || return $?
   fi
@@ -600,6 +607,66 @@ check_pipeline_xargs_destructive_payloads() {
   done
 }
 
+# Remove only leading shell redirection words, leaving the executable command for policy classification.
+strip_leading_shell_redirections() {
+  local candidate="$1"
+  local -a command_words=()
+  local word_index=0
+  local word=""
+  local operator_only_re='^(([0-9]+|\{[a-zA-Z_][a-zA-Z0-9_]*\})?(<<<|<<-|<<|<>|>>\||>>|>\||>&|<&|>|<)|&>>|&>)$'
+  local attached_target_re='^(([0-9]+|\{[a-zA-Z_][a-zA-Z0-9_]*\})?(<<<|<<-|<<|<>|>>\||>>|>\||>&|<&|>|<)|&>>|&>).+$'
+
+  split_shell_words_into command_words "$candidate"
+  while (( word_index < ${#command_words[@]} )); do
+    word="${command_words[$word_index]}"
+    if [[ "$word" =~ $operator_only_re ]]; then
+      # An operator-only word consumes the following filename, descriptor, or here-document delimiter.
+      (( word_index + 1 < ${#command_words[@]} )) || return 1
+      word_index=$((word_index + 2))
+      continue
+    fi
+    if [[ "$word" =~ $attached_target_re ]]; then
+      word_index=$((word_index + 1))
+      continue
+    fi
+    break
+  done
+  (( word_index > 0 && word_index < ${#command_words[@]} )) || return 1
+  join_shell_words_from command_words "$word_index"
+}
+
+# Detect whether a proposed command invokes the shell's eval built-in in any executable pipeline stage.
+# Use before approval because eval can reinterpret or construct a different command after policy review.
+pipeline_contains_shell_eval_stage() {
+  local developer_command="$1"
+  local -a executable_pipeline_stages=()
+  local executable_pipeline_stage
+  local normalized_pipeline_stage
+  local pipeline_stage_verb
+  local stage_without_redirections
+
+  split_top_level_pipeline_stages_into executable_pipeline_stages "$developer_command"
+
+  # A pipeline runs each top-level stage separately, so inspect every command the developer would start.
+  for executable_pipeline_stage in "${executable_pipeline_stages[@]}"; do
+    normalized_pipeline_stage="$(normalize_command_candidate "$executable_pipeline_stage")"
+    normalized_pipeline_stage="${normalized_pipeline_stage#"${normalized_pipeline_stage%%[![:space:]]*}"}"
+    # Bash permits redirections before a command word; peel them and re-normalize wrappers until the executable is visible.
+    while stage_without_redirections="$(strip_leading_shell_redirections "$normalized_pipeline_stage")"; do
+      normalized_pipeline_stage="$(normalize_command_candidate "$stage_without_redirections")"
+      normalized_pipeline_stage="${normalized_pipeline_stage#"${normalized_pipeline_stage%%[![:space:]]*}"}"
+    done
+    pipeline_stage_verb="${normalized_pipeline_stage%%[[:space:]]*}"
+    pipeline_stage_verb="${pipeline_stage_verb##*/}"
+
+    # Shell eval can reinterpret text after review, so the developer must submit the revealed command instead.
+    if [[ "$pipeline_stage_verb" == "eval" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
 # Apply destructive-shell policy to one user-visible command segment.
 # This is the final shell gate before secret and repository policy inspect the same segment.
 check_destructive_segment() {
@@ -650,12 +717,17 @@ check_destructive_segment() {
     esac
   fi
 
-  local lockfile_write_re='(>|>>|tee|sed[[:space:]]+-i)[[:space:]]+.*(package-lock\.json|pnpm-lock\.yaml|composer\.lock|Cargo\.lock|yarn\.lock)'
-  if [[ "$cmd" =~ $lockfile_write_re ]]; then
+  # Redirects write only their immediate target; a later lockfile argument may still be read-only.
+  # Compact and quoted targets remain valid shell syntax, while tee and sed -i may name the lockfile later in their operand list.
+  local lockfile_name_re='(package-lock\.json|pnpm-lock\.yaml|composer\.lock|Cargo\.lock|yarn\.lock)'
+  local lockfile_redirect_re="(>|>>)[[:space:]]*[\"']?([^[:space:]<>|;&\"']*/)*${lockfile_name_re}[\"']?([[:space:]|;&]|$)"
+  local lockfile_tool_write_re="(^|[[:space:]])([^[:space:]]*/)?(tee|sed[[:space:]]+-i)[[:space:]]+.*${lockfile_name_re}([[:space:]|;&]|$)"
+  if [[ "$cmd" =~ $lockfile_redirect_re ]] || [[ "$cmd" =~ $lockfile_tool_write_re ]]; then
     block "Direct lockfile modification. Use the package manager (npm install, composer update, etc.)." || return $?
   fi
 
-  if [[ "$CMD_VERB" == "eval" ]]; then
+  # Any eval stage can reinterpret reviewed text, so ask the developer to submit the resulting command instead.
+  if pipeline_contains_shell_eval_stage "$cmd"; then
     block "eval hides commands from safety checks. Write the command directly." || return $?
   fi
 
