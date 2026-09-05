@@ -1,7 +1,8 @@
 /**
- * Keeps user-facing command and authority wording consistent across setup surfaces.
- * Use these contracts when changing agent permissions or CLI language that users read.
- * They prevent one agent from presenting a different safety policy than another.
+ * Keep command wording and agent authority consistent across setup instructions and visible CLI output.
+ *
+ * These contracts check shared permissions, workflow reminders, and the audit summary users read.
+ * Run them when changing CLI language or instructions that affect an agent’s allowed actions.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -93,10 +94,7 @@ const USER_FACING_CLI_COMMAND_SURFACE_PATHS = [
   "src/dashboard/views/home.html",
 ] as const;
 
-/**
- * Limits the milestone reminder contract to ACT so adjacent sections cannot
- * satisfy the required timing or clarity obligations accidentally.
- */
+// Require timing and clarity reminders inside ACT so wording in an unrelated section cannot satisfy the instruction contract.
 function assertMilestoneReminder(
   instructionText: string,
   sourceLabel: string,
@@ -117,12 +115,9 @@ function assertMilestoneReminder(
 }
 
 /**
- * Builds the smallest passing report needed to render the user's audit summary.
- * Use it when testing visible audit wording without running a real repository audit.
+ * Build a controlled passing audit report for visible wording checks.
  *
- * Every field is constructed inline rather than loaded from a recorded fixture
- * to avoid coupling copy assertions to this repository's live audit state,
- * which would make the wording contract fail for unrelated harness changes.
+ * The fixture avoids live project state; null analysis fields and empty finding lists keep unrelated audit detail out of the rendered summary.
  */
 function makePassingReport(): AuditReport {
   return {
@@ -652,14 +647,12 @@ describe("step 06 references audit", () => {
 // Setup truth and evidence contracts
 // ---------------------------------------------------------------------------
 /**
- * Assert no heading in a set is a prefix of another.
+ * Reject headings that prefix another heading so readers can identify which section owns a setup rule.
  *
- * A reader scanning for "File ownership" cannot tell which section governs the path they are holding when a longer heading starts with the same
- * words. Prefix collisions are the failure this guards, so the message names both sides.
- *
- * @param headings - section headings gathered from one document
+ * @param headings - headings from one document; an empty list performs no checks
  */
 function assertNoShadowedHeading(headings: readonly string[]): void {
+  // Compare every heading with its peers so the failure identifies both competing navigation labels.
   for (const heading of headings) {
     const shadowedBy = headings.filter(
       (other) => other !== heading && other.startsWith(heading),
@@ -862,6 +855,7 @@ describe("end-of-run write-scope reconciliation", () => {
 });
 
 describe("milestone reminder", () => {
+  // Every instruction copy must place the full milestone reminder where an agent begins implementation.
   for (const relativePath of WRITE_SCOPE_RECONCILIATION_PATHS) {
     it(`keeps the complete reminder inside ACT in ${relativePath}`, () => {
       assertMilestoneReminder(
@@ -936,6 +930,7 @@ describe("setup-facing learning-loop retrieval", () => {
     });
   }
 
+  // Check browser discovery and ignored-state retrieval in each agent’s instructions so these rules do not depend on the provider.
   for (const relativePath of allInstructionPaths) {
     it(`routes browser syntax through the detected playbook branch in ${relativePath}`, () => {
       const content = readFileSync(
@@ -999,6 +994,7 @@ describe("setup-facing learning-loop retrieval", () => {
     );
 
     assert.ok(qualityPreset, "quality-check-goatflow preset must exist");
+    // The execution reference and quality preset must teach the same bounded learning-loop retrieval used by agent instructions.
     for (const [surface, content] of [
       ["execution-loop reference", executionLoop],
       ["quality preset", qualityPreset.prompt],

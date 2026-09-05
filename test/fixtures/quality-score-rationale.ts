@@ -1,6 +1,13 @@
 /**
- * Build the compact rationale ledger required beside every current quality score.
- * Tests reuse one complete shape so parser, persistence, and renderer fixtures cannot omit an axis accidentally.
+ * Supply complete score-rationale fixtures for quality parsing, persistence, and rendering tests.
+ *
+ * Every setup and system axis receives the same controlled evidence and deduction text.
+ * Tests can change one axis without accidentally omitting the rest of the required ledger.
+ */
+/**
+ * Build a fresh rationale ledger when a quality test needs all required axes present.
+ *
+ * @returns separate axis objects with nonempty fixture text; callers can change one axis without changing another
  */
 export function makeQualityScoreRationale() {
   const rationale = {

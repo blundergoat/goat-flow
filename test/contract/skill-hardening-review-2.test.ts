@@ -1,9 +1,8 @@
 /**
- * Contracts for the review workflow a user drives: how scope is established, when consent
- * gates apply, what counts as evidence, and how a ship verdict must be earned.
+ * Check how the review workflow establishes scope, handles consent, gathers evidence, and reports a verdict.
  *
- * Reads the installed copies rather than sources, so a contract fails when the guidance a user
- * actually receives drifts - not merely when the template does.
+ * These contracts inspect canonical and installed guidance so every supported agent follows the same review rules.
+ * Use them when changing review instructions, evidence requirements, or output contracts.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -28,6 +27,7 @@ describe("skill hardening contracts: goat-review (2/3)", () => {
       assert.match(crossCheck, /references\/review-traps\.md/u, skillPath);
       assert.match(crossCheck, /confirmed review-reasoning miss/u, skillPath);
       assert.match(skill, /Evidence before severity/u, skillPath);
+      // Severity guidance must consider each reachability and impact factor before labeling a user-facing risk.
       for (const axis of [
         "reachability",
         "attacker control",
@@ -106,6 +106,7 @@ describe("skill hardening contracts: goat-review (2/3)", () => {
       );
       assert.doesNotMatch(output, /If <5 total, list all/iu, skillPath);
       assert.match(output, /render only with content/iu, skillPath);
+      // Optional review sections must be named explicitly so empty report headings are not mistaken for findings.
       for (const conditionalSection of [
         "Systemic Patterns",
         "Spec Drift",
@@ -153,6 +154,7 @@ describe("skill hardening contracts: goat-review (2/3)", () => {
       const output = readMarkdownSection(skillPath, "Output Format");
 
       assert.match(integrity, /\*\*Always emit:\*\*/u, skillPath);
+      // Every report must disclose these fields so readers can assess its scope, evidence, and remaining limits.
       for (const mandatoryField of [
         "Scope snapshot",
         "Files opened in Pass 2",
@@ -173,6 +175,7 @@ describe("skill hardening contracts: goat-review (2/3)", () => {
         );
       }
       assert.match(integrity, /\*\*Emit when resolved:\*\*/u, skillPath);
+      // These integrity fields appear only when resolved evidence exists to populate them.
       for (const conditionalField of [
         "Refutation ledger",
         "Automated-review provenance",
@@ -230,6 +233,7 @@ describe("skill hardening contracts: goat-review (2/3)", () => {
       ),
       (referencePath) => {
         const reference = readProjectFile(referencePath);
+        // Automated-review guidance must distinguish agreement, independent findings, verified bot findings, and disputes.
         for (const provenance of [
           "overlap-confirmed",
           "local-only",
@@ -276,6 +280,7 @@ describe("skill hardening contracts: goat-review (2/3)", () => {
         );
         const matchingHierarchy = reference.slice(hierarchyStart);
         let previousHierarchyIndex = -1;
+        // Stronger matching evidence must precede loose textual similarity when linking local and automated findings.
         for (const hierarchyTerm of [
           "symbol",
           "rule ID",
@@ -300,6 +305,7 @@ describe("skill hardening contracts: goat-review (2/3)", () => {
         "Review Integrity (confidence signal)",
       );
       const output = readMarkdownSection(skillPath, "Output Format");
+      // The report and integrity sections must expose the same finding-provenance categories to readers.
       for (const provenance of [
         "overlap-confirmed",
         "local-only",
@@ -560,6 +566,7 @@ describe("skill hardening contracts: goat-review (2/3)", () => {
         /\.goat-flow\/logs\/review\/goat-review-chunks\.<random>\.md/u,
         skillPath,
       );
+      // A resumed review needs each saved state item to continue the same scope and produce one consolidated verdict.
       for (const requiredState of [
         "scope snapshot",
         "bound authority",

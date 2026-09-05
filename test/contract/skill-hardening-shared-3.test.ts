@@ -1,9 +1,8 @@
 /**
- * Contracts for guidance every skill inherits: the preamble, conventions, playbook wiring,
- * and the mirror parity that keeps all four install roots saying the same thing.
+ * Check the guidance shared by goat-flow skills, including preambles, conventions, and writing playbooks.
  *
- * Reads the installed copies rather than sources, so a contract fails when the guidance a user
- * actually receives drifts - not merely when the template does.
+ * These contracts inspect canonical and installed copies so supported agents receive consistent instructions.
+ * Use them when changing shared guidance, reference ownership, or installation parity.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -233,6 +232,7 @@ describe("skill hardening contracts: shared surfaces (3/3)", () => {
   });
 
   it("permits faithful source summaries while preserving citation", () => {
+    // Both preambles must permit faithful summaries while preserving source attribution.
     for (const preamblePath of [
       "workflow/skills/reference/skill-preamble.md",
       ".goat-flow/skill-docs/skill-preamble.md",
@@ -261,6 +261,7 @@ describe("skill hardening contracts: shared surfaces (3/3)", () => {
       );
     });
 
+    // Consumer instructions cannot require framework source files that are absent from an installed target project.
     for (const preamblePath of [
       "workflow/skills/reference/skill-preamble.md",
       ".goat-flow/skill-docs/skill-preamble.md",
@@ -272,6 +273,7 @@ describe("skill hardening contracts: shared surfaces (3/3)", () => {
       );
     }
 
+    // Shared conventions must not send consumer agents to this framework’s private lesson path.
     for (const conventionsPath of [
       "workflow/skills/reference/skill-conventions.md",
       ".goat-flow/skill-docs/skill-conventions.md",
@@ -283,6 +285,7 @@ describe("skill hardening contracts: shared surfaces (3/3)", () => {
       );
     }
 
+    // Skill-authoring instructions must identify a consumer install before probing framework-only source paths.
     for (const playbookPath of [
       "workflow/skills/playbooks/skill-playbook-authoring-sync.md",
       ".goat-flow/skill-docs/playbooks/skill-playbook-authoring-sync.md",
@@ -297,6 +300,7 @@ describe("skill hardening contracts: shared surfaces (3/3)", () => {
       );
     }
 
+    // Both TDD guides must label illustrative scenarios and avoid claiming framework-only fixtures as consumer evidence.
     for (const tddPath of [
       "workflow/skills/playbooks/skill-quality-testing/tdd-iteration.md",
       ".goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md",
@@ -401,6 +405,7 @@ describe("skill hardening contracts: shared surfaces (3/3)", () => {
 
     assertForEachTarget(mirroredFiles, (relativePath) => {
       const workflowSource = readProjectFile(`workflow/skills/${relativePath}`);
+      // Users of every supported agent must receive the same corrected workflow examples as the canonical source.
       for (const installedRoot of [
         ".claude/skills",
         ".agents/skills",
@@ -435,6 +440,7 @@ describe("skill hardening contracts: shared surfaces (3/3)", () => {
       assert.match(template, /\*\*Trigger phase:\*\*/, templatePath);
     });
 
+    // Every evidence-taxonomy owner must offer the same labels to authors recording incidents.
     for (const taxonomyPath of [
       "workflow/skills/reference/skill-conventions.md",
       ".goat-flow/skill-docs/skill-conventions.md",
@@ -448,6 +454,7 @@ describe("skill hardening contracts: shared surfaces (3/3)", () => {
       assert.match(taxonomy, /EXTERNAL_REFERENCE/, taxonomyPath);
     }
 
+    // Entry templates must ask authors to select one evidence basis rather than copy every label.
     for (const choiceTemplatePath of [
       "workflow/skills/reference/skill-conventions.md",
       ".goat-flow/skill-docs/skill-conventions.md",
@@ -460,6 +467,7 @@ describe("skill hardening contracts: shared surfaces (3/3)", () => {
       );
     }
 
+    // Installed and setup instructions must teach every supported agent the same single-choice evidence rule.
     for (const instructionPath of [
       "workflow/setup/agents/claude.md",
       "workflow/setup/agents/codex.md",

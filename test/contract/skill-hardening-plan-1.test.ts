@@ -1,9 +1,8 @@
 /**
- * Contracts for planning and timing guidance: milestone structure, effort and forecast
- * obligations, and the accounting a user is promised across installed copies.
+ * Check the planning and timing guidance users receive across supported agent integrations.
  *
- * Reads the installed copies rather than sources, so a contract fails when the guidance a user
- * actually receives drifts - not merely when the template does.
+ * These contracts inspect canonical and installed instructions for milestone structure, effort records, and forecast obligations.
+ * Use them when changing the planning workflow or its reference material.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";

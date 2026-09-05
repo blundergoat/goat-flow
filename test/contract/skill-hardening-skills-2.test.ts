@@ -1,9 +1,8 @@
 /**
- * Contracts for the remaining user-invocable skills and the router that selects them.
- * Grouped because each is small alone but shares the same install-mirror rules.
+ * Check the dispatcher and user-invoked workflows covered by the shared skill contracts.
  *
- * Reads the installed copies rather than sources, so a contract fails when the guidance a user
- * actually receives drifts - not merely when the template does.
+ * These contracts inspect canonical and installed guidance so supported agents apply the same mode and evidence rules.
+ * Use them when changing workflow routing, behavior, or required output.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -148,6 +147,7 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
     assertForEachTarget(installedSkillPaths("goat-qa"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);
       assert.match(skillGuidance, /Exhaustive priority matrix/, skillPath);
+      // Every risk and coverage combination must have guidance so QA priority does not depend on an omitted case.
       for (const matrixRow of expectedMatrixCases) {
         assert.match(skillGuidance, matrixRow, skillPath);
       }
@@ -384,10 +384,7 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
     );
   });
 
-  /*
-   * A user receiving a 100/100 critique still sees what the meta-audit found.
-   * The clean attestation keeps the required section honest and non-empty.
-   */
+  // Even a 100/100 critique must show the meta-audit result, using a clean attestation when it found no issues.
   it("renders truthful goat-critique meta-audit issues for clean results", () => {
     assertForEachTarget(installedSkillPaths("goat-critique"), (skillPath) => {
       const synthesis = readMarkdownSection(skillPath, "Phase 5 - Synthesise");

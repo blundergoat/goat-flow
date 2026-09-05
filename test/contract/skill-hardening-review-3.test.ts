@@ -1,9 +1,8 @@
 /**
- * Contracts for the review workflow a user drives: how scope is established, when consent
- * gates apply, what counts as evidence, and how a ship verdict must be earned.
+ * Check how the review workflow establishes scope, handles consent, gathers evidence, and reports a verdict.
  *
- * Reads the installed copies rather than sources, so a contract fails when the guidance a user
- * actually receives drifts - not merely when the template does.
+ * These contracts inspect canonical and installed guidance so every supported agent follows the same review rules.
+ * Use them when changing review instructions, evidence requirements, or output contracts.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -453,6 +452,7 @@ describe("skill hardening contracts: goat-review (3/3)", () => {
       assert.doesNotMatch(overlapGuidance, /before Pass 1/u, referencePath);
     });
 
+    // Every installed review copy must preserve the canonical order: finish local investigation before reading automated conclusions.
     for (const installedRoot of [
       ".claude/skills",
       ".agents/skills",

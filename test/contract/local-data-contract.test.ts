@@ -74,36 +74,38 @@ const LOCAL_STATE_README_ENTRIES = [
   ],
 ] as const;
 
-/** Manifest fields that define whether coordination state is local, created, and non-persistent. */
+// Manifest fields that define whether coordination state is local, created, and non-persistent.
 interface LocalDataManifestContract {
   required_files: string[];
   required_dirs: string[];
   directory_purposes: Record<string, string>;
 }
 
-/** Read one repository-relative contract surface for exact semantic checks. */
+// Read one repository-relative contract surface for exact semantic checks.
 function readContractFile(relativePath: string): string {
   return readFileSync(resolve(PROJECT_ROOT, relativePath), "utf-8");
 }
 
-/** Parse package and plan versions for the ownership contract; throws an assertion error for malformed input. */
+// Parse package and plan versions for the ownership contract; throws an assertion error for malformed input.
 function parseSemanticVersion(version: string): SemanticVersion {
   const match = /^(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/u.exec(version);
   assert.ok(match, `expected a semantic version, received ${version}`);
   return [Number(match[1]), Number(match[2]), Number(match[3])];
 }
 
-/** Return whether one plan version is newer than the package that could own it. */
+// Return whether one plan version is newer than the package that could own it.
 function isFutureVersion(
   candidate: SemanticVersion,
   current: SemanticVersion,
 ): boolean {
+  // A newer major release makes the plan a future owner even when its minor and patch numbers are smaller.
   if (candidate[0] !== current[0]) return candidate[0] > current[0];
+  // Matching major versions make the minor release the next ownership boundary to compare.
   if (candidate[1] !== current[1]) return candidate[1] > current[1];
   return candidate[2] > current[2];
 }
 
-/** Find version-qualified plan ownership claims without rejecting historical provenance. */
+// Find version-qualified plan ownership claims without rejecting historical provenance.
 function decisionPlanVersionReferences(
   decision: string,
 ): Array<{ text: string; version: string }> {
@@ -116,9 +118,7 @@ function decisionPlanVersionReferences(
 }
 
 /**
- * Confirm the architecture budget lists every runtime event kind by name.
- * Use when a producer gains a new event: the budget row is what tells a maintainer
- * the event is allowed to be emitted at all.
+ * Require every runtime event in the architecture budget so maintainers can review what local evidence producers may emit.
  *
  * @param architecture - text of the architecture contract; missing rows fail per event kind
  */
@@ -132,7 +132,7 @@ function assertEveryEventKindBudgeted(architecture: string): void {
   }
 }
 
-/** Confirm one local-state guide tells users where its evidence can and cannot go next. */
+// Confirm one local-state guide tells users where its evidence can and cannot go next.
 function assertLocalStateGuide(relativePath: string): void {
   const readme = readContractFile(relativePath);
   assert.match(readme, /Local data contract:.*\.goat-flow\/architecture\.md/iu);
@@ -160,6 +160,7 @@ describe("local data contract", () => {
           resolve(decisionsDirectory, fileName),
           "utf-8",
         );
+        // Only accepted or implemented decisions claim durable ownership; drafts do not constrain the current package.
         if (
           !/^\*\*Status:\*\*\s+(?:Accepted|Implemented)\s*$/mu.test(decision)
         ) {

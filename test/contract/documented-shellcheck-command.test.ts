@@ -1,11 +1,8 @@
 /**
- * Executes the shell-lint command the instruction files tell agents to run, and requires it to pass.
+ * Verify the shell-lint command agents receive in the repository instructions.
  *
- * The enforced gates do not cover the same ground as the documented command. CI lints all four hook globs, but
- * preflight derives its hook scope from `manifest_eval hook-dirs`, which resolves to the single directory
- * `.goat-flow/hooks` and globs it non-recursively. A regression introduced in a `workflow/hooks/` mirror is therefore
- * invisible to preflight. This contract is the only gate that runs the documented command itself, so it is what keeps
- * the instruction files honest.
+ * The tests check identical commands, installer coverage, and the absence of excluded ShellCheck rules.
+ * They execute the published command and fail if ShellCheck cannot be launched.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -19,7 +16,7 @@ const PROJECT_ROOT = resolve(
   "../..",
 );
 
-/** Instruction surfaces that publish the aggregate shell-lint command to agents. */
+// Instruction surfaces that publish the aggregate shell-lint command to agents.
 const DOCUMENTING_SURFACES = [
   "CLAUDE.md",
   "AGENTS.md",
@@ -45,6 +42,7 @@ function publishedShellcheckCommand(surface: string): string {
   const line = content
     .split("\n")
     .find((candidate) => candidate.trimStart().startsWith("shellcheck "));
+  // An absent published command becomes an empty result so the caller can name the incomplete instruction file.
   return line?.trim() ?? "";
 }
 
@@ -55,10 +53,12 @@ describe("documented shell-lint command", () => {
       command: publishedShellcheckCommand(surface),
     }));
 
+    // Every supported agent must receive a runnable shell-lint command in its own instructions.
     for (const { surface, command } of published) {
       assert.ok(command.length > 0, `${surface}: publishes no shellcheck line`);
     }
     const [first, ...rest] = published;
+    // Compare each remaining instruction file with the first so agents receive the same validation scope.
     for (const other of rest) {
       assert.equal(
         other.command,
@@ -74,6 +74,7 @@ describe("documented shell-lint command", () => {
   });
 
   it("keeps the workflow installer in every shell lint and syntax owner", () => {
+    // Check the commands shown to each agent before comparing automated validation owners.
     for (const surface of DOCUMENTING_SURFACES) {
       const content = readFileSync(resolve(PROJECT_ROOT, surface), "utf8");
       const commandLines = content
@@ -84,6 +85,7 @@ describe("documented shell-lint command", () => {
         2,
         `${surface}: expected two shell commands`,
       );
+      // Both lint and syntax checks must cover the installer that users run during setup.
       for (const command of commandLines) {
         assert.ok(
           command.includes(WORKFLOW_INSTALLER),
@@ -92,6 +94,7 @@ describe("documented shell-lint command", () => {
       }
     }
 
+    // Automated checks must retain the same installer coverage promised in agent instructions.
     for (const surface of AUTOMATED_SHELL_VALIDATION_OWNERS) {
       const content = readFileSync(resolve(PROJECT_ROOT, surface), "utf8");
       const occurrences = content.split(WORKFLOW_INSTALLER).length - 1;

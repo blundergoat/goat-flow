@@ -1,8 +1,8 @@
 /**
- * Protects the shared guidance users receive through every installed goat-flow skill: preamble, conventions, playbook wiring, and mirror parity.
+ * Check the guidance shared by goat-flow skills, including preambles, conventions, and writing playbooks.
  *
- * Reads installed copies so drift fails at the user's surface, not only in the template.
- * Use this contract when changing inherited skill doctrine or its installed mirrors.
+ * These contracts inspect canonical and installed copies so supported agents receive consistent instructions.
+ * Use them when changing shared guidance, reference ownership, or installation parity.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -129,11 +129,7 @@ describe("skill hardening contracts: shared surfaces (1/3)", () => {
     );
   });
 
-  /*
-   * Timing evidence is only trustworthy if every harness records it the same way.
-   * A harness that learned a weaker contract would emit Actuals that look
-   * identical to measured ones while resting on nothing.
-   */
+  // Every harness must distinguish measured timing evidence from estimates so users can trust the reported Actual.
 
   it("forces Full depth for one material-risk class regardless of size", () => {
     assertForEachTarget(installedSkillPaths("goat-review"), (skillPath) => {
@@ -548,6 +544,7 @@ describe("skill hardening contracts: shared surfaces (1/3)", () => {
   });
 
   it("bounds aggregate INDEX retrieval independently of raw file size", () => {
+    // Both preambles must bound total INDEX retrieval so an agent leaves room for the task’s source evidence.
     for (const preamblePath of [
       "workflow/skills/reference/skill-preamble.md",
       ".goat-flow/skill-docs/skill-preamble.md",

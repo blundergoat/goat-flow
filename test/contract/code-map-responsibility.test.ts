@@ -1,10 +1,8 @@
 /**
- * Pins the responsibility families `.goat-flow/code-map.md` must resolve, without turning it into a file census.
+ * Keep the code map useful for finding public, safety, persistence, planning, and hook responsibilities.
  *
- * The map is explicitly a responsibility map, not an exhaustive inventory, so this contract asserts only the
- * public, safety, persistence, plan-authoring, and hook-launch surfaces an orienting agent has to be able to find.
- * An ordinary internal helper staying unmapped is correct behaviour and is asserted as such below: a test that
- * compared every top-level filename would contradict the map's design and make normal module extraction fail CI.
+ * These contracts require the relevant module families while allowing ordinary internal helpers to stay unmapped.
+ * Run them when changing navigation guidance or moving responsibility between modules.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -21,7 +19,7 @@ const CODE_MAP = readFileSync(
   "utf8",
 );
 
-/** Responsibility families an orienting agent must be able to locate from the map alone. */
+// Responsibility families an orienting agent must be able to locate from the map alone.
 const REQUIRED_FAMILIES = [
   "cli-parser*.ts",
   "help.ts",
@@ -39,7 +37,7 @@ const REQUIRED_FAMILIES = [
   "skill-author*.ts",
 ] as const;
 
-/** Launch modules tracked in BOTH `workflow/hooks/` and `.goat-flow/hooks/`; the map carries a block for each. */
+// Launch modules tracked in BOTH `workflow/hooks/` and `.goat-flow/hooks/`; the map carries a block for each.
 const HOOK_LAUNCH_MODULES = [
   "run-with-bash.mjs",
   "hook-launch-runtime.mjs",
@@ -80,11 +78,8 @@ describe("code map responsibility families", () => {
   });
 
   it("allows an ordinary internal helper to stay unmapped", () => {
-    // Negative control. This module really exists (src/cli/audit/audit-provenance.ts) and is deliberately absent from
-    // the map: it is an internal audit helper, not a public, safety, persistence, plan-authoring, or hook-launch
-    // surface. Measured 2026-08-29, 86 nested modules are unmapped for the same reason. If a future edit maps this
-    // one, repoint the control at another genuinely unmapped helper rather than deleting the assertion - without it,
-    // nothing stops this contract from growing into the exhaustive census the map is designed not to be.
+    // audit-provenance.ts is an existing internal helper intentionally absent from the responsibility map.
+    // If it gains a mapped responsibility, choose another unmapped helper so this check keeps the map from becoming a file census.
     assert.ok(
       existsSync(resolve(PROJECT_ROOT, "src/cli/audit/audit-provenance.ts")),
       "the negative control module no longer exists; repoint it at another unmapped internal helper",

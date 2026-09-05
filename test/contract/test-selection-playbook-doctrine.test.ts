@@ -1,5 +1,8 @@
 /**
- * Locks value-led test selection across the standalone owner, goat-qa, and ordinary work.
+ * Check test-selection guidance across the standalone playbook, goat-qa, and ordinary implementation routes.
+ *
+ * Users must receive consistent rules for regression value, existing coverage, test placement, and authorized action.
+ * These contracts also protect installed templates, discovery links, and dashboard presets.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -20,22 +23,24 @@ const QA_ROOTS = [
 const INSTRUCTION_SENTENCE =
   "Before creating, changing, reviewing, consolidating, moving, or pruning tests, read `.goat-flow/skill-docs/playbooks/test-selection.md`.";
 
-/** Apply one assertion to the canonical and installed standalone playbooks. */
+// Apply one assertion to the canonical and installed standalone playbooks.
 function assertForPlaybooks(
   assertion: (content: string, playbookPath: string) => void,
 ): void {
+  // Apply each selection rule to both playbook copies so installation cannot weaken the user’s test policy.
   for (const playbookPath of PLAYBOOK_PATHS) {
     assertion(readFileSync(playbookPath, "utf8"), playbookPath);
   }
 }
 
-/** Require anchors in the order the decision workflow uses them. */
+// Require anchors in the order the decision workflow uses them.
 function assertOrdered(
   content: string,
   anchors: readonly string[],
   ownerPath: string,
 ): void {
   let previousOffset = -1;
+  // Check the required sequence so evidence and value decisions precede recommendations about changing tests.
   for (const anchor of anchors) {
     const offset = content.indexOf(anchor);
     assert.ok(offset >= 0, `${ownerPath}: missing ordered anchor: ${anchor}`);
@@ -47,7 +52,7 @@ function assertOrdered(
   }
 }
 
-/** Extract an exact backtick-delimited disposition set from one labelled line. */
+// Extract an exact backtick-delimited disposition set from one labelled line.
 function dispositionSet(
   content: string,
   label: string,
@@ -55,11 +60,13 @@ function dispositionSet(
 ): string[] {
   const escapedLabel = label.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
   const match = content.match(new RegExp(`^${escapedLabel}: ([^\\n]+)$`, "mu"));
+  // A missing disposition label fails before an empty extraction can look like a valid set of allowed outcomes.
   assert.ok(match?.[1], `${ownerPath}: missing ${label}`);
+  // No backtick values produces an empty set, which callers compare with the required dispositions.
   return [...match[1].matchAll(/`([^`]+)`/gu)].map((item) => item[1]);
 }
 
-/** Read one named template block without combining the distinct output phases. */
+// Read one named template block without combining the distinct output phases.
 function templateBlock(content: string, heading: string): string {
   const start = content.indexOf(heading);
   assert.ok(start >= 0, `missing template heading: ${heading}`);
@@ -127,6 +134,7 @@ describe("test-selection standalone doctrine", () => {
   it("waives case rows only for selector-driven non-semantic clarity passes", () => {
     assertForPlaybooks((content, playbookPath) => {
       const normalized = content.replace(/\s+/gu, " ");
+      // The comments-and-names-only lane must preserve every test contract before it can omit case-by-case decision rows.
       for (const requiredPhrase of [
         "explicit folder or file selector",
         "baseline, current bytes, and explicit request",
@@ -203,6 +211,7 @@ describe("test-selection standalone doctrine", () => {
         ["REMOVAL SUPPORTED", "RESTORE", "REPLACE", "REMOVAL UNRESOLVED"],
         playbookPath,
       );
+      // Each test-change category must reconcile completely so a review cannot omit an added, removed, changed, or relocated case.
       for (const equation of [
         "assessed_added = ADDED_KEEP + ADDED_CONSOLIDATE + ADDED_MOVE_LEVEL + ADDED_DROP_CANDIDATE + ADDED_UNRESOLVED",
         "assessed_removed = REMOVAL_SUPPORTED + RESTORE + REPLACE + REMOVAL_UNRESOLVED",
@@ -281,6 +290,7 @@ describe("test-selection standalone doctrine", () => {
 
   it("chooses the cheapest trustworthy proof level without automatic promotion", () => {
     assertForPlaybooks((content, playbookPath) => {
+      // Every proof level must remain available so test selection can choose the cheapest trustworthy evidence.
       for (const level of [
         "Static analysis",
         "Unit",
@@ -356,6 +366,7 @@ describe("test-selection standalone doctrine", () => {
         /before assigning any existing-test, added-test, or removed-test disposition/iu,
         playbookPath,
       );
+      // Deletion guidance must preserve each named high-impact contract until its protection has been assessed.
       for (const protectedContract of [
         "authorization",
         "tenancy",
@@ -395,6 +406,7 @@ describe("test-selection standalone doctrine", () => {
 
   it("records complete decisions, accounting, and material-change handoffs", () => {
     assertForPlaybooks((content, playbookPath) => {
+      // A test-selection record needs every decision field so the next implementer can assess and preserve its evidence.
       for (const field of [
         "Disposition",
         "Regression and impact",
@@ -453,6 +465,7 @@ describe("goat-qa application of test-selection doctrine", () => {
       `${QA_ROOTS[0]}/references/output-templates.md`,
       "utf8",
     );
+    // Every installed QA skill and output template must match the canonical workflow users rely on.
     for (const qaRoot of QA_ROOTS.slice(1)) {
       assert.equal(
         readFileSync(`${qaRoot}/SKILL.md`, "utf8"),
@@ -468,6 +481,7 @@ describe("goat-qa application of test-selection doctrine", () => {
   });
 
   it("loads the owner without weakening risk, coverage, or actor boundaries", () => {
+    // All QA copies must retain the report-only boundary and distinguish structural checks from behavioral evidence.
     for (const qaRoot of QA_ROOTS) {
       const skillPath = `${qaRoot}/SKILL.md`;
       const content = readFileSync(skillPath, "utf8");
@@ -490,6 +504,7 @@ describe("goat-qa application of test-selection doctrine", () => {
     }
   });
 
+  // Each QA output phase needs its own selection record so decisions remain visible at the relevant handoff.
   for (const templateHeading of [
     "### Regression Guard mode",
     "### Standard mode - Phase 2 output",
@@ -498,6 +513,7 @@ describe("goat-qa application of test-selection doctrine", () => {
     "### Audit post-gate plan",
   ]) {
     it(`adds a compact selection record to ${templateHeading}`, () => {
+      // Check the selected output phase in every installation so no agent receives an incomplete handoff template.
       for (const qaRoot of QA_ROOTS) {
         const templatePath = `${qaRoot}/references/output-templates.md`;
         const block = templateBlock(
@@ -505,6 +521,7 @@ describe("goat-qa application of test-selection doctrine", () => {
           templateHeading,
         );
         assert.match(block, /Test-selection record/u, templatePath);
+        // Every selection-record field must survive in this template so the user can assess the proposed test work.
         for (const field of [
           "Disposition",
           "Regression and impact",
@@ -597,9 +614,11 @@ const ENROLLMENT_OWNERS = [
 ] as const;
 
 describe("test-selection enrollment", () => {
+  // Every discovery owner must point agents to the standalone test-selection playbook before they change tests.
   for (const owner of ENROLLMENT_OWNERS) {
     it(`enrolls the playbook in ${owner.path}`, () => {
       const content = readFileSync(owner.path, "utf8");
+      // Check all required enrollment text so a partial reference cannot pass as a complete instruction route.
       for (const required of owner.required) {
         assert.ok(
           content.includes(required),
@@ -623,6 +642,7 @@ const INSTRUCTION_OWNERS = [
 ] as const;
 
 describe("ordinary implementation test-selection route", () => {
+  // Each ordinary implementation entry point must route test work through the same selection policy.
   for (const ownerPath of INSTRUCTION_OWNERS) {
     it(`routes test work through the owner in ${ownerPath}`, () => {
       assert.ok(
@@ -661,6 +681,7 @@ describe("QA-facing discovery and presets", () => {
     assert.match(publicDocs, /report-only/u);
   });
 
+  // Each testing preset must ask for evidence-backed selection rather than a preset number of test tasks.
   for (const presetId of [
     "walkthrough-with-testing",
     "test-regression",
@@ -702,6 +723,7 @@ describe("test-selection source neutrality", () => {
         `${qaRoot}/references/output-templates.md`,
       ]),
     ];
+    // Shipped guidance must not carry private URLs, local paths, or session-specific prompts into a user’s project.
     for (const shippedPath of shippedPaths) {
       const content = readFileSync(shippedPath, "utf8");
       assert.doesNotMatch(content, urlPattern, shippedPath);
@@ -717,6 +739,7 @@ describe("test-selection source neutrality", () => {
       qaDocsStart,
       qaDocsEnd < 0 ? undefined : qaDocsEnd,
     );
+    // The public QA description must meet each portability rule independently.
     for (const pattern of [
       urlPattern,
       privateHomePattern,
@@ -735,9 +758,11 @@ describe("test-selection source neutrality", () => {
       "test",
       "test-vs-code",
     ]);
+    // Inspect only the affected testing presets so the contract remains tied to the guidance this rollout owns.
     for (const preset of presets.filter((candidate) =>
       affectedPresetIds.has(candidate.id),
     )) {
+      // Every affected preset must exclude each private-residue pattern before users can launch its prompt.
       for (const pattern of [
         urlPattern,
         privateHomePattern,

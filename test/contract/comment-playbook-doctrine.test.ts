@@ -1,5 +1,8 @@
 /**
- * Locks the verification-led comment doctrine across canonical and installed playbooks.
+ * Check the rules used when agents edit code comments and docstrings.
+ *
+ * Canonical and installed playbooks must require accurate descriptions, preserved meaning, and verifiable changes.
+ * Use these contracts when changing comment guidance, its authority boundaries, or portability requirements.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -10,11 +13,12 @@ const PLAYBOOK_ROOTS = [
   ".goat-flow/skill-docs/playbooks",
 ] as const;
 
-/** Applies one doctrine assertion to the canonical and installed copies. */
+// Applies one doctrine assertion to the canonical and installed copies.
 function assertForPlaybook(
   playbookName: string,
   assertion: (content: string, playbookPath: string) => void,
 ): void {
+  // Apply the same rule to canonical and installed guidance so users do not receive a weaker comment workflow.
   for (const playbookRoot of PLAYBOOK_ROOTS) {
     const playbookPath = `${playbookRoot}/${playbookName}`;
     assertion(readFileSync(playbookPath, "utf8"), playbookPath);
@@ -281,6 +285,7 @@ describe("comment playbook verification doctrine", () => {
 
   it("keeps defect codes report-only and rejects compensating prose", () => {
     assertForPlaybook("code-comments.md", (content, playbookPath) => {
+      // Each diagnosis label must remain available to explain a comment defect without inserting review labels into source code.
       for (const defectCode of [
         "STALE",
         "FALSE",
@@ -630,6 +635,7 @@ describe("human-facing prose code-prose boundary", () => {
 
 describe("shipped playbook portability", () => {
   it("excludes consumer-specific and ignored-feedback residue", () => {
+    // Every shipped clarity guide must be usable in a consumer project without private paths or session-specific residue.
     for (const playbookName of [
       "code-comments.md",
       "gruff-code-quality.md",

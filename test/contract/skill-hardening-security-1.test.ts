@@ -1,6 +1,8 @@
 /**
- * Contracts for goat-security quick-scan, specialist, policy, evidence, threat, and runtime guidance.
- * Reads installed copies so user-visible drift fails regardless of the canonical source.
+ * Check the security workflow guidance users receive across supported agent integrations.
+ *
+ * These contracts inspect canonical and installed instructions for the evidence, coverage, and reporting each mode requires.
+ * Use them when changing security review modes, trust boundaries, or required disclosures.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";

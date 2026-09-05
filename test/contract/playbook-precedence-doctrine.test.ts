@@ -1,5 +1,8 @@
 /**
- * Locks bounded project-authority precedence across discipline playbooks.
+ * Check how discipline playbooks apply project conventions within the active instruction contract.
+ *
+ * Canonical and installed copies must preserve safety, architecture, evidence, and verification requirements.
+ * These tests also protect Gruff discovery and explicit controls for analyzer policy changes.
  */
 import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
@@ -31,12 +34,12 @@ const WRITING_PLAYBOOKS = [
   "writing-structure-diagnostics.md",
 ] as const;
 
-/** Reads one playbook copy without normalizing bytes. */
+// Reads one playbook copy without normalizing bytes.
 function readPlaybook(root: string, name: string): string {
   return readFileSync(`${root}/${name}`, "utf8");
 }
 
-/** Returns one top-level playbook section used by semantic assertions. */
+// Read the requested H2 and its following text; a missing heading throws so absent authority cannot pass silently.
 function readPlaybookSection(
   content: string,
   sectionName: string,
@@ -47,6 +50,7 @@ function readPlaybookSection(
   assert.notEqual(start, -1, `${playbookPath}: missing ${heading}`);
 
   const nextHeading = content.indexOf("\n## ", start + heading.length);
+  // With no later H2, the requested authority section extends to the end of the supplied playbook.
   return content.slice(start, nextHeading === -1 ? undefined : nextHeading);
 }
 
@@ -125,6 +129,7 @@ function assertBoundedProjectAuthority(
 
 describe("playbook project-precedence doctrine", () => {
   it("keeps routed writing playbooks mirrored without whole-file digest pins", () => {
+    // Readers must receive identical writing rules from the canonical and installed playbooks.
     for (const playbookName of WRITING_PLAYBOOKS) {
       const copies = PLAYBOOK_ROOTS.map((root) =>
         readPlaybook(root, playbookName),
@@ -133,7 +138,9 @@ describe("playbook project-precedence doctrine", () => {
     }
   });
 
+  // Every discipline owner must keep project conventions within the active safety and evidence contract.
   for (const playbookName of AUTHORITY_PLAYBOOKS) {
+    // Name a separate case for each installed copy so an authority mismatch identifies the guidance users received.
     for (const playbookRoot of PLAYBOOK_ROOTS) {
       const playbookPath = `${playbookRoot}/${playbookName}`;
       it(`${playbookPath} gives project conventions bounded authority`, () => {
@@ -147,6 +154,7 @@ describe("playbook project-precedence doctrine", () => {
 });
 
 describe("Gruff availability and policy controls", () => {
+  // Both Gruff guides must preserve safe availability discovery and explicit analyzer-policy controls.
   for (const playbookRoot of PLAYBOOK_ROOTS) {
     const playbookPath = `${playbookRoot}/gruff-code-quality.md`;
 

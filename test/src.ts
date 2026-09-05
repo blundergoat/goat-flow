@@ -1,7 +1,8 @@
 /**
- * Test-only facade for production modules used by deeply nested test fixtures.
- * Keeps audit and quality tests on stable, shallow imports without changing the package export surface.
- * Use when a nested test needs production behavior without brittle parent-directory traversal.
+ * Expose production helpers through shallow imports for nested audit and quality tests.
+ *
+ * Use this test-only facade when a fixture would otherwise need fragile parent-directory traversal.
+ * These re-exports keep the published package API unchanged.
  */
 export {
   computeHarness,

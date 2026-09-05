@@ -1,6 +1,8 @@
 /**
- * Contracts for goat-clarity's bounded code-remediation workflow.
- * The source is read directly so the first run fails until the canonical skill exists.
+ * Check the scope, evidence, and write rules used by goat-clarity.
+ *
+ * The contracts read canonical guidance and shared conventions so edits remain bounded by the user’s selected files and intent.
+ * Use them when changing clarity intake, delegated work, verification, or its completion receipt.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -19,11 +21,11 @@ const SCOPE_REFERENCE_PATH =
 const clarityGuidance = readProjectFile(SKILL_PATH);
 
 /**
- * Match load-bearing phrases without coupling contracts to Markdown wrapping or capitalisation.
+ * Match required instructions while allowing harmless Markdown wrapping and capitalization changes.
  *
  * @param guidance - user-facing guidance under contract
  * @param sourcePath - repository-relative path used in assertion failures
- * @param requiredPhrases - phrases that the installed workflow must retain
+ * @param requiredPhrases - instructions the workflow must retain; an empty list performs no checks
  */
 function assertGuidanceIncludesAll(
   guidance: string,
@@ -32,6 +34,7 @@ function assertGuidanceIncludesAll(
 ): void {
   const normalizedGuidance = guidance.replace(/\s+/gu, " ").toLowerCase();
 
+  // Require each instruction independently so one retained phrase cannot hide another missing safeguard.
   for (const requiredPhrase of requiredPhrases) {
     const normalizedPhrase = requiredPhrase.replace(/\s+/gu, " ").toLowerCase();
     assert.ok(
@@ -41,19 +44,17 @@ function assertGuidanceIncludesAll(
   }
 }
 
-/** Match load-bearing phrases in the canonical goat-clarity skill. */
+// Confirm the canonical goat-clarity guidance retains every required phrase.
 function assertIncludesAll(requiredPhrases: readonly string[]): void {
   assertGuidanceIncludesAll(clarityGuidance, SKILL_PATH, requiredPhrases);
 }
 
 /**
- * Assert the four documentation write-authority rules appear in first-match order.
- *
- * First match wins, so a request that says "report" must never be overridden by the later `documentation` keyword. Order is the whole contract here:
- * every rule can be present and the precedence still be wrong.
+ * Keep the four documentation write-authority rules in first-match order.
+ * A report request must withhold writes before the later documentation-keyword rule can grant them.
  *
  * @param sourcePath - repository-relative skill path named in assertion failures
- * @param guidance - whitespace-normalised lowercase skill text
+ * @param guidance - normalized lowercase skill text; missing rules, including an empty document, fail the contract
  */
 function assertRulePrecedence(sourcePath: string, guidance: string): void {
   const rules: readonly (readonly [string, string])[] = [
@@ -73,6 +74,7 @@ function assertRulePrecedence(sourcePath: string, guidance: string): void {
     assert.ok(offset >= 0, `${sourcePath}: missing the ${label} rule`);
     return [label, offset] as const;
   });
+  // Compare adjacent authority rules so the first applicable user intent controls whether the agent may write.
   for (let index = 1; index < offsets.length; index += 1) {
     const [previousLabel, previousOffset] = offsets[index - 1]!;
     const [label, offset] = offsets[index]!;
@@ -501,6 +503,7 @@ describe("skill hardening contracts: goat-clarity", () => {
       "freeze Target Scope Snapshot v2 before mutation",
     ]);
 
+    // Delegated agents must obey Scope v2 in both copies of the shared conventions.
     for (const conventionsPath of [
       "workflow/skills/reference/skill-conventions.md",
       ".goat-flow/skill-docs/skill-conventions.md",
@@ -650,6 +653,7 @@ describe("skill hardening contracts: goat-clarity", () => {
   });
 
   it("returns a complete but proportional remediation receipt", () => {
+    // The completion receipt must account for changed, retained, deferred, and unchecked work so the user can review the actual scope.
     for (const receiptLabel of [
       "Agent:",
       "Selector:",

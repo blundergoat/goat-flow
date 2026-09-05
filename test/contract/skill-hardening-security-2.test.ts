@@ -1,6 +1,8 @@
 /**
- * Contracts for goat-security identity, compliance, Git, supply-chain, path, and reporting guidance.
- * Reads installed copies so user-visible drift fails regardless of the canonical source.
+ * Check the security workflow guidance users receive across supported agent integrations.
+ *
+ * These contracts inspect canonical and installed instructions for the evidence, coverage, and reporting each mode requires.
+ * Use them when changing security review modes, trust boundaries, or required disclosures.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -529,6 +531,7 @@ describe("skill hardening contracts: security (2/2)", () => {
       );
     });
 
+    // The user guide and dashboard preset must disclose the same Quick coverage limits and Full reporting obligations.
     for (const [consumerName, consumerText] of [
       [
         "docs/skills.md",

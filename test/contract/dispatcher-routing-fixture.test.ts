@@ -1,7 +1,8 @@
 /**
- * Guards deterministic dispatcher-corpus integrity, not model behaviour.
- * The suite validates source provenance, policy coverage, and normalized expected outcomes;
- * live provider qualification remains a separate, explicitly identified run.
+ * Guards deterministic dispatcher-corpus integrity: stored user requests must have valid, traceable expected routes.
+ *
+ * These contracts check fixture provenance, route coverage, required fields, and permitted alternatives.
+ * They validate the stored corpus; live model qualification requires its own run.
  */
 import { execFileSync } from "node:child_process";
 import { describe, it } from "node:test";
@@ -34,7 +35,7 @@ type RouteMode = (typeof ROUTE_MODES)[number];
 type RouteFlag = (typeof ROUTE_FLAGS)[number];
 type CaseType = (typeof CASE_TYPES)[number];
 
-/** Normalized terminal route whose optional fields are constrained by route kind. */
+// Normalized terminal route whose optional fields are constrained by route kind.
 interface RouteDecision {
   kind: RouteKind;
   target?: string;
@@ -42,7 +43,7 @@ interface RouteDecision {
   flags?: RouteFlag[];
 }
 
-/** Source-grounded prompt case with strict expectations and explicit leniency. */
+// Source-grounded prompt case with strict expectations and explicit leniency.
 interface RoutingCase {
   id: string;
   prompt: string;
@@ -62,12 +63,12 @@ const CANONICAL_TARGETS = new Set(
   getSkillNames().filter((skillName) => skillName !== "goat"),
 );
 
-/** Return sorted own keys so fixture schema drift produces deterministic diagnostics. */
+// Return sorted own keys so fixture schema drift produces deterministic diagnostics.
 function sortedKeys(candidateObject: object): string[] {
   return Object.keys(candidateObject).sort();
 }
 
-/** Maintain the exact-schema invariant by rejecting missing or surplus fields. */
+// Maintain the exact-schema invariant by rejecting missing or surplus fields.
 function assertExactKeys(
   candidateObject: object,
   expectedKeys: readonly string[],
@@ -80,7 +81,7 @@ function assertExactKeys(
   );
 }
 
-/** Invariant: each route kind uses only its permitted normalized fields and values. */
+// Invariant: each route kind uses only its permitted normalized fields and values.
 function assertDecision(decision: RouteDecision, label: string): void {
   const permittedKeys = ["kind", "target", "mode", "flags"];
   assert.ok(
@@ -89,6 +90,7 @@ function assertDecision(decision: RouteDecision, label: string): void {
   );
   assert.ok(ROUTE_KINDS.includes(decision.kind), `${label}: invalid kind`);
 
+  // A request routed to a skill must name a registered destination other than the dispatcher itself.
   if (decision.kind === "skill") {
     assert.equal(typeof decision.target, "string", `${label}: missing target`);
     assert.ok(
@@ -100,11 +102,13 @@ function assertDecision(decision: RouteDecision, label: string): void {
     assert.equal(decision.mode, undefined, `${label}: non-skill mode`);
   }
 
+  // An explicit diagnostic mode belongs only to the debug workflow; omission leaves the workflow mode unspecified.
   if (decision.mode !== undefined) {
     assert.ok(ROUTE_MODES.includes(decision.mode), `${label}: invalid mode`);
     assert.equal(decision.target, "goat-debug", `${label}: mode owner`);
   }
 
+  // Declared routing flags must be meaningful and unique; omit the field when the request needs none.
   if (decision.flags !== undefined) {
     assert.ok(decision.flags.length > 0, `${label}: empty flags`);
     assert.deepEqual(
@@ -112,11 +116,14 @@ function assertDecision(decision: RouteDecision, label: string): void {
       [...new Set(decision.flags)].sort(),
       `${label}: flags must be sorted and unique`,
     );
+    // Check each requested routing constraint against the workflow allowed to consume it.
     for (const flag of decision.flags) {
       assert.ok(ROUTE_FLAGS.includes(flag), `${label}: invalid flag ${flag}`);
+      // Browser evidence precedes investigation only when the user request routes to debug.
       if (flag === "browser-evidence-first") {
         assert.equal(decision.target, "goat-debug", `${label}: browser flag`);
       }
+      // Returning to implementation is a planning continuation, so the route must target goat-plan.
       if (flag === "return-to-implement") {
         assert.equal(decision.target, "goat-plan", `${label}: return flag`);
       }
@@ -124,18 +131,19 @@ function assertDecision(decision: RouteDecision, label: string): void {
   }
 }
 
-/** Assert every decision in one ordered route sequence. */
+// Assert every decision in one ordered route sequence.
 function assertDecisionSequence(
   decisions: RouteDecision[],
   label: string,
 ): void {
   assert.ok(decisions.length > 0, `${label}: empty decision sequence`);
+  // Validate every ordered intent so one valid route cannot hide a later unsupported workflow.
   for (const [decisionIndex, decision] of decisions.entries()) {
     assertDecision(decision, `${label}[${decisionIndex}]`);
   }
 }
 
-/** Extract exact Intent cells from the live dispatcher Route Map table. */
+// Extract exact Intent cells from the live dispatcher Route Map table.
 function liveRouteMapIntents(): string[] {
   const routeMap = readMarkdownSection(DISPATCHER_PATH, "Route Map");
   return routeMap
@@ -144,7 +152,7 @@ function liveRouteMapIntents(): string[] {
     .filter((cell) => cell !== "" && cell !== "Intent" && !/^-+$/u.test(cell));
 }
 
-/** Side effects: spawns a read-only Git query to verify clone-valid provenance paths. */
+// Side effects: spawns a read-only Git query to verify clone-valid provenance paths.
 function trackedProjectPaths(): Set<string> {
   return new Set(
     execFileSync("git", ["ls-files", "-z"], {
@@ -156,12 +164,12 @@ function trackedProjectPaths(): Set<string> {
   );
 }
 
-/** Flatten strict expected decisions without treating lenient alternatives as policy. */
+// Flatten strict expected decisions without treating lenient alternatives as policy.
 function expectedDecisions(): RouteDecision[] {
   return ROUTING_CASES.flatMap((routingCase) => routingCase.expected);
 }
 
-/** Maintain source, schema, uniqueness, and ambiguity invariants for the full corpus. */
+// Maintain source, schema, uniqueness, and ambiguity invariants for the full corpus.
 function assertCorpusIntegrity(): void {
   const trackedPaths = trackedProjectPaths();
   const ids = new Set<string>();
@@ -169,6 +177,7 @@ function assertCorpusIntegrity(): void {
   const notes = new Set<string>();
 
   assert.equal(ROUTING_CASES.length, EXPECTED_CASE_COUNT);
+  // Each stored user request must have traceable source evidence and a distinct, valid expected route.
   for (const routingCase of ROUTING_CASES) {
     assertExactKeys(
       routingCase,
@@ -232,6 +241,7 @@ function assertCorpusIntegrity(): void {
     );
     assertDecisionSequence(routingCase.expected, `${routingCase.id}.expected`);
 
+    // Documented policy overlap permits alternate routes; unambiguous requests must have no alternatives.
     if (routingCase.type === "ambiguous") {
       assert.ok(
         routingCase.acceptable.length > 0,
@@ -241,6 +251,7 @@ function assertCorpusIntegrity(): void {
     } else {
       assert.deepEqual(routingCase.acceptable, [], routingCase.id);
     }
+    // Each permitted alternative must be valid and differ from the strict expected route.
     for (const [
       alternativeIndex,
       alternative,

@@ -1,9 +1,8 @@
 /**
- * Contracts for the remaining user-invocable skills and the router that selects them.
- * Grouped because each is small alone but shares the same install-mirror rules.
+ * Check the dispatcher and user-invoked workflows covered by the shared skill contracts.
  *
- * Reads the installed copies rather than sources, so a contract fails when the guidance a user
- * actually receives drifts - not merely when the template does.
+ * These contracts inspect canonical and installed guidance so supported agents apply the same mode and evidence rules.
+ * Use them when changing workflow routing, behavior, or required output.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -101,12 +100,7 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
     });
   });
 
-  /*
-   * D4 is where a fix gets called done, so the protections that decide closure
-   * must be stated there. A cleanup rule that lives only in D1 is not
-   * load-bearing at the moment someone declares the bug fixed, and a minimised
-   * reproducer proves a narrower claim than the one the reporter filed.
-   */
+  // The debug closure step must require cleanup and the original reproduction before an agent declares the reported bug fixed.
 
   it("closes goat-debug only on the original reproduction with diagnostics cleaned", () => {
     assertForEachTarget(installedSkillPaths("goat-debug"), (skillPath) => {
@@ -192,6 +186,7 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
         "Investigate Mode",
       );
 
+      // Debug guidance must distinguish observed facts, inferences, unverified claims, and evidence awaiting human action.
       for (const evidenceState of [
         "OBSERVED",
         "INFERRED",
@@ -213,10 +208,7 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
     });
   });
 
-  /*
-   * A user asking for a code tour can use Investigate without inventing a bug.
-   * This contract keeps diagnosis-only work out of that user path.
-   */
+  // A code tour can use Investigate without a bug report; diagnosis-only requirements must stay outside that path.
   it("scopes goat-debug diagnosis requirements away from Investigate mode", () => {
     assertForEachTarget(installedSkillPaths("goat-debug"), (skillPath) => {
       const boundaryCommands = readMarkdownSection(

@@ -1,5 +1,8 @@
 /**
- * Locks capability-aware fixtures and outcome-based scoring across the shipped authoring pack.
+ * Check how skill-authoring guides select fixtures, score outcomes, and interpret pressure-test evidence.
+ *
+ * Canonical and installed copies must preserve capability limits and avoid claiming more than the observed trials establish.
+ * Use these contracts when changing authoring tests, evidence requirements, or deployment guidance.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -26,12 +29,13 @@ const DEPLOYMENT_GUIDES = [
   ".goat-flow/skill-docs/skill-quality-testing/deployment.md",
 ] as const;
 
-/** Apply one section-scoped assertion to each canonical and installed guide. */
+// Apply one section-scoped assertion to each canonical and installed guide.
 function assertForEachSection(
   guidePaths: readonly string[],
   sectionHeading: string,
   assertion: (section: string, guidePath: string) => void,
 ): void {
+  // Check the requested section in every guide so another copy cannot conceal missing authoring instructions.
   for (const guidePath of guidePaths) {
     assertion(readMarkdownSection(guidePath, sectionHeading), guidePath);
   }
@@ -123,6 +127,7 @@ describe("skill-quality-testing evaluation doctrine", () => {
         );
         assert.match(section, /explicitly tests traceability/u, guidePath);
         assert.match(section, /citation-without-application/u, guidePath);
+        // Outcome-scoring guidance must consider each documented cause before treating a missing citation as failed skill use.
         for (const cause of [
           "instruction clarity",
           "routing",
@@ -214,6 +219,7 @@ describe("skill-quality-testing evaluation doctrine", () => {
   });
 
   it("keeps each canonical guide byte-identical to its installed copy", () => {
+    // Every installed authoring guide must match its canonical source so users receive the same testing rules.
     for (const [canonicalPath, installedPath] of [
       [ROOT_GUIDES[0], ROOT_GUIDES[1]],
       [TDD_GUIDES[0], TDD_GUIDES[1]],
@@ -228,6 +234,7 @@ describe("skill-quality-testing evaluation doctrine", () => {
   });
 
   it("scopes three-pass pressure evidence without broad robustness claims", () => {
+    // None of the authoring or deployment guides may turn bounded pressure evidence into an unlimited reliability claim.
     for (const guidePath of [
       ...ROOT_GUIDES,
       ...TDD_GUIDES,
@@ -238,6 +245,7 @@ describe("skill-quality-testing evaluation doctrine", () => {
       assert.doesNotMatch(content, /\bbulletproof(?:ing)?\b/iu, guidePath);
     }
 
+    // Pressure-test claims must name the failure class and provider settings that the observed trials actually covered.
     for (const guidePath of [...TDD_GUIDES, ...DEPLOYMENT_GUIDES]) {
       assert.match(
         readProjectFile(guidePath),
@@ -248,6 +256,7 @@ describe("skill-quality-testing evaluation doctrine", () => {
   });
 
   it("treats mixed RED trials as evidence instead of forcing a failure", () => {
+    // Both TDD guides must accept mixed outcomes as evidence instead of escalating pressure until a desired failure appears.
     for (const guidePath of TDD_GUIDES) {
       const content = readProjectFile(guidePath);
       assert.match(content, /pre-register[^\n]+trial count/iu, guidePath);
@@ -266,6 +275,7 @@ describe("skill-quality-testing evaluation doctrine", () => {
   });
 
   it("uses the published persuasion study without claiming skill validation", () => {
+    // Study citations must preserve the published figures and state that the study does not validate this particular skill.
     for (const guidePath of TDD_GUIDES) {
       const content = readProjectFile(guidePath);
       assert.match(content, /Meincke et al\. \(2026\)/u, guidePath);
@@ -277,6 +287,7 @@ describe("skill-quality-testing evaluation doctrine", () => {
   });
 
   it("keeps review pressure skeptical and permits supported zero-finding results", () => {
+    // Adversarial review guidance must permit a supported zero-finding outcome so agents do not invent defects.
     for (const guidePath of ADVERSARIAL_GUIDES) {
       const content = readProjectFile(guidePath);
       assert.match(content, /skeptical, neutral reviewer/u, guidePath);

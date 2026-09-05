@@ -1,9 +1,8 @@
 /**
- * Contracts for the review workflow a user drives: how scope is established, when consent
- * gates apply, what counts as evidence, and how a ship verdict must be earned.
+ * Check how the review workflow establishes scope, handles consent, gathers evidence, and reports a verdict.
  *
- * Reads the installed copies rather than sources, so a contract fails when the guidance a user
- * actually receives drifts - not merely when the template does.
+ * These contracts inspect canonical and installed guidance so every supported agent follows the same review rules.
+ * Use them when changing review instructions, evidence requirements, or output contracts.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -27,59 +26,70 @@ import {
 } from "./skill-hardening.helpers.js";
 
 /**
- * Run one git command inside a fixture repository.
+ * Spawns a Git subprocess for the fixture repository; command failures throw.
  *
- * Spawns a real git subprocess, so it writes whatever the supplied arguments write: callers here create repositories, commits, worktrees, and index
- * entries. Every write lands inside the caller's fixture directory and never reaches the repository under review.
+ * The supplied arguments can write fixture commits, worktrees, and staged entries, so callers use isolated temporary paths.
  *
- * @param cwd - repository or linked worktree the command runs in
- * @param args - git arguments after the implicit `-C <cwd>`
- * @returns the command's stdout
+ * @param fixtureWorkingDirectory - repository or linked worktree the command runs in
+ * @param gitArguments - git arguments after the implicit `-C <cwd>`
+ * @returns command stdout; quiet successful commands may return an empty string
  */
-function git(cwd: string, ...args: string[]): string {
-  return execFileSync("git", ["-C", cwd, ...args], { encoding: "utf-8" });
+function runFixtureGitCommand(
+  fixtureWorkingDirectory: string,
+  ...gitArguments: string[]
+): string {
+  return execFileSync("git", ["-C", fixtureWorkingDirectory, ...gitArguments], {
+    encoding: "utf-8",
+  });
 }
 
 /**
- * Capture everything a report-only review promises not to change: the object database, refs, the staged index, and the worktree.
+ * Record the sorted object inventory, refs, staged entries, and worktree status for a stable before/after comparison.
  *
- * The index is fingerprinted by its semantic contents rather than its raw bytes, because git rewrites the index stat cache on ordinary reads. Those
- * bytes change without any staged content changing, so asserting on them would report noise instead of a real mutation.
+ * Use staged contents because Git may refresh index cache bytes during ordinary reads without changing the user's staged work.
  *
  * @param worktreePath - linked worktree whose state is measured
- * @returns one fingerprint per protected surface
+ * @returns one comparison string per surface; empty worktree status means the fixture has no reported changes
  */
 function fingerprintGitState(worktreePath: string): Record<string, string> {
-  const commonDir = git(worktreePath, "rev-parse", "--git-common-dir").trim();
+  const commonGitDirectory = runFixtureGitCommand(
+    worktreePath,
+    "rev-parse",
+    "--git-common-dir",
+  ).trim();
   const objectsRoot = join(
-    commonDir.startsWith("/") ? commonDir : join(worktreePath, commonDir),
+    commonGitDirectory.startsWith("/")
+      ? commonGitDirectory
+      : join(worktreePath, commonGitDirectory),
     "objects",
   );
   const objectEntries: string[] = [];
   // Loose objects live in two-character fan-out directories, so the count is only meaningful after descending into every one of them.
-  const walkObjects = (directory: string): void => {
+  const collectObjectEntries = (directory: string): void => {
+    // Record each stored object so a read-only review cannot silently add to the fixture repository.
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
-      const fullPath = join(directory, entry.name);
+      const objectPath = join(directory, entry.name);
+      // Descend into object subdirectories before comparing the repository inventory.
       if (entry.isDirectory()) {
-        walkObjects(fullPath);
+        collectObjectEntries(objectPath);
         continue;
       }
       objectEntries.push(
-        `${relative(objectsRoot, fullPath)}:${statSync(fullPath).size}`,
+        `${relative(objectsRoot, objectPath)}:${statSync(objectPath).size}`,
       );
     }
   };
-  walkObjects(objectsRoot);
+  collectObjectEntries(objectsRoot);
   objectEntries.sort();
   return {
     objects: objectEntries.join("\n"),
-    refs: git(
+    refs: runFixtureGitCommand(
       worktreePath,
       "for-each-ref",
       "--format=%(refname) %(objectname)",
     ),
-    index: git(worktreePath, "ls-files", "--stage"),
-    worktree: git(
+    index: runFixtureGitCommand(worktreePath, "ls-files", "--stage"),
+    worktree: runFixtureGitCommand(
       worktreePath,
       "status",
       "--porcelain=v1",
@@ -121,6 +131,7 @@ describe("skill hardening contracts: goat-review (1/3)", () => {
           false,
           `${referencePath}: staged authority still writes a tree object`,
         );
+        // Staged-file guidance must use each permitted read-only command rather than creating a new Git tree.
         for (const required of [
           "git ls-files -s",
           "git diff --cached --binary",
@@ -151,15 +162,25 @@ describe("skill hardening contracts: goat-review (1/3)", () => {
     const worktreePath = join(fixtureRoot, "linked");
     try {
       mkdirSync(originPath);
-      git(originPath, "init", "--quiet");
-      git(originPath, "config", "user.email", "probe@example.test");
-      git(originPath, "config", "user.name", "Staged Authority Probe");
+      runFixtureGitCommand(originPath, "init", "--quiet");
+      runFixtureGitCommand(
+        originPath,
+        "config",
+        "user.email",
+        "probe@example.test",
+      );
+      runFixtureGitCommand(
+        originPath,
+        "config",
+        "user.name",
+        "Staged Authority Probe",
+      );
       writeFileSync(join(originPath, "alpha.txt"), "alpha contents\n");
       writeFileSync(join(originPath, "beta.txt"), "beta contents\n");
-      git(originPath, "add", "alpha.txt", "beta.txt");
-      git(originPath, "commit", "--quiet", "-m", "probe base");
+      runFixtureGitCommand(originPath, "add", "alpha.txt", "beta.txt");
+      runFixtureGitCommand(originPath, "commit", "--quiet", "-m", "probe base");
       // A linked worktree owns its own index, so staging here can never replace the index a user is working in.
-      git(
+      runFixtureGitCommand(
         originPath,
         "worktree",
         "add",
@@ -170,12 +191,12 @@ describe("skill hardening contracts: goat-review (1/3)", () => {
       );
 
       // Stage a blob that already exists, so the staging step itself adds nothing to the object database.
-      const existingBlobOid = git(
+      const existingBlobOid = runFixtureGitCommand(
         worktreePath,
         "rev-parse",
         "HEAD:beta.txt",
       ).trim();
-      git(
+      runFixtureGitCommand(
         worktreePath,
         "update-index",
         "--cacheinfo",
@@ -184,9 +205,13 @@ describe("skill hardening contracts: goat-review (1/3)", () => {
 
       const before = fingerprintGitState(worktreePath);
 
-      git(worktreePath, "ls-files", "-s");
-      git(worktreePath, "diff", "--cached", "--binary");
-      const stagedContent = git(worktreePath, "show", ":alpha.txt");
+      runFixtureGitCommand(worktreePath, "ls-files", "-s");
+      runFixtureGitCommand(worktreePath, "diff", "--cached", "--binary");
+      const stagedContent = runFixtureGitCommand(
+        worktreePath,
+        "show",
+        ":alpha.txt",
+      );
       // The read must return staged content, otherwise the probe proves nothing about staged authority.
       assert.equal(
         stagedContent,
@@ -503,6 +528,7 @@ describe("skill hardening contracts: goat-review (1/3)", () => {
         skillPath,
         "Step 0 - Scope, Size, Spec",
       );
+      // Every installed review workflow must name the setup mutations it forbids in the user’s working tree.
       for (const forbiddenCommand of [
         "git stash",
         "git checkout <branch>",
@@ -642,6 +668,7 @@ describe("skill hardening contracts: goat-review (1/3)", () => {
           /goat-flow-reference-version: "1\.17\.0"/u,
           referencePath,
         );
+        // Reviewers need every documented reasoning trap available in their own installed reference.
         for (const trapName of [
           "Reachability before severity",
           "Convention from a three-file sample",

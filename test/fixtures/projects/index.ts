@@ -1,7 +1,8 @@
 /**
- * Shared test fixtures for audit/quality tests.
- * Use these defaults to model a healthy selected project before one focused
- * setup or harness condition is overridden for a user-visible assertion.
+ * Supply reusable project, agent, and filesystem inputs for audit and quality tests.
+ *
+ * Tests override the facts relevant to the user-visible finding they want to check.
+ * The defaults are controlled fixture data; each case still supplies the evidence required by its own assertions.
  */
 import type {
   AgentFacts,
@@ -42,7 +43,7 @@ const HEALTHY_STANDALONE_PLAYBOOK_FILENAMES = [
   "writing-human-facing-prose.md",
 ] as const;
 
-/** Render the default playbook index a healthy-project audit fixture exposes to users. */
+// Render the default playbook index a healthy-project audit fixture exposes to users.
 function healthyPlaybookReadme(): string {
   const rows = HEALTHY_STANDALONE_PLAYBOOK_FILENAMES.map(
     (filename) => `| [\`${filename}\`](./${filename}) | Fixture | n/a |`,
@@ -58,7 +59,7 @@ ${rows.join("\n")}
 `;
 }
 
-/** Render one versioned playbook with the first section users expect to load. */
+// Render one versioned playbook with the first section users expect to load.
 function healthyPlaybook(filename: string): string {
   return `---
 goat-flow-reference-version: "${AUDIT_VERSION}"
@@ -71,9 +72,13 @@ Fixture capability is available.
 `;
 }
 
-// Test helper: a ReadonlyFS whose defaults describe a healthy project (a valid
-// .goat-flow/.gitignore, everything else empty/present). Pass overrides to
-// simulate the specific filesystem condition a check is meant to detect.
+/**
+ * Simulate project files for an audit check without touching a real user's project.
+ * Supply overrides for the missing, malformed, or installed content the test is exercising.
+ *
+ * @param overrides - filesystem operations to replace; omitted operations keep the shared fixture defaults
+ * @returns file access with selected built-in content; unlisted file reads return null and directory listings start empty
+ */
 export function stubFS(overrides: Partial<ReadonlyFS> = {}): ReadonlyFS {
   // Stands in for the committed goat-flow files an audit user would really have on disk.
   const defaultReadFile = (path: string): string | null => {
@@ -107,21 +112,31 @@ export function stubFS(overrides: Partial<ReadonlyFS> = {}): ReadonlyFS {
     ) {
       return `#!/usr/bin/env bash\n# goat-flow-hook-version: ${AUDIT_VERSION}\n`;
     }
+    // Unlisted files have no fixture content; a test requiring their bytes must provide an override.
     return null;
   };
   const fs = {
+    // Treat paths as present until a missing-file scenario overrides this operation.
     exists: () => true,
+    // Return only the built-in fixture content or the null that asks the test to supply its own file bytes.
     readFile: defaultReadFile,
+    // Leave size checks at zero until a test supplies the line count relevant to its finding.
     lineCount: () => 0,
+    // Supply no parsed JSON by default; tests of JSON settings provide the values their assertions need.
     readJson: () => null,
+    // Treat directories as readable unless the scenario models missing paths or denied access.
     isReadableDirectory: () => true,
+    // Leave discovery empty so a test supplies only the directory entries relevant to its finding.
     listDir: () => [],
+    // Require a test to opt into executable hooks instead of implying that every existing file can run.
     isExecutable: () => false,
+    // Leave wildcard discovery empty until the scenario provides matching files.
     glob: () => [],
     ...overrides,
   };
   return {
     ...fs,
+    // A supplied existence check wins; otherwise the test's glob results determine whether matching files exist.
     existsGlob:
       overrides.existsGlob ??
       ((pattern: string) => fs.glob(pattern).length > 0),
@@ -129,12 +144,10 @@ export function stubFS(overrides: Partial<ReadonlyFS> = {}): ReadonlyFS {
 }
 
 /**
- * Build a fully valid loaded config so a test can override just the field it is exercising.
+ * Build a valid loaded configuration so a test can change one setting without also triggering missing-config errors.
  *
- * Starting from valid means a test that changes one key is testing that key, not accidentally testing a missing-config path.
- *
- * @param overrides - fields to replace; an empty object yields the healthy baseline every audit check expects
- * @returns a loaded config already marked existing and valid
+ * @param overrides - settings replaced by the test; an empty object keeps the shared fixture defaults
+ * @returns an existing, valid configuration with empty warning and error lists
  */
 export function stubConfig(
   overrides: Partial<GoatFlowConfig> = {},
@@ -190,12 +203,10 @@ export const STUB_AGENT_PROFILE: AgentProfile = {
 };
 
 /**
- * Build a healthy set of agent facts so a test can override only the fact it is exercising.
+ * Build the shared agent-facts fixture so tests can vary one setup condition without reconstructing the whole object.
  *
- * The baseline represents a correctly installed agent, so any check that fails against it is failing for the reason the test intended.
- *
- * @param overrides - facts to replace; an empty object yields the fully healthy agent
- * @returns agent facts ready to drop into an audit context
+ * @param overrides - fact groups replaced by the test; an empty object keeps the shared agent fixture
+ * @returns agent facts for an audit context; each test must supply the evidence its asserted checks need
  */
 export function stubAgentFacts(
   overrides: Partial<AgentFacts> = {},
@@ -293,9 +304,12 @@ export const STUB_STRUCTURE: ProjectStructure = {
   agents: {},
 };
 
-// Test helper: baseline learning-loop "shared" facts — buckets present but
-// empty (no evidence, zero entries) — so audit contexts start from a known
-// neutral state that individual tests then nudge.
+/**
+ * Start shared project facts with present but empty learning-loop buckets, ready for a focused audit assertion.
+ * Empty entries and null diagnostics mean this fixture supplies neither incident evidence nor parser errors.
+ *
+ * @returns shared facts with no entries, evidence references, or parser diagnostics
+ */
 export function makeSharedFacts(): ProjectFacts["shared"] {
   return {
     footguns: {
@@ -379,11 +393,13 @@ export function makeSharedFacts(): ProjectFacts["shared"] {
   };
 }
 
-// Test helper. The deeply nested shape is intentional: audit checks read
-// AuditContext fields directly without presence guards, so every nested fact
-// must exist or a check throws instead of failing cleanly. This populates them
-// all for a healthy project; `overrides` shallow-merges last so a test can swap
-// just the slice it exercises, because rebuilding the whole tree per test is noise.
+/**
+ * Build the nested context audit checks read directly so a fixture omission does not masquerade as the user's setup failure.
+ * Overrides replace whole top-level slices; callers must provide complete nested facts for any slice they replace.
+ *
+ * @param overrides - context slices replaced by the test; an empty object keeps the common project and agent fixtures
+ * @returns a context without an agent filter by default; overrides can select an agent or replace project facts
+ */
 export function makeCtx(overrides: Partial<AuditContext> = {}): AuditContext {
   return {
     projectPath: "/tmp/test-project",

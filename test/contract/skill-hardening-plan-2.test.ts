@@ -1,9 +1,8 @@
 /**
- * Contracts for planning and timing guidance: milestone structure, effort and forecast
- * obligations, and the accounting a user is promised across installed copies.
+ * Check the planning and timing guidance users receive across supported agent integrations.
  *
- * Reads the installed copies rather than sources, so a contract fails when the guidance a user
- * actually receives drifts - not merely when the template does.
+ * These contracts inspect canonical and installed instructions for milestone structure, effort records, and forecast obligations.
+ * Use them when changing the planning workflow or its reference material.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -164,11 +163,8 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
     );
   });
 
-  /*
-   * The two plain-language sections are the only part of a milestone a reader outside the project can act on.
-   * Renaming them back to jargon, or dropping the worked BAD/GOOD pair that carries the register, returns plans to
-   * internal vocabulary, so the demonstration is pinned alongside the names.
-   */
+  // Keep the problem and beneficiary sections understandable to readers outside the project.
+  // The worked example must demonstrate that wording as well as preserve the section names.
   it("pins the plain-language milestone sections and the example that shows their register", () => {
     assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
       assert.match(
@@ -235,10 +231,7 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
     );
   });
 
-  /*
-   * A user starting a Standard plan needs an ISSUE.md beside the milestone files.
-   * The format reference guides that artifact and must stay unchanged.
-   */
+  // Standard plans need an ISSUE.md beside their milestones; this contract preserves the format reference that guides authors.
   it("writes the user-facing ISSUE artifact without treating its format reference as output", () => {
     assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
       const planGuidance = readProjectFile(skillPath);
@@ -408,6 +401,7 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
       },
     );
 
+    // Both convention copies must limit current reasons to blocked or abandoned milestones.
     for (const conventionsPath of [
       "workflow/skills/reference/skill-conventions.md",
       ".goat-flow/skill-docs/skill-conventions.md",

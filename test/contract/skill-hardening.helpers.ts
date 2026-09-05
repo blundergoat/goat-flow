@@ -1,12 +1,8 @@
 /**
- * Shared readers and assertions for the installed-skill contract suites.
- * Every contract group asks the same question in a different place: does the guidance a user
- * actually receives still say what it must? These helpers read installed files exactly as an
- * agent or the dashboard would, slice out the section under test, and assert across all four
- * install roots at once so a rule cannot pass on one mirror while another has drifted.
+ * Read skill guidance and apply shared contracts across the canonical and installed copies.
  *
- * Reading the installed copy rather than parsed metadata is the point. A contract that checked
- * a manifest would keep passing while the wording a user reads went stale.
+ * Tests inspect the wording agents receive so a correct copy cannot hide drift in another supported integration.
+ * Use these helpers for section checks, prompt presets, evidence anchors, and guidance-size limits.
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -21,25 +17,22 @@ export const INSTALLED_SKILL_ROOTS = [
 ] as const;
 
 /**
- * Loads one project file exactly as an agent or UI consumer receives it.
- * Use this when a contract depends on the installed wording, not parsed metadata.
+ * Read the exact project file a guidance contract needs; missing or unreadable files throw.
  *
- * @param projectRelativePath - repo-relative path to read; the installed copy, not a template
- * @returns the file contents verbatim; a missing file throws, because a contract asserting
- *   about guidance that is not installed has already failed
+ * @param projectRelativePath - repository-relative guidance path; callers choose the canonical or installed copy they need
+ * @returns file contents verbatim, including an empty string for an empty file
  */
 export function readProjectFile(projectRelativePath: string): string {
   return readFileSync(resolve(REPOSITORY_ROOT, projectRelativePath), "utf-8");
 }
 
 /**
- * Reads one Markdown H2 section so a UI-facing rule cannot pass by matching an example elsewhere.
- * A missing section means the installed workflow can no longer orient the user as documented.
+ * Reads the project file to find the requested H2 section while ignoring headings inside fenced examples.
+ * A missing heading throws because the agent cannot find the promised workflow guidance.
  *
  * @param projectRelativePath - installed file to read, exactly as a user's agent would
  * @param sectionHeading - H2 heading to isolate, without the leading hashes
- * @returns the section body; an empty string means the heading is absent, which callers assert
- *   against rather than silently passing
+ * @returns the heading and its section text up to the next H2; a heading with no body is still returned
  */
 export function readMarkdownSection(
   projectRelativePath: string,
@@ -52,25 +45,34 @@ export function readMarkdownSection(
   let sectionEndIndex = lines.length;
   let activeFence: "`" | "~" | null = null;
 
+  // Walk the document in reading order to isolate the section an agent would find outside examples.
   for (const [lineIndex, line] of lines.entries()) {
     const fenceMatch = /^\s*(`{3,}|~{3,})/u.exec(line);
+    // Fence markers change whether following headings are live guidance or example text.
     if (fenceMatch) {
       const fenceCharacter = fenceMatch[1][0] as "`" | "~";
+      // With no open fence, this marker starts an example whose headings must be ignored.
       if (activeFence === null) {
         activeFence = fenceCharacter;
-      } else if (activeFence === fenceCharacter) {
+      } else if (
+        // A matching marker returns the reader to the surrounding guidance.
+        activeFence === fenceCharacter
+      ) {
         activeFence = null;
       }
       continue;
     }
 
+    // Ignore fenced examples so quoted headings cannot satisfy a missing workflow section.
     if (activeFence !== null) continue;
 
+    // The first matching live H2 starts the requested section, including its heading.
     if (sectionStartIndex === -1 && line === sectionMarker) {
       sectionStartIndex = lineIndex;
       continue;
     }
 
+    // The next live H2 ends this section before unrelated guidance can satisfy its contract.
     if (sectionStartIndex !== -1 && /^##\s+/u.test(line)) {
       sectionEndIndex = lineIndex;
       break;
@@ -88,10 +90,10 @@ export function readMarkdownSection(
 }
 
 /**
- * Assert every required pattern against one installed guidance surface.
+ * Require every pattern in one guidance file so missing instructions produce a named contract failure.
  *
  * @param content - installed guidance text to inspect
- * @param patterns - required patterns that must all match
+ * @param patterns - required wording patterns; an empty list performs no checks
  * @param sourcePath - assertion label naming the inspected source
  */
 export function assertMatchesAll(
@@ -99,18 +101,19 @@ export function assertMatchesAll(
   patterns: readonly RegExp[],
   sourcePath: string,
 ): void {
+  // Every required instruction must appear; one matching pattern cannot compensate for a missing rule.
   for (const pattern of patterns) {
     assert.match(content, pattern, `${sourcePath}: missing ${pattern}`);
   }
 }
 
 /**
- * Extract one Markdown H3 subsection from an already isolated section body.
+ * Read one H3 subsection so a contract checks the relevant guidance rather than another section.
  *
  * @param sectionBody - Markdown H2 body that contains the subsection
  * @param subsectionHeading - H3 heading to isolate, without leading hashes
  * @param sourcePath - assertion label naming the inspected source
- * @returns subsection body up to the next H3 heading
+ * @returns text after the heading up to the next H3, possibly empty; a missing heading throws
  */
 export function readMarkdownSubsection(
   sectionBody: string,
@@ -122,15 +125,16 @@ export function readMarkdownSubsection(
   assert.notEqual(start, -1, `${sourcePath} missing ${marker}`);
   const remainder = sectionBody.slice(start + marker.length);
   const nextHeading = remainder.search(/\n###\s+/u);
+  // With no later H3, the requested subsection extends to the end of the supplied section.
   return nextHeading === -1 ? remainder : remainder.slice(0, nextHeading);
 }
 
 /**
- * Read one string field from a dashboard preset without crossing preset boundaries.
+ * Read one dashboard preset field after checking that the preset exists and its value is a string.
  *
  * @param presetId - exact dashboard preset identifier
  * @param field - supported string field to read
- * @returns the preset-scoped field value
+ * @returns the selected field, possibly empty; missing presets or non-string fields throw
  */
 export function readPresetStringField(
   presetId: string,
@@ -150,22 +154,20 @@ export function readPresetStringField(
 }
 
 /**
- * Read dashboard prompt copy through the preset-scoped field guard.
+ * Read the prompt text users launch from the selected dashboard preset.
  *
  * @param presetId - exact dashboard preset identifier
- * @returns prompt copy for the selected preset
+ * @returns the preset prompt, possibly empty; missing presets or non-string prompts throw
  */
 export function readPresetPrompt(presetId: string): string {
   return readPresetStringField(presetId, "prompt");
 }
 
 /**
- * Builds every installed path for a skill so each supported agent sees the same workflow.
- * Use this whenever a safety rule must remain identical across agent integrations.
+ * Build paths for every canonical and installed skill copy so contracts catch guidance drift.
  *
  * @param skillName - skill directory name, such as `goat-review`
- * @returns one SKILL.md path per install root; never empty, so a contract always asserts
- *   against every mirror rather than passing on whichever one it happened to read
+ * @returns one SKILL.md path per registered root; the fixed root list makes this result nonempty
  */
 export function installedSkillPaths(skillName: string): string[] {
   // Each installation root represents a user-visible agent integration.
@@ -175,11 +177,11 @@ export function installedSkillPaths(skillName: string): string[] {
 }
 
 /**
- * Builds every installed path for one progressive skill reference.
+ * Build paths for one reference across all registered roots so every agent receives the same guidance.
  *
  * @param skillName - skill directory that owns the reference
  * @param referencePath - path inside the skill, such as `references/rubric-examples.md`
- * @returns one path per install root, so drift in a single mirror still fails the contract
+ * @returns one reference path per registered root; the fixed root list makes this result nonempty
  */
 export function installedSkillReferencePaths(
   skillName: string,
@@ -191,10 +193,9 @@ export function installedSkillReferencePaths(
 }
 
 /**
- * Applies one contract to every user-facing target while preserving its failure label.
- * Use this for mirror parity rather than accepting one correct installation as enough.
+ * Apply the same contract to every selected guidance copy, preserving each target's failure label.
  *
- * @param contractTargets - installed targets to check, one per mirror a user could be reading
+ * @param contractTargets - guidance targets to check; an empty list runs no assertions
  * @param verifyTarget - contract applied to each target; its failure label names the mirror that failed
  */
 export function assertForEachTarget<T>(
@@ -207,8 +208,7 @@ export function assertForEachTarget<T>(
   }
 }
 
-// Every obligation a milestone-examples reference must state before a plan author can
-// trust an Actual: how to record time, how to stop it, and how each Actual state reads.
+// Required timing and forecast wording lets plan authors record effort and distinguish measured Actuals from estimates.
 export const TIMING_OBLIGATION_CHECKS = [
   /goat-flow plans time start/u,
   /--finalize/u,
@@ -224,17 +224,13 @@ export const TIMING_OBLIGATION_CHECKS = [
 ];
 
 /**
- * Resolve every `path` (search: `anchor`) citation in a skill bundle against its target file.
- * Use when a skill points a reader at another document, because a citation that no longer matches
- * sends the agent to text that is not there, which reads as a missing instruction.
+ * Check that a skill's named evidence anchors lead readers to text that exists.
  *
- * Anchors whose path starts with an angle-bracket token are consumer-project placeholders,
- * not files in this checkout, so they are counted and skipped rather than resolved.
+ * Placeholders beginning with an angle-bracket token are counted separately because their files belong to the eventual target project.
  *
  * @param reviewRoot - bundle root used to resolve `SKILL.md` and `references/` citations
- * @param bundlePaths - files to scan; an empty list returns zero counts and proves nothing,
- *   which the caller guards by asserting the checked count is above zero
- * @returns how many anchors resolved and how many placeholders were exempted
+ * @param bundlePaths - files to scan; an empty list returns zero counts, so callers separately require checked anchors
+ * @returns resolved and placeholder anchor counts; zero resolved anchors alone proves no citation is valid
  */
 export function verifyNamedAnchorsResolve(
   reviewRoot: string,
@@ -244,8 +240,10 @@ export function verifyNamedAnchorsResolve(
   let anchorsChecked = 0;
   let placeholderAnchors = 0;
 
+  // Check citations in every selected guidance file so readers can follow references from any bundle section.
   for (const sourcePath of bundlePaths) {
     const source = readProjectFile(sourcePath);
+    // Resolve each named citation independently; one valid destination cannot hide another broken instruction link.
     for (const anchorMatch of source.matchAll(namedAnchorPattern)) {
       const citedPath = anchorMatch[1];
       const anchor = anchorMatch[2];
@@ -274,11 +272,9 @@ export function verifyNamedAnchorsResolve(
 }
 
 /**
- * Confirm one milestone-examples section documents every timing and forecast obligation.
- * Use per installed harness: an author reading only their own agent's copy must still be
- * told how to record, stop, and disclose milestone time.
+ * Require the timing and forecast guidance a plan author needs to report trustworthy effort.
  *
- * @param effortEstimates - the reference's Effort Estimates section text
+ * @param effortEstimates - Effort Estimates section text; empty text fails the required wording checks
  * @param referencePath - path reported on failure, so the failing harness copy is named
  */
 export function assertTimingObligationsDocumented(
@@ -292,12 +288,10 @@ export function assertTimingObligationsDocumented(
 }
 
 /**
- * Counts user-facing skill guidance without YAML frontmatter, matching ADR-023.
- * Use this to prevent a workflow from becoming too large for agents to apply reliably.
+ * Count guidance words without YAML frontmatter to enforce the skill-body budget in ADR-023.
  *
  * @param projectRelativePath - installed guidance file to measure
- * @returns word count of the body only; frontmatter is excluded because it is metadata the
- *   user never reads and would otherwise inflate every file against its budget
+ * @returns body word count; empty or whitespace-only bodies count as zero, and frontmatter does not consume the guidance budget
  */
 export function countSkillBodyWords(projectRelativePath: string): number {
   const skillBody = readProjectFile(projectRelativePath).replace(
@@ -309,22 +303,18 @@ export function countSkillBodyWords(projectRelativePath: string): number {
   return skillBody.split(/\s+/).filter(Boolean).length;
 }
 
-/**
- * Wordings that must never appear in installed skill guidance.
- * Each names a retired rule that once told an agent to seek extra consent before delegating.
- * They are assembled from fragments so this file does not itself contain the banned phrase and
- * trip the very contracts that search for it.
- */
+// Reject retired delegation-consent wording in installed guidance.
+// Fragments keep this contract fixture from containing the complete phrase that repository checks reject.
 export const forbiddenCodexExceptionPattern = new RegExp(
   "Exception: on C" + "odex",
 );
 
-/** Retired wording that required explicit delegation consent on one agent. */
+// Retired wording that required explicit delegation consent on one agent.
 export const forbiddenCodexConsentPattern = new RegExp(
   ["C", "odex requires ", "explicit user ", "delegation ", "consent"].join(""),
 );
 
-/** Retired wording that asked an agent to confirm consent before spawning sub-agents. */
+// Retired wording that asked an agent to confirm consent before spawning sub-agents.
 export const forbiddenDelegationPromptPattern = new RegExp(
   ["confirm ", "delegation ", "consent once ", "before spawning"].join(""),
 );
