@@ -6,10 +6,11 @@
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  PROJECT_ROOT,
   runPlansCheck,
   assertSourceLabelledErrors,
   writeCheckFixture,
@@ -18,6 +19,183 @@ import {
 } from "./plans-check.helpers.js";
 
 type PlainLanguageHeadingStyle = "current" | "legacy" | null;
+
+const PARALLEL_PLAN = join(
+  PROJECT_ROOT,
+  "test",
+  "fixtures",
+  "plans",
+  "parallel-lanes",
+);
+
+describe("plans check: parallel lanes", () => {
+  const cases = [
+    { name: "disjoint lanes", lanes: ["go", "php"], cap: 2, errors: [] },
+    {
+      name: "one named lane collision",
+      lanes: ["php", "php"],
+      cap: 2,
+      errors: ["error: plan: multiple active milestones in lane php: M18, M19"],
+    },
+    {
+      name: "absent and empty lanes share default",
+      lanes: [undefined, ""],
+      cap: 3,
+      errors: ["error: plan: multiple active milestones: M18, M19"],
+    },
+    {
+      name: "explicit default joins the implicit lane",
+      lanes: ["default", undefined],
+      cap: 2,
+      errors: ["error: plan: multiple active milestones: M18, M19"],
+    },
+    {
+      name: "global overflow without collisions",
+      lanes: ["go", "php", "rs"],
+      cap: 2,
+      errors: ["error: plan: active milestone cap 2 exceeded: M18, M19, M20"],
+    },
+    {
+      name: "lane errors follow file order before the global cap",
+      lanes: ["php", "go", "php", "go"],
+      cap: 2,
+      errors: [
+        "error: plan: multiple active milestones in lane php: M18, M20",
+        "error: plan: multiple active milestones in lane go: M19, M21",
+        "error: plan: active milestone cap 2 exceeded: M18, M19, M20, M21",
+      ],
+    },
+    {
+      name: "cap one emits only its legacy error",
+      lanes: ["php", "php", "go"],
+      cap: 1,
+      errors: ["error: plan: multiple active milestones: M18, M19, M20"],
+    },
+    {
+      name: "invalid lanes count globally without a fabricated collision",
+      lanes: ["Bad!", "Bad!", "go"],
+      cap: 2,
+      errors: ["error: plan: active milestone cap 2 exceeded: M18, M19, M20"],
+    },
+  ];
+  for (const testCase of cases) {
+    /** Writes a temporary scheduling snapshot and compares the author's exact ordered plan errors. */
+    it(testCase.name, () => {
+      const root = mkdtempSync(join(tmpdir(), "goat-flow-plan-lanes-"));
+      try {
+        const files: Record<string, string> = {};
+        for (const [index, lane] of testCase.lanes.entries()) {
+          const id = `M${18 + index}`;
+          files[`${id}-fixture.md`] =
+            canonicalMilestoneBody({
+              title: `${id}: Active work`,
+              status: "in-progress",
+            }) + (lane === undefined ? "" : `\nLane: ${lane}\n`);
+        }
+        const result = runPlansCheck(
+          writeCheckPlan(root, files),
+          "--strict",
+          "--max-active",
+          String(testCase.cap),
+        );
+        assert.equal(
+          result.status,
+          testCase.errors.length > 0 ? 1 : 0,
+          result.stdout + result.stderr,
+        );
+        assert.deepEqual(
+          result.stdout
+            .split("\n")
+            .filter((line) => line.startsWith("error: plan:")),
+          testCase.errors,
+        );
+        if (testCase.lanes.includes("Bad!")) {
+          assert.match(
+            result.stdout,
+            /error: M18-fixture\.md: invalid Lane value;/u,
+          );
+          assert.match(
+            result.stdout,
+            /error: M19-fixture\.md: invalid Lane value;/u,
+          );
+          assert.match(
+            result.stdout,
+            /active: M18 \(in-progress\) \| lane: <invalid>/u,
+          );
+          assert.doesNotMatch(result.stdout, /Bad!/u);
+        }
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    });
+  }
+
+  /** Exercises the committed consumer fixture through both compatibility modes, without relying on ignored plans. */
+  it("reports the consumer lanes before the effort summary in strict and default checks", () => {
+    for (const flags of [[], ["--strict"]]) {
+      const result = runPlansCheck(
+        PARALLEL_PLAN,
+        ...flags,
+        "--max-active",
+        "2",
+      );
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.equal(result.stderr, "");
+      const lines = result.stdout.split("\n");
+      assert.deepEqual(lines.slice(3, 6), [
+        "active: M18 (in-progress) | lane: go",
+        "active: M19 (in-progress) | lane: php",
+        "plan: 2 active milestones (cap 2)",
+      ]);
+      assert.match(lines[6] ?? "", /^plan: 9 min estimated/u);
+    }
+    const legacy = runPlansCheck(
+      PARALLEL_PLAN,
+      "--strict",
+      "--max-active",
+      "1",
+    );
+    assert.equal(legacy.status, 1);
+    assert.deepEqual(
+      legacy.stdout.split("\n").filter((line) => line.startsWith("error:")),
+      ["error: plan: multiple active milestones: M18, M19"],
+    );
+    assert.doesNotMatch(legacy.stdout, /^active:|\(cap /mu);
+  });
+
+  /** A second lane never satisfies a prerequisite that is still in progress. */
+  it("keeps dependencies blocking across lanes while non-strict mode remains advisory", () => {
+    const root = mkdtempSync(join(tmpdir(), "goat-flow-plan-lane-dependency-"));
+    try {
+      const files: Record<string, string> = {};
+      for (const name of [
+        "M17-shared-baseline.md",
+        "M18-go-precision.md",
+        "M19-php-precision.md",
+      ]) {
+        files[name] = readFileSync(join(PARALLEL_PLAN, name), "utf-8");
+      }
+      files["M19-php-precision.md"] = files["M19-php-precision.md"]!.replace(
+        "Depends on: M17",
+        "Depends on: M18",
+      );
+      const plan = writeCheckPlan(root, files);
+      const strict = runPlansCheck(plan, "--strict", "--max-active", "2");
+      assert.equal(strict.status, 1);
+      assert.deepEqual(
+        strict.stdout.split("\n").filter((line) => line.startsWith("error:")),
+        [
+          "error: M19-php-precision.md: active or complete milestone requires dependency M18 to be complete",
+        ],
+      );
+      const advisory = runPlansCheck(plan, "--max-active", "2");
+      assert.equal(advisory.status, 0, advisory.stdout + advisory.stderr);
+      assert.doesNotMatch(advisory.stdout, /error:/u);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+});
 
 const VALID_PROBLEM_STATEMENT =
   "Plan authors can leave reader-facing sections vague because no checker rejects them.";

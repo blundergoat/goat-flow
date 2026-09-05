@@ -74,8 +74,55 @@ describe("plans check: lifecycle states and timing receipts", () => {
       assert.equal(result.status, 0, result.stdout + result.stderr);
       assert.equal(result.stdout, baseline.stdout);
       assert.equal(result.stderr, baseline.stderr);
+      const parallel = runPlansCheck(
+        writeCheckPlan(join(temporaryRoot, "lane"), withLanes),
+        "--strict",
+        "--max-active",
+        "2",
+      );
+      assert.equal(parallel.status, 0, parallel.stdout + parallel.stderr);
+      assert.match(parallel.stdout, /plan: 0 active milestones \(cap 2\)/u);
+      assert.doesNotMatch(parallel.stdout, /^active:/mu);
     } finally {
       rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
+  /** All execution and review states consume slots, including pending human verification. */
+  it("counts in-progress, testing-gate, and human-verification-pending across lanes", () => {
+    const root = mkdtempSync(join(tmpdir(), "goat-flow-plan-active-states-"));
+    try {
+      const files: Record<string, string> = {};
+      for (const [index, status] of [
+        "in-progress",
+        "testing-gate",
+        "human-verification-pending",
+      ].entries()) {
+        const id = `M0${index + 1}`;
+        const pending = status === "human-verification-pending";
+        files[`${id}-fixture.md`] =
+          canonicalMilestoneBody({
+            title: `${id}: Active state`,
+            status,
+            isTaskChecked: status !== "in-progress",
+            includeActual: pending,
+            proofLines: [
+              `- [${pending ? "x" : " "}] Outcome is proven. [automated] (est: 1 min proof)`,
+            ],
+          }) + `\nLane: lane-${index}\n`;
+      }
+      const plan = writeCheckPlan(root, files);
+      const allowed = runPlansCheck(plan, "--strict", "--max-active", "3");
+      assert.equal(allowed.status, 0, allowed.stdout + allowed.stderr);
+      assert.match(allowed.stdout, /plan: 3 active milestones \(cap 3\)/u);
+      const capped = runPlansCheck(plan, "--strict", "--max-active", "2");
+      assert.equal(capped.status, 1);
+      assert.deepEqual(
+        capped.stdout.split("\n").filter((line) => line.startsWith("error:")),
+        ["error: plan: active milestone cap 2 exceeded: M01, M02, M03"],
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
     }
   });
 

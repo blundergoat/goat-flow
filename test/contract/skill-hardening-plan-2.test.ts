@@ -280,7 +280,7 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
     );
     assert.match(
       exporterLesson,
-      /At that revision, the exporter accepted only the bold `Objective` field/u,
+      /exporter then accepted only the bold `Objective` field/u,
     );
     assert.match(
       exporterLesson,

@@ -19,6 +19,45 @@ import {
 } from "./plans-check.helpers.js";
 
 describe("plans check: effort arithmetic and plan shapes", () => {
+  /** Frozen before lane enforcement changed; compares complete stdout, stderr, and exit status. */
+  it("retains the pre-change cap-one transcript with omitted and explicit policy", () => {
+    const root = mkdtempSync(join(tmpdir(), "goat-flow-plan-golden-"));
+    const expected = {
+      stdout:
+        'M18-go.md: ~2 min (1 product / 1 proof / 0 other)\nM19-php.md: ~2 min (1 product / 1 proof / 0 other)\nplan: 4 min estimated - mix 50% product / 50% proof / 0% other (rough guide ~70/20/10)\nadvisory: plan mix drifts more than 15 percentage points from the rough ~70/20/10 guide - check for duplicated proof or missing verification; keep and explain the mix when task risk warrants it\ncalibration: uncalibrated - 0 of 3 eligible measured samples\nwork-unit calibration: uncalibrated - 0 of 3 eligible measured samples with countable bases\nwarning: M18-go.md: legacy-compatible plain-language problem section is missing; expected "## What problem are we solving or ## The problem"; received "no matching section"\nwarning: M18-go.md: legacy-compatible plain-language benefit section is missing; expected "## Who benefits and how or ## What you get"; received "no matching section"\nwarning: M19-php.md: legacy-compatible plain-language problem section is missing; expected "## What problem are we solving or ## The problem"; received "no matching section"\nwarning: M19-php.md: legacy-compatible plain-language benefit section is missing; expected "## Who benefits and how or ## What you get"; received "no matching section"\nerror: plan: multiple active milestones: M18, M19\n',
+      stderr: "",
+      status: 1,
+    };
+    try {
+      for (const withLane of [false, true]) {
+        const plan = writeCheckPlan(root, {
+          "M18-go.md":
+            canonicalMilestoneBody({
+              title: "M18: Go work",
+              status: "in-progress",
+            }) + (withLane ? "\nLane: go\n" : ""),
+          "M19-php.md":
+            canonicalMilestoneBody({
+              title: "M19: PHP work",
+              status: "in-progress",
+            }) + (withLane ? "\nLane: php\n" : ""),
+        });
+        for (const flags of [[], ["--max-active", "1"]]) {
+          const actual = runPlansCheck(plan, "--strict", ...flags);
+          assert.deepEqual(
+            {
+              stdout: actual.stdout,
+              stderr: actual.stderr,
+              status: actual.status,
+            },
+            expected,
+          );
+        }
+      }
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
   const timingEvidenceFailureCases = [
     {
       name: "an open segment on an inactive milestone",

@@ -73,7 +73,7 @@ function stubConfig(overrides: Partial<GoatFlowConfig> = {}): LoadedConfig {
       footguns: { path: ".goat-flow/learning-loop/footguns/" },
       lessons: { path: ".goat-flow/learning-loop/lessons/" },
       decisions: { path: ".goat-flow/learning-loop/decisions/" },
-      plans: { path: ".goat-flow/plans/" },
+      plans: { path: ".goat-flow/plans/", maxActiveMilestones: 1 },
       logs: { path: ".goat-flow/logs/" },
       agents: null,
       skills: { install: "all" },
