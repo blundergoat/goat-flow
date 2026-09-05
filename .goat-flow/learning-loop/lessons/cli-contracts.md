@@ -1,6 +1,6 @@
 ---
 category: cli-contracts
-last_reviewed: 2026-09-01
+last_reviewed: 2026-09-05
 ---
 
 **Scope:** The CLI's own surface contract - parser headroom before refactoring, omission tests for required choices, output shape across one and many selections, and what an id-based comparison actually compares. Cooperation between separately-correct components is [integration-verification.md](integration-verification.md).
@@ -23,7 +23,7 @@ last_reviewed: 2026-09-01
 **Decision changed:** Measure whole-file ESLint and gruff immediately after the first parser GREEN, and pay for new branches by removing duplicate parsing rather than adding a late helper alone.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
-**Incident count:** 5 | **Latest occurrence:** 2026-09-01
+**Incident count:** 6 | **Latest occurrence:** 2026-09-05
 
 **Prevention:**
 1. Before extending a shared parser or dispatcher, measure its line and complexity headroom; near-threshold files need an extraction in the initial GREEN design.
@@ -37,14 +37,13 @@ last_reviewed: 2026-09-01
 
 **Fix:** Extract lightweight positional/flag rules into `src/cli/skill-command-parser.ts` (search: `parseSkillPositionals`), keep doctor runtime imports behind `src/cli/cli-handlers.ts` (search: `handleSkillCommand`), and split collection decisions inside `src/cli/skill-doctor.ts` (search: `inspectFrontmatterFields`). Whole-file ESLint, typecheck, and targeted gruff then passed without suppressions or threshold changes.
 
-**Recurrence 2026-07-18:** M02 informational-flag behavior reached 61/61 focused tests and typecheck exited 0 before whole-file ESLint rejected `parseCLIArgs` at complexity 12. Moving the branch into a helper fixed complexity, but targeted gruff then exposed growth beyond the already-marginal file-length threshold. Rewinding duplicate namespace parsing brought `src/cli/cli-parser.ts` (search: `selectCommandPositionals`) to zero targeted gruff findings without a suppression or new module.
+**Incident ledger:**
 
-**Recurrence 2026-07-29:** `plans check` plus a comment pass pushed `cli-handlers.ts` to 751 then `plans-export.ts` to 753 - moving code re-trips the length gate in the destination. Extracting the whole effort-notation concern into `src/cli/plans-effort.ts` (search: `Effort-estimate notation parser`) with a nearby test cleared both; single-function shuffles only relocate the overflow.
-
-**Recurrence 2026-08-07:** Tightening Timing Receipt stamp validation passed 116 focused tests and typecheck before whole-file ESLint rejected `parseStamp` at complexity 11. The first helper extraction then made preflight report five new file-length warnings. Deriving canonical UTC from the epoch inside `parseStamp`, folding regressions into existing test cases, and restoring the accepted `plans-time.ts` size cleared targeted Gruff without weakening the invalid-calendar or rendered-heading checks.
-
-**Recurrence 2026-09-01:** Exact playbook-inventory regressions passed before full preflight rejected `driftSkillPlaybookInventory` at complexity 11.
-Extracting problem rendering into `describePlaybookInventoryProblems` restored focused ESLint without weakening the exact-set cases.
+- **Recurrence 2026-07-18:** M02 reached 61/61 focused tests and typecheck before ESLint rejected `parseCLIArgs` at complexity 12. A helper extraction then crossed the file-length gate; removing duplicate namespace parsing in `src/cli/cli-parser.ts` (search: `selectCommandPositionals`) cleared both without a new module.
+- **Recurrence 2026-07-29:** The checker and comment pass grew `cli-handlers.ts` to 751 lines and `plans-export.ts` to 753. Extracting the complete effort-notation concern into `src/cli/plans-effort.ts` (search: `Effort-estimate notation parser`) cleared the destination-size problem.
+- **Recurrence 2026-08-07:** Timing stamp validation passed 116 focused tests before ESLint rejected `parseStamp` at complexity 11. A helper extraction created five file-length warnings. Deriving UTC from the epoch inside `parseStamp`, folding regressions into existing cases, and preserving the `plans-time.ts` size cleared the gates without weakening invalid-calendar or rendered-heading checks.
+- **Recurrence 2026-09-01:** Playbook inventory tests passed before preflight rejected `driftSkillPlaybookInventory` at complexity 11. Extracting `describePlaybookInventoryProblems` preserved the exact-set cases and restored ESLint.
+- **Recurrence 2026-09-05:** Adding `--max-active` produced 1,015 substantive lines against the configured 1,000-line gate. Folding flag checks together still left 1,008 lines after formatting. Moving plan argument handling into `src/cli/cli-parser-plans.ts` (search: `validatePlansFlags`) cleared the size error without importing plan runtime into the parser.
 
 ---
 
@@ -54,9 +53,10 @@ Extracting problem rendering into `describePlaybookInventoryProblems` restored f
 **Decision changed:** Test valid, invalid, omitted, and explicit fallback forms; preserve invocation shape when omission selects a fallback.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
-**Incident count:** 5 | **Latest occurrence:** 2026-08-22
+**Incident count:** 6 | **Latest occurrence:** 2026-09-05
 
 **Prevention:** Add omission RED tests before implementation.
+Exercise a missing option argument through the CLI process as well as the parser: a raw parser exception can select the fatal exit instead of the promised usage exit.
 Required values must fail when absent; optional transport metadata must be omitted rather than converted to a new sentinel value.
 When the parser maps omission to a fallback, test omitted and explicit fallback forms separately.
 Preserve the invocation evidence needed by downstream behavior.
@@ -88,6 +88,8 @@ When moving bespoke help into shared metadata, preserve command-specific operati
 Grep existing command tests before treating generic coverage as complete.
 Evidence: `src/cli/help.ts` (search: `Structural failures exit 1`) and `test/unit/review-validate-verdict.test.ts`
 (search: `advisory warnings.*exit 0`).
+
+**Recurrence 2026-09-05:** The first `--max-active` implementation validated supplied values, but a missing argument raised Node's raw option error and the CLI exited 1. The process-level omission test required exit 2. `src/cli/cli-parser.ts` (search: `parseCLITokens`) now translates this option-value error into `CLIError`; other option errors retain their existing behavior. The reproduction in `test/unit/plans-check-forecast.test.ts` (search: `rejects the cap on export, every timing action, and non-plan commands`) passed after that correction.
 
 **Root cause:** I treated omitted/defaulted fields as harmless while testing one relationship.
 An earlier relationship could still reject the same payload first.
