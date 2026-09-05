@@ -3,40 +3,7 @@ category: test-snapshots
 last_reviewed: 2026-08-24
 ---
 
-**Scope:** Keeping asserted values true - snapshot files and tables, metadata contracts beyond the typed shape, which field a check should assert, and the suite/runner selection that decides whether a fixture runs at all. Building the fixtures themselves is [test-fixtures.md](test-fixtures.md).
-
-## Lesson: Advisory output must not erase existing empty-result guidance
-
-**Status:** active | **Created:** 2026-08-24
-**Decision changed:** Derive an empty-result message from the underlying result lanes before appending independent diagnostics.
-**Trigger phase:** ACT
-**Caught at:** VERIFY
-**Incident count:** 1
-
-**Prevention:** Evaluate fallback messages from their owning result lanes, or emit them before unrelated diagnostics join the report. Pair every new
-advisory lane with existing empty-input and legacy-output contracts. Evidence anchors: `src/cli/plans-check.ts` (search: `No effort rows and no errors`),
-`test/unit/plans-check-forecast.test.ts` (search: `default mode preserves legacy plans`), and `test/unit/plans-check.test.ts` (search: `single info line`).
-
-**What happened:** M22 appended plain-language warnings to `plans check` before testing whether a legacy plan had no effort report. The warnings made
-the shared output array nonempty, so the established `no effort estimates found` line disappeared. Focused M22 tests passed, while the fast suite
-failed both existing estimate-less-plan contracts.
-
-**Root cause:** The final rendered output array was reused as the semantic test for whether effort data existed. An unrelated advisory changed that
-array without changing the plan's effort state.
-
----
-
-## Lesson: CI must use package test scripts after suite splits
-
-**Status:** active | **Created:** 2026-06-01
-
-**Prevention:** After splitting, renaming, or serialising test files, compare `.github/workflows/ci.yml` against `package.json` test scripts before trusting local runs. Point CI at the package script that encodes exclusions/concurrency instead of duplicating a raw test glob. Evidence anchors: `.github/workflows/ci.yml` (search: `npm run test:fast`, `npm run test:slow:ci`), `CHANGELOG.md` (search: `CI uses the split test contract`), `package.json` (search: `"test:slow": "npm run build && node scripts/run-tests.mjs slow"`), `test/integration/audit-drift.helpers.ts` (search: `export {`), `test/integration/dashboard-server.helpers.ts` (search: `DASHBOARD_STATE_PATH`).
-
-**What happened:** PR #45 split the audit-drift and dashboard integration tests into standalone files and updated `package.json` so fast tests exclude stateful dashboard suites while `test:slow` runs them serially. The GitHub Actions `Test` step still invoked the raw `node --import tsx --test --test-reporter=spec test/*/*.test.ts` glob, so CI bypassed the split-suite contract and failed on `test/integration/audit-drift.test.ts` with `ReferenceError: describe is not defined`. A local raw-glob rerun also exposed dashboard state cross-contamination in `dashboard /api/projects`.
-
-**Root cause:** I updated the npm test scripts as the canonical suite entry points but did not update CI to call them, leaving Actions on an older invocation shape that no longer matched the test layout.
-
----
+**Scope:** Keeping asserted values true - snapshot files and tables, metadata contracts beyond the typed shape, and which field a check should assert. Building the fixtures themselves is [test-fixtures.md](test-fixtures.md); choosing and invoking the runner is [test-execution-environment.md](test-execution-environment.md); getting a checker's own counting right is [verification-validators.md](verification-validators.md).
 
 ## Lesson: New blocking checks can break passing fixtures even when the scanner is correct
 
@@ -110,38 +77,3 @@ array without changing the plan's effort state.
 **Prevention:** Keep fixture construction visible when it explains the behavioural contract. If a current rule reports excessive setup, assess each test against that rule's live options; extract reusable builders only when they clarify the SUT call and assertion.
 
 ---
-
-## Lesson: Aggregate metadata counts can mask invalid individual entries
-
-**Status:** active | **Created:** 2026-07-17
-**Decision changed:** Schema-health and evidence gates validate every parsed value and required relation independently before aggregating counts or declaring presence.
-**Trigger phase:** ACT
-**Caught at:** VERIFY
-**Incident count:** 3
-**Latest occurrence:** 2026-07-17
-
-**Prevention:** Split structured Markdown into entries first, classify only frontmatter, Status-line, typed, or label-shaped standalone declarations, validate each value against its documented vocabulary, validate ordering and ownership relations explicitly, reduce each entry to at most one valid schema result, then aggregate. Pair empty-input fixtures with semantic near-misses: duplicate or unknown values, negated pressure and failure claims, explicit absence presented as evidence, placeholders presented as evidence, fields in the wrong section, labels on the wrong side of a boundary, and non-file paths. Keep the existing negative fixtures for duplicate-masks-missing, multiple labels in one value, legacy labels, wrong casing, a canonical label followed by narrative `**Evidence:**` content, and the blocking `stats --check` result. Diagnostic text must not contain the aggregator's `; ` delimiter. Evidence anchors: `src/cli/facts/shared/learning-loop.ts` (search: `getEvidenceLabelDiagnostic`) separates taxonomy metadata from prose and emits the bucket error; `src/cli/stats/stats.ts` (search: `evidence-label`) maps it to a stable rule; `test/integration/stats-command.test.ts` (search: `exactly one canonical evidence label`) locks parsing and enforcement.
-
-**What happened:** Evidence-label health compared a bucket-wide label count with its entry count. A two-entry fixture with two labels in the first entry and none in the second reported `labelCount: 2` and `hasEvidenceLabels: true`; the same matcher also accepted lowercase `observed` even though every template defines uppercase canonical labels. The first per-entry correction still collapsed two declarations in one section to one valid boolean, so the regression expectation had to tighten from one accepted entry to zero before the parser enforced mutual exclusivity. A final live-repo probe then found the strict matcher recognized only 91 of 107 labels because `**Evidence:**` also introduces narrative evidence blocks; the parser had to distinguish taxonomy metadata from prose. When the corrected fact was wired into `stats --check`, the first diagnostic used the aggregator's reserved `; ` separator and split one actionable error into two findings until the message changed to a colon.
-
-**Root cause:** `countFootgunLabels` counted regex matches across the complete bucket and `hasEvidenceLabels` accepted `labelCount >= entryCount`. The aggregate could not preserve which section owned each match, the global case-insensitive flag weakened the documented enum, and one undifferentiated Markdown regex treated evidence-body headings as evidence-type declarations.
-
-**Recurrence 2026-07-17:** The first `skill new --red-log` gate counted any three comma-separated tokens as pressures, accepted `fail` inside `did not fail`, accepted `- none` as a verbatim rationalisation, and searched later GREEN sections for fields missing from RED. In the same review, the shipped-scenario contract checked only that an illustrative label existed, so moving it below `## Assumption Tracking` still satisfied the test. The focused suite and full preflight both passed before adversarial probes reproduced the two semantic bypasses. Evidence anchors: `src/cli/skill-author-red-log.ts` (search: `documentedPressureCount`) now validates the isolated RED section; `test/integration/skill-author.test.ts` (search: `rejects RED receipts whose fields describe success instead of failure`) locks the near-miss; `test/contract/skill-hardening-shared-3.test.ts` (search: `scenario label must immediately precede the assumption block`) locks the required ordering relation.
-
-**Recurrence 2026-07-17 (quality recheck):** A follow-up RED-log probe used every canonical token only inside explicit negations: `no time pressure`, `failed? no`, and `none observed because it complied`. The gate still accepted the receipt and wrote a discoverable skill because each field validator recognized tokens without validating the field's asserted meaning. The first literal fix blocked that receipt, but an immediate boundary probe reproduced the same bypass with label-prefixed absence claims: `time: no pressure`, `failed: false`, and `No rationalisation occurred`. The pressure validator now rejects a directly negated detail after a canonical label, the outcome validator rejects directly negated failure classifications, and the rationalisation validator rejects prose that explicitly reports absence. Evidence anchors: `src/cli/skill-author.ts` (search: `startsWithNegatedAssertion` and `isAbsentRationalisation`), `test/integration/skill-author.test.ts` (search: `rejects negated RED evidence that includes canonical tokens` and `rejects alternate absence claims after canonical RED labels`), and the paired acceptance control (search: `accepts positive pressure details and a substantive no-prefixed rationalisation`).
-
----
-
-## Lesson: Node test filters must precede explicit test paths
-
-**Status:** active | **Created:** 2026-08-01
-
-**Decision changed:** Put Node test-runner filters before explicit test paths and verify the reported test count proves isolation.
-
-**Trigger phase:** VERIFY
-
-**Prevention:** Use `node --import tsx --test --test-name-pattern="<pattern>" <test-path>` and require both the named subtest and expected `# tests` count before treating the run as focused proof.
-
-**What happened:** The M03 anchor command placed `--test-name-pattern` after the TypeScript test path. The Node/tsx runner executed all 110 contracts instead of the one anchor contract, so expected interim mirror failures obscured the intended proof. Moving the filter before the path produced exactly one passing test and the zero-miss diagnostic.
-
-**Evidence:** `test/contract/skill-hardening-review-2.test.ts` (search: `goat-review internal anchors resolve to named current targets`) - this is the intended isolated contract; its diagnostic reports checked, exempted, and missed anchors.

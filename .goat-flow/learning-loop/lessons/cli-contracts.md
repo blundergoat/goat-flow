@@ -109,3 +109,23 @@ The same assumption erased the difference between an omitted command and an expl
 **Root cause:** The command relied on ripgrep's input-count-dependent filename default while its output was evidence about file ownership.
 
 ---
+
+## Lesson: Advisory output must not erase existing empty-result guidance
+
+**Status:** active | **Created:** 2026-08-24
+**Decision changed:** Derive an empty-result message from the underlying result lanes before appending independent diagnostics.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+**Incident count:** 1
+**Merged:** 2026-09-05 - moved here from `.goat-flow/learning-loop/lessons/test-snapshots.md`; this is a command output-shape contract, which this bucket owns.
+
+**Prevention:** Evaluate fallback messages from their owning result lanes, or emit them before unrelated diagnostics join the report. Pair every new
+advisory lane with existing empty-input and legacy-output contracts. Evidence anchors: `src/cli/plans-check.ts` (search: `No effort rows and no errors`),
+`test/unit/plans-check-forecast.test.ts` (search: `default mode preserves legacy plans`), and `test/unit/plans-check.test.ts` (search: `single info line`).
+
+**What happened:** M22 appended plain-language warnings to `plans check` before testing whether a legacy plan had no effort report. The warnings made
+the shared output array nonempty, so the established `no effort estimates found` line disappeared. Focused M22 tests passed, while the fast suite
+failed both existing estimate-less-plan contracts.
+
+**Root cause:** The final rendered output array was reused as the semantic test for whether effort data existed. An unrelated advisory changed that
+array without changing the plan's effort state.

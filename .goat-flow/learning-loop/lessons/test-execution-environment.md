@@ -125,3 +125,31 @@ last_reviewed: 2026-08-21
 **Recurrence 2026-06-14:** While searching for this lesson, I put the literal Markdown title `` `npx vitest` is not this repo's runner `` inside a double-quoted `rg` pattern. Bash treated the backticked text as command substitution and launched `npx vitest`, reproducing the same wrong-runner failure mode from a read-only search.
 
 ---
+
+## Lesson: CI must use package test scripts after suite splits
+
+**Status:** active | **Created:** 2026-06-01
+**Merged:** 2026-09-05 - moved here from `.goat-flow/learning-loop/lessons/test-snapshots.md`; choosing the invocation CI runs belongs with the other runner-selection entries.
+
+**Prevention:** After splitting, renaming, or serialising test files, compare `.github/workflows/ci.yml` against `package.json` test scripts before trusting local runs. Point CI at the package script that encodes exclusions/concurrency instead of duplicating a raw test glob. Evidence anchors: `.github/workflows/ci.yml` (search: `npm run test:fast`, `npm run test:slow:ci`), `CHANGELOG.md` (search: `CI uses the split test contract`), `package.json` (search: `"test:slow": "npm run build && node scripts/run-tests.mjs slow"`), `test/integration/audit-drift.helpers.ts` (search: `export {`), `test/integration/dashboard-server.helpers.ts` (search: `DASHBOARD_STATE_PATH`).
+
+**What happened:** PR #45 split the audit-drift and dashboard integration tests into standalone files and updated `package.json` so fast tests exclude stateful dashboard suites while `test:slow` runs them serially. The GitHub Actions `Test` step still invoked the raw `node --import tsx --test --test-reporter=spec test/*/*.test.ts` glob, so CI bypassed the split-suite contract and failed on `test/integration/audit-drift.test.ts` with `ReferenceError: describe is not defined`. A local raw-glob rerun also exposed dashboard state cross-contamination in `dashboard /api/projects`.
+
+**Root cause:** I updated the npm test scripts as the canonical suite entry points but did not update CI to call them, leaving Actions on an older invocation shape that no longer matched the test layout.
+
+---
+
+## Lesson: Node test filters must precede explicit test paths
+
+**Status:** active | **Created:** 2026-08-01
+**Merged:** 2026-09-05 - moved here from `.goat-flow/learning-loop/lessons/test-snapshots.md`; argument order for the runner belongs with the other invocation-shape entries.
+
+**Decision changed:** Put Node test-runner filters before explicit test paths and verify the reported test count proves isolation.
+
+**Trigger phase:** VERIFY
+
+**Prevention:** Use `node --import tsx --test --test-name-pattern="<pattern>" <test-path>` and require both the named subtest and expected `# tests` count before treating the run as focused proof.
+
+**What happened:** The M03 anchor command placed `--test-name-pattern` after the TypeScript test path. The Node/tsx runner executed all 110 contracts instead of the one anchor contract, so expected interim mirror failures obscured the intended proof. Moving the filter before the path produced exactly one passing test and the zero-miss diagnostic.
+
+**Evidence:** `test/contract/skill-hardening-review-2.test.ts` (search: `goat-review internal anchors resolve to named current targets`) - this is the intended isolated contract; its diagnostic reports checked, exempted, and missed anchors.
