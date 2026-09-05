@@ -3,11 +3,11 @@ goat-flow-reference-version: "1.17.0"
 ---
 # Milestone Formats
 
-Use the smallest rendering that preserves execution, proof, and recovery. A Small plan is one compact file; Standard adds cold-start context; high-risk adds only protections tied to named failure modes.
+Preserve execution, proof, and recovery: Small uses one compact file; Standard adds cold-start context; high-risk adds protections for named failures.
 
 ## Compact Small rendering
 
-Use one file, at most 500 words and 40 nonblank lines. Omit every untriggered section.
+Use one file, at most 500 words and 40 nonblank lines; omit untriggered sections.
 
 ```markdown
 # <Outcome>
@@ -30,11 +30,11 @@ Use one file, at most 500 words and 40 nonblank lines. Omit every untriggered se
 - Stop/rescope if <failed premise or boundary>.
 ```
 
-Add assumptions, dependencies, drift context, manual proof, or rollback only when material.
+Add only material assumptions, dependencies, drift context, manual proof, or rollback.
 
 ## Handoff-grade milestone template
 
-Use this Standard shape for multi-milestone or cold-start work. Target at most 900 words and ten H2 headings unless a named risk requires more.
+Use Standard for multi-milestone or cold-start work: at most 900 words and ten H2 headings unless a named risk requires more.
 
 ```markdown
 # M01: <outcome>
@@ -42,6 +42,7 @@ Use this Standard shape for multi-milestone or cold-start work. Target at most 9
 **Status:** not-started
 **Planned at:** `<sha>`, YYYY-MM-DD
 **Depends on:** <local milestone IDs or none>
+**Lane:** <optional lowercase lane token>
 **Effort estimate:** ~<total> min agent-time (<product> product / <proof> proof / <other> other)
 **Forecast basis:** <units/rates/source; use Effort Estimates grammar>
 **Forecast range:** <derived low/likely/high; use Effort Estimates grammar>
@@ -85,7 +86,7 @@ Use this Standard shape for multi-milestone or cold-start work. Target at most 9
 - Stop if <a premise fails, scope changes, or evidence conflicts>.
 ```
 
-Put each literal command in one Commands source; a literal command appears once per milestone. Proof, tasks, and exit criteria reference its purpose rather than repeating it. Add Mid-implementation proof only before switching modules or after a bounded edit batch. The Objective is one plain sentence; commit ids, finding ids, and file paths belong in Context and Scope. Write each done condition as the plain claim; the case list lives in the test or the Commands row.
+Keep commands in Commands: a literal command appears once per milestone; Proof, tasks, and exit reference its purpose. Add Mid-implementation proof before switching modules or after a bounded edit batch. The Objective is one plain sentence; ids and paths belong in Context and Scope. Done conditions state claims; cases belong in tests or Commands.
 
 Write from the incident in Context, not by shortening the Objective - that sentence is for the implementer. One sentence each. `goat-flow plans check --strict` enforces current-heading length and internal identifiers. Name commands with their tool; visible user surfaces are not internal. The problem sentence names who hits it. The benefit sentence names what they can now do, never what ships. Neither restates the other. A spike that ships nothing says so.
 
@@ -102,36 +103,45 @@ Add `**Status reason:**` directly after Status only while `blocked` or `abandone
 
 Add only sections that prevent a named failure:
 
-- **Boundary Notes:** authorization, irreversible actions, recovery ownership, and rollback.
-- **Current-state evidence:** observed facts that determine the design.
+- **Boundary Notes:** authorization, irreversibility, recovery ownership, rollback.
+- **Current-state evidence:** observations determining design.
 - **Assumptions:** unresolved premises, dependent work, and required evidence.
-- **Verification baseline:** pre-change results referenced by command purpose.
+- **Verification baseline:** pre-change results by command purpose.
 - **Layered Proof:** distinct compatibility, rollback, security, migration, and behavioural claims.
-- **Maintenance notes:** non-obvious post-delivery traps only.
+- **Maintenance notes:** non-obvious maintenance traps.
 
 ### Verification baseline
 
-Record the observed pre-change result beside a command purpose; never repeat the literal command.
+Record pre-change results by command purpose; never repeat commands.
 
 ### Maintenance notes
 
-Include only a real trap a future maintainer cannot infer.
+Include only real, non-obvious maintenance traps.
 
-High-risk detail has no safety-reducing hard cap; output above 1,200 words names the safety reason. The artifact never delegates commit, push, or implementation authority.
+High-risk detail has no safety-reducing cap; above 1,200 words, name the safety reason. Never delegate commit, push, or implementation authority.
 
 ## Field guide
 
 | Field | Rule |
 |---|---|
-| Outcome | Name what becomes true; add Objective only when the title needs clarification. |
+| Outcome | Name what becomes true; add Objective only to clarify the title. |
 | What problem are we solving | What stays broken. |
 | Who benefits and how | What you can now do. |
 | Tasks | Order `[RISKY]`, `[CORE]`, `[SAFE]`; one action and one done condition per checkbox. |
 | Proof | State the claim in plain words → evidence with relevant tags; human sign-off belongs to the blocking gate. |
-| Exit | State binary transition truth and reference proof claims without copying commands. |
+| Exit | State binary transition truth; reference proof claims. |
 | Stop | Name the failed premise or boundary; preserve evidence and block dependent work. |
-| Context | Point to non-obvious files and semantic anchors needed by a fresh agent. |
+| Context | Give fresh agents non-obvious files and semantic anchors. |
 | Dependencies | Use `none` or comma-separated local milestone IDs; keep cross-plan prerequisites in narrative context. |
+| Lane | Optional `^[a-z0-9][a-z0-9-]{0,39}$` token; omitted/empty means `default`; scheduling metadata, never writer ownership. |
+
+## Lane lifecycle
+
+Read `../SKILL.md`: Phase 2 Mode 0 owns cap provenance and session selection; Phase 3 owns activation, gates, writer ownership, and the final dependency join. Omitted or empty Lane means `default`; all three active statuses consume their lane and the global cap. Strict scheduling success alone never proves the final join.
+
+### Downgrade recovery
+
+Before using an older checker, stop every extra open receipt. Keep one milestone active; block the others with a `Status reason:` preserving prior state, downgrade pause, and cap-compatible resume condition. Rerun strict validation before downgrade. Restore each prior state only after lane-cap support returns; preserve every task and receipt history.
 
 ## Effort Estimates
 
@@ -148,7 +158,7 @@ High-risk detail has no safety-reducing hard cap; output above 1,200 words names
 
 ### Timing receipts
 
-Start a receipt before the first action. The CLI stamps UTC and epoch seconds into the milestone file itself, so the evidence survives log purges and travels with the plan.
+Start a receipt before the first action. The CLI stamps UTC and epoch seconds in the milestone, preserving timing through log purges and handoffs.
 
 ```bash
 goat-flow plans time start <milestone-file> --category <product|proof|other>
@@ -157,7 +167,7 @@ goat-flow plans time status <milestone-file>           # read the open span and 
 goat-flow plans time stop <milestone-file> --finalize  # close the timeline at the gate
 ```
 
-- Switch category when the *kind* of work changes, not when the milestone changes. Running the test suite is proof time. One long span across a mixed session yields a `measured` split that measured nothing.
+- Each milestone owns its receipt; separate valid lanes can hold simultaneous spans. Stop then start when the work category changes. Tests count as proof. A mixed-category span cannot measure the split.
 - Stop before every human wait, interruption, and unrelated task. Manual pauses cannot detect machine suspend or a forgotten wait, so a span left open overnight is worthless.
 - `stop --discard-open` drops a span no honest end time exists for - a crash, a suspend, a forgotten pause - and permanently marks the receipt incomplete. No recovery path invents an end time.
 - Delegated or parallel-agent effort is disclosed separately. Never fold it into elapsed time on one timeline.
@@ -186,11 +196,11 @@ Legacy point estimates need no migration. A supplied basis must match agent work
 
 `plans check` keeps estimate-to-Actual ratios and also divides raw receipt seconds by matching agent work units. Only `complete` milestones with `measured` Actuals qualify; `human-verification-pending` calibrates nothing before ratification. Below three matching bases it keeps the cold-start prior. At three or more it reports local low-median-high min/unit rates and names unfinished stale forecasts as `reforecast required`. The CLI stays advisory and never rewrites files; goat-plan blocks implementation until that advisory is resolved.
 
-One milestone landing far from its estimate is a data point, not a correction factor. An early goat-debug milestone estimated two hours and self-reported 256 active seconds. Under this contract that Actual is `retrospective` rather than `measured`, so it cannot calibrate anything - and even if it could, a single ratio would have mis-sized every later milestone.
+An early goat-debug milestone estimated two hours and self-reported 256 active seconds. That Actual is `retrospective`, not `measured`, and cannot calibrate. Even a valid single ratio cannot size later milestones.
 
 ## Deferred and Backlog Routing
 
-Record a cut item once in the milestone with its destination, then place it in plan-level `backlog.md` under Next, Later, or Maybe. ISSUE.md names only exclusions reviewers would reasonably expect. Omit empty Deferred, backlog, and maintenance sections.
+Record each cut item and destination once; route to `backlog.md` under Next, Later, or Maybe. ISSUE.md names expected exclusions only. Omit empty Deferred, backlog, and maintenance sections.
 
 > **Illustrative scenario - input/output shape only; never evidence.** All paths, commands, measurements, and outcomes below are placeholders for the installed project.
 
@@ -208,7 +218,7 @@ Assumptions are beliefs, not tasks. Tick each with evidence; an invalidated assu
 
 User message: `.goat-flow/plans/oauth-refresh/`
 
-Evidence read: `.active` points elsewhere; status fields show M01 complete and M02 as the sole in-progress milestone; the bounded follow-up read returns only its first unchecked task line.
+Evidence read: `.active` points elsewhere; a strict check passes at default cap one; metadata shows M01 complete and M02 as the sole in-progress milestone depending on M01, so M02 is the unique final join; the bounded follow-up read returns only its first unchecked task line.
 
 ```markdown
 Mode: Path-Only Intake. `oauth-refresh` has M01 complete and M02 in-progress. I did not switch `.active`. Current task: `[CORE] Implement refresh callback`. Next action needed: summary, status check, plan update, or start this milestone?
@@ -232,7 +242,7 @@ Proposed M02 amendment: add a per-session lock. No plan file changed yet.
 Approve M01 completion and the proposed amendment, or adjust?
 ```
 
-The agent stops. After the human approves, it applies the M02 amendment before changing statuses, sets M01 complete, starts M02 only when dependencies allow, and reruns strict validation.
+The agent stops. After the human approves, it applies the M02 amendment before changing statuses, sets M01 complete, starts the selected M02 only when dependencies and lane capacity allow, preserves other lanes, and reruns strict validation.
 
 ## Kill-criteria stop
 

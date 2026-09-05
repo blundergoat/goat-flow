@@ -13,7 +13,7 @@ Mode selection discharges the shared Quick/Full depth choice; ceremony follows t
 
 ## When to Use
 
-Use for milestones, replans, rescope, or resume-from-plan. Files live in `.goat-flow/plans/<active>/`.
+Use for milestones, replans, rescope, or resume-from-plan in `.goat-flow/plans/<active>/`.
 
 ## Boundary Commands
 
@@ -35,45 +35,40 @@ Use for milestones, replans, rescope, or resume-from-plan. Files live in `.goat-
 2. **Run learning-loop retrieval before mode-specific reads.** Follow the preamble's INDEX-first retrieval and emit `Relevant prior learnings:`. Use brief/plan terms; add decisions for architecture, policy, or setup. For path-only intake, search only for plan-orientation and task-state failure classes. Do not retrieve implementation-domain learnings from the task path; open entries only when a hit affects safe orientation.
 
 3. **Inspect existing plan state only after retrieval.** Check for existing milestones:
-- `.goat-flow/plans/.active` is advisory. If valid, scan only its subdir.
+- Explicit plan paths select that directory; milestone paths select their parent. Otherwise scan the valid advisory `.active` subdir.
 - If missing/invalid, list non-archive dirs and recent `M*.md`, ask which is current, and offer to update `.active`; this is not setup failure.
-- If milestones exist and the user hasn't given an explicit action verb: "Milestone files exist for [feature]. Resume from here, update milestones, or start fresh?"
-- For stale plans, compare code and file modification dates; plan files are gitignored.
+- For stale plans, compare code and modification dates; plans are gitignored.
 
 ### Reconcile Existing Plan State
 
 Plans are local workflow state, not a setup invariant. Mode R is read-only: report each canonical Status token with a plain-language explanation, propose exact corrections, and stop.
 
-**If starting fresh:** name the build, main risk, and kill criteria.
+**Starting fresh:** name the build, main risk, and kill criteria.
 
 4. **Pick exactly one mode.** First match:
 
 0. **Path-Only Intake / Read-Only Orientation** - path-only or ambiguous task path. Summarize status, ask next action, stop.
-R. **Reconcile Existing Plan State** - explicit reconcile/audit/refresh. Compare live state with recorded evidence, propose corrections, and stop without writes.
-2. **Read-Only Analysis** - analysis signals: "what would the milestones look like", "break this down for me", "plan this out", "sketch the milestones", "reporting-only", "no-implementation". No files written; inline output; Phase 3 skipped; transition to file mode available later.
-1. **Named-File Update** - update, improve, tighten, rewrite, or fix a specific plan file only when no explicit reporting-only or no-implementation signal is present. A path alone is not write approval. Use Phase 2 § Mode 1; never implement code.
-3. **Small File-Write** - Hotfix / Small Feature scope (1-2 milestones, low blast radius), no analysis signals. Same write path as Mode 4; the only difference is ceremony - concise milestone files, not full ones. Write directly to `.goat-flow/plans/<active>/`.
-4. **File-Write (default at Standard+)** - implementation signals ("create milestones", "set up the plan", "start planning") OR Standard / System / Infrastructure scope with a clear objective and no analysis signals. Write full milestone files directly to `.goat-flow/plans/<active>/`.
+R. **Reconcile Existing Plan State** - reconcile/audit/refresh: compare live state with evidence, propose corrections, stop without writes.
+2. **Read-Only Analysis** - "what would the milestones look like", "break this down", "plan this out", "reporting-only", "no-implementation": inline output, no writes; skip Phase 3. File mode needs later authorization.
+1. **Named-File Update** - edit a specific plan file only when no explicit reporting-only or no-implementation signal is present. A path alone is not write approval; use Phase 2 § Mode 1, never implement code.
+3. **Small File-Write** - Hotfix / Small Feature (1-2 milestones), no analysis signals. Use Mode 4's write path with compact ceremony.
+4. **File-Write (default at Standard+)** - "create milestones", "set up the plan", "start planning", or Standard / System / Infrastructure with a clear objective and no analysis signals. Write full milestones in `.goat-flow/plans/<active>/`.
 
-If ambiguous, ask; never guess.
+**CHECKPOINT (Path-Only Intake):** "Mode: Path-Only Intake. [path]: [status]. Plan pointer: [state]. Next action needed."
 
-**Minimum input:** What to build. Infer or ask everything else.
-
-**CHECKPOINT (Path-Only Intake):** "Mode: Path-Only Intake. Orientation summary for [path]: [status]. Active plan pointer: [state]. Next action needed from user."
-
-**CHECKPOINT (Reconcile):** "Mode R. Live state: [status]. Proposed corrections: [changes or none]. No writes."
+**CHECKPOINT (Reconcile):** "Mode R. State: [status]. Corrections: [changes]. No writes."
 
 **CHECKPOINT (Named-File Update):** "Mode 1. Edit [file] in place for [delta]. Boundary: [scope]."
 
-**CHECKPOINT (planning modes):** "Mode: [Read-Only Analysis | Small File-Write | File-Write]. Creating milestones for [feature]. Riskiest part: [risk]. Kill criteria: [criteria]."
+**CHECKPOINT (planning modes):** "Mode: [selected mode]. Milestones: [feature]. Risk: [risk]. Kill criteria: [criteria]."
 
 ## Phase 1 - Milestone Breakdown
 
-Budget determines must-deliver scope, ranked stretch work, and cut order. Risk determines proof. Split only for uncertainty reduction, independent value, or a real decision gate.
+Budget determines must-deliver scope, ranked stretch work, and cut order. Risk determines proof; split for uncertainty reduction, independent value, or a decision gate.
 
 ### Milestone Archetypes
 
-Archetypes are optional lenses: **Prove It Works**, **Make It Real**, **Make It Solid**, and **Make It Shine**. Merge lenses sharing one outcome and proof boundary; omit lenses that add neither risk reduction nor value.
+Archetypes are optional lenses: **Prove It Works**, **Make It Real**, **Make It Solid**, **Make It Shine**. Merge shared outcomes/proof; omit lenses without risk reduction or value.
 
 **Spike-first rule:** If uncertain about a library, API, performance characteristic, or integration point - that uncertainty goes in Milestone 1 as a spike, not Milestone 3 as a risk.
 
@@ -81,11 +76,11 @@ Never drop a spike, intake, or kill criteria for milestone count, deadline, or l
 
 ### For each milestone, produce:
 
-Choose a Small, Standard, or high-risk rendering from `references/milestone-examples.md`. Always include outcome, Status, agent-time estimate, scope, executable Tasks, binary Exit, claim-based Proof, and Stop/rescope. Standard+ renderings also include `## What problem are we solving` and `## Who benefits and how` between Objective and Context, one plain line each under the reference's plain-language rule. Add Actual, dependencies, context, assumptions, Mid-implementation proof, boundaries, rollback, deferred work, or maintenance only when triggered.
+Choose a Small, Standard, or high-risk rendering from `references/milestone-examples.md`. Include outcome, Status, agent-time estimate, scope, executable Tasks, binary Exit, claim-based Proof, and Stop/rescope. Standard+ adds `## What problem are we solving` and `## Who benefits and how` between Objective and Context, one plain line each. Actual, dependencies, context, assumptions, Mid-implementation proof, boundaries, rollback, deferred work, and maintenance are conditional.
 
 ### Risk-weighted task ordering
 
-Tag and order tasks **[RISKY]** (unknowns/integrations/spikes), **[CORE]** (essential logic), then **[SAFE]** (straightforward docs/polish). If uncertainty exists without a [RISKY] task, revise the milestone.
+Order **[RISKY]** unknowns/integrations/spikes, **[CORE]** logic, then **[SAFE]** docs/polish. Uncertainty requires a [RISKY] task.
 
 ### Proof format
 
@@ -95,52 +90,51 @@ Each item states the claim and evidence with a proof-class tag. Omit inapplicabl
 
 **Tasks:** Use one action, target, and done condition. Put rationale, paths, and proof beneath the task only when needed. Pin paths when downstream work depends on them.
 
-**Effort estimate (agent-time):** Count positive agent-owned Task/Proof/Mid-proof plus one admin entry; exclude `[HUMAN]`/zero-minute items. `Forecast basis:` records `<n> agent work units` plus rates. Use `0.5-2.5-10 min/unit` until three eligible bases, then `plans check` evidence. Never use duration intuition; ~70/20/10 stays advisory. If scope changes, reforecast before implementation; `reforecast required` blocks. Start a `plans time` receipt first. Optional `Forecast range:` stays legacy-compatible; a basis derives headline/range.
+**Effort estimate (agent-time):** Count positive agent-owned Task/Proof/Mid-proof plus one admin entry; exclude `[HUMAN]`/zero-minute items. `Forecast basis:` records `<n> agent work units` plus rates. Use `0.5-2.5-10 min/unit` until three eligible bases, then `plans check` evidence. Never use duration intuition; ~70/20/10 stays advisory. If scope changes, reforecast before implementation; `reforecast required` blocks. Start a `plans time` receipt first. Optional `Forecast range:` stays legacy-compatible; bases derive headline/range.
 
-**Cold-start bar:** A fresh agent can identify relevant files, conventions, scope, commands, and recovery steps without prior conversation.
+**Cold-start bar:** Identify files, conventions, scope, commands, and recovery.
 
-**Handoff-grade artifacts (Standard+):** follow the drift-aware Standard template in `references/milestone-examples.md`. Small File-Write stays compact.
+**Handoff-grade artifacts:** Use Standard+ drift context; Small File-Write stays compact.
 
 ### Assumption tracking
 
-Assumptions are beliefs, not tasks. Tick validated evidence. On invalidation, record it and stop dependent work; amend only when mode/approval permits. At a human gate, propose and wait.
+Tick validated assumptions. Record invalidation and stop dependent work; amend only when mode/approval permits. At human gates, propose and wait.
 
 For Standard+, answer "If this plan fails, the most likely cause is ..." in an existing task, assumption, or kill criterion.
 
-**CHECKPOINT:** Read-Only Analysis presents milestones inline and stops. Write modes go to Phase 2 to write files; no Phase 1 approval pause.
+**CHECKPOINT:** Read-Only Analysis stops inline. Write modes enter Phase 2; no Phase 1 approval pause.
 
 ## Phase 2 - Deliver Milestones
 
-The delivery path maps 1:1 to the mode picked in Step 0. Do exactly the mode's block; do not cross modes mid-flow.
+Use only the Step 0 mode's delivery block; never cross modes mid-flow.
 
 ### Mode 0: Path-Only Intake / Read-Only Orientation
 
-- Read task README/index and milestone filenames/status fields. If exactly one milestone is in-progress, read only its first unchecked task line; no other body content.
+- Read filenames plus Status, Lane, and Depends on; run the source-compatible `plans check <plan-path> --strict`. Checker errors stop body reads.
+- Report cap provenance. Use `--max-active` only when the operator supplied it for this session; otherwise omit it for canonical config or default one. Never infer a cap from the active count or borrow an earlier override; if an absent override is needed, stop and ask.
+- Active means `in-progress`, `testing-gate`, or `human-verification-pending`. An absent or empty Lane means `default`. Check the final join below before source work or timing.
+- One session owns one milestone. An explicit path or user instruction selects it; select the sole active milestone automatically. With several active milestones and no selection, report each bounded next item, then ask which milestone this session owns.
+- Read only the bounded next item: implementation task, executor proof, or human item according to status. Report other lanes as state, never implementation authority. With no active work, report eligible choices.
 - Do NOT mutate `.goat-flow/plans/.active`, milestone status, checkboxes, or code.
-- Zero/multiple in-progress: report ambiguity; read no bodies.
-- Present: active marker, plan, milestone statuses, current milestone, and bounded task line when unambiguous.
-- Ask: "Summary, status check, plan update, or start a specific milestone?"
-- Stop until the user answers with an explicit action.
+- Present the plan pointer, active set, cap provenance, session milestone, and next item. Ask for the next action and stop.
 
 ### Mode R: Reconcile Existing Plan State (read-only)
 
-Compare HEAD and uncommitted state with status, tasks, assumptions, and evidence. Report contradictions and exact amendments. Do NOT edit plans, `.active`, status/checkboxes, or code; stop for new intake.
+Compare HEAD and uncommitted state with status, tasks, assumptions, and evidence. Propose exact amendments; do NOT edit plans, `.active`, status/checkboxes, or code.
 
 ### Mode 1: Named-File Update (edit in place)
 
-Edit the explicitly named plan file in place; path-only references do not qualify. Preserve title/status unless the requested change affects them. Present the delta and stop if scope spills.
+Edit the named file in place; a path alone does not qualify. Preserve unaffected title/status. Present the delta; stop on scope spill.
 
 ### Mode 2: Read-Only Analysis (no files)
 
-Run Phase 1, present milestones inline, and stop. Do NOT write files or modify `.goat-flow/plans/`; skip Phase 3.
+Present Phase 1 inline and stop; no files or `.goat-flow/plans/` changes. Skip Phase 3.
 
 **Transition out:** On "write these to files" / "let's go ahead", switch to Mode 4 using approved Phase 1 output. If prior-turn/session, re-read instructions, `.active`, named sources. Do NOT re-run breakdown.
 
-**CHECKPOINT:** "Milestones for [feature] (no files written). Say 'write to files' to persist, or adjust first."
-
 ### Mode 3: Small File-Write (Hotfix / Small Feature)
 
-The preamble normally skips goat-plan for Hotfix work; direct invocation uses Mode 3 for low-risk, one-or-two-milestone work. Write compact artifacts immediately, then present paths and summary.
+Direct Hotfix invocation uses Mode 3. Write compact artifacts immediately; present paths and summary.
 
 ### Mode 4: File-Write (Standard+ or explicit file request)
 
@@ -150,11 +144,11 @@ Write Standard or triggered high-risk artifacts immediately. Do NOT invoke/ask a
 
 Fresh plan: create a slugged directory, update `.active`, and write one zero-padded `M*.md` per milestone. Existing plan: identify its prior terminal milestone. Append: new `Depends on` prior. Insert before prior: prior `Depends on` new. Re-derive `ISSUE.md` bands and totals.
 
-**Rendering:** Mode 3 uses compact Small; Mode 4 uses Standard plus triggered high-risk fields. Omit empty and `N/A` sections. Use the Phase 1 core, claim-based Proof, and one command source.
+**Rendering:** Mode 3 uses compact Small; Mode 4 uses Standard plus triggered high-risk fields. Omit empty sections; retain Phase 1 core, claim-based Proof, and one command source.
 
 **ISSUE.md:** Standard+ writes `ISSUE.md` using `references/issue-format.md` as read-only guidance; Small only for a requested GitHub brief, multiple milestones, or shared requirements/budget.
 
-**Backlog:** When deferred items exist, write `backlog.md` with Next, Later, and Maybe tiers.
+**Backlog:** Deferred items need `backlog.md` with Next, Later, and Maybe tiers.
 
 **CHECKPOINT:** "Wrote [files created] to `.goat-flow/plans/<active>/`. Ready to start implementation."
 
@@ -164,19 +158,23 @@ Fresh plan: create a slugged directory, update `.active`, and write one zero-pad
 
 ## Phase 3 - Between Milestones
 
-After implementation tasks finish, set `testing-gate` and apply the Proof Gate from `skill-preamble.md`. Audit fresh evidence against every task and exit; rerun only stale/failed checks or when risk requires it.
+**Lane eligibility:** Activate not-started work only when every dependency is complete, its lane is free, and the active count is below the cap. For lane or capacity contention, show eligible IDs, lanes, and dependencies; ask, never select by number. Lanes grant no writer ownership; use disjoint scopes, applicable write claims, and an agreed merge boundary. Read `references/milestone-examples.md` → Lane lifecycle for downgrade recovery.
 
-Successful AI proof records structured `Actual:` and sets `human-verification-pending`; only human-owned items stay open and no later milestone becomes active. Finalize the receipt before `Actual:`; with none, declare `retrospective`, `unavailable`, or `incomplete` instead of inventing minutes. Calibration eligibility starts at `complete`.
+**Final join:** Exclude `abandoned`, `superseded`, and `deferred`; `blocked` still participates. Require one participating dependency sink whose transitive dependency closure covers every other participating milestone. Authors join every participating lane tip. A clean checker result cannot prove this join. Multiple sinks or uncovered work requires a plan amendment before source work or timing; never guess.
 
-**BLOCKING GATE (Human Verification):** Present changed files, exit evidence, estimate versus Actual, and assumption outcomes. "M[N] evidence is ready. Approve completion and M[N+1], or adjust?"
+Completed implementation enters `testing-gate`. Apply the preamble's Proof Gate; audit tasks and exit, rerun only stale/failed checks or when risk requires it.
 
-After approval for a non-final milestone, capture learnings, complete it, re-read/update the next milestone, and start it only when `Depends on` permits. Human-requested changes return the milestone to `in-progress`; never amend silently. Current-reason rule: `Status reason:`—`blocked`: condition+resume evidence/action; `abandoned`: human-decision+stop-rationale; remove-on-exit. Rerun strict validation after each transition.
+Successful AI proof records structured `Actual:` and sets `human-verification-pending`; only human-owned items stay open. Each milestone retains its own receipt and blocking human gate; unrelated active lanes keep their state and receipts. Finalize the receipt before `Actual:`; otherwise declare retrospective, unavailable, or incomplete instead of inventing minutes. Calibration eligibility starts at `complete`.
+
+**BLOCKING GATE (Human Verification):** Present files, exit evidence, estimate versus Actual, and assumptions. "Approve this milestone and eligible follow-up work, or adjust?"
+
+After approval for a non-final milestone, capture learnings, complete it, re-read/update the selected eligible milestone; start it only when `Depends on` permits and lane capacity allows. Human-requested changes return the milestone to `in-progress`; this applies only to the reviewed milestone; never amend silently. Current-reason rule: `Status reason:`—`blocked`: condition+resume evidence/action; `abandoned`: human-decision+stop-rationale; remove-on-exit. Rerun strict validation after each transition.
 
 The final pending milestone enters the combined Phase 4 review; do not mark it complete in Phase 3.
 
 ## Phase 4 - Plan Complete
 
-When predecessors are complete and the final milestone is `human-verification-pending`, run one plan-wide AI audit and blocking human review.
+Begin only when the unique final join is `human-verification-pending`, every other participating milestone and every join dependency is complete, and no sibling active work remains. Cap-one plans keep one final review.
 
 ### AI Verification Gate
 
@@ -194,18 +192,15 @@ Verify every implementation task and, when `ISSUE.md` exists, every ISSUE How it
 
 ## Constraints
 
-- MUST select one Step 0 mode and keep Modes 0, R, and 2 read-only.
-- MUST treat bare paths as context, never permission to update `.active`, plans, checkboxes, or code.
 - MUST use claim-based Proof, risk-first tasks, and mid-proof before switching modules or after a bounded edit batch.
 - MUST stop dependent work on invalidated assumptions, kill criteria, scope changes, or conflicting evidence.
 - MUST preserve failing evidence and obtain approval before amendments or lifecycle transitions.
 - MUST keep every milestone and final completion behind AI proof plus human sign-off.
 - MUST NOT invoke or prompt for `/goat-critique`; run it only on explicit request.
 - MUST NOT include self-deletion, self-archival, commit, or push instructions.
-- Universal constraints from `skill-preamble.md` apply.
 
 ## Output Format
 
-Emit only: Mode 0 orientation; R reconciliation; 1 in-place delta; 2 inline milestones; 3/4 files plus concise milestone names, objectives, task/exit/test counts, riskiest milestone, and stop condition. Modes 0/R/2 never write.
+Emit the selected mode's result: 0 orientation; R reconciliation; 1 delta; 2 inline milestones; 3/4 paths, milestone names/objectives, task/exit/test counts, risks, and stop condition. Modes 0/R/2 never write.
 
-**Terse-first:** Lead with the answer. One sentence per bullet. Strip qualifiers. Skip closing offers. Applies to informational output/summaries, not gate prompts or evidence-tagged findings.
+**Terse-first:** Lead directly; one sentence per bullet; strip qualifiers and closing offers. Gates retain required prompts and evidence.

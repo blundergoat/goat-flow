@@ -129,18 +129,22 @@ For user-facing tasks, findings, or recommendations, use:
 
 Lifecycle:
 
-1. Authorized work enters `in-progress`; completed implementation tasks enter `testing-gate`.
-2. Successful AI proof records structured `Actual:` and sets `human-verification-pending`; only human-owned items remain open and no later milestone activates.
-3. Human approval sets a non-final milestone `complete`, then the agent re-reads and starts an eligible dependency.
-4. Human-requested changes return the milestone to `in-progress`; invalidation/kill sets `blocked` and `Status reason:` names the condition and evidence/action to resume.
+1. Authorized work enters `in-progress` with complete dependencies, a free lane, and cap capacity; finished implementation enters `testing-gate`. Active statuses (`in-progress`, `testing-gate`, `human-verification-pending`) consume lane and cap; omitted/empty Lane means `default`.
+2. Successful AI proof records structured `Actual:` and sets `human-verification-pending`; only human-owned items remain open. Each milestone owns its receipt and blocking human gate; unrelated active lanes keep their state and receipts.
+3. Human approval completes only that non-final milestone. Re-read eligible work; resolve lane/cap contention with a human choice, never by number.
+4. Human-requested changes return the milestone to `in-progress`; this applies only to the reviewed milestone. Invalidation/kill sets `blocked` and `Status reason:` names the condition and evidence/action to resume.
 5. `abandoned` requires a human decision and `Status reason:` records why work stops. Leaving either state removes the reason; reopening invalidates proof.
 6. `superseded` and `deferred` are terminal and need a `Status reason:`.
 
-At the gate, record learnings, resolve assumptions, and propose amendments before applying them. A final pending milestone with complete predecessors enters Phase 4 review.
+Goat-plan Mode 0 owns cap provenance/selection; Phase 3 owns writer ownership and downgrade recovery.
+
+Derive the unique final join using goat-plan Phase 3: multiple sinks or uncovered work requires a plan amendment before source work or timing. Phase 4 needs that join `human-verification-pending`, all other participants complete, and no sibling active work.
+
+At the gate, record learnings, resolve assumptions, and propose amendments before applying them.
 
 ### Plan Completion Protocol
 
-See goat-plan Phase 4. Audit the final snapshot, present the **BLOCKING** human gate, and wait. Approval completes the final milestone; plans remain until human archival or removal.
+See goat-plan Phase 4: audit, present the **BLOCKING** human gate, wait. Approval completes the final milestone; archival/removal remains human-owned.
 
 Plans and milestones are verification artifacts. Agents MUST NOT delete, archive, or add self-destruct instructions.
 
