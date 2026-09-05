@@ -528,7 +528,13 @@ describe("hook registrar: launchers and installation", () => {
         "deny-dangerous.sh",
       );
       assert.equal(existsSync(managedHookPath), true);
-      assert.equal(existsSync(join(root, ".codex", "hooks.json")), false);
+      // Git retains its independently inherited choice while the selected hook stays disabled.
+      const initialConfig = readFileSync(
+        join(root, ".codex", "hooks.json"),
+        "utf-8",
+      );
+      assert.equal(initialConfig.includes("deny-dangerous.sh"), false);
+      assert.equal(initialConfig.includes("deny-git-mutations.sh"), true);
 
       // For example, the user may restore a checkout after its managed hook file was deleted.
       rmSync(managedHookPath);
@@ -542,9 +548,13 @@ describe("hook registrar: launchers and installation", () => {
         PROFILES.codex,
         denyDangerousSpec,
       );
-      assert.equal(disabledState.registrationIssue, undefined);
-      assert.equal(disabledState.configMissing, true);
-      assert.equal(existsSync(join(root, ".codex", "hooks.json")), false);
+      assert.equal(disabledState.registrationIssue, "registration-missing");
+      assert.equal(disabledState.configMissing, undefined);
+      assert.equal(disabledState.installed, false);
+      // Git retains its independently inherited choice while the selected hook stays disabled.
+      const config = readFileSync(join(root, ".codex", "hooks.json"), "utf-8");
+      assert.equal(config.includes("deny-dangerous.sh"), false);
+      assert.equal(config.includes("deny-git-mutations.sh"), true);
     });
   });
 
@@ -721,7 +731,11 @@ describe("hook registrar: launchers and installation", () => {
           }>;
         };
       };
-      delete config.hooks.PreToolUse[0]!.hooks[0]!.powershell;
+      const dangerRow = config.hooks.PreToolUse.flatMap(
+        (group) => group.hooks,
+      ).find((row) => JSON.stringify(row).includes("deny-dangerous.sh"));
+      assert.ok(dangerRow);
+      delete dangerRow.powershell;
       writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
 
       const denySpec = getHookSpec(HOOK_IDENTIFIER);
@@ -748,7 +762,11 @@ describe("hook registrar: launchers and installation", () => {
           }>;
         };
       };
-      config.hooks.PreToolUse[0]!.hooks[0]!.commandWindows += " stale";
+      const dangerRow = config.hooks.PreToolUse.flatMap(
+        (group) => group.hooks,
+      ).find((row) => JSON.stringify(row).includes("deny-dangerous.sh"));
+      assert.ok(dangerRow);
+      dangerRow.commandWindows += " stale";
       writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
 
       const denySpec = getHookSpec(HOOK_IDENTIFIER);

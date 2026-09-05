@@ -601,7 +601,13 @@ describe("managed setup preview", () => {
     );
     assert.equal(readFileSync(securityPolicyPath, "utf-8"), userSecurityPolicy);
     assert.equal(readFileSync(decisionGuidePath, "utf-8"), userDecisionGuide);
-    assert.equal(readFileSync(configPath, "utf-8"), userConfig);
+    assert.equal(
+      readFileSync(configPath, "utf-8"),
+      userConfig.replace(
+        "ui:\n",
+        "  deny-git-mutations:\n    enabled: false\nui:\n",
+      ),
+    );
     assert.equal(readFileSync(activePlanPath, "utf-8"), userActivePlan);
     assert.equal(readFileSync(codexSettingsPath, "utf-8"), userCodexSettings);
     assert.equal(existsSync(deprecatedSkillNotePath), true);

@@ -91,7 +91,8 @@ export const HOOK_SUBCOMMANDS = new Set<string>([
 ]);
 
 /** Bounded offline scenario groups users may request through `hooks verify`. */
-export type HookScenario = "deny-hook" | "post-turn-hook" | "gruff-hook";
+export type HookScenario =
+  "deny-hook" | "git-mutations-hook" | "post-turn-hook" | "gruff-hook";
 
 /**
  * Every shipped scenario group, in the order one `--scenario all` run executes them.
@@ -99,6 +100,7 @@ export type HookScenario = "deny-hook" | "post-turn-hook" | "gruff-hook";
  */
 export const BATCH_HOOK_SCENARIOS: readonly HookScenario[] = [
   "deny-hook",
+  "git-mutations-hook",
   "post-turn-hook",
   "gruff-hook",
 ];

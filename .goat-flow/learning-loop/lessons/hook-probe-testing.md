@@ -21,7 +21,7 @@ last_reviewed: 2026-08-29
 
 **Status:** active | **Created:** 2026-06-07
 
-**Prevention:** Manual Copilot/no-jq hook probes must copy the self-test contract: feed a top-level Copilot payload such as `{"toolName":"bash","toolArgs":"{\"command\":\"...\"}"}` to `bash workflow/hooks/deny-dangerous.sh` without `--check`, with `GOAT_DENY_FORCE_NO_JQ=1` only when testing the fallback parser. Evidence anchors: `workflow/hooks/deny-dangerous.sh` (search: `detect_output_mode`) and `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `expect_no_jq_copilot_block`).
+**Prevention:** Manual Copilot/no-jq hook probes must copy the self-test contract: feed a top-level Copilot payload such as `{"toolName":"bash","toolArgs":"{\"command\":\"...\"}"}` to `bash workflow/hooks/deny-dangerous.sh` without `--check`, with `GOAT_DENY_FORCE_NO_JQ=1` only when testing the fallback parser. Evidence anchors: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `detect_output_mode`) and `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `expect_no_jq_copilot_block`).
 
 **What happened:** A cross-version no-jq probe set an invented JSON-mode switch and called the hook's direct-check interface. That produced stderr and exit 2; the real Copilot-shaped payload returned a JSON denial through the host's expected exit path.
 
@@ -100,13 +100,13 @@ last_reviewed: 2026-08-29
 
 **Status:** active | **Created:** 2026-05-26
 
-**Prevention:** For hook payload parsing, normalize variant fields first, then read subfields. Keep self-tests for every registered agent payload shape in `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `expect_copilot_block`, `expect_antigravity_block`) and run the full self-test after every extractor edit. Evidence anchors: `workflow/hooks/deny-dangerous.sh` (search: `def extract_command(value)`) and `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `expect_antigravity_secret_file_block`).
+**Prevention:** For hook payload parsing, normalize variant fields first, then read subfields. Keep self-tests for every registered agent payload shape in `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `expect_copilot_block`, `expect_antigravity_block`) and run the full self-test after every extractor edit. Evidence anchors: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `def extract_command(value)`) and `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `expect_antigravity_secret_file_block`).
 
 **What happened:** While adding Antigravity hook payload support, I changed the guardrail jq extractor to read `.toolArgs.command` directly. Copilot can send `toolArgs` as a JSON string, so jq errored before reaching the `fromjson?` fallback. `bash workflow/hooks/deny-dangerous.sh --self-test=full` caught three Copilot deny regressions before the change shipped.
 
 **Root cause:** I added a new agent payload shape without first normalizing the existing polymorphic field shape shared by another agent. The fallback was present, but the earlier direct field access made it unreachable for string payloads.
 
-**Updated 2026-06-05:** The same parser gap recurred for file-tool paths instead of shell commands: jq normalized stringified Copilot `toolArgs` for `command`, but the path extractor did not parse stringified `path` / `file_path`. Safe non-bash payloads such as Copilot `view README.md` returned deny JSON until `extract_path` normalized object and string forms. Evidence anchors: `workflow/hooks/deny-dangerous.sh` (search: `def extract_path(value)`) and `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `stringified non-bash file read`).
+**Updated 2026-06-05:** The same parser gap recurred for file-tool paths instead of shell commands: jq normalized stringified Copilot `toolArgs` for `command`, but the path extractor did not parse stringified `path` / `file_path`. Safe non-bash payloads such as Copilot `view README.md` returned deny JSON until `extract_path` normalized object and string forms. Evidence anchors: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `def extract_path(value)`) and `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `stringified non-bash file read`).
 
 ## Lesson: Hook write-block tests must vary valid CLI grammar
 

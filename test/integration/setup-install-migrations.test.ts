@@ -6,20 +6,192 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 
 import { getAgentProfiles } from "../../src/cli/agents/registry.js";
-import { listHookSpecs } from "../../src/cli/server/hooks-registry.js";
+import {
+  getHookSpec,
+  listHookSpecs,
+} from "../../src/cli/server/hooks-registry.js";
+import {
+  readAgentHookState,
+  writeAgentHookState,
+} from "../../src/cli/server/agent-hook-writer.js";
+import {
+  agentHookSpawnDescriptor,
+  buildAgentHookDescriptor,
+} from "../../src/cli/server/agent-hook-command.js";
 import {
   makeTempProject,
   PROJECT_ROOT,
   readClaudePostTurnSafetyTimeout,
   runCliInstaller,
   runInstaller,
+  runInstallerWithEnvironment,
 } from "./setup-install.helpers.js";
 
 describe("setup --apply installer upgrade migrations", () => {
+  // ADD INTEGRATION: final-state tests cannot prove Git protection survives an interrupted split.
+  // Each fixture writes legacy Git coverage, interrupts a real atomic installer write, then retries.
+  for (const interruptedPath of [
+    ".claude/settings.json",
+    ".codex/hooks.json",
+    ".goat-flow/hooks/run-with-bash.mjs",
+    ".goat-flow/hooks/deny-git-mutations.sh",
+    ".goat-flow/hooks/deny-dangerous.sh",
+    ".goat-flow/hooks/deny-dangerous/guard-runtime.sh",
+    ".goat-flow/hooks/deny-dangerous/patterns-writes.sh",
+  ]) {
+    it(`retains Git protection when the split stops at ${interruptedPath}`, () => {
+      const root = makeTempProject();
+      const hookDirectory = join(root, ".goat-flow/hooks");
+      mkdirSync(hookDirectory, { recursive: true });
+      assert.equal(spawnSync("git", ["init", "--quiet", root]).status, 0);
+      for (const file of [
+        "run-with-bash.mjs",
+        "hook-launch-runtime.mjs",
+        "hook-provider-adapters.mjs",
+      ]) {
+        copyFileSync(
+          join(PROJECT_ROOT, "workflow/hooks", file),
+          join(hookDirectory, file),
+        );
+      }
+      // Fixture-created pre-split policy: the existing registration denies this exact push and permits status.
+      // The pending command is parsed as data and is never executed.
+      writeFileSync(
+        join(hookDirectory, "deny-dangerous.sh"),
+        [
+          "#!/usr/bin/env bash",
+          'node -e \'const p = JSON.parse(require("node:fs").readFileSync(0, "utf8")); if (p.tool_input.command === "git push origin main") { process.stderr.write("BLOCKED: Policy fixture: legacy Git protection\\n"); process.exit(2); }\'',
+          "",
+        ].join("\n"),
+      );
+      writeFileSync(
+        join(root, ".goat-flow/config.yaml"),
+        "hooks:\n  deny-dangerous:\n    enabled: true\n  post-turn-safety:\n    enabled: false\n",
+      );
+      const profiles = getAgentProfiles().filter(
+        (agent) => agent.id === "claude" || agent.id === "codex",
+      );
+      const dangerous = getHookSpec("deny-dangerous");
+      const git = getHookSpec("deny-git-mutations");
+      assert.ok(dangerous && git);
+      for (const agent of profiles) {
+        assert.ok(agent.hookConfigFile && agent.hooksDir);
+        mkdirSync(join(root, agent.hookConfigFile, ".."), { recursive: true });
+        writeFileSync(
+          join(root, agent.hookConfigFile),
+          JSON.stringify({
+            userMarker: "preserve",
+            hooks: {
+              PreToolUse: [
+                {
+                  matcher: "Bash",
+                  hooks: [{ type: "command", command: "node user-hook.js" }],
+                },
+              ],
+            },
+          }),
+        );
+        writeAgentHookState(root, agent, dangerous, true);
+      }
+      // Replay only fixture-owned registered policy handlers; operands remain inert provider payloads.
+      const decisions = (command: string) =>
+        profiles.map((agent) => {
+          assert.ok(agent.hooksDir);
+          return [dangerous, git]
+            .filter((spec) => readAgentHookState(root, agent, spec).installed)
+            .map((spec) => {
+              assert.ok(agent.hooksDir);
+              const descriptor = agentHookSpawnDescriptor(
+                buildAgentHookDescriptor(agent.id, agent.hooksDir, spec),
+              );
+              return spawnSync(descriptor.command, descriptor.args, {
+                cwd: root,
+                input: JSON.stringify({
+                  tool_name: "Bash",
+                  tool_input: { command },
+                }),
+                encoding: "utf-8",
+                timeout: 30000,
+              });
+            });
+        });
+      assert.ok(
+        decisions("git status").every(
+          (results) => results.length === 1 && results[0]?.status === 0,
+        ),
+      );
+      assert.ok(
+        decisions("git push origin main").every((results) =>
+          results.some((result) => result.status === 2),
+        ),
+      );
+      const shimDirectory = join(root, "interruption-tools");
+      mkdirSync(shimDirectory);
+      const realMv = spawnSync("bash", ["-c", "command -v mv"], {
+        encoding: "utf-8",
+      }).stdout.trim();
+      assert.ok(realMv);
+      writeFileSync(
+        join(shimDirectory, "mv"),
+        '#!/usr/bin/env bash\nif [[ "${!#}" == "$M20_INTERRUPT_PATH" ]]; then printf \'M20 interrupted replacement\\n\' >&2; exit 73; fi\nexec "$M20_REAL_MV" "$@"\n',
+        { mode: 0o755 },
+      );
+      const interrupted = runInstallerWithEnvironment(
+        root,
+        {
+          PATH: `${shimDirectory}:${process.env.PATH ?? ""}`,
+          M20_REAL_MV: realMv,
+          M20_INTERRUPT_PATH: interruptedPath,
+        },
+        "--agent",
+        "codex",
+      );
+      assert.notEqual(interrupted.status, 0);
+      assert.match(interrupted.stderr, /M20 interrupted replacement/u);
+      for (const results of decisions("git push origin main")) {
+        assert.ok(
+          results.some(
+            (result) =>
+              result.status === 2 &&
+              /BLOCKED: Policy|Policy hook unavailable:/u.test(result.stderr),
+          ),
+          JSON.stringify(results),
+        );
+      }
+      const retried = runInstaller(root, "--agent", "codex");
+      assert.equal(retried.status, 0, retried.stderr || retried.stdout);
+      for (const agent of profiles) {
+        assert.ok(readAgentHookState(root, agent, dangerous).installed);
+        assert.ok(readAgentHookState(root, agent, git).installed);
+        assert.ok(agent.hookConfigFile);
+        const config = readFileSync(join(root, agent.hookConfigFile), "utf-8");
+        assert.match(config, /userMarker/u);
+        assert.match(config, /node user-hook\.js/u);
+      }
+      for (const results of decisions("git push origin main")) {
+        assert.deepEqual(
+          results.map((result) => result.status),
+          [0, 2],
+        );
+      }
+      assert.ok(
+        decisions("git status").every((results) =>
+          results.every((result) => result.status === 0),
+        ),
+      );
+    });
+  }
+
   // Run the production block in a disposable project: it writes both replacements, then removes both retired files.
   // The minimal copy primitive isolates that ordering contract from unrelated installer work.
   it("installs renamed standalone playbooks before pruning retired filenames", () => {

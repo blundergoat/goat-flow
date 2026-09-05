@@ -29,12 +29,6 @@ import { projectIsAheadOfCli } from "../version-compare.js";
 import type { HookSpec } from "./hooks-registry.js";
 import { writeFileAtomic } from "./safe-exec.js";
 
-const DENY_DANGEROUS_POLICY_FILES = [
-  "patterns-shell.sh",
-  "patterns-paths.sh",
-  "patterns-writes.sh",
-  "deny-dangerous-self-test.sh",
-];
 const LEGACY_AGENT_HOOK_DIRECTORIES = [
   ".claude/hooks",
   ".codex/hooks",
@@ -98,7 +92,7 @@ function managedHookRelativePath(
 }
 
 /**
- * Derive one hook file's repair direction from M02's canonical classifier.
+ * Derive one hook file's repair direction from the canonical managed-file classifier.
  * Use after existence checks; unreadable evidence remains unclassified and never authorizes sync.
  *
  * @param projectPath - selected project used to derive the baseline's relative path
@@ -232,25 +226,6 @@ function managedHookFileContracts(
     templatePath: getTemplatePath(`workflow/hooks/${hookScriptName}`),
   }));
 
-  // The deny dispatcher also needs its policy store before protection is complete.
-  if (hookSpec.id === "deny-dangerous") {
-    // Each policy module must match the rules users receive from the same release.
-    for (const policyFileName of DENY_DANGEROUS_POLICY_FILES) {
-      managedHookFiles.push({
-        installedPath: join(
-          projectPath,
-          ".goat-flow",
-          "hooks",
-          "deny-dangerous",
-          policyFileName,
-        ),
-        templatePath: getTemplatePath(
-          `workflow/hooks/deny-dangerous/${policyFileName}`,
-        ),
-      });
-    }
-  }
-
   return managedHookFiles;
 }
 
@@ -344,70 +319,85 @@ export function managedFileIsTrusted(
   }
 }
 
+/** One file snapshot reused by both policies and every provider during a single read. */
+interface ManagedHookFileFacts {
+  exists: boolean;
+  direction: ManagedSetupChangeDirection;
+  trusted: boolean;
+}
+
+/** Operation-local inspection state; never retain this across writes or status requests. */
+export interface ManagedHookInspection {
+  expectedHashes: ReadonlyMap<string, string>;
+  files: Map<string, ManagedHookFileFacts>;
+}
+
 /**
- * Classify the files one installed hook needs before users rely on it.
- * Use when CLI, audit, or dashboard builds the local effective-state chain; it reports each gap as a false fact instead of throwing.
- * @param projectPath - selected project; empty text produces missing installation facts
- * @param agent - selected agent; an absent hook surface cannot produce complete facts
- * @param hookSpec - registry contract; an empty script set cannot establish runnable coverage
- * @returns existence, version, and trust facts; each false value names a visible repair state
+ * Read the installed baseline once before inspecting shared dependencies for one request.
+ *
+ * @param projectPath - selected target whose prior install hashes seed the inspection
+ * @returns empty file cache and prior hashes; discard this state after any write or request
+ */
+export function createManagedHookInspection(
+  projectPath: string,
+): ManagedHookInspection {
+  return {
+    expectedHashes: readManagedInstallStateFacade(projectPath).expectedHashes,
+    files: new Map(),
+  };
+}
+
+/**
+ * Classify one hook using an operation-local snapshot of each required path.
+ * Shared files are read once across sibling hooks and providers; a new operation gets fresh facts.
+ *
+ * @param projectPath - selected checkout whose installed paths are inspected
+ * @param agent - provider supplying the managed hook directory
+ * @param hookSpec - registry contract declaring every file this hook requires
+ * @param inspection - cache shared only within this read operation; omission starts a fresh inspection
+ * @returns separate presence, currency, trust and repair-direction facts for the complete dependency set
  */
 export function managedHookInstallationFacts(
   projectPath: string,
   agent: AgentProfile,
   hookSpec: HookSpec,
+  inspection: ManagedHookInspection = createManagedHookInspection(projectPath),
 ): ManagedHookInstallationFacts {
   const managedHookFiles = managedHookFileContracts(
     projectPath,
     agent,
     hookSpec,
   );
-  // A missing file means the user does not yet have a complete runnable hook.
-  const hasAllRequiredFiles = managedHookFiles.every((managedHookFile) =>
-    existsSync(managedHookFile.installedPath),
-  );
-  const managedBaseline = readManagedInstallStateFacade(projectPath);
-  const fileDirections = managedHookFiles.map((managedHookFile) =>
-    existsSync(managedHookFile.installedPath)
-      ? managedHookFileDirection(
-          projectPath,
-          managedHookFile,
-          managedBaseline.expectedHashes,
-        )
-      : "unclassified",
-  );
-  const changedPaths = managedHookFiles.flatMap((managedHookFile, index) =>
-    fileDirections[index] === "current"
-      ? []
-      : [managedHookRelativePath(projectPath, managedHookFile)],
-  );
-  // Current bytes matter only after every required file exists.
-  const hasCurrentRequiredFiles =
-    hasAllRequiredFiles &&
-    managedHookFiles.every((managedHookFile) => {
-      try {
-        return (
-          readFileSync(managedHookFile.installedPath, "utf-8") ===
-          readFileSync(managedHookFile.templatePath, "utf-8")
-        );
-      } catch {
-        // For example, permissions changed after the user opened the Hooks screen.
-        return false;
-      }
-    });
-  // Trust is checked independently so matching bytes behind a link never look safe.
-  const hasTrustedRequiredFiles =
-    hasAllRequiredFiles &&
-    managedHookFiles.every((managedHookFile) =>
-      managedFileIsTrusted(projectPath, managedHookFile.installedPath),
-    );
-
+  const fileFacts = managedHookFiles.map((file) => {
+    const cached = inspection.files.get(file.installedPath);
+    if (cached) return cached;
+    const exists = existsSync(file.installedPath);
+    const facts: ManagedHookFileFacts = {
+      exists,
+      direction: exists
+        ? managedHookFileDirection(projectPath, file, inspection.expectedHashes)
+        : "unclassified",
+      trusted: exists && managedFileIsTrusted(projectPath, file.installedPath),
+    };
+    inspection.files.set(file.installedPath, facts);
+    return facts;
+  });
   return {
-    hasAllRequiredFiles,
-    hasCurrentRequiredFiles,
-    hasTrustedRequiredFiles,
-    changeDirection: managedHookChangeDirection(fileDirections),
-    changedPaths,
+    hasAllRequiredFiles:
+      fileFacts.length > 0 && fileFacts.every((file) => file.exists),
+    hasCurrentRequiredFiles:
+      fileFacts.length > 0 &&
+      fileFacts.every((file) => file.direction === "current"),
+    hasTrustedRequiredFiles:
+      fileFacts.length > 0 && fileFacts.every((file) => file.trusted),
+    changeDirection: managedHookChangeDirection(
+      fileFacts.map((file) => file.direction),
+    ),
+    changedPaths: managedHookFiles.flatMap((file, index) =>
+      fileFacts[index]?.direction === "current"
+        ? []
+        : [managedHookRelativePath(projectPath, file)],
+    ),
   };
 }
 
@@ -704,6 +694,29 @@ function installedHookIsNewer(installedHookPath: string): boolean {
 }
 
 /**
+ * Refuse newer runtime bytes before registration or config migration can write anything.
+ *
+ * @param projectPath - selected target whose installed version stamps are checked
+ * @param agent - provider supplying the managed hook directory
+ * @param spec - registry contract supplying the files this change could replace
+ * @throws HookManagedInstallationError when an installed runtime stamp is newer than this CLI
+ */
+export function assertNoNewerManagedHookFiles(
+  projectPath: string,
+  agent: AgentProfile,
+  spec: HookSpec,
+): void {
+  for (const file of managedHookFileContracts(projectPath, agent, spec)) {
+    if (installedHookIsNewer(file.installedPath)) {
+      throw new HookManagedInstallationError(
+        `Refusing to overwrite ${file.installedPath}: the installed hook is newer than this CLI (${AUDIT_VERSION}). Re-run with a matching goat-flow release instead of downgrading the guardrail.`,
+        409,
+      );
+    }
+  }
+}
+
+/**
  * Remove one current managed script by exact name.
  * Use only when migration retires a hook while preserving user scripts; it swallows a missing file so repeated syncs stay quiet.
  * @param projectPath - selected project; empty text cannot own a safe removal
@@ -738,6 +751,7 @@ function copyDeclaredHookScripts(
   agent: AgentProfile,
   hookSpec: HookSpec,
   shouldOverwriteExisting: boolean,
+  writtenPaths: Set<string>,
 ): void {
   for (const hookScriptName of hookSpec.scriptFiles) {
     const installedHookPath = installedHookTarget(
@@ -745,6 +759,7 @@ function copyDeclaredHookScripts(
       agent,
       hookScriptName,
     );
+    if (writtenPaths.has(installedHookPath)) continue;
     if (!shouldOverwriteExisting && existsSync(installedHookPath)) continue;
     // A newer installed guard must not be silently downgraded by an older CLI.
     if (installedHookIsNewer(installedHookPath)) {
@@ -759,41 +774,7 @@ function copyDeclaredHookScripts(
       projectPath,
     );
     chmodSync(installedHookPath, 0o755);
-  }
-}
-
-/**
- * Install and chmod current deny-policy modules, then remove their exact retired script names.
- * Side effects: creates the policy directory and mutates only Goat Flow-owned hook files.
- */
-function copyDenyDangerousSupportFiles(
-  projectPath: string,
-  agent: AgentProfile,
-  shouldOverwriteExisting: boolean,
-): void {
-  const installedPolicyDirectory = join(
-    projectPath,
-    ".goat-flow",
-    "hooks",
-    "deny-dangerous",
-  );
-  mkdirSync(installedPolicyDirectory, { recursive: true });
-  for (const policyFileName of DENY_DANGEROUS_POLICY_FILES) {
-    const policyTemplatePath = getTemplatePath(
-      `workflow/hooks/deny-dangerous/${policyFileName}`,
-    );
-    const installedPolicyPath = join(installedPolicyDirectory, policyFileName);
-    assertWithinProject(projectPath, installedPolicyPath);
-    if (!shouldOverwriteExisting && existsSync(installedPolicyPath)) continue;
-    writeFileAtomic(
-      installedPolicyPath,
-      readFileSync(policyTemplatePath, "utf-8"),
-      projectPath,
-    );
-    chmodSync(installedPolicyPath, 0o755);
-  }
-  for (const legacyDenyScriptName of LEGACY_DENY_DANGEROUS_SCRIPT_NAMES) {
-    removeScriptIfPresent(projectPath, agent, legacyDenyScriptName);
+    writtenPaths.add(installedHookPath);
   }
 }
 
@@ -811,6 +792,7 @@ export function copyHookScripts(
   agent: AgentProfile,
   hookSpec: HookSpec,
   shouldOverwriteExisting = true,
+  writtenPaths = new Set<string>(),
 ): void {
   // An agent without a hook directory has no install destination for the user.
   if (!agent.hooksDir) return;
@@ -822,12 +804,15 @@ export function copyHookScripts(
     agent,
     hookSpec,
     shouldOverwriteExisting,
+    writtenPaths,
   );
 
   ensureHookGitignoreEntries(projectPath);
   // The deny dispatcher needs its separately owned policy modules after a fresh clone.
   if (hookSpec.id === "deny-dangerous") {
-    copyDenyDangerousSupportFiles(projectPath, agent, shouldOverwriteExisting);
+    for (const legacyName of LEGACY_DENY_DANGEROUS_SCRIPT_NAMES) {
+      removeScriptIfPresent(projectPath, agent, legacyName);
+    }
   }
 
   removeLegacyAgentHookScripts(projectPath, hookSpec);

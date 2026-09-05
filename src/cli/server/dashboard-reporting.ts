@@ -628,6 +628,8 @@ export function buildAuditCacheSignature(
     ".agents/hooks.json",
     ".github/hooks/hooks.json",
     ".goat-flow/hooks/deny-dangerous.sh",
+    ".goat-flow/hooks/deny-git-mutations.sh",
+    ".goat-flow/hooks/deny-dangerous/guard-runtime.sh",
     ".goat-flow/hooks/gruff-code-quality.sh",
     ".goat-flow/hooks/post-turn-safety.sh",
     ".goat-flow/hooks/deny-dangerous/patterns-shell.sh",

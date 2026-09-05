@@ -158,7 +158,9 @@ function denyRegistrationDetails(
         agent: agentFacts.agent.id,
         missingPatterns,
         extraPatterns: [],
-        hookRegistered: agentFacts.hooks.denyIsRegistered,
+        hookRegistered:
+          agentFacts.hooks.denyIsRegistered &&
+          agentFacts.hooks.gitDenyIsRegistered === true,
       };
     }),
   };
@@ -370,6 +372,28 @@ function findAgent(
   return agents.find((agentFacts) => agentFacts.agent.id === id);
 }
 
+/** Tell whether an agent has any policy file or configuration to register. */
+function hasPolicyHookSurface(
+  agentFacts: AuditContext["agents"][number],
+): boolean {
+  return (
+    agentFacts.hooks.denyExists ||
+    agentFacts.hooks.denyIsConfigBased ||
+    agentFacts.hooks.gitDenyExists === true
+  );
+}
+
+/** Require both policy registrations and the independently installed Git entrypoint. */
+function hasRegisteredPolicyHooks(
+  agentFacts: AuditContext["agents"][number],
+): boolean {
+  return (
+    agentFacts.hooks.denyIsRegistered &&
+    agentFacts.hooks.gitDenyExists === true &&
+    agentFacts.hooks.gitDenyIsRegistered === true
+  );
+}
+
 /**
  * Group deny-hook registration states for remediation.
  *
@@ -387,15 +411,19 @@ function classifyDenyRegistration(agents: AuditContext["agents"]): {
   const noDeny: string[] = [];
   const pathMismatch: string[] = [];
   for (const agentFacts of agents) {
-    if (!agentFacts.hooks.denyExists && !agentFacts.hooks.denyIsConfigBased) {
+    if (!hasPolicyHookSurface(agentFacts)) {
       noDeny.push(agentFacts.agent.id);
       continue;
     }
-    if (agentFacts.hooks.denyIsRegistered) {
+    if (hasRegisteredPolicyHooks(agentFacts)) {
       registered.push(agentFacts.agent.id);
       const expected = agentFacts.agent.denyHookFile;
       const actual = agentFacts.hooks.denyRegisteredPath;
-      if (expected && actual && !actual.endsWith(expected)) {
+      const gitActual = agentFacts.hooks.gitDenyRegisteredPath;
+      if (
+        (expected && actual && !actual.endsWith(expected)) ||
+        !gitActual?.endsWith(".goat-flow/hooks/deny-git-mutations.sh")
+      ) {
         pathMismatch.push(agentFacts.agent.id);
       }
     } else {
@@ -427,24 +455,25 @@ function buildDenyRegistrationFailure(
       .filter((id) => !pathMismatch.includes(id))
       .map(
         (id) =>
-          `${id}: deny hook registered as ${findAgent(agents, id)?.agent.hookEvents?.preTool ?? "pre-tool"} hook`,
+          `${id}: both policy hooks registered as ${findAgent(agents, id)?.agent.hookEvents?.preTool ?? "pre-tool"} hooks`,
       ),
     ...pathMismatch.map((id) => {
       const agentFacts = findAgent(agents, id);
-      return `${id}: registered hook path "${agentFacts?.hooks.denyRegisteredPath}" does not match expected deny hook "${agentFacts?.agent.denyHookFile}"`;
+      return `${id}: registered policy hook paths "${agentFacts?.hooks.denyRegisteredPath}" and "${agentFacts?.hooks.gitDenyRegisteredPath}" must match "${agentFacts?.agent.denyHookFile}" and ".goat-flow/hooks/deny-git-mutations.sh"`;
     }),
     ...unregistered.map(
       (id) =>
-        `${id}: deny hook exists but is NOT registered as a ${findAgent(agents, id)?.agent.hookEvents?.preTool ?? "pre-tool"} hook`,
+        `${id}: both policy hooks must exist and be registered as ${findAgent(agents, id)?.agent.hookEvents?.preTool ?? "pre-tool"} hooks`,
     ),
   ];
   const actions = [
     ...unregistered.map(
-      (id) => `Register the deny hook in ${id} agent settings`,
+      (id) =>
+        `Register deny-dangerous and deny-git-mutations in ${id} agent settings`,
     ),
     ...pathMismatch.map(
       (id) =>
-        `Fix ${id} hook registration to point at the canonical deny hook (${findAgent(agents, id)?.agent.denyHookFile})`,
+        `Fix ${id} registrations to point at ${findAgent(agents, id)?.agent.denyHookFile} and .goat-flow/hooks/deny-git-mutations.sh`,
     ),
   ];
   return fail(
@@ -453,11 +482,11 @@ function buildDenyRegistrationFailure(
     [
       ...unregistered.map(
         (id) =>
-          `Add a ${findAgent(agents, id)?.agent.hookEvents?.preTool ?? "PreToolUse"} hook entry in ${id} agent settings that runs deny-dangerous.sh.`,
+          `Add ${findAgent(agents, id)?.agent.hookEvents?.preTool ?? "PreToolUse"} hook entries in ${id} agent settings that run deny-dangerous.sh and deny-git-mutations.sh.`,
       ),
       ...pathMismatch.map(
         (id) =>
-          `Update the ${findAgent(agents, id)?.agent.hookEvents?.preTool ?? "PreToolUse"} hook in ${id} to reference ${findAgent(agents, id)?.agent.denyHookFile}.`,
+          `Update the ${findAgent(agents, id)?.agent.hookEvents?.preTool ?? "PreToolUse"} hooks in ${id} to reference ${findAgent(agents, id)?.agent.denyHookFile} and .goat-flow/hooks/deny-git-mutations.sh.`,
       ),
     ],
     denyRegistrationDetails(agents, unregistered, noDeny, pathMismatch),
@@ -490,7 +519,7 @@ const denyHookRegistered: HarnessCheck = {
     const findings = [
       ...registered.map(
         (id) =>
-          `${id}: deny hook registered as ${findAgent(ctx.agents, id)?.agent.hookEvents?.preTool ?? "pre-tool"} hook`,
+          `${id}: both policy hooks registered as ${findAgent(ctx.agents, id)?.agent.hookEvents?.preTool ?? "pre-tool"} hooks`,
       ),
       ...noDeny.map(
         (id) => `${id}: no deny mechanism (registration check skipped)`,

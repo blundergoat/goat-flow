@@ -52,6 +52,26 @@ export const CLAUDE_DANGEROUS_PAYLOAD =
 export const SUPPORTED_PROVIDER_HOOK_CASES = [
   {
     agent: PROFILES.claude,
+    hookId: "deny-git-mutations",
+    registrationTargets: [{ event: "PreToolUse", matcher: "Bash" }],
+  },
+  {
+    agent: PROFILES.codex,
+    hookId: "deny-git-mutations",
+    registrationTargets: [{ event: "PreToolUse", matcher: "Bash" }],
+  },
+  {
+    agent: PROFILES.antigravity,
+    hookId: "deny-git-mutations",
+    registrationTargets: [{ event: "PreToolUse", matcher: "run_command" }],
+  },
+  {
+    agent: PROFILES.copilot,
+    hookId: "deny-git-mutations",
+    registrationTargets: [{ event: "preToolUse", matcher: null }],
+  },
+  {
+    agent: PROFILES.claude,
     hookId: "deny-dangerous",
     registrationTargets: [{ event: "PreToolUse", matcher: "Bash" }],
   },
@@ -600,7 +620,7 @@ export interface ClaudeReplayHandler {
   args: string[];
 }
 
-/** Read the first generated Claude deny handler because hook arrays are nested by event and matcher.
+/** Read the generated Claude dangerous-policy handler by entrypoint; its sibling may be registered first.
  * The registrar wrote this fixture, so a missing row fails the test naturally.
  *
  * @param root - fixture project root
@@ -616,7 +636,12 @@ export function readClaudeDenyLauncher(root: string): ClaudeReplayHandler {
       }>;
     };
   };
-  const registeredHook = settings.hooks.PreToolUse[0]!.hooks[0]!;
+  const registeredHook = settings.hooks.PreToolUse.flatMap(
+    (group) => group.hooks,
+  ).find((entry) =>
+    entry.args?.some((arg) => arg.endsWith("/deny-dangerous.sh")),
+  );
+  assert.ok(registeredHook);
   assert.equal(typeof registeredHook.command, "string");
   assert.ok(
     Array.isArray(registeredHook.args),
@@ -634,7 +659,7 @@ export interface CodexReplayHandler {
   commandWindows: string;
 }
 
-/** Read the first generated Codex deny launcher because hook arrays are nested by event and matcher.
+/** Read the generated Codex dangerous-policy launcher by entrypoint; registration order is not identity.
  *
  * @param root - fixture project root
  * @returns both generated Codex launcher commands, proving the platform override was written
@@ -647,7 +672,9 @@ export function readCodexDenyLauncher(root: string): CodexReplayHandler {
       }>;
     };
   };
-  const registeredHook = settings.hooks?.PreToolUse?.[0]?.hooks?.[0];
+  const registeredHook = settings.hooks?.PreToolUse?.flatMap(
+    (group) => group.hooks ?? [],
+  ).find((entry) => entry.command?.includes("deny-dangerous.sh"));
   assert.equal(typeof registeredHook?.command, "string");
   assert.equal(typeof registeredHook?.commandWindows, "string");
   return {

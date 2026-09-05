@@ -11,6 +11,7 @@ import { isAbsolute, join, relative, resolve } from "node:path";
 import { getAgentProfiles } from "../agents/registry.js";
 import {
   hookScanRootsUseYamlAliases,
+  migrateGitHookChoice,
   readHookEnabled,
   readHookScanRoots,
   removeHookConfig,
@@ -41,6 +42,9 @@ import {
 import {
   HookManagedInstallationError as HookRegistrarError,
   copyHookScripts,
+  assertNoNewerManagedHookFiles,
+  createManagedHookInspection,
+  type ManagedHookInspection,
   hookConfigExists,
   managedFileIsTrusted,
   managedHookInstallationFacts,
@@ -845,12 +849,14 @@ function supportedAgentHookState(
   spec: HookSpec,
   isDesiredByUser: boolean,
   scanRootState: HookScanRootState | null,
+  inspection: ManagedHookInspection,
 ): HookAgentState {
   const registrationState = readAgentHookState(projectPath, agent, spec);
   const installationFacts = managedHookInstallationFacts(
     projectPath,
     agent,
     spec,
+    inspection,
   );
   const doesRootContractAllowRegistration =
     scanRootsPermitRegistration(scanRootState);
@@ -915,6 +921,7 @@ function agentHookState(
   spec: HookSpec,
   shouldBeEnabled: boolean,
   scanRootState: HookScanRootState | null,
+  inspection: ManagedHookInspection,
 ): HookAgentState {
   const unsupportedReason = unsupportedReasonForSpec(spec, agent);
   // A provider exclusion stays visible even when shared script files exist on disk.
@@ -944,6 +951,7 @@ function agentHookState(
     spec,
     shouldBeEnabled,
     scanRootState,
+    inspection,
   );
 }
 
@@ -983,6 +991,7 @@ function reconcileSupportedAgentHook(
   isEnabled: boolean,
   doesRootContractAllowRegistration: boolean,
   profiles: AgentProfile[],
+  writtenPaths: Set<string>,
 ): void {
   if (!shouldReconcileAgent(projectPath, agent, spec, profiles)) return;
   const desiredState = deriveManagedHookDesiredState(agent, spec, isEnabled);
@@ -992,7 +1001,7 @@ function reconcileSupportedAgentHook(
   // Disabling fills missing managed files but never refreshes existing inert bytes.
   if (!isEnabled) {
     if (desiredState.managedScriptFiles.length > 0) {
-      copyHookScripts(projectPath, agent, spec, false);
+      copyHookScripts(projectPath, agent, spec, false, writtenPaths);
     }
     if (hookConfigExists(projectPath, agent)) {
       writeAgentHookState(projectPath, agent, spec, false);
@@ -1001,7 +1010,7 @@ function reconcileSupportedAgentHook(
   }
   // Current inert files let install and sync repair drift without changing the user's disabled choice.
   if (desiredState.managedScriptFiles.length > 0) {
-    copyHookScripts(projectPath, agent, spec);
+    copyHookScripts(projectPath, agent, spec, true, writtenPaths);
   }
   // A disabled hook removes managed rows from existing config but never scaffolds a missing config file.
   if (shouldRegisterHook || hookConfigExists(projectPath, agent)) {
@@ -1014,6 +1023,7 @@ function reconcileHook(
   projectPath: string,
   spec: HookSpec,
   isEnabled: boolean,
+  writtenPaths = new Set<string>(),
 ): void {
   const profiles = getAgentProfiles();
   const scanRootState = postTurnScanRootState(projectPath, spec);
@@ -1032,6 +1042,7 @@ function reconcileHook(
       isEnabled,
       doesRootContractAllowRegistration,
       profiles,
+      writtenPaths,
     );
   }
 }
@@ -1052,16 +1063,19 @@ function assertNoKnownManagedHookDivergence(
 ): void {
   const profiles = getAgentProfiles();
   const divergedPaths = new Set<string>();
+  const inspection = createManagedHookInspection(projectPath);
   for (const spec of specs) {
     for (const agent of profiles) {
       if (unsupportedReasonForSpec(spec, agent) || !isSupportedAgent(agent)) {
         continue;
       }
       if (!shouldReconcileAgent(projectPath, agent, spec, profiles)) continue;
+      assertNoNewerManagedHookFiles(projectPath, agent, spec);
       const installationFacts = managedHookInstallationFacts(
         projectPath,
         agent,
         spec,
+        inspection,
       );
       if (installationFacts.changeDirection !== "diverged") continue;
       for (const changedPath of installationFacts.changedPaths) {
@@ -1116,14 +1130,18 @@ function pruneRemovedHookTombstones(projectPath: string): void {
 }
 
 /** Snapshot one hook across all known agents for dashboard and CLI consumers. */
-function readHookState(hookId: string, projectPath: string): HookState {
+function readHookState(
+  hookId: string,
+  projectPath: string,
+  inspection: ManagedHookInspection = createManagedHookInspection(projectPath),
+): HookState {
   const spec = resolveSpec(hookId);
   const enabled = readDesired(projectPath, spec);
   const scanRoots = postTurnScanRootState(projectPath, spec);
   const agents = Object.fromEntries(
     getAgentProfiles().map((agent) => [
       agent.id,
-      agentHookState(projectPath, agent, spec, enabled, scanRoots),
+      agentHookState(projectPath, agent, spec, enabled, scanRoots, inspection),
     ]),
   ) as Record<AgentId, HookAgentState>;
   return {
@@ -1143,7 +1161,27 @@ function readHookState(hookId: string, projectPath: string): HookState {
 // project; reads settings + script presence, so the result reflects on-disk
 // reality, not the in-memory registry defaults.
 export function readAllHookStates(projectPath: string): HookState[] {
-  return listHookSpecs().map((spec) => readHookState(spec.id, projectPath));
+  const inspection = createManagedHookInspection(projectPath);
+  return listHookSpecs().map((spec) =>
+    readHookState(spec.id, projectPath, inspection),
+  );
+}
+
+/**
+ * Register requested Git protection for every affected provider before shared bytes can narrow the old guard.
+ * A missing new entrypoint fails closed through its registered bootstrap until installation finishes.
+ * No runtime file is replaced until every owned registration write succeeds.
+ */
+function prepareGitMutationRegistrations(projectPath: string): void {
+  const gitSpec = resolveSpec("deny-git-mutations");
+  if (!readDesired(projectPath, gitSpec)) return;
+  const profiles = getAgentProfiles();
+  for (const agent of profiles) {
+    if (!isSupportedAgent(agent) || unsupportedReasonForSpec(gitSpec, agent))
+      continue;
+    if (!shouldReconcileAgent(projectPath, agent, gitSpec, profiles)) continue;
+    writeAgentHookState(projectPath, agent, gitSpec, true);
+  }
 }
 
 /**
@@ -1164,11 +1202,24 @@ export function applyHookState(
   if (!spec.togglable) {
     throw new HookRegistrarError(`Hook is not togglable: ${hookId}`, 400);
   }
-  // Enabled reconciliation may replace scripts, so prove authority before any cleanup or config write.
-  if (isEnabled) assertNoKnownManagedHookDivergence(projectPath, [spec]);
+  const gitSpec = resolveSpec("deny-git-mutations");
+  const repairGitSibling =
+    spec.id === "deny-dangerous" && readDesired(projectPath, gitSpec);
+  const changingSpecs = [
+    ...(isEnabled ? [spec] : []),
+    ...(repairGitSibling ? [gitSpec] : []),
+  ];
+  assertNoKnownManagedHookDivergence(projectPath, changingSpecs);
+  migrateGitHookChoice(projectPath);
   pruneRemovedHookTombstones(projectPath);
   setHookEnabled(projectPath, spec.id, isEnabled);
-  reconcileHook(projectPath, spec, isEnabled);
+  const writtenPaths = new Set<string>();
+  if (spec.id === "deny-dangerous" || spec.id === "deny-git-mutations") {
+    prepareGitMutationRegistrations(projectPath);
+    if (repairGitSibling)
+      reconcileHook(projectPath, gitSpec, true, writtenPaths);
+  }
+  reconcileHook(projectPath, spec, isEnabled, writtenPaths);
   return readHookState(spec.id, projectPath);
 }
 
@@ -1186,9 +1237,17 @@ export function syncHookStates(projectPath: string): HookState[] {
     readDesired(projectPath, spec),
   );
   assertNoKnownManagedHookDivergence(projectPath, enabledSpecs);
+  migrateGitHookChoice(projectPath);
   pruneRemovedHookTombstones(projectPath);
+  prepareGitMutationRegistrations(projectPath);
+  const writtenPaths = new Set<string>();
   for (const spec of togglableSpecs) {
-    reconcileHook(projectPath, spec, readDesired(projectPath, spec));
+    reconcileHook(
+      projectPath,
+      spec,
+      readDesired(projectPath, spec),
+      writtenPaths,
+    );
   }
   return readAllHookStates(projectPath);
 }

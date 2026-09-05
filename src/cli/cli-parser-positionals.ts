@@ -415,7 +415,7 @@ export function parseHookScenarioArg(
   // Verification must not choose a proof group the user did not explicitly request.
   if (scenarioArg === undefined) {
     throw new CLIError(
-      'hooks verify requires --scenario "deny-hook", "post-turn-hook", "gruff-hook", or "all".',
+      'hooks verify requires --scenario "deny-hook", "git-mutations-hook", "post-turn-hook", "gruff-hook", or "all".',
       2,
     );
   }
@@ -423,12 +423,13 @@ export function parseHookScenarioArg(
   // `all` is the only non-group word accepted; every other value must fail before a proof looks like it ran.
   if (
     scenarioArg !== "deny-hook" &&
+    scenarioArg !== "git-mutations-hook" &&
     scenarioArg !== "post-turn-hook" &&
     scenarioArg !== "gruff-hook" &&
     scenarioArg !== "all"
   ) {
     throw new CLIError(
-      '--scenario must be "deny-hook", "post-turn-hook", "gruff-hook", or "all".',
+      '--scenario must be "deny-hook", "git-mutations-hook", "post-turn-hook", "gruff-hook", or "all".',
       2,
     );
   }

@@ -311,12 +311,12 @@ function appendGroundingAndReadNext(
   lines.push("#    Record: which pass, which fail, which don't exist.");
   lines.push("");
   lines.push(
-    "# 2. Hook self-test (if deny-dangerous.sh exists in your hooks directory)",
+    "# 2. Test both managed policy hooks when this agent has an on-disk hook directory.",
   );
   // An agent profile without an on-disk deny hook gives the reviewer a clear no-probe message instead of an unusable command.
   lines.push(
     promptContext.denyHookFile
-      ? `bash ${promptContext.denyHookFile} --self-test=smoke`
+      ? `bash ${promptContext.denyHookFile} --self-test=smoke\nbash ${promptContext.denyHookFile.replace(/deny-dangerous\.sh$/, "deny-git-mutations.sh")} --self-test=smoke`
       : "#    This agent has no on-disk deny hook script to self-test.",
   );
   lines.push("");
@@ -486,7 +486,7 @@ function appendSetupQuality(
     `- Were hook scripts installed and registered in \`${promptContext.hookConfigFile}\`?`,
   );
   lines.push(
-    "- Did deny-dangerous.sh pass the self-test in Step 0? If not, what failed?",
+    "- Did both deny-dangerous.sh and deny-git-mutations.sh pass their self-tests in Step 0? If not, which policy failed?",
   );
   lines.push("");
 }

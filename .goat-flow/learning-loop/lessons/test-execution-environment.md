@@ -36,7 +36,7 @@ last_reviewed: 2026-08-21
 
 **Status:** active | **Created:** 2026-04-18
 
-**Prevention:** For focused test verification in this repo, invoke the underlying command directly, as in `node --import tsx --test test/unit/quality-subcommands.test.ts`, and reserve `npm test` for deliberate full-suite runs. Confirm the reported test count matches the file you meant to run before citing the result. Evidence anchors: `package.json` (search: `"test": "npm run test:fast"`), `scripts/run-tests.mjs` (search: `const mode = process.argv[2]`).
+**Prevention:** For focused test verification in this repo, invoke the underlying command directly, as in `node --import tsx --test test/unit/quality-subcommands.test.ts`, and reserve `npm test` for deliberate full-suite runs. Confirm the reported test count matches the file you meant to run before citing the result. Evidence anchors: `package.json` (search: `"test:fast": "node scripts/run-tests.mjs fast"`), `scripts/run-tests.mjs` (search: `const mode = process.argv[2]`).
 
 **What happened:** A focused verification run appended a test path to `npm test` to run only the quality prompt tests, and the full suite ran anyway, surfacing unrelated audit failures that obscured whether the changed file passed its own regression.
 
@@ -102,7 +102,7 @@ last_reviewed: 2026-08-21
 
 **Status:** active | **Created:** 2026-06-01
 
-**Prevention:** For "clean checkout" proofs, use a real clone when the test suite includes hooks, audit checks, or git-root discovery. Use `git archive` only for tests that are explicitly gitless. If an archive run fails with `deny-dangerous-self-test.sh --self-test=smoke failed`, rerun in a real clone before changing hook logic. Evidence anchors: `workflow/hooks/deny-dangerous.sh` (search: `resolve_goat_flow_root`), `.goat-flow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `expect_allow shell "echo safe"`), `test/unit/audit-command/agent-deny-hooks-drift.test.ts` (search: `passes when the installed deny hook matches the canonical template`), `package.json` (search: `"test:fast"`).
+**Prevention:** For "clean checkout" proofs, use a real clone when the test suite includes hooks, audit checks, or git-root discovery. Use `git archive` only for tests that are explicitly gitless. If an archive run fails with `deny-dangerous-self-test.sh --self-test=smoke failed`, rerun in a real clone before changing hook logic. Evidence anchors: `workflow/hooks/deny-dangerous.sh` (search: `git rev-parse --show-toplevel`), `.goat-flow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `expect_allow shell "echo safe"`), `test/unit/audit-command/agent-deny-hooks-drift.test.ts` (search: `passes when the installed deny hook matches the canonical template`), `package.json` (search: `"test:fast"`).
 
 **What happened:** During M09 clean-checkout verification, `git archive HEAD | tar -x` produced a no-`dist/` tree, but `npm test` failed five deny-hook audit tests. The failure was not the test partition fix: the archived tree had no `.git`, so `workflow/hooks/deny-dangerous.sh` could not resolve `git rev-parse --git-common-dir` and failed closed. The equivalent local `git clone --no-hardlinks --branch fix/audit-drift-fast-slow-partition --single-branch ...` had `.git`, no `dist/`, and passed `npm test` with `# pass 557`, `# fail 0`, `CLONE_NPM_TEST_EXIT_0`.
 

@@ -297,15 +297,21 @@ describe("bounded hook verification guidance", () => {
         ),
         `${relativePath} must show the bounded managed-hook proof command`,
       );
+      assert.ok(
+        content.includes(
+          "goat-flow hooks verify . --agent <id> --scenario git-mutations-hook --trusted-target",
+        ),
+        `${relativePath} must show the separate Git policy proof command`,
+      );
       assert.match(content, /trusted checkout/u, relativePath);
       assert.match(
         content,
-        /four fixed inert classifier operands/u,
+        /fixed provider-shaped inputs through the exact configured handler/u,
         relativePath,
       );
       assert.match(
         content,
-        /nine scenarios total: four deny-hook, three Gruff, and two post-turn/u,
+        /thirteen scenarios: four dangerous, four Git, three Gruff and two post-turn/u,
         relativePath,
       );
       assert.match(
@@ -315,7 +321,7 @@ describe("bounded hook verification guidance", () => {
       );
       assert.match(
         content,
-        /does not prove provider-side hook delivery/u,
+        /do(?:es)? not prove provider-side hook delivery/u,
         relativePath,
       );
       assert.doesNotMatch(

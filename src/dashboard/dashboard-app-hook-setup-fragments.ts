@@ -2,7 +2,7 @@
  * Connect agent discovery, project browsing, Plans, Hooks, and Setup controls to their shared dashboard state.
  *
  * Loaders report request failures in the relevant panel while guarded hook disabling asks for confirmation before saving.
- * Successful hook saves replace the matching row; failed saves leave current rows visible and report a banner and toast.
+ * Successful hook saves reload all rows because shared files can affect siblings; failed saves report a banner and toast.
  */
 
 /**
@@ -25,23 +25,22 @@ function dashboardConfirmHookToggle(
 }
 
 /**
- * Replace one hook row after the server accepts a toggle.
- * Use so the Hooks table reflects the saved guardrail state immediately.
+ * Refresh every hook row after the server accepts a toggle or shared-file repair.
+ * Use so sibling installation and proof states reflect the same saved files.
  *
- * @param ctx - dashboard state to update; missing hook rows leave the table unchanged
+ * @param ctx - dashboard state to reload; the loader reports refresh failures in the Hooks panel
  * @param hook - saved hook row returned by the server; empty agent state still renders as unavailable
  * @param shouldEnable - requested state used for toast copy; `false` tells the user it was disabled
- * @returns nothing; visible hook state and toast update in place
+ * @returns nothing; a project switch suppresses the old project's success toast
  */
-function dashboardApplyHookToggleResult(
+async function dashboardApplyHookToggleResult(
   ctx: DashboardAppContext,
   hook: HookState,
   shouldEnable: boolean,
-): void {
-  // Replace only the toggled row so other hook rows keep their current UI state.
-  ctx.hooksState = ctx.hooksState.map((item: HookState) =>
-    item.id === hook.id ? hook : item,
-  );
+): Promise<void> {
+  const requestProjectPath = ctx.projectPath;
+  await ctx.loadHooks();
+  if (ctx.projectPath !== requestProjectPath) return;
   ctx.showToast(`${hook.name} ${shouldEnable ? "enabled" : "disabled"}`);
 }
 
@@ -81,7 +80,7 @@ async function dashboardToggleHookState(
     if (error) throw new Error(error);
     // The user switched projects while saving, so this response belongs to an old screen.
     if (ctx.projectPath !== requestProjectPath) return;
-    dashboardApplyHookToggleResult(
+    await dashboardApplyHookToggleResult(
       ctx,
       payload.hook as HookState,
       shouldEnable,

@@ -8,7 +8,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { getAgentProfile } from "./agents/registry.js";
+import { getAgentProfile, getAgentProfiles } from "./agents/registry.js";
 import { classifyProjectState } from "./classify-state.js";
 import { CLIError } from "./cli-error.js";
 import { pathWriteClaimInspectCommand } from "./claims-command.js";
@@ -20,6 +20,7 @@ import {
 } from "./install-invocation.js";
 import {
   buildManagedSetupPreview,
+  isBlockingManagedFile,
   ManagedInstallStateRecordError,
   managedSetupPreviewForInstallerLaunch,
   prepareManagedInstallStateForApply,
@@ -146,6 +147,7 @@ const RETIRED_CONFIG_BLOCKS: ReadonlyArray<{ pattern: RegExp; edit: string }> =
 /** Hook toggles install adds when the user's config predates them. */
 const SHIPPED_HOOK_TOGGLES = [
   "deny-dangerous",
+  "deny-git-mutations",
   "post-turn-safety",
   "gruff-code-quality",
 ] as const;
@@ -244,7 +246,11 @@ function pendingHookRegistrationEdit(
  * @param agent - selected provider whose one hook-config row receives the summary
  * @returns concise edit phrases; empty means hook reconciliation leaves the config unchanged
  */
-function pendingHookConfigEdits(projectPath: string, agent: AgentId): string[] {
+function pendingHookConfigEdits(
+  projectPath: string,
+  agent: AgentId,
+  selectedHookId?: string,
+): string[] {
   const profile = getAgentProfile(agent);
   if (
     profile.hookConfigFile === null ||
@@ -268,6 +274,7 @@ function pendingHookConfigEdits(projectPath: string, agent: AgentId): string[] {
   const removalReasons: string[] = [];
 
   for (const spec of listHookSpecs()) {
+    if (selectedHookId !== undefined && spec.id !== selectedHookId) continue;
     const edit = pendingHookRegistrationEdit(
       projectPath,
       agent,
@@ -851,6 +858,54 @@ function releaseManagedInstallClaims(
 }
 
 /**
+ * Include existing sibling-provider Git registrations in the install write set.
+ * Shared policy bytes affect those providers too, so their exact config rows receive
+ * the same existing preview/admission contract before the standalone upgrade writes them.
+ */
+function buildInstallPreview(
+  options: ParsedCLI,
+  agent: AgentId,
+  authority: ManagedSetupAuthority,
+): ManagedSetupPreview {
+  const preview = buildManagedSetupPreview(
+    options.projectPath,
+    agent,
+    authority,
+    pendingMigrations(options, agent),
+  );
+  for (const sibling of getAgentProfiles()) {
+    if (sibling.id === agent || sibling.hookConfigFile === null) continue;
+    const edits = pendingHookConfigEdits(
+      options.projectPath,
+      sibling.id,
+      "deny-git-mutations",
+    );
+    if (edits.length === 0) continue;
+    const migrations = new Map([
+      [
+        sibling.hookConfigFile,
+        `Install edits this existing provider config to ${edits.join("; ")} before replacing shared policy files. Unrelated registrations and settings retain their values.`,
+      ],
+    ]);
+    const siblingPreview = buildManagedSetupPreview(
+      options.projectPath,
+      sibling.id,
+      authority,
+      migrations,
+    );
+    const row = siblingPreview.files.find(
+      (file) => file.path === sibling.hookConfigFile,
+    );
+    if (row && !preview.files.some((file) => file.path === row.path))
+      preview.files.push(row);
+    if (row && (isBlockingManagedFile(row) || row.state === "unmanaged"))
+      preview.verdict = "blocked";
+  }
+  preview.files.sort((left, right) => left.path.localeCompare(right.path));
+  return preview;
+}
+
+/**
  * Rebuild and repeat admission while every previewed destination is claimed.
  * Error behavior: throws a CLI error when admission or any preview input changed before mutation.
  */
@@ -860,12 +915,7 @@ function revalidateManagedInstallPreview(
   authority: ManagedSetupAuthority,
   initialPreview: ManagedSetupPreview,
 ): ManagedSetupPreview {
-  const revalidatedPreview = buildManagedSetupPreview(
-    options.projectPath,
-    agent,
-    authority,
-    pendingMigrations(options, agent),
-  );
+  const revalidatedPreview = buildInstallPreview(options, agent, authority);
   const overwriteBlocker = managedSetupAdmissionFailure(
     revalidatedPreview,
     authority,
@@ -983,12 +1033,7 @@ async function runClaimedManagedInstall(
 export async function handleInstallCommand(options: ParsedCLI): Promise<void> {
   const selectedAgent = validateManagedSetupRequest(options);
   const authority = readManagedSetupAuthority(options);
-  const installPreview = buildManagedSetupPreview(
-    options.projectPath,
-    selectedAgent,
-    authority,
-    pendingMigrations(options, selectedAgent),
-  );
+  const installPreview = buildInstallPreview(options, selectedAgent, authority);
   const installerLaunch = buildInstallerInvocation({
     scriptPath: getTemplatePath("workflow/install-goat-flow.sh"),
     projectPath: options.projectPath,

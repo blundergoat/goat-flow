@@ -86,20 +86,71 @@ const CODEX_POST_TURN_DELIVERY_CONTRACT: HookDeliveryContract = {
   launcherDeadlineMs: 75_000, // Ceiling: leaves Codex fifteen seconds to render Stop feedback.
 };
 
+// Both entrypoints load this complete target-local policy store.
+const POLICY_RUNTIME_FILES = [
+  "deny-dangerous/guard-runtime.sh",
+  "deny-dangerous/patterns-shell.sh",
+  "deny-dangerous/patterns-paths.sh",
+  "deny-dangerous/patterns-writes.sh",
+  "deny-dangerous/deny-dangerous-self-test.sh",
+];
+
 const HOOKS: HookSpec[] = [
   {
     id: "deny-dangerous",
     displayName: "Deny dangerous hook",
     description:
-      "Block risky shell operations, direct secret-path access, repository writes, and GitHub write operations through one PreToolUse dispatcher.",
+      "Block risky shell operations, direct secret-path access, and GitHub write operations.",
     event: "PreToolUse",
     matcher: "Bash",
     scriptFiles: [
       "run-with-bash.mjs",
       "hook-launch-runtime.mjs",
       "deny-dangerous.sh",
+      ...POLICY_RUNTIME_FILES,
     ],
     primaryScript: "deny-dangerous.sh",
+    togglable: true,
+    defaultEnabled: true,
+    requiresConfirmDialog: true,
+    // Above the shared launcher's 25s policy deadline so Goat Flow can emit
+    // its protocol-specific unavailable response before supported hosts stop it.
+    timeoutSec: 30,
+    deliveryContract: POLICY_DELIVERY_CONTRACT,
+    providerEvidence: {
+      claude: {
+        identity: "hook-provider-adapter.v1:claude:pre-tool",
+        effectiveSupportGate: "scenario-unverified",
+      },
+      codex: {
+        identity: "hook-provider-adapter.v1:codex:pre-tool",
+        effectiveSupportGate: "scenario-unverified",
+        expiresAt: "2026-09-21T02:17:08.834Z",
+      },
+      antigravity: {
+        identity: "hook-provider-adapter.v1:antigravity:pre-tool",
+        effectiveSupportGate: "scenario-unverified",
+      },
+      copilot: {
+        identity: "hook-provider-adapter.v1:copilot:pre-tool",
+        effectiveSupportGate: "scenario-unverified",
+      },
+    },
+  },
+  {
+    id: "deny-git-mutations",
+    displayName: "Deny Git mutations",
+    description:
+      "Block native Git commits, publication, and destructive history or cleanup operations.",
+    event: "PreToolUse",
+    matcher: "Bash",
+    scriptFiles: [
+      "run-with-bash.mjs",
+      "hook-launch-runtime.mjs",
+      "deny-git-mutations.sh",
+      ...POLICY_RUNTIME_FILES,
+    ],
+    primaryScript: "deny-git-mutations.sh",
     togglable: true,
     defaultEnabled: true,
     requiresConfirmDialog: true,

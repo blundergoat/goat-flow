@@ -43,7 +43,7 @@ last_reviewed: 2026-09-05
 
 **Context:** A safety hook grows policy categories with different risk profiles and self-test corpora.
 
-**Approach:** Keep one dispatcher and one registry entry, and put each operational decision in its own required policy module rather than another branch in the dispatcher. Destructive shell, secret-path access, and repository writes are distinct user decisions, so they live in `patterns-shell.sh`, `patterns-paths.sh`, and `patterns-writes.sh`, and the self-test installs and exercises all three. Anchors: `workflow/hooks/deny-dangerous.sh` (search: `GOAT_REQUIRED_HOOK_POLICY_FILES`), `src/cli/server/hooks-registry.ts` (search: `one PreToolUse dispatcher`), `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `patterns-writes.sh`).
+**Approach:** Give an independently managed policy its own registry identity and fixed entrypoint while keeping parser and transport code shared. In goat-flow, `deny-git-mutations` owns native Git commit, publication and destructive operations; `deny-dangerous` retains shell, secret and GitHub policy. Both require the complete shared runtime, preserve the routed corpus and declare shared file ownership independently of registration ownership. Repairing a shared file can invalidate both hooks' installation and proof states. Architecture owns this contract; the earlier coverage-loss incident remains in `.goat-flow/learning-loop/footguns/deny-shell.md` (search: `Splitting a monolithic guardrail`). Implementation anchors: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `Parse once per segment`) and `src/cli/server/hooks-registry.ts` (search: `deny-git-mutations`).
 
 ## Pattern: Asymmetric trust - set state from output, clear state from input
 

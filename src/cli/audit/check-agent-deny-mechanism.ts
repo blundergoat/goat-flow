@@ -35,6 +35,8 @@ const LEGACY_DENY_HOOK_FILES = [
 
 const DENY_HOOK_TEMPLATE_FILES = [
   "deny-dangerous.sh",
+  "deny-git-mutations.sh",
+  "deny-dangerous/guard-runtime.sh",
   "deny-dangerous/patterns-shell.sh",
   "deny-dangerous/patterns-paths.sh",
   "deny-dangerous/patterns-writes.sh",
@@ -54,6 +56,17 @@ function checkDenyHookPresent(ctx: AuditContext): AuditFailure | null {
         message: `Missing deny mechanism for ${agentFacts.agent.id}`,
         howToFix:
           "Create a deny hook file or add deny patterns to the agent's settings file.",
+      };
+    }
+    if (
+      agentFacts.agent.hooksDir &&
+      (!agentFacts.hooks.gitDenyExists || !agentFacts.hooks.gitDenyIsRegistered)
+    ) {
+      return {
+        check: "Agent deny mechanism",
+        message: `Missing or unregistered deny-git-mutations policy for ${agentFacts.agent.id}`,
+        howToFix:
+          "Run goat-flow hooks sync, then verify both deny-hook and git-mutations-hook with --trusted-target.",
       };
     }
   }
@@ -338,59 +351,60 @@ function checkHookVersion(ctx: AuditContext): AuditFailure | null {
  */
 function checkHookSelfTest(ctx: AuditContext): AuditFailure | null {
   // Test each included agent against its dispatcher so a shared policy test checks the installed entry point users invoke.
+  const testedDispatchers = new Set<string>();
   for (const agentFacts of ctx.agents) {
-    // An agent without a shell hook directory cannot supply a dispatcher for this test.
-    if (!agentFacts.agent.hooksDir) continue;
-    const denyRelPath = join(
-      ".goat-flow",
-      "hooks",
-      "deny-dangerous",
-      "deny-dangerous-self-test.sh",
-    );
-    const content = ctx.fs.readFile(denyRelPath);
-    // A missing or unreadable self-test provides no runtime verdict; only an installed shell test can be executed.
-    if (content === null) continue;
-    const denyPath = join(ctx.projectPath, denyRelPath);
-    const dispatcherRelPath = join(
-      agentFacts.agent.hooksDir,
-      "deny-dangerous.sh",
-    );
-    const dispatcherPath = join(ctx.projectPath, dispatcherRelPath);
-    // When a dispatcher exists, the shared self-test must exercise that agent's installed entry point instead of its default.
-    const env =
-      ctx.fs.readFile(dispatcherRelPath) === null
-        ? process.env
-        : { ...process.env, GOAT_DENY_DANGEROUS_HOOK: dispatcherPath };
-    try {
-      childProcess.execFileSync("bash", [denyPath, "--self-test=smoke"], {
-        env,
-        stdio: "pipe",
-        timeout: 30000,
-      });
-    } catch (error) {
-      // A user-edited deny policy can fail its self-test; a missing shell or sandbox restriction may stop the test before it runs.
-      // A recorded zero exit means the self-test completed successfully despite the process API's error object.
-      if (commandCompletedSuccessfully(error)) continue;
-      const spawnFailure = spawnFailureFor(
-        error,
-        `deny-dangerous self-test for ${agentFacts.agent.id}`,
+    for (const hookId of ["deny-dangerous", "deny-git-mutations"]) {
+      // An agent without a shell hook directory cannot supply a dispatcher for this test.
+      if (!agentFacts.agent.hooksDir) continue;
+      const denyRelPath = join(
+        ".goat-flow",
+        "hooks",
+        "deny-dangerous",
+        "deny-dangerous-self-test.sh",
       );
-      // Launch failures point the user at their environment instead of claiming that the hook policy itself failed.
-      if (spawnFailure !== null) {
+      const content = ctx.fs.readFile(denyRelPath);
+      // A missing or unreadable self-test provides no runtime verdict; only an installed shell test can be executed.
+      if (content === null) continue;
+      const denyPath = join(ctx.projectPath, denyRelPath);
+      const dispatcherRelPath = join(agentFacts.agent.hooksDir, `${hookId}.sh`);
+      const dispatcherPath = join(ctx.projectPath, dispatcherRelPath);
+      if (testedDispatchers.has(dispatcherPath)) continue;
+      testedDispatchers.add(dispatcherPath);
+      // When a dispatcher exists, the shared self-test must exercise that agent's installed entry point instead of its default.
+      const env =
+        ctx.fs.readFile(dispatcherRelPath) === null
+          ? process.env
+          : { ...process.env, GOAT_DENY_DANGEROUS_HOOK: dispatcherPath };
+      try {
+        childProcess.execFileSync("bash", [denyPath, "--self-test=smoke"], {
+          env,
+          stdio: "pipe",
+          timeout: 30000,
+        });
+      } catch (error) {
+        // A user-edited deny policy can fail its self-test; a missing shell or sandbox restriction may stop the test before it runs.
+        // A recorded zero exit means the self-test completed successfully despite the process API's error object.
+        if (commandCompletedSuccessfully(error)) continue;
+        const spawnFailure = spawnFailureFor(
+          error,
+          `${hookId} self-test for ${agentFacts.agent.id}`,
+        );
+        // Launch failures point the user at their environment instead of claiming that the hook policy itself failed.
+        if (spawnFailure !== null) {
+          return {
+            check: "Agent deny mechanism",
+            message: spawnFailure.message,
+            evidence: evidencePath(denyRelPath),
+            howToFix: spawnFailure.howToFix,
+          };
+        }
         return {
           check: "Agent deny mechanism",
-          message: spawnFailure.message,
+          message: `${hookId} self-test --self-test=smoke failed for ${agentFacts.agent.id}`,
           evidence: evidencePath(denyRelPath),
-          howToFix: spawnFailure.howToFix,
+          howToFix: `Run bash .goat-flow/hooks/${hookId}.sh --self-test=smoke to see which cases fail.`,
         };
       }
-      return {
-        check: "Agent deny mechanism",
-        message: `deny-dangerous-self-test.sh --self-test=smoke failed for ${agentFacts.agent.id}`,
-        evidence: evidencePath(denyRelPath),
-        howToFix:
-          "Run `bash .goat-flow/hooks/deny-dangerous/deny-dangerous-self-test.sh --self-test=smoke` to see which cases fail.",
-      };
     }
   }
   return null;

@@ -240,7 +240,7 @@ const COMMAND_HELP_CATALOG = {
       ["--agent <id>", "Select the agent for hooks verify."],
       [
         "--scenario <name>",
-        "Choose deny-hook, post-turn-hook, gruff-hook, or all.",
+        "Choose deny-hook, git-mutations-hook, post-turn-hook, gruff-hook, or all.",
       ],
       ["--trusted-target", "Allow the selected configured hook to run."],
       ["--format <type>", "Choose text or json output."],

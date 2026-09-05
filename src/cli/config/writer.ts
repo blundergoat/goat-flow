@@ -307,7 +307,12 @@ export function readHookEnabled(
   hookId: string,
   isEnabledByDefault: boolean,
 ): boolean {
-  return readHookConfig(projectPath)[hookId]?.enabled ?? isEnabledByDefault;
+  const hooks = readHookConfig(projectPath);
+  const inheritedDefault =
+    hookId === "deny-git-mutations"
+      ? (hooks["deny-dangerous"]?.enabled ?? true)
+      : isEnabledByDefault;
+  return hooks[hookId]?.enabled ?? inheritedDefault;
 }
 
 /**
@@ -407,6 +412,71 @@ function scanRootLineUsesYamlAlias(
   );
 }
 
+/** Resolve the first Git choice from the legacy policy or the fresh-install default. */
+function initialGitHookChoice(hooks: HookConfigMap): { enabled: boolean } {
+  return { enabled: hooks["deny-dangerous"]?.enabled ?? true };
+}
+
+/** Preserve the existing hook sibling indentation; an empty block uses two spaces. */
+function hookChildIndent(text: string, headerEnd: number): string {
+  const firstChild = text
+    .slice(headerEnd)
+    .split(/\r?\n/u)
+    .find((line) => line.trim() !== "" && !line.trimStart().startsWith("#"));
+  return firstChild?.match(/^( +)\S/u)?.[1] ?? "  ";
+}
+
+/** Render the inherited Git choice, preserving YAML syntax; the fallback adds it to the supplied hook map. */
+function insertInheritedGitHookChoice(
+  text: string,
+  hooks: HookConfigMap,
+): string {
+  const choice = initialGitHookChoice(hooks);
+  const header =
+    /^(?:hooks|"hooks"|'hooks'):[ \t]*((?:&[\w-]+[ \t]*)?)([^\r\n]*)/mu.exec(
+      text,
+    );
+  const entry = `  deny-git-mutations:\n    enabled: ${choice.enabled}`;
+  if (header) {
+    const headerValue = (header[2] ?? "").trim();
+    if (headerValue === "" || headerValue.startsWith("#")) {
+      // Insert one child without resolving aliases or rewriting another hook's grammar.
+      const end = header.index + header[0].length;
+      const indent = hookChildIndent(text, end);
+      const blockEntry = `${indent}deny-git-mutations:\n${indent.repeat(2)}enabled: ${choice.enabled}`;
+      return `${text.slice(0, end)}\n${blockEntry}${text.slice(end)}`;
+    }
+    if (headerValue.startsWith("{")) {
+      const open = header.index + header[0].indexOf("{") + 1;
+      const separator = text.slice(open).trimStart().startsWith("}") ? "" : ",";
+      return `${text.slice(0, open)} deny-git-mutations: { enabled: ${choice.enabled} }${separator}${text.slice(open)}`;
+    }
+    if (/^\*[\w-]+(?:\s+#.*)?$/u.test(headerValue)) {
+      return text.replace(header[0], `hooks:\n  <<: ${header[2]}\n${entry}`);
+    }
+  }
+  hooks["deny-git-mutations"] = choice;
+  return replaceTopLevelHooksBlock(text, renderHooksBlock(hooks));
+}
+
+/**
+ * Persist the initial Git choice before any legacy toggle can change its inheritance.
+ * Existing choices and unrelated YAML syntax survive the migration.
+ * Side effects: writes `.goat-flow/config.yaml` through the existing atomic writer.
+ *
+ * @param projectPath - selected target whose hook choices are migrated in place
+ * @returns nothing; an existing Git choice leaves the config untouched
+ */
+export function migrateGitHookChoice(projectPath: string): void {
+  const text = readConfigText(projectPath);
+  const hooks = readRawHooks(text);
+  if (hooks["deny-git-mutations"] !== undefined) return;
+  const next = insertInheritedGitHookChoice(text, hooks);
+  const path = configPath(projectPath);
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileAtomic(path, next, projectPath);
+}
+
 /**
  * Set one hook's desired enabled state in `.goat-flow/config.yaml`.
  * It writes the file in place, replacing only the hook block so the rest of the user's config, including their comments, survives the toggle.
@@ -423,6 +493,7 @@ export function setHookEnabled(
   const path = configPath(projectPath);
   const text = readConfigText(projectPath);
   const hooks = readRawHooks(text);
+  hooks["deny-git-mutations"] ??= initialGitHookChoice(hooks);
   const currentHook = hooks[hookId];
   const detectedBinaries =
     hookId === "gruff-code-quality" &&

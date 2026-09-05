@@ -49,12 +49,15 @@ import {
   type AgentHookHandlerDescriptor,
 } from "./server/agent-hook-command.js";
 import { getHookSpec } from "./server/hooks-registry.js";
+import { managedPolicyRuntimeIdentity } from "./server/hook-runtime-proof.js";
 
 export type {
   HookProbeExecution,
   HookRuntimeReport,
 } from "./hooks-configured-runtime-evidence.js";
 
+type PolicyScenarioGroup = "deny-hook" | "git-mutations-hook";
+// Both policy registrations retain the same provider deadline.
 const MANAGED_HOOK_IDENTIFIER = HOOK_VERIFICATION_CONTRACTS["deny-hook"].hookId;
 const managedHookTimeoutSeconds = getHookSpec(
   MANAGED_HOOK_IDENTIFIER,
@@ -99,15 +102,17 @@ export interface ManagedDenyHookState {
 export interface HookRuntimeRequest {
   projectPath: string;
   agent: AgentId;
-  scenarioGroup: "deny-hook";
+  scenarioGroup: PolicyScenarioGroup;
   isTargetUntrusted: boolean;
 }
 
 /** Replaceable boundaries keep verdict tests deterministic without spawning hook code. */
 export interface HookRuntimeDependencies {
+  readRuntimeIdentity?: typeof managedPolicyRuntimeIdentity;
   readDenyHookState: (
     projectPath: string,
     agent: AgentId,
+    scenarioGroup: PolicyScenarioGroup,
   ) => ManagedDenyHookState;
   executeProbe: (
     projectPath: string,
@@ -140,12 +145,39 @@ const DENY_HOOK_SCENARIOS: readonly HookProbeScenario[] = [
   },
   {
     id: HOOK_VERIFICATION_CONTRACTS["deny-hook"].requiredScenarioIds[2],
-    label: "Repository push is blocked",
+    label: "GitHub CLI writes are blocked",
+    expected: "blocked",
+    command: "gh pr create --fill",
+  },
+  {
+    id: HOOK_VERIFICATION_CONTRACTS["deny-hook"].requiredScenarioIds[3],
+    label: "Read-only repository status is allowed",
+    expected: "allowed",
+    command: "git status",
+  },
+];
+
+const GIT_HOOK_SCENARIOS: readonly HookProbeScenario[] = [
+  {
+    id: "repository-commit",
+    label: "Git commits are blocked",
+    expected: "blocked",
+    command: "git commit -m probe",
+  },
+  {
+    id: "repository-push",
+    label: "Git publication is blocked",
     expected: "blocked",
     command: "git push origin main",
   },
   {
-    id: HOOK_VERIFICATION_CONTRACTS["deny-hook"].requiredScenarioIds[3],
+    id: "repository-destructive",
+    label: "Destructive Git operations are blocked",
+    expected: "blocked",
+    command: "git reset --hard",
+  },
+  {
+    id: "read-only-control",
     label: "Read-only repository status is allowed",
     expected: "allowed",
     command: "git status",
@@ -156,9 +188,11 @@ const DENY_HOOK_SCENARIOS: readonly HookProbeScenario[] = [
 function readManagedDenyHookState(
   projectPath: string,
   agent: AgentId,
+  scenarioGroup: PolicyScenarioGroup,
 ): ManagedDenyHookState {
+  const hookIdentifier = HOOK_VERIFICATION_CONTRACTS[scenarioGroup].hookId;
   const denyHook = readAllHookStates(projectPath).find(
-    (hook) => hook.id === MANAGED_HOOK_IDENTIFIER,
+    (hook) => hook.id === hookIdentifier,
   );
   // A missing registry row is an internal capability gap, not proof of support.
   if (!denyHook) {
@@ -172,7 +206,7 @@ function readManagedDenyHookState(
     };
   }
   const agentState = denyHook.agents[agent];
-  const denyHookSpec = getHookSpec(MANAGED_HOOK_IDENTIFIER);
+  const denyHookSpec = getHookSpec(hookIdentifier);
   const agentProfile = getAgentProfiles().find(
     (knownAgent) => knownAgent.id === agent,
   );
@@ -554,6 +588,7 @@ function recordScenarioEvidence(
   scriptPath: string | null,
   result: HookRuntimeScenarioResult,
   recordEvidence: HookRuntimeDependencies["recordEvidence"],
+  runtimeIdentity: string | null,
 ): HookRuntimeScenarioResult {
   const appendResult = recordEvidence({
     producer: "hooks-runtime-evidence",
@@ -561,7 +596,8 @@ function recordScenarioEvidence(
     actor: "cli",
     projectRoot: request.projectPath,
     payload: {
-      hook_id: MANAGED_HOOK_IDENTIFIER,
+      hook_id: HOOK_VERIFICATION_CONTRACTS[request.scenarioGroup].hookId,
+      runtime_identity: runtimeIdentity,
       framework_version: AUDIT_VERSION,
       scenario_group: request.scenarioGroup,
       scenario_id: result.id,
@@ -592,6 +628,7 @@ function recordScenarioEvidence(
 }
 
 const DEFAULT_DEPENDENCIES: HookRuntimeDependencies = {
+  readRuntimeIdentity: managedPolicyRuntimeIdentity,
   readDenyHookState: readManagedDenyHookState,
   executeProbe: executeManagedHookProbe,
   executeConfiguredProbe: executeManagedConfiguredHookProbe,
@@ -607,21 +644,25 @@ function selectHookScenarioResults(
   hookState: ManagedDenyHookState,
   dependencies: HookRuntimeDependencies,
 ): HookRuntimeScenarioResult[] {
+  const scenarios =
+    request.scenarioGroup === "deny-hook"
+      ? DENY_HOOK_SCENARIOS
+      : GIT_HOOK_SCENARIOS;
   // Without explicit trusted-target approval, checkout-owned hook code cannot run.
   if (request.isTargetUntrusted) {
-    return DENY_HOOK_SCENARIOS.map((scenario) =>
+    return scenarios.map((scenario) =>
       skippedScenarioResult(scenario, "unsupported", "target-marked-untrusted"),
     );
   }
   // A missing registry entry is an internal error, not an unsupported agent capability.
   if (hookState.reasonCode === "hook-registry-missing") {
-    return DENY_HOOK_SCENARIOS.map((scenario) =>
+    return scenarios.map((scenario) =>
       skippedScenarioResult(scenario, "error", "hook-registry-missing"),
     );
   }
   // Unsupported agents receive explicit skipped results and never start the managed script.
   if (!hookState.isSupported) {
-    return DENY_HOOK_SCENARIOS.map((scenario) =>
+    return scenarios.map((scenario) =>
       skippedScenarioResult(scenario, "unsupported", "agent-hook-unsupported"),
     );
   }
@@ -635,14 +676,14 @@ function selectHookScenarioResults(
       hookState.reasonCode === "hook-disabled"
         ? "hook-disabled"
         : "hook-not-installed";
-    return DENY_HOOK_SCENARIOS.map((scenario) =>
+    return scenarios.map((scenario) =>
       skippedScenarioResult(scenario, "not-configured", notConfiguredReason),
     );
   }
   const managedHookScriptPath = hookState.scriptPath;
   const configuredProbe = dependencies.executeConfiguredProbe;
   // A configured managed script receives only the four fixed inert classifier operands.
-  return DENY_HOOK_SCENARIOS.map((scenario) =>
+  return scenarios.map((scenario) =>
     completedScenarioResult(
       scenario,
       // Production replays the exact registered handler; injected tests retain the direct seam.
@@ -662,6 +703,21 @@ function selectHookScenarioResults(
   );
 }
 
+/** Read a policy revision only after the caller has trusted the selected checkout. */
+function readRequestedRuntimeIdentity(
+  request: HookRuntimeRequest,
+  dependencies: HookRuntimeDependencies,
+): string | null {
+  if (request.isTargetUntrusted) return null;
+  return (
+    dependencies.readRuntimeIdentity?.(
+      request.projectPath,
+      request.agent,
+      HOOK_VERIFICATION_CONTRACTS[request.scenarioGroup].hookId,
+    ) ?? null
+  );
+}
+
 /**
  * Run all fixed deny-hook scenarios and return one complete local-evidence report.
  * Users call this through `hooks verify` when they need checkout-specific policy proof.
@@ -677,12 +733,25 @@ export function verifyManagedDenyHook(
   const hookState = dependencies.readDenyHookState(
     request.projectPath,
     request.agent,
+    request.scenarioGroup,
   );
-  const scenarioResults = selectHookScenarioResults(
+  const beforeIdentity = readRequestedRuntimeIdentity(request, dependencies);
+  let scenarioResults = selectHookScenarioResults(
     request,
     hookState,
     dependencies,
   );
+  const afterIdentity = readRequestedRuntimeIdentity(request, dependencies);
+  const runtimeIdentity =
+    beforeIdentity === afterIdentity ? afterIdentity : null;
+  // A file replacement during replay cannot prove one complete installed runtime.
+  if (dependencies.readRuntimeIdentity && runtimeIdentity === null) {
+    scenarioResults = scenarioResults.map((scenario) =>
+      scenario.verdict === "pass"
+        ? { ...scenario, verdict: "error", reasonCode: "hook-unavailable" }
+        : scenario,
+    );
+  }
 
   // With runtime approval withheld, suppress every target-local side effect, including event writes.
   const recordedScenarios = request.isTargetUntrusted
@@ -693,6 +762,7 @@ export function verifyManagedDenyHook(
           hookState.scriptPath,
           scenario,
           dependencies.recordEvidence,
+          runtimeIdentity,
         ),
       );
   const summary = summarizeScenarioResults(recordedScenarios);
@@ -705,7 +775,7 @@ export function verifyManagedDenyHook(
     command: "hooks.verify",
     projectPath: request.projectPath,
     agent: request.agent,
-    hookId: MANAGED_HOOK_IDENTIFIER,
+    hookId: HOOK_VERIFICATION_CONTRACTS[request.scenarioGroup].hookId,
     scenarioGroup: request.scenarioGroup,
     evidenceLimit:
       "Direct managed hook classifier evidence only; external agent delivery and provider-side hook invocation are not exercised.",

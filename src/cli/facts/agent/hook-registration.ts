@@ -197,6 +197,28 @@ function extractCommandsFromEventConfig(
   return commands;
 }
 
+/** Select a policy by primary entrypoint so a shared dependency or sibling cannot supply registration proof. */
+function normalizePolicyEventConfig(
+  hooks: Record<string, unknown>,
+  event: string | null,
+  hookId: "deny-dangerous" | "deny-git-mutations",
+): HookRegistrationMatch {
+  const paths = extractCommandsFromEventConfig(hooks, event).flatMap(
+    extractHookPathsFromCommand,
+  );
+  const exact = paths.find(
+    (path) => path === `${hookId}.sh` || path.endsWith(`/${hookId}.sh`),
+  );
+  // Retain wrong-path evidence for the existing guard's remediation, without mistaking the Git sibling for it.
+  const path =
+    exact ??
+    (hookId === "deny-dangerous"
+      ? paths.find((candidate) => !candidate.endsWith("deny-git-mutations.sh"))
+      : null) ??
+    null;
+  return { isRegistered: path !== null, path };
+}
+
 /** Normalize one event's hook registration into a simple registered/path pair. */
 function normalizeEventConfig(
   hooks: Record<string, unknown>,
@@ -289,23 +311,27 @@ export function buildHookRegistration(
 export function buildDenyRegistration(
   agent: AgentProfile,
   hookConfigParsed: unknown,
+  hookId: "deny-dangerous" | "deny-git-mutations" = "deny-dangerous",
 ): { denyIsRegistered: boolean; denyRegisteredPath: string | null } {
   if (agent.id === "antigravity") {
     if (!agent.hookEvents) {
       return { denyIsRegistered: false, denyRegisteredPath: null };
     }
     const denyDefinition =
-      readAntigravityHookDefinition(hookConfigParsed, "deny-dangerous") ??
-      readAntigravityHookDefinition(
-        hookConfigParsed,
-        "guard-repository-writes",
-      );
+      readAntigravityHookDefinition(hookConfigParsed, hookId) ??
+      (hookId === "deny-dangerous"
+        ? readAntigravityHookDefinition(
+            hookConfigParsed,
+            "guard-repository-writes",
+          )
+        : null);
     if (!denyDefinition || denyDefinition.enabled === false) {
       return { denyIsRegistered: false, denyRegisteredPath: null };
     }
-    const preTool = normalizeEventConfig(
+    const preTool = normalizePolicyEventConfig(
       denyDefinition,
       agent.hookEvents.preTool,
+      hookId,
     );
     return {
       denyIsRegistered: preTool.isRegistered,
@@ -321,7 +347,11 @@ export function buildDenyRegistration(
   if (!agent.hookEvents) {
     return { denyIsRegistered: false, denyRegisteredPath: null };
   }
-  const preTool = normalizeEventConfig(hooks, agent.hookEvents.preTool);
+  const preTool = normalizePolicyEventConfig(
+    hooks,
+    agent.hookEvents.preTool,
+    hookId,
+  );
   return {
     denyIsRegistered: preTool.isRegistered,
     denyRegisteredPath: preTool.path,

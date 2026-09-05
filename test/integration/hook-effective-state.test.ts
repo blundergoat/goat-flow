@@ -751,6 +751,13 @@ describe("effective hook state", () => {
       scenarioGroup: "deny-hook",
       isTargetUntrusted: false,
     });
+    const gitReport = verifyManagedDenyHook({
+      projectPath,
+      agent: "claude",
+      scenarioGroup: "git-mutations-hook",
+      isTargetUntrusted: false,
+    });
+    assert.equal(gitReport.status, "pass");
     const postTurnReport = verifyManagedConfiguredHook({
       projectPath,
       agent: "claude",
@@ -827,6 +834,59 @@ describe("effective hook state", () => {
       claudeHookState(projectPath, "deny-dangerous").effectiveState,
       { status: "effective", severity: "success" },
     );
+  });
+
+  // ADD INTEGRATION: a shared repair must invalidate both proofs, even when it restores identical release bytes.
+  // Writes disposable runtime and evidence files, then replays both registered hooks with inert inputs.
+  it("requires independent policy proof after a shared runtime repair", () => {
+    const projectPath = createClaudeProject();
+    syncHookStates(projectPath);
+    const verify = (scenarioGroup: "deny-hook" | "git-mutations-hook") =>
+      verifyManagedDenyHook({
+        projectPath,
+        agent: "claude",
+        scenarioGroup,
+        isTargetUntrusted: false,
+      });
+    assert.equal(verify("deny-hook").status, "pass");
+    assert.equal(
+      claudeHookState(projectPath, "deny-git-mutations").effectiveState.status,
+      "scenario-unverified",
+    );
+    assert.equal(verify("git-mutations-hook").status, "pass");
+    for (const hookId of ["deny-dangerous", "deny-git-mutations"]) {
+      assert.equal(
+        claudeHookState(projectPath, hookId).effectiveState.status,
+        "effective",
+      );
+    }
+    const sharedPath = join(
+      projectPath,
+      ".goat-flow/hooks/deny-dangerous/guard-runtime.sh",
+    );
+    writeFileSync(
+      sharedPath,
+      `${readFileSync(sharedPath, "utf-8")}\n# repair fixture\n`,
+    );
+    for (const hookId of ["deny-dangerous", "deny-git-mutations"]) {
+      assert.equal(
+        claudeHookState(projectPath, hookId).effectiveState.status,
+        "installation-stale",
+      );
+    }
+    applyHookState("deny-dangerous", true, projectPath);
+    for (const hookId of ["deny-dangerous", "deny-git-mutations"]) {
+      assert.equal(
+        claudeHookState(projectPath, hookId).effectiveState.status,
+        "scenario-unverified",
+      );
+    }
+    assert.equal(verify("git-mutations-hook").status, "pass");
+    assert.equal(
+      claudeHookState(projectPath, "deny-dangerous").effectiveState.status,
+      "scenario-unverified",
+    );
+    assert.equal(verify("deny-hook").status, "pass");
   });
 
   it(

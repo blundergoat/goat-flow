@@ -33,6 +33,7 @@ Coding agents never run `git commit` or `git push`; both are blocked at the sett
 - `patterns-writes.sh` blocks any push with one pattern match; the old `is_protected_push_token()` helper and force-push checks are gone. Self-tests cover feature-branch, bare, and `-u` pushes, all exit 2.
 - Every settings deny list uses the blanket `Bash(*git push*)` pattern. The settings glob matches anywhere in the command text, so a read-only command that merely quotes the literal is also denied; that bluntness is accepted (ADR-065).
 - `AGENTS.md`, `CLAUDE.md`, `.github/copilot-instructions.md`, and the setup reference state the unconditional prohibition; Never lists say "Push", not "Push to main. Force push." Autonomy Tiers is a provider-delta section under ADR-020, so no parity check or contract test pins this wording; a return of conditional commit language is caught by review, not by a gate.
+- Native Git commit, publication, and destructive-operation policy now runs through the separately registered `deny-git-mutations.sh`; GitHub CLI writes remain with `deny-dangerous.sh`. Both share the parser in `deny-dangerous/guard-runtime.sh` and classifiers in `patterns-writes.sh` (search: `check_git_segment`). The independent toggle is an enforcement choice, never authority for an agent to commit or push.
 - The categorical hook behaviour must not gain an agent approval bypass.
 
 ## Reversibility

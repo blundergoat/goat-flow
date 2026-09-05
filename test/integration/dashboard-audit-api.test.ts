@@ -4,7 +4,7 @@
  * after instruction/hook/lesson edits yet serves cache hits under budget, and (with quality=true)
  * folds in harness concerns without running deny-hook self-tests or changing the shared report.
  */
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import {
   assert,
   assertAuditScope,
@@ -288,6 +288,26 @@ describe("dashboard /api/audit", () => {
       );
       assert.equal((await fetchProfiledAudit(project.root)).body.cached, true);
 
+      // Both new policy inputs must invalidate cached reports even when an edit preserves file size.
+      for (const policyPath of [
+        ".goat-flow/hooks/deny-git-mutations.sh",
+        ".goat-flow/hooks/deny-dangerous/guard-runtime.sh",
+      ]) {
+        await writeProjectFile(project.root, policyPath, "# policy AAAA\n");
+        await fetchProfiledAudit(project.root);
+        assert.equal(
+          (await fetchProfiledAudit(project.root)).body.cached,
+          true,
+        );
+        await writeProjectFile(project.root, policyPath, "# policy BBBB\n");
+        const afterPolicyEdit = await fetchProfiledAudit(project.root);
+        assert.equal(afterPolicyEdit.body.cached, false, policyPath);
+        assert.equal(
+          spanCount(getProfileSpans(afterPolicyEdit.body), "runAuditBatch"),
+          1,
+        );
+      }
+
       await writeProjectFile(
         project.root,
         ".goat-flow/learning-loop/lessons/cache.md",
@@ -496,6 +516,16 @@ describe("dashboard /api/audit", () => {
     const project = await makeDashboardCacheProject();
     const markerPath = join(project.root, "launcher-executed.marker");
     try {
+      for (const hookFile of [
+        "deny-git-mutations.sh",
+        "deny-dangerous/guard-runtime.sh",
+      ]) {
+        await writeProjectFile(
+          project.root,
+          `.goat-flow/hooks/${hookFile}`,
+          readFileSync(join(PROJECT_PATH, "workflow/hooks", hookFile), "utf8"),
+        );
+      }
       // The selected project configures a launcher that records execution
       // before delegating to the managed script. A passive per-agent audit
       // must never run it: the audited checkout's config is untrusted input.
@@ -511,6 +541,10 @@ describe("dashboard /api/audit", () => {
                   {
                     type: "command",
                     command: `touch "${markerPath}"; bash .goat-flow/hooks/deny-dangerous.sh`,
+                  },
+                  {
+                    type: "command",
+                    command: `touch "${markerPath}"; bash .goat-flow/hooks/deny-git-mutations.sh`,
                   },
                 ],
               },

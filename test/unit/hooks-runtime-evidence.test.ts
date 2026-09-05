@@ -282,7 +282,11 @@ describe("hooks runtime evidence", () => {
   });
 
   // Each shared hook has its own explicit offline group so users never run another hook by accident.
-  for (const scenarioGroup of ["post-turn-hook", "gruff-hook"] as const) {
+  for (const scenarioGroup of [
+    "git-mutations-hook",
+    "post-turn-hook",
+    "gruff-hook",
+  ] as const) {
     it(`parses the ${scenarioGroup} configured-command group`, () => {
       const parsed = parseCLIArgs([
         "hooks",
@@ -327,9 +331,10 @@ describe("hooks runtime evidence", () => {
   // The batch selection expands to exactly the shipped groups, so no proof group is invented or dropped.
   // Invariant: BATCH_HOOK_SCENARIOS and HOOK_VERIFICATION_CONTRACTS always describe the same set of groups,
   // so a group added to one and not the other fails here instead of silently never running in a batch.
-  it("expands the all selection to the three fixed scenario groups", () => {
+  it("expands the all selection to the four fixed scenario groups", () => {
     assert.deepEqual(BATCH_HOOK_SCENARIOS, [
       "deny-hook",
+      "git-mutations-hook",
       "post-turn-hook",
       "gruff-hook",
     ]);
@@ -382,7 +387,8 @@ describe("hooks runtime evidence", () => {
    * @returns a report shaped exactly like a real one, with a single counted scenario
    */
   function groupReport(
-    scenarioGroup: "deny-hook" | "post-turn-hook" | "gruff-hook",
+    scenarioGroup:
+      "deny-hook" | "git-mutations-hook" | "post-turn-hook" | "gruff-hook",
     status: "pass" | "fail",
   ) {
     return {
@@ -411,6 +417,7 @@ describe("hooks runtime evidence", () => {
 
     const batch = summarizeHookRuntimeBatch("/tmp/batch-fixture", "claude", [
       groupReport("deny-hook", "pass"),
+      groupReport("git-mutations-hook", "pass"),
       groupReport("post-turn-hook", "fail"),
       groupReport("gruff-hook", "pass"),
     ]);
@@ -420,11 +427,12 @@ describe("hooks runtime evidence", () => {
     assert.equal(batch.status, "fail");
     assert.deepEqual(batch.scenarioGroups, [
       "deny-hook",
+      "git-mutations-hook",
       "post-turn-hook",
       "gruff-hook",
     ]);
     assert.deepEqual(batch.summary, {
-      pass: 2,
+      pass: 3,
       fail: 1,
       unsupported: 0,
       notConfigured: 0,
@@ -433,7 +441,7 @@ describe("hooks runtime evidence", () => {
     // Comparing every contained schema at once names all drifting reports, not just the first.
     assert.deepEqual(
       batch.reports.map((report) => report.schema),
-      Array(3).fill("goat-flow.hook-runtime-report.v1"),
+      Array(4).fill("goat-flow.hook-runtime-report.v1"),
     );
     assert.equal(
       JSON.parse(renderHookRuntimeBatchReportJson(batch)).schema,

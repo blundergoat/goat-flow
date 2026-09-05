@@ -43,6 +43,8 @@
     ".goat-flow/skill-docs/skill-quality-testing/adversarial-framing.md",
     ".goat-flow/skill-docs/skill-quality-testing/deployment.md",
     ".goat-flow/hooks/deny-dangerous.sh",
+    ".goat-flow/hooks/deny-git-mutations.sh",
+    ".goat-flow/hooks/deny-dangerous/guard-runtime.sh",
     ".goat-flow/hooks/gruff-code-quality.sh",
     ".goat-flow/hooks/hook-provider-adapters.mjs",
     ".goat-flow/hooks/hook-launch-runtime.mjs",
@@ -219,6 +221,14 @@
       "ownership": "system-owned",
       "source": "workflow/hooks/deny-dangerous.sh"
     },
+    ".goat-flow/hooks/deny-git-mutations.sh": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/deny-git-mutations.sh"
+    },
+    ".goat-flow/hooks/deny-dangerous/guard-runtime.sh": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/deny-dangerous/guard-runtime.sh"
+    },
     ".goat-flow/hooks/gruff-code-quality.sh": {
       "ownership": "system-owned",
       "source": "workflow/hooks/gruff-code-quality.sh"
@@ -315,7 +325,7 @@
     ".goat-flow/skill-docs/playbooks/": "Committed standalone playbooks for tools and capabilities available to coding agents. Holds README.md as the capability-playbook index, browser-use.md for browser evidence capture, changelog.md for CHANGELOG.md discipline, code-comments.md for inline-comment discipline, gruff-code-quality.md for gruff analyzer triage/fix/verification workflow across gruff-go/gruff-rs/gruff-ts/gruff-php/gruff-py, hook-policy-testing.md for deny-hook policy, mirror, and registration verification, naming-and-placement.md for responsibility-first placement and truthful identifier claims, observability.md for instrumentation discipline, page-capture.md for Playwright page-capture usage tiers, release-notes.md for per-release narrative discipline, skill-playbook-authoring-sync.md for built-in playbook shape, mirroring, discovery, registration, and verification, test-selection.md for value-led test dispositions and placement, writing-agent-facing-instructions.md for authoring agent-read documents (skills, playbooks, shared preamble/conventions, instruction files, hook messages, and README discovery rows), writing-sentence-diagnostics.md for sentence-level reader costs, writing-structure-diagnostics.md for document-level assembly defects, and writing-human-facing-prose.md for the human-read prose correctness router. Loaded on-demand by skills/agents - never composed into a skill at scoring time.",
     ".goat-flow/skill-docs/skill-quality-testing/": "Committed skill-authoring methodology pack. README.md indexes the pack; tdd-iteration.md, adversarial-framing.md, and deployment.md cover skill TDD, pressure-testing, and deployment discipline.",
     ".goat-flow/hooks/": "Committed central hook runtime. Holds the cross-platform launcher, its bounded launch runtime and provider adapters, deny-dangerous.sh, gruff-code-quality.sh, post-turn-safety.sh, and hook-specific policy modules under subdirectories.",
-    ".goat-flow/hooks/deny-dangerous/": "Committed shared hook policy store sourced by each agent's deny-dangerous.sh dispatcher. Holds the destructive-shell, secret-path, repository-write policy modules and the central deny-dangerous self-test.",
+    ".goat-flow/hooks/deny-dangerous/": "Committed parser, response and policy store shared by deny-dangerous.sh and deny-git-mutations.sh. The Git hook owns native Git mutations; deny-dangerous owns destructive shell, secret-path and GitHub CLI policy. The central self-test routes cases to their policy owner.",
     ".goat-flow/plans/": "Local, gitignored-by-design milestone files and plan subdirs. Session-scoped coordination state; not a persistence gap. Only README.md and .gitignore are committed."
   },
 

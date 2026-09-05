@@ -346,6 +346,10 @@ export interface AgentFacts {
     /** True when the deny hook is registered as a pre-tool-use hook in agent settings */
     denyIsRegistered: boolean;
     denyRegisteredPath: string | null;
+    /** Separate native Git guard facts; absent older serialized fields do not prove coverage. */
+    gitDenyExists?: boolean;
+    gitDenyIsRegistered?: boolean;
+    gitDenyRegisteredPath?: string | null;
     postTurnExists: boolean;
     postTurnRegistered: boolean;
     postTurnRegisteredPath: string | null;

@@ -350,7 +350,7 @@ interface ManagedConfiguredHookState {
 export interface ConfiguredHookRuntimeRequest {
   projectPath: string;
   agent: AgentId;
-  scenarioGroup: Exclude<HookScenario, "deny-hook">;
+  scenarioGroup: Exclude<HookScenario, "deny-hook" | "git-mutations-hook">;
   isTargetUntrusted: boolean;
 }
 
@@ -412,14 +412,14 @@ const GRUFF_HOOK_SCENARIOS: readonly ConfiguredHookScenario[] = [
 
 /** Map a configured scenario group to the registry hook whose exact command must run. */
 function hookIdForConfiguredScenario(
-  scenarioGroup: Exclude<HookScenario, "deny-hook">,
+  scenarioGroup: Exclude<HookScenario, "deny-hook" | "git-mutations-hook">,
 ): "post-turn-safety" | "gruff-code-quality" {
   return HOOK_VERIFICATION_CONTRACTS[scenarioGroup].hookId;
 }
 
 /** Return the fixed scenario set selected explicitly by the terminal or CI user. */
 function configuredScenarios(
-  scenarioGroup: Exclude<HookScenario, "deny-hook">,
+  scenarioGroup: Exclude<HookScenario, "deny-hook" | "git-mutations-hook">,
 ): readonly ConfiguredHookScenario[] {
   // Stop verification uses bounded provider context and never invents changed content.
   if (scenarioGroup === "post-turn-hook") return POST_TURN_HOOK_SCENARIOS;
@@ -594,7 +594,7 @@ function classifyGruffProbe(execution: HookProbeExecution): HookProbeObserved {
 
 /** Turn one configured command execution into a metadata-only user scenario result. */
 function completedConfiguredScenarioResult(
-  scenarioGroup: Exclude<HookScenario, "deny-hook">,
+  scenarioGroup: Exclude<HookScenario, "deny-hook" | "git-mutations-hook">,
   scenario: ConfiguredHookScenario,
   execution: HookProbeExecution,
 ): HookRuntimeScenarioResult {

@@ -113,7 +113,7 @@ async function handleHookVerification(options: ParsedCLI): Promise<void> {
 
   /** Run one group through the entrypoint that owns it, keeping the single trust decision. */
   const verifyScenarioGroup = (scenarioGroup: HookScenario) =>
-    scenarioGroup === "deny-hook"
+    scenarioGroup === "deny-hook" || scenarioGroup === "git-mutations-hook"
       ? verifyManagedDenyHook({
           projectPath: options.projectPath,
           agent,

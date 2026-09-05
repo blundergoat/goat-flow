@@ -15,6 +15,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import {
+  migrateGitHookChoice,
   readHookEnabled,
   readHookScanRoots,
   removeTopLevelConfigBlock,
@@ -46,6 +47,54 @@ function writeConventionalGruffPy(root: string): string {
 }
 
 describe("config writer", () => {
+  it("preserves four-space hook siblings when inserting the inherited Git choice", () => {
+    withTempProject((root) => {
+      const path = join(root, ".goat-flow/config.yaml");
+      const siblings =
+        "    deny-dangerous:\n        enabled: false\n    gruff-code-quality:\n        enabled: true\n";
+      writeFileSync(path, `hooks:\n${siblings}ui:\n  theme: dark\n`);
+      migrateGitHookChoice(root);
+      assert.equal(readHookEnabled(root, "deny-git-mutations", true), false);
+      assert.equal(readHookEnabled(root, "deny-dangerous", true), false);
+      assert.equal(readHookEnabled(root, "gruff-code-quality", false), true);
+      const migrated = readFileSync(path, "utf8");
+      assert.ok(migrated.includes(siblings));
+      assert.ok(migrated.endsWith("ui:\n  theme: dark\n"));
+      migrateGitHookChoice(root);
+      assert.equal(readFileSync(path, "utf8"), migrated);
+    });
+  });
+
+  // A legacy disabled guard must not become enabled merely because its policy split.
+  for (const legacyEnabled of [false, true]) {
+    it(`inherits the Git choice once from legacy enabled=${legacyEnabled}`, () => {
+      withTempProject((root) => {
+        const path = join(root, ".goat-flow/config.yaml");
+        writeFileSync(
+          path,
+          `hooks:\n  deny-dangerous:\n    enabled: ${legacyEnabled}\n`,
+        );
+        const before = readFileSync(path, "utf8");
+        assert.equal(
+          readHookEnabled(root, "deny-git-mutations", true),
+          legacyEnabled,
+        );
+        assert.equal(readFileSync(path, "utf8"), before);
+        setHookEnabled(root, "deny-dangerous", !legacyEnabled);
+        assert.equal(
+          readHookEnabled(root, "deny-git-mutations", true),
+          legacyEnabled,
+        );
+        setHookEnabled(root, "deny-git-mutations", !legacyEnabled);
+        setHookEnabled(root, "deny-dangerous", legacyEnabled);
+        assert.equal(
+          readHookEnabled(root, "deny-git-mutations", true),
+          !legacyEnabled,
+        );
+      });
+    });
+  }
+
   it("migrates the old gruff hook id when reading desired state", () => {
     withTempProject((root) => {
       const configPath = join(root, ".goat-flow", "config.yaml");

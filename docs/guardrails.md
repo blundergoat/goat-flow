@@ -1,14 +1,15 @@
 # Guardrails
 
-Guardrails are goat-flow's runtime command-safety hooks. Each agent invokes the central `deny-dangerous.sh` dispatcher, backed by shared policy modules in `.goat-flow/hooks/deny-dangerous/`.
+Guardrails are goat-flow's runtime command-safety hooks. Each agent registers `deny-dangerous.sh` and `deny-git-mutations.sh` separately. Both use the parser and policy modules in `.goat-flow/hooks/deny-dangerous/`.
 
 ## Surfaces
 
 | Surface | Path | Role |
 | --- | --- | --- |
-| Dispatcher | `workflow/hooks/deny-dangerous.sh` | Blocks recursive force deletion, privileged package-manager mutation, secret-path access, `git commit`, `git push`, destructive git flags, and GitHub write operations through `gh` |
-| Policy store | `.goat-flow/hooks/deny-dangerous/` | Shared policy modules sourced by each installed dispatcher |
-| Self-test | `.goat-flow/hooks/deny-dangerous/deny-dangerous-self-test.sh` | Runs smoke/full checks for the dispatcher and is what preflight invokes |
+| Dangerous policy | `workflow/hooks/deny-dangerous.sh` | Blocks recursive force deletion, privileged package-manager mutation, secret-path access, and GitHub write operations through `gh` |
+| Native Git policy | `workflow/hooks/deny-git-mutations.sh` | Blocks `git commit`, publication including `git push`, and destructive history or cleanup operations |
+| Policy store | `.goat-flow/hooks/deny-dangerous/` | Shared `guard-runtime.sh` parser and response implementation plus three policy modules |
+| Self-test | `.goat-flow/hooks/deny-dangerous/deny-dangerous-self-test.sh` | Routes smoke/full cases to each owning policy; preflight invokes both entrypoints |
 
 ## Agent Mapping
 
@@ -23,11 +24,15 @@ Guardrails are goat-flow's runtime command-safety hooks. Each agent invokes the 
 
 - `bash .goat-flow/hooks/deny-dangerous.sh --self-test=smoke`
 - `bash .goat-flow/hooks/deny-dangerous.sh --self-test=full`
+- `bash .goat-flow/hooks/deny-git-mutations.sh --self-test=smoke`
+- `bash .goat-flow/hooks/deny-git-mutations.sh --self-test=full`
 - `goat-flow hooks list --json`
-- `goat-flow hooks sync`
+- After trusting the selected checkout: `goat-flow hooks verify . --agent <id> --scenario all --trusted-target`
+
+Both policies default on. Upgrades preserve an explicit Git-hook choice or inherit the previous dangerous-hook choice once; later toggles are independent. Shared-file repairs can stale both proof records. `hooks sync` repairs installation, and each policy's verification group supplies fresh proof. Agents still never commit or push, regardless of toggle state.
 
 ## Limitations
 
-The dispatcher is a defense-in-depth check for proposed command text. It applies the existing Git and GitHub write rules to commands wrapped in supported `xargs`, `find -exec`, `watch`, shell-c, and common GNU Parallel forms. It also blocks exact credential directories, protected curl file operands, and downloaded bytes passed to executable or unknown pipeline consumers. Known read-only download filters, local data passed to an explicit script file, and literal `vendor` or `target` cleanup remain available.
+The shared parser is a defense-in-depth check for proposed command text. It applies the existing Git and GitHub write rules to commands wrapped in supported `xargs`, `find -exec`, `watch`, shell-c, and common GNU Parallel forms. It also blocks exact credential directories, protected curl file operands, and downloaded bytes passed to executable or unknown pipeline consumers. Known read-only download filters, local data passed to an explicit script file, and literal `vendor` or `target` cleanup remain available.
 
-The hook does not interpret arbitrary shell state or replace runtime permissions. Variable-computed executable names, shell aliases the policy cannot resolve, arbitrary interpreter bodies, and unsupported wrapper grammar may remain outside classification. Keep provider deny lists, filesystem permissions, process sandboxing, and operating-system credentials as the hard boundary. Inspect and run an unclear command manually.
+The hooks do not interpret arbitrary shell state or replace runtime permissions. Variable-computed executable names, shell aliases the policy cannot resolve, arbitrary interpreter bodies, and unsupported wrapper grammar may remain outside classification. Keep provider deny lists, filesystem permissions, process sandboxing, and operating-system credentials as the hard boundary. Inspect and run an unclear command manually.

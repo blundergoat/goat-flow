@@ -303,6 +303,52 @@ function applyExplicitHookToggles(
   return hasHookToggleChanged;
 }
 
+/** Find one row for each policy without accepting duplicate or ambiguous ownership. */
+function copilotPolicyRows(config: Record<string, unknown>): {
+  entries: unknown[];
+  dangerous: number;
+  git: number;
+} | null {
+  if (!isRecord(config.hooks)) return null;
+  const entries = config.hooks.preToolUse;
+  if (!Array.isArray(entries)) return null;
+  const specs = listHookSpecs().filter(
+    (spec) => spec.id === "deny-dangerous" || spec.id === "deny-git-mutations",
+  );
+  const [dangerous = -1, git = -1] = specs.map((spec) => {
+    const matches = entries.flatMap((entry, index) =>
+      commandEntryReferencesSpec(entry, spec) ? [index] : [],
+    );
+    return matches.length === 1 ? (matches[0] ?? -1) : -1;
+  });
+  if (dangerous < 0 || git < 0 || dangerous === git) return null;
+  return { entries, dangerous, git };
+}
+
+/** Align only independent policy rows in the comparison copy; preserve all expected payloads and other entries. */
+function alignCopilotPolicyOrder(
+  fs: ReadonlyFS,
+  config: Record<string, unknown>,
+  agent: AgentProfile,
+): boolean {
+  const installedText = agent.hook_config_file
+    ? fs.readFile(agent.hook_config_file)
+    : null;
+  if (installedText === null) return false;
+  const installedConfig = parseHookConfigJson(installedText);
+  if (installedConfig === null) return false;
+  const expected = copilotPolicyRows(config);
+  const installed = copilotPolicyRows(installedConfig);
+  if (!expected || !installed) return false;
+  if (expected.dangerous < expected.git === installed.dangerous < installed.git)
+    return false;
+  [expected.entries[expected.dangerous], expected.entries[expected.git]] = [
+    expected.entries[expected.git],
+    expected.entries[expected.dangerous],
+  ];
+  return true;
+}
+
 // Adjust the expected Copilot registry for saved toggles so deliberate user choices do not appear as drift.
 function expectedHookConfig(
   fs: ReadonlyFS,
@@ -320,8 +366,9 @@ function expectedHookConfig(
 
   const hasHookConfigChanged = applyExplicitHookToggles(fs, config, agent);
 
-  // Without explicit toggles, the installed file should match the manifest template exactly.
-  if (!hasHookConfigChanged) return template;
+  const hasPolicyOrderChanged = alignCopilotPolicyOrder(fs, config, agent);
+  // Preserve exact template bytes unless a saved choice or independent policy order requires adjustment.
+  if (!hasHookConfigChanged && !hasPolicyOrderChanged) return template;
   return `${JSON.stringify(config, null, 2)}\n`;
 }
 

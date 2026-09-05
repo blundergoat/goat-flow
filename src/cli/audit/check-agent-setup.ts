@@ -37,6 +37,7 @@ function agentArtifactsExist(
   if (
     hooksDir !== undefined &&
     (fs.exists(`${hooksDir}/deny-dangerous.sh`) ||
+      fs.exists(`${hooksDir}/deny-git-mutations.sh`) ||
       fs.exists(`${hooksDir}/guard-repository-writes.sh`))
   ) {
     return true;

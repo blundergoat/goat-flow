@@ -107,6 +107,8 @@ export function stubFS(overrides: Partial<ReadonlyFS> = {}): ReadonlyFS {
     if (
       [
         ".goat-flow/hooks/deny-dangerous.sh",
+        ".goat-flow/hooks/deny-git-mutations.sh",
+        ".goat-flow/hooks/deny-dangerous/guard-runtime.sh",
         ".goat-flow/hooks/post-turn-safety.sh",
       ].includes(path)
     ) {
@@ -256,6 +258,9 @@ export function stubAgentFacts(
       denyBlocksCloudDestructive: false,
       denyIsRegistered: true,
       denyRegisteredPath: ".goat-flow/hooks/deny-dangerous.sh",
+      gitDenyExists: true,
+      gitDenyIsRegistered: true,
+      gitDenyRegisteredPath: ".goat-flow/hooks/deny-git-mutations.sh",
       postTurnExists: false,
       postTurnRegistered: false,
       postTurnRegisteredPath: null,

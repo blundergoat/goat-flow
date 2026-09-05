@@ -23,7 +23,10 @@ import { performance } from "node:perf_hooks";
 import { after, describe, it } from "node:test";
 import { PROFILES } from "../../src/cli/detect/agents.js";
 import { managedHookEnvironment } from "../../src/cli/hooks-configured-runtime-evidence.js";
-import { agentHookSpawnDescriptor } from "../../src/cli/server/agent-hook-command.js";
+import {
+  agentHookSpawnDescriptor,
+  commandEntryReferencesSpec,
+} from "../../src/cli/server/agent-hook-command.js";
 import { writeAgentHookState } from "../../src/cli/server/agent-hook-writer.js";
 import { getHookSpec } from "../../src/cli/server/hooks-registry.js";
 import {
@@ -38,10 +41,12 @@ const SHARED_HOOK_FILES = [
   "hook-launch-runtime.mjs",
   "hook-provider-adapters.mjs",
   "deny-dangerous.sh",
+  "deny-git-mutations.sh",
   "gruff-code-quality.sh",
   "post-turn-safety.sh",
 ];
 const DENY_POLICY_FILES = [
+  "guard-runtime.sh",
   "patterns-shell.sh",
   "patterns-paths.sh",
   "patterns-writes.sh",
@@ -124,6 +129,7 @@ function createRegisteredHostileProject(
   // Register through the public writer so the fixture rows equal user rows.
   for (const hookId of [
     "deny-dangerous",
+    "deny-git-mutations",
     "gruff-code-quality",
     "post-turn-safety",
   ]) {
@@ -145,6 +151,7 @@ function createRegisteredHostileProject(
 function registeredHandler(
   projectRoot: string,
   lifecycleEvent: "PreToolUse" | "PostToolUse" | "Stop",
+  policyHookId = "deny-dangerous",
 ): RegisteredHandler {
   const settings = JSON.parse(
     readFileSync(join(projectRoot, ".claude", "settings.json"), "utf-8"),
@@ -161,7 +168,16 @@ function registeredHandler(
       }>
     >;
   };
-  const registeredHook = settings.hooks[lifecycleEvent]![0]!.hooks[0]!;
+  const policySpec = getHookSpec(policyHookId);
+  assert.ok(policySpec);
+  const registeredHook = settings.hooks[lifecycleEvent]!.flatMap(
+    (group) => group.hooks,
+  ).find(
+    (row) =>
+      lifecycleEvent !== "PreToolUse" ||
+      commandEntryReferencesSpec(row, policySpec),
+  );
+  assert.ok(registeredHook);
   assert.equal(typeof registeredHook.command, "string");
   assert.ok(
     Array.isArray(registeredHook.args),
@@ -314,10 +330,21 @@ describe("hook command spawn matrix", () => {
       "the canary secret must never appear in a handler stream",
     );
 
-    // A repository push is the plan's measured blocked operation.
+    // Native Git publication is enforced by its separately registered handler.
+    const gitHandler = registeredHandler(
+      projectRoot,
+      "PreToolUse",
+      "deny-git-mutations",
+    );
+    const gitAllowed = runRegisteredHandler(
+      projectRoot,
+      gitHandler,
+      denyPayload("git status"),
+    );
+    assert.equal(gitAllowed.status, 0, handlerDiagnostics(gitAllowed));
     const pushBlocked = runRegisteredHandler(
       projectRoot,
-      denyHandler,
+      gitHandler,
       denyPayload("git push origin main"),
     );
     assert.equal(pushBlocked.status, 2, handlerDiagnostics(pushBlocked));
@@ -536,7 +563,7 @@ const DEGRADATION_CASES: DegradationCase[] = [
       rmSync(join(projectRoot, ".goat-flow", "hooks", "run-with-bash.mjs")),
     expectedStatus: 2,
     expectedStderr:
-      /BLOCKED: Policy hook unavailable: managed root incomplete\./u,
+      /BLOCKED: Policy hook unavailable: deny-dangerous\.sh: managed root incomplete\./u,
   },
   {
     name: "corrupt launcher source becomes the policy could-not-start response",
@@ -549,7 +576,7 @@ const DEGRADATION_CASES: DegradationCase[] = [
       ),
     expectedStatus: 2,
     expectedStderr:
-      /BLOCKED: Policy hook unavailable: managed launcher could not start\./u,
+      /BLOCKED: Policy hook unavailable: deny-dangerous\.sh: managed launcher could not start\./u,
   },
   {
     name: "launcher without the runHookWithBash API is an explicit mismatch",
@@ -562,7 +589,7 @@ const DEGRADATION_CASES: DegradationCase[] = [
       ),
     expectedStatus: 2,
     expectedStderr:
-      /BLOCKED: Policy hook unavailable: managed launcher API mismatch\./u,
+      /BLOCKED: Policy hook unavailable: deny-dangerous\.sh: managed launcher API mismatch\./u,
   },
   {
     name: "missing launch runtime breaks the launcher import chain",
@@ -574,7 +601,7 @@ const DEGRADATION_CASES: DegradationCase[] = [
       ),
     expectedStatus: 2,
     expectedStderr:
-      /BLOCKED: Policy hook unavailable: managed launcher could not start\./u,
+      /BLOCKED: Policy hook unavailable: deny-dangerous\.sh: managed launcher could not start\./u,
   },
   {
     name: "corrupt launch runtime breaks the launcher import chain",
@@ -587,7 +614,7 @@ const DEGRADATION_CASES: DegradationCase[] = [
       ),
     expectedStatus: 2,
     expectedStderr:
-      /BLOCKED: Policy hook unavailable: managed launcher could not start\./u,
+      /BLOCKED: Policy hook unavailable: deny-dangerous\.sh: managed launcher could not start\./u,
   },
   {
     name: "missing hook script fails root classification with the policy response",
@@ -597,7 +624,7 @@ const DEGRADATION_CASES: DegradationCase[] = [
       rmSync(join(projectRoot, ".goat-flow", "hooks", "deny-dangerous.sh")),
     expectedStatus: 2,
     expectedStderr:
-      /BLOCKED: Policy hook unavailable: managed root incomplete\./u,
+      /BLOCKED: Policy hook unavailable: deny-dangerous\.sh: managed root incomplete\./u,
   },
   {
     name: "missing provider adapter keeps the Gruff soft-skip contract",

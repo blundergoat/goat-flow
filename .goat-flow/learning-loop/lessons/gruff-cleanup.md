@@ -1,6 +1,6 @@
 ---
 category: gruff-cleanup
-last_reviewed: 2026-09-05
+last_reviewed: 2026-09-06
 ---
 
 **Scope:** Using the Gruff analyzer - reading its findings before acting on them, capturing clean JSON, working around masker blind spots, and not converting a fix request into threshold tuning. What breaks downstream when code is split or renamed is [refactor-fallout.md](refactor-fallout.md); proving comment fixes satisfy the analyzer is [verification-gruff.md](verification-gruff.md).
@@ -19,7 +19,7 @@ last_reviewed: 2026-09-05
 
 **Status:** active | **Created:** 2026-05-30
 **Decision changed:** Re-run the analyzer after each candidate fix and restore the original code when the edit only trades one advisory for another.
-**Incident count:** 2 | **Latest occurrence:** 2026-08-28
+**Incident count:** 3 | **Latest occurrence:** 2026-09-06
 
 **Prevention:** For gruff cleanup, classify the action before editing: FIX code, IGNORE paths, BASELINE accepted debt, or TUNE config. After each edit, compare rule identities as well as the total; a lower or unchanged count can still hide rule substitution. If the user asks to "fix" a rule cluster, do not tune thresholds or other rule numbers unless they explicitly approve that policy change. If a finding cannot be fixed safely in the current scope, stop and say so instead of making the analyzer quieter. Evidence anchors: `.gruff-ts.yaml` (search: `size.file-length`), `CHANGELOG.md` (search: `gruff-ts size cleanup`).
 
@@ -28,6 +28,8 @@ last_reviewed: 2026-09-05
 **Root cause:** I treated "clear the gruff findings" as interchangeable with "make the report stop flagging them." That violated the requested fix intent. Threshold changes are policy changes, not code fixes, and they need explicit approval when the user asks to fix findings.
 
 **Recurrence 2026-08-28:** During M59, I classified six terminal catch returns as removable `waste.useless-return` findings. A measured full scan with gruff-ts 0.5.0 showed that deleting five of them created five `waste.swallowed-catch` findings instead. The edits changed no behavior and only exchanged analyzer labels, so I restored the returns and moved all six candidates to `SKIP-CODEBASE`. Evidence anchors: `.gruff-ts.yaml` (search: `waste.useless-return`), `.gruff-ts.yaml` (search: `waste.swallowed-catch`), and `src/cli/server/hook-managed-installation.ts` (search: `a previous sync already removed`).
+
+**Recurrence 2026-09-06:** The Git-hook split review added four installer YAML cases to a test file near its size limit. Two sizing edits still left `size.file-length` findings, and preflight failed after the focused behavior checks passed. I rewound my test-file edits to the user's staged baseline, then replaced the existing flow-map case with one compact five-case table. The original choice and formatting assertions remain, with repeat-install checks for every case; the four reproduced failures now pass. The scoped analyzer reports `0 error` and `0 warning` without a threshold change. Check the file's applicable size gate before the expensive suite, and rewind after two unsuccessful corrections. Evidence anchors: `test/integration/setup-install-agent-matrix.test.ts` (search: `legacyHookChoices`) and `.gruff-ts.yaml` (search: `size.file-length`).
 
 ## Lesson: Gruff JSON captures must not go through noisy npm output
 
@@ -140,7 +142,7 @@ and `src/cli/server/decoders.ts` (search: `This stays explicit because`).
 **Status:** active | **Created:** 2026-05-31
 **Incident count:** 3 | **Latest occurrence:** 2026-09-05
 
-**Prevention:** For large mechanical rewrites, use `apply_patch` for hand edits or a small checked command with obvious arguments. Keep verification commands short enough that the hook can audit them directly, and split multi-step analysis into separate commands. Evidence anchors: `workflow/hooks/deny-dangerous.sh` (search: `more than 50 chained segments`), `.goat-flow/skill-docs/playbooks/gruff-code-quality.md` (search: `Verification Gate`).
+**Prevention:** For large mechanical rewrites, use `apply_patch` for hand edits or a small checked command with obvious arguments. Keep verification commands short enough that the hook can audit them directly, and split multi-step analysis into separate commands. Evidence anchors: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `more than 50 chained segments`), `.goat-flow/skill-docs/playbooks/gruff-code-quality.md` (search: `Verification Gate`).
 
 **What happened:** During the gruff size cleanup, several long inline Node shell snippets were blocked by the guardrail hook before they could run. The commands were meant to perform mechanical test-file edits, but their length and nested shell shape crossed the safety rules and slowed the cleanup.
 
@@ -148,8 +150,8 @@ and `src/cli/server/decoders.ts` (search: `This stays explicit because`).
 
 **Recurrence 2026-08-24:** While verifying `learn new`, two ripgrep commands put literal backticks inside a double-quoted shell command.
 The deny-dangerous hook correctly treated them as command substitution and blocked both attempts before execution.
-Using a single-quoted plain search pattern let the read-only check run safely. Evidence anchor: `.goat-flow/hooks/deny-dangerous.sh` (search: `Backtick command substitution hides nested execution`).
+Using a single-quoted plain search pattern let the read-only check run safely. Evidence anchor: `.goat-flow/hooks/deny-dangerous/guard-runtime.sh` (search: `Backtick command substitution hides nested execution`).
 
 **Recurrence 2026-09-05:** Clarity-pass commands containing serialized source exceeded the hook's 16 KB command limit and were rejected before writes.
 Smaller patches and verification commands that read the selected files directly completed the work within the enforced limit.
-Evidence anchor: `workflow/hooks/deny-dangerous.sh` (search: `16384`).
+Evidence anchor: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `16384`).

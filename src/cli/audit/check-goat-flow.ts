@@ -68,6 +68,8 @@ const NAMED_PATHS = new Set([
   ".goat-flow/skill-docs/skill-quality-testing/deployment.md",
   ".goat-flow/hooks/",
   ".goat-flow/hooks/deny-dangerous.sh",
+  ".goat-flow/hooks/deny-git-mutations.sh",
+  ".goat-flow/hooks/deny-dangerous/guard-runtime.sh",
   ".goat-flow/hooks/gruff-code-quality.sh",
   ".goat-flow/hooks/post-turn-safety.sh",
   ".goat-flow/hooks/deny-dangerous/",
@@ -667,6 +669,8 @@ const hookVersionCurrent: BuildCheck = {
   scope: "setup",
   provenance: setupSpecProvenance([
     ".goat-flow/hooks/deny-dangerous.sh",
+    "workflow/hooks/deny-git-mutations.sh",
+    "workflow/hooks/deny-dangerous/guard-runtime.sh",
     ".goat-flow/hooks/gruff-code-quality.sh",
     ".goat-flow/hooks/post-turn-safety.sh",
     "src/cli/constants.ts",
@@ -678,6 +682,8 @@ const hookVersionCurrent: BuildCheck = {
     // absent until enabled.
     const hookFiles = [
       { file: "deny-dangerous.sh", required: true },
+      { file: "deny-git-mutations.sh", required: true },
+      { file: "deny-dangerous/guard-runtime.sh", required: true },
       { file: "gruff-code-quality.sh", required: false },
       { file: "post-turn-safety.sh", required: true },
     ];

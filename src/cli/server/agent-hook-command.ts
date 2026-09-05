@@ -95,14 +95,14 @@ function unavailableHookResponseProgram(hookResponseMode: string): string {
   }
   // Antigravity expects a deny decision on stdout and treats the host response as handled.
   if (providerIdentifier === "antigravity") {
-    return "const reportUnavailable=(reason)=>{process.stdout.write(JSON.stringify({decision:'deny',reason:'Policy hook unavailable: '+reason+'.'})+lineBreak);process.exit(0);};";
+    return "const reportUnavailable=(reason)=>{process.stdout.write(JSON.stringify({decision:'deny',reason:'Policy hook unavailable: '+path.basename(hookScriptPath||'unknown hook')+': '+reason+'.'})+lineBreak);process.exit(0);};";
   }
   // Copilot expects its own permission-decision fields when the policy hook cannot start.
   if (providerIdentifier === "copilot") {
-    return "const reportUnavailable=(reason)=>{process.stdout.write(JSON.stringify({permissionDecision:'deny',permissionDecisionReason:'Policy hook unavailable: '+reason+'.'})+lineBreak);process.exit(0);};";
+    return "const reportUnavailable=(reason)=>{process.stdout.write(JSON.stringify({permissionDecision:'deny',permissionDecisionReason:'Policy hook unavailable: '+path.basename(hookScriptPath||'unknown hook')+': '+reason+'.'})+lineBreak);process.exit(0);};";
   }
   // Safety hooks default to a visible fail-closed response instead of allowing an unchecked command.
-  return "const reportUnavailable=(reason)=>{process.stderr.write('BLOCKED: Policy hook unavailable: '+reason+'.'+lineBreak);process.exit(2);};";
+  return "const reportUnavailable=(reason)=>{process.stderr.write('BLOCKED: Policy hook unavailable: '+path.basename(hookScriptPath||'unknown hook')+': '+reason+'.'+lineBreak);process.exit(2);};";
 }
 
 /**
@@ -590,16 +590,8 @@ export function commandEntryReferencesSpec(
   // Non-object JSON cannot represent a runnable hook command.
   if (!isAgentHookJsonObject(entry)) return false;
   const commands = entryCommandSearchText(entry);
-  // Current managed script names identify the registration setup owns.
-  if (
-    spec.scriptFiles.some(
-      (script) =>
-        script !== "run-with-bash.mjs" &&
-        commandsReferenceScriptToken(commands, script),
-    )
-  ) {
-    return true;
-  }
+  // Shared runtime files are dependencies, never ownership of a sibling registration.
+  if (commandsReferenceScriptToken(commands, spec.primaryScript)) return true;
   // Historical deny script names remain managed so upgrades can remove them.
   if (
     spec.id === "deny-dangerous" &&
@@ -800,6 +792,7 @@ export function matcherForAgent(agent: AgentProfile, spec: HookSpec): string {
       "multi_replace_file_content",
     ].join("|");
   }
+  if (spec.id === "deny-git-mutations") return "run_command";
   // Antigravity policy coverage includes both shell and direct file actions users can request.
   if (spec.id === "deny-dangerous") {
     return [

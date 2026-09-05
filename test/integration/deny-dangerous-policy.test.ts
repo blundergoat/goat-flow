@@ -7,19 +7,171 @@
  */
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { cpSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { resolve } from "node:path";
-import { describe, it } from "node:test";
+import { after, describe, it } from "node:test";
 
 const projectRoot = resolve(import.meta.dirname, "..", "..");
-const canonicalDenyHookPath = resolve(
-  projectRoot,
-  "workflow/hooks/deny-dangerous.sh",
-);
+
+// Canonical entrypoints resolve the target's installed policy store. Keep candidate
+// bytes in their own Git root so this suite never repairs the active installation.
+const policyFixture = mkdtempSync(resolve(tmpdir(), "goat-policy-split-"));
+const fixtureHooks = resolve(policyFixture, ".goat-flow/hooks");
+mkdirSync(fixtureHooks, { recursive: true });
+cpSync(resolve(projectRoot, "workflow/hooks"), fixtureHooks, {
+  recursive: true,
+});
+assert.equal(spawnSync("git", ["init", "-q", policyFixture]).status, 0);
+after(() => rmSync(policyFixture, { recursive: true, force: true }));
+type PolicyHook = "deny-dangerous" | "deny-git-mutations";
+
+/** Classify inert command text using only the candidate fixture runtime. */
+function runSplitPolicyCheck(hook: PolicyHook, command: string) {
+  return spawnSync(
+    "bash",
+    [resolve(fixtureHooks, `${hook}.sh`), "--check", command],
+    {
+      cwd: policyFixture,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  );
+}
+
+describe("separate Git policy ownership", () => {
+  for (const command of [
+    "git commit -m x",
+    "git push origin main",
+    "git reset --hard",
+    "find . -exec git push origin main \\;",
+  ]) {
+    it(`routes native Git through its own hook: ${command}`, () => {
+      const owner = runSplitPolicyCheck("deny-git-mutations", command);
+      assert.equal(owner.status, 2, owner.stderr);
+      assert.match(owner.stderr, /Policy repository/u);
+      const sibling = runSplitPolicyCheck("deny-dangerous", command);
+      assert.equal(sibling.status, 0, sibling.stderr);
+      assert.equal(sibling.stderr, "");
+    });
+  }
+  for (const command of [
+    "rm -rf /",
+    "cat .env",
+    "gh api repos/owner/repo -X POST",
+    "gh pr create --fill",
+  ]) {
+    it(`retains non-Git policy in deny-dangerous: ${command}`, () => {
+      const owner = runSplitPolicyCheck("deny-dangerous", command);
+      assert.equal(owner.status, 2, owner.stderr);
+      assert.match(owner.stderr, /Policy (destructive|secret|repository)/u);
+      const sibling = runSplitPolicyCheck("deny-git-mutations", command);
+      assert.equal(sibling.status, 0, sibling.stderr);
+      assert.equal(sibling.stderr, "");
+    });
+  }
+  for (const command of [
+    "git push origin main; cat .env",
+    "git commit -m x; gh pr create --fill",
+    "git reset --hard; rm -rf /",
+  ]) {
+    it(`checks both owners in mixed commands: ${command}`, () => {
+      for (const hook of ["deny-dangerous", "deny-git-mutations"] as const) {
+        const result = runSplitPolicyCheck(hook, command);
+        assert.equal(result.status, 2, result.stderr);
+        assert.match(result.stderr, /Policy (destructive|secret|repository)/u);
+      }
+    });
+  }
+});
+
+// Partial installs occur between individual atomic file replacements. Exercise
+// real entrypoints with absent helpers and the pre-split module API in each transport.
+describe("split policy partial installation", () => {
+  for (const hook of ["deny-dangerous", "deny-git-mutations"] as const) {
+    for (const brokenDependency of [
+      "guard-runtime.sh",
+      "patterns-shell.sh",
+      "patterns-paths.sh",
+      "patterns-writes.sh",
+      "pre-split-api",
+    ]) {
+      it(`${hook} fails closed with ${brokenDependency}`, () => {
+        const root = mkdtempSync(resolve(tmpdir(), "goat-policy-partial-"));
+        const hooks = resolve(root, ".goat-flow/hooks");
+        try {
+          cpSync(resolve(projectRoot, "workflow/hooks"), hooks, {
+            recursive: true,
+          });
+          assert.equal(spawnSync("git", ["init", "-q", root]).status, 0);
+          if (brokenDependency === "pre-split-api") {
+            writeFileSync(
+              resolve(hooks, "deny-dangerous/patterns-writes.sh"),
+              "check_repository_segment() { return 0; }\n",
+            );
+          } else {
+            rmSync(resolve(hooks, "deny-dangerous", brokenDependency));
+          }
+          for (const [payload, decision] of [
+            [
+              {
+                tool_name: "Bash",
+                tool_input: { command: "git push origin main" },
+              },
+              null,
+            ],
+            [
+              {
+                toolName: "bash",
+                toolArgs: { command: "git push origin main" },
+              },
+              "permissionDecision",
+            ],
+            [
+              {
+                toolCall: {
+                  name: "run_command",
+                  args: { CommandLine: "git push origin main" },
+                },
+              },
+              "decision",
+            ],
+          ] as const) {
+            const result = spawnSync("bash", [resolve(hooks, `${hook}.sh`)], {
+              cwd: root,
+              input: JSON.stringify(payload),
+              encoding: "utf8",
+            });
+            assert.equal(
+              result.status,
+              decision === null ? 2 : 0,
+              result.stderr,
+            );
+            if (decision !== null)
+              assert.equal(JSON.parse(result.stdout)[decision], "deny");
+            assert.match(
+              result.stdout + result.stderr,
+              /Policy hook unavailable/u,
+            );
+            assert.ok(
+              (result.stdout + result.stderr).includes(
+                `${hook}.sh cannot start`,
+              ),
+            );
+          }
+        } finally {
+          rmSync(root, { recursive: true, force: true });
+        }
+      });
+    }
+  }
+});
 
 type PolicyBlockCase = {
   name: string;
   userCommand: string;
   expectedPolicyMessage: RegExp;
+  hook?: PolicyHook;
 };
 
 type PolicyAllowCase = {
@@ -31,6 +183,7 @@ type ParserBoundaryCase = {
   name: string;
   userCommand: string;
   expectedStatus: 0 | 2;
+  hook?: PolicyHook;
   expectedPolicyMessage?: RegExp;
 };
 
@@ -43,12 +196,17 @@ type ParserBoundaryCase = {
  */
 function runInertPolicyCheck(
   userCommand: string,
+  hook: PolicyHook = "deny-dangerous",
 ): ReturnType<typeof spawnSync> {
-  return spawnSync("bash", [canonicalDenyHookPath, "--check", userCommand], {
-    cwd: projectRoot,
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"],
-  });
+  return spawnSync(
+    "bash",
+    [resolve(fixtureHooks, `${hook}.sh`), "--check", userCommand],
+    {
+      cwd: policyFixture,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  );
 }
 
 /** Run one provider payload through stdin, optionally with an ambiguous positional command.
@@ -61,11 +219,12 @@ function runInertPolicyCheck(
 function runStdinPolicyCheck(
   stdinCommand: string,
   positionalCommand?: string,
+  hook: PolicyHook = "deny-dangerous",
 ): ReturnType<typeof spawnSync> {
-  const args = [canonicalDenyHookPath];
+  const args = [resolve(fixtureHooks, `${hook}.sh`)];
   if (positionalCommand !== undefined) args.push(positionalCommand);
   return spawnSync("bash", args, {
-    cwd: projectRoot,
+    cwd: policyFixture,
     encoding: "utf8",
     input: JSON.stringify({
       tool_name: "Bash",
@@ -160,6 +319,7 @@ const policyBlockCases: PolicyBlockCase[] = [
   {
     name: "xargs arg file hiding git push",
     userCommand: "xargs -a commands.txt git push origin main",
+    hook: "deny-git-mutations",
     expectedPolicyMessage: /Policy repository/u,
   },
   {
@@ -170,11 +330,13 @@ const policyBlockCases: PolicyBlockCase[] = [
   {
     name: "xargs attached arg file hiding git push",
     userCommand: "xargs --arg-file=commands.txt git push origin main",
+    hook: "deny-git-mutations",
     expectedPolicyMessage: /Policy repository/u,
   },
   {
     name: "find exec hiding git push",
     userCommand: "find . -name x -exec git push origin main ;",
+    hook: "deny-git-mutations",
     expectedPolicyMessage: /Policy repository/u,
   },
   {
@@ -195,16 +357,19 @@ const policyBlockCases: PolicyBlockCase[] = [
   {
     name: "Git alias expanding to send-pack with separated config",
     userCommand: "git -c alias.publish='send-pack origin main' publish",
+    hook: "deny-git-mutations",
     expectedPolicyMessage: /Policy repository/u,
   },
   {
     name: "Git alias expanding to send-pack with attached config",
     userCommand: "git -calias.publish='send-pack origin main' publish",
+    hook: "deny-git-mutations",
     expectedPolicyMessage: /Policy repository/u,
   },
   {
     name: "Git shell alias expanding to send-pack",
     userCommand: "git -c alias.publish='!git send-pack origin main' publish",
+    hook: "deny-git-mutations",
     expectedPolicyMessage: /Policy repository/u,
   },
   // Git's split_cmdline unquotes an alias value before running it, so quote characters left
@@ -213,42 +378,50 @@ const policyBlockCases: PolicyBlockCase[] = [
   {
     name: "Git alias whose value keeps double quotes around push",
     userCommand: `git -c 'alias.publish="push"' publish`,
+    hook: "deny-git-mutations",
     expectedPolicyMessage: /Policy repository/u,
   },
   {
     name: "Git alias whose value keeps single quotes around push",
     userCommand: `git -c "alias.publish='push'" publish`,
+    hook: "deny-git-mutations",
     expectedPolicyMessage: /Policy repository/u,
   },
   {
     name: "Git alias whose value keeps double quotes around send-pack",
     userCommand: `git -c 'alias.publish="send-pack"' publish`,
+    hook: "deny-git-mutations",
     expectedPolicyMessage: /Policy repository/u,
   },
   {
     name: "Git alias whose quoted value carries publication arguments",
     userCommand: `git -c 'alias.publish="push" origin main' publish`,
+    hook: "deny-git-mutations",
     expectedPolicyMessage: /Policy repository/u,
   },
   {
     name: "Git alias whose value quotes only part of the command word",
     userCommand: `git -c 'alias.publish=pu"sh"' publish`,
+    hook: "deny-git-mutations",
     expectedPolicyMessage: /Policy repository/u,
   },
   {
     name: "Git shell alias whose value keeps quotes around the bang form",
     userCommand: `git -c 'alias.publish="!git push origin main"' publish`,
+    hook: "deny-git-mutations",
     expectedPolicyMessage: /Policy repository/u,
   },
   // split_cmdline also removes backslash escapes, so `pu\sh` runs as `push` once Git expands the alias.
   {
     name: "Git alias whose value backslash-escapes a letter of push",
     userCommand: String.raw`git -c 'alias.publish=pu\sh origin main' publish`,
+    hook: "deny-git-mutations",
     expectedPolicyMessage: /Policy repository/u,
   },
   {
     name: "Git alias whose value backslash-escapes send-pack",
     userCommand: String.raw`git -c 'alias.publish=send-p\ack origin main' publish`,
+    hook: "deny-git-mutations",
     expectedPolicyMessage: /Policy repository/u,
   },
   {
@@ -287,25 +460,30 @@ const policyBlockCases: PolicyBlockCase[] = [
     name: `xargs optional ${option} before git push`,
     userCommand: `xargs ${option} git push origin main`,
     expectedPolicyMessage: /Policy repository/u,
+    hook: "deny-git-mutations" as const,
   })),
   {
     name: "watch hiding git push",
     userCommand: "watch -n 1 git push origin main",
+    hook: "deny-git-mutations",
     expectedPolicyMessage: /Policy repository/u,
   },
   {
     name: "parallel hiding git push",
     userCommand: "parallel git push origin main",
+    hook: "deny-git-mutations",
     expectedPolicyMessage: /Policy repository/u,
   },
   {
     name: "parallel halt policy before git push",
     userCommand: "parallel --halt soon,fail=1 git push origin main",
+    hook: "deny-git-mutations",
     expectedPolicyMessage: /Policy repository/u,
   },
   {
     name: "ANSI-C quoted shell command containing git push",
     userCommand: "bash -lc $'git push origin main'",
+    hook: "deny-git-mutations",
     expectedPolicyMessage: /Policy repository/u,
   },
   {
@@ -566,6 +744,7 @@ const parserBoundaryCases: ParserBoundaryCase[] = [
     name: "bare background command exposes its dangerous second segment",
     userCommand: "echo safe & git reset --hard",
     expectedStatus: 2,
+    hook: "deny-git-mutations",
     expectedPolicyMessage: /Policy repository/u,
   },
   {
@@ -729,7 +908,10 @@ describe("deny-dangerous existing policy boundaries", () => {
   // Each reproduced hazard must show the policy block the user would see before execution.
   for (const policyBlockCase of policyBlockCases) {
     it(`blocks ${policyBlockCase.name}`, () => {
-      const policyResult = runInertPolicyCheck(policyBlockCase.userCommand);
+      const policyResult = runInertPolicyCheck(
+        policyBlockCase.userCommand,
+        policyBlockCase.hook,
+      );
 
       // A missing status means the guard never reached the user's proposed command.
       assert.notEqual(policyResult.status, null, policyResult.error?.message);
@@ -741,13 +923,18 @@ describe("deny-dangerous existing policy boundaries", () => {
   // Each safe neighbour protects a normal user workflow from an over-broad repair.
   for (const policyAllowCase of policyAllowCases) {
     it(`allows ${policyAllowCase.name}`, () => {
-      const policyResult = runInertPolicyCheck(policyAllowCase.userCommand);
+      for (const hook of ["deny-dangerous", "deny-git-mutations"] as const) {
+        const policyResult = runInertPolicyCheck(
+          policyAllowCase.userCommand,
+          hook,
+        );
 
-      // A missing status means Bash failed before the user received a policy decision.
-      assert.notEqual(policyResult.status, null, policyResult.error?.message);
-      assert.equal(policyResult.status, 0, policyResult.stderr);
-      // Empty stderr means the user sees no misleading block for this safe command shape.
-      assert.equal(policyResult.stderr, "");
+        // A missing status means Bash failed before the user received a policy decision.
+        assert.notEqual(policyResult.status, null, policyResult.error?.message);
+        assert.equal(policyResult.status, 0, policyResult.stderr);
+        // Empty stderr means the user sees no misleading block for this safe command shape.
+        assert.equal(policyResult.stderr, "");
+      }
     });
   }
 
@@ -773,9 +960,9 @@ describe("deny-dangerous existing policy boundaries", () => {
   it("rejects an unsupported deny self-test value", () => {
     const policyResult = spawnSync(
       "bash",
-      [canonicalDenyHookPath, "--self-test=bogus"],
+      [resolve(fixtureHooks, "deny-dangerous.sh"), "--self-test=bogus"],
       {
-        cwd: projectRoot,
+        cwd: policyFixture,
         encoding: "utf8",
         stdio: ["ignore", "pipe", "pipe"],
       },
@@ -792,7 +979,8 @@ describe("deny-dangerous parser boundaries", () => {
     { name: "direct --check", run: runInertPolicyCheck },
     {
       name: "provider payload",
-      run: (userCommand: string) => runStdinPolicyCheck(userCommand),
+      run: (userCommand: string, hook?: PolicyHook) =>
+        runStdinPolicyCheck(userCommand, undefined, hook),
     },
   ] as const;
 
@@ -800,7 +988,10 @@ describe("deny-dangerous parser boundaries", () => {
     for (const inputMode of inputModes) {
       const verdict = parserCase.expectedStatus === 0 ? "allows" : "blocks";
       it([verdict, parserCase.name, "via", inputMode.name].join(" "), () => {
-        const policyResult = inputMode.run(parserCase.userCommand);
+        const policyResult = inputMode.run(
+          parserCase.userCommand,
+          parserCase.hook,
+        );
 
         assert.notEqual(policyResult.status, null, policyResult.error?.message);
         assert.equal(

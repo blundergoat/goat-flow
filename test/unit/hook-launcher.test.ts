@@ -469,6 +469,58 @@ describe("hook launcher script validation", () => {
     });
   });
 
+  // ADD INTEGRATION: split guards share a launcher; startup and deadline failures must name the selected policy.
+  for (const hookId of ["deny-dangerous", "deny-git-mutations"]) {
+    for (const responseMode of ["policy", "antigravity", "copilot"]) {
+      for (const failure of ["missing script", "deadline"]) {
+        it(`attributes ${failure} to ${hookId} in ${responseMode}`, () => {
+          withTempProject((root) => {
+            const hookDirectory = createManagedHookDirectory(root);
+            if (failure === "deadline") {
+              writeFileSync(
+                join(hookDirectory, `${hookId}.sh`),
+                "#!/usr/bin/env bash\nsleep 5\n",
+              );
+            }
+            const result = runLauncherProcess(
+              root,
+              `.goat-flow/hooks/${hookId}.sh`,
+              responseMode,
+              {
+                ...process.env,
+                GOAT_FLOW_HOOK_LAUNCH_TIMEOUT_MS: "10",
+              },
+            );
+            assert.equal(
+              result.status,
+              responseMode === "policy" ? 2 : 0,
+              launcherDiagnostics(result),
+            );
+            const reason =
+              responseMode === "policy"
+                ? result.stderr
+                : responseMode === "antigravity"
+                  ? JSON.parse(result.stdout).reason
+                  : JSON.parse(result.stdout).permissionDecisionReason;
+            assert.ok(reason.includes(hookId), reason);
+            assert.match(
+              reason,
+              failure === "deadline" ? /exceeded its deadline/u : /not found/u,
+            );
+            if (responseMode !== "policy") {
+              const response = JSON.parse(result.stdout);
+              assert.equal(
+                response.decision ?? response.permissionDecision,
+                "deny",
+              );
+              assert.equal(result.stderr, "");
+            }
+          });
+        });
+      }
+    }
+  }
+
   const invalidPolicyTimeoutValues = ["0", "1.5", "+1", " 1", "invalid"];
   // Separate names show exactly which mistyped user setting stopped being rejected.
   for (const invalidTimeoutMilliseconds of invalidPolicyTimeoutValues) {

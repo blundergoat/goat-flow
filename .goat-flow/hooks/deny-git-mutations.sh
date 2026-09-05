@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC2034,SC2317,SC2319
 # goat-flow-hook-version: 1.17.0
-# deny-dangerous.sh: destructive shell, secret-path and GitHub CLI policy.
+# deny-git-mutations.sh: native Git commit, publication and destructive-operation policy.
 # The entrypoint fixes policy ownership; the target project supplies the shared parser.
 
 set -uo pipefail
-readonly GOAT_GUARD_NAME="deny-dangerous.sh"
-readonly GOAT_GUARD_SCOPE="deny-dangerous"
+readonly GOAT_GUARD_NAME="deny-git-mutations.sh"
+readonly GOAT_GUARD_SCOPE="deny-git-mutations"
 readonly GOAT_GUARD_ENTRYPOINT="${BASH_SOURCE[0]}"
 GOAT_DENY_DANGEROUS_ORIGINAL_ARGS=("$@")
 unset GOAT_ACTIVE_GUARD_SCOPE

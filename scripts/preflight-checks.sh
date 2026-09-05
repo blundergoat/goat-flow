@@ -762,23 +762,29 @@ fi
 
 # ── Deny Policy ──────────────────────────────────────────────────────
 section "Deny Policy"
-if deny_self_test_output=$(bash workflow/hooks/deny-dangerous.sh --self-test=full 2>&1); then
-    pass "workflow/hooks/deny-dangerous.sh ${deny_self_test_output}"
-else
-    fail "workflow/hooks/deny-dangerous.sh full self-test"
-fi
-
-# Also smoke-test installed hooks. Routine audit/preflight only needs the
-# install-safe representative set; the local scripts/ copy runs the full corpus
-# above.
-while IFS= read -r hookdir; do
-    if [[ -f "$hookdir/deny-dangerous.sh" ]]; then
-        if bash "$hookdir/deny-dangerous.sh" --self-test=smoke >/dev/null 2>&1; then
-            pass "$hookdir/deny-dangerous.sh smoke self-test"
-        else
-            fail "$hookdir/deny-dangerous.sh smoke self-test"
-        fi
+for policy_hook in deny-dangerous deny-git-mutations; do
+    if deny_self_test_output=$(bash "workflow/hooks/$policy_hook.sh" --self-test=full 2>&1); then
+        pass "workflow/hooks/$policy_hook.sh ${deny_self_test_output}"
+    else
+        fail "workflow/hooks/$policy_hook.sh full self-test"
     fi
+done
+
+# Shared installed paths need one complete run each, regardless of how many providers own them.
+declare -A checked_policy_hook_paths=()
+while IFS= read -r hookdir; do
+    for policy_hook in deny-dangerous deny-git-mutations; do
+        installed_policy_hook="$hookdir/$policy_hook.sh"
+        [[ -n "${checked_policy_hook_paths[$installed_policy_hook]+present}" ]] && continue
+        checked_policy_hook_paths["$installed_policy_hook"]=1
+        if [[ ! -f "$installed_policy_hook" ]]; then
+            fail "$installed_policy_hook required policy hook missing"
+        elif deny_self_test_output=$(bash "$installed_policy_hook" --self-test=full 2>&1); then
+            pass "$installed_policy_hook ${deny_self_test_output}"
+        else
+            fail "$installed_policy_hook full self-test"
+        fi
+    done
 done < <(manifest_eval hook-dirs)
 
 # Runtime smoke test: pipe a known-blocked command through installed deny hooks
@@ -834,7 +840,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
 
-const guardScripts = ["deny-dangerous.sh"];
+const guardScripts = ["deny-dangerous.sh", "deny-git-mutations.sh"];
 const configs = [
   { agent: "claude", path: ".claude/settings.json", mode: "stderr" },
   { agent: "codex", path: ".codex/hooks.json", mode: "stderr" },
@@ -847,7 +853,7 @@ function emit(status, message) {
 }
 
 function payloadFor(mode, script) {
-  const command = "git push origin main";
+  const command = script === "deny-git-mutations.sh" ? "git push origin main" : "gh pr create --fill";
   if (mode === "copilot-json") {
     return {
       input: JSON.stringify({ toolName: "bash", toolArgs: { command } }),
@@ -988,6 +994,11 @@ for (const config of configs) {
     seen.add(key);
     return true;
   });
+  for (const script of guardScripts) {
+    if (!commands.some((entry) => entry.script === script)) {
+      emit("FAIL", `${config.agent}: required ${script} registration missing in ${config.path}`);
+    }
+  }
   if (commands.length === 0) {
     emit("FAIL", `${config.agent}: no configured guard hook commands found in ${config.path}`);
     continue;

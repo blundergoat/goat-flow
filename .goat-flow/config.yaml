@@ -53,6 +53,8 @@ learning-loop:
 # Togglable goat-flow hook state. Missing entries use registry defaults.
 # Manage with the dashboard Hooks page or `goat-flow hooks <enable|disable|sync>`.
 hooks:
+  deny-git-mutations:
+    enabled: true
   deny-dangerous:
     enabled: true
   gruff-code-quality:

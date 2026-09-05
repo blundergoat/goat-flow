@@ -507,7 +507,7 @@ npx @blundergoat/goat-flow@latest dashboard --dev         # Live reload mode
 
 ### `goat-flow hooks <list|enable|disable|sync|verify> [hook-id] [path]`
 
-Manage the project's registered guardrail, quality, and safety hooks (`deny-dangerous`, `gruff-code-quality`, `post-turn-safety`) in `.goat-flow/config.yaml`, then reconcile the per-agent hook config files so every agent stays in sync.
+Manage the project's registered guardrail, quality, and safety hooks (`deny-dangerous`, `deny-git-mutations`, `gruff-code-quality`, `post-turn-safety`) in `.goat-flow/config.yaml`, then reconcile the per-agent hook config files so every agent stays in sync.
 
 ```bash
 npx @blundergoat/goat-flow@latest hooks list                        # Show desired and per-agent effective state
@@ -516,6 +516,7 @@ npx @blundergoat/goat-flow@latest hooks enable gruff-code-quality   # Enable one
 npx @blundergoat/goat-flow@latest hooks disable gruff-code-quality  # Disable one hook and sync agent configs
 npx @blundergoat/goat-flow@latest hooks sync                         # Re-apply config.yaml hook state to agent configs
 npx @blundergoat/goat-flow@latest hooks verify . --agent claude --scenario deny-hook --trusted-target
+npx @blundergoat/goat-flow@latest hooks verify . --agent claude --scenario git-mutations-hook --trusted-target
 npx @blundergoat/goat-flow@latest hooks verify . --agent claude --scenario post-turn-hook --trusted-target
 npx @blundergoat/goat-flow@latest hooks verify . --agent claude --scenario gruff-hook --trusted-target
 ```
@@ -524,9 +525,11 @@ Goat Flow registers Codex project hooks for the `PreToolUse` deny policy, opt-in
 
 `enable` and `disable` require a `<hook-id>` (exit 2 if omitted). `sync` re-applies the `.goat-flow/config.yaml` hook state to every agent's hook config without changing which hooks are enabled.
 
-`hooks verify` requires `--agent <id>` and an explicit `--scenario`: one group (`deny-hook`, `post-turn-hook`, `gruff-hook`) or `all` to run every group in one command. There is no default; omitting `--scenario` exits `2`. Without `--trusted-target`, it returns explicit `unsupported` results and does not start the selected checkout's hook code. After you confirm the checkout is trusted, `--trusted-target` sends fixed provider-shaped inputs through the exact command generated for the selected agent, with the hook's registered timeout and bounded output capture. Deny probes use 30 seconds; post-turn and Gruff probes use 90 seconds. The deny group checks three blocked commands and one read-only control. The post-turn group checks a valid Stop result and an invalid event. The Gruff group checks unsupported input, a non-source edit, and a source edit whose analyzer result may be clean, advisory, incomplete, or unavailable. The inputs are inspected; their command operands are never executed. The deprecated `--untrusted-target` flag remains an explicit alias for the safe default during the v1.16.x compatibility window.
+`hooks verify` requires `--agent <id>` and an explicit `--scenario`: one group (`deny-hook`, `git-mutations-hook`, `post-turn-hook`, `gruff-hook`) or `all` to run every group in one command. There is no default; omitting `--scenario` exits `2`. Without `--trusted-target`, it returns explicit `unsupported` results and does not start the selected checkout's hook code. After you confirm the checkout is trusted, `--trusted-target` sends fixed provider-shaped inputs through the exact command generated for the selected agent, with the hook's registered timeout and bounded output capture. Deny probes use 30 seconds; post-turn and Gruff probes use 90 seconds. The `deny-hook` group checks secret reads, pipe-to-shell and GitHub writes plus a read-only control. The `git-mutations-hook` group checks native Git commit, push and destructive operations plus its own read-only control. Use `all` for combined policy proof; it runs thirteen scenarios across four groups. The post-turn group checks a valid Stop result and an invalid event. The Gruff group checks unsupported input, a non-source edit, and a source edit whose analyzer result may be clean, advisory, incomplete, or unavailable. The inputs are inspected; their command operands are never executed. The deprecated `--untrusted-target` flag remains an explicit alias for the safe default during the v1.16.x compatibility window.
 
 Each scenario reports `pass`, `fail`, `unsupported`, `not-configured`, or `error`. Only an accepted expected/observed match with a successfully written local event counts as `pass`; any other result makes the report exit 1. JSON uses `goat-flow.hook-runtime-report.v1`. `--scenario all` runs the groups in sequence, keeps every group's result even after one fails, and wraps the unchanged per-group reports in one `goat-flow.hook-runtime-batch.v1` document; the batch exits 1 unless every group passed. Reports and `hook.verify` events carry hook and scenario ids, verdict metadata, evidence level, duration, and reason codes - never input payloads, command operands, findings, stdout, or stderr.
+
+Both policy hooks default on. On upgrade, an explicit new Git-hook choice wins; otherwise its initial choice inherits the previous effective dangerous-hook setting, including disabled state. The choices and registrations are independent after migration. Disabling a policy keeps shared runtime files; repairing them refreshes all affected Hooks rows and invalidates retained policy proof. Old single-hook proof and settings-layer Git denials cannot satisfy the new Git group's proof contract. Agents never commit or push, even when the Git hook is disabled.
 
 Hook self-tests remain the broad internal regression corpus. `hooks verify` proves fixed outcomes at this checkout's exact configured-command boundary. It does not launch the external coding agent, prove provider-side hook delivery or model visibility, promote a live-support state, or change the cost or semantics of `audit --harness`.
 

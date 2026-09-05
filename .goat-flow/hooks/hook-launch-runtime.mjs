@@ -238,9 +238,10 @@ export function prepareProviderLauncherUnavailableDelivery(
   userFacingReason,
   childStandardError = "",
   launcherDurationMs = 0,
+  registeredHookIdentifier,
 ) {
   const managedHookIdentifier =
-    MANAGED_HOOK_IDENTIFIERS_BY_RESPONSE_KIND.get(
+    (launchContract.responseKind === "policy" ? registeredHookIdentifier : undefined) ?? MANAGED_HOOK_IDENTIFIERS_BY_RESPONSE_KIND.get(
       launchContract.responseKind,
     ) ?? "managed-hook";
   const launcherUnavailableResult = {

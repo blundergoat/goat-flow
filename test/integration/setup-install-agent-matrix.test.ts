@@ -190,13 +190,6 @@ const MANAGED_HOOK_DESIRED_STATE_FIXTURES: ManagedHookDesiredStateFixture[] = [
   },
 ];
 
-const DENY_POLICY_PATHS = [
-  ".goat-flow/hooks/deny-dangerous/patterns-shell.sh",
-  ".goat-flow/hooks/deny-dangerous/patterns-paths.sh",
-  ".goat-flow/hooks/deny-dangerous/patterns-writes.sh",
-  ".goat-flow/hooks/deny-dangerous/deny-dangerous-self-test.sh",
-];
-
 /** Expand one matrix row into the project-relative paths apply is allowed to mutate. */
 function expectedManagedHookWritePaths(
   fixture: ManagedHookDesiredStateFixture,
@@ -211,7 +204,6 @@ function expectedManagedHookWritePaths(
     ...denyDangerousHook.scriptFiles.map((fileName) =>
       posix.join(agentProfile.hooksDir ?? "", fileName),
     ),
-    ...DENY_POLICY_PATHS,
     ".goat-flow/.gitignore",
   ];
   const targetPaths: Record<ManagedHookWriteTarget, string[]> = {
@@ -1016,54 +1008,51 @@ describe("cross-agent install smoke matrix", () => {
         join(targetProjectPath, ".goat-flow", "config.yaml"),
         "utf-8",
       ),
-      configText,
+      configText.replace(
+        " }\n",
+        ", deny-git-mutations: { enabled: false } }\n",
+      ),
     );
   });
 
-  it("adds a missing managed hook to a flow-style hooks mapping without corrupting YAML", () => {
-    const targetProjectPath = makeTempProject();
-    const claudeProfile = supportedAgentProfiles.find(
-      (profile) => profile.id === "claude",
-    );
-    assert.ok(claudeProfile?.hookConfigFile);
-    const configText =
-      'hooks: { "deny-dangerous": { enabled: false }, "gruff-code-quality": { enabled: true } }\n';
-    mkdirSync(join(targetProjectPath, ".goat-flow"), { recursive: true });
-    writeFileSync(
-      join(targetProjectPath, ".goat-flow", "config.yaml"),
-      configText,
-    );
-
-    const installResult = runInstaller(
-      targetProjectPath,
-      "--agent",
-      claudeProfile.id,
-    );
-
-    assert.equal(installResult.status, 0, installResult.stderr);
-    const mutatedText = readFileSync(
-      join(targetProjectPath, ".goat-flow", "config.yaml"),
-      "utf-8",
-    );
-    const parsedConfig = load(mutatedText) as {
-      hooks: Record<string, { enabled: boolean }>;
-    };
-    assert.ok(parsedConfig !== null && typeof parsedConfig === "object");
-    assert.equal(parsedConfig.hooks["post-turn-safety"].enabled, true);
-    assert.equal(parsedConfig.hooks["deny-dangerous"].enabled, false);
-    assert.equal(parsedConfig.hooks["gruff-code-quality"].enabled, true);
-    assert.equal(
-      mutatedText.includes('"deny-dangerous": { enabled: false }'),
-      true,
-      "explicit user hook choices must survive byte-for-byte",
-    );
-    assert.equal(
-      mutatedText.split("\n").length,
-      configText.split("\n").length,
-      "a flow-style mapping must converge inside its own line",
-    );
-    assert.equal(mutatedText.endsWith("\n"), true);
-  });
+  // Preserve serialized choices while adding the Git policy in every reproduced YAML form.
+  const legacyHookChoices =
+    '"deny-dangerous": { enabled: false }, "gruff-code-quality": { enabled: true }';
+  for (const [shape, config] of Object.entries({
+    "plain flow": `hooks: { ${legacyHookChoices} }\n`,
+    "anchored flow": `hooks: &policy { ${legacyHookChoices} }\ncopy: *policy\n`,
+    alias: `defaults: &policy { ${legacyHookChoices} }\nhooks: *policy # retain defaults\n`,
+    "trailing comma": `hooks: { ${legacyHookChoices}, }\n`,
+    "multiline flow": `hooks: {\n  ${legacyHookChoices}\n}\n`,
+  })) {
+    it(`preserves ${shape} hook choices during the Git split and repeated installation`, () => {
+      const root = makeTempProject();
+      const path = join(root, ".goat-flow/config.yaml");
+      mkdirSync(dirname(path), { recursive: true });
+      writeFileSync(path, config);
+      const original = load(config) as Record<string, object>;
+      const first = runInstaller(root, "--agent", "claude");
+      assert.equal(first.status, 0, first.stderr);
+      const migrated = readFileSync(path, "utf8");
+      const parsed = load(migrated) as Record<string, object>;
+      assert.deepEqual(parsed.hooks, {
+        "post-turn-safety": { enabled: true },
+        ...original.hooks,
+        "deny-git-mutations": { enabled: false },
+      });
+      if (shape === "alias")
+        assert.deepEqual(parsed.defaults, original.defaults);
+      if (shape === "anchored flow")
+        assert.deepEqual(parsed.copy, parsed.hooks);
+      assert.ok(migrated.includes(legacyHookChoices));
+      assert.ok(migrated.endsWith("\n"));
+      if (shape !== "alias")
+        assert.equal(migrated.split("\n").length, config.split("\n").length);
+      const second = runInstaller(root, "--agent", "claude");
+      assert.equal(second.status, 0, second.stderr);
+      assert.equal(readFileSync(path, "utf8"), migrated);
+    });
+  }
 
   it("migrates a legacy disabled guard before reconciling registration", () => {
     const targetProjectPath = makeTempProject();
