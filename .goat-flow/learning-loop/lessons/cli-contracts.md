@@ -20,6 +20,10 @@ last_reviewed: 2026-09-01
 ## Lesson: New subcommands need parser headroom before the first GREEN refactor
 
 **Status:** active | **Created:** 2026-07-13
+**Decision changed:** Measure whole-file ESLint and gruff immediately after the first parser GREEN, and pay for new branches by removing duplicate parsing rather than adding a late helper alone.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+**Incident count:** 5 | **Latest occurrence:** 2026-09-01
 
 **Prevention:**
 1. Before extending a shared parser or dispatcher, measure its line and complexity headroom; near-threshold files need an extraction in the initial GREEN design.
@@ -33,17 +37,14 @@ last_reviewed: 2026-09-01
 
 **Fix:** Extract lightweight positional/flag rules into `src/cli/skill-command-parser.ts` (search: `parseSkillPositionals`), keep doctor runtime imports behind `src/cli/cli-handlers.ts` (search: `handleSkillCommand`), and split collection decisions inside `src/cli/skill-doctor.ts` (search: `inspectFrontmatterFields`). Whole-file ESLint, typecheck, and targeted gruff then passed without suppressions or threshold changes.
 
-**Recurrence update (2026-07-18):** M02 informational-flag behavior reached 61/61 focused tests and typecheck exited 0 before whole-file ESLint rejected `parseCLIArgs` at complexity 12. Moving the branch into a helper fixed complexity, but targeted gruff then exposed growth beyond the already-marginal file-length threshold. Rewinding duplicate namespace parsing brought `src/cli/cli-parser.ts` (search: `selectCommandPositionals`) to zero targeted gruff findings without a suppression or new module.
+**Recurrence 2026-07-18:** M02 informational-flag behavior reached 61/61 focused tests and typecheck exited 0 before whole-file ESLint rejected `parseCLIArgs` at complexity 12. Moving the branch into a helper fixed complexity, but targeted gruff then exposed growth beyond the already-marginal file-length threshold. Rewinding duplicate namespace parsing brought `src/cli/cli-parser.ts` (search: `selectCommandPositionals`) to zero targeted gruff findings without a suppression or new module.
 
-**Recurrence update (2026-07-29):** `plans check` plus a comment pass pushed `cli-handlers.ts` to 751 then `plans-export.ts` to 753 - moving code re-trips the length gate in the destination. Extracting the whole effort-notation concern into `src/cli/plans-effort.ts` (search: `Effort-estimate notation parser`) with a nearby test cleared both; single-function shuffles only relocate the overflow.
+**Recurrence 2026-07-29:** `plans check` plus a comment pass pushed `cli-handlers.ts` to 751 then `plans-export.ts` to 753 - moving code re-trips the length gate in the destination. Extracting the whole effort-notation concern into `src/cli/plans-effort.ts` (search: `Effort-estimate notation parser`) with a nearby test cleared both; single-function shuffles only relocate the overflow.
 
-**Recurrence update (2026-08-07):** Tightening Timing Receipt stamp validation passed 116 focused tests and typecheck before whole-file ESLint rejected `parseStamp` at complexity 11. The first helper extraction then made preflight report five new file-length warnings. Deriving canonical UTC from the epoch inside `parseStamp`, folding regressions into existing test cases, and restoring the accepted `plans-time.ts` size cleared targeted Gruff without weakening the invalid-calendar or rendered-heading checks.
+**Recurrence 2026-08-07:** Tightening Timing Receipt stamp validation passed 116 focused tests and typecheck before whole-file ESLint rejected `parseStamp` at complexity 11. The first helper extraction then made preflight report five new file-length warnings. Deriving canonical UTC from the epoch inside `parseStamp`, folding regressions into existing test cases, and restoring the accepted `plans-time.ts` size cleared targeted Gruff without weakening the invalid-calendar or rendered-heading checks.
 
 **Recurrence 2026-09-01:** Exact playbook-inventory regressions passed before full preflight rejected `driftSkillPlaybookInventory` at complexity 11.
 Extracting problem rendering into `describePlaybookInventoryProblems` restored focused ESLint without weakening the exact-set cases.
-
-**Decision changed:** Measure whole-file ESLint and gruff immediately after the first parser GREEN, and pay for new branches by removing duplicate parsing rather than adding a late helper alone. | **Trigger phase:** ACT | **Incident count:** 5 | **Latest occurrence:** 2026-09-01
-**Caught at:** VERIFY
 
 ---
 
@@ -80,7 +81,7 @@ Passing explicit invocation-shape evidence from the CLI entry point restored glo
 Evidence: `src/cli/cli-parser.ts` (search: `GLOBAL_INFORMATIONAL_FLAGS`), `src/cli/cli.ts` (search: `requestedHelpCommand`), and
 `test/integration/cli-help.test.ts` (search: `shows exactly four executable examples`).
 
-**Second recurrence update (2026-08-22):** Shared contextual help kept the `review` usage, subcommand, options, and examples.
+**Recurrence 2026-08-22 (exit-code guidance):** Shared contextual help kept the `review` usage, subcommand, options, and examples.
 It dropped the command's exit-code guidance.
 The generic topic test passed because it checked shared sections; the existing review test caught the missing contract during the full suite.
 When moving bespoke help into shared metadata, preserve command-specific operating details.

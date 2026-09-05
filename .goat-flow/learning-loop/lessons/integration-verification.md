@@ -44,7 +44,7 @@ last_reviewed: 2026-08-28
 
 **Root cause:** The dashboard server delegated path handling to downstream helpers and implicitly trusted them to reject bad inputs. That made the contract look healthy in happy-path tests while a false-success path remained live. The original tests asserted status enums and endpoint availability, but not that invalid inputs failed loudly.
 
-**Fix:** Added a shared `requireProjectDirectory()` guard in `src/cli/server/dashboard.ts` and used it before audit, setup, critique, and stack-detection work. Expanded `test/integration/dashboard-server.test.ts` to cover invalid audit and browse paths, plus stronger JSON/content-shape assertions across the API.
+**Fix:** A shared path guard now runs at the HTTP boundary before audit, setup, critique, and stack-detection work, and the integration suite covers invalid audit and browse paths alongside JSON and content-shape assertions. The guard was introduced as `requireProjectDirectory()` in the then-monolithic dashboard server; after the server split it lives in `src/cli/server/local-paths.ts` (search: `export function validateProjectPath`), so cite that symbol rather than the original name.
 
 ---
 

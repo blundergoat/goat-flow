@@ -3,6 +3,7 @@ category: filesystem-io
 last_reviewed: 2026-08-23
 ---
 
+**Scope:** Reading and writing files from agent code - byte-mode versus codepoint replacement, non-fatal IO contracts, and typing a wrapper over an overloaded Node API. Fixtures that create the files a test asserts are [test-fixtures.md](test-fixtures.md).
 ## Lesson: UTF-8 punctuation sweeps need post-replacement grep
 
 **Status:** active | **Created:** 2026-05-23

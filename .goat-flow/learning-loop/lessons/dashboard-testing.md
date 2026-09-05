@@ -1,96 +1,76 @@
 ---
 category: dashboard-testing
-last_reviewed: 2026-09-03
+last_reviewed: 2026-09-05
 ---
 
-**Scope:** Testing the dashboard as a built, served application - stale dist copies, servers needing a restart after template edits, Knip registration for classic scripts, route-scoped verification, and performance probes that need the real shell. Asserting against source and VM-loaded helpers is [dashboard-unit-tests.md](dashboard-unit-tests.md).
-
-## Lesson: Prove hook capability before marking an agent unsupported
-
-**Status:** active | **Created:** 2026-05-26
-**Decision changed:** Treat provider input, command execution, result delivery, and model visibility as separate support gates.
-**Trigger phase:** VERIFY
-**Incident count:** 9 | **Latest occurrence:** 2026-09-03
-
-**Prevention:** Verify each hook layer separately before choosing a support label. A payload fixture proves input extraction; an installed script proves local availability; neither proves the host returned feedback to the model. Keep provider-specific expectations explicit and use the first causal gap for the UI state and repair guidance. `test/integration/gruff-code-quality-smoke.test.ts` (search: `runs for Antigravity file-tool payloads without a file path`) remains input-path proof only.
-
-**What happened:** The Hooks dashboard first used `not supported`, then `unavailable`, for Antigravity Gruff before the local command path had been tested. Antigravity had project-local config, file-tool matchers, and a changed-file fallback, so the agent-wide label was too broad. That evidence proved local command feasibility, not model-visible Gruff feedback.
-
-**Root cause:** I first collapsed missing payload evidence into no hook capability, then collapsed local input handling into delivered feedback. Both shortcuts let one layer stand in for the entire effective-state chain.
-
-**Incident ledger:**
-
-- **Recurrence 2026-07-13:** A four-runner fixture incorrectly asserted hard secret-file protection for every agent, and a source-less `hard` row survived dashboard decoding. Per-runner expectations and source-required rendering fixed both layer collapses. Evidence anchors: `test/unit/enforcement-capability.test.ts` (search: `assertSecretFileStatusForAgent`), `src/cli/audit/enforcement.ts` (search: `secretFileReadCapability`), and `src/dashboard/dashboard-readers.ts` (search: `hasVisibleEvidence`).
-- **Recurrence 2026-08-10:** A registrar test treated Antigravity's runnable PostToolUse command as usable Gruff support even though its output could not reach the model. The corrected state is unregistered and `result-undelivered`. Evidence anchors: `src/cli/server/hooks-registry.ts` (search: `cannot deliver Gruff feedback to the active model`), `src/cli/server/hook-registrar.ts` (search: `doesProviderExclusionOwnState`), and `test/unit/hook-registrar-surfaces.test.ts` (search: `keeps gruff-code-quality unregistered for Antigravity without result delivery`).
-- **Recurrence 2026-08-10:** Fresh Codex canaries used a nonexistent final status and left an unsupported-provider fixture naming Codex. Typecheck and the focused suite restored the accepted gate and moved the unsupported assertion to Antigravity. Evidence anchors: `src/cli/server/hooks-registry.ts` (search: `hook-provider-adapter.v1:codex:post-tool`) and `test/integration/hook-effective-state.test.ts` (search: `antigravityState`).
-- **Recurrence 2026-08-10:** The Hooks-view test required a Codex exclusion after live proof removed the last one. The assertion now covers the current Antigravity and Copilot exclusions with provider-named reasons. Evidence anchors: `test/unit/dashboard-hooks-view.test.ts` (search: `keeps current provider exclusions paired with reasons`) and `src/cli/server/hooks-registry.ts` (search: `unsupportedAgents`).
-- **Recurrence 2026-08-10:** A fresh-install test expected Codex to omit Stop after live provider proof enabled it. The corrected test checks the installed event, script, timeout, and result protocol. Evidence anchors: `test/integration/setup-install.test.ts` (search: `Fresh Codex users receive the live-proven Stop feedback path`) and `src/cli/server/hooks-registry.ts` (search: `hook-provider-adapter.v1:codex:turn-stop`).
-- **Recurrence 2026-08-22:** A Windows registration override invalidated earlier Gruff and Stop evidence. One disposable session skipped project hooks; a trusted-project session delivered PreToolUse but no Gruff or Stop result, so registration stayed separate from provider proof. Evidence anchors: `src/cli/server/hooks-registry.ts` (search: `effectiveSupportGate: "provider-capture-stale"`), `test/integration/hook-effective-state.test.ts` (search: `replays Codex Stop results without upgrading stale provider proof`), and `workflow/hooks/README.md` (search: `initial disposable Codex CLI 0.149.0`).
-- **Recurrence 2026-08-27:** A bypass-trust capture could not renew a trusted-provider gate. A trusted Codex CLI 0.149.1 run then proved only PostToolUse, so Stop stayed stale. Evidence anchors: `src/cli/server/hooks-registry.ts` (search: `2026-09-25T20:17:22.830Z`), `test/integration/hook-effective-state.test.ts` (search: `expires exact Codex proof while keeping uncaptured Stop stale`), and `workflow/hooks/README.md` (search: `without the bypass flag`).
-- **Recurrence 2026-09-03:** An approved Codex CLI 0.152.0 fixture exited 0 without proving an event. Direct classifier output made PreToolUse attribution ambiguous, JSONL exposed no PostToolUse event, and Stop neither continued nor changed its marker fixture. No expiry moved. Future captures must separate tool output from hook output and require attributable trust, payload, result-delivery, model-visibility, and continuation evidence. Evidence anchors: `workflow/hooks/README.md` (search: `An approved Codex CLI 0.152.0 capture`) and `src/cli/server/hooks-registry.ts` (search: `effectiveSupportGate: "provider-capture-stale"`).
-
----
+**Scope:** Testing the dashboard as a built, served application - stale dist copies, servers needing a restart after template edits, Knip registration for classic scripts, route-scoped verification, and performance probes that need the real shell. Asserting against source and VM-loaded helpers is [dashboard-unit-tests.md](dashboard-unit-tests.md); proving a provider actually delivers hook feedback is [hook-testing.md](hook-testing.md).
 
 ## Lesson: Dashboard release QA should avoid real agent runners unless runner behavior is the target
 
 **Status:** active | **Created:** 2026-05-10
 
-**Prevention:** For manual dashboard page/modal sweeps, do not click runner launch buttons unless terminal runner behavior is the explicit target. Prefer browser-use state checks of the empty Workspace, `/api/terminal/sessions`, or a non-agent test harness. If the max-session modal needs coverage, trigger Alpine state via browser-use Python/CDP instead of starting ten runner sessions. When terminal launch is in scope, snapshot `git status --short` before and after, then close the session immediately. Evidence anchors: `src/dashboard/views/workspace.html` (search: `launchInTerminal('', activeRunner`), `src/dashboard/dashboard-terminal-runtime.ts` (search: `async function dashboardLaunchInTerminal`).
+**Prevention:** For manual dashboard page and modal sweeps, do not click runner launch buttons unless terminal runner behaviour is the explicit target; prefer browser-use state checks of the empty Workspace, `/api/terminal/sessions`, or a non-agent harness. Trigger Alpine state through browser-use Python or CDP instead of starting ten runner sessions for the max-session modal. When terminal launch is in scope, snapshot `git status --short` before and after, then close the session immediately. Evidence anchors: `src/dashboard/views/workspace.html` (search: `launchInTerminal('', activeRunner`), `src/dashboard/dashboard-terminal-runtime.ts` (search: `async function dashboardLaunchInTerminal`).
 
-**What happened:** During v1.6.0 browser-use manual dashboard QA, clicking Workspace `Open terminal` launched a real Claude Code session in the selected project. Before cleanup, `git status --short` showed an unexpected tracked diff in `docs/dashboard.md` adding a temporary `### Skills` section that was not part of the QA request; the diff was removed to restore the read-only testing scope.
+**What happened:** During v1.6.0 browser-use manual QA, clicking Workspace `Open terminal` launched a real Claude Code session in the selected project; before cleanup `git status --short` showed a tracked diff in `docs/dashboard.md` adding a temporary `### Skills` section that was not part of the QA request.
 
-**Root cause:** I treated the terminal launch as a harmless UI smoke, but the dashboard terminal starts a real agent process in the selected project. For release QA that only needs Workspace layout and session controls, a real runner can attach to existing agent state and mutate the repository.
+**Root cause:** The terminal launch was treated as a harmless UI smoke, but the dashboard terminal starts a real agent process that can attach to existing agent state and mutate the repository.
 
 ---
 
 ## Lesson: Slow verification can expose unrelated dashboard doc drift
 
 **Status:** active | **Created:** 2026-05-09
+**Incident count:** 4 | **Latest occurrence:** 2026-05-18
 
-**Prevention:** When `npm run test:slow` or preflight fails during unrelated verification, separate task-local regressions from repo-wide drift before changing code. For dashboard view drift, compare `workflow/manifest.json` (search: `dashboard_views`) against `.goat-flow/architecture.md` (search: `views for`, `Page views`) and rerun both `bash scripts/preflight-checks.sh` and `npm run test:slow` after the doc correction.
+**Prevention:** When `npm run test:slow` or preflight fails during unrelated verification, separate task-local regressions from repo-wide drift before changing code. For dashboard view drift, compare `workflow/manifest.json` (search: `dashboard_views`) against `.goat-flow/architecture.md` (search: `Page views`), then rerun both `bash scripts/preflight-checks.sh` and `npm run test:slow` after the doc correction.
 
-**What happened:** While double-checking an unrelated Codex config fix, `npm run test:slow` failed in `checkDrift: installer round-trip fixture` because the temp repo's preflight reported `Dashboard view names drift between manifest and architecture prose`. The Codex fix was clean; the blocker was stale `.goat-flow/architecture.md` prose missing the `skill` dashboard view in both required snippets.
+**What happened:** While double-checking an unrelated Codex config fix, `npm run test:slow` failed in `checkDrift: installer round-trip fixture` because the temp repo's preflight reported `Dashboard view names drift between manifest and architecture prose`; the Codex fix was clean and the blocker was stale architecture prose missing the `skill` view in both required snippets.
 
-**2026-05-10 recurrence:** Manual v1.6.0 CLI release smoke hit the same class through `node dist/cli/cli.js audit . --check-content --format text`: `Cold-Path Content Lint` failed because `docs/dashboard.md` listed dashboard headings without the manifest-backed `skills` view. Adding the missing `### Skills` section changed the check to `Cold-Path Content Lint: PASS (0 warning(s), 9 info, 177 file(s) scanned)`.
+**Root cause:** The broad slow suite was treated as a final confirmation step, but it also runs repo-wide cold-path truth checks through `scripts/preflight-checks.sh`, which surface committed doc drift focused tests never touch.
 
-**2026-05-15 recurrence:** During M00 side-menu execution, the focused dashboard route test failed before reaching `/api/tasks` because `validateManifest` reported `facts.dashboard_views drift` after the then-current tasks view and a `coming-soon` view (since removed in 1.13.0) were added. The fix was to add both view names to `workflow/manifest.json` and update the two dashboard view lists in `.goat-flow/architecture.md` before rerunning the route slice. The tasks view route was later renamed to `src/dashboard/views/plans.html`.
-
-**2026-05-18 recurrence:** During the v1.7.0 version bump, `node --import tsx src/cli/cli.ts audit . --check-drift --check-content --format json` failed after the scripted version surfaces were already consistent. The remaining warnings were cold-path doc drift around the manifest-backed `coming-soon` view (its `Coming Soon Destinations` block, since removed in 1.13.0) and `docs/audit-and-quality.md` (search: `Verification:           PASS (4/4)`) not being updated after the Verification harness concern grew to 4 checks. The fix was to align both doc claims, then rerun the content audit.
-
-**Root cause:** I treated the broad slow suite as a final confirmation step, but it also runs repo-wide cold-path truth checks through `scripts/preflight-checks.sh`. Those checks can surface unrelated committed dashboard doc drift that focused tests do not touch.
+**Recurrence 2026-05-10:** A v1.6.0 CLI release smoke hit the same class through `audit . --check-content`: `Cold-Path Content Lint` failed because `docs/dashboard.md` listed dashboard headings without the manifest-backed `skills` view, and adding the section produced `PASS (0 warning(s), 9 info, 177 file(s) scanned)`.
+**Recurrence 2026-05-15:** A focused dashboard route test failed before reaching `/api/tasks` because `validateManifest` reported `facts.dashboard_views drift` after the then-current tasks view and a `coming-soon` view (both since removed or renamed, the tasks route to `src/dashboard/views/plans.html`) were added; both names had to reach `workflow/manifest.json` and the two architecture lists first.
+**Recurrence 2026-05-18:** During the v1.7.0 bump, `audit . --check-drift --check-content` failed after the scripted version surfaces were consistent, on cold-path drift around the manifest-backed `coming-soon` view and on `docs/audit-and-quality.md` (search: `Verification:           PASS (4/4)`) not tracking the Verification concern's growth to four checks.
 
 ---
 
 ## Lesson: Classic dashboard script splits need Knip ignore coverage
 
 **Status:** active | **Created:** 2026-04-21
+**Decision changed:** Register a new dashboard classic script in `knip.json` and `src/dashboard/index.html` in the change that creates it, and run the repository Knip command before trusting preflight.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+**Incident count:** 2 | **Latest occurrence:** 2026-04-25
+**Merged:** 2026-09-05 - absorbed "Dashboard classic scripts need Knip registration" (2026-04-25); one root cause, HTML-loaded scripts are invisible to the module graph.
 
-**Prevention:**
-1. After adding a dashboard classic-script file, add it to `knip.json` in the same change.
-2. Re-run `npx knip --no-progress` before relying on preflight, because dashboard typecheck and asset tests will not catch Knip reachability gaps.
+**Prevention:** When adding a `src/dashboard/*.ts` classic script, update `src/dashboard/index.html`, add the built asset smoke, and register the source file in `knip.json` in the same change. Run the repository Knip command before relying on preflight; dashboard typecheck and asset tests cannot see reachability. After adding optional decoder branches, run `npx eslint src/cli src/dashboard` rather than treating `npm run typecheck` as enough. Evidence anchors: `knip.json` (search: `dashboard-custom-prompts.ts`), `src/cli/server/decoders.ts` (search: `decodeOptionalStringField`).
 
-**What happened:** Splitting `src/dashboard/app.ts` into additional classic browser scripts passed dashboard typecheck and server asset tests, but `npx knip --no-progress` flagged the new script-tag files as unused because they are loaded from `src/dashboard/index.html` rather than imported by TypeScript.
+**What happened:** Splitting `src/dashboard/app.ts` into further classic browser scripts passed dashboard typecheck and server asset tests, but Knip flagged the new script-tag files as unused because `src/dashboard/index.html` loads them rather than TypeScript importing them.
 
-**Root cause:** The dashboard frontend intentionally uses classic scripts (`x-data="app()"`) and shared browser globals. Knip follows module imports, not HTML script-tag reachability, so new `src/dashboard/dashboard-*.ts` files look unused unless `knip.json` names them alongside the existing `src/dashboard/app.ts` / `globals.d.ts` ignores.
+**Root cause:** The dashboard frontend intentionally uses classic scripts (`x-data="app()"`) and shared browser globals, so Knip follows module imports and never sees HTML script-tag reachability; `knip.json` is the only place that records the intent.
 
-**Evidence:** `knip.json` ignore list carries the dashboard classic-script files; `src/dashboard/index.html` loads `dashboard-readers.js`, `dashboard-setup-quality.js`, `dashboard-projects.js`, `dashboard-prompts.js`, `dashboard-terminal.js`, and `app.js` in order.
+**Recurrence 2026-04-25:** M03 added `src/dashboard/dashboard-custom-prompts.ts` and loaded it from the HTML shell; focused tests and typecheck passed, but the installer round-trip preflight reported the file unused, and the same run caught an ESLint complexity error in `src/cli/server/decoders.ts` after the terminal-create payload grew another optional field.
 
 ---
 
 ## Lesson: Dashboard asset tests can read stale dist copies
 
 **Status:** active | **Created:** 2026-04-25
-**Incident count:** 3 | **Latest occurrence:** 2026-08-29
+**Decision changed:** Refresh the built dashboard asset before any test that can read it, and clean `dist` when the change renames or removes a generated file.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+**Incident count:** 4 | **Latest occurrence:** 2026-08-29
+**Merged:** 2026-09-05 - absorbed "Dashboard asset renames need a clean dist build" (2026-05-31) from `.goat-flow/learning-loop/lessons/refactor-fallout.md`; both are the built copy disagreeing with source.
 
-**Prevention:** After changing dashboard static assets that are copied by `build:dashboard`, run `npm run build:dashboard` before dashboard-server asset smoke tests, or explicitly remove stale `dist/` before relying on source fallback.
+**Prevention:** After changing dashboard static assets copied by `build:dashboard`, run `npm run build:dashboard` before dashboard-server asset smoke tests and before the first expanded suite, not after a favourable focused run. When the change renames or deletes a generated asset, run the full `npm run build` or clean `dist` first, because `build:dashboard` compiles and copies without removing `dist/dashboard`; then grep `dist` for the old filenames. Evidence anchors: `package.json` (search: `rmSync('dist', { recursive: true, force: true })`), `package.json` (search: `tsconfig.dashboard.json && node scripts/build-dashboard-assets.mjs`).
 
-**What happened:** M02 added metadata to `src/dashboard/preset-prompts.json` and the JSON/unit checks passed, but the focused `dashboard assets` integration test failed because `/assets/preset-prompts.json` served the existing `dist/dashboard/preset-prompts.json` copy, which still lacked the new metadata.
+**What happened:** M02 added metadata to `src/dashboard/preset-prompts.json` and the JSON and unit checks passed, but the focused `dashboard assets` integration test failed because `/assets/preset-prompts.json` served the existing `dist/dashboard/preset-prompts.json` copy without the new metadata.
 
-**Root cause:** The dashboard server prefers `dist/dashboard/preset-prompts.json` when it exists. Source edits plus `npm run typecheck` do not refresh that built asset, so a local `dist/` directory can make focused source-run tests verify stale data.
+**Root cause:** The dashboard server prefers the built copy when it exists, and source edits plus `npm run typecheck` never refresh it, so a local `dist/` makes source-run tests verify stale data.
 
-**Recurrence (2026-08-14):** M03 changed the four QA-facing records in `src/dashboard/preset-prompts.json`. Focused preset and doctrine tests passed, but a later full-suite run failed the existing source/dist parity contract because `dist/dashboard/preset-prompts.json` still held the earlier catalog. Evidence anchor: `test/contract/skill-hardening-security-2.test.ts` (search: `dashboard preset source/dist parity`). Refresh the copied asset before the first expanded suite, not after a favourable focused run.
-
-**Recurrence 2026-08-29:** M68 changed the Coverage Audit preset and its focused unit contract, then the first full `npm test` run failed `dashboard preset source/dist parity` because the built catalog still held the previous prompt. Running `npm run build:dashboard` before repeating that exact contract and the full suite restored parity. Evidence anchors: `src/dashboard/preset-prompts.json` (search: `blocking-gate contract`) and `test/contract/skill-hardening-security-2.test.ts` (search: `dashboard preset source/dist parity`).
+**Recurrence 2026-05-31:** Renaming dashboard app fragment files, `npm run build:dashboard` compiled the new descriptive `dashboard-app-*.js` files but left the old generated numbered assets in `dist/dashboard`, because only the full build cleans `dist` first.
+**Recurrence 2026-08-14:** M03 changed the four QA-facing records in the preset catalog; focused preset and doctrine tests passed, but a later full-suite run failed the source/dist parity contract because the built copy still held the earlier catalog. `test/contract/skill-hardening-security-2.test.ts` (search: `dashboard preset source/dist parity`).
+**Recurrence 2026-08-29:** M68 changed the Coverage Audit preset and its focused unit contract, and the first full `npm test` failed the same parity contract until `npm run build:dashboard` ran before repeating it. `src/dashboard/preset-prompts.json` (search: `blocking-gate contract`).
 
 ---
 
@@ -98,23 +78,11 @@ last_reviewed: 2026-09-03
 
 **Status:** active | **Created:** 2026-05-15
 
-**Prevention:** After changing dashboard HTML/view templates, run `npm run build:dashboard`, restart the built dashboard server, then repeat browser-use smoke against the new URL. Evidence anchors: `src/cli/server/dashboard.ts` (search: `let cachedTemplate`), `src/cli/server/dashboard.ts` (search: `assembleDashboardHtml(shellPath)`), `src/dashboard/views/plans.html` (search: `gf-set-active-task-plan`).
+**Prevention:** After changing dashboard HTML or view templates, run `npm run build:dashboard`, restart the built dashboard server, then repeat the browser-use smoke against the new URL. Evidence anchors: `src/cli/server/dashboard.ts` (search: `let cachedTemplate`), `src/cli/server/dashboard.ts` (search: `assembleDashboardHtml(shellPath)`), `src/dashboard/views/plans.html` (search: `gf-set-active-task-plan`).
 
-**What happened:** While adding the Plans active-plan toggle, the built dashboard browser smoke kept showing the old direct Alpine handlers after `npm run build:dashboard`. Clicking the flag wrote `.goat-flow/plans/.active`, but the visible active marker stayed stale until I manually refreshed. The running dashboard process had cached the assembled HTML before the template-handler fix landed; after restarting `node dist/cli/cli.js dashboard .`, browser-use showed the new dispatched handlers and the active marker flipped immediately from `1.7.0` to `_archived` and back.
+**What happened:** While adding the Plans active-plan toggle, the browser smoke kept showing the old direct Alpine handlers after `npm run build:dashboard`. Clicking the flag wrote `.goat-flow/plans/.active`, but the visible marker stayed stale until a manual refresh; after restarting `node dist/cli/cli.js dashboard .`, the new dispatched handlers appeared and the marker flipped from `1.7.0` to `_archived` and back.
 
-**Root cause:** `serveDashboard()` caches `assembleDashboardHtml(shellPath)` at startup when dev mode is off. Rebuilding `dist/dashboard/views/plans.html` updates files on disk, but an already-running built dashboard server keeps serving the old assembled shell.
-
----
-
-## Lesson: Dashboard classic scripts need Knip registration
-
-**Status:** active | **Created:** 2026-04-25
-
-**Prevention:** When adding a `src/dashboard/*.ts` classic script, update `src/dashboard/index.html`, add the built asset smoke, and register the source file in `knip.json`. After adding optional decoder branches, run `npx eslint src/cli src/dashboard` before treating `npm run typecheck` as enough. Evidence anchors: `knip.json` (search: `dashboard-custom-prompts.ts`), `src/cli/server/decoders.ts` (search: `decodeOptionalStringField`).
-
-**What happened:** M03 added `src/dashboard/dashboard-custom-prompts.ts` as a browser classic-script helper and loaded it from `src/dashboard/index.html`. Focused tests and typecheck passed, but full `npm test` failed the installer round-trip preflight because Knip reported the file as unused. The same preflight also caught an ESLint complexity error in `src/cli/server/decoders.ts` after the terminal-create payload grew another optional field.
-
-**Root cause:** Dashboard classic scripts are loaded by HTML at runtime, not imported through the TypeScript module graph. Knip only knows they are intentional because `knip.json` ignores existing dashboard classic-script entrypoints. Focused source tests do not run the full preflight lint/Knip gate.
+**Root cause:** `serveDashboard()` caches the assembled HTML at startup when dev mode is off, so rebuilding the view file on disk does not change what a running built server serves.
 
 ---
 
@@ -122,11 +90,11 @@ last_reviewed: 2026-09-03
 
 **Status:** active | **Created:** 2026-04-29
 
-**Prevention:** For dashboard audit-path fixes, verify the exact `/api/audit` contract first: run the `/api/audit`-only test slice and a direct localhost fetch against `serveDashboard()`. Use the broader dashboard suite only as a follow-up check when the slower routes are relevant to the change. Evidence anchors: `test/integration/dashboard-audit-api.test.ts` (search: `describe("dashboard /api/audit"`), `test/integration/quality-constraint-isolation.test.ts` (search: `dashboard home audit refresh`), `src/cli/server/dashboard-audit-routes.ts` (search: `denyMechanismEvidenceLevel`).
+**Prevention:** For dashboard audit-path fixes, verify the exact `/api/audit` contract first: run the `/api/audit`-only test slice and a direct localhost fetch against `serveDashboard()`. Use the broader dashboard suite only as a follow-up when the slower routes are relevant. Evidence anchors: `test/integration/dashboard-audit-api.test.ts` (search: `describe("dashboard /api/audit"`), `test/integration/quality-constraint-isolation.test.ts` (search: `dashboard home audit refresh`), `src/cli/server/dashboard-audit-routes.ts` (search: `denyMechanismEvidenceLevel`).
 
-**What happened:** While fixing the Home page's multi-minute `Auditing...` stall, the first verification attempt used the entire `test/integration/dashboard-server.test.ts` suite as the gate. That suite still includes endpoints whose deeper behavior is intentionally slower than the Home summary path, so the broad run timed out before producing a useful pass/fail signal for the changed route.
+**What happened:** Fixing the Home page's multi-minute `Auditing...` stall, the first verification used the entire dashboard-server suite as the gate; that suite includes endpoints deliberately slower than the Home summary path, so the run timed out before producing a pass or fail signal for the changed route.
 
-**Root cause:** I used a verification scope wider than the code change. The fix only changed `/api/audit` summary behavior, but the suite also exercises other dashboard routes whose latency profile is different. That diluted the signal and made the timeout look like uncertainty in the changed path.
+**Root cause:** The verification scope was wider than the code change, which diluted the signal and made a timeout look like uncertainty in the changed path.
 
 ---
 
@@ -134,11 +102,11 @@ last_reviewed: 2026-09-03
 
 **Status:** active | **Created:** 2026-04-29
 
-**Prevention:** For shell-backed audit or hook performance work, capture timings in the same environment that can actually run the shell command before updating docs or declaring the bottleneck understood. For this repo, prefer a built `dist` dashboard probe plus a focused integration test, and compare fresh versus cached requests explicitly when a new cache is involved. Evidence anchors: `src/cli/server/dashboard-audit-routes.ts` (search: `const fresh = url.searchParams.get("fresh") === "true";`), `src/cli/server/dashboard-quality-routes.ts` (search: `function readQualityAuditCache`), `src/cli/audit/check-agent-deny-mechanism.ts` (search: `execFileSync("bash", [denyPath, "--self-test=smoke"]`).
+**Prevention:** For shell-backed audit or hook performance work, capture timings in an environment that can actually run the shell command before updating docs or naming the bottleneck. Prefer a built `dist` dashboard probe plus a focused integration test, and compare fresh against cached requests explicitly when a new cache is involved. Evidence anchors: `src/cli/server/dashboard-audit-routes.ts` (search: `const fresh = url.searchParams.get("fresh") === "true";`), `src/cli/server/dashboard-quality-routes.ts` (search: `function readQualityAuditCache`), `src/cli/audit/check-agent-deny-mechanism.ts` (search: `execFileSync("bash", [denyPath, "--self-test=smoke"]`).
 
-**What happened:** While optimizing `/api/quality`, my first localhost timing probes inside the sandbox made the route look subsecond and led to a bad footgun draft: `/api/quality` appeared to take about 379 ms, with `runAudit` around 160 ms. A later timing probe against the built dashboard outside the sandbox measured fresh `?fresh=true` requests at about 30,573 ms and 30,182 ms, with only the cached repeat at about 5 ms.
+**What happened:** Optimizing `/api/quality`, localhost timing probes inside the sandbox made the route look subsecond, about 379 ms with `runAudit` near 160 ms, and led to a bad footgun draft. A later probe against the built dashboard outside the sandbox measured fresh `?fresh=true` requests at about 30,573 ms and 30,182 ms, with only the cached repeat near 5 ms.
 
-**Root cause:** I treated a sandbox timing probe as representative for a route that shells out to `bash` through the deny-hook self-test. When the verification surface depends on external shell/runtime behavior, the sandbox path can understate real latency or skip the expensive branch entirely.
+**Root cause:** A sandbox timing probe was treated as representative for a route that shells out to `bash` through the deny-hook self-test; the sandbox path can understate real latency or skip the expensive branch entirely.
 
 ---
 
@@ -146,14 +114,8 @@ last_reviewed: 2026-09-03
 
 **Status:** active | **Created:** 2026-04-29
 
-**Prevention:**
+**Prevention:** Declare server cache state (`fresh` or `cached`) and client state (`cold` or `warmed`) separately before sampling, and never combine them into one series. Warm the client with a cheap request such as `/api/health`, then measure fresh and cached series independently. If client-visible time and server-side profile spans differ by orders of magnitude, find the unprofiled client or setup overhead before recording the timing. This incident establishes the warmup and cache-state controls, not a reusable latency threshold; the shared evidence matrix owns iteration count, median, spread, and correctness. Evidence anchor: `scripts/profile-dashboard-audit.mjs` (search: `await fetch(\`${baseUrl}/api/health\`)`).
 
-1. Declare server cache state (`fresh` or `cached`) and client state (`cold` or `warmed`) separately before sampling; never combine those states into one series.
-2. Warm the client with a cheap request such as `/api/health`, then measure fresh and cached endpoint series independently.
-3. Compare client-visible endpoint time with server-side profile spans. If they differ by orders of magnitude, identify unprofiled client or setup overhead before recording the timing.
+**What happened:** The first cached `/api/audit?quality=true` benchmark in `scripts/profile-dashboard-audit.mjs` reported about `1375ms` while server-side profile spans totalled about `17ms`; the route was cached and fast, and the first Node `fetch()` carried client and session warmup.
 
-This incident establishes the warmup and cache-state controls, not a reusable latency threshold. The shared evidence matrix owns iteration count, median, spread, and correctness requirements. Evidence anchor: `scripts/profile-dashboard-audit.mjs` (search: `await fetch(\`${baseUrl}/api/health\`)`).
-
-**What happened:** While adding `scripts/profile-dashboard-audit.mjs`, the first cached `/api/audit?quality=true` benchmark reported about `1375ms` even though the server-side profile spans totaled only about `17ms`. The route was cached and fast, but the first measured Node `fetch()` included client/session warmup overhead.
-
-**Root cause:** I treated the first HTTP request made by the benchmark process as representative endpoint time. That mixed one-time client setup with the route being measured and made the cached path look much slower than the server profile and same-server curl evidence.
+**Root cause:** The benchmark process's first HTTP request was treated as representative endpoint time, mixing one-time client setup with the route being measured.

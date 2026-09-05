@@ -1,6 +1,6 @@
 ---
 category: gruff-cleanup
-last_reviewed: 2026-08-28
+last_reviewed: 2026-09-05
 ---
 
 **Scope:** Using the Gruff analyzer - reading its findings before acting on them, capturing clean JSON, working around masker blind spots, and not converting a fix request into threshold tuning. What breaks downstream when code is split or renamed is [refactor-fallout.md](refactor-fallout.md); proving comment fixes satisfy the analyzer is [verification-gruff.md](verification-gruff.md).
@@ -43,7 +43,7 @@ last_reviewed: 2026-08-28
 
 **Status:** active | **Created:** 2026-06-10
 
-**Incident count:** 4 | **Latest occurrence:** 2026-08-27
+**Incident count:** 5 | **Latest occurrence:** 2026-09-05
 
 **Prevention:** When adding or changing a throw, return fallback, or swallowed failure, update the function's error-behavior contract in the same patch. If `docs.missing-error-behavior-doc` survives, read the installed rule vocabulary and use an explicit `@throws` tag or accepted recovery words such as `swallows`, `fallback`, or `recover` when truthful. Evidence anchors: `src/cli/facts/fs.ts` (search: `swallows read errors as a cached null fallback`) and `node_modules/@blundergoat/gruff-ts/src/context-doc-rules.ts` (search: `hasErrorBehaviorMarker`).
 
@@ -54,6 +54,22 @@ last_reviewed: 2026-08-28
 **Recurrence update (2026-08-16):** Two rewrites of the `readTargetConfigText` docblock in `src/cli/install-command.ts` failed the same way. "or null when no config can be read" carried no marker at all, and "returns null rather than throwing" failed because the vocabulary match is whole-word: `throwing` is not `throws`. The third wording used the bare `swallows` and cleared the finding.
 
 **Recurrence 2026-08-27:** During M41 Task 5, `recordManagedInstallAfterVerification` gained a typed state-persistence exception while its docblock still described only the return value. The focused Gruff baseline had zero findings; the post-change report found one `docs.missing-error-behavior-doc` advisory. Adding an explicit `@throws` contract returned the same targeted report to zero findings. Evidence anchor: `src/cli/managed-setup-preview.ts` (search: `@throws \`ManagedInstallStateRecordError\``).
+
+**Recurrence 2026-09-05:** The CLI, dashboard, and test clarity pass introduced documentation findings while shortening existing comments.
+The installed rules require whole-word markers: `throwing` does not match `throws`, and `report` does not match `reports`.
+Reading each flagged function and its rule allowed accurate wording to clear the introduced identities without changing behavior or analyzer policy.
+
+Compare stable-identity counts as well as names: two new swallowed-catch findings shared one identity in the dashboard batch.
+A map keyed only by that identity hid their multiplicity; comparing counts verified that both findings were removed.
+
+The reference check also caught three rewritten comments used as search anchors in existing lessons.
+Restoring the cited phrases within the clearer descriptions returned `stats --check` to `"status": "pass"` without changing the cited lessons.
+Preserve cited substrings before editing, then check references as well as Gruff after each batch.
+
+Evidence anchors: `src/cli/learn-scaffold.ts` (search: `@throws`) and `node_modules/@blundergoat/gruff-ts/src/context-doc-rules.ts` (search: `hasErrorBehaviorMarker`).
+The reference repairs are in `test/contract/skill-hardening.helpers.ts` (search: `angle-bracket token`),
+`test/contract/dispatcher-routing-fixture.test.ts` (search: `Guards deterministic dispatcher-corpus integrity`),
+and `src/cli/server/decoders.ts` (search: `This stays explicit because`).
 
 **Root cause:** I wrote comments that described the behavior semantically but did not satisfy the analyzer's marker vocabulary for error recovery.
 
@@ -122,7 +138,7 @@ last_reviewed: 2026-08-28
 ## Lesson: Gruff cleanup automation must fit the hook surface
 
 **Status:** active | **Created:** 2026-05-31
-**Incident count:** 2 | **Latest occurrence:** 2026-08-24
+**Incident count:** 3 | **Latest occurrence:** 2026-09-05
 
 **Prevention:** For large mechanical rewrites, use `apply_patch` for hand edits or a small checked command with obvious arguments. Keep verification commands short enough that the hook can audit them directly, and split multi-step analysis into separate commands. Evidence anchors: `workflow/hooks/deny-dangerous.sh` (search: `more than 50 chained segments`), `.goat-flow/skill-docs/playbooks/gruff-code-quality.md` (search: `Verification Gate`).
 
@@ -133,3 +149,7 @@ last_reviewed: 2026-08-28
 **Recurrence 2026-08-24:** While verifying `learn new`, two ripgrep commands put literal backticks inside a double-quoted shell command.
 The deny-dangerous hook correctly treated them as command substitution and blocked both attempts before execution.
 Using a single-quoted plain search pattern let the read-only check run safely. Evidence anchor: `.goat-flow/hooks/deny-dangerous.sh` (search: `Backtick command substitution hides nested execution`).
+
+**Recurrence 2026-09-05:** Clarity-pass commands containing serialized source exceeded the hook's 16 KB command limit and were rejected before writes.
+Smaller patches and verification commands that read the selected files directly completed the work within the enforced limit.
+Evidence anchor: `workflow/hooks/deny-dangerous.sh` (search: `16384`).

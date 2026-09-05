@@ -14,7 +14,7 @@ last_reviewed: 2026-09-04
 **Incident count:** 5
 **Latest occurrence:** 2026-08-16
 
-**Prevention:** Resolve managed paths from `workflow/manifest.json`, learning entries from `INDEX.md`, and ignored milestones with `rg --files --hidden --no-ignore`. Never infer directory or document names. When distributing executables across WSL, NTFS, or Linux filesystems, copy content, set the destination to the intended mode explicitly, and verify both `stat` and byte parity.
+**Prevention:** Resolve managed paths from `workflow/manifest.json`, learning entries from the generated `INDEX.md`, and ignored milestones by listing them, as in `find .goat-flow/plans -name 'M*.md'`; ripgrep is a session-only shim here and is not on `PATH` for a spawned process, so a script that calls it exits 127. Never infer directory or document names. When distributing executables across WSL, NTFS, or Linux filesystems, copy content, set the destination to the intended mode explicitly, and verify both `stat` and byte parity.
 
 **What happened:** Four pre-edit reads or commands inferred paths: the agent misread a workflow source/install pair as a move, pluralized a managed source directory, guessed the removed historical `ADR-016-dispatcher-is-canonical-skill.md` path, then guessed an M06 milestone filename. Each failed. `workflow/manifest.json` (search: `"source": "workflow/skills/reference/skill-conventions.md"`), `.goat-flow/learning-loop/decisions/INDEX.md` (search: `ADR-033-goat-flow-directory-restructure.md`), and `rg --files --hidden --no-ignore` supplied the exact paths.
 
@@ -34,7 +34,7 @@ last_reviewed: 2026-09-04
 **Trigger phase:** ACT
 **Incident count:** 10 | **Latest occurrence:** 2026-09-04
 
-**Prevention:** When a command is blocked, use the narrow unblocked equivalent instead of bypassing the guard or stopping prematurely. Keep cleanup targets literal in destructive command operands even after validating a shell variable. Prefer individual file removal followed by `rmdir`; use `mv -n` for moves.
+**Prevention:** When a command is blocked, use the narrow unblocked equivalent instead of bypassing the guard or stopping prematurely. Keep cleanup targets literal in destructive command operands even after validating a shell variable. Prefer individual file removal followed by `rmdir`; use `mv -n` for moves. This entry owns recovery after a block; authoring a search pattern that avoids the block is `.goat-flow/learning-loop/lessons/verification-preflight.md` (search: `Verification grep patterns must not carry Markdown backticks into Bash`).
 
 **What happened:** Agent needed to delete `.github/skills/goat-onboard/` and `.github/skills/goat-reflect/`. Used `rm -rf`, blocked by the destructive-shell guard. Instead of `rm file && rmdir dir` (not blocked), it asked the user to delete manually - wasting a round trip on something trivially solvable.
 
@@ -137,8 +137,8 @@ last_reviewed: 2026-09-04
 **Created:** 2026-06-04
 
 **Prevention:**
-1. Keep scratch work inside the repo - use `.goat-flow/scratchpad/` (gitignored), never `cd /tmp`. The persistent Bash cwd must not leave the repo tree while a cwd-relative guard is active.
-2. A repeated `git repository root unavailable` (or `Guard cannot start`) block on every Bash means the shell cwd is outside the repo. Do not retry or disable the guard - ask the user to type `!cd <repo>` to reset the persisted cwd, and keep working through Read/Edit/Write meanwhile.
+1. Keep the persistent Bash working directory inside the repository tree while a cwd-relative guard is active; the guard resolves the git root from that cwd, so `cd` out of the repo disables every later Bash call. Where scratch files live is a separate question: a repo-local gitignored directory such as `.goat-flow/scratchpad/`, or a harness-provided scratch path, is fine as long as you address it by path instead of changing directory into it.
+2. A repeated `git repository root unavailable` or `Guard cannot start` block on every Bash means the shell cwd is outside the repo. Do not retry or disable the guard: ask the user to type `!cd <repo>` to reset the persisted cwd, and keep working through Read, Edit, and Write meanwhile.
 
 **What happened:** While evaluating a GitHub PR, the agent staged scratch files in `/tmp` and ran `cd /tmp` to fetch them. From then on every Bash call was blocked by the PreToolUse guard with `BLOCKED: ... git repository root unavailable`, because the launcher runs `git rev-parse` in the session's persistent cwd and `/tmp` is outside any repo. The agent retried Bash several times, then reached for `dangerouslyDisableSandbox` before concluding it was stuck. The block also rejected the recovering `cd <repo>`, since the guard runs before the command's `cd`.
 

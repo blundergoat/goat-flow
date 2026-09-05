@@ -3,6 +3,7 @@ category: redaction
 last_reviewed: 2026-08-24
 ---
 
+**Scope:** Scrubbing secrets out of durable text - ordered rule interaction, redacting before the first write to a durable path, and metadata fields the body scrubber misses. Fixtures that must not embed real secret shapes are [hook-testing.md](hook-testing.md).
 ## Lesson: Ordered redaction rules must preserve earlier placeholders
 
 **Status:** active | **Created:** 2026-07-13
@@ -22,7 +23,7 @@ last_reviewed: 2026-08-24
 **Incident count:** 4
 **Latest occurrence:** 2026-08-24
 
-**Prevention:** A pre-write redaction example must accept interactive stdin or another non-persistent source. Never demonstrate it by redirecting from a raw draft file.
+**Prevention:** A pre-write redaction example must accept interactive stdin or another non-persistent source, and must never be demonstrated by redirecting from a raw draft file. A durable destination may receive only version-matched redactor output: if a draft reaches that path first, stop before indexing, redact to a temporary file, compare bytes, and replace the destination only from the redacted result.
 
 **What happened:** M08 correctly scrubbed stdin before its output write, but the first docs demonstrated `< draft.md`, implying the raw candidate already existed on disk.
 
@@ -33,8 +34,6 @@ last_reviewed: 2026-08-24
 **Recurrence (2026-08-14):** ADR-059 reached its durable path before the version-matched redactor ran. Before indexing, the correction redacted the file with goat-flow v1.15.1 and byte-compared it with the destination; later learning-loop corrections patched a temporary redacted copy and ran the redactor again with file input redirection after the hook rejected a pipe-to-interpreter form. Evidence anchors: `.goat-flow/learning-loop/decisions/ADR-059-useful-comment-doctrine.md` (search: `## Decision`) and `src/cli/redact-command.ts` (search: `readFileSync(0`).
 
 **Recurrence (2026-08-24):** During the standalone local-hook-policy re-home, 17 plan and decision files reached their durable paths before the goat-plan redaction gate. The correction ran each file through goat-flow v1.16.0 to a temporary destination and byte-compared it with the written file; every comparison matched.
-
-**Prevention update:** A durable destination may receive only version-matched redactor output. If a draft reaches that path first, stop before indexing, redact to a temporary file, compare bytes, and replace the destination only from the redacted result.
 
 ## Lesson: Durable exports must redact metadata as well as body fields
 

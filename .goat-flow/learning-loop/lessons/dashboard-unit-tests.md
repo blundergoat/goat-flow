@@ -27,7 +27,7 @@ last_reviewed: 2026-08-15
 
 **What happened:** M03 added a VM-loaded browser helper test for `dashboard-custom-prompts.ts`. The first focused run failed even though the expected and actual arrays had the same printed contents, because `assert.deepEqual` compared an array created inside the VM realm against a host-realm array literal.
 
-**Current recurrence:** On 2026-05-02, custom prompt form tests repeated this trap for validation arrays, surface tag arrays, and flag group arrays returned from the VM context. On 2026-05-16, the manifest-backed runner hint test hit the same issue for `dashboardValidateCustomPromptDraft(ctx)`. On 2026-05-20, the dashboard readers enforcement-summary regression failed with "Values have same structure but are not reference-equal" because `readDashboardReport` returned a VM-realm plain object. The helper behavior was correct; the assertions needed `Array.from(...)`, host-realm normalization, or scalar field comparisons.
+**Recurrence 2026-05-02:**  custom prompt form tests repeated this trap for validation arrays, surface tag arrays, and flag group arrays returned from the VM context. On 2026-05-16, the manifest-backed runner hint test hit the same issue for `dashboardValidateCustomPromptDraft(ctx)`. On 2026-05-20, the dashboard readers enforcement-summary regression failed with "Values have same structure but are not reference-equal" because `readDashboardReport` returned a VM-realm plain object. The helper behavior was correct; the assertions needed `Array.from(...)`, host-realm normalization, or scalar field comparisons.
 
 **Root cause:** The test executed browser helper code in `node:vm` to avoid changing classic-script exports, but the assertion treated cross-realm arrays like normal host arrays.
 

@@ -59,11 +59,11 @@ last_reviewed: 2026-09-01
 **Trigger phase:** ACT
 **Caught at:** VERIFY
 
-**Incident count:** 11
+**Incident count:** 12
 
-**Latest occurrence:** 2026-09-04
+**Latest occurrence:** 2026-09-05
 
-**Prevention:** Search indexes, contracts, and tracked semantic-anchor references before changing headings or compacting prose; run focused contracts and `stats --check`; repair anchors together.
+**Prevention:** Search indexes, contracts, and tracked semantic-anchor references before changing headings or compacting prose; run focused contracts and `stats --check`; repair anchors together. Never head-cap or single-line that sweep: the pinned citation listed thirteenth, or split across a line break, is the one that breaks.
 
 **What happened:** Eleven prose edits removed or changed durable or contract-pinned anchors:
 
@@ -73,6 +73,7 @@ last_reviewed: 2026-09-01
 - **2026-08-09 v1.15.1 goat-critique:** The new clean-attestation contract passed within budget, but the first compaction removed four phrases pinned by the adjacent meta-rubric contract. The focused suite reported 17/18 until those phrases were restored and unpinned output-list prose paid the word cost. Evidence: `test/contract/skill-hardening-skills-2.test.ts` (search: `uses one reproducible goat-critique meta-audit rubric`).
 - **2026-09-04:** M15's content audit found that ADR-006 still cited a shared-preamble phrase shortened during compaction. Updating the decision's needle to the current wording restored the semantic-anchor contract. Evidence: `.goat-flow/learning-loop/decisions/ADR-006-autonomous-skill-mode.md` (search: `an invoked skill runs its full protocol`) and `.goat-flow/skill-docs/skill-preamble.md` (search: `an invoked skill runs its full protocol`).
 - **2026-09-04 release acceptance:** Consolidating a timing recurrence removed its cited `go-live M15 activation` heading fragment. `stats --check` rejected the stale inbound reference; restoring the fragment preserved the existing anchor without dropping the expanded timing rule. Evidence: `.goat-flow/learning-loop/lessons/verification-testing.md` (search: `go-live M15 activation`) and `.goat-flow/learning-loop/lessons/milestone-accounting.md` (search: `go-live M15 activation`).
+- **2026-09-05 ADR concision rewrite:** Condensing 30 ADRs dropped twelve phrases pinned by contract tests or learning-loop anchors across six records: `return-to-implement` and two siblings in ADR-005, four headings and sentences in ADR-006, `A skill must have at least one of` and `explicit user acceptance for each compatibility break` in ADR-009, `Canonical agents` in ADR-020, `shipped and reverted` in ADR-037, and `exec form` in ADR-053. The pre-rewrite sweep found 14 anchors and missed these because its grep was capped at 12 lines and single-line. `stats --check` and the three ADR-reading contracts caught every one, and all were restored verbatim. Evidence: `.goat-flow/learning-loop/decisions/ADR-009-skill-consolidation.md` (search: `explicit user acceptance for each compatibility break`) and `test/contract/skill-hardening-clarity.test.ts` (search: `keeps the accepted clarity authority aligned`).
 
 **Root cause:** Edited prose carried durable external anchors.
 

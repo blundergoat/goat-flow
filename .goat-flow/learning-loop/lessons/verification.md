@@ -112,7 +112,9 @@ The final closeout then used `## Proof closure`, which the export parser treats 
 
 ## Lesson: Agent doesn't tick milestone checkboxes (recurrence x4, unresolved)
 
-**Status:** active | **Created:** 2026-03-31 | **Recurrences:** M1 (2026-03-31), M29 (2026-04-04), M32 (2026-04-05), M08 (2026-04-07)
+**Status:** active | **Created:** 2026-03-31
+**Incident count:** 4 | **Latest occurrence:** 2026-04-07
+**Recurrences:** M1 (2026-03-31), M29 (2026-04-04), M32 (2026-04-05), M08 (2026-04-07)
 
 **Prevention:** Treat checkbox state as part of each task's write transaction: update the active milestone immediately after the task result and before starting another task. Do not reintroduce a Stop-hook reminder without a new decision satisfying ADR-037's rejection list.
 
@@ -124,7 +126,7 @@ The final closeout then used `## Proof closure`, which the export parser treats 
 
 **Mechanical enforcement was tried and withdrawn (do not re-propose it blind).** ADR-037 (search: `shipped and reverted`) shipped `plan-checkbox-guard.sh` as a Claude-only Stop hook in v1.12.0 - exactly the "hook or gate" this lesson asks for. ADR-037 (search: `tombstone only`) removed it one day later in v1.12.1: the reminder cost default Stop surface, dashboard hook list, installer/config schema, manifest, and audit fixtures, while non-Claude Stop delivery stayed unverified and stale registrations could keep invoking a deleted script. ADR-037 also explicitly rejects swapping in a replacement reminder immediately, because that "risks rebuilding the same plan-state heuristics under a new name" - a replacement needs its own plan.
 
-**Status:** Unresolved, and deliberately so. The gap is real but the obvious fix has already been paid for once and reverted. Any new proposal must start from ADR-037's rejection list and show what it does differently - not restate "needs a hook."
+**Why it stays open:** The gap is real, but the obvious fix has already been paid for once and reverted. Any new proposal must start from ADR-037's rejection list and show what it does differently, rather than restating that this needs a hook.
 
 ---
 

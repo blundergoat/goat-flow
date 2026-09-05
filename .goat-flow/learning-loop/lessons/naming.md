@@ -3,6 +3,7 @@ category: naming
 last_reviewed: 2026-08-31
 ---
 
+**Scope:** Renaming and naming identifiers under an analyzer - which names are real placeholders, which abbreviations the project accepts, and what a mechanical rename sweep breaks. Running the analyzer itself is [gruff-cleanup.md](gruff-cleanup.md); what a split or rename breaks downstream is [refactor-fallout.md](refactor-fallout.md).
 ## Lesson: Boundary payload names are not placeholder debt
 
 **Status:** active | **Created:** 2026-05-30
@@ -62,7 +63,7 @@ last_reviewed: 2026-08-31
 Run the focused file before the full suite.
 Also run `node --import tsx src/cli/cli.ts stats --check` when a changed name or comment may be a learning-loop evidence anchor.
 
-**What happened:** A gruff cleanup renamed local `c`→`concern` in `test/unit/audit-command.test.ts` but left three later `c.*` references.
+**What happened:** A gruff cleanup renamed a local `c` to `concern` in the audit-command unit test, since split into `test/unit/audit-command/`, but left three later `c.*` references.
 Source typecheck exited 0 because it does not cover test files; `npm test` later failed with `ReferenceError: c is not defined`.
 
 **Root cause:** I treated the rename as local cleanup and relied on source typecheck before running the touched test.

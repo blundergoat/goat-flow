@@ -46,12 +46,7 @@ last_reviewed: 2026-08-11
 **Incident count:** 2 | **Latest occurrence:** 2026-07-19
 **Decision changed:** Multi-phase skill contracts must extract and compare the producing phase and its output template; whole-file phrase presence is insufficient.
 
-**Prevention:**
-1. Add contract tests that link canonical constants to docs: `SKILL_NAMES.length` must match README, docs, config, SKILL_TEMPLATES, and test fixtures
-2. After any rename, grep ALL file types (not just `.ts` and `.md` - also `.yaml`, `.json`, `.sh`)
-3. Periodically invite external review of the goat-flow repo itself, not just installed output
-4. `preflight-checks.sh` should verify SKILL_NAMES count consistency across surfaces
-5. For multi-phase prose contracts, assert that each classified tier reaches the phase and output where users act on it
+**Prevention:** Give a canonical constant a contract test that checks it against every surface restating it, including README, docs, config, templates, and fixtures, and validate that count against ground truth on disk rather than against another copy of the same claim; the manifest and constants both being wrong in the same direction is the failure this guards. After any rename, grep every file type rather than TypeScript and Markdown alone, including YAML, JSON, and shell. Periodically invite external review of this repository itself rather than only installed output. For multi-phase prose contracts, assert that each classified tier reaches the phase and output where users act on it. Evidence anchor: `src/cli/constants.ts` (search: `getSkillNames`).
 
 **What happened:** After M17, 6 external critics independently reviewed the goat-flow framework itself (not installed projects). They found 14 verified bugs that had survived all prior milestones: foundation.ts emitting v1.0, SKILL_TEMPLATES missing goat-sbao, config.yaml referencing a renamed script, README overclaiming hooks, stale test fixtures encoding the wrong skill count, setup fragments still creating coding-standards (removed in M13), classify-state marking "healthy" from version alone, and more. Every bug was a 1-5 line fix.
 
@@ -77,7 +72,7 @@ last_reviewed: 2026-08-11
 2. The preflight should validate sub-breakdowns, not just totals.
 3. Treat external critique findings as hypotheses, not facts. Verify each one independently before applying.
 
-**What happened:** A critique agent claimed `.goat-flow/architecture.md` (search: `20 build checks`) had the wrong build-check breakdown: "says 7+9, actual code shows 12+4." The agent accepted the claim at face value and changed the doc. A subsequent refactor restructured the checks into `SETUP_CHECKS` and `AGENT_CHECKS`; the breakdown when the lesson was written was **14 setup + 4 agent** (18 total) and has since grown to **16 setup + 4 agent** (20 total) as new checks like `goat-flow-gitignore` and `hook-version` were added. The preflight's "Architecture doc counts match code" check now validates both total and sub-breakdown because incorrect breakdowns previously passed automated gates.
+**What happened:** A critique agent claimed `.goat-flow/architecture.md` (search: `20 build checks`) had the wrong build-check breakdown: "says 7+9, actual code shows 12+4." The agent accepted the claim at face value and changed the doc. A subsequent refactor restructured the checks into `SETUP_CHECKS` and `AGENT_CHECKS`, and the breakdown has moved since: it was 14 setup plus 4 agent when this lesson was written and 16 plus 4 when last measured on 2026-09-05, as checks such as `goat-flow-gitignore` and `hook-version` were added. Never quote that pair from memory or from this entry; recompute it with the command below. Preflight's architecture-count check now validates the total and the sub-breakdown, because an incorrect breakdown with a correct total previously passed every automated gate.
 
 **Root cause:** The first critique agent likely miscounted or read a stale build of the code. The claim was plausible (it got the total right), which made it easy to accept without running the verification command. The same session also changed `code-map.md` correctly for a different issue, creating a false sense that all claims were verified.
 
@@ -88,11 +83,7 @@ last_reviewed: 2026-08-11
 
 **Status:** active | **Created:** 2026-04-15
 
-**Prevention:**
-1. Add content-drift checks to preflight or audit: doc check descriptions match code, convention claims match package.json, glossary canonical files exist
-2. ~~Change Step 01 early-stop to require content-drift checks, not just structural audit pass~~ (done: Step 01 now requires cold-path truth spot-check before stopping)
-3. Add a cold-path truth audit step to the release process: verify footguns, docs, coding-standards, glossary, and code-map against actual code before each release
-4. Consider auto-generating audit docs from check code exports to prevent drift permanently
+**Prevention:** Run the content-drift audit as well as the structural one before claiming a release-ready state, and verify footguns, docs, coding standards, glossary, and code map against actual code as a release step; a structural pass says nothing about whether a claim is true. This is now partly mechanical: `src/cli/audit/check-content-quality.ts`, `src/cli/audit/check-factual-claims.ts`, and `src/cli/audit/check-factual-semantic-drift.ts` ship as audit checks, and Step 01 requires a cold-path truth spot-check before stopping (`workflow/setup/01-system-overview.md`, search: `## State check`). Coverage still depends on which claims the agent chooses to verify, so the manual pass is not optional.
 
 **What happened:** Eight independent critiques (3 Claude, 5 Codex) reviewed the goat-flow v1.1.0 setup on its own repo. All 8 confirmed structural integrity: 7 skills matched templates, 57 tests passed, all router paths resolved, deny hook self-test passed, architecture doc numeric claims verified. Despite this, the 8 critiques collectively found 20+ verified content-accuracy failures in cold-path surfaces that no automated check caught. Examples at the time (all since resolved or removed): ~~`docs/audit-and-critique.md` describing checks that no longer exist in code~~; `docs/coding-standards/conventions.md` claimed zero runtime deps when `package.json` had js-yaml and ws; `.goat-flow/glossary.md` pointed Task Tracking at the wrong file; `.goat-flow/code-map.md` listed a script under the wrong directory; ~~`scripts/stop-lint.sh` existing despite the removed historical `ADR-015-remove-stop-lint-from-core.md`, whose decision now lives in current `ADR-037-separate-post-turn-safety-from-validation.md`~~; `.goat-flow/plans/.gitignore` ignored all milestone files while goat-plan claimed durable shared state. Setup scored 58-90/100 across the 8 critiques - the range itself shows the split between structural soundness and content accuracy.
 
@@ -105,10 +96,7 @@ last_reviewed: 2026-08-11
 
 **Status:** active | **Created:** 2026-04-16
 
-**Prevention:**
-1. After any rename, count change, or structural reorganization, grep for the old names/numbers across ALL docs, not just the files in the diff.
-2. Run multi-agent critique on release branches -- the cross-review pattern (compare findings across 3+ independent reviewers, verify each, disprove false positives) is the most effective cold-path drift detector available.
-3. Consider automating: extract check counts from code exports and validate against doc claims in preflight.
+**Prevention:** After any rename, count change, or structural reorganization, grep the old names and numbers across every doc rather than the files in the diff. Run multi-agent critique on release branches: comparing findings across three or more independent reviewers, verifying each, and disproving false positives is the most effective cold-path drift detector available. Preflight now derives architecture check counts from the code exports and compares them with the doc claims, which closes the count axis; the prose, description, and cross-file axes remain manual.
 
 **What happened:** A single diff review of 89 files on feat/1.1.0 found 2 cross-reference breakages (setup prompt, code-map skill tree). Then 4 independent coding agent critiques were run. Together they surfaced 15 additional cold-path issues: wrong check counts in CONTRIBUTING.md (8 vs 16), stale .js extensions in architecture.md and code-map, CLI help text with wrong harness count (15 vs 16), 6 stale footgun entries, and footgun file ordering that violated the scan contract. One critique (Critique 4) also produced a false positive (PreToolUse blind spot) that was disproved by finding the check in a different file (check-constraints.ts).
 
@@ -121,18 +109,10 @@ last_reviewed: 2026-08-11
 
 **Status:** active | **Created:** 2026-04-18
 
-**Prevention:** The Proof Gate in `skill-preamble.md` names the positive procedure (identify → run fresh → read → verify → cite). This lesson names the negative counterpart: the rationalization patterns that specifically defeat the red-flags. Before any completion, fix, or "passing" claim, check whether the next sentence you are about to write matches one of the patterns above. If it does, stop and satisfy the Proof Gate instead - or downgrade the claim to UNVERIFIED and state what evidence is still missing.
+**Prevention:** Before any completion, fix, or passing claim, check whether the sentence you are about to write is a rationalization rather than the claim itself, then either satisfy the Proof Gate or downgrade the claim to unverified and say what evidence is missing. The canonical list of rationalizations lives in one place and is not duplicated here: `.goat-flow/skill-docs/skill-preamble.md` (search: `Rationalisations to reject`). The instruction files route to it beside the red-flags, in `CLAUDE.md` (search: `The red-flags above name WHAT not to claim`).
 
-**What happens:** The four hallucination red-flags in AGENTS.md (search: "Hallucination red-flags") forbid claims without evidence: checks passed, completion, fix verification, and hedged claims. Agents still ship unverified claims under pressure by producing rationalizations that feel distinct from the forbidden claim but are logically equivalent to it. "I'm 95% confident", "the sub-agent said it passed", "the change looks correct" - each slips past the red-flags because the red-flags name the violation, not the specific excuse pattern.
+**What happened:** The four red-flags in `AGENTS.md` (search: `Hallucination red-flags`) forbid claims without evidence: checks passed, completion, fix verification, and hedged claims. Agents still shipped unverified claims under pressure by producing rationalizations that feel distinct from the forbidden claim while being logically equivalent to it, such as high stated confidence, a sub-agent's reported success, or the change looking correct.
 
-**Root cause:** The red-flags catalog what NOT to claim. They do not enumerate the specific rationalizations that convert "I didn't run the proof" into "it's fine." Under pressure (deadline, fatigue, long turn, trusted sub-agent report, partial run that "mostly worked"), the agent reaches for a rationalization the red-flags do not explicitly name, and the claim lands anyway.
-
-**Rationalizations to reject:**
-- "Confidence ≠ evidence" - high subjective confidence does not substitute for running the verification command in this message.
-- "Just this once" - partial compliance compounds into no compliance. There is no exemption for a single turn.
-- "The downstream agent said success, so it passes" - delegated claims are subject to the same red-flags; do not launder an unverified sub-agent output by restating it yourself.
-- "Partial check is enough" - a subset of tests is not the test suite. If the red-flag applies to the whole check, a partial run does not discharge it.
-- "Code changed, so probably fixed" - red-flag #3 requires re-running the reproduction that originally demonstrated the bug. "Probably fixed" is a hedged claim (red-flag #4).
-- "Looks correct to me" - structural inspection is not verification. If the red-flag demands output, reading code is not output.
+**Root cause:** The red-flags catalogue what not to claim without naming the specific excuses that convert "I did not run the proof" into "it is fine", so under deadline, fatigue, a long turn, or a trusted sub-agent report the agent reaches for an excuse the red-flags never named and the claim lands anyway.
 
 ---

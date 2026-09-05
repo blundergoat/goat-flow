@@ -86,7 +86,9 @@ Recurrence is the opposite signal. An entry with `**Incident count:**` above one
 Split a bucket at roughly 200 lines or 10 entries (ADR-033).
 Split along a real seam and extract the new bucket **out of** the existing file rather than renaming it.
 This keeps paths cited by code, ADRs, and sibling entries resolving.
-Re-run `goat-flow index` afterwards and let `stats --check` find any anchor that pointed at a moved entry.
+Re-run `goat-flow index` afterwards, then run BOTH gates: `stats --check` proves the buckets and generated indexes are internally consistent, and `goat-flow audit . --check-content` proves documents outside the lessons tree still resolve anchors that point *into* a moved entry.
+`stats --check` does not inspect those inbound citations, so a split can pass it and still break an ADR, playbook, or instruction file.
+Before regenerating, grep the moved entry titles across committed content rather than filtering to the lessons tree.
 
 Those figures are guidance.
 The blocking gate is measured in bytes: `stats --check` fails with `bucket-size` above 40,000 bytes.
