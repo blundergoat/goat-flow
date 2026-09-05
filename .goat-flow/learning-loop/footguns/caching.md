@@ -1,6 +1,6 @@
 ---
 category: caching
-last_reviewed: 2026-08-01
+last_reviewed: 2026-09-05
 ---
 
 ## Footgun: TTL'd cache invalidation MUST travel with every writer, not just the writer the bug surfaced from
@@ -8,22 +8,13 @@ last_reviewed: 2026-08-01
 **Status:** active | **Created:** 2026-05-25 | **Evidence:** EXTERNAL_REFERENCE
 
 **Prevention:**
-1. When introducing or modifying a TTL'd or memoized cache, do ONE grep before committing: `rg -n "<table_or_artifact_name>" src/ --type ts` and audit every mutator (insert/update/delete/bulk/import/reset/reload). Add invalidation to each one in the SAME PR. If you ship a fix that only patches the writer you observed, expect the second occurrence within weeks.
-2. Co-locate `set` and `clear` callsites where possible. If the cache is module-private (a `Map` declared at module top), put its `clearX()` export immediately under it so any writer importing the cache also sees the invalidator one screen away.
-3. When a cache exports `resetXCache()` (e.g., `resetManifestCache`), search for every reference: `rg -n "resetManifestCache" src/`. The set of callers should equal the set of mutators of the underlying resource. If there's a mutator with no reset call, that's the bug — fix before the user reports stale data.
-4. Contract test pattern: when adding a new mutator against a cached resource, the test that exercises it should also assert the cache returns the post-mutation value (not the pre-mutation cached value). The test fails if the invalidator is missing.
+1. When introducing or modifying a TTL'd or memoized cache, grep every mutator of the underlying resource (insert, update, delete, bulk import, reset, reload) and add invalidation to each in the same change. A fix that patches only the writer you observed will recur within weeks.
+2. Co-locate `set` and `clear`: when a cache is module-private, export its `clearX()` directly beneath it so any writer importing the cache sees the invalidator.
+3. When a cache exports a reset such as `resetManifestCache`, the set of callers must equal the set of mutators; a mutator with no reset call is the bug.
+4. A test for a new mutator against a cached resource asserts the cache returns the post-mutation value.
 
+**Symptoms:** A read-side cache returns stale data after a write completes, then self-heals at TTL expiry, so the bug looks transient and timing-dependent. Count-style caches are worst: callers see plausible wrong totals with no way to tell fresh from stale.
 
-**Symptoms:** A read-side cache returns stale data after a write completes. The cache eventually self-heals at TTL expiry, so the bug looks transient: "metrics seem stale right after I retry, but they come good after a few minutes." Repros are timing-dependent and easy to dismiss. Particularly insidious for COUNT-style caches (row counts, fact counts, artifact counts) — callers see plausible but wrong totals and have no way to tell whether the count is fresh or stale.
+**Why it happens:** The developer who adds a cache adds invalidation to the path they observe. Other mutators in other files never import the invalidation primitive because the cache is not visible from there.
 
-**Why it happens:** Caches are usually conceived as a read-side optimization. The developer who introduces the cache adds invalidation to the path they observe. Other mutators in different files (insert vs delete vs bulk-import vs config-reload vs cleanup) do not import the invalidation primitive because the cache module's existence isn't visible from those files. The cache definition stays in one place; the invalidators are scattered across every mutation site. A single missed callsite leaves the cache stale until TTL expiry.
-
-**Evidence (external — promptfoo PR #9421 + #9431):**
-- PR #9421 (merged 2026-05-24, `mldangelo`): `getCachedResultsCount()` / `getTotalResultRowCount()` cached with 5-min TTL. Insert paths `createFromEvaluateResult` and `createManyFromEvaluateResult` never invalidated. Two-line fix: import `clearCountCache`, call after each insert.
-- PR #9431 (merged shortly after, same project): `deleteErrorResults()` had the SAME bug class. The fix had to discover affected eval IDs via `selectDistinct` before deletion, then loop `clearCountCache(evalId)` after the batched delete. Sharing and metrics showed stale totals after retry cleanup.
-- Together: the same cache-invalidation bug shipped TWICE in the same product because the first fix only patched the writer the team observed (insert). Delete was a different file and never got the import. Strong evidence that "fix the one I saw" isn't enough for cache invalidation.
-
-**Goat-flow applicability — MEDIUM:** Goat-flow has three caches, and only one of them carries the shape this footgun describes. The rating was HIGH until a 2026-08-01 re-read of the cited code showed the `fs.ts` caches are per-adapter closure state, not the module-level singletons the entry originally claimed; check the scope before assuming a cache needs cross-writer invalidation:
-- `src/cli/facts/fs.ts` (search: `contentCache`, `existsCache`, `directoryReadCache`, `globCache`) — four `Map`s, each closure-scoped inside its own factory (`createCachedReadFile`, `createExistsChecker`, and the directory/glob readers), so one adapter's caches live and die with that adapter rather than persisting module-wide. That narrows the blast radius today: a facts pass cannot serve another pass stale data. The exposure returns the moment an adapter outlives a single pass — a "refresh on file watcher event" or "invalidate on write through audit" feature would need to reach all four.
-- `src/cli/manifest/manifest.ts` (search: `resetManifestCache`) — already exports an invalidator, which means callers are EXPECTED to call it. Every place that mutates the underlying manifest JSON (CLI commands, install script, repair routines) MUST grep-confirm it calls `resetManifestCache()`.
-- `src/cli/server/dashboard-assets.ts` (search: `dashboardAssetCache`) — module-level `Map`. Dev-mode source watchers must invalidate; production never mutates.
+**Evidence:** External, promptfoo PRs #9421 and #9431 (May 2026): `getCachedResultsCount()` was cached with a 5-minute TTL, the insert paths never invalidated it, and after that two-line fix the delete path `deleteErrorResults()` shipped the same bug because it lived in a different file. Local caches, re-read 2026-08-01: `src/cli/facts/fs.ts` (search: `contentCache`, `existsCache`, `directoryReadCache`, `globCache`) are four `Map`s closure-scoped inside their factories, so one facts pass cannot serve another stale data, and the exposure returns the moment an adapter outlives a pass, for example a file-watcher refresh. `src/cli/manifest/manifest.ts` (search: `resetManifestCache`) exports an invalidator that every manifest mutator must call. `src/cli/server/dashboard-assets.ts` (search: `dashboardAssetCache`) is a module-level `Map` that dev-mode source watchers must invalidate.
