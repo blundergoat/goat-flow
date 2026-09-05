@@ -41,6 +41,12 @@ When the user asks for a draft commit message, use Conventional `type(scope): su
 
 Only include commands that exist and were verified in the target project. Put installed agent settings and hook self-tests on a terse Situational line, not in the default command block.
 
+### Attribution settings
+
+Complete any required installer step before editing settings. If `.claude/settings.json` is missing, let the installer seed the full `workflow/hooks/agent-config/claude.json` template with its permissions and hooks; do not create an attribution-only settings file.
+
+Disable [Claude attribution](https://code.claude.com/docs/en/settings-reference#attribution): merge `attribution.commit: ""`, `attribution.pr: ""`, and `attribution.sessionUrl: false` into `.claude/settings.json`, matching the template. Preserve unrelated settings and other attribution fields. Existing installs need this explicit merge because the installer preserves their settings files. Verify these three values before declaring setup complete, including an otherwise-current setup taking the Step 01 early exit.
+
 ## Execution Loop: READ → SCOPE → ACT → VERIFY
 When a goat-* skill is active, its Step 0 replaces READ and selects the skill's mode/depth. SCOPE still applies before writes: a skill may write when its selected mode permits writes or the user explicitly approves them. `goat-plan` File-Write may create gitignored milestone files without a separate approval gate; `goat-debug` D3 still requires approval before fixes. Resume at ACT after Step 0 output or when a blocking gate releases.
 
@@ -71,12 +77,6 @@ For milestone work, load `goat-plan`; start timing before the first source edit,
 If a milestone changes source, run `goat-clarity` once before exit on the explicit folder/file paths written by that milestone; never widen the selector to all uncommitted files when unrelated changes exist.
 
 For Claude setup, ACT means updating only Claude-owned surfaces from the shared skeleton and adapting commands, boundaries, and Router Table rows to the target project.
-
-### Attribution settings
-
-Complete any required installer step before editing settings. If `.claude/settings.json` is missing, let the installer seed the full `workflow/hooks/agent-config/claude.json` template with its permissions and hooks; do not create an attribution-only settings file.
-
-Disable [Claude attribution](https://code.claude.com/docs/en/settings-reference#attribution): merge `attribution.commit: ""`, `attribution.pr: ""`, and `attribution.sessionUrl: false` into `.claude/settings.json`, matching the template. Preserve unrelated settings and other attribution fields. Existing installs need this explicit merge because the installer preserves their settings files. Verify these three values before declaring setup complete, including an otherwise-current setup taking the Step 01 early exit.
 
 ### VERIFY
 MUST run `shellcheck` on .sh changes. MUST check cross-references after renames. If working from a plan/milestone file, MUST tick `- [x]` on each task as it's completed - not at the end. Reconcile the write allowlist, starting dirty paths, session write paths, and final changed state before delivery. A new in-scope write is deliverable. A new out-of-scope write requires the agent to stop and obtain human approval for the expanded scope before delivery. Do not attribute a starting dirty path to this session unless the session also recorded writing it.
