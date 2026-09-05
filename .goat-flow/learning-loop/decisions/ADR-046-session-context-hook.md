@@ -1,34 +1,26 @@
 # ADR-046: Deliver bounded orientation through capture-gated session-start hooks
 
-**Status:** Accepted
+**Status:** Proposed
 **Date:** 2026-08-23
-**Updated:** 2026-09-03 - replaced a dead milestone owner with explicit unplanned follow-up status.
+**Updated:** 2026-09-05 - status changed from Accepted to Proposed: nothing has shipped, no milestone owns the slice, and the 2026-08-23 captures expire under ADR-052 on 2026-09-22. The 2026-09-03 amendment had replaced a dead milestone owner with unplanned status.
 
 ## Context
 
-Agents start and resume without a compact pointer to the active plan or latest session handoff. The existing Step 0 instructions can recover that state after deliberate reads, but they do not place bounded orientation in the first model request.
+Agents start and resume without a compact pointer to the active plan or latest handoff. Step 0 recovers that state after deliberate reads, but nothing places bounded orientation in the first model request.
 
-M12 tested the installed providers with a fresh nonce returned as session context. Claude Code 2.1.240 delivered the nonce for `startup`, `resume`, and `fork`; resume kept its session identity and fork changed it. Codex CLI 0.149.0 delivered for `startup` and `resume`; `codex exec fork` made a distinct thread but classified its hook as the documented `startup` source. GitHub Copilot CLI 1.0.80 delivered for initial source `new` and source `resume`, but project `sessionStart` hooks cannot currently be source-filtered and interactive `startup` remains uncaptured. Antigravity 1.1.15 documents no session-start event.
-
-The capture also reproduced a configuration interaction: Copilot combines `.github/hooks/*.json` with repository `.claude/settings.json`, so one fixture process ran both compatible entries until the runner selected a target provider explicitly. This is expected by Copilot's hook-locations contract and makes provider-specific registration part of the decision, not incidental test setup.
-
-Evidence anchors:
-
-- `.goat-flow/learning-loop/footguns/hooks.md` (search: `## Footgun: Copilot combines native and Claude project hook registrations`)
-- `.goat-flow/learning-loop/decisions/ADR-052-define-hook-trust-evidence-and-results.md` (search: `Each provider/event combination records`)
-- `workflow/manifest.json` (search: `"hook_events"`)
+M12 tested the installed providers with a fresh nonce returned as session context. Claude Code 2.1.240 delivered it for `startup`, `resume`, and `fork`. Codex CLI 0.149.0 delivered for `startup` and `resume`; `codex exec fork` made a distinct thread but classified its hook as `startup`. GitHub Copilot CLI 1.0.80 delivered for `new` and `resume`, but project `sessionStart` hooks cannot be source-filtered and interactive `startup` stayed uncaptured. Antigravity 1.1.15 documents no session-start event. The capture also reproduced a configuration interaction: Copilot combines `.github/hooks/*.json` with repository `.claude/settings.json`, so one fixture process ran both entries until the runner selected a provider explicitly (`.goat-flow/learning-loop/footguns/hooks.md`, search: `## Footgun: Copilot combines native and Claude project hook registrations`).
 
 ## Decision
 
-Ship one read-only session-orientation hook only where a fresh ADR-052 capture and the effective multi-agent config path both prove bounded delivery. It supplies pointers, not file contents, instructions, validation evidence, or permission to act.
+Ship one read-only session-orientation hook only where a fresh ADR-052 capture and the effective multi-agent config path both prove bounded delivery; the first admitted slice is Codex `startup` and `resume`.
 
-The canonical payload is one line:
+The hook supplies pointers, not file contents, instructions, validation evidence, or permission to act. Its canonical payload is one line:
 
 ```text
 goat-flow-session-context/v1 active_plan=<safe pointer> latest_session=<safe filename>
 ```
 
-The implementation contract is a Bash script of at most 25 lines, including a 3-line user-focused file description. It uses Bash builtins and glob expansion only in the per-item path, reads at most the first line of `.goat-flow/plans/.active`, selects the last date-prefixed session filename, replaces characters outside `[[:alnum:]._-]` with `_`, prints nothing when both values are absent, and always exits 0. This 23-line proof shape demonstrates that the constraints fit together:
+The script is at most 25 lines of Bash including a 3-line description, uses builtins and glob expansion only, reads at most the first line of `.goat-flow/plans/.active`, selects the last date-prefixed session filename, replaces characters outside `[[:alnum:]._-]` with `_`, prints nothing when both values are absent, and always exits 0. This 23-line proof shape shows the constraints fit together:
 
 ```bash
 #!/usr/bin/env bash
@@ -56,52 +48,30 @@ printf 'goat-flow-session-context/v1 active_plan=%s latest_session=%s\n' "${acti
 exit 0
 ```
 
-The source gates are:
+| Provider | Admitted sources | Deferred or unsupported |
+| --- | --- | --- |
+| Claude Code | none | `startup`, `resume`, and `fork` delivered, but Copilot also runs the Claude registration in a mixed-agent repository; `clear` and `compact` HUMAN-PENDING |
+| Codex CLI | `startup`, `resume` | `clear` and `compact` HUMAN-PENDING; fork has no separate source |
+| GitHub Copilot CLI | none | `sessionStart` not source-filterable, `startup` uncaptured, and a native entry would duplicate the cross-loaded Claude row |
+| Antigravity | none | No documented session-start event; `PreInvocation` is not equivalent |
 
-| Provider | Default-on sources after M12 | Deferred or unsupported |
-|---|---|---|
-| Claude Code | none in the first rollout | `startup`, `resume`, and `fork` delivered, but Copilot also runs the Claude registration in a mixed-agent repository. `clear` and `compact` remain HUMAN-PENDING. |
-| Codex CLI | `startup`, `resume` | `clear`, `compact` remain HUMAN-PENDING; fork has no separate source to register. |
-| GitHub Copilot CLI | none | `new` and `resume` delivered, but `sessionStart` is not source-filterable, `startup` is uncaptured, and a native registration would duplicate the cross-loaded Claude entry in a mixed-agent repository. |
-| Antigravity | none | No documented session-start event. `PreInvocation` is not equivalent. |
+At implementation, `workflow/manifest.json` gains nullable `hook_events.session_start` entries and the registry derives `supportsSessionStartHook` the way it derives `supportsPostTurnHook`. A null capability stays absent rather than becoming a best-effort hook. A Claude registration additionally needs a proven Copilot exclusion, because Copilot reads that config independently of the manifest gate. The hook never claims a milestone was read, a handoff applied, checks passed, or the project is safe.
 
-`workflow/manifest.json` gains nullable `hook_events.session_start` entries only at implementation. The runtime registry derives `supportsSessionStartHook` from `agent.hook_events?.session_start != null`, mirroring the existing `supportsPostTurnHook` gate. Registration templates must use only the source list above; a null capability must remain absent rather than becoming a best-effort hook. A Claude registration also needs a proven Copilot exclusion before `session_start` can become non-null because Copilot reads that repository config independently of Goat Flow's manifest gate.
+This does not conflict with ADR-037: it uses a different lifecycle surface, reads no project source, creates no workflow-enforcement state, and makes no validation claim.
 
-The hook is additive orientation. It must never claim that the active milestone was read, a handoff was applied, checks passed, or the project is safe. Agents still follow Step 0 and explicit verification gates.
+## Failure Mode Comparison
 
-## ADR-037 non-conflict
-
-ADR-037 governs post-turn `Stop` hooks and rejects generic project validation and plan-checkbox reminders. This decision uses a different lifecycle surface, reads no project source, creates no workflow-enforcement state, and makes no validation claim. It therefore does not restore `stop-lint.sh`, `post-turn-validate`, or `plan-checkbox-guard.sh`, and it does not supersede ADR-037.
-
-## Options considered
-
-### Keep instruction-only retrieval
-
-This avoids another hook surface but leaves orientation dependent on a later deliberate read. It remains the fallback for every deferred or unsupported provider and if rollout evidence fails.
-
-### Enable every documented provider
-
-Documentation alone cannot prove trust, result delivery, or model visibility. M12 also showed source mismatches and cross-tool config loading that a support table would hide. This option is rejected.
-
-### Enable capture-verified and independently routable sources only
-
-This keeps the claim small, excludes human-pending sources, accounts for the effective mixed-agent config path, and preserves null as an honest unsupported state. It is accepted. The first rollout is Codex-only.
+| Option | What fails | Verdict |
+| --- | --- | --- |
+| Instruction-only retrieval | Orientation depends on a later deliberate read | Fallback for every deferred provider and if rollout evidence fails |
+| Enable every documented provider | Documentation cannot prove trust, delivery, or model visibility; M12 showed source mismatches and cross-tool loading that a support table would hide | Rejected |
+| Capture-verified, independently routable sources only | A small claim with an honest null for unsupported providers | Accepted as the design |
 
 ## Consequences
 
-- Codex can receive one bounded orientation line on `startup` and `resume` without reading milestone or handoff bodies.
-- Claude remains off by default despite successful source captures because Copilot can execute its project registration outside the intended manifest gate.
-- Copilot remains off by default despite successful `new` and `resume` delivery because its unverified `startup` path cannot be excluded and a native entry can duplicate the Claude-compatible entry.
-- Antigravity continues with instruction-based Step 0 retrieval.
-- Provider capture evidence expires under ADR-052 when version, mode, config source, trust, lifecycle, response delivery, or model visibility changes.
-- The implementation must sweep manifest, registry, registrar, installed mirror, audit, tests, docs, and hook verification surfaces together; a script alone is not a shipped capability.
-
-## Rollout and acceptance
-
-The accepted first rollout remains Codex startup and resume only. No current implementation milestone owns this slice, so it is an explicitly unplanned follow-up until a future roadmap admits it. This decision does not itself authorize or implement shipped hooks.
-
-Deferred providers retain instruction-based retrieval until fresh evidence supports a later decision. No shipped config changes are required while they remain deferred.
+- Nothing ships until a fresh capture renews the evidence and a milestone admits the Codex slice; the implementation must sweep manifest, registry, registrar, installed mirror, audit, tests, docs, and hook verification together.
+- Claude and Copilot stay off despite successful captures; Antigravity keeps instruction-based Step 0 retrieval.
 
 ## Reversibility
 
-Before release, abandon the planned registration and script and leave nullable `session_start` fields absent. After release, rollback requires hook sync to remove installed registrations and mirrors while leaving the instruction-based Step 0 path intact.
+Before release, abandon the registration and script and leave `session_start` absent. After release, hook sync removes registrations and mirrors while the instruction-based Step 0 path stays intact.

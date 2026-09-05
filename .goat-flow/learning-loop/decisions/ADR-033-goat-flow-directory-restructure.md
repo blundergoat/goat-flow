@@ -2,119 +2,73 @@
 
 **Status:** Accepted
 **Date:** 2026-06-07
-**Updated:** 2026-08-15 - absorbed ADR-004 (config file and directory-based learning loop), ADR-016 (cold-path truth maintenance), ADR-035 (generated indexes), and ADR-001 (confusion-log removal). All four decide how durable project memory is stored, retrieved, and kept true.
-**Supersedes:** ADR-017 path choice for `.goat-flow/tasks/.active`. ADR-017's marker semantics remain in force.
-**Ticket/Context:** `.goat-flow/plans/1.10.0/M04-goat-flow-directory-restructure.md`
+**Updated:** 2026-09-05 - condensed; absorbed now-removed ADR-045-index-cost-date-columns.md (content-derived cost and date columns, 2026-08-23), corrected the bucket split rule to the enforced byte gate, and deferred `agents` semantics to ADR-014. The 2026-08-15 amendment absorbed now-removed ADR-004 (config and directory layout), ADR-016 (cold-path truth), ADR-035 (generated indexes), and ADR-001 (confusion-log removal).
+**Supersedes:** the ADR-017 marker path `.goat-flow/tasks/.active`; ADR-017's marker semantics remain in force.
 
 ## Context
 
-The installed `.goat-flow/` layout had grown around historical top-level buckets:
-`footguns/`, `lessons/`, `patterns/`, `decisions/`, `skill-reference/`,
-`skill-playbooks/`, `hook-lib/`, and `tasks/`. M04 showed that a simple rename
-would be unsafe because runtime code, setup templates, manifest checks, dashboard
-APIs, hook launchers, skill routing, and local milestone history all reference
-these paths.
+The installed `.goat-flow/` layout had grown around historical top-level buckets: `footguns/`, `lessons/`, `patterns/`, `decisions/`, `skill-reference/`, `skill-playbooks/`, `hook-lib/`, and `tasks/`. A plain rename was unsafe because runtime code, setup templates, manifest checks, dashboard APIs, hook launchers, skill routing, and local milestone history all referenced those paths. The user approved the `skill-docs` name and required the `tasks` to `plans` change to ship as a bundled migration that preserved `.active`, local milestone subdirectories, dashboard plan behaviour, and old history without overwriting same-named new files.
 
-The user approved the final skill-docs target name and required the `tasks` to
-`plans` change to ship as a bundled migration that preserves `.active`, existing
-local milestone subdirs, dashboard plan behavior, goat-plan routing, config
-defaults, and old local history without overwriting same-named new files.
-
-Three earlier decisions settled adjacent halves of the same question: which buckets exist and where config names them, how a cold agent finds an entry, and how stored content is kept from silently going stale. Splitting them across four files meant a reader changing the layout had to reconstruct the retrieval and truth contracts from elsewhere.
+Three earlier decisions had settled adjacent halves of one question: which buckets exist and where config names them, how a cold agent finds an entry, and how stored content is kept true. The original index rows also gave an agent no idea how much text an entry held, and showed dates only for decisions.
 
 ## Decision
 
-goat-flow stores durable memory, shared skill doctrine, hooks, and plans under one `.goat-flow/` hierarchy while `workflow/` remains the package source.
+Durable memory, shared skill doctrine, hooks, and plans live under one `.goat-flow/` hierarchy, retrieved through generated per-bucket indexes, while `workflow/` stays the package source.
 
 ### Installed layout
 
-- `.goat-flow/learning-loop/{decisions,footguns,lessons,patterns}/` for durable
-  project memory.
-- `.goat-flow/skill-docs/` for shared skill doctrine, with standalone playbooks
-  under `.goat-flow/skill-docs/playbooks/` and skill-authoring methodology under
-  `.goat-flow/skill-docs/skill-quality-testing/`.
-- `.goat-flow/hooks/` for central installed hook dispatchers, with deny-dangerous
-  policy modules under `.goat-flow/hooks/deny-dangerous/`.
+- `.goat-flow/learning-loop/{decisions,footguns,lessons,patterns}/` for durable project memory.
+- `.goat-flow/skill-docs/` for shared skill doctrine, with playbooks under `playbooks/` and skill-authoring method under `skill-quality-testing/`.
+- `.goat-flow/hooks/` for the central hook dispatchers, with deny-dangerous policy modules under `deny-dangerous/`.
 - `.goat-flow/plans/` for local milestone plans and the `.active` marker.
 
-Keep `workflow/` as the package template source. For example,
-`workflow/skills/reference/` still sources shared skill doctrine, while the
-installed copy lands in `.goat-flow/skill-docs/`.
-
-Installer upgrades must move old directories idempotently with no-overwrite
-semantics. When both old and new paths exist, the migration moves only entries
-whose destination does not already exist and leaves conflicts in the old path
-for human review rather than overwriting local work.
+`workflow/` remains the template source; for example `workflow/skills/reference/` sources the doctrine installed to `.goat-flow/skill-docs/`. Installer upgrades move old directories idempotently with no-overwrite semantics: when both paths exist, only entries whose destination is absent move, and conflicts stay in the old path for human review.
 
 ### Config surface
 
-`.goat-flow/config.yaml` names the learning-loop paths rather than hardcoding them: `footguns.path`, `lessons.path`, `decisions.path`, `plans.path`, plus `agents` (detected list or explicit override) and `skills.install` (explicit list or `all`). `config.yaml` is the only machine-readable config surface; the former gitignored local config was removed in M13.
-
-The template `.gitignore` and scaffolding keep per-session artifacts out of version control: `.goat-flow/plans/` and logs.
+`.goat-flow/config.yaml` is the only machine-readable config surface; the former gitignored local config was removed. It names the learning-loop paths (`footguns.path`, `lessons.path`, `decisions.path`, `plans.path`) and the skill list (`skills.install`, an explicit list or `all`). ADR-014 owns the semantics of `agents` and the optional calibration fields. The template `.gitignore` keeps `.goat-flow/plans/` and logs out of version control.
 
 ### Entry format
 
-Within `footguns/` and `lessons/`, entries are **category bucket files**, not one incident per file:
+Footguns and lessons are category bucket files, not one incident per file: `footguns/<category>.md` and `lessons/<category>.md`, with `## Footgun: <name>` plus `Status / Created / Evidence`, or `## Lesson: <name>` and `## Pattern: <name>` plus `Created`. A directory `README.md` carries any preamble. Create a new category only when none fits. A bucket over 40,000 bytes is a blocking `stats --check` finding and 39,000 bytes warns, so split into narrower categories before the gate.
 
-- **Footguns:** `.goat-flow/learning-loop/footguns/<category>.md` such as `hooks.md`, `auditor.md`, `setup.md`
-- **Lessons:** `.goat-flow/learning-loop/lessons/<category>.md` such as `verification.md`, `agent-behavior.md`
-- Each footgun entry uses `## Footgun: <name>` plus `Status / Created / Evidence`
-- Each lesson entry uses `## Lesson: <name>` or `## Pattern: <name>` plus `Created`
-- A directory-level `README.md` carries any preamble
-- Create a new category only when no existing category fits
-- Split a bucket at roughly 200 lines or 10 entries
+The two-surface minimum is architectural traps in `footguns/` and behavioural mistakes in `lessons/`. `confusion-log.md` is not a third surface and must not return; structural confusion is addressed by the router table and `.goat-flow/architecture.md`. A project still carrying one may keep it as unscored history and merge useful entries into `lessons/`.
 
-The two-surface minimum is architectural traps in `footguns/` and behavioural mistakes in `lessons/`. `confusion-log.md` is not a third surface and must not be resurrected as one - structural confusion is addressed by the router table and `.goat-flow/architecture.md`. A project still carrying an old confusion log may keep it as unscored historical material; useful entries merge into `lessons/`.
-
-### Evidence lifecycle
-
-- `ACTIVE` is the default for live warnings and lessons
-- `MITIGATED` marks a partial fix and must cite the change that reduced the risk
-- `RESOLVED` marks a fully fixed issue and stays in place as historical evidence rather than moving to a separate archive file
-
-Cold-path content requires automated truth-checking, not manual maintenance alone. `stats --check` and the preflight checks own that enforcement; entries carry semantic anchors rather than line numbers (ADR-024).
+Evidence lifecycle: `ACTIVE` is the default; `MITIGATED` marks a partial fix and cites the change; `RESOLVED` stays in place as history rather than moving to an archive. Cold-path content needs automated truth-checking: `stats --check` and the preflight checks own it, and entries cite semantic anchors rather than line numbers (ADR-024).
 
 ### Generated indexes
 
-Per-bucket `INDEX.md` files for all four buckets are produced by the `goat-flow index` CLI command (`src/cli/learning-loop-index/`) and committed to version control. One unified row schema applies to every bucket:
+`goat-flow index` (`src/cli/learning-loop-index/`) writes a committed `INDEX.md` per bucket with one row schema:
 
 ```markdown
-- [Title](bucket-file.md) (search: "<entry heading line>") - short hook
+- [Title](bucket-file.md) (search: "<entry heading line>") - short hook (YYYY-MM-DD; ~NNN tok)
 ```
 
-Hooks are extracted mechanically - first sentence after `**Symptoms:**` / `**What happened:**` / `**Context:**`; for ADRs the verbatim `**Status:**` plus `**Date:**` plus the first `## Decision` sentence - never hand-curated. Decisions rows carry status verbatim so retrieval does not follow superseded decisions blind, which makes a wrong `**Status:**` line a retrieval bug rather than a cosmetic one.
+Hooks are extracted mechanically, never hand-curated: the first sentence after `**Symptoms:**`, `**What happened:**`, or `**Context:**`; for footguns and lessons a declared `**Decision changed:**` value replaces that hook, prefixed `Decision:`; for decisions the verbatim `**Status:**` plus the first `## Decision` sentence, so retrieval never follows a superseded decision blind and a wrong status line is a retrieval bug. The complete hook stays within 100 characters, shortened at a word boundary with an ellipsis and backed up before an open code span.
 
-Generated output contains nothing clock-derived: `goat-flow stats --check` re-runs the generator in memory and compares content (`index-fresh`), so any time-dependence would read as permanent staleness. A stale index is a blocking `index-stale` finding; a never-generated index is an advisory `index-missing` warning so fresh installs do not false-fail.
+The suffix is content-derived. The token estimate is the entry's UTF-8 byte length divided by four, rounded to the nearest ten: a stable reading-cost comparison, not a model token count. The date appears only when the source declares one (`Created` for footguns, lessons, and patterns; `Date`, or `Superseded` for a superseded status, for decisions). Generation never substitutes the clock or file modification time, so an undated entry shows a token-only suffix such as `(~120 tok)`.
 
-The load model is a mandatory Step 0 read, not always-loaded instruction content: `skill-preamble.md` Learning-Loop Retrieval directs every skill's Step 0 to read the relevant `INDEX.md` before grepping individual entries, and requires the `Relevant prior learnings:` emission so skipped retrieval becomes visible.
+Nothing in generated output is clock-derived. `stats --check` regenerates in memory and compares (`index-fresh`); a stale index is a blocking `index-stale` finding and a never-generated one an advisory `index-missing` warning. Index `sizeBytes` is telemetry only and aggregate size never warns, because Step 0 searches the indexes rather than loading one wholesale. Search output is capped at 13 rows across the four buckets; the thirteenth row is a breadth signal to refine terms, and the agent reads at most 12. `skill-preamble.md` Learning-Loop Retrieval directs every skill's Step 0 to that read and requires the `Relevant prior learnings:` emission so skipped retrieval is visible.
 
 ## Failure Mode Comparison
 
-| Option | What fails | Why rejected or accepted |
+| Option | What fails | Verdict |
 | --- | --- | --- |
-| Rename directories and chase compile errors | Dashboard APIs, installer upgrades, hook configs, and local `.active` state can split between old and new paths. | Rejected because it loses the upgrade safety contract. |
-| Defer `tasks` to `plans` | Leaves the most user-visible rename out of the structural release and keeps ADR-017's old path as live doctrine. | Rejected after explicit user approval for bundled migration. |
-| Move workflow template source directories too | Increases package churn and obscures the source/install separation. | Rejected for skill docs; `workflow/skills/reference/` and `workflow/skills/playbooks/` remain source paths. |
-| Move installed state with no-overwrite migration | Preserves user-authored local content and lets setup/templates/runtime converge on one new layout. | Accepted. |
-| Hand-maintained bucket indexes | Three distinct row shapes drifted from their sources and could not be validated. | Rejected; the generator plus `index-fresh` replaced them. |
-| One incident per file | Directory listings grow past the point where a cold agent can scan them. | Rejected in favour of category bucket files with a split threshold. |
+| Rename directories and chase compile errors | Dashboard, installer, hook configs, and `.active` split between old and new paths | Rejected |
+| Defer `tasks` to `plans` | Leaves the most visible rename out of the structural release | Rejected after explicit approval of the bundled migration |
+| Move `workflow/` template sources too | Package churn and a blurred source/install separation | Rejected |
+| One incident per file | Listings grow past what a cold agent can scan | Rejected |
+| Hand-maintained indexes | Three row shapes drifted from their sources and could not be validated | Rejected |
+| Generation time or mtime in rows | Unchanged sources produce different bytes, so `stats --check` reports permanent staleness | Rejected |
+| Exact model tokenizer | A model-specific dependency with false precision across runtimes | Rejected |
+| Warn on aggregate index bytes | Prescribes retiring live evidence although bounded search prevents a whole-file read | Rejected |
+| No-overwrite migration, bucket files with a byte gate, deterministic rows with a content-derived suffix | Editing an entry changes its estimate and makes the index stale until regeneration | Accepted |
 
 ## Consequences
 
-All active instructions, setup templates, manifest entries, audit checks,
-dashboard plan APIs, config defaults, and goat-* skill routing must use the new
-paths. Old path mentions are valid only in migration code, compatibility tests,
-changelog/ADR history, or clearly historical learning-loop evidence.
-
-`/goat-plan` continues to own `.active` semantics, but the marker path is now
-`.goat-flow/plans/.active`. Missing or stale `.active` remains normal local
-churn, not setup failure.
-
-Adding, editing, renaming, or resolving any learning-loop entry requires re-running `goat-flow index`; `stats --check` fails while an index is stale.
+- Active instructions, templates, manifest entries, audit checks, dashboard APIs, config defaults, and skill routing use the new paths; old paths appear only in migration code, compatibility tests, and history.
+- Adding, editing, renaming, or resolving any entry requires `goat-flow index`; `stats --check` fails while an index is stale. All four `INDEX.md` files regenerate together.
 
 ## Reversibility
 
-This is reversible only by another coordinated migration release. A rollback
-must restore installer migration, manifest, dashboard routes, hook configs,
-skill-doc pointers, and goat-plan routing together; reverting only the directory
-names would recreate the split-layout failure this ADR prevents.
+Reversible only by another coordinated migration release that restores installer migration, manifest, dashboard routes, hook configs, skill-doc pointers, and goat-plan routing together. Removing the row suffix is a two-way change to the parser, formatter, and all four indexes in one commit.

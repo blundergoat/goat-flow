@@ -2,72 +2,41 @@
 
 **Status:** Accepted
 **Date:** 2026-08-23
-**Updated:** 2026-08-29 - the two-tier budget landed across all six contract surfaces and the contract assertion.
+**Updated:** 2026-09-05 - condensed; the goat-clarity anchor was corrected to a literal that resolves. The 2026-08-29 amendment recorded the rollout across all six surfaces.
 
 ## Context
 
-Before this rollout, every editable instruction and convention surface stated one five-call sub-agent
-budget, so a read-only lookup and an authorized edit-and-verify task had the same ceiling. Six
-documentation surfaces plus one contract test pinned that universal wording.
+Every instruction and convention surface stated one five-call sub-agent budget, so a read-only lookup and an authorized edit-and-verify task had the same ceiling. That ceiling is too small for the repository's implementation loop: related source reading, a scoped edit, focused verification, a bounded clarity pass, typecheck, and the relevant suite can each need separate tool invocations. `AGENTS.md` defines the loop (search: `## Execution Loop: READ → SCOPE → ACT → VERIFY`) and its clarity obligation (search: `once before exit on the explicit folder/file paths`).
 
-The universal ceiling is too small for the repository's required implementation loop. Related source
-reading, a scoped edit, focused verification, a bounded clarity pass, typecheck, and the relevant suite can
-each require separate tool invocations. `AGENTS.md` defines that loop (search:
-`## Execution Loop: READ → SCOPE → ACT → VERIFY`) and its post-source clarity obligation (search:
-`run goat-clarity once before exit`).
-
-Two neighbouring decisions bound the problem. ADR-005 keeps implementation in the ordinary ACT step, so
-delegating one authorized ACT task creates no implementation skill. ADR-042 exempts native sub-agents
-from the cross-harness Ask First boundary, where "unrestricted" means no extra approval gate rather than
-unbounded work. Goat-critique's five-call critique ceiling and three-call cross-examination ceiling are
-specialist scout contracts that stay fixed.
-
-Evidence anchors:
-
-- `AGENTS.md` (search: `Scouts get 5 tool calls`) - the always-loaded two-tier contract
-- `.goat-flow/learning-loop/decisions/ADR-005-no-implementation-skill.md` (search: `# ADR-005`)
-- `.goat-flow/learning-loop/decisions/ADR-042-cross-harness-invocation-ask-first.md` (search: `# ADR-042`)
-- `test/contract/skill-hardening-skills-2.test.ts` (search: `Scouts get 5 tool calls; implementation gets 5 plus`) - the assertion that pins the implementation-budget sentence
+ADR-005 keeps implementation in ordinary ACT, so delegating one authorized ACT task creates no implementation skill. ADR-042 exempts native sub-agents from the cross-harness boundary, where "unrestricted" means no extra approval gate, not unbounded work. Goat-critique's five-call critique ceiling and three-call cross-examination ceiling are specialist scout contracts that stay fixed.
 
 ## Decision
 
-Adopt two tiers instead of one universal budget, accepted by the user on 2026-08-23.
+Sub-agents have two budgets: scouts keep five tool calls, and implementation sub-agents get `min(20, 5 + task estimate in minutes)`.
 
 | Tier | Budget |
-|---|---|
-| Scout - read-only lookup, review, critique, or evidence gathering | 5 tool calls, unchanged |
-| Implementation sub-agent - a delegated objective explicitly authorized to edit within one task's named scope | `min(20, 5 + task estimate in minutes)` tool calls |
+| --- | --- |
+| Scout: read-only lookup, review, critique, or evidence gathering | 5 tool calls, unchanged |
+| Implementation sub-agent: a delegated objective explicitly authorized to edit within one task's named scope | `min(20, 5 + task estimate in minutes)` tool calls |
 
-The five-call base covers the discovery and reporting a scout already gets; estimated minutes add
-implementation room. The cap is a ceiling, not a spending target, and is not a duration model.
+The five-call base covers discovery and reporting; estimated minutes add implementation room. The cap is a ceiling, not a spending target or a duration model.
 
-Supporting definitions:
-
-- **Tool call:** one tool invocation made by the child agent. The final structured return and host-to-child messages do not count.
+- **Tool call:** one tool invocation by the child agent. The final structured return and host-to-child messages do not count.
 - **Task estimate:** the positive minutes in the task's `(est: <minutes> min <category>)` entry.
-- **Unavailable count:** when a runtime cannot expose child tool-call counts, the host passes the cap in the objective and records usage as unavailable. It must not claim measured compliance.
+- **Unavailable count:** when a runtime cannot expose child tool-call counts, the host passes the cap in the objective and records usage as unavailable; it must not claim measured compliance.
 
-Ownership is unchanged: a delegated return is product evidence, while the host still runs the milestone's
-Commands-table proof and owns checkbox completion.
+Ownership is unchanged: a delegated return is product evidence, while the host runs the milestone's Commands-table proof and owns checkbox completion.
+
+## Failure Mode Comparison
+
+| Option | What fails | Verdict |
+| --- | --- | --- |
+| One five-call budget for every sub-agent | Ordinary implementation stays undispatchable, and the universal line hides the scout/implementer difference | Rejected |
+| Host-declared caps with no numeric default | Plan artifacts cannot derive a budget, hosts can silently choose permissive caps, and dispatchability is not self-describing | Rejected |
+| Two tiers with a 20-call ceiling | Work above the ceiling must be split or stay host-owned; a task with no estimate gets one first | Accepted by the user on 2026-08-23 |
 
 ## Consequences
 
-- Ordinary edit-and-verify work becomes dispatchable without splitting it into coordination-heavy fragments, and the cap derives from notation goat-plan already requires.
-- The 20-call ceiling stops task estimates from becoming open-ended delegation authority. Work above it must be split before delegation or stay host-owned.
-- A task with no estimate gets one before implementation delegation, or stays host-owned.
-- The formula is a policy limit, not an empirically calibrated calls-per-minute ratio. Later measured call data can change the base or ceiling without reopening the two-tier decision.
-- ADR-042, `.goat-flow/learning-loop/lessons/agent-evidence-claims.md`, goat-critique's specialist ceilings, and every installed goat-critique mirror stay byte-identical.
-
-## Rollout
-
-The rollout landed on 2026-08-29 as single-line replacements in the six documentation surfaces:
-`AGENTS.md`, `CLAUDE.md`, `.github/copilot-instructions.md`,
-`.goat-flow/skill-docs/skill-conventions.md`, `workflow/skills/reference/skill-conventions.md`, and
-`workflow/setup/reference/execution-loop.md`. The assertion in
-`test/contract/skill-hardening-skills-2.test.ts` pins the accepted implementation sentence. Goat-plan may
-reuse that sizing rule in its dispatchability guidance, but that guidance is separate from this rollout.
-
-## Rejected alternatives
-
-- **Keep one five-call budget for every sub-agent.** No rollout cost, smallest delegation unit, but ordinary implementation stays undispatchable and the universal line keeps hiding the scout/implementer difference.
-- **Host-declared caps with no numeric default.** Accommodates differing runtimes, but removes the portable default, makes plan artifacts insufficient to derive a budget, lets hosts silently choose permissive caps, and leaves task dispatchability non-self-describing.
+- The cap derives from notation goat-plan already requires. The formula is a policy limit, not a calibrated calls-per-minute ratio, and measured data can change the base or ceiling without reopening the two-tier decision.
+- Rolled out 2026-08-29 as single-line replacements in `AGENTS.md`, `CLAUDE.md`, `.github/copilot-instructions.md`, `.goat-flow/skill-docs/skill-conventions.md`, `workflow/skills/reference/skill-conventions.md`, and `workflow/setup/reference/execution-loop.md`, pinned by `test/contract/skill-hardening-skills-2.test.ts` (search: `Scouts get 5 tool calls; implementation gets 5 plus`).
+- ADR-042 points at this tier for native sub-agents; goat-critique's specialist ceilings and every installed goat-critique mirror stay byte-identical.

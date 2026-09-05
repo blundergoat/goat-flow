@@ -2,50 +2,30 @@
 
 **Status:** Accepted
 **Date:** 2026-04-06
-**Updated:** 2026-08-08 - ADR-051 adds a Git-only commit-guidance seed and former-path migration. 2026-08-15 - absorbed ADR-003 (reference-based setup prompts). What setup may write and how its prompts obtain content are one contract: both exist to stop setup from generating a second, drifting copy of something the project or the package already owns.
+**Updated:** 2026-09-05 - condensed; scoping now names the ADR-020 roster instead of two agents, and a stale reference to the removed scanner is gone. Earlier amendments added the ADR-051 commit-guidance seed (2026-08-08) and absorbed now-removed ADR-003 on reference-based prompts (2026-08-15).
 
 ## Context
 
-goat-flow v1.0.0 setups caused damage to existing projects. The worst case: the setup agent replaced ambient-scribe's AGENTS.md (447 lines of real repo guidance) with a 104-line goat-flow mirror. It treated the instruction file as something goat-flow "owned" and could rewrite freely.
+v1.0.0 setups damaged existing projects. The worst case replaced a consumer's 447-line `AGENTS.md` with a 104-line goat-flow mirror because the setup agent treated the instruction file as goat-flow property. Users also did not want every agent configured at once: a Claude setup that rewrote `AGENTS.md` disrupted a Codex workflow nobody asked to change.
 
-Users also don't typically want every supported agent set up at once. A Claude setup that rewrites AGENTS.md or Copilot instructions disrupts workflows the user hasn't asked to change.
-
-Setup prompts had the mirror-image problem. They inlined skeleton content for each skill, so every prompt carried a copy of a template that the package also shipped. The copies drifted from their sources, and a template fix did not reach a project whose prompt had already been generated.
+Setup prompts had the mirror-image problem. They inlined a copy of each skill template, so generated prompts drifted from the package and a template fix never reached a project whose prompt already existed.
 
 ## Decision
 
-**Setup only creates/edits files in `.goat-flow/`.** Everything else in the project is hands-off.
+Setup writes only `.goat-flow/` and the selected agent's manifest-declared surfaces; every other project file is hands-off.
 
-**Existing instruction files (CLAUDE.md, AGENTS.md, `.github/copilot-instructions.md`):**
-- Do NOT delete domain content from the existing file.
-- Reorganise in-place: extract domain knowledge to `.goat-flow/architecture.md` and `.goat-flow/glossary.md`, keep behavioral rules in the instruction file, add missing goat-flow sections.
-- The user's original domain knowledge is preserved in `.goat-flow/`, not destroyed.
-- Never create "original-*" backup copies - reorganise instead. Git history preserves the original.
+**Existing instruction files** (`CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.md`): never delete domain content. Reorganise in place: extract domain knowledge to `.goat-flow/architecture.md` and `.goat-flow/glossary.md`, keep behavioural rules in the file, add the missing goat-flow sections. Never create `original-*` backups; Git history preserves the original.
 
-**All other project files** (`.github/instructions/`, `docs/`, `src/`, config files, scripts, etc.):
-- Never edit, never delete.
-- Reference them from the instruction file's Router Table and `.goat-flow/learning-loop/patterns/`.
+**All other files** (`.github/instructions/`, `docs/`, `src/`, config, scripts): never edit or delete. Reference them from the Router Table and `.goat-flow/learning-loop/patterns/`.
 
-**Exception for upgrades:** Older goat-flow versions (v0.9) have files outside `.goat-flow/` (e.g., `docs/footguns.md`, `tasks/`). These can be migrated during an upgrade -- moved, not deleted without migration.
+**Two exceptions.** Upgrades may migrate pre-1.0 files that lived outside `.goat-flow/`, moved rather than deleted. When the target contains `.git`, setup may seed or migrate the commit-guidance doc under the ADR-051 rules.
 
-**Commit-guidance exception:** When a target contains `.git`, setup may copy `workflow/setup/reference/git-commit-message.md` to the preferred docs path if neither accepted guide exists. During upgrades it may migrate a former-only `docs/coding-standards/git-commit.md` after verifying the preferred destination is absent. Targets without `.git` and collisions remain untouched.
+**Single-agent scoping.** `--agent <id>` selects one agent from the ADR-020 roster per run. Setup touches that agent's instruction file, skills directory, and hook config plus shared `.goat-flow/`, and nothing belonging to another agent. Users run and review each agent separately. A second agent's setup finds `.goat-flow/` already populated and merges rather than overwrites.
 
-**Single-agent scoping:** Setup for one agent only touches that agent's files.
-- Claude setup: CLAUDE.md, `.claude/`, and shared `.goat-flow/`. Does NOT touch AGENTS.md, `.agents/`, `.github/copilot-instructions.md`, `.github/`, or their skills.
-- Codex setup: AGENTS.md, `.agents/`, `.codex/`, and shared folders. Does NOT touch CLAUDE.md or `.claude/`.
-- Users scan and fix each agent setup separately.
-
-### Prompts reference templates, never inline them
-
-`goat-flow setup` generates prompts containing a template path table (skill name to its `workflow/skills/goat-<name>/SKILL.md` path) plus adaptation guidance. The agent reads each template from disk at setup time, so it gets the canonical current version and no inline copy exists to drift.
-
-- A language-to-coding-standards mapper auto-selects the backend, frontend, and security templates from the detected stack.
-- Setup takes one agent per run via `--agent <id>`, using the canonical agent set from ADR-020. The former `--agent all` tried to generate one prompt covering every agent and produced confused output.
-- The inline fragment renderer and its `GOAT_FLOW_INLINE_SETUP` rollback env var were deleted in v0.10.0. There is no inline-generation path to fall back to.
+**Prompts reference templates.** Generated prompts carry a table of template paths (`workflow/skills/goat-<name>/SKILL.md`) plus adaptation guidance; the agent reads each template from disk at setup time, so no inline copy exists to drift. A language-to-coding-standards mapper selects the backend, frontend, and security templates from the detected stack. The inline renderer and its `GOAT_FLOW_INLINE_SETUP` fallback were deleted in v0.10.0.
 
 ## Consequences
 
-- Setup agents reorganise existing instruction files in-place (extract domain knowledge to `.goat-flow/`, keep behavioral rules, add goat-flow sections)
-- Scanner anti-pattern check (AP-duplicate-surfaces) catches setups that create parallel surfaces
-- compose-setup.ts must detect which agent is being set up and scope file operations accordingly
-- Users running setup for a second agent later will find `.goat-flow/` already populated - setup should merge, not overwrite
+- Setup agents reorganise instruction files in place instead of replacing them.
+- `src/cli/prompt/compose-setup.ts` scopes file operations to the selected agent.
+- Setup for a second agent merges into an existing `.goat-flow/`.
