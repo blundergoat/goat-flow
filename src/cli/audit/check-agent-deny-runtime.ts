@@ -1,29 +1,33 @@
 /**
- * Runs the runtime half of the deny-hook audit after a user selects a project.
+ * Replay the selected project's deny hooks when the caller has authorized trusted-target execution.
  *
- * It replays safe and blocked commands through configured launchers, then uses the registered script when no launcher is present.
- * The result tells the user whether policy ran or failed before protection started.
- *
- * Static configuration checks remain in check-agent-deny-mechanism.ts.
+ * Configured launchers receive safe and blocked requests; undiscovered or unreadable registrations use a direct-script fallback.
+ * Results describe these local replays, without proving external agent delivery during a live session.
  */
 import * as childProcess from "node:child_process";
 import { existsSync } from "node:fs";
 import { join, posix } from "node:path";
 import type { AuditContext, AuditFailure } from "./types.js";
 
-/** User-facing spawn failure and repair, separate from a hook's policy exit. */
+/**
+ * Describe why audit could not start a hook and how the user can retry.
+ *
+ * Keep launcher availability separate from a policy decision to allow or block work.
+ * Both fields supply the failure and repair text displayed by the audit.
+ */
 interface SpawnFailure {
   message: string;
   howToFix: string;
 }
 
 /**
- * Extract a Node errno `code` (e.g. `"EPERM"`) from an unknown thrown value.
+ * Read a launcher error code so audit can explain a missing executable, blocked process, or timeout.
  *
- * @param error - A caught value that may be a Node system error.
- * @returns The `code` string when present, otherwise `undefined`.
+ * @param error - caught value; null or a value without a string code has no recognized errno
+ * @returns error code when available; undefined leaves the caller to inspect other process evidence
  */
 function errnoCode(error: unknown): string | undefined {
+  // Values without an errno cannot identify which launcher repair the user needs.
   return typeof error === "object" &&
     error !== null &&
     "code" in error &&
@@ -33,23 +37,22 @@ function errnoCode(error: unknown): string | undefined {
 }
 
 /**
- * Coerce an unknown caught value into a human-readable message string.
+ * Turn a caught launcher value into the detail displayed beside the audit's repair advice.
  *
- * @param error - A caught value (Error or otherwise).
- * @returns The Error's `message`, or the value stringified.
+ * @param error - caught value; null becomes the literal text "null"
+ * @returns Error message or stringified value; an empty Error message contributes no extra detail
  */
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
 /**
- * Turn a spawn errno into a user-facing failure, separate from a hook policy result.
+ * Report known launch failures separately from the hook's decision about a user command.
  *
- * @param error - The error thrown/returned by the spawn attempt.
- * @param action - Short description of what was being spawned, for the message.
- * @param executable - Program the runtime attempted to launch.
- * @returns A {@link SpawnFailure} for known spawn errnos, or `null` when the error
- *   is not a recognised spawn failure (i.e. the command actually ran).
+ * @param error - value returned or thrown by the launch attempt; an absent code produces no classified failure
+ * @param action - audit action named in the failure message; empty omits that context
+ * @param executable - program audit tried to start; defaults to Bash
+ * @returns known launch failure, or null for an unrecognized error; null alone does not prove the hook ran
  */
 export function spawnFailureFor(
   error: unknown,
@@ -57,18 +60,21 @@ export function spawnFailureFor(
   executable = "bash",
 ): SpawnFailure | null {
   const code = errnoCode(error);
+  // A process-restricted audit cannot start the hook; explain which permission prevents verification.
   if (code === "EPERM") {
     return {
       message: `${action} could not spawn ${executable} (EPERM: ${errorMessage(error)}). The current sandbox or permission profile blocks child-process execution.`,
       howToFix: `Run this audit outside the child-process-restricted sandbox, or use a profile that permits Node child_process to spawn ${executable}.`,
     };
   }
+  // An unavailable executable leaves the hook untested; tell the user what to install or add to PATH.
   if (code === "ENOENT") {
     return {
       message: `${action} could not spawn ${executable} (ENOENT: ${errorMessage(error)}).`,
       howToFix: `Install ${executable} or run the audit in an environment where ${executable} is on PATH.`,
     };
   }
+  // A hook launch that exceeds its deadline needs a manual replay to reveal where it stalls.
   if (code === "ETIMEDOUT") {
     return {
       message: `${action} timed out while spawning ${executable} (${errorMessage(error)}).`,
@@ -80,22 +86,23 @@ export function spawnFailureFor(
 }
 
 /**
- * Detect whether the user's hook started and returned a numeric status.
+ * Recognize a recorded child exit so audit does not mistake a policy result for a failure to start.
  *
- * @param result - A `spawnSync`-shaped result with an optional `status`.
- * @returns `true` when `status` is a number (the child started and exited).
+ * @param result - process result; absent or null status means no numeric exit was recorded
+ * @returns true when the result contains a numeric child exit status
  */
 function completedWithStatus(result: { status?: unknown }): boolean {
   return typeof result.status === "number";
 }
 
 /**
- * Detect a clean child exit even when `execFileSync` also reports an error.
+ * Recognize a zero child exit inside a thrown process result before audit reports a launcher failure.
  *
- * @param error - The error thrown by `execFileSync`.
- * @returns `true` when the underlying command exited 0 despite the throw.
+ * @param error - caught process value; null or a missing status supplies no successful-exit evidence
+ * @returns true only when the caught value explicitly records exit status zero
  */
 export function commandCompletedSuccessfully(error: unknown): boolean {
+  // Only an explicit zero exit lets the caller treat a thrown result as a successful command.
   return (
     typeof error === "object" &&
     error !== null &&
@@ -104,63 +111,70 @@ export function commandCompletedSuccessfully(error: unknown): boolean {
   );
 }
 
-/** Return a known launcher failure only when the child never reached a numeric exit status. */
+/**
+ * Classify a launch failure only when audit has no recorded child exit.
+ * A null result means no known launcher failure was found; it is not proof of a successful policy check.
+ */
 function spawnFailureFromResult(
   result: childProcess.SpawnSyncReturns<string>,
   action: string,
   executable = "bash",
 ): SpawnFailure | null {
+  // A numeric exit belongs to the hook result, so the caller evaluates policy instead of suggesting a launch repair.
   if (completedWithStatus(result)) return null;
+  // Without a reported process error there is no launch-specific repair to show.
   return result.error
     ? spawnFailureFor(result.error, action, executable)
     : null;
 }
 
 /**
- * Quote a hook path so Bash reads it as one literal user-selected location.
+ * Quote a hook path so Bash reads the user's selected location as one literal argument.
  *
- * @param argument - The raw string (typically an absolute hook path) to quote.
- * @returns The value wrapped in single quotes with embedded quotes escaped.
+ * @param argument - raw hook path; empty becomes one empty shell argument
+ * @returns quoted argument with embedded single quotes escaped
  */
 function shellSingleQuote(argument: string): string {
   return `'${argument.replace(/'/g, "'\\''")}'`;
 }
 
 /**
- * Carry one user-shaped runtime probe to the hook without changing its JSON bytes.
- * Use while audit replays the same standard-input flow an agent runtime uses.
+ * Carry one policy request in the child environment without changing its JSON bytes.
+ * Use when audit pipes the request into a configured shell launcher.
  *
- * @param hookInput - agent event JSON; empty means the hook receives no user command
- * @returns child environment containing the probe; never empty because process values are preserved
+ * @param hookInput - agent event JSON; empty supplies no command payload
+ * @returns child environment; never empty because the probe payload key is always included
  */
 function runtimeProbeEnvironment(hookInput: string): NodeJS.ProcessEnv {
   return { ...process.env, GOAT_HOOK_SMOKE_PAYLOAD: hookInput };
 }
 
 /**
- * Pipe one user-shaped probe into the configured hook command.
- * Use during audit so the launcher receives input exactly as it does in an agent session.
+ * Pipe one policy request into the exact shell command registered in the trusted target.
+ * Preserve launcher syntax because rewriting it could conceal a broken registration.
  *
- * @param configuredHookCommand - launcher from agent config; empty cannot produce a valid audit run
- * @returns shell pipeline for replay; never empty because the payload command is always included
+ * @param configuredHookCommand - registered shell text; empty leaves an invalid empty command group
+ * @returns non-empty replay pipeline containing the payload command and configured launcher
  */
 function pipeRuntimeProbeTo(configuredHookCommand: string): string {
   return `printf %s "$GOAT_HOOK_SMOKE_PAYLOAD" | { ${configuredHookCommand}; }`;
 }
 
 /**
- * Render one evidence path consistently for users on Windows and POSIX.
+ * Render an audit repair path with consistent separators on Windows and POSIX.
  *
- * @param relPath - Repo-relative path that may carry Windows separators.
- * @returns The same path with every backslash rendered as a forward slash.
+ * @param relPath - project-relative evidence path; empty remains empty
+ * @returns supplied path with backslashes rendered as forward slashes
  */
 export function evidencePath(relPath: string): string {
   return relPath.replace(/\\/g, "/");
 }
 
 /**
- * Expected user outcome for one replay, including the agent's status and response stream.
- * Use it to distinguish a policy decision from a launcher that never reached policy.
+ * Describe the allow or block response audit expects from one local policy replay.
+ *
+ * The request uses the selected agent's protocol; status, stream, and pattern define the observed response.
+ * Use these expectations to identify which user action failed its runtime check.
  */
 interface RuntimeProbeExpectation {
   expectedOutcome: "allow" | "block";
@@ -171,8 +185,8 @@ interface RuntimeProbeExpectation {
 }
 
 /**
- * Build the blocked-command expectation for one agent protocol.
- * Use when audit proves an unsafe user command reaches policy and is denied.
+ * Build a blocked-command request in the selected agent's protocol.
+ * Audit sends the command as hook input; this helper does not execute the command being denied.
  */
 function blockedRuntimeProbe(agentId: string): RuntimeProbeExpectation {
   // Copilot users receive a JSON permission denial on standard output.
@@ -210,8 +224,8 @@ function blockedRuntimeProbe(agentId: string): RuntimeProbeExpectation {
 }
 
 /**
- * Build the safe-command expectation for one agent protocol.
- * Use when audit proves ordinary user work is still allowed by the configured launcher.
+ * Build a safe-command request to check that the configured launcher permits ordinary work.
+ * The response expectation follows the selected agent's hook protocol.
  */
 function allowedRuntimeProbe(agentId: string): RuntimeProbeExpectation {
   // Copilot represents a safe command by returning no hook response.
@@ -308,13 +322,13 @@ function configuredRuntimeProbes(
 }
 
 /**
- * Resolve the managed deny script a selected agent should run.
- * A null result means the user has no installed hook path for direct runtime proof.
+ * Resolve the registered deny path, falling back to the agent's managed hook directory.
+ * Null means audit has no candidate for direct replay; a returned path does not establish that the file exists.
  */
 function registeredDenyRelPath(
   agentFacts: AuditContext["agents"][number],
 ): string | null {
-  // An explicit registration is the path the user's agent will actually invoke.
+  // Prefer the registered path so a hand-edited installation is checked against its own hook target.
   if (agentFacts.hooks.denyRegisteredPath)
     return agentFacts.hooks.denyRegisteredPath;
   // No hook directory means setup, rather than runtime audit, owns the next action.
@@ -322,11 +336,15 @@ function registeredDenyRelPath(
   return join(agentFacts.agent.hooksDir, "deny-dangerous.sh");
 }
 
-/** Normalize registered hook paths to the same slash style as parsed shell command paths. */
+/**
+ * Normalize the expected hook path before comparing it with the user's configured launcher.
+ * Null preserves the absence of a known registration path.
+ */
 function normalizedRegisteredDenyRelPath(
   agentFacts: AuditContext["agents"][number],
 ): string | null {
   const registeredPath = registeredDenyRelPath(agentFacts);
+  // Without an expected hook location, audit cannot compare the launcher's target with a registration.
   if (registeredPath === null) return null;
   return posix.normalize(
     registeredPath.replace(/\\/gu, "/").replace(/^\.\//u, ""),
@@ -335,33 +353,46 @@ function normalizedRegisteredDenyRelPath(
 
 const CONFIGURED_RUNTIME_SCRIPTS = ["deny-dangerous.sh"] as const;
 
-/** Hook handler extracted from agent config for runtime-shaped smoke validation. */
+/**
+ * Retain one managed deny handler found in the user's agent configuration.
+ *
+ * Shell text and exec arguments stay distinct so runtime replay preserves the configured invocation.
+ * A null script path means extraction could not identify a project-relative managed script operand.
+ */
 interface ConfiguredHookCommand {
   command: string;
-  /** Codex's optional Windows-only shell override; null keeps the default command on every platform. */
+  // Codex's optional Windows-only shell override; null keeps the default command on every platform.
   commandWindows: string | null;
-  /** Exec-form arguments; null means the platform-selected shell command is used. */
+  // Exec-form arguments; null means the platform-selected shell command is used.
   args: string[] | null;
   scriptFile: string;
   scriptPath: string | null;
   configPath: string;
 }
 
-/** Extract the configured hook script path without executing shell glue from agent config. */
+/**
+ * Read the managed script operand from shell text without running the user's launcher.
+ * Return null when no matching project-relative token remains after lexical path checks.
+ */
 function extractConfiguredScriptPath(
   command: string,
   scriptFile: string,
 ): string | null {
+  // Ignore trailing shell comments so a mentioned filename does not become the user's replay target.
   const withoutShellComment =
     command.replace(/\\/g, "/").split("#", 1)[0] ?? "";
+  // Inspect each script token; no tokens means there is no managed path to validate.
   for (const candidate of withoutShellComment.match(/[^\s"'`;|&{}]+\.sh/gu) ??
     []) {
+    // Other script names are user hooks outside this managed deny check.
     if (posix.basename(candidate) !== scriptFile) continue;
+    // A launcher may prefix its managed path with $root; compare the remaining project-relative operand.
     const withoutRoot = candidate.startsWith("$root/")
       ? candidate.slice("$root/".length)
       : candidate;
     const relative = withoutRoot.replace(/^\.\//, "");
     const normalised = posix.normalize(relative);
+    // Paths outside the project do not identify a managed hook location for this audit.
     if (
       normalised.startsWith("../") ||
       normalised === ".." ||
@@ -375,13 +406,12 @@ function extractConfiguredScriptPath(
 }
 
 /**
- * Match a complete managed script token while preserving similar user filenames.
- * Local copy: importing the shared matcher from server/agent-hook-command would close a module-init cycle through manifest.ts, which loads this audit
- * check.
+ * Match a complete managed script token without selecting similarly named user hooks.
+ * Keep this local because importing the server matcher would create a module cycle through manifest.ts.
  *
- * @param commands - runnable text from one config row; empty is never a match
- * @param script - managed script filename to look for, such as `deny-dangerous.sh`
- * @returns true when the text launches the managed script; false leaves user hooks alone
+ * @param commands - config row text; empty never matches
+ * @param script - managed script filename, such as deny-dangerous.sh
+ * @returns true when the text contains the exact script token; this does not prove the launcher executes it
  */
 function commandsReferenceScriptToken(
   commands: string,
@@ -402,7 +432,7 @@ function commandsReferenceScriptToken(
  *
  * @param argumentValues - string argv elements from one config row; empty finds no path
  * @param scriptFile - managed script filename, such as `deny-dangerous.sh`
- * @returns contained repo-relative script path, or null when no operand names it safely
+ * @returns lexically project-relative script operand, or null when no matching operand passes these path checks
  */
 function extractConfiguredArgvScriptPath(
   argumentValues: string[],
@@ -411,9 +441,11 @@ function extractConfiguredArgvScriptPath(
   // Each operand may be the script path; escaping or absolute candidates are skipped.
   for (const argumentValue of argumentValues) {
     const normalizedCandidate = argumentValue.replace(/\\/g, "/");
+    // An operand naming another script does not select the managed deny hook.
     if (posix.basename(normalizedCandidate) !== scriptFile) continue;
     const relative = normalizedCandidate.replace(/^\.\//, "");
     const normalised = posix.normalize(relative);
+    // Absolute or parent-relative operands cannot supply the project's managed hook path.
     if (
       normalised.startsWith("../") ||
       normalised === ".." ||
@@ -438,6 +470,7 @@ function pushConfiguredCommand(
 ): void {
   // Empty or non-text values cannot be launchers the user's agent will run.
   if (typeof command !== "string" || command.length === 0) return;
+  // A missing or non-text Windows override leaves the default shell command in use.
   const configuredWindowsCommand =
     typeof commandWindows === "string" ? commandWindows : null;
   const commandSearchText = [command, configuredWindowsCommand ?? ""].join(
@@ -448,6 +481,7 @@ function pushConfiguredCommand(
   );
   // Unrelated user hooks stay outside the managed runtime audit.
   if (!managedScriptFile) return;
+  // Use the Windows override only on Windows; an empty override remains visible as a broken configured command.
   const platformSelectedCommand =
     process.platform === "win32" && configuredWindowsCommand !== null
       ? configuredWindowsCommand
@@ -501,11 +535,11 @@ function pushConfiguredArgvCommand(
 }
 
 /**
- * Walk a settings file of unknown shape and pull out every hook command it registers, wherever the agent chose to nest them.
+ * Collect managed deny handlers across the agent's nested settings so audit can replay each configured invocation.
  *
- * @param configNode - any node of the parsed config; non-command values are walked through and contribute nothing
- * @param configPath - config file the commands came from, kept so a finding can name the file the user must edit
- * @param commands - collected commands, appended to in place
+ * @param configNode - parsed settings node; null and primitive values contribute no handlers
+ * @param configPath - settings path retained so a finding identifies the file to repair
+ * @param commands - handler queue mutated in place; initially empty means no handlers have been discovered
  */
 function collectNestedCommandValues(
   configNode: unknown,
@@ -514,11 +548,13 @@ function collectNestedCommandValues(
 ): void {
   // Agents nest hook registrations differently, so both arrays and objects are walked rather than assuming one layout.
   if (Array.isArray(configNode)) {
+    // Visit each registration in a settings array so later handlers are also checked.
     for (const entry of configNode) {
       collectNestedCommandValues(entry, configPath, commands);
     }
     return;
   }
+  // Empty or scalar settings cannot contain another handler to replay.
   if (!configNode || typeof configNode !== "object") return;
   const obj = configNode as Record<string, unknown>;
   // Exec-form rows carry their operands in args; string rows keep shell text in command.
@@ -533,7 +569,9 @@ function collectNestedCommandValues(
     );
   }
   pushConfiguredCommand(commands, obj.bash, undefined, configPath);
+  // Look through nested settings objects for managed registrations.
   for (const child of Object.values(obj)) {
+    // Nested objects may contain handlers; null children are ignored by the next visit.
     if (typeof child === "object") {
       collectNestedCommandValues(child, configPath, commands);
     }
@@ -541,12 +579,12 @@ function collectNestedCommandValues(
 }
 
 /**
- * Read the guard commands one agent has actually registered, which is what the runtime audit replays rather than trusting the file list.
- * It swallows an unreadable or malformed config as an empty list, which the caller reports as no registered protection.
+ * Read and deduplicate the managed deny commands audit can discover in one agent's settings.
+ * Missing or malformed settings recover as an empty list, allowing the caller's direct-script fallback.
  *
- * @param ctx - audit context supplying the target filesystem
- * @param agentFacts - agent whose configuration is being read
- * @returns every registered hook command; empty means this agent has nothing wired up
+ * @param ctx - audit context supplying the selected project's filesystem
+ * @param agentFacts - agent whose configured handlers are read
+ * @returns discovered managed handlers; empty means none were extracted, not that the agent has no protection
  */
 function configuredGuardCommands(
   ctx: AuditContext,
@@ -554,9 +592,10 @@ function configuredGuardCommands(
 ): ConfiguredHookCommand[] {
   const configPath =
     agentFacts.agent.hookConfigFile ?? agentFacts.agent.settingsFile;
-  // An agent with no settings file cannot register anything, so there is nothing to replay.
+  // Without a known settings path, audit cannot discover this agent's configured launchers.
   if (!configPath) return [];
   const rawConfig = ctx.fs.readFile(configPath);
+  // Unreadable settings supply no launchers; the caller can still try the registered script.
   if (rawConfig === null) return [];
   let parsed: unknown;
   try {
@@ -576,18 +615,22 @@ function configuredGuardCommands(
       command.commandWindows ?? "",
       ...(command.args ?? []),
     ].join("\0");
+    // The same discovered handler needs only one replay, even when nested settings expose it twice.
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
   });
 }
 
-/** Render one configured handler for failure messages without re-quoting operands. */
+// Render one configured handler for failure messages without re-quoting operands.
 function describeConfiguredCommand(configured: ConfiguredHookCommand): string {
+  // Exec-form registrations display their executable and operands as the user configured them.
   if (configured.args !== null) {
     return [configured.command, ...configured.args].join(" ");
   }
+  // Windows failures name the selected override so users repair the command actually replayed.
   if (process.platform === "win32" && configured.commandWindows !== null) {
+    // An empty override needs a visible label rather than a blank command in the failure message.
     return configured.commandWindows.length > 0
       ? configured.commandWindows
       : "<empty commandWindows>";
@@ -595,9 +638,11 @@ function describeConfiguredCommand(configured: ConfiguredHookCommand): string {
   return configured.command;
 }
 
-/** Name the executable selected for one configured handler on this platform. */
+// Name the executable selected for one configured handler on this platform.
 function configuredHookExecutable(configured: ConfiguredHookCommand): string {
+  // Exec-form failures must name the configured executable in installation or permission advice.
   if (configured.args !== null) return configured.command;
+  // Shell registrations select PowerShell for a Windows override and Bash otherwise.
   return process.platform === "win32" && configured.commandWindows !== null
     ? "powershell.exe"
     : "bash";
@@ -608,7 +653,7 @@ function configuredHookExecutable(configured: ConfiguredHookCommand): string {
  *
  * @param agentFacts - agent whose registration is being judged
  * @param configured - the command as registered in the user's config
- * @returns the failure text, or null when the registration names the expected script
+ * @returns repair detail, or null when no mismatch is found; an unknown expected path cannot be compared
  */
 function configuredHookCommandPathFailure(
   agentFacts: AuditContext["agents"][number],
@@ -619,6 +664,7 @@ function configuredHookCommandPathFailure(
     return `${agentFacts.agent.id} configured hook command does not name an exact managed hook script path: ${describeConfiguredCommand(configured)}`;
   }
   const expectedScriptPath = normalizedRegisteredDenyRelPath(agentFacts);
+  // When registration supplies an expected path, a different target requires the user to repair the launcher.
   if (
     expectedScriptPath !== null &&
     configured.scriptPath !== expectedScriptPath
@@ -629,8 +675,8 @@ function configuredHookCommandPathFailure(
 }
 
 /**
- * Return the project locations from which a user's configured launcher must work.
- * Root and managed descendants prove the launcher does not depend on Git cwd state.
+ * Select the project root and, when applicable, the existing .goat-flow directory for local replay.
+ * These locations check common working-directory assumptions without proving every possible launch location.
  */
 function configuredHookProbeLocations(
   ctx: AuditContext,
@@ -651,8 +697,8 @@ function configuredHookProbeLocations(
 }
 
 /**
- * Convert one configured-launcher replay into the audit result a user sees.
- * A null result means the expected allow or block response reached policy.
+ * Translate one local launcher replay into the audit's failure detail.
+ * Null means the recorded status and response match this probe's expectation.
  */
 function configuredHookProbeFailureFromResult(
   result: childProcess.SpawnSyncReturns<string>,
@@ -680,8 +726,9 @@ function configuredHookProbeFailureFromResult(
       howToFix: spawnFailure.howToFix,
     };
   }
-  // A missing shell command means setup failed before the managed hook could run.
+  // Without an exit status, a reported process error counts as failure; otherwise use the existing zero-status fallback.
   const status = result.status ?? (result.error ? -1 : 0);
+  // An unavailable or non-executable shell command prevents this replay from reaching the managed hook.
   if (status === 126 || status === 127) {
     return {
       ok: false,
@@ -692,7 +739,7 @@ function configuredHookProbeFailureFromResult(
   // Each agent exposes its user-facing hook decision on a different stream.
   const responseText =
     runtimeProbe.expectedStream === "stdout" ? result.stdout : result.stderr;
-  // The expected policy outcome means this configured launcher is working for the user.
+  // A matching status and response satisfy this local allow-or-block probe.
   if (
     status === runtimeProbe.expectedStatus &&
     runtimeProbe.expectedPattern.test(responseText)
@@ -707,15 +754,15 @@ function configuredHookProbeFailureFromResult(
 }
 
 /**
- * Start one policy probe with the user's registered invocation shape. Side effect: spawns one bounded child process.
+ * Spawn one bounded policy replay using the trusted target's exact configured invocation.
  *
- * PowerShell receives the Windows override, Bash keeps its input pipe, and exec-form handlers retain exact argv.
- * Use this split because replaying through another shell can make a broken registration appear healthy.
+ * The caller must authorize target execution before entering this runtime path.
+ * Preserve shell and exec argument shapes because a rewritten launcher could hide the user's configuration error.
  *
- * @param configured - installed handler; null argv selects a platform shell command
- * @param runtimeProbe - safe or blocked request and its expected user-visible result
- * @param workingDirectoryPath - selected project location; empty cannot model a real agent launch
- * @returns Completed bounded process result; null status means the configured executable did not report an exit code.
+ * @param configured - installed handler; null args selects a platform shell command
+ * @param runtimeProbe - safe or blocked request and its expected response
+ * @param workingDirectoryPath - selected project root or managed directory used as the replay's working directory
+ * @returns process result; null status means no child exit code was recorded
  */
 function spawnConfiguredHookProbe(
   configured: ConfiguredHookCommand,
@@ -761,10 +808,8 @@ function spawnConfiguredHookProbe(
 }
 
 /**
- * Replay safe and blocked user commands through one exact configured launcher.
- *
- * Provider-specific spawn shapes stay distinct because another shell can make a broken registration appear healthy.
- * Use after config discovery so the UI's first failure names the launcher, root, or policy the user must repair.
+ * Replay safe and blocked requests through the trusted target's configured launcher.
+ * Return the first path or response failure so audit names the registration and location the user must repair.
  */
 function verifyConfiguredHookRuntime(
   ctx: AuditContext,
@@ -784,9 +829,9 @@ function verifyConfiguredHookRuntime(
     agentFacts.agent.id,
     configured.scriptFile,
   );
-  // Replay every location from which the user can launch the selected agent.
+  // Replay the root and any selected managed directory to expose working-directory-dependent launcher failures.
   for (const probeLocation of configuredHookProbeLocations(ctx, agentFacts)) {
-    // A safe command followed by a blocked one proves policy is selective, not broadly broken.
+    // Check both selected outcomes so a launcher that rejects every request cannot pass.
     for (const runtimeProbe of runtimeProbes) {
       const probeResult = spawnConfiguredHookProbe(
         configured,
@@ -808,8 +853,8 @@ function verifyConfiguredHookRuntime(
 }
 
 /**
- * Replay one blocked user command through the installed script itself.
- * It spawns the script directly, and is used only when no configured launcher exists to give stronger end-to-end proof.
+ * Spawn a replay of one blocked request through the installed script when no launcher was discovered.
+ * This fallback checks the script's response without verifying configured launcher syntax or external agent delivery.
  */
 function verifyDirectHookRuntime(
   ctx: AuditContext,
@@ -840,8 +885,9 @@ function verifyDirectHookRuntime(
     return { ok: false, ...spawnFailure };
   }
 
-  // Agent protocols expose their block decision on different output streams.
+  // Without an exit status, a process error counts as failure; otherwise retain the existing zero-status fallback.
   const status = probeResult.status ?? (probeResult.error ? -1 : 0);
+  // Read the stream where this agent protocol exposes its block decision.
   const responseText =
     blockedProbe.expectedStream === "stdout"
       ? probeResult.stdout
@@ -854,8 +900,8 @@ function verifyDirectHookRuntime(
 }
 
 /**
- * Verify every configured guard for one agent and return its first user-facing failure.
- * Undefined means no launcher exists, while null means every configured launcher passed.
+ * Replay discovered managed handlers and report the first local runtime failure.
+ * Undefined requests the direct-script fallback; null means every discovered handler passed its selected probes.
  */
 function configuredHookRuntimeFailure(
   ctx: AuditContext,
@@ -887,8 +933,8 @@ function configuredHookRuntimeFailure(
 }
 
 /**
- * Verify the installed deny script when no configured launcher is available.
- * Use this fallback so users still receive runtime evidence for older installations.
+ * Replay the installed script when no configured launcher was discovered.
+ * Null means no failure was found; missing paths and unreadable scripts are skipped for static checks to report.
  */
 function directHookRuntimeFailure(
   ctx: AuditContext,
@@ -906,7 +952,7 @@ function directHookRuntimeFailure(
     agentFacts,
     denyRelPath,
   );
-  // The expected policy block means the installed script works for this user.
+  // The expected response satisfies this direct blocked-command probe.
   if (directRuntimeResult.ok) return null;
 
   return {
@@ -924,11 +970,11 @@ function directHookRuntimeFailure(
 }
 
 /**
- * Verify safe and blocked user commands through each selected agent's real hook path.
- * Use during trusted CLI audit to separate working policy from launcher unavailability.
+ * Replay selected agents' deny hooks after the caller authorizes trusted-target execution.
+ * Report the first local runtime failure; external agent delivery is outside this check.
  *
- * @param ctx - selected project and agents; an empty agent list means there is nothing to show
- * @returns first runtime failure; `null` means every selected user-facing hook check passed
+ * @param ctx - trusted selected project and agents; an empty agent list performs no replay
+ * @returns first replay failure, or null when none was found; skipped or unreadable hooks do not establish a passing replay
  */
 export function checkHookRuntimeSmoke(ctx: AuditContext): AuditFailure | null {
   // Each selected agent gets an independent result so one pass cannot hide a later failure.

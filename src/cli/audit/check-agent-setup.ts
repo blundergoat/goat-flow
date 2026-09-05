@@ -1,11 +1,8 @@
 /**
- * Validate agent setup surfaces for `goat-flow audit`.
+ * Report the selected project's agent installation gaps through goat-flow audit.
  *
- * Use when a user wants to know whether an agent has the instruction file, skills, settings, and hook wiring needed to run goat-flow safely in the
- * selected project.
- *
- * Aggregate mode reports missing supported agents and stale artifacts; `--agent <id>` drills into that agent's install details and remediation
- * commands.
+ * Aggregate checks explain missing instruction files and orphaned installation artifacts across managed agents.
+ * A selected-agent audit also checks that agent's skills, settings, and deny mechanism, with repair guidance for the first failing prerequisite.
  */
 import type { AuditFailure, BuildCheck, AuditContext } from "./types.js";
 import type { CheckEvidence } from "./provenance-types.js";
@@ -23,17 +20,18 @@ import {
 // === 1. Agent Instruction ===
 
 /**
- * Detect whether an agent directory contains goat-flow-owned artifacts.
- * It reports absence rather than throwing on an unreadable directory, so a user's own agent config is never mistaken for a broken install.
+ * Identify known goat-flow hooks or canonical skill folders before reporting an orphaned agent installation.
+ * An unreadable skills directory reports no skill evidence, so ordinary agent settings alone never trigger cleanup guidance.
  *
- * @param fs - target project filesystem; missing directories mean no goat-flow artifact exists there
- * @param profile - manifest profile for one agent; missing hook dir limits detection to skills
- * @returns whether goat-flow artifacts exist; `false` means the UI can ignore ordinary agent config
+ * @param fs - target filesystem used to find known installed hook files or skill folders
+ * @param profile - manifest paths for one agent; an omitted hooks directory limits the evidence search to its skills
+ * @returns - true when known goat-flow artifacts are found; false means this helper found no evidence of an orphaned installation
  */
 function agentArtifactsExist(
   fs: ReadonlyFS,
   profile: { hooks_dir?: string; settings?: string; skills_dir: string },
 ): boolean {
+  // A profile without a hook directory can establish an installed artifact only through its canonical skill folders.
   const hooksDir = profile.hooks_dir?.replace(/\/$/, "");
   // Guardrail scripts prove goat-flow touched this agent, even if the instruction file is gone.
   if (
@@ -47,9 +45,10 @@ function agentArtifactsExist(
   try {
     const entries = fs.listDir(skillsDir);
     // Any canonical skill folder means the user has a goat-flow skill install for this agent.
-    if (entries.some((e) => getSkillNames().includes(e))) return true;
+    if (entries.some((skillName) => getSkillNames().includes(skillName)))
+      return true;
   } catch {
-    // Missing skills directories mean there is no skill artifact to report.
+    // A caller's filesystem adapter may reject a removed skills directory; ignore it as evidence for orphaned-install cleanup.
   }
   return false;
 }
@@ -59,7 +58,7 @@ function agentArtifactsExist(
  * Use in `--agent <id>` audits so the first setup failure points at the missing starter file.
  *
  * @param ctx - audit context; missing agent facts mean the selected instruction file was not found
- * @returns audit failure for the missing instruction, or `null` when the selected agent is ready
+ * @returns - missing-instruction failure, or null when the selected instruction file exists
  */
 function checkInstructionPresent(ctx: AuditContext): AuditFailure | null {
   const agentFacts = ctx.agents.find(
@@ -71,6 +70,7 @@ function checkInstructionPresent(ctx: AuditContext): AuditFailure | null {
   const profile = ctx.agentFilter
     ? ctx.structure.agents[ctx.agentFilter]
     : undefined;
+  // If no profile supplies the filename, still identify the selected agent in the setup repair message.
   const instructionFile =
     profile?.instruction_file ?? `${ctx.agentFilter} instruction file`;
   return {
@@ -110,7 +110,7 @@ function checkSupportedInstructionFilesPresent(
  * Check that aggregate agent scope has at least one managed agent surface.
  * Use when the user runs an unscoped audit and needs to know whether any agent is configured.
  *
- * @param ctx - audit context; empty `agents` means no supported instruction files were detected
+ * @param ctx - target facts; an empty agents list means no managed agent was included in this audit
  * @returns audit failure when no agent is configured, or `null` when at least one agent exists
  */
 function checkAnyAgentConfigured(ctx: AuditContext): AuditFailure | null {
@@ -144,23 +144,18 @@ function shouldCheckCopilotCommitInstructions(ctx: AuditContext): boolean {
 }
 
 /**
- * Check whether the Copilot instruction file bridges to an accepted commit guide.
+ * Check an existing Copilot instruction file for a reference to an accepted project commit guide.
+ * Use in scoped Git-checkout audits; missing instruction files remain the broader setup check's responsibility.
  *
- * IDEs (VS Code, JetBrains) auto-read .github/copilot-instructions.md but not an accepted docs commit guide, so commit conventions only reach Copilot
- * when the auto-read instruction file references either the preferred git-commit-message.md path or the compatible git-commit.md path.
- *
- * Returns null - no failure - when the .github/ dir is absent, when Copilot is not a configured agent in aggregate mode (a Claude/Codex project that
- * happens to ship GitHub config must not be forced to add it), when the Copilot instruction file itself is missing (the broader instruction-file
- * check owns that failure), or when an accepted reference is present.
- *
- * @param ctx - audit context; absent Copilot setup means the user should not see this specialized finding
- * @returns audit failure when the bridge is missing, or `null` when Copilot does not need this check
+ * @param ctx - target facts and filesystem; an out-of-scope or absent Copilot instruction file receives no specialized finding
+ * @returns - missing-guide-reference failure, or null when an accepted reference exists or this check does not apply
  */
 function checkCopilotCommitInstructionsPresent(
   ctx: AuditContext,
 ): AuditFailure | null {
   // Copilot is not in scope, so do not ask the user to edit GitHub instruction files.
   if (!shouldCheckCopilotCommitInstructions(ctx)) return null;
+  // Use the manifest's Copilot instruction path when available, with the standard location as the fallback.
   const copilotInstruction =
     ctx.structure.agents.copilot?.instruction_file ??
     ".github/copilot-instructions.md";
@@ -171,6 +166,7 @@ function checkCopilotCommitInstructionsPresent(
     preferredCommitGuide,
     "docs/coding-standards/git-commit.md",
   ];
+  // An unreadable instruction file cannot prove that Copilot will receive the project's commit guide.
   const instructionContent = ctx.fs.readFile(copilotInstruction) ?? "";
   // Copilot already sees an accepted commit guide through its auto-read file.
   if (
@@ -194,15 +190,15 @@ function checkCopilotCommitInstructionsPresent(
  * @returns skills dirs still backed by instruction files; empty set means no shared dirs are protected
  */
 function presentAgentSkillsDirs(ctx: AuditContext): Set<string> {
-  const dirs = new Set<string>();
+  const presentSkillsDirectories = new Set<string>();
   // Only agents with instruction files can legitimately own their skills directory.
   for (const profile of Object.values(ctx.structure.agents)) {
     // Existing instruction files keep shared skill dirs from being flagged as orphaned.
     if (profile.skills_dir && ctx.fs.exists(profile.instruction_file)) {
-      dirs.add(profile.skills_dir.replace(/\/$/, ""));
+      presentSkillsDirectories.add(profile.skills_dir.replace(/\/$/, ""));
     }
   }
-  return dirs;
+  return presentSkillsDirectories;
 }
 
 /**
@@ -215,7 +211,7 @@ function presentAgentSkillsDirs(ctx: AuditContext): Set<string> {
 function checkOrphanedArtifacts(ctx: AuditContext): AuditFailure | null {
   // Without goat-flow config, the project has no install baseline for orphan checks.
   if (!ctx.config.exists) return null;
-  const sharedDirs = presentAgentSkillsDirs(ctx);
+  const sharedSkillsDirectories = presentAgentSkillsDirs(ctx);
   const missing: string[] = [];
   // Inspect every manifest agent so stale directories surface even outside selected-agent mode.
   for (const [agentId, profile] of Object.entries(ctx.structure.agents)) {
@@ -223,7 +219,7 @@ function checkOrphanedArtifacts(ctx: AuditContext): AuditFailure | null {
     if (ctx.fs.exists(profile.instruction_file)) continue;
     const skillsDir = profile.skills_dir.replace(/\/$/, "");
     // Shared skill dirs are owned by another present agent, so do not report them as orphaned.
-    if (skillsDir && sharedDirs.has(skillsDir)) continue;
+    if (skillsDir && sharedSkillsDirectories.has(skillsDir)) continue;
     // Goat-flow artifacts without an instruction file leave the user with partial setup.
     if (agentArtifactsExist(ctx.fs, profile)) {
       missing.push(`${agentId} (${profile.instruction_file})`);
@@ -244,16 +240,18 @@ function checkOrphanedArtifacts(ctx: AuditContext): AuditFailure | null {
  * Use so audit output points the user at the manifest, architecture, and specific missing surface.
  *
  * @param ctx - audit context; missing agent filter falls back to the failed message when possible
- * @param failure - audit failure being explained; `null` returns broad instruction provenance
- * @returns evidence paths for the audit result; empty paths are removed by `uniquePaths`
+ * @param failure - finding to explain; null omits failure-derived paths while still honoring an explicit agent selection
+ * @returns - evidence for the audit result with duplicate paths removed and relevant instruction or commit-guide paths included
  */
 function agentInstructionProvenance(
   ctx: AuditContext,
   failure: AuditFailure | null,
 ): CheckEvidence {
   const paths = ["workflow/manifest.json", ".goat-flow/architecture.md"];
+  // With no failed message or recognizable agent name, only an explicit agent selection can narrow this evidence.
   const failedAgentId = failure?.message.match(/\b([a-z]+) \([^)]+\)/)?.[1];
   const agentId = ctx.agentFilter ?? failedAgentId;
+  // No selected or failure-derived agent means the finding keeps framework-wide instruction evidence.
   const profile = agentId ? ctx.structure.agents[agentId] : undefined;
   // Specific instruction files make the audit finding actionable for one agent.
   if (profile?.instruction_file) paths.push(profile.instruction_file);
@@ -281,14 +279,16 @@ const agentInstruction: BuildCheck = {
     ".goat-flow/architecture.md",
   ]),
   provenanceFor: agentInstructionProvenance,
-  /** Run the Agent instruction file check. */
+  // Report the first instruction prerequisite for the selected agent, or aggregate installation coverage when no agent is selected.
   run: (ctx) => {
+    // A selected-agent request needs that agent's starter file and any applicable commit-guide reference.
     if (ctx.agentFilter) {
       return (
         checkInstructionPresent(ctx) ??
         checkCopilotCommitInstructionsPresent(ctx)
       );
     }
+    // Aggregate setup first needs a managed agent, then complete instruction coverage, then orphan and commit-guide checks.
     return (
       checkAnyAgentConfigured(ctx) ??
       checkSupportedInstructionFilesPresent(ctx) ??
@@ -302,20 +302,23 @@ const agentInstruction: BuildCheck = {
 
 /**
  * Check canonical skill files and declared references for every selected agent.
+ *
  * Use so users see which skill mirrors need reinstalling before an agent follows stale workflows.
  * The nested walk is required because an agent can load any declared reference independently.
  *
  * @param ctx - audit context; empty agent list produces no missing skill findings here
- * @returns audit failure listing missing skill files, or `null` when mirrors match the manifest
+ * @returns - missing required skill paths, or null when no required path was found missing
  */
 function checkCanonicalSkills(ctx: AuditContext): AuditFailure | null {
   const canonical = ctx.structure.skills.canonical;
   const missing: string[] = [];
+  // An absent reference map adds no extra required files beyond each canonical skill's SKILL.md.
   const references = ctx.structure.skills.references ?? {};
   // Inspect each configured agent mirror because users run one agent at a time.
   for (const agentFacts of ctx.agents) {
     // Every canonical skill should have the same installed shape for this agent.
     for (const skill of canonical) {
+      // Only declared string paths add reference requirements; absent or unusable declarations leave just the skill body.
       const referenceFiles = Array.isArray(references[skill])
         ? references[skill].filter((file) => typeof file === "string")
         : [];
@@ -329,7 +332,7 @@ function checkCanonicalSkills(ctx: AuditContext): AuditFailure | null {
       }
     }
   }
-  // Skill mirrors match the manifest, so the user does not need reinstall guidance.
+  // No required path was reported missing; separate checks still assess stale references and version metadata.
   if (missing.length === 0) return null;
   return {
     check: "Agent skills",
@@ -341,15 +344,16 @@ function checkCanonicalSkills(ctx: AuditContext): AuditFailure | null {
 }
 
 /**
- * Return manifest-declared reference files for one skill.
- * Use when pruning stale installed references without touching `SKILL.md`.
+ * Identify the reference paths the manifest still permits so stale-file findings do not target the skill body.
  *
- * @param ctx - audit context; missing reference map means the skill has no expected reference files
- * @param skill - canonical skill name; empty or unknown names return no expected references
- * @returns expected `references/` files; empty set means any installed reference is stale
+ * @param ctx - manifest structure; an absent reference map approves no extra reference paths
+ * @param skill - canonical skill whose reference declaration is being inspected
+ * @returns - declared references/ paths; an empty set approves none of the caller's installed reference candidates
  */
 function expectedReferenceFiles(ctx: AuditContext, skill: string): Set<string> {
+  // Missing reference metadata leaves the caller with no approved reference candidates for this skill.
   const references = ctx.structure.skills.references ?? {};
+  // Only an array of reference paths can establish which installed files the manifest still owns.
   const referenceFiles = Array.isArray(references[skill])
     ? references[skill].filter(
         (file): file is string =>
@@ -364,12 +368,12 @@ function expectedReferenceFiles(ctx: AuditContext, skill: string): Set<string> {
  * Use after upgrades, because a reference file left behind by a rename still looks authoritative to an agent reading it.
  *
  * @param ctx - audit context; empty agent list produces no stale reference findings
- * @returns audit failure listing unexpected references, or `null` when installed references are current
+ * @returns - unexpected scanned references, or null when no scanned reference falls outside the manifest's declared set
  */
 function checkUnexpectedSkillReferences(
   ctx: AuditContext,
 ): AuditFailure | null {
-  const unexpected: string[] = [];
+  const unexpectedSkillReferences: string[] = [];
 
   // Every agent mirror can retain stale files after an upgrade, so inspect each one.
   for (const agentFacts of ctx.agents) {
@@ -384,23 +388,26 @@ function checkUnexpectedSkillReferences(
       // Glob installed Markdown references so removed files still surface.
       for (const path of ctx.fs.glob(`${referencesDir}/**/*.md`)) {
         const prefix = `${skillRoot}/`;
+        // Compare installed files with the manifest's skill-relative paths; unfamiliar prefixes remain intact for that comparison.
         const relativeFile = path.startsWith(prefix)
           ? path.slice(prefix.length)
           : path;
         // Any manifest-unlisted reference may give the agent outdated workflow guidance.
         if (!expected.has(relativeFile)) {
-          unexpected.push(`${agentFacts.agent.id}:${skill}:${relativeFile}`);
+          unexpectedSkillReferences.push(
+            `${agentFacts.agent.id}:${skill}:${relativeFile}`,
+          );
         }
       }
     }
   }
 
   // No stale references means the installed mirror matches manifest ownership.
-  if (unexpected.length === 0) return null;
+  if (unexpectedSkillReferences.length === 0) return null;
   return {
     check: "Agent skills",
-    message: `Unexpected stale skill reference files found: ${unexpected.join(", ")}`,
-    evidence: unexpected[0],
+    message: `Unexpected stale skill reference files found: ${unexpectedSkillReferences.join(", ")}`,
+    evidence: unexpectedSkillReferences[0],
     howToFix:
       "Run `goat-flow install . --agent <id>` for the affected agent. The installer prunes manifest-unlisted skill reference files during upgrades.",
   };
@@ -408,44 +415,47 @@ function checkUnexpectedSkillReferences(
 
 /**
  * Check installed skill versions against the current goat-flow version.
+ *
  * Use so users know when agent skill mirrors need reinstalling after an upgrade.
  * Missing and mismatched versions stay separate because they require different evidence messages.
  *
  * @param ctx - audit context; empty version maps produce no mismatch findings here
- * @returns audit failure for missing/mismatched versions, or `null` when mirrors are current
+ * @returns - missing or mismatched version finding, or null when inspected version entries require no repair
  */
 function checkSkillVersions(ctx: AuditContext): AuditFailure | null {
-  const noVersion: string[] = [];
-  const mismatch: string[] = [];
+  const skillsWithoutVersion: string[] = [];
+  const skillsWithVersionMismatch: string[] = [];
   // Every installed skill version is checked because one stale mirror can misroute an agent.
   for (const agentFacts of ctx.agents) {
     // Version metadata is stored per skill folder.
     for (const [name, version] of Object.entries(agentFacts.skills.versions)) {
       // Missing version means the user cannot tell whether this mirror matches the release.
       if (version === null) {
-        noVersion.push(`${agentFacts.agent.id}:${name}`);
+        skillsWithoutVersion.push(`${agentFacts.agent.id}:${name}`);
         // Mismatched version means the installed skill may carry old workflow rules.
       } else if (version !== AUDIT_VERSION) {
-        mismatch.push(`${agentFacts.agent.id}:${name} (${version})`);
+        skillsWithVersionMismatch.push(
+          `${agentFacts.agent.id}:${name} (${version})`,
+        );
       }
     }
   }
   // Versionless skills need reinstall guidance before mismatch checks.
-  if (noVersion.length > 0) {
+  if (skillsWithoutVersion.length > 0) {
     return {
       check: "Agent skills",
-      message: `Missing goat-flow-skill-version: ${noVersion.join(", ")}`,
-      evidence: noVersion[0],
+      message: `Missing goat-flow-skill-version: ${skillsWithoutVersion.join(", ")}`,
+      evidence: skillsWithoutVersion[0],
       howToFix:
         "Re-install skills by running `goat-flow install . --agent <id>` for the affected agent.",
     };
   }
   // Stale skill versions need reinstall guidance with the expected version.
-  if (mismatch.length > 0) {
+  if (skillsWithVersionMismatch.length > 0) {
     return {
       check: "Agent skills",
-      message: `Version mismatch (expected ${AUDIT_VERSION}): ${mismatch.join(", ")}`,
-      evidence: mismatch[0],
+      message: `Version mismatch (expected ${AUDIT_VERSION}): ${skillsWithVersionMismatch.join(", ")}`,
+      evidence: skillsWithVersionMismatch[0],
       howToFix:
         "Re-install skills by running `goat-flow install . --agent <id>` for the affected agent.",
     };
@@ -455,6 +465,7 @@ function checkSkillVersions(ctx: AuditContext): AuditFailure | null {
 
 /**
  * Check stale skill directories left behind by renamed or removed skills.
+ *
  * Use so users remove old routing surfaces that an agent could still discover.
  * Final folder names are compared because each agent owns a different skill-root path.
  *
@@ -463,31 +474,35 @@ function checkSkillVersions(ctx: AuditContext): AuditFailure | null {
  */
 function checkDeprecatedSkills(ctx: AuditContext): AuditFailure | null {
   const staleNames = new Set(ctx.structure.skills.stale_names);
-  const found: string[] = [];
+  const deprecatedSkills: string[] = [];
   // Inspect every installed skill directory because old names can coexist beside current skills.
   for (const agentFacts of ctx.agents) {
     // Installed dirs are matched by final folder name so agent-specific roots do not matter.
-    for (const dir of agentFacts.skills.installedDirs) {
-      const name = dir.split("/").pop() ?? "";
+    for (const installedSkillDirectory of agentFacts.skills.installedDirs) {
+      // Without a final folder name, this installed path supplies no deprecated skill name to report.
+      const name = installedSkillDirectory.split("/").pop() ?? "";
       // Stale names mean the user may see duplicate or outdated skill routing.
       if (staleNames.has(name)) {
-        found.push(`${agentFacts.agent.id}:${name}`);
+        deprecatedSkills.push(`${agentFacts.agent.id}:${name}`);
       }
     }
   }
   // No deprecated skill dirs means the agent has no stale routing surface to remove.
-  if (found.length === 0) return null;
+  if (deprecatedSkills.length === 0) return null;
   // Convert compact identifiers back into paths the user can remove.
-  const paths = found.map((s) => {
-    const [agent, name] = s.split(":");
-    const agentFacts = ctx.agents.find((a) => a.agent.id === agent);
+  const paths = deprecatedSkills.map((deprecatedSkill) => {
+    const [agent, name] = deprecatedSkill.split(":");
+    const agentFacts = ctx.agents.find(
+      (candidateAgentFacts) => candidateAgentFacts.agent.id === agent,
+    );
+    // A known agent supplies the removable directory path; otherwise keep the identified stale skill name in the guidance.
     return agentFacts ? `${agentFacts.agent.skillsDir}/${name}` : name;
   });
   return {
     check: "Agent skills",
-    message: `Deprecated skill directories found: ${found.join(", ")}`,
-    evidence: found[0],
-    howToFix: `Remove the deprecated ${found.length === 1 ? "directory" : "directories"}: ${paths.join(", ")}. Delete the SKILL.md inside each, then remove the empty directory.`,
+    message: `Deprecated skill directories found: ${deprecatedSkills.join(", ")}`,
+    evidence: deprecatedSkills[0],
+    howToFix: `Remove the deprecated ${deprecatedSkills.length === 1 ? "directory" : "directories"}: ${paths.join(", ")}. Delete the SKILL.md inside each, then remove the empty directory.`,
   };
 }
 
@@ -501,13 +516,17 @@ const agentSkills: BuildCheck = {
   ]),
   // A stale CLI's manifest and skill templates cannot identify defects in a newer install.
   skip: targetUsesNewerGoatFlow,
-  /** Run the Agent skills check. */
+  // Report the first missing, stale, or wrongly versioned skill artifact after the selected agent's instruction file is available.
   run: (ctx) => {
     // Aggregate mode gets instruction-level coverage; skill mirrors are checked per selected agent.
     if (!ctx.agentFilter) return null;
-    const blocked = checkSelectedInstructionAvailable(ctx, "Agent skills");
+    const instructionFailure = checkSelectedInstructionAvailable(
+      ctx,
+      "Agent skills",
+    );
     // Missing instruction files block deeper skill checks because remediation starts with setup.
-    if (blocked) return blocked;
+    if (instructionFailure) return instructionFailure;
+    // Missing files take priority; once restored, the next audit can identify stale references, versions, or retired skill names.
     return (
       checkCanonicalSkills(ctx) ??
       checkUnexpectedSkillReferences(ctx) ??
@@ -519,7 +538,7 @@ const agentSkills: BuildCheck = {
 
 // === 3. Agent Settings ===
 
-/** 4 agent setup checks */
+// 4 agent setup checks
 export const AGENT_CHECKS: BuildCheck[] = [
   agentInstruction,
   agentSkills,

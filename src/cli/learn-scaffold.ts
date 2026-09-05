@@ -90,7 +90,12 @@ const ENTRY_HEADING: Record<LearnEntryType, string> = {
   pattern: "Pattern",
 };
 
-/** Values passed from the CLI after option placement and pair counts are known to be valid. */
+/**
+ * Carry the author's selected entry type, category, title, and evidence from the command line.
+ *
+ * Validation checks paired evidence before previewing or publishing a learning-loop entry.
+ * A dry run returns the same scaffold without changing the selected project.
+ */
 export interface LearnScaffoldRequest {
   projectRoot: string;
   entryType: LearnEntryType;
@@ -102,7 +107,12 @@ export interface LearnScaffoldRequest {
   shouldDryRun: boolean;
 }
 
-/** Test seams for the clock and the two post-publication stages; normal CLI calls omit every member. */
+/**
+ * Let tests control the clock, a concurrent editor save, and the stages after publication.
+ *
+ * Normal CLI calls omit these overrides and use the real filesystem and verification helpers.
+ * A stats override returns null for success or diagnostic text that becomes recovery guidance.
+ */
 export interface LearnScaffoldDependencies {
   now?: () => Date;
   beforeBucketReplacement?: () => void;
@@ -110,7 +120,12 @@ export interface LearnScaffoldDependencies {
   verifyStats?: (projectRoot: string) => string | null;
 }
 
-/** Result rendered by the CLI after validation; `wasWritten: false` means dry-run left the project unchanged. */
+/**
+ * Give the CLI the validated scaffold and the terminal output for this authoring request.
+ *
+ * A dry run sets wasWritten to false and includes the preview without changing project files.
+ * Warnings explain checks such as the bucket-size limit before the author retries.
+ */
 export interface LearnScaffoldResult {
   targetPath: string;
   skeleton: string;
@@ -119,7 +134,12 @@ export interface LearnScaffoldResult {
   output: string;
 }
 
-/** One inspected bucket destination and the bytes/identity used for the cooperative final recheck. */
+/**
+ * Retain the destination's bytes and file identity while preparing a new learning-loop entry.
+ *
+ * The final recheck detects another editor's save before replacing the bucket.
+ * Null content and file stats mean this category needs a new file.
+ */
 interface BucketSnapshot {
   absolutePath: string;
   projectRelativePath: string;
@@ -127,23 +147,28 @@ interface BucketSnapshot {
   fileStats: Stats | null;
 }
 
-/** One author-supplied evidence path and the literal text expected inside it. */
+/**
+ * Pair an author's project-relative evidence file with the literal text they expect to find.
+ *
+ * Citation validation checks both before the entry can be published.
+ * The rendered pair lets later readers find the same evidence without relying on line numbers.
+ */
 interface EvidenceCitation {
   path: string;
   literal: string;
 }
 
-/** Format one native path for terminal output that remains copyable on Windows and POSIX. */
+// Format one native path for terminal output that remains copyable on Windows and POSIX.
 function displayPath(path: string): string {
   return path.split(sep).join("/");
 }
 
-/** Return today's UTC calendar date so generated frontmatter and entry metadata agree. */
+// Return today's UTC calendar date so generated frontmatter and entry metadata agree.
 function formatUtcDate(now: Date): string {
   return now.toISOString().slice(0, 10);
 }
 
-/** Reject a category that could escape its learning-loop directory; throws a usage error before any path is opened. */
+// Reject a category that could escape its learning-loop directory; throws a usage error before any path is opened.
 function validateCategory(category: string): void {
   // A lowercase kebab-case bucket is one filename; slashes, control characters, absolute paths, and dot segments all fail this single rule.
   if (!SAFE_CATEGORY.test(category)) {
@@ -154,7 +179,7 @@ function validateCategory(category: string): void {
   }
 }
 
-/** Reject title text that could create another heading; throws a usage error before the developer sees a misleading preview. */
+// Reject title text that could create another heading; throws a usage error before the developer sees a misleading preview.
 function validateTitle(title: string): string {
   const normalizedTitle = title.trim();
   // Blank input would create an unsearchable heading, while control characters can split or hide what the author sees.
@@ -174,7 +199,7 @@ function validateTitle(title: string): string {
   return normalizedTitle;
 }
 
-/** Pair evidence flags in developer order; throws a usage error when a missing or unsafe value prevents a checkable citation. */
+// Pair evidence flags in developer order; throws a usage error when a missing or unsafe value prevents a checkable citation.
 function buildEvidenceCitations(
   request: LearnScaffoldRequest,
 ): EvidenceCitation[] {
@@ -194,6 +219,7 @@ function buildEvidenceCitations(
   }
   // Each pair is validated before Markdown rendering so punctuation cannot change the citation grammar the developer previewed.
   return request.evidencePaths.map((evidencePath, index) => {
+    // A missing paired literal is rejected below instead of publishing a citation readers cannot reproduce.
     const searchLiteral = request.searchLiterals[index] ?? "";
     // Evidence paths are project-relative Markdown tokens; backticks, Windows separators, and dot segments would make their destination unclear.
     if (
@@ -223,7 +249,7 @@ function buildEvidenceCitations(
   });
 }
 
-/** Enforce the footgun-only evidence taxonomy; throws a usage error when the chosen entry type cannot carry the supplied value. */
+// Enforce the footgun-only evidence taxonomy; throws a usage error when the chosen entry type cannot carry the supplied value.
 function validateEvidenceKind(request: LearnScaffoldRequest): void {
   // Footgun readers need one canonical evidence kind before trusting an architectural warning.
   if (request.entryType === "footgun" && request.evidenceKind === null) {
@@ -238,12 +264,12 @@ function validateEvidenceKind(request: LearnScaffoldRequest): void {
   }
 }
 
-/** Escape one literal for the shared double-quoted search-anchor grammar. */
+// Escape one literal for the shared double-quoted search-anchor grammar.
 function escapeSearchLiteral(literal: string): string {
   return literal.replace(/\\/gu, "\\\\").replace(/"/gu, '\\"');
 }
 
-/** Render author-supplied citations as one canonical evidence line, or no line when evidence is optional and omitted. */
+// Render author-supplied citations as one canonical evidence line, or no line when evidence is optional and omitted.
 function renderEvidenceLine(
   citations: readonly EvidenceCitation[],
 ): string | null {
@@ -257,17 +283,14 @@ function renderEvidenceLine(
 }
 
 /**
- * Build a schema-only entry that contains no invented incident or recommendation prose.
- * Use for both dry-run preview and the exact bytes inserted into the selected bucket.
- *
- * Field order follows the learning-loop READMEs (search: `Then lead with`): the metadata block sits under the heading, the rule comes next, and the
- * incident narrative and its evidence follow. A reader who stops after two lines still leaves with the decision the entry exists to change.
+ * Build the empty fields used by both the author's preview and the entry published to the selected bucket.
+ * Follow the learning-loop schema's metadata, decision, narrative, and evidence order without inventing incident prose.
  *
  * @param entryType - developer-selected footgun, lesson, or pattern grammar
  * @param title - validated one-line heading text; never empty
  * @param createdDate - UTC creation date in YYYY-MM-DD form
- * @param citations - verified path/literal pairs; empty is allowed only for lessons and patterns
- * @param evidenceKind - canonical footgun taxonomy, or null when the selected schema has no evidence-kind field
+ * @param citations - verified file/literal pairs; an empty list omits the evidence line for lessons and patterns
+ * @param evidenceKind - footgun evidence label; null is for lessons and patterns, whose schema omits it
  * @returns Markdown ending in one newline, ready for preview or insertion
  */
 export function renderLearnEntrySkeleton(
@@ -292,8 +315,10 @@ export function renderLearnEntrySkeleton(
       "",
       "**Symptoms:**",
     ];
-  } else if (entryType === "lesson") {
-    // Lessons keep status implicit as active and expose the fields an author fills after describing a real behavioural mistake.
+  } else if (
+    // Lesson fields describe a real mistake and keep active status implicit.
+    entryType === "lesson"
+  ) {
     skeletonLines = [
       heading,
       "",
@@ -315,7 +340,7 @@ export function renderLearnEntrySkeleton(
   return `${skeletonLines.join("\n")}\n`;
 }
 
-/** Require one real project directory; throws a usage error when the selected root is missing, unreadable, redirected, or not a directory. */
+// Require one real project directory; throws a usage error when the selected root is missing, unreadable, redirected, or not a directory.
 function inspectProjectRoot(projectRoot: string): void {
   let projectStats: Stats;
   try {
@@ -336,7 +361,7 @@ function inspectProjectRoot(projectRoot: string): void {
   }
 }
 
-/** Read one path identity without following links; returns null for a new bucket and throws a usage error for every other inspection failure. */
+// Read one path identity without following links; returns null for a new bucket and throws a usage error for every other inspection failure.
 function lstatOrNull(path: string): Stats | null {
   try {
     return lstatSync(path);
@@ -351,7 +376,7 @@ function lstatOrNull(path: string): Stats | null {
   }
 }
 
-/** Inspect every parent; throws a usage error when a missing, linked, or non-directory component makes the write destination unsafe. */
+// Inspect every parent; throws a usage error when a missing, linked, or non-directory component makes the write destination unsafe.
 function inspectBucketParents(
   projectRoot: string,
   absoluteBucketPath: string,
@@ -381,7 +406,7 @@ function inspectBucketParents(
   }
 }
 
-/** Return whether a configured bucket path would escape the selected project and write somewhere the developer did not choose. */
+// Return whether a configured bucket path would escape the selected project and write somewhere the developer did not choose.
 function resolvesOutsideProject(projectRelativePath: string): boolean {
   return (
     projectRelativePath === ".." ||
@@ -390,7 +415,7 @@ function resolvesOutsideProject(projectRelativePath: string): boolean {
   );
 }
 
-/** Resolve and snapshot one category bucket; throws a usage error when containment, link identity, or readable-file checks fail. */
+// Resolve and snapshot one category bucket; throws a usage error when containment, link identity, or readable-file checks fail.
 function inspectBucketDestination(
   projectRoot: string,
   bucketDirectory: string,
@@ -444,12 +469,12 @@ function inspectBucketDestination(
   };
 }
 
-/** Create canonical frontmatter for a category whose bucket file does not exist yet. */
+// Create canonical frontmatter for a category whose bucket file does not exist yet.
 function newBucketFrontmatter(category: string, reviewDate: string): string {
   return `---\ncategory: ${category}\nlast_reviewed: ${reviewDate}\n---\n\n`;
 }
 
-/** Return an existing bucket with only its review date changed and no filesystem writes; malformed or mismatched frontmatter throws a usage error. */
+// Return an existing bucket with only its review date changed and no filesystem writes; malformed or mismatched frontmatter throws a usage error.
 function renderRefreshedFrontmatter(
   content: string,
   category: string,
@@ -463,6 +488,7 @@ function renderRefreshedFrontmatter(
   if (frontmatterMatch === null) {
     throw new CLIError(`${targetPath}: missing leading YAML frontmatter.`, 2);
   }
+  // Missing metadata yields empty match lists, so the author gets a repair error rather than guessed values.
   const frontmatterBody = frontmatterMatch[1] ?? "";
   const categoryLines =
     frontmatterBody.match(/^category:\s*(.*?)\s*$/gmu) ?? [];
@@ -492,13 +518,14 @@ function renderRefreshedFrontmatter(
   return `${refreshedFrontmatter}${content.slice(frontmatterMatch[0].length)}`;
 }
 
-/** Insert the new active entry before resolved history without rewriting any existing entry bytes. */
+// Insert the new active entry before resolved history without rewriting any existing entry bytes.
 function insertActiveEntry(content: string, skeleton: string): string {
   const resolvedHeadingIndex = findResolvedEntriesHeadingIndex(content);
   // Buckets with resolved history receive the new active entry immediately before that boundary.
   if (resolvedHeadingIndex >= 0) {
     const activeContent = content.slice(0, resolvedHeadingIndex);
     const resolvedContent = content.slice(resolvedHeadingIndex);
+    // Add only the blank lines needed to keep the new entry separate from the existing text.
     const separator = activeContent.endsWith("\n\n")
       ? ""
       : activeContent.endsWith("\n")
@@ -506,6 +533,7 @@ function insertActiveEntry(content: string, skeleton: string): string {
         : "\n\n";
     return `${activeContent}${separator}${skeleton}\n${resolvedContent}`;
   }
+  // A bucket without resolved history still needs a blank paragraph before the new heading.
   const separator = content.endsWith("\n\n")
     ? ""
     : content.endsWith("\n")
@@ -514,7 +542,7 @@ function insertActiveEntry(content: string, skeleton: string): string {
   return `${content}${separator}${skeleton}`;
 }
 
-/** Provide the shared bucket parser with one prospective file and no unrelated directory content. */
+// Provide the shared bucket parser with one prospective file and no unrelated directory content.
 function prospectiveBucketFS(
   bucketDirectory: string,
   targetPath: string,
@@ -524,25 +552,34 @@ function prospectiveBucketFS(
   const targetFilename = basename(targetPath);
   const normalizedTargetPath = `${normalizedDirectory}/${targetFilename}`;
   return {
+    // Expose only the proposed bucket and its parent so validation cannot mistake other project files for this entry.
     exists: (path) =>
       path.replace(/\/$/u, "") === normalizedDirectory ||
       path === normalizedTargetPath,
+    // Let the parser read the pending entry before publication; null means the requested file is outside this preview.
     readFile: (path) =>
       path === normalizedTargetPath ? prospectiveContent : null,
+    // Count preview lines for diagnostics; unrelated paths have no content and return zero.
     lineCount: (path) =>
       path === normalizedTargetPath ? prospectiveContent.split("\n").length : 0,
+    // Keep JSON unavailable because the authoring preview exposes a Markdown bucket only.
     readJson: () => null,
+    // Let the parser discover the proposed bucket's directory without reading the rest of the project.
     isReadableDirectory: (path) =>
       path.replace(/\/$/u, "") === normalizedDirectory,
+    // List only the author's target bucket; an unrelated directory has no files in this preview.
     listDir: (path) =>
       path.replace(/\/$/u, "") === normalizedDirectory ? [targetFilename] : [],
+    // Treat the preview as documentation, with no executable content for validation to run.
     isExecutable: () => false,
+    // Return no wildcard matches so broad searches cannot pull unrelated files into entry validation.
     glob: () => [],
+    // Report no wildcard match because the preview exposes its one bucket through explicit paths only.
     existsGlob: () => false,
   };
 }
 
-/** Confirm the prospective bucket parses as one active entry; throws before publication when shared index/stats grammar disagrees. */
+// Confirm the prospective bucket parses as one active entry; throws before publication when shared index/stats grammar disagrees.
 function validateProspectiveBucket(
   entryType: LearnEntryType,
   bucketDirectory: string,
@@ -598,7 +635,7 @@ function validateProspectiveBucket(
   }
 }
 
-/** Verify every rendered path-plus-literal pair through the shared extractor; throws one usage error that lists all stale citations. */
+// Verify every rendered path-plus-literal pair through the shared extractor; throws one usage error that lists all stale citations.
 function validateCitations(
   projectRoot: string,
   targetPath: string,
@@ -622,6 +659,7 @@ function validateCitations(
   // Regex-shaped text is checked literally; a pattern that only resembles matching therefore appears here as a missing literal.
   if (failures.length > 0) {
     const failureDetails = failures.map((failure) => {
+      // When extraction provides no detailed diagnostic, the cited path still tells the author what to repair.
       const citedLocation =
         failure.diagnostic ?? `${failure.filePath} (search anchor)`;
       return `${citedLocation} [${failure.reason ?? "stale"}]`;
@@ -633,7 +671,7 @@ function validateCitations(
   }
 }
 
-/** Build the complete target bytes; throws before publication for a duplicate heading or malformed existing frontmatter. */
+// Build the complete target bytes; throws before publication for a duplicate heading or malformed existing frontmatter.
 function buildProspectiveContent(
   snapshot: BucketSnapshot,
   category: string,
@@ -665,7 +703,7 @@ function buildProspectiveContent(
   return insertActiveEntry(refreshedContent, skeleton);
 }
 
-/** Recheck the bucket snapshot; throws without publication when a normal editor save changed its existence, identity, or content. */
+// Recheck the bucket snapshot; throws without publication when a normal editor save changed its existence, identity, or content.
 function assertBucketUnchanged(
   initialSnapshot: BucketSnapshot,
   bucketDirectory: string,
@@ -677,6 +715,7 @@ function assertBucketUnchanged(
     bucketDirectory,
     category,
   );
+  // Creating or removing the category while this command runs makes its original snapshot stale.
   const existenceChanged =
     (initialSnapshot.fileStats === null) !==
     (currentSnapshot.fileStats === null);
@@ -695,7 +734,10 @@ function assertBucketUnchanged(
   }
 }
 
-/** Writes complete bucket bytes through an adjacent temporary file; failures throw after cleanup, while the function throws the original error. */
+/**
+ * Writes the prepared bucket through an adjacent temporary file so readers see complete old or new content.
+ * On failure, it attempts temporary-file cleanup and throws; the final recheck rejects a concurrent editor save.
+ */
 function replaceBucketAtomically(
   snapshot: BucketSnapshot,
   bucketDirectory: string,
@@ -711,6 +753,7 @@ function replaceBucketAtomically(
   let temporaryDescriptor: number | null = null;
   try {
     temporaryDescriptor = openSync(temporaryPath, "wx", 0o600);
+    // Preserve an existing bucket's access mode; a new category gets the normal readable Markdown-file mode.
     fchmodSync(temporaryDescriptor, snapshot.fileStats?.mode ?? 0o644);
     writeFileSync(temporaryDescriptor, prospectiveContent, "utf-8");
     fsyncSync(temporaryDescriptor);
@@ -730,7 +773,7 @@ function replaceBucketAtomically(
   }
 }
 
-/** Regenerate every existing learning-loop index from the bucket bytes just published. */
+// Regenerate every existing learning-loop index from the bucket bytes just published.
 function regenerateLearningLoopIndexes(projectRoot: string): void {
   const projectFiles = createFS(projectRoot);
   const configState = loadConfig(projectRoot, projectFiles);
@@ -742,9 +785,10 @@ function regenerateLearningLoopIndexes(projectRoot: string): void {
 }
 
 /**
- * Acquire the bucket and every configured generated index as one cooperative write set.
- * Index regeneration rewrites every bucket's index, so claims cover them all to avoid racing another learning-loop writer.
- * Throws a CLIError that translates a reusable claim refusal into a no-write learn-new diagnostic.
+ * Reserve the bucket and every generated index before publishing the author's new entry.
+ *
+ * Index regeneration rewrites every bucket's index, so claims reserve them all to avoid conflicting cooperative writes.
+ * Throws a CLI error with retry guidance when the write set cannot be reserved.
  */
 function acquireLearningLoopWriteClaims(
   projectRoot: string,
@@ -769,10 +813,12 @@ function acquireLearningLoopWriteClaims(
       })),
     );
   } catch (error) {
+    // Another learn new run can already hold an index claim; the author gets retry guidance before any bucket is changed.
     if (error instanceof PathWriteClaimError) {
       const unreleasedTargets = error.cleanupResults.flatMap((result) =>
         result.status === "released" ? [] : [result.targetPath],
       );
+      // Unreleased claims need inspection first; otherwise explain a busy claim or ask the author to retry current files.
       const recovery =
         unreleasedTargets.length > 0
           ? `inspect .goat-flow/write-claims before retrying; cleanup was not confirmed for ${unreleasedTargets.join(", ")}.`
@@ -802,10 +848,13 @@ function releaseLearningLoopWriteClaims(
       result.status === "released" ? [] : [result.targetPath],
     );
   } catch {
+    // A batch already released by this process is rejected; report every target so the author can inspect unconfirmed cleanup.
     unreleasedTargets = [...claims.targetPaths];
   }
+  // Successful release needs no extra terminal message after the author's publication result.
   if (unreleasedTargets.length === 0) return;
   const diagnostic = `Learning-loop write completed without confirmed claim release for ${unreleasedTargets.join(", ")}. Inspect .goat-flow/write-claims before retrying.`;
+  // Preserve the original publication failure while still telling the author that claim cleanup needs attention.
   if (didPublicationFail) {
     console.error(diagnostic);
     return;
@@ -813,7 +862,7 @@ function releaseLearningLoopWriteClaims(
   throw new CLIError(diagnostic, 1);
 }
 
-/** Run the same invariant as `goat-flow stats --check`; null means no blocking finding remains and both command paths agree. */
+// Run the same invariant as `goat-flow stats --check`; null means no blocking finding remains and both command paths agree.
 function verifyLearningLoopStats(projectRoot: string): string | null {
   const projectFiles = createFS(projectRoot);
   const configState = loadConfig(projectRoot, projectFiles);
@@ -834,7 +883,7 @@ function verifyLearningLoopStats(projectRoot: string): string | null {
   return statsVerdict.findings.map((finding) => finding.message).join("; ");
 }
 
-/** Convert a post-publication failure into one honest partial-state message and copyable recovery command. */
+// Convert a post-publication failure into one honest partial-state message and copyable recovery command.
 function partialStateError(
   targetPath: string,
   stage: "index regeneration" | "stats --check",
@@ -857,6 +906,7 @@ function publishLearningLoopFollowUps(
   dependencies: LearnScaffoldDependencies,
 ): void {
   try {
+    // Normal authoring refreshes real indexes; tests may substitute a controlled failure after the bucket is written.
     (dependencies.regenerateIndexes ?? regenerateLearningLoopIndexes)(
       projectRoot,
     );
@@ -866,6 +916,7 @@ function publishLearningLoopFollowUps(
   }
   let statsFailure: string | null;
   try {
+    // Missing test overrides use the same stats gate the author can run to confirm recovery.
     statsFailure = (dependencies.verifyStats ?? verifyLearningLoopStats)(
       projectRoot,
     );
@@ -879,7 +930,7 @@ function publishLearningLoopFollowUps(
   }
 }
 
-/** Render a dry-run preview or the three successful publication stages for the developer's terminal. */
+// Render a dry-run preview or the three successful publication stages for the developer's terminal.
 function renderResultOutput(
   targetPath: string,
   skeleton: string,
@@ -905,13 +956,13 @@ function renderResultOutput(
 }
 
 /**
- * Validate, preview, or publish one learning-loop scaffold in the developer's selected project.
- * Use for the `learn new` CLI route; pre-write failures leave buckets and indexes unchanged, while post-write failures name exact recovery.
+ * Validate, preview, or publish an entry through learn new in the author's selected project.
+ * Pre-write failures leave buckets and indexes unchanged; later failures explain how to recover the published entry.
  *
- * @param request - parsed author input; empty evidence is allowed only for lessons and patterns, while a null evidence kind is forbidden for footguns
- * @param dependencies - test seams; omitted members use the real clock, index generator, stats check, and no simulated editor save
- * @returns rendered result plus the validated skeleton; `wasWritten` is false only when the developer requested `--dry-run`
- * @throws CLIError with exit 2 before publication, or exit 1 with the recovery command after a bucket was published but follow-up work failed
+ * @param request - parsed author input; footguns require evidence pairs and a non-null evidence kind
+ * @param dependencies - optional test overrides; omitted members use normal publishing and verification
+ * @returns terminal output and the validated scaffold; wasWritten is false when the author requested a dry run
+ * @throws CLIError before publication, or with recovery guidance when publishing or follow-up work fails
  */
 export function runLearnScaffold(
   request: LearnScaffoldRequest,
@@ -921,6 +972,7 @@ export function runLearnScaffold(
   const normalizedTitle = validateTitle(request.title);
   validateEvidenceKind(request);
   const citations = buildEvidenceCitations(request);
+  // Normal CLI calls use today's date; tests can pin it so previews and published metadata remain comparable.
   const scaffoldDate = formatUtcDate(
     (dependencies.now ?? (() => new Date()))(),
   );
@@ -976,6 +1028,7 @@ export function runLearnScaffold(
   if (exceedsBucketSizeGate) {
     const warning = `${snapshot.projectRelativePath} will exceed the ${BUCKET_SIZE_WARN_BYTES}-byte bucket-size gate; split the category before relying on stats --check.`;
     warnings.push(warning);
+    // A preview can show an oversized entry, but publishing it would immediately fail the required stats gate.
     if (!request.shouldDryRun) {
       throw new CLIError(`${warning} No scaffold was published.`, 2);
     }
@@ -1016,6 +1069,7 @@ export function runLearnScaffold(
       dependencies,
     );
   } catch (error) {
+    // A concurrent save, write failure, or failed follow-up retains its original CLI error while claims are released.
     publicationError = error;
     throw error;
   } finally {

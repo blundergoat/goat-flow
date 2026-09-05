@@ -1,9 +1,8 @@
 /**
- * Audit orchestrator for `goat-flow audit`.
+ * Run the selected project's audit and assemble the report shown by the CLI and dashboard.
  *
- * Loads config, extracts facts, runs build checks (pass/fail) and optional harness completeness checks (--harness, deterministic pass/fail per
- * concern).
- * Returns an AuditReport consumed by renderers and the dashboard.
+ * Setup and agent checks establish installation status; optional harness, drift, and content checks add their own results.
+ * Single and batch entry points share the same report rules while keeping each agent's extracted facts separate.
  */
 import type { AgentId, ProjectFacts, ReadonlyFS } from "../types.js";
 import { loadConfig } from "../config/index.js";
@@ -51,12 +50,19 @@ import type {
   HarnessCheck,
 } from "./types.js";
 
-/** Build one offline hook-coverage section without running target hooks or provider agents. */
+/**
+ * Summarize installed hook protection for the selected agent or all agents without running their hooks.
+ *
+ * @param projectPath - target project whose settings and installed hook files supply the coverage snapshot
+ * @param selectedAgent - selected agent ID; null includes every agent represented by the hook registry
+ * @returns - coverage summary and hook details; no required hooks leaves the coverage status passing
+ */
 function buildHookCoverageReport(
   projectPath: string,
   selectedAgent: AgentId | null,
 ): AuditHookCoverageReport {
   const hooks = readAllHookStates(projectPath);
+  // A null selection means the user requested aggregate coverage across the agents represented by the registry.
   const selectedHookSurfaces = hooks.flatMap((hook) =>
     Object.entries(hook.agents)
       .filter(
@@ -64,6 +70,7 @@ function buildHookCoverageReport(
       )
       .map(([, agentState]) => ({ hook, agentState })),
   );
+  // Disabled or unsupported hooks remain visible but do not fail required protection for the selected agents.
   const requiredHookSurfaces = selectedHookSurfaces.filter(
     ({ hook, agentState }) => hook.enabled && agentState.supported,
   );
@@ -76,12 +83,14 @@ function buildHookCoverageReport(
   const hasRequiredWarning = requiredHookSurfaces.some(
     ({ agentState }) => agentState.effectiveState.severity === "warning",
   );
+  // With no explicit selection, report the registry's agent names; an empty hook registry yields an empty agent list.
   const selectedAgents = (
     selectedAgent === null
       ? Object.keys(hooks[0]?.agents ?? {})
       : [selectedAgent]
   ) as AgentId[];
   return {
+    // The most severe required hook determines the headline; optional hook state remains in the detail counts.
     status: hasRequiredDanger
       ? "fail"
       : hasRequiredWarning
@@ -111,41 +120,46 @@ function buildHookCoverageReport(
 
 export { createAuditFactsView } from "./audit-facts-view.js";
 
-/** Runtime switches that choose audit scope, fact depth, and optional diagnostics. */
+// Runtime switches that choose audit scope, fact depth, and optional diagnostics.
 type AuditHarnessOption = Record<"harness", boolean>;
 
 /**
- * Caller-supplied switches for a single `runAudit` invocation.
+ * Define the caller's contract for choosing checks and evidence in one project audit report.
  *
- * Every field beyond `agentFilter` and the inherited `harness` flag is optional and off by default, so the common audit path stays the deterministic
- * build checks; the optional fields turn on the more expensive diagnostics (drift, content lint, explicit full deny-hook runtime validation) or trade
- * fact depth for dashboard speed.
+ * A null agent filter audits all agents; harness and content checks follow the caller's switches.
+ * Drift can run automatically for multi-agent projects, while omitted deny evidence stays static and fact depth stays full.
  */
 interface AuditOptions extends AuditHarnessOption {
+  // Null selects the aggregate report; an agent ID narrows findings to that agent.
   agentFilter: AgentId | null;
-  /** Optional drift check. Defaults to false when omitted. */
+  // Explicitly request drift; omission still permits automatic drift for a multi-agent project.
   checkDrift?: boolean;
-  /** Optional cold-path content lint. Defaults to false when omitted. */
+  // Optional cold-path content lint. Defaults to false when omitted.
   checkContent?: boolean;
-  /** Deny-hook evidence depth. Omission is static; full explicitly executes target hook code. */
+  // Deny-hook evidence depth. Omission is static; full explicitly executes target hook code.
   denyMechanismEvidenceLevel?: "full" | "static" | "present-only";
-  /** Optional fact profile. Dashboard summary omits stack facts by contract. */
+  // Optional fact profile. Dashboard summary omits stack facts by contract.
   factProfile?: AuditFactProfile;
-  /** Optional development/test profiler for audit-path timing. */
+  // Optional development/test profiler for audit-path timing.
   profile?: AuditProfiler;
-  /** Internal label used to separate aggregate, per-agent, and single audit spans. */
+  // Internal label used to separate aggregate, per-agent, and single audit spans.
   profileScope?: "aggregate" | "per-agent" | "single";
-  /** Internal batch option: project-level auto drift should run on aggregate only. */
+  // Internal batch option: project-level auto drift should run on aggregate only.
   shouldRunAutoDrift?: boolean;
 }
 
-/** Synchronous profiler seam used by dashboard development benchmarks. */
+/**
+ * Measure audit work when a dashboard benchmark or development caller requests timing.
+ *
+ * Each named span wraps one synchronous step and returns its result unchanged.
+ * Reports do not require a profiler; production callers can omit it without skipping any selected checks.
+ */
 interface AuditProfiler {
-  /** Time one labelled audit step; implementations return whatever the wrapped block returned. */
+  // Time one labelled audit step; implementations return whatever the wrapped block returned.
   span<T>(name: string, block: () => T): T;
 }
 
-/** Run a block inside an optional profiler span. */
+// Run the requested audit step with timing when a profiler is supplied; omission runs the same step directly.
 function span<T>(
   profile: AuditProfiler | undefined,
   name: string,
@@ -154,17 +168,17 @@ function span<T>(
   return profile ? profile.span(name, block) : block();
 }
 
-/** Resolve the fact profile once so dashboard-summary callers get consistent fact slicing. */
+// Use full project facts by default; dashboard-summary callers explicitly omit stack detection for their faster report.
 function factProfile(options: AuditOptions): AuditFactProfile {
   return options.factProfile ?? "full";
 }
 
-/** Decide whether stack detection should run for the requested fact profile. */
+// Include stack detection for full audits and omit it for dashboard summaries whose checks must not depend on those facts.
 function factsIncludeStack(options: AuditOptions): boolean {
   return factProfile(options) !== "dashboard-summary";
 }
 
-/** Resolve omission to the non-executing evidence level at the public audit boundary. */
+// Default to static deny evidence so an ordinary audit does not execute the target project's hook code.
 function denyMechanismEvidenceLevel(
   options: AuditOptions,
 ): NonNullable<AuditOptions["denyMechanismEvidenceLevel"]> {
@@ -173,12 +187,14 @@ function denyMechanismEvidenceLevel(
 
 /**
  * Reject a stack-dependent check before a dashboard-summary context can misreport it.
- * @throws Error when a check requires stack facts excluded from the current context.
+ *
+ * @throws - Error when a check requires stack facts excluded from the current context.
  */
 function assertCheckCanRunWithoutStack(
   ctx: AuditContext,
   check: Pick<BuildCheck | HarnessCheck, "id" | "name" | "requiresStack">,
 ): void {
+  // A summary report cannot claim a result for a check whose required stack facts were deliberately omitted.
   if (ctx.factProfile === "dashboard-summary" && check.requiresStack === true) {
     throw new Error(
       `${check.id} (${check.name}) requires stack facts and cannot run in dashboard-summary audit profile`,
@@ -186,13 +202,16 @@ function assertCheckCanRunWithoutStack(
   }
 }
 
-/** Build an audit scope from its checks, excluding score-only failures. */
+// Build an audit scope from its checks, excluding score-only failures.
 function buildScope(
   checks: CheckResult[],
   summary: Record<string, string>,
 ): AuditScope {
-  const failures = checks.flatMap((c) =>
-    c.failure && c.impact === "scope-fail" ? [c.failure] : [],
+  // Score-only findings stay visible in check rows but must not turn this scope's headline into a failure.
+  const failures = checks.flatMap((checkResult) =>
+    checkResult.failure && checkResult.impact === "scope-fail"
+      ? [checkResult.failure]
+      : [],
   );
   return {
     status: failures.length === 0 ? "pass" : "fail",
@@ -205,7 +224,7 @@ function buildScope(
 /**
  * Run harness checks and return the scope results plus per-concern scores.
  *
- * @param ctx - required target facts and read-only filesystem; absent context means the audit cannot run
+ * @param ctx - target facts, read-only filesystem, and configured acknowledgements for this harness report
  * @returns scope and five concerns; an empty applicable-check set receives score zero, not false assurance
  */
 export function computeHarness(ctx: AuditContext): {
@@ -238,6 +257,7 @@ export function computeHarness(ctx: AuditContext): {
       continue;
     }
     const result = check.run(ctx);
+    // A configured acknowledgement applies only to a failed advisory; integrity and metric checks keep their normal treatment.
     const acknowledged =
       check.type === "advisory" &&
       result.status === "fail" &&
@@ -250,9 +270,11 @@ export function computeHarness(ctx: AuditContext): {
   }
 
   // Calculate each concern independently so one weak area cannot hide behind another.
-  for (const key of Object.keys(concerns) as AuditConcernKey[]) {
-    const { total, passing } = counts[key];
-    concerns[key].score = total > 0 ? Math.round((passing / total) * 100) : 0;
+  for (const concernKey of Object.keys(concerns) as AuditConcernKey[]) {
+    const { total, passing } = counts[concernKey];
+    // No applicable checks means no measured assurance, so the displayed concern score stays zero.
+    concerns[concernKey].score =
+      total > 0 ? Math.round((passing / total) * 100) : 0;
   }
 
   addStructuralAssuranceLimits(concerns);
@@ -260,11 +282,12 @@ export function computeHarness(ctx: AuditContext): {
   return { scope: buildScope(checks, {}), concerns };
 }
 
-/** Summarize agent-specific checks skipped by aggregate audit mode for non-gating evidence limits. */
+// Explain skipped agent checks so aggregate-report readers know when to rerun with --agent; null means no caveat is needed.
 function describeAggregateAgentSkips(agentScope: AuditScope): string | null {
   const skippedAgentChecks = agentScope.checks
     .filter((check) => check.status === "skipped")
     .map((check) => check.id);
+  // Every agent check ran, so there is no omitted-evidence caveat to add to the report.
   if (skippedAgentChecks.length === 0) return null;
   return `${skippedAgentChecks.length} agent-specific check(s) skipped in aggregate mode (${skippedAgentChecks.join(", ")}); rerun with --agent <id> for selected-agent runtime evidence.`;
 }
@@ -273,31 +296,37 @@ function describeAggregateAgentSkips(agentScope: AuditScope): string | null {
  * Describe how much of the enforcement matrix stayed unproven, so a passing constraint score is not read as full filesystem enforcement.
  *
  * @param matrix - per-agent enforcement capabilities collected for this audit
- * @returns the caveat sentence, or null when every capability was verified and no hedge is needed
+ * @returns - caveat text, or null when no capability is limited or unknown, including an empty matrix
  */
 function enforcementLimitSummary(
   matrix: AgentEnforcementCapability[],
 ): string | null {
-  let limited = 0;
-  let unknown = 0;
+  let limitedCapabilityCount = 0;
+  let unknownCapabilityCount = 0;
+  // Count gaps across the selected agents so the headline does not imply more protection than the evidence supports.
   for (const agent of matrix) {
+    // Each capability describes a distinct enforcement surface the user may rely on.
     for (const capability of agent.capabilities) {
-      if (capability.status === "limited") limited++;
-      if (capability.status === "unknown") unknown++;
+      // Limited evidence proves only part of this capability and must remain explicit in the report.
+      if (capability.status === "limited") limitedCapabilityCount++;
+      // Unknown evidence leaves this capability unproven even when other constraints pass.
+      if (capability.status === "unknown") unknownCapabilityCount++;
     }
   }
-  if (limited === 0 && unknown === 0) return null;
-  const parts = [
-    unknown > 0 ? `${unknown} unknown` : "",
-    limited > 0 ? `${limited} limited` : "",
+  // With neither kind of evidence gap, there is no limitation sentence to attach.
+  if (limitedCapabilityCount === 0 && unknownCapabilityCount === 0) return null;
+  // Omit zero-count categories so the caveat names only the evidence gaps that remain.
+  const capabilityCounts = [
+    unknownCapabilityCount > 0 ? `${unknownCapabilityCount} unknown` : "",
+    limitedCapabilityCount > 0 ? `${limitedCapabilityCount} limited` : "",
   ].filter(Boolean);
-  const totalLimitedEvidence = unknown + limited;
+  const totalLimitedEvidence = unknownCapabilityCount + limitedCapabilityCount;
   const capabilityLabel =
     totalLimitedEvidence === 1 ? "capability" : "capabilities";
-  return `Constraint score covers verified deny patterns only, not broad filesystem enforcement; enforcement matrix still reports ${parts.join(" and ")} ${capabilityLabel}.`;
+  return `Constraint score covers verified deny patterns only, not broad filesystem enforcement; enforcement matrix still reports ${capabilityCounts.join(" and ")} ${capabilityLabel}.`;
 }
 
-/** Add aggregate-only caveats without changing the audit status or concern scores users see. */
+// Add aggregate-only caveats without changing the audit status or concern scores users see.
 function addNonGatingEvidenceLimits(
   agentScope: AuditScope,
   concerns: Record<AuditConcernKey, AuditConcern> | null,
@@ -317,12 +346,13 @@ function addNonGatingEvidenceLimits(
   }
 }
 
-/** Run build checks and return per-scope results. */
+// Recognize a check omitted from aggregate mode so the report does not mistake missing per-agent evidence for a pass.
 function isAggregateAgentSkip(
   ctx: AuditContext,
   check: BuildCheck,
   failure: ReturnType<BuildCheck["run"]>,
 ): boolean {
+  // A null failure is a skip only when this agent check cannot answer for the user's aggregate selection.
   return (
     failure === null &&
     check.scope === "agent" &&
@@ -344,11 +374,14 @@ function runSingleBuildCheck(
   check: BuildCheck,
 ): CheckResult {
   assertCheckCanRunWithoutStack(ctx, check);
+  // A check without a skip rule runs normally; an explicit skip prevents it from inspecting an unsupported setup.
   const explicitlySkipped = check.skip?.(ctx) ?? false;
   const failure = explicitlySkipped ? null : check.run(ctx);
+  // Checks may supply result-specific evidence; otherwise the report keeps their registered evidence record.
   const provenance = check.provenanceFor?.(ctx, failure) ?? check.provenance;
   const skipped =
     explicitlySkipped || isAggregateAgentSkip(ctx, check, failure);
+  // A skipped check makes no pass claim; a completed check with no failure is the passing case.
   const status = skipped ? "skipped" : failure ? "fail" : "pass";
   const impact = classifyCheckImpact(status, undefined);
   return {
@@ -357,12 +390,13 @@ function runSingleBuildCheck(
     status,
     ...impact,
     provenance: labelEvidencePathBases(provenance),
+    // Passing and skipped rows omit failure details so renderers have no repair message to show.
     failure: failure ?? undefined,
     evidenceKind: check.evidenceKind,
   };
 }
 
-/** Run setup and agent build checks into their separately rendered audit scopes. */
+// Run setup and agent build checks into their separately rendered audit scopes.
 function runBuildChecks(ctx: AuditContext): {
   setup: AuditScope;
   agent: AuditScope;
@@ -372,6 +406,7 @@ function runBuildChecks(ctx: AuditContext): {
     agent: [],
   };
   const BUILD_CHECKS = [...SETUP_CHECKS, ...AGENT_CHECKS];
+  // Keep setup and agent findings in their own report sections while running the full selected registry.
   for (const check of BUILD_CHECKS) {
     scopeChecks[check.scope].push(runSingleBuildCheck(ctx, check));
   }
@@ -381,7 +416,7 @@ function runBuildChecks(ctx: AuditContext): {
   };
 }
 
-/** Build the AuditContext from config, facts, and manifest structure. */
+// Load the selected project's facts and configuration so every check in this report uses the same installation snapshot.
 function buildAuditContext(
   fs: ReadonlyFS,
   projectPath: string,
@@ -415,7 +450,7 @@ function buildAuditContext(
   };
 }
 
-/** Combine build + optional harness + optional drift + optional content statuses into an overall pass/fail. */
+// Combine the selected sections into the audit headline; null optional sections were not run and do not fail the report.
 function overallStatus(
   setup: AuditScope,
   agent: AuditScope,
@@ -424,6 +459,7 @@ function overallStatus(
   content: ContentReport | null,
 ): "pass" | "fail" {
   const buildPassed = setup.status === "pass" && agent.status === "pass";
+  // Unrequested sections have no result to fail; each selected section must pass for the overall audit to pass.
   const harnessPassed = !harness || harness.scope.status === "pass";
   const driftPassed = !drift || drift.status === "pass";
   const contentPassed = !content || content.status === "pass";
@@ -438,7 +474,7 @@ function overallStatus(
  * @param fs - filesystem adapter scoped to the target project
  * @param projectPath - absolute or relative target project root passed to fact extraction and checks
  * @param options - audit switches controlling agent filtering, harness, drift, content, and fact profile
- * @returns full audit report with setup, agent, optional harness, drift, and content sections
+ * @returns - report with setup and agent sections; harness, drift, and content are null when their checks do not run
  */
 export function runAudit(
   fs: ReadonlyFS,
@@ -449,13 +485,14 @@ export function runAudit(
   return runAuditFromContext(ctx, fs, projectPath, options);
 }
 
-/** Run every selected audit layer against one already-extracted, evidence-level-normalized context. */
+// Assemble the user's report from a prepared context, preserving selected checks and evidence limits across single and batch audits.
 function runAuditFromContext(
   ctx: AuditContext,
   fs: ReadonlyFS,
   projectPath: string,
   options: AuditOptions,
 ): AuditReport {
+  // Calls outside a batch use the single-run timing label; this does not change which checks the user receives.
   const profileScope = options.profileScope ?? "single";
   validateProvenanceWithProfile(ctx, options, profileScope);
   const { setup: setupScope, agent: agentScope } = span(
@@ -477,6 +514,7 @@ function runAuditFromContext(
     agentScope: agentScope,
     denyMechanismEvidenceLevel: denyMechanismEvidenceLevel(options),
   });
+  // A build-only report has no harness concerns, but its agent scope still needs any omitted-evidence caveat.
   addNonGatingEvidenceLimits(
     agentScope,
     harness?.concerns ?? null,
@@ -495,8 +533,10 @@ function runAuditFromContext(
     scopes: {
       setup: setupScope,
       agent: agentScope,
+      // A null harness section means the caller did not request harness checks.
       harness: harness?.scope ?? null,
     },
+    // Concern scores exist only when harness checks ran; null must not be rendered as a zero score.
     concerns: harness?.concerns ?? null,
     enforcement,
     hookCoverage,
@@ -547,17 +587,18 @@ function computeHarnessWithProfile(
  * Decide whether this run compares installed files against the shipped templates.
  *
  * @param ctx - audit context supplying the target version skew
- * @param options - audit switches; an explicit drift request always wins
+ * @param options - drift switches; explicit requests still respect the newer-target version guard
  * @returns true to run drift, false when the target is newer than this CLI or auto-drift does not apply
  */
 function shouldRunDriftCheck(
   ctx: AuditContext,
   options: AuditOptions,
 ): boolean {
-  // A stale CLI cannot produce a trustworthy template comparison; the
-  // config-version check already reports the skew as the actionable failure.
+  // A stale CLI cannot compare newer templates reliably; the config-version check already reports the actionable mismatch.
   if (targetUsesNewerGoatFlow(ctx)) return false;
+  // The user's explicit request enables comparison after the CLI version guard has accepted this target.
   if (options.checkDrift === true) return true;
+  // Batch callers can reserve automatic drift for the aggregate report; other runs use the multi-agent policy.
   return options.shouldRunAutoDrift !== false && shouldAutoRunDrift(ctx);
 }
 
@@ -567,10 +608,10 @@ function shouldRunDriftCheck(
  *
  * @param ctx - target audit context; a null agent filter means inspect every installed runtime
  * @param fs - read-only selected-target filesystem; empty projects yield setup findings elsewhere
- * @param projectPath - selected target shown in audit output; empty paths are rejected before this layer
+ * @param projectPath - target root passed to drift comparisons and used to resolve installed files
  * @param options - audit switches; omitted drift keeps this result null unless auto-drift applies
  * @param profileScope - profiler label for aggregate, per-agent, or single-user audit work
- * @returns drift report for the chosen scope, or null when the user did not request drift
+ * @returns - drift report for the chosen scope, or null when the version guard or drift policy skips comparison
  */
 function computeDriftWithProfile(
   ctx: AuditContext,
@@ -601,8 +642,7 @@ function computeContentWithProfile(
 ): ContentReport | null {
   // The user did not ask for content checks, so the report has no content section.
   if (!options.checkContent) return null;
-  // Same stale-CLI reasoning as drift: newer cold-path content would be linted
-  // against rules this release does not carry yet.
+  // A newer target may use content rules this CLI does not know; skip the scan and let the version check report the mismatch.
   if (targetUsesNewerGoatFlow(ctx)) return null;
   return span(options.profile, `${profileScope} content checks`, () =>
     computeContent(ctx),
@@ -610,17 +650,16 @@ function computeContentWithProfile(
 }
 
 /**
- * Run aggregate + per-agent audits sharing a single config/structure/provenance pass.
- * Eliminates the N+1 pattern where each per-agent audit re-parses config and facts.
+ * Build aggregate and per-agent reports from one configuration and fact extraction pass.
  *
- * It swallows a per-agent audit that throws and leaves that agent out of the result, because one unreadable runtime must not cost the caller the
- * aggregate report as well.
+ * It swallows per-agent audit failures so one failing agent does not discard the completed aggregate report.
+ * Each agent gets isolated facts; callers receive only the per-agent reports that completed.
  *
  * @param fs - filesystem adapter scoped to the target project
- * @param projectPath - target project root reused by aggregate and per-agent runs
- * @param options - aggregate audit switches reused by the per-agent runs
- * @param agentIds - supported agent ids to audit individually after the aggregate run
- * @returns the aggregate report plus one entry per agent that audited without throwing
+ * @param projectPath - target root reused by aggregate and per-agent reports
+ * @param options - shared audit switches; an agent filter also narrows the requested per-agent list
+ * @param agentIds - supported agents to audit individually; an empty list requests only the aggregate report
+ * @returns - aggregate report and successful per-agent reports; failed agent runs are omitted from the list
  */
 export function runAuditBatch(
   fs: ReadonlyFS,
@@ -642,6 +681,7 @@ export function runAuditBatch(
     validateRegisteredCheckProvenance(fs);
   });
 
+  // A selected --agent limits both fact extraction and the individual reports included in this batch.
   const effectiveAgentIds = options.agentFilter
     ? agentIds.filter((id) => id === options.agentFilter)
     : agentIds;
@@ -659,6 +699,7 @@ export function runAuditBatch(
     factProfile: currentFactProfile,
   });
   const perAgentFacts = new Map<AgentId, ProjectFacts>();
+  // Prepare separate fact objects before running checks so one agent's report cannot alter another's evidence.
   for (const agentId of effectiveAgentIds) {
     perAgentFacts.set(
       agentId,
@@ -685,9 +726,11 @@ export function runAuditBatch(
   });
 
   const perAgent: { id: string; audit: AuditReport }[] = [];
+  // Complete each selected agent independently while retaining the aggregate report already built above.
   for (const agentId of effectiveAgentIds) {
     try {
       const agentFacts = perAgentFacts.get(agentId);
+      // Without a prepared fact view, this agent has no evidence snapshot from which to build a report.
       if (!agentFacts) continue;
       const agentCtx: AuditContext = {
         projectPath,
@@ -709,9 +752,8 @@ export function runAuditBatch(
           shouldRunAutoDrift: false,
         }),
       });
-      // For example, the user's agent settings file is malformed, so that runner is left out and the rest of the report still renders.
     } catch {
-      /* skip agents that fail to audit */
+      // Skip agents that fail to audit so the user can still read the completed aggregate and other agents' results.
     }
   }
 

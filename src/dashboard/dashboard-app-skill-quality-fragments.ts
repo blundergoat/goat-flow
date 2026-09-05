@@ -1,17 +1,15 @@
 /**
- * Drive the Skills tab and Skill Evaluator UI.
+ * Present skill scores and evaluator actions in the dashboard's Skills tab.
  *
- * Use when a dashboard user reviews installed skill quality, opens one skill report, or evaluates pasted/dropped Markdown before deciding whether to
- * keep, revise, or retire an artifact.
- *
- * The helpers translate score payloads into badges, banners, clipboard summaries, and file input state without making the templates re-compute report
- * meaning.
+ * Use these helpers when users review installed skills or score pasted and locally selected Markdown.
+ * They turn reports into banners, grades, copied summaries, and file-picker state.
  */
 
 /**
- * The summary banner shown above the skill-quality breakdown: a title, supporting sentence, and one rolled-up severity.
- * `severity` is the worst metric severity present (fail beats warn beats pass), so the banner colour always reflects the most serious issue rather
- * than an average.
+ * Summarize the selected skill above its metric breakdown.
+ *
+ * Failures take priority over warnings; incomplete evidence also keeps the banner at warning severity.
+ * An empty selection has no banner text, so the report panel can remain blank.
  */
 interface SkillSummaryBanner {
   title: string;
@@ -28,6 +26,7 @@ interface SkillSummaryBanner {
 function dashboardSkillEvidenceLimitNotes(
   report: SkillQualityReport | null,
 ): string[] {
+  // Before a report is available, there is no partial-evidence warning to show.
   if (!report) return [];
   return report.fitNotes.filter((note) =>
     /^(?:artifact|composition) truncated at\b/iu.test(note),
@@ -35,25 +34,22 @@ function dashboardSkillEvidenceLimitNotes(
 }
 
 /**
- * Render an evaluator result as the Markdown a user pastes into a PR, review note, or session summary.
+ * Build the Markdown copied from an evaluator result, keeping the report's metric order.
+ * Use after Copy report so the exported score, grade, and slug match the result panel.
  *
- * Section order and metric order both follow the visible panel, so the pasted text reads as the same assessment the
- * user was just looking at rather than a re-ordered summary of it.
- *
- * @param ctx - dashboard app context, used for the same grade, percentage, and slug helpers the panel displays
- * @param result - the evaluator result being exported; optional sections are omitted entirely rather than written
- *   as empty headings, because a bare "## Improvement tips" with nothing under it reads as advice that went missing
+ * @param appContext - dashboard app context, used for the same grade, percentage, and slug helpers the panel displays
+ * @param result - evaluated artifact; empty tips or source lists omit those sections from the copied report
  * @returns the Markdown document; never empty
  */
 function buildEvaluatorReportMarkdown(
-  ctx: DashboardAppContext,
+  appContext: DashboardAppContext,
   result: SkillEvaluateResult,
 ): string {
   const lines: string[] = [];
-  const pct = Math.round(ctx.skillReportPct(result) * 100);
-  const grade = ctx.skillLetterGrade(ctx.skillReportPct(result));
-  lines.push(`# ${result.artifact.name} - ${grade} ${pct}%`);
-  lines.push(`Slug: \`${ctx.skillEvaluatorSlug(result)}\``);
+  const scorePercent = Math.round(appContext.skillReportPct(result) * 100);
+  const grade = appContext.skillLetterGrade(appContext.skillReportPct(result));
+  lines.push(`# ${result.artifact.name} - ${grade} ${scorePercent}%`);
+  lines.push(`Slug: \`${appContext.skillEvaluatorSlug(result)}\``);
   lines.push(
     `Subtype: ${result.subtype} (${Math.round(result.classification.confidence * 100)}% ${result.classification.detectedSubtype})`,
   );
@@ -87,16 +83,18 @@ function buildEvaluatorReportMarkdown(
     lines.push("");
     lines.push("## Composed from");
     // Copy each source so users can see which files contributed to the score.
-    for (const src of result.composedFrom) {
-      lines.push(`- ${src}`);
+    for (const sourcePath of result.composedFrom) {
+      lines.push(`- ${sourcePath}`);
     }
   }
   return lines.join("\n");
 }
 
 /**
- * What the Skill Evaluator banner is written from, gathered once so the title and detail agree.
- * Collecting them in one shape is the contract that stops the headline saying one thing while the detail beneath it says another.
+ * Keep the evaluator headline and supporting detail tied to the same report.
+ *
+ * Gather classification, metric counts, and evidence limits after scoring pasted or uploaded Markdown.
+ * Both banner helpers must use these same signals to explain the user's next review decision.
  */
 interface EvaluatorVerdictSignals {
   report: SkillEvaluateResult;
@@ -111,7 +109,7 @@ interface EvaluatorVerdictSignals {
   classificationConfidence: number;
 }
 
-/** The action each recommendation asks the user to take, phrased for the banner sentence. */
+// The action each recommendation asks the user to take, phrased for the banner sentence.
 const EVALUATOR_RECOMMENDATION_LABELS: Record<string, string> = {
   "needs-human-review": "Manual review required",
   "consider-reclassifying": "Consider reclassifying",
@@ -122,13 +120,10 @@ const EVALUATOR_RECOMMENDATION_LABELS: Record<string, string> = {
 };
 
 /**
- * Choose the single headline the evaluator banner leads with.
+ * Choose the evaluator's next-action headline; packaging and classification mismatches take priority over metric counts.
  *
- * The order is the point: a packaging or classification mismatch is shown ahead of metric counts, because it changes what
- * the user should do next rather than merely how good the artifact is.
- *
- * @param signals - the verdict signals read from the report
- * @returns the headline; never empty, so the banner always says something
+ * @param signals - report findings shared with the banner detail; empty evidence notes add no partial-read warning
+ * @returns a non-empty headline describing the strongest review signal
  */
 function evaluatorVerdictTitle(signals: EvaluatorVerdictSignals): string {
   // Strong shape mismatch tells the user the artifact may be packaged as the wrong thing.
@@ -146,10 +141,10 @@ function evaluatorVerdictTitle(signals: EvaluatorVerdictSignals): string {
   }
   // Failing metrics mean the user needs a stronger verdict than warning copy.
   if (signals.failCount > 0) {
-    const tail = signals.isHardVerdict
+    const verdictAction = signals.isHardVerdict
       ? "block ship"
       : "- needs review before keeping";
-    return `${signals.failCount} failing metric${signals.failCount > 1 ? "s" : ""} ${tail}`;
+    return `${signals.failCount} failing metric${signals.failCount > 1 ? "s" : ""} ${verdictAction}`;
   }
   // Warnings are non-blocking, so the banner keeps the artifact reviewable.
   if (signals.warnCount > 0) {
@@ -163,41 +158,43 @@ function evaluatorVerdictTitle(signals: EvaluatorVerdictSignals): string {
 }
 
 /**
- * Build the supporting sentence under the banner headline, describing the same signal the headline chose.
+ * Explain the confidence or metric count behind the evaluator headline so users can judge the suggested next action.
  *
- * @param signals - the verdict signals read from the report
- * @returns the detail phrase, without its trailing full stop
+ * @param signals - the same report findings used to choose the headline
+ * @returns supporting text without its final full stop; zero non-passing metrics means no metric needs attention
  */
 function evaluatorVerdictDetail(signals: EvaluatorVerdictSignals): string {
+  // A packaging warning needs its confidence beside the headline so users can judge whether to reclassify.
   if (signals.shapeMismatch && signals.shapeConfidence >= 0.7) {
     return `${Math.round(signals.shapeConfidence * 100)}% shape confidence`;
   }
+  // A subtype warning uses the same confidence threshold as the headline above it.
   if (
     signals.classificationConfidence >= 0.85 &&
     signals.detected !== signals.report.subtype
   ) {
     return `${Math.round(signals.classificationConfidence * 100)}% ${signals.detected} classification`;
   }
-  const nonPassing = signals.failCount + signals.warnCount;
-  return `${nonPassing} non-passing metric${nonPassing === 1 ? "" : "s"}`;
+  const nonPassingCount = signals.failCount + signals.warnCount;
+  return `${nonPassingCount} non-passing metric${nonPassingCount === 1 ? "" : "s"}`;
 }
 
 /**
- * Build the headline banner for a selected skill-quality report.
- * Use when the Skills tab needs one user-readable status above the metric breakdown.
+ * Build the selected skill's status banner above its metric breakdown.
  *
- * @param ctx - dashboard app context; missing score helpers would prevent percentage-based warning copy
+ * @param appContext - dashboard app context; missing score helpers would prevent percentage-based warning copy
  * @param report - selected report; `null` means no skill report is ready to summarize
- * @returns banner title, detail, and severity; warn fallback keeps an empty selection visually neutral
+ * @returns banner text and severity; an absent report gives empty text and a warning placeholder
  */
 function dashboardSkillSummaryBanner(
-  ctx: DashboardAppContext,
+  appContext: DashboardAppContext,
   report: SkillQualityReport | null,
 ): SkillSummaryBanner {
   // No report is selected yet, so the Skills tab keeps the headline placeholder neutral.
   if (!report) return { title: "", desc: "", severity: "warn" };
-  const pct = ctx.skillReportPct(report);
+  const scoreRatio = appContext.skillReportPct(report);
   const evidenceLimitNotes = dashboardSkillEvidenceLimitNotes(report);
+  // Complete evidence adds no cautionary sentence to the banner.
   const evidenceLimitSuffix =
     evidenceLimitNotes.length > 0
       ? ` Evidence limit: ${evidenceLimitNotes.join("; ")}.`
@@ -210,29 +207,30 @@ function dashboardSkillSummaryBanner(
   const failCount = report.metrics.filter(
     (metric) => metric.severity === "fail",
   ).length;
-  const rec = report.recommendation;
+  const recommendation = report.recommendation;
   // Failing metrics mean the user should address structural issues before trusting the skill.
   if (failCount > 0) {
+    // A failing report mentions warnings only when there is additional cleanup to review.
     const warningSummary = warnCount
       ? ` and ${warnCount} warning${warnCount > 1 ? "s" : ""}`
       : "";
     return {
       title: "Critical structural issues require attention",
-      desc: `${failCount} failing metric${failCount > 1 ? "s" : ""}${warningSummary}. Recommended: ${rec}.${evidenceLimitSuffix}`,
+      desc: `${failCount} failing metric${failCount > 1 ? "s" : ""}${warningSummary}. Recommended: ${recommendation}.${evidenceLimitSuffix}`,
       severity: "fail",
     };
   }
   // Warnings mean the skill can stay visible but still needs cleanup guidance.
   if (warnCount > 0) {
     const title =
-      pct >= 0.85
+      scoreRatio >= 0.85
         ? "Strong skill identity with adequate structural quality"
         : "Acceptable skill with non-blocking issues";
     return {
       title,
       desc: `${warnCount} non-blocking issue${
         warnCount > 1 ? "s" : ""
-      }. Recommended: ${rec}, address warnings.${evidenceLimitSuffix}`,
+      }. Recommended: ${recommendation}, address warnings.${evidenceLimitSuffix}`,
       severity: "warn",
     };
   }
@@ -242,13 +240,13 @@ function dashboardSkillSummaryBanner(
       title: "Assessment used partial evidence",
       desc: `Evidence limit: ${evidenceLimitNotes.join(
         "; ",
-      )}. Structural metrics only describe the content assessed. Recommended: ${rec}.`,
+      )}. Structural metrics only describe the content assessed. Recommended: ${recommendation}.`,
       severity: "warn",
     };
   }
   return {
     title: "All structural metrics passing",
-    desc: `Recommended: ${rec}.`,
+    desc: `Recommended: ${recommendation}.`,
     severity: "pass",
   };
 }
@@ -274,21 +272,22 @@ function dashboardSkillQualityReportFragment(): DashboardAppFragment {
     },
 
     /**
-     * Load or reuse one selected skill report.
-     * Use when the user clicks a skill in the Skills tab; stale requests cannot overwrite the new selection.
+     * Open a skill after the user selects it, reusing cached scores when available.
+     * Report failures as toasts; a late response cannot replace another project, runner, or skill selection.
      *
-     * @param artifactId - selected skill artifact id; empty means no meaningful report can be fetched
-     * @returns nothing; failures are reported as toasts and leave an uncached selection without a report
+     * @param artifactId - selected inventory item's id, used as the cache key and scoring request parameter
+     * @returns nothing; an uncached request clears the old report before loading, and reports failures through a toast
      */
     async loadSkillQualityReport(artifactId: string) {
       this.skillQualitySelectedId = artifactId;
-      const cached = this.skillQualityReports[artifactId];
+      const cachedReport = this.skillQualityReports[artifactId];
       // Cached reports open instantly so users can switch back without another network wait.
-      if (cached) {
-        this.skillQualityReport = cached;
+      if (cachedReport) {
+        this.skillQualityReport = cachedReport;
         this.skillQualityLoading = false;
         return;
       }
+      // Selecting another uncached skill cancels the previous request; the first selection has nothing to cancel.
       this.skillQualityAbortController?.abort();
       const controller = new AbortController();
       this.skillQualityAbortController = controller;
@@ -297,19 +296,19 @@ function dashboardSkillQualityReportFragment(): DashboardAppFragment {
       this.skillQualityReport = null;
       this.skillQualityLoading = true;
       try {
-        const res = await dashboardFetch(
+        const response = await dashboardFetch(
           `/api/skill-quality?path=${encodeURIComponent(requestProjectPath)}&agent=${encodeURIComponent(requestRunner)}&artifact=${encodeURIComponent(artifactId)}`,
           { signal: controller.signal },
         );
-        const payload: unknown = await res.json();
+        const payload: unknown = await response.json();
         const error = readErrorMessage(
           readRecord(payload, "Skill quality report"),
         );
-        // Server-side scoring errors become a toast instead of replacing the current report.
+        // Scoring errors leave the cleared report panel empty and tell the user why through a toast.
         if (error) {
           this.showToast(error, true);
-          // The response still matches the visible project, runner, and selected skill.
         } else if (
+          // Only the report for the still-selected project, runner, and skill belongs in this panel.
           this.projectPath === requestProjectPath &&
           this.activeRunner === requestRunner &&
           this.skillQualitySelectedId === artifactId
@@ -318,11 +317,13 @@ function dashboardSkillQualityReportFragment(): DashboardAppFragment {
           this.skillQualityReport = report;
           this.skillQualityReports[artifactId] = report;
         }
-      } catch (err) {
-        // Aborted requests mean the user picked another skill before this one finished.
+      } catch (failure) {
+        // A failed fetch or invalid JSON response shows a scoring-error toast; a cancelled request stays silent.
+        // Switching skills or leaving the view can cancel the request before it finishes.
         if (controller.signal.aborted) return;
-        const msg = err instanceof Error ? err.message : String(err);
-        this.showToast(msg || "Skill quality scoring failed", true);
+        const errorMessage =
+          failure instanceof Error ? failure.message : String(failure);
+        this.showToast(errorMessage || "Skill quality scoring failed", true);
       }
       // Only the latest request is allowed to clear the Skills tab loading state.
       if (this.skillQualityAbortController === controller) {
@@ -364,16 +365,15 @@ function dashboardSkillQualityReportFragment(): DashboardAppFragment {
     },
 
     /**
-     * Count cached skills with warning or failure metrics.
-     * Use for the Skills tab scope strip so users see how many artifacts still need attention.
+     * Count cached skills with warnings, failures, or incomplete evidence for the Skills tab's attention count.
      *
-     * @returns warning/failure/evidence-limit count; zero means every cached report is currently clean
+     * @returns the number needing review; zero means no cached report has one of these issues
      */
     skillsWithWarningsCount(): number {
-      let count = 0;
+      let warningCount = 0;
       // Scan cached reports in the same set the user sees in the Skills tab.
-      for (const id in this.skillQualityReports) {
-        const report = this.skillQualityReports[id];
+      for (const artifactId in this.skillQualityReports) {
+        const report = this.skillQualityReports[artifactId];
         // Missing cache entries mean that skill has not produced a visible report yet.
         if (!report) continue;
         // Any warn/fail metric or bounded evidence surface makes this skill count as needing review.
@@ -384,9 +384,9 @@ function dashboardSkillQualityReportFragment(): DashboardAppFragment {
           ) ||
           dashboardSkillEvidenceLimitNotes(report).length > 0
         )
-          count++;
+          warningCount++;
       }
-      return count;
+      return warningCount;
     },
 
     /**
@@ -399,20 +399,18 @@ function dashboardSkillQualityReportFragment(): DashboardAppFragment {
       const reports = Object.values(this.skillQualityReports);
       // No prefetched reports means the rollup should stay in its empty state.
       if (reports.length === 0) return 0;
-      let sum = 0;
+      let scoreRatioTotal = 0;
       // Each cached report contributes the same normalized score to the rollup.
-      for (const report of reports) sum += Number(this.skillReportPct(report));
-      return sum / reports.length;
+      for (const report of reports)
+        scoreRatioTotal += Number(this.skillReportPct(report));
+      return scoreRatioTotal / reports.length;
     },
 
     /**
-     * Build the skills detail headline from recommendation and warn/fail counts.
-     *
-     * The branch order promotes blocking findings above percentage score so a high score cannot hide a small number of load-bearing structural
-     * failures because review must see the risk before the aggregate grade.
+     * Show the selected skill's strongest finding above its score so a high percentage cannot hide a failure.
      *
      * @param report - selected skill report; `null` means the Skills tab has no headline yet
-     * @returns banner copy and severity; warn fallback keeps an empty selection visually neutral
+     * @returns banner text and severity; an absent report gives empty text and a warning placeholder
      */
     skillSummaryBanner(report: SkillQualityReport | null): SkillSummaryBanner {
       return dashboardSkillSummaryBanner(this, report);
@@ -441,10 +439,12 @@ function dashboardSkillEvaluatorResultFragment(): DashboardAppFragment {
     } {
       // No evaluator result exists yet, so the result panel stays empty.
       if (!report) return { title: "", desc: "" };
-      const cls = report.classification;
-      const detected = cls.detectedSubtype;
+      const classification = report.classification;
+      const detected = classification.detectedSubtype;
+      // Reports without separate shape fields use subtype classification to keep the verdict readable.
       const detectedShape = report.detectedShape ?? detected;
-      const shapeConfidence = report.shapeConfidence ?? cls.confidence;
+      const shapeConfidence =
+        report.shapeConfidence ?? classification.confidence;
       const shapeMismatch =
         report.shapeMismatch ?? detectedShape !== report.subtype;
       const failCount = report.metrics.filter(
@@ -467,18 +467,20 @@ function dashboardSkillEvaluatorResultFragment(): DashboardAppFragment {
         warnCount,
         evidenceLimitNotes,
         isHardVerdict,
-        classificationConfidence: cls.confidence,
+        classificationConfidence: classification.confidence,
       };
+      // Complete input needs no partial-evidence caveat beneath the verdict.
       const evidenceLimitDetail =
         evidenceLimitNotes.length > 0
           ? ` Evidence limit: ${evidenceLimitNotes.join("; ")}.`
           : "";
-      const recHuman =
+      // An unfamiliar recommendation still gives the user a readable action in the banner.
+      const recommendationLabel =
         EVALUATOR_RECOMMENDATION_LABELS[report.recommendation] ??
         "Keep as a skill";
       return {
         title: evaluatorVerdictTitle(signals),
-        desc: `${evaluatorVerdictDetail(signals)}.${evidenceLimitDetail} ${recHuman} before deciding to keep, convert, or discard.`,
+        desc: `${evaluatorVerdictDetail(signals)}.${evidenceLimitDetail} ${recommendationLabel} before deciding to keep, convert, or discard.`,
       };
     },
 
@@ -502,9 +504,10 @@ function dashboardSkillEvaluatorResultFragment(): DashboardAppFragment {
       const tipsByMetric = new Map<string, SkillEvaluateTip[]>();
       // Bucket tips by metric so each advice group follows the score row it explains.
       for (const tip of report.tips) {
-        const arr = tipsByMetric.get(tip.metric) ?? [];
-        arr.push(tip);
-        tipsByMetric.set(tip.metric, arr);
+        // The first tip creates its metric's advice group; later tips appear in the same group.
+        const metricTips = tipsByMetric.get(tip.metric) ?? [];
+        metricTips.push(tip);
+        tipsByMetric.set(tip.metric, metricTips);
       }
       const groups: Array<{
         metric: string;
@@ -534,20 +537,16 @@ function dashboardSkillEvaluatorResultFragment(): DashboardAppFragment {
 }
 
 /**
- * Build the Skill Evaluator's label and interaction methods: tip toggling, audit recency, file roles, and the export slug.
- *
- * These are the small pieces the result panel reads around the verdict, kept apart from the verdict and tip builders so
- * neither half becomes a wall of unrelated methods.
+ * Add file roles, audit age, export labels, and tip toggles to the evaluator result panel.
  *
  * @returns dashboard fragment merged into the app alongside the result fragment
  */
 function dashboardSkillEvaluatorLabelsFragment(): DashboardAppFragment {
   return {
     /**
-     * Toggle one evaluator tip group open or closed.
-     * Use when the user expands advice for a specific metric.
+     * Expand or collapse advice when the user selects a metric's tip group.
      *
-     * @param metric - metric id shown in the result; empty ids collapse under an unusable key
+     * @param metric - report metric id used to store that group's open or closed state
      * @returns nothing; the visible group state changes in place
      */
     toggleSkillEvaluatorTipGroup(metric: string) {
@@ -606,27 +605,26 @@ function dashboardSkillEvaluatorLabelsFragment(): DashboardAppFragment {
       // No result has been generated yet, so there is no slug to copy.
       if (!report) return "";
       const today = new Date().toISOString().slice(0, 10);
-      const safe = (report.artifact.name || "skill")
+      // An unnamed artifact uses 'skill' in the copyable label before filename-unsafe characters are removed.
+      const artifactSlug = (report.artifact.name || "skill")
         .toLowerCase()
         .replace(/[^a-z0-9-]+/g, "-")
         .replace(/^-+|-+$/g, "");
-      return `evaluation-${today}-${safe}`;
+      return `evaluation-${today}-${artifactSlug}`;
     },
   };
 }
 
 /**
- * Build Alpine methods for Skill Evaluator clipboard and file-input actions.
- * Use when the user copies a result, resets the form, or drops Markdown files into the evaluator.
+ * Add Copy report to the evaluator result panel; its handler reports clipboard failures through a toast.
  *
- * @returns dashboard fragment; empty methods are never returned because the evaluator form uses all handlers
+ * @returns the copy handler and its success-badge lifecycle for the dashboard app
  */
 function dashboardSkillEvaluatorClipboardFragment(): DashboardAppFragment {
   return {
     /**
-     * Copy the current evaluator result as Markdown.
-     * Use when the user wants to paste the score into a PR, review note, or session summary.
-     * Clipboard failures are reported as toasts and clear any previous success badge.
+     * Copy the visible evaluator result as Markdown for a review note or PR.
+     * The handler reports failures as toasts and clears any previous copy-success badge.
      *
      * @returns nothing; missing result leaves the clipboard unchanged
      */
@@ -649,25 +647,25 @@ function dashboardSkillEvaluatorClipboardFragment(): DashboardAppFragment {
           this._skillEvaluatorReportCopiedTimer = null;
         }, 4000);
         this.showToast("Report copied to clipboard");
-      } catch (err) {
+      } catch (failure) {
+        // The browser can deny a clipboard write after Copy report; remove the success badge and show the failure in a toast.
         this.skillEvaluatorReportCopied = false;
         // Failed copy attempts should remove any previous success timer immediately.
         if (this._skillEvaluatorReportCopiedTimer) {
           clearTimeout(this._skillEvaluatorReportCopiedTimer);
           this._skillEvaluatorReportCopiedTimer = null;
         }
-        const msg = err instanceof Error ? err.message : String(err);
-        this.showToast(msg || "Copy failed", true);
+        const errorMessage =
+          failure instanceof Error ? failure.message : String(failure);
+        this.showToast(errorMessage || "Copy failed", true);
       }
     },
   };
 }
 
 /**
- * Build the Skill Evaluator's form methods: resetting it, clearing a result, and taking dropped or chosen Markdown files.
- *
- * These are the actions that change what the evaluator is about to score, kept apart from the copy action that exports a
- * score already produced.
+ * Add form resets and local-file selection to the evaluator before scoring.
+ * File input reports read failures in the form while keeping files from earlier successful selections.
  *
  * @returns dashboard fragment merged into the app alongside the clipboard fragment
  */
@@ -713,16 +711,15 @@ function dashboardSkillEvaluatorInputActionsFragment(): DashboardAppFragment {
     },
 
     /**
-     * Read dropped or selected Markdown files into the Skill Evaluator.
-     * Use after the user drops files or picks them from the file input.
-     * Read failures are reported in the evaluator without discarding previously loaded files.
+     * Read files chosen in the picker or dropped into the evaluator; accept Markdown extensions and Markdown or plain-text MIME types.
+     * The handler reports read failures in the form and keeps previously loaded files.
      *
-     * @param fileList - browser file list; empty or non-Markdown files show an evaluator error
+     * @param fileList - browser selection; an empty list or no accepted files shows a form error
      * @returns nothing; loaded files populate chips and may prefill the suggested artifact name
      */
     async _ingestSkillEvaluatorFiles(fileList: FileList | File[]) {
-      // Only Markdown-like files are evaluated so accidental binary drops do not reach scoring.
-      const list = Array.from(fileList).filter(
+      // For example, a mixed-file drop keeps Markdown extensions and files the browser identifies as Markdown or plain text.
+      const acceptedFiles = Array.from(fileList).filter(
         (file) =>
           file.name.endsWith(".md") ||
           file.name.endsWith(".markdown") ||
@@ -730,13 +727,13 @@ function dashboardSkillEvaluatorInputActionsFragment(): DashboardAppFragment {
           file.type === "text/plain",
       );
       // No valid files means the drop/input action did not give the evaluator anything to score.
-      if (list.length === 0) {
+      if (acceptedFiles.length === 0) {
         this.skillEvaluatorError =
           "Drop .md / .markdown files only (got 0 valid files).";
         return;
       }
-      const reads = list.map(
-        // FileReader reads each browser file so the evaluator can score local content.
+      const pendingFileReads = acceptedFiles.map(
+        // Read local text before scoring; choosing an empty text file still creates a chip with empty content.
         (file) =>
           new Promise<{ name: string; content: string }>((resolve, reject) => {
             const reader = new FileReader();
@@ -755,35 +752,38 @@ function dashboardSkillEvaluatorInputActionsFragment(): DashboardAppFragment {
           }),
       );
       try {
-        const loaded = await Promise.all(reads);
-        const existing = new Set(
+        const loadedFiles = await Promise.all(pendingFileReads);
+        const existingFileNames = new Set(
           this.skillEvaluatorFiles.map(
             (file: { name: string; content: string }) => file.name,
           ),
         );
-        // Add each new file once so duplicate drops do not create duplicate chips.
-        for (const loadedFile of loaded) {
-          // Duplicate filenames keep the existing chip and avoid ambiguous result rows.
-          if (existing.has(loadedFile.name)) continue;
+        // Append the completed batch while keeping files loaded by earlier picker or drop actions.
+        for (const loadedFile of loadedFiles) {
+          // A name already present before this batch keeps its existing chip and content.
+          if (existingFileNames.has(loadedFile.name)) continue;
           this.skillEvaluatorFiles.push(loadedFile);
         }
         // Empty suggested name uses the first loaded filename as a helpful default.
         if (!this.skillEvaluatorName && this.skillEvaluatorFiles[0]) {
-          const first = this.skillEvaluatorFiles[0];
-          this.skillEvaluatorName = first.name.replace(/\.(md|markdown)$/i, "");
+          const firstFile = this.skillEvaluatorFiles[0];
+          this.skillEvaluatorName = firstFile.name.replace(
+            /\.(md|markdown)$/i,
+            "",
+          );
         }
         this.skillEvaluatorError = null;
-      } catch (err) {
+      } catch (failure) {
+        // A selected file can become unreadable before FileReader finishes; show its error and keep the previously loaded chips.
         this.skillEvaluatorError =
-          err instanceof Error ? err.message : String(err);
+          failure instanceof Error ? failure.message : String(failure);
       }
     },
 
     /**
-     * Load files from the Skill Evaluator file picker.
-     * Use when the user selects one or more local Markdown files.
+     * Read the local files selected in the evaluator's picker, then reset the picker so the same file can be chosen again.
      *
-     * @param event - input change event; missing files mean the user cancelled the picker
+     * @param event - file-picker change event; an absent or empty file list leaves the current input unchanged
      * @returns nothing; selected files are read asynchronously
      */
     loadSkillEvaluatorFile(event: Event) {
@@ -791,14 +791,14 @@ function dashboardSkillEvaluatorInputActionsFragment(): DashboardAppFragment {
       // Cancelled pickers leave the evaluator unchanged.
       if (!input.files || input.files.length === 0) return;
       void this._ingestSkillEvaluatorFiles(input.files);
+      // Clearing the picker lets the user select the same file again and receive another change event.
       input.value = "";
     },
 
     /**
-     * Mark the evaluator dropzone active during drag-over.
-     * Use so users see the panel is ready to accept Markdown files.
+     * Highlight the evaluator dropzone as the user drags files over it.
      *
-     * @param event - drag event from the dropzone; missing data still only toggles visual state
+     * @param event - dropzone drag event; preventing its default permits the later drop action
      * @returns nothing; the dropzone highlight changes in place
      */
     skillEvaluatorDragOver(event: DragEvent) {
@@ -814,10 +814,12 @@ function dashboardSkillEvaluatorInputActionsFragment(): DashboardAppFragment {
      * @returns nothing; the dropzone highlight changes in place
      */
     skillEvaluatorDragLeave(event: DragEvent) {
-      const related = event.relatedTarget as Node | null;
-      const target = event.currentTarget as Node | null;
+      // Leaving the browser or losing the dropzone target gives no contained destination, so the highlight will clear.
+      const nextDragTarget = event.relatedTarget as Node | null;
+      const dropzone = event.currentTarget as Node | null;
       // Moving between children should keep the dropzone visibly active.
-      if (target && related && target.contains(related)) return;
+      if (dropzone && nextDragTarget && dropzone.contains(nextDragTarget))
+        return;
       this.skillEvaluatorDragActive = false;
     },
   };

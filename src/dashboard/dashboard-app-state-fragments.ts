@@ -1,16 +1,13 @@
 /**
- * Core state fragments for the dashboard Alpine app. dashboardMergeAppFragments stitches them into one app object via descriptor merge (so getters
- * and method `this` survive).
+ * Set the dashboard's initial selections, empty results, and loading flags before its feature methods run.
  *
- * These fragments seed the injected audit report, selected project path, theme, per-session/terminal UI flags, and the state used by projects, tasks,
- * hooks, quality, and the skill evaluator.
- * Order matters: fields here must exist before later fragments' methods read them.
+ * Derived getters keep terminal status, project labels, and setup scores aligned with the user's current selection.
+ * Merge these fragments with dashboardMergeAppFragments so those getters remain reactive as requests complete.
  */
 
 /**
- * Build the core-state fragment: audit report, project path, theme, and session/terminal UI flags.
- * The returned object is one input to dashboardMergeAppFragments, not a standalone app; its fields are the reactive baseline later fragments' getters
- * and methods assume already exist.
+ * Initialize the selected project, saved theme, audit result, and terminal controls when the dashboard opens.
+ * Merge this state before feature methods run so they share the same reactive selections and loading flags.
  *
  * @param supportedAgents - agents the server reports as launchable, used to seed runner UI options
  * @param defaultRunner - runner pre-selected in the launcher until the user picks another
@@ -24,10 +21,13 @@ function dashboardCoreStateFragment(
     // --- Core state ---
     report: readInjectedReport(),
 
+    // A shell without an injected project starts at the server's current directory.
     projectPath: window.__GOAT_FLOW_DEFAULT_PATH__ ?? ".",
 
+    // An unversioned shell displays the explicit placeholder until a versioned build is served.
     dashboardVersion: window.__GOAT_FLOW_VERSION__ ?? "0.0.0",
 
+    // A saved theme choice wins; first-time visitors inherit their operating system preference.
     darkMode:
       localStorage.getItem("gf-dark") === "true" ||
       (!localStorage.getItem("gf-dark") &&
@@ -59,6 +59,7 @@ function dashboardCoreStateFragment(
 
     agentsLoaded: false,
 
+    // Show placeholder agent cards during first discovery; an empty result after loading needs no skeletons.
     get agentSkeletonList(): SupportedAgent[] {
       return this.installedAgents.length === 0 && !this.agentsLoaded
         ? this.supportedAgents
@@ -79,9 +80,7 @@ function dashboardCoreStateFragment(
 
     _workspacePoll: null as ReturnType<typeof setInterval> | null,
 
-    /** Optional user-supplied display titles keyed by stable project identity.
-     *  Persisted alongside paths/favorites in .goat-flow/dashboard-state.json so
-     *  titles follow repos across path moves when the server can resolve identity. */
+    // Keep user-chosen project titles with stable identities so a resolved path move can retain the displayed name.
     projectTitles: {},
 
     projectIdentities: {},
@@ -90,30 +89,31 @@ function dashboardCoreStateFragment(
 
     projectTitleDraft: "",
 
-    /** Resolve the stable dashboard-state key for a path, falling back for older payloads. */
+    // Find the saved-project key; older payloads without identities continue using the project path.
     projectKeyFor(path: string): string {
       return this.projectIdentities[path] ?? path;
     },
 
-    /** Resolve the display name for a project path, preferring a user override. */
+    // Show the user's saved project title when available, otherwise use the directory name.
     displayNameFor(path: string): string {
       const identityKey = this.projectKeyFor(path);
       const override =
         this.projectTitles[identityKey] ?? this.projectTitles[path];
+      // An empty or invalid saved title leaves the directory name visible instead of a blank project label.
       if (typeof override === "string" && override.length > 0) return override;
       return getProjectDisplayName(path);
     },
 
-    /** Return the current project name. */
+    // Keep the current project heading in sync with its saved title or directory name.
     get projectName(): string {
       return this.displayNameFor(this.projectPath);
     },
 
-    /** Keep a stable accent color per project so quick switches stay visually anchored.
-     *  Hash the path (not the display name) so renaming doesn't change the accent. */
+    // Keep the project accent tied to its path so changing the displayed title preserves its familiar color.
     get projectColor(): string {
       const key = this.projectPath;
       let hash = 0;
+      // Every path character contributes to the stable accent used when returning to this project.
       for (let i = 0; i < key.length; i++)
         hash = key.charCodeAt(i) + ((hash << 5) - hash);
       const hue = Math.abs(hash) % 360;
@@ -168,9 +168,7 @@ function dashboardCoreStateFragment(
 
     availableRunners: [] as RunnerId[],
 
-    // Project switches intentionally preserve backend sessions so returning to a workspace
-    // can reattach instead of spawning a fresh agent process. Each project keeps the full
-    // list of its bound sessions plus the id that was active at detach time.
+    // Returning to a project restores its bound sessions and selected tab without starting another backend agent.
     _projectSessions: {},
 
     _projectActiveSession: {},
@@ -179,8 +177,7 @@ function dashboardCoreStateFragment(
 
     _xtermLoaded: false,
 
-    // detachTerminal() flips this while it closes browser-side sockets so ws.onclose only
-    // marks sessions ended when the runner actually exits on the backend.
+    // Closing browser sockets during a project switch must not mark the still-running backend sessions as ended.
     _detaching: false,
 
     // Drag-drop image upload state for the active terminal pane.
@@ -192,20 +189,23 @@ function dashboardCoreStateFragment(
   };
 }
 
-/** Resolve the active local terminal session from Alpine state. */
+// Find the selected terminal tab; null means no local session is available for its controls.
 function activeTerminalSession(
   sessions: LocalSession[],
   activeSessionId: string | null,
 ): LocalSession | null {
+  // With no tab selected, hide session-specific controls instead of choosing another session implicitly.
   if (activeSessionId === null) return null;
+  // A tab removed since selection has no local session left to operate on.
   return sessions.find((session) => session.id === activeSessionId) ?? null;
 }
 
-/** Return true only when a browser tab is disconnected from a still-live backend session. */
+// Return true only when a browser tab is disconnected from a still-live backend session.
 function isTerminalDetached(
   session: LocalSession | null,
   serverSessions: ServerSessionInfo[],
 ): boolean {
+  // Missing, ended, or already connected tabs need no reconnect affordance.
   if (!session || session.ended || session.connected) return false;
   return serverSessions.some(
     (serverSession) =>
@@ -214,32 +214,40 @@ function isTerminalDetached(
 }
 
 /**
- * Return true only in the pre-output startup gap. The ordered guards keep ended, awaiting-input,
- * ready, and error sessions from showing a loading overlay after the terminal is already usable.
+ * Show startup progress only while a connected runner has produced no output.
+ * Ended sessions, input prompts, and known ready or error states must not be covered by the loading overlay.
  */
 function isTerminalWaitingForRunner(session: LocalSession | null): boolean {
+  // No selected terminal means there is no startup work to show.
   if (!session) return false;
+  // A disconnected or finished session is not waiting for first output from a live connection.
   if (!session.connected || session.ended) return false;
+  // A runner asking the user a question needs its prompt exposed, not covered by loading progress.
   if (session.awaitingInput) return false;
+  // Completed startup and explicit failures each have their own visible state.
   if (session.loadingPhase === "ready" || session.loadingPhase === "error")
     return false;
+  // Legacy sessions without captured output are treated as having no first output yet.
   const tail = session.outputTail ?? "";
   return tail.length === 0;
 }
 
-/** Format the startup overlay for the active terminal session. */
+// Choose startup progress or failure text for a terminal; no session produces no overlay message.
 function terminalLoadingMessageFor(session: LocalSession | null): string {
+  // Closing the selected tab removes its startup message.
   if (!session) return "";
+  // A failed launch displays its recorded cause, with a usable message when no cause was supplied.
   if (session.loadingPhase === "error") {
     return `Failed to start: ${session.loadingError || "Could not start session."}`;
   }
+  // The socket is attached, but shell startup still needs progress text.
   if (session.loadingPhase === "loading") {
     return "Connected. Loading shell...";
   }
   return `Spinning up ${session.runner} session...`;
 }
 
-/** Resolve terminal handles by the active session id without materialising Alpine refs. */
+// Find the selected tab's transport handles; undefined means its browser terminal has not been attached.
 function terminalRefFor(
   refs: Record<string, TerminalRefs>,
   activeSessionId: string | null,
@@ -248,85 +256,79 @@ function terminalRefFor(
 }
 
 /**
- * Build active terminal-session getters.
- *
- * These are intentional getters rather than methods, because they must recompute reactively from raw state and the merge step preserves them.
- * Loading/transport getters and session-list ordering live in companion fragments so each fragment keeps one responsibility.
+ * Expose the selected terminal's connection, completion, and input state to workspace controls.
+ * Keep these as getters so tab switches recompute the displayed state through the fragment merge.
  */
 function dashboardActiveTerminalSessionFragment(): DashboardAppFragment {
   return {
-    /** Return the active local session. */
+    // Supply the selected tab's local state; null leaves session-specific controls inactive.
     get _activeSession(): LocalSession | null {
       return activeTerminalSession(this.sessions, this.activeSessionId);
     },
 
-    /** Return the active terminal session ID. */
+    // Identify the selected terminal for actions; null means the user has no local session selected.
     get terminalSessionId(): string | null {
       return this._activeSession?.id ?? null;
     },
 
-    /** Return whether the active terminal is connected. */
+    // Enable connected-session controls only while the selected tab has a live connection.
     get terminalConnected(): boolean {
       return this._activeSession?.connected ?? false;
     },
 
-    /** Return whether the active terminal has ended. */
+    // Show ended-session actions only for a selected terminal whose runner has finished.
     get terminalEnded(): boolean {
       return this._activeSession?.ended ?? false;
     },
 
-    /** Return whether the active terminal is detached from a live backend session. */
+    // Offer reconnect context when the selected tab is disconnected but its backend runner is still active.
     get terminalDetached(): boolean {
       return isTerminalDetached(this._activeSession, this.serverSessions);
     },
 
-    /** Return whether the active terminal appears to be awaiting a user choice. */
+    // Expose a detected runner question so the workspace can ask the user to respond.
     get terminalAwaitingInput(): boolean {
       return this._activeSession?.awaitingInput === true;
     },
   };
 }
 
-/** Build active terminal loading, title, and transport getters. */
+// Build active terminal loading, title, and transport getters.
 function dashboardTerminalStatusAccessorsFragment(): DashboardAppFragment {
   return {
-    /**
-     * True when the active terminal is connected but the runner has not produced any output yet.
-     * Surfaces the gap between WebSocket attach (~100 ms) and Claude Code's first PTY paint (~5 s observed locally) so users see in-place progress
-     * instead of a silent terminal.
-     */
+    // Keep startup progress visible after connection until the runner produces output or needs a user response.
     get terminalWaitingForRunner(): boolean {
       return isTerminalWaitingForRunner(this._activeSession);
     },
 
-    /** Return the active terminal loading-overlay message. */
+    // Display startup progress for the supplied terminal; null removes the message.
     terminalLoadingMessage(session: LocalSession | null): string {
       return terminalLoadingMessageFor(session);
     },
 
-    /** Return the active terminal age label. */
+    // Show the selected terminal's age; an absent session leaves the label empty.
     get terminalAge(): string {
       return this._activeSession?.age ?? "";
     },
 
-    /** Return the last run prompt label. */
+    // Show the selected session's title or prompt label; null means no session is selected.
     get lastRunPrompt(): string | null {
       return this._activeSession
         ? this.sessionTitleFor(this._activeSession)
         : null;
     },
 
-    /** Return the last run agent ID. */
+    // Identify the selected session's runner for its controls; null means there is no selected session.
     get lastRunAgent(): RunnerId | null {
       return this._activeSession?.runner ?? null;
     },
 
-    /** Return the active terminal WebSocket reference. */
+    // Give terminal actions the selected tab's socket; undefined means that tab has no attached transport.
     get _terminalWs(): WebSocket | undefined {
       return terminalRefFor(this._terminalRefs, this.activeSessionId)?.ws;
     },
 
-    /** Return the active xterm instance. */
+    // Give workspace actions the selected browser terminal; undefined means its view has not been created.
     get _terminalXterm(): XTermInstance | undefined {
       return terminalRefFor(this._terminalRefs, this.activeSessionId)?.xterm;
     },
@@ -334,14 +336,12 @@ function dashboardTerminalStatusAccessorsFragment(): DashboardAppFragment {
 }
 
 /**
- * Build session-list getters plus Projects, Tasks, and Hooks state.
- *
- * The list getters hold a stable ordering contract the templates depend on: current-project sessions sort newest-first, and other-project sessions
- * sort by project name then newest-first, so the rendered order is deterministic across re-renders rather than reflecting array insertion order.
+ * Initialize Projects, Plans, and Hooks state alongside the workspace session lists.
+ * Keep the session ordering contract: current project newest first; other projects by name, then newest first.
  */
 function dashboardWorkspaceCollectionsStateFragment(): DashboardAppFragment {
   return {
-    /** Sessions whose project matches the current projectPath, newest first. */
+    // Sessions whose project matches the current projectPath, newest first.
     get currentProjectSessions(): ServerSessionInfo[] {
       return this.serverSessions
         .filter((s) => s.projectPath === this.projectPath)
@@ -351,7 +351,7 @@ function dashboardWorkspaceCollectionsStateFragment(): DashboardAppFragment {
         );
     },
 
-    /** Sessions for other projects, grouped by project name then newest first. */
+    // Sessions for other projects, grouped by project name then newest first.
     get otherProjectSessions(): ServerSessionInfo[] {
       return this.serverSessions
         .filter((s) => s.projectPath !== this.projectPath)
@@ -359,6 +359,7 @@ function dashboardWorkspaceCollectionsStateFragment(): DashboardAppFragment {
           const byName = (a.projectName || "").localeCompare(
             b.projectName || "",
           );
+          // Sessions from different projects stay grouped by project label before their creation times are compared.
           if (byName !== 0) return byName;
           return (
             new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
@@ -366,14 +367,14 @@ function dashboardWorkspaceCollectionsStateFragment(): DashboardAppFragment {
         });
     },
 
-    /** Active sessions for the current project; valid targets for `Send to active`. */
+    // Active sessions for the current project; valid targets for `Send to active`.
     get sendTargetsInCurrentProject(): ServerSessionInfo[] {
       return this.serverSessions.filter(
         (s) => s.projectPath === this.projectPath && s.status === "active",
       );
     },
 
-    /** Whether a backend session is currently bound to a local xterm instance. */
+    // Whether a backend session is currently bound to a local xterm instance.
     isSessionBoundLocally(id: string): boolean {
       return this.sessions.some(
         (s) => s.id === id && s.ended !== true && s.connected === true,
@@ -469,9 +470,7 @@ function dashboardQualitySetupStateFragment(
 
     skillQualityAbortController: null as AbortController | null,
 
-    /** Cache of per-artifact reports so the sidebar can show a grade for each
-     *  skill without waiting on per-click fetches. Populated by prefetchSkillReports
-     *  after loadSkillQualityInventory. */
+    // Cache prefetched skill reports so sidebar grades are available before the user opens each skill.
     skillQualityReports: {},
 
     skillQualityAuditedAt: null as number | null,
@@ -501,10 +500,10 @@ function dashboardQualitySetupStateFragment(
       typeof setTimeout
     > | null,
 
-    /** Per-metric collapse state for the evaluator result tip groups. */
+    // Per-metric collapse state for the evaluator result tip groups.
     skillEvaluatorTipCollapsed: {},
 
-    /** Resolve the current display name for one supported agent id. */
+    // Show the runner's supported display name, falling back to its ID when metadata is unavailable.
     agentName(agentId: RunnerId): string {
       return (
         this.supportedAgents.find((agent) => agent.id === agentId)?.name ??
@@ -512,36 +511,45 @@ function dashboardQualitySetupStateFragment(
       );
     },
 
-    /** Return the audit-based status shown on each Setup page agent card. */
+    // Return the audit-based status shown on each Setup page agent card.
     setupAgentStatus(agentId: RunnerId): { label: string; color: string } {
+      // No audit report means the Setup card has no result to classify.
       if (!this.report) return { label: "Not audited", color: "#52525b" };
       const score = this.report.agentScores.find(
         (score: AgentScore) => score.id === agentId,
       );
+      // An audit without this runner cannot establish whether its setup is passing.
       if (!score) return { label: "Not audited", color: "#52525b" };
       const agentPass = score.agent.status === "pass";
+      // An omitted harness scope adds no harness failure to the runner card.
       const harnessPass = !score.harness || score.harness.status === "pass";
+      // The card is passing only when neither the agent setup nor its available harness scope fails.
       if (agentPass && harnessPass)
         return { label: "Passing", color: "var(--status-pass)" };
+      // Agent setup failure takes priority over a harness failure in the card label.
       if (!agentPass) return { label: "Setup failing", color: "#f87171" };
       return { label: "Harness failing", color: "#fbbf24" };
     },
 
-    /** Convert one audit scope into a percentage, including score-only maturity checks. */
+    // Score applicable checks for the Setup card; null means the scope has no scored checks, not a zero-percent result.
     auditScopePercent(scope: AuditScope | null | undefined): number | null {
+      // An absent scope contributes no checks to setup readiness.
       const checks = scope?.checks ?? [];
       const scored = checks.filter((check) => check.status !== "skipped");
+      // A missing scope or all-skipped checks must display no score rather than a failing zero.
       if (scored.length === 0) return null;
       const passed = scored.filter((check) => check.status === "pass").length;
       return Math.round((passed / scored.length) * 100);
     },
 
-    /** Readiness for the Setup page target card: setup + selected agent + harness. */
+    // Average available setup, runner, and harness percentages for the target card; null means no readiness score is available.
     setupTargetScore(agentId: RunnerId): number | null {
+      // Before auditing, the target card must not imply a measured readiness score.
       if (!this.report) return null;
       const score = this.report.agentScores.find(
         (score: AgentScore) => score.id === agentId,
       );
+      // A report for other runners cannot supply readiness for the runner the user selected.
       if (!score) return null;
       const parts = [
         this.auditScopePercent(this.report.scopes.setup),
@@ -550,26 +558,33 @@ function dashboardQualitySetupStateFragment(
       ].filter(
         (value): value is number => value !== null && !Number.isNaN(value),
       );
+      // When every scope is absent or unscored, the target remains unaudited.
       if (parts.length === 0) return null;
       return Math.round(
         parts.reduce((total, value) => total + value, 0) / parts.length,
       );
     },
 
-    /** Convert the selected setup target's readiness score into a letter grade. */
+    // Convert the selected setup target's readiness score into a letter grade.
     setupTargetGrade(agentId: RunnerId): string {
       const score = this.setupTargetScore(agentId);
+      // A missing readiness score gets a placeholder, keeping an unaudited target distinct from a failing grade.
       if (score === null) return "-";
+      // Scores in the highest ten-point band receive the target card's top grade.
       if (score >= 90) return "A";
+      // The next ten-point band is the card's B grade.
       if (score >= 80) return "B";
+      // A score in the seventies maps to the card's C grade.
       if (score >= 70) return "C";
+      // Scores in the sixties receive D; lower scores fall through to the card's F grade.
       if (score >= 60) return "D";
       return "F";
     },
 
-    /** Format the selected setup target's readiness score for the target card. */
+    // Format the selected setup target's readiness score for the target card.
     setupTargetPercent(agentId: RunnerId): string {
       const score = this.setupTargetScore(agentId);
+      // Preserve the unaudited label until an actual readiness percentage is available.
       return score === null ? "Not audited" : `${score}%`;
     },
 

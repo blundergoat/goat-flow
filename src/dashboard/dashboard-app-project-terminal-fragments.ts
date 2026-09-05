@@ -1,26 +1,23 @@
 /**
- * Project, terminal, and skill-evaluator action fragments for the dashboard Alpine app.
+ * Connect project controls, terminal sessions, and the standalone skill evaluator to dashboard actions.
  *
- * dashboardMergeAppFragments stitches these into one app object.
- * These fragments own the standalone skill evaluator (drop/upload/paste markdown, then POST for a quality verdict), project-list management methods,
- * clipboard + toast utilities, the full terminal-session method surface, and the small time-formatting helpers.
- *
- * As elsewhere, most methods are thin `this`-bound shims over shared `dashboard*` helpers; the few with logic inline (clipboard fallback, scrollback
- * export, time formatting) are self-contained and noted on their own doc comments.
+ * Merge these fragments into Alpine so buttons share the current project, selected session, input files, and feedback state.
+ * Shared helpers own most actions; this file also prepares evaluator requests, scrollback downloads, and relative-time labels.
  */
 
-/** Reset per-run evaluator state and cancel any stale copied-report label timer. */
+// Reset per-run evaluator state and cancel any stale copied-report label timer.
 function dashboardResetSkillEvaluatorRun(ctx: DashboardAppContext): void {
   ctx.skillEvaluatorError = null;
   ctx.skillEvaluatorResult = null;
   ctx.skillEvaluatorReportCopied = false;
+  // Starting another evaluation must cancel the previous report's temporary Copied label.
   if (ctx._skillEvaluatorReportCopiedTimer) {
     clearTimeout(ctx._skillEvaluatorReportCopiedTimer);
     ctx._skillEvaluatorReportCopiedTimer = null;
   }
 }
 
-/** Return whether the evaluator has markdown from uploaded files or pasted content. */
+// Return whether the evaluator has markdown from uploaded files or pasted content.
 function dashboardHasSkillEvaluatorInput(ctx: DashboardAppContext): boolean {
   return (
     ctx.skillEvaluatorFiles.length > 0 ||
@@ -28,11 +25,12 @@ function dashboardHasSkillEvaluatorInput(ctx: DashboardAppContext): boolean {
   );
 }
 
-/** Build the evaluator request body, preferring uploaded files over pasted content. */
+// Build the evaluator request body, preferring uploaded files over pasted content.
 function dashboardBuildSkillEvaluatorRequestBody(
   ctx: DashboardAppContext,
 ): Record<string, unknown> {
   const body: Record<string, unknown> = {};
+  // Attached files take priority when the user has also pasted markdown into the evaluator.
   if (ctx.skillEvaluatorFiles.length > 0) {
     body.files = ctx.skillEvaluatorFiles;
   } else {
@@ -40,27 +38,28 @@ function dashboardBuildSkillEvaluatorRequestBody(
   }
   body.kind = "skill";
   const name = ctx.skillEvaluatorName.trim();
+  // An empty name lets the evaluator infer its own artifact name from the submitted content.
   if (name.length > 0) body.suggestedName = name;
   return body;
 }
 
 /**
- * Run one skill-evaluator request. Network, parse, and API errors are recovered into
- * skillEvaluatorError so a failed evaluate request reports in-view instead of breaking Alpine.
+ * Evaluate the attached files or pasted markdown and show the resulting skill verdict.
+ * Network, parsing, and API failures recover into the evaluator's error field so the user can retry from the same panel.
  */
 async function dashboardRunSkillEvaluator(
   ctx: DashboardAppContext,
 ): Promise<void> {
   dashboardResetSkillEvaluatorRun(ctx);
+  // Clicking Evaluate with no files or meaningful pasted text asks for input without sending an empty request.
   if (!dashboardHasSkillEvaluatorInput(ctx)) {
     ctx.skillEvaluatorError =
       "Drop .md files, upload, or paste markdown first.";
     return;
   }
   ctx.skillEvaluatorLoading = true;
-  // Verdicts depend on the project's quality profile, so a project switch while the request is in flight must not surface the old project's verdict
-  // or error.
-  // Loading still clears in finally; leaving it set would keep the Evaluate button disabled in the new project.
+  // Verdicts depend on the selected project's quality profile; navigation must not show a result or error from the previous project.
+  // Clear loading even after navigation so Evaluate becomes available again.
   const requestProjectPath = ctx.projectPath;
   try {
     const url = `/api/quality/evaluate?path=${encodeURIComponent(requestProjectPath)}`;
@@ -70,14 +69,17 @@ async function dashboardRunSkillEvaluator(
       body: JSON.stringify(dashboardBuildSkillEvaluatorRequestBody(ctx)),
     });
     const payload = readRecord(await res.json(), "Evaluate result");
+    // A completed evaluation for a project the user left cannot replace the current verdict.
     if (ctx.projectPath !== requestProjectPath) return;
     const error = readErrorMessage(payload);
+    // An evaluator rejection stays in the input panel so the user can correct the submission.
     if (error) {
       ctx.skillEvaluatorError = error;
       return;
     }
     ctx.skillEvaluatorResult = payload;
   } catch (err) {
+    // A disconnected server or malformed result reports a retryable error only while the same project remains selected.
     if (ctx.projectPath !== requestProjectPath) return;
     ctx.skillEvaluatorError = err instanceof Error ? err.message : String(err);
   } finally {
@@ -85,20 +87,23 @@ async function dashboardRunSkillEvaluator(
   }
 }
 
-/** Dump an xterm buffer and trim trailing blank lines for a readable download. */
+// Collect a terminal buffer for export, trimming trailing blank lines; an empty buffer produces an empty download section.
 function dashboardDumpTerminalBuffer(buf: XTermBuffer): string {
   const lines: string[] = [];
+  // Preserve visible scrollback order so the downloaded transcript follows the session as the user read it.
   for (let i = 0; i < buf.length; i++) {
     const line = buf.getLine(i);
+    // An unavailable buffer row contributes no transcript text.
     if (line) lines.push(line.translateToString(true));
   }
+  // Remove empty tail rows created by the terminal panel height rather than session output.
   while (lines.length > 0 && lines[lines.length - 1] === "") {
     lines.pop();
   }
   return lines.join("\n");
 }
 
-/** Build scrollback text, including the alternate screen when a TUI currently owns it. */
+// Build scrollback text, including the alternate screen when a TUI currently owns it.
 function dashboardTerminalScrollbackText(xterm: XTermInstance): string {
   const normalText = dashboardDumpTerminalBuffer(xterm.buffer.normal);
   const altActive = xterm.buffer.active === xterm.buffer.alternate;
@@ -106,14 +111,16 @@ function dashboardTerminalScrollbackText(xterm: XTermInstance): string {
     ? dashboardDumpTerminalBuffer(xterm.buffer.alternate)
     : "";
   const parts: string[] = [];
+  // A session with no normal scrollback adds no empty transcript section.
   if (normalText) parts.push(normalText);
+  // An active full-screen terminal app has a separate screen; include its current view under a labeled divider.
   if (altText) {
     parts.push("", "--- alternate screen (current TUI view) ---", "", altText);
   }
   return parts.join("\n");
 }
 
-/** Download terminal scrollback text using the runner and short session id as the filename. */
+// Download terminal scrollback text using the runner and short session id as the filename.
 function dashboardDownloadTerminalScrollback(
   runner: RunnerId | "terminal",
   sessionId: string,
@@ -129,14 +136,16 @@ function dashboardDownloadTerminalScrollback(
   URL.revokeObjectURL(url);
 }
 
-/** Export one live xterm tab's scrollback; no download occurs when the tab has no xterm handle. */
+// Export one live xterm tab's scrollback; no download occurs when the tab has no xterm handle.
 function dashboardExportSessionScrollback(
   ctx: DashboardAppContext,
   sessionId: string,
 ): void {
   const refs = ctx._terminalRefs[sessionId];
+  // A session without an attached browser terminal has no local scrollback available to download.
   if (!refs?.xterm) return;
   const session = ctx.sessions.find((s: LocalSession) => s.id === sessionId);
+  // If local session metadata has gone away, the filename still identifies this as terminal output.
   const runner = session?.runner ?? "terminal";
   dashboardDownloadTerminalScrollback(
     runner,
@@ -146,23 +155,22 @@ function dashboardExportSessionScrollback(
 }
 
 /**
- * Build the skill-evaluator fragment: drop/remove/run methods for the ad-hoc markdown evaluator.
- *
- * `runSkillEvaluator` owns its fetch inline because it has a one-off request and response shape, and it reports a
- * failure in the evaluator's error field rather than throwing, so a bad request never breaks the app.
+ * Expose file-drop, removal, and evaluation actions for standalone skill markdown.
+ * The shared evaluator request helper reports failures inside the panel and restores its loading state.
  */
 function dashboardSkillEvaluatorInputFragment(): DashboardAppFragment {
   return {
-    /** drop handler - read every dropped .md file and append to the list. */
+    // Pass dropped files to the shared markdown intake so accepted files appear in the evaluator's attachment list.
     skillEvaluatorDrop(event: DragEvent) {
       event.preventDefault();
       this.skillEvaluatorDragActive = false;
       const files = event.dataTransfer?.files;
+      // A text or empty drag has no files to add to the evaluator.
       if (!files || files.length === 0) return;
       void this._ingestSkillEvaluatorFiles(files);
     },
 
-    /** Remove one already-attached file by name. */
+    // Remove one already-attached file by name.
     removeSkillEvaluatorFile(name: string) {
       this.skillEvaluatorFiles = this.skillEvaluatorFiles.filter(
         (file: { name: string; content: string }) => file.name !== name,
@@ -170,11 +178,8 @@ function dashboardSkillEvaluatorInputFragment(): DashboardAppFragment {
     },
 
     /**
-     * POST the dropped/pasted markdown to the quality evaluate endpoint and store the verdict.
-     *
-     * With neither files nor content present it returns early without a request, leaving a prompt on screen.
-     * A fetch or parse failure is written into `skillEvaluatorError` and reported in view rather than propagated, and
-     * the loading state is always cleared, so a bad request never leaves the panel stuck.
+     * Evaluate the submitted markdown and show its verdict or a request-for-input message.
+     * Request failures are reported inside the panel, and loading always clears so the user can retry.
      */
     async runSkillEvaluator() {
       await dashboardRunSkillEvaluator(this);
@@ -182,76 +187,71 @@ function dashboardSkillEvaluatorInputFragment(): DashboardAppFragment {
   };
 }
 
-/**
- * Build the saved-project action fragment.
- *
- * Project actions stay separate from the skill evaluator so this fragment remains a small dispatch
- * surface over dashboard project helpers.
- */
+// Expose saved-project registration, archive, sorting, persistence, and title actions to dashboard controls.
 function dashboardProjectActionsFragment(): DashboardAppFragment {
   return {
     // -- Projects --
+    // Add the entered directory to saved projects and load its adoption status; an empty draft adds nothing.
     async addProject() {
       await dashboardAddProject(this);
     },
 
-    /** Retain a project in archived dashboard state and hide it from the active list. */
+    // Retain a project in archived dashboard state and hide it from the active list.
     async archiveProject(path: string) {
       await dashboardSetProjectArchived(this, path, true);
     },
 
-    /** Return a retained archived project to the active workspace list. */
+    // Return a retained archived project to the active workspace list.
     async restoreProject(path: string) {
       await dashboardSetProjectArchived(this, path, false);
     },
 
-    /** Sort saved projects by the active key and direction. */
+    // Sort saved projects by the active key and direction.
     sortProjects(key: ProjectSortKey) {
       dashboardSortProjects(this, key);
     },
 
-    /** Sort projects by visible columns while keeping the derived "name" column first-class. */
+    // Sort projects by visible columns while keeping the derived "name" column first-class.
     get sortedProjectsList(): ProjectEntry[] {
       return dashboardSortedProjectsList(this);
     },
 
-    /** Refresh lightweight adoption status for every active project. */
+    // Refresh lightweight adoption status for every active project.
     async refreshProjectStatuses() {
       await dashboardRefreshProjectStatuses(this);
     },
 
-    /** Compatibility entry used by startup while the Projects UI uses truthful status terminology. */
+    // Compatibility entry used by startup while the Projects UI uses truthful status terminology.
     async auditAllProjects() {
       await dashboardRefreshProjectStatuses(this);
     },
 
-    /** Load saved dashboard state from disk, with localStorage as a migration fallback. */
+    // Load saved dashboard state from disk, with localStorage as a migration fallback.
     async _loadSavedDashboardState() {
       await dashboardLoadSavedDashboardState(this);
     },
 
-    /** Persist the current dashboard state to localStorage and the server store. */
+    // Persist the current dashboard state to localStorage and the server store.
     _saveDashboardState() {
       dashboardSaveDashboardState(this);
     },
 
-    /** Begin editing the current project's title (inline header rename). */
+    // Begin editing the current project's title (inline header rename).
     startEditProjectTitle() {
       dashboardStartEditProjectTitle(this);
     },
 
-    /** Commit the inline-edited title for the current project path. An empty
-     *  or whitespace-only draft clears the override so the path basename wins. */
+    // Save the edited project title; an empty or whitespace-only draft clears the override and restores the directory name.
     saveProjectTitle() {
       dashboardSaveProjectTitle(this);
     },
 
-    /** Discard the inline-edited title. */
+    // Discard the inline-edited title.
     cancelEditProjectTitle() {
       dashboardCancelEditProjectTitle(this);
     },
 
-    /** Persist the current project list through the shared dashboard state store. */
+    // Persist the current project list through the shared dashboard state store.
     _saveProjectsList() {
       this._saveDashboardState();
     },
@@ -259,27 +259,22 @@ function dashboardProjectActionsFragment(): DashboardAppFragment {
 }
 
 /**
- * Build shared dashboard utility methods.
- *
- * Clipboard fallback and toast state are used across views, while terminal availability is the small
- * bridge that lets the shell decide whether terminal controls should render.
+ * Share clipboard feedback, toasts, and terminal availability checks across dashboard views.
+ * Clipboard access failures recover through the legacy copy fallback.
  */
 function dashboardUtilityActionsFragment(): DashboardAppFragment {
   return {
     // -- Clipboard + Toast --
     /**
-     * Copy text to the clipboard, preferring the async Clipboard API.
-     *
-     * That API is undefined in insecure contexts and can also reject, so a failure recovers through a hidden-textarea
-     * `execCommand("copy")` fallback instead of surfacing the error. False means both paths failed.
+     * Copy text through the Clipboard API, with a hidden-textarea fallback when that API is unavailable or rejects access.
+     * False means the fallback reported no copy; exceptions from the fallback remain the caller's responsibility.
      */
     async copyTextToClipboard(text: string): Promise<boolean> {
       try {
         await navigator.clipboard.writeText(text);
         return true;
       } catch (err) {
-        // Falls through to legacy textarea+execCommand on TypeError (clipboard
-        // API undefined in insecure contexts) or any Promise reject reason.
+        // A browser without clipboard access, or one rejecting permission, gets a second copy attempt through the textarea fallback.
         void err;
       }
       const textarea = document.createElement("textarea");
@@ -294,7 +289,7 @@ function dashboardUtilityActionsFragment(): DashboardAppFragment {
       return didCopy;
     },
 
-    /** Copy text and flash the "Copied!" button label, reverting to "Copy" after 2s. Fire-and-forget: the copy result is ignored. */
+    // Copy text and flash the "Copied!" button label, reverting to "Copy" after 2s. Fire-and-forget: the copy result is ignored.
     copyText(text: string) {
       void this.copyTextToClipboard(text);
       this.copyLabel = "Copied!";
@@ -303,9 +298,10 @@ function dashboardUtilityActionsFragment(): DashboardAppFragment {
       }, 2000);
     },
 
-    /** Show a temporary toast message. */
+    // Show a temporary toast message.
     showToast(msg: string, isError?: boolean) {
       this.toast = msg;
+      // Callers that omit an error flag request the normal informational toast appearance.
       this.toastError = isError ?? false;
       setTimeout(() => {
         this.toast = "";
@@ -313,13 +309,19 @@ function dashboardUtilityActionsFragment(): DashboardAppFragment {
     },
 
     // -- Terminal --
+    // Discover whether terminal controls can be enabled for this dashboard server.
     async checkTerminalAvailable() {
       await dashboardCheckTerminalAvailable(this);
     },
   };
 }
 
-/** Optional workspace and reporting fields forwarded by dashboard terminal launch actions. */
+/**
+ * Carry optional workspace and report ownership choices when the dashboard launches a terminal.
+ *
+ * Prompt labels and preset IDs keep the resulting session recognizable in the workspace.
+ * Unset paths and labels are forwarded to the shared launch helper, which owns their defaults.
+ */
 interface DashboardTerminalLaunchOptions {
   promptLabel?: string | null;
   presetId?: string | null;
@@ -331,34 +333,32 @@ interface DashboardTerminalLaunchOptions {
 }
 
 /**
- * Build terminal launch and reconnect method shims.
- *
- * These methods intentionally delegate to shared `dashboard*` terminal helpers because the WebSocket and xterm mechanics are shared with the
- * non-fragmented code paths and must stay in one place; the fragment is just the named Alpine entry point surface.
+ * Expose terminal launch, retry, reconnect, and title actions to workspace controls.
+ * Shared terminal helpers own session transport and launch behavior so these Alpine entry points use the same lifecycle rules.
  */
 function dashboardTerminalLaunchActionsFragment(): DashboardAppFragment {
   return {
-    /** Refresh terminal session state from the server. */
+    // Refresh terminal session state from the server.
     async updateSessionCount() {
       await dashboardUpdateSessionCount(this);
     },
 
-    /** Clear non-active (terminated/starting) sessions, preserving running ones. */
+    // Clear non-active (terminated/starting) sessions, preserving running ones.
     async endAllSessions() {
       await dashboardEndAllSessions(this);
     },
 
-    /** Retry a terminal session that failed or stalled before first output. */
+    // Retry a terminal session that failed or stalled before first output.
     async retryTerminalSession(sessionId: string) {
       await dashboardRetryTerminalSession(this, sessionId);
     },
 
-    /** Load the xterm.js globals on demand before any terminal view is rendered. */
+    // Load the xterm.js globals on demand before any terminal view is rendered.
     async loadXterm() {
       await dashboardLoadXterm(this);
     },
 
-    /** Launch a preset prompt in the selected runner. */
+    // Launch a preset prompt in the selected runner.
     async launchPreset(
       prompt: string,
       runner?: RunnerId,
@@ -368,37 +368,37 @@ function dashboardTerminalLaunchActionsFragment(): DashboardAppFragment {
       await dashboardLaunchPreset(this, prompt, runner, label, options);
     },
 
-    /** Drop a session id from every project's saved list, pruning empty entries. */
+    // Drop a session id from every project's saved list, pruning empty entries.
     _forgetSavedSession(sessionId: string) {
       dashboardForgetSavedSession(this, sessionId);
     },
 
-    /** Persist a launch-time title for reconnect and refresh recovery. */
+    // Save a meaningful session title for reconnects; absent or blank titles leave existing saved titles unchanged.
     rememberSessionTitle(sessionId: string, title: string | null | undefined) {
       dashboardRememberSessionTitle(this, sessionId, title);
     },
 
-    /** Add an ended local session to the Workspace recent-history list. */
+    // Add an ended local session to the Workspace recent-history list.
     rememberRecentSession(session: LocalSession) {
       dashboardRememberRecentSession(this, session);
     },
 
-    /** Resolve the display title for a terminal session. */
+    // Choose the session's saved or generated display title; null produces the neutral Runner session label.
     sessionTitleFor(session: ServerSessionInfo | LocalSession | null): string {
       return dashboardSessionTitle(this, session);
     },
 
-    /** Detach the current browser terminal while preserving reconnect metadata. */
+    // Detach browser terminals while saving reconnect state; an omitted or empty path saves the currently selected project's sessions.
     detachTerminal(forProjectPath?: string) {
       dashboardDetachTerminal(this, forProjectPath);
     },
 
-    /** Reconnect the workspace to every saved backend session for this project. */
+    // Reconnect the workspace to every saved backend session for this project.
     async reconnectTerminal(): Promise<boolean> {
       return dashboardReconnectTerminal(this);
     },
 
-    /** Create a new backend terminal session and open it in the workspace. */
+    // Create a new backend terminal session and open it in the workspace.
     async launchInTerminal(
       prompt: string,
       runner: RunnerId = "claude",
@@ -426,49 +426,45 @@ function dashboardTerminalLaunchActionsFragment(): DashboardAppFragment {
 }
 
 /**
- * Build terminal binding, export, and session-selection methods.
- *
- * These methods complete the terminal app surface after the launch/reconnect methods in dashboardTerminalLaunchActionsFragment. exportSession
- * delegates to the scrollback helper because the xterm buffer walk is browser-only but easier to verify outside the Alpine fragment literal.
+ * Expose terminal connection, session selection, closure, and transcript downloads to workspace controls.
+ * Export uses the browser terminal's buffers; session actions delegate to the shared terminal lifecycle helpers.
  */
 function dashboardTerminalSessionActionsFragment(): DashboardAppFragment {
   return {
-    /** Bind a browser xterm instance to a backend PTY session. */
+    // Bind a browser xterm instance to a backend PTY session.
     connectTerminal(sessionId: string, wsUrl: string) {
       dashboardConnectTerminal(this, sessionId, wsUrl);
     },
 
-    /** End a local terminal session and release its browser bindings. */
+    // End a local terminal session and release its browser bindings.
     endSession(sessionId: string) {
       dashboardEndSession(this, sessionId);
     },
 
     /**
-     * Download one terminal tab's scrollback as a .txt file built from its xterm buffer.
-     *
-     * It dumps the normal buffer with trailing blank lines trimmed and, when a TUI has switched to the alternate
-     * screen, appends that view under a divider. A session with no live xterm instance downloads nothing.
+     * Download the tab's scrollback, trimming blank tail rows and appending the current full-screen terminal view when active.
+     * A session without an attached browser terminal has no local transcript to download.
      */
     exportSession(sessionId: string) {
       dashboardExportSessionScrollback(this, sessionId);
     },
 
-    /** Exit the active terminal session from the workspace view. */
+    // Exit the active terminal session from the workspace view.
     exitTerminal() {
       dashboardExitTerminal(this);
     },
 
-    /** Switch the workspace to an existing local terminal session. */
+    // Switch the workspace to an existing local terminal session.
     switchToSession(sessionId: string) {
       dashboardSwitchToSession(this, sessionId);
     },
 
-    /** Attach the workspace to an existing backend terminal session. */
+    // Attach the workspace to an existing backend terminal session.
     async openServerSession(serverSession: ServerSessionInfo) {
       await dashboardOpenServerSession(this, serverSession);
     },
 
-    /** Terminate a backend terminal session by ID. */
+    // Terminate a backend terminal session by ID.
     async endServerSession(sessionId: string) {
       await dashboardEndServerSession(this, sessionId);
     },
@@ -479,10 +475,8 @@ function dashboardTerminalSessionActionsFragment(): DashboardAppFragment {
 }
 
 /**
- * Build the time-formatting helper fragment: pure relative-time formatters the templates bind to.
- *
- * They hold no state and do no I/O, turning a date into a short "Xm/h/d ago" label; the two differ only in their
- * null and zero handling, which each method states for itself.
+ * Format relative ages for activity and audit labels without changing dashboard state.
+ * Activity and audit labels use different missing-date and hour-to-day rules, described on their methods.
  */
 function dashboardTimeFormattingFragment(): DashboardAppFragment {
   return {
@@ -492,33 +486,40 @@ function dashboardTimeFormattingFragment(): DashboardAppFragment {
      * A null date returns "" (render nothing); negative/future deltas are not specially handled.
      */
     formatTimeAgo(date: string | Date | null): string {
+      // Missing activity timestamps leave their labels blank.
       if (!date) return "";
       const seconds = Math.floor(
         (Date.now() - new Date(date).getTime()) / 1000,
       );
+      // Sub-minute results use a readable freshness label instead of a seconds counter.
       if (seconds < 60) return "just now";
       const minutes = Math.floor(seconds / 60);
+      // Within the first hour, minute labels retain useful activity detail.
       if (minutes < 60) return `${minutes}m ago`;
       const hours = Math.floor(minutes / 60);
+      // Activity within the first day is easier to distinguish in hours.
       if (hours < 24) return `${hours}h ago`;
       return `${Math.floor(hours / 24)}d ago`;
     },
 
     /**
-     * Format an audit's age like formatTimeAgo, but tuned for "freshness" copy.
-     * A null date reads "just now" (treat a never-stamped audit as current, not blank), the elapsed time is clamped at zero so clock skew never shows
-     * a negative age, and hours are shown up to 72h before switching to days so a recent multi-day audit still reads in hours.
+     * Format audit freshness, treating a missing date or a future timestamp as just now.
+     * Keep ages below 72 hours in hours so recent multi-day audits retain useful detail.
      */
     formatAuditAge(date: string | Date | null): string {
+      // An audit without a stored timestamp uses the current-result freshness label.
       if (!date) return "just now";
       const seconds = Math.max(
         0,
         Math.floor((Date.now() - new Date(date).getTime()) / 1000),
       );
+      // Sub-minute results use a readable freshness label instead of a seconds counter.
       if (seconds < 60) return "just now";
       const minutes = Math.floor(seconds / 60);
+      // Within the first hour, minute labels retain useful activity detail.
       if (minutes < 60) return `${minutes}m ago`;
       const hours = Math.floor(minutes / 60);
+      // Audit ages retain hourly detail for three days before switching to coarser day labels.
       if (hours < 72) return `${hours}h ago`;
       return `${Math.floor(hours / 24)}d ago`;
     },

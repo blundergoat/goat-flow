@@ -1,13 +1,10 @@
 /**
- * Cold-path content quality linting over truth-bearing prose: instruction files, installed skills, and canonical docs.
+ * Inspect the selected project's guidance for prose, readiness, and evidence problems shown by audit.
  *
- * Three detector families run over every scanned file:
+ * Curated documents and installed skills receive prose checks; learning-loop buckets omit vague-word warnings.
+ * Additional Markdown receives readiness and semantic-anchor checks, with local working artifacts excluded.
  *
- * - Vague terms, a conservative three-word subset: `properly`, `correctly`, `appropriately`. INFO severity.
- * - Generic instructions, five cclint patterns such as "follow best practices". WARNING severity.
- * - Non-actionable statements, three cclint patterns such as a bare "remember" with no "to". INFO severity.
- *
- * One shared `inCodeBlock` state machine skips fenced blocks for all three families, which is the bug both cclint rules had.
+ * Fence, heading, and anchor parsers preserve source line numbers so each finding points to the text the author can repair.
  */
 import type { AuditContext } from "./types.js";
 import type { ContentFinding, ContentSeverity } from "./types.js";
@@ -25,32 +22,31 @@ import {
 import { STANDALONE_PLAYBOOK_FILES } from "./skill-docs-contract.js";
 
 /**
- * Regex detector descriptor for one prose-quality rule.
+ * Describe one prose pattern and the finding shown to the document's author.
  *
- * The matcher only sees one non-code-block line at a time, so each rule owns
- * both the stable audit id and the remediation text needed for that local hit.
+ * Each rule has a stable audit identifier, severity, and message builder for a matching source line.
+ * The prose scanner applies these rules outside fenced blocks and skips table header labels.
  */
 interface PatternRule {
   rule: string;
-  /** Compiled regex (case-insensitive, word-boundary handled inside the pattern). */
+  // Compiled regex (case-insensitive, word-boundary handled inside the pattern).
   pattern: RegExp;
   severity: ContentSeverity;
+  // Turn the matched wording into the explanation displayed beside its source line.
   message: (match: string, line: string) => string;
+  // Optional replacement builder in the rule descriptor; undefined means no replacement wording is supplied.
   suggestion?: (match: string, line: string) => string | undefined;
 }
 
 /**
- * Scan mode for a target.
+ * Choose whether audit flags vague wording on this documentation surface.
  *
- * - `full`: all three detector families, for surfaces that must read as current instruction.
- * - `restricted`: generic-instruction and non-actionable only, for learning-loop surfaces whose incident prose
- *   legitimately uses vague-adjacent words such as "projects that correctly omitted those fields".
+ * Full mode includes vague-word checks for current guidance.
+ * Restricted mode omits those warnings from incident prose while retaining the other applicable checks.
  */
 type ScanMode = "full" | "restricted";
 
-/** Static target scope for full content-quality checks: truth-bearing prose.
- *  Learning-loop buckets (footguns/lessons) and ADR files are resolved
- *  separately at scan time - see LEARNING_LOOP_DIRS and listDecisionMarkdown. */
+// Curated guidance receives full prose checks; learning-loop buckets and ADR files are discovered separately.
 const STATIC_QUALITY_TARGETS = [
   // Hot-path instruction files
   "CLAUDE.md",
@@ -75,8 +71,7 @@ const STATIC_QUALITY_TARGETS = [
   "docs/cli.md",
   "docs/skills.md",
   "docs/audit-and-quality.md",
-  // ADR index. ADR-NNN files are discovered dynamically so new decisions do
-  // not fall out of content-quality coverage.
+  // Discover ADR files separately so a newly added decision is covered without changing this target list.
   ".goat-flow/learning-loop/decisions/README.md",
   ".goat-flow/learning-loop/decisions/INDEX.md",
   // Setup templates
@@ -102,12 +97,7 @@ const STATIC_QUALITY_TARGETS = [
 
 const DECISIONS_DIR = ".goat-flow/learning-loop/decisions/";
 
-/**
- * Learning-loop buckets, scanned in restricted mode.
- *
- * Symptoms, Why, and Evidence sections describe past incidents and legitimately use words like "correctly", so
- * vague-term checks would fire on honest prose; the other two detectors still apply to Prevention blocks.
- */
+// Incident prose skips vague-word warnings; the other applicable detectors still inspect every readable bucket.
 const LEARNING_LOOP_DIRS = [
   ".goat-flow/learning-loop/footguns/",
   ".goat-flow/learning-loop/lessons/",
@@ -117,7 +107,7 @@ const LEARNING_LOOP_DIRS = [
 const VAGUE_TERMS: { term: string; suggestion: (line: string) => string }[] = [
   {
     term: "properly",
-    /** Build the "properly" suggestion. */
+    // Ask the author for a concrete format or standard, using formatting advice when the source mentions format or style.
     suggestion: (line) =>
       /format|style/i.test(line)
         ? "Specify the exact format or style guide (e.g. 'Follow Prettier defaults' or 'Use 2-space indentation')."
@@ -125,13 +115,13 @@ const VAGUE_TERMS: { term: string; suggestion: (line: string) => string }[] = [
   },
   {
     term: "correctly",
-    /** Build the "correctly" suggestion. */
+    // Ask the author to define a measurable result readers can verify.
     suggestion: (_line) =>
       "Define what 'correct' means with measurable criteria.",
   },
   {
     term: "appropriately",
-    /** Build the "appropriately" suggestion. */
+    // Ask the author to connect a specific situation with its expected response.
     suggestion: (_line) =>
       "Describe the specific situation and the expected response.",
   },
@@ -142,7 +132,7 @@ const GENERIC_INSTRUCTIONS: PatternRule[] = [
     rule: "generic-best-practices",
     pattern: /follow\s+best\s+practices/i,
     severity: "warning",
-    /** Build the generic best practices finding message. */
+    // Tell the author which unnamed practice needs a concrete instruction.
     message: () =>
       "Avoid generic 'follow best practices'. Be specific about which practice applies here.",
   },
@@ -150,7 +140,7 @@ const GENERIC_INSTRUCTIONS: PatternRule[] = [
     rule: "generic-good-code",
     pattern: /write\s+good\s+code/i,
     severity: "warning",
-    /** Build the generic good code finding message. */
+    // Ask for standards readers can apply when the instruction only requests good code.
     message: () =>
       "Avoid vague 'write good code'. Be specific about the standards the reader must meet.",
   },
@@ -158,7 +148,7 @@ const GENERIC_INSTRUCTIONS: PatternRule[] = [
     rule: "generic-correct",
     pattern: /do\s+it\s+correctly/i,
     severity: "warning",
-    /** Build the generic correct finding message. */
+    // Request measurable criteria for an instruction that gives no test of success.
     message: () =>
       "Avoid generic 'do it correctly'. Define what correct means with measurable criteria.",
   },
@@ -166,7 +156,7 @@ const GENERIC_INSTRUCTIONS: PatternRule[] = [
     rule: "generic-common-sense",
     pattern: /use\s+common\s+sense/i,
     severity: "warning",
-    /** Build the generic common sense finding message. */
+    // Ask for explicit instructions when the author relies on the reader's common sense.
     message: () =>
       "Avoid 'use common sense'. Document the specific decision criteria the reader should apply.",
   },
@@ -174,7 +164,7 @@ const GENERIC_INSTRUCTIONS: PatternRule[] = [
     rule: "generic-be-careful",
     pattern: /be\s+careful/i,
     severity: "warning",
-    /** Build the generic be careful finding message. */
+    // Ask the author to name the risk and the checks readers can use to avoid it.
     message: () =>
       "Instead of 'be careful', specify the exact risk and mitigation.",
   },
@@ -188,7 +178,7 @@ const NON_ACTIONABLE: PatternRule[] = [
     rule: "non-actionable-remember",
     pattern: /(?:\bremember\b|\bkeep in mind\b|\bdon'?t forget\b)(?!\s+to\s+)/i,
     severity: "info",
-    /** Build the non actionable remember finding message. */
+    // Identify a reminder that does not tell the reader what action to perform.
     message: (match) =>
       `"${match}" without "to <verb>" has no action. State what the reader must do.`,
   },
@@ -196,7 +186,7 @@ const NON_ACTIONABLE: PatternRule[] = [
     rule: "non-actionable-important",
     pattern: /it'?s\s+important(?!\s+to\s+)/i,
     severity: "info",
-    /** Build the non actionable important finding message. */
+    // Ask the author to replace an importance claim with the action the reader needs.
     message: () =>
       '"it\'s important" without "to <verb>" leaves the expected action unspecified.',
   },
@@ -204,24 +194,19 @@ const NON_ACTIONABLE: PatternRule[] = [
     rule: "non-actionable-should-know",
     pattern: /you\s+should\s+know(?!\s+that\s+)/i,
     severity: "info",
-    /** Build the non actionable should know finding message. */
+    // Ask for a concrete instruction when the author only says what readers should know.
     message: () =>
       '"you should know" without "that <fact>" has no propositional content.',
   },
 ];
 
-/**
- * Legacy v1.0 six-step Execution Loop drift.
- * Matches only the arrow-sequence declaration, not incidental historical prose mentioning CLASSIFY or LOG.
- *
- * Every reviewed v1.2 consumer shipped AGENTS.md with the six-step loop while CLAUDE.md used the four-step one.
- */
+// Match retired arrow-sequence steps without flagging ordinary mentions of CLASSIFY or LOG in historical prose.
 const LEGACY_EXECUTION_LOOP: PatternRule[] = [
   {
     rule: "legacy-execution-loop-classify",
     pattern: /\bREAD\s*(?:→|-+>)\s*CLASSIFY\s*(?:→|-+>)\s*SCOPE\b/i,
     severity: "warning",
-    /** Build the legacy loop CLASSIFY finding message. */
+    // Point an author using the retired CLASSIFY sequence to the current execution-loop reference.
     message: () =>
       "Legacy v1.0 Execution Loop detected (READ → CLASSIFY → SCOPE → ACT → VERIFY → LOG). The v1.2 loop is four steps: READ → SCOPE → ACT → VERIFY. Rewrite per workflow/setup/reference/execution-loop.md.",
   },
@@ -229,7 +214,7 @@ const LEGACY_EXECUTION_LOOP: PatternRule[] = [
     rule: "legacy-execution-loop-trailing-log",
     pattern: /\bVERIFY\s*(?:→|-+>)\s*LOG\b/i,
     severity: "warning",
-    /** Build the legacy loop trailing-LOG finding message. */
+    // Explain which retired trailing step the author must remove from the declared execution loop.
     message: () =>
       "Legacy 'VERIFY → LOG' step detected. The v1.2 Execution Loop ends at VERIFY; session logging is finalised at step-06, not as an inline loop step.",
   },
@@ -240,7 +225,7 @@ const PROMPT_WRAPPER_RESIDUE: PatternRule[] = [
     rule: "prompt-wrapper-residue",
     pattern: /<\/?(?:content|invoke)\b[^>]*>/i,
     severity: "warning",
-    /** Build the prompt wrapper residue finding message. */
+    // Identify pasted invocation tags so the author can remove them from repository prose.
     message: (match) =>
       `Prompt wrapper residue "${match}" found in committed prose. Remove model/invocation wrapper tags from repository content.`,
   },
@@ -252,7 +237,7 @@ const STALE_SKILL_PLAYBOOKS_PATH: PatternRule[] = [
     pattern:
       /\.goat-flow\/skill-playbooks\/|(?<!skill-docs\/)skill-playbooks\//i,
     severity: "warning",
-    /** Build the stale skill-playbooks path finding message. */
+    // Give authors the current installed and template locations for an obsolete playbook path.
     message: () =>
       "Stale skill-playbooks path found. Current installed playbooks live under .goat-flow/skill-docs/playbooks/; workflow templates live under workflow/skills/playbooks/.",
   },
@@ -260,79 +245,92 @@ const STALE_SKILL_PLAYBOOKS_PATH: PatternRule[] = [
 
 const HISTORICAL_REFERENCE_DIRS = [DECISIONS_DIR, ...LEARNING_LOOP_DIRS];
 
-/** Preserve old paths in learning-loop history while rejecting them in active guidance. */
+// Preserve old paths in learning-loop history while rejecting them in active guidance.
 function shouldScanStaleSkillPlaybooksPath(path: string): boolean {
   return !HISTORICAL_REFERENCE_DIRS.some((dir) => path.startsWith(dir));
 }
 
-/** Headings that explicitly advertise unanswered readiness work. */
+// Headings that explicitly advertise unanswered readiness work.
 const READINESS_SECTION_HEADING =
   /\b(?:open|pending|unresolved)\s+(?:questions?|issues?)\b/i;
 
-/** One rendered Markdown heading that can open or close a readiness section. */
+/**
+ * Record the visible title and depth used to track a readiness section.
+ *
+ * A matching title opens the section whose unfinished answers audit reports.
+ * The depth lets a later peer or parent heading end that section.
+ */
 interface ReadinessHeading {
   level: number;
   text: string;
 }
 
 /**
- * Read one `#`-style heading the way a reader sees it rendered.
+ * Read a hash-prefixed heading to locate the author's open or unresolved questions section.
  *
- * Used while scanning for readiness sections, so an author's "Open Questions" heading is recognised whether or not
- * they left a few spaces in front of it.
- *
- * @param line - one line of the document being audited
- * @returns the heading level and visible text, or null when the line is ordinary prose and the audit moves on; it
- *   reads the line and writes nothing, so re-running an audit never changes the document
+ * @param line - source line; empty text provides no heading
+ * @returns heading depth and visible text, or null when no usable heading was parsed; reads the line without changing the document
  */
 function parseAtxHeading(line: string): ReadinessHeading | null {
-  // Up to three leading spaces still render as a heading, so an indented "## Open Questions" the
-  // author sees on screen must be scanned rather than skipped as plain text.
+  // An author can indent "## Open Questions" by up to three spaces and still create a heading readers see.
   const match = /^ {0,3}(#{1,6})\s+(.+?)\s*#*\s*$/.exec(line);
   // Not a heading line at all, so there is no section boundary here.
   if (!match?.[1]) return null;
-  // Hash marks with no text after them, which readers see as an empty heading.
+  // Without captured heading text, the caller has no section title to match.
   if (match[2] === undefined) return null;
   return { level: match[1].length, text: match[2] };
 }
 
-/** Parse one setext underline with its preceding visible heading text. */
+/**
+ * Read an underline and its preceding title to identify another way authors can mark a readiness section.
+ *
+ * @param line - potential underline; empty or unmatched text supplies no heading boundary
+ * @param previousLine - preceding visible title; empty or whitespace-only text supplies no heading
+ * @returns heading depth and title, or null when this pair does not form a recognized heading
+ */
 function parseSetextHeading(
   line: string,
   previousLine: string,
 ): ReadinessHeading | null {
   const underline = /^ {0,3}(=+|-+)[\t ]*$/.exec(line)?.[1];
+  // Without a recognized underline, this pair does not open or close a readiness section.
   if (!underline) return null;
   const text = previousLine.trim();
+  // An empty preceding line provides no section title for audit to recognize.
   if (text.length === 0) return null;
   return { level: underline[0] === "=" ? 1 : 2, text };
 }
 
-/** Track whether the current Markdown position belongs to a readiness section. */
+/**
+ * Track whether the current source line belongs to an open or unresolved questions section.
+ *
+ * @param line - current source line; ordinary prose retains the current section
+ * @param nextLine - possible setext underline; empty at end of file supplies no underlined heading
+ * @param currentLevel - active readiness depth; null means the scan is outside such a section
+ * @returns active readiness depth, or null when no readiness section applies
+ */
 function nextReadinessHeadingLevel(
   line: string,
   nextLine: string,
   currentLevel: number | null,
 ): number | null {
+  // Try the hash heading first, then an underline on the next line, so both authored heading styles receive coverage.
   const heading = parseAtxHeading(line) ?? parseSetextHeading(nextLine, line);
+  // Ordinary prose keeps the current section, allowing its unfinished answers to be reported.
   if (heading === null) return currentLevel;
+  // A heading that names open or unresolved work starts a readiness section.
   if (READINESS_SECTION_HEADING.test(heading.text)) return heading.level;
+  // A peer or parent heading ends the readiness section; deeper subsections remain part of it.
   if (currentLevel !== null && heading.level <= currentLevel) return null;
   return currentLevel;
 }
 
 /**
- * Find the placeholder a user left behind in a readiness answer, if there is one.
+ * Find a recognized placeholder left in an author's readiness answer.
+ * Mask inline code for TODO, TBD, and ??? checks so examples of those markers are not reported as unfinished work.
  *
- * Use when checking a readiness section, so an unfinished answer such as a to-do note, "???", or a bare "Answer:"
- * is raised back to the author instead of shipping as though it were real.
- *
- * Backticked text is masked before matching, so an author who writes about such markers as an example is not
- * accused of leaving one behind.
- *
- * @param line - one line from a readiness section, exactly as the author wrote it
- * @returns the marker text to show the author; `null` means the line is properly filled in
- *   and nothing is reported for it
+ * @param line - readiness source line; empty prose alone is not a recognized placeholder
+ * @returns marker text for the finding; null means no recognized marker was found, not that the answer is complete
  */
 function unresolvedContentMarker(line: string): string | null {
   const markerText = maskInlineCodeSpansOnLine(line);
@@ -344,33 +342,37 @@ function unresolvedContentMarker(line: string): string | null {
   // "???" is the other placeholder authors leave when they mean to come back to it.
   if (markerText.includes("???")) return "???";
 
+  // Strip list and table edges so a bare Answer: field is still recognized in those layouts.
   const normalized = line
     .trim()
     .replace(/^[-*+]\s+/, "")
     .replace(/^\|\s*/, "")
     .replace(/\s*\|$/, "")
     .trim();
+  // An Answer: label with no response leaves the readiness question unresolved.
   if (/^(?:\*\*|__)?Answer(?:\*\*|__)?\s*:\s*(?:\*\*|__)?$/i.test(normalized)) {
     return "empty Answer:";
   }
   return null;
 }
 
-/** Scan only explicit readiness sections, ignoring examples in fenced blocks. */
+// Scan only explicit readiness sections, ignoring examples in fenced blocks.
 function scanUnresolvedReadiness(path: string, text: string): ContentFinding[] {
   const findings: ContentFinding[] = [];
-  // Reuse the rendered Markdown view so commented-out headings and fenced
-  // examples cannot change which later lines count as readiness answers.
+  // Mask commented-out text and fenced examples so they cannot open or close the author's visible readiness section.
   const lines = maskNonRenderedMarkdown(text).split(/\r?\n/);
   let readinessHeadingLevel: number | null = null;
 
+  // Inspect visible lines in order so headings determine which later answers receive readiness checks.
   for (let index = 0; index < lines.length; index++) {
+    // A missing current or following line contributes empty text, which cannot introduce a readiness heading.
     const line = lines[index] ?? "";
     readinessHeadingLevel = nextReadinessHeadingLevel(
       line,
       lines[index + 1] ?? "",
       readinessHeadingLevel,
     );
+    // Only text inside a recognized readiness section contributes an unfinished-answer finding.
     if (readinessHeadingLevel !== null) {
       applyUnresolvedContentMarker(line, index + 1, path, findings);
     }
@@ -380,15 +382,14 @@ function scanUnresolvedReadiness(path: string, text: string): ContentFinding[] {
 }
 
 /**
- * Add one blocking content finding for a marker inside a readiness section.
- * Side effect: mutates the caller's `findings` array in place rather than returning a new list.
- * Error behavior: throws nothing; a line with no marker is reported as nothing at all.
+ * Append a readiness warning for the author when this line contains a recognized unfinished answer.
+ * Mutates the caller's findings; a line without a marker adds nothing.
  *
- * @param line - source line to inspect for an unresolved marker
- * @param lineNumber - 1-based line number recorded on any finding
- * @param path - repo-relative source path used in findings
- * @param findings - accumulator appended to in place; left untouched when the line is clean
- * @returns nothing; the result is the appended finding, if any
+ * @param line - source line; empty prose alone produces no marker
+ * @param lineNumber - 1-based source location displayed on the finding
+ * @param path - source path displayed in audit; empty leaves the repair file unspecified
+ * @param findings - accumulator appended to in place; unchanged when no marker is found
+ * @returns nothing; any detected marker is represented by the appended finding
  */
 function applyUnresolvedContentMarker(
   line: string,
@@ -397,6 +398,7 @@ function applyUnresolvedContentMarker(
   findings: ContentFinding[],
 ): void {
   const marker = unresolvedContentMarker(line);
+  // No recognized placeholder means this line adds no readiness warning.
   if (marker === null) return;
   findings.push({
     severity: "warning",
@@ -409,24 +411,21 @@ function applyUnresolvedContentMarker(
   });
 }
 
-/** Detect a Markdown table separator row, e.g. `| --- | :---: | ---: |`.
- *  A header row is identified by being immediately followed by such a separator;
- *  cells in header rows are column labels, not instructional prose. */
+// Recognize a table separator so the preceding header row is treated as labels rather than actionable prose.
 function isTableSeparatorLine(line: string): boolean {
   return /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)+\|?\s*$/.test(line);
 }
 
 /**
- * Apply a PatternRule array to a line, accumulating any matches into findings.
- * Side effect: mutates the caller's `findings` array in place rather than returning a new list.
- * Error behavior: throws nothing; a rule that does not match is reported as nothing at all.
+ * Read each configured pattern and append its matching explanation for the document's author.
+ * Mutates the caller's findings; nonmatching rules add nothing.
  *
- * @param rules - rules applied in order; every matching rule contributes its own finding
- * @param line - source line to match against
- * @param lineNumber - 1-based line number recorded on any finding
- * @param path - repo-relative source path used in findings
- * @param findings - accumulator appended to in place; left untouched when no rule matches
- * @returns nothing; the result is whatever was appended
+ * @param rules - rules in display order; an empty list adds no findings
+ * @param line - source line matched against each rule
+ * @param lineNumber - 1-based source location displayed on each finding
+ * @param path - source path displayed in audit; empty leaves the repair file unspecified
+ * @param findings - accumulator appended to in place; unchanged when no rule matches
+ * @returns nothing; matched rules contribute their own appended findings
  */
 function applyPatternRules(
   rules: PatternRule[],
@@ -435,8 +434,10 @@ function applyPatternRules(
   path: string,
   findings: ContentFinding[],
 ): void {
+  // Apply every selected rule so one source line can explain several distinct repairs.
   for (const rule of rules) {
     const match = rule.pattern.exec(line);
+    // A rule that does not match this wording has no repair to suggest.
     if (!match) continue;
     findings.push({
       severity: rule.severity,
@@ -449,15 +450,14 @@ function applyPatternRules(
 }
 
 /**
- * Apply vague-term detection to a line, in full mode only.
- * Side effect: mutates the caller's `findings` array in place rather than returning a new list.
- * Error behavior: throws nothing; a line with no vague term is reported as nothing at all.
+ * Read a full-mode source line for configured vague words and append advice that asks the author for a measurable standard.
+ * Mutates the caller's findings once for each configured term present on the line.
  *
- * @param line - source line to match against every configured vague term
- * @param lineNumber - 1-based line number recorded on any finding
- * @param path - repo-relative source path used in findings
- * @param findings - accumulator appended to in place; left untouched when no term matches
- * @returns nothing; the result is whatever was appended
+ * @param line - source line; empty text matches no configured vague word
+ * @param lineNumber - 1-based source location displayed on the finding
+ * @param path - source path displayed in audit; empty leaves the repair file unspecified
+ * @param findings - accumulator appended to in place; unchanged when no term matches
+ * @returns nothing; detected terms contribute their own appended findings
  */
 function applyVagueTerms(
   line: string,
@@ -465,9 +465,11 @@ function applyVagueTerms(
   path: string,
   findings: ContentFinding[],
 ): void {
+  // Check each configured vague word so its finding can offer the corresponding concrete-writing advice.
   for (const { term, suggestion } of VAGUE_TERMS) {
     const rx = new RegExp(`\\b${term}\\b`, "i");
     const match = rx.exec(line);
+    // A term absent from this source line needs no vague-word warning.
     if (!match) continue;
     findings.push({
       severity: "info",
@@ -480,7 +482,7 @@ function applyVagueTerms(
   }
 }
 
-/** Scan one line for vague, generic, non-actionable, or legacy-loop guidance. */
+// Apply the prose rules appropriate to current guidance, historical evidence, or setup references.
 function scanLine(
   line: string,
   lineNumber: number,
@@ -488,12 +490,14 @@ function scanLine(
   findings: ContentFinding[],
   mode: ScanMode = "full",
 ): void {
+  // Current guidance receives vague-word warnings; incident prose omits them.
   if (mode === "full") {
     applyVagueTerms(line, lineNumber, path, findings);
   }
   applyPatternRules(GENERIC_INSTRUCTIONS, line, lineNumber, path, findings);
   applyPatternRules(NON_ACTIONABLE, line, lineNumber, path, findings);
   applyPatternRules(PROMPT_WRAPPER_RESIDUE, line, lineNumber, path, findings);
+  // Current guidance must use the current playbook path; historical evidence can retain the path it records.
   if (shouldScanStaleSkillPlaybooksPath(path)) {
     applyPatternRules(
       STALE_SKILL_PLAYBOOKS_PATH,
@@ -503,22 +507,20 @@ function scanLine(
       findings,
     );
   }
+  // Setup references can describe retired loops as migration guidance; other surfaces receive obsolete-loop warnings.
   if (!path.startsWith("workflow/setup/")) {
     applyPatternRules(LEGACY_EXECUTION_LOOP, line, lineNumber, path, findings);
   }
 }
 
 /**
- * Scan one file, skipping fenced code blocks before applying prose detectors.
+ * Scan one document's prose and readiness answers, preserving source locations for the author's repairs.
+ * Prose rules skip fenced blocks and table header labels; restricted mode omits vague-word warnings.
  *
- * Pass `mode: "restricted"` for learning-loop files to skip vague-term checks on incident prose while still
- * rejecting generic instructions.
- *
- * @param path - repo-relative path used in emitted findings and mode-specific rules
- * @param text - Markdown or instruction-file content to scan
- * @param mode - detector set to apply for the target surface
- * @returns findings outside fenced code blocks; it throws nothing, so every problem is reported as a finding and an
- *   empty array means the prose passed every enabled detector
+ * @param path - source path used in findings and surface-specific rules
+ * @param text - Markdown or instruction text; empty content produces no findings
+ * @param mode - full includes vague-word warnings; restricted omits those warnings from incident prose
+ * @returns detected findings; empty means the enabled rules found nothing, not that every instruction is complete
  */
 export function scanContentQuality(
   path: string,
@@ -528,11 +530,15 @@ export function scanContentQuality(
   const findings: ContentFinding[] = [];
   const lines = text.split(/\r?\n/);
   let activeFence: MarkdownFence | null = null;
+  // Visit source lines in order to keep code-fence state and reported repair locations aligned.
   for (let i = 0; i < lines.length; i++) {
+    // Missing line text is empty; null fence state means the reader is outside a fenced example.
     const line = lines[i] ?? "";
     const fenceState = advanceMarkdownFenceState(line, activeFence);
     activeFence = fenceState.activeFence;
+    // Fence markers and enclosed examples are excluded from prose instructions shown as findings.
     if (fenceState.isFenceLine || activeFence !== null) continue;
+    // A following separator makes this row table labels, so its words are not treated as instructions.
     if (line.includes("|") && isTableSeparatorLine(lines[i + 1] ?? "")) {
       continue;
     }
@@ -543,12 +549,10 @@ export function scanContentQuality(
 }
 
 /**
- * Find moved literal anchors on current guidance surfaces.
+ * Report a cited literal that no longer appears in an existing evidence target.
  *
  * Missing files remain owned by path-integrity checks.
- *
- * An existing target with a missing needle is unambiguous drift, including in accepted ADR evidence: a historical
- * decision still needs a grep-resolvable pointer to its live proof.
+ * Historical decisions still need resolvable anchors so readers can find their cited proof.
  */
 function scanSemanticAnchorQuality(
   ctx: AuditContext,
@@ -574,13 +578,9 @@ function scanSemanticAnchorQuality(
     }));
 }
 
-/**
- * List current ADR files in a deterministic order.
- *
- * ADR content is a stable truth surface, and discovering `ADR-NNN-*.md` files at runtime keeps new decisions inside content-quality coverage without
- * requiring a second hard-coded target list.
- */
+// Read current ADR filenames in deterministic order so new decisions receive prose-quality coverage automatically.
 function listDecisionMarkdown(ctx: AuditContext): string[] {
+  // A project without the decisions directory contributes no ADR targets to this scan.
   if (!ctx.fs.exists(DECISIONS_DIR)) return [];
   return ctx.fs
     .listDir(DECISIONS_DIR)
@@ -590,21 +590,19 @@ function listDecisionMarkdown(ctx: AuditContext): string[] {
 }
 
 /**
- * Resolve the full scan target list.
- *
- * The target set is assembled here because static truth surfaces, current ADRs, and every installed skill file are maintained by different setup
- * paths; a single de-duped resolver avoids coverage drift between those sources.
+ * Collect current guidance, ADRs, and installed skill files into one prose-quality scan list.
+ * Deduplicate their paths because separate setup sources can refer to the same document.
  */
 function resolveTargets(ctx: AuditContext): string[] {
   const targets = new Set<string>([
     ...STATIC_QUALITY_TARGETS,
     ...listDecisionMarkdown(ctx),
   ]);
-  // Every installed copy of every canonical skill file is a quality target -
-  // this is what makes `goat-flow audit` inspect the skills the user's agents
-  // actually load, not just the templates.
+  // Include installed skill copies so audit checks the guidance the user's agents load.
   for (const agentDir of getInstalledSkillRoots()) {
+    // Each canonical skill contributes its files under this agent's installed skill root.
     for (const name of getSkillNames()) {
+      // Include the skill's declared references as well as its main contract in the prose scan.
       for (const relativeFile of getSkillFiles(name)) {
         targets.add(`${agentDir}/${name}/${relativeFile}`);
       }
@@ -644,30 +642,32 @@ const COMMITTED_LOCAL_STATE_READMES = new Set([
   ".goat-flow/scratchpad/README.md",
 ]);
 
-/** Keep only the stable README anchors committed beneath local-state trees. */
+// Keep only the stable README anchors committed beneath local-state trees.
 function isCommittedLocalStateReadme(path: string): boolean {
   return COMMITTED_LOCAL_STATE_READMES.has(path);
 }
 
-/** Exclude local working artifacts from the repository-wide evidence sweep. */
+// Exclude local working artifacts from the repository-wide evidence sweep.
 function isLocalMarkdownArtifact(path: string): boolean {
+  // Agent workspaces, logs, and temporary folders are excluded from project-wide evidence findings.
   if (LOCAL_MARKDOWN_PREFIXES.some((prefix) => path.startsWith(prefix))) {
     return true;
   }
+  // Top-level TODO_ and docs_ scratch files remain outside the maintained evidence scan.
   if (/^(?:TODO_|docs_).+\.md$/i.test(path)) return true;
+  // Keep the maintained README anchors in local-state trees while excluding their working artifacts.
   return GOAT_LOCAL_STATE_PREFIXES.some(
     (prefix) => path.startsWith(prefix) && !isCommittedLocalStateReadme(path),
   );
 }
 
 /**
- * Discover Markdown not already covered by the curated prose-quality scans.
- * The result is sorted so the audit stays deterministic: glob order varies by filesystem, and an unsorted list would reorder findings between runs on
- * the same unchanged tree.
+ * Discover additional Markdown for readiness and semantic-anchor checks after curated prose scans.
+ * Sort filesystem results to preserve the order of findings across repeated audits.
  *
- * @param ctx - audit context supplying the target filesystem
- * @param scanned - paths the curated scans already covered; these are excluded
- * @returns additional Markdown paths in stable lexicographic order; empty when everything is covered
+ * @param ctx - audit context supplying the selected project's filesystem
+ * @param scanned - paths already covered; an empty set excludes no previously scanned files
+ * @returns additional eligible paths in stable order; empty means no further Markdown was discovered
  */
 function resolveAdditionalEvidenceTargets(
   ctx: AuditContext,
@@ -679,9 +679,9 @@ function resolveAdditionalEvidenceTargets(
     .sort();
 }
 
-/** List `<dir>/*.md` entries, excluding README.md. Used to pick up learning-loop
- *  buckets without resolving hidden or non-markdown files. */
+// Read immediate Markdown entries other than README.md so learning-loop buckets receive incident-prose checks.
 function listBucketMarkdown(ctx: AuditContext, dir: string): string[] {
+  // A missing learning-loop directory supplies no incident buckets to inspect.
   if (!ctx.fs.exists(dir)) return [];
   return ctx.fs
     .listDir(dir)
@@ -690,13 +690,11 @@ function listBucketMarkdown(ctx: AuditContext, dir: string): string[] {
 }
 
 /**
- * Run content-quality checks across the configured documentation targets.
+ * Read the configured documentation targets and report prose, readiness, and evidence findings for the author.
+ * Missing or unreadable files are skipped, leaving available guidance covered without treating a skipped file as a pass.
  *
- * Missing files and unreadable targets are skipped; the function reports prose findings for available surfaces instead of failing the whole audit on
- * optional buckets.
- *
- * @param ctx - Audit context containing the read-only project filesystem.
- * @returns Findings plus the count of files that were actually scanned.
+ * @param ctx - selected project's read-only filesystem and audit context
+ * @returns detected findings and readable-file count; zero files means no target was scanned
  */
 export function runContentQualityChecks(ctx: AuditContext): {
   findings: ContentFinding[];
@@ -705,18 +703,24 @@ export function runContentQualityChecks(ctx: AuditContext): {
   const findings: ContentFinding[] = [];
   const scanned = new Set<string>();
   let filesScanned = 0;
+  // Scan curated current guidance and installed skills with the full prose rules.
   for (const rel of resolveTargets(ctx)) {
+    // A missing target contributes no prose result; other audit checks own missing-file guidance.
     if (!ctx.fs.exists(rel)) continue;
     const text = ctx.fs.readFile(rel);
+    // Unreadable content cannot supply findings or count as a scanned document.
     if (text === null) continue;
     scanned.add(rel);
     filesScanned++;
     findings.push(...scanContentQuality(rel, text, "full"));
     findings.push(...scanSemanticAnchorQuality(ctx, rel, text));
   }
+  // Check each learning-loop area using the rules appropriate to recorded incidents.
   for (const dir of LEARNING_LOOP_DIRS) {
+    // Each discovered incident bucket contributes prose and evidence findings.
     for (const rel of listBucketMarkdown(ctx, dir)) {
       const text = ctx.fs.readFile(rel);
+      // A bucket that cannot be read supplies no incident-prose or evidence result.
       if (text === null) continue;
       scanned.add(rel);
       filesScanned++;
@@ -724,8 +728,10 @@ export function runContentQualityChecks(ctx: AuditContext): {
       findings.push(...scanSemanticAnchorQuality(ctx, rel, text));
     }
   }
+  // Inspect remaining eligible Markdown for unfinished readiness answers and stale evidence anchors.
   for (const rel of resolveAdditionalEvidenceTargets(ctx, scanned)) {
     const text = ctx.fs.readFile(rel);
+    // An unreadable additional document contributes no evidence finding or scanned-file count.
     if (text === null) continue;
     scanned.add(rel);
     filesScanned++;

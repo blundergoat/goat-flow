@@ -1,14 +1,10 @@
 /**
- * Shell and infrastructure HTTP route handlers for the dashboard server.
+ * Serve the dashboard page, browser assets, project-folder picker, hook controls, and installed-runner detection.
  *
- * Backs the HTML shell (`/`, with the bootstrap injection), static asset serving (`/assets/`, with ETag/304 handling), the directory picker
- * (`/api/browse`), hook state read/toggle (`/api/hooks`), and agent-availability detection (`/api/agents/installed`).
+ * Static assets use ETags so the browser can reuse unchanged bundles; hook requests read or update the selected project's installation.
+ * Runner detection uses bounded local probes and reuses results until a caller explicitly requests a fresh check.
  *
- * Agent detection spawns `which`/`where` and `--version` probes with short timeouts and caches the result per handler set, refreshing only on an
- * explicit `fresh=true`.
- * Filesystem and probe failures are reported as JSON error bodies or recorded as "not installed" rather than thrown.
- *
- * Asset loading lives in dashboard-assets.ts; hook mutation in hook-registrar.ts.
+ * Filesystem and probe failures become error responses or unavailable-runner results so the caller can explain the affected operation.
  */
 import { execFileSync } from "node:child_process";
 import { readdirSync } from "node:fs";
@@ -28,15 +24,17 @@ import {
 } from "./hook-registrar.js";
 import { isProjectDirectory } from "./setup-detect.js";
 
-/** Writes the dashboard shell response after injecting the default workspace path. */
+// Writes the dashboard shell response after injecting the default workspace path.
 function handleHtmlRequest(
   ctx: DashboardRouteContext,
   url: URL,
   res: ServerResponse,
 ): boolean {
+  // Only the dashboard entry page receives the server's initial workspace and session settings.
   if (url.pathname !== "/") return false;
 
   const injection = `<script>window.__GOAT_FLOW_DEFAULT_PATH__ = ${JSON.stringify(ctx.absDefault)}; window.__GOAT_FLOW_VERSION__ = ${JSON.stringify(ctx.packageVersion)}; window.__GOAT_FLOW_DASHBOARD_TOKEN__ = ${JSON.stringify(ctx.dashboardToken)}; window.__GOAT_FLOW_AGENTS__ = ${JSON.stringify(SUPPORTED_AGENTS)}; window.__GOAT_FLOW_RUNNER_IDS__ = ${JSON.stringify(KNOWN_AGENT_IDS)}; window.__GOAT_FLOW_PRESETS__ = ${JSON.stringify(ctx.dashboardPresets)};</script>`;
+  // Development sessions reconnect after source changes; packaged dashboards need no reload connection.
   const liveReloadScript = ctx.isDevMode
     ? `<script>(function(){var ws=new WebSocket('ws://'+location.host+'/ws/livereload');ws.onmessage=function(){location.reload()};ws.onclose=function(){setTimeout(function(){location.reload()},1000)}})()</script>`
     : "";
@@ -62,9 +60,11 @@ function handleAssetRequest(
   url: URL,
   res: ServerResponse,
 ): boolean {
+  // Page and API requests must reach their own handlers instead of being treated as browser assets.
   if (!url.pathname.startsWith("/assets/")) return false;
 
   const filename = url.pathname.slice("/assets/".length);
+  // Only a single supported asset filename is served; other paths fall through without reading arbitrary files.
   if (!/^[a-z0-9_-]+\.(js|css|json)$/i.test(filename)) return false;
 
   const contentType = filename.endsWith(".css")
@@ -79,6 +79,7 @@ function handleAssetRequest(
       "Content-Type": contentType,
       ETag: asset.etag,
     };
+    // The browser already has these exact asset bytes, so it can reuse them without downloading the bundle again.
     if (req.headers["if-none-match"] === asset.etag) {
       res.writeHead(304, headers);
       res.end();
@@ -87,6 +88,7 @@ function handleAssetRequest(
     res.writeHead(200, headers);
     res.end(asset.content);
   } catch {
+    // A missing packaged bundle, such as an asset from an incomplete installation, produces a 404 for that browser request.
     res.writeHead(404);
     res.end("Not found");
   }
@@ -103,6 +105,7 @@ function handleBrowseRequest(
   url: URL,
   res: ServerResponse,
 ): boolean {
+  // Folder-picker navigation must not consume other project requests.
   if (url.pathname !== "/api/browse") return false;
 
   try {
@@ -112,8 +115,12 @@ function handleBrowseRequest(
       .map((entry) => entry.name)
       .sort();
     const dirs = entries.map((name) => {
-      const full = join(dirPath, name);
-      return { name, path: full, isProject: isProjectDirectory(full) };
+      const childDirectoryPath = join(dirPath, name);
+      return {
+        name,
+        path: childDirectoryPath,
+        isProject: isProjectDirectory(childDirectoryPath),
+      };
     });
     ctx.jsonResponse(res, 200, {
       current: dirPath,
@@ -121,6 +128,7 @@ function handleBrowseRequest(
       dirs,
     });
   } catch (err) {
+    // Navigating into a folder without read permission fails listing; the picker receives the reason it cannot show that folder.
     ctx.jsonResponse(res, ctx.responseStatusForError(err, 500), {
       error: err instanceof Error ? err.message : String(err),
     });
@@ -128,14 +136,16 @@ function handleBrowseRequest(
   return true;
 }
 
-/** Extract a hook id from dashboard toggle route paths. */
+// Return the hook named by a toggle URL, or null when the request belongs to another dashboard route.
 function hookIdFromTogglePath(pathname: string): string | null {
   const match = pathname.match(/^\/api\/hooks\/([^/]+)\/toggle$/u);
+  // An absent hook segment cannot identify a toggle, so the request continues through normal routing.
   return match?.[1] ? decodeURIComponent(match[1]) : null;
 }
 
-/** Map hook registrar errors to HTTP status codes while preserving generic error handling. */
+// Map hook registrar errors to HTTP status codes while preserving generic error handling.
 function hookErrorStatus(ctx: DashboardRouteContext, err: unknown): number {
+  // Hook validation already chose a useful refusal status; preserve it for the user's toggle result.
   if (err instanceof HookRegistrarError) return err.statusCode;
   return ctx.responseStatusForError(err, 500);
 }
@@ -156,7 +166,9 @@ async function handleHooksRequest(
   url: URL,
   res: ServerResponse,
 ): Promise<boolean> {
+  // Opening the Hooks card reads installation state without changing any hook.
   if (url.pathname === "/api/hooks") {
+    // Hook updates need a specific toggle URL; this collection endpoint only supplies the card's current state.
     if (req.method !== "GET") {
       ctx.jsonResponse(res, 405, { error: "Method not allowed" });
       return true;
@@ -168,6 +180,7 @@ async function handleHooksRequest(
       );
       ctx.jsonResponse(res, 200, { hooks: readAllHookStates(projectPath) });
     } catch (err) {
+      // A selected project removed since page load cannot supply hook state; the card receives an error rather than missing-hook results.
       ctx.jsonResponse(res, hookErrorStatus(ctx, err), {
         error: err instanceof Error ? err.message : String(err),
       });
@@ -176,7 +189,9 @@ async function handleHooksRequest(
   }
 
   const hookId = hookIdFromTogglePath(url.pathname);
+  // A URL that names no hook toggle remains available to another route group.
   if (hookId === null) return false;
+  // A hook change requires an explicit submission so fetching a URL cannot enable or disable it.
   if (req.method !== "POST") {
     ctx.jsonResponse(res, 405, { error: "Method not allowed" });
     return true;
@@ -189,6 +204,7 @@ async function handleHooksRequest(
     );
     const { decodeHookToggleBody } = await import("./decoders.js");
     const decoded = decodeHookToggleBody(await ctx.readBody(req));
+    // An invalid enabled value is rejected before the user's hook configuration can change.
     if (!decoded.ok) {
       ctx.jsonResponse(res, 400, { error: decoded.error, path: decoded.path });
       return true;
@@ -196,6 +212,7 @@ async function handleHooksRequest(
     const hook = applyHookState(hookId, decoded.value.enabled, projectPath);
     ctx.jsonResponse(res, 200, { hook });
   } catch (err) {
+    // A read-only project can prevent hook installation; return the registrar's error so the user knows the toggle did not complete.
     ctx.jsonResponse(res, hookErrorStatus(ctx, err), {
       error: err instanceof Error ? err.message : String(err),
     });
@@ -204,10 +221,9 @@ async function handleHooksRequest(
 }
 
 /**
- * Spawns lightweight agent probes because the dashboard needs availability
- * without failing page load when a runner is missing.
+ * Spawns bounded local probes so the dashboard can show available runners without requiring every agent to be installed.
  *
- * Swallows missing binaries and optional version failures.
+ * Swallows missing binaries and optional version failures into availability results; null versions mean no version was requested or obtained.
  */
 function detectInstalledAgents(includeVersions: boolean): {
   id: string;
@@ -222,7 +238,9 @@ function detectInstalledAgents(includeVersions: boolean): {
         timeout: 3000,
         stdio: "pipe",
       });
+      // Normal page loads only need availability; a runner can be installed even when no version has been collected.
       let version: string | null = null;
+      // An explicit re-check also asks each installed runner for its version, accepting the extra probe time.
       if (includeVersions) {
         try {
           version = normalizeAgentVersionOutput(
@@ -232,16 +250,23 @@ function detectInstalledAgents(includeVersions: boolean): {
             }).toString(),
           );
         } catch {
-          /* version detection optional */
+          // Optional version detection can time out; intentionally ignore that failure and keep the runner available with its version unknown.
         }
       }
       return { ...agent, installed: true, version };
     } catch {
+      // A runner absent from PATH fails the platform lookup; its unavailable result is sufficient feedback for the dashboard.
       return { ...agent, installed: false, version: null };
     }
   });
 }
 
+/**
+ * Keep runner availability results for one set of dashboard handlers.
+ *
+ * A null cache means no local runner check has completed yet.
+ * An explicit refresh replaces the saved result, including any newly collected version strings.
+ */
 type AgentDetectionState = {
   cached: ReturnType<typeof detectInstalledAgents> | null;
 };
@@ -260,9 +285,11 @@ function handleAgentDetectRequest(
   url: URL,
   res: ServerResponse,
 ): boolean {
+  // Installed-runner detection must not consume project setup or hook requests.
   if (url.pathname !== "/api/agents/installed") return false;
 
   const fresh = url.searchParams.get("fresh") === "true";
+  // The first visit needs an availability check; an explicit refresh also discovers runners installed since that visit.
   if (fresh || state.cached === null) {
     state.cached = detectInstalledAgents(fresh);
   }
@@ -273,23 +300,25 @@ function handleAgentDetectRequest(
 }
 
 /**
- * Bind the shell/infrastructure handlers to one server's request context and allocate the per-handler
- * agent-detection cache so probe results persist across requests until a fresh probe is requested.
+ * Bind page, asset, folder-picker, and hook requests to this server and keep runner-detection results available across page visits.
  *
  * @param ctx - per-server dashboard route context with path validation, template/version/token, and IO hooks
- * @returns the HTML, asset, browse, hooks, and agent-detect handlers; each resolves true once it has
- *   answered a matching request, or false to let another handler claim the URL
+ * @returns handlers that answer matching shell or infrastructure requests, or return false for the next route group
  */
 export function createShellRouteHandlers(ctx: DashboardRouteContext) {
   const agentDetection: AgentDetectionState = { cached: null };
   return {
+    // Connect page loading to this server's default project, session token, and dashboard template.
     handleHtmlRequest: (url: URL, res: ServerResponse) =>
       handleHtmlRequest(ctx, url, res),
     handleAssetRequest,
+    // Connect folder-picker navigation to the server's browsing policy and JSON response helper.
     handleBrowseRequest: (url: URL, res: ServerResponse) =>
       handleBrowseRequest(ctx, url, res),
+    // Connect Hooks card reads and toggles to this server's selected-project validation.
     handleHooksRequest: (req: IncomingMessage, url: URL, res: ServerResponse) =>
       handleHooksRequest(ctx, req, url, res),
+    // Connect runner availability requests to the cache shared by this server's page visits.
     handleAgentDetectRequest: (url: URL, res: ServerResponse) =>
       handleAgentDetectRequest(agentDetection, url, res),
   };

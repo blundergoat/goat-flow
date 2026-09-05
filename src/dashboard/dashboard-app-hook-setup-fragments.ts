@@ -1,12 +1,8 @@
 /**
- * Hook-focused Alpine fragments: agent/plan/hook loaders and the Hooks/Setup view actions.
+ * Connect agent discovery, project browsing, Plans, Hooks, and Setup controls to their shared dashboard state.
  *
- * Use when the user opens the Hooks view, flips a hook switch, or launches setup repairs - every method here either loads the hook state a view
- * renders or applies a toggle the user just confirmed.
- * Split from the data-loading fragments so each file stays reviewable.
- *
- * Toggling a guarded safety hook always confirms with the user first, and a failed toggle
- * recovers into a toast plus a reload of true server state rather than a half-applied switch.
+ * Loaders report request failures in the relevant panel while guarded hook disabling asks for confirmation before saving.
+ * Successful hook saves replace the matching row; failed saves leave current rows visible and report a banner and toast.
  */
 
 /**
@@ -21,7 +17,7 @@ function dashboardConfirmHookToggle(
   hook: HookState,
   shouldEnable: boolean,
 ): boolean {
-  // Enabling is always safe to proceed, and hooks without confirm prompts do not interrupt the user.
+  // Only disabling a hook marked for confirmation opens the warning dialog; enabling or unguarded toggles continue directly.
   if (shouldEnable || !hook.requiresConfirmDialog) return true;
   return window.confirm(
     `Disabling ${hook.name} removes the guardrail. Continue?`,
@@ -53,7 +49,7 @@ function dashboardApplyHookToggleResult(
  * Persist one hook toggle.
  * Use when the user enables, disables, or resyncs a guardrail row in the Hooks view.
  *
- * @param ctx - dashboard state; missing current project means stale responses are ignored
+ * @param ctx - dashboard state; results apply only while the project that started the save remains selected
  * @param hook - hook row being saved; non-togglable hooks leave the row unchanged
  * @param shouldEnable - desired hook state; `false` may require user confirmation
  * @returns nothing; it reports a failed toggle in the Hooks banner and toast while leaving every row visible
@@ -91,6 +87,7 @@ async function dashboardToggleHookState(
       shouldEnable,
     );
   } catch (err) {
+    // A refused hook change, disconnected server, or malformed response leaves the row unchanged and reports an error for its project.
     // The user switched projects while the save failed, so do not toast over the new screen.
     if (ctx.projectPath !== requestProjectPath) return;
     ctx.hooksError = err instanceof Error ? err.message : String(err);
@@ -102,9 +99,8 @@ async function dashboardToggleHookState(
 }
 
 /**
- * Build the agent-detection / plans / hooks fragment of the app's async data-loading methods.
- * One input to dashboardMergeAppFragments; the methods delegate to shared helpers that own the fetch and its recover-on-failure handling, so this
- * fragment only wires names to those helpers.
+ * Load agent choices and plan state, and expose project browsing actions to the dashboard.
+ * Requests recover through configured runner defaults or panel errors so failed discovery does not prevent navigation.
  *
  * @param supportedAgents - agents the server can launch, used to scope installed-agent detection
  * @returns the fragment object of agent/plans/hooks loader methods merged into the Alpine app
@@ -128,6 +124,7 @@ function dashboardAgentPlanHookLoadersFragment(
           await res.json(),
           "Agent detection response",
         );
+        // An absent agent list gives the launcher no discovered rows; invalid individual records are omitted.
         const agents: AgentInfo[] = Array.isArray(payload.agents)
           ? payload.agents
               .map((agent: unknown) => readAgentInfo(agent))
@@ -146,12 +143,12 @@ function dashboardAgentPlanHookLoadersFragment(
           )
         ) {
           const [firstInstalled] = this.installedAgents;
-          // Defensive empty array handling keeps the prior runner if detection races.
+          // Use the first available installed row as the launcher default when the previous runner is not installed.
           if (firstInstalled) this.activeRunner = firstInstalled.id;
         }
         return true;
       } catch {
-        // Detection failures are recoverable; the UI can still show configured runners.
+        // A server connection failure or malformed agent JSON leaves configured runners available and reports unsuccessful discovery to the caller.
         return false;
       }
     },
@@ -170,7 +167,7 @@ function dashboardAgentPlanHookLoadersFragment(
      * Load child directories for a browser path.
      * Use when the user drills into a folder in the project picker.
      *
-     * @param path - folder path to browse; empty means the helper falls back to its current browser path
+     * @param path - folder path forwarded to the browse endpoint; the server decides whether an empty path is valid
      * @returns nothing; errors are shown by the browser helper
      */
     async browseTo(path: string) {
@@ -181,7 +178,7 @@ function dashboardAgentPlanHookLoadersFragment(
      * Set a browsed directory as the active project.
      * Use when the user chooses a folder from the project browser.
      *
-     * @param dir - browsed directory row; missing paths would leave the selected project unchanged
+     * @param dir - decoded browser row; project rows select a workspace, while other directories continue browsing
      * @returns nothing; project selection updates through the shared helper
      */
     selectDir(dir: BrowseDir) {
@@ -199,7 +196,9 @@ function dashboardAgentPlanHookLoadersFragment(
       this.tasksLoading = true;
       this.tasksError = "";
       const requestProjectPath = this.projectPath;
+      // Without an explicit choice, reopening Plans keeps the selected plan name for this request.
       const requestedPlan = planName ?? this.selectedTaskPlan;
+      // A missing or empty plan name leaves the server to choose the plan returned for this project.
       const planParam = requestedPlan
         ? `&plan=${encodeURIComponent(requestedPlan)}`
         : "";
@@ -217,6 +216,7 @@ function dashboardAgentPlanHookLoadersFragment(
         this.tasksState = state;
         this.selectedTaskPlan = state.selectedPlan;
       } catch (err) {
+        // A rejected plan request, lost server connection, or malformed state clears this project's plan result and shows its error.
         // Late errors for another project should not overwrite the current plan panel.
         if (this.projectPath !== requestProjectPath) return;
         this.tasksState = null;
@@ -231,7 +231,7 @@ function dashboardAgentPlanHookLoadersFragment(
      * Select a task plan and reload its milestones.
      * Use when the user chooses a different plan from the plan picker.
      *
-     * @param planName - plan directory name; empty means the next load falls back to current/default plan
+     * @param planName - selected plan directory; an empty name omits the plan query so the server chooses the returned plan
      * @returns nothing; loading runs asynchronously
      */
     selectTaskPlan(planName: string) {
@@ -272,6 +272,7 @@ function dashboardAgentPlanHookLoadersFragment(
         this.selectedTaskPlan = state.selectedPlan;
         this.showToast(`Active plan set to ${planName}`);
       } catch (err) {
+        // A refused activation or failed request keeps the prior plan result and reports the save error for the current project.
         // Late errors for another project should not interrupt the current plan panel.
         if (this.projectPath !== requestProjectPath) return;
         this.tasksError = err instanceof Error ? err.message : String(err);
@@ -290,9 +291,8 @@ function dashboardAgentPlanHookLoadersFragment(
 }
 
 /**
- * Build the Tasks view's display helpers: progress labels, progress percentages, and modified-time text.
- *
- * These only format what the loaders already fetched, so they stay apart from the loading actions and it reports no failures of its own.
+ * Format milestone progress for Plans and load the hook state used by the Hooks view.
+ * Formatting uses existing rows; the hook loader reports failed requests through the Hooks banner.
  *
  * @returns dashboard fragment merged into the app alongside the plan loaders
  */
@@ -360,10 +360,12 @@ function dashboardTaskDisplayFragment(): DashboardAppFragment {
         if (error) throw new Error(error);
         // The user switched projects before hooks returned, so leave the new rows alone.
         if (this.projectPath !== requestProjectPath) return;
+        // A response without hook rows leaves the Hooks list empty instead of retaining results from an earlier load.
         this.hooksState = Array.isArray(payload.hooks)
           ? (payload.hooks as HookState[])
           : [];
       } catch (err) {
+        // A rejected hook request, unavailable server, or invalid response clears current hook rows and reports a panel error.
         // Late hook errors for another project should not replace the visible rows.
         if (this.projectPath !== requestProjectPath) return;
         this.hooksState = [];
@@ -380,8 +382,8 @@ function dashboardTaskDisplayFragment(): DashboardAppFragment {
  * Build hook actions plus setup-prompt actions for the dashboard.
  * Use when composing the app so hook tables, filters, and setup buttons share one state object.
  *
- * @param supportedAgents - agents the server can launch; empty means hook rows show unavailable surfaces
- * @returns dashboard fragment; empty methods are never returned because Hooks and Setup views need all handlers
+ * @param supportedAgents - declared runner metadata; row helpers read the live supported-agent list on the merged app
+ * @returns hook row, coverage, and presentation helpers merged into the dashboard app
  */
 function dashboardHookSetupActionsFragment(
   supportedAgents: SupportedAgent[],
@@ -395,6 +397,7 @@ function dashboardHookSetupActionsFragment(
      * @returns per-agent hook rows; empty array means there are no supported agents to display
      */
     hookAgents(hook: HookState): Array<[RunnerId, HookAgentState]> {
+      // Missing per-runner evidence still produces an unavailable row, keeping unsupported coverage visible to the user.
       return this.supportedAgents.map((agent) => [
         agent.id,
         hook.agents[agent.id] ?? {
@@ -513,8 +516,7 @@ function dashboardHookSetupActionsFragment(
 /**
  * Build the Hooks view's roll-up counters and the agent lists behind each hook row's disclosure.
  *
- * These answer "how many hooks are actually effective across my agents", which is the summary a user reads before opening
- * any individual hook row.
+ * Summaries count the effective-state evidence already loaded for each agent before the user opens individual hook rows.
  *
  * @returns dashboard fragment merged into the app alongside the hook actions
  */
@@ -538,7 +540,7 @@ function dashboardHookSummaryFragment(): DashboardAppFragment {
      * Count hooks whose desired dashboard state is enabled.
      * Use for the enabled filter chip and Hooks overview summary.
      *
-     * @returns enabled hook count; zero means every hook is desired off
+     * @returns enabled count among loaded hooks; zero also covers an empty hook list
      */
     hooksEnabledCount(): number {
       return this.hooksState.filter((hook: HookState) => hook.enabled).length;
@@ -548,7 +550,7 @@ function dashboardHookSummaryFragment(): DashboardAppFragment {
      * Count hooks with at least one agent surface in drift.
      * Use for the drift filter chip and overview warning.
      *
-     * @returns drifted hook count; zero means desired and installed states match
+     * @returns loaded hooks with reported drift; zero does not prove unavailable agent state is current
      */
     hooksDriftCount(): number {
       return this.hooksState.filter((hook: HookState) =>
@@ -574,7 +576,7 @@ function dashboardHookSummaryFragment(): DashboardAppFragment {
      * Count enabled hooks with at least one non-green agent surface.
      * Use for the Hooks summary and Ineffective filter badge.
      *
-     * @returns ineffective hook count; zero means every requested visible chain is effective
+     * @returns enabled hooks with warning or danger surfaces; zero also covers no loaded or enabled hooks
      */
     hooksIneffectiveCount(): number {
       return this.hooksState.filter((hook: HookState) =>
@@ -597,7 +599,7 @@ function dashboardHookFilterActionsFragment(): DashboardAppFragment {
      * Test one hook against a selected filter chip.
      * Use before search so the Hooks list reflects enabled/disabled/drift tabs.
      *
-     * @param hook - hook row to test; missing states fall back to the all filter behavior
+     * @param hook - loaded hook row; enabled state, effective coverage, and drift determine its filter membership
      * @param filter - selected filter chip; unknown values show the hook
      * @returns whether the hook should stay visible for that filter
      */
@@ -651,7 +653,7 @@ function dashboardHookFilterActionsFragment(): DashboardAppFragment {
      * Return filtered hooks that belong to one dashboard section.
      * Use to render sectioned hook groups after filtering and search.
      *
-     * @param section - section to render; empty/unknown sections return no matching rows
+     * @param section - typed section selected by the Hooks view; sections without matching hooks render no rows
      * @returns visible hooks for that section
      */
     hooksForSection(section: HookSection): HookState[] {
@@ -664,7 +666,7 @@ function dashboardHookFilterActionsFragment(): DashboardAppFragment {
      * Count filtered hooks in one dashboard section.
      * Use for section headers in the Hooks view.
      *
-     * @param section - section to count; empty/unknown sections return zero
+     * @param section - typed section whose visible rows supply the count; an empty section returns zero
      * @returns visible hook count for that section
      */
     hookSectionCount(section: HookSection): number {
@@ -749,7 +751,7 @@ function dashboardHookFilterActionsFragment(): DashboardAppFragment {
      * Generate setup output for a specific target agent.
      * Use when an agent card asks for setup instructions for that runner.
      *
-     * @param targetAgent - runner id the user is setting up; empty would fail in the shared helper
+     * @param targetAgent - supported runner selected for setup; its ID selects the generated prompt and cache entry
      * @param shouldForce - when true, regenerate even if cached setup output exists
      * @returns setup-generation result from the shared helper
      */

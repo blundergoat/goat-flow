@@ -1,14 +1,8 @@
 /**
- * Validates the Codex-specific settings a project needs for goat-flow to run safely.
+ * Explain Codex settings that keep the selected project's hooks or filesystem permissions from working as configured.
  *
- * Codex configures hooks and filesystem access differently from the other agents, so its settings get their own checks: a retired feature flag left
- * enabled, hooks silently switched off, and workspace-root globs that do not mean what the person who typed them expected.
- *
- * The workspace-root checks matter most in practice.
- * A pattern that looks like it grants access to one directory can quietly grant far more, or nothing at all, and the user has no way to see that from
- * their config file.
- *
- * These turn that into a message naming the exact pattern and what it actually does.
+ * After syntax validation, these checks identify retired hook flags, disabled hooks, invalid permission globs, and absent exact paths.
+ * Each finding names the setting the user can repair before retrying the selected-agent audit.
  */
 import type { AuditContext, AuditFailure, BuildCheck } from "./types.js";
 import { collectCodexWorkspaceRootEntries } from "../facts/agent/settings.js";
@@ -19,13 +13,14 @@ import {
 } from "./check-agent-common.js";
 
 /**
- * Read parsed settings as a flat object.
- * Use before checking agent settings keys that come from JSON/TOML parsers.
+ * Expose object-shaped parsed settings for the selected agent's key checks.
+ * Missing or scalar settings return null; an empty object remains available but has no configured keys.
  *
- * @param parsed - parsed settings value; `null`, empty, or primitive values mean no settings keys are readable
- * @returns settings object, or `null` when the audit cannot inspect keys safely
+ * @param parsed - parsed settings; null and scalar values provide no object for field inspection
+ * @returns - object whose fields the caller must validate, or null when parsed settings are not object-shaped
  */
 function settingsObject(parsed: unknown): Record<string, unknown> | null {
+  // A hand-edited settings value may be a scalar or null; only an object supplies fields for the next setting check.
   return parsed && typeof parsed === "object"
     ? (parsed as Record<string, unknown>)
     : null;
@@ -36,11 +31,12 @@ function settingsObject(parsed: unknown): Record<string, unknown> | null {
  * Use for flattened TOML facts where section keys appear as dotted strings.
  *
  * @param parsed - parsed settings value; `null` means the key is absent for audit purposes
- * @param key - exact flattened key to find; empty means no meaningful setting can match
+ * @param key - exact flattened key selected by the check, including dotted TOML section names
  * @returns whether the key exists exactly
  */
 function hasSettingsKey(parsed: unknown, key: string): boolean {
   const settings = settingsObject(parsed);
+  // Without object-shaped settings, this check has no evidence that the requested key was configured.
   return settings ? Object.prototype.hasOwnProperty.call(settings, key) : false;
 }
 
@@ -49,7 +45,7 @@ function hasSettingsKey(parsed: unknown, key: string): boolean {
  * Use when missing and mistyped settings must not be treated as a safe `false`.
  *
  * @param parsed - parsed settings value; `null` means no boolean can be read
- * @param key - exact flattened key to read; empty returns `null` because no setting is identified
+ * @param key - exact flattened setting name whose configured boolean the check needs
  * @returns boolean setting value, or `null` when missing/mistyped so audit can report it clearly
  */
 function booleanSetting(parsed: unknown, key: string): boolean | null {
@@ -57,6 +53,7 @@ function booleanSetting(parsed: unknown, key: string): boolean | null {
   // Missing settings mean the audit cannot prove the user enabled the feature.
   if (!settings) return null;
   const settingValue = settings[key];
+  // Text such as "true" is not an enabled feature; the caller receives null until a real boolean is configured.
   return typeof settingValue === "boolean" ? settingValue : null;
 }
 
@@ -122,10 +119,11 @@ function checkCodexHooksEnabled(ctx: AuditContext): AuditFailure | null {
  * Detect exact Codex workspace-root deny paths that should exist on disk.
  * Use so audit can report absent exact paths separately from valid subtree globs.
  *
- * @param pattern - Codex filesystem pattern; empty is treated as an exact missing path
+ * @param pattern - configured filesystem pattern; empty, glob, absolute, and parent-relative paths skip this exact-path check
  * @returns whether the pattern is exact and should exist in the checkout
  */
 function isCodexExactWorkspaceRootPath(pattern: string): boolean {
+  // Root-wide or glob entries describe a scope rather than one project file whose absence should be reported.
   if (
     pattern.length === 0 ||
     pattern === "." ||
@@ -134,7 +132,9 @@ function isCodexExactWorkspaceRootPath(pattern: string): boolean {
   ) {
     return false;
   }
+  // Absolute paths belong outside this workspace-relative existence check and receive no missing-project-file finding.
   if (/^(?:[A-Za-z]:[\\/]|[\\/])/u.test(pattern)) return false;
+  // Parent-traversal patterns are excluded because their target may sit outside the selected project.
   return !pattern.split(/[\\/]/u).includes("..");
 }
 
@@ -164,7 +164,7 @@ function collectInvalidCodexInlineGlobs(
   invalidGlobs: string[],
 ): void {
   // Each inline table entry can carry a pattern whose invalid shape affects Codex startup.
-  for (const [pattern, mode] of parseTomlInlineStringTableForKey(rawValue)) {
+  for (const [pattern, mode] of parseTomlInlineStringTable(rawValue)) {
     // Only `none` access patterns block workspace reads/writes and need subtree syntax.
     if (mode === "none" && isCodexInvalidNoneGlob(pattern)) {
       invalidGlobs.push(pattern);
@@ -290,9 +290,7 @@ function collectCodexFilesystemFindings(
  * @param rawValue - raw inline table text; empty or non-table text produces no entries
  * @returns parsed key/value pairs; empty array means no inline permissions were readable
  */
-function parseTomlInlineStringTableForKey(
-  rawValue: string,
-): Array<[string, string]> {
+function parseTomlInlineStringTable(rawValue: string): Array<[string, string]> {
   const trimmedTable = rawValue.trim();
   // Only inline table text can carry the compact workspace-root permission shape.
   if (!trimmedTable.startsWith("{") || !trimmedTable.endsWith("}")) return [];
@@ -395,7 +393,7 @@ function checkCodexWorkspaceRootExactPaths(
     if (typeof defaultPermissions !== "string" || defaultPermissions === "") {
       continue;
     }
-    const missing = collectCodexWorkspaceRootEntries(
+    const missingWorkspacePaths = collectCodexWorkspaceRootEntries(
       agentFacts.settings.parsed,
       defaultPermissions,
     )
@@ -403,10 +401,10 @@ function checkCodexWorkspaceRootExactPaths(
       .map((entry) => entry.pattern)
       .filter((pattern) => !ctx.fs.exists(pattern));
     // All exact paths exist, so the user does not need to edit this profile.
-    if (missing.length === 0) continue;
+    if (missingWorkspacePaths.length === 0) continue;
     return {
       check: "Agent settings",
-      message: `Codex permission profile lists exact workspace-root paths that do not exist: ${uniquePaths(missing).join(", ")}`,
+      message: `Codex permission profile lists exact workspace-root paths that do not exist: ${uniquePaths(missingWorkspacePaths).join(", ")}`,
       evidence: agentFacts.agent.settingsFile ?? ".codex/config.toml",
       howToFix:
         "Remove absent exact entries from .codex/config.toml. Keep trailing `/**` subtree denies, and add exact `none`/`read` entries only for files that exist in this checkout.",
@@ -423,29 +421,33 @@ export const agentSettings: BuildCheck = {
     "workflow/manifest.json",
     ".goat-flow/architecture.md",
   ]),
-  /** Run the Agent settings check. */
+  // Validate the selected agent's settings syntax, then report the first Codex migration or hook-enablement issue.
   run: (ctx) => {
     // Aggregate mode stops at instruction coverage; settings are checked per selected agent.
     if (!ctx.agentFilter) return null;
-    const blocked = checkSelectedInstructionAvailable(ctx, "Agent settings");
+    const instructionFailure = checkSelectedInstructionAvailable(
+      ctx,
+      "Agent settings",
+    );
     // Missing instruction files block settings checks because setup must recreate the agent surface first.
-    if (blocked) return blocked;
-    const invalid: string[] = [];
+    if (instructionFailure) return instructionFailure;
+    const invalidSettingsAgents: string[] = [];
     // Invalid settings syntax is reported before semantic Codex migration checks.
     for (const agentFacts of ctx.agents) {
       // Settings that exist but failed parsing need syntax repair from the user.
       if (agentFacts.settings.exists && !agentFacts.settings.valid) {
-        invalid.push(agentFacts.agent.id);
+        invalidSettingsAgents.push(agentFacts.agent.id);
       }
     }
     // Syntax errors prevent reliable semantic checks, so report them first.
-    if (invalid.length > 0) {
+    if (invalidSettingsAgents.length > 0) {
       return {
         check: "Agent settings",
-        message: `Invalid settings for: ${invalid.join(", ")}`,
-        howToFix: `Fix the JSON syntax in the settings file for ${invalid.join(", ")}.`,
+        message: `Invalid settings for: ${invalidSettingsAgents.join(", ")}`,
+        howToFix: `Fix the JSON syntax in the settings file for ${invalidSettingsAgents.join(", ")}.`,
       };
     }
+    // Stop at the first repair the user can make; later semantic checks run after that setting is corrected.
     return (
       checkCodexDeprecatedHooksFlag(ctx) ??
       checkCodexHooksEnabled(ctx) ??

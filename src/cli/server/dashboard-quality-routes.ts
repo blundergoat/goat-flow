@@ -1,12 +1,10 @@
 /**
- * Quality-prompt and quality-history HTTP route handlers for the dashboard server.
+ * Supply quality-review prompts and saved review history for the selected project and agent.
  *
- * Backs `/api/quality` (compose a quality review prompt for one agent, optionally reusing a short-TTL in-memory audit cache) and
- * `/api/quality/history` (return persisted history rows plus the latest trend summary).
+ * The Quality view can compose a prompt, reuse a short-lived audit, and compare saved runs with the latest trend summary.
+ * Invalid agent or mode choices receive a 400; history limits default or clamp to a bounded window.
  *
- * Query parameters are validated up front, with invalid agent/mode/limit values answered as 400 JSON; downstream audit or filesystem failures are
- * reported as JSON status bodies rather than thrown.
- * Report shaping lives in dashboard-reporting.ts; history loading in quality/history.ts.
+ * Route handlers report request failures as JSON, while a missing audit can still yield a prompt with unavailable evidence marked.
  */
 import type { ServerResponse } from "node:http";
 import { runAudit } from "../audit/audit.js";
@@ -32,17 +30,19 @@ import {
   buildQualityAuditCacheKey,
 } from "./dashboard-reporting.js";
 
-/** Parse the quality history limit. Invalid input (non-numeric, zero, negative)
- *  falls back to the default so callers can't bypass the cap with ?limit=0. */
+// Keep the Quality history list bounded: an absent or invalid limit uses 20 rows, and larger requests stop at 100.
 function parseQualityHistoryLimit(param: string | null): number {
+  // Opening history without a requested page size uses the normal 20-run window.
   if (param === null) return 20;
   const parsed = Number.parseInt(param, 10);
+  // An unusable page size retains the default history window instead of showing no runs or removing the cap.
   if (!Number.isFinite(parsed) || parsed <= 0) return 20;
   return Math.min(parsed, 100);
 }
 
-/** Parse a dashboard quality-mode filter. */
+// Return a recognized quality mode, or null so history can remain unfiltered and prompt requests can use their default.
 function parseQualityModeParam(param: string | null): QualityMode | null {
+  // An omitted mode leaves the route free to choose its history or prompt default.
   if (param === null) return null;
   return VALID_QUALITY_MODES.has(param) ? (param as QualityMode) : null;
 }
@@ -51,7 +51,8 @@ function parseQualityModeParam(param: string | null): QualityMode | null {
  * Decide whether one saved run belongs in the history list the user is currently looking at.
  *
  * @param entry - saved run being considered
- * @param filters - agent and mode the user selected; a null filter means that dimension is not being narrowed
+ * @param agent - selected runner, or null to include saved runs from all agents
+ * @param qualityMode - selected review mode, or null to include all modes
  * @returns true when the run should appear in the table
  */
 function qualityHistoryEntryMatchesFilters(
@@ -59,15 +60,19 @@ function qualityHistoryEntryMatchesFilters(
   agent: AgentId | null,
   qualityMode: QualityMode | null,
 ): boolean {
+  // A selected runner hides saved reviews produced for other agents.
   if (agent !== null && entry.agent !== agent) return false;
+  // With no mode filter, the history list includes every review mode for the accepted runner.
   if (qualityMode === null) return true;
+  // Older saved runs without a mode belong to the original agent-setup review category.
   return (entry.report.quality_mode ?? "agent-setup") === qualityMode;
 }
 
 /**
- * Validated `/api/quality/history` query filters.
- * A null `agent` or `qualityMode` means "no filter" (return all), while `limit` is always a clamped positive count so callers cannot request an
- * unbounded or zero-row window.
+ * Carry the accepted Quality history choices after query validation.
+ *
+ * Null agent or mode values leave that part of the list unfiltered.
+ * The positive, capped limit prevents callers from requesting an empty or unbounded history window.
  */
 interface QualityHistoryFilters {
   agent: AgentId | null;
@@ -92,6 +97,7 @@ function readQualityHistoryFilters(
   const agent =
     agentParam && VALID_AGENTS.has(agentParam) ? (agentParam as AgentId) : null;
 
+  // A named but unsupported runner must be corrected instead of silently showing another agent's reviews.
   if (agentParam && !agent) {
     ctx.jsonResponse(res, 400, {
       error: `quality history agent must be one of: ${KNOWN_AGENT_LIST}`,
@@ -102,6 +108,7 @@ function readQualityHistoryFilters(
   const modeParam = url.searchParams.get("mode");
   const qualityMode = parseQualityModeParam(modeParam);
 
+  // Reject an unknown review mode rather than displaying a broader history than the user requested.
   if (modeParam && !qualityMode) {
     ctx.jsonResponse(res, 400, {
       error: `quality history mode must be one of: ${QUALITY_MODES.join(", ")}`,
@@ -130,6 +137,7 @@ function parseQualityRequestParams(
   res: ServerResponse,
 ): QualityRequestParams | null {
   const agentParam = url.searchParams.get("agent");
+  // Prompt composition needs a supported runner so its instructions match the user's selected agent.
   if (!agentParam || !VALID_AGENTS.has(agentParam)) {
     ctx.jsonResponse(res, 400, {
       error: `quality requires --agent. Valid: ${KNOWN_AGENT_LIST}`,
@@ -138,6 +146,7 @@ function parseQualityRequestParams(
   }
 
   const modeParam = url.searchParams.get("mode");
+  // An unsupported review mode cannot safely select the prompt's assessment criteria.
   if (modeParam && !VALID_QUALITY_MODES.has(modeParam)) {
     ctx.jsonResponse(res, 400, {
       error: `quality mode must be one of: ${QUALITY_MODES.join(", ")}`,
@@ -147,6 +156,7 @@ function parseQualityRequestParams(
 
   return {
     agent: agentParam as AgentId,
+    // An omitted or empty mode requests the standard agent-setup review.
     qualityMode: parseQualityModeParam(modeParam) ?? "agent-setup",
     includeFresh: url.searchParams.get("fresh") === "true",
     shouldUseFastCache: url.searchParams.get("fast") === "true",
@@ -168,11 +178,14 @@ function readQualityAuditCache(
   agent: AgentId,
   isFresh: boolean,
 ): AuditReport | null {
+  // An explicit fresh request must re-check the selected project instead of reusing a recent prompt audit.
   if (isFresh) return null;
   const cached = ctx.qualityAuditCache.get(
     buildQualityAuditCacheKey(projectPath, agent),
   );
+  // The first prompt for this project and runner has no audit available to reuse.
   if (!cached) return null;
+  // A report older than ten seconds may miss recent setup edits, so the next prompt must obtain current evidence.
   if (Date.now() - cached.cachedAt >= 10_000) {
     ctx.qualityAuditCache.delete(buildQualityAuditCacheKey(projectPath, agent));
     return null;
@@ -202,12 +215,12 @@ function writeQualityAuditCache(
 
 /**
  * Return the audit a quality prompt needs, reusing the cached one when it is still good and running a fresh audit otherwise.
- * A failed audit throws through to the route handler, which reports it to the user as a JSON status body.
+ * Swallows audit failures into a null report so the prompt can identify unavailable audit evidence and still be composed.
  *
  * @param ctx - dashboard route context supplying the cache and audit entry points
  * @param projectPath - validated project the user selected
  * @param agent - agent the prompt is being composed for
- * @returns the audit report to embed in the prompt
+ * @returns the report and cache outcome; a null report tells prompt composition that audit evidence is unavailable
  */
 function getOrRunQualityAudit(
   ctx: DashboardRouteContext,
@@ -219,39 +232,43 @@ function getOrRunQualityAudit(
   }: { cacheOnly?: boolean; fresh?: boolean } = {},
 ): { report: AuditReport | null; cacheStatus: QualityAuditCacheStatus } {
   const cached = readQualityAuditCache(ctx, projectPath, agent, fresh);
+  // A recent report answers repeated prompt requests without another project audit.
   if (cached !== null) {
     return { report: cached, cacheStatus: "hit" };
   }
   const cacheStatus = fresh ? "bypass" : "miss";
+  // Fast prompt requests continue without audit evidence when the cache has no acceptable report.
   if (cacheOnly) return { report: null, cacheStatus };
   try {
     const fs = createFS(projectPath);
     const report = runAudit(fs, projectPath, {
       agentFilter: agent,
       harness: true,
-      // Generating a quality prompt is a read, whether the user is assessing goat-flow itself or a project they selected, so it stops at static
-      // evidence and never runs the project's own hook command.
+      // Generating a prompt must not execute the selected project's hook commands, so audit evidence stays static.
       //
-      // Every path that fills qualityAuditCache must keep this one static contract, because the cache key does not record the evidence level and a
-      // full report could otherwise be served to a passive request later.
+      // Every cache writer must keep this limit because cache keys do not distinguish evidence levels.
+      // Otherwise a later passive request could receive a report gathered with broader execution authority.
       denyMechanismEvidenceLevel: "static",
     });
     writeQualityAuditCache(ctx, projectPath, agent, report);
     return { report, cacheStatus };
   } catch {
+    // A project audit that fails while its files are being changed leaves evidence unavailable; prompt composition owns that user-facing notice.
     return { report: null, cacheStatus };
   }
 }
 
-/** Generate a quality prompt and reports path/audit failures as JSON. */
+// Compose the selected runner's review prompt; reports request failures as JSON the Quality view can display.
 function handleQualityRequest(
   ctx: DashboardRouteContext,
   url: URL,
   res: ServerResponse,
 ): boolean {
+  // History and artifact requests belong to other handlers even though they share the Quality view.
   if (url.pathname !== "/api/quality") return false;
 
   const params = parseQualityRequestParams(ctx, url, res);
+  // Parameter validation already explained why the prompt request was rejected.
   if (params === null) return true;
 
   try {
@@ -308,6 +325,7 @@ function handleQualityRequest(
       auditCacheStatus: audit.cacheStatus,
     });
   } catch (err) {
+    // A selected project removed since page load fails validation; the Quality view receives the reason no prompt could be returned.
     ctx.jsonResponse(res, ctx.responseStatusForError(err, 500), {
       error: err instanceof Error ? err.message : String(err),
     });
@@ -329,9 +347,11 @@ async function handleQualityHistoryRequest(
   url: URL,
   res: ServerResponse,
 ): Promise<boolean> {
+  // Only saved-review history requests belong here; prompt requests continue to their own handler.
   if (url.pathname !== "/api/quality/history") return false;
 
   const filters = readQualityHistoryFilters(ctx, url, res);
+  // Invalid history choices already produced an error, so no saved reviews should be read.
   if (filters === null) return true;
 
   try {
@@ -351,6 +371,7 @@ async function handleQualityHistoryRequest(
       limit: filters.limit,
       qualityMode: filters.qualityMode,
     });
+    // No saved run matching these choices leaves the latest-summary panel without a comparison baseline.
     const latestEntry =
       history.entries.find((entry) =>
         qualityHistoryEntryMatchesFilters(
@@ -366,6 +387,7 @@ async function handleQualityHistoryRequest(
       warnings: history.warnings,
     });
   } catch (err) {
+    // A project deleted since selection cannot supply history; return an error so unavailable history is not mistaken for no saved runs.
     ctx.jsonResponse(res, ctx.responseStatusForError(err, 500), {
       error: err instanceof Error ? err.message : String(err),
     });
@@ -374,17 +396,17 @@ async function handleQualityHistoryRequest(
 }
 
 /**
- * Bind the quality handlers to one server's request context so each closure shares the path validator,
- * the per-server audit cache, and the evidence recorder.
+ * Bind prompt composition and saved-review history to this dashboard server's path validator, audit cache, and evidence recorder.
  *
  * @param ctx - per-server dashboard route context with path validation, the quality audit cache, and IO hooks
- * @returns the quality-prompt and quality-history handlers; each resolves true once it has answered a
- *   matching request, or false to let another handler claim the URL
+ * @returns handlers that answer matching prompt or history requests, or return false for the next route group
  */
 export function createQualityRouteHandlers(ctx: DashboardRouteContext) {
   return {
+    // Connect the Quality view's prompt request to this server's cached audit and selected project.
     handleQualityRequest: (url: URL, res: ServerResponse) =>
       handleQualityRequest(ctx, url, res),
+    // Connect saved-review history requests to this server's validated project paths.
     handleQualityHistoryRequest: (url: URL, res: ServerResponse) =>
       handleQualityHistoryRequest(ctx, url, res),
   };
