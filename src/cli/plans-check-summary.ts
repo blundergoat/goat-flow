@@ -16,6 +16,7 @@ import {
   type PlanEffortSplit,
 } from "./plans-effort.js";
 import type { PlanExportRecord } from "./plans-export.js";
+import { readActiveMilestones } from "./plans-check-structure.js";
 
 /** Plan-level effort-mix target percentages from goat-plan's estimation guidance. */
 const MIX_TARGET: PlanEffortSplit = { product: 70, proof: 20, other: 10 };
@@ -80,6 +81,27 @@ export function renderMilestoneLine(record: PlanExportRecord): string | null {
     ? ` | ${record.status.trim().toLowerCase()} - excluded from the plan total`
     : "";
   return `${record.sourceFile}: ~${record.effort.totalMinutes} min${splitText}${actualText}${exclusionText}`;
+}
+
+/**
+ * Report the active lanes only when parallel policy is enabled.
+ * @param records - all parsed milestones; inactive milestones contribute no active row
+ * @param maxActive - resolved positive safe integer cap; one suppresses this entire block
+ * @returns active rows and the cap total; invalid declarations display a fixed marker
+ */
+export function renderActivePlanSummary(
+  records: PlanExportRecord[],
+  maxActive: number,
+): string[] {
+  if (maxActive === 1) return [];
+  const active = readActiveMilestones(records);
+  return [
+    ...active.map(
+      (milestone) =>
+        `active: ${milestone.id} (${milestone.status}) | lane: ${milestone.lane ?? "<invalid>"}`,
+    ),
+    `plan: ${active.length} active milestones (cap ${maxActive})`,
+  ];
 }
 
 /**

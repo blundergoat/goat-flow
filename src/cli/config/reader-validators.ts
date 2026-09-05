@@ -834,9 +834,29 @@ function warnUnknownQualitySubtypeKeys(
   }
 }
 
+/** Validate the opt-in active milestone cap without accepting fractional or unsafe counts. */
+function validatePlansField(
+  raw: RawConfig,
+  warnings: ValidationIssue[],
+  errors: ValidationIssue[],
+): void {
+  validateObjectField(raw, "plans", warnings, errors, (value) => {
+    if (!("maxActiveMilestones" in value)) return;
+    const cap = value.maxActiveMilestones;
+    if (typeof cap !== "number" || !Number.isSafeInteger(cap) || cap < 1) {
+      pushError(
+        errors,
+        "plans.maxActiveMilestones",
+        "must be a positive safe integer",
+      );
+    }
+  });
+}
+
 /** Ordered list of field-level validators applied during config validation. */
 const CONFIG_VALIDATORS: ConfigValidator[] = [
   validateVersionField,
+  validatePlansField,
   validateLegacyAgentsField,
   validateLineLimitsField,
   validateSkillsField,

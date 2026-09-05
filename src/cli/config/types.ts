@@ -58,7 +58,7 @@ export interface GoatFlowConfig extends GoatFlowConfigBooleanFields {
   footguns: { path: string };
   lessons: { path: string };
   decisions: { path: string };
-  plans: { path: string };
+  plans: { path: string; maxActiveMilestones: number };
   /** Legacy normalized field retained for old tests/fixtures; new code uses `plans.path`. */
   tasks?: { path: string };
   logs: { path: string };

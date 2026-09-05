@@ -7,7 +7,10 @@
  *
  * User-invoked only - never part of audit or quality gates.
  */
+import { realpathSync } from "node:fs";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { CLIError } from "./cli-error.js";
+import { loadConfig } from "./config/reader.js";
 import { writeOutput } from "./cli-output.js";
 import type { ParsedCLI } from "./cli-types.js";
 import {
@@ -30,6 +33,7 @@ import {
 } from "./plans-time.js";
 import {
   renderCalibrationSummary,
+  renderActivePlanSummary,
   renderMilestoneLine,
   renderPlanSummary,
 } from "./plans-check-summary.js";
@@ -65,7 +69,7 @@ const EXCEPTIONAL_STATUSES = new Set([
   "deferred",
 ]);
 
-/** Missing canonical fields that strict mode can determine without semantic guesses. */
+/** Canonical field and receipt-state warnings strict mode can reject without semantic guesses. */
 const STRICT_STRUCTURAL_WARNINGS = new Set([
   "missing status",
   "missing scope",
@@ -73,6 +77,8 @@ const STRICT_STRUCTURAL_WARNINGS = new Set([
   "missing proof",
   "missing exit criteria",
   "missing stop/rescope",
+  // A summary claims a final total even when no Actual cites it and no clock is open.
+  "timing receipt summary requires finalized state",
 ]);
 
 /**
@@ -101,9 +107,6 @@ function isStrictValidationWarning(
   isReceiptClaimed: boolean,
   isReceiptActive: boolean,
 ): boolean {
-  // A summary claims a final total even when no Actual cites it and no clock is open.
-  if (warning === "timing receipt summary requires finalized state")
-    return true;
   return (
     warning.includes("actual effort not parseable") ||
     warning === "blank Status reason supplied" ||
@@ -759,6 +762,7 @@ function assertCheckUsage(options: ParsedCLI): void {
 function handlePlansCheckCommand(options: ParsedCLI): void {
   // e.g. the user finished writing milestones and ran `goat-flow plans check .goat-flow/plans/<active>`.
   assertCheckUsage(options);
+  const maxActive = resolvePlanMaxActive(options);
 
   let records: PlanExportRecord[];
   try {
@@ -782,7 +786,7 @@ function handlePlansCheckCommand(options: ParsedCLI): void {
   );
   // Strict mode also checks ordering and dependencies across the whole selected plan.
   if (options.plansStrict) {
-    errors.push(...collectPlanStructureErrors(records));
+    errors.push(...collectPlanStructureErrors(records, maxActive));
   }
 
   // Milestones with estimates become report rows; legacy ones contribute nothing.
@@ -790,7 +794,11 @@ function handlePlansCheckCommand(options: ParsedCLI): void {
     .map(renderMilestoneLine)
     .filter((line): line is string => line !== null);
   const planSummary = renderPlanSummary(records);
-  const reportLines = [...milestoneLines, ...planSummary];
+  const reportLines = [
+    ...milestoneLines,
+    ...renderActivePlanSummary(records, maxActive),
+    ...planSummary,
+  ];
 
   // Calibration only means something next to a mix summary, so it follows the same gate.
   if (planSummary.length > 0) {
@@ -798,8 +806,12 @@ function handlePlansCheckCommand(options: ParsedCLI): void {
   }
 
   // No effort rows and no errors means the user selected a legacy plan, even when prose advice follows.
-  if (reportLines.length === 0 && errors.length === 0) {
-    reportLines.push(
+  if (
+    milestoneLines.length === 0 &&
+    planSummary.length === 0 &&
+    errors.length === 0
+  ) {
+    reportLines.unshift(
       "no effort estimates found - this plan predates the estimation notation (informational)",
     );
   }
@@ -817,6 +829,71 @@ function handlePlansCheckCommand(options: ParsedCLI): void {
     process.exitCode = 1;
   }
   writeOutput({ ...options, output: null }, reportLines.join("\n"));
+}
+
+/** Check containment by path components, including the root itself. */
+function isWithinPlanRoot(root: string, selectedPath: string): boolean {
+  const relativePath = relative(root, selectedPath);
+  return (
+    relativePath !== ".." &&
+    !relativePath.startsWith(`..${sep}`) &&
+    !isAbsolute(relativePath)
+  );
+}
+
+/**
+ * Locate project policy only for a canonical plan operand that remains physically contained.
+ * External operands and escaped symlinks retain the default instead of borrowing ancestor or working-directory config.
+ * Swallows realpath errors as a null fallback; the plan loader owns unreadable-input diagnostics.
+ */
+function canonicalPlanProjectRoot(planPath: string): string | null {
+  const absolutePath = resolve(planPath);
+  const marker = `${sep}.goat-flow${sep}plans${sep}`;
+  const markerIndex = `${absolutePath}${sep}`.lastIndexOf(marker);
+  if (markerIndex < 0) return null;
+  const projectRoot = resolve(`${absolutePath.slice(0, markerIndex)}${sep}`);
+  try {
+    const realProject = realpathSync(projectRoot);
+    const realPlans = realpathSync(join(projectRoot, ".goat-flow", "plans"));
+    const realSelected = realpathSync(absolutePath);
+    return isWithinPlanRoot(realProject, realPlans) &&
+      isWithinPlanRoot(realPlans, realSelected)
+      ? projectRoot
+      : null;
+  } catch {
+    // An unresolved path cannot grant config authority; the plan loader reports unreadable input.
+    return null;
+  }
+}
+
+/**
+ * Resolve CLI override, physically canonical project config, then the legacy cap of one.
+ *
+ * @throws CLIError with exit 2 and the config path when canonical config cannot be read or validated
+ */
+function resolvePlanMaxActive(options: ParsedCLI): number {
+  // Explicit policy must work even when the project's config is malformed or unreadable.
+  if (options.plansMaxActive !== null) return options.plansMaxActive;
+  const projectRoot = canonicalPlanProjectRoot(options.projectPath);
+  if (projectRoot === null) return 1;
+  const configPath = join(projectRoot, ".goat-flow", "config.yaml");
+  let loaded: ReturnType<typeof loadConfig>;
+  try {
+    loaded = loadConfig(projectRoot);
+  } catch (error) {
+    throw new CLIError(
+      `${configPath}: ${error instanceof Error ? error.message : String(error)}`,
+      2,
+    );
+  }
+  if (!loaded.valid) {
+    throw new CLIError(
+      `${configPath}: ${loaded.errors.map((issue) => `${issue.path}: ${issue.message}`).join("; ")}`,
+      2,
+    );
+  }
+  // Valid warnings belong to config diagnostics and must not alter plans check output.
+  return loaded.config.plans.maxActiveMilestones;
 }
 
 /**

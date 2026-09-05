@@ -20,6 +20,11 @@ import {
 } from "./cli-agent-options.js";
 import { CLIError } from "./cli-error.js";
 import {
+  validatePlansFlags,
+  parsePlansMaxActive,
+  parsePlansTimeCategoryArg,
+} from "./cli-parser-plans.js";
+import {
   COMMANDS,
   REMOVED_COMMANDS,
   VALID_FORMATS,
@@ -34,7 +39,6 @@ import {
   type ParsedCLI,
   type PlansSubcommand,
   type PlansTimeAction,
-  type PlansTimeCategory,
   type QualitySubcommand,
   type SkillSubcommand,
 } from "./cli-types.js";
@@ -108,6 +112,7 @@ const CLI_ARG_OPTIONS = {
   skill: { type: "string" },
   scenario: { type: "string" },
   strict: { type: "boolean", default: false },
+  "max-active": { type: "string" },
   category: { type: "string" },
   target: { type: "string" },
   "marker-sha256": { type: "string" },
@@ -434,161 +439,6 @@ function validateHookFlags(
       2,
     );
   }
-}
-
-/** Reject strict plan accounting anywhere except the read-only plans check route. */
-function validatePlansFlags(
-  command: Command,
-  values: ParsedArgValues,
-  plansSubcommand: PlansSubcommand | null,
-  plansTimeAction: PlansTimeAction | null,
-): void {
-  validatePlansStrictFlag(command, values, plansSubcommand);
-  validatePlansCategoryFlag(command, values, plansSubcommand, plansTimeAction);
-  validatePlansStopFlags(command, values, plansSubcommand, plansTimeAction);
-  validatePlansForceFlag(command, values, plansSubcommand);
-}
-
-/**
- * Keep strict plan accounting on the read-only check route.
- * Error behavior: throws CLIError with exit code 2 when `--strict` appears anywhere else.
- *
- * @param command - command the user invoked
- * @param values - parsed flag map; only `--strict` is inspected here
- * @param plansSubcommand - plans subcommand, or null when the command is not `plans`
- * @returns nothing; returning means the flag is on its only valid route
- */
-function validatePlansStrictFlag(
-  command: Command,
-  values: ParsedArgValues,
-  plansSubcommand: PlansSubcommand | null,
-): void {
-  if (
-    parsedFlag(values, "strict") &&
-    (command !== "plans" || plansSubcommand !== "check")
-  ) {
-    throw new CLIError("--strict is only valid for plans check.", 2);
-  }
-}
-
-/**
- * Require a category on timing starts and reject it everywhere else.
- *
- * Error behavior: throws CLIError with exit code 2 in both directions, because a start with no category would record time that no later report can
- * attribute.
- *
- * @param command - command the user invoked
- * @param values - parsed flag map; only `--category` is inspected here
- * @param plansSubcommand - plans subcommand, or null when the command is not `plans`
- * @param plansTimeAction - timing action, or null when the subcommand is not `time`
- * @returns nothing; returning means the category is present exactly where it is required
- */
-function validatePlansCategoryFlag(
-  command: Command,
-  values: ParsedArgValues,
-  plansSubcommand: PlansSubcommand | null,
-  plansTimeAction: PlansTimeAction | null,
-): void {
-  const category = parsedString(values, "category");
-  const isTimingStart =
-    command === "plans" &&
-    plansSubcommand === "time" &&
-    plansTimeAction === "start";
-  // A category describes either recorded plan time or a learning bucket; every other command rejects it instead of silently ignoring it.
-  if (category !== undefined && !isTimingStart && command !== "learn") {
-    throw new CLIError(
-      "--category is only valid for plans time start or learn new.",
-      2,
-    );
-  }
-  // A timing start without a category would create unattributed time, so the developer must choose one before the receipt changes.
-  if (isTimingStart && category === undefined) {
-    throw new CLIError("plans time start requires --category.", 2);
-  }
-}
-
-/**
- * Keep pause recovery and finalization flags on timing stops, and mutually exclusive.
- *
- * Error behavior: throws CLIError with exit code 2 for a misplaced flag and again for the combined pair, because finalizing and discarding open
- * entries are opposite resolutions of the same state.
- *
- * @param command - command the user invoked
- * @param values - parsed flag map; `--finalize` and `--discard-open` are inspected here
- * @param plansSubcommand - plans subcommand, or null when the command is not `plans`
- * @param plansTimeAction - timing action, or null when the subcommand is not `time`
- * @returns nothing; returning means at most one stop flag is set, on the stop route
- */
-function validatePlansStopFlags(
-  command: Command,
-  values: ParsedArgValues,
-  plansSubcommand: PlansSubcommand | null,
-  plansTimeAction: PlansTimeAction | null,
-): void {
-  const shouldFinalize = parsedFlag(values, "finalize");
-  const shouldDiscardOpen = parsedFlag(values, "discard-open");
-  const hasStopFlag = shouldFinalize || shouldDiscardOpen;
-  const isTimingStop =
-    command === "plans" &&
-    plansSubcommand === "time" &&
-    plansTimeAction === "stop";
-  if (hasStopFlag && !isTimingStop) {
-    throw new CLIError(
-      "--finalize and --discard-open are only valid for plans time stop.",
-      2,
-    );
-  }
-  if (shouldFinalize && shouldDiscardOpen) {
-    throw new CLIError("--finalize and --discard-open cannot be combined.", 2);
-  }
-}
-
-/**
- * Keep plan-force semantics limited to generated export replacement.
- *
- * Error behavior: throws CLIError with exit code 2 when `--force` is used on another plans route, so force can never mean "overwrite" for a command
- * that was not designed to replace a file.
- *
- * @param command - command the user invoked; non-plans commands are left to their own validators
- * @param values - parsed flag map; only `--force` is inspected here
- * @param plansSubcommand - plans subcommand, or null when the command is not `plans`
- * @returns nothing; returning means force is absent or on the export route
- */
-function validatePlansForceFlag(
-  command: Command,
-  values: ParsedArgValues,
-  plansSubcommand: PlansSubcommand | null,
-): void {
-  if (
-    parsedFlag(values, "force") &&
-    command === "plans" &&
-    plansSubcommand !== "export"
-  ) {
-    throw new CLIError("--force is only valid for plans export.", 2);
-  }
-}
-
-/**
- * Parse a start category after route validation has rejected misplaced flags.
- * Error behavior: throws CLIError with exit code 2 for an unrecognised category name.
- *
- * @param rawCategory - flag text as typed; undefined is only valid on a non-start action
- * @param action - timing action; anything but `start` yields null without inspecting the text
- * @returns the category, or null when this action does not carry one
- */
-function parsePlansTimeCategoryArg(
-  rawCategory: string | undefined,
-  action: PlansTimeAction | null,
-): PlansTimeCategory | null {
-  if (action !== "start" || rawCategory === undefined) return null;
-  if (
-    rawCategory !== "product" &&
-    rawCategory !== "proof" &&
-    rawCategory !== "other"
-  ) {
-    throw new CLIError("--category must be product, proof, or other.", 2);
-  }
-  return rawCategory;
 }
 
 /** Returns true when the command resolves to a deterministic install or setup preview/apply path. */
@@ -1132,6 +982,33 @@ function parsePrimaryPositionals(
 }
 
 /**
+ * Parse option tokens and classify missing or ambiguous active-cap values as usage errors.
+ * Other option-parsing failures propagate unchanged.
+ *
+ * @throws CLIError with exit 2 when Node rejects the value of --max-active
+ */
+function parseCLITokens(filteredArgs: string[]) {
+  try {
+    return parseArgs({
+      args: filteredArgs,
+      options: CLI_ARG_OPTIONS,
+      allowPositionals: true,
+      strict: true,
+    });
+  } catch (error) {
+    if (
+      error instanceof TypeError &&
+      "code" in error &&
+      error.code === "ERR_PARSE_ARGS_INVALID_OPTION_VALUE" &&
+      error.message.includes("'--max-active")
+    ) {
+      throw new CLIError(error.message, 2);
+    }
+    throw error;
+  }
+}
+
+/**
  * Parse raw CLI argv into structured command options.
  * Throws CLIError when a command, flag, positional, or value combination is invalid.
  *
@@ -1142,12 +1019,7 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
   const { command, filteredArgs } = parseCommand(argv);
 
   /** Destructured parseArgs result containing option values and positional arguments */
-  const { values, positionals } = parseArgs({
-    args: filteredArgs,
-    options: CLI_ARG_OPTIONS,
-    allowPositionals: true,
-    strict: true,
-  });
+  const { values, positionals } = parseCLITokens(filteredArgs);
   const parsedValues = values as ParsedArgValues;
   const commandPositionals = selectCommandPositionals(
     command,
@@ -1284,6 +1156,9 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
     ...reviewFields,
     plansSubcommand: plansPositionals.plansSubcommand,
     plansStrict: parsedFlag(parsedValues, "strict"),
+    plansMaxActive: parsePlansMaxActive(
+      parsedString(parsedValues, "max-active"),
+    ),
     plansTimeAction: plansPositionals.plansTimeAction,
     plansTimeCategory: parsePlansTimeCategoryArg(
       parsedString(parsedValues, "category"),

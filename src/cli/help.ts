@@ -414,7 +414,7 @@ const COMMAND_HELP_CATALOG = {
     summary: "Export, check, or time milestone plans.",
     usage: [
       "goat-flow plans export <plan-path> [flags]",
-      "goat-flow plans check <plan-path> [--strict]",
+      "goat-flow plans check <plan-path> [--strict] [--max-active <n>]",
       "goat-flow plans time <start|stop|status> <milestone-file> [flags]",
     ],
     subcommands: [
@@ -424,6 +424,10 @@ const COMMAND_HELP_CATALOG = {
     ],
     flags: [
       ["--strict", "Apply the current-plan authoring gate on check."],
+      [
+        "--max-active <n>",
+        "Set a positive active milestone cap for check; overrides plans.maxActiveMilestones in the owning project config (default 1).",
+      ],
       ["--format <type>", "Choose markdown or json export output."],
       ["--output <path>", "Write an export instead of previewing it."],
       ["--force", "Replace an existing export destination."],

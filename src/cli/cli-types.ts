@@ -222,6 +222,7 @@ export interface ParsedCLI extends CLIOptions {
   reviewValidatePath: string | null;
   plansSubcommand: PlansSubcommand | null;
   plansStrict: boolean;
+  plansMaxActive: number | null;
   plansTimeAction: PlansTimeAction | null;
   plansTimeCategory: PlansTimeCategory | null;
   plansTimeFinalize: boolean;

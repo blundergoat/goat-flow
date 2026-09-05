@@ -658,35 +658,91 @@ function collectSupersededSuccessorErrors(
   return errors;
 }
 
+/** Active scheduling state shared by strict enforcement and opt-in reporting. */
+interface ActiveMilestone {
+  id: string;
+  status: string;
+  /** Null marks an invalid or ambiguous declaration; absent and empty declarations use default. */
+  lane: string | null;
+}
+
 /**
- * Enforce one active execution or verification boundary per plan.
- * Use so timing and next-action guidance point users to exactly one current milestone.
+ * Derive active state without changing exported Lane metadata.
+ * @param records - parsed milestones in file order; inactive statuses consume no slot
+ * @returns active rows in that same order; invalid lanes still consume a global slot
  */
-function collectActiveStateErrors(identities: MilestoneIdentity[]): string[] {
-  const activeMilestones = identities.filter((identity) =>
-    ACTIVE_STATUSES.has(identity.record.status.trim().toLowerCase()),
-  );
-  // Two active milestones make timing and next-action guidance ambiguous for the user.
-  if (activeMilestones.length > 1) {
-    return [
-      `plan: multiple active milestones: ${activeMilestones.map((identity) => identity.id).join(", ")}`,
-    ];
+export function readActiveMilestones(
+  records: PlanExportRecord[],
+): ActiveMilestone[] {
+  const active: ActiveMilestone[] = [];
+  for (const record of records) {
+    const status = record.status.trim().toLowerCase();
+    if (!ACTIVE_STATUSES.has(status)) continue;
+    const identity = readMilestoneIdentity(record);
+    if (identity === null) continue;
+    const declaredLane = record.lane ?? "";
+    const isLaneInvalid =
+      record.warnings.includes("multiple Lane values supplied") ||
+      (declaredLane !== "" && !/^[a-z0-9][a-z0-9-]{0,39}$/u.test(declaredLane));
+    active.push({
+      id: identity.id,
+      status,
+      lane: isLaneInvalid ? null : declaredLane || "default",
+    });
   }
-  return [];
+  return active;
+}
+
+/** Enforce the legacy single-active rule or the opted-in per-lane and global limits. */
+function collectActiveStateErrors(
+  active: ActiveMilestone[],
+  maxActive: number,
+): string[] {
+  const activeIds = active.map((milestone) => milestone.id).join(", ");
+  // Cap one keeps exactly the historical error, even when authors have declared lanes.
+  if (maxActive === 1) {
+    return active.length > 1
+      ? [`plan: multiple active milestones: ${activeIds}`]
+      : [];
+  }
+  const lanes = new Map<string, string[]>();
+  for (const milestone of active) {
+    // The source-labelled metadata error owns invalid declarations; they never fabricate a lane collision.
+    if (milestone.lane === null) continue;
+    const ids = lanes.get(milestone.lane) ?? [];
+    ids.push(milestone.id);
+    lanes.set(milestone.lane, ids);
+  }
+  const errors: string[] = [];
+  for (const [lane, ids] of lanes) {
+    if (ids.length < 2) continue;
+    const laneLabel = lane === "default" ? "" : ` in lane ${lane}`;
+    errors.push(
+      `plan: multiple active milestones${laneLabel}: ${ids.join(", ")}`,
+    );
+  }
+  if (active.length > maxActive) {
+    errors.push(
+      `plan: active milestone cap ${maxActive} exceeded: ${activeIds}`,
+    );
+  }
+  return errors;
 }
 
 /**
  * Check that a plan's milestones form a workable set, not just valid files.
  * Use in strict mode after each milestone passes on its own, so the author learns about duplicate ids, missing or circular dependencies, and two
- * milestones being active at once.
+ * competing active milestones under the resolved scheduling cap.
  *
  * @param records - every milestone parsed from the plan directory; an empty list means there
  *   is no plan to cross-check and nothing is reported
+ * @param maxActive - resolved positive safe integer cap; one preserves legacy enforcement
  * @returns one error line per structural problem, each naming its milestone file; empty means
  *   the milestones fit together and the author has a workable order
  */
 export function collectPlanStructureErrors(
   records: PlanExportRecord[],
+  maxActive = 1,
 ): string[] {
   const errors = collectStrictPlainLanguageErrors(records);
   // Files without a milestone ID cannot participate in local graph relationships.
@@ -709,6 +765,8 @@ export function collectPlanStructureErrors(
   errors.push(
     ...collectSupersededSuccessorErrors(identities, indexes.byNumber),
   );
-  errors.push(...collectActiveStateErrors(identities));
+  errors.push(
+    ...collectActiveStateErrors(readActiveMilestones(records), maxActive),
+  );
   return errors;
 }
