@@ -2,6 +2,7 @@
  * How a review's claims are held to its contents: refutation ledgers that must exist,
  * Top 5 references that must resolve, and a Ship Verdict the findings actually justify -
  * plus the CLI surface that runs the same checks from stdin.
+ *
  * Fixtures use real files so anchor and ledger claims are behavioural, not mocked.
  */
 import { spawnSync } from "node:child_process";
@@ -27,6 +28,8 @@ import {
   CLI_PATH,
   createReviewedProject,
   validReview,
+  withReviewSource,
+  reviewReportTemplate,
   withSixSurfacedFindings,
   withTopFiveRisk,
   warningsOf,
@@ -52,13 +55,13 @@ describe("review output validation: ledger, sections, and verdict", () => {
 
   it("rejects duplicate finding sections and integrity fields", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
-    const duplicateFindings = validReview().replace(
+    const duplicateFindings = validReview(projectRoot).replace(
       "## Systemic Patterns",
       "## Findings\n\nDuplicate surface.\n\n## Systemic Patterns",
     );
-    const duplicateIntegrityField = validReview().replace(
-      "- Scope snapshot: source=worktree",
-      "- Scope snapshot: source=area\n- Scope snapshot: source=worktree",
+    const duplicateIntegrityField = validReview(projectRoot).replace(
+      "- Scope snapshot: source=explicit path list",
+      "- Scope snapshot: source=area\n- Scope snapshot: source=explicit path list",
     );
 
     assert.equal(
@@ -83,7 +86,7 @@ describe("review output validation: ledger, sections, and verdict", () => {
 
   it("permits compact integrity only on zero-finding reports", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
-    const compactWithFindings = validReview().replace(
+    const compactWithFindings = validReview(projectRoot).replace(
       /## Review Integrity\n[\s\S]*?\n## Findings/u,
       "Review Integrity: confident; 1/1 files opened; no degradation flags; validator=validated.\n\n## Findings",
     );
@@ -106,7 +109,7 @@ describe("review output validation: ledger, sections, and verdict", () => {
   it("requires a local refutation ledger when the report claims one", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
     const result = validateReviewReport(
-      validReview(undefined, undefined, 1),
+      validReview(projectRoot, undefined, undefined, 1),
       projectRoot,
     );
     assert.equal(hasViolation(result, "refutation-ledger"), true);
@@ -125,7 +128,7 @@ describe("review output validation: ledger, sections, and verdict", () => {
     );
     assert.deepEqual(
       validateReviewReport(
-        validReview(undefined, undefined, 1, ledgerPath),
+        validReview(projectRoot, undefined, undefined, 1, ledgerPath),
         projectRoot,
       ).violations,
       [],
@@ -150,7 +153,7 @@ describe("review output validation: ledger, sections, and verdict", () => {
       "utf-8",
     );
 
-    const report = validReview(undefined, undefined, 8, ledgerPath)
+    const report = validReview(projectRoot, undefined, undefined, 8, ledgerPath)
       .replace("- Evidence: 4 OBSERVED", "- Evidence: 1 OBSERVED")
       .replace("- Verdicts: 4/0/8/0", "- Verdicts: 1/0/8/0")
       .replace(
@@ -174,7 +177,7 @@ describe("review output validation: ledger, sections, and verdict", () => {
       "utf-8",
     );
     const unrelated = validateReviewReport(
-      validReview(undefined, undefined, 1),
+      validReview(projectRoot, undefined, undefined, 1),
       projectRoot,
     );
     assert.equal(hasViolation(unrelated, "refutation-ledger"), true);
@@ -187,7 +190,7 @@ describe("review output validation: ledger, sections, and verdict", () => {
       "utf-8",
     );
     const mismatch = validateReviewReport(
-      validReview(undefined, undefined, 2, declaredPath),
+      validReview(projectRoot, undefined, undefined, 2, declaredPath),
       projectRoot,
     );
     assert.equal(hasViolation(mismatch, "refutation-ledger"), true);
@@ -200,6 +203,7 @@ describe("review output validation: ledger, sections, and verdict", () => {
   it("accepts a persist-skipped refutation count without a local ledger", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
     const report = validReview(
+      projectRoot,
       undefined,
       undefined,
       "1 (persist-skipped)",
@@ -215,13 +219,15 @@ describe("review output validation: ledger, sections, and verdict", () => {
 
   it("permits pre-existing actions only when Scope snapshot declares area mode", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
-    const diffReport = validReview().replace(
+    const diffReport = validReview(projectRoot).replace(
       "[MAY:patch] [local-only] **Cover the caller contract**",
       "[MAY:pre-existing] [local-only] **Cover the caller contract**",
     );
-    const areaReport = diffReport
-      .replace("source=worktree", "source=area")
-      .replace("1 changed lines", "1 clusters");
+    const areaReport = withReviewSource(diffReport, projectRoot, {
+      kind: "area",
+      roots: ["src"],
+      sample: null,
+    }).replace("1 changed lines", "1 clusters");
 
     assert.equal(
       hasCheck(
@@ -240,11 +246,11 @@ describe("review output validation: ledger, sections, and verdict", () => {
 
   it("rejects duplicate definitions and unresolved Top 5 R-ID references", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
-    const duplicate = validReview().replace(
+    const duplicate = validReview(projectRoot).replace(
       "- R-003 [MAY:patch]",
       "- R-002 [MAY:patch]",
     );
-    const unknownReference = withTopFiveRisk(validReview(), "R-999");
+    const unknownReference = withTopFiveRisk(validReview(projectRoot), "R-999");
 
     assert.equal(
       hasCheck(
@@ -268,7 +274,7 @@ describe("review output validation: ledger, sections, and verdict", () => {
 
   it("preserves moved refuter IDs while rejecting undefined secondary references", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
-    const refuted = validReview()
+    const refuted = validReview(projectRoot)
       .replace("- Evidence: 4 OBSERVED", "- Evidence: 5 OBSERVED")
       .replace("- Verdicts: 4/0/0/0", "- Verdicts: 5/0/0/0")
       .replace(
@@ -298,7 +304,7 @@ describe("review output validation: ledger, sections, and verdict", () => {
   it("resolves every semantic anchor cited by Top 5 Risks", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
     const longHeadingReport = withTopFiveRisk(
-      withSixSurfacedFindings(validReview()),
+      withSixSurfacedFindings(validReview(projectRoot)),
       "R-001",
       "missingTopFiveAnchor",
     );
@@ -336,7 +342,7 @@ describe("review output validation: ledger, sections, and verdict", () => {
   it("accepts both documented Top 5 headings without a missing-section warning", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
     const report = withTopFiveRisk(
-      withSixSurfacedFindings(validReview()),
+      withSixSurfacedFindings(validReview(projectRoot)),
     ).replace("## Top 5 Risks (cross-tier)", "## Top 5 Risks");
     const result = validateReviewReport(report, projectRoot);
 
@@ -346,10 +352,10 @@ describe("review output validation: ledger, sections, and verdict", () => {
 
   it("rejects Ship Verdict decisions that contradict severity or integrity", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
-    const severityConflict = validReview()
+    const severityConflict = validReview(projectRoot)
       .replace("[SHOULD:patch]", "[MUST:patch]")
       .replace("Decision: **PARTIAL**", "Decision: **YES**");
-    const degradationConflict = validReview().replace(
+    const degradationConflict = validReview(projectRoot).replace(
       "Decision: **PARTIAL**",
       "Decision: **YES WITH CONDITIONS**",
     );
@@ -383,14 +389,14 @@ describe("review output validation: ledger, sections, and verdict", () => {
 
   it("reconciles risk-depth-declined with a partial conclusion and verdict cap", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
-    const overconfident = validReview()
+    const overconfident = validReview(projectRoot)
       .replace(
         "- Degradation flags: gates-not-run",
         "- Degradation flags: risk-depth-declined",
       )
       .replace("- Conclusion: coverage-degraded", "- Conclusion: confident")
       .replace("Decision: **PARTIAL**", "Decision: **YES WITH CONDITIONS**");
-    const aboveCap = validReview()
+    const aboveCap = validReview(projectRoot)
       .replace("[SHOULD:patch]", "[MAY:patch]")
       .replace(
         "- Degradation flags: gates-not-run",
@@ -422,7 +428,7 @@ describe("review output validation: ledger, sections, and verdict", () => {
   /** A declared coverage loss cannot retain the validator's strongest confidence claim. */
   it("rejects confident conclusions paired with degradation flags", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
-    const overconfident = validReview()
+    const overconfident = validReview(projectRoot)
       .replace("- Conclusion: coverage-degraded", "- Conclusion: confident")
       .replace("Decision: **PARTIAL**", "Decision: **YES WITH CONDITIONS**");
 
@@ -436,7 +442,7 @@ describe("review output validation: ledger, sections, and verdict", () => {
 
   it("warns for unknown degradation flags without failing validation", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
-    const report = validReview().replace(
+    const report = validReview(projectRoot).replace(
       "- Degradation flags: gates-not-run",
       "- Degradation flags: gates-not-run, mystery-degradation",
     );
@@ -454,11 +460,11 @@ describe("review output validation: ledger, sections, and verdict", () => {
 
   it("rejects empty or contradictory degradation flag lists", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
-    const emptyFlag = validReview().replace(
+    const emptyFlag = validReview(projectRoot).replace(
       "- Degradation flags: gates-not-run",
       "- Degradation flags: gates-not-run,",
     );
-    const contradictoryNone = validReview().replace(
+    const contradictoryNone = validReview(projectRoot).replace(
       "- Degradation flags: gates-not-run",
       "- Degradation flags: none, gates-not-run",
     );
@@ -480,15 +486,15 @@ describe("review output validation: ledger, sections, and verdict", () => {
   it("warns for conditional Top 5 and empty optional-section defects", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
     const prematureTopFive = validateReviewReport(
-      withTopFiveRisk(validReview()),
+      withTopFiveRisk(validReview(projectRoot)),
       projectRoot,
     );
     const missingTopFive = validateReviewReport(
-      withSixSurfacedFindings(validReview()),
+      withSixSurfacedFindings(validReview(projectRoot)),
       projectRoot,
     );
     const emptyOptional = validateReviewReport(
-      validReview().replace(
+      validReview(projectRoot).replace(
         "## Ship Verdict",
         "## Breaking Changes\n\n## Ship Verdict",
       ),
@@ -520,12 +526,12 @@ describe("review output validation: ledger, sections, and verdict", () => {
     {
       checkId: "V1",
       code: "anchor-unresolved",
-      report: validReview("src/example.ts", "missingSymbol"),
+      report: reviewReportTemplate("src/example.ts", "missingSymbol"),
     },
     {
       checkId: "V2",
       code: "finding-grammar",
-      report: validReview().replace(
+      report: reviewReportTemplate().replace(
         "- R-001 [SHOULD:patch]",
         "- R-01 [SHOULD:patch]",
       ),
@@ -533,7 +539,7 @@ describe("review output validation: ledger, sections, and verdict", () => {
     {
       checkId: "V3",
       code: "finding-harm",
-      report: validReview().replace(
+      report: reviewReportTemplate().replace(
         " | Harm: requests use an invalid configuration.",
         "",
       ),
@@ -541,17 +547,20 @@ describe("review output validation: ledger, sections, and verdict", () => {
     {
       checkId: "V4",
       code: "finding-evidence",
-      report: validReview().replace(" | Evidence: OBSERVED", ""),
+      report: reviewReportTemplate().replace(" | Evidence: OBSERVED", ""),
     },
     {
       checkId: "V5",
       code: "integrity-format",
-      report: validReview().replace("- Review validator: validated\n", ""),
+      report: reviewReportTemplate().replace(
+        "- Review validator: validated\n",
+        "",
+      ),
     },
     {
       checkId: "V6",
       code: "finding-id-duplicate",
-      report: validReview().replace(
+      report: reviewReportTemplate().replace(
         "- R-003 [MAY:patch]",
         "- R-002 [MAY:patch]",
       ),
@@ -559,7 +568,7 @@ describe("review output validation: ledger, sections, and verdict", () => {
     {
       checkId: "V8",
       code: "refutation-ledger",
-      report: validReview(undefined, undefined, 1),
+      report: reviewReportTemplate(undefined, undefined, 1),
     },
   ];
 
@@ -567,7 +576,13 @@ describe("review output validation: ledger, sections, and verdict", () => {
   for (const fixture of structuralValidationCases) {
     it(`maps the seeded structural corpus to ${fixture.checkId}/${fixture.code}`, (testContext) => {
       const projectRoot = createReviewedProject(testContext);
-      const result = validateReviewReport(fixture.report, projectRoot);
+      const result = validateReviewReport(
+        withReviewSource(fixture.report, projectRoot, {
+          kind: "paths",
+          paths: [{ path: "src/example.ts", from: "live" }],
+        }),
+        projectRoot,
+      );
       assert.equal(
         hasCheck(
           result.violations as ValidationIssueShape[],
@@ -583,7 +598,7 @@ describe("review output validation: ledger, sections, and verdict", () => {
   it("renders every violation with its class and line when available", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
     const result = validateReviewReport(
-      validReview("src/example.ts", "missingSymbol").replace(
+      validReview(projectRoot, "src/example.ts", "missingSymbol").replace(
         " | Harm: requests use an invalid configuration.",
         "",
       ),
@@ -620,7 +635,7 @@ describe("review validate CLI", () => {
   it("rejects missing, unknown, and extra review positionals", () => {
     assert.throws(
       () => parseCLIArgs(["review"]),
-      /requires subcommand "validate"/iu,
+      /requires subcommand "snapshot"/iu,
     );
     assert.throws(
       () => parseCLIArgs(["review", "check"]),
@@ -652,6 +667,7 @@ describe("review validate CLI", () => {
     assert.match(ledger.stdout, /review validate-ledger: PASS \(2 records\)/u);
 
     const report = validReview(
+      FRAMEWORK_ROOT,
       "src/cli/help.ts",
       "renderHelp",
       2,
@@ -669,6 +685,7 @@ describe("review validate CLI", () => {
     assert.match(draft.stdout, /persistence unverified/iu);
 
     const mismatchedEnvelope = `${validReview(
+      FRAMEWORK_ROOT,
       "src/cli/help.ts",
       "renderHelp",
       1,
@@ -724,6 +741,7 @@ describe("review validate CLI", () => {
     assert.match(duplicateMarker.stdout, /exactly one ledger marker/iu);
 
     const zeroRefutationDraft = validReview(
+      FRAMEWORK_ROOT,
       "src/cli/help.ts",
       "renderHelp",
     ).replace("- Review validator: validated", "- Review validator: pending");
@@ -787,10 +805,11 @@ describe("review validate CLI", () => {
     assert.match(help.stdout, /review validate \[report-file\]/u);
     assert.match(help.stdout, /review validate-draft \[draft-envelope-file\]/u);
     assert.match(help.stdout, /review validate-ledger \[ledger-file\]/u);
-    assert.match(help.stdout, /structural failures exit 1/iu);
+    assert.match(help.stdout, /Structural failures exit 1/iu);
     assert.match(help.stdout, /advisory warnings.*exit 0/iu);
+    assert.match(help.stdout, /capture refusals exit 2/iu);
 
-    const report = validReview("src/cli/help.ts", "renderHelp");
+    const report = validReview(FRAMEWORK_ROOT, "src/cli/help.ts", "renderHelp");
     const valid = spawnSync(
       process.execPath,
       ["--import", "tsx", CLI_PATH, "review", "validate"],
@@ -802,6 +821,7 @@ describe("review validate CLI", () => {
 
   it("exits one and reports each stdin violation", () => {
     const report = validReview(
+      FRAMEWORK_ROOT,
       "src/cli/cli.ts",
       "missingReviewValidatorAnchor",
     ).replace(" | Harm: requests use an invalid configuration.", "");
@@ -816,7 +836,11 @@ describe("review validate CLI", () => {
   });
 
   it("keeps warning-only CLI results at exit zero", () => {
-    const report = validReview("src/cli/help.ts", "renderHelp").replace(
+    const report = validReview(
+      FRAMEWORK_ROOT,
+      "src/cli/help.ts",
+      "renderHelp",
+    ).replace(
       "- Degradation flags: gates-not-run",
       "- Degradation flags: gates-not-run, mystery-degradation",
     );
@@ -837,7 +861,7 @@ describe("review validate CLI", () => {
       rmSync(outputRoot, { recursive: true, force: true }),
     );
     const outputPath = join(outputRoot, "validation.txt");
-    const report = validReview("src/cli/help.ts", "renderHelp");
+    const report = validReview(FRAMEWORK_ROOT, "src/cli/help.ts", "renderHelp");
     const result = spawnSync(
       process.execPath,
       [

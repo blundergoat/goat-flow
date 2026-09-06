@@ -159,6 +159,14 @@ describe("ADR-023 word budget tiers", () => {
     const measuredReferenceFiles = [
       ...skillQualityTestingFiles,
       ...topLevelPlaybookPaths,
+      ...[
+        "examples.md",
+        "refuter-spec.md",
+        "automated-review.md",
+        "review-traps.md",
+      ].flatMap((name) =>
+        installedSkillReferencePaths("goat-review", `references/${name}`),
+      ),
       ...installedSkillReferencePaths(
         "goat-debug",
         "references/diagnostic-techniques.md",

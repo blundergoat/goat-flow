@@ -157,6 +157,8 @@ describe("skill hardening contracts: goat-review (2/3)", () => {
       // Every report must disclose these fields so readers can assess its scope, evidence, and remaining limits.
       for (const mandatoryField of [
         "Scope snapshot",
+        "Authority snapshot",
+        "Gate authority",
         "Files opened in Pass 2",
         "Evidence",
         "Verdicts",

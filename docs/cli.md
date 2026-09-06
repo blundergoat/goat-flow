@@ -327,6 +327,116 @@ npx @blundergoat/goat-flow@latest redact --output .goat-flow/logs/sessions/YYYY-
 
 Paste the candidate text into stdin and send EOF. Without `--output`, the safe text is written to stdout. With `--output`, the command creates one private file inside the selected project, rejects linked parent paths, and revalidates the create-only allocation before and after writing. It refuses existing files, so choose a fresh filename for every run. This is a practical pre-write guard, not perfect DLP; review sensitive artifacts before sharing them. The separate `redactEvidenceText` API remains a hash-and-length evidence contract and does not produce readable output.
 
+### `goat-flow review snapshot [request-file]`
+
+Capture the source selected for a review from a JSON request on stdin or in one file. Run from the reviewed project's root.
+The command prints canonical metadata to stdout, reads only local files and Git objects, and rejects `--output`.
+Retain the initial response through the review; a later capture is a comparison, never a replacement baseline.
+Usage errors and unsupported captures exit `2`; invalid report evidence exits `1` through the validation commands below.
+
+Shape-only request for the operator's staged changes:
+
+```json
+{"schema":"goat-review-request/v1","source":{"kind":"staged","base":"HEAD"}}
+```
+
+The request requires `schema` and `source`. Optional `execution` defaults to false and `renames` to an empty array.
+Unknown or duplicate keys, unsafe integers, ambiguous paths, and unsupported variants are errors.
+
+| Source kind | Exact source fields | Selection |
+|---|---|---|
+| `pr`, `branch` | `kind,target,head` | Local commit selectors; resolve target tip, head, and one unique merge base. No fetch or remote identity claim. |
+| `range` | `kind,left,right,operator` | `..` compares endpoints; `...` uses their unique merge base. |
+| `commit` | `kind,commit,parent` | Positive one-based parent number, or null for the sole parent/root. A merge requires a parent number. |
+| `staged` | `kind,base` | Resolved base versus complete stage-0 index. Only an actually unborn `HEAD` permits an empty base. |
+| `unstaged` | `kind` | Complete index versus live tracked files; excludes untracked files. |
+| `worktree` | `kind,base,untracked` | Base versus live tracked files plus the declared untracked selection. |
+| `paths` | `kind,paths` | Each member has `path,from`; from is `live`, `index`, or `git`. Git members also require `revision`. |
+| `area` | `kind,roots,sample` | Literal live directories; null sample enumerates them, while a path array freezes only that sample. |
+
+Worktree untracked selection is exactly `{"mode":"exclude"}`, `{"mode":"all-nonignored"}`,
+or `{"mode":"explicit","paths":[...]}`. Explicit untracked members cannot name index entries.
+Paths preserve spaces, quotes, tabs, newlines, pipes, backticks, internal colons, and Unicode without normalization.
+Absolute paths, dot/traversal components, backslash separators, duplicate paths, NUL, and non-round-trip UTF-8 are refused.
+Area roots and gate working directories may use `.` for the project root.
+
+Area enumeration excludes ignored untracked trees, symlink traversal, and nested repositories.
+A standalone folder uses the repository filesystem adapter's build/tool directory exclusions.
+Standalone areas containing ignore rules require explicit paths or a Git repository; capture refuses to guess their membership.
+Explicit paths may select an ignored regular file. An absent selected file stays in the inventory and cannot support an anchor.
+Symlinks, submodules, unmerged/intent-to-add/sparse indexes, and live comparisons needing content conversion are unsupported.
+Multiple merge bases require an explicit two-dot comparison. These refusals never fall back to HEAD or live bytes.
+
+The response has two members:
+
+- `authority`: frozen `goat-review-authority/v1` metadata with exactly `schema,objectFormat,source,index,inventory,renames,workspace,fingerprint`.
+- `checkout`: `fingerprint` and `reason`, each string or null. With execution=false both workspace identities are null and reason is `not-requested`.
+
+Resolved source metadata retains `kind` and `requested`, the original source object.
+PR/branch add `targetTip,head,comparisonBase,operator`; ranges add `left,head,comparisonBase,operator`.
+Commit adds `head,parentNumber,comparisonBase`; staged adds `base`; unstaged adds no extra fields.
+Worktree adds `base,untrackedPaths`; paths adds resolved `paths`; area adds selected literal `paths`.
+Git IDs are full lowercase SHA-1 or SHA-256 object IDs in the repository's actual format, and commit selectors must resolve as commits.
+
+The sorted inventory contains `{path,old,new}` members. Comparison-less paths/areas use old=null.
+An absent side is `{"kind":"absent"}`; a regular file records `kind,from,mode,sha256`.
+Index/Git files add `blob`; Git files also add `revision`. Modes are `100644` or `100755`.
+Diff inventory lists changed literal paths without rename inference.
+Optional rename pairs contain `old,new` and must uniquely pair a deleted member with an added member; they grant no additional authority.
+
+Hashes use exact raw bytes, without Git object framing, filters, text conversion, or newline normalization.
+Canonical JSON sorts object keys lexicographically and protocol path arrays by UTF-8 bytes, uses no insignificant whitespace,
+and escapes literal <, >, &, backtick, and pipe as lowercase Unicode escapes. Integers must be exact and safe; unpaired surrogates are rejected.
+Decimal and exponent spellings are accepted only when their mathematical value is an integer; floating-point rounding cannot select a different parent.
+Requests accept ordinary JSON whitespace; frozen authority, gates, and escaped anchors require the canonical spelling.
+
+| Identity | SHA-256 input after its domain prefix and NUL byte |
+|---|---|
+| `index-v1:sha256:<hex>` | `goat-review-index/v1` + canonical `{objectFormat,entries}`; entries include path, mode, blob, stage, intentToAdd, skipWorktree, assumeUnchanged. |
+| `review-v1:sha256:<hex>` | `goat-review-authority/v1` + canonical authority record excluding fingerprint. |
+| `workspace-v1:sha256:<hex>` | `goat-review-workspace/v1` + canonical `{head,files,untracked}`; sorted entries contain path, kind, and present-file mode/raw sha256. |
+| `gate-v1:sha256:<hex>` | `goat-review-gate/v1` + canonical `{argv,cwd,origin}`. |
+
+Use execution=true in the initial request when a gate is planned.
+The authority workspace covers the full selected execution source, including tracked files outside the diff.
+The checkout fingerprint independently describes live execution source files and all nonignored untracked files, plus selected ignored files.
+Uniform Git/index path selections use that complete Git/index state; mixed selections receive credit only when their selected bytes match one full state.
+A sample's execution capture does not claim the surrounding files were reviewed.
+Unavailable selected state or incompatible views produce null authority workspace with a reason, so they cannot prove a passing gate.
+An unsupported live checkout has a null checkout fingerprint and a reason; a readable fixed Git/index source retains its own workspace identity.
+An unrelated live checkout does not change an immutable review fingerprint.
+
+Both full and compact reports require exactly one visible `Authority snapshot: <canonical JSON>` and `Gate authority: <canonical JSON>`.
+Full reports put them in the Review Integrity list; compact reports use standalone lines.
+Fenced, indented, quoted, or commented examples cannot provide these fields.
+The readable Scope snapshot must agree with its authority's source, resolved base/head, fingerprint, and uncommitted state.
+Base uses a commit ID, `empty-tree`, `index`, or `n/a`; head uses a commit ID, `index`, `worktree`, or `per-path`.
+
+Ordinary anchors use new-side content, or the old side for a deletion.
+For an explicit old side or delimiter-bearing text, use canonical `anchor={"path":...,"search":...,"side":"old|new"}`.
+Search text is a nonempty literal matched against raw UTF-8 bytes. The path must belong to the frozen inventory.
+Validation rechecks source identity before/after reads and at completion, including zero-finding reports.
+Detected drift stops validation; capture does not promise to detect every change-and-revert race.
+
+Gate authority uses exactly `schema,review,trustedBase,hostInstructions,gates`, with schema `goat-review-gates/v1`.
+Review is the frozen review fingerprint; trustedBase is a separate full commit ID or null.
+Host instruction records contain `reference,sha256`.
+Each gate contains `id,argv,cwd,origin,expectedWorkspace,attempts,outcome,reason`:
+
+- argv is a nonempty literal string array, cwd is a project-relative directory, and id binds argv/cwd/origin.
+- Git origin contains `kind="git",revision,path,sha256,literal`. Revision equals trustedBase; source bytes must match the hash and contain the literal.
+- Host origin contains `kind="host",reference,sha256` and must match a retained host instruction record.
+- expectedWorkspace equals the authority workspace. An attempt contains `number,reviewBefore,reviewAfter,workspaceBefore,workspaceAfter,exitCode,output`.
+- Before/after measurements use review-v1 or workspace-v1 fingerprints. Null means a measurement was unavailable and cannot earn execution credit.
+- Each gate has zero or one attempt, numbered 1. Output is literal and may be empty for a quiet command; null exitCode cannot prove a pass.
+- Outcomes are `pass|changed-code|pre-existing|infrastructure|unresolved|skipped|unavailable`. Skipped/unavailable needs a nonempty reason.
+- Pass requires exit 0 and matching review/workspace fingerprints before and after. A real wrong-state attempt remains uncredited with reason `selected-state-mismatch`.
+- Duplicate gate IDs and retries fail; an empty gate inventory cannot claim `Gates: run`.
+
+The host still establishes trusted instructions, consent, command meaning, and evidence that the process actually ran.
+This validator checks declared provenance and state consistency; it does not authenticate permission, launch gates, or provide hostile-checkout containment.
+Workspace identity does not prove reproducible dependencies, environment, or sandbox isolation.
+
 ### `goat-flow review validate-ledger|validate-draft|validate [input-file] [--output <path>]`
 
 Run the three goat-review proof gates from a file or stdin. `validate-ledger` checks raw transient refutation records and returns the exact record count. `validate-draft` requires `Review validator: pending`; when refutations are nonzero, its draft envelope is the complete report, a line containing only `<!-- goat-flow-review-ledger-draft -->`, then the exact transient records. It checks report grammar, ledger grammar, and count together while explicitly leaving persistence unverified. After redaction creates the declared ledger, change the report field to `validated`; `validate` checks the report and that exact persisted artifact and rejects the transient marker. Run report validation from the reviewed project's root so semantic anchors and ledger paths resolve there. Structural V1-V6/V8 failures exit `1`; advisory V7 shape warnings and unknown degradation flags are printed but retain exit `0`. By default the result prints to stdout; `--output` writes the same PASS/FAIL result to the selected file.

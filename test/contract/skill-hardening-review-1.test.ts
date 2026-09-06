@@ -18,6 +18,10 @@ import {
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import {
+  captureReviewSnapshot,
+  readReviewAnchor,
+} from "../../src/cli/review-validate-authority.js";
+import {
   assertForEachTarget,
   installedSkillPaths,
   installedSkillReferencePaths,
@@ -133,8 +137,8 @@ describe("skill hardening contracts: goat-review (1/3)", () => {
         );
         // Staged-file guidance must use each permitted read-only command rather than creating a new Git tree.
         for (const required of [
-          "git ls-files -s",
-          "git diff --cached --binary",
+          "goat-flow review snapshot",
+          "complete stage-0 index",
           "git show :<path>",
         ]) {
           assert.ok(
@@ -178,7 +182,15 @@ describe("skill hardening contracts: goat-review (1/3)", () => {
       writeFileSync(join(originPath, "alpha.txt"), "alpha contents\n");
       writeFileSync(join(originPath, "beta.txt"), "beta contents\n");
       runFixtureGitCommand(originPath, "add", "alpha.txt", "beta.txt");
-      runFixtureGitCommand(originPath, "commit", "--quiet", "-m", "probe base");
+      const tree = runFixtureGitCommand(originPath, "write-tree").trim();
+      const head = runFixtureGitCommand(
+        originPath,
+        "commit-tree",
+        tree,
+        "-m",
+        "probe base",
+      ).trim();
+      runFixtureGitCommand(originPath, "update-ref", "HEAD", head);
       // A linked worktree owns its own index, so staging here can never replace the index a user is working in.
       runFixtureGitCommand(
         originPath,
@@ -205,13 +217,18 @@ describe("skill hardening contracts: goat-review (1/3)", () => {
 
       const before = fingerprintGitState(worktreePath);
 
-      runFixtureGitCommand(worktreePath, "ls-files", "-s");
-      runFixtureGitCommand(worktreePath, "diff", "--cached", "--binary");
-      const stagedContent = runFixtureGitCommand(
+      const { authority } = captureReviewSnapshot(
+        JSON.stringify({
+          schema: "goat-review-request/v1",
+          source: { kind: "staged", base: "HEAD" },
+        }),
         worktreePath,
-        "show",
-        ":alpha.txt",
       );
+      const stagedContent = readReviewAnchor(
+        worktreePath,
+        authority,
+        "alpha.txt",
+      ).toString("utf8");
       // The read must return staged content, otherwise the probe proves nothing about staged authority.
       assert.equal(
         stagedContent,
@@ -259,7 +276,7 @@ describe("skill hardening contracts: goat-review (1/3)", () => {
       assert.match(scopeSnapshot, /area `<files>`\/`<clusters>`/u, skillPath);
       assert.match(
         scopeSnapshot,
-        /Required `n\/a` is resolved, not degraded/u,
+        /Only comparison-less fields may use `n\/a`; byte authority always resolves/u,
         skillPath,
       );
       assert.match(scopeSnapshot, /Area: the user's audit brief/u, skillPath);
@@ -280,7 +297,7 @@ describe("skill hardening contracts: goat-review (1/3)", () => {
         skillPath,
         "Review Integrity (confidence signal)",
       );
-      assert.match(integrity, /diff mode also lists paths/u, skillPath);
+      assert.match(integrity, /Scope snapshot with paths/u, skillPath);
       assert.match(
         constraints,
         /\*\*Both modes:\*\*[\s\S]*above 20 files, or 3000 changed lines/u,
@@ -301,7 +318,7 @@ describe("skill hardening contracts: goat-review (1/3)", () => {
       assert.match(scopeSnapshot, /\*\*Source:\*\*[^\n]+worktree/u, skillPath);
       assert.match(
         scopeSnapshot,
-        /For `worktree`, bind the combined tracked diff plus untracked membership/u,
+        /For `worktree`, freeze tracked changes and declared untracked membership together/u,
         skillPath,
       );
     });
@@ -476,7 +493,7 @@ describe("skill hardening contracts: goat-review (1/3)", () => {
         );
         assert.match(
           reference,
-          /Never repair a failure or rerun it/u,
+          /Never repair or rerun a failure/u,
           referencePath,
         );
         assert.match(reference, /\[MUST:needs-decision\]/u, referencePath);
@@ -549,7 +566,7 @@ describe("skill hardening contracts: goat-review (1/3)", () => {
         skillPath,
         "Step 0 - Scope, Size, Spec",
       );
-      assert.match(scope, /Raw content stays transient/u, skillPath);
+      assert.match(scope, /Raw bytes stay transient/u, skillPath);
       assert.match(scope, /redacted bundle is a durable receipt/u, skillPath);
       assert.match(scope, /not the byte authority/u, skillPath);
       assert.match(scope, /\.txt`\/`\.json`\/`\.diff/u, skillPath);
@@ -609,13 +626,21 @@ describe("skill hardening contracts: goat-review (1/3)", () => {
         assert.match(reference, /### State Authority Matrix/u, referencePath);
         assert.match(
           reference,
-          /`git diff <base-oid>\.\.\.<head-oid>`/u,
+          /goat-review-request\/v1[^\n]+goat-flow review snapshot/u,
           referencePath,
         );
-        assert.match(reference, /`git show <head-oid>:<path>`/u, referencePath);
+        assert.match(
+          reference,
+          /deleted\/old content from the merge base/u,
+          referencePath,
+        );
         // Staged authority names non-writing commands; a tree write would mutate the repository under review.
-        assert.match(reference, /`git ls-files -s`/u, referencePath);
-        assert.match(reference, /`git diff --cached --binary`/u, referencePath);
+        assert.match(reference, /complete stage-0 index/u, referencePath);
+        assert.match(
+          reference,
+          /Snapshot and validation share canonical serialization/u,
+          referencePath,
+        );
         assert.match(reference, /`git show :<path>`/u, referencePath);
         assert.match(
           reference,

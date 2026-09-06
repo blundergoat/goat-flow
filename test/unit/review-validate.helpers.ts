@@ -1,12 +1,9 @@
 /**
- * Shared fixtures for the review-output validator suites.
- * A validator test needs three things again and again: a disposable reviewed project whose
- * semantic anchors resolve literally, a complete valid report to mutate one field at a time,
- * and readers for the violations and warnings a run produces. These builders own that
- * boilerplate so each test states only the defect it introduces.
+ * Arrange disposable projects and review reports for validator tests.
+ * Use these helpers to bind a valid source before introducing the defect a test is meant to exercise.
  *
- * `validReview` is the load-bearing piece: it renders a report that passes every check, so a
- * test that breaks exactly one thing proves that one rule rather than tripping several.
+ * Each project exposes a literal source anchor and registers its own cleanup.
+ * The plain report template is deliberately unbound; validReview captures actual authority before a test mutates the report.
  */
 import { spawnSync } from "node:child_process";
 import type { TestContext } from "node:test";
@@ -15,6 +12,11 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { validateReviewReport } from "../../src/cli/review-validate.js";
+import {
+  canonicalReviewJson,
+  captureReviewSnapshot,
+  reviewScopeLabels,
+} from "../../src/cli/review-validate-authority.js";
 
 export const FRAMEWORK_ROOT = resolve(import.meta.dirname, "..", "..");
 export const CLI_PATH = join(FRAMEWORK_ROOT, "src", "cli", "cli.ts");
@@ -40,13 +42,14 @@ export function createReviewedProject(testContext: TestContext): string {
 }
 
 /**
- * Writes one immutable review authority whose file differs from the live checkout.
- * Use when a test must prove validation reads the pinned authority, not the working tree.
+ * Create immutable source commits and a different live file for source-substitution tests.
+ * Use before binding a PR or branch control whose evidence must come from its selected commit.
  *
- * @param testContext - the running test; cleanup of the project is registered on it
- * @returns paths to the written project and its pinned authority file
+ * @param testContext - running test that owns cleanup of the disposable project
+ * @returns the project root and resolved base/head commit IDs; the live file deliberately differs from head
  */
 export function createVersionedReviewedProject(testContext: TestContext): {
+  base: string;
   head: string;
   projectRoot: string;
 } {
@@ -69,6 +72,10 @@ export function createVersionedReviewedProject(testContext: TestContext): {
   };
 
   runGit(["init", "--quiet"]);
+  const base = runGit(
+    ["commit-tree", runGit(["mktree"], "")],
+    "empty comparison fixture\n",
+  );
   writeFileSync(
     join(projectRoot, "src", "example.ts"),
     "export const committedAnchor = 'committed';\n",
@@ -76,26 +83,26 @@ export function createVersionedReviewedProject(testContext: TestContext): {
   );
   runGit(["add", "src/example.ts"]);
   const tree = runGit(["write-tree"]);
-  const head = runGit(["commit-tree", tree], "review fixture\n");
+  const head = runGit(["commit-tree", tree, "-p", base], "review fixture\n");
   writeFileSync(
     join(projectRoot, "src", "example.ts"),
     "export const workingTreeOnly = 'live';\n",
     "utf-8",
   );
-  return { head, projectRoot };
+  return { base, head, projectRoot };
 }
 
 /**
- * Render one full report using every validator-owned finding and integrity field.
+ * Render the shared report grammar before binding it to a fixture's actual source.
  *
- * @param anchorPath - file the findings cite; defaults to the fixture source written above
- * @param anchorText - literal each anchor must find; defaults to the fixture symbol
- * @param refutationsLogged - count the integrity block claims; a string form covers the
- *   persist-skipped notation
- * @param refutationLedger - ledger path the claim cites; "n/a" means none is claimed
- * @returns a report that passes every check, ready for a test to break one field
+ * @param anchorPath - file the findings cite; omitted uses the fixture source path
+ * @param anchorText - literal evidence; omitted uses the fixture's loadConfig symbol
+ * @param refutationsLogged - claimed count, optionally with the persist-skipped notation
+ *
+ * @param refutationLedger - exact ledger path or skip marker; n/a means no ledger is claimed
+ * @returns an unbound report template; call withReviewSource before using it as a passing control
  */
-export function validReview(
+export function reviewReportTemplate(
   anchorPath = "src/example.ts",
   anchorText = "loadConfig",
   refutationsLogged: number | string = 0,
@@ -147,6 +154,87 @@ Confidence: MEDIUM
 }
 
 /**
+ * Build a full-report control bound to the selected fixture's actual source bytes.
+ *
+ * @param projectRoot - disposable project whose authority is captured before the tested mutation
+ * @param anchorPath - selected live file; omitted uses src/example.ts
+ * @param anchorText - literal finding evidence; omitted uses the fixture's loadConfig text
+ *
+ * @param refutationsLogged - declared count; zero requires no persisted ledger
+ * @param refutationLedger - exact ledger path or skip marker; n/a is valid only when no refutations are claimed
+ * @returns the bound report to mutate without refreshing its authority
+ */
+export function validReview(
+  projectRoot: string,
+  anchorPath = "src/example.ts",
+  anchorText = "loadConfig",
+  refutationsLogged: number | string = 0,
+  refutationLedger = "n/a",
+): string {
+  // An outside-project anchor is a negative fixture; keep its baseline on the real source so the path check causes the failure.
+  const selectedPath = anchorPath.startsWith("../")
+    ? "src/example.ts"
+    : anchorPath;
+  return withReviewSource(
+    reviewReportTemplate(
+      anchorPath,
+      anchorText,
+      refutationsLogged,
+      refutationLedger,
+    ),
+    projectRoot,
+    { kind: "paths", paths: [{ path: selectedPath, from: "live" }] },
+  );
+}
+
+/**
+ * Bind a fixture report to a source during arrangement, before the test introduces drift or a substitution.
+ *
+ * @param report - report template whose readable and canonical authority fields are replaced together
+ * @param projectRoot - fixture root where the source request resolves
+ * @param source - explicit request selection used for the control
+ *
+ * @returns a report carrying the captured source and an empty, uncredited gate inventory
+ */
+export function withReviewSource(
+  report: string,
+  projectRoot: string,
+  source: unknown,
+): string {
+  const { authority } = captureReviewSnapshot(
+    JSON.stringify({ schema: "goat-review-request/v1", source }),
+    projectRoot,
+  );
+  const labels = reviewScopeLabels(authority);
+  const scope = `- Scope snapshot: source=${labels.source}, base=${labels.base}, head=${labels.head}, authority=${authority.fingerprint}, drift=verified, uncommitted=${labels.uncommitted}, signals=1, bundle=.goat-flow/logs/review/goat-review-bundle.fixture.diff, chunking=none`;
+  const gates = {
+    schema: "goat-review-gates/v1",
+    review: authority.fingerprint,
+    trustedBase: null,
+    hostInstructions: [],
+    gates: [],
+  };
+  const fields = `${scope}\n- Authority snapshot: ${canonicalReviewJson(authority)}\n- Gate authority: ${canonicalReviewJson(gates)}`;
+  return report
+    .replace(/^- (?:Authority snapshot|Gate authority):.*\n/gmu, "")
+    .replace(/^- Scope snapshot:.*$/mu, fields);
+}
+
+/**
+ * Build the two standalone authority lines required by a compact review control.
+ *
+ * @param projectRoot - fixture root whose default live source is captured
+ * @returns canonical source and empty-gate records; no gates receive execution credit
+ */
+export function reviewAuthorityFields(projectRoot: string): string {
+  return validReview(projectRoot)
+    .split("\n")
+    .filter((line) => /^- (?:Authority snapshot|Gate authority):/u.test(line))
+    .map((line) => line.slice(2))
+    .join("\n");
+}
+
+/**
  * Add two valid surfaced findings so the report crosses the Top 5 threshold.
  *
  * @param report - a valid report to extend; its evidence and verdict tallies are updated so
@@ -170,6 +258,7 @@ export function withSixSurfacedFindings(report: string): string {
  * @param report - report to extend
  * @param findingId - finding the risk entry cites; defaults to the report's first finding
  * @param anchorText - literal the entry anchors to; defaults to the fixture's known symbol
+ *
  * @returns the report with a Top 5 Risks section whose reference must resolve
  */
 export function withTopFiveRisk(
@@ -196,8 +285,7 @@ export interface ValidationIssueShape {
  * Read warning output while RED remains compatible with the pre-warning result type.
  *
  * @param result - a validator run; a result predating the warnings field reads as empty
- * @returns advisory issues only; empty means the report earned no warnings, not that the
- *   validator skipped them
+ * @returns advisory issues only; empty means the report earned no warnings, not that the validator skipped them
  */
 export function warningsOf(
   result: ReturnType<typeof validateReviewReport>,
@@ -231,6 +319,7 @@ export function hasViolation(
  * @param issues - violations or warnings from a validator run
  * @param checkId - public check identifier the user sees beside the message
  * @param code - stable issue code that must accompany it
+ *
  * @returns whether the pair appears together, proving the issue is attributed correctly
  */
 export function hasCheck(

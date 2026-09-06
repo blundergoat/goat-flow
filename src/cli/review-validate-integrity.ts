@@ -1,16 +1,12 @@
 /**
- * Checks the Review Integrity block - the part of a report that states how thorough it was.
+ * Check the coverage claims in a review's full or compact integrity receipt.
+ * Use this pass before accepting finding evidence or deriving the final ship verdict.
  *
- * Scope, files opened, evidence counts, verdict tallies, degradation flags and conclusion are the reviewer's own claims about their coverage, and
- * they are the fields most likely to be quietly overstated.
- * This pass makes each applicable claim either verifiable or a violation.
- *
- * Counts are cross-checked against the findings actually present rather than taken at face value, because a report claiming more evidence than it
- * shows is worse than one admitting it was partial - a reader trusts the number and stops looking.
+ * It validates visible fields, source and size declarations, refutation claims, and degradation disclosures.
+ * Counts are cross-checked against the findings actually present by later passes using the claims parsed here.
  */
 import {
   REVIEW_BUNDLE_PATH,
-  IMMUTABLE_OBJECT_IDENTIFIER,
   SCOPE_SNAPSHOT,
   REQUIRED_INTEGRITY_FIELDS,
   AUTOMATED_REVIEW_VALUE,
@@ -45,6 +41,12 @@ import {
   type LocatedLine,
   type ReviewSizeClaim,
 } from "./review-validate-common.js";
+import {
+  validateAuthorityScope,
+  validateVisibleAuthorityFields,
+  compactAuthorityFields,
+  readAuthorityFields,
+} from "./review-validate-authority.js";
 import { validateDegradationConclusion } from "./review-validate-verdict.js";
 
 const OMIT_WHEN_INAPPLICABLE_INTEGRITY_FIELDS = new Set([
@@ -55,7 +57,7 @@ const OMIT_WHEN_INAPPLICABLE_INTEGRITY_FIELDS = new Set([
 /**
  * Extract colon-delimited integrity fields and fail repeated authority claims.
  *
- * @param section - one located report section; null means the heading was absent entirely
+ * @param section - existing full receipt section; its heading locates missing-field issues
  * @param violations - shared violation list, appended in report order so a reader sees issues top-down; a violation makes the report fail
  * @returns the Review Integrity rows keyed by field name; an empty map means the block was missing entirely
  */
@@ -64,11 +66,14 @@ function collectIntegrityFields(
   violations: ReviewValidationViolation[],
 ): IntegrityFieldMap {
   const fields: IntegrityFieldMap = new Map();
+  // Read every visible receipt row so repeated or contradictory claims are reported where the reviewer wrote them.
   for (const locatedLine of section.lines) {
     const match = locatedLine.text.match(/^\s*-\s+([^:]+):\s*(.*)$/u);
+    // Ordinary prose is not a receipt row and cannot supply a required integrity value.
     if (match?.[1] === undefined || match[2] === undefined) continue;
     const label = match[1].trim();
     const prior = fields.get(label);
+    // A repeated label makes the receipt ambiguous even when one of its values is valid.
     if (prior) {
       addViolation(
         violations,
@@ -93,9 +98,12 @@ function validateIntegrityFieldGrammar(
   violations: ReviewValidationViolation[],
   validationStage: ReviewValidationStage,
 ): void {
+  // Check each required disclosure before letting the report's coverage claims influence the verdict.
   for (const [label, valuePattern] of REQUIRED_INTEGRITY_FIELDS) {
     const field = fields.get(label);
+    // An inapplicable optional row can stay absent; visible triggers are checked separately.
     if (!field && OMIT_WHEN_INAPPLICABLE_INTEGRITY_FIELDS.has(label)) continue;
+    // A valid field is ready for relationship checks against the rest of the report.
     if (
       field &&
       reviewIntegrityValuePattern(label, valuePattern, validationStage).test(
@@ -119,6 +127,7 @@ function parseFullSizeClaim(
   violations: ReviewValidationViolation[],
 ): ReviewSizeClaim | null {
   const match = field.value.match(FULL_REVIEW_SIZE_VALUE);
+  // An unreadable size claim cannot justify a completed review or its chunking decision.
   if (!match) {
     addViolation(
       violations,
@@ -140,7 +149,9 @@ function parseFullSizeClaim(
     field.line,
     violations,
   );
+  // An imprecise file count has already produced an issue and cannot establish review size.
   if (fileCount === null) return null;
+  // An imprecise line or cluster count cannot establish the workload reviewed.
   if (unitCount === null) return null;
   return {
     fileCount,
@@ -157,6 +168,7 @@ function validateFullSizeUnit(
   violations: ReviewValidationViolation[],
 ): boolean {
   const expectedUnit = scope.isAreaAudit ? /^clusters?$/iu : /^changed/iu;
+  // Matching units let the same count describe the selected diff or area meaningfully.
   if (expectedUnit.test(size.unitLabel)) return true;
   addViolation(
     violations,
@@ -176,7 +188,9 @@ function validateFullSizeFileCount(
   violations: ReviewValidationViolation[],
 ): boolean {
   const coverageFileCount = fullReviewCoverageFileCount(fields);
+  // An invalid coverage denominator is already reported; this check cannot compare it with Size.
   if (coverageFileCount === null) return true;
+  // The size and opened-file denominator describe the same selected file population.
   if (coverageFileCount === size.fileCount) return true;
   addViolation(
     violations,
@@ -194,11 +208,16 @@ function validateFullScopeSize(
   violations: ReviewValidationViolation[],
 ): boolean {
   const field = fields.get("Size");
+  // Missing Size already blocks the receipt and cannot supply a chunking decision.
   if (!field) return false;
   const size = parseFullSizeClaim(field, violations);
+  // A malformed Size cannot establish that the review stayed within its agreed limits.
   if (!size) return false;
+  // Area clusters and changed lines measure different work, so a unit mismatch blocks this scope.
   if (!validateFullSizeUnit(size, scope, violations)) return false;
+  // Contradictory file populations prevent the receipt from establishing completed coverage.
   if (!validateFullSizeFileCount(size, fields, violations)) return false;
+  // A scope within both limits needs no accepted chunking arrangement.
   if (
     !reviewScopeExceedsChunkLimit(
       size.fileCount,
@@ -208,6 +227,7 @@ function validateFullScopeSize(
   ) {
     return true;
   }
+  // An oversized scope is valid here only after the reviewer records accepted chunks.
   if (scope.chunking === "accepted") return true;
   addViolation(
     violations,
@@ -225,6 +245,7 @@ function requireIntegrityField(
   label: string,
   violations: ReviewValidationViolation[],
 ): void {
+  // The triggered disclosure is already present; its grammar is checked by the common field pass.
   if (fields.has(label)) return;
   addViolation(
     violations,
@@ -291,6 +312,7 @@ function validateOptionalIntegrityField(
   violations: ReviewValidationViolation[],
 ): void {
   const field = fields.get(label);
+  // An absent optional extension needs no value check, and a valid one can proceed unchanged.
   if (!field || valuePattern.test(field.value)) return;
   addViolation(
     violations,
@@ -311,6 +333,7 @@ function readRefutationCount(
   const match = refutations?.value.match(
     /^(\d+)(?:\s+\((persist-skipped)\))?$/u,
   );
+  // Missing or malformed refutation text earns no count while the field grammar reports its defect.
   if (!refutations || !match?.[1]) {
     return {
       refutationsLogged: 0,
@@ -319,6 +342,7 @@ function readRefutationCount(
     };
   }
   const refutationsLogged = Number(match[1]);
+  // A rounded count could overstate discarded suspicions, so it cannot receive refutation credit.
   if (!Number.isSafeInteger(refutationsLogged)) {
     addViolation(
       violations,
@@ -383,6 +407,7 @@ function validateResolvedIntegrityFields(
   lines: string[],
   violations: ReviewValidationViolation[],
 ): void {
+  // A PR review must disclose how automated findings were reconciled with local evidence.
   if (reportUsesPrScope(fields)) {
     requireIntegrityField(
       fields,
@@ -391,9 +416,11 @@ function validateResolvedIntegrityFields(
       violations,
     );
   }
+  // Visible cross-model activity requires a matching refuter disclosure.
   if (reportShowsRefuterActivity(lines)) {
     requireIntegrityField(fields, section, "Refuter pass", violations);
   }
+  // A Spec Drift section requires its integrity status to be disclosed too.
   if (readSections(lines, "Spec Drift").length > 0) {
     requireIntegrityField(fields, section, "Spec drift", violations);
   }
@@ -405,8 +432,10 @@ function warnUnknownDegradationFlags(
   line: number,
   warnings: ReviewValidationViolation[],
 ): void {
+  // Unknown flags remain visible as warnings so reviewers can distinguish new limits from recognized ones.
   for (const flag of flags) {
     const configuredBase = /^configured-base-unresolved=\S+$/u.test(flag);
+    // Recognized and separately rejected flags need no additional unknown-flag warning.
     if (
       KNOWN_DEGRADATION_FLAGS.has(flag) ||
       RETIRED_DEGRADATION_FLAGS.has(flag) ||
@@ -428,7 +457,9 @@ function rejectRetiredDegradationFlags(
   line: number,
   violations: ReviewValidationViolation[],
 ): void {
+  // Check every declared limit for retired ways of bypassing mandatory chunking.
   for (const flag of flags) {
+    // Only retired flags belong to this refusal; current flags are checked by their own rules.
     if (!RETIRED_DEGRADATION_FLAGS.has(flag)) continue;
     addViolation(
       violations,
@@ -446,6 +477,7 @@ function validateRiskDepthConclusion(
   fallbackLine: number,
   violations: ReviewValidationViolation[],
 ): void {
+  // Declining the recommended depth caps the report at a partial conclusion.
   if (
     flags.has("risk-depth-declined") &&
     fields.get("Conclusion")?.value !== "partial"
@@ -512,6 +544,7 @@ function readSafeIntegrityCount(
   violations: ReviewValidationViolation[],
 ): number | null {
   const count = Number(countText);
+  // Exact counts can be reconciled; values that lose integer precision must be refused.
   if (Number.isSafeInteger(count)) return count;
   addViolation(
     violations,
@@ -529,6 +562,7 @@ function readEvidenceCounts(
 ): EvidenceCountClaim | null {
   const field = fields.get("Evidence");
   const match = field?.value.match(/^(\d+) OBSERVED\s*\/\s*(\d+) INFERRED$/u);
+  // Missing or malformed evidence totals cannot supply observed or inferred credit.
   if (!field || !match?.[1] || !match[2]) return null;
   const observed = readSafeIntegrityCount(
     match[1],
@@ -542,11 +576,14 @@ function readEvidenceCounts(
     field.line,
     violations,
   );
+  // Both evidence counts must be exact before they can be compared with the surfaced findings.
   if (observed === null || inferred === null) return null;
   return { inferred, line: field.line, observed };
 }
 
-/** Parse confirmed/adjusted/refuted/unresolved totals for reconciliation. */
+/**
+ * Confirm all four disposition counts can be reconciled without using absent or imprecise values.
+ */
 function hasFourSafeCounts(
   counts: Array<number | null>,
 ): counts is [number, number, number, number] {
@@ -559,8 +596,10 @@ function readVerdictCounts(
   violations: ReviewValidationViolation[],
 ): VerdictCountClaim | null {
   const field = fields.get("Verdicts");
+  // A missing verdict row has no disposition counts for later reconciliation.
   if (!field) return null;
   const match = field.value.match(/^(\d+)\/(\d+)\/(\d+)\/(\d+)$/u);
+  // Malformed disposition text cannot be treated as a partial set of valid totals.
   if (!match) return null;
   const [
     ,
@@ -594,6 +633,7 @@ function readVerdictCounts(
     violations,
   );
   const counts = [confirmed, adjusted, refuted, unresolved];
+  // All four counts must be exact before the report can claim their combined disposition.
   if (!hasFourSafeCounts(counts)) return null;
   const [confirmedCount, adjustedCount, refutedCount, unresolvedCount] = counts;
   return {
@@ -611,6 +651,7 @@ function parseScopeSnapshot(
   violations: ReviewValidationViolation[],
 ): ParsedScopeSnapshot | null {
   const match = field.value.match(SCOPE_SNAPSHOT);
+  // Without the required scope fields, the report cannot identify what its findings reviewed.
   if (!match) {
     addViolation(
       violations,
@@ -620,10 +661,15 @@ function parseScopeSnapshot(
     );
     return null;
   }
+  return readScopeSnapshotFields(match);
+}
+
+/** Normalize a complete scope claim before matching its labels with the captured source and review limits. */
+function readScopeSnapshotFields(match: RegExpMatchArray): ParsedScopeSnapshot {
   const [
     ,
     sourceText = "",
-    ,
+    base = "",
     head = "",
     authority = "",
     drift = "",
@@ -635,6 +681,7 @@ function parseScopeSnapshot(
   const source = sourceText.trim().toLowerCase();
   return {
     authority: authority.trim(),
+    base: base.trim(),
     bundle: bundle.trim(),
     chunking: chunking.trim().toLowerCase(),
     drift: drift.trim(),
@@ -663,6 +710,7 @@ function validateScopeState(
   const hasCompletedChunking = ["no", "none", "accepted"].includes(
     scope.chunking,
   );
+  // A report must explicitly disclose a completed drift check before its proof can pass.
   if (!hasVerifiedDrift) {
     addViolation(
       violations,
@@ -671,6 +719,7 @@ function validateScopeState(
       "Scope snapshot drift must be verified before review proof can pass",
     );
   }
+  // A durable bundle needs its documented path or the explicit redaction-unavailable disclosure.
   if (
     scope.bundle !== "persist-skipped: redactor-unavailable" &&
     !REVIEW_BUNDLE_PATH.test(scope.bundle)
@@ -682,6 +731,7 @@ function validateScopeState(
       "Scope snapshot bundle must name one review bundle receipt or the documented persist-skipped marker",
     );
   }
+  // Proposed, declined, or unknown chunking states cannot describe a completed review.
   if (!hasCompletedChunking) {
     addViolation(
       violations,
@@ -693,97 +743,46 @@ function validateScopeState(
   return hasSafeSignals && hasVerifiedDrift && hasCompletedChunking;
 }
 
-/** Return whether the scope's Pass 2 files live in one Git object. */
-function scopeUsesGitObject(source: string): boolean {
-  return (
-    source === "staged" || source === "branch diff" || source.startsWith("pr")
-  );
-}
-
-/** Return whether uncommitted metadata contradicts a Git-object source. */
-function hasGitUncommittedConflict(scope: ParsedScopeSnapshot): boolean {
-  if (scope.source === "staged") return scope.uncommitted !== "yes";
-  if (scope.source === "branch diff") return scope.uncommitted !== "no";
-  if (scope.source.startsWith("pr")) return scope.uncommitted !== "no";
-  return false;
-}
-
-/** Resolve a committed or staged scope into its immutable anchor authority. */
-function readGitScopeAuthority(
-  scope: ParsedScopeSnapshot,
-  line: number,
-  hasValidState: boolean,
-  violations: ReviewValidationViolation[],
-): ReviewAnchorAuthority {
-  let isValidAuthority = hasValidState;
-  if (
-    !IMMUTABLE_OBJECT_IDENTIFIER.test(scope.head) ||
-    scope.authority === "n/a"
-  ) {
-    addViolation(
-      violations,
-      "integrity-format",
-      line,
-      "committed and staged review scopes require a full immutable head or tree OID and a non-n/a authority",
-    );
-    isValidAuthority = false;
-  }
-  if (hasGitUncommittedConflict(scope)) {
-    addViolation(
-      violations,
-      "integrity-format",
-      line,
-      "Scope snapshot uncommitted state contradicts its declared source",
-    );
-  }
-  return isValidAuthority
-    ? { kind: "git-object", oid: scope.head }
-    : { kind: "invalid" };
-}
-
-/** Resolve a live source while validating its uncommitted marker. */
-function readWorktreeScopeAuthority(
-  scope: ParsedScopeSnapshot,
-  line: number,
-  hasValidState: boolean,
-  violations: ReviewValidationViolation[],
-): ReviewAnchorAuthority {
-  const requiresUncommitted = ["worktree", "unstaged"].includes(scope.source);
-  if (requiresUncommitted && scope.uncommitted !== "yes") {
-    addViolation(
-      violations,
-      "integrity-format",
-      line,
-      "Scope snapshot uncommitted state contradicts its declared source",
-    );
-  }
-  return hasValidState ? { kind: "worktree" } : { kind: "invalid" };
-}
-
 /** Bind semantic-anchor reads to the canonical scope snapshot authority. */
 function readScopeAuthority(
   fields: IntegrityFieldMap,
+  projectRoot: string,
   violations: ReviewValidationViolation[],
 ): { anchorAuthority: ReviewAnchorAuthority; isAreaAudit: boolean } {
   const field = fields.get("Scope snapshot");
+  // Missing readable scope already blocks authority and cannot be replaced by another report field.
   if (!field) {
     return { anchorAuthority: { kind: "invalid" }, isAreaAudit: false };
   }
   const scope = parseScopeSnapshot(field, violations);
+  // Malformed readable scope prevents later evidence from receiving a valid review identity.
   if (!scope) {
     return { anchorAuthority: { kind: "invalid" }, isAreaAudit: false };
   }
   const hasValidState =
     validateScopeState(scope, field.line, violations) &&
     validateFullScopeSize(fields, scope, violations);
-  const anchorAuthority = scopeUsesGitObject(scope.source)
-    ? readGitScopeAuthority(scope, field.line, hasValidState, violations)
-    : readWorktreeScopeAuthority(scope, field.line, hasValidState, violations);
+  const anchorAuthority = readAuthorityFields(fields, projectRoot, violations);
+  // The readable summary must describe the same source that will answer anchor reads.
+  if (anchorAuthority.kind === "snapshot")
+    validateAuthorityScope(
+      scope,
+      anchorAuthority.snapshot,
+      field.line,
+      violations,
+    );
+  // Existing size and drift declarations remain required beside the verified byte authority.
+  if (!hasValidState)
+    return {
+      anchorAuthority: { kind: "invalid" },
+      isAreaAudit: scope.isAreaAudit,
+    };
   return { anchorAuthority, isAreaAudit: scope.isAreaAudit };
 }
 
 /** Validate the full Review Integrity field set and return its ledger claim. */
 function validateFullIntegrity(
+  projectRoot: string,
   section: MarkdownSection,
   lines: string[],
   violations: ReviewValidationViolation[],
@@ -811,7 +810,7 @@ function validateFullIntegrity(
     warnings,
   );
   validateResolvedIntegrityFields(fields, section, lines, violations);
-  const scope = readScopeAuthority(fields, violations);
+  const scope = readScopeAuthority(fields, projectRoot, violations);
   return {
     ...scope,
     conclusion: readIntegrityConclusion(fields),
@@ -827,11 +826,13 @@ function validateCompactCleanReviewFields(
   lines: string[],
   violations: ReviewValidationViolation[],
 ): void {
+  // Every compact disclosure remains mandatory even when the review has no findings.
   for (const field of COMPACT_CLEAN_REVIEW_FIELDS) {
     const matches = lines
       .map((text, lineIndex) => ({ line: lineIndex + 1, text }))
       .filter(({ text }) => field.prefix.test(text));
     const first = matches.at(0);
+    // An omitted compact disclosure leaves readers unable to assess the claimed clean result.
     if (!first) {
       addViolation(
         violations,
@@ -841,6 +842,7 @@ function validateCompactCleanReviewFields(
       );
       continue;
     }
+    // An empty or malformed disclosure cannot provide the explanation its label promises.
     if (!field.value.test(first.text)) {
       addViolation(
         violations,
@@ -849,6 +851,7 @@ function validateCompactCleanReviewFields(
         `compact ${field.label} ${field.requirement}`,
       );
     }
+    // Repeated compact disclosures can contradict the first one and must be reported separately.
     for (const duplicate of matches.slice(1)) {
       addViolation(
         violations,
@@ -873,6 +876,7 @@ function parseCompactSizeClaim(
   violations: ReviewValidationViolation[],
 ): CompactReviewSizeClaim | null {
   const match = located.text.match(COMPACT_REVIEW_SCOPE_SIZE);
+  // An unreadable compact size cannot support its claimed coverage or chunking state.
   if (!match) {
     addViolation(
       violations,
@@ -894,7 +898,9 @@ function parseCompactSizeClaim(
     located.line,
     violations,
   );
+  // An imprecise file count cannot establish the compact review's scope.
   if (fileCount === null) return null;
+  // An imprecise changed-line count cannot establish whether chunking was required.
   if (changedLines === null) return null;
   return {
     fileCount,
@@ -923,8 +929,11 @@ function validateCompactOpenedCoverage(
     line,
     violations,
   );
+  // An imprecise opened count cannot support the compact report's coverage claim.
   if (openedFileCount === null) return null;
+  // An imprecise scope count cannot supply a valid coverage denominator.
   if (scopedFileCount === null) return null;
+  // A report cannot claim to have opened more files than it scoped.
   if (openedFileCount > scopedFileCount) {
     addViolation(
       violations,
@@ -943,9 +952,12 @@ function validateCompactScopeSize(
   violations: ReviewValidationViolation[],
 ): void {
   const located = findCompactScopeLine(lines);
+  // The missing compact Scope disclosure is already reported by its required-field check.
   if (!located) return;
   const size = parseCompactSizeClaim(located, violations);
+  // A malformed compact size cannot be used to validate coverage relationships.
   if (!size) return;
+  // The size and coverage denominator must describe the same selected files.
   if (coverageFileCount !== null && size.fileCount !== coverageFileCount) {
     addViolation(
       violations,
@@ -954,6 +966,7 @@ function validateCompactScopeSize(
       `compact Scope file count ${size.fileCount} does not match files opened denominator ${coverageFileCount}`,
     );
   }
+  // A compact review within both limits needs no accepted chunking arrangement.
   if (
     !reviewScopeExceedsChunkLimit(
       size.fileCount,
@@ -963,6 +976,7 @@ function validateCompactScopeSize(
   ) {
     return;
   }
+  // Accepted chunks satisfy the oversized-review requirement recorded in the compact scope.
   if (size.chunking === "accepted") return;
   addViolation(
     violations,
@@ -972,8 +986,9 @@ function validateCompactScopeSize(
   );
 }
 
-/** Validate M04's compact clean-review receipt and its surrounding disclosures. */
+/** Validate a compact clean-review receipt and the disclosures that support its verdict. */
 function validateCompactIntegrity(
+  projectRoot: string,
   lines: string[],
   findingCandidateCount: number,
   violations: ReviewValidationViolation[],
@@ -992,6 +1007,7 @@ function validateCompactIntegrity(
   );
   // Zero-finding reviews may use the shorter user-facing integrity line.
   if (compactIndex >= 0 && compactIntegrityMatch) {
+    // Each extra integrity line could contradict the first receipt and needs its own reported location.
     for (const duplicate of compactIntegrityLines.slice(1)) {
       addViolation(
         violations,
@@ -1017,7 +1033,11 @@ function validateCompactIntegrity(
       );
     }
     return {
-      anchorAuthority: { kind: "invalid" },
+      anchorAuthority: readAuthorityFields(
+        compactAuthorityFields(lines),
+        projectRoot,
+        violations,
+      ),
       conclusion: (compactIntegrityMatch[1] ??
         "confident") as ReviewIntegrityConclusion,
       isRiskDepthDeclined: false,
@@ -1055,22 +1075,27 @@ function validateCompactIntegrity(
 }
 
 /**
- * Validate either the full integrity block or M04's compact clean-review line.
+ * Validate a full or compact receipt before its coverage and evidence claims can influence the verdict.
  *
- * @param lines - the report split into lines; an empty report fails earlier than this
- * @param findingCandidateCount - how many list items looked like findings, used to tell an empty section from a malformed one
- * @param violations - shared violation list, appended in report order so a reader sees issues top-down; a violation makes the report fail
- * @param warnings - shared advisory list; entries here inform the author without changing the pass/fail verdict
+ * @param projectRoot - selected project whose original authority must still resolve
+ * @param lines - visible report lines; empty input is reported as missing integrity
+ * @param findingCandidateCount - candidate finding rows; nonzero disallows the compact clean-review form
+ *
+ * @param violations - appended failures that prevent the report from passing
+ * @param warnings - advisory issues that inform the reader without failing validation
  * @param validationStage - draft requires a pending receipt; final requires a completed validator state
- * @returns the parsed integrity claims used by later passes; absent fields have already been reported
+ *
+ * @returns parsed claims for later passes; absent or malformed fields have already produced issues
  */
 export function validateIntegrity(
+  projectRoot: string,
   lines: string[],
   findingCandidateCount: number,
   violations: ReviewValidationViolation[],
   warnings: ReviewValidationViolation[],
   validationStage: ReviewValidationStage = "final",
 ): IntegrityResult {
+  validateVisibleAuthorityFields(lines, violations);
   const fullSections = readSections(lines, "Review Integrity");
   const fullSection = fullSections.at(0);
   // A full receipt is authoritative whenever the user includes its H2 section.
@@ -1078,6 +1103,7 @@ export function validateIntegrity(
     const compactIntegrityLines = lines
       .map((text, lineIndex) => ({ line: lineIndex + 1, text }))
       .filter(({ text }) => /^\s*Review Integrity:/u.test(text));
+    // A full receipt cannot borrow or contradict a compact integrity claim elsewhere in the report.
     for (const compactIntegrity of compactIntegrityLines) {
       addViolation(
         violations,
@@ -1096,6 +1122,7 @@ export function validateIntegrity(
       );
     }
     return validateFullIntegrity(
+      projectRoot,
       fullSection,
       lines,
       violations,
@@ -1104,6 +1131,7 @@ export function validateIntegrity(
     );
   }
   return validateCompactIntegrity(
+    projectRoot,
     lines,
     findingCandidateCount,
     violations,

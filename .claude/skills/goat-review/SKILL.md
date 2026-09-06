@@ -7,7 +7,7 @@ goat-flow-skill-version: "1.17.0"
 
 ## Shared Conventions
 
-Read `.goat-flow/skill-docs/skill-preamble.md`; on full-depth also read `.goat-flow/skill-docs/skill-conventions.md`.
+Read `.goat-flow/skill-docs/skill-preamble.md`; on full-depth read `.goat-flow/skill-docs/skill-conventions.md`.
 
 ## Boundary Commands
 
@@ -26,9 +26,9 @@ Read `.goat-flow/skill-docs/skill-preamble.md`; on full-depth also read `.goat-f
 
 **Scope sizing:** `references/examples.md` (search: `Depth Signals`). A material-risk override → Full; else 3+ → full, 2 → offer, 0–1 → quick. Quick keeps Pass 1 → Pass 2. Refused Full: `risk-depth-declined`, Conclusion `partial`, verdict max `PARTIAL`.
 
-**Pass 0 gates:** with explicit current-session consent, run non-fixing instruction/CI gates once; never fix/rerun. Classify via `references/examples.md` (search: `Gate Evidence Classification`): `changed-code | pre-existing | infrastructure | unresolved`; only host-proven changed-code is a defect. Emit `Gates: run | skipped (<reason>) | unavailable`; non-run adds `gates-not-run`; tracked mutation stops.
+**Pass 0 gates:** with explicit current-session consent, run non-fixing instruction/CI gates once; never fix/rerun. Use `references/examples.md` (search: `Pass 0 Automated Gates`); only host-proven changed-code is a defect. Emit `Gates: run | skipped (<reason>) | unavailable`; non-run adds `gates-not-run`; tracked mutation stops.
 
-**State authority:** per `references/examples.md` (search: `State Authority Matrix`), bind the diff and Pass 2 files to one declared authority; drift stops. Raw content stays transient; the redacted bundle is a durable receipt, not the byte authority. Unavailable: `persist-skipped: redactor-unavailable`.
+**State authority:** `goat-flow review snapshot` binds the diff and Pass 2 files to one declared authority. Follow `references/examples.md` (search: `State Authority Matrix`); drift stops. Raw bytes stay transient; the redacted bundle is a durable receipt, not the byte authority. Unavailable: `persist-skipped: redactor-unavailable`.
 
 **Spec source (opt-in):** Full offers milestone criteria; Quick skips.
 
@@ -38,9 +38,9 @@ Read `.goat-flow/skill-docs/skill-preamble.md`; on full-depth also read `.goat-f
 
 ### Review Scope Snapshot (mandatory)
 
-- **Source:** worktree | staged | unstaged | PR | branch diff | area | explicit path list
-- **Base/Head:** `<base-oid>` / `<head-or-tree-oid>` (area: n/a)
-- **Authority:** `<commit-OIDs | staged-fingerprint | diff-hash + path-hashes | n/a>`
+- **Source:** worktree | staged | unstaged | PR | branch diff | range .. | range ... | commit | area | explicit path list
+- **Base/Head:** `<comparison-base>` / `<commit-oid|index|worktree|per-path>`
+- **Authority:** `<review-v1:sha256:digest>`
 - **Uncommitted included:** yes | no | n/a
 - **Size/signals:** diff `<files>`/`<changed-lines>`; area `<files>`/`<clusters>`; signals `<n>`
 - **Bundle:** `<path | persist-skipped: redactor-unavailable>` (redacted receipt); chunking no | proposed | accepted | declined; coverage `<k>/<n>`
@@ -49,9 +49,9 @@ Read `.goat-flow/skill-docs/skill-preamble.md`; on full-depth also read `.goat-f
 - **Gate evidence:** pass/changed-code/pre-existing/infrastructure/unresolved counts
 - **Scope degradation:** `<flags or "none">`
 
-For `worktree`, bind the combined tracked diff plus untracked membership; do not merge independently captured states.
+For `worktree`, freeze tracked changes and declared untracked membership together.
 
-Required `n/a` is resolved, not degraded; unknowns degrade.
+Only comparison-less fields may use `n/a`; byte authority always resolves; unknowns degrade.
 
 ### Step 0.5 - Intent Reconstruction (mandatory)
 
@@ -176,7 +176,7 @@ Offer Pass 3 for user opt-in, `coverage-degraded`/`high-inference`, or a MUST-ne
 
 ## Review Integrity (confidence signal)
 
-**Always emit:** for started reviews, Scope snapshot (diff mode also lists paths); Files opened in Pass 2; Evidence; Verdicts: confirmed/adjusted/refuted/unresolved; Gates; Size. Use Output Format.
+**Always emit:** Scope snapshot with paths; Authority snapshot; Gate authority; Files opened in Pass 2; Evidence; Verdicts: confirmed/adjusted/refuted/unresolved; Gates; Size. Compact: both snapshots.
 
 - **Refutations logged:** `<N>` or `<N> (persist-skipped)` if redaction is unavailable.
 - **Review validator:** `validated` | `validator-unavailable`.
@@ -218,6 +218,8 @@ Machine-valid anchors use repo-relative paths such as `<repo-relative-path>` (se
 
 ## Review Integrity
 - Scope snapshot: source=<source>, base=<base>, head=<head>, authority=<state-id>, drift=<verified|stopped>, uncommitted=<yes|no|n/a>, signals=<n>, bundle=<path|persist-skipped: redactor-unavailable>, chunking=<state>
+- Authority snapshot: <canonical JSON>
+- Gate authority: <canonical JSON>
 - Files opened in Pass 2: <k>/<n>  (diff paths: <list or "n/a">)
 - Evidence: <N> OBSERVED / <M> INFERRED
 - Verdicts: <c>/<a>/<r>/<u>

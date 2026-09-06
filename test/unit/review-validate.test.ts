@@ -2,6 +2,7 @@
  * How a drafted review is read before it is judged: compact and full surfaces, fenced and
  * commented examples that must stay inert, semantic anchors that must resolve, and the
  * Review Integrity block's required fields.
+ *
  * Fixtures use real files so anchor and ledger claims are behavioural, not mocked.
  */
 import { describe, it } from "node:test";
@@ -11,6 +12,8 @@ import {
   createReviewedProject,
   createVersionedReviewedProject,
   validReview,
+  withReviewSource,
+  reviewAuthorityFields,
   hasCheck,
   hasViolation,
 } from "./review-validate.helpers.js";
@@ -20,11 +23,12 @@ describe("review output validation: grammar, masking, and integrity", () => {
   it("accepts a complete report and the compact clean-review surface", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
     assert.deepEqual(
-      validateReviewReport(validReview(), projectRoot).violations,
+      validateReviewReport(validReview(projectRoot), projectRoot).violations,
       [],
     );
 
     const compact = `Scope: reviewed worktree at HEAD; 1 file and 1 changed line; chunking=none.
+${reviewAuthorityFields(projectRoot)}
 Ship Verdict: **YES** - no blocking finding survived Pass 2.
 Zero findings: checked boundary conditions, error paths, and integration seams; guards disproved every suspicion.
 Review Integrity: confident; 1/1 files opened; no degradation flags; validator=validated.
@@ -36,6 +40,7 @@ What I Didn't Examine: none.
   it("requires a terminal chunking state in compact clean reviews", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
     const compact = `Scope: reviewed worktree at HEAD; 1 file and 1 changed line; chunking=none.
+${reviewAuthorityFields(projectRoot)}
 Ship Verdict: **YES** - no blocking finding survived Pass 2.
 Zero findings: checked boundary conditions, error paths, and integration seams; guards disproved every suspicion.
 Review Integrity: confident; 1/1 files opened; no degradation flags; validator=validated.
@@ -66,7 +71,7 @@ What I Didn't Examine: none.
 
   it("accepts a full local review that omits inapplicable integrity rows", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
-    const resolvedOnlyReport = validReview()
+    const resolvedOnlyReport = validReview(projectRoot)
       .replace("- Refutation ledger: n/a\n", "")
       .replace(/^- Automated-review provenance:.*\n/mu, "")
       .replace(/^- Refuter pass:.*\n/mu, "")
@@ -85,6 +90,7 @@ What I Didn't Examine: none.
     const projectRoot = createReviewedProject(testContext);
     const missingLedger = validateReviewReport(
       validReview(
+        projectRoot,
         "src/example.ts",
         "loadConfig",
         "1 (persist-skipped)",
@@ -93,25 +99,27 @@ What I Didn't Examine: none.
       projectRoot,
     );
     const missingRefuter = validateReviewReport(
-      validReview().replace(/^- Refuter pass:.*\n/mu, ""),
+      validReview(projectRoot).replace(/^- Refuter pass:.*\n/mu, ""),
       projectRoot,
     );
     const missingSpecDrift = validateReviewReport(
-      validReview().replace("- Spec drift: checked M05\n", ""),
+      validReview(projectRoot).replace("- Spec drift: checked M05\n", ""),
       projectRoot,
     );
 
     const versioned = createVersionedReviewedProject(testContext);
-    const prScope = `- Scope snapshot: source=PR #57, base=${versioned.head}, head=${versioned.head}, authority=immutable Git objects, drift=verified, uncommitted=no, signals=1, bundle=.goat-flow/logs/review/goat-review-bundle.fixture.diff, chunking=none`;
     const missingAutomatedReview = validateReviewReport(
-      validReview("src/example.ts", "committedAnchor")
-        .replace(/^- Scope snapshot:.*$/mu, prScope)
-        .replace(/^- Automated-review provenance:.*\n/mu, ""),
+      withReviewSource(
+        validReview(versioned.projectRoot, "src/example.ts", "committedAnchor"),
+        versioned.projectRoot,
+        { kind: "pr", target: versioned.base, head: versioned.head },
+      ).replace(/^- Automated-review provenance:.*\n/mu, ""),
       versioned.projectRoot,
     );
 
     assert.equal(hasViolation(missingLedger, "refutation-ledger"), true);
 
+    // Each visible trigger must require its corresponding disclosure, without relying on another missing field to fail.
     for (const [result, field] of [
       [missingRefuter, "Refuter pass"],
       [missingSpecDrift, "Spec drift"],
@@ -132,7 +140,7 @@ What I Didn't Examine: none.
     const projectRoot = createReviewedProject(testContext);
     // `## Review Integrity ##` renders as the heading "Review Integrity", so
     // validation must find the section instead of reporting it missing.
-    const closingAtx = validReview().replace(
+    const closingAtx = validReview(projectRoot).replace(
       "## Review Integrity",
       "## Review Integrity ##",
     );
@@ -145,11 +153,13 @@ What I Didn't Examine: none.
 
   it("rejects a second decision appended to a compact verdict", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
+    // Extra decisions must not change the compact verdict the reader sees.
     for (const verdict of [
       "Ship Verdict: **YES** and **NO**",
       "Ship Verdict: **YES** - actually **NO**",
     ]) {
       const report = `Scope: reviewed worktree at HEAD; 1 file and 1 changed line; chunking=none.
+${reviewAuthorityFields(projectRoot)}
 ${verdict}
 Zero findings: checked boundary conditions, error paths, and integration seams; guards disproved every suspicion.
 Review Integrity: confident; 1/1 files opened; no degradation flags; validator=validated.
@@ -164,11 +174,11 @@ What I Didn't Examine: none.
 
   it("rejects reports that mix compact and full verdict or integrity forms", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
-    const mixedVerdict = validReview().replace(
+    const mixedVerdict = validReview(projectRoot).replace(
       "## TL;DR",
       "Ship Verdict: **YES** - compact duplicate.\n\n## TL;DR",
     );
-    const mixedIntegrity = validReview().replace(
+    const mixedIntegrity = validReview(projectRoot).replace(
       "## TL;DR",
       "Review Integrity: confident; 1/1 files opened; no degradation flags; validator=validated.\n\n## TL;DR",
     );
@@ -192,6 +202,7 @@ What I Didn't Examine: none.
   it("rejects compact proof fields contained in multiline inline code", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
     const report = `\`Scope: reviewed worktree at HEAD; 1 file and 1 changed line; chunking=none.
+${reviewAuthorityFields(projectRoot)}
 Ship Verdict: **YES** - no blocking finding survived Pass 2.
 Zero findings: checked boundary conditions, error paths, and integration seams; guards disproved every suspicion.
 Review Integrity: confident; 1/1 files opened; no degradation flags; validator=validated.
@@ -207,6 +218,7 @@ What I Didn't Examine: none.\`
   it("keeps a contradictory verdict visible after an invalid fence opener", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
     const report = `Scope: reviewed worktree at HEAD; 1 file and 1 changed line; chunking=none.
+${reviewAuthorityFields(projectRoot)}
 Ship Verdict: **YES** - no blocking finding survived Pass 2.
 Zero findings: checked boundary conditions, error paths, and integration seams; guards disproved every suspicion.
 Review Integrity: confident; 1/1 files opened; no degradation flags; validator=validated.
@@ -255,6 +267,7 @@ Review Integrity: confident; 1/1 files opened; no degradation flags; validator=v
   it("rejects empty, undefended, or repeated compact disclosures", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
     const compact = `Scope: reviewed worktree at HEAD; 1 file and 1 changed line; chunking=none.
+${reviewAuthorityFields(projectRoot)}
 Ship Verdict: **YES** - no blocking finding survived Pass 2.
 Zero findings: checked boundary conditions, error paths, and integration seams; guards disproved every suspicion.
 Review Integrity: confident; 1/1 files opened; no degradation flags; validator=validated.
@@ -297,6 +310,7 @@ What I Didn't Examine: none.
     const projectRoot = createReviewedProject(testContext);
     const report = `Checked the visible literal \\<!-- token.
 Scope: reviewed worktree at HEAD; 1 file and 1 changed line; chunking=none.
+${reviewAuthorityFields(projectRoot)}
 Ship Verdict: **YES** - no blocking finding survived Pass 2.
 Zero findings: checked boundary conditions, error paths, and integration seams; guards disproved every suspicion.
 Review Integrity: confident; 1/1 files opened; no degradation flags; validator=validated.
@@ -311,6 +325,7 @@ What I Didn't Examine: none.
     const report = `Checked the literal \`first line
 continued <!-- remains code\` token.
 Scope: reviewed worktree at HEAD; 1 file and 1 changed line; chunking=none.
+${reviewAuthorityFields(projectRoot)}
 Ship Verdict: **YES** - no blocking finding survived Pass 2.
 Zero findings: checked boundary conditions, error paths, and integration seams; guards disproved every suspicion.
 Review Integrity: confident; 1/1 files opened; no degradation flags; validator=validated.
@@ -322,7 +337,7 @@ What I Didn't Examine: none.
 
   it("rejects structural review evidence inside a raw HTML block", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
-    const report = `<pre>\n${validReview()}\n</pre>\n`;
+    const report = `<pre>\n${validReview(projectRoot)}\n</pre>\n`;
     const result = validateReviewReport(report, projectRoot);
 
     assert.equal(result.status, "fail");
@@ -334,6 +349,7 @@ What I Didn't Examine: none.
     const projectRoot = createReviewedProject(testContext);
     const report = `<x-review>
 Scope: reviewed worktree at HEAD; 1 file and 1 changed line; chunking=none.
+${reviewAuthorityFields(projectRoot)}
 Ship Verdict: **YES** - no blocking finding survived Pass 2.
 Zero findings: checked boundary conditions, error paths, and integration seams.
 Review Integrity: confident; 1/1 files opened; no degradation flags; validator=validated.
@@ -350,6 +366,7 @@ What I Didn't Examine: none.
   it("rejects degradation flags in compact integrity receipts", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
     const report = `Scope: reviewed worktree at HEAD; 1 file and 1 changed line; chunking=none.
+${reviewAuthorityFields(projectRoot)}
 Ship Verdict: **YES** - no blocking finding survived Pass 2.
 Zero findings: checked boundary conditions, error paths, and integration seams.
 Review Integrity: confident; 1/1 files opened; risk-depth-declined; validator=validated.
@@ -364,11 +381,11 @@ What I Didn't Examine: none.
   it("requires validator status and gate evidence in full and compact integrity", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
     const missingValidator = validateReviewReport(
-      validReview().replace("- Review validator: validated\n", ""),
+      validReview(projectRoot).replace("- Review validator: validated\n", ""),
       projectRoot,
     );
     const missingGateEvidence = validateReviewReport(
-      validReview().replace(
+      validReview(projectRoot).replace(
         "- Gate evidence: pass=0, changed-code=0, pre-existing=0, infrastructure=0, unresolved=0\n",
         "",
       ),
@@ -376,6 +393,7 @@ What I Didn't Examine: none.
     );
     const compactWithoutValidator = validateReviewReport(
       `Scope: reviewed worktree at HEAD; 1 file and 1 changed line; chunking=none.
+${reviewAuthorityFields(projectRoot)}
 Ship Verdict: **YES** - no blocking finding survived Pass 2.
 Zero findings: checked boundary conditions, error paths, and integration seams.
 Review Integrity: confident; 1/1 files opened; no degradation flags.
@@ -384,6 +402,7 @@ What I Didn't Examine: none.
       projectRoot,
     );
 
+    // Both receipt forms must disclose their validation state and applicable gate evidence.
     for (const result of [
       missingValidator,
       missingGateEvidence,
@@ -403,23 +422,26 @@ What I Didn't Examine: none.
   it("rejects an unresolved semantic anchor", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
     const result = validateReviewReport(
-      validReview("src/example.ts", "missingSymbol"),
+      validReview(projectRoot, "src/example.ts", "missingSymbol"),
       projectRoot,
     );
     assert.equal(hasViolation(result, "anchor-unresolved"), true);
   });
 
   it("resolves semantic anchors from the declared immutable authority", (testContext) => {
-    const { head, projectRoot } = createVersionedReviewedProject(testContext);
-    const scope = `- Scope snapshot: source=PR #57, base=${head}, head=${head}, authority=immutable Git objects, drift=verified, uncommitted=no, signals=1, bundle=.goat-flow/logs/review/goat-review-bundle.fixture.diff, chunking=none`;
-    const committedReport = validReview(
-      "src/example.ts",
-      "committedAnchor",
-    ).replace(/^- Scope snapshot:.*$/mu, scope);
-    const liveOnlyReport = validReview(
-      "src/example.ts",
-      "workingTreeOnly",
-    ).replace(/^- Scope snapshot:.*$/mu, scope);
+    const { base, head, projectRoot } =
+      createVersionedReviewedProject(testContext);
+    const source = { kind: "pr", target: base, head };
+    const committedReport = withReviewSource(
+      validReview(projectRoot, "src/example.ts", "committedAnchor"),
+      projectRoot,
+      source,
+    );
+    const liveOnlyReport = withReviewSource(
+      validReview(projectRoot, "src/example.ts", "workingTreeOnly"),
+      projectRoot,
+      source,
+    );
 
     assert.deepEqual(
       validateReviewReport(committedReport, projectRoot).violations,
@@ -436,23 +458,24 @@ What I Didn't Examine: none.
 
   it("rejects incomplete scope snapshots and contradictory totals", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
-    const incompleteScope = validReview().replace(
+    const incompleteScope = validReview(projectRoot).replace(
       /^- Scope snapshot:.*$/mu,
       "- Scope snapshot: reviewed the current change",
     );
-    const wrongEvidenceTotal = validReview().replace(
+    const wrongEvidenceTotal = validReview(projectRoot).replace(
       "- Evidence: 4 OBSERVED / 0 INFERRED",
       "- Evidence: 3 OBSERVED / 0 INFERRED",
     );
-    const wrongVerdictTotal = validReview().replace(
+    const wrongVerdictTotal = validReview(projectRoot).replace(
       "- Verdicts: 4/0/0/0",
       "- Verdicts: 3/0/0/0",
     );
-    const impossibleFileCoverage = validReview().replace(
+    const impossibleFileCoverage = validReview(projectRoot).replace(
       "- Files opened in Pass 2: 1/1",
       "- Files opened in Pass 2: 2/1",
     );
 
+    // Each contradictory count or incomplete scope must fail for the integrity defect it introduces.
     for (const report of [
       incompleteScope,
       wrongEvidenceTotal,
@@ -469,11 +492,15 @@ What I Didn't Examine: none.
     }
   });
 
+  // These unfinished or unknown chunking states cannot describe a completed review.
   for (const chunking of ["proposed", "declined", "unexpected"]) {
     it(`rejects completed review chunking=${chunking}`, (testContext) => {
       const projectRoot = createReviewedProject(testContext);
       const result = validateReviewReport(
-        validReview().replace("chunking=none", `chunking=${chunking}`),
+        validReview(projectRoot).replace(
+          "chunking=none",
+          `chunking=${chunking}`,
+        ),
         projectRoot,
       );
       assert.equal(result.status, "fail", chunking);
@@ -487,7 +514,7 @@ What I Didn't Examine: none.
 
   it("requires accepted chunking when completed scope size exceeds either limit", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
-    const fullFileOverflow = validReview()
+    const fullFileOverflow = validReview(projectRoot)
       .replace(
         "- Files opened in Pass 2: 1/1",
         "- Files opened in Pass 2: 21/21",
@@ -496,7 +523,7 @@ What I Didn't Examine: none.
         "- Size: 1 files, 1 changed lines",
         "- Size: 21 files, 3000 changed lines",
       );
-    const fullLineOverflow = validReview()
+    const fullLineOverflow = validReview(projectRoot)
       .replace(
         "- Files opened in Pass 2: 1/1",
         "- Files opened in Pass 2: 20/20",
@@ -505,7 +532,7 @@ What I Didn't Examine: none.
         "- Size: 1 files, 1 changed lines",
         "- Size: 20 files, 3001 changed lines",
       );
-    const fullBoundary = validReview()
+    const fullBoundary = validReview(projectRoot)
       .replace(
         "- Files opened in Pass 2: 1/1",
         "- Files opened in Pass 2: 20/20",
@@ -515,6 +542,7 @@ What I Didn't Examine: none.
         "- Size: 20 files, 3000 changed lines",
       );
     const compactFileOverflow = `Scope: reviewed worktree at HEAD; 21 files and 3000 changed lines; chunking=none.
+${reviewAuthorityFields(projectRoot)}
 Ship Verdict: **YES** - no blocking finding survived Pass 2.
 Zero findings: checked boundary conditions, error paths, and integration seams; guards disproved every suspicion.
 Review Integrity: confident; 21/21 files opened; no degradation flags; validator=validated.
@@ -581,13 +609,14 @@ What I Didn't Examine: none.
 
   it("binds full-report size units to diff or area scope", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
-    const diffUsingClusters = validReview().replace(
+    const diffUsingClusters = validReview(projectRoot).replace(
       "- Size: 1 files, 1 changed lines",
       "- Size: 1 files, 4001 clusters",
     );
-    const areaUsingChangedLines = validReview().replace(
-      "source=worktree",
-      "source=area",
+    const areaUsingChangedLines = withReviewSource(
+      validReview(projectRoot),
+      projectRoot,
+      { kind: "area", roots: ["src"], sample: null },
     );
     const areaUsingClusters = areaUsingChangedLines.replace(
       "- Size: 1 files, 1 changed lines",
@@ -616,11 +645,12 @@ What I Didn't Examine: none.
 
   it("binds opened-file coverage to the declared review size", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
-    const fullMismatch = validReview().replace(
+    const fullMismatch = validReview(projectRoot).replace(
       "- Size: 1 files, 1 changed lines",
       "- Size: 2 files, 1 changed lines",
     );
     const compact = `Scope: reviewed worktree at HEAD; 2 files and 1 changed line; chunking=none.
+${reviewAuthorityFields(projectRoot)}
 Ship Verdict: **YES** - no blocking finding survived Pass 2.
 Zero findings: checked boundary conditions, error paths, and integration seams; guards disproved every suspicion.
 Review Integrity: confident; 1/1 files opened; no degradation flags; validator=validated.
@@ -659,7 +689,7 @@ What I Didn't Examine: none.
   it("rejects a transient draft-ledger marker in a final report", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
     const result = validateReviewReport(
-      `${validReview()}<!-- goat-flow-review-ledger-draft -->\n`,
+      `${validReview(projectRoot)}<!-- goat-flow-review-ledger-draft -->\n`,
       projectRoot,
     );
 
@@ -670,11 +700,12 @@ What I Didn't Examine: none.
     );
   });
 
+  // Retired flags must not turn an oversized, unchunked review into an accepted partial result.
   for (const flag of ["large-diff-unchunked", "large-area-unchunked"]) {
     it(`rejects retired ${flag} degradation flag`, (testContext) => {
       const projectRoot = createReviewedProject(testContext);
       const result = validateReviewReport(
-        validReview().replace(
+        validReview(projectRoot).replace(
           "- Degradation flags: gates-not-run",
           `- Degradation flags: gates-not-run, ${flag}`,
         ),
@@ -691,11 +722,14 @@ What I Didn't Examine: none.
 
   it("rejects missing Evidence and Proof tags", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
-    const missingEvidence = validReview().replace(
+    const missingEvidence = validReview(projectRoot).replace(
       " | Evidence: OBSERVED | Proof: STATIC",
       " | Proof: STATIC",
     );
-    const missingProof = validReview().replace(" | Proof: STATIC", "");
+    const missingProof = validReview(projectRoot).replace(
+      " | Proof: STATIC",
+      "",
+    );
     assert.equal(
       hasViolation(
         validateReviewReport(missingEvidence, projectRoot),
@@ -714,7 +748,7 @@ What I Didn't Examine: none.
 
   it("requires Harm on MUST and SHOULD findings", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
-    const report = validReview().replace(
+    const report = validReview(projectRoot).replace(
       " | Harm: requests use an invalid configuration.",
       "",
     );
@@ -726,11 +760,11 @@ What I Didn't Examine: none.
 
   it("rejects malformed R-IDs and retired overlap tags", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
-    const missingId = validReview().replace(
+    const missingId = validReview(projectRoot).replace(
       "- R-001 [SHOULD:patch]",
       "- [SHOULD:patch]",
     );
-    const retiredOverlap = validReview().replace(
+    const retiredOverlap = validReview(projectRoot).replace(
       "[local-only]",
       "[overlap:reviewer]",
     );
@@ -752,7 +786,7 @@ What I Didn't Examine: none.
 
   it("rejects an unparseable Review Integrity block", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
-    const report = validReview().replace(
+    const report = validReview(projectRoot).replace(
       "- Verdicts: 4/0/0/0",
       "- Verdicts: two",
     );
@@ -767,7 +801,7 @@ What I Didn't Examine: none.
 
   it("ignores fenced examples but rejects fenced-only live integrity", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
-    const fencedExample = validReview().replace(
+    const fencedExample = validReview(projectRoot).replace(
       "## Findings",
       `\`\`\`markdown
 ## Findings
@@ -781,7 +815,7 @@ What I Didn't Examine: none.
       [],
     );
 
-    const fencedIntegrity = validReview().replace(
+    const fencedIntegrity = validReview(projectRoot).replace(
       /## Review Integrity\n([\s\S]*?)\n## Findings/u,
       "```markdown\n## Review Integrity\n$1\n```\n\n## Findings",
     );
@@ -798,7 +832,7 @@ What I Didn't Examine: none.
 
   it("ignores indented code examples inside live report sections", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
-    const indentedExample = validReview().replace(
+    const indentedExample = validReview(projectRoot).replace(
       "### MUST / SHOULD / MAY",
       `    - R-999 [MUST:patch] **Example only** \`missing.ts\` (search: \`missing\`) | Harm: example | Evidence: OBSERVED | Proof: STATIC
 
@@ -813,7 +847,7 @@ What I Didn't Examine: none.
 
   it("does not accept indented proof fields immediately after headings", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
-    const indentedProof = validReview()
+    const indentedProof = validReview(projectRoot)
       .replace(/^(##+ .+)\n\n/gmu, "$1\n")
       .split("\n")
       .map((line) =>
@@ -838,7 +872,7 @@ What I Didn't Examine: none.
 
   it("ignores findings hidden inside multiline HTML comments", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
-    const commentedExample = validReview().replace(
+    const commentedExample = validReview(projectRoot).replace(
       "### MUST / SHOULD / MAY",
       `<!--
 - R-999 [MUST:patch] **Hidden example** \`missing.ts\` (search: \`missing\`) - This is not rendered. | Harm: none | Evidence: OBSERVED | Proof: STATIC
