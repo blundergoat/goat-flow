@@ -5,7 +5,8 @@
  * The validator checks visible Markdown, frozen source authority, trusted gate records, and declared local ledgers.
  * Validation does not persist artifacts or run gates; the CLI writes only the explicitly requested validation output.
  */
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync, statSync } from "node:fs";
+import { getPackageVersion } from "./paths.js";
 import { CLIError } from "./cli-error.js";
 import type { ParsedCLI } from "./cli-types.js";
 import { writeOutput } from "./cli-output.js";
@@ -21,6 +22,7 @@ import {
   REVIEW_DRAFT_LEDGER_MARKER,
   addViolation,
   type IntegrityResult,
+  type FindingDefinition,
   type IntegrityField,
   type LocatedLine,
   type ReviewValidationResult,
@@ -38,6 +40,8 @@ import {
   type GitContext,
   type ReviewAuthoritySnapshot,
   readSections,
+  readIntegrityJson,
+  requireDegradationReferences,
 } from "./review-validate-common.js";
 import { gitContext, commitId, treeFiles } from "./review-validate-anchors.js";
 import { validateIntegrity } from "./review-validate-integrity.js";
@@ -90,6 +94,7 @@ function validateReportGateAuthority(
   projectRoot: string,
   integrity: IntegrityResult,
   violations: ReviewValidationViolation[],
+  definitions: FindingDefinition[],
 ): void {
   // Invalid selection already blocks the report; gate evidence cannot supply a replacement source.
   if (integrity.anchorAuthority.kind !== "snapshot") return;
@@ -104,10 +109,8 @@ function validateReportGateAuthority(
   );
   // The integrity pass owns missing fields; only an existing receipt can be checked for execution credit.
   if (!gateField) return;
-  const claimedGates = fullSection
-    ? readGateReceiptField(receiptLines, "Gates", true)
-    : null;
-  validateReviewGates(
+  const claimedGates = integrity.fields.get("Gates");
+  const gates = validateReviewGates(
     gateField.value,
     projectRoot,
     integrity.anchorAuthority.snapshot,
@@ -115,6 +118,238 @@ function validateReportGateAuthority(
     gateField.line,
     violations,
   );
+  // Only authority-validated command records can be reconciled with the displayed outcomes and findings.
+  if (gates)
+    reconcileGateOutcomes(gates, integrity, definitions, lines, violations);
+}
+
+/** Reconcile distinct command outcomes with the summary, disclosures, and active findings without executing any command. */
+function reconcileGateOutcomes(
+  gates: JsonRecord[],
+  integrity: IntegrityResult,
+  definitions: FindingDefinition[],
+  lines: string[],
+  violations: ReviewValidationViolation[],
+): void {
+  const field = integrity.fields.get("Gate evidence");
+  const labels = [
+    "pass",
+    "changed-code",
+    "pre-existing",
+    "infrastructure",
+    "unresolved",
+  ];
+  const expected = labels.map(
+    (label) => gates.filter((gate) => gate.outcome === label).length,
+  );
+  const match = field?.value.match(
+    /^pass=(\d+),\s*changed-code=(\d+),\s*pre-existing=(\d+),\s*infrastructure=(\d+),\s*unresolved=(\d+)$/u,
+  );
+  // One selected command counts once, regardless of how many assertions its output claims to have checked.
+  if (
+    !match ||
+    expected.some((count, index) => Number(match[index + 1]) !== count)
+  )
+    addViolation(
+      violations,
+      "gate-state",
+      field?.line ?? null,
+      "Gate evidence totals must equal distinct credited commands in Gate authority",
+    );
+  validateGateSummary(gates, expected, integrity, violations);
+  const incompleteIds = gates
+    .filter(
+      (gate) =>
+        gate.outcome === "infrastructure" || gate.outcome === "unresolved",
+    )
+    .map((gate) => textField(gate.id, "gate id"));
+  requireDegradationReferences(
+    integrity,
+    "gate-evidence-incomplete",
+    incompleteIds,
+    violations,
+  );
+  validateGateFindingLinks(gates, integrity, definitions, violations);
+  validatePreExistingGateIssue(gates, integrity, lines, violations);
+}
+
+/** Keep skipped and incomplete checks visible in the report's execution summary. */
+function validateGateSummary(
+  gates: JsonRecord[],
+  counts: number[],
+  integrity: IntegrityResult,
+  violations: ReviewValidationViolation[],
+): void {
+  const field = integrity.fields.get("Gate evidence");
+  const hasUnexecutedGates =
+    gates.length === 0 ||
+    gates.some(
+      (gate) => gate.outcome === "skipped" || gate.outcome === "unavailable",
+    );
+  const hasIncompleteGateEvidence = gates.some(
+    (gate) =>
+      gate.outcome === "infrastructure" || gate.outcome === "unresolved",
+  );
+  validateGateGapFlags(
+    hasUnexecutedGates,
+    hasIncompleteGateEvidence,
+    integrity,
+    violations,
+  );
+  const summary = integrity.fields.get("Gates")?.value;
+  const executedCount = counts.reduce((sum, count) => sum + count, 0);
+  const expectedSummary = hasUnexecutedGates
+    ? executedCount > 0
+      ? "unavailable"
+      : null
+    : "run";
+  // An entirely unexecuted selection can explain a skip; mixed execution must remain unavailable.
+  if (
+    expectedSummary === null ? summary === "run" : summary !== expectedSummary
+  )
+    addViolation(
+      violations,
+      "gate-state",
+      field?.line ?? null,
+      "Gates must be run for complete execution, unavailable for mixed execution, or a disclosed skip/unavailability with no execution",
+    );
+}
+
+/** Require each execution gap's disclosure even when another selected command passed. */
+function validateGateGapFlags(
+  skipped: boolean,
+  incomplete: boolean,
+  integrity: IntegrityResult,
+  violations: ReviewValidationViolation[],
+): void {
+  // Execution gaps must remain visible even when an unrelated command passed.
+  for (const [flag, needed] of [
+    ["gates-not-run", skipped],
+    ["gate-evidence-incomplete", incomplete],
+  ] as const)
+    // A stale or omitted gap flag would misstate which selected commands actually supplied evidence.
+    if (needed !== integrity.flags.has(flag))
+      addViolation(
+        violations,
+        "gate-state",
+        integrity.fields.get("Gate evidence")?.line ?? null,
+        `${flag} must agree with the selected gate outcomes`,
+      );
+}
+
+/** Require a separate nearby-issue disclosure when a diff review classifies a failure as pre-existing. */
+function validatePreExistingGateIssue(
+  gates: JsonRecord[],
+  integrity: IntegrityResult,
+  lines: string[],
+  violations: ReviewValidationViolation[],
+): void {
+  // A base failure in a diff remains an untagged nearby issue; area reviews retain their existing pre-existing action route.
+  if (
+    gates.some((gate) => gate.outcome === "pre-existing") &&
+    !integrity.isAreaAudit &&
+    !["Pre-existing Nearby", "Pre-existing Issues"].some((heading) =>
+      readSections(lines, heading).some((section) =>
+        section.lines.some(
+          ({ text }) => /^\s*-\s+\S/u.test(text) && !/\bR-\d{3}\b/u.test(text),
+        ),
+      ),
+    )
+  )
+    addViolation(
+      violations,
+      "gate-state",
+      integrity.fields.get("Gate evidence")?.line ?? null,
+      "pre-existing gate failure requires an untagged nearby issue with base evidence",
+    );
+}
+
+/** Bind required gate consequences to real active IDs; skipped commands and unrelated findings cannot supply failure proof. */
+function validateGateFindingLinks(
+  gates: JsonRecord[],
+  integrity: IntegrityResult,
+  definitions: FindingDefinition[],
+  violations: ReviewValidationViolation[],
+): void {
+  const field = integrity.fields.get("Gate findings");
+  const links = readIntegrityJson(
+    integrity.fields,
+    "Gate findings",
+    violations,
+  );
+  const required = gates.filter(
+    (gate) => gate.outcome === "changed-code" || gate.outcome === "unresolved",
+  );
+  try {
+    const mappings = record(field ? links : {}, "Gate findings");
+    requireAuthority(
+      Object.keys(mappings).length === required.length &&
+        required.every((gate) =>
+          Object.hasOwn(mappings, textField(gate.id, "gate id")),
+        ),
+      "Gate findings must name exactly the changed-code and unresolved gates",
+      "gate-state",
+    );
+    // Each required gate needs its own active consequence; history cannot make a failed check actionable.
+    for (const gate of required) {
+      validateLinkedGateFindings(
+        gate,
+        mappings[textField(gate.id, "gate id")],
+        integrity,
+        definitions,
+      );
+    }
+  } catch (error) {
+    // A report may retain a gate link after a finding was refuted or point a failing gate at an unrelated success.
+    addViolation(
+      violations,
+      "gate-state",
+      field?.line ?? null,
+      error instanceof Error ? error.message : "invalid Gate findings",
+    );
+  }
+}
+
+/** Reject missing, historical, or incompatible finding links so each failure keeps its required visible consequence. */
+function validateLinkedGateFindings(
+  gate: JsonRecord,
+  ids: JsonValue | undefined,
+  integrity: IntegrityResult,
+  definitions: FindingDefinition[],
+): void {
+  requireAuthority(
+    Array.isArray(ids) && ids.length > 0 && new Set(ids).size === ids.length,
+    "Gate findings requires unique nonempty active ID lists",
+    "gate-state",
+  );
+  // Every linked ID must still be an active finding after refutation and synthesis.
+  for (const id of ids) {
+    const finding = definitions.find(
+      (definition) =>
+        definition.id === id && definition.section !== "Refuted by Refuter",
+    );
+    requireAuthority(
+      finding,
+      "Gate findings references an absent or historical ID",
+      "gate-state",
+    );
+    const disposition = integrity.finalDispositions?.[finding.id];
+    requireAuthority(
+      gate.outcome !== "changed-code" ||
+        disposition === "confirmed" ||
+        disposition === "adjusted",
+      "changed-code gate needs an active confirmed/adjusted finding",
+      "gate-state",
+    );
+    requireAuthority(
+      gate.outcome !== "unresolved" ||
+        (finding.severity === "MUST" &&
+          finding.action === "needs-decision" &&
+          disposition === "unresolved"),
+      "unresolved gate needs an active MUST:needs-decision unresolved verification blocker",
+      "gate-state",
+    );
+  }
 }
 
 /**
@@ -132,6 +367,10 @@ function evaluateReviewReport(
   projectRoot: string,
   shouldVerifyPersistedLedger: boolean,
   validationStage: ReviewValidationStage,
+  draftEnvelope: {
+    ledgerText: string | null;
+    markerCount: number;
+  } | null = null,
 ): ReviewEvaluation {
   const lines = maskNonRenderedMarkdown(markdown).split(/\r?\n/u);
   const violations: ReviewValidationViolation[] = [];
@@ -144,7 +383,6 @@ function evaluateReviewReport(
     warnings,
     validationStage,
   );
-  validateReportGateAuthority(lines, projectRoot, integrity, violations);
   const definitions = validateFindingSections(
     lines,
     integrity.isAreaAudit,
@@ -154,12 +392,40 @@ function evaluateReviewReport(
   );
   validateUniqueFindingIds(definitions, violations);
   validateEscapedReviewAnchors(
-    lines,
+    // Scope and coverage disclosures contain literal filenames; an anchor= marker in that metadata is not finding evidence.
+    lines.map((line) =>
+      /^\s*(?:-\s+)?(?:Scope snapshot|Source coverage|Degradation evidence):/u.test(
+        line,
+      )
+        ? ""
+        : line,
+    ),
     projectRoot,
     integrity.anchorAuthority,
     violations,
   );
+  validateRefutationLedger(
+    projectRoot,
+    integrity,
+    violations,
+    shouldVerifyPersistedLedger,
+  );
+  // Transient IDs must be available before disposition inference; a draft path never stands in for those actual records.
+  if (draftEnvelope)
+    validateDraftLedgerEnvelope(
+      draftEnvelope.ledgerText,
+      draftEnvelope.markerCount,
+      integrity,
+      violations,
+    );
   validateIntegrityCounts(integrity, definitions, violations);
+  validateReportGateAuthority(
+    lines,
+    projectRoot,
+    integrity,
+    violations,
+    definitions,
+  );
   validateShipVerdict(lines, integrity, definitions, violations);
   const topFive = readTopFiveSection(lines, violations);
   validateSectionAnchors(
@@ -172,12 +438,6 @@ function evaluateReviewReport(
   validateRefuterReferences(lines, definitions, violations);
   validateSpecDrift(lines, violations);
   validateConditionalSections(lines, topFive, definitions, warnings);
-  validateRefutationLedger(
-    projectRoot,
-    integrity,
-    violations,
-    shouldVerifyPersistedLedger,
-  );
   // A zero-finding report still needs a final comparison with its original selected source.
   if (integrity.anchorAuthority.kind === "snapshot")
     verifyReviewAuthority(
@@ -286,6 +546,8 @@ function validateDraftLedgerEnvelope(
     return;
   }
   const ledgerResult = validateRefutationLedgerText(ledgerText);
+  // Only valid unique transient records can establish which IDs were refuted before persistence.
+  if (ledgerResult.status === "pass") integrity.ledgerIds = ledgerResult.ids;
   violations.push(...ledgerResult.violations);
   // The draft count must match its actual ledger records before the reviewer can retain the evidence.
   if (ledgerResult.recordCount !== integrity.refutationsLogged) {
@@ -309,12 +571,7 @@ function validateReviewDraftEnvelope(
     projectRoot,
     false,
     "draft",
-  );
-  validateDraftLedgerEnvelope(
-    envelope.ledgerText,
-    envelope.markerCount,
-    evaluation.integrity,
-    evaluation.result.violations,
+    envelope,
   );
   evaluation.result.status =
     evaluation.result.violations.length === 0 ? "pass" : "fail";
@@ -444,6 +701,27 @@ function readReviewInput(path: string | null): string {
  * @throws CLIError when command usage is invalid or the selected input cannot be read
  */
 export function handleReviewCommand(options: ParsedCLI): void {
+  validateReviewCommandUsage(options);
+  const projectRoot =
+    options.reviewSubcommand === "validate-ledger"
+      ? options.projectPath
+      : resolveReviewedProject(options.projectPath);
+  const input = readReviewInput(options.reviewValidatePath);
+  dispatchReviewInput(options, projectRoot, input);
+}
+
+/** Refuse unsupported operations or validator versions before reading the operator's input. */
+function validateReviewCommandUsage(options: ParsedCLI): void {
+  const actualVersion = getPackageVersion();
+  // A skill can reject an older PATH binary before it reads report data or asks the operator for stdin.
+  if (
+    options.reviewExpectedVersion &&
+    options.reviewExpectedVersion !== actualVersion
+  )
+    throw new CLIError(
+      `Review validator version mismatch: expected ${JSON.stringify(options.reviewExpectedVersion)}, actual ${actualVersion}.`,
+      2,
+    );
   // Without an operation, the CLI cannot know which review artifact the operator wants checked.
   if (!options.reviewSubcommand) {
     throw new CLIError(
@@ -457,10 +735,17 @@ export function handleReviewCommand(options: ParsedCLI): void {
       "review snapshot does not accept --output; retain its stdout metadata through the review.",
       2,
     );
-  const input = readReviewInput(options.reviewValidatePath);
+}
+
+/** Validate the selected input and write the result the operator requested. */
+function dispatchReviewInput(
+  options: ParsedCLI,
+  projectRoot: string,
+  input: string,
+): void {
   // The operator requested a source selection, so produce its authority before any report validation.
   if (options.reviewSubcommand === "snapshot") {
-    writeOutput(options, renderReviewSnapshot(input, options.projectPath));
+    writeOutput(options, renderReviewSnapshot(input, projectRoot));
     return;
   }
   // Ledger-only validation checks its text grammar without claiming that a report has persisted it.
@@ -473,8 +758,8 @@ export function handleReviewCommand(options: ParsedCLI): void {
   }
   const result =
     options.reviewSubcommand === "validate-draft"
-      ? validateReviewDraftEnvelope(input, options.projectPath)
-      : validateReviewReport(input, options.projectPath);
+      ? validateReviewDraftEnvelope(input, projectRoot)
+      : validateReviewReport(input, projectRoot);
   const rendered = renderReviewValidationResult(
     result,
     `review ${options.reviewSubcommand}`,
@@ -485,6 +770,23 @@ export function handleReviewCommand(options: ParsedCLI): void {
   writeOutput(options, rendered);
   // A failed report must signal failure even after all repairable issues have been printed.
   if (result.status === "fail") process.exitCode = 1;
+}
+
+/** Resolve the operator's chosen project once before any saved input is read; a missing directory is a usage error. */
+function resolveReviewedProject(selectedPath: string): string {
+  try {
+    const projectRoot = realpathSync(selectedPath);
+    // Selecting a report file as the project cannot establish a directory for source evidence.
+    if (!statSync(projectRoot).isDirectory())
+      throw new Error("expected a directory");
+    return projectRoot;
+  } catch (error) {
+    // A moved project folder or a file passed to --project needs a corrected path, not a fallback to this workspace.
+    throw new CLIError(
+      `Cannot open reviewed project ${JSON.stringify(selectedPath)}: ${error instanceof Error ? error.message : String(error)}`,
+      2,
+    );
+  }
 }
 
 /** Require an origin's literal raw hash rather than accepting an arbitrary label as command provenance. */
@@ -695,6 +997,31 @@ function validateRecordedAttempt(
     "passing gate requires matching before/after source state and exit code 0",
     "gate-state",
   );
+  validateFailureOutcome(gate, attempt);
+}
+
+/** Reject failure classifications without a completed failure or their stated causality evidence. */
+function validateFailureOutcome(gate: JsonRecord, attempt: JsonRecord): void {
+  // Completed failures require an actual nonzero exit; interruption can describe infrastructure trouble only.
+  const outcome = textField(gate.outcome, "gate outcome");
+  requireAuthority(
+    !["changed-code", "pre-existing", "unresolved"].includes(outcome) ||
+      (typeof attempt.exitCode === "number" && attempt.exitCode !== 0),
+    "changed-code, pre-existing, and unresolved gates require a completed nonzero exit",
+    "gate-state",
+  );
+  requireAuthority(
+    gate.outcome !== "infrastructure" || attempt.exitCode !== 0,
+    "infrastructure failure requires a failed or interrupted attempt",
+    "gate-state",
+  );
+  // A classified failure needs the host's causality, base, or environment explanation beside the actual attempt.
+  requireAuthority(
+    !["changed-code", "pre-existing", "infrastructure"].includes(outcome) ||
+      (typeof gate.reason === "string" && gate.reason.trim().length > 0),
+    "classified failure requires changed-source causality, base evidence, or an environment reason",
+    "gate-state",
+  );
 }
 
 /** Validate one command identity, origin, and attempt under the report's fixed authority. */
@@ -763,7 +1090,7 @@ function validateReviewGates(
   claimedGates: string | null,
   line: number | null,
   violations: ReviewValidationViolation[],
-): void {
+): JsonRecord[] | null {
   try {
     const gates = record(parseReviewJson(text, true), "gate authority");
     exactKeys(gates, [
@@ -820,6 +1147,7 @@ function validateReviewGates(
       "Gates: run requires every selected gate to execute on its matching source state",
       "gate-state",
     );
+    return gates.gates.map((gate) => record(gate, "gate"));
   } catch (error) {
     // A report may cite a changed package script or a different checkout; preserve the provenance/state refusal without running it.
     addViolation(
@@ -832,5 +1160,6 @@ function validateReviewGates(
         ? error.message
         : "cannot read gate authority",
     );
+    return null;
   }
 }

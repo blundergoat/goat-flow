@@ -329,7 +329,10 @@ Paste the candidate text into stdin and send EOF. Without `--output`, the safe t
 
 ### `goat-flow review snapshot [request-file]`
 
-Capture the source selected for a review from a JSON request on stdin or in one file. Run from the reviewed project's root.
+Capture the source selected for a review from a JSON request on stdin or in one file.
+Use the controlling installation's CLI with `--project <reviewed-root> --expected-version <installed-skill-version>`.
+The optional project selects evidence; input and output filenames still resolve from the invoking directory.
+Omitting the project retains the current-directory default. The project must resolve to an existing directory.
 The command prints canonical metadata to stdout, reads only local files and Git objects, and rejects `--output`.
 Retain the initial response through the review; a later capture is a comparison, never a replacement baseline.
 Usage errors and unsupported captures exit `2`; invalid report evidence exits `1` through the validation commands below.
@@ -439,14 +442,145 @@ Workspace identity does not prove reproducible dependencies, environment, or san
 
 ### `goat-flow review validate-ledger|validate-draft|validate [input-file] [--output <path>]`
 
-Run the three goat-review proof gates from a file or stdin. `validate-ledger` checks raw transient refutation records and returns the exact record count. `validate-draft` requires `Review validator: pending`; when refutations are nonzero, its draft envelope is the complete report, a line containing only `<!-- goat-flow-review-ledger-draft -->`, then the exact transient records. It checks report grammar, ledger grammar, and count together while explicitly leaving persistence unverified. After redaction creates the declared ledger, change the report field to `validated`; `validate` checks the report and that exact persisted artifact and rejects the transient marker. Run report validation from the reviewed project's root so semantic anchors and ledger paths resolve there. Structural V1-V6/V8 failures exit `1`; advisory V7 shape warnings and unknown degradation flags are printed but retain exit `0`. By default the result prints to stdout; `--output` writes the same PASS/FAIL result to the selected file.
+Run the three proof gates from a file or stdin using the controlling installation's version-matched CLI.
+`validate-ledger` checks transient refutation records and returns their exact count.
+`validate-draft` checks a complete report with `Review validator: pending` before receipt persistence.
+For nonzero refutations, append a line containing only `<!-- goat-flow-review-ledger-draft -->`, then the exact transient records.
+Zero refutations omit that appendix. Draft validation checks grammar, IDs, counts, and safe fresh destinations without creating files.
+
+After redaction writes the declared receipts, remove the appendix and change the validator field to `validated`.
+Final `validate` checks the report and available persisted receipts; it rejects both the draft marker and a pending validator field.
+A documented persistence skip remains reportable with reduced confidence and its explicit proof limit.
+
+Use `--project <reviewed-root>` for snapshot, draft, and final validation; `validate-ledger` rejects it because transient ledger grammar has no project.
+All four commands accept `--expected-version <installed-skill-version>`. A mismatch fails before input is read.
+Omission preserves legacy invocation but does not prove that the CLI matches the skill.
+Duplicate, empty, misplaced, or unsupported options exit `2`; help and version do not inspect the selected project.
+Structural V1–V6/V8 failures, including unknown degradation flags, exit `1`; advisory V7 shape warnings retain exit `0`.
+Validation prints its result to stdout unless `--output` selects a result file.
 
 ```bash
-npx @blundergoat/goat-flow@latest review validate-ledger
-npx @blundergoat/goat-flow@latest review validate-draft
-npx @blundergoat/goat-flow@latest review validate review.md
-npx @blundergoat/goat-flow@latest review validate review.md --output validation.txt
+goat-flow review validate-ledger --expected-version 1.17.0
+goat-flow review validate-draft --project /path/to/reviewed-project --expected-version 1.17.0
+goat-flow review validate review.md --project /path/to/reviewed-project --expected-version 1.17.0
+goat-flow review validate review.md --output validation.txt
 ```
+
+### Review integrity contract
+
+Full and compact reports use the same authority, coverage, receipt, count, and gate checks.
+The skill's output template and examples provide presentation shapes; these rules determine whether the declarations agree.
+Validation does not prove that the reviewer read every file, reasoned correctly, or found every defect.
+
+**Coverage and presentation.** Both forms require the scope, authority and gate snapshots, opened files, Source coverage,
+Final dispositions, Evidence, Verdicts, Refutations logged, Gates, Gate evidence, Size, and Degradation evidence.
+Full output supplies Conclusion, Degradation flags, and Review validator as list fields; compact output puts them in its summary.
+PR provenance is required in both forms. Optional fields become mandatory when their corresponding work exists.
+
+Use canonical JSON for `Source coverage: ["path"]`, `Final dispositions: {"R-001":"confirmed"}`,
+`Degradation evidence: {"flag":"reason"}`, `Gate findings: {"<gate-id>":["R-001"]}`, and
+`Refuter outcomes: {"R-001":"confirmed"}`. These are illustrative shapes; use captured paths, actual IDs, and current evidence.
+An empty array means no selected file was fully examined; an empty object means no entries in that field.
+Gate findings and Refuter outcomes may be omitted when inapplicable or supplied as `{}`; explicit `null` is invalid.
+Supported legacy simple path lists remain readable, but use JSON for delimiter-bearing filenames.
+
+Size uses `<n> files, <m> changed lines` for diffs and explicit paths, or `<n> files, <m> clusters` for areas, followed by
+`(source coverage: <k>/<n> exactly once)`. No extra clauses are accepted.
+Both denominators and Size's file count equal the frozen selected inventory. Every opened/completed path is unique and belongs to that inventory.
+A selected absent path is not a completed file read. Missing opened files require `files-not-opened`; missing completed coverage requires `chunked-partial`.
+Degradation evidence must name each whole missing path; a longer or different filename does not count.
+Use JSON-quoted paths inside the reason for filenames containing spaces, quotes, or separators.
+Neither undercoverage nor a sample may shrink the denominator.
+Area samples retain their roots and selected paths in authority and need a nonempty `## What I Didn't Examine` section describing exclusions.
+
+Compact output is limited to complete diff/PR selections with no active findings, refutations, history, or refuter work and a confident conclusion.
+Area and explicit-path reviews use full output. Disclosure-only flags remain visible with their reasons.
+Missing fields require repair; an ineligible selection or confidence level requires full output.
+
+**Findings and refutations.** Every issue has one final disposition: confirmed, adjusted, refuted, or unresolved.
+The Final dispositions map and Verdicts totals agree exactly. Confirmed, adjusted, and unresolved IDs appear in Findings or Systemic Patterns.
+Refuted IDs stay outside active findings; optional Refuted by Refuter history and available ledger IDs agree with the map.
+History contributes neither active evidence nor automated-review totals. Persisted and draft ledgers reject duplicate IDs.
+The legacy map omission is accepted only when all active findings can be inferred as confirmed, adjusted/unresolved totals are zero,
+and refuted IDs are available from the ledger or the refutation total is zero.
+
+An unresolved item starts its bold title with `Unconfirmed:` followed by a nonempty title, uses `needs-signal` or `needs-decision`, and includes nonempty
+`Missing proof:` and `Next check:` text. Preserve demonstrated harm and severity; unresolved gate evidence requires MUST:needs-decision.
+Finding evidence is OBSERVED or INFERRED. UNVERIFIED belongs to a non-finding evidence gap, not a finding's Evidence field.
+NOT-REPRODUCED findings require their disclosure flag and ID; an inference majority requires exact OBSERVED/INFERRED totals in its reason.
+
+A `yes` refuter row names an actual model and a Refuter outcomes map whose counts and IDs match the accepted host results.
+Refuter-confirmed IDs may finish confirmed or adjusted; refuted/unresolved results match their final dispositions.
+Locally verified leads are counted separately and cannot reuse an outcome ID.
+Legacy `no` and `skipped` rows have zero counts, model=n/a, and no outcomes; a decline alone does not imply refuter failure.
+
+PR provenance assigns each active finding exactly one class: overlap-confirmed, local-only, bot-only-locally-verified, or disputed-match.
+Only tags before the bold finding title declare provenance or refuter participation; tags mentioned in prose carry no credit.
+Multiple reviewers may confirm the same class, but its finding counts once. Counters and missed-ID lists match the active prefix tags.
+A successful empty response uses `no-automated-review-present`.
+Missing ingestion uses whole-row `n/a`, `automated-review-uningested`, and a reason. Locally, omit provenance; legacy whole-row n/a remains readable.
+
+**Receipts.** Final bundle and nonzero ledger paths stay beneath the selected project's `.goat-flow/logs/review/`.
+Every existing ancestor must be a real directory and the leaf a regular file; symlinks and observed substitutions are rejected.
+Validation checks the opened file and its ancestry again after reading. An empty redacted bundle is allowed; it is not source authority.
+Draft paths must be fresh, with safe existing parents. Draft PASS neither reserves a path nor proves later persistence.
+If the compatible redactor is unavailable, use matching `persist-skipped: redactor-unavailable` markers and the degradation flag.
+A nonzero draft still includes its exact transient records. Final skipped persistence proves only the declared count and relationships, not stored ledger contents.
+
+**Gate outcomes.** Gate evidence counts distinct recorded commands, never assertions or reported test totals.
+Each changed-code/unresolved gate has exactly its required active IDs in Gate findings; other outcomes have no map entry.
+An unrelated pass cannot cancel a failure.
+
+| Outcome | Required execution and report consequence |
+|---|---|
+| pass | One matching attempt with exit 0. |
+| changed-code | A completed nonzero exit and linked confirmed/adjusted finding; the host establishes changed-code causality. |
+| pre-existing | A completed nonzero exit and host evidence from the base/unchanged authority; diff reviews include an untagged Pre-existing item. |
+| infrastructure | A failed or interrupted attempt, nonempty reason, and gate-evidence-incomplete. No changed-code claim follows. |
+| unresolved | A completed nonzero exit, gate-evidence-incomplete with its explanation, and a linked unresolved MUST:needs-decision blocker. |
+| skipped / unavailable | No executed outcome credit; nonempty reason and gates-not-run. An allowed wrong-state attempt stays uncredited. |
+
+All selected commands executed means `Gates: run`; no executed commands permits `skipped (<reason>)` or `unavailable`; mixed execution uses `unavailable`.
+No selected commands cannot claim run. Null exit status permits only infrastructure among executed failures.
+Incomplete gate explanations name the affected gate IDs.
+
+**Degradation flags.** Degradation evidence contains exactly the selected tokens with nonempty reasons.
+`none` means no flags and uses an empty evidence object. Unknown, duplicate, empty, and retired large-*-unchunked tokens fail.
+Configured-base-unresolved carries a nonempty base after `=`.
+
+| Token | Required disclosure | Conclusion class |
+|---|---|---|
+| persist-skipped: redactor-unavailable | Unavailable compatible redactor and matching receipt markers. | coverage-degraded |
+| chunked-partial | Missing or incomplete selected paths. | partial |
+| gates-not-run | Missing execution or no selected gates, with the reason. | coverage-degraded |
+| gate-evidence-incomplete | Infrastructure/unresolved evidence and affected gate IDs. | coverage-degraded |
+| risk-depth-declined | Declined material-risk depth and its omitted scope. | partial |
+| high-inference-ratio | Active INFERRED findings exceed OBSERVED; exact totals. | high-inference |
+| files-not-opened | Missing selected paths. | coverage-degraded |
+| unfamiliar-area | Unestablished local contract and missing read. | coverage-degraded |
+| missing-types | Unavailable type dependency needed for a contract. | coverage-degraded |
+| footguns-unread | Relevant unread entry and reason. | coverage-degraded |
+| not-reproduced-findings | Active finding IDs and attempted check. | high-inference |
+| coverage-degraded | Missing required surface and next check. | coverage-degraded |
+| callsite-completeness-grep-only | Symbols searched and semantic-search limitation. | coverage-degraded |
+| configured-base-unresolved=&lt;base&gt; | Failed configured base and accepted fallback, if any. | coverage-degraded |
+| base-detection-failed | Failed detection and explicitly selected valid comparison. | coverage-degraded |
+| base-fetch-skipped | Intentionally skipped fetch; pinned local comparison, no remote-freshness claim. | disclosure only |
+| base-fetch-failed | Failed fetch and resolved local comparison; no remote-freshness claim. | coverage-degraded |
+| intent-unstated | Missing supplied intent with observable contracts and selected coverage established. | disclosure only |
+| automated-review-uningested | Failed or incomplete PR ingestion surface. | coverage-degraded |
+| cross-model-refuter-failed | Failed approved attempt or required refuter operation; ordinary decline is insufficient. | coverage-degraded |
+| cross-model-unresolved | Surviving unresolved refuter finding IDs. | high-inference |
+| refuter-citation-unverified | Material citation the host could not verify. | high-inference |
+
+The validator checks token/field relationships, missing paths, referenced gate/finding IDs, and exact inference totals.
+A nonempty explanation does not independently prove the claimed cause or investigation. Flags never waive missing source authority.
+
+Combine confidence limits once: partial takes precedence over coverage-degraded, then high-inference, then confident.
+The two disclosures alone permit confident. Reduced confidence lowers the finding-derived verdict one rung:
+YES → YES WITH CONDITIONS → PARTIAL → NO. Multiple flags do not stack penalties; risk-depth-declined also caps the result at PARTIAL.
+An active MUST or intent-mismatch still requires NO. Area-audit N/A is separate from a shipping recommendation.
+PENDING REFUTER/HUMAN is draft-only and cannot conceal an existing MUST or intent-mismatch.
 
 ### `goat-flow plans export <plan-path> [--format markdown|json] [--output <path>] [--force]`
 

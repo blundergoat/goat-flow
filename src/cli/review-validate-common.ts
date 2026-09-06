@@ -40,6 +40,12 @@ export interface MarkdownSection {
 
 /** Refutation claim extracted while validating the integrity surface. */
 export interface IntegrityResult {
+  fields: IntegrityFieldMap;
+  flags: ReadonlySet<string>;
+  isCompact: boolean;
+  validationStage: ReviewValidationStage;
+  finalDispositions: Record<string, FinalDisposition> | null;
+  ledgerIds: string[] | null;
   anchorAuthority: ReviewAnchorAuthority;
   conclusion: ReviewIntegrityConclusion | null;
   isRiskDepthDeclined: boolean;
@@ -53,8 +59,119 @@ export interface IntegrityResult {
   verdictCounts: VerdictCountClaim | null;
 }
 
+/** The final outcome of one suspicion; refuted items appear only in ledger/history, never active findings. */
+export type FinalDisposition =
+  "confirmed" | "adjusted" | "refuted" | "unresolved";
+
+/**
+ * Read canonical metadata before validating the report's manifests and per-ID maps.
+ *
+ * Invalid JSON adds a violation; an absent optional field returns null without inventing a value.
+ *
+ * @param fields - visible integrity rows; an absent optional row returns null
+ * @param label - metadata field the reviewer can repair
+ * @param violations - appended JSON grammar failures
+ * @returns parsed JSON, or null when absent or invalid; required-row checks own missing metadata
+ */
+export function readIntegrityJson(
+  fields: IntegrityFieldMap,
+  label: string,
+  violations: ReviewValidationViolation[],
+): JsonValue | null {
+  const field = fields.get(label);
+  // Missing optional metadata has no evidence to parse; required omissions are reported by their field owner.
+  if (!field) return null;
+  try {
+    return parseReviewJson(field.value, true);
+  } catch (error) {
+    // A copied map with duplicate keys or noncanonical JSON needs a corrected row before any of its IDs can count.
+    addViolation(
+      violations,
+      "integrity-format",
+      field.line,
+      `${label} requires canonical JSON: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    return null;
+  }
+}
+
+/**
+ * Require a limitation's explanation to name the affected findings, gates, or evidence totals.
+ * Use after checking the trigger; the explanation discloses a claim without proving the underlying investigation.
+ *
+ * @param integrity - parsed report; an absent flag leaves this explanation inapplicable
+ * @param flag - declared limitation whose affected evidence must remain visible
+ * @param references - exact IDs or totals to identify; empty means there is no affected evidence to name
+ *
+ * @param violations - appended failures when the report hides an affected reference
+ */
+export function requireDegradationReferences(
+  integrity: IntegrityResult,
+  flag: string,
+  references: string[],
+  violations: ReviewValidationViolation[],
+): void {
+  // Without this declared limitation or affected evidence, there is no reference requirement to enforce here.
+  if (!integrity.flags.has(flag) || references.length === 0) return;
+  const evidence = readIntegrityJson(
+    integrity.fields,
+    "Degradation evidence",
+    violations,
+  );
+  const reason =
+    evidence && typeof evidence === "object" && !Array.isArray(evidence)
+      ? evidence[flag]
+      : null;
+  // Matching whole reference tokens prevents R-0010 or 11 OBSERVED from supplying R-001 or 1 OBSERVED evidence.
+  const namesEveryReference = references.every((reference) => {
+    const literal = reference.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+    return (
+      typeof reason === "string" &&
+      new RegExp(`(?:^|[^A-Za-z0-9])${literal}(?=$|[^A-Za-z0-9])`, "u").test(
+        reason,
+      )
+    );
+  });
+  // A generic limitation cannot tell the reader which result or check needs follow-up.
+  if (!namesEveryReference)
+    addViolation(
+      violations,
+      "integrity-format",
+      integrity.fields.get("Degradation evidence")?.line ?? null,
+      `${flag} evidence must name ${references.join(", ")}`,
+    );
+}
+
+/**
+ * Match a whole missing path in its disclosure so readers can identify which selected source was not examined.
+ *
+ * @param reason - omission explanation; empty text cannot identify a missing file
+ * @param path - one nonempty selected path; quote names containing spaces or separators in the explanation
+ * @returns true when the explanation names this exact file, rather than a longer filename containing it
+ */
+export function disclosureNamesPath(reason: string, path: string): boolean {
+  const quotedStrings = /"(?:[^"\\]|\\.)*"/gu;
+  // JSON quoting preserves spaces and separators in filenames without accepting a substring of another quoted path.
+  if (
+    [...reason.matchAll(quotedStrings)].some(
+      (match) => match[0] === JSON.stringify(path),
+    )
+  )
+    return true;
+  // Delimiter-bearing filenames need the quoted form so prose separators cannot change which file was omitted.
+  if (!/^[\w./@+-]+$/u.test(path)) return false;
+  const literal = path.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  const prose = reason.replace(quotedStrings, " ");
+  return new RegExp(
+    `(?:^|[\\s,;:([\\]{}'\x60])${literal}(?=$|[\\s,;:()\\[\\]{}'\x60]|\\.(?=\\s|$))`,
+    "u",
+  ).test(prose);
+}
+
 /** Parsed finding definition used for stable-ID and conditional-section checks. */
 export interface FindingDefinition {
+  /** Original visible capsule; absent only for legacy programmatic consumers outside report parsing. */
+  text?: string;
   action: FindingAction;
   evidence: "INFERRED" | "OBSERVED" | null;
   id: string;
@@ -218,6 +335,23 @@ export const TOP_FIVE_HEADINGS = [
 export const FINDING_CANDIDATE = /^\s*-\s+\S/u;
 export const FINDING_PREFIX =
   /^\s*-\s+(R-\d{3})\s+\[(MUST|SHOULD|MAY):(patch|needs-decision|intent-mismatch|needs-signal|pre-existing)\](?:\s+\[(?:(?:overlap-confirmed|bot-only-locally-verified|disputed-match):[^\]\s]+|local-only|CONFIRMED-CROSS-MODEL)\])*\s+\*\*[^*\n]+\*\*/u;
+
+/**
+ * Read classification tags before the finding title; quoted tags in explanations carry no review credit.
+ *
+ * @param text - visible finding line; ordinary prose or malformed findings return no tags
+ * @returns declared provenance/refuter tags, excluding severity/action; empty means none were declared
+ */
+export function readFindingPrefixTags(text: string): string[] {
+  const prefix = text.match(FINDING_PREFIX)?.[0];
+  // Only a valid finding prefix can declare who verified the concern or how it was discovered.
+  if (!prefix) return [];
+  const tags = prefix.slice(prefix.indexOf("]") + 1, prefix.indexOf("**"));
+  return [...tags.matchAll(/\[([^\]]+)\]/gu)].map((match) =>
+    match[0].slice(1, -1),
+  );
+}
+
 export const EVIDENCE_TAG =
   /(?:^|\|\s*)Evidence:\s*(OBSERVED|INFERRED)(?=\s*(?:\||$))/u;
 export const PROOF_TAG =
@@ -238,7 +372,7 @@ export const REVIEW_CHUNK_FILE_LIMIT = 20;
 /** Three thousand is binding because goat-review forbids larger diffs from entering Pass 1 unchunked. */
 export const REVIEW_CHUNK_CHANGED_LINE_LIMIT = 3000;
 export const FULL_REVIEW_SIZE_VALUE =
-  /^(\d+)\s+files?,\s*(\d+)\s+(changed[- ]lines?|clusters?)\b/iu;
+  /^(\d+)\s+files?,\s*(\d+)\s+(changed[- ]lines?|clusters?)\s+\(source coverage: (\d+)\/(\d+) exactly once\)$/iu;
 export const COMPACT_REVIEW_SCOPE_SIZE =
   /^\s*Scope:\s*\S.*?\b(\d+)\s+files?\s+(?:and|,)\s*(\d+)\s+changed[- ]lines?\b.*;\s*chunking=(no|none|accepted)\.?\s*$/iu;
 
@@ -249,6 +383,8 @@ export const REQUIRED_INTEGRITY_FIELDS: ReadonlyArray<
   ["Authority snapshot", /\S/u],
   ["Gate authority", /\S/u],
   ["Files opened in Pass 2", /^\d+\/\d+\b/u],
+  ["Source coverage", /\S/u],
+  ["Degradation evidence", /\S/u],
   ["Evidence", /^\d+ OBSERVED\s*\/\s*\d+ INFERRED$/u],
   ["Verdicts", /^\d+\/\d+\/\d+\/\d+$/u],
   ["Refutations logged", /^\d+(?:\s+\(persist-skipped\))?$/u],
@@ -273,9 +409,9 @@ export const AUTOMATED_REVIEW_VALUE =
 export const REFUTER_VALUE =
   /^(?:yes|no|skipped);\s*confirmed=\d+,\s*refuted=\d+,\s*unresolved=\d+,\s*leads-verified=\d+,\s*model=\S.+$/u;
 const COMPACT_INTEGRITY =
-  /^\s*Review Integrity:\s*(confident|coverage-degraded|high-inference|partial);\s*(\d+)\/(\d+)\s+files opened;\s*no degradation flags;\s*validator=(?:validated|validator-unavailable)\.?\s*$/u;
+  /^\s*Review Integrity:\s*(confident|coverage-degraded|high-inference|partial);\s*(\d+)\/(\d+)\s+files opened;\s*(?:no degradation flags|flags=([^;]+));\s*validator=(?:validated|validator-unavailable)\.?\s*$/u;
 const COMPACT_DRAFT_INTEGRITY =
-  /^\s*Review Integrity:\s*(confident|coverage-degraded|high-inference|partial);\s*(\d+)\/(\d+)\s+files opened;\s*no degradation flags;\s*validator=pending\.?\s*$/u;
+  /^\s*Review Integrity:\s*(confident|coverage-degraded|high-inference|partial);\s*(\d+)\/(\d+)\s+files opened;\s*(?:no degradation flags|flags=([^;]+));\s*validator=pending\.?\s*$/u;
 export const COMPACT_CLEAN_REVIEW_FIELDS = [
   {
     label: "Scope",
@@ -521,24 +657,6 @@ export function reviewScopeExceedsChunkLimit(
 }
 
 /**
- * Read the full receipt's scoped-file denominator after its own grammar check.
- *
- * @param fields - parsed full Review Integrity rows
- * @returns the safe denominator, or null when another grammar check owns the defect
- */
-export function fullReviewCoverageFileCount(
-  fields: IntegrityFieldMap,
-): number | null {
-  const denominator = fields
-    .get("Files opened in Pass 2")
-    ?.value.match(/^\d+\/(\d+)\b/u)?.[1];
-  // Malformed coverage is already reported by its grammar check and cannot supply a denominator.
-  if (denominator === undefined) return null;
-  const parsed = Number(denominator);
-  return Number.isSafeInteger(parsed) ? parsed : null;
-}
-
-/**
  * Match the stage-specific compact validator receipt.
  *
  * @param line - compact Review Integrity line
@@ -621,7 +739,12 @@ export interface SelectedFiles {
   index: string | null;
 }
 
-/** Metadata retained by the reviewer; null workspace means no executable source state was captured. */
+/**
+ * Retain the selected files and source identity while reviewing and validating the report.
+ *
+ * The fingerprint binds this metadata; recapture compares with it and never silently replaces it.
+ * Null workspace means no executable source state was captured; an empty inventory means no selected file changes.
+ */
 export interface ReviewAuthoritySnapshot {
   schema: "goat-review-authority/v1";
   objectFormat: "sha1" | "sha256" | null;
@@ -633,7 +756,12 @@ export interface ReviewAuthoritySnapshot {
   fingerprint: string;
 }
 
-/** Capture response separates immutable review identity from the operator's current checkout. */
+/**
+ * Return the captured review source beside the operator's current checkout identity.
+ *
+ * Use the authority throughout the review and the checkout measurements when deciding whether a gate can earn execution credit.
+ * Null checkout fingerprint means no execution measurement is available; reason explains why.
+ */
 export interface ReviewSnapshotEnvelope {
   authority: ReviewAuthoritySnapshot;
   checkout: { fingerprint: string | null; reason: string | null };
@@ -1059,4 +1187,31 @@ export function reviewGateId(
   origin: unknown,
 ): string {
   return taggedHash("gate", { argv, cwd, origin });
+}
+
+/**
+ * Convert one integrity count while rejecting precision-losing integers.
+ *
+ * @param countText - decimal count from a report field; malformed text is rejected by its field grammar
+ * @param label - field name shown in a repairable count error
+ * @param line - visible report line owning this count
+ * @param violations - report errors to append when the value cannot be represented exactly
+ * @returns exact nonnegative count, including zero; null means the claimed count is unsafe and has received a violation
+ */
+export function readSafeIntegrityCount(
+  countText: string,
+  label: string,
+  line: number,
+  violations: ReviewValidationViolation[],
+): number | null {
+  const count = Number(countText);
+  // Exact counts can be reconciled; values that lose integer precision must be refused.
+  if (Number.isSafeInteger(count)) return count;
+  addViolation(
+    violations,
+    "integrity-format",
+    line,
+    `${label} must be a safe non-negative integer`,
+  );
+  return null;
 }

@@ -389,10 +389,10 @@ const COMMAND_HELP_CATALOG = {
     summary:
       "Capture review authority or validate goat-review evidence. Structural failures exit 1; advisory warnings retain exit 0; usage and capture refusals exit 2.",
     usage: [
-      "goat-flow review snapshot [request-file]",
-      "goat-flow review validate-ledger [ledger-file] [--output <path>]",
-      "goat-flow review validate-draft [draft-envelope-file] [--output <path>]",
-      "goat-flow review validate [report-file] [--output <path>]",
+      "goat-flow review snapshot [request-file] [--project <dir>] [--expected-version <version>]",
+      "goat-flow review validate-ledger [ledger-file] [--expected-version <version>] [--output <path>]",
+      "goat-flow review validate-draft [draft-envelope-file] [--project <dir>] [--expected-version <version>] [--output <path>]",
+      "goat-flow review validate [report-file] [--project <dir>] [--expected-version <version>] [--output <path>]",
     ],
     subcommands: [
       [
@@ -407,6 +407,14 @@ const COMMAND_HELP_CATALOG = {
       ["validate", "Check the report and its exact persisted ledger."],
     ],
     flags: [
+      [
+        "--project <dir>",
+        "Select reviewed evidence independently of the input path; defaults to cwd. Unavailable for validate-ledger.",
+      ],
+      [
+        "--expected-version <version>",
+        "Require this exact controlling CLI version before reading input; omitted means no version-match guarantee.",
+      ],
       [
         "--output <path>",
         "Write a validation result to a file; unavailable for snapshot.",

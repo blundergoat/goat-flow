@@ -1,6 +1,6 @@
 ---
 category: milestone-accounting
-last_reviewed: 2026-09-05
+last_reviewed: 2026-09-06
 ---
 
 **Scope:** Milestone state and effort accounting - activation order, where human gates belong, what a task section may contain, and why estimates counted from work units beat estimates written as durations. Multi-agent council coordination is [coordination.md](coordination.md).
@@ -169,7 +169,7 @@ Evidence anchors: `src/cli/plans-effort.ts` (search: `export function countAgent
 **Status:** active | **Created:** 2026-08-14
 **Decision changed:** Activate before timing starts, stop before an inactive handoff, never move a pending or terminal milestone backward only to time acceptance administration, and remove the active receipt schema before resetting to `not-started`.
 **Trigger phase:** ACT
-**Incident count:** 10 | **Latest occurrence:** 2026-09-04
+**Incident count:** 11 | **Latest occurrence:** 2026-09-06
 
 **Prevention:** Change the milestone to `in-progress` or `testing-gate` before checking implementation work or starting the first timing segment, using only the canonical lifecycle vocabulary (`active` is not a status). Confirm exactly one rendered `Status` field, then start the category and inspect the returned open segment; if start is rejected, correct the state and retry prospectively, never backfilling the missed interval. Stop and inspect the open span before changing status to `human-verification-pending`, `blocked`, `abandoned`, or `complete`; once pending, leave later acceptance administration unmeasured. When resetting to `not-started`, reopen every task and proof, preserve closed-segment evidence under Reset history, and remove the active Timing Receipt section. Evidence anchors: `src/cli/plans-time.ts` (search: `Timing Start requires exactly one rendered Status field`) rejects missing, competing, empty, or inactive states; `src/cli/plans-check.ts` (search: `not-started milestone must not include a Timing Receipt`) enforces a clean receipt after reset.
 
@@ -182,6 +182,8 @@ Evidence anchors: `src/cli/plans-effort.ts` (search: `export function countAgent
 **Recurrence 2026-08-24 (reset):** Resetting `windows-native-hooks` M01 to `not-started` while preserving its paused receipt failed `not-started milestone must not include a Timing Receipt`; moving the closed S01 row to Reset history and reopening the checked task passed without erasing measured effort.
 **Recurrence 2026-09-03 (M13 activation):** The unsupported status `active` was written first, then M13's frozen-contract task was checked while the milestone still read `not-started`. `src/cli/plans-check.ts` (search: `const VALID_STATUSES`), `src/cli/plans-check.ts` (search: `not-started milestone has checked implementation tasks`).
 **Recurrence 2026-09-04 (go-live M15 activation):** Timing started while a go-live milestone was still `not-started`, and later a reopen attempt for release-candidate acceptance after `human-verification-pending` was refused by the same guard; the accepted lifecycle update stays unmeasured instead of moving status backward.
+
+**Recurrence 2026-09-06 (go-live M23 proposal label):** A narrative `Status:` label created a second rendered lifecycle field. Timing start refused the file until the narrative used `Proposal state:`. Keep reserved field names out of handoff prose; the forty-second gap stayed unmeasured. `src/cli/plans-time.ts` (search: `Timing Start requires exactly one rendered Status field`) retains the refusal.
 
 ---
 

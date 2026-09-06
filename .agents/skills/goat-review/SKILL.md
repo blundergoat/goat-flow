@@ -28,7 +28,7 @@ Read `.goat-flow/skill-docs/skill-preamble.md`; on full-depth read `.goat-flow/s
 
 **Pass 0 gates:** with explicit current-session consent, run non-fixing instruction/CI gates once; never fix/rerun. Use `references/examples.md` (search: `Pass 0 Automated Gates`); only host-proven changed-code is a defect. Emit `Gates: run | skipped (<reason>) | unavailable`; non-run adds `gates-not-run`; tracked mutation stops.
 
-**State authority:** `goat-flow review snapshot` binds the diff and Pass 2 files to one declared authority. Follow `references/examples.md` (search: `State Authority Matrix`); drift stops. Raw bytes stay transient; the redacted bundle is a durable receipt, not the byte authority. Unavailable: `persist-skipped: redactor-unavailable`.
+**State authority:** `goat-flow review snapshot` binds the diff and Pass 2 files to one declared authority. Controlling CLI: `--project <reviewed-root> --expected-version <installed-skill-version>`; ledger rejects --project. Follow `references/examples.md` (search: `State Authority Matrix`); drift stops. Raw bytes stay transient; the redacted bundle is a durable receipt, not the byte authority. Unavailable: `persist-skipped: redactor-unavailable`.
 
 **Spec source (opt-in):** Full offers milestone criteria; Quick skips.
 
@@ -88,7 +88,7 @@ Open declared-authority full files, never unqualified checkout paths. For each s
 - **Try to DISPROVE it** using anchors, guards, upstream checks, framework mitigations, contracts.
 - **CONFIRMED** needs positive reachability; failed disproof → **UNRESOLVED**. **ADJUSTED** is real but narrower and restates severity; **REFUTED** cites a removing guard/contract. Forbid "confirmed with caveat", "matches prior behaviour", and "sloppy but not exploitable".
 - **Blast Radius Rule:** search consumers symbol-aware (LSP/MCP) → AST (`ast-grep`) → text (`rg`/`grep`); text-only adds `callsite-completeness-grep-only`. Include dynamic dispatch/reflection/DI, string keys, generated code, external consumers. Verify one consumer or mark UNRESOLVED with `coverage-degraded`.
-- **Refutation Ledger:** keep REFUTED suspicions only, transient, one record per line: `- R-NNN | Suspicion: ... | Evidence: ... | Rationale: ...`. CONFIRMED/ADJUSTED → Findings; UNRESOLVED → verdict counts. Do not redact in Pass 2; Pass 3 may change it.
+- **Refutation Ledger:** keep REFUTED suspicions only, transient, one record per line: `- R-NNN | Suspicion: ... | Evidence: ... | Rationale: ...`. CONFIRMED/ADJUSTED → Findings; UNRESOLVED → one `Unconfirmed:` finding with needs-signal/needs-decision, `Missing proof:`, and `Next check:`. Do not redact in Pass 2; Pass 3 may change it.
 - Add verified context; recheck anchors.
 
 ### Pass 2.5 - Inline Re-framings
@@ -124,7 +124,7 @@ Group 3+ findings with one root under `## Systemic Patterns` at the highest seve
 
 Check findings against INDEX-first footguns and `references/review-traps.md`; include matches, reword once before omitting. A confirmed review-reasoning miss follows learning-loop VERIFY.
 
-**BLOCKING GATE:** Present Findings, risks, and Review Integrity; pause. Pending Pass 3 uses `PENDING REFUTER/HUMAN`; afterward, give the verdict.
+**BLOCKING GATE:** Present Findings, risks, and Review Integrity; pause. Pending Pass 3 may use `PENDING REFUTER/HUMAN` only without an active MUST/intent-mismatch; final output requires a terminal verdict.
 
 **Review DoD gate:** reporting-only review verifies findings/references/scope and needed implementation tests. “Implement” invokes instruction DoD.
 
@@ -164,7 +164,7 @@ If none, emit "No drift detected against M[NN]" as proof.
 
 Offer Pass 3 for user opt-in, `coverage-degraded`/`high-inference`, or a MUST-needs-decision/INTENT-MISMATCH.
 
-**Approval gate:** A trigger is not approval. Before explicit current-session approval, disclose runtime and model, authentication state, findings-only payload, one refuter inference call, cost or rate-limit impact, why a second model, and local-only fallback. “Keep going”/urgency do not count. If declined or unanswered, complete the local review; record `Refuter pass: skipped`; do not add `coverage-degraded` or `cross-model-refuter-failed` solely because the user declined.
+**Approval gate:** A trigger is not approval. Before explicit current-session approval, disclose runtime and model, authentication state, findings-only payload, one refuter inference call, cost or rate-limit impact, why a second model, and local-only fallback. “Keep going”/urgency do not count. If declined or unanswered, complete the local review; record `Refuter pass: skipped; confirmed=0, refuted=0, unresolved=0, leads-verified=0, model=n/a`; do not add `coverage-degraded` or `cross-model-refuter-failed` solely because the user declined.
 
 **Method:** After approval, use `references/refuter-spec.md` with authenticated non-host; send authority metadata plus R-ID FINDINGS LIST, never the diff.
 
@@ -172,13 +172,13 @@ Offer Pass 3 for user opt-in, `coverage-degraded`/`high-inference`, or a MUST-ne
 
 **Constraints:** Before approval, run only reference-listed availability/auth checks; versions do not prove auth. Without an authenticated refuter, skip with `cross-model-refuter-failed`.
 
-**Proof Gate:** After optional Pass 3, follow `references/examples.md` (search: `Pre-persistence Proof Envelope`). For N>0, validate the transient ledger and combined pending draft before redaction. Final version-matched CLI `goat-flow review validate` PASS licenses `Review validator: validated`; draft PASS excludes persistence; `validator-unavailable` does not block.
+**Proof Gate:** Follow `references/examples.md` (search: `Pre-persistence Proof Envelope`) before redaction. Final version-matched CLI `goat-flow review validate` PASS licenses `Review validator: validated`; draft PASS excludes persistence; `validator-unavailable` does not block.
 
 ## Review Integrity (confidence signal)
 
-**Always emit:** Scope snapshot with paths; Authority snapshot; Gate authority; Files opened in Pass 2; Evidence; Verdicts: confirmed/adjusted/refuted/unresolved; Gates; Size. Compact: both snapshots.
+**Always emit:** Scope snapshot; Authority snapshot; Gate authority; Files opened in Pass 2; Source coverage; Final dispositions; Evidence; Verdicts: confirmed/adjusted/refuted/unresolved; Gates; Size; Degradation evidence. Both forms follow `docs/cli.md` (search: `Review integrity contract`).
 
-- **Refutations logged:** `<N>` or `<N> (persist-skipped)` if redaction is unavailable.
+- **Refutations logged:** `<N>` | `<N> (persist-skipped)`.
 - **Review validator:** `validated` | `validator-unavailable`.
 - **Gate evidence:** pass/changed-code/pre-existing/infrastructure/unresolved counts.
 - **Degradation flags:** `persist-skipped: redactor-unavailable`, `chunked-partial`, `gates-not-run`, `gate-evidence-incomplete`, `risk-depth-declined`, `high-inference-ratio`, `files-not-opened`, `unfamiliar-area`, `missing-types`, `footguns-unread`, `not-reproduced-findings`, `coverage-degraded`, `callsite-completeness-grep-only`, `configured-base-unresolved=<base>`, `base-detection-failed`, `base-fetch-skipped`, `base-fetch-failed`, `intent-unstated`, `automated-review-uningested`, `cross-model-refuter-failed`, `cross-model-unresolved`, `refuter-citation-unverified`.
@@ -186,12 +186,12 @@ Offer Pass 3 for user opt-in, `coverage-degraded`/`high-inference`, or a MUST-ne
 
 **Emit when resolved:**
 
-- **Refutation ledger:** only when Refutations logged is nonzero; use the exact path or `persist-skipped`. Count matches.
-- **Automated-review provenance:** for PRs; emit `overlap-confirmed`, `local-only`, `bot-only-locally-verified`, `disputed-match` counts plus missed lists, or `no-automated-review-present`.
-- **Refuter pass:** when Pass 3 was offered/run; emit outcome, counts, model.
+- **Refutation ledger:** only when Refutations logged is nonzero; exact path or `persist-skipped`.
+- **Automated-review provenance:** PR active finding counts/missed lists or `no-automated-review-present`.
+- **Refuter pass:** offered/run: outcome, counts, model; nonzero `Refuter outcomes`.
 - **Spec drift:** `checked M[NN]` | `skipped` | `unavailable`. Optional skip is not degradation.
 
-Never emit a whole field for `n/a` alone; applicable rows may contain `n/a` subvalues. Degradation flags, Conclusion, and compact zero-finding receipt always emit.
+Never emit a whole field for `n/a` except failed PR ingestion; subvalues may use it. Always emit Degradation flags, Conclusion, and compact receipt.
 
 ## Constraints
 
@@ -209,7 +209,7 @@ Never emit a whole field for `n/a` alone; applicable rows may contain `n/a` subv
 
 ## Output Format
 
-Emit `## Top 5 Risks` only when there are more than five surfaced findings; otherwise use Findings. Render only with content: `Systemic Patterns`, `Spec Drift`, `Pre-existing Nearby`, `Pre-existing Issues`, `Breaking Changes`. `What's Good` needs substantive evidence, never generic praise. Clean PR: scope line ending `chunking=no|accepted`, verdict, defended zero-findings statement, one-line integrity summary, one-line unexamined surface.
+Emit `## Top 5 Risks` only above five surfaced findings. Render only populated `Systemic Patterns`, `Spec Drift`, `Pre-existing Nearby`, `Pre-existing Issues`, `Breaking Changes`. `What's Good` needs substantive evidence, never generic praise. Clean PR: `references/examples.md` (search: `Clean review compact surface`).
 
 Machine-valid anchors use repo-relative paths such as `<repo-relative-path>` (search: `literal`) in Findings, Systemic Patterns, and Top 5 Risks; resolve against the reviewed project.
 
@@ -220,23 +220,28 @@ Machine-valid anchors use repo-relative paths such as `<repo-relative-path>` (se
 - Scope snapshot: source=<source>, base=<base>, head=<head>, authority=<state-id>, drift=<verified|stopped>, uncommitted=<yes|no|n/a>, signals=<n>, bundle=<path|persist-skipped: redactor-unavailable>, chunking=<state>
 - Authority snapshot: <canonical JSON>
 - Gate authority: <canonical JSON>
-- Files opened in Pass 2: <k>/<n>  (diff paths: <list or "n/a">)
+- Files opened in Pass 2: <k>/<n> (paths: <canonical JSON>)
+- Source coverage: <canonical JSON>
+- Final dispositions: <canonical JSON>
 - Evidence: <N> OBSERVED / <M> INFERRED
 - Verdicts: <c>/<a>/<r>/<u>
 - Refutations logged: <N> | <N> (persist-skipped)
 - Review validator: validated | validator-unavailable
 - Gates: run | skipped (<reason>) | unavailable
 - Gate evidence: pass=<N>, changed-code=<N>, pre-existing=<N>, infrastructure=<N>, unresolved=<N>
-- Size: <files> files, <changed lines | clusters>  (source coverage: <k>/<n> exactly once | no)
+- Gate findings: <canonical JSON>
+- Size: <n> files, <u> <changed lines|clusters> (source coverage: <k>/<n> exactly once)
 <!-- When count > 0. -->
 - Refutation ledger: persist-skipped | .goat-flow/logs/review/goat-review-refutations.<random>.txt
 <!-- PR only. -->
 - Automated-review provenance: overlap-confirmed=<K>, local-only=<L>, bot-only-locally-verified=<B>, disputed-match=<D>; automated findings the local review missed: <IDs|none>; local findings every bot missed: <R-IDs|none> | no-automated-review-present
 <!-- Pass 3 only. -->
 - Refuter pass: yes | no | skipped; confirmed=<N>, refuted=<M>, unresolved=<K>, leads-verified=<N>, model=<id|n/a>
+- Refuter outcomes: <canonical JSON>
 <!-- Spec Drift only. -->
 - Spec drift: <checked M[NN] | skipped | unavailable>
-- Degradation flags: <list or "none"; redactor unavailable => persist-skipped: redactor-unavailable; gates not run => gates-not-run; grep-only coverage => callsite-completeness-grep-only>
+- Degradation flags: <tokens|none; includes persist-skipped: redactor-unavailable>
+- Degradation evidence: <canonical JSON>
 - Conclusion: <confident | coverage-degraded | high-inference | partial>
 
 ## Findings

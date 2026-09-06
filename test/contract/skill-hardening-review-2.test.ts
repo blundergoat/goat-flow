@@ -101,11 +101,11 @@ describe("skill hardening contracts: goat-review (2/3)", () => {
       const output = readMarkdownSection(skillPath, "Output Format");
       assert.match(
         output,
-        /Emit `## Top 5 Risks` only when[^\n]+more than five surfaced findings/iu,
+        /Emit `## Top 5 Risks` only above five surfaced findings/iu,
         skillPath,
       );
       assert.doesNotMatch(output, /If <5 total, list all/iu, skillPath);
-      assert.match(output, /render only with content/iu, skillPath);
+      assert.match(output, /Render only populated/iu, skillPath);
       // Optional review sections must be named explicitly so empty report headings are not mistaken for findings.
       for (const conditionalSection of [
         "Systemic Patterns",
@@ -127,14 +127,35 @@ describe("skill hardening contracts: goat-review (2/3)", () => {
       );
       assert.match(
         output,
-        /Clean PR[^\n]+scope line[^\n]+verdict[^\n]+defended zero-findings statement[^\n]+one-line integrity summary[^\n]+one-line unexamined surface/iu,
+        /Clean PR[^\n]+references\/examples\.md[^\n]+Clean review compact surface/iu,
         skillPath,
       );
-      assert.match(
-        output,
-        /Clean PR[^\n]+scope line ending `chunking=no\|accepted`/iu,
-        skillPath,
+      const referencePath = skillPath.replace(
+        /SKILL\.md$/u,
+        "references/examples.md",
       );
+      const compact = readMarkdownSubsection(
+        readMarkdownSection(
+          referencePath,
+          "Conditional Output and Provenance Shapes",
+        ),
+        "Clean review compact surface",
+        referencePath,
+      );
+      // The compact example must keep each reader-visible summary element after detailed rules move to their reference.
+      for (const field of [
+        "Scope",
+        "Ship Verdict",
+        "Zero findings",
+        "Review Integrity",
+        "What I Didn't Examine",
+      ]) {
+        assert.ok(
+          compact.includes(`${field}:`),
+          `${skillPath}: compact ${field}`,
+        );
+      }
+      assert.match(compact, /chunking=<no\|accepted>/u, skillPath);
     });
 
     const presetCatalog = readProjectFile("src/dashboard/preset-prompts.json");
@@ -160,6 +181,9 @@ describe("skill hardening contracts: goat-review (2/3)", () => {
         "Authority snapshot",
         "Gate authority",
         "Files opened in Pass 2",
+        "Source coverage",
+        "Final dispositions",
+        "Degradation evidence",
         "Evidence",
         "Verdicts",
         "Refutations logged",
@@ -194,6 +218,14 @@ describe("skill hardening contracts: goat-review (2/3)", () => {
         );
       }
       assert.match(integrity, /Never emit.*whole field.*`n\/a`/u, skillPath);
+      assert.match(output, /- Source coverage: <canonical JSON/u, skillPath);
+      assert.match(output, /- Final dispositions: <canonical JSON/u, skillPath);
+      assert.match(
+        output,
+        /- Degradation evidence: <canonical JSON/u,
+        skillPath,
+      );
+      assert.match(integrity, /docs\/cli\.md/u, skillPath);
       assert.match(
         output,
         /<!-- When count > 0\. -->\n- Refutation ledger:/u,
@@ -307,14 +339,23 @@ describe("skill hardening contracts: goat-review (2/3)", () => {
         "Review Integrity (confidence signal)",
       );
       const output = readMarkdownSection(skillPath, "Output Format");
-      // The report and integrity sections must expose the same finding-provenance categories to readers.
+      assert.match(
+        integrity,
+        /Automated-review provenance[^\n]+PR active finding counts\/missed lists/u,
+        skillPath,
+      );
+      // The output grammar must expose every provenance category named by the canonical integrity contract.
       for (const provenance of [
         "overlap-confirmed",
         "local-only",
         "bot-only-locally-verified",
         "disputed-match",
       ]) {
-        assert.match(integrity, new RegExp(provenance, "u"), skillPath);
+        assert.match(
+          readProjectFile("docs/cli.md"),
+          new RegExp(provenance, "u"),
+          skillPath,
+        );
         assert.match(output, new RegExp(provenance, "u"), skillPath);
       }
     });
@@ -452,7 +493,7 @@ describe("skill hardening contracts: goat-review (2/3)", () => {
       );
       assert.match(
         passThree,
-        /After optional Pass 3[^\n]+references\/examples\.md[^\n]+Pre-persistence Proof Envelope[^\n]+transient ledger[^\n]+pending draft[^\n]+before redaction/iu,
+        /Proof Gate:[^\n]+references\/examples\.md[^\n]+Pre-persistence Proof Envelope[^\n]+before redaction/iu,
         skillPath,
       );
       assert.match(
@@ -481,12 +522,12 @@ describe("skill hardening contracts: goat-review (2/3)", () => {
         );
         assert.match(
           proofEnvelope,
-          /`goat-flow review validate-ledger`[^\n]+exact count[^\n]+`Review validator: pending`/iu,
+          /`Review validator: pending`[^\n]+`goat-flow review validate-ledger`[^\n]+exact count/iu,
           referencePath,
         );
         assert.match(
           proofEnvelope,
-          /compatible redactor[^\n]+fresh intended[^\n]+goat-review-refutations\.<random>\.txt[^\n]+otherwise declare[^\n]+persist-skipped fields now/iu,
+          /fresh[^\n]+goat-review-refutations\.<random>\.txt[^\n]+Without redaction[^\n]+documented skips/iu,
           referencePath,
         );
         assert.match(
@@ -496,12 +537,12 @@ describe("skill hardening contracts: goat-review (2/3)", () => {
         );
         assert.match(
           proofEnvelope,
-          /already-validated intended path[^\n]+otherwise write nothing/iu,
+          /compatible redactor[^\n]+checked fresh destinations[^\n]+otherwise write nothing/iu,
           referencePath,
         );
         assert.ok(
           proofEnvelope.indexOf("goat-flow review validate-draft") <
-            proofEnvelope.indexOf("use the redactor to write"),
+            proofEnvelope.indexOf("Use the compatible redactor to write"),
           referencePath,
         );
       },
@@ -559,7 +600,7 @@ describe("skill hardening contracts: goat-review (2/3)", () => {
       );
       assert.match(
         diffReview,
-        /CONFIRMED\/ADJUSTED[^\n]+Findings[^\n]+UNRESOLVED[^\n]+verdict counts/iu,
+        /CONFIRMED\/ADJUSTED[^\n]+Findings[^\n]+UNRESOLVED[^\n]+Unconfirmed[^\n]+Missing proof:[^\n]+Next check:/iu,
         skillPath,
       );
       assert.match(skill, /Pre-persistence Proof Envelope/u, skillPath);

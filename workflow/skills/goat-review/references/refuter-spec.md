@@ -62,7 +62,7 @@ The host reviewer applies these rules to the refuter output:
 
 - Refuter output is advisory. Empty, broad, uncited, or unresolvable evidence has no effect on the final finding.
 - Before any refuter result changes severity, action, disposition, or Ship Verdict, the host re-derives the evidence from the declared authority and records the relevant Pass 2 proof. Failure preserves the finding and adds `refuter-citation-unverified`.
-- Preserve the original R-ID through synthesis.
+- Preserve the original R-ID through synthesis. `Final dispositions` assigns one terminal outcome per ID; active findings exclude refuted history. Every host-verified refutation also has one ledger record.
 
 | Refuter Verdict | Host Action |
 |-----------------|-------------|
@@ -77,9 +77,12 @@ When Pass 3 runs, add to Review Integrity:
 
 ```
 - Refuter pass: yes | no | skipped; confirmed=<N>, refuted=<M>, unresolved=<K>, leads-verified=<N>, model=<model-identifier|n/a>
+- Refuter outcomes: <canonical JSON submitted R-ID map: confirmed|refuted|unresolved>
 ```
 
-Use `skipped` when Pass 3 was triggered but no authenticated external refuter was available. Use `n/a` for the model when no refuter actually ran.
+Nonzero submitted outcomes require `Refuter outcomes` with matching counts; leads stay separate. Confirmed may end adjusted; refuted/unresolved must match the final map. Unresolved findings use `Unconfirmed:`, needs-signal/needs-decision, `Missing proof:`, and `Next check:`.
+
+Emit `skipped` with zero counts and model=n/a when no refuter ran; truthful legacy `no` remains accepted. The host's nonempty result map names its actual model.
 
 ## Pre-flight Check
 

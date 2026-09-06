@@ -1051,32 +1051,6 @@ export function validateVisibleAuthorityFields(
 }
 
 /**
- * Read the compact receipt's standalone authority fields for the shared source checks.
- *
- * @param lines - visible report lines; full-form list rows cannot substitute for compact fields
- * @returns located authority and coverage fields; missing entries are rejected by the shared reader
- */
-export function compactAuthorityFields(lines: string[]): IntegrityFieldMap {
-  const fields: IntegrityFieldMap = new Map();
-  // Compact reviews still retain the same machine-verifiable selection even when they have no findings.
-  for (const [index, text] of lines.entries()) {
-    const match = text.match(/^\s*(Authority snapshot|Gate authority): (.*)$/u);
-    // Only standalone compact authority rows can bind the compact report's selected bytes.
-    if (match) fields.set(match[1]!, { value: match[2]!, line: index + 1 });
-    const coverage = text.match(
-      /^\s*Review Integrity:[^;]+;\s*(\d+\/\d+) files opened;/u,
-    );
-    // Compact coverage uses the same absence check as the full receipt after its own grammar has been validated.
-    if (coverage)
-      fields.set("Files opened in Pass 2", {
-        value: coverage[1]!,
-        line: index + 1,
-      });
-  }
-  return fields;
-}
-
-/**
  * Bind either receipt form to its original source and a reader that rechecks anchor bytes.
  *
  * @param fields - parsed receipt rows; absent authority fields cannot borrow trust from free-text scope

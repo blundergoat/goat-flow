@@ -222,6 +222,8 @@ export interface ParsedCLI extends CLIOptions {
   shouldConfirmAbandoned: boolean;
   reviewSubcommand: ReviewSubcommand | null;
   reviewValidatePath: string | null;
+  /** Caller-supplied installed skill contract; null leaves legacy callers without a version-match guarantee. */
+  reviewExpectedVersion: string | null;
   plansSubcommand: PlansSubcommand | null;
   plansStrict: boolean;
   plansMaxActive: number | null;

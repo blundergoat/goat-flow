@@ -1,34 +1,38 @@
 /**
- * How a review's claims are held to its contents: refutation ledgers that must exist,
- * Top 5 references that must resolve, and a Ship Verdict the findings actually justify -
- * plus the CLI surface that runs the same checks from stdin.
+ * Exercise the evidence behind a review's final findings, refutations, and Ship Verdict.
  *
- * Fixtures use real files so anchor and ledger claims are behavioural, not mocked.
+ * Use when changing exclusive dispositions, refuter/provenance counts, confidence rules, or receipt safety.
+ * Real files let valid ledger and bundle controls expose the specific contradiction under test.
  */
-import { spawnSync } from "node:child_process";
+
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
+  renameSync,
+  symlinkSync,
+  unlinkSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
-import { parseCLIArgs } from "../../src/cli/cli-parser.js";
+
+import { join } from "node:path";
+
 import {
   renderReviewValidationResult,
   validateReviewReport,
 } from "../../src/cli/review-validate.js";
-import { validateRefutationLedgerText } from "../../src/cli/review-validate-ledger.js";
 import {
-  FRAMEWORK_ROOT,
-  CLI_PATH,
+  readReviewReceipt,
+  validateRefutationLedgerText,
+} from "../../src/cli/review-validate-ledger.js";
+import {
   createReviewedProject,
+  createVersionedReviewedProject,
   validReview,
   withReviewSource,
+  withIntegrityFields,
+  cleanReview,
+  fullCleanReview,
   reviewReportTemplate,
   withSixSurfacedFindings,
   withTopFiveRisk,
@@ -37,6 +41,7 @@ import {
   hasViolation,
 } from "./review-validate.helpers.js";
 import type { ValidationIssueShape } from "./review-validate.helpers.js";
+import { canonicalReviewJson } from "../../src/cli/review-validate-authority.js";
 
 describe("review output validation: ledger, sections, and verdict", () => {
   it("rejects reserved pipe delimiters inside ledger fields", () => {
@@ -117,13 +122,11 @@ describe("review output validation: ledger, sections, and verdict", () => {
 
   it("accepts a claimed refutation only from its declared counted ledger", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
-    const ledgerRoot = join(projectRoot, ".goat-flow", "logs", "review");
-    mkdirSync(ledgerRoot, { recursive: true });
     const ledgerPath =
       ".goat-flow/logs/review/goat-review-refutations.fixture.txt";
     writeFileSync(
       join(projectRoot, ledgerPath),
-      "- R-003 | Suspicion: missing guard | Evidence: caller rejects empty values | Rationale: the guard removes reachability\n",
+      "- R-005 | Suspicion: missing guard | Evidence: caller rejects empty values | Rationale: the guard removes reachability\n",
       "utf-8",
     );
     assert.deepEqual(
@@ -139,8 +142,6 @@ describe("review output validation: ledger, sections, and verdict", () => {
   // logged all nine suspicions; the surviving confirmation belongs in Findings, not in the ledger.
   it("accepts eight REFUTED ledger records alongside one surfaced confirmation", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
-    const ledgerRoot = join(projectRoot, ".goat-flow", "logs", "review");
-    mkdirSync(ledgerRoot, { recursive: true });
     const ledgerPath =
       ".goat-flow/logs/review/goat-review-refutations.mixed.txt";
     writeFileSync(
@@ -156,10 +157,7 @@ describe("review output validation: ledger, sections, and verdict", () => {
     const report = validReview(projectRoot, undefined, undefined, 8, ledgerPath)
       .replace("- Evidence: 4 OBSERVED", "- Evidence: 1 OBSERVED")
       .replace("- Verdicts: 4/0/8/0", "- Verdicts: 1/0/8/0")
-      .replace(
-        "- Automated-review provenance: overlap-confirmed=0, local-only=4, bot-only-locally-verified=0, disputed-match=0; automated findings the local review missed: none; local findings every bot missed: R-001, R-002, R-003, R-004",
-        "- Automated-review provenance: overlap-confirmed=0, local-only=1, bot-only-locally-verified=0, disputed-match=0; automated findings the local review missed: none; local findings every bot missed: R-001",
-      )
+      .replace(/^- Refuter (?:pass|outcomes):.*\n/gmu, "")
       .replace(/- R-002[^\n]+\n/u, "")
       .replace(/- R-003[^\n]+\n/u, "")
       .replace(/\n## Systemic Patterns\n- R-004[^\n]+\n/u, "");
@@ -170,7 +168,6 @@ describe("review output validation: ledger, sections, and verdict", () => {
   it("rejects stale unrelated ledgers and declared count mismatches", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
     const ledgerRoot = join(projectRoot, ".goat-flow", "logs", "review");
-    mkdirSync(ledgerRoot, { recursive: true });
     writeFileSync(
       join(ledgerRoot, "goat-review-refutations.stale.txt"),
       "- R-099 | Suspicion: stale | Evidence: stale | Rationale: stale\n",
@@ -202,15 +199,25 @@ describe("review output validation: ledger, sections, and verdict", () => {
 
   it("accepts a persist-skipped refutation count without a local ledger", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
-    const report = validReview(
-      projectRoot,
-      undefined,
-      undefined,
-      "1 (persist-skipped)",
-      "persist-skipped",
+    const report = withIntegrityFields(
+      validReview(
+        projectRoot,
+        undefined,
+        undefined,
+        "1 (persist-skipped)",
+        "persist-skipped",
+      ),
+      {
+        "Final dispositions":
+          '{"R-001":"confirmed","R-002":"confirmed","R-003":"confirmed","R-004":"confirmed","R-005":"refuted"}',
+        "Degradation flags":
+          "gates-not-run, persist-skipped: redactor-unavailable",
+        "Degradation evidence":
+          '{"gates-not-run":"No gates were requested.","persist-skipped: redactor-unavailable":"No compatible redactor was available."}',
+      },
     ).replace(
-      "- Degradation flags: gates-not-run",
-      "- Degradation flags: gates-not-run, persist-skipped: redactor-unavailable",
+      "bundle=.goat-flow/logs/review/goat-review-bundle.fixture.diff",
+      "bundle=persist-skipped: redactor-unavailable",
     );
     const result = validateReviewReport(report, projectRoot);
     assert.deepEqual(result.violations, []);
@@ -274,16 +281,26 @@ describe("review output validation: ledger, sections, and verdict", () => {
 
   it("preserves moved refuter IDs while rejecting undefined secondary references", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
-    const refuted = validReview(projectRoot)
-      .replace("- Evidence: 4 OBSERVED", "- Evidence: 5 OBSERVED")
-      .replace("- Verdicts: 4/0/0/0", "- Verdicts: 5/0/0/0")
-      .replace(
-        "## Spec Drift",
-        `## Refuted by Refuter
-- R-005 [MAY:patch] [CONFIRMED-CROSS-MODEL] **Retire a disproved concern** \`src/example.ts\` (search: \`loadConfig\`) - The host reproduced the removing guard. | Evidence: OBSERVED | Proof: RUNTIME
+    const ledgerPath =
+      ".goat-flow/logs/review/goat-review-refutations.history.txt";
+    writeFileSync(
+      join(projectRoot, ledgerPath),
+      "- R-005 | Suspicion: missing guard | Evidence: host reproduced guard | Rationale: disproved\n",
+    );
+    const refuted = withIntegrityFields(
+      validReview(projectRoot, undefined, undefined, 1, ledgerPath),
+      {
+        "Refuter pass":
+          "yes; confirmed=1, refuted=1, unresolved=0, leads-verified=0, model=test-refuter",
+        "Refuter outcomes": '{"R-004":"confirmed","R-005":"refuted"}',
+      },
+    ).replace(
+      "## Spec Drift",
+      `## Refuted by Refuter
+- R-005 [MAY:patch] **Retire a disproved concern** \`src/example.ts\` (search: \`loadConfig\`) - The host reproduced the removing guard. | Evidence: OBSERVED | Proof: RUNTIME
 
 ## Spec Drift`,
-      );
+    );
     assert.deepEqual(validateReviewReport(refuted, projectRoot).violations, []);
 
     const unresolvedReference = refuted.replace(
@@ -436,25 +453,25 @@ describe("review output validation: ledger, sections, and verdict", () => {
 
     assert.match(
       result.violations.map((violation) => violation.message).join("\n"),
-      /degradation flags require a non-confident Conclusion/u,
+      /degradation flags require Conclusion: coverage-degraded/u,
     );
   });
 
-  it("warns for unknown degradation flags without failing validation", (testContext) => {
+  it("rejects unknown degradation flags as integrity failures", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
     const report = validReview(projectRoot).replace(
       "- Degradation flags: gates-not-run",
       "- Degradation flags: gates-not-run, mystery-degradation",
     );
     const result = validateReviewReport(report, projectRoot);
-    assert.equal(result.status, "pass");
+    assert.equal(result.status, "fail");
     assert.equal(
-      hasCheck(warningsOf(result), "V5", "degradation-flag-unknown"),
+      hasCheck(result.violations, "V5", "degradation-flag-unknown"),
       true,
     );
     assert.match(
       renderReviewValidationResult(result),
-      /^review validate: PASS \(1 warning\)/u,
+      /^review validate: FAIL/u,
     );
   });
 
@@ -610,274 +627,448 @@ describe("review output validation: ledger, sections, and verdict", () => {
     assert.match(rendered, /line \d+ \[V3\/finding-harm\]/u);
   });
 });
-describe("review validate CLI", () => {
-  it("parses stdin-first and optional-file forms from the reviewed-project cwd", () => {
-    const stdinForm = parseCLIArgs(["review", "validate"]);
-    assert.equal(stdinForm.command, "review");
-    assert.equal(stdinForm.reviewSubcommand, "validate");
-    assert.equal(stdinForm.reviewValidatePath, null);
-    assert.equal(stdinForm.projectPath, resolve("."));
 
-    const fileForm = parseCLIArgs(["review", "validate", "saved-review.md"]);
-    assert.equal(fileForm.reviewValidatePath, resolve("saved-review.md"));
-    assert.equal(fileForm.projectPath, resolve("."));
+/** Require a specific disposition/refuter refusal after establishing the companion report as a passing control. */
+function assertDispositionFailure(
+  report: string,
+  root: string,
+  pattern: RegExp,
+): void {
+  const result = validateReviewReport(report, root);
+  assert.equal(result.status, "fail");
+  assert.ok(
+    result.violations.some((issue) => pattern.test(issue.message)),
+    JSON.stringify(result.violations),
+  );
+}
 
-    assert.equal(
-      parseCLIArgs(["review", "validate-draft"]).reviewSubcommand,
-      "validate-draft",
+describe("exclusive final review dispositions", () => {
+  it("ties inference and unreproduced disclosures to active evidence totals and finding IDs", (test) => {
+    const root = createReviewedProject(test);
+    const report = withIntegrityFields(validReview(root), {
+      Evidence: "1 OBSERVED / 3 INFERRED",
+      "Degradation flags":
+        "gates-not-run, high-inference-ratio, not-reproduced-findings",
+      "Degradation evidence": canonicalReviewJson({
+        "gates-not-run": "No gates were requested.",
+        "high-inference-ratio": "1 OBSERVED / 3 INFERRED active findings.",
+        "not-reproduced-findings":
+          "R-001: inspected the fixture contract but did not reproduce its claimed runtime failure.",
+      }),
+    })
+      .replace(/^(- R-00[123].*Evidence: )OBSERVED/gmu, "$1INFERRED")
+      .replace(/^(- R-001.*Proof: )STATIC/mu, "$1NOT-REPRODUCED");
+    assert.deepEqual(validateReviewReport(report, root).violations, []);
+    assertDispositionFailure(
+      report.replace(
+        "1 OBSERVED / 3 INFERRED active findings.",
+        "Evidence remains incomplete.",
+      ),
+      root,
+      /high-inference-ratio.*name/,
     );
-    assert.equal(
-      parseCLIArgs(["review", "validate-ledger"]).reviewSubcommand,
-      "validate-ledger",
+    assertDispositionFailure(
+      report.replace(
+        "R-001: inspected the fixture contract",
+        "The reviewer inspected the fixture contract",
+      ),
+      root,
+      /not-reproduced-findings.*name/,
+    );
+    assertDispositionFailure(
+      report.replace(
+        "gates-not-run, high-inference-ratio, not-reproduced-findings",
+        "gates-not-run",
+      ),
+      root,
+      /outnumber|NOT-REPRODUCED/,
     );
   });
 
-  it("rejects missing, unknown, and extra review positionals", () => {
-    assert.throws(
-      () => parseCLIArgs(["review"]),
-      /requires subcommand "snapshot"/iu,
+  it("requires an unresolved refuter disclosure to identify the surviving unconfirmed concern", (test) => {
+    const root = createReviewedProject(test);
+    const report = withIntegrityFields(validReview(root), {
+      Verdicts: "3/0/0/1",
+      "Final dispositions":
+        '{"R-001":"confirmed","R-002":"confirmed","R-003":"confirmed","R-004":"unresolved"}',
+      "Refuter pass":
+        "yes; confirmed=0, refuted=0, unresolved=1, leads-verified=0, model=test-refuter",
+      "Refuter outcomes": '{"R-004":"unresolved"}',
+      "Degradation flags": "gates-not-run, cross-model-unresolved",
+      "Degradation evidence": canonicalReviewJson({
+        "gates-not-run": "No gates were requested.",
+        "cross-model-unresolved":
+          "R-004 needs the caller's configuration contract.",
+      }),
+    })
+      .replace(" [CONFIRMED-CROSS-MODEL]", "")
+      .replace(
+        "**Group configuration fallback gaps**",
+        "**Unconfirmed: group configuration fallback gaps**",
+      )
+      .replace(
+        /^(- R-004.*)$/mu,
+        "$1 | Missing proof: caller contract | Next check: inspect the caller",
+      );
+    assert.deepEqual(validateReviewReport(report, root).violations, []);
+    assertDispositionFailure(
+      report.replace(
+        "R-004 needs the caller's",
+        "The review needs the caller's",
+      ),
+      root,
+      /cross-model-unresolved.*name/,
     );
-    assert.throws(
-      () => parseCLIArgs(["review", "check"]),
-      /requires subcommand/iu,
-    );
-    assert.throws(
-      () => parseCLIArgs(["review", "validate", "one.md", "two.md"]),
-      /at most one \[report-file\]/iu,
-    );
-    assert.throws(
-      () => parseCLIArgs(["review", "validate-draft", "one.md", "two.md"]),
-      /at most one \[draft-envelope-file\]/iu,
+    assertDispositionFailure(
+      report.replace("gates-not-run, cross-model-unresolved", "gates-not-run"),
+      root,
+      /cross-model-unresolved must match/,
     );
   });
 
-  it("validates ledger grammar and a complete report draft before persistence", () => {
-    const ledgerPath =
-      ".goat-flow/logs/review/goat-review-refutations.not-written.txt";
-    const rawLedger = `- R-003 | Suspicion: missing guard | Evidence: caller rejects empty values | Rationale: the guard removes reachability
-- R-004 | Suspicion: missing fallback | Evidence: caller supplies a default | Rationale: the fallback removes reachability
-`;
-
-    const ledger = spawnSync(
-      process.execPath,
-      ["--import", "tsx", CLI_PATH, "review", "validate-ledger"],
-      { cwd: FRAMEWORK_ROOT, encoding: "utf-8", input: rawLedger },
+  it("reconciles PR bot counters and distinguishes missing ingestion from an empty response", (test) => {
+    const { projectRoot, base, head } = createVersionedReviewedProject(test);
+    const report = withIntegrityFields(
+      withReviewSource(
+        reviewReportTemplate("src/example.ts", "committedAnchor"),
+        projectRoot,
+        { kind: "pr", target: base, head },
+      ),
+      {
+        "Automated-review provenance":
+          "overlap-confirmed=0, local-only=4, bot-only-locally-verified=0, disputed-match=0; automated findings the local review missed: none; local findings every bot missed: R-001, R-002, R-003, R-004",
+      },
     );
-    assert.equal(ledger.status, 0, ledger.stderr);
-    assert.match(ledger.stdout, /review validate-ledger: PASS \(2 records\)/u);
-
-    const report = validReview(
-      FRAMEWORK_ROOT,
-      "src/cli/help.ts",
-      "renderHelp",
-      2,
-      ledgerPath,
-    ).replace("- Review validator: validated", "- Review validator: pending");
-    const draftEnvelope = `${report}<!-- goat-flow-review-ledger-draft -->\n${rawLedger}`;
-
-    const draft = spawnSync(
-      process.execPath,
-      ["--import", "tsx", CLI_PATH, "review", "validate-draft"],
-      { cwd: FRAMEWORK_ROOT, encoding: "utf-8", input: draftEnvelope },
+    assert.deepEqual(validateReviewReport(report, projectRoot).violations, []);
+    assertDispositionFailure(
+      report.replace("local-only=4", "local-only=5"),
+      projectRoot,
+      /counts and missed-ID lists/,
     );
-    assert.equal(draft.status, 0, draft.stderr);
-    assert.match(draft.stdout, /review validate-draft: PASS/u);
-    assert.match(draft.stdout, /persistence unverified/iu);
+    assertDispositionFailure(
+      report.replace(
+        "local findings every bot missed: R-001, R-002, R-003, R-004",
+        "local findings every bot missed: R-001",
+      ),
+      projectRoot,
+      /counts and missed-ID lists/,
+    );
+    const noBots = withIntegrityFields(report, {
+      "Automated-review provenance": "no-automated-review-present",
+    });
+    assert.deepEqual(validateReviewReport(noBots, projectRoot).violations, []);
+    const missing = withIntegrityFields(report, {
+      "Automated-review provenance": "n/a",
+      "Degradation flags": "gates-not-run, automated-review-uningested",
+      "Degradation evidence":
+        '{"automated-review-uningested":"The PR comment response was unavailable.","gates-not-run":"No gates were requested."}',
+    });
+    assert.deepEqual(validateReviewReport(missing, projectRoot).violations, []);
+    assertDispositionFailure(
+      withIntegrityFields(missing, {
+        "Automated-review provenance": "no-automated-review-present",
+      }),
+      projectRoot,
+      /distinguish unavailable ingestion/,
+    );
+    const localRoot = createReviewedProject(test);
+    const local = validReview(localRoot);
+    assert.deepEqual(validateReviewReport(local, localRoot).violations, []);
+    assertDispositionFailure(
+      withIntegrityFields(local, {
+        "Automated-review provenance": "no-automated-review-present",
+      }),
+      localRoot,
+      /outside PR mode/,
+    );
+  });
 
-    const mismatchedEnvelope = `${validReview(
-      FRAMEWORK_ROOT,
-      "src/cli/help.ts",
-      "renderHelp",
-      1,
-      ledgerPath,
+  it("matches exact refuted IDs, rejects duplicate records, and keeps history out of active evidence", (test) => {
+    const root = createReviewedProject(test);
+    const ledger =
+      ".goat-flow/logs/review/goat-review-refutations.identities.txt";
+    const record =
+      "- R-005 | Suspicion: missing guard | Evidence: fixture guard removes reachability | Rationale: refuted\n";
+    writeFileSync(join(root, ledger), record);
+    const dispositions = canonicalReviewJson({
+      "R-001": "confirmed",
+      "R-002": "confirmed",
+      "R-003": "confirmed",
+      "R-004": "confirmed",
+      "R-005": "refuted",
+    });
+    const report = withIntegrityFields(
+      validReview(root, undefined, undefined, 1, ledger),
+      {
+        "Final dispositions": dispositions,
+        "Refuter pass":
+          "yes; confirmed=1, refuted=1, unresolved=0, leads-verified=0, model=test-refuter",
+        "Refuter outcomes": '{"R-004":"confirmed","R-005":"refuted"}',
+      },
     ).replace(
-      "- Review validator: validated",
-      "- Review validator: pending",
-    )}<!-- goat-flow-review-ledger-draft -->\n${rawLedger}`;
-    const mismatched = spawnSync(
-      process.execPath,
-      ["--import", "tsx", CLI_PATH, "review", "validate-draft"],
-      { cwd: FRAMEWORK_ROOT, encoding: "utf-8", input: mismatchedEnvelope },
+      "## Spec Drift",
+      "## Refuted by Refuter\n- R-005 [MUST:patch] **Refuted fixture concern** `src/example.ts` (search: `loadConfig`) - The guard disproves this fixture claim. | Harm: disproved request failure | Evidence: OBSERVED | Proof: RUNTIME\n\n## Spec Drift",
     );
-    assert.equal(mismatched.status, 1, mismatched.stderr);
-    assert.match(mismatched.stdout, /2 records.+claims 1/iu);
-
-    const missingAppendix = spawnSync(
-      process.execPath,
-      ["--import", "tsx", CLI_PATH, "review", "validate-draft"],
-      { cwd: FRAMEWORK_ROOT, encoding: "utf-8", input: report },
+    assert.deepEqual(validateReviewReport(report, root).violations, []);
+    assertDispositionFailure(
+      withIntegrityFields(report, {
+        Evidence: "5 OBSERVED / 0 INFERRED",
+        Verdicts: "5/0/1/0",
+      }),
+      root,
+      /active findings|Evidence claims/,
     );
-    assert.equal(missingAppendix.status, 1, missingAppendix.stderr);
-    assert.match(
-      missingAppendix.stdout,
-      /nonzero refutations require.+goat-flow-review-ledger-draft/iu,
+    writeFileSync(join(root, ledger), record.replace("R-005", "R-006"));
+    assertDispositionFailure(report, root, /unique IDs must equal/);
+    writeFileSync(join(root, ledger), record + record);
+    assertDispositionFailure(
+      withIntegrityFields(report, { "Refutations logged": "2" }),
+      root,
+      /duplicate R-IDs/,
     );
-
-    const prematureValidated = spawnSync(
-      process.execPath,
-      ["--import", "tsx", CLI_PATH, "review", "validate-draft"],
-      {
-        cwd: FRAMEWORK_ROOT,
-        encoding: "utf-8",
-        input: draftEnvelope.replace(
-          "- Review validator: pending",
-          "- Review validator: validated",
-        ),
-      },
-    );
-    assert.equal(prematureValidated.status, 1, prematureValidated.stderr);
-    assert.match(prematureValidated.stdout, /pending.+final validation/iu);
-
-    const duplicateMarker = spawnSync(
-      process.execPath,
-      ["--import", "tsx", CLI_PATH, "review", "validate-draft"],
-      {
-        cwd: FRAMEWORK_ROOT,
-        encoding: "utf-8",
-        input: `${draftEnvelope}<!-- goat-flow-review-ledger-draft -->\n${rawLedger}`,
-      },
-    );
-    assert.equal(duplicateMarker.status, 1, duplicateMarker.stderr);
-    assert.match(duplicateMarker.stdout, /exactly one ledger marker/iu);
-
-    const zeroRefutationDraft = validReview(
-      FRAMEWORK_ROOT,
-      "src/cli/help.ts",
-      "renderHelp",
-    ).replace("- Review validator: validated", "- Review validator: pending");
-    const zeroRefutations = spawnSync(
-      process.execPath,
-      ["--import", "tsx", CLI_PATH, "review", "validate-draft"],
-      {
-        cwd: FRAMEWORK_ROOT,
-        encoding: "utf-8",
-        input: zeroRefutationDraft,
-      },
-    );
-    assert.equal(zeroRefutations.status, 0, zeroRefutations.stderr);
-
-    const unexpectedAppendix = spawnSync(
-      process.execPath,
-      ["--import", "tsx", CLI_PATH, "review", "validate-draft"],
-      {
-        cwd: FRAMEWORK_ROOT,
-        encoding: "utf-8",
-        input: `${zeroRefutationDraft}<!-- goat-flow-review-ledger-draft -->\n${rawLedger}`,
-      },
-    );
-    assert.equal(unexpectedAppendix.status, 1, unexpectedAppendix.stderr);
-    assert.match(
-      unexpectedAppendix.stdout,
-      /zero refutations must not include.+appendix/iu,
-    );
-
-    const final = spawnSync(
-      process.execPath,
-      ["--import", "tsx", CLI_PATH, "review", "validate"],
-      {
-        cwd: FRAMEWORK_ROOT,
-        encoding: "utf-8",
-        input: report.replace(
-          "- Review validator: pending",
-          "- Review validator: validated",
-        ),
-      },
-    );
-    assert.equal(final.status, 1, final.stderr);
-    assert.match(final.stdout, /declared ledger is absent/u);
-
-    const invalidLedger = spawnSync(
-      process.execPath,
-      ["--import", "tsx", CLI_PATH, "review", "validate-ledger"],
-      { cwd: FRAMEWORK_ROOT, encoding: "utf-8", input: "not a record\n" },
-    );
-    assert.equal(invalidLedger.status, 1, invalidLedger.stderr);
-    assert.match(invalidLedger.stdout, /does not match.+one-line grammar/iu);
+    const duplicate = validateRefutationLedgerText(record + record);
+    assert.equal(duplicate.status, "fail");
+    assert.match(duplicate.violations[0]!.message, /duplicate R-IDs/);
   });
 
-  it("accepts review help without a report and validates stdin end to end", () => {
-    const help = spawnSync(
-      process.execPath,
-      ["--import", "tsx", CLI_PATH, "review", "--help"],
-      { cwd: FRAMEWORK_ROOT, encoding: "utf-8" },
+  it("requires an explicit map when legacy adjusted or unresolved identities would need guessing", (test) => {
+    const root = createReviewedProject(test);
+    const confirmed = validReview(root);
+    assert.deepEqual(validateReviewReport(confirmed, root).violations, []);
+    assertDispositionFailure(
+      withIntegrityFields(confirmed, { Verdicts: "3/1/0/0" }),
+      root,
+      /cannot be inferred unambiguously/,
     );
-    assert.equal(help.status, 0, help.stderr);
-    assert.match(help.stdout, /review validate \[report-file\]/u);
-    assert.match(help.stdout, /review validate-draft \[draft-envelope-file\]/u);
-    assert.match(help.stdout, /review validate-ledger \[ledger-file\]/u);
-    assert.match(help.stdout, /Structural failures exit 1/iu);
-    assert.match(help.stdout, /advisory warnings.*exit 0/iu);
-    assert.match(help.stdout, /capture refusals exit 2/iu);
-
-    const report = validReview(FRAMEWORK_ROOT, "src/cli/help.ts", "renderHelp");
-    const valid = spawnSync(
-      process.execPath,
-      ["--import", "tsx", CLI_PATH, "review", "validate"],
-      { cwd: FRAMEWORK_ROOT, encoding: "utf-8", input: report },
-    );
-    assert.equal(valid.status, 0, valid.stderr);
-    assert.match(valid.stdout, /review validate: PASS/u);
+    const adjusted = withIntegrityFields(confirmed, {
+      Verdicts: "3/1/0/0",
+      "Final dispositions":
+        '{"R-001":"adjusted","R-002":"confirmed","R-003":"confirmed","R-004":"confirmed"}',
+    });
+    assert.deepEqual(validateReviewReport(adjusted, root).violations, []);
+    // A malformed, unknown, or unrelated final outcome must not inherit the valid finding's disposition.
+    for (const map of [
+      '{"R-001":"confirmed","R-001":"adjusted"}',
+      '{"R-001":"unknown"}',
+      '{"R-999":"confirmed"}',
+    ])
+      assertDispositionFailure(
+        withIntegrityFields(adjusted, { "Final dispositions": map }),
+        root,
+        /canonical JSON|values must|placement|matching final disposition/,
+      );
   });
 
-  it("exits one and reports each stdin violation", () => {
-    const report = validReview(
-      FRAMEWORK_ROOT,
-      "src/cli/cli.ts",
-      "missingReviewValidatorAnchor",
-    ).replace(" | Harm: requests use an invalid configuration.", "");
-    const invalid = spawnSync(
-      process.execPath,
-      ["--import", "tsx", CLI_PATH, "review", "validate"],
-      { cwd: FRAMEWORK_ROOT, encoding: "utf-8", input: report },
-    );
-    assert.equal(invalid.status, 1, invalid.stderr);
-    assert.match(invalid.stdout, /\[V1\/anchor-unresolved\]/u);
-    assert.match(invalid.stdout, /\[V3\/finding-harm\]/u);
+  it("keeps unresolved concerns visible with an honest title, decision request, and next check", (test) => {
+    const root = createReviewedProject(test);
+    const report = withIntegrityFields(validReview(root), {
+      Verdicts: "3/0/0/1",
+      "Final dispositions":
+        '{"R-001":"unresolved","R-002":"confirmed","R-003":"confirmed","R-004":"confirmed"}',
+    })
+      .replace("[SHOULD:patch]", "[SHOULD:needs-decision]")
+      .replace(
+        "**Handle missing configuration**",
+        "**Unconfirmed: handle missing configuration**",
+      )
+      .replace(
+        "The loader accepts an empty value.",
+        "The fixture needs a caller decision. | Missing proof: caller contract | Next check: inspect the caller",
+      );
+    assert.deepEqual(validateReviewReport(report, root).violations, []);
+    // Each missing unresolved-field requirement must remain visible instead of becoming a confirmed-looking finding.
+    for (const mutation of [
+      report.replace("Unconfirmed: handle", "Handle"),
+      report.replace("[SHOULD:needs-decision]", "[SHOULD:patch]"),
+      report.replace(" | Missing proof: caller contract", ""),
+      report.replace(" | Next check: inspect the caller", ""),
+      report.replace(
+        "**Unconfirmed: handle missing configuration**",
+        "**Handle missing configuration** **Unconfirmed: misleading second title**",
+      ),
+    ])
+      assertDispositionFailure(
+        mutation,
+        root,
+        /unresolved needs an Unconfirmed/,
+      );
   });
 
-  it("keeps warning-only CLI results at exit zero", () => {
-    const report = validReview(
-      FRAMEWORK_ROOT,
-      "src/cli/help.ts",
-      "renderHelp",
-    ).replace(
-      "- Degradation flags: gates-not-run",
-      "- Degradation flags: gates-not-run, mystery-degradation",
+  it("reconciles no/skipped refuters, per-ID outcomes, and verified leads", (test) => {
+    const root = createReviewedProject(test);
+    const report = validReview(root);
+    assert.deepEqual(validateReviewReport(report, root).violations, []);
+    // Both supported no-run spellings require zero work and no claimed model.
+    for (const state of ["no", "skipped"]) {
+      const skipped = withIntegrityFields(report, {
+        "Refuter pass": `${state}; confirmed=0, refuted=0, unresolved=0, leads-verified=0, model=n/a`,
+        "Refuter outcomes": "{}",
+      }).replace(" [CONFIRMED-CROSS-MODEL]", "");
+      assert.deepEqual(validateReviewReport(skipped, root).violations, []);
+      assertDispositionFailure(
+        skipped.replace("confirmed=0", "confirmed=1"),
+        root,
+        /zero counts/,
+      );
+      assertDispositionFailure(
+        skipped.replace("model=n/a", "model=test-refuter"),
+        root,
+        /model=n\/a/,
+      );
+    }
+    assertDispositionFailure(
+      withIntegrityFields(report, { "Refuter outcomes": "{}" }),
+      root,
+      /matching per-ID/,
     );
-    const warned = spawnSync(
-      process.execPath,
-      ["--import", "tsx", CLI_PATH, "review", "validate"],
-      { cwd: FRAMEWORK_ROOT, encoding: "utf-8", input: report },
+    assertDispositionFailure(
+      report.replace("leads-verified=0", "leads-verified=99"),
+      root,
+      /verified refuter leads cannot exceed/,
     );
-    assert.equal(warned.status, 0, warned.stderr);
-    assert.match(warned.stdout, /review validate: PASS \(1 warning\)/u);
-    assert.match(warned.stdout, /\[V5\/degradation-flag-unknown\]/u);
+    assertDispositionFailure(
+      withIntegrityFields(report, {
+        "Refuter outcomes": '{"R-003":"confirmed"}',
+      }),
+      root,
+      /cross-model tag requires/,
+    );
   });
 
-  // Covers writing validation output through --output: writes the file and expects its contents to match.
-  it("writes validation output through --output", (testContext) => {
-    const outputRoot = mkdtempSync(join(tmpdir(), "goat-flow-review-output-"));
-    testContext.after(() =>
-      rmSync(outputRoot, { recursive: true, force: true }),
-    );
-    const outputPath = join(outputRoot, "validation.txt");
-    const report = validReview(FRAMEWORK_ROOT, "src/cli/help.ts", "renderHelp");
-    const result = spawnSync(
-      process.execPath,
+  it("applies the documented disclosure precedence once across material limit combinations", (test) => {
+    const root = createReviewedProject(test);
+    const full = fullCleanReview(cleanReview(root));
+    const cases: Array<[string[], string, string]> = [
+      [["unfamiliar-area"], "coverage-degraded", "YES WITH CONDITIONS"],
+      [["missing-types"], "coverage-degraded", "YES WITH CONDITIONS"],
+      [["footguns-unread"], "coverage-degraded", "YES WITH CONDITIONS"],
+      [["coverage-degraded"], "coverage-degraded", "YES WITH CONDITIONS"],
       [
-        "--import",
-        "tsx",
-        CLI_PATH,
-        "review",
-        "validate",
-        "--output",
-        outputPath,
+        ["callsite-completeness-grep-only"],
+        "coverage-degraded",
+        "YES WITH CONDITIONS",
       ],
-      { cwd: FRAMEWORK_ROOT, encoding: "utf-8", input: report },
-    );
+      [
+        ["configured-base-unresolved=missing-base"],
+        "coverage-degraded",
+        "YES WITH CONDITIONS",
+      ],
+      [["base-detection-failed"], "coverage-degraded", "YES WITH CONDITIONS"],
+      [["base-fetch-failed"], "coverage-degraded", "YES WITH CONDITIONS"],
+      [
+        ["cross-model-refuter-failed"],
+        "coverage-degraded",
+        "YES WITH CONDITIONS",
+      ],
+      [
+        ["refuter-citation-unverified"],
+        "high-inference",
+        "YES WITH CONDITIONS",
+      ],
+      [["risk-depth-declined"], "partial", "PARTIAL"],
+      [
+        ["risk-depth-declined", "missing-types", "refuter-citation-unverified"],
+        "partial",
+        "PARTIAL",
+      ],
+    ];
+    // Each flag combination must yield one confidence result and one verdict downgrade, regardless of the number of flags.
+    for (const [flags, conclusion, verdict] of cases) {
+      const evidence = canonicalReviewJson(
+        Object.fromEntries(
+          flags.map((flag) => [
+            flag,
+            `Fixture disclosure for ${flag}; the named limitation remains unverified.`,
+          ]),
+        ),
+      );
+      const report = withIntegrityFields(full, {
+        "Degradation flags": flags.join(", "),
+        "Degradation evidence": evidence,
+        Conclusion: conclusion,
+        "Refuter pass":
+          "skipped; confirmed=0, refuted=0, unresolved=0, leads-verified=0, model=n/a",
+      }).replace("Decision: **YES**", `Decision: **${verdict}**`);
+      assert.deepEqual(
+        validateReviewReport(report, root).violations,
+        [],
+        flags.join(", "),
+      );
+      assertDispositionFailure(
+        withIntegrityFields(report, { Conclusion: "confident" }),
+        root,
+        /degradation flags require Conclusion/,
+      );
+    }
+  });
+});
 
-    assert.equal(result.status, 0, result.stderr);
-    assert.equal(result.stdout, "");
-    assert.match(readFileSync(outputPath, "utf-8"), /review validate: PASS/u);
+describe("review receipt files", () => {
+  it("verifies final bundle files and refuses symlink leaves or parents", (test) => {
+    // Each filesystem mutation starts from a real valid receipt so the refusal belongs to that defect alone.
+    for (const defect of [
+      "missing",
+      "directory",
+      "leaf-symlink",
+      "parent-symlink",
+    ] as const) {
+      const root = createReviewedProject(test);
+      const receipt = join(
+        root,
+        ".goat-flow/logs/review/goat-review-bundle.fixture.diff",
+      );
+      const control = validReview(root);
+      assert.deepEqual(validateReviewReport(control, root).violations, []);
+      // Redirecting a parent must fail even when the linked directory still contains the original receipt.
+      if (defect === "parent-symlink") {
+        renameSync(
+          join(root, ".goat-flow/logs"),
+          join(root, ".goat-flow/retained"),
+        );
+        symlinkSync("retained", join(root, ".goat-flow/logs"), "dir");
+      } else {
+        unlinkSync(receipt);
+        // A directory with the expected filename cannot supply the receipt's bytes.
+        if (defect === "directory") mkdirSync(receipt);
+        // A linked leaf must be rejected even when it points to a regular file inside the project.
+        if (defect === "leaf-symlink")
+          symlinkSync(join(root, "src/example.ts"), receipt);
+      }
+      assertDispositionFailure(
+        control,
+        root,
+        /cannot verify declared review bundle/,
+      );
+    }
+  });
+
+  it("checks fresh draft destinations without creating files or accepting existing evidence", (test) => {
+    const root = createReviewedProject(test);
+    const absent = ".goat-flow/logs/review/goat-review-bundle.future.diff";
+    assert.equal(readReviewReceipt(root, absent, "draft"), null);
+    assert.throws(() => readReviewReceipt(root, absent, "final"), /absent/);
+    assert.throws(
+      () =>
+        readReviewReceipt(
+          root,
+          ".goat-flow/logs/review/goat-review-bundle.fixture.diff",
+          "draft",
+        ),
+      /already exists/,
+    );
+    assert.throws(
+      () => readReviewReceipt(root, "../outside.diff", "draft"),
+      /outside/,
+    );
+    symlinkSync("review", join(root, ".goat-flow/logs/linked"), "dir");
+    assert.throws(
+      () =>
+        readReviewReceipt(
+          root,
+          ".goat-flow/logs/linked/goat-review-bundle.future.diff",
+          "draft",
+        ),
+      /outside/,
+    );
   });
 });

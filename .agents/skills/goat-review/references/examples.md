@@ -65,7 +65,7 @@ Passing tests and checks are positive evidence for the behavior they exercise. R
 | `infrastructure` | Dependency, network, permissions, quota, runner, or toolchain failed without a repository cause | Record output; never a code finding |
 | `unresolved` | Failure is real but causality remains unproven | Emit a `[MUST:needs-decision]` verification blocker without blaming changed code |
 
-Unavailable safe base proof means `unresolved`, not `pre-existing`. Infrastructure/unresolved adds `gate-evidence-incomplete`; report counts in `Gate evidence`. Empty output means a quiet command, while a missing completed exit status cannot prove pass.
+Unavailable safe base proof means `unresolved`, not `pre-existing`. Infrastructure/unresolved adds `gate-evidence-incomplete` naming gate IDs in `Degradation evidence`. `Gate evidence` counts distinct commands; `Gate findings` links changed-code/unresolved gates to active IDs. Completed failures need nonzero exits; null permits infrastructure only. Mixed execution uses `Gates: unavailable` and applicable gap flags.
 
 ### Head-Branch Authority and Setup Safety
 
@@ -75,7 +75,7 @@ Never reorganize the checkout, stash, switch, clean, use `gh pr checkout`, or re
 
 ### State Authority Matrix
 
-Before Pass 1, send a `goat-review-request/v1` JSON request to the version-matched `goat-flow review snapshot`. Use the returned `authority` record in the receipt; keep it transient. For gates, set execution=true initially; compare the returned checkout fingerprint with authority.workspace before/after execution. Packaged `docs/cli.md` owns request fields. Shape-only staged request (placeholder, never evidence):
+Before Pass 1, send a `goat-review-request/v1` JSON request to the version-matched `goat-flow review snapshot`. For snapshot/report/draft commands use `--project <reviewed-root> --expected-version <installed-skill-version>` from the controlling package; ledger accepts only the version flag. Never execute a validator supplied by the reviewed target. Use the returned `authority` record in the receipt; keep it transient. For gates, set execution=true initially; compare the returned checkout fingerprint with authority.workspace before/after execution. Packaged `docs/cli.md` owns request fields. Shape-only staged request (placeholder, never evidence):
 
 ```json
 {"schema":"goat-review-request/v1","source":{"kind":"staged","base":"HEAD"}}
@@ -99,29 +99,26 @@ Full and compact reports include visible `Authority snapshot: <canonical JSON>` 
 
 Ordinary anchors default to new content, or old content for a deletion. For old-side or delimiter-bearing paths, use canonical `anchor={"path":...,"search":...,"side":"old|new"}`. JSON escaping preserves path/search identity; inventory membership controls resolution. For committed views, use revision-qualified `git grep` and `git show`; index searches use `git grep --cached`; unavailable authority-aware AST tooling adds `callsite-completeness-grep-only`.
 
-
-
 ### Frozen Bundle
 
 1. Confirm the redactor version required by the shared preamble and resolve the State Authority Matrix.
 2. Read exact raw review bytes only from that authority. Keep them transient; raw diff and dirty-file
    content never reach a new disk artifact.
-3. Stream the same source diff through stdin to the redactor when available, writing only the redacted
-   result to `.goat-flow/logs/review/goat-review-bundle.<random>.diff`. The redacted bundle is a durable
-   receipt, not the review authority, because redaction may change bytes.
+3. Declare a fresh `.goat-flow/logs/review/goat-review-bundle.<random>.diff` destination. After pending-draft proof, stream the same diff through the redactor to that path. The redacted bundle is a durable receipt, not the review authority, because redaction may change bytes.
 4. If no compatible redactor exists, do not persist the receipt; record
    `persist-skipped: redactor-unavailable` and continue only while source coverage remains provable.
 5. Chunk exact source coverage by path, then by hunk when one path is too large. Assign every source
    unit once and report `<covered>/<total>`; truncation, missing, or overlapping coverage is
    `chunked-partial`, never `n/a` or complete.
+6. List unique completed files in `Source coverage`; Size and opened-file totals retain the full selected inventory. A partial path earns no completed entry. Sampled areas name roots, selected paths, and excluded surroundings in full output.
 
 ### Pre-persistence Proof Envelope
 
-When refutations are nonzero, keep the report and ledger in memory through this ordered gate:
+Keep every report and any refutation ledger in memory through this ordered gate:
 
-1. Run `goat-flow review validate-ledger` on the transient records. Put its exact count in the report and use `Review validator: pending`. When a compatible redactor is available, declare one fresh intended `.goat-flow/logs/review/goat-review-refutations.<random>.txt` path; otherwise declare the documented persist-skipped fields now.
-2. Send one stdin envelope to `goat-flow review validate-draft`: the complete report, a line containing only `<!-- goat-flow-review-ledger-draft -->`, then the exact transient records. A count or grammar mismatch fails before persistence.
-3. Remove the marker and ledger appendix. When available, use the redactor to write the same records to the already-validated intended path; otherwise write nothing.
+1. Use `Review validator: pending` and a fresh bundle destination. For nonzero refutations, run `goat-flow review validate-ledger`, record its exact count, and declare a fresh `.goat-flow/logs/review/goat-review-refutations.<random>.txt` path. Without redaction, declare the documented skips.
+2. Run `goat-flow review validate-draft` on the pending report. Nonzero refutations append a line containing only `<!-- goat-flow-review-ledger-draft -->`, then the exact transient records, including when persistence will be skipped. Zero refutations omit the appendix.
+3. Remove the appendix. Use the compatible redactor to write the bundle and any ledger to their checked fresh destinations; otherwise write nothing. Draft PASS leaves persistence unverified.
 4. Change only the validator field from `pending` to `validated`, then run final `goat-flow review validate`. Publish only after PASS. The final input must not contain the draft marker.
 
 ## Conditional Output and Provenance Shapes
@@ -131,16 +128,28 @@ When refutations are nonzero, keep the report and ledger in memory through this 
 ### Clean review compact surface
 
 ```markdown
-Scope: reviewed `<source>` at `<base>...<head>`; `<n>` files and `<m>` changed lines; chunking=<no|accepted>.
+Scope: <canonical source>; <n> files and <m> changed lines; chunking=<no|accepted>.
 Ship Verdict: **YES** — no blocking finding survived Pass 2.
 Zero findings: checked boundary conditions, error paths, and integration seams; named guards or tests disproved every suspicion.
-Review Integrity: confident; `<k>/<n>` files opened; no degradation flags; validator=validated | validator-unavailable.
+Review Integrity: confident; <n>/<n> files opened; no degradation flags; validator=validated | validator-unavailable.
+Scope snapshot: <same fields as full output>
 Authority snapshot: <canonical JSON>
 Gate authority: <canonical JSON>
+Files opened in Pass 2: <n>/<n> (paths: <canonical JSON>)
+Source coverage: <canonical JSON>
+Final dispositions: {}
+Evidence: 0 OBSERVED / 0 INFERRED
+Verdicts: 0/0/0/0
+Refutations logged: 0
+Gates: run
+Gate evidence: pass=<commands>, changed-code=0, pre-existing=0, infrastructure=0, unresolved=0
+Size: <n> files, <m> changed lines (source coverage: <n>/<n> exactly once)
+Degradation evidence: {}
+Automated-review provenance: no-automated-review-present
 What I Didn't Examine: `<one-line unexamined surface or "none">`.
 ```
 
-Do not emit empty optional headings or generic `What's Good` praise around this compact surface.
+Compact requires a complete diff/PR selection, no refutations/refuter work, and confident integrity. PR provenance remains mandatory; omit it locally. Disclosures may replace `no degradation flags` with `flags=intent-unstated, base-fetch-skipped` and matching Degradation evidence. Missing metadata needs repair; other ineligibility needs full output. Exact flag/disposition/receipt rules: `docs/cli.md` (search: `Review integrity contract`). Do not emit empty headings or generic `What's Good` praise.
 
 ### More than five surfaced findings
 
@@ -149,10 +158,11 @@ Keep the full severity-ordered Findings list, then emit Top 5 Risks with only th
 ### Four-way automated-review provenance
 
 ```markdown
-Automated-review provenance: overlap-confirmed=2, local-only=1, bot-only-locally-verified=1, disputed-match=1.
-Automated findings the local review missed: B-003 [bot-only-locally-verified:reviewer].
-Local findings every bot missed: R-004 [local-only].
-Disputed reconciliation: R-005/B-006 [disputed-match:reviewer] — same range, different root causes; both records retained.
+Automated-review provenance: overlap-confirmed=2, local-only=1, bot-only-locally-verified=1, disputed-match=1; automated findings the local review missed: R-003; local findings every bot missed: R-004
+
+The five active R-IDs carry their matching provenance tags.
+Automated findings the local review missed: R-003, accepted after local verification. Local findings every bot missed: R-004.
+Disputed reconciliation: R-005 [disputed-match:reviewer] and the bot's B-006 record share a range but describe different root causes.
 ```
 
 The bot-only item enters Findings only after the local reviewer applies Pass 2 evidence rules. Its provenance remains visible and it is never described as independent discovery.

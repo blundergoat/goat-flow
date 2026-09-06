@@ -1,12 +1,13 @@
 /**
- * How a drafted review is read before it is judged: compact and full surfaces, fenced and
- * commented examples that must stay inert, semantic anchors that must resolve, and the
- * Review Integrity block's required fields.
+ * Exercise the visible evidence required by full and compact review reports.
  *
- * Fixtures use real files so anchor and ledger claims are behavioural, not mocked.
+ * Use when changing metadata, coverage, anchor checks, or Markdown handling.
+ * Real project files distinguish a valid source claim from an unrelated fixture setup failure.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { validateReviewReport } from "../../src/cli/review-validate.js";
 import {
   createReviewedProject,
@@ -14,10 +15,14 @@ import {
   validReview,
   withReviewSource,
   reviewAuthorityFields,
+  cleanReview,
+  fullCleanReview,
+  withIntegrityFields,
   hasCheck,
   hasViolation,
 } from "./review-validate.helpers.js";
 import type { ValidationIssueShape } from "./review-validate.helpers.js";
+import { canonicalReviewJson } from "../../src/cli/review-validate-authority.js";
 
 describe("review output validation: grammar, masking, and integrity", () => {
   it("accepts a complete report and the compact clean-review surface", (testContext) => {
@@ -27,7 +32,7 @@ describe("review output validation: grammar, masking, and integrity", () => {
       [],
     );
 
-    const compact = `Scope: reviewed worktree at HEAD; 1 file and 1 changed line; chunking=none.
+    const compact = `Scope: worktree; 1 file and 1 changed line; chunking=none.
 ${reviewAuthorityFields(projectRoot)}
 Ship Verdict: **YES** - no blocking finding survived Pass 2.
 Zero findings: checked boundary conditions, error paths, and integration seams; guards disproved every suspicion.
@@ -39,7 +44,7 @@ What I Didn't Examine: none.
 
   it("requires a terminal chunking state in compact clean reviews", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
-    const compact = `Scope: reviewed worktree at HEAD; 1 file and 1 changed line; chunking=none.
+    const compact = `Scope: worktree; 1 file and 1 changed line; chunking=none.
 ${reviewAuthorityFields(projectRoot)}
 Ship Verdict: **YES** - no blocking finding survived Pass 2.
 Zero findings: checked boundary conditions, error paths, and integration seams; guards disproved every suspicion.
@@ -59,7 +64,7 @@ What I Didn't Examine: none.
       projectRoot,
     );
     const accepted = validateReviewReport(
-      compact.replace("chunking=none", "chunking=accepted"),
+      compact.replaceAll("chunking=none", "chunking=accepted"),
       projectRoot,
     );
 
@@ -74,7 +79,7 @@ What I Didn't Examine: none.
     const resolvedOnlyReport = validReview(projectRoot)
       .replace("- Refutation ledger: n/a\n", "")
       .replace(/^- Automated-review provenance:.*\n/mu, "")
-      .replace(/^- Refuter pass:.*\n/mu, "")
+      .replace(/^- Refuter (?:pass|outcomes):.*\n/gmu, "")
       .replace("- Spec drift: checked M05\n", "")
       .replaceAll(" [local-only]", "")
       .replace(" [CONFIRMED-CROSS-MODEL]", "")
@@ -99,7 +104,10 @@ What I Didn't Examine: none.
       projectRoot,
     );
     const missingRefuter = validateReviewReport(
-      validReview(projectRoot).replace(/^- Refuter pass:.*\n/mu, ""),
+      validReview(projectRoot).replace(
+        /^- Refuter (?:pass|outcomes):.*\n/gmu,
+        "",
+      ),
       projectRoot,
     );
     const missingSpecDrift = validateReviewReport(
@@ -158,7 +166,7 @@ What I Didn't Examine: none.
       "Ship Verdict: **YES** and **NO**",
       "Ship Verdict: **YES** - actually **NO**",
     ]) {
-      const report = `Scope: reviewed worktree at HEAD; 1 file and 1 changed line; chunking=none.
+      const report = `Scope: worktree; 1 file and 1 changed line; chunking=none.
 ${reviewAuthorityFields(projectRoot)}
 ${verdict}
 Zero findings: checked boundary conditions, error paths, and integration seams; guards disproved every suspicion.
@@ -201,7 +209,7 @@ What I Didn't Examine: none.
 
   it("rejects compact proof fields contained in multiline inline code", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
-    const report = `\`Scope: reviewed worktree at HEAD; 1 file and 1 changed line; chunking=none.
+    const report = `\`Scope: worktree; 1 file and 1 changed line; chunking=none.
 ${reviewAuthorityFields(projectRoot)}
 Ship Verdict: **YES** - no blocking finding survived Pass 2.
 Zero findings: checked boundary conditions, error paths, and integration seams; guards disproved every suspicion.
@@ -217,7 +225,7 @@ What I Didn't Examine: none.\`
 
   it("keeps a contradictory verdict visible after an invalid fence opener", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
-    const report = `Scope: reviewed worktree at HEAD; 1 file and 1 changed line; chunking=none.
+    const report = `Scope: worktree; 1 file and 1 changed line; chunking=none.
 ${reviewAuthorityFields(projectRoot)}
 Ship Verdict: **YES** - no blocking finding survived Pass 2.
 Zero findings: checked boundary conditions, error paths, and integration seams; guards disproved every suspicion.
@@ -266,7 +274,7 @@ Review Integrity: confident; 1/1 files opened; no degradation flags; validator=v
 
   it("rejects empty, undefended, or repeated compact disclosures", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
-    const compact = `Scope: reviewed worktree at HEAD; 1 file and 1 changed line; chunking=none.
+    const compact = `Scope: worktree; 1 file and 1 changed line; chunking=none.
 ${reviewAuthorityFields(projectRoot)}
 Ship Verdict: **YES** - no blocking finding survived Pass 2.
 Zero findings: checked boundary conditions, error paths, and integration seams; guards disproved every suspicion.
@@ -309,7 +317,7 @@ What I Didn't Examine: none.
   it("keeps proof fields after an escaped HTML comment opener", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
     const report = `Checked the visible literal \\<!-- token.
-Scope: reviewed worktree at HEAD; 1 file and 1 changed line; chunking=none.
+Scope: worktree; 1 file and 1 changed line; chunking=none.
 ${reviewAuthorityFields(projectRoot)}
 Ship Verdict: **YES** - no blocking finding survived Pass 2.
 Zero findings: checked boundary conditions, error paths, and integration seams; guards disproved every suspicion.
@@ -324,7 +332,7 @@ What I Didn't Examine: none.
     const projectRoot = createReviewedProject(testContext);
     const report = `Checked the literal \`first line
 continued <!-- remains code\` token.
-Scope: reviewed worktree at HEAD; 1 file and 1 changed line; chunking=none.
+Scope: worktree; 1 file and 1 changed line; chunking=none.
 ${reviewAuthorityFields(projectRoot)}
 Ship Verdict: **YES** - no blocking finding survived Pass 2.
 Zero findings: checked boundary conditions, error paths, and integration seams; guards disproved every suspicion.
@@ -348,7 +356,7 @@ What I Didn't Examine: none.
   it("rejects structural review evidence inside a type-7 HTML block", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
     const report = `<x-review>
-Scope: reviewed worktree at HEAD; 1 file and 1 changed line; chunking=none.
+Scope: worktree; 1 file and 1 changed line; chunking=none.
 ${reviewAuthorityFields(projectRoot)}
 Ship Verdict: **YES** - no blocking finding survived Pass 2.
 Zero findings: checked boundary conditions, error paths, and integration seams.
@@ -365,7 +373,7 @@ What I Didn't Examine: none.
 
   it("rejects degradation flags in compact integrity receipts", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
-    const report = `Scope: reviewed worktree at HEAD; 1 file and 1 changed line; chunking=none.
+    const report = `Scope: worktree; 1 file and 1 changed line; chunking=none.
 ${reviewAuthorityFields(projectRoot)}
 Ship Verdict: **YES** - no blocking finding survived Pass 2.
 Zero findings: checked boundary conditions, error paths, and integration seams.
@@ -392,7 +400,7 @@ What I Didn't Examine: none.
       projectRoot,
     );
     const compactWithoutValidator = validateReviewReport(
-      `Scope: reviewed worktree at HEAD; 1 file and 1 changed line; chunking=none.
+      `Scope: worktree; 1 file and 1 changed line; chunking=none.
 ${reviewAuthorityFields(projectRoot)}
 Ship Verdict: **YES** - no blocking finding survived Pass 2.
 Zero findings: checked boundary conditions, error paths, and integration seams.
@@ -513,98 +521,42 @@ What I Didn't Examine: none.
   }
 
   it("requires accepted chunking when completed scope size exceeds either limit", (testContext) => {
-    const projectRoot = createReviewedProject(testContext);
-    const fullFileOverflow = validReview(projectRoot)
-      .replace(
-        "- Files opened in Pass 2: 1/1",
-        "- Files opened in Pass 2: 21/21",
-      )
-      .replace(
-        "- Size: 1 files, 1 changed lines",
-        "- Size: 21 files, 3000 changed lines",
+    // Real selected files keep chunk-limit failures separate from inventory-count contradictions.
+    for (const [fileCount, changedLines, needsChunks] of [
+      [21, 21, true],
+      [1, 3001, true],
+      [20, 3000, false],
+    ] as const) {
+      const projectRoot = createReviewedProject(testContext);
+      writeFileSync(
+        join(projectRoot, "src/example.ts"),
+        "loadConfig\n".repeat(changedLines - fileCount + 1),
       );
-    const fullLineOverflow = validReview(projectRoot)
-      .replace(
-        "- Files opened in Pass 2: 1/1",
-        "- Files opened in Pass 2: 20/20",
-      )
-      .replace(
-        "- Size: 1 files, 1 changed lines",
-        "- Size: 20 files, 3001 changed lines",
-      );
-    const fullBoundary = validReview(projectRoot)
-      .replace(
-        "- Files opened in Pass 2: 1/1",
-        "- Files opened in Pass 2: 20/20",
-      )
-      .replace(
-        "- Size: 1 files, 1 changed lines",
-        "- Size: 20 files, 3000 changed lines",
-      );
-    const compactFileOverflow = `Scope: reviewed worktree at HEAD; 21 files and 3000 changed lines; chunking=none.
-${reviewAuthorityFields(projectRoot)}
-Ship Verdict: **YES** - no blocking finding survived Pass 2.
-Zero findings: checked boundary conditions, error paths, and integration seams; guards disproved every suspicion.
-Review Integrity: confident; 21/21 files opened; no degradation flags; validator=validated.
-What I Didn't Examine: none.
-`;
-    const compactLineOverflow = compactFileOverflow
-      .replace("21 files and 3000", "20 files and 3001")
-      .replace("21/21 files", "20/20 files");
-    const compactBoundary = compactFileOverflow
-      .replace("21 files", "20 files")
-      .replace("21/21 files", "20/20 files");
-
-    assert.equal(
-      hasViolation(
-        validateReviewReport(fullFileOverflow, projectRoot),
-        "integrity-format",
-      ),
-      true,
-    );
-    assert.equal(
-      hasViolation(
-        validateReviewReport(fullLineOverflow, projectRoot),
-        "integrity-format",
-      ),
-      true,
-    );
-    assert.equal(
-      hasViolation(
-        validateReviewReport(compactFileOverflow, projectRoot),
-        "integrity-format",
-      ),
-      true,
-    );
-    assert.equal(
-      hasViolation(
-        validateReviewReport(compactLineOverflow, projectRoot),
-        "integrity-format",
-      ),
-      true,
-    );
-    assert.deepEqual(
-      validateReviewReport(
-        fullFileOverflow.replace("chunking=none", "chunking=accepted"),
-        projectRoot,
-      ).violations,
-      [],
-    );
-    assert.deepEqual(
-      validateReviewReport(
-        fullLineOverflow.replace("chunking=none", "chunking=accepted"),
-        projectRoot,
-      ).violations,
-      [],
-    );
-    assert.deepEqual(
-      validateReviewReport(fullBoundary, projectRoot).violations,
-      [],
-    );
-    assert.deepEqual(
-      validateReviewReport(compactBoundary, projectRoot).violations,
-      [],
-    );
+      // Create the full selected inventory before capture so the file-count threshold is based on real source membership.
+      for (let index = 1; index < fileCount; index += 1)
+        writeFileSync(join(projectRoot, `src/file-${index}.ts`), "fixture\n");
+      const compact = cleanReview(projectRoot, changedLines);
+      // Both presentations must apply the same chunking threshold to the same selected files.
+      for (const report of [compact, fullCleanReview(compact)]) {
+        const result = validateReviewReport(report, projectRoot);
+        // An oversized selection needs accepted chunking; the paired control proves that acceptance removes this specific error.
+        if (needsChunks) {
+          assert.ok(
+            result.violations.some((issue) =>
+              /exceeds.+requires chunking=accepted/u.test(issue.message),
+            ),
+            JSON.stringify(result.violations),
+          );
+          assert.deepEqual(
+            validateReviewReport(
+              report.replaceAll("chunking=none", "chunking=accepted"),
+              projectRoot,
+            ).violations,
+            [],
+          );
+        } else assert.deepEqual(result.violations, []);
+      }
+    }
   });
 
   it("binds full-report size units to diff or area scope", (testContext) => {
@@ -645,12 +597,13 @@ What I Didn't Examine: none.
 
   it("binds opened-file coverage to the declared review size", (testContext) => {
     const projectRoot = createReviewedProject(testContext);
+    const compactMetadata = reviewAuthorityFields(projectRoot);
     const fullMismatch = validReview(projectRoot).replace(
       "- Size: 1 files, 1 changed lines",
       "- Size: 2 files, 1 changed lines",
     );
-    const compact = `Scope: reviewed worktree at HEAD; 2 files and 1 changed line; chunking=none.
-${reviewAuthorityFields(projectRoot)}
+    const compact = `Scope: worktree; 2 files and 1 changed line; chunking=none.
+${compactMetadata}
 Ship Verdict: **YES** - no blocking finding survived Pass 2.
 Zero findings: checked boundary conditions, error paths, and integration seams; guards disproved every suspicion.
 Review Integrity: confident; 1/1 files opened; no degradation flags; validator=validated.
@@ -670,12 +623,12 @@ What I Didn't Examine: none.
     assert.equal(hasViolation(fullResult, "integrity-format"), true);
     assert.match(
       fullResult.violations.map((violation) => violation.message).join("\n"),
-      /file count/iu,
+      /selected files|counts and unique paths/iu,
     );
     assert.equal(hasViolation(compactResult, "integrity-format"), true);
     assert.match(
       compactResult.violations.map((violation) => violation.message).join("\n"),
-      /file count/iu,
+      /compact Scope and files opened/iu,
     );
     assert.equal(hasViolation(overopenedResult, "integrity-format"), true);
     assert.match(
@@ -884,6 +837,255 @@ What I Didn't Examine: none.
     assert.deepEqual(
       validateReviewReport(commentedExample, projectRoot).violations,
       [],
+    );
+  });
+});
+
+/** Require the named integrity refusal rather than accepting a failure caused by an unrelated fixture defect. */
+function assertIntegrityFailure(
+  report: string,
+  projectRoot: string,
+  message: RegExp,
+): void {
+  const result = validateReviewReport(report, projectRoot);
+  assert.equal(result.status, "fail");
+  assert.ok(
+    result.violations.some((issue) => message.test(issue.message)),
+    JSON.stringify(result.violations),
+  );
+}
+
+describe("selected review integrity relationships", () => {
+  it("retains all five selected files when opened or source coverage is partial", (test) => {
+    const root = createReviewedProject(test);
+    const paths = [
+      "src/example.ts",
+      ...Array.from({ length: 3 }, (_, index) => `src/selected-${index}.ts`),
+      'src/anchor=literal, "quoted".ts',
+    ];
+    // Populate every selected path before capture so later undercoverage cannot be masked by source drift.
+    for (const path of paths.slice(1))
+      writeFileSync(join(root, path), "selected fixture\n");
+    const compact = cleanReview(root, 5);
+    const full = fullCleanReview(compact);
+    // Establish a passing control in each presentation before removing coverage claims.
+    for (const control of [compact, full])
+      assert.deepEqual(validateReviewReport(control, root).violations, []);
+    const opened = '1/5 (paths: ["src/example.ts"])';
+    assertIntegrityFailure(
+      withIntegrityFields(full, { "Files opened in Pass 2": opened }),
+      root,
+      /files-not-opened/,
+    );
+    const compactPartial = withIntegrityFields(compact, {
+      "Files opened in Pass 2": opened,
+    }).replace("5/5 files opened", "1/5 files opened");
+    assertIntegrityFailure(compactPartial, root, /use full output/);
+    // Plain paths remain readable; quote the filename whose commas and quotes would otherwise look like prose separators.
+    const missing = paths
+      .slice(1)
+      .map((path) => (path.includes("anchor=") ? JSON.stringify(path) : path))
+      .join(", ");
+    const partial = withIntegrityFields(full, {
+      "Files opened in Pass 2": opened,
+      "Source coverage": '["src/example.ts"]',
+      Size: "5 files, 5 changed lines (source coverage: 1/5 exactly once)",
+      "Degradation flags": "chunked-partial, files-not-opened",
+      "Degradation evidence": canonicalReviewJson({
+        "chunked-partial": `Incomplete source: ${missing}`,
+        "files-not-opened": `Unread selected files: ${missing}`,
+      }),
+      Conclusion: "partial",
+    }).replace("Decision: **YES**", "Decision: **YES WITH CONDITIONS**");
+    assert.deepEqual(validateReviewReport(partial, root).violations, []);
+    // A longer filename containing an unread path cannot explain which selected file the reviewer skipped.
+    assertIntegrityFailure(
+      withIntegrityFields(partial, {
+        "Degradation evidence": canonicalReviewJson({
+          "chunked-partial": paths
+            .slice(1)
+            .map((path) => `other/${path}-copy`)
+            .join(", "),
+          "files-not-opened": missing,
+        }),
+      }),
+      root,
+      /chunked-partial.*naming missing paths/,
+    );
+    assertIntegrityFailure(
+      withIntegrityFields(partial, {
+        Size: "1 files, 5 changed lines (source coverage: 1/1 exactly once)",
+        "Files opened in Pass 2": '1/1 (paths: ["src/example.ts"])',
+      }),
+      root,
+      /selected inventory|selected files/,
+    );
+  });
+
+  it("rejects duplicate paths, missing membership, and trailing Size clauses in both forms", (test) => {
+    const root = createReviewedProject(test);
+    const compact = cleanReview(root);
+    // Duplicate paths and extra Size clauses must fail equally in compact and full reports.
+    for (const report of [compact, fullCleanReview(compact)]) {
+      assert.deepEqual(validateReviewReport(report, root).violations, []);
+      // Each malformed manifest isolates duplicate, absent, or empty path membership.
+      for (const manifest of [
+        '["src/example.ts","src/example.ts"]',
+        '["src/absent.ts"]',
+        '[""]',
+      ])
+        assertIntegrityFailure(
+          withIntegrityFields(report, { "Source coverage": manifest }),
+          root,
+          /Source coverage/,
+        );
+      // Appending another clause must not turn a valid Size prefix into an accepted contradictory claim.
+      for (const suffix of [
+        " extra",
+        " (source coverage: 1/1 exactly once)",
+        " (bundle chunks: no)",
+      ])
+        assertIntegrityFailure(
+          withIntegrityFields(report, {
+            Size: `1 files, 1 changed lines (source coverage: 1/1 exactly once)${suffix}`,
+          }),
+          root,
+          /Size must be/,
+        );
+      assertIntegrityFailure(
+        withIntegrityFields(report, {
+          "Files opened in Pass 2":
+            '1/1 (paths: ["src/example.ts","src/example.ts"])',
+        }),
+        root,
+        /unique nonempty paths/,
+      );
+    }
+  });
+
+  it("requires every shared compact metadata row and refuses comparison-less paths and sampled areas", (test) => {
+    const root = createReviewedProject(test);
+    const compact = cleanReview(root);
+    assert.deepEqual(validateReviewReport(compact, root).violations, []);
+    // Removing any shared metadata field must identify the missing evidence even when the compact summary claims confidence.
+    for (const label of [
+      "Scope snapshot",
+      "Authority snapshot",
+      "Gate authority",
+      "Source coverage",
+      "Files opened in Pass 2",
+      "Size",
+      "Evidence",
+      "Verdicts",
+      "Gate evidence",
+      "Degradation evidence",
+    ])
+      assertIntegrityFailure(
+        compact.replace(new RegExp(`^${label}:.*\\n`, "mu"), ""),
+        root,
+        new RegExp(label),
+      );
+    const metadata = validReview(root).match(
+      /## Review Integrity\n([\s\S]*?)\n## Findings/u,
+    )![1]!;
+    const pathCompact = compact
+      .replace(
+        /^Scope snapshot:.*$/mu,
+        metadata.match(/^- Scope snapshot:.*$/mu)![0]!.slice(2),
+      )
+      .replace(
+        /^Authority snapshot:.*$/mu,
+        metadata.match(/^- Authority snapshot:.*$/mu)![0]!.slice(2),
+      );
+    assertIntegrityFailure(pathCompact, root, /use full output/);
+    const area =
+      withReviewSource(validReview(root), root, {
+        kind: "area",
+        roots: ["src"],
+        sample: ["src/example.ts"],
+      })
+        .replace("1 changed lines", "1 clusters")
+        .replace(
+          "Decision: **PARTIAL**",
+          "Decision: **N/A - AREA AUDIT ONLY**",
+        ) +
+      "\n## What I Didn't Examine\nOther files under src are outside the declared sample.\n";
+    assert.deepEqual(validateReviewReport(area, root).violations, []);
+    assertIntegrityFailure(
+      withIntegrityFields(area, {
+        "Files opened in Pass 2": "0/1 (paths: [])",
+      }),
+      root,
+      /files-not-opened/,
+    );
+    // Markdown formatting cannot turn an empty exclusion into a description of the unreviewed surroundings.
+    for (const emptyExclusion of [
+      "None.",
+      "- None.",
+      "**None.**",
+      "- n/a",
+      "1. _Nothing._",
+    ])
+      assertIntegrityFailure(
+        area.replace(
+          "Other files under src are outside the declared sample.",
+          emptyExclusion,
+        ),
+        root,
+        /area sample.*excluded surroundings/,
+      );
+  });
+
+  it("keeps intent and skipped-fetch disclosures confident in either presentation", (test) => {
+    const root = createReviewedProject(test);
+    const compact = cleanReview(root);
+    // Missing supplied intent and a skipped fetch are disclosures when the selected local comparison is otherwise complete.
+    for (const flag of ["intent-unstated", "base-fetch-skipped"]) {
+      const evidence = canonicalReviewJson({
+        [flag]:
+          flag === "intent-unstated"
+            ? "No product intent was supplied; the explicit comparison is complete."
+            : "Fetch was intentionally skipped; only the pinned local comparison is claimed.",
+      });
+      const short = withIntegrityFields(compact, {
+        "Degradation evidence": evidence,
+      }).replace("no degradation flags", `flags=${flag}`);
+      assert.deepEqual(validateReviewReport(short, root).violations, []);
+      const full = withIntegrityFields(fullCleanReview(compact), {
+        "Degradation flags": flag,
+        "Degradation evidence": evidence,
+      });
+      assert.deepEqual(validateReviewReport(full, root).violations, []);
+      assertIntegrityFailure(
+        withIntegrityFields(full, { "Degradation evidence": "{}" }),
+        root,
+        /one nonempty explanation/,
+      );
+    }
+  });
+
+  it("rejects duplicate, unknown, empty, or unexplained degradation tokens", (test) => {
+    const root = createReviewedProject(test);
+    const full = fullCleanReview(cleanReview(root));
+    // Ambiguous or unknown tokens must fail without weakening the valid report used as the control.
+    for (const flags of [
+      "intent-unstated, intent-unstated",
+      "unrecognized-limit",
+      "none, intent-unstated",
+      "intent-unstated,",
+      "configured-base-unresolved=",
+    ])
+      assertIntegrityFailure(
+        withIntegrityFields(full, { "Degradation flags": flags }),
+        root,
+        /flag/,
+      );
+    assertIntegrityFailure(
+      withIntegrityFields(full, {
+        "Degradation evidence": '{"intent-unstated":"unclaimed"}',
+      }),
+      root,
+      /one nonempty explanation/,
     );
   });
 });

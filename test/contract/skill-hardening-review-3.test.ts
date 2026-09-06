@@ -36,6 +36,16 @@ describe("skill hardening contracts: goat-review (3/3)", () => {
         skillPath,
       );
       assert.match(
+        skill,
+        /Unconfirmed:[^\n]+Missing proof:[^\n]+Next check:/u,
+        skillPath,
+      );
+      assert.match(
+        skill,
+        /confirmed=0, refuted=0, unresolved=0, leads-verified=0, model=n\/a/u,
+        skillPath,
+      );
+      assert.match(
         output,
         /Machine-valid anchors use repo-relative paths such as `<repo-relative-path>` \(search: `literal`\)[^\n]+Findings[^\n]+Systemic Patterns[^\n]+Top 5 Risks/u,
         skillPath,
@@ -67,8 +77,8 @@ describe("skill hardening contracts: goat-review (3/3)", () => {
       );
       assert.match(integrity, /callsite-completeness-grep-only/u, skillPath);
       assert.match(
-        output,
-        /grep-only coverage[^\n]+callsite-completeness-grep-only/u,
+        diffReview,
+        /text-only adds `callsite-completeness-grep-only`/u,
         skillPath,
       );
     });
@@ -93,6 +103,12 @@ describe("skill hardening contracts: goat-review (3/3)", () => {
       assert.match(
         reference,
         /external library\/framework behaviour/u,
+        referencePath,
+      );
+      assert.match(reference, /Refuter outcomes/u, referencePath);
+      assert.match(
+        reference,
+        /active findings[^\n]+refuted history/u,
         referencePath,
       );
     });

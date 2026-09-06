@@ -73,7 +73,9 @@ For a bot-only candidate, the host reruns the normal Pass 2 evidence procedure o
 
 ### Matching Hierarchy
 
-Compare in this order: symbol, rule ID, category, root cause, line range, then token similarity on the normalized brief. File equality is a prerequisite, not proof of one defect. The same line with different root causes stays two findings. When confidence is insufficient, preserve the existing err-toward-`[new]` bias: use `local-only` plus `disputed-match` rather than merging. Never suppress a finding as overlap.
+Compare in this order: symbol, rule ID, category, root cause, line range, then token similarity on the normalized brief. File equality is a prerequisite, not proof of one defect. The same line with different root causes stays two findings.
+
+When confidence is insufficient, preserve the existing err-toward-`[new]` bias: keep the bot candidate as a separate annex record and classify the active local finding as `disputed-match`. Keep the pre-ingestion local record unchanged. Never add `local-only` as a second class. Never suppress a finding as overlap.
 
 Report both deltas explicitly: "Automated findings the local review missed" lists verified bot-only IDs; "Local findings every bot missed" lists local-only R-IDs. `overlap-confirmed` is confirmation, not independent local yield.
 
@@ -86,8 +88,11 @@ Extend the Review Integrity surface defined in SKILL.md with this line when in P
 ```
 
 When no automated review: `Automated-review provenance: no-automated-review-present`.
-When fetch failed: include `automated-review-uningested` in Degradation flags.
-Outside PR mode: omit the line entirely or write `n/a`.
+Counts and missed-ID lists describe active final findings only; refuted history adds no current provenance credit.
+Each active ID has exactly one provenance class, declared before its bold title. Several reviewers may confirm that class, but the ID counts once.
+Tags mentioned in the title or explanation do not declare provenance.
+When fetch failed: use `Automated-review provenance: n/a`, include `automated-review-uningested`, and explain the ingestion failure in `Degradation evidence`.
+Outside PR mode: omit the line; truthful legacy `n/a` remains accepted.
 
 ## Degradation Flag
 

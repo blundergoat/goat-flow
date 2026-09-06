@@ -297,13 +297,17 @@ describe("skill hardening contracts: goat-review (1/3)", () => {
         skillPath,
         "Review Integrity (confidence signal)",
       );
-      assert.match(integrity, /Scope snapshot with paths/u, skillPath);
+      assert.match(integrity, /Scope snapshot; Authority snapshot/u, skillPath);
       assert.match(
         constraints,
         /\*\*Both modes:\*\*[\s\S]*above 20 files, or 3000 changed lines/u,
         skillPath,
       );
-      assert.match(outputFormat, /diff paths: <list or "n\/a">/u, skillPath);
+      assert.match(
+        outputFormat,
+        /Source coverage: <canonical JSON>/u,
+        skillPath,
+      );
       assert.match(outputFormat, /N\/A - AREA AUDIT ONLY/u, skillPath);
     });
   });
@@ -614,6 +618,12 @@ describe("skill hardening contracts: goat-review (1/3)", () => {
       assert.match(scope, /persist-skipped: redactor-unavailable/u, skillPath);
       assert.match(scope, /\*\*Authority:\*\*/u, skillPath);
       assert.match(scope, /\*\*State drift:\*\*/u, skillPath);
+      assert.match(scope, /--project <reviewed-root>/u, skillPath);
+      assert.match(
+        scope,
+        /--expected-version <installed-skill-version>/u,
+        skillPath,
+      );
     });
 
     assertForEachTarget(
