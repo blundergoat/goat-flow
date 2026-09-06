@@ -34,6 +34,7 @@ import { hashFile } from "../../src/cli/managed-setup-write-set.js";
 import { HOOK_VERIFICATION_CONTRACTS } from "../../src/cli/hook-verification-contracts.js";
 import {
   applyHookState,
+  HookRegistrarError,
   readAllHookStates,
   syncHookStates,
   type HookAgentState,
@@ -355,6 +356,7 @@ describe("effective hook state", () => {
 
   /**
    * Fixture purpose: omit install state so status cannot guess whether changed bytes are old or local.
+   *
    * Side effects: writes one local hook customization inside a disposable project.
    * Invariant: unclassified drift stays command-free until a trusted baseline establishes direction.
    */
@@ -362,6 +364,11 @@ describe("effective hook state", () => {
     const projectPath = createClaudeProject();
     initializeDisposableGitProject(projectPath);
     syncHookStates(projectPath);
+    // A clone contains committed hooks but omits local install history, so this case removes the fixture-only state.
+    rmSync(join(projectPath, ".goat-flow/install-state"), {
+      recursive: true,
+      force: true,
+    });
     const hookScriptPath = join(
       projectPath,
       ".goat-flow",
@@ -393,6 +400,7 @@ describe("effective hook state", () => {
 
   /**
    * Fixture purpose: gives one shared hook a canonical row that contradicts retained Codex evidence.
+   *
    * Side effects: writes v1 and v2 state, one older managed script, and one removed orphan fixture.
    * Invariant: Claude reads the path row from managed.json; neither agent identity nor an orphan row changes it.
    */
@@ -422,6 +430,7 @@ describe("effective hook state", () => {
 
   /**
    * Fixture purpose: stores an exact managed Antigravity command under a noncanonical sibling id.
+   *
    * Filesystem side effects: rewrites one disposable provider config and requests managed removal.
    * Invariant: ownership follows the exact script reference while unrelated definitions remain user-owned.
    */
@@ -460,6 +469,7 @@ describe("effective hook state", () => {
 
   /**
    * Fixture purpose: locally diverges a registered script after recording its prior managed hash.
+   *
    * Filesystem side effects: toggles the disposable hook off while preserving its inert edited bytes.
    * Invariant: disabling unregisters execution and never needs authority to refresh dormant files.
    */
@@ -484,6 +494,7 @@ describe("effective hook state", () => {
 
   /**
    * Fixture purpose: combines a blocking local edit with removable tombstone state.
+   *
    * Filesystem side effects: invokes a rejected enable against a disposable project only.
    * Invariant: an enabled-state blocker is detected before cleanup, toggle, config, or script mutation.
    */
@@ -730,6 +741,7 @@ describe("effective hook state", () => {
 
   /**
    * Fixture purpose: prove complete required rows produce PASS while disabled optional Gruff stays neutral.
+   *
    * Filesystem side effects: writes managed hooks, agent settings, verification receipts, and one conflict fixture inside a disposable project.
    * Invariant: optional disabled rows cannot lower an otherwise effective aggregate.
    */
@@ -841,6 +853,7 @@ describe("effective hook state", () => {
   it("requires independent policy proof after a shared runtime repair", () => {
     const projectPath = createClaudeProject();
     syncHookStates(projectPath);
+    /** Replay the selected policy's registered handler so the fixture records the same independent proof the Hooks page requires. */
     const verify = (scenarioGroup: "deny-hook" | "git-mutations-hook") =>
       verifyManagedDenyHook({
         projectPath,
@@ -854,6 +867,7 @@ describe("effective hook state", () => {
       "scenario-unverified",
     );
     assert.equal(verify("git-mutations-hook").status, "pass");
+    // Both policy rows can show effective only after each has its own current scenario proof.
     for (const hookId of ["deny-dangerous", "deny-git-mutations"]) {
       assert.equal(
         claudeHookState(projectPath, hookId).effectiveState.status,
@@ -868,13 +882,30 @@ describe("effective hook state", () => {
       sharedPath,
       `${readFileSync(sharedPath, "utf-8")}\n# repair fixture\n`,
     );
+    // Editing their shared runtime must mark both displayed policy rows stale.
     for (const hookId of ["deny-dangerous", "deny-git-mutations"]) {
       assert.equal(
         claudeHookState(projectPath, hookId).effectiveState.status,
         "installation-stale",
       );
     }
-    applyHookState("deny-dangerous", true, projectPath);
+    let confirmationIdentity: string | undefined;
+    // Repair now requires the same explicit replacement review that a user sees when local bytes differ.
+    assert.throws(
+      () => applyHookState("deny-dangerous", true, projectPath),
+      (error: unknown) => {
+        assert.ok(error instanceof HookRegistrarError);
+        assert.equal(error.details?.code, "hook-replacement-required");
+        confirmationIdentity = error.details?.confirmationIdentity;
+        assert.ok(confirmationIdentity);
+        return true;
+      },
+    );
+    applyHookState("deny-dangerous", true, projectPath, {
+      replace: true,
+      confirmationIdentity,
+    });
+    // Restoring shared bytes still requires fresh proof for each policy before either row turns green.
     for (const hookId of ["deny-dangerous", "deny-git-mutations"]) {
       assert.equal(
         claudeHookState(projectPath, hookId).effectiveState.status,
@@ -918,6 +949,7 @@ describe("effective hook state", () => {
 
   /**
    * Fixture purpose: prove finding and incomplete output through the user's exact Stop command.
+   *
    * Side effects: writes one merge-conflict file in a disposable Git project removed by cleanup.
    * Invariant: the configured command reports both result classes without provider invocation.
    */

@@ -10,6 +10,7 @@
  * Merge this state before feature methods run so they share the same reactive selections and loading flags.
  *
  * @param supportedAgents - agents the server reports as launchable, used to seed runner UI options
+ *
  * @param defaultRunner - runner pre-selected in the launcher until the user picks another
  * @returns the fragment object of initial state fields merged into the Alpine app
  */
@@ -412,7 +413,17 @@ function dashboardWorkspaceCollectionsStateFragment(): DashboardAppFragment {
 
     hooksError: "",
 
+    // Null leaves hook controls available; a hook id or "sync" owns the shared saving state.
     hookSavingId: null as string | null,
+
+    // Returning to the same project is a new visit, so an earlier response cannot revive its dialog or spinner.
+    hooksVisitGeneration: 0,
+    hooksActionGeneration: 0,
+    hooksLoadGeneration: 0,
+
+    // No pending review means a normal safe request; listed replacements require a separate explicit click.
+    hooksReplacement: null as HookReplacementReview | null,
+    hooksChangedPaths: [] as string[],
 
     hooksFilter: "all",
 
@@ -425,6 +436,7 @@ function dashboardWorkspaceCollectionsStateFragment(): DashboardAppFragment {
  *
  * @param supportedAgents - agents this build knows about, shown in the runner pickers
  * @param defaultRunner - runner selected until the user picks another
+ *
  * @param defaultSetupAgents - setup rows rendered before the first audit response arrives
  * @returns the fragment merged into the dashboard app
  */

@@ -68,7 +68,7 @@ throw new Error("Condition X did not become true within 5 seconds");
 
 **Approach:** Run `npm run typecheck` before relying on preflight. Complexity-only verification misses callback type drift, helper return narrowing, and unused-parameter regressions that only appear when TypeScript checks the whole tree.
 
-**Evidence (OBSERVED):** During M53, the extracted `reconcileSupportedAgentHook` helper declared its profile list `readonly` while the existing callee required a mutable array. File-level ESLint passed; typecheck rejected the mismatch before behavioural tests or preflight ran. Anchor: `src/cli/server/hook-registrar.ts` (search: `function reconcileSupportedAgentHook`).
+**Evidence (OBSERVED):** During M53, the former `reconcileSupportedAgentHook` helper declared its profile list `readonly` while the existing callee required a mutable array. File-level ESLint passed; typecheck rejected the mismatch before behavioural tests or preflight ran. That provider loop now lives in `src/cli/server/hook-registrar.ts` (search: `function reconcileHook`), which passes the profile list to `shouldReconcileAgent`.
 
 ## Pattern: Non-gating audit gaps belong in explicit limits
 

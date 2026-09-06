@@ -1,19 +1,49 @@
-<!-- ═══ Hooks View ═══ -->
-<div x-show="activeView === 'hooks'" x-cloak class="gf-hooks-view">
+<!--
+  Let users inspect their selected project's hook coverage and sync bundled official files.
+
+  Replacement lists disclose affected files and keep Cancel as the first focused action.
+  Shared loading and saving state keeps row controls consistent while requests finish.
+-->
+<div
+  x-show="activeView === 'hooks'"
+  x-cloak
+  class="gf-hooks-view"
+  @keydown.escape.window="cancelHookReplacement()"
+>
   <main class="gf-hooks-page">
     <header class="gf-page-head gf-hooks-head">
       <div>
         <h1>Hooks</h1>
         <p>Manage project hook state for the selected workspace.</p>
+        <p>
+          Sync uses official files bundled with Goat Flow
+          <span x-text="dashboardVersion"></span> and keeps your enabled
+          choices.
+        </p>
       </div>
-      <button
-        @click="loadHooks()"
-        :disabled="hooksLoading"
-        class="gf-btn gf-btn-md gf-btn-secondary"
-        title="Refresh hook state"
-      >
-        <span x-text="hooksLoading ? 'Refreshing...' : 'Refresh'"></span>
-      </button>
+      <div class="gf-hooks-filter-group">
+        <button
+          type="button"
+          @click="loadHooks()"
+          :disabled="hooksLoading || !!hookSavingId || !!hooksReplacement"
+          class="gf-btn gf-btn-md gf-btn-secondary"
+          title="Refresh hook state"
+        >
+          <span x-text="hooksLoading ? 'Refreshing...' : 'Refresh'"></span>
+        </button>
+        <button
+          type="button"
+          @click="syncOfficialHooks()"
+          :disabled="hooksLoading || !!hookSavingId || !!hooksReplacement"
+          :aria-busy="String(hookSavingId === 'sync')"
+          class="gf-btn gf-btn-md gf-btn-primary"
+          title="Sync files from this Goat Flow version; review differing local files before replacing them"
+        >
+          <span
+            x-text="hookSavingId === 'sync' ? 'Syncing...' : 'Sync official hooks'"
+          ></span>
+        </button>
+      </div>
     </header>
 
     <div
@@ -25,9 +55,67 @@
     </div>
 
     <div x-show="hooksError" x-cloak class="gf-hooks-alert" role="alert">
-      <div class="gf-text-primary">Hooks could not be loaded</div>
+      <div class="gf-text-primary">Hook action needs attention</div>
       <p x-text="hooksError"></p>
+      <ul
+        x-show="hooksChangedPaths.length > 0"
+        aria-label="Files changed before the error"
+      >
+        <template x-for="path in hooksChangedPaths" :key="path">
+          <li><code x-text="path"></code></li>
+        </template>
+      </ul>
     </div>
+
+    <section
+      x-show="hooksReplacement"
+      x-cloak
+      class="gf-hooks-panel"
+      role="region"
+      aria-labelledby="hook-replacement-title"
+    >
+      <h2 id="hook-replacement-title">
+        Replace local files with official copies?
+      </h2>
+      <p>
+        Save any changes you want to keep before continuing. Replacement
+        discards the current contents of these files.
+      </p>
+      <ul aria-label="Files requiring replacement">
+        <template
+          x-for="file in (hooksReplacement?.conflicts || [])"
+          :key="file.path"
+        >
+          <li>
+            <code x-text="file.path"></code>
+            <span
+              x-text="file.reason === 'diverged' ? ' — changed since the recorded install' : ' — no matching install history'"
+            ></span>
+            <span x-text="' (affects ' + file.hookIds.join(', ') + ')'"></span>
+          </li>
+        </template>
+      </ul>
+      <div class="gf-hooks-filter-group">
+        <button
+          type="button"
+          x-ref="hookReplacementCancel"
+          @click="cancelHookReplacement()"
+          :disabled="!!hookSavingId"
+          class="gf-btn gf-btn-md gf-btn-secondary"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          @click="confirmHookReplacement()"
+          :disabled="!!hookSavingId"
+          class="gf-btn gf-btn-md gf-btn-primary"
+          x-text="hooksReplacement?.action.kind === 'toggle'
+            ? (hooksReplacement.action.enabled ? 'Replace with official files and enable' : 'Replace with official files and disable')
+            : 'Replace listed files and sync'"
+        ></button>
+      </div>
+    </section>
 
     <section
       x-show="hooksState.length > 0"
@@ -310,7 +398,7 @@
                   class="gf-hook-switch"
                   :class="hook.enabled && 'is-on'"
                   :aria-checked="String(hook.enabled)"
-                  :disabled="hookSavingId === hook.id"
+                  :disabled="hooksLoading || !!hookSavingId || !!hooksReplacement"
                   @click="toggleHook(hook, !hook.enabled)"
                 >
                   <span
@@ -325,7 +413,7 @@
                 <button
                   x-show="hook.togglable && hookHasDrift(hook)"
                   @click="resyncHook(hook)"
-                  :disabled="hookSavingId === hook.id"
+                  :disabled="hooksLoading || !!hookSavingId || !!hooksReplacement"
                   class="gf-btn gf-btn-sm gf-btn-secondary"
                 >
                   Re-sync

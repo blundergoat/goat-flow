@@ -13,6 +13,7 @@ type DashboardAlpineContext = DashboardAppContext &
  *
  * @param sessionId - session whose panel is being resized
  * @param refs - live socket references for that session
+ *
  * @param xterm - terminal instance to refit
  * @returns true when the resize applied; false means the panel is hidden and the caller should try again later
  */
@@ -203,6 +204,8 @@ function dashboardRegisterTerminalWatchers(ctx: DashboardAlpineContext): void {
  */
 function dashboardRegisterViewWatchers(ctx: DashboardAlpineContext): void {
   ctx.$watch("activeView", (view: string) => {
+    // Leaving and revisiting Hooks invalidates requests even when the selected project has not changed.
+    dashboardResetHookVisit(ctx);
     // Leaving or reopening Workspace ends its previous poll before a new view can start one.
     if (ctx._workspacePoll) {
       clearInterval(ctx._workspacePoll);
@@ -279,6 +282,8 @@ function dashboardRegisterRunnerAndProjectWatchers(
     document.title = `${ctx.projectName} | GOAT Flow`;
   };
   ctx.$watch("projectPath", (newPath: string, oldPath: string) => {
+    // A replacement review can never carry over to another project, including an immediate switch back.
+    if (newPath !== oldPath) dashboardResetHookVisit(ctx);
     updateTitle();
     // Initial selection and unchanged paths need no terminal detach or second round of project fetches.
     if (!oldPath || newPath === oldPath) return;
@@ -315,6 +320,7 @@ function dashboardRegisterRunnerAndProjectWatchers(
  * Handle the keyboard shortcuts that work anywhere in the dashboard, before any view-specific handler sees the key.
  *
  * @param ctx - live Alpine dashboard context
+ *
  * @param event - the key the user pressed
  * @returns true when the shortcut was handled and no other handler should act on it
  */
@@ -368,6 +374,7 @@ function dashboardHandleGlobalShortcut(
  * Enter requires a selection, no pending launch, and room below the session limit so a held key cannot queue extra terminals.
  *
  * @param ctx - dashboard state supplying the selection, launch flag, and session counts
+ *
  * @param event - the keydown being handled; keys other than the three navigation keys are ignored
  * @returns nothing; the effect is the moved selection or the started launch. It may call preventDefault and start a terminal launch.
  */
@@ -434,7 +441,7 @@ function dashboardHandlePromptShortcut(
   if (event.key === "Escape") {
     // Clearing the search restores the full prompt list before dismissing a selected prompt.
     if (ctx.presetSearch) ctx.presetSearch = "";
-    // With no search text left, Escape removes the current prompt selection.
+    // With no search text left, Escape clears prompt selection so a later Enter cannot launch it.
     else if (ctx.selectedPreset) ctx.selectedPreset = null;
   }
 }

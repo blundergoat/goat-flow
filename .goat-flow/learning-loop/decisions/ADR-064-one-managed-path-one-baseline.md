@@ -3,7 +3,7 @@
 **Status:** Accepted
 **Date:** 2026-08-27
 **Ticket/Context:** M41, goat-flow 1.17.0 managed install-state work
-**Updated:** 2026-09-05 - condensed; rollout wording aligned with ADR-048 (remaining writer adoption is unplanned) and reversibility updated because v2 state has shipped. The 2026-08-28 amendment refreshed the preview evidence after admission moved to the v2 facade.
+**Updated:** 2026-09-06 - accepted hook-only baseline publication under the existing schema and complete ADR-048 claims; full-install receipts remain exclusive to public install.
 
 ## Context
 
@@ -56,7 +56,7 @@ type ManagedInstallReceipt = {
 };
 ```
 
-Objects accept exactly the keys shown. Unknown keys, duplicate file-row paths, duplicate receipt agents, duplicate paths within a receipt, unsafe paths, unknown agents, empty versions, invalid hashes or generations, unsorted arrays, and non-canonical bytes are malformed-blocking. A receipt reference to a missing row or a different generation is valid stale evidence, not a parse error, so normal row replacement can stale another agent's receipt without corrupting the file. `expectedSha256` is the package hash from the last verified public install or a clean legacy bootstrap, never computed from current target bytes; receipts carry no content hash.
+Objects accept exactly the keys shown. Unknown keys, duplicate file-row paths, duplicate receipt agents, duplicate paths within a receipt, unsafe paths, unknown agents, empty versions, invalid hashes or generations, unsorted arrays, and non-canonical bytes are malformed-blocking. A receipt reference to a missing row or a different generation is valid stale evidence, not a parse error, so normal row replacement can stale another agent's receipt without corrupting the file. `expectedSha256` is the package hash from the last verified public install, guarded hook operation, or clean legacy bootstrap, never computed from current target bytes; receipts carry no content hash.
 
 ### Deterministic row generations and canonical bytes
 
@@ -78,6 +78,16 @@ Canonical bytes order top-level keys `schemaVersion`, `files`, `receipts`; row k
 A verified public install writes, for every current system-owned exact-copy path in the selected agent's complete preview, the incoming package hash with `verified-install` provenance for the executing version, recomputes generations (identical rows keep theirs), and leaves rows outside its path set byte-identical, including other agents' unique rows and orphans. After all selected paths pass post-write verification, it replaces the selected agent's receipt with the exact sorted path/generation set just verified, then canonicalizes and atomically replaces `managed.json` once. Repeating a confirmed install produces identical bytes and no replacement.
 
 A stored receipt is `confirmed` only when its package version equals the executing version, its path set equals the current system-owned exact-copy set for that agent, every referenced row exists at the referenced generation, every target is a safe regular file whose hash equals the row's expected hash, and that agent's legacy cutover marker is exact. Any of those failing makes it `stale`, which removes installation-selection authority but keeps the canonical row, because a legitimate local edit still needs the old expected hash to classify as `local-preserved` or `both-changed`. An agent imported from valid v1 state but not yet verified under v2 is `legacy-unconfirmed`. No directory or shared path is evidence that an agent is installed.
+
+### Guarded hook-only row publication
+
+A guarded hook sync or toggle may publish canonical rows for the exact bundled hook dependencies it has just verified. It records the incoming package hash with existing `verified-install` provenance for the executing version and derives generations through the existing row constructor. It preserves unrelated rows and every existing agent receipt, and it neither creates nor refreshes a full-install receipt. A receipt that references a changed generation becomes stale under the existing receipt rules.
+
+Hook operations use the existing receipt-free bootstrap and cutover order only after clean missing or valid legacy evidence is admitted. Malformed, conflicting, or already cutover-incompatible state blocks before target mutation; public install remains the cutover-recovery owner. Claims cover the complete operation, including state and marker destinations, until target verification and canonical publication finish. Schema, provenance shape, generation inputs, bootstrap precedence, and marker semantics stay unchanged.
+
+Missing history does not authorize replacement of differing local files. Missing or byte-identical official files may be adopted after admission; differing unclassified files and proven divergence require explicit replacement intent bound to the selected project, action, destination identities, persisted choices, baseline/markers, and incoming bundle. A changed review requires a fresh decision. Unsafe paths, newer scripts, and invalid history cannot be overridden.
+
+This writer uses `src/cli/server/hook-operation.ts` (search: `executeHookChange`) and `src/cli/managed-setup-preview.ts` (search: `recordManagedHookAfterVerification`). The admission regression in `test/integration/managed-divergence-messaging.test.ts` (search: `before changing any hook destination`) reproduced config mutation before malformed-provider refusal, unclassified replacement without confirmation, and ignored unsafe install-state evidence in the former registrar path.
 
 ### Public status vocabulary
 

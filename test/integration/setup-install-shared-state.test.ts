@@ -1,15 +1,16 @@
 /**
- * Public-process contract for one path-keyed managed install baseline.
+ * Exercise shared installation history through the public CLI in disposable projects.
  *
- * The decision rows keep migration edge cases visible beside the fixtures that
- * reproduce selected-agent drift and concurrent installation. Hook files are
- * copied and compared as inert bytes; this suite never executes hook payloads.
+ * Migration and concurrent-install cases protect the same file baseline across provider selection and install order.
+ * Successive hook bundles advance verified rows while retaining full-install receipts; hook payloads remain inert bytes.
  */
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   chmodSync,
+  cpSync,
+  symlinkSync,
   existsSync,
   mkdirSync,
   readFileSync,
@@ -44,8 +45,7 @@ interface DecisionRow {
 }
 
 /**
- * Decision table used to derive ADR-064. `reported` rows come from the
- * 1.15.1-to-1.16.0 consumer report; `contract` rows are labelled design cases,
+ * Decision table used to derive ADR-064. `reported` rows come from the 1.15.1-to-1.16.0 consumer report; `contract` rows are labelled design cases,
  * not claims that the current implementation already exhibits the outcome.
  */
 const SHARED_STATE_DECISIONS: readonly DecisionRow[] = [
@@ -234,6 +234,7 @@ function setLegacyVersion(
  */
 function installedLegacyPair(): string {
   const projectPath = makeTempProject();
+  // Create the two predecessor installations whose shared file history must migrate consistently.
   for (const agent of ["codex", "antigravity"] as const) {
     const result = runInstaller(projectPath, "--agent", agent);
     assert.equal(result.status, 0, result.stderr || result.stdout);
@@ -271,14 +272,14 @@ function readManagedState(projectPath: string): {
 }
 
 /**
- * Install the two public agents in one order and verify the final v2 shape.
- * Side effects: writes only inside a disposable project registered for teardown.
- * Invariant: shared and unique managed paths each have exactly one canonical row.
+ * Install both providers in the requested order and inspect the resulting shared history.
+ * Writes stay inside the disposable project; shared and unique paths must each have one canonical row.
  */
 function stateAfterInstallOrder(
   order: readonly ["antigravity" | "claude", "antigravity" | "claude"],
 ): string {
   const projectPath = makeTempProject();
+  // Exercise the user's installation order through the public CLI before comparing final shared state.
   for (const agent of order) {
     const result = runCliInstaller(projectPath, "--agent", agent);
     assert.equal(
@@ -299,6 +300,7 @@ function stateAfterInstallOrder(
     new Set(state.files.map((row) => row.path)).size,
     state.files.length,
   );
+  // Shared and provider-specific files each need a canonical row after either install order.
   for (const requiredPath of [
     SHARED_HOOK_PATH,
     SHARED_SKILL_PATH,
@@ -382,6 +384,7 @@ function runCliInstallerAsync(
 async function waitForPath(path: string, timeoutMs = 10_000): Promise<void> {
   const startedAt = Date.now();
   while (!existsSync(path)) {
+    // A stalled fixture must fail with the missing marker instead of leaving the concurrency check hanging.
     if (Date.now() - startedAt >= timeoutMs) {
       throw new Error(`Timed out waiting for ${path}`);
     }
@@ -416,8 +419,9 @@ describe("one baseline per managed path", () => {
   });
 
   /**
-   * Fixture purpose: one current and one stale agent baseline describe the same
-   * shared patched bytes, so selecting an agent must not change overwrite safety.
+   * Fixture purpose: one current and one stale agent baseline describe the same shared patched bytes, so selecting an agent must not change overwrite
+   * safety.
+   *
    * Filesystem side effects: installs and edits inert bytes in one disposable target.
    * Invariant: neither dry-run changes the patched hook or shared skill.
    */
@@ -525,6 +529,7 @@ describe("one baseline per managed path", () => {
     assert.equal(antigravityThenClaude, claudeThenAntigravity);
   });
 
+  // Neither equal-version nor unrankable legacy disagreement can let provider selection choose overwrite authority.
   for (const migrationCase of [
     {
       name: "equal-version disagreement",
@@ -821,4 +826,107 @@ describe("one baseline per managed path", () => {
       );
     },
   );
+});
+
+describe("hook-only shared history upgrades", () => {
+  it("advances successive bundled hook versions while preserving full-install receipts and unrelated rows", () => {
+    const projectPath = makeTempProject();
+    const packagePath = makeTempProject();
+    const installed = runCliInstaller(projectPath, "--agent", "claude");
+    assert.equal(installed.status, 0, installed.stderr || installed.stdout);
+    const initial = readManagedState(projectPath).state;
+    assert.ok(initial.receipts.length > 0);
+    const unrelatedRow = initial.files.find(
+      (row) => row.path === CLAUDE_SKILL_PATH,
+    );
+    assert.ok(unrelatedRow);
+
+    // An isolated package lets the real CLI load newer bundled bytes without changing this checkout's templates.
+    for (const path of ["src", "workflow", "package.json"]) {
+      cpSync(join(PROJECT_ROOT, path), join(packagePath, path), {
+        recursive: true,
+        errorOnExist: true,
+        force: false,
+      });
+    }
+    symlinkSync(
+      join(PROJECT_ROOT, "node_modules"),
+      join(packagePath, "node_modules"),
+      process.platform === "win32" ? "junction" : "dir",
+    );
+    const packageJsonPath = join(packagePath, "package.json");
+    const packageJson = JSON.parse(
+      readFileSync(packageJsonPath, "utf-8"),
+    ) as Record<string, unknown>;
+    const bundledPath = join(packagePath, "workflow/hooks/run-with-bash.mjs");
+    const originalBundle = readFileSync(bundledPath, "utf-8");
+    let previousGeneration = initial.files.find(
+      (row) => row.path === SHARED_HOOK_PATH,
+    )?.generation;
+
+    // Each CLI process resolves its own package version, just as successive user-installed releases do.
+    for (const version of ["1.18.0", "1.19.0"]) {
+      packageJson.version = version;
+      writeFileSync(packageJsonPath, JSON.stringify(packageJson));
+      const incomingBytes = `${originalBundle}\n// Fixture bundle version ${version}.\n`;
+      writeFileSync(bundledPath, incomingBytes);
+      const synced = spawnSync(
+        process.execPath,
+        [
+          "--import",
+          "tsx",
+          join(packagePath, "src/cli/cli.ts"),
+          "hooks",
+          "sync",
+          projectPath,
+        ],
+        {
+          cwd: packagePath,
+          encoding: "utf-8",
+          timeout: 30_000,
+        },
+      );
+      assert.equal(
+        synced.status,
+        0,
+        `${version}: ${synced.stderr || synced.stdout}`,
+      );
+      assert.equal(
+        readFileSync(join(projectPath, SHARED_HOOK_PATH), "utf-8"),
+        incomingBytes,
+        version,
+      );
+      const current = readManagedState(projectPath).state;
+      const hookRow = current.files.find(
+        (row) => row.path === SHARED_HOOK_PATH,
+      );
+      assert.ok(hookRow, version);
+      assert.equal(
+        hookRow.expectedSha256,
+        createHash("sha256").update(incomingBytes).digest("hex"),
+        version,
+      );
+      assert.deepEqual(hookRow.provenance, {
+        kind: "verified-install",
+        goatFlowVersion: version,
+      });
+      assert.notEqual(hookRow.generation, previousGeneration, version);
+      assert.deepEqual(
+        current.files.find((row) => row.path === CLAUDE_SKILL_PATH),
+        unrelatedRow,
+        version,
+      );
+      assert.deepEqual(current.receipts, initial.receipts, version);
+      const priorReference = current.receipts
+        .flatMap((receipt) => receipt.files)
+        .find((row) => row.path === SHARED_HOOK_PATH);
+      assert.ok(priorReference, version);
+      assert.notEqual(
+        priorReference.generation,
+        hookRow.generation,
+        "hook sync leaves the old full-install receipt stale",
+      );
+      previousGeneration = hookRow.generation;
+    }
+  });
 });

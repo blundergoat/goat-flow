@@ -86,7 +86,13 @@ export interface EvaluateBody {
 }
 
 // Hook-toggle payload accepted by POST /api/hooks/:hookId/toggle.
-type HookToggleBody = Record<"enabled", boolean>;
+type HookToggleBody = Record<"enabled", boolean> & HookReplacementBody;
+
+/** Exact replacement intent returned by the Hooks page after the user reviews its file list. */
+interface HookReplacementBody {
+  replace?: boolean;
+  confirmationIdentity?: string;
+}
 
 const MAX_PROJECT_TITLE_LENGTH = 120; // Storage limit: dense dashboard rows cannot absorb long custom aliases.
 
@@ -95,6 +101,7 @@ const MAX_PROJECT_TITLE_LENGTH = 120; // Storage limit: dense dashboard rows can
  * Use when rejecting one field so the dashboard can show the exact user-fixable request path.
  *
  * @param path - field label returned to the route so the dashboard can identify the rejected input
+ *
  * @param message - validation explanation the route includes in its error response
  * @returns decoder failure; never `null`, because callers branch on `ok: false`
  */
@@ -110,6 +117,7 @@ function buildDecodeError(
  * Use at every dashboard ingress so malformed user/browser payloads become field errors.
  *
  * @param body - raw request body; empty or invalid text means there is no usable payload to process
+ *
  * @param path - body or message label that tells the caller which incoming payload failed
  * @returns parsed JSON, or a decoder error describing the malformed body
  */
@@ -145,6 +153,7 @@ function isRecord(candidate: unknown): candidate is Record<string, unknown> {
  *
  * @param raw - request body object; missing optional keys mean the older UI had no values to save
  * @param key - paths or favorites list to decode; the field name is reused in validation errors
+ *
  * @param options - `required` marks fields the UI must send; omitted means old state files default empty
  * @returns decoded strings, or an error when the list would corrupt saved project state
  */
@@ -183,6 +192,7 @@ function decodeStringArrayField(
  * Missing paths let the terminal route choose its defaults; a missing prompt opens the runner without sending initial text.
  *
  * @param raw - terminal-create body; missing field means the user did not choose that optional value
+ *
  * @param key - supported launch text field to decode and identify in any validation error
  * @returns decoded string, or an empty string when the UI intentionally left the value unset
  */
@@ -366,6 +376,7 @@ function rejectUnsupportedQualityCapture(
  * Each rejection names the field the user must correct; accepted choices still need the route's path and launch checks.
  *
  * @param body - raw request body; empty or malformed JSON stops the launch before a terminal row appears
+ *
  * @param options - allowed runners and default; an empty allowed set rejects every explicit runner selection
  * @returns decoded launch choices, or a field error the route can show without starting a session
  */
@@ -507,7 +518,72 @@ export function decodeHookToggleBody(
   if (typeof raw.enabled !== "boolean") {
     return buildDecodeError("body.enabled", "must be a boolean");
   }
-  return { ok: true, value: { enabled: raw.enabled } };
+  const confirmation = decodeHookReplacement(raw, [
+    "enabled",
+    "replace",
+    "confirmationIdentity",
+  ]);
+  // An incomplete or malformed replacement review cannot accompany an otherwise valid toggle.
+  if (!confirmation.ok) return confirmation;
+  return { ok: true, value: { enabled: raw.enabled, ...confirmation.value } };
+}
+
+/**
+ * Decode the global Sync request before the selected project's hook files are inspected for replacement.
+ *
+ * @param body - JSON object; empty or invalid JSON refuses without changing hooks
+ * @returns exact replacement intent, or a field-specific request error
+ */
+export function decodeHookSyncBody(
+  body: string,
+): DecodeResult<HookReplacementBody> {
+  const parsed = parseJson(body, "body");
+  // A damaged request cannot be treated as permission to sync with defaults.
+  if (!parsed.ok) return parsed;
+  // Sync accepts an options object; a list or null cannot express a reviewed replacement.
+  if (!isRecord(parsed.value))
+    return buildDecodeError("body", "must be a JSON object");
+  return decodeHookReplacement(parsed.value, [
+    "replace",
+    "confirmationIdentity",
+  ]);
+}
+
+/** Require both explicit replacement intent and a complete review identity; client-supplied file lists are never accepted. */
+function decodeHookReplacement(
+  raw: Record<string, unknown>,
+  allowedFields: readonly string[],
+): DecodeResult<HookReplacementBody> {
+  const unsupportedField = Object.keys(raw).find(
+    (field) => !allowedFields.includes(field),
+  );
+  // Extra action or path fields cannot expand the server-derived operation the user reviewed.
+  if (unsupportedField)
+    return buildDecodeError(`body.${unsupportedField}`, "is not supported");
+  const hasReplacement =
+    raw.replace !== undefined || raw.confirmationIdentity !== undefined;
+  // The first Sync or toggle request asks the server to apply only changes that need no replacement approval.
+  if (!hasReplacement) return { ok: true, value: {} };
+  // Only an explicit true authorizes replacing the reviewed local files.
+  if (raw.replace !== true)
+    return buildDecodeError(
+      "body.replace",
+      "must be true for explicit replacement",
+    );
+  // A retry must identify the exact review the user confirmed; a missing or malformed identity grants no replacement.
+  if (
+    typeof raw.confirmationIdentity !== "string" ||
+    !/^[a-f0-9]{64}$/u.test(raw.confirmationIdentity)
+  ) {
+    return buildDecodeError(
+      "body.confirmationIdentity",
+      "must identify the exact reviewed hook changes",
+    );
+  }
+  return {
+    ok: true,
+    value: { replace: true, confirmationIdentity: raw.confirmationIdentity },
+  };
 }
 
 /**
@@ -515,6 +591,7 @@ export function decodeHookToggleBody(
  * The upload handler then enforces image type and byte limits because non-empty text alone does not prove a safe attachment.
  *
  * @param body - raw request body; empty or malformed JSON means no images are attached
+ *
  * @param options - upload count limits; zero max means every image upload is rejected
  * @returns upload payload, or a path-specific error before the terminal receives files
  */
@@ -742,6 +819,7 @@ function decodeEvaluateOptionals(
  *
  * @param name - submitted filename; empty or non-string values are rejected before scoring
  * @param index - position in the bundle used to identify the rejected input field
+ *
  * @param seenNames - previously accepted names; an empty set means this is the first file being checked
  * @returns accepted bare filename, or the field error the user must correct
  */

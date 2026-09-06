@@ -1,8 +1,8 @@
 /**
- * Connect agent discovery, project browsing, Plans, Hooks, and Setup controls to their shared dashboard state.
+ * Connect discovery, project browsing, Plans, Hooks and Setup controls to shared dashboard state.
  *
- * Loaders report request failures in the relevant panel while guarded hook disabling asks for confirmation before saving.
- * Successful hook saves reload all rows because shared files can affect siblings; failed saves report a banner and toast.
+ * Hook actions refresh every affected row and keep refusals or partial-write recovery visible in the Hooks panel.
+ * Replacement needs a separate review, and stale responses cannot change a later project visit.
  */
 
 /**
@@ -10,6 +10,7 @@
  * Use when the user clicks a hook switch that would remove protection.
  *
  * @param hook - hook row being toggled; missing confirm metadata means no dialog is required
+ *
  * @param shouldEnable - next desired state; `false` means the user may be removing protection
  * @returns whether the toggle may continue; `false` means the hook row stays unchanged
  */
@@ -25,76 +26,317 @@ function dashboardConfirmHookToggle(
 }
 
 /**
- * Refresh every hook row after the server accepts a toggle or shared-file repair.
- * Use so sibling installation and proof states reflect the same saved files.
+ * Clear hook state when navigation changes which project visit owns the screen.
+ * Outstanding server work may finish, but its response cannot change this new visit.
  *
- * @param ctx - dashboard state to reload; the loader reports refresh failures in the Hooks panel
- * @param hook - saved hook row returned by the server; empty agent state still renders as unavailable
- * @param shouldEnable - requested state used for toast copy; `false` tells the user it was disabled
- * @returns nothing; a project switch suppresses the old project's success toast
+ * @param ctx - live dashboard state whose Hooks controls and request generations are reset
  */
-async function dashboardApplyHookToggleResult(
+function dashboardResetHookVisit(ctx: DashboardAppContext): void {
+  ctx.hooksVisitGeneration = Number(ctx.hooksVisitGeneration) + 1;
+  ctx.hooksActionGeneration = Number(ctx.hooksActionGeneration) + 1;
+  ctx.hooksLoadGeneration = Number(ctx.hooksLoadGeneration) + 1;
+  ctx.hookSavingId = null;
+  ctx.hooksLoading = false;
+  ctx.hooksReplacement = null;
+  ctx.hooksChangedPaths = [];
+  ctx.hooksError = "";
+  ctx.hooksState = [];
+}
+
+/** Keep a response tied to the project visit that started it, including a leave-and-return to the same project. */
+function dashboardHookVisitIsCurrent(
   ctx: DashboardAppContext,
-  hook: HookState,
-  shouldEnable: boolean,
-): Promise<void> {
-  const requestProjectPath = ctx.projectPath;
-  await ctx.loadHooks();
-  if (ctx.projectPath !== requestProjectPath) return;
-  ctx.showToast(`${hook.name} ${shouldEnable ? "enabled" : "disabled"}`);
+  projectPath: string,
+  visitGeneration: number,
+): boolean {
+  return (
+    ctx.projectPath === projectPath &&
+    ctx.hooksVisitGeneration === visitGeneration
+  );
+}
+
+/** Keep the failure detail readable in the Hooks banner, including non-Error values thrown while reading a response. */
+function dashboardHookRequestFailureMessage(error: unknown): string {
+  // Fetch and JSON errors carry a message; an unexpected thrown value still needs visible diagnostic text.
+  return error instanceof Error ? error.message : String(error);
 }
 
 /**
- * Persist one hook toggle.
- * Use when the user enables, disables, or resyncs a guardrail row in the Hooks view.
+ * Refresh the selected project's hook rows, optionally retaining a failed write's recovery message.
+ * Catches read failures into the Hooks banner; only the latest read for this visit can replace rows or stop loading.
  *
- * @param ctx - dashboard state; results apply only while the project that started the save remains selected
- * @param hook - hook row being saved; non-togglable hooks leave the row unchanged
- * @param shouldEnable - desired hook state; `false` may require user confirmation
- * @returns nothing; it reports a failed toggle in the Hooks banner and toast while leaving every row visible
+ * @param ctx - dashboard state for the selected project
+ *
+ * @param shouldPreserveError - true after a partial write; false lets a deliberate refresh clear the previous error
+ * @returns nothing; stale replies are ignored and a failed read leaves an error in the Hooks panel
+ */
+async function dashboardLoadHookStates(
+  ctx: DashboardAppContext,
+  shouldPreserveError = false,
+): Promise<void> {
+  const projectPath = ctx.projectPath;
+  const visitGeneration = ctx.hooksVisitGeneration;
+  const loadGeneration = ++ctx.hooksLoadGeneration;
+  ctx.hooksLoading = true;
+  // A partial apply needs fresh rows without erasing the explanation of what failed.
+  if (!shouldPreserveError) {
+    ctx.hooksError = "";
+    ctx.hooksChangedPaths = [];
+  }
+  /** Only the latest read in this visit may replace visible rows or end its loading state. */
+  const isCurrent = (): boolean =>
+    dashboardHookVisitIsCurrent(ctx, projectPath, visitGeneration) &&
+    ctx.hooksLoadGeneration === loadGeneration;
+  try {
+    const response = await dashboardFetch(
+      `/api/hooks?path=${encodeURIComponent(projectPath)}`,
+    );
+    const payload = readRecord(await response.json(), "Hooks response");
+    // A later visit or refresh already owns the screen, even if this older request reports an error.
+    if (!isCurrent()) return;
+    const error = readErrorMessage(payload);
+    // Missing rows cannot establish current hook state after a project switch or partial write.
+    if (!response.ok || error || !Array.isArray(payload.hooks))
+      throw new Error(error || "Hook state could not be loaded.");
+    ctx.hooksState = payload.hooks as HookState[];
+  } catch (error) {
+    // Losing the dashboard connection during refresh leaves the current visit without trusted rows.
+    if (!isCurrent()) return;
+    ctx.hooksState = [];
+    const message = dashboardHookRequestFailureMessage(error);
+    ctx.hooksError = shouldPreserveError
+      ? `${ctx.hooksError} Refresh failed: ${message}`
+      : message;
+  } finally {
+    // An older read must not stop the loading indicator for a newer visit.
+    if (isCurrent()) ctx.hooksLoading = false;
+  }
+}
+
+/** Read the exact replacement list returned by the server; an incomplete list cannot open an approval dialog. */
+function dashboardReadHookReplacement(
+  payload: Record<string, unknown>,
+): HookReplacementFile[] {
+  // A plain error or malformed response offers no replacement authority to the browser.
+  if (
+    payload.replacementAvailable !== true ||
+    !Array.isArray(payload.conflicts) ||
+    typeof payload.confirmationIdentity !== "string" ||
+    !/^[a-f0-9]{64}$/u.test(payload.confirmationIdentity)
+  )
+    return [];
+  const files: HookReplacementFile[] = [];
+  // Every listed file must retain its affected hook names and reason so the user can review the complete change.
+  for (const candidate of payload.conflicts) {
+    const file = readRecord(candidate, "Hook replacement file");
+    // Partial evidence would hide what replacement discards, so reject the entire review.
+    if (
+      typeof file.path !== "string" ||
+      !file.path ||
+      !Array.isArray(file.hookIds) ||
+      !file.hookIds.every((hookId: unknown) => typeof hookId === "string") ||
+      (file.reason !== "diverged" && file.reason !== "unclassified")
+    )
+      return [];
+    files.push({ path: file.path, hookIds: file.hookIds, reason: file.reason });
+  }
+  return files;
+}
+
+/**
+ * Keep a refused or partial hook change visible and offer only a complete, current replacement review.
+ *
+ * @param ctx - live Hooks state receiving the error and any changed-file list
+ * @param payload - server failure envelope; absent review evidence leaves replacement unavailable
+ *
+ * @param request - project visit and explicit action that produced this response
+ * @param isCurrent - whether delayed focus still belongs to this response
+ *
+ * @returns nothing; partial writes refresh rows while preserving their recovery message
+ */
+async function dashboardShowHookActionFailure(
+  ctx: DashboardAppContext,
+  payload: Record<string, unknown>,
+  request: Omit<HookReplacementReview, "confirmationIdentity" | "conflicts">,
+  isCurrent: () => boolean,
+): Promise<void> {
+  const errorMessage = readErrorMessage(payload) || "Hook change failed.";
+  ctx.hooksError = errorMessage;
+  // Inspection commands must remain visible after the page refreshes; absent or empty guidance leaves the original error intact.
+  if (typeof payload.recovery === "string" && payload.recovery.trim()) {
+    ctx.hooksError = `${errorMessage}\n${payload.recovery.trim()}`;
+  }
+  const conflicts = dashboardReadHookReplacement(payload);
+  // Complete server evidence permits a separate decision, with Cancel focused before the destructive action.
+  if (conflicts.length > 0) {
+    ctx.hooksReplacement = {
+      ...request,
+      confirmationIdentity: payload.confirmationIdentity as string,
+      conflicts,
+    };
+    ctx.$nextTick(() => {
+      // Navigation can happen before Alpine renders the replacement panel.
+      if (isCurrent() && ctx.hooksReplacement)
+        ctx.$refs.hookReplacementCancel?.focus();
+    });
+  }
+  ctx.hooksChangedPaths = Array.isArray(payload.changedPaths)
+    ? payload.changedPaths.filter((path: unknown) => typeof path === "string")
+    : [];
+  // A disk or claim-release failure can follow successful file writes, so users need current rows beside the error.
+  if (
+    payload.code === "hook-apply-failed" ||
+    payload.code === "hook-claim-release-failed"
+  ) {
+    await dashboardLoadHookStates(ctx, true);
+  }
+}
+
+/**
+ * Prepare the request for the user's Sync, toggle or reviewed replacement action.
+ * Keep replacement authority absent until the user confirms the server's exact review.
+ *
+ * @param action - selected Hooks control and, for a toggle, the desired enabled state
+ * @param review - server review accepted by the user; absent means differing local files must be preserved
+ *
+ * @returns route and request fields; an empty body means sync using existing hook choices
+ */
+function dashboardPrepareHookActionRequest(
+  action: HookUserAction,
+  review?: HookReplacementReview,
+): { endpoint: string; body: Record<string, unknown> } {
+  // Sync reconciles the whole Hooks page; a toggle names the row whose desired state changes.
+  const endpoint =
+    action.kind === "sync"
+      ? "/api/hooks"
+      : `/api/hooks/${encodeURIComponent(action.hookId)}/toggle`;
+  const body = {
+    // A global sync preserves configured choices; only a row toggle supplies a new choice.
+    ...(action.kind === "toggle" ? { enabled: action.enabled } : {}),
+    // Only the exact review the user accepted may authorize replacing differing local files.
+    ...(review
+      ? { replace: true, confirmationIdentity: review.confirmationIdentity }
+      : {}),
+  };
+  return { endpoint, body };
+}
+
+/** Name the action that just succeeded so the toast matches the control the user selected. */
+function dashboardHookActionSuccessMessage(action: HookUserAction): string {
+  // A row toggle confirms its new state; global sync confirms the bundled files were reconciled.
+  return action.kind === "sync"
+    ? "Official hook files synced"
+    : `${action.hookName} ${action.enabled ? "enabled" : "disabled"}`;
+}
+
+/**
+ * Submit Sync, a toggle or an exact replacement retry and display its verified result.
+ *
+ * One coordinator binds every response branch to the same visit and save lock because users can navigate while a request is pending.
+ * Catches connection failures into a refresh instruction; partial writes reload rows while retaining recovery details.
+ *
+ * @param ctx - live Hooks state; one action owns the shared busy flag until its matching response finishes
+ * @param action - explicit user action; sync preserves configured choices and toggle names its desired state
+ *
+ * @param review - matching server review; absent means no permission to discard differing local bytes
+ * @returns nothing; a refusal stays visible and partial writes trigger a read of current rows
+ */
+async function dashboardRunHookAction(
+  ctx: DashboardAppContext,
+  action: HookUserAction,
+  review?: HookReplacementReview,
+): Promise<void> {
+  // A loading screen or pending review cannot accept overlapping writes to shared hook files.
+  if (ctx.hookSavingId || ctx.hooksLoading || (ctx.hooksReplacement && !review))
+    return;
+  const projectPath = ctx.projectPath;
+  const visitGeneration = ctx.hooksVisitGeneration;
+  const requestGeneration = ++ctx.hooksActionGeneration;
+  ctx.hooksLoadGeneration = Number(ctx.hooksLoadGeneration) + 1;
+  ctx.hookSavingId = action.kind === "sync" ? "sync" : action.hookId;
+  ctx.hooksReplacement = null;
+  ctx.hooksChangedPaths = [];
+  ctx.hooksError = "";
+  /** Only this action in this visit may show a result or release the shared busy flag. */
+  const isCurrent = (): boolean =>
+    dashboardHookVisitIsCurrent(ctx, projectPath, visitGeneration) &&
+    ctx.hooksActionGeneration === requestGeneration;
+  const { endpoint, body } = dashboardPrepareHookActionRequest(action, review);
+  try {
+    const response = await dashboardFetch(
+      `${endpoint}?path=${encodeURIComponent(projectPath)}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      },
+    );
+    const payload = readRecord(await response.json(), "Hook action response");
+    // For example, a user can leave Hooks and return while the original Sync request is still in flight.
+    if (!isCurrent()) return;
+    const error = readErrorMessage(payload);
+    // Refusal details describe the available recovery; no failed request earns a success toast.
+    if (!response.ok || error) {
+      await dashboardShowHookActionFailure(
+        ctx,
+        payload,
+        {
+          projectPath,
+          visitGeneration,
+          requestGeneration,
+          action,
+        },
+        isCurrent,
+      );
+      return;
+    }
+    // Success is meaningful only with the full refreshed row set, including hooks sharing repaired files.
+    if (!Array.isArray(payload.hooks))
+      throw new Error(
+        "Hook change returned no current hook state. Refresh to inspect the project.",
+      );
+    ctx.hooksState = payload.hooks as HookState[];
+    ctx.showToast(dashboardHookActionSuccessMessage(action));
+  } catch (error) {
+    // A lost connection after clicking Sync cannot prove whether the server finished; keep an explicit refresh instruction.
+    if (!isCurrent()) return;
+    ctx.hooksError = `${dashboardHookRequestFailureMessage(error)} Refresh hook state before retrying.`;
+  } finally {
+    // A late response from an earlier action cannot unlock controls for a newer action.
+    if (isCurrent()) ctx.hookSavingId = null;
+  }
+}
+
+/**
+ * Confirm removal of protection, then route one toggle through the shared hook operation.
+ *
+ * @param ctx - live Hooks state; a pending save or replacement review blocks another action
+ * @param hook - selected hook row; non-togglable hooks expose no writable control
+ *
+ * @param shouldEnable - desired state; false may require the guardrail-removal dialog
+ * @returns nothing; cancellation sends no request and keeps the row unchanged
  */
 async function dashboardToggleHookState(
   ctx: DashboardAppContext,
   hook: HookState,
   shouldEnable: boolean,
 ): Promise<void> {
-  // Non-togglable hooks or an active save mean the user cannot start another change yet.
-  if (!hook.togglable || ctx.hookSavingId) return;
-  // Cancelled confirmation leaves the guardrail row unchanged.
+  // Shared files make simultaneous row changes unsafe to present as independent saves.
+  if (
+    !hook.togglable ||
+    ctx.hookSavingId ||
+    ctx.hooksLoading ||
+    ctx.hooksReplacement
+  )
+    return;
+  // Cancelling the disable warning leaves the user's protection in place.
   if (!dashboardConfirmHookToggle(hook, shouldEnable)) return;
-  ctx.hookSavingId = hook.id;
-  ctx.hooksError = "";
-  const requestProjectPath = ctx.projectPath;
-  try {
-    const res = await dashboardFetch(
-      `/api/hooks/${encodeURIComponent(hook.id)}/toggle?path=${encodeURIComponent(requestProjectPath)}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ enabled: shouldEnable }),
-      },
-    );
-    const payload = readRecord(await res.json(), "Hook toggle response");
-    const error = readErrorMessage(payload);
-    // Server-side hook failures are shown as user-facing save errors.
-    if (error) throw new Error(error);
-    // The user switched projects while saving, so this response belongs to an old screen.
-    if (ctx.projectPath !== requestProjectPath) return;
-    await dashboardApplyHookToggleResult(
-      ctx,
-      payload.hook as HookState,
-      shouldEnable,
-    );
-  } catch (err) {
-    // A refused hook change, disconnected server, or malformed response leaves the row unchanged and reports an error for its project.
-    // The user switched projects while the save failed, so do not toast over the new screen.
-    if (ctx.projectPath !== requestProjectPath) return;
-    ctx.hooksError = err instanceof Error ? err.message : String(err);
-    ctx.showToast(ctx.hooksError || "Hook update failed", true);
-  } finally {
-    // Clear the saving spinner only for the hook row that started this request.
-    if (ctx.hookSavingId === hook.id) ctx.hookSavingId = null;
-  }
+  await dashboardRunHookAction(ctx, {
+    kind: "toggle",
+    hookId: hook.id,
+    hookName: hook.name,
+    enabled: shouldEnable,
+  });
 }
 
 /**
@@ -346,33 +588,9 @@ function dashboardTaskDisplayFragment(): DashboardAppFragment {
      * @returns nothing; endpoint errors recover into the Hooks banner and stale responses are ignored
      */
     async loadHooks() {
-      this.hooksLoading = true;
-      this.hooksError = "";
-      const requestProjectPath = this.projectPath;
-      try {
-        const res = await dashboardFetch(
-          `/api/hooks?path=${encodeURIComponent(requestProjectPath)}`,
-        );
-        const payload = readRecord(await res.json(), "Hooks response");
-        const error = readErrorMessage(payload);
-        // Hook endpoint errors should keep the user in the Hooks panel with a visible banner.
-        if (error) throw new Error(error);
-        // The user switched projects before hooks returned, so leave the new rows alone.
-        if (this.projectPath !== requestProjectPath) return;
-        // A response without hook rows leaves the Hooks list empty instead of retaining results from an earlier load.
-        this.hooksState = Array.isArray(payload.hooks)
-          ? (payload.hooks as HookState[])
-          : [];
-      } catch (err) {
-        // A rejected hook request, unavailable server, or invalid response clears current hook rows and reports a panel error.
-        // Late hook errors for another project should not replace the visible rows.
-        if (this.projectPath !== requestProjectPath) return;
-        this.hooksState = [];
-        this.hooksError = err instanceof Error ? err.message : String(err);
-      } finally {
-        // Only the matching request may clear the Hooks loading spinner.
-        if (this.projectPath === requestProjectPath) this.hooksLoading = false;
-      }
+      // Refresh cannot dismiss a replacement review or race a hook write.
+      if (this.hookSavingId || this.hooksReplacement) return;
+      await dashboardLoadHookStates(this);
     },
   };
 }
@@ -388,6 +606,35 @@ function dashboardHookSetupActionsFragment(
   supportedAgents: SupportedAgent[],
 ): DashboardAppFragment {
   return {
+    /** Sync bundled official files while keeping the project's configured enabled choices. */
+    async syncOfficialHooks(): Promise<void> {
+      await dashboardRunHookAction(this, { kind: "sync" });
+    },
+
+    /** Cancel a replacement review without submitting another request or altering project files. */
+    cancelHookReplacement(): void {
+      // An already-submitted replacement must finish before its controls become available again.
+      if (this.hookSavingId) return;
+      this.hooksReplacement = null;
+    },
+
+    /** Apply only the replacement list reviewed during this same project visit and request. */
+    async confirmHookReplacement(): Promise<void> {
+      const review = this.hooksReplacement as HookReplacementReview | null;
+      // Closing the review or switching away removes its authority, even after returning to the same project.
+      if (
+        !review ||
+        !dashboardHookVisitIsCurrent(
+          this,
+          review.projectPath,
+          review.visitGeneration,
+        ) ||
+        review.requestGeneration !== this.hooksActionGeneration
+      )
+        return;
+      await dashboardRunHookAction(this, review.action, review);
+    },
+
     /**
      * Return hook state rows for every supported agent.
      * Use in the hook table so missing agent payloads still show as unavailable rows.
@@ -599,6 +846,7 @@ function dashboardHookFilterActionsFragment(): DashboardAppFragment {
      * Use before search so the Hooks list reflects enabled/disabled/drift tabs.
      *
      * @param hook - loaded hook row; enabled state, effective coverage, and drift determine its filter membership
+     *
      * @param filter - selected filter chip; unknown values show the hook
      * @returns whether the hook should stay visible for that filter
      */
@@ -707,6 +955,7 @@ function dashboardHookFilterActionsFragment(): DashboardAppFragment {
      * Use when the user flips a guardrail switch.
      *
      * @param hook - hook row being toggled; non-togglable hooks are ignored by the shared helper
+     *
      * @param shouldEnable - desired enabled state; `false` may prompt for confirmation
      * @returns nothing; failures remain visible in the Hooks panel
      */
@@ -751,6 +1000,7 @@ function dashboardHookFilterActionsFragment(): DashboardAppFragment {
      * Use when an agent card asks for setup instructions for that runner.
      *
      * @param targetAgent - supported runner selected for setup; its ID selects the generated prompt and cache entry
+     *
      * @param shouldForce - when true, regenerate even if cached setup output exists
      * @returns setup-generation result from the shared helper
      */

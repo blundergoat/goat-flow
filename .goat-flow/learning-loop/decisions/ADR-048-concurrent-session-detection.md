@@ -50,11 +50,17 @@ Checkbox loss ranks first because it can falsify milestone completion and depend
 | Dashboard-owned in-memory lock | A second dashboard, a CLI command, and a direct edit all bypass one server's memory | Rejected |
 | Path-keyed claim plus content identity | A crashed owner blocks availability, and non-cooperating edits stay outside the guarantee | Accepted; stale cooperating writers fail closed without a daemon |
 
+## Hook operation coverage
+
+Hook sync and toggles use `src/cli/server/hook-operation.ts` (search: `executeHookChange`) to claim the complete prepared destination set before any config, registration, script, ignore, cleanup, baseline, or cutover mutation. The registrar rebuilds its operation under those claims, binds replacement intent to the exact review, and holds claims through verification and ADR-064 hook-only publication. Contention refuses immediately. Owner-checked release failures remain visible, and an apply failure reports changed destinations without rolling back over external edits.
+
+Config and provider writers invoked outside this registrar path retain their existing coverage; this amendment does not make every caller guarded. Atomic file replacements remain separate filesystem operations.
+
 ## Rollout
 
 Shipped: the reusable claim and identity helper (`src/cli/path-write-claim.ts`), cross-process tests, stable diagnostics, sorted multi-target admission, and the managed-install transaction guard. `install` claims every previewed destination including config and managed agent-config paths, `learn new` claims its target bucket and all four generated indexes, and ADR-064 is the first full-lifecycle consumer.
 
-Unplanned until a roadmap admits them: moving the `plans time` identity comparison inside the claim, guarding dashboard active-plan writes with a revision from the plan read route, covering config writers outside `install`, dashboard project-state revisioning, and session-log output. A future guarded writer must retain supported-platform proof for exclusive creation and cleanup; a platform that cannot provide it stops the dependent work for a revised decision rather than falling back to re-read-only checks.
+Unplanned until a roadmap admits them: moving the `plans time` identity comparison inside the claim, guarding dashboard active-plan writes with a revision from the plan read route, covering config writers outside `install` and the guarded hook registrar, dashboard project-state revisioning, and session-log output. A future guarded writer must retain supported-platform proof for exclusive creation and cleanup; a platform that cannot provide it stops the dependent work for a revised decision rather than falling back to re-read-only checks.
 
 Until a writer is guarded, goat-plan re-reads the exact milestone or marker immediately before a direct edit, compares it with the snapshot used to prepare the edit, and stops on any sibling change. These steps are advisory and must be described as such, never as a lock.
 

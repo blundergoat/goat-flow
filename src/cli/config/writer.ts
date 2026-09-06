@@ -1,8 +1,8 @@
 /**
- * Minimal `.goat-flow/config.yaml` writer for hook toggle state.
+ * Read and prepare the selected project's saved hook choices for CLI and dashboard actions.
  *
- * The writer only replaces targeted top-level blocks so comments and ordering
- * in the rest of the config file survive normal dashboard toggles.
+ * Targeted changes preserve unrelated top-level settings and comments.
+ * Guarded Sync prepares config in memory; direct writers persist their own changes atomically.
  */
 import {
   accessSync,
@@ -64,6 +64,7 @@ function configPath(projectPath: string): string {
 /** Read existing config text or synthesize the minimal config needed before the first toggle write. */
 function readConfigText(projectPath: string): string {
   const path = configPath(projectPath);
+  // A first toggle needs a config file before its choice can be saved.
   if (!existsSync(path)) {
     return [
       "# .goat-flow/config.yaml - project configuration",
@@ -75,9 +76,9 @@ function readConfigText(projectPath: string): string {
 }
 
 /**
- * Return executable analyzers at exact project conventions without searching arbitrary subtrees.
- * A resolved path must remain a regular file inside the selected project; existing config overrides win when the caller merges this result.
- * Error behavior: swallows inaccessible roots or candidates into an omitted result instead of blocking hook configuration.
+ * Find a supported project-local analyzer when the user enables Gruff without configuring a binary.
+ *
+ * Only executable files inside the project qualify; missing or inaccessible candidates leave discovery unset as a safe fallback.
  */
 function conventionalGruffBinaries(
   projectPath: string,
@@ -86,10 +87,12 @@ function conventionalGruffBinaries(
   try {
     projectRealPath = realpathSync(projectPath);
   } catch {
+    // A project moved or became unreadable after selection; leave analyzer discovery unset.
     return null;
   }
 
   const binaries: Record<string, string> = {};
+  // Check only supported project locations when the user enables Gruff without choosing a binary.
   for (const [language, relativeBinaryPath] of CONVENTIONAL_GRUFF_BINARIES) {
     try {
       const candidatePath = join(projectPath, relativeBinaryPath);
@@ -100,10 +103,11 @@ function conventionalGruffBinaries(
         relativeRealPath === ".." ||
         relativeRealPath.startsWith(`..${sep}`) ||
         isAbsolute(relativeRealPath);
+      // Do not save a launcher that points outside the selected project or cannot identify an executable file.
       if (escapesProject || !statSync(binaryRealPath).isFile()) continue;
       binaries[language] = relativeBinaryPath;
     } catch {
-      // A missing, unreadable, or non-executable convention leaves discovery unchanged.
+      // Ignore missing or unusable local analyzers; for example, the user may not have created this project's Python environment.
     }
   }
   return Object.keys(binaries).length > 0 ? binaries : null;
@@ -115,10 +119,11 @@ function normalizeHookIdentifier(hookIdentifier: string): string {
 }
 
 /**
- * Parse one raw `hooks.<id>` YAML entry into its canonical id and state.
- * Returns null for malformed entries (no boolean `enabled`) so the caller can skip them - a user's hand-edited config never crashes a toggle write.
+ * Read one saved hook choice, returning null when its enabled value is not a boolean.
+ * Guarded sync validates YAML separately; this reader only decides which explicit choices are usable.
  *
  * @param hookId - raw hook key as written in config.yaml (may be a legacy alias)
+ *
  * @param hookEntry - raw YAML value under that key
  * @returns canonical id plus validated state, or null when the entry is malformed
  */
@@ -143,23 +148,30 @@ function readHookEntry(
   };
 }
 
-/** Parse explicitly configured hook states; malformed YAML uses an empty-map fallback. */
-function readRawHooks(text: string): HookConfigMap {
+/**
+ * Read explicit hook choices for status and config preparation.
+ * Malformed YAML uses an empty-map fallback; guarded operations validate the same text before allowing writes.
+ *
+ * @param text - captured YAML; empty text has no saved choices
+ * @returns valid explicit choices; an empty map means none could be read
+ */
+export function readConfiguredHookChoices(text: string): HookConfigMap {
   let parsed: unknown;
   try {
     parsed = load(text) ?? {};
   } catch {
+    // A hand-edited YAML syntax error supplies no readable choices; guarded sync validates separately before writing.
     return {};
   }
   // No parseable hooks section -> registry defaults apply for everything.
   if (!isRecord(parsed) || !isRecord(parsed.hooks)) return {};
   const hooks: HookConfigMap = {};
+  // Read each saved choice so valid overrides survive aliases and unrelated malformed entries.
   for (const [hookId, value] of Object.entries(parsed.hooks)) {
     const entry = readHookEntry(hookId, value);
     // Malformed entry -> skip; the hook falls back to its registry default.
     if (!entry) continue;
-    // A legacy alias normalizing onto an id that already appeared -> first
-    // occurrence wins so canonical entries beat their aliases.
+    // An alias cannot replace a choice already read under its canonical ID; a later canonical entry can still replace an earlier alias.
     if (
       entry.id !== hookId &&
       Object.prototype.hasOwnProperty.call(hooks, entry.id)
@@ -192,7 +204,10 @@ function isTopLevelLine(line: string): boolean {
 /** Replace only the managed top-level hooks block, preserving all unrelated config text. */
 function replaceTopLevelHooksBlock(text: string, block: string): string {
   const lines = text.replace(/\s*$/u, "\n").split("\n");
-  const start = lines.findIndex((line) => /^hooks:\s*(?:#.*)?$/u.test(line));
+  const start = lines.findIndex((line) =>
+    /^(?:hooks|"hooks"|'hooks'):/u.test(line),
+  );
+  // Append a hooks section when the user has not saved any hook settings yet.
   if (start === -1) return `${lines.join("\n").trimEnd()}\n\n${block}\n`;
 
   let prefixEnd = start;
@@ -206,6 +221,7 @@ function replaceTopLevelHooksBlock(text: string, block: string): string {
   let end = start + 1;
   while (end < lines.length) {
     const line = lines[end] ?? "";
+    // Stop at the next setting so changing hooks preserves the rest of the project config.
     if (line.trim() !== "" && isTopLevelLine(line)) break;
     end += 1;
   }
@@ -220,6 +236,7 @@ function replaceTopLevelHooksBlock(text: string, block: string): string {
  * Find the line range one top-level config block occupies, so a toggle can replace only that block and leave the user's comments alone.
  *
  * @param lines - config file split into lines
+ *
  * @param key - top-level key to locate
  * @returns the block's start and end lines, or null when the key is not in the file yet
  */
@@ -227,14 +244,17 @@ function topLevelBlockRange(
   lines: string[],
   key: string,
 ): { start: number; end: number } | null {
+  // Only a literal supported setting name can select a block for removal.
   if (!/^[A-Za-z0-9_-]+$/u.test(key)) return null;
   const start = lines.findIndex((line) =>
     new RegExp(`^${key}:\\s*(?:#.*)?$`, "u").test(line),
   );
+  // An absent setting needs no replacement or cleanup.
   if (start === -1) return null;
   let end = start + 1;
   while (end < lines.length) {
     const line = lines[end] ?? "";
+    // The next top-level setting belongs to another feature and must survive this edit.
     if (line.trim() !== "" && isTopLevelLine(line)) break;
     end += 1;
   }
@@ -246,6 +266,7 @@ function topLevelBlockRange(
  *
  * @param lines - config file split into lines
  * @param start - first line of the block itself
+ *
  * @param key - top-level key being replaced
  * @returns the first line to remove, which equals `start` when the block has no header of its own
  */
@@ -255,11 +276,13 @@ function removablePrefixStart(
   key: string,
 ): number {
   const comments = REMOVED_TOP_LEVEL_BLOCK_COMMENTS.get(key);
+  // Without a known generated header, preserve the user's preceding comments.
   if (!comments) return start;
   let prefixStart = start;
   while (prefixStart > 0 && comments.has(lines[prefixStart - 1] ?? "")) {
     prefixStart -= 1;
   }
+  // Remove the header's separating blank line so cleanup does not leave an empty section.
   if (prefixStart > 0 && (lines[prefixStart - 1] ?? "").trim() === "") {
     prefixStart -= 1;
   }
@@ -271,6 +294,7 @@ function removablePrefixStart(
  * Use when a deprecated dashboard or hook setting should disappear from the user's config.
  *
  * @param text - existing config file text; empty text means there is no visible block to remove
+ *
  * @param key - top-level config key to remove; empty cannot match a user-facing config block
  * @returns config text without the block, or the original text when the block is absent
  */
@@ -291,7 +315,7 @@ function removeTopLevelBlockFromText(text: string, key: string): string {
 
 /** Return the explicitly configured hook state, excluding registry defaults. */
 function readHookConfig(projectPath: string): HookConfigMap {
-  return readRawHooks(readConfigText(projectPath));
+  return readConfiguredHookChoices(readConfigText(projectPath));
 }
 
 /**
@@ -299,6 +323,7 @@ function readHookConfig(projectPath: string): HookConfigMap {
  *
  * @param projectPath - project whose goat-flow config stores hook overrides
  * @param hookId - canonical hook id to read
+ *
  * @param isEnabledByDefault - registry default to use when config omits the hook
  * @returns configured enabled state, or the registry default when absent
  */
@@ -319,6 +344,7 @@ export function readHookEnabled(
  * Return one hook's explicit project-relative post-turn roots.
  *
  * @param projectPath - selected project whose goat-flow config owns the hook row
+ *
  * @param hookId - canonical hook id; hooks without `scan-roots` return no list
  * @returns copied configured roots, or `null` when the hook has no valid explicit list
  */
@@ -337,6 +363,7 @@ function yamlValueWithoutComment(rawValue: string): string {
 
 /** Return true for `*roots`, `&roots ...`, or a flow list such as `[*api_root, packages/web]` written on the `scan-roots:` line. */
 function scanRootInlineValueUsesYamlAlias(inlineValue: string): boolean {
+  // An anchor or alias here cannot be read by the post-turn hook's simpler config parser.
   if (/^[*&]/u.test(inlineValue)) return true;
   return inlineValue.startsWith("[") && /[[,]\s*[*&]/u.test(inlineValue);
 }
@@ -347,6 +374,7 @@ function scanRootInlineValueUsesYamlAlias(inlineValue: string): boolean {
  *
  * @param lines - config text split into lines
  * @param keyLineIndex - index of the `scan-roots:` line; items are searched below it
+ *
  * @param keyIndent - indent of that key; a line at this indent or shallower ends the list
  * @returns true on the first alias or anchor item; false when the list ends without one
  */
@@ -355,24 +383,27 @@ function scanRootBlockListUsesYamlAlias(
   keyLineIndex: number,
   keyIndent: number,
 ): boolean {
+  // Inspect the user's scan-root list until the next setting begins.
   for (
     let itemIndex = keyLineIndex + 1;
     itemIndex < lines.length;
     itemIndex += 1
   ) {
     const itemLine = lines[itemIndex] ?? "";
+    // Blank lines between selected scan folders do not end the list.
     if (itemLine.trim().length === 0) continue;
     const itemIndent = itemLine.length - itemLine.trimStart().length;
+    // A setting at the same or shallower indentation belongs outside this scan-root list.
     if (itemIndent <= keyIndent) break;
+    // An aliased folder cannot safely become a post-turn scan target.
     if (/^\s*-\s*[*&]/u.test(itemLine)) return true;
   }
   return false;
 }
 
 /**
- * Tell whether the project's `scan-roots` entry is written with a YAML anchor or alias in any shape the hook runtime cannot read.
- * Use before registering post-turn scan roots: js-yaml resolves `*name` and `&name` for the CLI, but the hook's own parser inside
- * post-turn-safety.sh does not, so a registration that accepts them would fail closed at Stop time with a misleading message.
+ * Check for YAML aliases before registering the user's post-turn scan folders.
+ * The CLI resolves aliases, but post-turn-safety.sh cannot; accepting them would fail at the end of the agent's turn.
  *
  * @param projectPath - selected project whose `.goat-flow/config.yaml` is inspected as text; a missing file has no scan roots
  * @returns true when a `scan-roots` value, flow list item, or block list item starts with `*` or `&`
@@ -389,6 +420,7 @@ export function hookScanRootsUseYamlAliases(projectPath: string): boolean {
  *
  * @param lines - whole config text split into lines, needed to read a block list beneath the key
  * @param line - the line being inspected
+ *
  * @param index - its position in `lines`
  * @returns true for an alias or anchor in this key's value; false for other lines, comments, and plain lists
  */
@@ -401,8 +433,10 @@ function scanRootLineUsesYamlAlias(
   if (line.trimStart().startsWith("#")) return false;
   // The key may sit mid-line inside a flow mapping, `post-turn-safety: { scan-roots: *roots }`, so match it anywhere.
   const keyMatch = /scan-roots\s*:(.*)$/u.exec(line);
+  // Other settings do not affect whether post-turn scan roots can be registered.
   if (!keyMatch) return false;
   const inlineValue = yamlValueWithoutComment(keyMatch[1] ?? "");
+  // An unsupported inline alias is enough to refuse registration before a turn ends.
   if (scanRootInlineValueUsesYamlAlias(inlineValue)) return true;
   // Only a key that starts its line can own a block list beneath it.
   const blockKeyMatch = /^(\s*)scan-roots\s*:/u.exec(line);
@@ -437,8 +471,10 @@ function insertInheritedGitHookChoice(
       text,
     );
   const entry = `  deny-git-mutations:\n    enabled: ${choice.enabled}`;
+  // Keep the user's existing YAML style when adding the separate Git protection choice.
   if (header) {
     const headerValue = (header[2] ?? "").trim();
+    // An empty or comment-only header uses a normal indented hook entry.
     if (headerValue === "" || headerValue.startsWith("#")) {
       // Insert one child without resolving aliases or rewriting another hook's grammar.
       const end = header.index + header[0].length;
@@ -446,11 +482,13 @@ function insertInheritedGitHookChoice(
       const blockEntry = `${indent}deny-git-mutations:\n${indent.repeat(2)}enabled: ${choice.enabled}`;
       return `${text.slice(0, end)}\n${blockEntry}${text.slice(end)}`;
     }
+    // Keep an inline hooks mapping inline when adding the inherited choice.
     if (headerValue.startsWith("{")) {
       const open = header.index + header[0].indexOf("{") + 1;
       const separator = text.slice(open).trimStart().startsWith("}") ? "" : ",";
       return `${text.slice(0, open)} deny-git-mutations: { enabled: ${choice.enabled} }${separator}${text.slice(open)}`;
     }
+    // Preserve the user's shared YAML settings through a merge while adding this explicit choice.
     if (/^\*[\w-]+(?:\s+#.*)?$/u.test(headerValue)) {
       return text.replace(header[0], `hooks:\n  <<: ${header[2]}\n${entry}`);
     }
@@ -460,16 +498,16 @@ function insertInheritedGitHookChoice(
 }
 
 /**
- * Persist the initial Git choice before any legacy toggle can change its inheritance.
- * Existing choices and unrelated YAML syntax survive the migration.
- * Side effects: writes `.goat-flow/config.yaml` through the existing atomic writer.
+ * Save the inherited Git protection choice before an older combined toggle can change it.
+ * Writes config atomically while preserving existing choices and unrelated settings.
  *
  * @param projectPath - selected target whose hook choices are migrated in place
  * @returns nothing; an existing Git choice leaves the config untouched
  */
 export function migrateGitHookChoice(projectPath: string): void {
   const text = readConfigText(projectPath);
-  const hooks = readRawHooks(text);
+  const hooks = readConfiguredHookChoices(text);
+  // A saved Git protection choice takes precedence over migration from the older combined toggle.
   if (hooks["deny-git-mutations"] !== undefined) return;
   const next = insertInheritedGitHookChoice(text, hooks);
   const path = configPath(projectPath);
@@ -482,6 +520,7 @@ export function migrateGitHookChoice(projectPath: string): void {
  * It writes the file in place, replacing only the hook block so the rest of the user's config, including their comments, survives the toggle.
  *
  * @param projectPath - project whose goat-flow config should be written
+ *
  * @param hookId - canonical hook id to update
  * @param isEnabled - desired enabled state to persist
  */
@@ -492,7 +531,7 @@ export function setHookEnabled(
 ): void {
   const path = configPath(projectPath);
   const text = readConfigText(projectPath);
-  const hooks = readRawHooks(text);
+  const hooks = readConfiguredHookChoices(text);
   hooks["deny-git-mutations"] ??= initialGitHookChoice(hooks);
   const currentHook = hooks[hookId];
   const detectedBinaries =
@@ -516,41 +555,11 @@ export function setHookEnabled(
 }
 
 /**
- * Remove one hook override from `.goat-flow/config.yaml`.
- * Use when the user clears a hook toggle and should return to the registry default.
- *
- * @param projectPath - project whose config is edited; empty means no project config can be found
- * @param hookId - canonical hook id to remove; empty cannot match a visible hook toggle
- * @returns nothing; absent config or absent hook entries leave the user's config unchanged
- */
-export function removeHookConfig(projectPath: string, hookId: string): void {
-  const path = configPath(projectPath);
-
-  // No config file means there is no saved user override to remove.
-  if (!existsSync(path)) return;
-
-  const text = readConfigText(projectPath);
-  const hooks = readRawHooks(text);
-
-  // If this hook was never overridden, the registry default already controls the UI.
-  if (!Object.prototype.hasOwnProperty.call(hooks, hookId)) return;
-
-  Reflect.deleteProperty(hooks, hookId);
-  writeFileAtomic(
-    path,
-    replaceTopLevelHooksBlock(text, renderHooksBlock(hooks)),
-    projectPath,
-  );
-}
-
-/**
- * Remove one top-level block from the project's `.goat-flow/config.yaml`, leaving the rest of the user's config untouched.
- *
- * Used when a feature is switched off in the dashboard and its settings should disappear rather than linger as dead configuration.
- *
- * Side effect: rewrites the config file atomically, and does nothing when the file or the block is already absent.
+ * Remove a retired top-level setting while preserving the rest of the user's config.
+ * Writes atomically only when the section exists; missing config or an absent section causes no write.
  *
  * @param projectPath - selected project whose config is edited
+ *
  * @param key - top-level key to remove; a key that is not present is a no-op rather than an error
  * @returns nothing; an unchanged file is left alone entirely, so no needless write or mtime change occurs
  */
@@ -559,9 +568,101 @@ export function removeTopLevelConfigBlock(
   key: string,
 ): void {
   const path = configPath(projectPath);
+  // A project without config has no retired section to remove.
   if (!existsSync(path)) return;
   const text = readConfigText(projectPath);
   const next = removeTopLevelBlockFromText(text, key);
+  // Avoid touching the file when the requested section is already absent.
   if (next === text) return;
   writeFileAtomic(path, next, projectPath);
+}
+
+/** Remove only retired overrides so Sync cannot leave a choice whose managed registration no longer exists. */
+function removeRetiredHookChoices(
+  choices: HookConfigMap,
+  removedHookIds: readonly string[],
+): boolean {
+  let hasRemovedChoice = false;
+  // Each retired id is owned by the registry; unrelated user configuration remains outside this cleanup.
+  for (const hookId of removedHookIds) {
+    // Remove only a saved retired choice; current hook choices stay available to the user.
+    if (Object.prototype.hasOwnProperty.call(choices, hookId)) {
+      Reflect.deleteProperty(choices, hookId);
+      hasRemovedChoice = true;
+    }
+  }
+  return hasRemovedChoice;
+}
+
+/** Apply the user's explicit choice, discovering a conventional analyzer only when enabling Gruff without a configured binary. */
+function applyPreparedHookChoice(
+  choices: HookConfigMap,
+  toggle: { hookId: string; enabled: boolean },
+  projectPath: string,
+): void {
+  const current = choices[toggle.hookId];
+  const binaries =
+    current?.binaries ??
+    (toggle.hookId === "gruff-code-quality" && toggle.enabled
+      ? conventionalGruffBinaries(projectPath)
+      : null);
+  choices[toggle.hookId] = {
+    ...current,
+    enabled: toggle.enabled,
+    ...(binaries ? { binaries } : {}),
+  };
+}
+
+/**
+ * Prepare the selected project's hook choices for Sync or a toggle using captured config bytes.
+ * Invalid YAML refuses the operation before it can erase saved choices.
+ *
+ * @param text - captured config; null creates a first config, while empty text supplies no saved choices
+ * @param projectPath - selected project used to discover an existing local analyzer
+ *
+ * @param toggle - explicit requested choice; omitted for Sync, which preserves enabled choices
+ * @param removedHookIds - retired registry IDs to remove; an empty list preserves every current choice
+ *
+ * @returns complete config with inherited choices and retired settings reconciled
+ * @throws when the source or prepared YAML is invalid
+ */
+export function prepareHookConfig(
+  text: string | null,
+  projectPath: string,
+  toggle?: { hookId: string; enabled: boolean },
+  removedHookIds: readonly string[] = [],
+): string {
+  const original =
+    text ??
+    '# .goat-flow/config.yaml - project configuration\nversion: "1.8.0"\n';
+  const parsed = load(original) ?? {};
+  // A list or scalar cannot safely hold hook choices; refuse before Sync changes the project.
+  if (
+    !isRecord(parsed) ||
+    (parsed.hooks !== undefined && !isRecord(parsed.hooks))
+  ) {
+    throw new Error(
+      "Hook config must contain a YAML mapping: .goat-flow/config.yaml",
+    );
+  }
+  const hooks = readConfiguredHookChoices(original);
+  let next =
+    hooks["deny-git-mutations"] === undefined
+      ? insertInheritedGitHookChoice(original, hooks)
+      : original;
+  // Check the migration before any other transformation can hide a syntax failure.
+  load(next);
+  const desired = readConfiguredHookChoices(next);
+  let hasHookChange = removeRetiredHookChoices(desired, removedHookIds);
+  // Sync preserves configured choices; a toggle replaces only its explicitly selected choice.
+  if (toggle) {
+    applyPreparedHookChoice(desired, toggle, projectPath);
+    hasHookChange = true;
+  }
+  // Rewrite the hooks section only when a toggle or retired choice changed it.
+  if (hasHookChange)
+    next = replaceTopLevelHooksBlock(next, renderHooksBlock(desired));
+  next = removeTopLevelBlockFromText(next, "plan-guard");
+  load(next);
+  return next;
 }

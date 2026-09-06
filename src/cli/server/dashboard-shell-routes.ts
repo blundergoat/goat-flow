@@ -21,6 +21,7 @@ import {
   HookRegistrarError,
   applyHookState,
   readAllHookStates,
+  syncHookStates,
 } from "./hook-registrar.js";
 import { isProjectDirectory } from "./setup-detect.js";
 
@@ -52,6 +53,7 @@ function handleHtmlRequest(
  *
  * @param req - incoming request, whose ETag header decides whether a 304 is enough
  * @param url - request URL under `/assets/`
+ *
  * @param res - response written directly by this handler
  * @returns true once this route has answered; false means the URL belongs to another handler
  */
@@ -140,24 +142,76 @@ function handleBrowseRequest(
 function hookIdFromTogglePath(pathname: string): string | null {
   const match = pathname.match(/^\/api\/hooks\/([^/]+)\/toggle$/u);
   // An absent hook segment cannot identify a toggle, so the request continues through normal routing.
-  return match?.[1] ? decodeURIComponent(match[1]) : null;
+  return match?.[1] ?? null;
 }
 
 // Map hook registrar errors to HTTP status codes while preserving generic error handling.
 function hookErrorStatus(ctx: DashboardRouteContext, err: unknown): number {
   // Hook validation already chose a useful refusal status; preserve it for the user's toggle result.
   if (err instanceof HookRegistrarError) return err.statusCode;
+  // A malformed percent-encoded hook id is a bad request, with no project changes to inspect.
+  if (err instanceof URIError) return 400;
   return ctx.responseStatusForError(err, 500);
 }
 
 /**
- * Answer the Hooks card, either reading current hook state or applying the toggle the user just clicked.
- * It reports a bad body or a failed install as a JSON status body rather than throwing at the server.
+ * Read or sync all hook rows for the selected project.
+ * Invalid bodies and refused writes return their error details before the browser offers any replacement.
+ */
+async function handleHookCollectionRequest(
+  ctx: DashboardRouteContext,
+  req: IncomingMessage,
+  url: URL,
+  res: ServerResponse,
+): Promise<boolean> {
+  // Read and explicit Sync are the only collection actions; fetching a URL never mutates hook files.
+  if (req.method !== "GET" && req.method !== "POST") {
+    ctx.jsonResponse(res, 405, { error: "Method not allowed" });
+    return true;
+  }
+  try {
+    const projectPath = ctx.validatedPath(
+      url.searchParams.get("path"),
+      req.method === "POST" ? "write-local-state" : "project-read",
+    );
+    // Global Sync uses the same guarded registrar as CLI sync and individual toggles.
+    if (req.method === "POST") {
+      const { decodeHookSyncBody } = await import("./decoders.js");
+      const decoded = decodeHookSyncBody(await ctx.readBody(req));
+      // Reject malformed replacement intent before the selected project's hooks can change.
+      if (!decoded.ok) {
+        ctx.jsonResponse(res, 400, {
+          error: decoded.error,
+          path: decoded.path,
+        });
+        return true;
+      }
+      ctx.jsonResponse(res, 200, {
+        hooks: syncHookStates(projectPath, decoded.value),
+      });
+    } else {
+      ctx.jsonResponse(res, 200, { hooks: readAllHookStates(projectPath) });
+    }
+  } catch (err) {
+    // A selected project removed since page load cannot supply hook state; the card receives an error rather than missing-hook results.
+    ctx.jsonResponse(res, hookErrorStatus(ctx, err), {
+      error: err instanceof Error ? err.message : String(err),
+      ...(err instanceof HookRegistrarError ? err.details : {}),
+    });
+  }
+  return true;
+}
+
+/**
+ * Serve hook status, bundled Sync and the user's selected toggle from the Hooks page.
+ * Reports caught request and operation failures as JSON errors with replacement or recovery details.
  *
  * @param ctx - dashboard route context supplying path validation and response helpers
  * @param req - incoming request; a POST carries the toggle the user chose
+ *
  * @param url - request URL carrying the project path
  * @param res - JSON response target
+ *
  * @returns true once this route has answered; false means the URL belongs to another handler
  */
 async function handleHooksRequest(
@@ -166,27 +220,9 @@ async function handleHooksRequest(
   url: URL,
   res: ServerResponse,
 ): Promise<boolean> {
-  // Opening the Hooks card reads installation state without changing any hook.
-  if (url.pathname === "/api/hooks") {
-    // Hook updates need a specific toggle URL; this collection endpoint only supplies the card's current state.
-    if (req.method !== "GET") {
-      ctx.jsonResponse(res, 405, { error: "Method not allowed" });
-      return true;
-    }
-    try {
-      const projectPath = ctx.validatedPath(
-        url.searchParams.get("path"),
-        "project-read",
-      );
-      ctx.jsonResponse(res, 200, { hooks: readAllHookStates(projectPath) });
-    } catch (err) {
-      // A selected project removed since page load cannot supply hook state; the card receives an error rather than missing-hook results.
-      ctx.jsonResponse(res, hookErrorStatus(ctx, err), {
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
-    return true;
-  }
+  // The collection owns read and global Sync; row URLs carry one explicit toggle.
+  if (url.pathname === "/api/hooks")
+    return handleHookCollectionRequest(ctx, req, url, res);
 
   const hookId = hookIdFromTogglePath(url.pathname);
   // A URL that names no hook toggle remains available to another route group.
@@ -209,12 +245,18 @@ async function handleHooksRequest(
       ctx.jsonResponse(res, 400, { error: decoded.error, path: decoded.path });
       return true;
     }
-    const hook = applyHookState(hookId, decoded.value.enabled, projectPath);
-    ctx.jsonResponse(res, 200, { hook });
+    const hook = applyHookState(
+      decodeURIComponent(hookId),
+      decoded.value.enabled,
+      projectPath,
+      decoded.value,
+    );
+    ctx.jsonResponse(res, 200, { hook, hooks: readAllHookStates(projectPath) });
   } catch (err) {
     // A read-only project can prevent hook installation; return the registrar's error so the user knows the toggle did not complete.
     ctx.jsonResponse(res, hookErrorStatus(ctx, err), {
       error: err instanceof Error ? err.message : String(err),
+      ...(err instanceof HookRegistrarError ? err.details : {}),
     });
   }
   return true;
@@ -250,7 +292,7 @@ function detectInstalledAgents(includeVersions: boolean): {
             }).toString(),
           );
         } catch {
-          // Optional version detection can time out; intentionally ignore that failure and keep the runner available with its version unknown.
+          // Ignore an optional version-probe timeout; for example, an installed runner can hang while its availability remains known.
         }
       }
       return { ...agent, installed: true, version };
@@ -277,6 +319,7 @@ type AgentDetectionState = {
  *
  * @param state - per-server detection cache
  * @param url - request URL, where `fresh=true` forces a new probe
+ *
  * @param res - JSON response target
  * @returns true once this route has answered; false means the URL belongs to another handler
  */

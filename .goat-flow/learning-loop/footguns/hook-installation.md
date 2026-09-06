@@ -1,6 +1,6 @@
 ---
 category: hook-installation
-last_reviewed: 2026-09-05
+last_reviewed: 2026-09-06
 ---
 
 **Scope:** Hook install, launch, registration, and config-drift plumbing. The `deny-dangerous` policy parser lives in [deny-shell.md](deny-shell.md), [deny-secrets.md](deny-secrets.md), and [deny-writes.md](deny-writes.md); runtime delivery and provider adapters live in [hooks.md](hooks.md).
@@ -8,18 +8,47 @@ last_reviewed: 2026-09-05
 ## Footgun: Hook toggles can scaffold uninstalled agent surfaces
 
 **Status:** active | **Created:** 2026-05-27 | **Evidence:** ACTUAL_MEASURED
+**Incident count:** 3 | **Latest occurrence:** 2026-09-06
 
 **Prevention:**
 1. Treat hook support and agent installation as different facts: support comes from the manifest, installation from target-project surfaces.
 2. Do not count shared markers such as `AGENTS.md` or `.agents/skills/` as a per-agent opt-in when several profiles share them.
 3. On disable, remove existing residue, but never create a missing hook config just to remove an entry from it.
 4. Regenerate installed configs through the hook writer so project toggles survive; raw template copies are only defaults.
+5. Match legacy residue to its owning provider before queueing changes; pending cleanup in another provider's folder is never an opt-in.
 
 **Symptoms:** A hook toggle against a clean target creates agent config and hook files for agents the target never opted into, so setup and audit look agent-aware after a one-toggle request.
 
 **Why it happens:** A registrar loop over supported agents treated support metadata as installation evidence, and the config writer treated a missing JSON file as `{}`, so an unguarded toggle created `.claude/settings.json`, `.codex/hooks.json`, `.agents/hooks.json`, `.github/hooks/hooks.json`, and hook script directories from scratch.
 
 **Evidence:** Pre-fix, `hooks disable deny-dangerous <clean-dir>` created all four configs plus `.goat-flow/config.yaml`, and `hooks enable` created scripts under every agent hook directory. `src/cli/server/hook-registrar.ts` (search: `shouldReconcileAgent`) now gates writes on detected surfaces or existing residue; `test/unit/hook-registrar-surfaces.test.ts` (search: `does not scaffold uninstalled agent surfaces`) locks it. On 2026-08-09, copying Copilot's baseline template over its installed config removed an explicitly enabled Gruff hook until `src/cli/audit/check-drift-hooks.ts` (search: `applyExplicitHookToggles`) restored the project toggle.
+
+**Recurrence 2026-09-06:** Deferred cleanup left legacy scripts on disk while Sync checked every provider, so one provider's residue opted in all four.
+The migration fixtures reproduced unwanted Claude, Codex, Antigravity and Copilot configs before the fix.
+Keep legacy detection provider-specific and cleanup separate: `src/cli/server/hook-managed-installation.ts` (search: `hookScriptResidueExists`),
+`test/integration/hook-sync-recovery.test.ts` (search: `provider with legacy hook residue`).
+
+## Footgun: Hook recovery guidance can drift from the public CLI
+
+**Status:** active | **Created:** 2026-09-06 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Reuse the public claim-inspection command builder and preserve recovery guidance in every hook error consumer.
+
+**Prevention:**
+1. Build inspection commands with `pathWriteClaimInspectCommand`, using the selected physical project root and each unreleased target.
+2. Test refused admission and completed writes with failed claim cleanup; inspection must leave the markers intact.
+3. Preserve recovery text when the Hooks page refreshes after failure. Marker removal still requires explicit operator-confirmed recovery.
+
+**Symptoms:** Sync leaves claims that block retry, but its recovery command is unknown or the Hooks page drops the command after refresh.
+
+**Why it happens:** Hook errors named nonexistent `goat-flow writes` instead of using the shared command builder.
+The dashboard read `error` and `changedPaths` but discarded the separate `recovery` field.
+
+**Evidence:** Denied claim deletion reproduced both cleanup paths; the old guidance named a command the source CLI rejected.
+The regression now runs public inspection for every reported target and checks that each marker remains.
+Owners: `src/cli/server/hook-operation.ts` (search: `hookClaimReleaseFailure`),
+`src/dashboard/dashboard-app-hook-setup-fragments.ts` (search: `dashboardShowHookActionFailure`).
+Tests: `test/integration/hook-sync-recovery.test.ts` (search: `prints working inspection commands`),
+`test/unit/dashboard-hook-actions.test.ts` (search: `while retaining the error, recovery and changed-file list`).
 
 ## Footgun: Hook command strings can fail before guard code starts
 
@@ -154,7 +183,7 @@ last_reviewed: 2026-09-05
 
 **Symptoms:** In an isolated dashboard target, changing `deny-dangerous/guard-runtime.sh` marked both policy rows installation stale. Re-syncing the dangerous row repaired the helper, but the Git row still displayed installation stale because the client replaced only the saved row.
 
-**Evidence:** `src/dashboard/dashboard-app-hook-setup-fragments.ts` (search: `dashboardApplyHookToggleResult`) now reloads the list. Replaying the same shared-helper drift and Re-sync sequence refreshed both visible Claude rows to scenario unverified; cancelling disable sent no toggle request, and a delayed response did not replace a newly selected project's rows. Backend proof is bound in `src/cli/server/hook-runtime-proof.ts` (search: `managedPolicyRuntimeIdentity`); same-size entrypoint and helper edits invalidate the audit cache in `test/integration/dashboard-audit-api.test.ts` (search: `invalidates cached dashboard audits after instruction, hook, and lesson edits`).
+**Evidence:** `src/dashboard/dashboard-app-hook-setup-fragments.ts` (search: `dashboardRunHookAction`) now applies the complete refreshed list returned by a successful sync or toggle. Replaying the same shared-helper drift and Re-sync sequence refreshed both visible Claude rows to scenario unverified; cancelling disable sent no toggle request, and a delayed response did not replace a newly selected project's rows. Backend proof is bound in `src/cli/server/hook-runtime-proof.ts` (search: `managedPolicyRuntimeIdentity`); same-size entrypoint and helper edits invalidate the audit cache in `test/integration/dashboard-audit-api.test.ts` (search: `invalidates cached dashboard audits after instruction, hook, and lesson edits`).
 
 ## Footgun: Fixed hook indentation can reparent existing YAML settings
 

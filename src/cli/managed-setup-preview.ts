@@ -1,10 +1,8 @@
 /**
- * Builds the install write-set preview users see before installing goat-flow updates.
+ * Build the file preview users inspect before installing Goat Flow into a selected project.
  *
- * For managed templates it compares the last installed hash, the selected target file, and the current package template without exposing file
- * contents or absolute project paths; for user-owned and generated destinations it reports the seed-or-preserve action instead.
- *
- * Install handlers use the same result to block ambiguous overwrites and record recovery state.
+ * Compare prior, installed and bundled hashes for managed files; describe seeding or preservation for other destinations.
+ * Install and guarded hook operations reuse this owner to verify files and publish their permitted history.
  */
 import {
   closeSync,
@@ -167,9 +165,11 @@ function readManagedInstallCutoverEvidence(
   const migratedAgents: AgentId[] = [];
   const absentAgents: AgentId[] = [];
   const incompatibleAgents: AgentId[] = [];
+  // Every provider marker must agree before the selected project can use the shared install history.
   for (const agent of KNOWN_AGENT_IDS) {
     const relativePath = `.goat-flow/install-state/${agent}.json`;
     const target = readManagedTargetEvidence(projectPath, relativePath);
+    // A missing or unsafe marker means migration is incomplete; keep it visible as a repair requirement.
     if (target.status !== "regular") {
       incompatibleAgents.push(agent);
       continue;
@@ -181,12 +181,16 @@ function readManagedInstallCutoverEvidence(
         flag: "r",
       });
     } catch {
+      // An editor or permission change can make a marker unreadable between checks; report incompatible history.
       incompatibleAgents.push(agent);
       continue;
     }
+    // An exact migrated marker records that this provider had earlier installation evidence.
     if (markerBytes === managedInstallCutoverMarkerBytes(agent, "migrated")) {
       migratedAgents.push(agent);
-    } else if (
+    }
+    // An exact absent marker records a completed cutover for a provider with no earlier evidence.
+    else if (
       markerBytes === managedInstallCutoverMarkerBytes(agent, "absent")
     ) {
       absentAgents.push(agent);
@@ -200,8 +204,11 @@ function readManagedInstallCutoverEvidence(
 /** Return every agent named by retained legacy provenance in canonical v2 rows. */
 function legacyProvenanceAgents(state: ManagedInstallStateV2): AgentId[] {
   const agents = new Set<AgentId>();
+  // Collect provider history from each shared file before publishing migration markers.
   for (const row of state.files) {
+    // Rows verified by a later install do not identify which providers supplied legacy history.
     if (row.provenance.kind !== "legacy-v1-bootstrap") continue;
+    // Shared files may preserve observations from several previously installed providers.
     for (const observation of row.provenance.observations) {
       agents.add(observation.agent);
     }
@@ -210,9 +217,9 @@ function legacyProvenanceAgents(state: ManagedInstallStateV2): AgentId[] {
 }
 
 /**
- * Atomically replace one known marker without following a non-regular destination.
- * Side effect: writes one private adjacent filesystem temp file, flushes it, and renames it over the marker.
- * Error behavior: throws on unsafe destinations or failed atomic publication; the prior marker remains authoritative when replacement does not finish.
+ * Write one provider's migration marker atomically so older installers stop using its retired hash store.
+ *
+ * Writes and flushes a private temporary file, then renames it; unsafe paths or failed publication throw without replacing the prior marker.
  */
 function writeManagedInstallCutoverMarker(
   projectPath: string,
@@ -223,13 +230,18 @@ function writeManagedInstallCutoverMarker(
   const markerPath = managedInstallStatePath(projectPath, agent);
   const markerBytes = managedInstallCutoverMarkerBytes(agent, legacyEvidence);
   const currentTarget = readManagedTargetEvidence(projectPath, relativePath);
+  // Read a safe existing marker so a repeated install can avoid rewriting completed migration evidence.
   if (currentTarget.status === "regular") {
     try {
+      // An already matching marker needs no write during the user's retry.
       if (readFileSync(markerPath, "utf-8") === markerBytes) return;
     } catch {
+      // A marker may become unreadable after selection; refuse cutover instead of replacing evidence that could not be read.
       throw new Error(`Could not read ${relativePath} before cutover.`);
     }
-  } else if (currentTarget.status !== "missing") {
+  }
+  // A directory or unsafe link at the marker path requires repair before installation can proceed.
+  else if (currentTarget.status !== "missing") {
     throw new Error(`${relativePath} must be a safe regular file.`);
   }
 
@@ -245,11 +257,13 @@ function writeManagedInstallCutoverMarker(
     temporaryDescriptor = null;
     renameSync(temporaryPath, markerPath);
   } catch (error) {
+    // For example, write access may be revoked during migration; close and clean the temporary marker before reporting failure.
+    // A failed open has no descriptor to close; a later write failure still owns one.
     if (temporaryDescriptor !== null) closeSync(temporaryDescriptor);
     try {
       rmSync(temporaryPath, { force: true });
     } catch (cleanupError) {
-      // Preserve the publication failure as primary while retaining cleanup evidence for diagnostics.
+      // Revoked folder permissions can also prevent temp-file cleanup; retain that cause while reporting the original publication failure.
       if (error instanceof Error && error.cause === undefined) {
         error.cause = cleanupError;
       }
@@ -271,37 +285,40 @@ function managedInstallMigratedAgents(
     ...facade.legacyAgents,
     ...legacyProvenanceAgents(state),
   ]);
+  // Before canonical cutover, legacy rows already supply the available provider migration history.
   if (facade.source !== "v2") return migratedAgents;
 
   const existingEvidence = readManagedInstallCutoverEvidence(projectPath);
+  // A retry preserves each provider already recorded as migrated in an exact marker.
   for (const agent of existingEvidence.migratedAgents) {
     migratedAgents.add(agent);
   }
+  // A completed install receipt rules out inferring history from leftover legacy files.
   if (state.receipts.length > 0) return migratedAgents;
 
-  // A receipt-free managed.json can be the recoverable first half of bootstrap;
-  // regular incompatible files are labelled migrated without reading their hashes as authority.
+  // A receipt-free managed.json can be the recoverable first half of bootstrap; regular incompatible files are labelled migrated without reading
+  // their hashes as authority.
   for (const agent of existingEvidence.incompatibleAgents) {
     const target = readManagedTargetEvidence(
       projectPath,
       `.goat-flow/install-state/${agent}.json`,
     );
+    // A remaining safe legacy file identifies a provider interrupted during receipt-free migration.
     if (target.status === "regular") migratedAgents.add(agent);
   }
   return migratedAgents;
 }
 
 /**
- * Publish or repair the receipt-free v2 cutover while the caller owns every state claim.
- * The two-phase order exists because any interruption must leave one authoritative v2 baseline before old readers are disabled path by path.
- * Invariant: managed.json is published before every known agent path becomes an exact hashless marker, and no receipt is invented during bootstrap.
- * Side effects: writes managed.json first, then atomically replaces all known v1 paths with hashless markers.
- * Error behavior: throws before Bash can mutate a target; a published receipt-free state remains recoverable when a later marker write fails.
+ * Publish shared install history under the caller's complete state claims, then replace provider markers.
+ *
+ * The shared baseline must be durable before markers change; this receipt-free order lets install recover after a later write fails.
  *
  * @param projectPath - selected target root whose complete state paths are already held by the caller's write claims
  */
 export function prepareManagedInstallStateForApply(projectPath: string): void {
   const facade = readManagedInstallStateFacade(projectPath);
+  // Conflicting or malformed history must be repaired before an install or hook operation can publish new state.
   if (
     facade.status === "malformed-blocking" ||
     facade.status === "conflicting"
@@ -313,6 +330,7 @@ export function prepareManagedInstallStateForApply(projectPath: string): void {
     files: [],
     receipts: [],
   };
+  // Publish shared history before disabling old readers so an interrupted first cutover retains one baseline.
   if (facade.source !== "v2") {
     writeManagedInstallStateV2(projectPath, state);
   }
@@ -322,6 +340,7 @@ export function prepareManagedInstallStateForApply(projectPath: string): void {
     facade,
     state,
   );
+  // Mark every known provider after shared history is durable, including providers the user has not installed.
   for (const agent of KNOWN_AGENT_IDS) {
     writeManagedInstallCutoverMarker(
       projectPath,
@@ -331,7 +350,12 @@ export function prepareManagedInstallStateForApply(projectPath: string): void {
   }
 }
 
-/** Verified target bytes whose next managed baseline could not be persisted. */
+/**
+ * Report that installed files were verified but their shared history could not be saved.
+ *
+ * The CLI uses this failure to explain recovery without claiming a completed installation.
+ * Retain the original write error for diagnostics while keeping the public message stable.
+ */
 export class ManagedInstallStateRecordError extends Error {
   readonly writeError: unknown;
 
@@ -387,6 +411,7 @@ export interface ManagedSetupPreview {
  * Use so dry-run and real install consume the same platform prerequisite result.
  *
  * @param installPreview - current file actions; an empty list still receives a launch blocker
+ *
  * @param installerLaunch - selected Bash or actionable error; never null after discovery
  * @returns original ready preview or blocked copy; never null and never mutates the input
  */
@@ -487,8 +512,7 @@ const STATE_PRESENTATION: Record<
 };
 
 /**
- * Convert one canonical managed-file state into the repair direction shared by install, audit, and hook status.
- * This consumes M02's classifier result so downstream surfaces never invent their own old/current/new comparison.
+ * Translate the shared file comparison into the same repair direction for Install, Audit and Hooks.
  *
  * @param state - canonical three-way state; non-content states have no proven drift direction
  * @returns current, safely behind, locally diverged, or unclassified repair evidence
@@ -496,8 +520,11 @@ const STATE_PRESENTATION: Record<
 export function managedSetupChangeDirection(
   state: ManagedSetupFileState,
 ): ManagedSetupChangeDirection {
+  // Matching installed and bundled bytes let the user leave this file alone.
   if (state === "unchanged") return "current";
+  // Only the bundle changed, so the user's pristine installed copy can safely advance.
   if (state === "template-changed") return "behind";
+  // Locally changed bytes need review before the user replaces them with bundled content.
   if (state === "both-changed" || state === "local-preserved") {
     return "diverged";
   }
@@ -521,6 +548,7 @@ export function classifyManagedSetupFile(
   if (input.currentSha256 === input.newExpectedSha256) return "unchanged";
 
   // Without an old baseline, a missing destination is created and an existing differing regular file is adopted: pre-install-state targets
+  //
   // legitimately hold older-package bytes, and the managed refresh matches what the installer always did for system-owned templates before baselines
   // existed.
   //
@@ -532,9 +560,8 @@ export function classifyManagedSetupFile(
   // A deleted destination may represent deliberate user intent, so setup pauses.
   if (input.currentSha256 === null) return "missing";
 
-  // The package has nothing new to deliver here, so the local bytes are simply
-  // kept. Blocking would refuse every unrelated write over a file goat-flow does
-  // not need to touch, and replacing would destroy content it never authored.
+  // The package has nothing new to deliver here, so the local bytes are simply kept. Blocking would refuse every unrelated write over a file
+  // goat-flow does not need to touch, and replacing would destroy content it never authored.
   if (input.newExpectedSha256 === input.oldExpectedSha256) {
     return "local-preserved";
   }
@@ -708,9 +735,8 @@ function buildPreviewFile(
 }
 
 /**
- * Turn one non-template destination into the row users read beside managed templates.
- * Use for user-owned and generated paths, where install seeds, preserves, or rewrites from project state and there is no package template to compare
- * bytes against.
+ * Describe a generated or user-owned destination beside the managed files in the install preview.
+ * These paths are seeded, preserved or rewritten from project settings; there is no exact-copy package hash to compare.
  */
 function buildProjectWriteFile(
   definition: ProjectWriteDefinition,
@@ -758,9 +784,7 @@ function buildProjectWriteFile(
 }
 
 /**
- * Choose the sentence one non-template row shows.
- * A migration row names the exact edits install will make, because "this file may change" is not something a user can check afterwards, while a named
- * list is.
+ * Describe the exact planned edits beside a migration row so users can verify what installation changed.
  */
 function migrationRowReason(
   definition: ProjectWriteDefinition,
@@ -769,6 +793,7 @@ function migrationRowReason(
   presentationReason: string,
   pendingMigrations: ReadonlyMap<string, string>,
 ): string {
+  // Show the unsafe-path problem before describing migrations the installer cannot safely perform.
   if (isCurrentTargetUnsafe) return presentationReason;
   const migrationSummary = pendingMigrations.get(definition.path);
   // A pending migration always carries its own summary; the fallback keeps the row honest if not.
@@ -789,6 +814,7 @@ function projectWriteState(
 ): ManagedSetupFileState {
   // Generated files are rewritten from project state, so presence changes nothing users must decide.
   if (definition.ownership === "generated") return "regenerated";
+  // A missing user file is created only when this destination explicitly allows initial seeding.
   if (currentTarget.status === "missing") {
     return definition.seedable ? "user-seeded" : "user-preserved";
   }
@@ -832,8 +858,7 @@ function previewVerdict(
     )
   )
     return "blocked";
-  // Retired paths are preserved and pre-baseline adoptions replace bytes, so
-  // both still deserve user attention before the installer runs.
+  // Retired paths are preserved and pre-baseline adoptions replace bytes, so both still deserve user attention before the installer runs.
   if (
     files.some((file) => file.state === "removed" || file.state === "adopted")
   ) {
@@ -843,9 +868,9 @@ function previewVerdict(
 }
 
 /**
- * Read one selection-independent baseline and layer marker compatibility over v2 rows.
- * Invariant: selected-agent input never changes the expected hash map or global bootstrap outcome.
- * Error behavior: target-controlled failures remain non-throwing status and safe diagnostic fields.
+ * Read shared installation history for status and preview, then check that all provider markers agree.
+ *
+ * Provider selection never changes the shared hashes; unreadable or malformed evidence returns a blocking status.
  *
  * @param projectPath - selected project root whose complete install-state directory supplies evidence
  * @returns canonical facade plus marker compatibility; malformed input remains a blocking result
@@ -857,6 +882,7 @@ export function readManagedSetupV2Baseline(projectPath: string): {
   error: string | null;
 } {
   const facade = readManagedInstallStateFacade(projectPath);
+  // Missing or legacy history has no canonical marker set to validate yet.
   if (facade.source !== "v2" || facade.state === null) {
     return {
       facade,
@@ -866,6 +892,7 @@ export function readManagedSetupV2Baseline(projectPath: string): {
     };
   }
   const cutoverEvidence = readManagedInstallCutoverEvidence(projectPath);
+  // With every marker compatible, the shared baseline can supply normal install and hook status.
   if (cutoverEvidence.incompatibleAgents.length === 0) {
     return { facade, status: facade.status, cutoverEvidence, error: null };
   }
@@ -889,6 +916,7 @@ interface ManagedReceiptProblem {
  *
  * @param state - canonical v2 state containing the receipt and referenced row generations
  * @param files - current selected-agent preview rows used for exact path and target-byte checks
+ *
  * @param selectedAgent - agent whose stored receipt is evaluated; absence produces no problems
  * @returns every authority-removing mismatch, including its path when the reason is path-specific
  */
@@ -900,6 +928,7 @@ export function selectedManagedReceiptProblems(
   const selectedReceipt = state.receipts.find(
     (receipt) => receipt.agent === selectedAgent,
   );
+  // No receipt means no completed install is claimed, so there is no receipt to mark stale.
   if (selectedReceipt === undefined) return [];
 
   const selectedFiles = files.filter(
@@ -912,7 +941,9 @@ export function selectedManagedReceiptProblems(
   );
   const selectedPaths = new Set(selectedFiles.map((file) => file.path));
   const problems: ManagedReceiptProblem[] = [];
+  // Check every receipt reference against the provider's current install footprint.
   for (const reference of selectedReceipt.files) {
+    // A file removed from the current package makes this older receipt incomplete evidence of today's installation.
     if (!selectedPaths.has(reference.path)) {
       problems.push({
         path: reference.path,
@@ -920,9 +951,11 @@ export function selectedManagedReceiptProblems(
       });
     }
   }
+  // Each current managed file must still agree with the receipt and the shared baseline.
   for (const file of selectedFiles) {
     const row = rows.get(file.path);
     const reference = references.get(file.path);
+    // A newly required file is not covered by an older receipt until a full install verifies it.
     if (reference === undefined) {
       problems.push({
         path: file.path,
@@ -930,6 +963,7 @@ export function selectedManagedReceiptProblems(
       });
       continue;
     }
+    // A receipt without its referenced baseline row cannot prove the current installation.
     if (row === undefined) {
       problems.push({
         path: file.path,
@@ -937,18 +971,22 @@ export function selectedManagedReceiptProblems(
       });
       continue;
     }
+    // A hook-only refresh can advance a shared file while leaving this full-install receipt stale.
     if (reference.generation !== row.generation) {
       problems.push({
         path: file.path,
         reason: `Receipt generation no longer matches managed-state row ${file.path}.`,
       });
     }
+    // A missing or unsafe target no longer supports the receipt's completed-install claim.
     if (file.currentStatus !== "regular") {
       problems.push({
         path: file.path,
         reason: `Managed target ${file.path} is ${file.currentStatus}, not a safe regular file.`,
       });
-    } else if (file.currentSha256 !== row.expectedSha256) {
+    }
+    // Local edits after install invalidate the receipt for this file without erasing its previous history.
+    else if (file.currentSha256 !== row.expectedSha256) {
       problems.push({
         path: file.path,
         reason: `Current target bytes no longer match managed-state row ${file.path}.`,
@@ -959,8 +997,8 @@ export function selectedManagedReceiptProblems(
 }
 
 /**
- * Derive every stale receipt visible during one selected-agent preview.
- * Invariant: row generations, package version, markers, exact selected path set, and current selected bytes all participate without changing row authority.
+ * List providers whose receipts no longer prove their current installation.
+ * Receipts must still match file generations, package version, migration markers and the selected provider's current files.
  */
 function managedInstallStaleReceiptAgents(
   baseline: ReturnType<typeof readManagedSetupV2Baseline>,
@@ -969,19 +1007,25 @@ function managedInstallStaleReceiptAgents(
   goatFlowVersion: string,
 ): AgentId[] {
   const state = baseline.facade.state;
+  // No canonical state means there are no stored receipts to classify.
   if (state === null) return [];
   const staleAgents = new Set<AgentId>(baseline.facade.staleReceiptAgents);
+  // Compare each stored install against the version the user is running now.
   for (const receipt of state.receipts) {
+    // A receipt from another package version does not prove this version's full installation.
     if (receipt.goatFlowVersion !== goatFlowVersion) {
       staleAgents.add(receipt.agent);
     }
   }
+  // Incomplete provider markers can also invalidate receipts even when shared file hashes still match.
   for (const agent of baseline.cutoverEvidence?.incompatibleAgents ?? []) {
+    // Only providers with a stored receipt can have that receipt marked stale.
     if (state.receipts.some((receipt) => receipt.agent === agent)) {
       staleAgents.add(agent);
     }
   }
 
+  // Missing, changed or unverified selected files prevent the current provider's receipt from remaining current.
   if (selectedManagedReceiptProblems(state, files, selectedAgent).length > 0) {
     staleAgents.add(selectedAgent);
   }
@@ -994,9 +1038,11 @@ function appendManagedInstallPreviewLimits(
   baseline: ReturnType<typeof readManagedSetupV2Baseline>,
   staleReceiptAgents: readonly AgentId[],
 ): void {
+  // Expose unreadable or incompatible history as a preview limitation the user can repair.
   if (baseline.error !== null) {
     limits.push(`Install state is ${baseline.status}: ${baseline.error}`);
   }
+  // List providers whose old receipts no longer prove their current installation.
   if (staleReceiptAgents.length > 0) {
     limits.push(
       `Install receipt evidence is stale for: ${staleReceiptAgents.join(", ")}.`,
@@ -1008,10 +1054,12 @@ function appendManagedInstallPreviewLimits(
  * Build a hash-only managed setup preview for one selected project and agent.
  * Use before rendering dry-run output or admitting the existing installer.
  *
- * @param projectPath - selected target root; empty is invalid upstream and produces no useful files
+ * @param projectPath - selected project whose managed files are previewed before installation
  * @param agent - selected agent whose canonical skill mirror is included; never null after CLI validation
+ *
  * @param authority - overwrite permissions the user granted by flag; the default grants none, so conflicts stay blocked
  * @param pendingMigrations - path-to-summary rows naming in-place edits install will make; empty means none
+ *
  * @returns deterministic path-sorted preview; files is empty only when no managed templates exist
  */
 export function buildManagedSetupPreview(
@@ -1125,10 +1173,9 @@ export function renderManagedSetupPreviewText(
   return lines.join("\n");
 }
 /**
- * Build the one post-verification state candidate without mutating persisted evidence.
- * Invariant: only selected paths whose current bytes equal the incoming hash receive verified provenance, and the selected receipt changes only when
- * every selected exact-copy path is verified. Rows and receipts outside the selected path set remain logically unchanged.
- * Error behavior: throws if verified-path evidence cannot resolve to the row generation required by its receipt reference.
+ * Build verified baseline rows and a full-install receipt after checking the user's installed files.
+ *
+ * Every selected exact-copy file must verify before its receipt changes; throws if a required row is missing and preserves unrelated history.
  */
 function buildManagedInstallReceiptCandidate(
   state: ManagedInstallStateV2,
@@ -1139,8 +1186,11 @@ function buildManagedInstallReceiptCandidate(
       file.ownership === "system-owned" && file.newExpectedSha256 !== null,
   );
   const rows = new Map(state.files.map((row) => [row.path, row]));
+  // Verify each selected exact-copy file before allowing its row to become current install evidence.
   for (const file of selectedFiles) {
+    // Without a bundled hash, this path cannot receive a verified package baseline.
     if (file.newExpectedSha256 === null) continue;
+    // Preserved edits or unsafe targets must not be recorded as the official files the user installed.
     if (
       file.currentStatus !== "regular" ||
       file.currentSha256 !== file.newExpectedSha256
@@ -1166,12 +1216,14 @@ function buildManagedInstallReceiptCandidate(
       file.currentSha256 === file.newExpectedSha256,
   );
   const receipts = [...state.receipts];
+  // Refresh a full-install receipt only after every required selected file is verified.
   if (allSelectedPathsVerified) {
     const selectedReceipt = {
       agent: preview.agent,
       goatFlowVersion: preview.goatFlowVersion,
       files: selectedFiles.map((file) => {
         const row = rows.get(file.path);
+        // Missing row evidence is an internal inconsistency; refuse to publish a receipt that claims completion.
         if (row === undefined) {
           throw new Error(
             `Verified managed path ${file.path} has no state row.`,
@@ -1183,6 +1235,7 @@ function buildManagedInstallReceiptCandidate(
     const previousReceiptIndex = receipts.findIndex(
       (receipt) => receipt.agent === preview.agent,
     );
+    // A first verified install adds this provider's receipt; a repeat install replaces its previous receipt.
     if (previousReceiptIndex === -1) receipts.push(selectedReceipt);
     else receipts[previousReceiptIndex] = selectedReceipt;
   }
@@ -1194,10 +1247,72 @@ function buildManagedInstallReceiptCandidate(
 }
 
 /**
+ * Record verified Sync dependencies without claiming that the user completed a full install.
+ * Invariant: unrelated rows and all existing receipts retain their data; changed generations may stale those receipts.
+ *
+ * @param projectPath - selected project whose state and file claims are held by the hook operation
+ *
+ * @param officialFiles - bundled dependency hashes; an empty list has no history to publish
+ * @throws when file verification, cutover validation, or atomic publication fails
+ */
+export function recordManagedHookAfterVerification(
+  projectPath: string,
+  officialFiles: readonly { path: string; expectedSha256: string }[],
+): void {
+  // A disable that kept all existing bytes cannot add verified installation history.
+  if (officialFiles.length === 0) return;
+  const baseline = readManagedSetupV2Baseline(projectPath);
+  const state = baseline.facade.state;
+  // An interrupted or externally changed cutover must be repaired through public install first.
+  if (
+    baseline.status !== "loaded" ||
+    baseline.facade.source !== "v2" ||
+    state === null
+  ) {
+    throw new Error(
+      "Canonical hook history is unavailable after verification.",
+    );
+  }
+  const rows = new Map(state.files.map((row) => [row.path, row]));
+  // Every recorded row must describe the exact bundled bytes the user now has on disk.
+  for (const file of officialFiles) {
+    const target = readManagedTargetEvidence(projectPath, file.path);
+    // A changed or unsafe target cannot become verified history after a partial Sync.
+    if (target.status !== "regular" || target.sha256 !== file.expectedSha256) {
+      throw new Error(`Official hook file could not be verified: ${file.path}`);
+    }
+    rows.set(
+      file.path,
+      createManagedInstallStateRow({
+        path: file.path,
+        expectedSha256: file.expectedSha256,
+        provenance: {
+          kind: "verified-install",
+          goatFlowVersion: getPackageVersion(),
+        },
+      }),
+    );
+  }
+  const candidate = {
+    schemaVersion: state.schemaVersion,
+    files: [...rows.values()],
+    receipts: state.receipts,
+  };
+  // Repeating a healthy Sync keeps canonical bytes stable and avoids an unnecessary replacement.
+  if (
+    canonicalManagedInstallStateBytes(candidate) !==
+    baseline.facade.canonicalBytes
+  ) {
+    writeManagedInstallStateV2(projectPath, candidate);
+  }
+}
+
+/**
  * Verify the installer wrote every managed template before recording the next baseline.
  *
- * @param projectPath - selected target root; empty is invalid upstream and records nothing
+ * @param projectPath - selected project whose installed files are verified before history is recorded
  * @param agent - installed agent mirror to verify; never null after CLI validation
+ *
  * @returns mismatching relative paths; empty means hash-only state was safely recorded
  * @throws `ManagedInstallStateRecordError` when verified bytes cannot be persisted; preview failures propagate unchanged
  */
@@ -1224,12 +1339,14 @@ export function recordManagedInstallAfterVerification(
   }
   try {
     const facade = readManagedInstallStateFacade(projectPath);
+    // Installation cannot record success without the shared state created during preparation.
     if (facade.source !== "v2" || facade.state === null) {
       throw new Error(
         "Project-wide managed install state is unavailable after verification.",
       );
     }
     const cutoverEvidence = readManagedInstallCutoverEvidence(projectPath);
+    // A marker changed during installation; refuse to publish a receipt over incompatible evidence.
     if (cutoverEvidence.incompatibleAgents.length > 0) {
       throw new Error(
         "Managed install cutover markers changed before receipt publication.",
@@ -1239,12 +1356,14 @@ export function recordManagedInstallAfterVerification(
       facade.state,
       installedPreview,
     );
+    // Avoid rewriting history when verification produces exactly the existing canonical state.
     if (
       canonicalManagedInstallStateBytes(candidate) !== facade.canonicalBytes
     ) {
       writeManagedInstallStateV2(projectPath, candidate);
     }
   } catch (error) {
+    // For example, the state folder may lose write permission after target files change; report incomplete recording and recovery.
     throw new ManagedInstallStateRecordError(error);
   }
   return [];

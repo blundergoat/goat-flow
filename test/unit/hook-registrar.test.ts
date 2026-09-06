@@ -1,8 +1,8 @@
 /**
- * How hooks arrive on disk: newer installed copies are never overwritten, stale timeouts
- * read as uninstalled, and the generated launchers resolve the correct repo root from
- * worktrees, submodules, and outside-repo working directories.
- * Every case builds a real project and reads back what the registrar actually wrote.
+ * Check the hook registrations and launchers used by CLI and dashboard actions.
+ *
+ * Disposable projects cover newer-file protection, registration drift, duplicate repair and preserved user hooks.
+ * Generated launchers prove project-root selection and input forwarding across supported repository layouts.
  */
 import assert from "node:assert/strict";
 import {
@@ -464,6 +464,7 @@ describe("hook registrar: launchers and installation", () => {
         copilotHooksPath,
       ];
       const configBytesPerRun: string[][] = [];
+      // Repeated user Sync actions must converge to identical provider config without accumulating duplicate rows.
       for (let syncRun = 0; syncRun < 3; syncRun += 1) {
         syncHookStates(root);
         configBytesPerRun.push(
@@ -693,6 +694,7 @@ describe("hook registrar: launchers and installation", () => {
         PROFILES.claude,
         denySpec,
       );
+      // This fixture requires the current argv launcher so migration assertions cannot silently accept an older command shape.
       if (expectedDescriptor.form !== "argv") {
         assert.fail("Claude must register the approved argv handler");
       }

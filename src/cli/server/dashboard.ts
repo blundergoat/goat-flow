@@ -5,6 +5,7 @@
  *
  * The server is deliberately locked to the machine it runs on, so:
  * - it binds loopback only, and rejects API requests whose Host or Origin header does not match its own address
+ *
  * - the token is regenerated per run, so a stale bookmark cannot reach a later session
  * - terminal sessions are torn down on SIGTERM and SIGINT rather than left holding a PTY
  */
@@ -58,8 +59,10 @@ function readBody(
     let size = 0;
     let hasRejectedBody = false;
     req.on("data", (chunk: Buffer) => {
+      // Once a request is too large, ignore the remaining upload chunks instead of buffering more user data.
       if (hasRejectedBody) return;
       size += chunk.length;
+      // Stop buffering an oversized submission and let the route report that it exceeds the allowed limit.
       if (size > maxBytes) {
         hasRejectedBody = true;
         chunks.length = 0;
@@ -70,10 +73,12 @@ function readBody(
       chunks.push(chunk);
     });
     req.on("end", () => {
+      // An oversized request must not become a successful empty submission when its stream finishes.
       if (hasRejectedBody) return;
       resolve(Buffer.concat(chunks).toString("utf-8"));
     });
     req.on("error", (err) => {
+      // A disconnected browser should fail the pending read unless the size refusal already settled it.
       if (!hasRejectedBody) reject(err);
     });
   });
@@ -85,6 +90,7 @@ function readBody(
  *
  * @param res - response to complete
  * @param status - HTTP status code to send
+ *
  * @param body - value serialised as the JSON body
  * @returns nothing; the response is closed on return
  */
@@ -116,10 +122,10 @@ interface DashboardServer {
  * Every POST/DELETE handler that mutates local state, executes a command, or could be CSRF-bait MUST appear in this set.
  * The Origin/CSRF check fires via `isSideEffectfulApiRoute → SIDE_EFFECTFUL_EXACT_API_ROUTES.has(routeKey)`.
  *
- * Convention: register the exact route key `"<METHOD> <path>"` here whenever
- * you add a side-effectful endpoint.
+ * Convention: register the exact route key `"<METHOD> <path>"` here whenever you add a side-effectful endpoint.
  */
 const SIDE_EFFECTFUL_EXACT_API_ROUTES = new Set([
+  "POST /api/hooks",
   "POST /api/projects/list",
   "POST /api/projects/archive",
   "POST /api/projects/restore",
@@ -137,16 +143,20 @@ const TERMINAL_UPLOAD_IMAGE_API_ROUTE =
 /** Read the dashboard authorization token supplied by a browser/API client. */
 function readDashboardToken(req: IncomingMessage, url: URL): string | null {
   const header = req.headers[DASHBOARD_TOKEN_HEADER];
+  // The dashboard normally sends its per-run token in this header.
   if (typeof header === "string" && header.length > 0) return header;
+  // Use the first supplied header value when the HTTP client represents it as a list.
   if (Array.isArray(header) && typeof header[0] === "string") return header[0];
   return url.searchParams.get("token");
 }
 
 /** Compare dashboard tokens without leaking length-matched timing. */
 function tokenMatches(expected: string, actual: string | null): boolean {
+  // A missing or empty token cannot authorize access to the user's local dashboard.
   if (!actual) return false;
   const expectedBuffer = Buffer.from(expected);
   const actualBuffer = Buffer.from(actual);
+  // Reject a token of the wrong length before the constant-time comparison, which requires equal-size buffers.
   if (expectedBuffer.length !== actualBuffer.length) return false;
   return timingSafeEqual(expectedBuffer, actualBuffer);
 }
@@ -157,6 +167,7 @@ function tokenMatches(expected: string, actual: string | null): boolean {
  * A non-browser client such as curl sends no Origin at all, which cannot be cross-origin and is therefore allowed.
  *
  * @param req - incoming request whose Origin header is read; a missing Origin is treated as same-origin
+ *
  * @param server - the running dashboard server, read for the port it actually bound
  * @returns true when the request may proceed; false for an Origin belonging to some other page
  */
@@ -174,12 +185,11 @@ function originAllowed(req: IncomingMessage, server: Server): boolean {
 }
 
 /**
- * Check the browser Host header against this server's own loopback address for WebSocket upgrades.
- *
- * A page on another origin can script an upgrade but cannot forge the Host the browser sends, so a mismatched Host is the
- * DNS-rebinding shape we refuse.
+ * Check that a terminal socket request targets this server's loopback host and port.
+ * A mismatched Host can indicate DNS rebinding; the token gate still applies when the listening address is unavailable.
  *
  * @param req - incoming upgrade request whose Host header is validated
+ *
  * @param server - the running dashboard server, read for the port it actually bound
  * @returns true when Host is loopback for this port, or when the address is not known yet and the token gate still applies
  */
@@ -198,8 +208,10 @@ function hostAllowed(req: IncomingMessage, server: Server): boolean {
  *
  * @param req - incoming request whose headers are checked
  * @param url - parsed request URL; only `/api/` paths are guarded
+ *
  * @param res - response ended with a rejection when the headers are not allowed
  * @param server - the running dashboard server, read for the port it actually bound
+ *
  * @returns true when the request was rejected and the caller must stop handling it
  */
 function rejectBadHostOrOrigin(
@@ -230,22 +242,23 @@ function rejectBadHostOrOrigin(
 }
 
 /**
- * Report whether a request targets a route that can mutate local state.
- *
- * These are the routes worth an extra Origin check, because they are the ones that create a terminal, write a plan, or flip
- * a hook rather than just reading something back.
+ * Identify requests that write local state or start a process so they receive the additional browser Origin check.
  *
  * @param req - incoming request; a missing method is read as GET
+ *
  * @param url - parsed request URL matched against the mutating-route list
  * @returns true when the route can change something on the user's machine
  */
 function isSideEffectfulApiRoute(req: IncomingMessage, url: URL): boolean {
   const method = req.method ?? "GET";
   const routeKey = `${method} ${url.pathname}`;
+  // These named actions can write project state or start processes, so they need the additional Origin check.
   if (SIDE_EFFECTFUL_EXACT_API_ROUTES.has(routeKey)) return true;
+  // Every hook row toggle can modify the selected project, regardless of the hook ID in the URL.
   if (method === "POST" && HOOK_TOGGLE_API_ROUTE.test(url.pathname)) {
     return true;
   }
+  // Uploading an image writes a terminal attachment and needs the same browser-origin protection.
   if (method === "POST" && TERMINAL_UPLOAD_IMAGE_API_ROUTE.test(url.pathname)) {
     return true;
   }
@@ -253,16 +266,15 @@ function isSideEffectfulApiRoute(req: IncomingMessage, url: URL): boolean {
 }
 
 /**
- * Enforce process-local authorization for every API request.
- *
- * The token is regenerated per run, so a stale bookmark from an earlier dashboard cannot reach this one.
- *
- * Side effect: writes a 403 JSON response when the request is rejected.
+ * Require this dashboard run's token for every API request and check Origin for actions that change local state.
+ * A rejected request ends with HTTP 403; a stale bookmark from an earlier run cannot authorize the new server.
  *
  * @param req - incoming request carrying the token as a header or query parameter
  * @param url - parsed request URL; only `/api/` paths are guarded
+ *
  * @param res - response ended with a 403 when the caller is not this local browser
  * @param gates - the running server and its per-run token
+ *
  * @returns true when the request was rejected and the caller must stop handling it
  */
 function rejectUnauthorizedApi(
@@ -271,6 +283,7 @@ function rejectUnauthorizedApi(
   res: ServerResponse,
   gates: { server: Server; dashboardToken: string },
 ): boolean {
+  // The page shell and assets are outside this API token gate.
   if (!url.pathname.startsWith("/api/")) return false;
 
   // No valid token means this is not the browser tab the dashboard printed a URL for.
@@ -293,6 +306,7 @@ function rejectUnauthorizedApi(
  *
  * @param req - incoming upgrade request
  * @param url - parsed request URL; only `/ws/terminal/` paths are guarded
+ *
  * @param gates - the running server and its per-run token
  * @returns true when the upgrade must be refused and its socket destroyed
  */
@@ -301,6 +315,7 @@ function rejectUnauthorizedTerminalUpgrade(
   url: URL,
   gates: { server: Server; dashboardToken: string },
 ): boolean {
+  // The terminal gate leaves other socket routes to their own admission checks.
   if (!url.pathname.startsWith("/ws/terminal/")) return false;
   // A foreign Host (DNS-rebinding shape) is refused before anything else.
   if (!hostAllowed(req, gates.server)) return true;
@@ -315,10 +330,8 @@ function rejectUnauthorizedTerminalUpgrade(
 type DashboardRoute = () => Promise<boolean> | boolean;
 
 /**
- * Order every dashboard endpoint into the chain one request is offered to.
- *
- * Order is the routing table: the first handler that recognises the URL claims it, so the UI shell and its assets are
- * matched before the API endpoints and the catch-all 404 is only reached when nothing above it wanted the request.
+ * Build the ordered route chain for each browser request.
+ * The first matching handler answers; unmatched requests reach the final 404.
  *
  * @param handlers - the route handlers built for this server run, each returning true when it claimed the request
  * @returns a builder that produces the ordered attempts for one request
@@ -436,6 +449,7 @@ function buildDashboardRoutes(handlers: {
  *
  * @param req - incoming request
  * @param res - response completed by the matching route
+ *
  * @param context - the running server, its per-run token, dev-mode flag, and the ordered route chain
  * @returns nothing; the response is ended before this resolves
  */
@@ -458,7 +472,9 @@ async function dispatchDashboardRequest(
     `http://${req.headers.host ?? "127.0.0.1"}`,
   );
 
+  // Reject a mismatched Host before a request can reach selected-project data.
   if (rejectBadHostOrOrigin(req, url, res, context.server)) return;
+  // Reject an unauthorized or cross-origin write before dispatching the user's action.
   if (rejectUnauthorizedApi(req, url, res, context)) return;
 
   // Log API requests in dev mode
@@ -468,6 +484,7 @@ async function dispatchDashboardRequest(
 
   // Offer the request to each route in turn; the first one to claim it has already written the response.
   for (const route of context.routes(req, url, res)) {
+    // Once a route answers, stop so another handler cannot act on the same request.
     if (await route()) return;
   }
 
@@ -476,13 +493,12 @@ async function dispatchDashboardRequest(
 }
 
 /**
- * Turn an unhandled request failure into a 500 the browser can show, and a stack trace in the terminal.
- *
- * The user sees a red toast in the dashboard rather than a hung panel, while the terminal running `goat-flow dashboard`
- * keeps the stack needed to actually diagnose it.
+ * Report an unhandled request failure as HTTP 500 when possible, with diagnostic details in the server terminal.
+ * The browser receives an error instead of waiting indefinitely; responses already streaming cannot receive a new status.
  *
  * @param req - the request that failed, named in the terminal log line
  * @param res - the response; nothing is written when headers already went out mid-stream
+ *
  * @param err - whatever was thrown; a non-Error value reports as a generic internal error with no stack
  * @returns nothing; this is the last stop, so it never rethrows
  */
@@ -494,6 +510,7 @@ function reportDashboardRequestFailure(
   const msg = err instanceof Error ? err.message : "Internal error";
   const stack = err instanceof Error ? err.stack : "";
   console.error(`[dashboard] ${req.method} ${req.url} → 500: ${msg}`);
+  // Log a stack only when the thrown value supplies one for diagnosing the failed page request.
   if (stack) console.error(stack);
   // Headers already sent means a route started streaming before it failed, so there is no status left to set.
   if (!res.headersSent) {
@@ -502,16 +519,13 @@ function reportDashboardRequestFailure(
 }
 
 /**
- * Watch the built dashboard assets and push a reload to every open browser tab when they change.
- *
- * This is the dev-mode loop: edit a dashboard file, and the tab refreshes itself instead of waiting for a manual reload.
- *
- * Error behavior: throws nothing; a send to a closed tab swallows its error so one dead client cannot stop the others reloading.
+ * Watch built dashboard assets and reload open development tabs when they change.
+ * A closed-tab send uses an ignored-error fallback; filesystem watcher startup failures propagate to the caller.
  *
  * @param dashDir - directory of built dashboard assets to watch recursively
- * @param liveReloadClients - currently connected reload sockets; an empty set simply means no tab is open to notify
- * @returns a function that stops the watcher and releases its exit hook. It starts a recursive filesystem watcher and registers a process `exit`
- *   hook to close it.
+ *
+ * @param liveReloadClients - reload sockets; an empty set means no open tab needs notification
+ * @returns cleanup function that closes the watcher and removes its process exit hook
  */
 function startDashboardDevWatcher(
   dashDir: string,
@@ -522,11 +536,12 @@ function startDashboardDevWatcher(
    * Error behavior: throws nothing; a send to a closed socket is swallowed so one dead client cannot stop the others from reloading.
    */
   const notifyReload = (): void => {
+    // Notify every open development tab after rebuilt dashboard assets change.
     for (const client of liveReloadClients) {
       try {
         client.send("reload");
       } catch {
-        /* ignore: the tab was closed, so this client no longer needs reloading */
+        // Ignore sends to a tab the user closed during this broadcast so other development tabs still receive their reload.
       }
     }
   };
@@ -538,7 +553,7 @@ function startDashboardDevWatcher(
     debounce = setTimeout(notifyReload, 100);
   });
 
-  /** Close the dev-mode dashboard file watcher and release its process hook. */
+  /** Stop watching built dashboard files; the outer cleanup removes this callback's process exit hook. */
   const closeWatcher = (): void => {
     watcher.close();
   };
@@ -552,15 +567,16 @@ function startDashboardDevWatcher(
 }
 
 /**
- * Open the dev-mode live-reload socket for a browser tab that cleared the loopback checks.
+ * Connect a development tab to automatic reload after it clears the loopback checks.
  *
- * Side effect: completes the WebSocket handshake and adds the tab to the reload broadcast set, or destroys the socket.
- * Error behavior: throws nothing; a failed handshake swallows its error and closes the socket, because reload is a convenience.
+ * The fallback for a failed handshake closes its socket; a successful handshake adds the tab to future reload broadcasts.
  *
  * @param req - the upgrade request
  * @param socket - the raw socket, destroyed when the reload server cannot start
+ *
  * @param head - the first packet of the upgraded stream
  * @param context - the reload client set and the lazy reload WebSocket server
+ *
  * @returns nothing; failures close the socket rather than surfacing to the user, since reload is a convenience
  */
 async function openLiveReloadSocket(
@@ -582,23 +598,22 @@ async function openLiveReloadSocket(
       });
     });
   } catch {
-    /* ignore: reload is best effort, so a failed handshake just closes the socket */
+    // A development tab can disconnect during the handshake; close its reload socket without interrupting other dashboard requests.
     socket.destroy();
   }
 }
 
 /**
- * Route one WebSocket upgrade to either the dev reload channel or a terminal session.
- *
- * The reload channel is dev-only and carries no token, because the injected reload client has none and demanding one would
- * break auto-refresh - so it clears the same Host and Origin allowlist the terminal upgrade uses instead.
+ * Route a browser socket to development reload or its terminal session.
+ * Reload uses Host and Origin checks; terminal access also requires this server run's token.
  *
  * @param req - the upgrade request
  * @param socket - the raw socket, destroyed for any upgrade that is not allowed or not recognised
+ *
  * @param head - the first packet of the upgraded stream
  * @param context - the running server, its token, dev-mode flag, reload state, and the terminal upgrade handler
- * @returns nothing; every path either hands the socket over or closes it. It completes a handshake or destroys the socket; nothing is left
- *   half-open.
+ *
+ * @returns nothing; every path either hands the socket over or closes it. It completes a handshake or destroys the socket; nothing is left half-open.
  */
 async function handleDashboardUpgrade(
   req: IncomingMessage,
@@ -620,6 +635,7 @@ async function handleDashboardUpgrade(
 ): Promise<void> {
   const url = new URL(req.url ?? "/", `http://127.0.0.1`);
 
+  // Only development mode exposes automatic browser reload after an asset rebuild.
   if (url.pathname === "/ws/livereload" && context.isDevMode) {
     // Hostile Host or Origin: drop the socket before the reload handshake.
     if (
@@ -633,6 +649,7 @@ async function handleDashboardUpgrade(
     return;
   }
 
+  // An unauthorized terminal upgrade must not obtain a shell connection.
   if (rejectUnauthorizedTerminalUpgrade(req, url, context)) {
     socket.destroy();
     return;
@@ -645,14 +662,11 @@ async function handleDashboardUpgrade(
 }
 
 /**
- * Close the HTTP server, the reload socket server, the dev watcher, and every live terminal, in that order.
+ * Stop the development watcher and reload server, then close terminals before the HTTP server.
+ * Callers await cleanup so running terminal resources are released before network connections close.
  *
- * Terminals go before the HTTP server so a user's running agent is shut down properly rather than having its socket cut
- * from under it.
- *
- * @param context - the running server, its signal handler, and the resources to release
- * @returns a promise that resolves once everything is closed, rejecting only if the HTTP server itself fails to
- *   close; it removes the SIGTERM and SIGINT handlers and closes every open connection on the way
+ * @param context - running server, signal handler and resources to release
+ * @returns promise that resolves after cleanup; reload, terminal or HTTP cleanup failures reject it
  */
 async function shutDownDashboard(context: {
   server: Server;
@@ -679,6 +693,7 @@ async function shutDownDashboard(context: {
   await context.closeTerminalResources();
   await new Promise<void>((resolveClose, rejectClose) => {
     context.server.close((err) => {
+      // A server-close error must remain visible to callers waiting for the dashboard to shut down.
       if (err) rejectClose(err);
       else resolveClose();
     });
@@ -688,17 +703,12 @@ async function shutDownDashboard(context: {
 }
 
 /**
- * Start the local dashboard server and expose its API endpoints.
+ * Start the loopback dashboard for the selected project with shared authorization and terminal state.
  *
- * The whole server lives in one closure because every route shares the same per-run token, live-reload set, and
- * terminal state; hoisting the routes out would thread that mutable state through each one, so the length is
- * deliberate rather than accidental.
+ * Starts shutdown handlers and an optional development watcher; startup failures reject so the caller can recover before using the server.
  *
- * @param options - selected project path plus optional dev-mode and dashboard configuration
- * @returns the running dashboard handle with its URL, token, and close method. It binds a loopback TCP port, starts
- *   a filesystem watcher in dev mode, and registers SIGTERM and SIGINT handlers that exit the process. It throws
- *   nothing: the promise resolves once the port is listening, and each per-request failure reports as an HTTP
- *   response instead of escaping the server.
+ * @param options - selected project path plus optional development and dashboard settings
+ * @returns running server URL and close handle once listening; synchronous setup failures reject the promise
  */
 export function serveDashboard(
   options: DashboardOptions,
@@ -714,7 +724,9 @@ export function serveDashboard(
       : assembleDashboardHtml(shellPath);
     /** Read the current dashboard HTML shell, using the cache when possible. */
     function getTemplate(): string {
+      // Development requests need the rebuilt shell immediately after a source change.
       if (isDevMode) return assembleDashboardHtml(shellPath);
+      // The first normal request fills the cache; later page loads reuse the same bundled shell.
       if (!cachedTemplate) cachedTemplate = assembleDashboardHtml(shellPath);
       return cachedTemplate;
     }
@@ -774,6 +786,7 @@ export function serveDashboard(
 
     /** Lazy-load the live-reload WebSocket server for dev-mode browser refreshes. */
     async function getLiveReloadWSS(): Promise<WebSocketServer> {
+      // Create one reload server when the first development tab connects.
       if (!liveReloadWssPromise) {
         liveReloadWssPromise = import("ws").then(
           ({ WebSocketServer: WSS }) => new WSS({ noServer: true }),
@@ -836,8 +849,7 @@ export function serveDashboard(
       });
     });
 
-    // Shutdown joins HTTP, WebSocket, watcher, and terminal cleanup so callers
-    // can await one idempotent close even when signals and tests race.
+    // Shutdown joins HTTP, WebSocket, watcher, and terminal cleanup so callers can await one idempotent close even when signals and tests race.
     let closePromise: Promise<void> | null = null;
     /** Close the dashboard server, watchers, and terminal sessions through one promise because signals can race. */
     async function closeServer(): Promise<void> {
@@ -852,8 +864,8 @@ export function serveDashboard(
     }
 
     /**
-     * Shut down the dashboard server's live terminal state before exiting the process.
-     * Error behavior: exits the process regardless of whether the shutdown succeeded, so a stuck terminal cannot leave the signal unhandled.
+     * Exits after dashboard cleanup resolves or rejects when the user stops the server.
+     * An unresolved cleanup still keeps this callback waiting.
      */
     const doShutdown = (): void => {
       void closeServer().finally(() => {
@@ -865,6 +877,7 @@ export function serveDashboard(
 
     server.listen(0, "127.0.0.1", () => {
       const addr = server.address();
+      // Startup can report a usable browser URL only after a TCP port has been assigned.
       if (!addr || typeof addr === "string") return;
       const url = `http://127.0.0.1:${addr.port}/?token=${encodeURIComponent(dashboardToken)}`;
       console.log(`Dashboard: ${url}`);
