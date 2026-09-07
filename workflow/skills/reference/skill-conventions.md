@@ -14,25 +14,8 @@ Use project-specific buckets such as `verification.md` or `runtime.md`.
 Route entries to `.goat-flow/learning-loop/lessons/`, `patterns/`, or `footguns/`; never to a monolithic log or README.
 
 Before adding, Extract / Consolidate / Skip: search the relevant INDEX and bucket; update one root cause across symptoms; create only distinct causes; skip non-decision-changing material.
-```markdown
-<!-- Lesson bucket -->
----
-category: verification
-last_reviewed: YYYY-MM-DD
----
 
-## Lesson: [Title]
-
-**Created:** YYYY-MM-DD
-**Decision changed:** [what future work does differently]
-**Trigger phase:** READ | SCOPE | ACT | VERIFY (optional)
-
-**Prevention:** [rule to prevent recurrence]
-
-**What happened:** [description]
-
-**Evidence:** `file` + semantic anchor (function name, unique string, or `(search: "pattern")`) - [what was found] (required for code-specific lessons; omit for behavioral lessons)
-```
+Each bucket's `README.md` owns its full entry shape, metadata order, evidence labels, and optional fields; read the one you are writing to. The footgun shape is repeated here because it carries the evidence choice every bucket shares:
 
 ```markdown
 <!-- Footgun bucket -->
@@ -57,19 +40,7 @@ last_reviewed: YYYY-MM-DD
 **Evidence:** `file` + semantic anchor (function name, unique string, or `(search: "pattern")`) - [what was found]
 ```
 
-Keep metadata as one paragraph below the heading, then a blank line and `**Prevention:**` as the first body paragraph; bucket READMEs and `learn new` use this order.
-
-Evidence labels: `ACTUAL_MEASURED` = reproduced/measured locally; `OBSERVED` = direct code/config evidence; `EXTERNAL_REFERENCE` = cited real incident with local applicability. Never use hypotheticals.
-
-```markdown
-# Successful Patterns
-
-## Pattern: [Name]
-**Context:** [when this approach works]
-**Approach:** [what to do]
-```
-
-Use optional `hallucination-risk` when names can mislead, including generated code, environment config, or external contracts.
+Never use a hypothetical as evidence.
 
 ## Adaptive Step 0
 
@@ -99,7 +70,7 @@ If 3 consecutive file reads produce no new signal relevant to the current questi
 2. State what you were looking for and didn't find
 3. Ask the human to redirect, narrow scope, or close
 
-**Sub-agent mode:** When invoked as a sub-agent (forked context), most BLOCKING GATEs become CHECKPOINTs (logged, not paused). Step 0 proceeds with auto-detected scope. **Exception:** the goat-debug D2→D3 "human decides before fixing" safety gate and the goat-clarity Scope v2 approval gate MUST remain blocking even in sub-agent mode - they prevent unreviewed fixes or authority expansion.
+**Sub-agent mode:** When invoked as a sub-agent (forked context), most BLOCKING GATEs become CHECKPOINTs (logged, not paused). Step 0 proceeds with auto-detected scope. **Exception:** the goat-debug D2→D3 "human decides before fixing" safety gate, the separate goat-debug D3 implementation approval, and the goat-clarity Scope v2 approval gate MUST remain blocking even in sub-agent mode - they prevent unreviewed fixes or authority expansion. Approvals worded as explicit current-session approval, such as diagnostic mutation and bisect, are not gate conversions and never downgrade.
 
 ## Task Tracking
 
@@ -111,9 +82,7 @@ Handoff receipts: read `.goat-flow/logs/sessions/README.md`; redact before writi
 
 ## Durable Artifact Redaction
 
-For session, handoff, critique, review, quality, security, or export text, use the version-compatible CLI required by `skill-preamble.md`: `goat-flow redact --output .goat-flow/logs/<fresh-path>`. Send the in-memory draft via stdin and EOF; only redacted bytes may reach disk. Redact before disk, not after. Never stage raw text; existing destinations are refused.
-
-The hash-only `redactEvidenceText` API is not a readable scrubber. Redaction reduces credential leakage but neither provides DLP nor replaces secret review.
+Artifact text follows `skill-preamble.md` → Durable Local Text Redaction, which every invocation already loads, so Quick depth reaches the same rule. Keep artifact-specific destinations and specialized savers at their callers.
 
 ## Presenting Findings
 

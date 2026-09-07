@@ -60,7 +60,7 @@ Write 2-3 hypotheses spanning at least 2 of: Data, Logic, Timing, Environment, C
 
 **UI-visible bugs:** After writing hypotheses, use browser evidence to confirm or eliminate UI-related hypotheses. Follow the workflow in `.goat-flow/skill-docs/playbooks/browser-use.md`. Browser output is OBSERVED; interpretations remain INFERRED until mapped to `file + semantic anchor`.
 
-**Diagnostic-experiment authority:** Read-only observation may proceed within repository rules. Any experiment affecting source, configuration, local state, network, production, or sensitive data follows the repository's stricter approval boundary. Before a mutation, state the target, expected signal, affected state, rollback, and a cleanup marker; then wait for explicit current-session approval. Track approved mutations separately from the proposed fix. Incomplete cleanup blocks a fixed claim, and user-owned diagnostics are never removed without permission.
+**Diagnostic-experiment authority:** Read-only observation may proceed within repository rules, as may execution against disposable state the investigation itself created; disclose target-controlled execution when local policy requires it. Any experiment affecting existing source, configuration, local state, network, production, or sensitive data follows the repository's stricter approval boundary. Before a mutation, state the target, expected signal, affected state, rollback, and a cleanup marker; then wait for explicit current-session approval. Track approved mutations separately from the proposed fix. Incomplete cleanup blocks a fixed claim, and user-owned diagnostics are never removed without permission.
 
 If repeated reads or experiments produce no new decision signal, checkpoint: state what was checked, which hypotheses remain, and the next distinguishing evidence needed.
 
@@ -75,7 +75,7 @@ If repeated reads or experiments produce no new decision signal, checkpoint: sta
 
 **Output:** Reduced case and method, or a supported minimal/not-applicable/unsafe disposition; literal command/input/steps; tested removals; updated hypothesis set. A removed factor is irrelevant only under the same decision-relevant context.
 
-**Optional bisect path (state-mutating):** Bisect is never required for a reporting-only diagnosis. In reporting-only or no-write mode, describe the option but do not run it. Otherwise require a clean worktree, validate known-good and known-bad refs plus a deterministic, non-destructive predicate at both endpoints, disclose the commands and rollback, then wait for explicit current-session approval. Urgency, an outage, or broad permission to diagnose does not override these gates. A dirty worktree stops this path; an isolated worktree is a separately approved option, not an automatic workaround. After approval, run only the diagnostic predicate. Run `git bisect reset` on success, error, cancellation, or interruption; on resumption, reset before any other repository work.
+**Optional bisect path (state-mutating):** Bisect is never required for a reporting-only diagnosis. In reporting-only or no-write mode, describe the option but do not run it. Otherwise require a clean worktree, validate known-good and known-bad refs plus a deterministic, non-destructive predicate at both endpoints, disclose the commands and rollback, then wait for explicit current-session approval. Urgency, an outage, or broad permission to diagnose does not override these gates. A dirty worktree stops this path; an isolated worktree is a separately approved option, not an automatic workaround. After approval, run only the diagnostic predicate. Run `git bisect reset` on success, error, cancellation, or interruption while that approval still holds. A governing freeze leaves state unchanged and outranks this cleanup: report the pending reset and wait for explicit cleanup authority, because resumption alone does not release it.
 
 **Hypothesis ranking:** After minimisation, rank surviving hypotheses by cost and likelihood:
 
@@ -95,7 +95,7 @@ Symptom reproduction is not root-cause proof. HIGH requires a traced mechanism p
 
 **Root cause validation before claiming HIGH confidence.** For each candidate root cause, run a causation / necessity / sufficiency check:
 - **Causation** - does the proposed cause mechanically produce the observed symptom? Trace the path with `file + semantic anchor`.
-- **Necessity** - without this cause, does the symptom still occur? If yes, the cause is insufficient or incomplete.
+- **Necessity** - without this cause, does the symptom still occur? If yes, the cause is not necessary under the compared conditions; look for an alternative sufficient cause, hold relevant cofactors constant, and assess sufficiency separately.
 - **Sufficiency** - is this cause alone enough, or are there co-factors? Name them.
 
 For high-stakes diagnoses, run a 5-Whys chain. Every "because" MUST cite `file + semantic anchor` or a reproduction step, not just prose.

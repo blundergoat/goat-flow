@@ -201,7 +201,11 @@ Record the literal command, scope, exit, and salient output separately from what
 
 - Command status: `PASS | FAIL | NOT_RUN | UNAVAILABLE`.
 - Claim verdict: `VERIFIED | REFUTED | NOT_CHECKED`.
-- Shared proof-class tag: `OBSERVED | INFERRED | UNVERIFIED | HUMAN-PENDING`.
+- Shared evidence quality: `OBSERVED | INFERRED | UNVERIFIED | HUMAN-PENDING`.
+- Shared proof class: `RUNTIME | CONTRACT-GREP | STATIC | NOT-REPRODUCED`.
+
+Evidence quality states how certain the evidence is; proof class states the method that produced
+it. A claim carries both.
 
 Baseline attribution applies to every mechanical check, including formatter, analyzer, comment-shape,
 width, syntax, and residue checks. Run the exact same check against the current selected bytes and the
@@ -217,7 +221,7 @@ present on current bytes was introduced by the current change.
 A passing command never makes an untested claim verified. `PASS` means only that the named command
 accepted its actual scope. `FAIL` remains failure evidence even when another command passes.
 `NOT_RUN` names a deliberate omission; `UNAVAILABLE` names the failed availability check. A claim is
-`VERIFIED` only when the command or inspected evidence directly tests it and the proof class is
+`VERIFIED` only when the command or inspected evidence directly tests it and the evidence quality is
 `OBSERVED`; it is `REFUTED` when direct observed evidence contradicts it. Use `NOT_CHECKED` when
 required evidence is absent or indirect, paired with `INFERRED`, `UNVERIFIED`, or `HUMAN-PENDING` as
 the shared preamble requires.
@@ -234,8 +238,8 @@ table presentation may vary.
 2. The changed-span ledger maps each intentional changed span to one diagnosed finding or explicitly
    reported formatter-owned reflow. It may aggregate spans by file and diagnosed rule only after
    symbol-level evidence maps every member span. Unmapped churn fails reconciliation.
-3. The command-evidence ledger records each command status, scope, literal result, and the separate
-   claim verdicts it supports or leaves unchecked.
+3. The command-evidence ledger records each command status, scope, literal result, proof class, and
+   the separate claim verdicts it supports or leaves unchecked.
 
 Never add unlike units, such as paths, spans, findings, and commands, into one total. A no-findings run
 still reconciles selected units and formatter evidence without expanding empty sections. Receipt
