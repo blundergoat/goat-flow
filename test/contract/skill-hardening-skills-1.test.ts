@@ -46,6 +46,23 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
         /success, error, cancellation, or interruption/,
         skillPath,
       );
+
+      // A governing freeze outranks bisect cleanup: resuming must not silently authorise a worktree write.
+      assert.match(
+        skillGuidance,
+        /governing freeze leaves state unchanged/u,
+        skillPath,
+      );
+      assert.match(
+        skillGuidance,
+        /resumption alone does not release it/u,
+        skillPath,
+      );
+      assert.doesNotMatch(
+        skillGuidance,
+        /on resumption, reset before any other repository work/u,
+        skillPath,
+      );
     });
   });
 
@@ -143,6 +160,14 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
       assert.match(skillGuidance, /Necessity/u, skillPath);
       assert.match(skillGuidance, /Sufficiency/u, skillPath);
       assert.doesNotMatch(skillGuidance, /HIGH = reproduced/u, skillPath);
+
+      // A surviving symptom disproves necessity; calling that insufficiency conflates the two independent properties.
+      assert.match(skillGuidance, /not necessary/u, skillPath);
+      assert.doesNotMatch(
+        skillGuidance,
+        /the cause is insufficient or incomplete/u,
+        skillPath,
+      );
     });
   });
 

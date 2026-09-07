@@ -18,7 +18,25 @@ import {
 const SKILL_PATH = "workflow/skills/goat-clarity/SKILL.md";
 const SCOPE_REFERENCE_PATH =
   "workflow/skills/goat-clarity/references/target-scope-and-evidence.md";
+const SHARED_PREAMBLE_PATH = "workflow/skills/reference/skill-preamble.md";
+// Both shared axes enumerate exactly four tokens: OBSERVED/INFERRED/UNVERIFIED/HUMAN-PENDING and RUNTIME/CONTRACT-GREP/STATIC/NOT-REPRODUCED.
+const SHARED_VOCABULARY_TOKEN_COUNT = 4;
 const clarityGuidance = readProjectFile(SKILL_PATH);
+
+/**
+ * Collect the bold vocabulary tokens the shared preamble defines inside one owner region.
+ *
+ * Consumer contracts compare against these live tokens, so a renamed or reordered owner vocabulary fails here
+ * instead of leaving a consumer that copied the old list quietly disagreeing with it.
+ *
+ * @param ownerRegion - preamble text that defines exactly one vocabulary
+ * @returns the owner's tokens in definition order
+ */
+function readOwnerVocabulary(ownerRegion: string): string[] {
+  return [...ownerRegion.matchAll(/\*\*([A-Z][A-Z-]+)/gu)].map(
+    (tokenMatch) => tokenMatch[1],
+  );
+}
 
 /**
  * Match required instructions while allowing harmless Markdown wrapping and capitalization changes.
@@ -615,9 +633,87 @@ describe("skill hardening contracts: goat-clarity", () => {
       "Claim verdict",
       "VERIFIED | REFUTED | NOT_CHECKED",
       "a passing command never makes an untested claim verified",
-      "Shared proof-class tag",
+      "Shared evidence quality",
       "OBSERVED | INFERRED | UNVERIFIED | HUMAN-PENDING",
+      "Shared proof class",
+      "RUNTIME | CONTRACT-GREP | STATIC | NOT-REPRODUCED",
+      "proof class states the method that produced",
+      "A claim carries both",
+      "literal result, proof class",
     ]);
+  });
+
+  // Literal-presence checks on both sides can preserve two contradictory owners, so compare the consumer to the owner.
+
+  it("binds clarity evidence labels to the shared preamble vocabularies", () => {
+    const sharedPreamble = readProjectFile(SHARED_PREAMBLE_PATH);
+    const evidenceQualityDefinition = /^.*Tag evidence quality.*$/mu.exec(
+      sharedPreamble,
+    );
+    assert.ok(
+      evidenceQualityDefinition,
+      `${SHARED_PREAMBLE_PATH} must define the shared evidence-quality vocabulary`,
+    );
+
+    // Read the quality axis from its defining line; the surrounding section also names a proof class in its claim table.
+    const evidenceQualityTokens = readOwnerVocabulary(
+      evidenceQualityDefinition[0],
+    );
+    const proofClassTokens = readOwnerVocabulary(
+      readMarkdownSection(SHARED_PREAMBLE_PATH, "Proof Classification"),
+    );
+
+    // A shortened owner list would let the agreement checks below pass without comparing anything.
+    assert.equal(
+      evidenceQualityTokens.length,
+      SHARED_VOCABULARY_TOKEN_COUNT,
+      SHARED_PREAMBLE_PATH,
+    );
+    assert.equal(
+      proofClassTokens.length,
+      SHARED_VOCABULARY_TOKEN_COUNT,
+      SHARED_PREAMBLE_PATH,
+    );
+
+    const evidenceQualityList = evidenceQualityTokens.join(" | ");
+    const proofClassList = proofClassTokens.join(" | ");
+    const mislabelledQualityPattern = new RegExp(
+      `proof[- ]class[^.]*?\\b(?:${evidenceQualityTokens.join("|")})\\b`,
+      "u",
+    );
+
+    assertForEachTarget(
+      installedSkillReferencePaths(
+        "goat-clarity",
+        "references/target-scope-and-evidence.md",
+      ),
+      (referencePath) => {
+        const statusAndClaimEvidence = readMarkdownSection(
+          referencePath,
+          "Status and Claim Evidence",
+        );
+
+        assert.ok(
+          statusAndClaimEvidence.includes(
+            `Shared evidence quality: \`${evidenceQualityList}\``,
+          ),
+          `${referencePath} must label ${evidenceQualityList} as evidence quality`,
+        );
+        assert.ok(
+          statusAndClaimEvidence.includes(
+            `Shared proof class: \`${proofClassList}\``,
+          ),
+          `${referencePath} must route the shared proof class ${proofClassList}`,
+        );
+
+        // Quality and method are separate axes, so a quality token under a proof-class label is a contradiction, not a synonym.
+        assert.doesNotMatch(
+          statusAndClaimEvidence,
+          mislabelledQualityPattern,
+          `${referencePath} must not present an evidence-quality token as a proof class`,
+        );
+      },
+    );
   });
 
   it("attributes every mechanical check against an equivalent bound baseline", () => {

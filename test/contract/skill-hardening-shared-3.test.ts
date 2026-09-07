@@ -198,6 +198,46 @@ describe("skill hardening contracts: shared surfaces (3/3)", () => {
       ".goat-flow/skill-docs/skill-conventions.md",
     ];
 
+    // Quick depth persists artifacts without ever loading conventions, so the artifact rules must sit in the always-loaded preamble.
+    assertForEachTarget(
+      [
+        "workflow/skills/reference/skill-preamble.md",
+        ".goat-flow/skill-docs/skill-preamble.md",
+      ],
+      (referencePath) => {
+        const redactionGuidance = readMarkdownSection(
+          referencePath,
+          "Durable Local Text Redaction",
+        );
+        assert.match(
+          redactionGuidance,
+          /session, handoff, critique, review, quality, security, or export text/,
+          referencePath,
+        );
+        assert.match(
+          redactionGuidance,
+          /Redact before disk, not after/,
+          referencePath,
+        );
+        assert.match(
+          redactionGuidance,
+          /goat-flow redact.*--output.*\.goat-flow\/logs/u,
+          referencePath,
+        );
+        assert.match(
+          redactionGuidance,
+          /existing destinations are refused/,
+          referencePath,
+        );
+        assert.match(
+          redactionGuidance,
+          /hash-only `redactEvidenceText`.*not a readable scrubber/,
+          referencePath,
+        );
+      },
+    );
+
+    // Conventions keeps the artifact heading but must route to that single owner instead of restating it.
     assertForEachTarget(conventionPaths, (referencePath) => {
       const redactionGuidance = readMarkdownSection(
         referencePath,
@@ -205,27 +245,12 @@ describe("skill hardening contracts: shared surfaces (3/3)", () => {
       );
       assert.match(
         redactionGuidance,
-        /session, handoff, critique, review, quality, security, or export text/,
+        /`skill-preamble\.md` → Durable Local Text Redaction/,
         referencePath,
       );
       assert.match(
         redactionGuidance,
-        /Redact before disk, not after/,
-        referencePath,
-      );
-      assert.match(
-        redactionGuidance,
-        /goat-flow redact.*--output.*\.goat-flow\/logs/u,
-        referencePath,
-      );
-      assert.match(
-        redactionGuidance,
-        /version-compatible CLI required by `skill-preamble\.md`/,
-        referencePath,
-      );
-      assert.match(
-        redactionGuidance,
-        /hash-only `redactEvidenceText`.*not a readable scrubber/,
+        /artifact-specific destinations and specialized savers at their callers/,
         referencePath,
       );
     });

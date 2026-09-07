@@ -402,9 +402,17 @@ describe("skill hardening contracts: shared surfaces (1/3)", () => {
       ".goat-flow/skill-docs/skill-conventions.md",
     ]) {
       const conventions = readProjectFile(conventionsPath);
+      // D3 carries its own implementation approval, so naming only the D2 handoff leaves the second gate convertible.
       assert.match(
         conventions,
         /goat-debug D2→D3 "human decides before fixing"/,
+        conventionsPath,
+      );
+      assert.match(conventions, /D3 implementation approval/u, conventionsPath);
+      // Mutation approvals are worded as explicit current-session approval, not BLOCKING GATE, so state they never convert.
+      assert.match(
+        conventions,
+        /are not gate conversions and never downgrade/u,
         conventionsPath,
       );
       assert.match(

@@ -17,6 +17,9 @@ import {
   INSTALLED_SKILL_ROOTS,
 } from "./skill-hardening.helpers.js";
 
+const ISSUE_FORMAT_PATH =
+  "workflow/skills/goat-plan/references/issue-format.md";
+
 describe("skill hardening contracts: goat-plan (1/2)", () => {
   it("carries one timing and forecast contract into every installed harness", () => {
     assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
@@ -512,19 +515,73 @@ describe("skill hardening contracts: goat-plan (1/2)", () => {
         skillPath,
         "Phase 2 - Deliver Milestones",
       );
+      assert.match(
+        artifactRules,
+        /Small only for a requested GitHub brief, multiple milestones, or shared requirements\/budget/u,
+        skillPath,
+      );
+    });
+  });
+
+  // The close-out gate must name ISSUE sections its format owner actually defines, so derive both names from that owner.
+
+  it("closes ISSUE work through the section names its format owner defines", () => {
+    const issueFormat = readProjectFile(ISSUE_FORMAT_PATH);
+    const tickedSectionMatch =
+      /completion ticks verified (\w+) instead of rewriting requirements/u.exec(
+        issueFormat,
+      );
+    const stableSectionMatch = /Preserve stable requirements in (\w+);/u.exec(
+      issueFormat,
+    );
+    assert.ok(
+      tickedSectionMatch,
+      `${ISSUE_FORMAT_PATH} must name the ISSUE section completion ticks`,
+    );
+    assert.ok(
+      stableSectionMatch,
+      `${ISSUE_FORMAT_PATH} must name the ISSUE section that stays stable`,
+    );
+
+    const tickedSectionName = tickedSectionMatch[1];
+    const stableSectionName = stableSectionMatch[1];
+
+    // Both names must be real ISSUE headings; otherwise the close-out gate sends authors to a section that does not exist.
+    assertForEachTarget(
+      [tickedSectionName, stableSectionName],
+      (sectionName) => {
+        assert.match(
+          issueFormat,
+          new RegExp(`^## ${sectionName}$`, "mu"),
+          `${ISSUE_FORMAT_PATH} must define a ${sectionName} section`,
+        );
+      },
+    );
+
+    assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
       const completionGate = readMarkdownSection(
         skillPath,
         "Phase 4 - Plan Complete",
       );
 
       assert.match(
-        artifactRules,
-        /Small only for a requested GitHub brief, multiple milestones, or shared requirements\/budget/u,
+        completionGate,
+        new RegExp(
+          `when \`ISSUE\\.md\` exists, every ISSUE ${tickedSectionName} item`,
+          "u",
+        ),
         skillPath,
       );
       assert.match(
         completionGate,
-        /when `ISSUE\.md` exists, every ISSUE How item/u,
+        new RegExp(`Keep ${stableSectionName} stable`, "u"),
+        skillPath,
+      );
+
+      // How and What are not ISSUE sections; naming them sends close-out to a heading the format owner does not define.
+      assert.doesNotMatch(
+        completionGate,
+        /ISSUE How item|Keep What as/u,
         skillPath,
       );
     });
