@@ -104,14 +104,14 @@ last_reviewed: 2026-09-07
 
 ## Lesson: Config mergers must preserve user-visible serialization
 
-**Status:** active | **Created:** 2026-08-12
+**Status:** active | **Created:** 2026-08-12 | **Evidence:** OBSERVED
 
 **Decision changed:** Compare both parsed state and serialized output when replacing migration logic, and seed compatibility proof through the predecessor producer when it remains callable.
 
 **Trigger phase:** ACT | **Caught at:** VERIFY
 **Incident count:** 3 | **Latest occurrence:** 2026-09-07
 
-**Prevention:** When migrating serialized state, reproduce its whitespace, trailing newline, key shape, and ordering contract as well as parsed semantics. Drive at least one compatibility fixture through the supported predecessor writer instead of rebuilding its output from the new reader's assumptions.
+**Prevention:** When migrating serialized state, reproduce its whitespace, trailing newline, key shape, and ordering contract as well as parsed semantics. Drive at least one compatibility fixture through the supported predecessor writer instead of rebuilding its output from the new reader's assumptions. At a provider boundary, validate adaptation, decode stdout, and inspect the actual host feedback field before asserting line count or exact retained content. Absence of `Coverage:` proves neither successful adaptation nor one-line feedback. Require the observed bad variant to fail the decisive assertion while valid detailed-output controls remain valid.
 
 **What happened:** The generated desired-state merger produced semantically correct Codex hooks but wrote minified JSON. The focused installer matrix failed two user-visible formatting assertions, including the expected `"timeout": 90` form.
 
@@ -122,7 +122,7 @@ last_reviewed: 2026-09-07
 **Recurrence 2026-08-27:** The first v2 bootstrap fixture rebuilt small v1 files in an order that happened to satisfy the new UTF-8 canonicalizer. The production v1 writer orders its complete path set with `localeCompare`; a direct writer-to-facade reproduction returned `malformed-blocking` for every agent shape checked. The correction preserves parsed v1 row order during byte normalization, then applies UTF-8 sorting only to the virtual v2 state. Evidence anchors: `src/cli/managed-setup-state.ts` (search: `V1 predates UTF-8 canonical ordering`) and `test/unit/managed-setup-preview.test.ts` (search: `bootstraps a baseline written by the v1 state writer`).
 
 
-**Recurrence 2026-09-07:** M32 checked `JSON.stringify` of the whole adapter result as though it were model-visible text. A renderer mutation inserted a decoded newline while all 15 adapter cases still passed. Decode the actual host feedback field before asserting its line count or exact content. The repaired three-provider cases reject that mutation while retaining the other controls. Evidence: `test/unit/hook-provider-adapters.test.ts` (search: `providerFeedbackText`, `compacts only the verified non-source Gruff advisory for`).
+**Recurrence 2026-09-07:** The M32 review found that a helper stringified the whole adapter result before inspecting feedback. JSON escaping hid decoded line breaks from the old line-count assertion; the reviewed newline mutation survived that check. The word `Coverage:` itself remains searchable through ordinary JSON escaping, so its absence was not the decisive regression discriminator. The current helper parses stdout and selects the host feedback field; each provider case checks the exact decoded message and its real line count. Evidence: `test/unit/hook-provider-adapters.test.ts` (search: `providerFeedbackText`, `compacts only the verified non-source Gruff advisory for`), `workflow/hooks/hook-provider-adapters.mjs` (search: `renderHookResultMessage`, `adaptPostToolResult`). These are the observable representation and regression boundaries, not proof that the original executor performed a mutation check.
 
 ---
 

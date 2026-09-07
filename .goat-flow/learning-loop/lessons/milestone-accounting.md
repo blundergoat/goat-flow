@@ -148,22 +148,23 @@ Evidence anchors: `src/cli/plans-effort.ts` (search: `export function countAgent
 
 ## Lesson: A running receipt makes a wrong category split look measured
 
-**Status:** active | **Created:** 2026-08-02
-**Decision changed:** Switch the receipt category at the work boundary, not at the milestone boundary; a stale category is a silent data error, not a rounding detail.
+**Status:** active | **Created:** 2026-08-02 | **Evidence:** OBSERVED
+**Decision changed:** Switch category at each work boundary; correct timestamps cannot make an inaccurate category split measured evidence.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
 **Incident count:** 5 | **Latest occurrence:** 2026-09-07
 
-**Prevention:** Switch category when the kind of work changes: entering a proof cycle, returning to implementation, or starting plan bookkeeping each warrant `stop` then `start --category <new>`, and being about to run the suite, lint, or typecheck is a proof trigger by definition. Before finalizing, read the segment list, because one long span across a mixed session is the smell. If the split is known-wrong at the gate, disclose it in the human-verification report and treat only the total as trustworthy. Evidence anchors: `src/cli/plans-time.ts` (search: `export function applyPlanTimeTransition`) performs the category change; `src/cli/plans-check.ts` (search: `function collectMeasuredActualErrors`) reconciles Actual against the receipt but cannot detect a mis-tagged category. Never starting a receipt at all is `.goat-flow/learning-loop/lessons/milestone-accounting.md` (search: `## Lesson: Actual time must come from prospective active-time segments`).
+**Prevention:** On entering evaluation, tests, lint or typecheck, stop the implementation span and start `--category proof`; switch again for implementation or bookkeeping. Before finalizing, compare segment boundaries with the recorded actions. If a category split is wrong and cannot be recovered honestly, preserve timestamps and elapsed totals, disclose the limitation and use `Actual: unavailable`. Never invent a retrospective split to keep a sample eligible. Excluding an invalid sample protects calibration; a structurally valid receipt cannot prove its category reflects the work.
 
-**What happened:** Effort-estimation-timing M02 opened a `product` span and left it open across implementation, a full test run, lint, format, and unused-export checks. The finalized receipt reported 1112 product / 99 proof seconds; the 1354-second total was correct and system-stamped, but most of that "product" time was proof, and the receipt finalized, reconciled, and passed strict validation because the CLI can only stamp the category it was given.
+**What happened:** Effort-estimation-timing M02 left a product span open through implementation and verification. Its finalized record reported 1112 product / 99 proof seconds within a correct 1354-second total. Strict validation accepted the internally consistent categories, although much of the product span contained proof.
 
-**Root cause:** A running timer makes category maintenance feel optional, giving an unmaintained split the authority of a `measured` Actual.
+**Root cause:** The timer stamps the selected category; it cannot infer what work occurred inside the span.
 
-**Recurrences 2026-08-04, 2026-08-09, 2026-08-14:** Three more milestones left a first `product` span open straight through their proof work. The quality-findings milestone ran focused content tests, both 327-case hook corpora, the interleaved benchmark, and skill contract runs inside it, and its split is knowingly inaccurate and excluded from calibration. M03 ran goat-debug RED confirmation, delegated pressure runs, and the deployment matrix, then entered goat-critique RED, and was caught after 1,604 seconds when the user challenged forecast quality. Code-quality-upstream M03 covered product edits, three evaluator runs, formatting recovery, full-suite diagnosis, and final gates, and with no prospective boundaries left the span was discarded and Actual recorded as incomplete. `src/cli/plans-time.ts` (search: `receipt contains a discarded open span`).
+**Recurrences 2026-08-04, 2026-08-09, 2026-08-14:** The quality-findings milestone left tests, hook corpora, benchmarks and contracts under product; its split was excluded from calibration. M03 covered debug evaluations and proof until challenged after 1,604 seconds. Code-quality-upstream M03 mixed edits and verification without recoverable boundaries, so its span was discarded and Actual marked incomplete. The discarded-span path is in `src/cli/plans-time.ts` (search: `receipt contains a discarded open span`).
 
+**Recurrence 2026-09-07:** M29, M32 and M33 recorded 999, 342 and 94 seconds entirely as product despite verification. Their corrected records preserve elapsed totals and timestamps but exclude unavailable category allocations from measured calibration.
 
-**Recurrence 2026-09-07:** M29, M32 and M33 recorded 999, 342 and 94 seconds entirely as product despite verification. Preserve their elapsed totals and timestamps; use `Actual: unavailable` when the category allocation cannot be recovered honestly, excluding those samples from measured calibration.
+**Evidence:** `src/cli/plans-time.ts` (search: `export function applyPlanTimeTransition`) owns category transitions; `src/cli/plans-check.ts` (search: `function collectMeasuredActualErrors`) checks receipt arithmetic; `src/cli/plans-check-summary.ts` (search: `function readCalibrationSample`) excludes non-measured Actuals. Missing timers are covered by `.goat-flow/learning-loop/lessons/milestone-accounting.md` (search: `## Lesson: Actual time must come from prospective active-time segments`).
 
 ---
 
