@@ -555,6 +555,86 @@ describe("consumer setup to quality-report lifecycle", () => {
     });
   });
 
+  it("keeps goat-review guidance portable in consumer installs", async () => {
+    await withTemporaryConsumerTarget(async (consumerTargetPath) => {
+      const installResult = runPublicCli([
+        "install",
+        consumerTargetPath,
+        "--agent",
+        "codex",
+      ]);
+      assertCliSucceeded(
+        installResult,
+        "consumer install for review portability",
+      );
+
+      const installedReviewDirectory = join(
+        consumerTargetPath,
+        ".agents",
+        "skills",
+        "goat-review",
+      );
+      const shippedReviewFiles = [
+        join(installedReviewDirectory, "SKILL.md"),
+        join(installedReviewDirectory, "references", "examples.md"),
+        join(installedReviewDirectory, "references", "refuter-spec.md"),
+        join(installedReviewDirectory, "references", "automated-review.md"),
+        join(installedReviewDirectory, "references", "review-traps.md"),
+      ];
+
+      // A consumer install carries goat-flow's own incident evidence only as prose, never as a path it cannot resolve.
+      const frameworkOnlyReference =
+        /\.goat-flow\/learning-loop\/(?:footguns|lessons|patterns|decisions)\/|\.goat-flow\/plans\/|(?:^|[^\w/])src\/cli\/|(?:^|[^\w/])test\/(?:unit|contract|integration)\/|ADR-\d/mu;
+
+      for (const shippedReviewFile of shippedReviewFiles) {
+        assert.equal(
+          existsSync(shippedReviewFile),
+          true,
+          `${shippedReviewFile} must reach a fresh consumer install`,
+        );
+        const shippedGuidance = readFileSync(shippedReviewFile, "utf8");
+        assert.doesNotMatch(
+          shippedGuidance,
+          frameworkOnlyReference,
+          `${shippedReviewFile} must not depend on a framework-only path a consumer never receives`,
+        );
+      }
+
+      // The real incidents ship as self-contained traps, identified by title rather than by a dead file path.
+      const installedTraps = readFileSync(
+        join(installedReviewDirectory, "references", "review-traps.md"),
+        "utf8",
+      );
+      for (const shippedTrapName of [
+        "A finding that contradicts a passing test",
+        "A guard rewrite needs both builds run, not both sources read",
+        "An addressed marker is not evidence the fix landed",
+      ]) {
+        assert.match(
+          installedTraps,
+          new RegExp(shippedTrapName, "u"),
+          `${shippedTrapName} must ship to a consumer install`,
+        );
+      }
+
+      // Target-project learning-loop discovery stays valid: the installer seeds those directories.
+      for (const seededBucket of ["footguns", "lessons", "patterns"]) {
+        assert.equal(
+          existsSync(
+            join(
+              consumerTargetPath,
+              ".goat-flow",
+              "learning-loop",
+              seededBucket,
+            ),
+          ),
+          true,
+          `${seededBucket} must exist so a consumer's own retrieval route resolves`,
+        );
+      }
+    });
+  });
+
   it("cleans the selected consumer after a failed lifecycle action", async () => {
     await assert.rejects(
       withTemporaryConsumerTarget(async (consumerTargetPath) => {

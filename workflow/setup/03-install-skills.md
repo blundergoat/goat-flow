@@ -23,9 +23,10 @@ Read the detailed templates in `workflow/skills/` (each skill is a directory con
 
 Each SKILL.md MUST include:
 - `goat-flow-skill-version:` in YAML frontmatter matching the current goat-flow version
-- Sections: When to Use, Step 0 / Gather Context, Process with phased steps, Constraints, Output Format
+- A trigger signal: either a `## When to Use` section or a `Use when ...` statement, which the frontmatter `description` satisfies. Both forms are accepted; do not add a redundant heading to a skill that already carries the statement
+- Sections: Step 0 / Gather Context, Process with phased steps, Constraints, Output Format
 
-**Exception:** The dispatcher (`goat/SKILL.md`) uses `How It Works` instead of `When to Use` and has no Output Format section. The validator accepts this.
+**Exception:** The dispatcher (`goat/SKILL.md`) uses `How It Works` and has no Output Format section. The validator accepts this.
 
 **IMPORTANT: Install skills VERBATIM from the templates. Do NOT adapt, compress, rewrite, or remove any sections.** Copy `SKILL.md` plus any `references/*.md` files listed under that skill, and delete any stale Markdown files in that skill's `references/` directory that are no longer listed in `workflow/manifest.json` `skills.references`. Skills are the same for every project - project-specific context comes from the instruction file, `.goat-flow/learning-loop/footguns/`, `.goat-flow/learning-loop/lessons/`, and any optional local instruction files the project already has. Cutting or rewriting skill content causes more damage than generic examples ever will.
 

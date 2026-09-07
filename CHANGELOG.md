@@ -33,6 +33,13 @@ The next release adds per-command `--help`, path-aware learning recall, one proj
 - **Preflight bounds dependency audits** - A stalled registry now fails the gate after 120 seconds. Set `GOAT_FLOW_PREFLIGHT_AUDIT_TIMEOUT_SECONDS=N` to choose the deadline; `0` disables only this deadline, while the audit still runs and remains blocking.
 - **Skipped hooks explain non-Git limits** - Install and sync name the hook, explain why no safe post-turn scan root exists, and show how to configure one.
 - **`/goat-review` staged reviews leave Git unchanged** - Staged authority uses `git ls-files -s`, `git diff --cached --binary`, and `git show :<path>` instead of `git write-tree`, so report-only review creates no tree object.
+- **`/goat-review` reports validate on first emission** - Refuted suspicions keep their IDs in the disposition map, JSON rows are bare, the gates record is always present, and conclusion labels follow validator precedence.
+- **`/goat-review` finding tags use MUST, SHOULD, or MAY** - A reviewed project's own severity ordering ranks findings but never fills the severity slot.
+- **`/goat-review` names its Quick and Full diff routes** - Full continues into Pass 2.5, the spec-drift offer, and the optional refuter; area audits reach the same terminal steps.
+- **Refuter recipes state their enforced boundary** - Each runtime recipe names the flag that restricts it, forbids bypass flags, and falls back to a local-only review when unsupported.
+- **PR bot logins normalize by suffix** - Overlap matching strips one trailing `[bot]` before alias mapping, compares semantic location instead of line ranges, and leaves unknown authors unknown.
+- **Three review traps ship from real incidents** - A finding that contradicts a passing test, a guard rewrite that needs both builds run, and a bot's own addressed marker join the shipped traps.
+- **Setup accepts the `Use when` trigger form** - Skill installation no longer demands a `When to Use` heading when the frontmatter description states the trigger.
 - **Gruff finds project wrappers again** - `gruff-<language>.sh` in `bin/test/`, `bin/`, or `scripts/` preserves project config, paths, and reports.
 - **Quality prompts reuse project evidence** - Failed audits add bounded learning context; previously refuted candidates stay out of findings.
 - **Focused quality prompts assess the requested project** - Process and harness grounding use its path instead of `.`; prompts omit selected targets absent from the request.

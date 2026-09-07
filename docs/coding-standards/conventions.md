@@ -74,7 +74,7 @@ node --import tsx src/cli/cli.ts quality . --agent claude       # Generate quali
 
 ## Conventions
 
-- ESM throughout: `"type": "module"` in package.json, `NodeNext` module resolution
+- ESM throughout for CLI and server: `"type": "module"` in package.json, `NodeNext` module resolution. The dashboard is compiled separately by `tsconfig.dashboard.json`, which sets no module or moduleResolution, and its files are classic browser scripts sharing one script scope - see `frontend.md` (search: `classic browser scripts`)
 - Use `.js` extensions in all TypeScript import paths (NodeNext requires it)
 - `node:test` + `node:assert/strict` for testing (not Jest, not Vitest)
 - Strict TypeScript: `"strict": true` in tsconfig.json

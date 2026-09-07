@@ -22,7 +22,7 @@ describe("skill hardening contracts: goat-review (2/3)", () => {
       const skill = readProjectFile(skillPath);
       const crossCheck = readMarkdownSection(
         skillPath,
-        "Diff Review (Quick) - Two-Pass Discipline",
+        "Diff Review - Quick and Full",
       );
       assert.match(crossCheck, /references\/review-traps\.md/u, skillPath);
       assert.match(crossCheck, /confirmed review-reasoning miss/u, skillPath);
@@ -46,8 +46,14 @@ describe("skill hardening contracts: goat-review (2/3)", () => {
     assertForEachTarget(installedSkillPaths("goat-review"), (skillPath) => {
       const skill = readProjectFile(skillPath);
       assert.match(skill, /Self-consistency check/u, skillPath);
-      assert.match(skill, /\{R-id, file, range, action\}/u, skillPath);
-      assert.match(skill, /same-file overlapping ranges/iu, skillPath);
+      assert.match(skill, /\{R-id, file, anchor, action\}/u, skillPath);
+      assert.match(
+        skill,
+        /same-file findings sharing a semantic location/iu,
+        skillPath,
+      );
+      // Line ranges go stale on every edit, so overlap is keyed on the semantic anchor instead.
+      assert.doesNotMatch(skill, /overlapping ranges/iu, skillPath);
       assert.match(skill, /demote both one rung/u, skillPath);
       assert.match(skill, /Tension with R-0NN/u, skillPath);
       assert.match(skill, /two review→fix cycles/u, skillPath);
@@ -249,6 +255,94 @@ describe("skill hardening contracts: goat-review (2/3)", () => {
     });
   });
 
+  it("pins one severity vocabulary and canonical integrity field shapes", () => {
+    assertForEachTarget(installedSkillPaths("goat-review"), (skillPath) => {
+      const diffReview = readMarkdownSection(
+        skillPath,
+        "Diff Review - Quick and Full",
+      );
+      const integrity = readMarkdownSection(
+        skillPath,
+        "Review Integrity (confidence signal)",
+      );
+      const scope = readMarkdownSection(
+        skillPath,
+        "Step 0 - Scope, Size, Spec",
+      );
+
+      // A reviewed project's own severity ladder must never reach the report's SEVERITY slot.
+      assert.match(
+        diffReview,
+        /SEVERITY is exactly `MUST`, `SHOULD`, or `MAY`/u,
+        skillPath,
+      );
+      assert.match(diffReview, /never fills that slot/u, skillPath);
+
+      // The disposition map and the verdict tuple must not drift apart.
+      assert.match(
+        integrity,
+        /every final `R-NNN` to exactly one lowercase/u,
+        skillPath,
+      );
+      // Pass 2 refutations keep an R-ID, appear in the map as refuted, and count in the verdict tuple.
+      assert.match(
+        integrity,
+        /refutations keep a distinct R-ID[\s\S]*one `refuted` map entry/u,
+        skillPath,
+      );
+      assert.match(
+        integrity,
+        /`Verdicts` refuted equals `Refutations logged`/u,
+        skillPath,
+      );
+      assert.doesNotMatch(integrity, /carry no R-ID/u, skillPath);
+
+      // Rows the validator parses as JSON must be bare, and evidence keys must equal the emitted flags.
+      assert.match(
+        integrity,
+        /bare canonical JSON, never code spans/u,
+        skillPath,
+      );
+      assert.match(integrity, /exactly one entry per emitted flag/u, skillPath);
+      assert.match(
+        integrity,
+        /`goat-review-gates\/v1` record; `gates: \[\]` when none run, never `\{\}`/u,
+        skillPath,
+      );
+
+      // Conclusion precedence: partial-class flags win, inference-only limits give high-inference, other limits degrade coverage.
+      assert.match(
+        integrity,
+        /`partial` for `chunked-partial` or `risk-depth-declined`; `high-inference` for inference-only limits; else `coverage-degraded`; disclosures alone `confident`/u,
+        skillPath,
+      );
+
+      // The Size row's closing words are literal grammar, not an instruction to the author.
+      const output = readMarkdownSection(skillPath, "Output Format");
+      assert.match(
+        output,
+        /<!-- literal "exactly once" -->\n- Size: <n> files/u,
+        skillPath,
+      );
+      assert.match(
+        integrity,
+        /canonical array of unique completed selected paths/u,
+        skillPath,
+      );
+
+      // An unavailable producer degrades honestly instead of emitting a hand-built record.
+      assert.match(scope, /controlling package source/u, skillPath);
+      assert.match(scope, /[Nn]ever invent a schema/u, skillPath);
+
+      // Target guidance is a source for this review, never an import into another project.
+      assert.match(
+        scope,
+        /[Nn]ever import another project's standards/u,
+        skillPath,
+      );
+    });
+  });
+
   it("keeps goat-review bound to the universal skill constraints", () => {
     assertForEachTarget(installedSkillPaths("goat-review"), (skillPath) => {
       assert.match(
@@ -320,7 +414,8 @@ describe("skill hardening contracts: goat-review (2/3)", () => {
           "rule ID",
           "category",
           "root cause",
-          "line range",
+          // ADR-024: identity is decided on the semantic anchor, because line numbers go stale on every edit.
+          "semantic location",
           "token similarity",
         ]) {
           const hierarchyIndex = matchingHierarchy.indexOf(hierarchyTerm);
@@ -365,7 +460,7 @@ describe("skill hardening contracts: goat-review (2/3)", () => {
     assertForEachTarget(installedSkillPaths("goat-review"), (skillPath) => {
       const diffReview = readMarkdownSection(
         skillPath,
-        "Diff Review (Quick) - Two-Pass Discipline",
+        "Diff Review - Quick and Full",
       );
       const integrity = readMarkdownSection(
         skillPath,
@@ -394,7 +489,7 @@ describe("skill hardening contracts: goat-review (2/3)", () => {
     assertForEachTarget(installedSkillPaths("goat-review"), (skillPath) => {
       const diffReview = readMarkdownSection(
         skillPath,
-        "Diff Review (Quick) - Two-Pass Discipline",
+        "Diff Review - Quick and Full",
       );
       const output = readMarkdownSection(skillPath, "Output Format");
 
@@ -480,7 +575,7 @@ describe("skill hardening contracts: goat-review (2/3)", () => {
       const skill = readProjectFile(skillPath);
       const diffReview = readMarkdownSection(
         skillPath,
-        "Diff Review (Quick) - Two-Pass Discipline",
+        "Diff Review - Quick and Full",
       );
       const passThree = readMarkdownSection(
         skillPath,
@@ -582,7 +677,7 @@ describe("skill hardening contracts: goat-review (2/3)", () => {
       const skill = readProjectFile(skillPath);
       const diffReview = readMarkdownSection(
         skillPath,
-        "Diff Review (Quick) - Two-Pass Discipline",
+        "Diff Review - Quick and Full",
       );
       const constraints = readMarkdownSection(skillPath, "Constraints");
       const output = readMarkdownSection(skillPath, "Output Format");

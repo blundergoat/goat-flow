@@ -300,7 +300,7 @@ describe("skill hardening contracts: goat-review (1/3)", () => {
       assert.match(integrity, /Scope snapshot; Authority snapshot/u, skillPath);
       assert.match(
         constraints,
-        /\*\*Both modes:\*\*[\s\S]*above 20 files, or 3000 changed lines/u,
+        /\*\*Both modes:\*\*[\s\S]*MUST chunk per Step 0/u,
         skillPath,
       );
       assert.match(
@@ -354,7 +354,7 @@ describe("skill hardening contracts: goat-review (1/3)", () => {
       );
       assert.match(
         constraints,
-        /MUST chunk above 20 files, or 3000 changed lines/u,
+        /MUST chunk per Step 0[\s\S]*never enter Pass 1 unchunked/u,
         skillPath,
       );
     });
@@ -371,7 +371,7 @@ describe("skill hardening contracts: goat-review (1/3)", () => {
 
       assert.match(
         scope,
-        /above 20 files or 3000 changed lines[^\n]+propose concrete chunks[^\n]+stop before Pass 1/iu,
+        /above 20 files or 3000 changed lines[^\n]+propose chunks[^\n]+stop before Pass 1/iu,
         skillPath,
       );
       assert.match(
@@ -420,8 +420,15 @@ describe("skill hardening contracts: goat-review (1/3)", () => {
       );
       assert.match(scope, /search: `Depth Signals`/u, skillPath);
       assert.match(scope, /3\+ → full, 2 → offer, 0–1 → quick/u, skillPath);
-      assert.match(scope, /Quick keeps Pass 1 → Pass 2/u, skillPath);
       assert.match(scope, /Refused Full/u, skillPath);
+      const modes = readMarkdownSection(
+        skillPath,
+        "Diff Review - Quick and Full",
+      );
+      // Every mode needs its own reachable pass sequence and a route to the shared terminal steps.
+      assert.match(modes, /Quick runs Pass 1 then Pass 2/u, skillPath);
+      assert.match(modes, /Full continues into Pass 2\.5/u, skillPath);
+      assert.match(modes, /Area audits use their own passes/u, skillPath);
       assert.match(scope, /signals `<n>`/u, skillPath);
     });
 
@@ -708,6 +715,9 @@ describe("skill hardening contracts: goat-review (1/3)", () => {
           "Reachability before severity",
           "Convention from a three-file sample",
           "Regression without a baseline read",
+          "A finding that contradicts a passing test",
+          "A guard rewrite needs both builds run, not both sources read",
+          "An addressed marker is not evidence the fix landed",
           "Mirror bug on a widened or narrowed guard",
           "Hide, filter, or redact checked on one projection",
           "Finding outside the diff",

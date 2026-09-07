@@ -214,17 +214,17 @@ Structured code review and quality audit with negative verification.
 
 | Mode | Trigger | What it does |
 |------|---------|-------------|
-| **Quick Review** | review, PR, diff | Diff-only suspicion pass followed by grounded verification |
+| **Diff Review** | review, PR, diff | Quick runs the diff-only suspicion pass then grounded verification; Full continues into Pass 2.5, the spec-drift offer, and the optional refuter offer |
 | **Audit** | audit, quality sweep | Systematic codebase area scan - findings only, no fixes |
 | **Direction / Opportunity Audit** | explicit future-direction request | Advisory, repo-grounded opportunities kept separate from defect verdicts |
 
-**Quick Review:**
+**Diff Review:**
 
 ```mermaid
 flowchart TD
     S0["Step 0\nAuto-detect scope\nFootgun check"] --> R1
 
-    subgraph Review["Quick Review"]
+    subgraph Review["Diff Review"]
         R1["Pass 1: Blind Suspicion\nDiff only\nCapture raw suspicions"]
         R1 -->|"CHECKPOINT"| R2["Pass 2: Grounded Verification\nOpen full files\nConfirm / Adjust / Refute / Unresolve"]
         R2 --> AR["Post-local reconciliation\nAutomated review after both passes"]
@@ -238,13 +238,15 @@ flowchart TD
 
 Pass 1 never surfaces findings. Pass 2 opens full files and assigns each suspicion one final disposition: confirmed, adjusted, refuted, or unresolved. Refuted IDs stay in the ledger or optional history; unresolved findings remain visible as Unconfirmed items with missing proof and a next check. Active evidence and provenance totals exclude refuted history. Automated-review conclusions stay unread until both local passes finish, then locally verified bot-only findings may enter the same evidence pipeline. MUST NOT flag pre-existing issues as part of this change.
 
-Findings use `R-NNN [SEVERITY:ACTION]`, semantic anchors, Evidence/Proof, and `Harm:` for MUST/SHOULD; every result includes Review Integrity. Use the controlling installation's version-matched CLI: run `goat-flow review validate-ledger` for nonzero refutations, then `goat-flow review validate-draft` on every pending report before redaction and receipt writes, and final `goat-flow review validate` after removing the transient appendix. Validator unavailability does not block reporting; disclose it without claiming PASS.
+Findings use `R-NNN [SEVERITY:ACTION]`, semantic anchors, Evidence/Proof, and `Harm:` for MUST/SHOULD; every result includes Review Integrity. SEVERITY is exactly MUST, SHOULD, or MAY - a reviewed project's own severity ordering ranks findings but never fills that slot. Use the controlling installation's version-matched CLI: run `goat-flow review validate-ledger` for nonzero refutations, then `goat-flow review validate-draft` on every pending report before redaction and receipt writes, and final `goat-flow review validate` after removing the transient appendix. Validator unavailability does not block reporting; disclose it without claiming PASS.
 
 Draft and final report commands use `--project <reviewed-root> --expected-version <installed-skill-version>`; ledger validation takes only the version flag. Nonzero refutations require the exact transient ledger appendix in the draft. Final validation checks the available persisted receipts. The [Review integrity contract](cli.md#review-integrity-contract) defines shared full/compact metadata, exclusive IDs, gate outcomes, flags, and verdict consequences.
 
 Pass 2.5 re-frames only evidence already gathered and makes no new tool, file, command, or model calls. Refutation ledgers use a declared exact path and counted one-line records; ledgers and captured refuter JSON use host-owned pre-write redaction. Unavailable redaction skips persistence but preserves the count; draft proof checks transient records, while final skipped-persistence proof cannot verify stored ledger contents. Full and compact integrity output records `Review validator: validated | validator-unavailable`.
 
 Pass 3 is optional and requires explicit informed approval. An uncited or unresolvable refuter claim cannot remove a finding; a MUST remains blocking until the host verifies its cited guard, and only a verified citation can change Ship Verdict.
+
+**Project guidance:** Step 0 names the reviewed project's active instructions and, when present, its standards headings, and extends INDEX-first retrieval across that project's footguns, lessons, and patterns, adding accepted decisions for architecture, policy, or setup. A missing optional document is a bounded miss rather than a finding, and another project's standards are never imported into the review.
 
 **Audit mode:** For codebase areas (not a diff). Scan using severity ordering, run negative verification, group 3+ related findings as systemic patterns. MUST NOT propose fixes in audit mode - findings only.
 

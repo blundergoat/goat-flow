@@ -1,6 +1,6 @@
 ---
 category: test-fixtures
-last_reviewed: 2026-09-06
+last_reviewed: 2026-09-07
 ---
 
 **Scope:** Building and keeping fixtures true - collision branches, semantic operands, in-memory against disk-backed corpora, and fixtures that drift from the code they model. Runner behaviour is [test-execution-environment.md](test-execution-environment.md).
@@ -66,11 +66,11 @@ last_reviewed: 2026-09-06
 
 ## Lesson: Workflow parser refactors need both fixture coverage and typecheck
 
-**Status:** active | **Created:** 2026-04-03 | **Evidence:** OBSERVED
+**Status:** active | **Created:** 2026-04-03 | **Evidence:** ACTUAL_MEASURED
 **Decision changed:** Before a prose parser, enumerate every shipped producer shape, validate the nominally valid fixture's relationships, and lock one grammar with focused fixtures; negative mutations target a unique semantic substring; shipped path examples label placeholders explicitly and verifiers recognise the placeholder grammar rather than one literal token; at first behavioural GREEN, check whole-file complexity and headroom before adding branches.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
-**Incident count:** 15 | **Latest occurrence:** 2026-09-06
+**Incident count:** 16 | **Latest occurrence:** 2026-09-07
 
 **Prevention:** For parser refactors, verify in this order: (1) print or exercise extracted intermediate values and fixture relationships, (2) run the focused regression suite, (3) run `npx tsc --noEmit`, (4) run whole-file ESLint and complexity or size analysis, then (5) freeze writes and run the full suite; any later write invalidates that result. Match heuristics to behaviour patterns such as `grep ... | while read ... [ ! -e ]`, not keywords in step names. Grep the old diagnostic across tests and include the producer's own unit file in RED and GREEN proof whenever a parser message changes. For skill wording, include shared-surface contracts before compressing required rules to fit a budget. Exercise literal protocol markers, effective Git configuration, decimal rounding, and unsupported checkout states before accepting a byte-authority parser.
 
@@ -109,6 +109,8 @@ last_reviewed: 2026-09-06
   - Parser and fixture refactors exposed wrong scalar-reader arguments, missing imports, and confusion between PR targets and `source.requested.sample`. Check both producer and consumer shapes: `src/cli/review-validate.ts` (search: `textField(gate.id`), `src/cli/review-validate-sections.ts` (search: `area request`), and `test/integration/review-validate-authority.test.ts` (search: `rejects a receipt replaced`).
   - A filename containing `anchor=` reached the generic anchor scanner; `test/integration/review-validate-authority.test.ts` (search: `keeps anchor markers`) now protects that boundary. A stale provenance replacement silently did nothing; `test/unit/review-validate.helpers.ts` (search: `withIntegrityFields`) rejects ambiguous field mutations.
   - Focused tests missed two shared guidance failures, unused exports, and stale moved-test citations. Run the shared contracts and full preflight before freezing the handoff; `test/contract/skill-hardening-shared-1.test.ts` (search: `teaches compact clean output`; `keeps public skill workflows aligned`) owns the missed wording checks.
+
+- **Recurrence 2026-09-07 (release-plan reconciliation):** A revised ISSUE checker rejected a valid completed row because its forecast regex excluded historical actual-time annotations. After that correction, comparing every likely field exposed unfinished rows that retained old values or omitted them. Read every producer shape and reconcile all repeated fields from `src/cli/plans-export.ts` (search: `loadPlanExportRecords`); the range owner `src/cli/plans-effort.ts` (search: `PlanEffortForecastRange`) binds likely to the milestone total. Run the documented command against the actual document, then mutate totals, dependencies and checkboxes in memory to test rejection. Committed evidence must cite tracked owners; `src/cli/facts/shared/learning-loop-common.ts` (search: `gitignored path used as durable evidence anchor`) rejected the first recurrence's local-plan citations.
 
 ---
 

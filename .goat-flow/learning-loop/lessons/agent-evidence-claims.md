@@ -1,6 +1,6 @@
 ---
 category: agent-evidence-claims
-last_reviewed: 2026-09-05
+last_reviewed: 2026-09-07
 ---
 
 **Scope:** What counts as citable evidence - mechanism claims need a read source, absence and exact-count claims need untruncated searches, gitignored paths are never durable anchors, and final verification gates need supported scopes with captured logs. Reading the request and retrieving memory is [agent-behavior.md](agent-behavior.md); using tools and the environment is [agent-tooling.md](agent-tooling.md).
@@ -145,3 +145,27 @@ last_reviewed: 2026-09-05
 **Recurrence 2026-08-27 (ignored lint):** `npx eslint test/integration/preflight-progress.test.ts` exited zero with an ignored-file diagnostic and was labelled PASS; `eslint.config.mjs` (search: `"test/**"`) keeps that path outside the lint scope, so cover ignored tests with typecheck, Prettier, and their runtime suite.
 **Recurrence 2026-08-28 (export capture):** A full plan export exited 0 but the tool truncated its 10,093 JSON lines; piping it into inline `node -e` was blocked as `Pipe to interpreter`, and a bounded `jq` selector exposed the required fields. `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Known language runtimes may consume local data only when their program is explicit`), `src/cli/plans-export.ts` (search: `No output path is the safe preview mode`).
 **Recurrence 2026-08-28 (proof scope):** A line-budget command scanned every physical line in eight instruction files although the claim covered only ACT-local reminders, and exited 1 on a 1,677-character READ line measured before the edit; baseline bespoke proof before editing and scope it to the claim. `workflow/setup/reference/execution-loop.md` (search: `MUST read relevant files before changes`), `test/contract/command-phrases.test.ts` (search: `assertMilestoneReminder`).
+
+## Lesson: Score a skill's output grammar with its validator, not by reading the report
+
+**Status:** active | **Created:** 2026-09-07 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** When a milestone's success criterion is that produced output validates, the acceptance test is the validator's result on produced output, and by-eye grammar scoring is a lead only.
+**Trigger phase:** SCOPE
+**Caught at:** VERIFY
+
+**Prevention:** Before scoring any produced report as conforming, save it and run the repository's validator on it; score from the violation list. Do this on the baseline runs too, so the failure classes you register are the ones the parser enforces rather than the ones you noticed. When a produced report cannot reach the validator under its run conditions, say the grammar claim is unverified rather than scoring it by inspection.
+
+**What happened:** Twelve isolated goat-review runs were scored by reading. Four format classes looked fixed between baseline and candidate. Running `goat-flow review validate-draft` on one candidate report afterwards returned 12 violations. Two were regressions the candidate wording had caused: a sentence saying Pass 2 refutations "carry no R-ID" had led three runs to drop refuted IDs from the disposition map, and a rule against inventing tokens had led four runs to park disclosures as extra evidence keys. Five further classes had gone unregistered because no eye caught them: code-span-wrapped JSON and a dropped literal `exactly once` in every one of the twelve reports, an empty `Gate authority` object, extra evidence keys, and conclusion precedence. The milestone had predicted this exact failure in its own stop condition, "measuring compliance by cited text while the agent skips the corresponding code check".
+
+**Root cause:** The parser's grammar is literal and the reviewer's reading is semantic, so a report that means the right thing can fail every row. Evidence anchors: `src/cli/review-validate-common.ts` (search: `FULL_REVIEW_SIZE_VALUE`), `src/cli/review-validate-sections.ts` (search: `validateFinalDispositions`), and the corrected root `workflow/skills/goat-review/SKILL.md` (search: `refutations keep a distinct R-ID`).
+
+## Lesson: A structural gap in skill text is not evidence of a behavioural gap
+
+**Status:** active | **Created:** 2026-09-07 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Before sizing tasks on an assumed behavioural failure, run the registered baseline; when the instruction file or the shared preamble may already route the behaviour, expect the baseline to pass and plan a neutral correction instead.
+
+**Prevention:** Search the skill text for the route, then test the behaviour anyway. Score application on the report's own opened-file trace, never on detection alone, because a seeded defect can be reachable by another path. Keep the seeded rule out of the fixture's code comments; a docstring that states the invariant makes the defect generically discoverable and the fixture stops discriminating. If the baseline passes, record the KEEP and reduce the task to a pointer or nothing; the iron law forbids a new mandatory rule with no failing test behind it.
+
+**What happened:** A milestone sized its two largest tasks on the premise that reviewers miss a project's own coding standards, supported by a grep showing the shipped skill had no route to them. The baseline runs disproved the premise: with a fixture project whose instruction file named its standards directory, every applicable run found the rules, cited them, applied them to code decisions, and left two documented exceptions alone. The route the skill text lacked was supplied by the reviewed project's instruction file and the shared preamble's INDEX-first retrieval. One seeded rule-only defect was also found in a project with no standards at all, through a docstring in the fixture's own constants module that stated the invariant, so detection had to be discounted and the trace used instead. With approval, the two tasks shrank to a heading fix and one sentence, and the effort moved to format failures the same runs had measured.
+
+**Root cause:** Absence in one document was read as absence in the system. Skills run inside a stack of instruction file, preamble, and project guidance, and a behaviour can be routed by any layer. Evidence anchors: `.goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md` (search: `Score application, not citation`), `.goat-flow/skill-docs/skill-preamble.md` (search: `Learning-Loop Retrieval`), `workflow/skills/goat-review/SKILL.md` (search: `**Project guidance:**`).

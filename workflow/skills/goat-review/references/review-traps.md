@@ -40,6 +40,40 @@ targets; editing the stale claims would have reintroduced defects.
 **Fix:** Re-read current HEAD and, for a regression claim, compare `git show <base>:<file>` with the
 frozen bundle before assigning a verdict. Framework incident: `Blindly applying review feedback without verifying findings`.
 
+### A finding that contradicts a passing test
+
+**Trap:** A review finding describes the code accurately, so the reviewer treats it as a defect to fix.
+
+**Reality:** Applying a mechanically correct bot finding turned two test failures into twenty-two, because a test
+asserted the reported behaviour on purpose.
+
+**Fix:** Before acting, search the test suite and any self-test for the behaviour the finding wants changed. If a
+test, decision record, or self-test asserts it deliberately, the finding is a design question for the owner, not a
+defect to fix in a review-response pass. Framework incident: `A bot finding that contradicts a passing test is a design question, not a bug`.
+
+### A guard rewrite needs both builds run, not both sources read
+
+**Trap:** A guard, parser, or classifier is called a regression because the diff moved most of its branches.
+
+**Reality:** Four regression suspicions raised from a deny-policy diff were all refuted by running base and head
+against one probe matrix. Every verdict was identical; only the messages had changed.
+
+**Fix:** Extract the base version and run both builds against the same inputs, labelling each row `same`,
+`newly-blocked`, or `newly-allowed`. Reading the base source says what the code used to say, not what it used to
+decide. This extends `Regression without a baseline read` for any surface with a runnable verdict, and proves
+nothing about code that has none. Framework incident: `For a guard rewrite, run the base build - reading the base diff cannot tell a message change from a verdict change`.
+
+### An addressed marker is not evidence the fix landed
+
+**Trap:** A review comment marked resolved or addressed is treated as proof the change happened.
+
+**Reality:** A bot appended an addressed marker to a finding whose file still carried the contradictory text at
+review time. Two of its other findings were the inverse, describing defects already fixed in later commits.
+
+**Fix:** Re-verify every finding against the selected review state, in both directions: a marker claiming a fix
+landed, and a finding claiming a defect remains. Resolution markers describe the commit the author last read, not
+the state under review. Framework incident: `A review bot's own "addressed" marker is not evidence the fix landed`.
+
 ## Placeholder trap shapes
 
 The following are shipped input/output shapes for consumer evidence. They are not goat-flow incidents.

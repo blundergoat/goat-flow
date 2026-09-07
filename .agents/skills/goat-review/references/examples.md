@@ -212,17 +212,19 @@ Use this shape when Pass 1 raises a plausible template or output-format suspicio
 
 ## Worked Example - Confirmed Finding Shape
 
-This scenario shows how a generator/auditor contract mismatch becomes a confirmed finding only after a current reproduction.
+> **Illustrative scenario - input/output shape only; never evidence.** Every path, symbol, and outcome below is a placeholder to replace with current target-project evidence.
 
-**Review surface:** `<target-project>/src/artifact-audit.ts` (search: `classifyInstalledArtifact`), `<target-project>/src/artifact-generator.ts` (search: `userOwnedMarker`), and `<target-project>/test/artifact-drift.test.ts` (search: `accepts a user-owned generated artifact`).
+This shape shows how a producer/checker contract mismatch becomes a confirmed finding only after a current reproduction.
 
-**Pass 1 suspicion:** The drift audit appeared to classify every unmapped installed playbook as stale even though `goat-flow skill new` creates consumer-only playbooks at that location.
+**Review surface:** `<target-project>/src/checker.ts` (search: `<classify-function>`), `<target-project>/src/producer.ts` (search: `<ownership-marker>`), and `<target-project>/test/checker.test.ts` (search: `<accepts-marked-artifact-test>`).
 
-**Pass 2 reproduction:** In this scenario, a generated user-owned playbook produces a `stale installed shared artifact` finding because it is absent from the package mirror map.
+**Pass 1 suspicion:** The checker appears to reject every artifact the producer legitimately creates at a documented location.
 
-**Finding:** The audit contradicted the documented consumer-project route and made a valid local playbook fail drift checks.
+**Pass 2 reproduction:** Run the producer, then the checker, against the declared authority; the produced artifact is rejected because the checker's allowlist never learned the producer's marker.
 
-**Resolution:** Generated consumer playbooks now carry explicit `goat-flow-ownership: "user-owned"` frontmatter. The audit exempts only playbooks with that marker, while unmarked stale package artifacts remain findings. The regression covers both outcomes.
+**Finding:** The checker contradicts the producer's documented route, so a valid artifact fails its check.
+
+**Resolution shape:** The producer stamps an explicit ownership marker; the checker exempts exactly that marker and keeps rejecting unmarked stale artifacts. A regression covers both outcomes.
 
 ## Finding Format Examples
 

@@ -1,6 +1,6 @@
 ---
 category: skill-guidance
-last_reviewed: 2026-09-05
+last_reviewed: 2026-09-07
 ---
 
 **Scope:** Editing shipped skill and playbook guidance: behavioural wording, authority alignment, contract caps, and load-budget signals. Skill candidacy and runtime authoring traps live in [skill-authoring.md](skill-authoring.md); mirror sync lives in [skills.md](skills.md).
@@ -27,7 +27,7 @@ last_reviewed: 2026-09-05
 **Decision changed:** Measure the body budget and inventory phrase-pinning contracts, vocabulary consumers, and reconciliation owners before adding or compressing shipped skill guidance.
 **Trigger phase:** READ
 **Caught at:** ACT
-**Incident count:** 8 | **Latest occurrence:** 2026-08-24
+**Incident count:** 9 | **Latest occurrence:** 2026-09-07
 
 **Prevention:** Before editing a playbook or skill, measure its body word count, read its actual cap from `test/contract/skill-hardening-contracts.test.ts` rather than assuming the ADR-023 tier, and grep the contract tests for its filename to list the pinned phrases:
 
@@ -52,6 +52,7 @@ For a closed vocabulary or reconciliation equation, also grep every label and to
 - **Recurrence 2026-08-17 (closed vocabulary):** goat-clarity's added/removed-test vocabulary reached the skill while the batch checkpoint, docs, changelog, and receipt still enumerated only existing-test outcomes, and the focused suite pinned the stale equation independently; adding consumer contracts moved the skill to the rejecting 2,500 boundary and a semantics-preserving trim left 2,490. Anchors: `workflow/skills/goat-clarity/references/target-scope-and-evidence.md` (search: `batch_expected = assessed_added`) and `test/contract/skill-hardening-clarity.test.ts` (search: `batch_expected = assessed_added`).
 - **Recurrence 2026-08-18:** planning against 3000 claimed roughly 1000 and 2100 words of room, while the routed budgets measured `.goat-flow/skill-docs/playbooks/writing-human-facing-prose.md` at 1992 within 1700-2000 and `.goat-flow/skill-docs/playbooks/writing-sentence-diagnostics.md` at 1136 within 900-1150, leaving 8 and 14 words: `test/contract/skill-hardening-contracts.test.ts` (search: `M51 writing playbooks stay within their routed context budgets`).
 - **Recurrence 2026-08-24:** a 99-rule inventory trimmed duplicates from `workflow/skills/playbooks/writing-human-facing-prose.md` (1996 to 1978) and `workflow/skills/playbooks/writing-sentence-diagnostics.md` (1128 to 1114) with rules, caps, contracts, and mirrors unchanged; this entry's own record then reached 41,271 bytes and tripped `stale-ref` on three shorthand paths until compacted with full paths, per `src/cli/stats/stats.ts` (search: `BUCKET_SIZE_WARN_BYTES`).
+- **Recurrence 2026-09-07:** the goat-review root rose from 2,374 to 2,554 body words against the strict 2,500 cap; the first compression deleted the enumerated `**Always emit:**` field list, three integrity bullets, and the `**Emit when resolved:**` block that four review contracts pin, turning 61 passing assertions into 19 failures. Restoring every pinned string and funding it by tightening the milestone's own new sentences landed at 2,497 with 61 of 61 passing. A second compression during the recheck then dropped `unknowns degrade`, a rule a lesson already records as lost to compaction once before, until `goat-flow stats --check` reported the stale reference; two unpinned words elsewhere paid for its return. Anchors: `test/contract/skill-hardening-review-2.test.ts` (search: `emits only resolved goat-review integrity fields`), `workflow/skills/goat-review/SKILL.md` (search: `**Always emit:**`), `.goat-flow/learning-loop/lessons/verification-formatting.md` (search: `compaction had dropped the rule`).
 
 ## Footgun: Adjective-shaped style rules in shipped guidance do not constrain another agent's output
 
@@ -114,3 +115,33 @@ For a closed vocabulary or reconciliation equation, also grep every label and to
 **Why it happens:** The two budgets use different units. ADR-023 counts body words in `test/contract/skill-hardening.helpers.ts` (search: "countSkillBodyWords"); the rubric estimates tokens as `Math.ceil(content.length / 4)` over the raw SKILL.md including frontmatter and steps from 10/10 to 7/10 above 5,000 tokens in `src/cli/quality/skill-quality-metrics.ts` (search: `tokens > 5000`). At about 8 chars per word they agree, but goat-security's pipe-delimited compound tokens run about 10 chars per word, so 2,072 body words is 20,604 chars and 5,151 tokens, while goat-review at 2,413 words is 19,972 chars and 4,993 tokens with 28 chars of headroom. Relocation pays pointer overhead and cannot add a sixth `references/` file without a separate 3-point deduction in the same metrics file (search: `subRefs > 5`).
 
 **Evidence:** 2026-08-16: moving goat-security's Step 0 exception-validity tuple (1,328 chars) and Compliance Mode body (1,546 chars) into `references/project-policy-template.md` netted 2,395 chars after pointers, leaving 20,604 chars and the same 7/10, with no remaining literal duplication. The user chose to keep that 96% as a true density signal rather than move Full-only phases into `common-threats.md`, which loads on every run anyway.
+
+## Footgun: Review Integrity rows authored as Markdown fail the validator's literal grammar
+
+**Status:** active | **Created:** 2026-09-07 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Score a produced review report only after `goat-flow review validate-draft` has read it; author the template so its literal grammar cannot be mistaken for prose.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Emit every JSON-bearing row bare, with no code span. Keep the words `exactly once` in the Size row. Take `Gate authority` from the `goat-review-gates/v1` record with `gates: []` when nothing ran, never `{}`. Give `Degradation evidence` exactly one key per emitted flag. Before claiming a report conforms, run the version-matched `review validate-draft` and score from its violation list; a report that reads correctly has proven nothing.
+
+**Symptoms:** A report looks complete, every field is present, and the validator rejects it: `requires canonical JSON`, `Size must be n files, u changed lines (source coverage: k/n exactly once)`, `expected fields: schema, review, trustedBase, hostInstructions, gates`, `exactly one nonempty explanation per emitted flag`. Two sibling shapes: explanatory parentheses inside a `key=value` row, which fails `Scope snapshot must declare ... in canonical order` or `no/skipped refuter requires zero counts`; and a zero-findings defence written as bullets under `## Findings`, which the finding-grammar check parses as malformed findings.
+
+**Why it happens:** The skill's output template sits inside a fenced block, so `<canonical JSON>` carries no backticks there, while every other literal in the skill does; authors wrap the JSON to match. The parenthetical `(source coverage: <k>/<n> exactly once)` reads as an instruction to state coverage once, but the words are part of the regex. The template names `Gate authority` without showing the no-gate record, so an empty object looks honest. `src/cli/review-validate-common.ts` (search: `FULL_REVIEW_SIZE_VALUE`) and (search: `function readIntegrityJson`) own the first two; `src/cli/review-validate-verdict.ts` (search: `exactly one nonempty explanation per emitted flag`) owns the last.
+
+**Evidence:** On 2026-09-07, twelve isolated goat-review runs across six cases all wrapped JSON rows in code spans and all dropped the literal `exactly once`; none emitted the `goat-review-gates/v1` record. Scored by reading, four format classes looked fixed. `review validate-draft` on one produced report returned 12 violations, and stripping only the code spans cleared two of them. Three confirmation runs against the corrected root then produced zero violations in the corrected classes, while two of them still carried prose inside canonical rows and one defended zero findings as bullets under the Findings heading; both shapes are recorded here and left for the next review-skill wording pass rather than edited without a run behind them. The root now states each rule once: `workflow/skills/goat-review/SKILL.md` (search: `**JSON rows:**`), (search: `literal "exactly once"`), and (search: `**Gate authority:**`), pinned by `test/contract/skill-hardening-review-2.test.ts` (search: `bare canonical JSON, never code spans`).
+
+## Footgun: The review degradation vocabulary has no honest token for an unavailable authority producer
+
+**Status:** active | **Created:** 2026-09-07 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** When no enumerated degradation token or bundle marker fits, stop as the root requires or attach the disclosure to an emitted flag's explanation; never add a token, a bundle marker, or an extra evidence key.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Treat the flag list and the bundle markers as closed sets the validator enforces. A reviewer that cannot obtain a version-matched authority producer, or that runs under a no-write mandate, has no enumerated token for either state. Until the vocabulary owner adds one, either stop and report authority unavailable, as `workflow/skills/goat-review/SKILL.md` (search: `Never invent a schema`) requires, or carry the note inside the explanation of a flag actually emitted. Extra evidence keys fail too, so a parked note is not a safe alternative.
+
+**Symptoms:** Reports carry `snapshot-cli-version-mismatch`, `authority-capture-refused`, or a bare `persist-skipped`, each annotated as outside the standard vocabulary, and the validator rejects the token, the marker, or the extra key.
+
+**Why it happens:** The vocabulary was frozen from failure modes seen when the producer always resolved. Two reproducible states fall outside it: the PATH CLI lagging the skill version, and a reviewed project that is not a repository root, which the producer refuses with `authority-path: selected project must be the repository root` and `authority-unsupported: live review paths cannot enter nested repositories`. The honesty rule against inventing tokens then has nowhere to send the truth. `src/cli/review-validate-verdict.ts` (search: `conclusionForDegradationFlags`) owns the flag classes; the bundle marker has one documented value, `persist-skipped: redactor-unavailable`.
+
+**Evidence:** On 2026-09-07, two of six baseline runs and two of six candidate runs invented a token and said so in the report; two more candidate runs parked the same disclosure as an extra `Degradation evidence` key, which `review validate-draft` rejected with `must contain exactly one nonempty explanation per emitted flag`. All three fixture-project runs hit both producer refusals verbatim. The gap is recorded, not closed: the vocabulary belongs to the review authority and integrity milestones, and the review skill routes it there rather than adding a token.

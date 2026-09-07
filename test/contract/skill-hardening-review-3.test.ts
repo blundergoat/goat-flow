@@ -57,7 +57,7 @@ describe("skill hardening contracts: goat-review (3/3)", () => {
     assertForEachTarget(installedSkillPaths("goat-review"), (skillPath) => {
       const diffReview = readMarkdownSection(
         skillPath,
-        "Diff Review (Quick) - Two-Pass Discipline",
+        "Diff Review - Quick and Full",
       );
       const integrity = readMarkdownSection(
         skillPath,
@@ -121,11 +121,16 @@ describe("skill hardening contracts: goat-review (3/3)", () => {
       const constraints = readMarkdownSection(skillPath, "Constraints");
       assert.match(passThree, /Refuter output is advisory/u, skillPath);
       assert.match(passThree, /host-reproduced evidence/u, skillPath);
+      const findingAuthority = readMarkdownSection(
+        skillPath,
+        "Diff Review - Quick and Full",
+      );
       assert.match(
-        constraints,
-        /Refuter output changes Ship Verdict only after host reproduction/u,
+        findingAuthority,
+        /Only host-reproduced evidence controls[\s\S]*Ship Verdict/u,
         skillPath,
       );
+      assert.match(constraints, /Ship Verdict/u, skillPath);
     });
   });
 
@@ -133,7 +138,7 @@ describe("skill hardening contracts: goat-review (3/3)", () => {
     assertForEachTarget(installedSkillPaths("goat-review"), (skillPath) => {
       const diffReview = readMarkdownSection(
         skillPath,
-        "Diff Review (Quick) - Two-Pass Discipline",
+        "Diff Review - Quick and Full",
       );
       assert.match(diffReview, /\*\*Finding authority:\*\*/u, skillPath);
       assert.match(
@@ -379,12 +384,140 @@ describe("skill hardening contracts: goat-review (3/3)", () => {
         /`Copilot`[^\n]+`copilot-pull-request-reviewer`/,
         referencePath,
       );
+      // One strip rule covers every bot suffix, so no per-alias row repeats it.
       assert.match(
         overlapGuidance,
-        /`github-advanced-security\[bot\]`[^\n]+`github-advanced-security`/,
+        /[Ss]trip one trailing `\[bot\]` suffix first, then map the[\s\S]+alias/,
         referencePath,
       );
     });
+  });
+
+  it("qualifies refuter recipes with an enforced boundary and a closed fallback", () => {
+    assertForEachTarget(
+      installedSkillReferencePaths("goat-review", "references/refuter-spec.md"),
+      (referencePath) => {
+        const reference = readMarkdownSection(
+          referencePath,
+          "Supported Invocation Recipes",
+        );
+
+        // Each documented recipe names the runtime and the flags that actually restrict it.
+        assert.match(
+          reference,
+          /codex exec --sandbox read-only/u,
+          referencePath,
+        );
+        assert.match(reference, /claude -p --restricted/u, referencePath);
+        assert.match(reference, /is the enforced boundary/u, referencePath);
+
+        // Configuration isolation is never presented as runtime containment.
+        assert.match(
+          reference,
+          /never its runtime containment/u,
+          referencePath,
+        );
+        assert.match(
+          reference,
+          /[Nn]one of them proves that no filesystem write can occur/u,
+          referencePath,
+        );
+
+        // Bypass flags stay forbidden in every documented recipe.
+        assert.match(
+          reference,
+          /\*\*Forbidden in any recipe:\*\*/u,
+          referencePath,
+        );
+        for (const forbiddenFlag of [
+          "--dangerously-bypass-approvals-and-sandbox",
+          "--dangerously-bypass-hook-trust",
+          "--dangerously-skip-permissions",
+          "--allow-dangerously-skip-permissions",
+        ]) {
+          assert.match(
+            reference,
+            new RegExp(forbiddenFlag, "u"),
+            `${referencePath}: missing forbidden flag ${forbiddenFlag}`,
+          );
+        }
+
+        // An unsupported configuration falls back locally instead of improvising a weaker call.
+        assert.match(reference, /[Ff]ail closed/u, referencePath);
+        assert.match(reference, /cross-model-refuter-failed/u, referencePath);
+        assert.match(
+          reference,
+          /[Ww]ithholding a recipe never blocks local delivery/u,
+          referencePath,
+        );
+      },
+    );
+  });
+
+  it("normalizes every observed bot login shape once", () => {
+    assertForEachTarget(
+      installedSkillReferencePaths(
+        "goat-review",
+        "references/automated-review.md",
+      ),
+      (referencePath) => {
+        const reference = readMarkdownSection(
+          referencePath,
+          "Post-Pass-2 Ingestion",
+        );
+
+        // One strip rule covers every suffixed spelling the endpoints actually return.
+        assert.match(
+          reference,
+          /[Ss]trip one trailing `\[bot\]` suffix first/u,
+          referencePath,
+        );
+        for (const observedLogin of [
+          "copilot-pull-request-reviewer",
+          "chatgpt-codex-connector",
+          "coderabbitai",
+          "github-advanced-security",
+        ]) {
+          assert.match(
+            reference,
+            new RegExp(observedLogin, "u"),
+            `${referencePath}: missing observed login ${observedLogin}`,
+          );
+        }
+
+        // An unmapped author stays unknown rather than being guessed into a vendor.
+        assert.match(
+          reference,
+          /author matching no row stays unknown/u,
+          referencePath,
+        );
+        assert.match(
+          reference,
+          /[Nn]ever infer a vendor from a partial name/u,
+          referencePath,
+        );
+      },
+    );
+  });
+
+  it("states the setup trigger requirement as the signal the scorer accepts", () => {
+    const setup = readProjectFile("workflow/setup/03-install-skills.md");
+
+    // The trigger requirement accepts the statement form the scorer scores and two shipped skills use.
+    assert.match(
+      setup,
+      /A trigger signal: either a `## When to Use` section or a `Use when \.\.\.` statement/u,
+    );
+    assert.doesNotMatch(setup, /Sections: When to Use,/u);
+
+    // Both affected skills carry the statement form rather than a redundant heading.
+    for (const skillName of ["goat-review", "goat-clarity"]) {
+      assertForEachTarget(installedSkillPaths(skillName), (skillPath) => {
+        const skill = readProjectFile(skillPath);
+        assert.match(skill, /Use when /iu, skillPath);
+        assert.doesNotMatch(skill, /^## When to Use$/mu, skillPath);
+      });
+    }
   });
 
   it("keeps automated-review conclusions hidden until both local passes finish", () => {
@@ -396,7 +529,7 @@ describe("skill hardening contracts: goat-review (3/3)", () => {
       );
       const diffReview = readMarkdownSection(
         skillPath,
-        "Diff Review (Quick) - Two-Pass Discipline",
+        "Diff Review - Quick and Full",
       );
       const passOneIndex = diffReview.indexOf("### Pass 1 - Blind Suspicion");
       const passTwoIndex = diffReview.indexOf(
