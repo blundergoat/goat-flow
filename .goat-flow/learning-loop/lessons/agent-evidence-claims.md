@@ -1,6 +1,6 @@
 ---
 category: agent-evidence-claims
-last_reviewed: 2026-09-07
+last_reviewed: 2026-09-08
 ---
 
 **Scope:** What counts as citable evidence - mechanism claims need a read source, absence and exact-count claims need untruncated searches, gitignored paths are never durable anchors, and final verification gates need supported scopes with captured logs. Reading the request and retrieving memory is [agent-behavior.md](agent-behavior.md); using tools and the environment is [agent-tooling.md](agent-tooling.md).
@@ -200,6 +200,21 @@ Before ticking any RUNTIME or [agent-evaluated] proof item, name the specific de
 
 ---
 
+## Lesson: Naming the component that satisfies a rule is a claim about its code
+
+**Status:** active | **Created:** 2026-09-07
+**Decision changed:** Before writing that a named tool provides a guarantee, read that tool's implementation, including its failure paths, and claim only the property its code establishes.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Correcting an unreachable instruction usually means naming the component that really performs the work. That rewrite silently converts a requirement into an assertion about an implementation, so it needs the same evidence as any other claim: open the source, follow the success path and every rejection path, and describe only what you find. Never carry an adjective from the old requirement onto the new attribution. Describe outcome vocabularies in terms of end states an agent can observe, because a failure path that leaves a partial artifact will not match a state named after what the code intended to do.
+
+**What happened:** In 1.17.0 M45 the goat-security Persist Gate was corrected to name the redactor as the component performing the parent traversal, and the phrase "race-safe" was carried over from the requirement being replaced. Three independent reviewers found the redactor's parent walk is a pathname `lstat` sequence, not a descriptor-anchored one, and that the claim contradicted a sibling reference in the same skill forbidding exactly that substitution. The same reviewers found the new outcome vocabulary said "no artifact created" while a real rejection path leaves a zero-byte file at the destination, so an agent would report the artifact as skipped.
+
+**Root cause:** Attribution was treated as editorial phrasing rather than as a factual claim about code. Carrying an adjective across a rewrite is the specific move that hides the error, because the sentence still reads like the sentence that was approved. Evidence anchors: `src/cli/redact-command.ts` (search: `assertRedactDirectories`) walks parents with `lstatSync` by pathname, while `assertRedactAllocation` compares `fstatSync` against `lstatSync` before and after the write; `workflow/skills/goat-security/references/common-threats.md` (search: `MUST NOT emulate containment with a status check`) is the sibling rule the false claim contradicted.
+
+---
+
 ## Lesson: Reused evidence expires the moment you edit what it depended on
 
 **Status:** active | **Created:** 2026-09-07
@@ -212,3 +227,16 @@ Before ticking any RUNTIME or [agent-evaluated] proof item, name the specific de
 **What happened:** In 1.17.0 M26 a shipped template reference said "do not combine templates from different phases", which was overriding the skill and causing a Standard test-plan response to drop its risk map. The fix replaced it with a mode-level ban plus an explicit Standard exception. The old rule had been categorical and had also kept Audit's gap report separate from its post-gate plan, because that reference holds two Audit phases; the replacement forbade only cross-mode combination and left Audit unprotected at render time. The same record had already closed the Audit gate criterion by reusing two earlier runs, and those runs had read the pre-fix reference. The reuse was sound when written and was invalidated by the later edit. A self-audit caught both, the rule was rewritten to ban combining any gate report with the plan that follows it and to name Audit explicitly, and an extra isolated run confirmed the Audit gate still holds.
 
 **Root cause:** Reuse was treated as a property of the earlier run rather than as a claim about the current tree. A narrow replacement for a broad rule silently drops whatever else the broad rule covered, and nothing in the change itself surfaces the loss. Recurrence is likeliest when one file governs several routes and a fix targets one of them. Evidence anchors: `workflow/skills/goat-qa/references/output-templates.md` (search: `never combine a gate report with the plan that follows it`), `test/contract/skill-hardening-skills-2.test.ts` (search: `lets an auto-released goat-qa gate carry both phases in one response`).
+
+## Lesson: Calling text a duplicate is a claim that its rule survives elsewhere
+
+**Status:** active | **Created:** 2026-09-08
+**Decision changed:** Before cutting a sentence as redundant, name the exact surviving location, confirm every reader who needed the rule loads that location first, and add or re-point a contract assertion there before the cut.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Treat "already said elsewhere" as an evidence claim with three parts: where, reachable by whom, asserted how. A cut that cannot fill all three is not a cut. Measure the token delta per pair first; pipe-joined lists are nearly free under a whitespace cap, prose is not, and the cheapest-looking cut is often a single-owner rule.
+
+**What happened:** In 1.17.0 M47 the goat-security root had one word of headroom and needed a posture field, a conclusion definition and a loading contract. Two cuts were justified as duplicates and were not: the Phase 6 requirement to verify referenced submodule content (search: `verify referenced content`), which no other line carried, and the Quick output clause excluding Full-only rows, whose loss let a trial evaluator add inventory-integrity rows to a Quick report. The contract suite caught the first; the paired-arm adjudicator caught the second. Both were restored and paid for by cuts whose survivor was named and asserted.
+
+**Root cause:** A nearby sentence on the same topic was read as the same rule. Overlap in subject is not identity of obligation, and a reader who reaches one line need not reach the other.

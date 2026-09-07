@@ -1,6 +1,6 @@
 ---
 category: verification-validators
-last_reviewed: 2026-09-04
+last_reviewed: 2026-09-07
 ---
 
 **Scope:** Getting a checker itself right - regex and wildcard construction, path resolution inside guards, what a validator must inventory, and counting contracts between a check and what it reports. Whether a claim was verified at all is [verification.md](verification.md).
@@ -80,9 +80,9 @@ last_reviewed: 2026-09-04
 ## Lesson: Behavior-scope changes need assertion updates before the first focused run
 
 **Status:** active | **Created:** 2026-05-04
-**Incident count:** 7 | **Latest occurrence:** 2026-08-17
+**Incident count:** 8 | **Latest occurrence:** 2026-09-07
 
-**Prevention:** Before the first focused run, grep implementation and adjacent tests for old flags, phrases, counts, routes, and errors; include install/round-trip suites when generated config shape changes. Update those assertions with the behavior. Evidence anchors: `src/cli/server/terminal.ts` (search: `initialInput`), `test/integration/audit-drift.test.ts` (search: `expectedDeprecatedHookComparisons`), `test/contract/skill-hardening-shared-1.test.ts` (search: `carries explicit build intent through planning into ordinary ACT`), `test/unit/evidence-envelope.test.ts` (search: `keeps append failures non-fatal`).
+**Prevention:** Before the first focused run, grep implementation and adjacent tests for old flags, phrases, counts, routes, and errors; include install/round-trip suites when generated config shape changes. For every replaced sentence, grep its opening fragment as well as its changed terms, because an assertion may parse a sentence by its opener without naming the words being changed. Update those assertions with the behavior. Evidence anchors: `src/cli/server/terminal.ts` (search: `initialInput`), `test/integration/audit-drift.test.ts` (search: `expectedDeprecatedHookComparisons`), `test/contract/skill-hardening-shared-1.test.ts` (search: `carries explicit build intent through planning into ordinary ACT`), `test/unit/evidence-envelope.test.ts` (search: `keeps append failures non-fatal`).
 
 **What happened:** Behavior changes left adjacent assertions pinned to old flags, phrases, counts, routes, or errors, so focused checks failed only after implementation.
 
@@ -101,6 +101,8 @@ last_reviewed: 2026-09-04
 **Recurrence (2026-08-17):** Moving instruction-parity phrases from the parity script into `workflow/manifest.json` passed the new focused tests, but the fast suite still had a contract test pinned to the old owner and a copied-repository fixture without the manifest. The live stats check also found a lesson anchor pointing at the removed script-owned phrase. When ownership moves, grep the old semantic anchors and fixture copy lists before declaring the focused slice complete. Evidence anchors: `workflow/manifest.json` (search: `"label": "test-selection READ route"`), `test/contract/test-selection-playbook-doctrine.test.ts` (search: `registers the exact route with instruction parity`), and `test/unit/local-instructions.test.ts` (search: `workflow/manifest.json`).
 
 A relocation also destroys its own evidence: once the inline list was deleted, the reader and its tests both resolved to the manifest, so a phrase dropped in transit would have vanished from the rule and the assertion in the same commit, and the tests would still have gone green. Green tests cannot show that a move preserved membership; only the pre-move copy can. Diff it structurally - parse the old literal out of `git show HEAD:<file>` and compare label, section, and phrase content rather than eyeballing labels, because a label survives a shortened phrase list. Verified for this move on 2026-08-17: 8 rules before and after, zero content differences.
+
+**Recurrence 2026-09-07:** M44 rewrote the security root's inventory sentence and grepped both security contract suites for the changed nouns (`attackers`, `completeness proof`, `descriptor-anchored`). That found every affected assertion except one: `test/contract/skill-hardening-security-2.test.ts` (search: `current exhaustive baseline must retain 12 inventory kinds`) parsed the kind list from the sentence opener `Every authoritative assessment-driving inventory—` and failed the first GREEN run at 16 of 17 while the four intentionally revised cases passed. The assertion now parses the reconciled list and the declared pair separately, so the same 12-kind baseline holds.
 
 ---
 
