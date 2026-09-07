@@ -15,7 +15,7 @@ Keep three questions separate:
 2. **Mechanism:** What traced path connects the candidate defect to that exact behaviour?
 3. **Distinguishing proof:** Does changing only the candidate factor change the symptom as predicted, or does deterministic contract evidence entail it?
 
-A reproduced symptom can support the first question while two causes remain unresolved. Eliminating alternatives by absence alone is not confirmation. When an intervention would be unsafe or human-owned, stop at MEDIUM and name the missing proof.
+A reproduced symptom can support the first question while two causes remain unresolved. Eliminating alternatives by absence alone is not confirmation. When an intervention would be unsafe or human-owned, deterministic proof that entails the symptom can still satisfy HIGH; downgrade to MEDIUM only when no sufficient distinguishing proof is available, and name the missing proof.
 
 For each surviving hypothesis, prefer one short experiment statement:
 

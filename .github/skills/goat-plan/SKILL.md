@@ -178,7 +178,7 @@ Begin only when the unique final join is `human-verification-pending`, every oth
 
 ### AI Verification Gate
 
-Verify every implementation task and, when `ISSUE.md` exists, every ISSUE How item is closed. Verify exits and Proof claims have fresh evidence, assumptions are resolved, statuses are coherent, and required learning-loop updates exist. Keep What as stable requirements. Surface gaps and aggregate all UNVERIFIED items; do not rerun fresh evidence for presentation.
+Verify every implementation task and, when `ISSUE.md` exists, every ISSUE Tasks item is closed. Verify exits and Proof claims have fresh evidence, assumptions are resolved, statuses are coherent, and required learning-loop updates exist. Keep Requirements stable. Surface gaps and aggregate all UNVERIFIED items; do not rerun fresh evidence for presentation.
 
 ### Human Verification Gate
 
