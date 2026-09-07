@@ -136,6 +136,123 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
     });
   });
 
+  it("defines each goat-qa coverage depth by the evidence that earns it", () => {
+    // These four definitions decide every depth an agent may assign, so each one names the evidence that earns it.
+    assertForEachTarget(installedSkillPaths("goat-qa"), (skillPath) => {
+      const coverageDepth = readMarkdownSection(skillPath, "Coverage Depth");
+
+      // NONE must require a bounded search and must count a manual plan as coverage.
+      assert.match(
+        coverageDepth,
+        /\| NONE \| No current automated assertion or manual plan found for the named behaviour after a bounded search \|/u,
+        skillPath,
+      );
+      // Snapshots and mock choreography alone stay structural, whatever their apparent depth.
+      assert.match(
+        coverageDepth,
+        /\| STRUCTURAL \| Imports, constructs, snapshots, or collaborator choreography only[^\n]*no behaviour assertion \|/u,
+        skillPath,
+      );
+      assert.match(
+        coverageDepth,
+        /\| PARTIAL-BEHAVIOURAL \| Happy path or narrow behaviour only; error\/edge paths untested \|/u,
+        skillPath,
+      );
+      assert.match(
+        coverageDepth,
+        /\| BEHAVIOURAL \| Meaningful output, side-effect, error-path, or invariant coverage \|/u,
+        skillPath,
+      );
+      // An absent test body is an unavailable depth, not a fifth level and not NONE.
+      assert.doesNotMatch(
+        coverageDepth,
+        /\| (UNKNOWN|UNVERIFIED|UNRESOLVED) \|/u,
+        skillPath,
+      );
+    });
+  });
+
+  it("requires goat-qa to back absent, unavailable, and zero-gap claims with evidence", () => {
+    assertForEachTarget(installedSkillPaths("goat-qa"), (skillPath) => {
+      const gapAnalysis = readMarkdownSection(
+        skillPath,
+        "Phase 2 - Gap Analysis",
+      );
+
+      // A test that cannot be read is recorded, never silently dropped or counted as absent.
+      assert.match(
+        gapAnalysis,
+        /Read each matched test file and classify coverage depth; record unavailable tests in Verification Integrity/u,
+        skillPath,
+      );
+      // Missing evidence produces an unresolved row and a next check, never a dropped row.
+      assert.match(
+        gapAnalysis,
+        /incomplete evidence is `UNRESOLVED`, not omission/u,
+        skillPath,
+      );
+      // Audit reaches NONE only after searching tests and exported-symbol references.
+      assert.match(
+        readMarkdownSection(skillPath, "Audit Mode"),
+        /Search all tests and exported-symbol references\. No matching test\/manual plan → coverage `NONE`/u,
+        skillPath,
+      );
+      // A clean result is a claim that must carry its own evidence.
+      assert.match(
+        readMarkdownSection(skillPath, "Constraints"),
+        /MUST defend zero-gap results explicitly[^\n]*Zero gaps without justification is an error condition, not a clean bill/u,
+        skillPath,
+      );
+    });
+  });
+
+  it("lets an auto-released goat-qa gate carry both phases in one response", () => {
+    // Explicit test-plan intent releases Standard's Phase 2 gate, so both phases render in one response.
+    // The reference is read at render time and outranks the skill there: a blanket ban on combining
+    // phases would drop the risk map and gap analysis from every test-plan answer.
+    assertForEachTarget(
+      installedSkillReferencePaths("goat-qa", "references/output-templates.md"),
+      (referencePath) => {
+        const outputTemplates = readProjectFile(referencePath);
+
+        // Modes never mix, and a gate report never ships with the plan that follows it.
+        // Only Standard's auto-release is exempt; Audit always stays separated.
+        assert.match(
+          outputTemplates,
+          /Never combine templates from different modes, and never combine a gate report with the plan that follows it/u,
+          referencePath,
+        );
+        assert.match(
+          outputTemplates,
+          /Audit has no such release and always waits after A4/u,
+          referencePath,
+        );
+        assert.doesNotMatch(
+          outputTemplates,
+          /do not combine templates from different phases/u,
+          referencePath,
+        );
+        // The combined response keeps Phase 2 first and carries one ledger and one integrity section.
+        assert.match(
+          outputTemplates,
+          /explicit test-plan intent releases the Phase 2 gate[^.]*Phase 2 blocks first and the Phase 3 plan after them/u,
+          referencePath,
+        );
+        assert.match(
+          outputTemplates,
+          /single Refuted Candidates ledger and a single Verification Integrity section/u,
+          referencePath,
+        );
+        // The Phase 3 block itself must not read as though the gate can only be approved by a human.
+        assert.match(
+          outputTemplates,
+          /### Standard mode - Phase 3 output \(after the Phase 2 gate is approved or auto-released\)/u,
+          referencePath,
+        );
+      },
+    );
+  });
+
   it("routes every goat-qa risk and coverage combination exhaustively", () => {
     const expectedMatrixCases = [
       /\| CRITICAL \| Blocking \| Blocking \| Blocking \| Defer \|/,
@@ -212,7 +329,7 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
         const outputStartMarker =
           "### Standard mode - Phase 2 output (diff-driven, present at BLOCKING GATE)";
         const outputEndMarker =
-          "### Standard mode - Phase 3 output (generate only after Phase 2 gate approval)";
+          "### Standard mode - Phase 3 output (after the Phase 2 gate is approved or auto-released)";
         const outputStartIndex = outputTemplates.indexOf(outputStartMarker);
         const outputEndIndex = outputTemplates.indexOf(outputEndMarker);
 

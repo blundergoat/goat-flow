@@ -3,7 +3,7 @@ goat-flow-reference-version: "1.17.0"
 ---
 # goat-qa Output Templates
 
-Read this reference only when rendering the final response. Select the template matching the mode and gate reached; do not combine templates from different phases.
+Read this reference only when rendering the final response. Select the template matching the mode and gate reached. Never combine templates from different modes, and never combine a gate report with the plan that follows it. One exception: within Standard, explicit test-plan intent releases the Phase 2 gate, and that one response carries the Phase 2 blocks first and the Phase 3 plan after them, under a single Refuted Candidates ledger and a single Verification Integrity section covering the whole response. Audit has no such release and always waits after A4.
 
 ### Regression Guard mode
 
@@ -66,7 +66,10 @@ Read this reference only when rendering the final response. Select the template 
 - Assessed by: [agent]
 ```
 
-### Standard mode - Phase 3 output (generate only after Phase 2 gate approval)
+### Standard mode - Phase 3 output (after the Phase 2 gate is approved or auto-released)
+
+When the gate auto-released, the Phase 2 blocks above already appear in this same response; emit
+this plan after them and do not repeat the ledger or the integrity section.
 
 ```markdown
 ## Targeted Testing Plan

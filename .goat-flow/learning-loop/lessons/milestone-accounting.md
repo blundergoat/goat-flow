@@ -1,6 +1,6 @@
 ---
 category: milestone-accounting
-last_reviewed: 2026-09-06
+last_reviewed: 2026-09-07
 ---
 
 **Scope:** Milestone state and effort accounting - activation order, where human gates belong, what a task section may contain, and why estimates counted from work units beat estimates written as durations. Multi-agent council coordination is [coordination.md](coordination.md).
@@ -255,7 +255,7 @@ Evidence anchors: `src/cli/plans-effort.ts` (search: `export function countAgent
 **Decision changed:** When goat-plan File-Write adds a milestone to a plan directory that already has a terminal release milestone, the same batch adds the new ID to that node's `Depends on` and re-derives the ISSUE task band and totals; a milestone file alone is not "in the plan".
 **Trigger phase:** SCOPE
 **Caught at:** ACT
-**Incident count:** 3 | **Latest occurrence:** 2026-08-25
+**Incident count:** 4 | **Latest occurrence:** 2026-09-07
 
 **Prevention:** When adding a milestone to an existing plan directory, read the terminal node, add the new ID, traverse the graph to re-derive direct and closure counts, then re-derive the ISSUE.md band and "How long" totals before strict validation; a passing per-file check is necessary, not sufficient. Since 2026-08-23 goat-plan's File Artifact Rules state this for existing plans (TDD log `2026-08-23-goat-plan-tdd.md`; partial hardening, one real RED and one GREEN).
 
@@ -264,3 +264,5 @@ Evidence anchors: `src/cli/plans-effort.ts` (search: `export function countAgent
 **Root cause:** goat-plan's File-Write path described creating and validating files in `.goat-flow/plans/<active>/` without saying that an existing train's dependency graph and ISSUE bands are part of the artifact, so "wrote M47" felt complete.
 
 **Recurrence 2026-08-25:** M55 correctly replaced M54 as M37's terminal dependency and updated ISSUE bands, but the dependency note reused stale counts; independent traversal found 28 direct terminals and a 51-milestone closure, not 27 and 50.
+
+**Recurrence 2026-09-07:** Closing a milestone is the same class. M24 reached `complete` in its own file while the ISSUE.md How-row still read not-started and on hold, the summary row said it remained on hold, and the Remaining-work band still counted its 58 minutes; the pre-handover recheck of M25-M27 caught it, so acceptance now re-derives the How-row, summary row, and bands with the milestone file.

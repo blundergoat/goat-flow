@@ -39,6 +39,7 @@ The next release adds per-command `--help`, path-aware learning recall, one proj
 - **Refuter recipes state their enforced boundary** - Each runtime recipe names the flag that restricts it, forbids bypass flags, and falls back to a local-only review when unsupported.
 - **PR bot logins normalize by suffix** - Overlap matching strips one trailing `[bot]` before alias mapping, compares semantic location instead of line ranges, and leaves unknown authors unknown.
 - **Three review traps ship from real incidents** - A finding that contradicts a passing test, a guard rewrite that needs both builds run, and a bot's own addressed marker join the shipped traps.
+- **`/goat-qa` test plans keep their risk map** - Asking for a test plan up front now returns the change risk map and gap analysis alongside the plan, in one response.
 - **Setup accepts the `Use when` trigger form** - Skill installation no longer demands a `When to Use` heading when the frontmatter description states the trigger.
 - **Gruff finds project wrappers again** - `gruff-<language>.sh` in `bin/test/`, `bin/`, or `scripts/` preserves project config, paths, and reports.
 - **Quality prompts reuse project evidence** - Failed audits add bounded learning context; previously refuted candidates stay out of findings.

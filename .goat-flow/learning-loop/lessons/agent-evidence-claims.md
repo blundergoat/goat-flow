@@ -169,3 +169,33 @@ last_reviewed: 2026-09-07
 **What happened:** A milestone sized its two largest tasks on the premise that reviewers miss a project's own coding standards, supported by a grep showing the shipped skill had no route to them. The baseline runs disproved the premise: with a fixture project whose instruction file named its standards directory, every applicable run found the rules, cited them, applied them to code decisions, and left two documented exceptions alone. The route the skill text lacked was supplied by the reviewed project's instruction file and the shared preamble's INDEX-first retrieval. One seeded rule-only defect was also found in a project with no standards at all, through a docstring in the fixture's own constants module that stated the invariant, so detection had to be discounted and the trace used instead. With approval, the two tasks shrank to a heading fix and one sentence, and the effort moved to format failures the same runs had measured.
 
 **Root cause:** Absence in one document was read as absence in the system. Skills run inside a stack of instruction file, preamble, and project guidance, and a behaviour can be routed by any layer. Evidence anchors: `.goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md` (search: `Score application, not citation`), `.goat-flow/skill-docs/skill-preamble.md` (search: `Learning-Loop Retrieval`), `workflow/skills/goat-review/SKILL.md` (search: `**Project guidance:**`).
+
+---
+
+## Lesson: Evidence tooling is evidence, so run the fixture and re-derive every count
+
+**Status:** active | **Created:** 2026-09-07
+**Decision changed:** Execute every evaluation fixture and re-derive run counts from artifacts before any claim rests on them; a scorer and its fixtures are graded material, not scaffolding.
+**Trigger phase:** VERIFY
+**Caught at:** VERIFY
+
+**Prevention:** Before an evidence record is offered for approval, run each fixture's own test suite and confirm every expected failure is one you designed. Re-derive counts by counting artifacts, never from memory. Give each scorer a deliberately wrong input per fixture and confirm it fails, because a scorer proven only against a passing input has not been proven at all. When a scorer and a report disagree, read the report rows first: the scorer is the newer, less reviewed artifact.
+
+**What happened:** A self-audit of 1.17.0 M25, requested before approval, found five defects in work already reported as verified. The evidence record claimed "five isolated runs" when the runner logs showed four, and claimed three of them were mis-scored on the first pass when all four were. An F1 fixture asserted `roundToCents(1.005) === 1.01`, which is false because `1.005 * 100` is `100.49999999999999`; the fixture had never been executed. Two F2 fixture tests called `assert.snapshot`, which does not exist on `node:assert`. The F2 scorer matched behaviours only by symbol, so a report that split one function into invariant rows labelled by file and branch scored a false failure, which also showed the original pass had been partly luck. One F2 criterion forbade `NONE` anywhere in a file whose uncovered invariants correctly carried it.
+
+**Root cause:** The fixtures and scorer were treated as apparatus rather than as claims. Every rule applied to the thing under test, that assertions are verified before they are believed and counts are derived rather than recalled, applies equally to the instrument doing the testing. Recurrence is likeliest when a scorer is corrected mid-run: four scorer corrections were needed across M25's four runs, each found by reading flagged rows rather than trusting the number and each re-proved against golden and wrong inputs before the result was accepted. Evidence anchors: `.goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md` (search: `Score application, not citation`), `test/contract/skill-hardening-skills-2.test.ts` (search: `defines each goat-qa coverage depth by the evidence that earns it`).
+
+---
+
+## Lesson: Reused evidence expires the moment you edit what it depended on
+
+**Status:** active | **Created:** 2026-09-07
+**Decision changed:** After every source edit, re-check which retained results read the file you changed, and mark those results stale before reusing them.
+**Trigger phase:** VERIFY
+**Caught at:** VERIFY
+
+**Prevention:** Reusing an earlier run to close a criterion is legitimate only while its inputs are unchanged, so record which files each reused run read. Before an evidence record is offered for approval, diff the session's writes against those input lists and re-run anything whose inputs moved. Treat a fix that broadens a rule as a candidate regression on every behaviour the narrow rule also protected, not only the one it targeted.
+
+**What happened:** In 1.17.0 M26 a shipped template reference said "do not combine templates from different phases", which was overriding the skill and causing a Standard test-plan response to drop its risk map. The fix replaced it with a mode-level ban plus an explicit Standard exception. The old rule had been categorical and had also kept Audit's gap report separate from its post-gate plan, because that reference holds two Audit phases; the replacement forbade only cross-mode combination and left Audit unprotected at render time. The same record had already closed the Audit gate criterion by reusing two earlier runs, and those runs had read the pre-fix reference. The reuse was sound when written and was invalidated by the later edit. A self-audit caught both, the rule was rewritten to ban combining any gate report with the plan that follows it and to name Audit explicitly, and an extra isolated run confirmed the Audit gate still holds.
+
+**Root cause:** Reuse was treated as a property of the earlier run rather than as a claim about the current tree. A narrow replacement for a broad rule silently drops whatever else the broad rule covered, and nothing in the change itself surfaces the loss. Recurrence is likeliest when one file governs several routes and a fix targets one of them. Evidence anchors: `workflow/skills/goat-qa/references/output-templates.md` (search: `never combine a gate report with the plan that follows it`), `test/contract/skill-hardening-skills-2.test.ts` (search: `lets an auto-released goat-qa gate carry both phases in one response`).
