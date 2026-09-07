@@ -152,15 +152,18 @@ Evidence anchors: `src/cli/plans-effort.ts` (search: `export function countAgent
 **Decision changed:** Switch the receipt category at the work boundary, not at the milestone boundary; a stale category is a silent data error, not a rounding detail.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
-**Incident count:** 4 | **Latest occurrence:** 2026-08-14
+**Incident count:** 5 | **Latest occurrence:** 2026-09-07
 
 **Prevention:** Switch category when the kind of work changes: entering a proof cycle, returning to implementation, or starting plan bookkeeping each warrant `stop` then `start --category <new>`, and being about to run the suite, lint, or typecheck is a proof trigger by definition. Before finalizing, read the segment list, because one long span across a mixed session is the smell. If the split is known-wrong at the gate, disclose it in the human-verification report and treat only the total as trustworthy. Evidence anchors: `src/cli/plans-time.ts` (search: `export function applyPlanTimeTransition`) performs the category change; `src/cli/plans-check.ts` (search: `function collectMeasuredActualErrors`) reconciles Actual against the receipt but cannot detect a mis-tagged category. Never starting a receipt at all is `.goat-flow/learning-loop/lessons/milestone-accounting.md` (search: `## Lesson: Actual time must come from prospective active-time segments`).
 
 **What happened:** Effort-estimation-timing M02 opened a `product` span and left it open across implementation, a full test run, lint, format, and unused-export checks. The finalized receipt reported 1112 product / 99 proof seconds; the 1354-second total was correct and system-stamped, but most of that "product" time was proof, and the receipt finalized, reconciled, and passed strict validation because the CLI can only stamp the category it was given.
 
-**Root cause:** Starting a receipt feels like the whole discipline, so category maintenance is treated as optional bookkeeping; `stop` then `start` is two commands while doing nothing is zero, and the resulting split carries the authority of a `measured` Actual while being a guess.
+**Root cause:** A running timer makes category maintenance feel optional, giving an unmaintained split the authority of a `measured` Actual.
 
 **Recurrences 2026-08-04, 2026-08-09, 2026-08-14:** Three more milestones left a first `product` span open straight through their proof work. The quality-findings milestone ran focused content tests, both 327-case hook corpora, the interleaved benchmark, and skill contract runs inside it, and its split is knowingly inaccurate and excluded from calibration. M03 ran goat-debug RED confirmation, delegated pressure runs, and the deployment matrix, then entered goat-critique RED, and was caught after 1,604 seconds when the user challenged forecast quality. Code-quality-upstream M03 covered product edits, three evaluator runs, formatting recovery, full-suite diagnosis, and final gates, and with no prospective boundaries left the span was discarded and Actual recorded as incomplete. `src/cli/plans-time.ts` (search: `receipt contains a discarded open span`).
+
+
+**Recurrence 2026-09-07:** M29, M32 and M33 recorded 999, 342 and 94 seconds entirely as product despite verification. Preserve their elapsed totals and timestamps; use `Actual: unavailable` when the category allocation cannot be recovered honestly, excluding those samples from measured calibration.
 
 ---
 

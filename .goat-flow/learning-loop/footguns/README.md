@@ -55,9 +55,12 @@ Inside a bucket, add entries as `## Footgun:` blocks. Each entry MUST begin with
 **Decision changed:** [the future agent decision this evidence changes]
 **Trigger phase:** READ | SCOPE | ACT | VERIFY (optional)
 **Caught at:** READ | SCOPE | ACT | VERIFY (optional; use only when different)
+**hallucination-risk:** high (optional)
 
 <body>
 ```
+
+Add the optional `**hallucination-risk:** high` line when names in the affected surface can mislead an agent into inferring behaviour instead of reading it, such as generated code, environment configuration, or an external contract. Skills use it as a signal to re-read the live file or config before trusting inference.
 
 Entry bodies are retrieved by agents but verified by people in code review and staleness checks: write them per `.goat-flow/skill-docs/playbooks/writing-human-facing-prose.md`. Body prose only - frontmatter, schema lines, and semantic anchors stay exempt as fixed schema.
 

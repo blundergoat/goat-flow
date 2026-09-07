@@ -17,7 +17,9 @@ Active goat-* Step 0 replaces READ and selects depth. SCOPE still gates writes b
 
 ## Durable Local Text Redaction
 
-Narrative records use this route. Require `goat-flow --version` to match `goat-flow-reference-version`; treat missing or mismatched CLIs as unavailable. Source CLI requires matching package/entry/version. Send the in-memory draft through stdin to `goat-flow redact --output <destination>` or source equivalent. Only redacted output reaches disk; never stage raw text. Otherwise write nothing and report `persist-skipped: redactor-unavailable`.
+Narrative records use this route, including session, handoff, critique, review, quality, security, or export text. Require `goat-flow --version` to match `goat-flow-reference-version`; treat missing or mismatched CLIs as unavailable. Source CLI requires matching package/entry/version. Send the in-memory draft through stdin to `goat-flow redact --output <destination>` or source equivalent; artifact text uses a fresh path under `.goat-flow/logs/`. Redact before disk, not after: only redacted output reaches disk, never stage raw text, and existing destinations are refused. Otherwise write nothing and report `persist-skipped: redactor-unavailable`.
+
+The hash-only `redactEvidenceText` API is not a readable scrubber. Redaction reduces credential leakage but neither provides DLP nor replaces secret review.
 
 Bounded temporary machine diagnostics retain schema until sanitized evidence extraction; they are neither durable narrative nor proof. Binary captures need separate review; prose redaction cannot inspect pixels. Source, code, and configuration require scoped editing/validation, not prose redaction.
 

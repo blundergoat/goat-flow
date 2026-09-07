@@ -1,6 +1,6 @@
 ---
 category: contract-testing
-last_reviewed: 2026-09-05
+last_reviewed: 2026-09-07
 ---
 
 **Scope:** Tests that pin a contract rather than behaviour - exact wording, path semantics, word budgets, and user-visible serialization. When the thing under test is a hook, dashboard surface, or fixture, use the bucket that owns it.
@@ -42,7 +42,7 @@ last_reviewed: 2026-09-05
   pack immediately led to a tighter sentence that removed the duplicated identifier list and freed seven words without weakening the contract.
   Evidence anchor: `test/contract/skill-hardening-plan-2.test.ts` (search: `enforces current-heading length and internal identifiers`).
 
-**Recurrence 2026-08-29:** Adding the accepted two-tier sub-agent budget to both shared convention copies raised each body from 1496 to 1539 words. The focused budget contract ran only after the aggregate fast suite, delaying attribution. The first trim then changed five redaction phrases pinned by the shared-surface contract. Applying the agent-facing writing playbook's one-owner and pruning rules around those fixed phrases removed duplicate continuity prose and restored both mirrors to 1481 words. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `always-loaded shared references stay within the 1500-word cap`), `test/contract/skill-hardening-shared-3.test.ts` (search: `requires pre-write redaction for durable local text`), and `workflow/skills/reference/skill-conventions.md` (search: `For session, handoff`).
+**Recurrence 2026-08-29:** Adding the accepted two-tier sub-agent budget to both shared convention copies raised each body from 1496 to 1539 words. The focused budget contract ran only after the aggregate fast suite, delaying attribution. The first trim then changed five redaction phrases pinned by the shared-surface contract. Applying the agent-facing writing playbook's one-owner and pruning rules around those fixed phrases removed duplicate continuity prose and restored both mirrors to 1481 words. Evidence: `test/contract/skill-hardening-contracts.test.ts` (search: `always-loaded shared references stay within the 1500-word cap`), `test/contract/skill-hardening-shared-3.test.ts` (search: `requires pre-write redaction for durable local text`), and `workflow/skills/reference/skill-preamble.md` (search: `session, handoff, critique, review, quality, security, or export text`), which owned that artifact wording from 2026-09-07 when M29 consolidated it out of `skill-conventions.md` so Quick depth could reach it.
 
 **Recurrence 2026-09-01:** Inserting a retrieval-cap clause into the shared READ bullet raised that line to 861-863 characters across the seven parity-checked files, and `scripts/check-instruction-parity.mjs` (search: `MAX_INSTRUCTION_LINE_CHARACTERS`) failed on its 800-character line limit - a cap no instruction file or setup template states. Contract and link checks had already passed, so parity was the only gate that saw it. Rewriting the clause to 93 characters with the same meaning restored parity at 794. Instruction files carry a third budget beyond word caps and pinned phrases: characters per line. Measure the target line before inserting, and run the parity script first when a shared section changes.
 
@@ -109,7 +109,7 @@ last_reviewed: 2026-09-05
 **Decision changed:** Compare both parsed state and serialized output when replacing migration logic, and seed compatibility proof through the predecessor producer when it remains callable.
 
 **Trigger phase:** ACT | **Caught at:** VERIFY
-**Incident count:** 2 | **Latest occurrence:** 2026-08-27
+**Incident count:** 3 | **Latest occurrence:** 2026-09-07
 
 **Prevention:** When migrating serialized state, reproduce its whitespace, trailing newline, key shape, and ordering contract as well as parsed semantics. Drive at least one compatibility fixture through the supported predecessor writer instead of rebuilding its output from the new reader's assumptions.
 
@@ -120,6 +120,9 @@ last_reviewed: 2026-09-05
 **Fix:** Keep compact JSON only for before/after comparison and pretty-print the user file. Evidence anchors: `workflow/install-goat-flow.sh` (search: `JSON.stringify(currentConfig, null, 2)`) and `test/integration/setup-install-agent-matrix.test.ts` (search: `timeout\": 90`).
 
 **Recurrence 2026-08-27:** The first v2 bootstrap fixture rebuilt small v1 files in an order that happened to satisfy the new UTF-8 canonicalizer. The production v1 writer orders its complete path set with `localeCompare`; a direct writer-to-facade reproduction returned `malformed-blocking` for every agent shape checked. The correction preserves parsed v1 row order during byte normalization, then applies UTF-8 sorting only to the virtual v2 state. Evidence anchors: `src/cli/managed-setup-state.ts` (search: `V1 predates UTF-8 canonical ordering`) and `test/unit/managed-setup-preview.test.ts` (search: `bootstraps a baseline written by the v1 state writer`).
+
+
+**Recurrence 2026-09-07:** M32 checked `JSON.stringify` of the whole adapter result as though it were model-visible text. A renderer mutation inserted a decoded newline while all 15 adapter cases still passed. Decode the actual host feedback field before asserting its line count or exact content. The repaired three-provider cases reject that mutation while retaining the other controls. Evidence: `test/unit/hook-provider-adapters.test.ts` (search: `providerFeedbackText`, `compacts only the verified non-source Gruff advisory for`).
 
 ---
 

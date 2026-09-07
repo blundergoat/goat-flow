@@ -1,6 +1,6 @@
 ---
 category: plan-artifacts
-last_reviewed: 2026-09-06
+last_reviewed: 2026-09-07
 ---
 
 **Scope:** The grammar and validation of plan, milestone, and review artifacts: evidence fields, proof gates, machine-parsed dependency links, effort accounting, and when a validator runs relative to persistence. CLI process behaviour and output streams live in [cli.md](cli.md).
@@ -99,12 +99,12 @@ and `test/unit/review-validate.test.ts` (search: `retains all five selected file
 ## Footgun: A partial reforecast fails strict validation, and integer estimates cannot express sub-minute unit rates
 
 **Status:** active | **Created:** 2026-08-19 | **Evidence:** ACTUAL_MEASURED
-**Decision changed:** Reforecast every estimate line together, and when the local likely rate implies fewer minutes than there are work units, keep the planning-time basis and record the local figure in prose.
+**Decision changed:** Reforecast every estimate line together, then reconcile the derived `ISSUE.md` bands the checker never reads; when the local likely rate implies fewer minutes than there are work units, keep the planning-time basis and record the local figure in prose.
 **Trigger phase:** SCOPE
 **Caught at:** VERIFY
-**Incident count:** 8 | **Latest occurrence:** 2026-08-28
+**Incident count:** 9 | **Latest occurrence:** 2026-09-07
 
-**Prevention:** Treat a reforecast as one atomic edit to basis, range, headline, split, and every `(est: ...)` entry, then run strict validation before starting the timing receipt. Preserve planning-time estimates when the likely rate implies fewer minutes than positive integer work items can express. Derive bounds with floor, nearest, and ceiling, and never rescale an in-progress or completed milestone to newer calibration data.
+**Prevention:** Treat a reforecast as one atomic edit to basis, range, headline, split, and every `(est: ...)` entry, then run strict validation before starting the timing receipt. A clean strict result is not consistency: recompute the `ISSUE.md` At a glance row, task band and Forecast summary rows from the milestone headers, because no checker validates them. Preserve planning-time estimates when the likely rate implies fewer minutes than positive integer work items can express. Derive bounds with floor, nearest, and ceiling, and never rescale an in-progress or completed milestone to newer calibration data.
 
 **Symptoms:** `plans check --strict` printed the advisory `reforecast required: ... use 0.61-0.93-1.04 min/unit before implementation`. Updating only `**Forecast basis:**` and `**Forecast range:**`, as a handoff note suggested, flipped the plan to exit 1 with `forecast range likely (8 min) must equal the Effort estimate total (22 min)`. Measured 2026-08-19 on `.goat-flow/plans/1.16.0-golive` M04 (9 units) and M05 (8 units).
 
@@ -117,6 +117,7 @@ and `test/unit/review-validate.test.ts` (search: `retains all five selected file
 - **Recurrence 2026-08-24 (M24):** intuitive rounding gave a low bound of 5 where the validator floors `6 x 0.80` to 4; `src/cli/plans-effort.ts` (search: `deriveForecastRangeFromBasis`) owns the rounding.
 - **Recurrence 2026-08-26 (M55):** the basis declared 14 units for 16 counted items with a mismatched high bound; `src/cli/plans-effort.ts` (search: `forecast basis declares`) owns the unit check.
 - **Recurrence 2026-08-28 (M57):** activation moved the derived likely value to 36 minutes while `Effort estimate` stayed at 34, failing `src/cli/plans-check.ts` (search: `must equal the Effort estimate total`).
+- **Recurrence 2026-09-07 (M28):** the loud half failed first, `forecast range likely (30 min) must equal the Effort estimate total (33 min)`, and was fixed by cutting three task estimates. Strict validation then passed while four `ISSUE.md` figures stayed stale, because `src/cli/plans-check-summary.ts` (search: `renderRequiredReforecasts`) advises rates without reading any ISSUE band, and the plan's own reconciliation milestone owns that check only at the end of the plan. Recomputing all sixty milestone headers matched every band except the three M28 touched: `Whole plan` 1907/913, `Remaining work` 1166/504 and `Shared, disclosure and hooks` 229/103 each needed minus 3 likely and minus 3 product. The same pass exposed an older stale headline claiming 37 unfinished milestones after M25-M27 completed.
 
 ---
 
