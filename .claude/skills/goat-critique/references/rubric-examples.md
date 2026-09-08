@@ -7,42 +7,42 @@ goat-flow-reference-version: "1.17.0"
 
 ## Rubric Context Maps
 
-Each map lists additions to the fixed Context split in `SKILL.md` and never replaces it. Agents A and B keep their artifact, architecture, and rubric baseline; an empty C list means no additional project context, so C still reads artifact + rubric only. Footgun/lesson entries mean targeted INDEX-first hits from those buckets, not whole-directory reads. Agent C's isolation enforcement (Phase 2 step 1 grep check) is unchanged regardless of context map. Generic fallback uses the default split plus the additions below.
+Each map lists additions to the fixed Context split in `SKILL.md` and never replaces it. Agents A and B keep their artifact, architecture, and rubric baseline; an empty C list means no additional project context, so C still receives the supplied artifact + selected rubric payload only. Footgun/lesson entries mean targeted INDEX-first hits from those buckets, not whole-directory reads. Every map uses **Fresh-eyes boundary and recovery** in `sub-agent-directives.md`; none grants additional C reads. Generic fallback uses the default split plus the additions below.
 
 ### Plan
 - **A:** targeted INDEX-first footgun/lesson hits, `.goat-flow/learning-loop/decisions/`
 - **B:** `.goat-flow/plans/.active`, `git log --oneline -20`, milestone logs
-- **C:** [] (isolation enforced)
+- **C:** [] (no additional project context)
 
 ### Security assessment
 - **A:** targeted INDEX-first footgun/lesson hits, threat-model docs, `.goat-flow/learning-loop/decisions/`
 - **B:** `git log --oneline -20`, config.yaml, dependency manifests
-- **C:** [] (isolation enforced)
+- **C:** [] (no additional project context)
 
 ### Debug hypotheses
 - **A:** targeted INDEX-first footgun/lesson hits, `.goat-flow/logs/sessions/`
 - **B:** `git log --oneline -20`, config.yaml, test output
-- **C:** [] (isolation enforced)
+- **C:** [] (no additional project context)
 
 ### Review findings
 - **A:** targeted INDEX-first footgun/lesson hits, `.goat-flow/learning-loop/decisions/`
 - **B:** `git log --oneline -20`, config.yaml, CI logs
-- **C:** [] (isolation enforced)
+- **C:** [] (no additional project context)
 
 ### Test strategy
 - **A:** targeted INDEX-first footgun/lesson hits, `.goat-flow/learning-loop/decisions/`
 - **B:** `git log --oneline -20`, config.yaml, test manifests
-- **C:** [] (isolation enforced)
+- **C:** [] (no additional project context)
 
 ### Architecture/refactor
 - **A:** targeted INDEX-first footgun/lesson hits, `.goat-flow/learning-loop/decisions/`, dependency maps
 - **B:** `git log --oneline -20`, config.yaml, module boundaries
-- **C:** [] (isolation enforced)
+- **C:** [] (no additional project context)
 
 ### Generic (fallback)
 - **A:** targeted INDEX-first footgun/lesson hits
 - **B:** `git log --oneline -20`, config.yaml
-- **C:** [] (isolation enforced)
+- **C:** [] (no additional project context)
 
 ## Worked examples
 
@@ -50,11 +50,12 @@ Each map lists additions to the fixed Context split in `SKILL.md` and never repl
 
 ### Full phase walkthrough: Phase 2 context-leak edge case
 
-- **Artifact:** `SKILL.md`
-- **Rubric:** Generic fallback
-- **Agent C output under review:** "The Context leak scan section names `goat-critique` and `.goat-flow`; do not discard those references when they are copied from artifact text."
-- **Phase 2 actions:** grep Agent C output for forbidden terms; apply the framework-self exemption because the artifact is a goat-flow skill; verify each project term is traceable to the artifact text; still check for structural navigation leaks such as config keys or architecture sections absent from Agent C's input.
-- **Expected Phase 2 result:** `no context leak - framework-self terms traceable to artifact; proceed to completeness gate`.
+- **Artifact:** supplied inline `skills/goat-example/SKILL.md` content, including its Tests section.
+- **Rubric:** Generic fallback, supplied inline with an `architecture.md#scope` identity.
+- **Agent C output under review:** references to those two supplied identities and the ordinary word tests.
+- **Phase 2 actions:** scan the response through stdin; trace both candidate references to the payload and disregard tests as navigation.
+- **Expected Phase 2 result:** accept the references, record exposed activity or its absence, then check completeness. A clean scan alone proves no isolation.
+- **Leak variant:** an observed unauthorized read ends C's use. Discard its return and use the shared replacement counter; never restart that child.
 
 ### Example: Plan rubric critique output
 
