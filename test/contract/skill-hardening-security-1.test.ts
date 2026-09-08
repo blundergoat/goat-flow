@@ -70,8 +70,7 @@ describe("skill hardening contracts: security (1/2)", () => {
       assertMatchesAll(
         readMarkdownSection(skillPath, "Loading"),
         [
-          // Both depths get one mandatory set, and the root keeps naming every reference:
-          // the quality composer builds the evaluated context from these links.
+          // Quality assessment loads references from these links, so both depths must name every required file.
           /Both depths read `references\/common-threats\.md` and `references\/supply-chain-and-cicd\.md` before Quick step 1 or Full Phase 0/isu,
           /`references\/identity-and-data\.md`.*`references\/file-upload-and-paths\.md`.*`references\/project-policy-template\.md`.*Reference loading map/isu,
           /unavailable reference, the map.s own file included.*`not-assessed`.*`coverage-degraded`.*MUST NOT recommend clearance.*gap disclosed.*exhaustive Quick stays Quick/isu,
@@ -236,8 +235,7 @@ describe("skill hardening contracts: security (1/2)", () => {
       );
       assert.match(
         fullAssessmentPath,
-        // Naming the axis keeps the two independent: a missing cross-check degrades coverage, and leaves posture,
-        // confidence and the flow of the assessment alone.
+        // An unavailable specialist limits coverage; the reviewer still receives findings at their existing posture and confidence.
         /record `specialist-unavailable`; do not wait or halt; coverage degrades/,
         skillPath,
       );
@@ -265,8 +263,7 @@ describe("skill hardening contracts: security (1/2)", () => {
   });
 
   it("binds goat-security policy exceptions and scanners to trusted authorities", () => {
-    // Step 0 keeps the exception outcome rules inline and points at the reference for the
-    // field, approval, and status validation an agent runs only when an exception exists.
+    // A reviewer checks an accepted-risk exception against the policy reference before changing its disposition.
     assertForEachTarget(installedSkillPaths("goat-security"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);
       assertMatchesAll(
@@ -335,8 +332,7 @@ describe("skill hardening contracts: security (1/2)", () => {
           [/accepted-risk disposition, not a false-positive classification/u],
           referencePath,
         );
-        // The reference section owns the assessment-time validation rules (Validation during
-        // assessment) and the record shape a policy author fills in.
+        // The policy reference defines both the exception record users supply and the checks required before accepting it.
         assertMatchesAll(
           acceptedRiskRecords,
           [
@@ -480,8 +476,7 @@ describe("skill hardening contracts: security (1/2)", () => {
   });
 
   it("keeps posture precedence and degradation flags identical on every surface", () => {
-    // Posture resolves by first match top-down, so a surface that reorders these values reports a different decision
-    // for the same findings. An unresolved item outranks a decided one.
+    // Reordering these postures changes the review decision for the same findings; unresolved items take precedence.
     const posturePrecedence = [
       "block",
       "needs-decision",
@@ -489,9 +484,7 @@ describe("skill hardening contracts: security (1/2)", () => {
       "watch",
       "none",
     ];
-    // `specialist-unavailable` appears twice on purpose: in its own `Specialist:` field, and here, because a
-    // cross-check that could not run is a coverage gap. The Constraints section requires that an unavailable
-    // specialist never implies clearance, and this list is the only thing that enforces it.
+    // An unavailable specialist stays visible in its own field and the coverage flags, so reviewers cannot mistake a missing check for clearance.
     const degradationFlags = [
       "tool-limited",
       "<tool>-unavailable",
@@ -501,13 +494,21 @@ describe("skill hardening contracts: security (1/2)", () => {
       "unsupported: <capability>",
       "none",
     ];
-    // Prose surfaces state the precedence as one sentence, so reading order is the only ranking they express.
-    // Invariant: the returned list always holds all five posture values ordered by first appearance, because a
-    // missing value fails here; that keeps every prose surface comparable with the Phase 5 ranking contract.
-    const posturesInReadingOrder = (span: string, sourceLabel: string) =>
+    /**
+     * Read the order in which guidance says a reviewer must consider each posture.
+     * Use to compare prose with the skill's first-match rule; a missing posture fails this check.
+     *
+     * @param guidanceText - selected report guidance; empty text fails because every posture is required
+     * @param sourceLabel - guide or preset name shown when the check fails
+     * @returns required postures in reading order; successful checks never return an empty list
+     */
+    const posturesInReadingOrder = (
+      guidanceText: string,
+      sourceLabel: string,
+    ) =>
       posturePrecedence
         .map((posture) => {
-          const position = span.search(
+          const position = guidanceText.search(
             new RegExp(String.raw`(?<![\w-])${posture}(?![\w-])`, "u"),
           );
           assert.ok(
@@ -519,22 +520,29 @@ describe("skill hardening contracts: security (1/2)", () => {
         .sort((left, right) => left.position - right.position)
         .map((entry) => entry.posture);
 
-    // Invariant: every listed token occurs exactly once in the span and comes back in reading order, so a
-    // dropped, duplicated or reordered flag fails here where a membership check would not notice.
+    /**
+     * Read flags in their stated order; each expected flag must appear exactly once.
+     * Use to detect dropped, duplicated, or reordered flags before users follow that guidance.
+     *
+     * @param guidanceText - selected prose; empty text fails when expected flags are present
+     * @param expectedTokens - flags required by that entry point; an empty list checks none
+     * @param sourceLabel - guide or preset name used to locate a failure
+     * @returns flags in reading order; empty only when no flags were requested
+     */
     const tokensInReadingOrder = (
-      span: string,
-      tokens: readonly string[],
+      guidanceText: string,
+      expectedTokens: readonly string[],
       sourceLabel: string,
     ) => {
-      return tokens
+      return expectedTokens
         .map((token) => {
-          const occurrences = span.split(token).length - 1;
+          const occurrences = guidanceText.split(token).length - 1;
           assert.equal(
             occurrences,
             1,
             `${sourceLabel}: expected exactly one ${token}, found ${occurrences}`,
           );
-          return { token, position: span.indexOf(token) };
+          return { token, position: guidanceText.indexOf(token) };
         })
         .sort((left, right) => left.position - right.position)
         .map((entry) => entry.token);
@@ -579,9 +587,9 @@ describe("skill hardening contracts: security (1/2)", () => {
       assert.deepEqual(
         integrityFields[2].split("|"),
         degradationFlags,
-        `${skillPath}: an unavailable specialist must not degrade the conclusion through the flag list`,
+        `${skillPath}: an unavailable specialist must remain a degradation flag`,
       );
-      // The exclusion above matters only while every listed flag still forces the degraded conclusion.
+      // Every listed coverage gap must still prevent the reviewer from reporting a confident conclusion.
       assert.match(
         readProjectFile(skillPath),
         /any degradation flag is set, conclude `coverage-degraded`/u,
@@ -589,6 +597,7 @@ describe("skill hardening contracts: security (1/2)", () => {
       );
     });
 
+    // Reviewers may start from the guide or dashboard preset; both must preserve the skill's posture and coverage rules.
     for (const [sourceLabel, guidance, proseFlags] of [
       [
         "docs/skills.md",

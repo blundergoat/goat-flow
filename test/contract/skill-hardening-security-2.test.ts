@@ -49,8 +49,7 @@ describe("skill hardening contracts: security (2/2)", () => {
   });
 
   it("makes goat-security compliance source-bound with complete dispositions", () => {
-    // SKILL.md keeps the overlay contract and gate order; the on-demand rules an agent needs
-    // only when Compliance Mode is selected live in the policy reference it points at.
+    // Selecting Compliance Mode loads the policy reference's mapping rules after the review's Proof Gate.
     assertForEachTarget(installedSkillPaths("goat-security"), (skillPath) => {
       assertMatchesAll(
         readMarkdownSection(skillPath, "Compliance Mode"),
@@ -325,8 +324,7 @@ describe("skill hardening contracts: security (2/2)", () => {
           ],
           referencePath,
         );
-        // Both tokens can describe one installed scanner, so the precedence must be one statement in the
-        // paragraph that owns scanner availability, not fragments spread across the file.
+        // A reviewer needs one rule for choosing the scanner's withheld reason when approval and execution controls are both missing.
         assert.match(
           readMarkdownSection(
             referencePath,
@@ -538,10 +536,12 @@ describe("skill hardening contracts: security (2/2)", () => {
     assertForEachTarget(installedSkillPaths("goat-security"), (skillPath) => {
       const intake = readMarkdownSection(skillPath, "Step 0 - Intake");
       const outputFormat = readMarkdownSection(skillPath, "Output Format");
+      // A missing Quick template becomes empty text so the required report fields fail validation.
       const quickOutput =
         outputFormat.match(
           /\*\*Quick Scan output\*\*[\s\S]*?```markdown\n[\s\S]*?```/u,
         )?.[0] ?? "";
+      // Missing inventory wording contributes no kinds, so the Full coverage count fails instead of silently accepting an incomplete list.
       const reconciledInventoryKinds =
         intake
           .match(
@@ -550,7 +550,7 @@ describe("skill hardening contracts: security (2/2)", () => {
           ?.split("|")
           .map((kind) => kind.trim())
           .filter(Boolean) ?? [];
-      // Attackers and assumptions are declared rather than reconciled, yet they still count toward the exhaustive baseline.
+      // Attackers and assumptions count as declared inputs; missing wording leaves this list empty and fails the Full inventory count.
       const declaredInventoryKinds =
         intake
           .match(
@@ -561,6 +561,7 @@ describe("skill hardening contracts: security (2/2)", () => {
         ...reconciledInventoryKinds,
         ...declaredInventoryKinds,
       ];
+      // Without a gap ledger, the empty match list fails the requirement to disclose Quick review limits.
       const quickGapLedgerRows =
         quickOutput.match(/coverage-gap ledger/giu) ?? [];
 

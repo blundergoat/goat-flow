@@ -362,20 +362,23 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
   it("accepts verified clean goat-critique results without fabricated findings", () => {
     assertForEachTarget(installedSkillPaths("goat-critique"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);
-      assert.match(skillGuidance, /Check sub-agent completeness/, skillPath);
-      assert.match(
+      assertMatchesAll(
         skillGuidance,
-        /clean-result attestation after one documented second pass/,
+        [
+          /Check sub-agent completeness/,
+          /clean-result attestation after one documented second pass/,
+          /Evidence reviewed:/,
+          /Residual uncertainty:/,
+          /sub-agent completeness limited/,
+          /Fresh-eyes boundary and recovery/u,
+        ],
         skillPath,
       );
-      assert.match(skillGuidance, /Evidence reviewed:/, skillPath);
-      assert.match(skillGuidance, /Residual uncertainty:/, skillPath);
       assert.doesNotMatch(
         skillGuidance,
         /Each sub-agent MUST return 3-7 findings/,
         skillPath,
       );
-      assert.match(skillGuidance, /sub-agent completeness limited/, skillPath);
     });
 
     const directivePaths = INSTALLED_SKILL_ROOTS.map(
@@ -384,12 +387,27 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
     );
     assertForEachTarget(directivePaths, (referencePath) => {
       const directives = readProjectFile(referencePath);
-      assert.match(directives, /Clean-result attestation/, referencePath);
-      assert.match(directives, /Second-pass result:/, referencePath);
-      assert.match(directives, /Residual uncertainty:/, referencePath);
-      assert.match(
+      // A missing reviewer leaves a visible coverage limit; it cannot earn another retry or become a defect in the user's artifact.
+      assertMatchesAll(
         directives,
-        /Never invent a finding to meet the normal target/,
+        [
+          /Clean-result attestation/,
+          /Second-pass result:/,
+          /Residual uncertainty:/,
+          /Never invent a finding to meet the normal target/,
+          /supplied artifact[\s\S]*selected rubric/iu,
+          /instructions.*assessment material/iu,
+          /c_replacements_used.*0/u,
+          /one run-wide C replacement.*leak and missing-field failures/iu,
+          /never reset.*resume.*failure type/iu,
+          /Never resume.*contaminated child/iu,
+          /exhausted[\s\S]*A\/B[\s\S]*host.*meta.*human/iu,
+          /stdout.*candidate matches.*not.*verdict/iu,
+          /zero matches.*no textual signal/iu,
+          /unauthorized read.*even.*no matching term/iu,
+          /Generic words.*tests.*not navigation/iu,
+          /self-report.*unavailable/iu,
+        ],
         referencePath,
       );
     });
@@ -398,9 +416,18 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
   it("merges goat-critique rubric context maps into the fixed context split", () => {
     assertForEachTarget(installedSkillPaths("goat-critique"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);
-      assert.match(
+      assertMatchesAll(
         skillGuidance,
-        /Merge the selected rubric map[^\n]+fixed A\/B\/C split[^\n]+never replace baseline context/u,
+        [
+          /Merge the selected rubric map[^\n]+fixed A\/B\/C split[^\n]+never replace baseline context/u,
+          /Fresh-eyes boundary and recovery/u,
+          /separate input payloads and no result sharing/u,
+        ],
+        skillPath,
+      );
+      assert.doesNotMatch(
+        skillGuidance,
+        /same-field control|isolation enforced/u,
         skillPath,
       );
     });
@@ -415,19 +442,13 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
           referencePath,
           "Rubric Context Maps",
         );
-        assert.match(
+        assertMatchesAll(
           contextMaps,
-          /Each map lists additions to the fixed Context split[^\n]+never replaces it/u,
-          referencePath,
-        );
-        assert.match(
-          contextMaps,
-          /Agents A and B keep their artifact[^\n]+architecture[^\n]+rubric baseline/iu,
-          referencePath,
-        );
-        assert.match(
-          contextMaps,
-          /empty C list means no additional project context/iu,
+          [
+            /Each map lists additions to the fixed Context split[^\n]+never replaces it/u,
+            /Agents A and B keep their artifact[^\n]+architecture[^\n]+rubric baseline/iu,
+            /empty C list means no additional project context/iu,
+          ],
           referencePath,
         );
         // These rubrics add no project reading for C; users still receive a fresh-eyes critique from its fixed baseline context.
@@ -809,15 +830,13 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
       const intake = readMarkdownSection(skillPath, "Step 0 - Intake");
       const synthesis = readMarkdownSection(skillPath, "Phase 5 - Synthesise");
 
-      assert.match(intake, /host\/root context owns Phases 1-5\.6/u, skillPath);
-      assert.match(
+      assertMatchesAll(
         intake,
-        /forked sub-agent[\s\S]+return[\s\S]+before Phase 1/u,
-        skillPath,
-      );
-      assert.match(
-        intake,
-        /does not apply the shared sub-agent gate conversion/u,
+        [
+          /host\/root context owns Phases 1-5\.6/u,
+          /forked sub-agent[\s\S]+return[\s\S]+before Phase 1/u,
+          /does not apply the shared sub-agent gate conversion/u,
+        ],
         skillPath,
       );
       assert.match(
@@ -881,50 +900,33 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
       assert.match(skillGuidance, /\/goat-critique/, skillPath);
       assert.match(skillGuidance, /consent to spawn sub-agents/, skillPath);
       assert.match(skillGuidance, /Do NOT ask again/, skillPath);
-      assert.doesNotMatch(
-        skillGuidance,
+      // An explicit critique request already authorizes its reviewers, so none of these extra consent prompts may return.
+      for (const forbiddenPrompt of [
         forbiddenCodexExceptionPattern,
-        skillPath,
-      );
-      assert.doesNotMatch(
-        skillGuidance,
         forbiddenCodexConsentPattern,
-        skillPath,
-      );
-      assert.doesNotMatch(
-        skillGuidance,
         forbiddenDelegationPromptPattern,
-        skillPath,
-      );
+      ]) {
+        assert.doesNotMatch(skillGuidance, forbiddenPrompt, skillPath);
+      }
     });
   });
 
   it("keeps goat-critique report-only until explicit apply", () => {
     assertForEachTarget(installedSkillPaths("goat-critique"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);
-      assert.match(skillGuidance, /Report-only by default/, skillPath);
-      assert.match(
+      assertMatchesAll(
         skillGuidance,
-        /Do not mutate the target artifact/,
+        [
+          /Report-only by default/,
+          /Do not mutate the target artifact/,
+          /user separately says to apply, edit, update, fix/,
+          /Recommendations are never auto-applied/,
+          /After synthesis, stop/,
+          /Do not enter implementation mode/,
+          /freeze writes/,
+        ],
         skillPath,
       );
-      assert.match(
-        skillGuidance,
-        /user separately says to apply, edit, update, fix/,
-        skillPath,
-      );
-      assert.match(
-        skillGuidance,
-        /Recommendations are never auto-applied/,
-        skillPath,
-      );
-      assert.match(skillGuidance, /After synthesis, stop/, skillPath);
-      assert.match(
-        skillGuidance,
-        /Do not enter implementation mode/,
-        skillPath,
-      );
-      assert.match(skillGuidance, /freeze writes/, skillPath);
     });
   });
 
