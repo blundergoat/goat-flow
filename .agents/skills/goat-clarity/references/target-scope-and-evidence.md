@@ -4,7 +4,7 @@ goat-flow-reference-version: "1.17.0"
 # Target Scope and Evidence
 
 Use this reference after goat-clarity resolves project authority. It owns deterministic selector,
-snapshot, drift, formatter, evidence-status, and receipt mechanics. It grants no write authority;
+placement, snapshot, drift, formatter, evidence-status, and receipt mechanics. It grants no write authority;
 `SKILL.md` owns surface eligibility, permanent prohibitions, diagnosis, and Scope v2.
 
 ## Selector Inventory
@@ -68,6 +68,28 @@ committed baseline exists. Preserve ignored, excluded, and unsupported counts. E
 consumers are read-only context unless separately admitted through Scope v2. Stop when no eligible unit
 remains.
 
+## No-eligible-unit Receipt
+
+After necessary selector safety and classification, report the selector and stop reason, literal classification and outcome counts,
+protected-byte evidence, clarity assessment `NOT_CHECKED`, unresolved claims and zero writes.
+Skip unrelated owners, formatter discovery, and test-value work; omitted discovery is `NOT_CHECKED`, not `NOT_FOUND`, and execution is `NOT_RUN` with its reason.
+
+An empty writable set alone does not select this exit: selected human prose may still receive read-only diagnosis, and remote report-only work keeps its lane.
+Unchanged protected bytes prove preservation only. Failed access remains inaccessible; missing preservation evidence remains unchecked.
+
+## Placement Decision
+
+Apply these rows in classification, diagnosis and lane selection. They interpret the user's grant; they do not create one.
+Every permitted move must preserve behavior and compatibility; the root's permanent prohibitions and Scope v2 controls still apply.
+
+| Observed request and boundary | Required lane |
+|---|---|
+| An explicit current user instruction identifies the private symbol and destination, wholly inside one frozen writable file | Safe apply for that disclosed operation; no second approval is needed. |
+| A general clarity request or placement diagnosis alone | Preserve bytes and propose the exact operation through Scope v2. |
+| Cross-file or uncertain placement, even when both paths are selected | Scope v2; freeze the disclosed paths after second approval. |
+| A public or exported identifier | Root's spelling exception only, with second approval and per-identifier compatibility disclosure. |
+| Named-argument parameters, serialized fields or keys, behavior, signature shape, persisted data, migration, or test meaning | Outside both clarity lanes; route to `goat-plan`. |
+
 ## Selector-driven Non-semantic Lane
 
 Use this lane only for an explicit folder or file selector when baseline, current bytes, and explicit
@@ -127,6 +149,12 @@ comparison baseline too. Diff modified authority before using it. Semantic autho
 rule's meaning differs, not merely its wrapping. It fails closed until the truth order identifies the
 controlling text or the human resolves the conflict; working-tree recency is not authority by itself.
 
+Record the governing inputs actually used to decide permissions, surface classification, formatter ownership, and exact commands,
+even outside the selected inventory. Bind their canonical identity, existence/type, current bytes or digest, and provenance.
+
+Retain bounded absence/discovery evidence for applicable instructions or formatter owners that could appear later;
+rediscovery stays within the original scope.
+
 Give each inventoried unit one record:
 
 | Field | Required value |
@@ -134,13 +162,16 @@ Give each inventoried unit one record:
 | Identity | Reversible repository-relative path representation and selector membership |
 | State | Path status, file type, mode, size when available, and content digest |
 | Surface | One class from the skill, including the reason when restrictive precedence applies |
-| Authority | Writable, read-only context, protected, excluded, inaccessible, or `NOT_CHECKED` |
+| Write classification | Writable, read-only/protected, excluded, inaccessible, or `NOT_CHECKED`; selected context-only units belong to read-only/protected |
+| Assessment | Applicable clarity assessment completed, partial, or `NOT_CHECKED`, with the inspected scope and evidence |
 | Provenance | Command, API page/count, or repository fact that established the record |
 
-The presented Target Scope Snapshot summarizes identity, authority, writable paths, exclusions,
+Keep documentation-write permission separate from governing authority: `Documentation writes: granted | withheld`.
+The presented Target Scope Snapshot summarizes identity, authority, governing inputs, writable paths, selected read-only/protected units, exclusions,
 unknowns, context, pre-existing dirty paths, baseline proof, and formatter capability. Its
 reconciliation uses literal integers:
 `inventory N = writable W + read-only/protected R + excluded X + inaccessible I + NOT_CHECKED U`.
+Protected and context-only units never enter excluded counts. Unselected context is not inventory membership.
 Stop before freezing if the arithmetic fails. Content digest means a collision-resistant digest of
 the exact bytes read. For an edited path, maintain a working digest from the frozen baseline through
 each inspected transition. Protected units keep their baseline digest.
@@ -160,6 +191,12 @@ work, re-inventory staged, unstaged, untracked, deleted, and unmerged membership
 byte-safe method. For a path list, repeat the bounded inventory of each listed folder, and each listed
 file must still resolve to the same one file.
 
+Recheck these governing inputs and bounded discovery before every batch; unchanged selected bytes or HEAD do not prove they are current.
+A changed dependency pauses writes for reread and reconciliation, invalidates the old snapshot and command decision,
+and requires rebinding before continuation.
+
+Keep existing approval gates when authority or the writable set changes; unchanged grants need no new approval. Unrelated files are not dependencies.
+
 For remote report-only PR work, revalidate the bound provider repository plus base and head identifiers
 before the final receipt. Head drift invalidates the report and requires a new inventory; no edit batch
 exists in this lane.
@@ -177,7 +214,7 @@ by `.editorconfig` with no dedicated config file present, so its absence does no
 formatter, or project script merely to discover a command. Do not invent generic tool invocations or
 drop repository-owned flags.
 
-Classify each formatter-owned writable path:
+Classify formatter capability for each writable surface:
 
 - `READY`: exact repository-owned check and write commands are known, preserve repository-owned flags,
   and can scope the command to formatter-owned writable paths.
@@ -194,6 +231,10 @@ comparison preserves the frozen command plus repository-owned path and configura
 After the bounded clarity edits, rerun the check before typecheck, tests, or Gruff. Run the frozen write
 command only on modified formatter-owned writable paths when project authority permits it, inspect the
 formatter diff, map its changed spans, and rerun the check.
+
+An owned command with a failed availability check has execution status `UNAVAILABLE`, not capability `NOT_FOUND`.
+Keep its resolved ownership and exact command; preserve affected bytes when required pre-mutation proof cannot run.
+Baseline `FAIL` remains recorded even when the final check passes. Deliberate omissions use `NOT_RUN` with a reason and leave unsupported claims `NOT_CHECKED`.
 
 ## Status and Claim Evidence
 
@@ -228,18 +269,26 @@ the shared preamble requires.
 
 ## Like-unit Receipt Ledgers
 
-Keep three separate ledgers. Their row meanings are stable; headings, ordering, and compact prose or
-table presentation may vary.
+Keep three separate ledgers.
 
-1. The selected-unit ledger gives every inventoried unit exactly one disposition: modified,
-   compliant unchanged, deferred, excluded, inaccessible, or `NOT_CHECKED`. Its disposition counts
-   reconcile with the snapshot's literal integers. Excluded units may aggregate by exclusive surface
-   class when deterministic membership and the class total are preserved.
+1. The selected-unit ledger retains surface and write classification, then gives every inventoried unit exactly one terminal outcome.
+   Write-classification totals and terminal-outcome totals independently equal the same inventory; they are separate axes, not matching label buckets.
+   Excluded units may aggregate only when deterministic membership and their exclusive class total remain recorded.
 2. The changed-span ledger maps each intentional changed span to one diagnosed finding or explicitly
    reported formatter-owned reflow. It may aggregate spans by file and diagnosed rule only after
    symbol-level evidence maps every member span. Unmapped churn fails reconciliation.
 3. The command-evidence ledger records each command status, scope, literal result, proof class, and
    the separate claim verdicts it supports or leaves unchecked.
+
+| Terminal outcome | Required evidence and eligible membership |
+|---|---|
+| Modified | An authorized diagnosed edit in a writable unit |
+| Compliant unchanged | Compliant unchanged requires an applicable clarity assessment with no finding; read-only human prose may be assessed without write permission |
+| Deferred | A supported finding whose remedy requires permission or another workflow; selected read-only human prose may carry findings |
+| Preserved protected | Preserved protected requires a byte comparison; clarity assessment stays `NOT_CHECKED`; applies to protected or context-only units |
+| Excluded | Excluded membership only; never substitute this for selected read-only/protected units |
+| Inaccessible | The selected unit could not be read |
+| `NOT_CHECKED` | Required assessment, identity or preservation evidence is incomplete; name the gap instead of implying compliance |
 
 Never add unlike units, such as paths, spans, findings, and commands, into one total. A no-findings run
 still reconciles selected units and formatter evidence without expanding empty sections. Receipt

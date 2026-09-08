@@ -59,21 +59,7 @@ working or committed rules silently. Record missing authority as `NOT_CHECKED`; 
 project's conventions.
 
 Read `references/target-scope-and-evidence.md` for selector, snapshot, drift, formatter, status, and
-receipt mechanics. Then emit a per-unit owner routing matrix. Load an owner only when at least one
-classified unit meets its condition; do not load every clarity owner unconditionally.
-
-| Objective condition | Owner to load |
-|---|---|
-| A source-code or test-source unit has a naming or placement candidate | `.goat-flow/skill-docs/playbooks/naming-and-placement.md` (`Safe Route`) |
-| A source-code or test-source unit has a comment or docstring candidate | `.goat-flow/skill-docs/playbooks/code-comments.md` (`Pick the Reader First`) |
-| Repository instructions require Gruff for an eligible unit and read-only discovery finds the wrapper | `.goat-flow/skill-docs/playbooks/gruff-code-quality.md` (`Comment and Documentation Passes`) |
-| A PR or uncommitted selector changes test cases, or a folder or file selector includes test source | `.goat-flow/skill-docs/playbooks/test-selection.md` (`Decision Route`) |
-| Verification needs a focused test choice | `.goat-flow/skill-docs/playbooks/test-selection.md` (`Revalidate before mutation`) |
-| Documentation write authority selects writable human prose | `.goat-flow/skill-docs/playbooks/writing-human-facing-prose.md` (`Scope Gate`) and any surface owner it routes |
-| A candidate depends on project vocabulary or a domain term | `.goat-flow/glossary.md` |
-
-No matrix match means no owner load or broader-discipline claim. Project authority may add an owner
-but cannot weaken permanent prohibitions.
+receipt mechanics.
 
 ### 0.2 Classify selected units
 
@@ -82,7 +68,7 @@ freezing write authority. Use these exclusive surface classes:
 
 | Surface class | Write contract |
 |---|---|
-| Source code | Comments/docstrings, truthful local/private renames, and authorized private placement may be writable. |
+| Source code | Comments/docstrings, truthful local/private renames, and authorized private placement under the reference’s Placement Decision may be writable. |
 | Test source | Test-source comments and private names may be writable; assertions, fixtures, snapshots, expected output, test level, coverage, and meaning remain protected. |
 | Human documentation | Writable only with documentation write authority when the unit is inside the selected inventory; context-only documentation is always read-only. |
 | Agent-control or protected | Read-only evidence. Agent-control surfaces are never style-remediated by goat-clarity. |
@@ -107,23 +93,47 @@ completeness cannot be established. Bind writable authority to the
 repository root resolved from the invocation working directory; never search parent, child, sibling,
 scratchpad, or cached repositories for write authority.
 
+For the no-eligible-unit exit, use the reference's compact receipt and stop before owner routing or diagnosis.
+
+Emit a per-unit owner routing matrix. Load an owner only when at least one
+classified unit meets its condition; do not load every clarity owner unconditionally.
+Candidate-specific owners stay pending until the first supported candidate; load them before judging that candidate.
+Naming/comment owner reads wait until Snapshot v1 is frozen and applicable case accounting is complete.
+Do not diagnose names or comments while collecting the inventory; accounting completed afterward cannot repair this order.
+
+| Objective condition | Owner to load |
+|---|---|
+| A source-code or test-source unit has a naming or placement candidate | `.goat-flow/skill-docs/playbooks/naming-and-placement.md` (`Safe Route`) |
+| A source-code or test-source unit has a comment or docstring candidate | `.goat-flow/skill-docs/playbooks/code-comments.md` (`Pick the Reader First`) |
+| Repository instructions require Gruff for an eligible unit and read-only discovery finds the wrapper | `.goat-flow/skill-docs/playbooks/gruff-code-quality.md` (`Comment and Documentation Passes`) |
+| A PR or uncommitted selector changes test cases, or a folder or file selector includes test source | `.goat-flow/skill-docs/playbooks/test-selection.md` (`Decision Route`) |
+| Verification needs a focused test choice | `.goat-flow/skill-docs/playbooks/test-selection.md` (`Revalidate before mutation`) |
+| Documentation write authority selects writable human prose | `.goat-flow/skill-docs/playbooks/writing-human-facing-prose.md` (`Scope Gate`) and any surface owner it routes |
+| A candidate depends on project vocabulary or a domain term | `.goat-flow/glossary.md` |
+
+No matrix match means no owner load or broader-discipline claim. Project authority may add an owner
+but cannot weaken permanent prohibitions.
+
 ### 0.3 Freeze the Target Scope Snapshot
 
 Present this snapshot before the first edit:
 
 ```text
 Target Scope Snapshot
-Identity: <repository; documentation authority; selector; HEAD; PR identity>
+Identity: <repository; selector; HEAD; PR identity>
+Documentation writes: <granted | withheld>
 Authority: <documents; state/provenance; baseline; semantic drift>
 Writable paths: <frozen deduplicated eligible repository-relative paths>
-Exclusions: <deleted, ignored, protected, context-only, generated, binary, or unsupported paths>
+Read-only/protected: <selected units outside write permission>
+Exclusions: <deleted, generated, binary, unsupported, or otherwise ineligible units>
 Unknowns: <unresolved identity/access/provenance/compatibility>
-Read-only context: <instructions, consumers, producers, tests, configuration, and review evidence>
+Read-only context: <required evidence outside selected units>
 Reconciliation: inventory <N> = writable <W> + read-only/protected <R> + excluded <X> + inaccessible <I> + NOT_CHECKED <U>; use literal integers
 Pre-existing dirty paths: <frozen selected/unrelated paths, or none>
+Formatter capability: <READY | NOT_FOUND | AMBIGUOUS; discovery evidence, or NOT_CHECKED: reason>
 Baseline proof: <binding status/hashes/checks/tool availability>
-Formatter check: <exact repository-owned command scoped to writable formatter paths, or NOT_CHECKED>
-Formatter write: <exact repository-owned command scoped to writable formatter paths, or NOT_CHECKED>
+Formatter check: <READY: exact scoped owned command/flags; otherwise NOT_RUN: reason>
+Formatter write: <READY: exact scoped owned command/flags; otherwise NOT_RUN: reason>
 ```
 
 Use the reference to resolve the exact repository-owned formatter check and write commands, retain
@@ -142,7 +152,26 @@ For each candidate, record unit, surface class, incumbent's concrete claim, cont
 owner, permitted edit, and proof. Labels, pattern counts, preferences, and tool findings are leads,
 not diagnoses. Missing fields: preserve bytes, record gaps; never manufacture a finding.
 
-### 1. Diagnose naming and placement
+### 1. Run the test-value pass
+
+For a PR or uncommitted selector, assess every added, removed, relocated, or materially changed test
+case. For a folder or file selector, assess every test case in selected test-source units unless the
+reference's selector-driven non-semantic lane proves comment/private-name-only equivalence, which
+waives only per-case value and disposition rows; otherwise the full case-level manifest and four-part
+value gate apply.
+
+Each assessed test gets one row. Apply the four-part value gate: plausible regression, user or business
+impact, current overlap, and stable observable contract. `PRUNE CANDIDATE` needs proof no replacement
+is required; `CONSOLIDATE` or `MOVE LEVEL` keeps the original until replacement coverage passes.
+
+Before assessing cases, load `.goat-flow/skill-docs/playbooks/test-selection.md` (`Decision Record and Handoff`).
+Added-test dispositions and the other disposition meanings and equations apply to every existing, added, removed, relocated, and materially changed row.
+Missing proof keeps the matching unresolved disposition; the owner's evidence gates still apply.
+
+Use the reference checkpoint: every case must reconcile in the full lane. Report-only: never authorize
+test changes; route broader coverage to `goat-qa`.
+
+### 2. Diagnose naming and placement
 
 Naming and placement before comments. Trace producers, transformations, effects, consumers. Verify
 what each name promises to the UI, caller, or operator reader and the domain, repository, or
@@ -153,10 +182,10 @@ and proof. A preference for different synonyms, emphasis, or phrasing is not a f
 incumbent is accurate, keep its bytes.
 
 A local or private rename needs every reference inside writable paths. Reject cryptic/overstated
-names, preserve a compliant incumbent, and route placement, public/exported, cross-file, or uncertain
-findings to Scope v2, never compensating prose.
+names and preserve a compliant incumbent. Route placement through the reference’s Placement Decision;
+public/exported, cross-file, or uncertain findings require Scope v2, never compensating prose.
 
-### 2. Diagnose comments and documentation
+### 3. Diagnose comments and documentation
 
 After naming, choose the UI, caller, or operator reader and domain, repository, or infrastructure
 layer. Inspect branches, loops, null/empty paths, catches, entry points, and doc contracts. Apply
@@ -171,53 +200,20 @@ documenting the defect as intent. Record it as Deferred with reason `BLOCKED-ON-
 the reproduced defect to `goat-debug`. Before rewriting a block governed by multiple rules, state its
 expected final shape and check every applicable rule against that shape.
 
-Describe the current contract, never history. Do not mention removed symbols, local plans, review
-provenance, or anything a fresh clone cannot inspect. A comment that restates code, compensates for a
-name, invents UI, or rewrites a compliant incumbent is not a clarity improvement.
+Describe the current contract. Follow `code-comments.md`: keep history only for a current compatibility obligation or a checkable removal trigger.
+Never cite gitignored paths, local state, or removed symbols. Keep other provenance only when it supplies the durable contract, removal trigger, or
+verification path.
+A comment that restates code, compensates for a name, invents UI, or rewrites a compliant incumbent is not a clarity improvement.
 
 With documentation write authority, apply the routed human-prose and surface owners only to eligible
 human documentation inside the frozen writable set. Preserve exact facts, code, quotations, control
 grammar, context-only documents, and protected regions.
 
-### 3. Run the test-value pass
-
-For a PR or uncommitted selector, assess every added, removed, relocated, or materially changed test
-case. For a folder or file selector, assess every test case in selected test-source units unless the
-reference's selector-driven non-semantic lane proves comment/private-name-only equivalence, which
-waives only per-case value and disposition rows; otherwise the full case-level manifest and four-part
-value gate apply.
-
-Each assessed test gets one row. Apply the four-part value gate: plausible regression, user or business
-impact, current overlap, and stable observable contract. `PRUNE CANDIDATE` needs proof no replacement
-is required; `CONSOLIDATE` or `MOVE LEVEL` keeps the original until replacement coverage passes.
-
-Added-test dispositions: `ADDED KEEP`, `ADDED CONSOLIDATE`, `ADDED MOVE LEVEL`, `ADDED DROP CANDIDATE`, `ADDED UNRESOLVED`
-
-Removed-test dispositions: `REMOVAL SUPPORTED`, `RESTORE`, `REPLACE`, `REMOVAL UNRESOLVED`
-
-Relocated-test state: `RELOCATED`
-
-Apply `test-selection.md` meanings and evidence gates to every existing, added, removed, relocated,
-and materially changed row.
-Folder/file:
-`assessed_existing = KEEP + CONSOLIDATE + MOVE LEVEL + PRUNE CANDIDATE + UNRESOLVED`. PR/uncommitted:
-
-```text
-assessed_added = ADDED_KEEP + ADDED_CONSOLIDATE + ADDED_MOVE_LEVEL + ADDED_DROP_CANDIDATE + ADDED_UNRESOLVED
-assessed_removed = REMOVAL_SUPPORTED + RESTORE + REPLACE + REMOVAL_UNRESOLVED
-assessed_materially_changed = KEEP + CONSOLIDATE + MOVE_LEVEL + PRUNE_CANDIDATE + UNRESOLVED
-assessed_relocated = RELOCATED
-assessed_pr_or_uncommitted = assessed_added + assessed_removed + assessed_materially_changed + assessed_relocated
-```
-
-Use the reference checkpoint: every case must reconcile in the full lane. Report-only: never authorize
-test changes; route broader coverage to `goat-qa`.
-
 ### 4. Choose the apply lane
 
 #### Safe apply
 
-Snapshot v1 permits diagnosed comments, complete local/private renames, authorized private placement,
+Snapshot v1 permits diagnosed comments, complete local/private renames, private placement admitted by the reference’s Placement Decision,
 and documentation prose inside writable paths. Preserve observable behaviour, public shape, errors,
 side effects, ordering, compatible inputs/outputs, test meaning, and protected bytes. Reject
 whitespace-only churn.
@@ -228,8 +224,8 @@ the Scope v2 spelling exception; route it to `goat-plan`.
 
 #### Scope v2
 
-Stop on new paths, Snapshot v1 escape, or public renames. Scope v2 needs second approval; initial
-request does not satisfy it. It covers exact writable paths for an already-permitted clarity operation
+Use the reference’s Placement Decision for moves. Stop on new paths, Snapshot v1 escape, or public renames.
+Scope v2 needs second approval; initial request does not satisfy it. It covers exact writable paths for an already-permitted clarity operation
 or an enumerated set of public or exported identifier renames plus mechanical reference updates.
 Disclose every identifier, exact affected writable paths, per-identifier compatibility impact, and
 proof; wait for explicit approval. One approval covers only that disclosed set. Require explicit user
@@ -270,35 +266,37 @@ verification results, command status, and separate claim verdicts. Failure/unava
 
 ## Clarity Remediation Receipt
 
-Return a compact receipt using the reference's selected-unit, changed-span, and command-evidence
-ledgers. Give every selected unit one disposition; map every changed span to its finding or formatter
-reflow.
+Use the reference's selected-unit, changed-span, and command-evidence ledgers. Give every selected unit one class and one outcome;
+map every changed span to its finding or formatter reflow.
 
-Meanings are stable but presentation may vary; no JSON schema is promised. Use lowercase agent ID
-and selector kind, then accepted target.
+Presentation may vary; meanings remain stable. Use lowercase agent ID and selector kind.
 
 ```text
 Agent: <claude | codex | antigravity | copilot>
 Selector: <github-pr | uncommitted | paths> — <accepted target>
 Snapshot: <frozen identity/authority>
+Documentation writes: <granted | withheld>
 Write paths: <authorized repository-relative paths>
+Unit totals: <classification and outcome counts separately reconcile inventory>
 Modified: <units changed and diagnosed reason>
-Compliant unchanged: <preserved inspected units>
+Compliant unchanged: <clarity assessed; no finding>
+Preserved protected: <byte evidence only; clarity NOT_CHECKED>
 Deferred: <valid findings requiring Scope v2 or another workflow>
 Excluded: <units outside selector eligibility>
 Inaccessible: <units that could not be read>
 NOT_CHECKED: <claims or proof not completed>
 Test-selection record: <disposition counts and evidence-backed drop, deletion, restore, or replacement candidates, or not applicable>
-Formatter proof: <baseline and final literal formatter commands and results, or NOT_CHECKED with reason>
+Formatter proof: <capability/discovery; exact commands/flags; baseline/final statuses and literal results, or omission reason>
 Verification: <literal commands and results>
 Summary: <paste-ready pull-request summary when requested or needed for headless/sub-agent handoff; otherwise not requested>
 ```
 
-A receipt is complete when formatter capability is classified. `READY` needs baseline and final
+A receipt is complete when formatter capability is classified, or deliberately omitted with a reason at the no-eligible-unit exit
+or an established read-only lane.
+`READY` needs baseline and final
 results, `NOT_FOUND` needs its discovery evidence, and `AMBIGUOUS` blocks mutation.
 
-A run with no diagnosed findings keeps every label in one compact summary. Never add unlike units to
-manufacture a total.
+With no diagnosed findings, keep labels in a compact summary. Never combine unlike units.
 
 ## Routing
 
