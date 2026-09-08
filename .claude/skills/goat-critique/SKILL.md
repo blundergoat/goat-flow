@@ -46,7 +46,7 @@ goat-critique runs only full delegated mode: Phases 1-5, 5.5 meta-audit, 5.6 out
 
 Spawn all three sub-agents in parallel using the host's real delegation mechanism.
 
-Context diversity catches more than tonal diversity.
+Before spawning C, assemble its inline payload and initialize run state using **Fresh-eyes boundary and recovery** in `references/sub-agent-directives.md`.
 
 ### The Core Trio Lens
 
@@ -56,7 +56,7 @@ Agents A and B each use the combined SKEPTIC/ANALYST/STRATEGIST lens; never spli
 - **ANALYST** - "What does the evidence actually say? What's the cost/benefit? What do the numbers and code paths tell us?"
 - **STRATEGIST** - "What's the fastest path to shipping? What can we defer? What's the highest-leverage change?"
 
-A/B use all three perspectives. C is the same-field control with no lens quota; use `N/A - fresh-eyes scope` only when a lens adds nothing.
+A/B use all three perspectives. C provides a fresh-eyes comparison with no lens quota; use `N/A - fresh-eyes scope` when a lens adds nothing.
 
 **Context split:**
 
@@ -64,7 +64,7 @@ A/B use all three perspectives. C is the same-field control with no lens quota; 
 |---|---|---|
 | A (Risk) | artifact + architecture.md + targeted INDEX-first footgun/lesson hits + rubric | git history, config.yaml |
 | B (Alternatives) | artifact + architecture.md + `git log --oneline -20` + config.yaml + rubric | footguns, lessons |
-| C (Fresh Eyes) | artifact + rubric ONLY | everything else (isolation enforced) |
+| C (Fresh Eyes) | supplied artifact + selected rubric payload ONLY | other project evidence; disclose harness context |
 
 ### Sub-Agent Definitions
 
@@ -72,7 +72,7 @@ Full directives: `references/sub-agent-directives.md`.
 
 - **A (Risk):** SKEPTIC/ANALYST/STRATEGIST on risks, 2nd-order impacts, fastest safe path. Must cite downstream files by name.
 - **B (Alternatives):** SKEPTIC/ANALYST/STRATEGIST on alternatives, ranked by implementation friction. Must surface at least one alternative.
-- **C (Fresh Eyes):** No project context. Flags unstated assumptions and readability gaps. ISOLATION RULE enforced.
+- **C (Fresh Eyes):** Flags unstated assumptions and readability gaps using the permitted payload; follow the reference's ISOLATION RULE.
 
 Each sub-agent normally returns the reference pack's Result envelope and Per-finding output spec, including Proof class. Three to seven findings is the normal range; zero uses the same envelope with an empty finding list after one documented second pass.
 
@@ -82,9 +82,9 @@ Each sub-agent normally returns the reference pack's Result envelope and Per-fin
 
 Execute in this order:
 
-**1. Context leak scan.** Grep Agent C output for `.goat-flow/`, `goat-*`, `architecture.md`, `config.yaml`, or project-specific namespace references. Only flag references absent from Agent C's input. Untraceable match = CONTEXT LEAK; discard and re-spawn stricter. **Framework-self exemption:** for artifacts inside `.goat-flow/`, `skills/goat-*`, or a goat-flow instruction file, skip `.goat-flow/` and `goat-*` term scans. Check only structural navigation leaks: file paths, config keys, or architecture sections absent from the input.
+**1. Context leak scan.** Apply **Fresh-eyes boundary and recovery** first: scan C's response through stdin, trace candidate matches to its artifact/rubric payload, and inspect available activity. Textual absence never proves isolation; the host discards leaks and owns the shared replacement allowance.
 
-**1b. Completeness gate.** Verify each sub-agent returned every applicable Result-envelope field (`Evidence reviewed:` through `Residual uncertainty:`, strength and coverage ledger per the reference pack, plus B's unconditional ranked alternative). Incomplete → re-spawn once; still incomplete → `sub-agent completeness limited`.
+**1b. Completeness gate.** Verify every applicable Result-envelope field (`Evidence reviewed:` through `Residual uncertainty:`, strength, coverage ledger and B's ranked alternative). A/B each get one completeness replacement; C uses the same run-wide allowance as leaks. Unresolved omissions produce `sub-agent completeness limited`; honest unassessed rows are complete.
 
 **2. Classify each finding:** **Consensus** (≥2 agents, severity within ±1), **Split** (≥2 agents, severity differs ≥2 levels or explicit reject vs blocking), **Unique** (one agent only). Silence is not a dismiss; treat as Unique.
 
@@ -171,11 +171,11 @@ The rubric determines what sub-agents evaluate. Match to artifact type. Dimensio
 - MUST run in one mode: full delegated, Phases 1-5 plus 5.5/5.6, three critique sub-agents plus one meta-agent. 5.5 runs before the human gate; 5.6 after the human responds. Quick/lite modes were removed: single-context lenses are self-talk, not multi-perspective critique.
 - Explicit `$goat-critique` or `/goat-critique` invocation IS consent to spawn sub-agents and the full protocol. Do NOT ask again.
 - Report-only by default. Do not mutate the target artifact or committed files unless the user separately says to apply, edit, update, fix, or otherwise implement. If interrupted, freeze writes.
-- MUST Spawn all three sub-agents in a single parallel batch. Sequential spawning loses the informational-diversity benefit.
+- MUST Spawn all three sub-agents in a single parallel batch. Preserve separate input payloads and no result sharing; timing alone does not prove independence.
 - MUST set max 5 tool-call budget per critique sub-agent; log calls/limit when exposed, otherwise unavailable markers. Do not claim mechanical enforcement when counts are unavailable.
 - MUST log per spawned critique/cross-exam/meta agent: id/handle if exposed, calls/limit, or unavailable markers.
-- MUST Scan Agent C output for context leaks before any other Phase 2 work. Only flag references absent from the input artifact. Any untraceable match = CONTEXT LEAK; discard and re-spawn.
-- MUST Check sub-agent completeness: verify all required fields in the evidence-backed findings or a clean-result attestation after one documented second pass against `references/sub-agent-directives.md`. Incomplete → re-spawn once; if still incomplete, record `sub-agent completeness limited`.
+- MUST Scan Agent C output before other Phase 2 work using **Fresh-eyes boundary and recovery**, including its permitted payload and shared replacement counter.
+- MUST Check sub-agent completeness against `references/sub-agent-directives.md`, including a clean-result attestation after one documented second pass. Phase 2 owns the bounded repair; never reset C's allowance.
 - MUST enforce cross-examination budget: Max 3 cross-examination agents total, max 3 tool calls per agent.
 - Recommendations are never auto-applied. After synthesis, stop. Do not enter implementation mode unless the user explicitly asks to apply changes.
 - MUST apply the Proof Gate from `skill-preamble.md` to every synthesised finding and preserve one proof class tag (`RUNTIME | CONTRACT-GREP | STATIC | NOT-REPRODUCED`) on each. Sub-agent reports are inputs to verify, not evidence to launder. Re-read applies to findings surviving to Phase 5 (typically 3-7 after Phase 3/4 filtering), not to all findings raised in Phase 1.
