@@ -1,6 +1,6 @@
 ---
 category: agent-evidence-claims
-last_reviewed: 2026-09-08
+last_reviewed: 2026-09-09
 ---
 
 **Scope:** What counts as citable evidence - mechanism claims need a read source, absence and exact-count claims need untruncated searches, gitignored paths are never durable anchors, and final verification gates need supported scopes with captured logs. Reading the request and retrieving memory is [agent-behavior.md](agent-behavior.md); using tools and the environment is [agent-tooling.md](agent-tooling.md); skill-trial evidence is [skill-trial-evidence.md](skill-trial-evidence.md).
@@ -77,9 +77,11 @@ last_reviewed: 2026-09-08
 ## Lesson: Absence claims need untruncated searches
 
 **Status:** active | **Created:** 2026-07-03
-**Incident count:** 3 | **Latest occurrence:** 2026-08-16
+**Incident count:** 4 | **Latest occurrence:** 2026-09-09
 
 **Prevention:** Before claiming a pattern is absent, rerun the exact single pattern with no `head` or `tail` truncation, or count with `grep -c`. For an exact path claim, use `test -e` on that path or an exact tracked-file query; a filename filter designed for neighbouring names is only a sample. Derive an exact-count claim from the widest search it implies, `git grep` over the tracked tree, before pinning it into a stop condition. Evidence anchor: `scripts/preflight-checks.sh` (search: `Learning-Loop Schema`).
+
+Capture large source or JSON inventories in bounded parts and reconcile their full lengths before parsing or crediting them as a baseline.
 
 **What happened:** `grep -n "stats\|quality\|audit\|index" scripts/preflight-checks.sh | head -20` showed no `stats` hit, and the analysis claimed `stats --check` ran in no local gate; the `head -20` had truncated the match list, and preflight's Learning-Loop Schema section already ran `node dist/cli/cli.js stats . --check`. The user's "double check" exposed the false absence claim before it shaped the fix.
 
@@ -87,6 +89,11 @@ last_reviewed: 2026-09-08
 
 **Recurrence 2026-08-12:** A `5-call` census over six hand-picked directories returned seven paths, about to ship as an exact-count stop condition; `git grep -ln "5-call"` over the tracked tree returned eight, because `.goat-flow/learning-loop/decisions/ADR-042-cross-harness-invocation-ask-first.md` (search: `5-call`) sat outside every scanned directory.
 **Recurrence 2026-08-16:** An M04 path audit filtered filenames with contiguous `hooks-runtime` and reported that `hooks-configured-runtime-evidence.ts` did not exist; `test -e` disproved it immediately. `src/cli/hooks-configured-runtime-evidence.ts` (search: `readManagedConfiguredHookState`).
+
+**Recurrence 2026-09-09:** M50's all-copy baseline JSON and later lessons INDEX capture exceeded their output budgets. Both truncated results were
+rejected; bounded fifty-line reads and exact character counts recovered the complete inputs before source changes. The failed parses are recorded
+in the active plan's baseline-capture checkpoint; they never became absence, count or recovery evidence. Contract: `.goat-flow/skill-docs/skill-preamble.md`
+(search: `Exact count`).
 
 ---
 
@@ -115,7 +122,7 @@ last_reviewed: 2026-09-08
 **Status:** active | **Created:** 2026-05-19
 **Decision changed:** Use repository-owned package scripts for supported gates; baseline bespoke checks and scope them to the claim they prove.
 **Trigger phase:** VERIFY
-**Incident count:** 24 | **Latest occurrence:** 2026-08-28
+**Incident count:** 25 | **Latest occurrence:** 2026-09-08
 
 **Prevention:** Run supported format, lint, Knip, and test gates with captured output, one command per gate. A predecessor may exempt one named RED fixture only when a blocked dependent owns it; preserve the full failure receipt, run every other test, and keep the green gate downstream. Any extra failure stops. Copy each gate's invocation from its owner instead of improvising a scope, and quote the literal result line: `package.json` (search: `test:fast`), `package.json` (search: `"format:check"`), `scripts/preflight-checks.sh` (search: `lint_targets[@]`), `knip.json` (search: `ignoreDependencies`). Evidence anchor: `test/integration/setup-install-agent-matrix.test.ts` (search: `must have one exact registration`).
 
@@ -145,6 +152,9 @@ last_reviewed: 2026-09-08
 **Recurrence 2026-08-27 (ignored lint):** `npx eslint test/integration/preflight-progress.test.ts` exited zero with an ignored-file diagnostic and was labelled PASS; `eslint.config.mjs` (search: `"test/**"`) keeps that path outside the lint scope, so cover ignored tests with typecheck, Prettier, and their runtime suite.
 **Recurrence 2026-08-28 (export capture):** A full plan export exited 0 but the tool truncated its 10,093 JSON lines; piping it into inline `node -e` was blocked as `Pipe to interpreter`, and a bounded `jq` selector exposed the required fields. `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Known language runtimes may consume local data only when their program is explicit`), `src/cli/plans-export.ts` (search: `No output path is the safe preview mode`).
 **Recurrence 2026-08-28 (proof scope):** A line-budget command scanned every physical line in eight instruction files although the claim covered only ACT-local reminders, and exited 1 on a 1,677-character READ line measured before the edit; baseline bespoke proof before editing and scope it to the claim. `workflow/setup/reference/execution-loop.md` (search: `MUST read relevant files before changes`), `test/contract/command-phrases.test.ts` (search: `assertMilestoneReminder`).
+
+
+**Recurrence 2026-09-08 (comment contracts):** Rewording two private test helpers introduced `docs.missing-invariant-doc` advisories despite the scoped baseline having none. Reading the installed rule showed that it recognizes specific contract words. State the actual must-hold rule in plain English, preserve useful parameter and return context, then repeat the same scoped formatter and analyzer commands. The repaired check reported no findings across the three selected files. **Evidence:** OBSERVED; `test/contract/skill-hardening-security-1.test.ts` (search: `posturesInReadingOrder`, `tokensInReadingOrder`); `scripts/gruff-ts.sh` (search: `exec "$GRUFF_BIN" "$@"`).
 
 ---
 

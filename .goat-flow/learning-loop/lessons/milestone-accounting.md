@@ -1,6 +1,6 @@
 ---
 category: milestone-accounting
-last_reviewed: 2026-09-07
+last_reviewed: 2026-09-08
 ---
 
 **Scope:** Milestone state and effort accounting - activation order, where human gates belong, what a task section may contain, and why estimates counted from work units beat estimates written as durations. Multi-agent council coordination is [coordination.md](coordination.md).
@@ -193,18 +193,22 @@ Evidence anchors: `src/cli/plans-effort.ts` (search: `export function countAgent
 
 ## Lesson: Finalized timing receipts require their parsed summaries
 
-**Status:** active | **Created:** 2026-08-14
+**Status:** active | **Created:** 2026-08-14 | **Evidence:** OBSERVED
 **Decision changed:** Finalize milestone timing through the plans-time command; when repairing a receipt manually, reconcile both summary lines before claiming measured Actual.
 **Trigger phase:** VERIFY
+**Incident count:** 2 | **Latest occurrence:** 2026-09-08
 **Merged:** 2026-09-05 - moved here from `.goat-flow/learning-loop/lessons/verification.md`; timing receipts sit with the three sibling entries above rather than in general verification discipline.
 
-**Prevention:** Use `plans time stop <milestone> --finalize` for normal closure. If manual recovery is necessary, compare the receipt with the canonical rendered shape, derive rather than eyeball the largest-remainder split, and rerun strict validation after the terminal status change. Evidence anchors: `docs/cli.md` (search: `plans time stop .goat-flow/plans/<active>/M01-example.md --finalize`), `src/cli/plans-time-receipt.ts` (search: `Compare rounded total, category sum, and largest-remainder allocation`), `src/cli/plans-check.ts` (search: `measured Actual requires a finalized embedded Timing Receipt`).
+**Prevention:** Use `plans time stop <milestone> --finalize` for normal closure. For manual recovery, restore both summaries, derive the largest-remainder split, then validate the terminal status. Unknown Actual uses `unavailable: reason` or `incomplete: reason`, never the CLI display dash. Evidence anchors: `docs/cli.md` (search: `plans time stop .goat-flow/plans/<active>/M01-example.md --finalize`), `src/cli/plans-time-receipt.ts` (search: `Compare rounded total, category sum, and largest-remainder allocation`), `src/cli/plans-check.ts` (search: `measured Actual requires a finalized embedded Timing Receipt`).
 
 **What happened:** A milestone's segment table, receipt state, and measured Actual were finalized by hand, but the first strict completion check rejected them because the receipt omitted the `Recorded seconds` and `Allocated minutes` lines, leaving the parser no summary object to validate the Actual claim against. After those lines were added, the next check rejected a manually rounded category split that did not follow the canonical largest-remainder allocation.
 
 **Root cause:** The visible segment arithmetic was treated as the whole embedded receipt and category minutes were rounded by intuition, although the strict checker requires both canonical parsed summaries and its deterministic allocation.
 
+**Recurrence 2026-09-08:** M35 used the display dash in an unavailable Actual; strict parsing failed until the colon was restored. Source grammar: `src/cli/plans-effort.ts` (search: `ACTUAL_UNKNOWN_STATE_PATTERN`).
+
 ---
+
 
 ## Lesson: Milestone task sections contain estimated work, not evidence notes
 
