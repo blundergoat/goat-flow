@@ -74,7 +74,7 @@ Full directives: `references/sub-agent-directives.md`.
 - **B (Alternatives):** SKEPTIC/ANALYST/STRATEGIST on alternatives, ranked by implementation friction. Must surface at least one alternative.
 - **C (Fresh Eyes):** No project context. Flags unstated assumptions and readability gaps. ISOLATION RULE enforced.
 
-Each sub-agent normally returns the reference pack's Result envelope: identity, assessment, one anchored strength, evidence reviewed, coverage ledger, residual uncertainty, lens dispositions, and findings with Proof class and the per-finding schema. Three to seven findings is the normal range; zero is the same envelope with an empty finding list after one documented second pass.
+Each sub-agent normally returns the reference pack's Result envelope and Per-finding output spec, including Proof class. Three to seven findings is the normal range; zero uses the same envelope with an empty finding list after one documented second pass.
 
 **Lens coverage:** A/B analyse every lens; C probes assumptions/readability. See the reference pack Lens-finding floor.
 
@@ -84,13 +84,13 @@ Execute in this order:
 
 **1. Context leak scan.** Grep Agent C output for `.goat-flow/`, `goat-*`, `architecture.md`, `config.yaml`, or project-specific namespace references. Only flag references absent from Agent C's input. Untraceable match = CONTEXT LEAK; discard and re-spawn stricter. **Framework-self exemption:** for artifacts inside `.goat-flow/`, `skills/goat-*`, or a goat-flow instruction file, skip `.goat-flow/` and `goat-*` term scans. Check only structural navigation leaks: file paths, config keys, or architecture sections absent from the input.
 
-**1b. Completeness gate.** Verify each sub-agent returned every Result-envelope field (`Evidence reviewed:` through `Residual uncertainty:`, strength and coverage ledger per the reference pack, plus B's unconditional ranked alternative). Incomplete → re-spawn once.
+**1b. Completeness gate.** Verify each sub-agent returned every applicable Result-envelope field (`Evidence reviewed:` through `Residual uncertainty:`, strength and coverage ledger per the reference pack, plus B's unconditional ranked alternative). Incomplete → re-spawn once; still incomplete → `sub-agent completeness limited`.
 
 **2. Classify each finding:** **Consensus** (≥2 agents, severity within ±1), **Split** (≥2 agents, severity differs ≥2 levels or explicit reject vs blocking), **Unique** (one agent only). Silence is not a dismiss; treat as Unique.
 
-**3. Rank each sub-agent's critique** on Grounding, Specificity, Actionability, Coverage and Calibration as strong, adequate or limited, each explained from evidence. Never sum invented numbers.
+**3. Rank each sub-agent's critique** using the reference pack's Ranking criteria: Grounding, Specificity, Actionability, Coverage and Calibration; strong, adequate or limited with evidence, never summed.
 
-**4. Verify sub-agent dimension coverage.** Skim each agent's findings, or a clean attestation's `Rubric coverage:` entries; confirm each claimed dimension has substantive content or named evidence. Demote unsubstantiated claims. Use orchestrator-verified dimensions as input to step 5.
+**4. Verify sub-agent dimension coverage.** Verify each Coverage-ledger scope against its named evidence for clean and non-clean returns. Demote unsubstantiated claims before the union in step 5.
 
 **5. Union the coverage ledgers.** Merge the agents' rows into one host ledger per selected dimension - `finding`, `checked-clean` or `unassessed` - by the reference pack's union rule. Unassessed coverage never generates a HIGH or MEDIUM artifact finding.
 
@@ -121,7 +121,7 @@ Present unresolved items conversationally. Open with decision count and titles. 
 
 ## Phase 5 - Synthesise
 
-Produce the prime critique. Lead with a **Verdict** block:
+Before drafting, apply Final-finding schema and Audit payload identity from `references/rubric-examples.md`. Lead with a **Verdict** block:
 - **Gate: BLOCK | CONCERNS | CLEAN** - derived from surviving findings: any CRITICAL → BLOCK, any HIGH (no CRITICAL) → CONCERNS, else CLEAN. CLEAN coexists with lower-severity findings and with limited coverage; show coverage status beside it.
 - Assessment: STRONG / ADEQUATE / WEAK / FLAWED (synthesised from sub-agent assessments and cross-examination outcomes)
 - Risk level: the highest surviving evidenced artifact severity, floored at LOW and labelled `no evidenced defect` when none survives - a floor, not a clearance
@@ -141,7 +141,7 @@ Then the full critique:
 
 **Proof Gate:** Apply the Proof Gate (see Constraints) to every synthesised finding before inclusion. Every synthesised finding must carry proof class `RUNTIME | CONTRACT-GREP | STATIC | NOT-REPRODUCED`.
 
-**Phase 5.5 - Meta-audit.** Assemble a self-contained packet for the 2-call meta-agent: the draft with its `report_revision`, the selected dimensions, and the final-finding schema and ten rules from `references/rubric-examples.md`. It grades that packet alone. Score each 0 or 10; their sum is `Meta-score`; no partial credit. Emit non-empty `## Auto-Detected Issues`: failures, or at 100/100 write exactly `No failed meta-audit checks.` Never invent issues. Put `Meta-score: N/100` in Verdict. Corrections edit the report, never the artifact.
+**Phase 5.5 - Meta-audit.** Assemble a self-contained packet for the 2-call meta-agent: the frozen draft with its `report_revision`, selected dimensions, and the reference pack's complete Meta-audit rubric (including Packet vocabulary), Final-finding schema and Audit payload identity. It grades that packet alone. Score each 0 or 10; their sum is `Meta-score`; no partial credit. Emit non-empty `## Auto-Detected Issues`: failures, or at 100/100 write exactly `No failed meta-audit checks.` Never invent issues. Put `Meta-score: N/100` in Verdict. Corrections edit the report, never the artifact.
 
 **BLOCKING GATE:** Present the synthesised critique (including Meta-score if 5.5 produced one). "Options: (A) apply, (B) dig deeper, (C) re-run, (D) close. Default: D." Picking (A) is the explicit apply instruction Constraints require, authorizing only the surviving Recommended Changes. After plan critique, suggest `/goat-plan`.
 

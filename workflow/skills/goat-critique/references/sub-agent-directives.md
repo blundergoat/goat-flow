@@ -43,15 +43,15 @@ Every sub-agent returns the same envelope whether or not it found a defect. A cl
 
 ### Coverage ledger
 
-One row per selected dimension, none omitted:
+One row per selected dimension, none omitted. Each row names the full declared scope and one overall disposition:
 
-`dimension [M|O] | finding | checked-clean | unassessed | scope | evidence or finding IDs | reason and next evidence needed`
+`dimension [M|O] | disposition | declared scope | inspected scopes and evidence or finding IDs | unassessed scopes, reasons and next evidence needed`
 
-`finding` cites the finding IDs that evidence a defect in that dimension. `checked-clean` requires complete inspection of the declared scope with no supported defect. `unassessed` states why and what evidence would settle it; it is an honest, complete row and never a defect in the artifact. A dimension with an evidenced defect stays `finding` even when a different scope within it is clean.
+Any supported defect makes the disposition `finding`, citing its finding IDs. With no supported defect, `checked-clean` requires verified inspection of the full declared scope; otherwise use `unassessed`. An unassessed scope states why and what evidence would settle it; it never creates an artifact defect.
 
-Partial scope stays explicit rather than rounding to either neighbour: write the inspected part as `checked-clean` with that scope named, and the remainder as its own `unassessed` row with its reason.
+Keep partial inspection within the same row: name the checked-clean inspected scopes and the unassessed remainder with its reasons and next evidence. A `finding` row also retains any unassessed remainder; a defect does not imply complete inspection.
 
-**How the host unions these rows.** The host merges every agent's ledger into one row per selected dimension. It unions verified inspected scopes, not agent declarations, so one agent's missing inspection never erases another agent's verified coverage: a dimension two agents inspected and found clean stays `checked-clean` even when the third could not inspect it, and that third agent's limitation is preserved separately rather than downgrading the row.
+**How the host unions these rows.** The host unions verified inspected scopes, not agent declarations, then applies the same disposition rule to the full declared scope. Verified A/B coverage can earn `checked-clean` despite C's missing inspection only when that union covers the full scope without a supported defect. Preserve each agent's limitations separately, including gaps covered by another agent.
 
 ## Per-finding output spec
 
@@ -60,7 +60,7 @@ Every finding MUST include:
 - **Finding ID:** a stable run-local identifier, unique within this run. Hooks, retractions, recommendations, top blockers and coverage rows cite the ID instead of repeating the finding.
 - **Proof attempt:** exact command/read executed in sub-agent's tool budget, or "N/A - purely structural"
 - **Proof class:** `RUNTIME | CONTRACT-GREP | STATIC | NOT-REPRODUCED` - records *how* the claim was checked: the verification mechanism, or NOT-REPRODUCED when the attempt could not confirm it
-- **Evidence quality:** OBSERVED / INFERRED / UNVERIFIED / HUMAN-PENDING - records *confidence* in the result, on the shared preamble scale. The axes are independent: a STATIC read can still yield OBSERVED, while a RUNTIME attempt that fails to reproduce pairs NOT-REPRODUCED with UNVERIFIED
+- **Evidence quality:** OBSERVED / INFERRED / UNVERIFIED / HUMAN-PENDING - records the claim's evidential support, independently of proof class and the separate HIGH/MEDIUM/LOW confidence judgment. A STATIC read can yield OBSERVED; an unsuccessful reproduction does not verify the claim.
 - Title, severity (CRITICAL/HIGH/MEDIUM/LOW), evidence (file + semantic anchor or artifact section reference), confidence (HIGH/MEDIUM/LOW)
 - **Rubric dimensions:** the selected dimensions this finding evidences, each with its [M] or [O] mark, so the coverage ledger and the finding agree by construction
 - **SKEPTIC:** one line - what could go wrong, worst case (or "N/A - [reason]" if genuinely inapplicable)
@@ -68,6 +68,20 @@ Every finding MUST include:
 - **STRATEGIST:** one line - fastest path, what to defer, highest-leverage action
 
 For Agents A and B, the tension between lenses is the point. If all three agree, say so - forced disagreement is noise. Consensus across lenses is itself a valid finding; the mandate is that all three perspectives appear as labeled sub-fields, not that they must disagree. For Agent C, the labeled fields keep the schema uniform; `N/A - fresh-eyes scope` is acceptable when the fresh-eyes finding has no useful lens-specific angle.
+
+## Ranking criteria
+
+The host rates each critique on these criteria using its verified output:
+
+| Criterion | What it assesses |
+|---|---|
+| Grounding | Whether evidence supports the claims and their anchors resolve |
+| Specificity | Whether claims name the affected scope, condition and concrete consequence |
+| Actionability | Whether a supported defect has a usable next step, or a clean result justifies leaving the artifact alone |
+| Coverage | Verified inspection of the declared scope and honest accounting for its limits |
+| Calibration | Whether severity and confidence fit the demonstrated effects and evidential limits |
+
+Use **strong** for a clearly supported criterion, **adequate** for a usable result with bounded gaps, and **limited** for a material unsupported or missing part. Explain each rating from evidence. Never sum these labels or invent numerical scores; finding count alone earns no rating.
 
 ## Clean-result attestation
 

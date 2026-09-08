@@ -39,6 +39,18 @@ The next release adds per-command `--help`, path-aware learning recall, one proj
 - **Refuter recipes state their enforced boundary** - Each runtime recipe names the flag that restricts it, forbids bypass flags, and falls back to a local-only review when unsupported.
 - **PR bot logins normalize by suffix** - Overlap matching strips one trailing `[bot]` before alias mapping, compares semantic location instead of line ranges, and leaves unknown authors unknown.
 - **Three review traps ship from real incidents** - A finding that contradicts a passing test, a guard rewrite that needs both builds run, and a bot's own addressed marker join the shipped traps.
+- **BREAKING: `/goat-critique` uses one result contract** - Clean and finding-bearing returns share an envelope and Coverage ledger. Findings keep
+  stable IDs, rubric dimensions, host verification and source agent IDs; evidence quality includes `HUMAN-PENDING` separately from confidence. Update
+  report consumers to read those fields.
+- **BREAKING: critique coverage is separate from severity** - Replace `## Rubric Coverage Gaps` with `## Rubric Coverage` in report consumers. Each
+  selected dimension is `finding`, `checked-clean` or `unassessed`; unread scope records its limits and next evidence instead of creating an automatic
+  defect. `CLEAN` can coexist with lower-severity findings or limited coverage and does not grant clearance.
+- **BREAKING: critique meta-audits bind their score to a report revision** - Consumers must bind `audited_revision` to `report_revision` and use the
+  current check names. One correction batch may receive one recheck; later report edits require that remaining allowance or an unaudited label. The
+  host cannot calculate a replacement score, and conformance does not prove artifact correctness.
+- **Critique recommendations retain their evidence** - Recommendations and integration hooks cite surviving finding IDs; a finding may have no hook or
+  several. Blind spots name real limits or a supported `none identified` statement, rankings use explained qualitative labels, and early exits retain
+  lower-severity findings. Apply actions can use only surviving recommendations after the human gate.
 - **`/goat-qa` test plans keep their risk map** - Asking for a test plan up front now returns the change risk map and gap analysis alongside the plan, in one response.
 - **Setup accepts the `Use when` trigger form** - Skill installation no longer demands a `When to Use` heading when the frontmatter description states the trigger.
 - **Gruff finds project wrappers again** - `gruff-<language>.sh` in `bin/test/`, `bin/`, or `scripts/` preserves project config, paths, and reports.
@@ -64,8 +76,8 @@ The next release adds per-command `--help`, path-aware learning recall, one proj
 - **Accepted-risk exceptions are validated against every recorded field** - Assessment now checks finding class and compensating controls with verification evidence, and an exception may record no compensating control only where the governing policy explicitly permits it. A missing or unvalidated field keeps the finding `OPEN`.
 - **`/goat-security` reports name a posture and a two-value conclusion** - Every report carries `block`, `needs-decision`, `accepted-risk`, `watch`, or `none` with the finding that governs it, and concludes `confident` or `coverage-degraded`; `tool-limited` is a defined degradation flag rather than an undefined third conclusion.
 - **`/goat-security` Quick output is a fixed template** - Quick reports use exactly eight sections; lead fields stay owned by step 5 and accepted-risk fields defer to the policy validator's complete list, so a report can no longer carry fewer fields than validation checks.
-- **`/goat-security` loads the same references at both depths** - Full now states the mandatory set and the fail-closed rule that only Quick had; conditional references and the class map live in a reference loading map, and an unavailable reference, the map's own file included, degrades coverage without stopping the run.
-- **`/goat-security` returns late leads to verification** - The dependency audit runs during lead gathering when authorized, and any lead found after verification re-enters Phase 2 before the proof gate; reporting having begun neither suppresses nor promotes it.
+- **`/goat-security` loads the same references at both depths** - Both load the mandatory set before Quick step 1 or Full Phase 0; conditional references and the class map live in a reference loading map, and an unavailable reference, the map's own file included, degrades coverage without stopping the run.
+- **`/goat-security` returns late leads to verification** - The dependency audit runs during lead gathering when authorized; missing execution controls yield `execution-withheld`, while an approval-only gap yields `scanner-withheld`. Any later lead re-enters Phase 2 before the proof gate; reporting having begun neither suppresses nor promotes it.
 - **`/goat-security` uses one gate name, one spelling, and ten diff states** - Consumer aliases resolve to the Shared Pre-Probe Gate and the Exhaustive inventory gate, ledger values are spelled one way everywhere, the common reference lists all ten Git delta states, design text is evidence for a stated requirement but never for deployed behaviour, and an escaped anchor is labelled so it stays findable.
 
 ## v1.16.0 - 2026-08-20

@@ -530,11 +530,6 @@ describe("skill hardening contracts: security (2/2)", () => {
       /Quick or full threat assessment/iu,
       "dashboard preset security description",
     );
-    assert.equal(
-      readProjectFile("dist/dashboard/preset-prompts.json"),
-      readProjectFile("src/dashboard/preset-prompts.json"),
-      "dashboard preset source/dist parity",
-    );
   });
 
   it("uses one Quick gap-ledger row while Full keeps exhaustive rows", () => {

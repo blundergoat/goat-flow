@@ -281,7 +281,7 @@ flowchart TD
     P55 -->|"BLOCKING GATE"| P56["Phase 5.6: Outcome capture\naccepted / rejected / deferred / partial"]
 ```
 
-**Key constraints:** MUST use real delegated sub-agent calls, not inline role-play. MUST run the meta-audit before the synthesis gate and capture outcomes only after the human responds. MUST restrict the fresh-eyes pass to artifact + evaluation criteria only (no project context). MUST include "What Wasn't Critiqued" section (never empty). MUST put low-confidence recommendation candidates under Open Questions until evidence supports them.
+**Key constraints:** MUST use real delegated sub-agent calls, not inline role-play. MUST run the meta-audit before the synthesis gate and capture outcomes only after the human responds. MUST restrict the fresh-eyes pass to artifact + evaluation criteria only (no project context). MUST include "What Wasn't Critiqued" with actual limits or a supported `none identified` statement within a declared scope; never leave it empty or invent a limit. MUST put low-confidence recommendation candidates under Open Questions until evidence supports them.
 
 ---
 

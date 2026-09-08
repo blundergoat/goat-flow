@@ -1,8 +1,8 @@
 /**
- * Check the dispatcher and user-invoked workflows covered by the shared skill contracts.
+ * Protect the instructions users rely on when asking for QA, critique, or help choosing a workflow.
  *
- * These contracts inspect canonical and installed guidance so supported agents apply the same mode and evidence rules.
- * Use them when changing workflow routing, behavior, or required output.
+ * Run these contracts after changing a skill's routing, evidence rules, or report fields to check every supported harness copy.
+ * These are static guidance checks; application trials establish how agents use the instructions in a user's workflow.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -142,7 +142,7 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
     assertForEachTarget(installedSkillPaths("goat-qa"), (skillPath) => {
       const coverageDepth = readMarkdownSection(skillPath, "Coverage Depth");
 
-      // NONE must require a bounded search and must count a manual plan as coverage.
+      // A user's existing manual test plan counts as coverage, so NONE requires a search that finds neither tests nor a plan.
       assert.match(
         coverageDepth,
         /\| NONE \| No current automated assertion or manual plan found for the named behaviour after a bounded search \|/u,
@@ -208,9 +208,8 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
   });
 
   it("lets an auto-released goat-qa gate carry both phases in one response", () => {
-    // Explicit test-plan intent releases Standard's Phase 2 gate, so both phases render in one response.
-    // The reference is read at render time and outranks the skill there: a blanket ban on combining
-    // phases would drop the risk map and gap analysis from every test-plan answer.
+    // Asking goat-qa for a test plan releases Standard's Phase 2 gate, so the answer includes both the risk analysis and the plan.
+    // The output template must allow that combined answer because it controls rendering after the skill chooses the mode.
     assertForEachTarget(
       installedSkillReferencePaths("goat-qa", "references/output-templates.md"),
       (referencePath) => {
@@ -355,9 +354,9 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
   });
 
   it("labels the preflight goat-critique wording gate as static", () => {
-    const preflight = readProjectFile("scripts/preflight-checks.sh");
-    assert.match(preflight, /section "Skill Static Contracts"/);
-    assert.doesNotMatch(preflight, /Skill Behavioral Contracts/);
+    const preflightScript = readProjectFile("scripts/preflight-checks.sh");
+    assert.match(preflightScript, /section "Skill Static Contracts"/);
+    assert.doesNotMatch(preflightScript, /Skill Behavioral Contracts/);
   });
 
   it("accepts verified clean goat-critique results without fabricated findings", () => {
@@ -431,10 +430,10 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
           /empty C list means no additional project context/iu,
           referencePath,
         );
-        // Rubrics that add no project context of their own, so an agent running them sees
-        // only the fixed baseline split rather than an invented extra reading list.
+        // These rubrics add no project reading for C; users still receive a fresh-eyes critique from its fixed baseline context.
         const rubricsWithEmptyContextList = 7;
 
+        // No matching empty lists means that guidance disappeared, so the missing count must fail this contract.
         assert.equal(
           contextMaps.match(/- \*\*C:\*\* \[\]/gu)?.length,
           rubricsWithEmptyContextList,
@@ -462,7 +461,7 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
       const synthesis = readMarkdownSection(skillPath, "Phase 5 - Synthesise");
       assert.match(
         synthesis,
-        /ten rules from `references\/rubric-examples\.md`/u,
+        /reference pack's complete Meta-audit rubric/u,
         skillPath,
       );
       assert.match(synthesis, /Score each 0 or 10/u, skillPath);
@@ -485,8 +484,7 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
           referencePath,
           "Meta-audit rubric (Phase 5.5)",
         );
-        // Collect every absent check first, so one failure names all of them rather than
-        // stopping at whichever happened to be listed first.
+        // Show every missing audit rule in one failure so maintainers can restore the complete report-grading contract together.
         const missingMetaAuditChecks = metaAuditChecks.filter(
           (checkName) => !metaAudit.includes(checkName),
         );
@@ -502,8 +500,7 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
     );
   });
 
-  // A clean critique and a critique with findings must be gradeable by the same reader, so the two
-  // returns carry one field contract and clean is an empty finding list rather than a different schema.
+  // A user receiving no findings still needs the same assessment and coverage evidence as a user receiving a list of defects.
   it("gives goat-critique one result envelope for clean and non-clean returns", () => {
     assertForEachTarget(
       installedSkillReferencePaths(
@@ -523,7 +520,6 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
           ],
           referencePath,
         );
-        // One envelope means the two returns are never mutually exclusive at whole-return level.
         assert.doesNotMatch(
           directives,
           /returns this schema instead of findings/iu,
@@ -533,10 +529,8 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
     );
   });
 
-  // Every rule that attributes a scope, a hook or a retraction to something needs a referent, so a
-  // finding carries an identifier and the shared evidence scale the rest of the harness already uses.
-  // Invariant: the identifier is run-local and the scale includes HUMAN-PENDING, so hooks, retractions and
-  // coverage rows resolve to one finding and the evidence contract matches the shared preamble.
+  // Stable finding IDs let users trace coverage, hooks, and retractions to the same reported issue throughout a critique.
+  // The shared evidence scale keeps HUMAN-PENDING visible when a finding still needs the user's verification.
   it("gives every goat-critique finding an identity and the shared evidence scale", () => {
     assertForEachTarget(
       installedSkillReferencePaths(
@@ -558,8 +552,7 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
     );
   });
 
-  // An unaddressed dimension is missing coverage, not a defect in the artifact; manufacturing a HIGH
-  // for it both fabricates a finding and makes the CLEAN gate unreachable on the clean path.
+  // Users need unread scope shown as a coverage gap; turning that gap into a HIGH finding would falsely block a clean artifact.
   it("reports goat-critique dimension coverage instead of manufacturing findings", () => {
     assertForEachTarget(installedSkillPaths("goat-critique"), (skillPath) => {
       const ranking = readMarkdownSection(
@@ -567,6 +560,8 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
         "Phase 2 - Rank and Compare",
       );
       assertMatchesAll(ranking, [/checked-clean/u, /unassessed/u], skillPath);
+      assert.match(ranking, /Verify each Coverage-ledger scope/u, skillPath);
+      assert.doesNotMatch(ranking, /`Rubric coverage:` entries/u, skillPath);
       assert.doesNotMatch(ranking, /auto-generate HIGH/iu, skillPath);
       assert.doesNotMatch(ranking, /optional . MEDIUM/iu, skillPath);
       assert.match(
@@ -575,10 +570,44 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
         skillPath,
       );
     });
+    assertForEachTarget(
+      installedSkillReferencePaths(
+        "goat-critique",
+        "references/sub-agent-directives.md",
+      ),
+      (referencePath) => {
+        const envelope = readMarkdownSection(referencePath, "Result envelope");
+        assertMatchesAll(
+          envelope,
+          [
+            /one row per selected dimension/iu,
+            /full declared scope/iu,
+            /within the same row/iu,
+            /otherwise.*`unassessed`/iu,
+            /unions verified inspected scopes/iu,
+          ],
+          referencePath,
+        );
+        assert.doesNotMatch(envelope, /remainder as its own `unassessed` row/u);
+      },
+    );
   });
 
   // The meta-agent grades a packet it is handed; every rule it applies has to travel inside that packet.
   it("makes the goat-critique meta packet carry the rules it grades against", () => {
+    assertForEachTarget(installedSkillPaths("goat-critique"), (skillPath) => {
+      const synthesis = readMarkdownSection(skillPath, "Phase 5 - Synthesise");
+      assertMatchesAll(
+        synthesis,
+        [
+          /Audit payload identity/u,
+          /Final-finding schema/u,
+          /complete Meta-audit rubric/u,
+          /Packet vocabulary/u,
+        ],
+        skillPath,
+      );
+    });
     assertForEachTarget(
       installedSkillReferencePaths(
         "goat-critique",
@@ -597,6 +626,40 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
             /otherwise CLEAN/u,
             /zero or multiple/iu,
             /incomplete inspection is not an artifact defect/iu,
+            /Recommended action.*required only when.*warrants/isu,
+            /omission.*does not fail check 2/iu,
+          ],
+          referencePath,
+        );
+      },
+    );
+  });
+
+  // Explain why one critic's assessment is stronger so users can judge the comparison without an invented numerical ranking.
+  it("defines evidence-based goat-critique ranking criteria at their routed owner", () => {
+    assertForEachTarget(installedSkillPaths("goat-critique"), (skillPath) => {
+      assert.match(
+        readMarkdownSection(skillPath, "Phase 2 - Rank and Compare"),
+        /reference pack's Ranking criteria/u,
+        skillPath,
+      );
+    });
+    assertForEachTarget(
+      installedSkillReferencePaths(
+        "goat-critique",
+        "references/sub-agent-directives.md",
+      ),
+      (referencePath) => {
+        const criteria = readMarkdownSection(referencePath, "Ranking criteria");
+        assertMatchesAll(
+          criteria,
+          [
+            /Grounding.*evidence/iu,
+            /Specificity.*scope/iu,
+            /Actionability.*next step/iu,
+            /Coverage.*verified/iu,
+            /Calibration.*severity.*confidence/iu,
+            /strong.*adequate.*limited.*Never sum/isu,
           ],
           referencePath,
         );
@@ -625,7 +688,7 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
     );
   });
 
-  // Risk level and CLEAN are separate axes from coverage; neither may read as a safety clearance.
+  // Show users the highest supported severity and the coverage gaps separately so they can judge what CLEAN establishes.
   it("derives goat-critique risk level and CLEAN from surviving findings", () => {
     assertForEachTarget(installedSkillPaths("goat-critique"), (skillPath) => {
       const synthesis = readMarkdownSection(skillPath, "Phase 5 - Synthesise");
@@ -785,26 +848,26 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
 
   it("redacts goat-critique persistence before disk and preserves the human gate", () => {
     assertForEachTarget(installedSkillPaths("goat-critique"), (skillPath) => {
-      const phaseFour = readMarkdownSection(skillPath, "Phase 4 - Clarify");
-      assert.match(phaseFour, /keep.*Phase 1-3.*in memory/iu, skillPath);
+      const clarifyPhase = readMarkdownSection(skillPath, "Phase 4 - Clarify");
+      assert.match(clarifyPhase, /keep.*Phase 1-3.*in memory/iu, skillPath);
       assert.match(
-        phaseFour,
+        clarifyPhase,
         /stdin.*`goat-flow redact --output \.goat-flow\/logs\/critiques\/<YYYY-MM-DD>-<HHMM>-<artifact-slug>-<rand5>\.md`.*matching source CLI/isu,
         skillPath,
       );
       assert.match(
-        phaseFour,
+        clarifyPhase,
         /only.*redactor.*destination bytes.*disk/isu,
         skillPath,
       );
       assert.match(
-        phaseFour,
+        clarifyPhase,
         /unavailable.*redaction fails.*write nothing.*`persist-skipped: redactor-unavailable`.*continue.*human gate/isu,
         skillPath,
       );
-      assert.match(phaseFour, /Phase 3 early exit/u, skillPath);
+      assert.match(clarifyPhase, /Phase 3 early exit/u, skillPath);
       assert.doesNotMatch(
-        phaseFour,
+        clarifyPhase,
         /\bWrite Phase 1-3\b|(?:write|persist).*raw.*(?:then|before).*redact/iu,
         skillPath,
       );

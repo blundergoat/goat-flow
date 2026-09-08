@@ -72,7 +72,7 @@ describe("skill hardening contracts: security (1/2)", () => {
         [
           // Both depths get one mandatory set, and the root keeps naming every reference:
           // the quality composer builds the evaluated context from these links.
-          /Both depths read `references\/common-threats\.md` and `references\/supply-chain-and-cicd\.md` before Quick step 1 or Full Phase 1/isu,
+          /Both depths read `references\/common-threats\.md` and `references\/supply-chain-and-cicd\.md` before Quick step 1 or Full Phase 0/isu,
           /`references\/identity-and-data\.md`.*`references\/file-upload-and-paths\.md`.*`references\/project-policy-template\.md`.*Reference loading map/isu,
           /unavailable reference, the map.s own file included.*`not-assessed`.*`coverage-degraded`.*MUST NOT recommend clearance.*gap disclosed.*exhaustive Quick stays Quick/isu,
         ],
@@ -94,6 +94,16 @@ describe("skill hardening contracts: security (1/2)", () => {
       assert.match(
         fullAssessmentPath,
         /Full Assessment-only specialist cross-check/,
+        skillPath,
+      );
+      // A user needs the withheld reason to distinguish missing execution controls from missing approval.
+      assert.match(
+        readMarkdownSubsection(
+          fullAssessmentPath,
+          "Phase 0 - Tool Detection / Lead Gathering",
+          skillPath,
+        ),
+        /Apply Shared Pre-Probe Gate.*Dependency audit:.*authorized=run here; missing Shared Pre-Probe Gate control=`execution-withheld`; approval-only=`scanner-withheld`/u,
         skillPath,
       );
     });

@@ -57,7 +57,7 @@ Quick and Full MUST apply this gate before any probe.
 
 ## Loading
 
-Both depths read `references/common-threats.md` and `references/supply-chain-and-cicd.md` before Quick step 1 or Full Phase 1, then `references/identity-and-data.md`, `references/file-upload-and-paths.md`, and `references/project-policy-template.md` on the triggers in the Reference loading map. An unavailable reference, the map's own file included, marks its families `not-assessed`, the assessment `coverage-degraded`, MUST NOT recommend clearance, and continues with the gap disclosed; exhaustive Quick stays Quick.
+Both depths read `references/common-threats.md` and `references/supply-chain-and-cicd.md` before Quick step 1 or Full Phase 0, then `references/identity-and-data.md`, `references/file-upload-and-paths.md`, and `references/project-policy-template.md` on the triggers in the Reference loading map. An unavailable reference, the map's own file included, marks its families `not-assessed`, the assessment `coverage-degraded`, MUST NOT recommend clearance, and continues with the gap disclosed; exhaustive Quick stays Quick.
 
 ## Quick Scan Path
 
@@ -65,7 +65,7 @@ Both depths read `references/common-threats.md` and `references/supply-chain-and
 2. Scan attacker control/impact; assign severity only after tracing evidence.
 3. Re-check framework/platform mitigations before retaining findings.
 4. For diffs, report changed-file count, risky buckets, and states: `added`, `modified`, `deleted`, `renamed`, `mode/type-changed`, `symlink`, `submodule`, `binary/unscannable`, `attribute-suppressed`, or `pre-existing`.
-5. Present `CONFIRMED` first. For every retained or withheld lead, report title|`file + semantic anchor`@authority|entry→sink/requirement gap|confidence|evidence status|exploit status|finding type|risk disposition|severity=exploitability/CIA impact|proof-class|evidence needed|recommended remediation|proof-of-fix. `CONFIRMED` requires `OBSERVED`. Critical/High `PROBABLE`=`NEEDS-DECISION`; name missing link; MUST NOT recommend clearance. 
+5. Present `CONFIRMED` first. For every retained or withheld lead, report title|`file + semantic anchor`@authority|entry→sink/requirement gap|confidence|evidence status|exploit status|finding type|risk disposition|severity=exploitability/CIA impact|proof-class|evidence needed|recommended remediation|proof-of-fix. `CONFIRMED` requires `OBSERVED`. Critical/High `PROBABLE`=`NEEDS-DECISION`; name missing link; MUST NOT recommend clearance.
 
 **Quick-stop boundary:** Stop after step 5, using Phase 4/Phase 5 shared definitions and posture, Phase 6's shared Proof Gate and zero-findings defence, and Persist Gate when approved. A Quick Scan MUST NOT enter the Full Assessment Path. If a Phase 5 specialist trigger appears, recommend Full Assessment instead of running or waiting for a specialist.
 
@@ -73,7 +73,7 @@ Both depths read `references/common-threats.md` and `references/supply-chain-and
 
 ### Phase 0 - Tool Detection / Lead Gathering
 
-Apply Shared Pre-Probe Gate; manually verify leads. **Dependency audit:** run here when authorized, else `scanner-withheld` with missing approval. Any lead surfacing after Phase 2 re-enters Phase 2 before Phase 6; begun reporting neither suppresses nor promotes it.
+Apply Shared Pre-Probe Gate; manually verify leads. **Dependency audit:** authorized=run here; missing Shared Pre-Probe Gate control=`execution-withheld`; approval-only=`scanner-withheld`. Any lead surfacing after Phase 2 re-enters Phase 2 before Phase 6; begun reporting neither suppresses nor promotes it.
 
 ### Phase 1 - Threat Surface Scan
 
