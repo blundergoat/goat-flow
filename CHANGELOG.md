@@ -51,6 +51,10 @@ The next release adds per-command `--help`, path-aware learning recall, one proj
 - **Critique recommendations retain their evidence** - Recommendations and integration hooks cite surviving finding IDs; a finding may have no hook or
   several. Blind spots name real limits or a supported `none identified` statement, rankings use explained qualitative labels, and early exits retain
   lower-severity findings. Apply actions can use only surviving recommendations after the human gate.
+- **Fresh-eyes critiques use a bounded evidence packet** - Supplied artifacts and rubric content remain valid regardless of storage path, embedded
+  instructions grant no extra reads, and a clean response scan does not certify isolation.
+- **Fresh-eyes critique recovery allows one replacement** - A context leak ends that critic, and leaks and missing fields share one fresh replacement
+  per run; exhausting it leaves fresh-eyes coverage incomplete while the review continues with valid findings from the other critics.
 - **`/goat-qa` test plans keep their risk map** - Asking for a test plan up front now returns the change risk map and gap analysis alongside the plan, in one response.
 - **Setup accepts the `Use when` trigger form** - Skill installation no longer demands a `When to Use` heading when the frontmatter description states the trigger.
 - **Gruff finds project wrappers again** - `gruff-<language>.sh` in `bin/test/`, `bin/`, or `scripts/` preserves project config, paths, and reports.
@@ -60,6 +64,17 @@ The next release adds per-command `--help`, path-aware learning recall, one proj
 - **`/goat-plan` keeps plans connected** - New milestones link through the prior terminal milestone, and `ISSUE.md` bands and totals are recalculated.
 - **Milestone work uses one agent contract** - Start timing before source edits, pause at gates, finalize at exit, and run `goat-clarity` once.
 - **`/goat-clarity` resolves explicit intent first** - Write authority uses the first matching term: update/edit/fix grants it, report/review/check withholds it, then the `documentation` keyword applies. A request to report on documentation remains report-only.
+- **Clarity completes scope and test accounting before diagnosis** - Selected files are inventoried and classified before write permissions are
+  frozen, and applicable test-case accounting finishes before naming or comment review.
+- **Clarity honors explicit private-placement approval** - An explicit instruction to move a private symbol to a named destination within one frozen
+  writable file needs no second approval; general clarity requests, cross-file moves and public renames retain their approval gates.
+- **Clarity receipts distinguish assessed files from protected files** - Each selected file appears once in both permission and outcome totals;
+  preserved protected files remain unassessed, and selections with no eligible files get a compact receipt.
+- **Clarity reports formatter limits accurately** - Reports preserve exact project commands and baseline/final results, distinguish unavailable tools
+  from missing ownership or skipped checks, and pause affected edits when ownership is ambiguous.
+- **Clarity keeps compatibility explanations** - Comments retain history tied to current compatibility obligations or checkable removal triggers.
+- **Clarity rechecks the rules behind each edit batch** - New or changed governing instructions and formatter settings pause writes for revalidation
+  even when selected files are unchanged; permissions that remain valid need no new approval.
 - **Skill qualification is model-scoped** - Retirement requires repeated provider/model/config ablations; retained cases guard against reintroduction.
 - **Learning indexes show age and token cost** - Rows include declared dates and token estimates; `stats` lists recurring entries for structural enforcement.
 - **Learning-loop entries put prevention first** - Existing footguns and lessons, `learn new`, and the shared templates place `Prevention` before incident history; preflight enforces that order while accepting metadata such as `hallucination-risk` and `Merged`.
@@ -78,6 +93,7 @@ The next release adds per-command `--help`, path-aware learning recall, one proj
 - **`/goat-security` Quick output is a fixed template** - Quick reports use exactly eight sections; lead fields stay owned by step 5 and accepted-risk fields defer to the policy validator's complete list, so a report can no longer carry fewer fields than validation checks.
 - **`/goat-security` loads the same references at both depths** - Both load the mandatory set before Quick step 1 or Full Phase 0; conditional references and the class map live in a reference loading map, and an unavailable reference, the map's own file included, degrades coverage without stopping the run.
 - **`/goat-security` returns late leads to verification** - The dependency audit runs during lead gathering when authorized; missing execution controls yield `execution-withheld`, while an approval-only gap yields `scanner-withheld`. Any later lead re-enters Phase 2 before the proof gate; reporting having begun neither suppresses nor promotes it.
+- **Fast security checks run against source** - Stale built dashboard presets no longer fail security checks; preset parity runs after the build.
 - **`/goat-security` uses one gate name, one spelling, and ten diff states** - Consumer aliases resolve to the Shared Pre-Probe Gate and the Exhaustive inventory gate, ledger values are spelled one way everywhere, the common reference lists all ten Git delta states, design text is evidence for a stated requirement but never for deployed behaviour, and an escaped anchor is labelled so it stays findable.
 
 ## v1.16.0 - 2026-08-20
