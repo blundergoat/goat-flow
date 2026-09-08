@@ -26,14 +26,43 @@ goat-flow-reference-version: "1.17.0"
 **Context reads:** artifact + rubric ONLY
 **Does NOT read:** everything else (isolation enforced)
 
+## Result envelope
+
+Every sub-agent returns the same envelope whether or not it found a defect. A clean result is this envelope with an empty finding list, not a different schema, so one reader grades both.
+
+- **Agent identity:** `A` (Risk), `B` (Alternatives) or `C` (Fresh Eyes). Every downstream rule that attributes a scope, a limitation or the alternatives mandate reads this field, so a return without it cannot be reconciled with the others.
+- **Overall assessment:** STRONG / ADEQUATE / WEAK / FLAWED
+- **Strength:** one concrete strength with an artifact anchor
+- **Evidence reviewed:** exact artifact sections, files, commands, or `artifact-only` for isolated C
+- **Coverage ledger:** one row per selected rubric dimension, defined below
+- **Residual uncertainty:** unread or untestable surface, or `none identified` with rationale
+- **Lens dispositions:** what SKEPTIC, ANALYST and STRATEGIST each checked. A lens with nothing to report uses `No supported finding` after the documented re-run; C may use `N/A - fresh-eyes scope`.
+- **Second-pass result:** prompt used and what was re-read. Required whenever any lens or the whole return is clean.
+- **Alternatives (Agent B only):** at least one ranked, meaningfully different approach and why the artifact's choice wins. The mandate is unconditional and a clean result does not waive it. Ranked alternatives are informational comparisons, never a recommendation to change an artifact that has no finding against it. A and C omit this field.
+- **Findings:** zero or more, each carrying every field in the next section
+
+### Coverage ledger
+
+One row per selected dimension, none omitted:
+
+`dimension [M|O] | finding | checked-clean | unassessed | scope | evidence or finding IDs | reason and next evidence needed`
+
+`finding` cites the finding IDs that evidence a defect in that dimension. `checked-clean` requires complete inspection of the declared scope with no supported defect. `unassessed` states why and what evidence would settle it; it is an honest, complete row and never a defect in the artifact. A dimension with an evidenced defect stays `finding` even when a different scope within it is clean.
+
+Partial scope stays explicit rather than rounding to either neighbour: write the inspected part as `checked-clean` with that scope named, and the remainder as its own `unassessed` row with its reason.
+
+**How the host unions these rows.** The host merges every agent's ledger into one row per selected dimension. It unions verified inspected scopes, not agent declarations, so one agent's missing inspection never erases another agent's verified coverage: a dimension two agents inspected and found clean stays `checked-clean` even when the third could not inspect it, and that third agent's limitation is preserved separately rather than downgrading the row.
+
 ## Per-finding output spec
 
 Every finding MUST include:
 
+- **Finding ID:** a stable run-local identifier, unique within this run. Hooks, retractions, recommendations, top blockers and coverage rows cite the ID instead of repeating the finding.
 - **Proof attempt:** exact command/read executed in sub-agent's tool budget, or "N/A - purely structural"
 - **Proof class:** `RUNTIME | CONTRACT-GREP | STATIC | NOT-REPRODUCED` - records *how* the claim was checked: the verification mechanism, or NOT-REPRODUCED when the attempt could not confirm it
-- **Evidence quality:** OBSERVED / INFERRED / UNVERIFIED - records *confidence* in the result. The axes are independent: a STATIC read can still yield OBSERVED, while a RUNTIME attempt that fails to reproduce pairs NOT-REPRODUCED with UNVERIFIED
+- **Evidence quality:** OBSERVED / INFERRED / UNVERIFIED / HUMAN-PENDING - records *confidence* in the result, on the shared preamble scale. The axes are independent: a STATIC read can still yield OBSERVED, while a RUNTIME attempt that fails to reproduce pairs NOT-REPRODUCED with UNVERIFIED
 - Title, severity (CRITICAL/HIGH/MEDIUM/LOW), evidence (file + semantic anchor or artifact section reference), confidence (HIGH/MEDIUM/LOW)
+- **Rubric dimensions:** the selected dimensions this finding evidences, each with its [M] or [O] mark, so the coverage ledger and the finding agree by construction
 - **SKEPTIC:** one line - what could go wrong, worst case (or "N/A - [reason]" if genuinely inapplicable)
 - **ANALYST:** one line - what the evidence says, cost/benefit
 - **STRATEGIST:** one line - fastest path, what to defer, highest-leverage action
@@ -42,20 +71,9 @@ For Agents A and B, the tension between lenses is the point. If all three agree,
 
 ## Clean-result attestation
 
-Three to seven findings is the normal useful range, not a quota. A sub-agent that finds no supported defect after one documented second pass returns this schema instead of findings:
+Three to seven findings is the normal useful range, not a quota. A sub-agent that finds no supported defect after one documented second pass returns the Result envelope with an empty finding list, marked `CLEAN RESULT:` no supported findings. Every envelope field still applies: agent identity, overall assessment, strength, evidence reviewed, the complete coverage ledger, residual uncertainty, lens dispositions, the second-pass result, and B's unconditional alternatives.
 
-- **CLEAN RESULT:** no supported findings
-- **Evidence reviewed:** exact artifact sections, files, commands, or `artifact-only` for isolated C
-- **Rubric coverage:** each mandatory dimension and the evidence checked
-- **Second-pass result:** prompt used and what was re-read
-- **Residual uncertainty:** unread or untestable surface, or `none identified` with rationale
-- **SKEPTIC / ANALYST / STRATEGIST:** what each lens checked; C may use `N/A - fresh-eyes scope` where appropriate
-- **Alternatives (Agent B only):** at least one ranked, meaningfully different approach and why the artifact's choice wins - the alternatives mandate is unconditional and a clean result does not waive it; A and C omit this field
-- **Proof class:** `RUNTIME | CONTRACT-GREP | STATIC | NOT-REPRODUCED`
-- **Overall assessment:** STRONG / ADEQUATE / WEAK / FLAWED
-- **Strength:** one concrete strength with an artifact anchor
-
-This attestation satisfies the completeness gate only after the second pass is documented. Never invent a finding to meet the normal target.
+A clean return satisfies the completeness gate only after the second pass is documented. Never invent a finding to meet the normal target.
 
 ## Lens-finding floor
 

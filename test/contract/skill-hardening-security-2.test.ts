@@ -321,6 +321,29 @@ describe("skill hardening contracts: security (2/2)", () => {
             /emergency stop/u,
             /escalation contact/u,
             /authorization tuple changes, run the full gate again/u,
+            /`<tool>-unavailable` when absent, `scanner-withheld` when installed but unauthorized/u,
+          ],
+          referencePath,
+        );
+        // Both tokens can describe one installed scanner, so the precedence must be one statement in the
+        // paragraph that owns scanner availability, not fragments spread across the file.
+        assert.match(
+          readMarkdownSection(
+            referencePath,
+            "Dependency and supply-chain model",
+          ),
+          /Record one token per scanner.*target-controlled execution is missing any control SKILL's Shared Pre-Probe Gate requires.*`execution-withheld`.*name that control.*`scanner-withheld`.*execution safety is settled.*lacks only run approval/iu,
+          referencePath,
+        );
+        // The class map routes local HTTP/WebSocket/PTY and browser-to-terminal controls here.
+        assertMatchesAll(
+          readMarkdownSection(
+            referencePath,
+            "Local server, PTY, and shell surfaces",
+          ),
+          [
+            /validate Host, Origin, session provenance, and workspace ownership on HTTP\/WebSocket paths/u,
+            /before browser-controlled input reaches a shell, PTY, terminal runner/u,
           ],
           referencePath,
         );
@@ -497,6 +520,8 @@ describe("skill hardening contracts: security (2/2)", () => {
         /authoritative baseline-family inventory.*independently verified complete.*one row per family.*omitted.*unverifiably complete.*`not-assessed`.*coverage-degraded.*withholds clearance/isu,
         /every local untrusted-artifact content read uses the supported passive-read profile.*no-follow classification beneath a validated root.*bounded raw bytes.*MUST NOT import.*render.*execute.*invoke handlers.*otherwise.*`UNVERIFIED`/isu,
         /framework-mitigated defaults.*current `OBSERVED` evidence.*declared authority.*affected path.*otherwise retain.*missing check.*non-clearance posture/iu,
+        // The public summary must carry the skill's own answer on what an unavailable specialist costs.
+        /records `specialist-unavailable`, which degrades coverage without halting the assessment, changing the posture, or reducing any finding's confidence/u,
       ],
       "docs/skills.md",
     );

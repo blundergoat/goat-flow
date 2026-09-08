@@ -8,6 +8,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   assertForEachTarget,
+  assertMatchesAll,
   forbiddenCodexConsentPattern,
   forbiddenCodexExceptionPattern,
   forbiddenDelegationPromptPattern,
@@ -448,20 +449,20 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
       "Gate-finding match",
       "Evidence quality per finding",
       "Rubric coverage completeness",
-      "Rec-changes actionability",
-      "No orphan retractions",
-      "No contradictory findings",
-      "Top-blockers traceability",
-      "Severity calibration internal consistency",
-      "Integration-hooks 1:1 with findings",
-      "Blind-spot-check non-empty",
+      "Recommendation actionability",
+      "Retraction rationale",
+      "Contradictions",
+      "Top-blocker traceability",
+      "Severity consistency",
+      "Integration hooks",
+      "Blind-spot statement",
     ];
 
     assertForEachTarget(installedSkillPaths("goat-critique"), (skillPath) => {
       const synthesis = readMarkdownSection(skillPath, "Phase 5 - Synthesise");
       assert.match(
         synthesis,
-        /10 checks in `references\/rubric-examples\.md`/u,
+        /ten rules from `references\/rubric-examples\.md`/u,
         skillPath,
       );
       assert.match(synthesis, /Score each 0 or 10/u, skillPath);
@@ -499,6 +500,158 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
         assert.match(metaAudit, /`Meta-score` is the sum/u);
       },
     );
+  });
+
+  // A clean critique and a critique with findings must be gradeable by the same reader, so the two
+  // returns carry one field contract and clean is an empty finding list rather than a different schema.
+  it("gives goat-critique one result envelope for clean and non-clean returns", () => {
+    assertForEachTarget(
+      installedSkillReferencePaths(
+        "goat-critique",
+        "references/sub-agent-directives.md",
+      ),
+      (referencePath) => {
+        const directives = readProjectFile(referencePath);
+        assertMatchesAll(
+          directives,
+          [
+            /same envelope/iu,
+            /empty finding list/iu,
+            /Agent identity:/u,
+            /Coverage ledger:/u,
+            /Lens dispositions:/u,
+          ],
+          referencePath,
+        );
+        // One envelope means the two returns are never mutually exclusive at whole-return level.
+        assert.doesNotMatch(
+          directives,
+          /returns this schema instead of findings/iu,
+          referencePath,
+        );
+      },
+    );
+  });
+
+  // Every rule that attributes a scope, a hook or a retraction to something needs a referent, so a
+  // finding carries an identifier and the shared evidence scale the rest of the harness already uses.
+  // Invariant: the identifier is run-local and the scale includes HUMAN-PENDING, so hooks, retractions and
+  // coverage rows resolve to one finding and the evidence contract matches the shared preamble.
+  it("gives every goat-critique finding an identity and the shared evidence scale", () => {
+    assertForEachTarget(
+      installedSkillReferencePaths(
+        "goat-critique",
+        "references/sub-agent-directives.md",
+      ),
+      (referencePath) => {
+        assertMatchesAll(
+          readProjectFile(referencePath),
+          [
+            /Finding ID:/u,
+            /run-local/iu,
+            /HUMAN-PENDING/u,
+            /Rubric dimensions:/u,
+          ],
+          referencePath,
+        );
+      },
+    );
+  });
+
+  // An unaddressed dimension is missing coverage, not a defect in the artifact; manufacturing a HIGH
+  // for it both fabricates a finding and makes the CLEAN gate unreachable on the clean path.
+  it("reports goat-critique dimension coverage instead of manufacturing findings", () => {
+    assertForEachTarget(installedSkillPaths("goat-critique"), (skillPath) => {
+      const ranking = readMarkdownSection(
+        skillPath,
+        "Phase 2 - Rank and Compare",
+      );
+      assertMatchesAll(ranking, [/checked-clean/u, /unassessed/u], skillPath);
+      assert.doesNotMatch(ranking, /auto-generate HIGH/iu, skillPath);
+      assert.doesNotMatch(ranking, /optional . MEDIUM/iu, skillPath);
+      assert.match(
+        readProjectFile(skillPath),
+        /never generates a HIGH/iu,
+        skillPath,
+      );
+    });
+  });
+
+  // The meta-agent grades a packet it is handed; every rule it applies has to travel inside that packet.
+  it("makes the goat-critique meta packet carry the rules it grades against", () => {
+    assertForEachTarget(
+      installedSkillReferencePaths(
+        "goat-critique",
+        "references/rubric-examples.md",
+      ),
+      (referencePath) => {
+        const metaAudit = readMarkdownSection(
+          referencePath,
+          "Meta-audit rubric (Phase 5.5)",
+        );
+        assertMatchesAll(
+          metaAudit,
+          [
+            /any CRITICAL gives BLOCK/iu,
+            /HIGH without CRITICAL gives CONCERNS/iu,
+            /otherwise CLEAN/u,
+            /zero or multiple/iu,
+            /incomplete inspection is not an artifact defect/iu,
+          ],
+          referencePath,
+        );
+      },
+    );
+  });
+
+  // A score names the exact draft it graded, so a later edit cannot inherit a score it never earned.
+  it("binds a goat-critique meta score to the revision it audited", () => {
+    assertForEachTarget(
+      installedSkillReferencePaths(
+        "goat-critique",
+        "references/rubric-examples.md",
+      ),
+      (referencePath) => {
+        assertMatchesAll(
+          readProjectFile(referencePath),
+          [
+            /report_revision/u,
+            /audited_revision/u,
+            /one fresh two-call recheck/iu,
+          ],
+          referencePath,
+        );
+      },
+    );
+  });
+
+  // Risk level and CLEAN are separate axes from coverage; neither may read as a safety clearance.
+  it("derives goat-critique risk level and CLEAN from surviving findings", () => {
+    assertForEachTarget(installedSkillPaths("goat-critique"), (skillPath) => {
+      const synthesis = readMarkdownSection(skillPath, "Phase 5 - Synthesise");
+      assertMatchesAll(
+        synthesis,
+        [
+          /highest surviving evidenced artifact severity/iu,
+          /no evidenced defect/iu,
+          /CLEAN coexists with lower-severity findings/iu,
+        ],
+        skillPath,
+      );
+      assert.match(
+        readMarkdownSection(skillPath, "Phase 3 - Cross-Examine"),
+        /No findings require cross-examination/u,
+        skillPath,
+      );
+      assert.doesNotMatch(synthesis, /Must never be empty/iu, skillPath);
+    });
+    assertForEachTarget(installedSkillPaths("goat-critique"), (skillPath) => {
+      assert.doesNotMatch(
+        readProjectFile(skillPath),
+        /no disputes - full consensus/iu,
+        skillPath,
+      );
+    });
   });
 
   // Even a 100/100 critique must show the meta-audit result, using a clean attestation when it found no issues.

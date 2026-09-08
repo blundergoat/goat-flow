@@ -1,6 +1,6 @@
 ---
 category: agent-behavior
-last_reviewed: 2026-08-29
+last_reviewed: 2026-09-08
 ---
 
 **Scope:** Reading the request and retrieving memory - parsing what was asked, honouring an explicit next step, naming the real failure class in retrieval terms, and treating end-of-task rules as deliverables. Using tools and the environment is [agent-tooling.md](agent-tooling.md); what an explicit skill invocation obliges is [skill-invocation.md](skill-invocation.md).
@@ -174,3 +174,16 @@ Related: `feedback_gruff_never_disable` (auto-memory, 2026-05-25).
 **Why it matters:** A late prose check can catch residue, but it cannot make the required source-of-truth, meaning-preservation, and audience checks shape the first edit. On a larger change, that ordering can turn a factual plan adjustment into an avoidable rewrite.
 
 ---
+
+## Lesson: A written repair list is a diagnosis, not a proof; check its stated contradiction against the bytes
+
+**Status:** active | **Created:** 2026-09-08
+**Decision changed:** Before deleting a value, clause or field that a handoff, review or issue says is contradictory, quote both sides of the alleged contradiction from the current bytes and check they sit on the same axis. Two rules on independent axes cannot contradict, and the "contradictory" item is often the only thing enforcing a third rule.
+**Trigger phase:** READ
+**Caught at:** VERIFY
+
+**Prevention:** Treat a repair instruction as a lead with a citation, not a settled finding, even when it comes from your own earlier session or from several independent reviewers. Open both cited rules, quote them, and name the axis each one moves; if they move different axes, the contradiction is not real and the prescribed deletion is unsafe. Before removing a value from an enumeration, grep for every rule that reads that enumeration and ask what stops being enforced once the value is gone. Prefer stating the intended reading over deleting one of two placements: a token that appears in two lists is usually two facts, not a duplicate. Anchors: `workflow/skills/goat-security/SKILL.md` (search: `MUST NOT let accepted risk`), (search: `Degradation flags:`), (search: `If no admissible and available specialist exists`).
+
+**What happened:** A recorded repair list said `specialist-unavailable` sat in goat-security's `Degradation flags:` enumeration "which contradicts Phase 5's 'do not wait or block' and its instruction to retain `CONFIRMED` findings", and instructed removing it. Both halves are false on the bytes. `block` is a posture value; `coverage-degraded` is a conclusion value; this skill separates those axes everywhere, so a flag that degrades coverage neither waits nor blocks. Coverage never touches a finding's confidence either. Acting on the instruction deleted the only mechanism enforcing a third rule in the same file - `MUST NOT let accepted risk, unavailable scanners, or unavailable specialists imply factual clearance` - so an assessment whose mandatory Critical/High cross-check never ran could conclude `confident`. The repair was then compounded by a second edit that made the weakening explicit. An adversarial read of the diff caught both; the contract suites, budgets, drift, typecheck, formatter and plan check were green throughout.
+
+**Root cause:** The instruction named two rules and asserted a relationship between them. Reading the instruction is not reading the rules, and a plausible relationship between two quoted fragments survives a check for whether the fragments exist. Nothing in the repair path required naming which axis each rule moved, so a category error passed as a citation.

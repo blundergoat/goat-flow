@@ -9,9 +9,9 @@ When application and API surfaces both apply, select both baselines and record s
 
 ## Reference loading map
 
-Both goat-security depths load this file and `supply-chain-and-cicd.md` first. Also load `identity-and-data.md` when identity, authentication, authorization, sessions, secrets, or data are applicable, and `file-upload-and-paths.md` when uploads, paths, archives, or extraction are applicable; ambiguity never makes a reference inapplicable. Record each reference’s applicability and status before scanning. Load `project-policy-template.md` for `Validation during assessment` when an exception exists at the trusted policy authority, and for `## Compliance Mode` after the selected path's Proof Gate.
+Both goat-security depths load this file and `supply-chain-and-cicd.md` first. Also load `identity-and-data.md` when identity, authentication, authorization, sessions, secrets, or data are applicable, and `file-upload-and-paths.md` when uploads, paths, archives, or extraction are applicable; ambiguity never makes a reference inapplicable. Record each reference's applicability and status before scanning. Load `project-policy-template.md` for `Validation during assessment` when an exception exists at the trusted policy authority, and for `## Compliance Mode` after the selected path's Proof Gate.
 
-Class map: application/API/browser/intermediaries, native/desktop/mobile/embedded, memory-unsafe/unsafe-FFI, and local HTTP/WebSocket/PTY and browser-to-terminal controls use this file; generative AI/LLM/RAG, non-generative ML/model, agentic, dependencies/build/CI/releases/shell/agents, and infrastructure/IaC/cloud/containers/orchestrators use `supply-chain-and-cicd.md`; identity/authz/sessions/secrets/data use `identity-and-data.md`; uploads/paths/archives use `file-upload-and-paths.md`.
+Class map: application/API/browser/intermediaries, native/desktop/mobile/embedded, and memory-unsafe/unsafe-FFI use this file; generative AI/LLM/RAG, non-generative ML/model, agentic, dependencies/build/CI/releases/shell/agents, infrastructure/IaC/cloud/containers/orchestrators, and local HTTP/WebSocket/PTY and browser-to-terminal controls use `supply-chain-and-cicd.md`; identity/authz/sessions/secrets/data use `identity-and-data.md`; uploads/paths/archives use `file-upload-and-paths.md`.
 
 ## Application baseline
 

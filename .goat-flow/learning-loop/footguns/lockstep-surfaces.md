@@ -1,6 +1,6 @@
 ---
 category: lockstep-surfaces
-last_reviewed: 2026-09-05
+last_reviewed: 2026-09-08
 ---
 
 **Scope:** Changes where adding or renaming one artifact obliges a matching edit on several other surfaces at once, and the partial-update failures that follow. Stale pointers, path validation, and evidence rot live in [docs-and-crossrefs.md](docs-and-crossrefs.md).
@@ -90,3 +90,21 @@ last_reviewed: 2026-09-05
 **Why it happens:** Claude, Codex, Antigravity, and Copilot read three separate files at different compression levels, with Codex and Antigravity sharing `AGENTS.md`. Cross-agent checks cover a few structural sections, not every command line or router row.
 
 **Evidence:** A 2026-04-27 quality review found `.github/copilot-instructions.md` still told Copilot to run only the slow suite while the other files used the full release gate; the release command now sits at `.github/copilot-instructions.md` (search: `test:full`). The same pass found `AGENTS.md` skill-reference rows omitting topical files; they are now split at `AGENTS.md` (search: `Skill reference (meta)`).
+
+## Footgun: An ordered decision vocabulary republished on several surfaces can disagree while every gate stays green
+
+**Status:** active | **Created:** 2026-09-08 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** When a value list carries meaning in its order - "first match", precedence, a fallback chain - assert the sequence as a sequence on every surface that republishes it. Membership assertions cannot see a reordering.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:**
+1. Before editing a list whose surrounding prose says "first match", "in order", "otherwise", or "falls back to", find every surface that republishes it. goat-security's posture values live in four: the skill's Phase 5 bullets, the skill's own `Posture:` report field, the `/goat-security` section of `docs/skills.md`, and the `security` dashboard preset.
+2. Extract each surface's sequence and compare sequences, not members. `test/contract/skill-hardening-security-1.test.ts` (search: `keeps posture precedence and degradation flags identical on every surface`) reads the Phase 5 bullets by their backticked-token shape, parses the bracketed report field, and orders the two prose surfaces by first appearance inside their own precedence sentence.
+3. A value that appears in two enumerations is usually two facts, not a duplicate. `specialist-unavailable` sits in both the `Specialist:` field and the `Degradation flags:` list: one records the cross-check outcome, the other is what makes an unrun cross-check withhold clearance. Removing either placement silently drops a rule, so trace what reads each list before treating one occurrence as redundant. The behavioural half of this is `.goat-flow/learning-loop/lessons/agent-behavior.md` (search: `A written repair list is a diagnosis, not a proof`).
+
+**Symptoms:** Every contract suite, word budget, drift check, typecheck, formatter and plan check passes, and two agents reading two published copies of the same protocol report a different decision for identical findings.
+
+**Why it happens:** Guidance contracts here match phrases. `assertMatchesAll` proves each posture bullet exists and each flag name appears somewhere; no assertion compared one surface's ordering with another's. Reordering costs no words, so the word-budget cap does not see it. The four copies live in separate files that no single parity check spans - the four-root parity check covers the skill mirrors, not the public documentation or the dashboard preset.
+
+**Evidence:** Measured 2026-09-08 during M47. Phase 5 ranked `accepted-risk` above `needs-decision` while the report field, `docs/skills.md` and the `security` preset ranked them the other way; all four say "first match top-down", so a report carrying both a Critical/High accepted risk and a Critical/High probable finding resolved differently depending on which copy the agent read. No gate found it; independent readings of the four surfaces did. Restoring the pre-fix bytes and re-running the two security suites reproduced it as `# pass 14`, `# fail 4`, with the ordering assertion printing `+ 'accepted-risk'` above `- 'needs-decision'`. Anchors: `workflow/skills/goat-security/SKILL.md` (search: `first match top-down`), `docs/skills.md` (search: `Every report maps one posture`), `src/dashboard/preset-prompts.json` (search: `Map one posture, first match top-down`).

@@ -1,6 +1,6 @@
 ---
 category: setup
-last_reviewed: 2026-09-05
+last_reviewed: 2026-09-08
 ---
 
 ## Footgun: A preview-layer classification change is inert until apply consumes the decision
@@ -46,6 +46,23 @@ last_reviewed: 2026-09-05
 - External corroboration: obra/superpowers PR #1586 ("feat: add DeepSeek TUI harness support") was closed for bypassing the plugin install mechanism and turning a symlinked `AGENTS.md` into a file.
 
 ---
+
+## Footgun: The installer integration helpers report a spawn timeout as a content assertion failure
+
+**Status:** active | **Created:** 2026-09-08 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Whether a wall of failing `setup-install-agent-matrix` cases is a regression in the bytes you just changed. Time one installer run before diagnosing the content; on a slow host every case fails for the same reason and none of them is about your change.
+**Trigger phase:** VERIFY
+
+**Prevention:**
+1. When `setup-install-*` cases fail with `null !== 0`, read `status`, not the message. `spawnSync` returns `status: null` when its `timeout` kills the child, and the helpers pass a fixed 30-second budget: `test/integration/setup-install.helpers.ts` (search: `runInstallerWithEnvironment`), (search: `runCliInstaller`).
+2. Time one install directly before blaming a diff: `bash workflow/install-goat-flow.sh <temp-dir> --agent claude`. A run near or above 30 seconds explains every failing case at once.
+3. Do not treat these suites as a gate for a guidance-text change on a slow host. They belong to the `slow` group, which `npm run test:slow` runs single-concurrency after a build; the `fast` group is the default `npm test`.
+
+**Symptoms:** Twenty-five of twenty-six `cross-agent install smoke matrix` cases fail with a bare `null !== 0` under an install log that shows every step succeeding, each case taking almost exactly 30 seconds. The message reads like an exit-code assertion about installed content, so the natural next move is to hunt the diff.
+
+**Why it happens:** The helpers spawn the installer with `timeout: 30000`. `spawnSync` reports a killed child as `status: null`, and the assertion compares that to `0`, so a wall-clock problem is presented in the vocabulary of a content problem. The installer copies several hundred small files, which is exactly the workload Windows Git Bash is slowest at - the same process and filesystem cost recorded in `.goat-flow/learning-loop/footguns/hooks.md` (search: `Per-item subprocess spawning in hooks is ~40x more expensive on Windows Git Bash`).
+
+**Evidence:** Measured 2026-09-08 on Windows 11 Pro 10.0.26200 during M47, whose change was Markdown, one JSON string and two test files. Run serially with `--test-concurrency=1` and nothing else touching the tree, the two suites returned `# tests 51`, `# pass 2`, `# fail 49` - 25 of 26 cases in `setup-install-agent-matrix.test.ts` and 24 of 25 in `setup-install-migrations.test.ts` - each failure around `duration_ms: 30016` with error `null !== 0`. A default-concurrency run returned the same totals, so concurrency is not the cause. A single `bash workflow/install-goat-flow.sh <temp-dir> --agent claude` on the same tree exited 0 in 46 seconds, above the helpers' 30-second budget.
 
 ## Resolved Entries
 

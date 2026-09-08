@@ -32,7 +32,7 @@ last_reviewed: 2026-09-05
 
 **Approach:** Verify every self-declaration that changes routing, severity, or acceptance on the orchestrator side, highest blast radius first: re-read a sample finding to confirm its dimension tag, grep fresh-eyes output for forbidden namespace references, and only then trust the coverage math. Lower-stakes declarations such as quota and lens completeness can stay prose until they repeatedly fail. Never let a prompt rule feed automatic HIGH severity or phase progression on the sub-agent's own assertion; a prompt can request discipline but cannot prove it happened.
 
-**Evidence:** `workflow/skills/goat-critique/SKILL.md` (search: `leak scan`) and (search: `coverage gate`) are the executable checks that replaced self-report-only gates.
+**Evidence:** `workflow/skills/goat-critique/SKILL.md` (search: `leak scan`) and (search: `Union the coverage ledgers`) are the executable checks that replaced self-report-only gates. The coverage step now unions verified inspected scopes rather than agent declarations, and no longer converts an unaddressed dimension into an automatic HIGH.
 
 ## Pattern: Delegated-work review before user handoff
 
