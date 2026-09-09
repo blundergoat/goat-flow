@@ -87,20 +87,68 @@ Each map lists additions to the fixed Context split in `SKILL.md` and never repl
 - **Rubric dimensions:** blast radius accuracy [M], migration safety [M], dependency impact [O]
 ```
 
-### Example: Differential mode delta block (Phase 5 Verdict)
+## Differential baselines
 
-When Step 0 detects a same-artifact critique log within 30 days and differential mode is active, Phase 5 appends a delta block to the Verdict comparing this run against the prior one. Worked example for a plan re-critiqued after the author resolved two findings and added a milestone:
+`artifact_identity` uses the normalized selected-project root by default; a human-declared portable project ID may explicitly replace it. Normalize relative path separators and dot segments, preserve case and scope selectors, and sort/deduplicate artifact-set members. Inline material needs a declared identity. Content hashes belong separately in `assessed_state`. Same basenames in different directories/projects do not match. Project moves, renames and changed set membership require explicit mapping.
 
-```markdown
-## Verdict
-- **Gate:** CONCERNS  <!-- one HIGH survives -->
-- **Delta vs prior critique [diff-of: a1b2c]:** Resolved: 2 | Regressed: 0 | New: 1 | Unchanged: 1
-```
+Within 30 days, offer differential mode for matching identity. Prefer finalized findings even when outcomes are pending; a selected preliminary baseline must say preliminary. Record the baseline's record ID and project-relative path, plus source locator or unavailable reason, in `baseline`. A filename suffix is not its identity.
 
-- **Resolved (2):** the prior MILE-03 sequencing gap and the missing rollback step are absent from the current artifact.
-- **New (1):** the added milestone introduces an untested integration boundary (HIGH) - this drives the CONCERNS gate.
-- **Unchanged (1):** the prior MEDIUM on task specificity persists.
-- Counts come from matching this run's findings against the prior log's findings by title/anchor; `[diff-of: a1b2c]` cites the `<rand5>` slug of the prior critique's filename.
+| Prior source | Permitted comparison |
+|---|---|
+| Immutable Git commit/blob and path/set, successfully retrieved at the declared project | Artifact diff plus evidenced findings comparison |
+| Available ignored/supplied source, or retained scrubbed snapshot proven byte-equivalent to the bounded original | Artifact diff while identity and equivalence hold |
+| Redaction-altered or unknown-equivalence snapshot/receipt | Receipt or findings comparison only |
+| Digest or summary without recoverable bytes | Artifact-diff-unavailable; bounded findings comparison where evidence permits |
+
+Do not archive raw ignored artifacts or create Git objects to manufacture a baseline. A digest can verify available bytes; it cannot reconstruct missing ones. Prove a scrubbed snapshot's equivalence before treating it as source authority.
+
+Before the initial critic batch, give A/B bounded relevant prior findings and any available artifact diff, with exact baseline identity and limits. Preserve their fixed context split and five-call limits. C receives only current artifact/rubric; do not claim omitted critic work occurred.
+
+### Delta accounting
+
+Map claims using artifact identity, semantic anchor, claim and stable source IDs, retaining merge/split mappings without double-counting. Each prior finding is exactly one of `unchanged`, `resolved`, `regressed`, `unassessed`, `unmapped`. New findings belong only to the current set.
+
+Report `Resolved: N | Regressed: M | New: K | Unchanged: J`, plus explicit unassessed/unmapped counts and reasons. Prior total = unchanged + resolved + regressed + unassessed + unmapped. Link the selected record by ID and path.
+
+Changed or unchanged classifications and each new finding need current evidence; absence from this report never proves resolution. Unassessed lacks current proof; unmapped lacks established identity. Regression requires evidenced worsening or recurrence after evidenced prior resolution, not a renamed title.
+
+## Saved records and recovery
+
+Use one Markdown metadata block per record; this is a document contract, not a runtime parser. Create a `run_id` once; resume retains it, while a deliberate rerun gets a new run ID. Each fresh record gets its own `record_id`.
+
+| Metadata field | Required value |
+|---|---|
+| `record_schema_version`, `skill_version` | Schema revision `1` and actual loaded skill version |
+| `run_id`, `record_id`, `phase`, `created_at` | Opaque run ID, unique record ID, phase below, UTC creation time |
+| `source_record` | Predecessor ID and project-relative path; otherwise null with a missing-source reason |
+| `artifact_identity`, `assessed_state` | Selected project and artifact/path-set identity; assessed content identity separately |
+| `report_revision`, `audited_revision` | Report payload revision and revision actually graded; null with reason when inapplicable |
+| `baseline` | Selected prior record and available source locator, or unavailable reason; permitted comparison type |
+| `limitations`, `retry_state` | Coverage/persistence limits and already-used C replacement and meta-recheck allowances |
+
+| Phase | Save when; required body | Resume at |
+|---|---|---|
+| `pre-clarification` | Before Phase 4, even with no questions: Phase 1–3 findings, coverage, verification, retractions and pending questions | Phase 4 |
+| `finalized` | After meta-audit, before the final human gate: complete final findings, Phase 4 decisions, exact audited draft/meta result, limitations and pending final question; link preliminary record when available | Final human gate |
+| `outcomes` | After an actual response: `## Outcomes` with exact reply and per-finding dispositions; link finalized record and its finding IDs | Follow-up context, comparing through finalized findings |
+
+### Save protocol
+
+Keep every draft in memory. Pipe it through stdin to the preamble-selected `goat-flow redact --output .goat-flow/logs/critiques/<YYYY-MM-DD>-<HHMM>-<artifact-slug>-<rand5>.md` or matching source CLI; only redactor destination bytes may reach disk. Check each destination is absent. The random suffix prevents collisions; filenames are not run or artifact identities. Never append to or overwrite an earlier record.
+
+If unavailable or redaction fails, write nothing, emit `persist-skipped: redactor-unavailable`, and continue to the applicable human gate. Identify which phase failed and which earlier saves succeeded. A later save declares a missing predecessor instead of inventing its path. No raw fallback or whole-run persistence claim after a failed final/outcome save.
+
+Verify saved bytes and links before claiming persistence. If redaction changes audited report content, apply **Audit payload identity** below: use its remaining recheck allowance or mark the saved revision unaudited. Metadata and an unchanged audit wrapper alone do not change the payload.
+
+### Human outcomes
+
+A defaults to `accepted`; D defaults to `deferred`. For B/C, preserve the actual dig-deeper/rerun request; map only explicit per-finding decisions. Use `human_disposition: null` with a pending reason when unspecified. The only non-null values are `accepted`, `rejected`, `deferred`, `partial`; partial means partial human acceptance, never missing information. An investigation request does not supply a disposition.
+
+### Resume selection
+
+Read phase and verified source links, not modification times or the largest filename. Linked records must agree on run/artifact identity and finding IDs. Ambiguous candidates or conflicting links require a human choice; a missing predecessor remains explicit. Legacy records remain readable with unknown/preliminary/legacy provenance, without migration or inferred finality.
+
+Re-read the current artifact identity and assessed bytes. Unchanged bytes permit continuation; drift requires a human choice to finish the recorded state or start a new critique. Never combine fresh bytes with old findings silently. Preserve retry counters. An existing finalized record with no outcomes resumes the final human gate without repeating critics or saving a duplicate final draft. If an actual reply was not saved, ask for it again. A saved accepted recommendation is continuity evidence, never independent permission to apply in a new session.
 
 ## Meta-audit rubric (Phase 5.5)
 

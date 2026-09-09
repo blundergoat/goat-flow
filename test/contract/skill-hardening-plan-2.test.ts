@@ -366,9 +366,9 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
     }
   });
 
-  it("requires current reasons only for blocked and abandoned milestones", () => {
+  it("requires current reasons for all exceptional milestones", () => {
     const compactSkillRule =
-      /Current-reason rule: `Status reason:`—`blocked`: condition\+resume evidence\/action; `abandoned`: human-decision\+stop-rationale; remove-on-exit/u;
+      /For exceptional states, use `references\/milestone-examples\.md` → Status reason; remove stale reasons on ordinary states/u;
     const blockedRule =
       /`blocked` and `Status reason:` names the condition and evidence\/action to resume/u;
     const abandonedRule =
@@ -387,21 +387,36 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
       ),
       (referencePath) => {
         const reference = readProjectFile(referencePath);
+        const reasons = readMarkdownSection(referencePath, "Status reason");
         assert.match(
-          reference,
-          /Add `\*\*Status reason:\*\*` directly after Status only while `blocked` or `abandoned`/u,
+          reasons,
+          /one current `\*\*Status reason:\*\*`/u,
           referencePath,
         );
+        for (const state of [
+          "blocked",
+          "abandoned",
+          "superseded",
+          "deferred",
+        ]) {
+          assert.match(
+            reasons,
+            new RegExp(`^\\| ${state} \\|`, "mu"),
+            referencePath,
+          );
+        }
         assert.match(reference, /evidence\/action needed to resume/u);
         assert.match(
           reference,
-          /preserve the human decision and why work stops/u,
+          /Preserve the human decision and why work stops/u,
         );
-        assert.match(reference, /Remove the field when leaving either state/u);
+        assert.match(reference, /resolvable non-self successor milestone/u);
+        assert.match(reference, /later release or record owning the scope/u);
+        assert.match(reference, /Remove stale reasons on ordinary states/u);
       },
     );
 
-    // Both convention copies must limit current reasons to blocked or abandoned milestones.
+    // Shared conventions retain the earlier stop/resume rules and the two terminal-state obligations.
     for (const conventionsPath of [
       "workflow/skills/reference/skill-conventions.md",
       ".goat-flow/skill-docs/skill-conventions.md",
@@ -410,6 +425,11 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
       assert.match(conventions, blockedRule, conventionsPath);
       assert.match(conventions, abandonedRule, conventionsPath);
       assert.match(conventions, removalRule, conventionsPath);
+      assert.match(
+        conventions,
+        /`superseded` and `deferred` are terminal and need a `Status reason:`/u,
+        conventionsPath,
+      );
     }
   });
 

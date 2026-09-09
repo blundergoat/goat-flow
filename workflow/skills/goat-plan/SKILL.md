@@ -1,6 +1,6 @@
 ---
 name: goat-plan
-description: "Use when starting a non-trivial implementation that needs structured task breakdown with progress tracking."
+description: "Use when creating, updating, reconciling, or resuming milestone plans."
 goat-flow-skill-version: "1.17.0"
 ---
 # /goat-plan
@@ -47,12 +47,19 @@ Plans are local workflow state, not a setup invariant. Mode R is read-only: repo
 
 4. **Pick exactly one mode.** First match:
 
-0. **Path-Only Intake / Read-Only Orientation** - path-only or ambiguous task path. Summarize status, ask next action, stop.
-R. **Reconcile Existing Plan State** - reconcile/audit/refresh: compare live state with evidence, propose corrections, stop without writes.
-2. **Read-Only Analysis** - "what would the milestones look like", "break this down", "plan this out", "reporting-only", "no-implementation": inline output, no writes; skip Phase 3. File mode needs later authorization.
-1. **Named-File Update** - edit a specific plan file only when no explicit reporting-only or no-implementation signal is present. A path alone is not write approval; use Phase 2 § Mode 1, never implement code.
-3. **Small File-Write** - Hotfix / Small Feature (1-2 milestones), no analysis signals. Use Mode 4's write path with compact ceremony.
-4. **File-Write (default at Standard+)** - "create milestones", "set up the plan", "start planning", or Standard / System / Infrastructure with a clear objective and no analysis signals. Write full milestones in `.goat-flow/plans/<active>/`.
+**0: Path-Only Intake / Read-Only Orientation** - path-only or ambiguous task path. Summarize status, ask next action, stop.
+
+**2: Read-Only Analysis** - reporting-only/no-file constraints forbid writes; no-implementation alone does not. Conflicting write/no-write instructions preserve bytes and require clarification.
+
+**1: Named-File Update** - explicit plan edits, including reconcile-and-fix with implementation prohibited. A path alone is not write approval; use Phase 2 § Mode 1, never implement code.
+
+**R: Reconcile Existing Plan State** - reconcile/audit without requested edits: compare evidence, propose corrections, stop without writes.
+
+**2: Read-Only Analysis** - inline planning without artifact authority; skip Phase 3. File mode needs later authorization.
+
+**3: Small File-Write** - explicit planning artifacts for Hotfix / Small Feature (1-2 milestones); use Mode 4's write path with compact ceremony.
+
+**4: File-Write (Standard+)** - explicit planning artifacts for Standard / System / Infrastructure; resolve missing destination/scope before writing.
 
 **CHECKPOINT (Path-Only Intake):** "Mode: Path-Only Intake. [path]: [status]. Plan pointer: [state]. Next action needed."
 
@@ -90,7 +97,7 @@ Each item states the claim and evidence with a proof-class tag. Omit inapplicabl
 
 **Tasks:** Use one action, target, and done condition. Put rationale, paths, and proof beneath the task only when needed. Pin paths when downstream work depends on them.
 
-**Effort estimate (agent-time):** Count positive agent-owned Task/Proof/Mid-proof plus one admin entry; exclude `[HUMAN]`/zero-minute items. `Forecast basis:` records `<n> agent work units` plus rates. Use `0.5-2.5-10 min/unit` until three eligible bases, then `plans check` evidence. Never use duration intuition; ~70/20/10 stays advisory. If scope changes, reforecast before implementation; `reforecast required` blocks. Start a `plans time` receipt first. Optional `Forecast range:` stays legacy-compatible; bases derive headline/range.
+**Effort estimate (agent-time):** Count positive agent-owned Task/Proof/Mid-proof plus one admin entry; exclude `[HUMAN]`/zero-minute items. `Forecast basis:` records `<n> agent work units` plus rates. Use `0.5-2.5-10 min/unit` until three eligible bases, then `plans check` evidence. Never use duration intuition; ~70/20/10 stays advisory. If scope changes, reforecast before implementation; `reforecast required` blocks. Execution uses `references/milestone-examples.md` → Timing receipts. `Forecast range:` is required with a basis; legacy points and range-only estimates remain valid.
 
 **Cold-start bar:** Identify files, conventions, scope, commands, and recovery.
 
@@ -142,7 +149,7 @@ Write Standard or triggered high-risk artifacts immediately. Do NOT invoke/ask a
 
 ### File Artifact Rules (Modes 3 and 4)
 
-Fresh plan: create a slugged directory, update `.active`, and write one zero-padded `M*.md` per milestone. Existing plan: identify its prior terminal milestone. Append: new `Depends on` prior. Insert before prior: prior `Depends on` new. Re-derive `ISSUE.md` bands and totals.
+Fresh plan: create a slugged directory and write one zero-padded `M*.md` per milestone. Only explicit active-plan selection updates `.active`; a creation destination or unrelated existing-plan edit leaves a valid marker unchanged. Existing plan: identify its prior terminal milestone. Append: new `Depends on` prior. Insert before prior: prior `Depends on` new. Re-derive `ISSUE.md` bands and totals.
 
 **Rendering:** Mode 3 uses compact Small; Mode 4 uses Standard plus triggered high-risk fields. Omit empty sections; retain Phase 1 core, claim-based Proof, and one command source.
 
@@ -164,11 +171,11 @@ Fresh plan: create a slugged directory, update `.active`, and write one zero-pad
 
 Completed implementation enters `testing-gate`. Apply the preamble's Proof Gate; audit tasks and exit, rerun only stale/failed checks or when risk requires it.
 
-Successful AI proof records structured `Actual:` and sets `human-verification-pending`; only human-owned items stay open. Each milestone retains its own receipt and blocking human gate; unrelated active lanes keep their state and receipts. Finalize the receipt before `Actual:`; otherwise declare retrospective, unavailable, or incomplete instead of inventing minutes. Calibration eligibility starts at `complete`.
+Successful AI proof records structured `Actual:` and sets `human-verification-pending`; only human-owned items stay open. Each milestone retains its own receipt and blocking human gate; unrelated active lanes keep their state and receipts. Follow `references/milestone-examples.md` → Timing receipts: finalize before Actual or declare retrospective/unavailable/incomplete instead of inventing minutes. Calibration eligibility starts at `complete`.
 
 **BLOCKING GATE (Human Verification):** Present files, exit evidence, estimate versus Actual, and assumptions. "Approve this milestone and eligible follow-up work, or adjust?"
 
-After approval for a non-final milestone, capture learnings, complete it, re-read/update the selected eligible milestone; start it only when `Depends on` permits and lane capacity allows. Human-requested changes return the milestone to `in-progress`; this applies only to the reviewed milestone; never amend silently. Current-reason rule: `Status reason:`—`blocked`: condition+resume evidence/action; `abandoned`: human-decision+stop-rationale; remove-on-exit. Rerun strict validation after each transition.
+After approval for a non-final milestone, capture learnings, complete it, re-read/update the selected eligible milestone; start it only when `Depends on` permits and lane capacity allows. Human-requested changes return the milestone to `in-progress`; this applies only to the reviewed milestone; never amend silently. For exceptional states, use `references/milestone-examples.md` → Status reason; remove stale reasons on ordinary states. Rerun strict validation after each transition.
 
 The final pending milestone enters the combined Phase 4 review; do not mark it complete in Phase 3.
 
@@ -178,7 +185,7 @@ Begin only when the unique final join is `human-verification-pending`, every oth
 
 ### AI Verification Gate
 
-Verify every implementation task and, when `ISSUE.md` exists, every ISSUE Tasks item is closed. Verify exits and Proof claims have fresh evidence, assumptions are resolved, statuses are coherent, and required learning-loop updates exist. Keep Requirements stable. Surface gaps and aggregate all UNVERIFIED items; do not rerun fresh evidence for presentation.
+Verify every implementation task and, when `ISSUE.md` exists, every ISSUE Tasks item is closed. Require fresh exit/Proof evidence, resolved assumptions, coherent statuses and required learning-loop updates. Keep Requirements stable and mapped to outcomes/proof. Reconcile ISSUE delivery bands with its headline separately: `plans check` reads milestones only. Aggregate gaps/UNVERIFIED; reuse fresh evidence.
 
 ### Human Verification Gate
 

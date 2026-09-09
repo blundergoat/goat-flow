@@ -249,6 +249,36 @@ describe("plans check: active cap input and project authority", () => {
 });
 
 describe("plans check: forecasts, calibration, and CLI usage", () => {
+  /** Writes a basis-only fixture to guard the missing-range rejection in default mode as well as strict mode. */
+  it("default mode requires the derived range when a forecast basis is supplied", () => {
+    const temporaryRoot = mkdtempSync(
+      join(tmpdir(), "goat-flow-plan-basis-range-"),
+    );
+    const planPath = writeCheckFixture(
+      temporaryRoot,
+      estimatedMilestoneBody(
+        "Effort estimate: ~8 min agent-time (3 product / 3 proof / 2 other)",
+        ["- [ ] Build the thing (est: 3 min product)"],
+        {
+          forecastBasisLine:
+            "Forecast basis: 3 agent work units; 0.5-2.5-10 min/unit low-likely-high; source: cold-start prior",
+          planAdminOverhead: "2 min other",
+          testingGateLines: ["- [ ] Run typecheck (est: 3 min proof)"],
+        },
+      ),
+    );
+    try {
+      const result = runPlansCheck(planPath);
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.match(
+        result.stdout,
+        /Forecast basis requires a derived Forecast range/u,
+      );
+    } finally {
+      rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+  });
+
   // Covers an optional forecast band: writes one sharing the headline's unit and centre and expects a pass.
   it("strict mode accepts an ordered forecast range centred on the headline", () => {
     const temporaryRoot = mkdtempSync(join(tmpdir(), "goat-flow-plan-range-"));

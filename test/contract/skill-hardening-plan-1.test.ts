@@ -32,8 +32,21 @@ describe("skill hardening contracts: goat-plan (1/2)", () => {
         "Phase 3 - Between Milestones",
       );
 
-      assert.match(breakdown, /Start a `plans time` receipt first/u, skillPath);
-      assert.match(breakdown, /Optional `Forecast range:`/u, skillPath);
+      assert.match(
+        breakdown,
+        /Execution uses `references\/milestone-examples\.md` → Timing receipts/u,
+        skillPath,
+      );
+      assert.match(
+        breakdown,
+        /`Forecast range:` is required with a basis/u,
+        skillPath,
+      );
+      assert.match(
+        breakdown,
+        /legacy points and range-only estimates remain valid/u,
+        skillPath,
+      );
       assert.match(
         breakdown,
         /Forecast basis.*agent work units/u,
@@ -51,7 +64,7 @@ describe("skill hardening contracts: goat-plan (1/2)", () => {
       );
       assert.match(
         betweenMilestones,
-        /Finalize the receipt before `Actual:`/u,
+        /Timing receipts: finalize before Actual/u,
         skillPath,
       );
       assert.match(
@@ -80,6 +93,33 @@ describe("skill hardening contracts: goat-plan (1/2)", () => {
           readMarkdownSection(referencePath, "Effort Estimates"),
           /\[HUMAN\].*excluded.*agent work units/isu,
           `${referencePath}: human-only work is not excluded from agent forecasts`,
+        );
+        const timing = readMarkdownSection(referencePath, "Effort Estimates");
+        assert.match(
+          timing,
+          /set exactly one rendered Status to `in-progress` or `testing-gate`, then start and inspect/u,
+          referencePath,
+        );
+        assert.match(
+          timing,
+          /Pending consumes capacity but cannot Start/u,
+          referencePath,
+        );
+        assert.match(timing, /acceptance never reopens timing/u, referencePath);
+        assert.match(
+          timing,
+          /Authorized reset.*stop timing.*fence exact historical receipts and Actual.*Reset history.*remove their live representations.*Reopen scoped Tasks\/Proof\/Mid-implementation proof\/Exit checkboxes.*clear current Actual and stale Status reason.*`not-started`; validate/su,
+          referencePath,
+        );
+        assert.match(
+          timing,
+          /Fenced history supplies no live metadata/u,
+          referencePath,
+        );
+        assert.match(
+          timing,
+          /Never erase inconvenient measurements/u,
+          referencePath,
         );
       },
     );
@@ -371,8 +411,8 @@ describe("skill hardening contracts: goat-plan (1/2)", () => {
   it("makes explicit no-write signals outrank named-file mutation verbs", () => {
     assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
       const intake = readMarkdownSection(skillPath, "Step 0 - Intake");
-      const readOnlyIndex = intake.indexOf("2. **Read-Only Analysis**");
-      const namedFileIndex = intake.indexOf("1. **Named-File Update**");
+      const readOnlyIndex = intake.indexOf("**2: Read-Only Analysis**");
+      const namedFileIndex = intake.indexOf("**1: Named-File Update**");
 
       assert.notEqual(
         readOnlyIndex,
@@ -390,9 +430,33 @@ describe("skill hardening contracts: goat-plan (1/2)", () => {
       );
       assert.match(
         intake,
-        /Named-File Update.*only when no explicit reporting-only or no-implementation signal is present/su,
-        `${skillPath}: ordinary update verbs can override explicit no-write intent`,
+        /reporting-only\/no-file constraints forbid writes; no-implementation alone does not/u,
+        `${skillPath}: plan-file and implementation permissions are conflated`,
       );
+      assert.match(
+        intake,
+        /Named-File Update.*explicit plan edits, including reconcile-and-fix with implementation prohibited/su,
+        `${skillPath}: authorized named-plan edits lose their update mode`,
+      );
+      const modeIds = Array.from(
+        intake.matchAll(/^\*\*([0-4R]): .+?\*\*/gmu),
+        (match) => match[1],
+      );
+      assert.deepEqual(
+        modeIds,
+        ["0", "2", "1", "R", "2", "3", "4"],
+        `${skillPath}: stable labels must retain the approved first-match order`,
+      );
+      const delivery = readMarkdownSection(
+        skillPath,
+        "Phase 2 - Deliver Milestones",
+      );
+      for (const modeId of new Set(modeIds)) {
+        assert.ok(
+          delivery.includes(`### Mode ${modeId}:`),
+          `${skillPath}: intake mode ${modeId} has no matching delivery block`,
+        );
+      }
     });
   });
 
@@ -629,12 +693,12 @@ describe("skill hardening contracts: goat-plan (1/2)", () => {
         );
         assert.match(
           milestoneExample,
-          /must exactly reproduce each category and the headline/,
+          /must reproduce product\/proof\/other categories and headline/,
           examplePath,
         );
         assert.match(
           milestoneExample,
-          /diagnostic guide, never a quota or pass\/fail gate/,
+          /70\/20\/10 is diagnostic, never a quota\/gate/,
           examplePath,
         );
         assert.equal(

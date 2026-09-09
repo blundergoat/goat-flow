@@ -1,6 +1,6 @@
 ---
 category: milestone-accounting
-last_reviewed: 2026-09-08
+last_reviewed: 2026-09-09
 ---
 
 **Scope:** Milestone state and effort accounting - activation order, where human gates belong, what a task section may contain, and why estimates counted from work units beat estimates written as durations. Multi-agent council coordination is [coordination.md](coordination.md).
@@ -263,14 +263,16 @@ Evidence anchors: `src/cli/plans-effort.ts` (search: `export function countAgent
 **Decision changed:** When goat-plan File-Write adds a milestone to a plan directory that already has a terminal release milestone, the same batch adds the new ID to that node's `Depends on` and re-derives the ISSUE task band and totals; a milestone file alone is not "in the plan".
 **Trigger phase:** SCOPE
 **Caught at:** ACT
-**Incident count:** 4 | **Latest occurrence:** 2026-09-07
+**Incident count:** 5 | **Latest occurrence:** 2026-09-09
 
 **Prevention:** When adding a milestone to an existing plan directory, read the terminal node, add the new ID, traverse the graph to re-derive direct and closure counts, then re-derive the ISSUE.md band and "How long" totals before strict validation; a passing per-file check is necessary, not sufficient. Since 2026-08-23 goat-plan's File Artifact Rules state this for existing plans (TDD log `2026-08-23-goat-plan-tdd.md`; partial hardening, one real RED and one GREEN).
 
-**What happened:** M47 was created in the 1.17.0 train with valid structure and a passing strict check, but the terminal node M37, whose `Depends on` closes the release, did not list it; the ISSUE.md band and totals changed only because the user asked separately, and the gap surfaced on a "double check that plan" pass because `plans check` validates each file and the ISSUE arithmetic, not membership in the terminal node. Hours later a parallel session added M48 to the same train, also absent from that node. Both files are gitignored plan files, so no durable anchor exists; the strict check passed before and after the fix.
+**What happened:** M47 was created in the 1.17.0 train with valid structure and a passing strict check, but the terminal node M37, whose `Depends on` closes the release, did not list it; the ISSUE.md band and totals changed only because the user asked separately, and the gap surfaced on a "double check that plan" pass because `plans check` validates milestone files, without checking ISSUE arithmetic or membership in the terminal node. Hours later a parallel session added M48 to the same train, also absent from that node. Both files are gitignored plan files, so no durable anchor exists; the strict check passed before and after the fix.
 
 **Root cause:** goat-plan's File-Write path described creating and validating files in `.goat-flow/plans/<active>/` without saying that an existing train's dependency graph and ISSUE bands are part of the artifact, so "wrote M47" felt complete.
 
 **Recurrence 2026-08-25:** M55 correctly replaced M54 as M37's terminal dependency and updated ISSUE bands, but the dependency note reused stale counts; independent traversal found 28 direct terminals and a 51-milestone closure, not 27 and 50.
 
 **Recurrence 2026-09-07:** Closing a milestone is the same class. M24 reached `complete` in its own file while the ISSUE.md How-row still read not-started and on hold, the summary row said it remained on hold, and the Remaining-work band still counted its 58 minutes; the pre-handover recheck of M25-M27 caught it, so acceptance now re-derives the How-row, summary row, and bands with the milestone file.
+
+**Recurrence 2026-09-09:** The shipped ISSUE headline was 6-9h against 4-8h bands. CLI ignores ISSUE; evidence: `test/integration/goat-plan-templates.test.ts` (search: `plans check leaves ISSUE arithmetic`).

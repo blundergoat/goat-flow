@@ -39,7 +39,8 @@ goat-critique runs only full delegated mode: Phases 1-5, 5.5 meta-audit, 5.6 out
 - Select its Critique Rubric; ask if unclear.
 - Run preamble learning-loop retrieval for artifact/risk terms; record misses without broad-loading buckets.
 - **Host ownership:** The host/root context owns Phases 1-5.6. A forked sub-agent returns control before Phase 1 and does not apply the shared sub-agent gate conversion. The host spawns agents, presents gates, and resumes Phase 5.6 after the response. Direct/chained host entry needs no delegation prompt; chained entry skips only intake confirmation.
-- **Differential mode detection:** For a same-artifact slug under `.goat-flow/logs/critiques/` within 30 days, offer differential mode: A/B get prior log + diff; C stays cold. Phase 5 adds deltas and `[diff-of: <rand5>]`.
+- **Resume:** For saved work, apply **Saved records and recovery** in `references/rubric-examples.md` before generating critics.
+- **Differential mode detection:** For matching artifact identity within 30 days, apply **Differential baselines** in `references/rubric-examples.md`: offer prior findings and available diff to A/B; C stays cold. Phase 5 links the baseline record and reports deltas.
 - **Read context map:** Merge the selected rubric map from `references/rubric-examples.md` into the fixed A/B/C split; never replace baseline context.
 
 ## Phase 1 - Generate Competing Critiques
@@ -112,7 +113,7 @@ Mark each: RESOLVED (with winner) / STILL DISPUTED / RETRACTED (false positive c
 
 ## Phase 4 - Clarify
 
-**Persist before gate:** Keep the Phase 1-3 draft in memory. Pipe it through stdin to the preamble-selected `goat-flow redact --output .goat-flow/logs/critiques/<YYYY-MM-DD>-<HHMM>-<artifact-slug>-<rand5>.md` or matching source CLI; only redactor destination bytes may reach disk. That artifact slug is what a later run matches for differential mode. If unavailable or redaction fails, write nothing, emit `persist-skipped: redactor-unavailable`, and continue to the human gate. Do this after Phase 3 early exit too.
+**Persist before gate:** Keep the Phase 1-3 draft in memory; save a fresh `pre-clarification` record through **Saved records and recovery** in `references/rubric-examples.md`. Do this after Phase 3 early exit too; save failures continue to the human gate.
 
 Present unresolved items conversationally. Open with decision count and titles. Ask each as `Q[N]: [decision]? (A) [option] (B) [option] Default: [A/B]. Background: [one sentence]`. For 3+, use `| # | Decision | Option A (default) | Option B | Why |`, then ask for numbered overrides or default approval. Cover Phase-3 disputes, valid trade-offs, and whether context drift is intentional. End by requesting picks or pushback.
 
@@ -126,7 +127,7 @@ Before drafting, apply Final-finding schema and Audit payload identity from `ref
 - Assessment: STRONG / ADEQUATE / WEAK / FLAWED (synthesised from sub-agent assessments and cross-examination outcomes)
 - Risk level: the highest surviving evidenced artifact severity, floored at LOW and labelled `no evidenced defect` when none survives - a floor, not a clearance
 - Top 1-3 blockers (if any) - one line each, linked to findings below
-- If differential mode: append delta block (`Resolved: N | Regressed: M | New: K | Unchanged: J` vs prior critique)
+- If differential mode: append the **Differential baselines** delta block, including unassessed/unmapped prior findings.
 
 Then the full critique:
 - Consensus findings, unchanged
@@ -143,9 +144,11 @@ Then the full critique:
 
 **Phase 5.5 - Meta-audit.** Assemble a self-contained packet for the 2-call meta-agent: the frozen draft with its `report_revision`, selected dimensions, and the reference pack's complete Meta-audit rubric (including Packet vocabulary), Final-finding schema and Audit payload identity. It grades that packet alone. Score each 0 or 10; their sum is `Meta-score`; no partial credit. Emit non-empty `## Auto-Detected Issues`: failures, or at 100/100 write exactly `No failed meta-audit checks.` Never invent issues. Put `Meta-score: N/100` in Verdict. Corrections edit the report, never the artifact.
 
+**Persist final:** Before this gate, save the audited report as a fresh `finalized` record through **Saved records and recovery**.
+
 **BLOCKING GATE:** Present the synthesised critique (including Meta-score if 5.5 produced one). "Options: (A) apply, (B) dig deeper, (C) re-run, (D) close. Default: D." Picking (A) is the explicit apply instruction Constraints require, authorizing only the surviving Recommended Changes. After plan critique, suggest `/goat-plan`.
 
-**Phase 5.6 - Outcome capture.** After the host receives the human's A/B/C/D pick, tag each surviving finding: `accepted | rejected | deferred | partial`. Defaults: A → accepted, D → deferred. Persist under `## Outcomes`. Do not show `## Outcomes` in the initial Phase 5 gate response.
+**Phase 5.6 - Outcome capture.** After the host receives the human's A/B/C/D pick, save a fresh linked `outcomes` record using **Saved records and recovery**. A → accepted; D → deferred; B/C preserve the request with unspecified dispositions pending. Do not show `## Outcomes` in the initial Phase 5 gate response.
 
 **Integration hooks.** Populate from surviving findings when applicable:
 - `for-goat-plan` - milestone updates, reordering
@@ -206,5 +209,5 @@ Use this for the Phase 5 gate response. Omit `## Outcomes` until Phase 5.6.
 ## Open Questions
 ## Integration Hooks  <!-- for-goat-plan, for-goat-debug, for-implementation -->
 ## What Wasn't Critiqued
-<!-- Phase 5.6 after human response: append ## Outcomes with per-finding accepted|rejected|deferred|partial -->
+<!-- Phase 5.6: fresh linked outcomes record; use Saved records and recovery -->
 ```

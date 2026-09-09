@@ -841,7 +841,7 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
       );
       assert.match(
         synthesis,
-        /After the host receives the human's A\/B\/C\/D pick/u,
+        /Phase 5\.5[\s\S]*Persist final:.*fresh `finalized` record.*Saved records and recovery[\s\S]*BLOCKING GATE[\s\S]*After the host receives the human's A\/B\/C\/D pick.*fresh linked `outcomes` record.*Saved records and recovery/u,
         skillPath,
       );
     });
@@ -867,26 +867,26 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
 
   it("redacts goat-critique persistence before disk and preserves the human gate", () => {
     assertForEachTarget(installedSkillPaths("goat-critique"), (skillPath) => {
-      const clarifyPhase = readMarkdownSection(skillPath, "Phase 4 - Clarify");
-      assert.match(clarifyPhase, /keep.*Phase 1-3.*in memory/iu, skillPath);
-      assert.match(
-        clarifyPhase,
-        /stdin.*`goat-flow redact --output \.goat-flow\/logs\/critiques\/<YYYY-MM-DD>-<HHMM>-<artifact-slug>-<rand5>\.md`.*matching source CLI/isu,
-        skillPath,
+      const records = readMarkdownSection(
+        skillPath.replace(/SKILL\.md$/u, "references/rubric-examples.md"),
+        "Saved records and recovery",
       );
       assert.match(
-        clarifyPhase,
-        /only.*redactor.*destination bytes.*disk/isu,
+        readMarkdownSection(skillPath, "Phase 4 - Clarify"),
+        /keep.*Phase 1-3.*in memory.*fresh `pre-clarification` record.*Saved records and recovery.*Phase 3 early exit/isu,
         skillPath,
       );
-      assert.match(
-        clarifyPhase,
-        /unavailable.*redaction fails.*write nothing.*`persist-skipped: redactor-unavailable`.*continue.*human gate/isu,
+      assertMatchesAll(
+        records,
+        [
+          /stdin.*`goat-flow redact --output \.goat-flow\/logs\/critiques\/<YYYY-MM-DD>-<HHMM>-<artifact-slug>-<rand5>\.md`.*matching source CLI/isu,
+          /only.*redactor.*destination bytes.*disk/isu,
+          /unavailable.*redaction fails.*write nothing.*`persist-skipped: redactor-unavailable`.*continue.*human gate/isu,
+        ],
         skillPath,
       );
-      assert.match(clarifyPhase, /Phase 3 early exit/u, skillPath);
       assert.doesNotMatch(
-        clarifyPhase,
+        records,
         /\bWrite Phase 1-3\b|(?:write|persist).*raw.*(?:then|before).*redact/iu,
         skillPath,
       );

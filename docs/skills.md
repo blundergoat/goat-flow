@@ -33,7 +33,7 @@ flowchart LR
 |-------|---------|-----------|-------------|
 | [/goat](#goat--dispatcher) | Route to the right skill | None | When intent is ambiguous; skip for simple implementations (the no-skill fast path in `skill-preamble.md`) |
 | [/goat-debug](#goat-debug) | Diagnosis-first debugging + investigate mode + browser evidence | No fixes until human reviews diagnosis | Bug or test failure, UI issues, exploring unfamiliar code |
-| [/goat-plan](#goat-plan) | Milestone planning with claim-based Proof | Human approval closes every milestone and the final plan | Before non-trivial implementation |
+| [/goat-plan](#goat-plan) | Milestone planning with claim-based Proof | Human approval closes every milestone and the final plan | Create, update, reconcile or resume plans |
 | [/goat-review](#goat-review) | Structured code review + quality audit | Negative verification before presenting findings | Before merging, quality audits |
 | [/goat-critique](#goat-critique) | Multi-perspective critique of any artifact | Runs only with delegated sub-agents; blocks on unresolved disputes before synthesis | High-stakes decisions, plans, assessments |
 | [/goat-security](#goat-security) | Threat-model-driven security assessment | MUST re-check framework/tooling mitigations before flagging findings | Before releases, after dependency changes, during audits |
@@ -174,7 +174,7 @@ For an explicit goal and scope continue without waiting at I1; pause only for am
 
 ## /goat-plan
 
-Milestone planner and manager. The delivery budget controls scope: it fits the smallest complete result, estimates coding-agent time separately from human waiting, and adds detail only when risk or handoff needs it.
+Create, update, reconcile or resume milestone plans. The delivery budget controls scope: it fits the smallest complete result, estimates coding-agent time separately from human waiting, and adds detail only when risk or handoff needs it.
 
 ```mermaid
 flowchart TD
@@ -194,7 +194,7 @@ flowchart TD
     P4 -->|"BLOCKING GATE"| Close["Complete"]
 ```
 
-**Modes:** Path-Only Intake and Read-Only Analysis never write. Named-File Update changes only the named plan file. Small File-Write creates one compact file; Standard File-Write creates a one-screen `ISSUE.md` overview plus executable milestones. High-risk work adds only the assumptions, rollback, compatibility, security, or layered proof its named risks require.
+**Modes:** Path-Only Intake, Read-Only Analysis and reconciliation without an edit request never write. Named-File Update changes only the named plan file, including reconcile-and-fix requests with implementation prohibited. Actual no-file or reporting-only constraints forbid plan edits; contradictory write/no-write requests require clarification. Small File-Write creates one compact file; Standard File-Write creates a one-screen `ISSUE.md` overview plus executable milestones. High-risk work adds only the assumptions, rollback, compatibility, security, or layered proof its named risks require.
 
 **Planning lenses:** Prove It Works, Make It Real, Make It Solid, and Make It Shine are optional planning lenses, not required phases. A spike exists only for a named uncertainty. Lenses merge or disappear when they do not reduce uncertainty, deliver independent value, or create a real decision gate.
 
@@ -202,7 +202,7 @@ flowchart TD
 
 **Agent-time forecasts:** Count positive agent-owned Task, Proof, Mid-proof, and admin entries; exclude `[HUMAN]` and zero-minute items. Below three matching receipt-backed bases, multiply the count by the `0.5-2.5-10 min/unit` cold-start prior and record the inputs in `Forecast basis:`. At three or more samples, use the low-median-high rates shown by `plans check`. A changed scope or `reforecast required` advisory blocks implementation until the basis, range, headline, and item estimates agree.
 
-**Execution and recovery:** Authorized build/change requests may return to ordinary ACT without another implementation-approval pause. Every milestone still stops on invalidated assumptions, kill criteria, changed scope, or conflicting evidence. Fresh proof records actual effort before the blocking human gate. Reconciliation remains read-only, and plan state remains local workflow context.
+**Execution and recovery:** Authorized build/change requests may return to ordinary ACT without another implementation-approval pause. Every milestone still stops on invalidated assumptions, kill criteria, changed scope, or conflicting evidence. Fresh proof records actual effort before the blocking human gate. Reconciliation without requested edits remains read-only, and plan state remains local workflow context. Naming a creation destination or editing another plan leaves a valid active marker unchanged; explicitly selecting a fresh active plan permits the switch.
 
 **Completion:** Final closure requires current evidence and human approval. `/goat-plan` never infers approval, silently weakens requirements, auto-runs `/goat-critique`, or writes self-deletion instructions.
 
