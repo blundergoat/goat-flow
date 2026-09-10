@@ -11,8 +11,10 @@ Each map lists additions to the fixed Context split in `SKILL.md` and never repl
 
 ### Plan
 - **A:** targeted INDEX-first footgun/lesson hits, `.goat-flow/learning-loop/decisions/`
-- **B:** `.goat-flow/plans/.active`, `git log --oneline -20`, milestone logs
+- **B:** relevant selected milestone artifacts, `git log --oneline -20`
 - **C:** [] (no additional project context)
+
+Prefer the explicitly supplied milestone/set. Otherwise use `.goat-flow/plans/.active` as an advisory locator and resolve the relevant milestone files; ask when the intended plan is ambiguous. `<active>` need not be a version directory. This is read-only context selection: never switch `.active`, change milestone status, or load all historical plans. Milestone logs do not replace the selected artifacts.
 
 ### Security assessment
 - **A:** targeted INDEX-first footgun/lesson hits, threat-model docs, `.goat-flow/learning-loop/decisions/`

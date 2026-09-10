@@ -445,9 +445,9 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
         assertMatchesAll(
           contextMaps,
           [
-            /Each map lists additions to the fixed Context split[^\n]+never replaces it/u,
-            /Agents A and B keep their artifact[^\n]+architecture[^\n]+rubric baseline/iu,
-            /empty C list means no additional project context/iu,
+            /Each map lists additions to the fixed Context split[^\n]+never replaces it[\s\S]*\*\*B:\*\* relevant selected milestone artifacts/u,
+            /Agents A and B keep their artifact[^\n]+architecture[^\n]+rubric baseline[\s\S]*Prefer the explicitly supplied milestone\/set.*advisory locator.*resolve the relevant milestone files; ask when the intended plan is ambiguous/iu,
+            /empty C list means no additional project context[\s\S]*<active>.*need not be a version directory.*read-only context selection: never switch.*\.active.*change milestone status, or load all historical plans.*Milestone logs do not replace the selected artifacts/iu,
           ],
           referencePath,
         );

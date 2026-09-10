@@ -130,13 +130,17 @@ Every assessment mode MUST map posture, first match top-down, ties by highest se
 - `none`: no retained finding; posture never clears on its own
 - Accepted risk MUST NOT erase/downgrade factual-finding|evidence|exploit-status|severity or reduce confidence; show the exception beside the unchanged factual rating
 
-Run a narrow specialist cross-check for Critical/High; auth/crypto/secrets/CI/CD/agent expertise; or clustered strong evidence with uncertainty.
+Cross-check eligible clusters: Critical/High; auth/crypto/secrets/CI/CD/agent expertise; or clustered strong evidence with uncertainty.
 
-An admissible specialist is an independent tool or reviewer with a named failure class and structured return. Same-context self-review does not qualify. This phase is pre-admitted; delegate only when invocation is already authorized by current-session user intent or local instructions.
+Use one independent tool/reviewer per eligible cluster; same-context self-review is inadmissible. This pre-admitted phase requires current-session user or local invocation authorization.
 
-If no admissible and available specialist exists, record `specialist-unavailable`; do not wait or halt; coverage degrades. Preserve each affected candidate's current confidence: retain `CONFIRMED` findings. Only unresolved candidates remain `PROBABLE` with the exact evidence needed to promote or kill them.
+Return: cluster/finding IDs; failure class/question; reviewed authority/scope; checks/anchors; evidence status/proof class; proposed technical disposition; remaining uncertainty.
 
-One `/goat-critique` disagreement pass per cluster. Outcomes: `retain CONFIRMED`, `promote to CONFIRMED`, `keep as PROBABLE`, or `kill as false positive`.
+Host verifies evidence before outcomes: `retain CONFIRMED`, `promote to CONFIRMED`, `keep as PROBABLE`, or `kill as false positive`. Promotion requires current direct evidence; kill requires observed refutation. Human acceptance/rejection supplies no technical proof.
+
+If unavailable: `specialist-unavailable`, coverage degrades; continue without waiting. Retain `CONFIRMED`; unresolved `PROBABLE` names missing proof.
+
+Explicit `/goat-critique` runs its full host-owned lifecycle; this cross-check does not invoke it.
 
 ### Phase 5.5 - Exploit Chaining
 

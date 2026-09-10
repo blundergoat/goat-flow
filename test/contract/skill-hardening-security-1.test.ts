@@ -218,45 +218,26 @@ describe("skill hardening contracts: security (1/2)", () => {
         skillPath,
         "Full Assessment Path",
       );
-      assert.match(
+      assertMatchesAll(
         fullAssessmentPath,
-        /An admissible specialist is an independent tool or reviewer with a named failure class and structured return/,
-        skillPath,
-      );
-      assert.match(
-        fullAssessmentPath,
-        /Same-context self-review does not qualify/,
-        skillPath,
-      );
-      assert.match(
-        fullAssessmentPath,
-        /invocation is already authorized by current-session user intent or local instructions/,
-        skillPath,
-      );
-      assert.match(
-        fullAssessmentPath,
-        // An unavailable specialist limits coverage; the reviewer still receives findings at their existing posture and confidence.
-        /record `specialist-unavailable`; do not wait or halt; coverage degrades/,
-        skillPath,
-      );
-      assert.match(
-        fullAssessmentPath,
-        /Preserve each affected candidate's current confidence: retain `CONFIRMED` findings/,
-        skillPath,
-      );
-      assert.match(
-        fullAssessmentPath,
-        /Only unresolved candidates remain `PROBABLE` with the exact evidence needed/,
-        skillPath,
-      );
-      assert.match(
-        fullAssessmentPath,
-        /Outcomes: `retain CONFIRMED`, `promote to CONFIRMED`, `keep as PROBABLE`, or `kill as false positive`/,
+        [
+          /Cross-check eligible clusters: Critical\/High; auth\/crypto\/secrets\/CI\/CD\/agent expertise; or clustered strong evidence with uncertainty/u,
+          /one independent tool\/reviewer per eligible cluster; same-context self-review is inadmissible/u,
+          /pre-admitted phase requires current-session user or local invocation authorization/u,
+          /Return: cluster\/finding IDs; failure class\/question; reviewed authority\/scope; checks\/anchors; evidence status\/proof class; proposed technical disposition; remaining uncertainty/u,
+          /Host verifies evidence before outcomes: `retain CONFIRMED`, `promote to CONFIRMED`, `keep as PROBABLE`, or `kill as false positive`/u,
+          /Promotion requires current direct evidence; kill requires observed refutation/u,
+          /Human acceptance\/rejection supplies no technical proof/u,
+          // An unavailable specialist limits coverage; the reviewer still receives findings at their existing posture and confidence.
+          /If unavailable: `specialist-unavailable`, coverage degrades; continue without waiting/u,
+          /Retain `CONFIRMED`; unresolved `PROBABLE` names missing proof/u,
+          /Explicit `\/goat-critique` runs its full host-owned lifecycle; this cross-check does not invoke it/u,
+        ],
         skillPath,
       );
       assert.doesNotMatch(
         fullAssessmentPath,
-        /Keep each affected candidate `PROBABLE`/,
+        /Keep each affected candidate `PROBABLE`|One `\/goat-critique` disagreement pass per cluster/u,
         skillPath,
       );
     });
