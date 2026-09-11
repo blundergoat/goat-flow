@@ -92,7 +92,49 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
       );
       assert.match(
         skillGuidance,
-        /### D4 - Post-Fix Verification \(only after approved implementation\)/u,
+        /### D4 - Post-Fix Verification \(approved implementation or existing fix\)/u,
+        skillPath,
+      );
+      const intake = readMarkdownSection(skillPath, "Step 0 - Choose Depth");
+      assert.match(
+        intake,
+        /existing-fix verification[\s\S]*directly to D4/u,
+        skillPath,
+      );
+      assert.match(
+        intake,
+        /without D2\/D3, hypotheses, minimisation, or causal confidence/u,
+        skillPath,
+      );
+      assert.match(intake, /historical proof is context/u, skillPath);
+      assert.match(
+        intake,
+        /Valid explicit depth wins within governing policy/u,
+        skillPath,
+      );
+      assert.match(
+        intake,
+        /Full risk\/scope triggers override Quick defaults/u,
+        skillPath,
+      );
+      assert.match(
+        intake,
+        /Quick[\s\S]*bounded[\s\S]*Full[\s\S]*component boundaries/u,
+        skillPath,
+      );
+      assert.match(
+        skillGuidance,
+        /Missing or unsafe original proof: UNVERIFIED; human-owned: HUMAN-PENDING with owner/u,
+        skillPath,
+      );
+      assert.match(
+        skillGuidance,
+        /Remaining symptom: return to D1; no new patch authority/u,
+        skillPath,
+      );
+      assert.match(
+        skillGuidance,
+        /Passing verification does not prove root cause/u,
         skillPath,
       );
       assert.doesNotMatch(
@@ -137,6 +179,28 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
       assert.match(
         skillGuidance,
         /user-owned diagnostics are never removed without permission/u,
+        skillPath,
+      );
+      const reduction = skillGuidance.slice(
+        skillGuidance.indexOf("### D1.5 - Minimise"),
+        skillGuidance.indexOf("### D2 - Diagnosis"),
+      );
+      assert.match(
+        reduction,
+        /Before reducing, preserve the original[\s\S]*beside the reduced case/u,
+        skillPath,
+      );
+      const closure = skillGuidance.slice(
+        skillGuidance.indexOf("### D4 - Post-Fix Verification"),
+      );
+      assert.match(
+        closure,
+        /First complete approved diagnostic cleanup[\s\S]*confirm the intended source\/configuration state[\s\S]*Rerun the \*\*original, unminimized reproduction\*\*/u,
+        skillPath,
+      );
+      assert.match(
+        closure,
+        /adjacent checks at the changed causal boundary/u,
         skillPath,
       );
     });
@@ -340,10 +404,10 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
         /`references\/diagnostic-techniques\.md`/u,
         skillPath,
       );
-      // The loading sentence is exclusive, so it must name every route the body uses, including D1.5 reduction.
+      // The exclusive loading route must cover both diagnosis techniques and existing-fix reporting.
       assert.match(
         readProjectFile(skillPath),
-        /only when a diagnosis needs mutation classification, reduction-method selection, causal-distinction detail, or the worked output example/u,
+        /only for ranking-matrix detail, mutation classification, reduction-method selection, causal-distinction detail, worked diagnosis, or existing-fix reporting/u,
         skillPath,
       );
     });
@@ -358,6 +422,30 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
         assert.match(
           referenceGuidance,
           /Illustrative scenario - input\/output shape only; never evidence/u,
+          referencePath,
+        );
+        const verification = readMarkdownSection(
+          referencePath,
+          "Existing-Fix Verification Report",
+        );
+        for (const field of [
+          "Change and tested state",
+          "Original steps",
+          "Expected versus observed",
+          "Approved cleanup",
+          "Retained user diagnostics",
+          "Adjacent checks",
+          "Proof class and limits",
+          "Human-pending checks and owners",
+        ]) {
+          assert.ok(
+            verification.includes(field),
+            `${referencePath}: missing verification field ${field}`,
+          );
+        }
+        assert.match(
+          referenceGuidance,
+          /## Hypothesis Ranking Matrix/u,
           referencePath,
         );
         // The discovery pointer must name reduction so the D1.5 route is visible before the body is read.

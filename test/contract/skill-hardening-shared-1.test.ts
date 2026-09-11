@@ -129,8 +129,6 @@ describe("skill hardening contracts: shared surfaces (1/3)", () => {
     );
   });
 
-  // Every harness must distinguish measured timing evidence from estimates so users can trust the reported Actual.
-
   it("forces Full depth for one material-risk class regardless of size", () => {
     assertForEachTarget(installedSkillPaths("goat-review"), (skillPath) => {
       const scope = readMarkdownSection(
@@ -396,7 +394,7 @@ describe("skill hardening contracts: shared surfaces (1/3)", () => {
   });
 
   it("names only real safety-critical sub-agent gates", () => {
-    // Every installed convention must keep the same two user-blocking safety gates and no invented third gate.
+    // Delegation must preserve the approvals that authorize consequential actions.
     for (const conventionsPath of [
       "workflow/skills/reference/skill-conventions.md",
       ".goat-flow/skill-docs/skill-conventions.md",
@@ -481,6 +479,27 @@ describe("skill hardening contracts: shared surfaces (1/3)", () => {
       /explicit goal and scope continue without waiting/u,
     );
     assert.doesNotMatch(debugDocumentation, /I1 -->\|"BLOCKING GATE"\| I2/u);
+    assert.match(debugDocumentation, /S0 -->\|"Existing fix"\| D4/u);
+    assert.match(debugDocumentation, /D3 -->\|"BLOCKING GATE"\| Implement/u);
+    assert.match(debugDocumentation, /Implement --> D4/u);
+    assert.match(
+      debugDocumentation,
+      /cleanup first[\s\S]*intended state[\s\S]*original reproduction/u,
+    );
+    assert.doesNotMatch(debugDocumentation, /D3 -->\|"BLOCKING GATE"\| D4/u);
+    assert.match(debugDocumentation, /D1\[[^\n]+ --> BrowserCheck/u);
+    assert.match(debugDocumentation, /BrowserCheck -->\|No\| D15/u);
+    assert.match(debugDocumentation, /Browser --> D15/u);
+    assert.match(debugDocumentation, /D15 --> D2/u);
+    assert.match(debugDocumentation, /browser-use\.md[^\n]+manual fallback/u);
+    assert.match(debugDocumentation, /Learning loop if triggered/u);
+    assert.match(
+      debugDocumentation,
+      /verification catches a failure, the agent corrects course, or the user requests/u,
+    );
+    assert.match(debugDocumentation, /Check -->\|Yes\| Pause/u);
+    assert.match(debugDocumentation, /Pause --> I1/u);
+    assert.doesNotMatch(debugDocumentation, /covers stack detection/u);
 
     const reviewDocumentation = readMarkdownSection(
       "docs/skills.md",
