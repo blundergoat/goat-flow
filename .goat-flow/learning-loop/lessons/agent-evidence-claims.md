@@ -1,6 +1,6 @@
 ---
 category: agent-evidence-claims
-last_reviewed: 2026-09-09
+last_reviewed: 2026-09-11
 ---
 
 **Scope:** What counts as citable evidence - mechanism claims need a read source, absence and exact-count claims need untruncated searches, gitignored paths are never durable anchors, and final verification gates need supported scopes with captured logs. Reading the request and retrieving memory is [agent-behavior.md](agent-behavior.md); using tools and the environment is [agent-tooling.md](agent-tooling.md); skill-trial evidence is [skill-trial-evidence.md](skill-trial-evidence.md).
@@ -76,24 +76,24 @@ last_reviewed: 2026-09-09
 
 ## Lesson: Absence claims need untruncated searches
 
-**Status:** active | **Created:** 2026-07-03
-**Incident count:** 4 | **Latest occurrence:** 2026-09-09
+**Status:** active | **Created:** 2026-07-03 | **Evidence:** OBSERVED
+**Incident count:** 7 | **Latest occurrence:** 2026-09-11
 
 **Prevention:** Before claiming a pattern is absent, rerun the exact single pattern with no `head` or `tail` truncation, or count with `grep -c`. For an exact path claim, use `test -e` on that path or an exact tracked-file query; a filename filter designed for neighbouring names is only a sample. Derive an exact-count claim from the widest search it implies, `git grep` over the tracked tree, before pinning it into a stop condition. Evidence anchor: `scripts/preflight-checks.sh` (search: `Learning-Loop Schema`).
 
-Capture large source or JSON inventories in bounded parts and reconcile their full lengths before parsing or crediting them as a baseline.
+Capture large source or JSON inventories in bounded parts and reconcile their full lengths before parsing or crediting them as a baseline. Budget both the individual tool capture and combined orchestration output; retain complete results in memory before displaying selected fields.
 
 **What happened:** `grep -n "stats\|quality\|audit\|index" scripts/preflight-checks.sh | head -20` showed no `stats` hit, and the analysis claimed `stats --check` ran in no local gate; the `head -20` had truncated the match list, and preflight's Learning-Loop Schema section already ran `node dist/cli/cli.js stats . --check`. The user's "double check" exposed the false absence claim before it shaped the fix.
 
 **Root cause:** A multi-pattern grep piped through `head` answers "what appears early", not "does X appear at all".
 
-**Recurrence 2026-08-12:** A `5-call` census over six hand-picked directories returned seven paths, about to ship as an exact-count stop condition; `git grep -ln "5-call"` over the tracked tree returned eight, because `.goat-flow/learning-loop/decisions/ADR-042-cross-harness-invocation-ask-first.md` (search: `5-call`) sat outside every scanned directory.
-**Recurrence 2026-08-16:** An M04 path audit filtered filenames with contiguous `hooks-runtime` and reported that `hooks-configured-runtime-evidence.ts` did not exist; `test -e` disproved it immediately. `src/cli/hooks-configured-runtime-evidence.ts` (search: `readManagedConfiguredHookState`).
+The recurring failure is crediting a sampled or truncated capture as complete. This ledger preserves the distinct evidence:
 
-**Recurrence 2026-09-09:** M50's all-copy baseline JSON and later lessons INDEX capture exceeded their output budgets. Both truncated results were
-rejected; bounded fifty-line reads and exact character counts recovered the complete inputs before source changes. The failed parses are recorded
-in the active plan's baseline-capture checkpoint; they never became absence, count or recovery evidence. Contract: `.goat-flow/skill-docs/skill-preamble.md`
-(search: `Exact count`).
+- **Recurrence 2026-08-12:** A six-directory census found seven five-call paths; the tracked-tree search found eight. The missed path was `.goat-flow/learning-loop/decisions/ADR-042-cross-harness-invocation-ask-first.md` (search: `5-call`).
+- **Recurrence 2026-08-16:** A contiguous-name filter missed `src/cli/hooks-configured-runtime-evidence.ts` (search: `readManagedConfiguredHookState`); an exact existence check disproved the absence claim.
+- **Recurrence 2026-09-09:** M50's all-copy baseline JSON and lessons INDEX captures exceeded output budgets. Bounded fifty-line reads and exact character counts recovered them before source edits; failed captures earned no baseline credit. Contract: `.goat-flow/skill-docs/skill-preamble.md` (search: `Exact count`).
+- **Recurrence 2026-09-11:** M42 guidance and drift captures truncated; M43 repeated the problem and printed full export rows after treating an array as an object. Complete in-memory parsing recovered the evidence. DG-03 also lost required input when five file reads shared one response despite large budgets; that attempt was invalidated. Emit each complete input separately and distinguish command success from evidence delivery. Contract: `.goat-flow/skill-docs/skill-preamble.md` (search: `## Proof Gate`); affected guidance: `workflow/skills/goat-debug/SKILL.md` (search: `Post-Fix Verification`).
+- **Recurrence 2026-09-11 (M39):** Combined source reads, context JSON and a full plan export exceeded capture budgets; increasing the export budget still failed. Parsing the complete export inside the command process and emitting scalar assertions recovered its 72-record graph. Filename guesses also missed existing inputs. An oversized preparation command was rejected by the 16 KB hook before execution. Discover exact paths, keep commands inspectable, reconcile capture lengths and retain rejected attempts separately. Contract: `.goat-flow/skill-docs/skill-preamble.md` (search: `Exact count`, `## Proof Gate`); export owner: `src/cli/plans-export.ts` (search: `loadPlanExportRecords`).
 
 ---
 
