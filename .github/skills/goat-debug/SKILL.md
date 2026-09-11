@@ -13,7 +13,7 @@ On full-depth, also read `.goat-flow/skill-docs/skill-conventions.md`.
 ## When to Use
 
 Use when diagnosing a bug or understanding unfamiliar code. For onboarding, use investigate mode.
-- Bug/symptom --> **Diagnose mode**. Exploring, no bug --> **Investigate mode**.
+- Bug/symptom --> **Diagnose mode**. Exploring, no bug --> **Investigate mode**. Already-applied fix --> Step 0 verification.
 
 **If you want to "just try something" before tracing the code path, STOP.** That is the failure mode this skill exists to prevent.
 
@@ -34,19 +34,21 @@ Use when diagnosing a bug or understanding unfamiliar code. For onboarding, use 
 
 ## Step 0 - Choose Depth
 
-If depth is pre-decided, proceed. Otherwise choose:
-- **Quick** when the symptom is isolated to 1-2 files, the user wants diagnosis only, or the prompt already includes a reproduction/error output.
-- **Full** when the symptom crosses components, has no reproduction yet, affects CI/prod/user-visible behaviour, or a fix may follow. If uncertain, choose full.
+**Already-applied change: existing-fix verification.** Identify change, environment/state, original failing steps, expected result, earlier evidence, and execution authority; historical proof is context. Go directly to D4 without D2/D3, hypotheses, minimisation, or causal confidence. Use the reference's verification report; diagnosis-only obligations apply only if diagnosis runs.
+
+**New diagnosis:** Valid explicit depth wins within governing policy. Otherwise Full risk/scope triggers override Quick defaults:
+- **Quick:** isolated 1-2 files, diagnosis only, or supplied reproduction; bounded primary-path investigation and compact report.
+- **Full:** cross-component, no reproduction, CI/prod/user-visible impact, or possible fix; trace implicated component boundaries and relevant runtime/configuration context. If uncertain, choose Full.
 If vague, ask about: goal, symptom/error message, area involved, and what was already tried with its outcome; prior attempts enter D1 as evidence to trace, not as eliminated hypotheses.
 
-**Quick path (D1 + applicable D1.5 + D2):** diagnose and report; minimum evidence is primary file read, 2 hypothesis categories tested, reproduction attempted or no-repro gap stated. Before D2, run D1.5 or state `reproduction already minimal`, `reduction not applicable`, or `unsafe to reduce` with the literal input/command and reason. Quick never enters D3 or D4 directly.
+**Both diagnosis depths:** D1 + applicable D1.5 + D2; read primary file, test 2 hypothesis categories, attempt reproduction or state gap. Before D2, run D1.5 or state `reproduction already minimal`, `reduction not applicable`, or `unsafe to reduce` with literal input/command and reason. Quick never enters D3 or D4 directly.
 
 **Full is gated, not linear:** run D1 through D2, then stop, investigate deeper, or request a fix plan. Full diagnosis-only may stop at D2. If a Quick diagnosis leads to a fix request, promote to Full at the D2 gate; do not skip either approval. D3 planning follows the first approval; implementation requires the separate D3 approval; D4 follows implementation only.
 **Footgun check:** Use the preamble's learning-loop retrieval on `.goat-flow/learning-loop/footguns/` and `.goat-flow/learning-loop/lessons/` for the target area. Surface matches or an explicit retrieval miss; do not broad-load either bucket.
 
-**Browser evidence detection:** For a URL, local page, screenshot, rendering issue, or browser console/network symptom, read `.goat-flow/skill-docs/playbooks/browser-use.md` and follow its availability, installation-approval, and manual-fallback contract. The playbook is the sole owner of browser installation policy.
+**Browser evidence detection:** URL, local page, screenshot, rendering, or browser console/network symptoms require `.goat-flow/skill-docs/playbooks/browser-use.md`; it owns availability, installation approval, and manual fallback.
 
-Read `references/diagnostic-techniques.md` only when a diagnosis needs mutation classification, reduction-method selection, causal-distinction detail, or the worked output example.
+Read `references/diagnostic-techniques.md` only for ranking-matrix detail, mutation classification, reduction-method selection, causal-distinction detail, worked diagnosis, or existing-fix reporting.
 
 ## Diagnose Mode
 
@@ -58,19 +60,14 @@ Write 2-3 hypotheses spanning at least 2 of: Data, Logic, Timing, Environment, C
 
 **Hypothesis ranking:** Before expensive tracing, reduction, or experiments, rank the hypotheses by likelihood and cost; re-rank whenever evidence changes.
 
-| Likelihood \ Cost | LOW cost | MEDIUM cost | HIGH cost |
-|---|---|---|---|
-| **HIGH** likelihood | 1st | 2nd | 3rd |
-| **MEDIUM** likelihood | 2nd | 3rd | 4th |
-| **LOW** likelihood | 3rd | 4th | Skip |
 
 Test cheap-and-likely first; skip expensive-and-unlikely until cheap options are eliminated. When survivors remain, run the cheapest authorized distinguishing check, or cite deterministic proof that entails the symptom; one intervention per hypothesis is never required.
 
 After tracing, mark each: CONFIRMED / ADJUSTED / ELIMINATED / UNRESOLVED with `file + semantic anchor` evidence.
 
-**Multi-component failures** (CI → build → deploy, request → middleware → handler → DB, etc.): inspect existing evidence boundary by boundary. Record input, output, and the broken invariant, then investigate the failing component. If new instrumentation is needed, apply the diagnostic-experiment authority below before modifying anything.
+**Multi-component failures:** Record each boundary's input, output, and broken invariant; investigate the failing component. New instrumentation follows diagnostic-experiment authority below.
 
-**UI-visible bugs:** After writing hypotheses, use browser evidence to confirm or eliminate UI-related hypotheses. Follow the workflow in `.goat-flow/skill-docs/playbooks/browser-use.md`. Browser output is OBSERVED; interpretations remain INFERRED until mapped to `file + semantic anchor`.
+**UI-visible bugs:** After hypotheses, apply the browser playbook. Browser output is OBSERVED; interpretations remain INFERRED until mapped to `file + semantic anchor`.
 
 **Diagnostic-experiment authority:** Read-only observation may proceed within repository rules, as may execution against disposable state the investigation itself created; disclose target-controlled execution (running code or configuration the target project supplies) when local policy requires it. Any experiment affecting existing source, configuration, local state, network, production, or sensitive data follows the repository's stricter approval boundary. Before a mutation, state the target, expected signal, affected state, rollback, and a cleanup marker; then wait for explicit current-session approval. Track approved mutations separately from the proposed fix. Incomplete cleanup blocks a fixed claim, and user-owned diagnostics are never removed without permission.
 
@@ -78,7 +75,7 @@ If repeated reads or experiments produce no new decision signal, checkpoint: sta
 
 ### D1.5 - Minimise
 
-**Goal:** Reduce the failing case without removing the property required for the symptom.
+**Goal:** Reduce the failing case without removing the property required for the symptom. Before reducing, preserve the original steps, input, expected result, and context beside the reduced case.
 
 **Procedure:**
 1. Identify variables in the reproduction (input data, config, environment, sequence of actions)
@@ -89,7 +86,7 @@ If repeated reads or experiments produce no new decision signal, checkpoint: sta
 
 **Optional bisect path (state-mutating):** Bisect is never required for a reporting-only diagnosis. In reporting-only or no-write mode, describe the option but do not run it. Otherwise require a clean worktree, validate known-good and known-bad refs plus a deterministic, non-destructive predicate at both endpoints, disclose the commands and rollback, then wait for explicit current-session approval. Urgency, an outage, or broad permission to diagnose does not override these gates. A dirty worktree stops this path; an isolated worktree is a separately approved option, not an automatic workaround. After approval, run only the diagnostic predicate. Run `git bisect reset` on success, error, cancellation, or interruption while that approval still holds. A governing freeze leaves state unchanged and outranks this cleanup: report the pending reset and wait for explicit cleanup authority, because resumption alone does not release it.
 
-After minimisation, re-rank the survivors with the D1 table before D2.
+After minimisation, re-rank survivors before D2; consult the reference's ranking matrix if needed.
 
 ### D2 - Diagnosis
 
@@ -112,8 +109,10 @@ Approval to write D3 authorizes planning only, not implementation. State what ch
 
 **BLOCKING GATE:** Present the fix plan, then pause. Implement only after explicit approval.
 
-### D4 - Post-Fix Verification (only after approved implementation)
-Rerun the **original, unminimized reproduction** from D2 - a code change is not a fix until the symptom is gone under the case that first showed it, since a minimised case proves less. Then run D3 verification, check adjacent regressions, and grep for old patterns after renames. Do not close while any approved diagnostic mutation from D1 remains uncleaned: confirm each cleanup marker, and leave user-owned diagnostics in place.
+### D4 - Post-Fix Verification (approved implementation or existing fix)
+First complete approved diagnostic cleanup, confirm each marker, retain user-owned diagnostics, and confirm the intended source/configuration state. Rerun the **original, unminimized reproduction** from D2 or existing-fix intake: a minimised case proves less. Run applicable D3 verification, adjacent checks at the changed causal boundary, and old-pattern searches after renames. Do not close while any approved diagnostic mutation from D1 remains uncleaned.
+
+Missing or unsafe original proof: UNVERIFIED; human-owned: HUMAN-PENDING with owner. Remaining symptom: return to D1; no new patch authority. Passing verification does not prove root cause.
 
 **3-fix abort rule:** If three independent fixes have failed to resolve the symptom, STOP and reconsider whether the architecture or the root-cause hypothesis is wrong. Do not attempt a fourth patch without first re-entering D1 with a fresh hypothesis set.
 
@@ -165,7 +164,6 @@ Required: **What I Didn't Read** (skipped files + reasons), **Current vs Expecte
 - MUST declare scope before deep reading (investigate mode)
 - MUST tag diagnose evidence as OBSERVED, INFERRED, UNVERIFIED, or HUMAN-PENDING
 - MUST include "What I Didn't Read" in every investigation report
-- MUST check recurrence against footguns + lessons
 - Universal constraints from skill-preamble.md apply.
 - MUST verify fix doesn't violate architecture constraints
 - Diagnose mode MUST run D1.5 reduction before D2 or evidence a minimal, not-applicable, or unsafe disposition
@@ -174,21 +172,21 @@ Required: **What I Didn't Read** (skipped files + reasons), **Current vs Expecte
 
 ## Output Format
 
-Diagnose and investigate modes produce different artifacts. Use the block that matches the mode you actually ran.
+Existing-fix verification uses the reference report; otherwise use the applicable block.
 
 ### Diagnose mode (through the current gate)
 
 Keep Quick output compact. Omit D3, D4, UI, and diagnostic-mutation fields when they are not applicable.
 
 ```markdown
-## TL;DR       <!-- 1 sentence: root cause + confidence -->
-## Hypotheses  <!-- table: #, Hypothesis, Category, Status, Evidence (file + semantic anchor) -->
-## Minimal Failing Case  <!-- from D1.5: reduced case/method, or supported disposition and limits -->
-## Root Cause  <!-- Confidence + Location (file + semantic anchor) + Description -->
-## Reproduction Steps  <!-- numbered, with Expected vs Actual -->
+## TL;DR       <!-- root cause + confidence -->
+## Hypotheses  <!-- #, hypothesis, category, status, file + semantic anchor -->
+## Minimal Failing Case  <!-- D1.5 case/method or disposition; limits -->
+## Root Cause  <!-- confidence; file + semantic anchor; description -->
+## Reproduction Steps  <!-- Expected vs Actual -->
 ## Fix Plan    <!-- only if human approved D3 -->
-## Verification  <!-- only after approved implementation and D4 -->
-## UI Evidence  <!-- optional: only when browser evidence was captured -->
+## Verification  <!-- after D4 -->
+## UI Evidence  <!-- if captured -->
 ## Debug Integrity
 - Files read: [N]
 - Hypotheses assessed: [N] (CONFIRMED: [n] / ADJUSTED: [n] / ELIMINATED: [n] / UNRESOLVED: [n])
@@ -205,7 +203,7 @@ Keep Quick output compact. Omit D3, D4, UI, and diagnostic-mutation fields when 
 ### Investigate mode (I1–I3)
 
 ```markdown
-## TL;DR  <!-- 1 sentence: what this area does + top signal found -->
+## TL;DR  <!-- purpose + top signal -->
 ## Scope
 - **In scope:** [files / dirs]
 - **Out of scope:** [what was deliberately skipped]
@@ -214,7 +212,7 @@ Keep Quick output compact. Omit D3, D4, UI, and diagnostic-mutation fields when 
 | File | Role | Connections | Evidence |
 | --- | --- | --- | --- |
 | `file + semantic anchor` | [role] | [what calls / is called by this] | OBSERVED/INFERRED |
-## Current vs Expected State  <!-- where the code matches and diverges from the mental model -->
-## What I Didn't Read  <!-- every skipped file plus one-line reason -->
-## Open Questions  <!-- genuine unknowns to resolve next -->
+## Current vs Expected State
+## What I Didn't Read  <!-- skipped files + reasons -->
+## Open Questions
 ```

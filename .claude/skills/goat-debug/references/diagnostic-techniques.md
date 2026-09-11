@@ -1,11 +1,38 @@
 ---
 name: goat-debug-diagnostic-techniques
-description: "Progressive causal, reduction-method, mutation-safety, and worked-example guidance for goat-debug Diagnose mode."
+description: "Progressive ranking, causal, reduction-method, mutation-safety, and report guidance for goat-debug diagnosis and existing-fix verification."
 goat-flow-reference-version: "1.17.0"
 ---
 # Diagnostic Techniques
 
 Load this reference only when the root skill routes here. The root owns mode selection, approval gates, mandatory causal confidence, and output. This file expands conditional techniques; it never authorizes a mutation.
+
+## Existing-Fix Verification Report
+
+Use this report when verifying an already-applied change. Read the change and relevant state before execution; the root's D4 cleanup and original-case proof rules govern closure. Supplied historical proof is context, never a fresh result. Verification permission does not authorize another patch.
+
+Report these fields using actual evidence:
+
+- **Change and tested state:** file + semantic anchor, relevant environment, source and configuration state.
+- **Original steps:** preserve the original input, sequence, and expected result; never silently replace them with a reduced case.
+- **Expected versus observed:** exact command/steps, literal output and exit status, or the missing execution evidence.
+- **Approved cleanup:** markers checked before decisive proof; any unfinished cleanup blocks closure.
+- **Retained user diagnostics:** identify pre-existing diagnostics preserved in the tested state.
+- **Adjacent checks:** actual checks at the changed causal boundary and their literal results; name omitted checks and why.
+- **Proof class and limits:** use the preamble's proof classification; a passing symptom check does not establish root cause.
+- **Human-pending checks and owners:** name each check and responsible person/role; use UNVERIFIED for missing/unsafe proof and HUMAN-PENDING for human-owned execution.
+
+If the original symptom remains, report failed verification and return to D1 without new patch authority. Do not borrow hypothesis counts, minimisation, causal confidence, or Debug Integrity from a diagnosis that did not occur.
+
+## Hypothesis Ranking Matrix
+
+Apply the root's likelihood/cost ranking before expensive tracing, reduction, or experiments; this matrix expands that rule.
+
+| Likelihood \ Cost | LOW cost | MEDIUM cost | HIGH cost |
+|---|---|---|---|
+| **HIGH** likelihood | 1st | 2nd | 3rd |
+| **MEDIUM** likelihood | 2nd | 3rd | 4th |
+| **LOW** likelihood | 3rd | 4th | Skip |
 
 ## Distinguish Symptom from Cause
 
@@ -74,9 +101,9 @@ Scenario: page two of a list repeats the final row from page one when cursor pag
 | Cursor decoding loses the tie-break key. | Data | Duplicate sort keys reproduce only when the secondary key is absent; compare decoded input with the emitted cursor. |
 | Offset mode still overrides cursor mode. | Configuration | The traced configuration selects the offset branch; inspect precedence before changing any flag. |
 
-- **D1.5:** reduce the fixture while preserving the duplicate sort key and page transition. Do not remove an interacting key merely to obtain a smaller non-failing case.
+- **D1.5:** preserve the original two-page case and expected result before reducing; keep both cases. Reduce while preserving the duplicate sort key and page transition. Do not remove an interacting key merely to obtain a smaller non-failing case.
 - **D2:** a reproduced duplicate proves the symptom, not which hypothesis caused it. HIGH requires the traced inclusive comparison plus a safe counterfactual showing that changing only that boundary removes the duplicate, or deterministic query-contract proof that entails it. Present the diagnosis and stop.
 - **D3:** only after the first human decision, propose the smallest causal change, affected function, rollback, diagnostic cleanup, and original reproducer. Present the plan and stop again.
-- **D4:** only after approved implementation, rerun the original two-page reproduction and report literal output. If a human owns the final browser check, mark it `HUMAN-PENDING` rather than fixed.
+- **D4:** after approved implementation, finish approved diagnostic cleanup and confirm the intended source/configuration state while retaining user diagnostics. Rerun the original two-page reproduction, check the adjacent pagination boundary, and report literal output. An already-applied fix enters here from Step 0 with its original case and authority; it needs no invented D1-D3 history. If a human owns the final browser check, mark it `HUMAN-PENDING` with its owner rather than fixed.
 
 This scenario demonstrates report shape only. Its commands and conclusions are not reusable evidence.
