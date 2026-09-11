@@ -2247,13 +2247,13 @@ main() {
   # larger transport: a quoted body consumed as data may reach 256KB only when
   # masking removes every byte above the ordinary policy surface.
   if (( ${#command} > 262144 )); then
-    block "Command exceeds 16KB; review and run manually if intended."
+    block "Command is too large for policy inspection; use file or stdin input for large data."
   fi
   if (( ${#command} > 16384 )) && {
     (( ${#command_policy} > 16384 )) ||
       ! large_quality_save_heredoc_is_bounded_data "$command_policy"
   }; then
-    block "Command exceeds 16KB; review and run manually if intended."
+    block "Command is too large for policy inspection; use file or stdin input for large data."
   fi
 
   declare -a _goat_chain_segments=()
