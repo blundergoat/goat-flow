@@ -124,7 +124,7 @@ Diagnosis-first debugging and codebase investigation.
 | Mode | Trigger | What it does |
 |------|---------|-------------|
 | **Diagnose** | bug, error, crash, symptom | Hypothesis-driven debugging with confidence-gated fixes |
-| **Diagnose (UI)** | UI bug, rendering issue, browser-visible symptom | Browser evidence capture via `browser-use` CLI, then hypothesis-driven debugging |
+| **Diagnose (UI)** | UI bug, rendering issue, browser-visible symptom | Hypothesis-driven debugging with browser evidence via `browser-use` in D1 |
 | **Investigate** | explore, understand, how does, new to this | Deep codebase reading with progressive depth and evidence tags |
 
 **Diagnose mode:**
@@ -132,24 +132,29 @@ Diagnosis-first debugging and codebase investigation.
 ```mermaid
 flowchart TD
     S0["Step 0\nGather context\nFootgun check\nUI bug detection"] --> D1
+    S0 -->|"Existing fix"| D4
 
     subgraph Diagnose["Diagnose Mode"]
-        D1["D1: Investigate\nHypotheses (2+ categories)\nRank, then trace code paths"] --> D15["D1.5: Minimise\nMethod fits the failure shape\nPreserve the load-bearing condition"]
-        D15 --> BrowserCheck{UI bug?}
+        D1["D1: Investigate\nHypotheses (2+ categories)\nRank, then trace code paths"] --> BrowserCheck{UI bug?}
         BrowserCheck -->|Yes| Browser["Browser evidence\nversion-matched browser-use playbook\nOBSERVED data"]
-        BrowserCheck -->|No| D2
-        Browser --> D2["D2: Diagnosis\nConfidence: HIGH/MEDIUM/LOW"]
+        BrowserCheck -->|No| D15
+        Browser --> D15["D1.5: Minimise\nMethod fits the failure shape\nPreserve the load-bearing condition"]
+        D15 --> D2["D2: Diagnosis\nConfidence: HIGH/MEDIUM/LOW"]
     end
 
     D2 -->|"BLOCKING GATE"| Decision{Human decision}
     Decision -->|"Fix it"| D3["D3: Fix Plan\nplanning only"]
     Decision -->|"Go deeper"| D1
     Decision -->|"Just report"| Close
-    D3 -->|"BLOCKING GATE"| D4["D4: Post-Fix Verification\nOriginal unminimized reproduction\n+ browser re-verification for UI bugs"]
-    D4 -->|"CHECKPOINT"| Close["Closing\nLearning loop"]
+    D3 -->|"BLOCKING GATE"| Implement["Approved implementation"]
+    Implement --> D4["D4: Post-Fix Verification\nApproved cleanup first\nConfirm intended state\nOriginal unminimized reproduction\n+ adjacent checks and UI re-verification"]
+    D4 -->|"Symptom remains; no patch authority"| D1
+    D4 -->|"Proof satisfied"| Close["Closing\nLearning loop if triggered"]
 ```
 
-No fixes until human reviews diagnosis, and approval to write D3 authorizes planning only - implementation needs its own approval. Symptom reproduction is not root-cause proof: HIGH requires a traced mechanism plus a distinguishing counterfactual or intervention, or deterministic proof that entails the symptom; MEDIUM means the mechanism is traced but distinguishing proof is unavailable or unsafe, and LOW rests on a load-bearing inferred link. For UI bugs, Step 0 detects browser-visible symptoms and loads `.goat-flow/skill-docs/playbooks/browser-use.md` on-demand. D1 uses browser evidence (screenshots, DOM state) to confirm or eliminate hypotheses after initial code reading. D4 reruns the browser reproduction post-fix as proof. Browser evidence is OBSERVED data; interpretations remain INFERRED until mapped to `file + semantic anchor`. When `browser-use` is unavailable, the reference includes a manual fallback using OS screenshot tools and browser DevTools.
+No fixes until human reviews diagnosis, and approval to write D3 authorizes planning only - implementation needs its own approval. Symptom reproduction is not root-cause proof: HIGH requires a traced mechanism plus a distinguishing counterfactual or intervention, or deterministic proof that entails the symptom; MEDIUM means the mechanism is traced but distinguishing proof is unavailable or unsafe, and LOW rests on a load-bearing inferred link. For UI bugs, Step 0 detects browser-visible symptoms and loads `.goat-flow/skill-docs/playbooks/browser-use.md` on-demand. D1 uses browser evidence (screenshots, DOM state) to confirm or eliminate hypotheses after initial code reading. D4 reruns the browser reproduction post-fix as proof. Browser evidence is OBSERVED data; interpretations remain INFERRED until mapped to `file + semantic anchor`. When `browser-use` is unavailable, [the browser-use playbook](../.goat-flow/skill-docs/playbooks/browser-use.md) owns the manual fallback using OS screenshot tools and browser DevTools. Learning-loop updates are conditional: write them when verification catches a failure, the agent corrects course, or the user requests one.
+
+To verify an existing fix, identify the change and environment, original failing steps and expected result, historical proof as context, and execution authority; enter D4 directly, complete approved cleanup first, confirm the intended state, and rerun the original reproduction plus adjacent checks, marking unavailable proof UNVERIFIED and human-owned checks HUMAN-PENDING with an owner.
 
 **Investigate mode:**
 
@@ -160,15 +165,16 @@ flowchart TD
     subgraph Investigate["Investigate Mode"]
         I1["I1: Scope & Plan\nDeclare in/out of scope\nRead estimate"]
         I1 -->|"CHECKPOINT"| I2["I2: Read (Progressive Depth)\nEntry points → Critical path → Supporting"]
-        I2 -->|"3x estimate?"| Check{"Re-scope?"}
-        Check -->|Yes| I1
+        I2 --> Check{"More reading would exceed 3x estimate?"}
+        Check -->|Yes| Pause["Pause for scope decision"]
+        Pause --> I1
         Check -->|No| I3["I3: Report\n'What I Didn't Read' (required)"]
     end
 
     I3 -->|"BLOCKING GATE"| Close["Go deeper / Switch to diagnose / Close"]
 ```
 
-For an explicit goal and scope continue without waiting at I1; pause only for ambiguity or before exceeding the declared read limit. For onboarding ("I'm new to this project"), use investigate mode - covers stack detection and codebase orientation through progressive depth reading.
+For an explicit goal and scope continue without waiting at I1; pause only for ambiguity or before exceeding the declared read limit. For onboarding ("I'm new to this project"), use investigate mode for codebase orientation through progressive depth reading.
 
 ---
 
@@ -418,7 +424,7 @@ The skill freezes a Target Scope Snapshot before its first edit. It records auth
 `READY` records exact owned commands and flags, with separate baseline and final results. An unavailable owned command remains `UNAVAILABLE`;
 omitted discovery is not a no-owner result. Deliberately skipped work records its reason, and a failing baseline remains failure evidence after a later pass.
 
-The test-selection record gives a report-only value pass through `test-selection.md` to changed tests in a PR or uncommitted selector and to every test in selected folder or file test-source units, except when a proven comment/private-name-only selector pass preserves test meaning and waives per-case rows. Folder/file cases and materially changed tests in PR and uncommitted work use `KEEP`, `CONSOLIDATE`, `MOVE LEVEL`, `PRUNE CANDIDATE`, or `UNRESOLVED`. Added tests use `ADDED KEEP`, `ADDED CONSOLIDATE`, `ADDED MOVE LEVEL`, `ADDED DROP CANDIDATE`, or `ADDED UNRESOLVED`; removed tests use `REMOVAL SUPPORTED`, `RESTORE`, `REPLACE`, or `REMOVAL UNRESOLVED`. A proven path or namespace-only carryover uses `RELOCATED`; uncertain identity stays in the added and removed unresolved buckets. A manifest checkpoint counts cases before broader diagnosis and caps provider evidence batches at 20 cases, so incomplete cases cannot disappear. Recommendations never authorize assertion, fixture, level, coverage, or test-meaning changes.
+The test-selection record gives a report-only value pass through `test-selection.md` to changed tests in a PR or uncommitted selector and to every test in selected folder or file test-source units, except when every edit across the selected inventory is proven comment/private-name-only; a function relocation requires the full case ledger. Folder/file cases and materially changed tests in PR and uncommitted work use `KEEP`, `CONSOLIDATE`, `MOVE LEVEL`, `PRUNE CANDIDATE`, or `UNRESOLVED`. Added tests use `ADDED KEEP`, `ADDED CONSOLIDATE`, `ADDED MOVE LEVEL`, `ADDED DROP CANDIDATE`, or `ADDED UNRESOLVED`; removed tests use `REMOVAL SUPPORTED`, `RESTORE`, `REPLACE`, or `REMOVAL UNRESOLVED`. A proven path or namespace-only carryover uses `RELOCATED`; uncertain identity stays in the added and removed unresolved buckets. A manifest checkpoint counts cases before broader diagnosis and caps provider evidence batches at 20 cases, so incomplete cases cannot disappear. Recommendations never authorize assertion, fixture, level, coverage, or test-meaning changes.
 
 Current compatibility obligations and checkable removal triggers remain useful comment context. Removed symbols and gitignored or local-plan
 provenance stay prohibited.
