@@ -1,6 +1,6 @@
 ---
 category: setup-and-migration
-last_reviewed: 2026-09-05
+last_reviewed: 2026-09-10
 ---
 
 **Scope:** Installing goat-flow into a project and migrating an existing install - what a package smoke proves, mirror fan-out, the scope a setup agent may write, and concepts that survive their own removal. Repo-wide gates that catch the fallout are [verification-preflight.md](verification-preflight.md).
@@ -26,12 +26,15 @@ last_reviewed: 2026-09-05
 ## Lesson: Skill edits must fan out to all four installed mirrors, and removed anchors cascade
 
 **Status:** active | **Created:** 2026-07-18
+**Incident count:** 2 | **Latest occurrence:** 2026-09-10
 
 **Prevention:** Treat one canonical skill edit as a four-target fan-out, `workflow/skills/` plus the `.claude/`, `.agents/`, and `.github/` mirrors, and verify with `goat-flow audit . --check-drift`. After deleting or renaming any anchored function, run `goat-flow stats . --check`, rewrite the citing footgun and lesson anchors as dated resolved-history prose, then re-check bucket size. Evidence anchors: `test/unit/support-bundle.test.ts` (search: `emits clean JSON through the CLI`), `.goat-flow/learning-loop/footguns/deny-shell.md` (search: `removed 2026-07-18`).
 
 **What happened:** A goat-critique skill and reference-pack edit was synced to three mirrors and the contract suite passed, but `goat-flow audit . --check-drift` failed on the fourth mirror under `.github/skills/`, taking the workspace-self support-bundle test with it. Separately, removing a hook helper made two footgun evidence anchors stale, failing the `feedback-loop-active` harness check, and rewriting those anchors pushed the footgun bucket over its size gate.
 
 **Root cause:** The mirror set was treated as three targets, and anchor repair was treated as free of size consequences.
+
+**Recurrence 2026-09-10:** M52's committed security-skill wording change (`6e554aa2`) removed the phrase `If no admissible and available specialist exists` that `.goat-flow/learning-loop/lessons/agent-behavior.md` cited as an anchor; the four mirrors were synced correctly, but `goat-flow stats . --check` did not run with the source change, so the stale reference surfaced only during the later learning-loop closeout. Run the stats check whenever a skill edit deletes or rewrites a phrase, and grep the learning-loop buckets for the removed text before syncing mirrors. `.goat-flow/learning-loop/lessons/agent-behavior.md` (search: `coverage degrades; continue without waiting`).
 
 ---
 

@@ -1,6 +1,6 @@
 ---
 category: test-fixtures
-last_reviewed: 2026-09-07
+last_reviewed: 2026-09-11
 ---
 
 **Scope:** Building and keeping fixtures true - collision branches, semantic operands, in-memory against disk-backed corpora, and fixtures that drift from the code they model. Runner behaviour is [test-execution-environment.md](test-execution-environment.md).
@@ -226,3 +226,16 @@ last_reviewed: 2026-09-07
 **Recurrence 2026-08-09:** A goat-debug GREEN evaluator chose the correct Investigate path, but the prompt's three-call cap and read ban prevented the skill's mandatory learning-loop retrieval, so the pass was discarded. `workflow/skills/goat-debug/SKILL.md` (search: `Footgun check`).
 **Recurrence 2026-08-10:** A live provider canary prohibited reads but named only old and new values for four edits; the agent guessed four incompatible declarations and every patch failed, exercising Stop without PostToolUse. `test/integration/hook-consumer-canary.test.ts` (search: `writeObservedCodexFeedbackConfig`).
 **Recurrence 2026-08-16:** A goat-clarity Copilot evaluator guard recognised read-only Git only when the subcommand came first; Copilot prefixed `--no-optional-locks` and `-C <worktree>`, so the guard misclassified the disposable clone as non-Git and the run was discarded. `workflow/skills/goat-clarity/SKILL.md` (search: `repository root resolved from the invocation working directory`).
+
+## Lesson: Concurrent evaluator runs must not share a fixture worktree when any run writes
+
+**Created:** 2026-09-11
+**Decision changed:** Schedule parallel evaluator runs by write set, not by case: every run that may write gets its own disposable worktree, and a read-only run that hashes fixtures shares a checkout only with other read-only runs.
+**Trigger phase:** SCOPE
+**Caught at:** VERIFY
+
+**Prevention:** Before launching evaluator runs in parallel, list each run's registered write set. Give every run with a non-empty write set a dedicated `git worktree add --detach` checkout with its own fixture copies, keep hash-taking read-only runs away from writers, and record the checkout name in each trace so a changed hash is attributable before anyone calls it an anomaly. The shared conventions already require a named merge boundary for parallel tasks sharing files, `workflow/skills/reference/skill-conventions.md` (search: `Parallel tasks sharing files require a named merge boundary`); evaluator fixtures are files in that sense.
+
+**What happened:** M31 launched the bare-path planning baseline, which hashes the fixture milestones and must write nothing, and the interrupted-task recovery baseline, which ticks a fixture task, in the same worktree. The bare-path evaluator saw its M02 hash change between its start and end commands, guessed that the strict plan check had written the file, and reported an unexplained anomaly. The change was the recovery run's registered tick. The candidate arms ran in separate checkouts and the bare-path hashes stayed identical.
+
+**Root cause:** The host treated dependency independence between cases as write independence and scheduled by case rather than by write set.

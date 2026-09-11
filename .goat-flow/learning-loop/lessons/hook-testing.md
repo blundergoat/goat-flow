@@ -1,6 +1,6 @@
 ---
 category: hook-testing
-last_reviewed: 2026-09-05
+last_reviewed: 2026-09-11
 ---
 
 **Scope:** Hook test coverage strategy and provider evidence - what a self-test actually exercises, which support layer a capture proves, matrices that interfere with the live guard, fixtures that must not carry real secrets, and splits that only look like coverage. The script under test is [hook-script-authoring.md](hook-script-authoring.md); driving it with payloads is [hook-probe-testing.md](hook-probe-testing.md).
@@ -95,7 +95,7 @@ last_reviewed: 2026-09-05
 **Status:** active | **Created:** 2026-06-03
 **Decision changed:** Split all-in-one shell verification into bounded direct commands, and feed hook payloads from a temporary file when the live shell guard inspects the outer command.
 **Trigger phase:** VERIFY
-**Incident count:** 5 | **Latest occurrence:** 2026-08-15
+**Incident count:** 7 | **Latest occurrence:** 2026-09-11
 
 **Prevention:** For manual guardrail matrices, run one direct case at a time or create a temporary harness file with a plain invocation command. Construct secret-path payloads from variables when the outer live guard would otherwise see them, prefer here-strings or file redirection over `printf | bash hook`, and record temp roots in the parent shell before using command substitution. Use the interpreter returned by `command -v python3 || command -v python` rather than assuming a `python` shim. Evidence anchors: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `Command has more than 50 chained segments`), `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Pipe to shell`), `.goat-flow/learning-loop/lessons/verification-scanners.md` (search: `Temp cleanup must satisfy destructive-command hooks`).
 
@@ -106,6 +106,8 @@ last_reviewed: 2026-09-05
 **Recurrence 2026-07-14:** A disposable-target walkthrough repeated the failure when an all-in-one validation command was blocked before setup; a short temporary harness kept each reviewed step visible and unblocked.
 **Recurrence 2026-08-03:** PR-thread verification piped a bundled comment snapshot into an inline Node parser, so the guard rejected the outer command before the read-only parser ran; persisting the snapshot in a temporary file and reading it through stdin redirection preserved the workflow.
 **Recurrence 2026-08-10:** A focused Gruff verification piped generated JSON into a shell hook and was blocked; writing the payload to a securely created temporary file and redirecting the hook's stdin kept the outer command reviewable.
+**Recurrence 2026-09-10:** Milestone evidence maintenance hit two live guards: a local generator-to-redactor pipe was rejected, then a whole-file heredoc exceeded the command-size limit. Neither command wrote files. Separate the generator read from redaction and apply only bounded, already-scrubbed replacement sections; never change hook policy to admit the wrapper. Evidence: `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Pipe to interpreter`) and `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `Command exceeds 16KB`); the M52 evaluation record retains both rejected commands and the successful bounded writes.
+**Recurrence 2026-09-11:** Saving critique records from in-memory heredocs into the redactor tripped the 50-segment guard three times: semicolons and pipe characters inside the heredoc body count as chained segments, and a 13 KB body trips the count even without them while a 7 KB body passes. Scrubbing each half into the project scratchpad with the redactor and then concatenating the scrubbed halves through the redactor into the create-only record kept every raw draft off disk and preserved the record schema. Evidence: workflow/hooks/deny-dangerous/guard-runtime.sh (search: chained segments).
 
 ---
 

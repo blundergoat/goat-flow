@@ -1,6 +1,6 @@
 ---
 category: plan-artifacts
-last_reviewed: 2026-09-07
+last_reviewed: 2026-09-11
 ---
 
 **Scope:** The grammar and validation of plan, milestone, and review artifacts: evidence fields, proof gates, machine-parsed dependency links, effort accounting, and when a validator runs relative to persistence. CLI process behaviour and output streams live in [cli.md](cli.md).
@@ -154,6 +154,20 @@ and `test/unit/review-validate.test.ts` (search: `retains all five selected file
 **Evidence:** The user committed the prepared changelog and review fixes during the release boundary wait. Revalidation found replacement HEAD `406eddd0e8ce0de19c385b61520d512b5530037a`, and the planned changelog edit no longer applied because `CHANGELOG.md` (search: `## v1.17.0`) already carried the section. A fresh isolated bump preview at that HEAD still produced the approved 164-path set, so the user reapproved the replacement baseline before `scripts/bump-version.sh` (search: `# Updated files:`) ran.
 
 ---
+
+## Footgun: A handoff that ticks a narrowed task only after gate acceptance collides with the checker, which closes every gate state to open tasks
+
+**Status:** active | **Created:** 2026-09-11 | **Evidence:** OBSERVED
+**Decision changed:** Hold a milestone with a human-pending scope narrowing at `in-progress` for its gate, say so in the closeout note, and tick the narrowed task and complete the milestone in one transition after acceptance; do not try `testing-gate` or `human-verification-pending` with the task open.
+**Trigger phase:** VERIFY
+**Caught at:** VERIFY
+**Incident count:** 1 | **Latest occurrence:** 2026-09-11
+
+**Prevention:** Before setting a gate status, count open `- [ ]` implementation tasks; if a handoff rule keeps one open pending the human's acceptance of a narrowed scope, present the gate from `in-progress` and record the hold reason beside the Exit line. Strict validation stays green because `in-progress` is the only active state that tolerates open tasks.
+
+**Symptoms:** `plans check --strict` printed `human-verification-pending milestone has open implementation tasks`, then `testing-gate milestone has open implementation tasks`, after M41 deferred the I-05 additions and left Task 4 open as `debug-handoff.md` instructs (search: `tick the task only after that disposition is accepted`).
+
+**Why it happens:** `src/cli/plans-check.ts` (search: `open implementation tasks`) treats both gate states as implementation-complete, while the debug handoff's scope-creep rule makes ticking conditional on the human decision the gate exists to obtain. The two rules are on the same axis and the checker is the enforced one.
 
 ## Resolved Entries
 

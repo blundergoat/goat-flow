@@ -76,7 +76,7 @@ If 3 consecutive file reads produce no new signal relevant to the current questi
 
 For plan or milestone work, tick each task `- [x]` immediately, never at batch end or closeout. Checkboxes recover state after interruption or compaction; tick any missed completion before continuing.
 
-On `/compact` without an active milestone, write current state to `.goat-flow/logs/sessions/`. Milestones are primary continuity; session logs are fallback.
+Compact at ~60% context or 15+ turns. On `/compact` without an active milestone, write current state to `.goat-flow/logs/sessions/`. Milestones are primary continuity; session logs are fallback.
 
 Handoff receipts: read `.goat-flow/logs/sessions/README.md`; redact before writing.
 
@@ -92,34 +92,9 @@ For user-facing tasks, findings, or recommendations, use:
 - **Problem:** what's wrong (one line)
 - **Solution:** what to do (one line)
 
-## Milestone Retrospective (goat-plan)
+## Milestone Lifecycle (goat-plan)
 
-**Status vocabulary:** `not-started | in-progress | testing-gate | blocked | abandoned | superseded | deferred | human-verification-pending | complete`
-
-Lifecycle:
-
-1. Authorized work enters `in-progress` with complete dependencies, a free lane, and cap capacity; finished implementation enters `testing-gate`. Active statuses (`in-progress`, `testing-gate`, `human-verification-pending`) consume lane and cap; omitted/empty Lane means `default`.
-2. Successful AI proof records structured `Actual:` and sets `human-verification-pending`; only human-owned items remain open. Each milestone owns its receipt and blocking human gate; unrelated active lanes keep their state and receipts.
-3. Human approval completes only that non-final milestone. Re-read eligible work; resolve lane/cap contention with a human choice, never by number.
-4. Human-requested changes return the milestone to `in-progress`; this applies only to the reviewed milestone. Invalidation/kill sets `blocked` and `Status reason:` names the condition and evidence/action to resume.
-5. `abandoned` requires a human decision and `Status reason:` records why work stops. Leaving either state removes the reason; reopening invalidates proof.
-6. `superseded` and `deferred` are terminal and need a `Status reason:`.
-
-Goat-plan Mode 0 owns cap provenance/selection; Phase 3 owns writer ownership and downgrade recovery.
-
-Derive the unique final join using goat-plan Phase 3: multiple sinks or uncovered work requires a plan amendment before source work or timing. Phase 4 needs that join `human-verification-pending`, all other participants complete, and no sibling active work.
-
-At the gate, record learnings, resolve assumptions, and propose amendments before applying them.
-
-### Plan Completion Protocol
-
-See goat-plan Phase 4: audit, present the **BLOCKING** human gate, wait. Approval completes the final milestone; archival/removal remains human-owned.
-
-Plans and milestones are verification artifacts. Agents MUST NOT delete, archive, or add self-destruct instructions.
-
-Compact at ~60% context or 15+ turns.
-
-When blocked: ask one question with a recommended default.
+`goat-plan` owns milestone status, lanes, receipts, human gates, and the final join: read its Phase 3 and Phase 4, plus its milestone-examples reference → Status reason, Lane lifecycle, and Timing receipts. Another skill that resumes an interrupted milestone task ticks only that task under Task Tracking and Recovery; it never changes a status, lane, receipt, or another lane's work.
 
 ## Orchestration Admission
 
@@ -159,6 +134,8 @@ When a skill fails mid-execution (context limit, sub-agent death, tool error):
 | Corrected twice on same approach | STOP and rewind the current hypothesis; ask for a different debugging angle |
 | User wants restart | Re-run from Step 0 |
 | User wants to skip | Document skip reason in output, proceed to closing |
+
+When blocked: ask one question with a recommended default.
 
 ## Interrupt Freeze Protocol
 

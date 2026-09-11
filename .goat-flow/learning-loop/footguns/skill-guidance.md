@@ -1,6 +1,6 @@
 ---
 category: skill-guidance
-last_reviewed: 2026-09-07
+last_reviewed: 2026-09-11
 ---
 
 **Scope:** Editing shipped skill and playbook guidance: behavioural wording, authority alignment, contract caps, and load-budget signals. Skill candidacy and runtime authoring traps live in [skill-authoring.md](skill-authoring.md); mirror sync lives in [skills.md](skills.md).
@@ -27,7 +27,7 @@ last_reviewed: 2026-09-07
 **Decision changed:** Measure the body budget and inventory phrase-pinning contracts, vocabulary consumers, and reconciliation owners before adding or compressing shipped skill guidance.
 **Trigger phase:** READ
 **Caught at:** ACT
-**Incident count:** 9 | **Latest occurrence:** 2026-09-07
+**Incident count:** 10 | **Latest occurrence:** 2026-09-11
 
 **Prevention:** Before editing a playbook or skill, measure its body word count, read its actual cap from `test/contract/skill-hardening-contracts.test.ts` rather than assuming the ADR-023 tier, and grep the contract tests for its filename to list the pinned phrases:
 
@@ -49,6 +49,7 @@ For a closed vocabulary or reconciliation equation, also grep every label and to
 - **Recurrence 2026-08-17:** the ADR-023 3000-word cap was not binding; `test/contract/skill-hardening-contracts.test.ts` (search: `M02 playbooks stay within their rollout budgets`) capped `.goat-flow/skill-docs/playbooks/code-comments.md` at 2880 and `.goat-flow/skill-docs/playbooks/writing-sentence-diagnostics.md` at 900-1100, so six and two words of real headroom read as 126 and 1902.
 - **Recurrence 2026-08-17 (clarity gate):** two older assertions still pinned phrases an approved rewrite removed; the aggregate gate failed on `zero eligible source files` and the comma-sensitive `binary or generated` until only the superseded phrase was removed. Anchors: `workflow/skills/goat-clarity/SKILL.md` (search: `when no selected unit is source code`) and `test/contract/skill-hardening-clarity.test.ts` (search: `fails closed on unsupported path state`).
 - **Recurrence 2026-08-17 (clarity budget):** goat-clarity rose from 2,457 to 2,641 words and the full gate rejected it before the slow suite; compressing duplicated test-selection explanation back into its owner left 2,491 across all mirrors: `workflow/skills/goat-clarity/SKILL.md` (search: `Added-test dispositions`).
+- **Recurrence 2026-09-11 (public docs):** extending the goat-security paragraph in docs/skills.md with the accepted cluster caller reworded the unavailable-specialist clause and dropped the verb the security contract pins (search: records specialist-unavailable, which degrades coverage in test/contract/skill-hardening-security-2.test.ts); one suite failed, the pinned phrase was restored verbatim and 34 of 34 passed. Grep the docs pins before rewording a sentence, not only the skill pins.
 - **Recurrence 2026-08-17 (closed vocabulary):** goat-clarity's added/removed-test vocabulary reached the skill while the batch checkpoint, docs, changelog, and receipt still enumerated only existing-test outcomes, and the focused suite pinned the stale equation independently; adding consumer contracts moved the skill to the rejecting 2,500 boundary and a semantics-preserving trim left 2,490. Anchors: `workflow/skills/goat-clarity/references/target-scope-and-evidence.md` (search: `batch_expected = assessed_added`) and `test/contract/skill-hardening-clarity.test.ts` (search: `batch_expected = assessed_added`).
 - **Recurrence 2026-08-18:** planning against 3000 claimed roughly 1000 and 2100 words of room, while the routed budgets measured `.goat-flow/skill-docs/playbooks/writing-human-facing-prose.md` at 1992 within 1700-2000 and `.goat-flow/skill-docs/playbooks/writing-sentence-diagnostics.md` at 1136 within 900-1150, leaving 8 and 14 words: `test/contract/skill-hardening-contracts.test.ts` (search: `M51 writing playbooks stay within their routed context budgets`).
 - **Recurrence 2026-08-24:** a 99-rule inventory trimmed duplicates from `workflow/skills/playbooks/writing-human-facing-prose.md` (1996 to 1978) and `workflow/skills/playbooks/writing-sentence-diagnostics.md` (1128 to 1114) with rules, caps, contracts, and mirrors unchanged; this entry's own record then reached 41,271 bytes and tripped `stale-ref` on three shorthand paths until compacted with full paths, per `src/cli/stats/stats.ts` (search: `BUCKET_SIZE_WARN_BYTES`).
@@ -145,3 +146,18 @@ For a closed vocabulary or reconciliation equation, also grep every label and to
 **Why it happens:** The vocabulary was frozen from failure modes seen when the producer always resolved. Two reproducible states fall outside it: the PATH CLI lagging the skill version, and a reviewed project that is not a repository root, which the producer refuses with `authority-path: selected project must be the repository root` and `authority-unsupported: live review paths cannot enter nested repositories`. The honesty rule against inventing tokens then has nowhere to send the truth. `src/cli/review-validate-verdict.ts` (search: `conclusionForDegradationFlags`) owns the flag classes; the bundle marker has one documented value, `persist-skipped: redactor-unavailable`.
 
 **Evidence:** On 2026-09-07, two of six baseline runs and two of six candidate runs invented a token and said so in the report; two more candidate runs parked the same disclosure as an extra `Degradation evidence` key, which `review validate-draft` rejected with `must contain exactly one nonempty explanation per emitted flag`. All three fixture-project runs hit both producer refusals verbatim. The gap is recorded, not closed: the vocabulary belongs to the review authority and integrity milestones, and the review skill routes it there rather than adding a token.
+
+## Footgun: The drift audit reads a `references/<file>.md` token in shared guidance as a path beside that file
+
+**Status:** active | **Created:** 2026-09-11 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Name another skill's reference by description in shared guidance and playbooks; never write a bare `references/<file>.md` token outside that skill's own root.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Before pointing at a skill reference from `workflow/skills/reference/*.md` or a playbook, run `node --import tsx src/cli/cli.ts audit . --check-drift --format json` and read the `drift.findings` array. The resource-reference check resolves every backticked `references/...` token relative to the file that contains it, so a pointer from the shared conventions to goat-plan's reference resolves under `workflow/skills/reference/references/` and fails as a missing canonical resource. Describe the target instead ("its milestone-examples reference → Status reason") or name the section alone.
+
+**Symptoms:** The focused contract suites pass, `audit --check-drift` exits 1 with `drift.status: fail`, and the repository's own audit unit test in `test/unit/audit-command/main.test.ts` (search: `passes on this repo`) fails inside `npm test` with `'fail' !== 'pass'`.
+
+**Why it happens:** `src/cli/audit/resource-references.ts` (search: `references missing canonical resource`) extracts reference tokens from shared guidance and requires each resolved path to exist in the canonical workflow package. A token that reads to an agent as "the goat-plan reference" is a relative path to the checker.
+
+**Evidence:** 2026-09-11, M31: the first shared-conventions pointer read `references/milestone-examples.md` → Status reason and produced `workflow/skills/reference/skill-conventions.md references missing canonical resource workflow/skills/reference/references/milestone-examples.md`; rewording to `its milestone-examples reference → Status reason` returned the audit to `drift: pass, findings: 0, checked: 250`. The accepted wording is pinned by `test/contract/skill-hardening-plan-2.test.ts` (search: `its milestone-examples reference`).
