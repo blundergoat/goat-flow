@@ -420,6 +420,7 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
         skillGuidance,
         [
           /Merge the selected rubric map[^\n]+fixed A\/B\/C split[^\n]+never replace baseline context/u,
+          /Read only the selected rubric's `###` map under Rubric Context Maps[^\n]+Other reference sections load at the phase that names them/u,
           /Fresh-eyes boundary and recovery/u,
           /separate input payloads and no result sharing/u,
         ],
@@ -791,12 +792,7 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
       const skillGuidance = readProjectFile(skillPath);
       assert.match(
         skillGuidance,
-        /Phases 1-5, 5\.5 meta-audit, 5\.6 outcome capture, three critique sub-agents, one meta-agent/,
-        skillPath,
-      );
-      assert.match(
-        skillGuidance,
-        /full delegated, Phases 1-5 plus 5\.5\/5\.6, three critique sub-agents plus one meta-agent/,
+        /Phases 1-5, 5\.5 meta-audit, 5\.6 outcome capture, three critique sub-agents, one meta-agent[\s\S]+full delegated, Phases 1-5 plus 5\.5\/5\.6, three critique sub-agents plus one meta-agent/,
         skillPath,
       );
     });
@@ -806,11 +802,7 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
     );
     assert.match(
       acceptedDecision,
-      /mandatory lifecycle is Phases 1-5 plus Phase 5\.5 meta-audit and Phase 5\.6 outcome capture/,
-    );
-    assert.match(
-      acceptedDecision,
-      /three isolated critique sub-agents[\s\S]+up to three cross-exam agents[\s\S]+one meta-agent/,
+      /mandatory lifecycle is Phases 1-5 plus Phase 5\.5 meta-audit and Phase 5\.6 outcome capture[\s\S]+three isolated critique sub-agents[\s\S]+up to three cross-exam agents[\s\S]+one meta-agent/,
     );
 
     const publicSkills = readProjectFile("docs/skills.md");
@@ -818,6 +810,12 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
     assert.match(publicSkills, /up to 3 cross-exam agents \(conditional\)/);
     assert.match(publicSkills, /1 meta-agent \(always\)/);
     assert.match(publicSkills, /5\.5: Meta-audit; 5\.6: Outcome capture/);
+    assert.match(publicSkills, /CLEAN means no surviving HIGH or CRITICAL/);
+    assert.match(publicSkills, /recheck are additional agents/);
+
+    const auditGuide = readProjectFile("docs/audit-and-quality.md");
+    assert.match(auditGuide, /spawns at least 4 sub-agents if invoked/);
+    assert.doesNotMatch(auditGuide, /spawns 3 sub-agents/);
 
     const setupGuide = readProjectFile("workflow/setup/03-install-skills.md");
     assert.match(setupGuide, /mandatory Phase 5\.5 meta-audit/);

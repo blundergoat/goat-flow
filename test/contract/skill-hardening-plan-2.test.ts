@@ -347,7 +347,7 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
       );
     });
 
-    // Both installed convention copies must give plan authors the same boundary.
+    // Both installed convention copies send plan authors to the same owner instead of restating its lifecycle.
     for (const conventionsPath of [
       "workflow/skills/reference/skill-conventions.md",
       ".goat-flow/skill-docs/skill-conventions.md",
@@ -355,12 +355,12 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
       const conventions = readProjectFile(conventionsPath);
       assert.match(
         conventions,
-        /Successful AI proof records structured `Actual:` and sets `human-verification-pending`/u,
+        /`goat-plan` owns milestone status, lanes, receipts, human gates, and the final join/u,
         conventionsPath,
       );
-      assert.match(
+      assert.doesNotMatch(
         conventions,
-        /Human-requested changes return the milestone to `in-progress`/u,
+        /Successful AI proof records structured `Actual:`/u,
         conventionsPath,
       );
     }
@@ -369,11 +369,6 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
   it("requires current reasons for all exceptional milestones", () => {
     const compactSkillRule =
       /For exceptional states, use `references\/milestone-examples\.md` → Status reason; remove stale reasons on ordinary states/u;
-    const blockedRule =
-      /`blocked` and `Status reason:` names the condition and evidence\/action to resume/u;
-    const abandonedRule =
-      /`abandoned` requires a human decision and `Status reason:` records why work stops/u;
-    const removalRule = /Leaving either state removes the reason/u;
 
     assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
       const skillGuidance = readProjectFile(skillPath);
@@ -413,21 +408,29 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
         assert.match(reference, /resolvable non-self successor milestone/u);
         assert.match(reference, /later release or record owning the scope/u);
         assert.match(reference, /Remove stale reasons on ordinary states/u);
+        // The examples own the reopening rule; the shared conventions only point here.
+        assert.match(
+          reasons,
+          /Remove stale reasons on ordinary states; reopening invalidates proof/u,
+          referencePath,
+        );
       },
     );
 
-    // Shared conventions retain the earlier stop/resume rules and the two terminal-state obligations.
+    // Shared conventions point at the owner instead of restating the exceptional-state obligations.
     for (const conventionsPath of [
       "workflow/skills/reference/skill-conventions.md",
       ".goat-flow/skill-docs/skill-conventions.md",
     ]) {
       const conventions = readProjectFile(conventionsPath);
-      assert.match(conventions, blockedRule, conventionsPath);
-      assert.match(conventions, abandonedRule, conventionsPath);
-      assert.match(conventions, removalRule, conventionsPath);
+      assert.doesNotMatch(
+        conventions,
+        /`superseded` and `deferred` are terminal/u,
+        conventionsPath,
+      );
       assert.match(
         conventions,
-        /`superseded` and `deferred` are terminal and need a `Status reason:`/u,
+        /its milestone-examples reference → Status reason, Lane lifecycle, and Timing receipts/u,
         conventionsPath,
       );
     }

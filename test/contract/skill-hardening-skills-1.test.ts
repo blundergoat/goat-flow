@@ -168,6 +168,18 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
         /the cause is insufficient or incomplete/u,
         skillPath,
       );
+
+      // ADR-009 keeps 5-Whys in D2; the root states its rule: a named trigger selects the chain, which stops where cited evidence stops.
+      assert.match(
+        skillGuidance,
+        /high-stakes diagnoses \(production availability, persistent-data loss, or a security boundary at risk\)/u,
+        skillPath,
+      );
+      assert.match(
+        skillGuidance,
+        /the chain ends where cited evidence ends/u,
+        skillPath,
+      );
     });
   });
 
@@ -283,14 +295,32 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
         /mark each: CONFIRMED \/ ADJUSTED \/ ELIMINATED \/ UNRESOLVED/u,
         skillPath,
       );
+      // UNRESOLVED includes untested and inconclusive hypotheses, so assessed totals cannot determine executed-check counts.
       assert.match(
         skillGuidance,
-        /Hypotheses tested:\*\* count \(CONFIRMED \+ ADJUSTED \+ ELIMINATED \+ UNRESOLVED\)/u,
+        /Hypotheses assessed:\*\* count \(CONFIRMED \+ ADJUSTED \+ ELIMINATED \+ UNRESOLVED\)/u,
+        skillPath,
+      );
+      assert.match(skillGuidance, /Checks executed:\*\* count/u, skillPath);
+      assert.doesNotMatch(
+        skillGuidance,
+        /Hypotheses tested:\*\* count/u,
         skillPath,
       );
       assert.match(
         skillGuidance,
         /CONFIRMED: \[n\] \/ ADJUSTED: \[n\] \/ ELIMINATED: \[n\] \/ UNRESOLVED: \[n\]/u,
+        skillPath,
+      );
+      // The definition demands a named human-owned check, so the template cannot reduce it to a bare count.
+      assert.match(
+        skillGuidance,
+        /HUMAN-PENDING: each human-owned check with its owner or role/u,
+        skillPath,
+      );
+      assert.match(
+        skillGuidance,
+        /HUMAN-PENDING=\[n\]: \[check - owner\]/u,
         skillPath,
       );
     });
@@ -310,6 +340,12 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
         /`references\/diagnostic-techniques\.md`/u,
         skillPath,
       );
+      // The loading sentence is exclusive, so it must name every route the body uses, including D1.5 reduction.
+      assert.match(
+        readProjectFile(skillPath),
+        /only when a diagnosis needs mutation classification, reduction-method selection, causal-distinction detail, or the worked output example/u,
+        skillPath,
+      );
     });
 
     assertForEachTarget(
@@ -322,6 +358,12 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
         assert.match(
           referenceGuidance,
           /Illustrative scenario - input\/output shape only; never evidence/u,
+          referencePath,
+        );
+        // The discovery pointer must name reduction so the D1.5 route is visible before the body is read.
+        assert.match(
+          referenceGuidance,
+          /^description: ".*reduction-method.*"$/mu,
           referencePath,
         );
         // Reference files carry `reference-version`; `skill-version` is the SKILL.md key.
@@ -386,6 +428,41 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
       assert.match(
         skillGuidance,
         /If repeated reads or experiments produce no new decision signal, checkpoint: state what was checked, which hypotheses remain, and the next distinguishing evidence needed\./u,
+        skillPath,
+      );
+    });
+  });
+
+  // Ranking decides which hypotheses to test first, so it must appear before tracing rather than after minimisation.
+  it("ranks goat-debug hypotheses before expensive tracing", () => {
+    assertForEachTarget(installedSkillPaths("goat-debug"), (skillPath) => {
+      const diagnoseMode = readMarkdownSection(skillPath, "Diagnose Mode");
+      const rankingIndex = diagnoseMode.indexOf("**Hypothesis ranking:**");
+      const tracingIndex = diagnoseMode.indexOf("After tracing, mark each");
+      assert.ok(rankingIndex !== -1, `${skillPath}: ranking rule missing`);
+      assert.ok(tracingIndex !== -1, `${skillPath}: tracing rule missing`);
+      assert.ok(
+        rankingIndex < tracingIndex,
+        `${skillPath}: ranking must precede tracing`,
+      );
+      assert.match(
+        diagnoseMode,
+        /\*\*Hypothesis ranking:\*\* Before expensive tracing, reduction, or experiments/u,
+        skillPath,
+      );
+      assert.match(
+        diagnoseMode,
+        /re-rank whenever evidence changes/u,
+        skillPath,
+      );
+      assert.match(
+        diagnoseMode,
+        /cheapest authorized distinguishing check, or cite deterministic proof/u,
+        skillPath,
+      );
+      assert.doesNotMatch(
+        diagnoseMode,
+        /After minimisation, rank surviving hypotheses/u,
         skillPath,
       );
     });

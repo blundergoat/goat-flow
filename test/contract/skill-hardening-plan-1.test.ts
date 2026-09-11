@@ -85,16 +85,26 @@ describe("skill hardening contracts: goat-plan (1/2)", () => {
         "references/milestone-examples.md",
       ),
       (referencePath) => {
+        // Planning-time grammar and execution-time receipts are separate sections; the obligations span both.
+        const effortEstimates = readMarkdownSection(
+          referencePath,
+          "Effort Estimates",
+        );
+        const timing = readMarkdownSection(referencePath, "Timing receipts");
         assertTimingObligationsDocumented(
-          readMarkdownSection(referencePath, "Effort Estimates"),
+          `${effortEstimates}\n${timing}`,
           referencePath,
         );
         assert.match(
-          readMarkdownSection(referencePath, "Effort Estimates"),
+          effortEstimates,
           /\[HUMAN\].*excluded.*agent work units/isu,
           `${referencePath}: human-only work is not excluded from agent forecasts`,
         );
-        const timing = readMarkdownSection(referencePath, "Effort Estimates");
+        assert.doesNotMatch(
+          effortEstimates,
+          /goat-flow plans time start/u,
+          `${referencePath}: execution commands must not sit inside the planning-time grammar`,
+        );
         assert.match(
           timing,
           /set exactly one rendered Status to `in-progress` or `testing-gate`, then start and inspect/u,
@@ -376,24 +386,44 @@ describe("skill hardening contracts: goat-plan (1/2)", () => {
       /Restore each prior state only after lane-cap support returns; preserve every task and receipt history/u,
     );
 
+    // The lifecycle rules live with goat-plan; the shared conventions only point there.
+    const skillPath = "workflow/skills/goat-plan/SKILL.md";
+    const betweenMilestones = readMarkdownSection(
+      skillPath,
+      "Phase 3 - Between Milestones",
+    );
+    const planComplete = readMarkdownSection(
+      skillPath,
+      "Phase 4 - Plan Complete",
+    );
+    assert.match(
+      betweenMilestones,
+      /Each milestone retains its own receipt and blocking human gate; unrelated active lanes keep their state and receipts/u,
+    );
+    assert.match(
+      betweenMilestones,
+      /After approval for a non-final milestone, capture learnings, complete it/u,
+    );
+    assert.match(
+      betweenMilestones,
+      /Multiple sinks or uncovered work requires a plan amendment before source work or timing/u,
+    );
+    assert.match(planComplete, /no sibling active work/u);
+    assert.doesNotMatch(betweenMilestones, /no later milestone activates/u);
+
     const conventions = readMarkdownSection(
       "workflow/skills/reference/skill-conventions.md",
-      "Milestone Retrospective (goat-plan)",
+      "Milestone Lifecycle (goat-plan)",
     );
     assert.match(
       conventions,
-      /Each milestone owns its receipt and blocking human gate; unrelated active lanes keep their state and receipts/u,
+      /`goat-plan` owns milestone status, lanes, receipts, human gates, and the final join/u,
     );
     assert.match(
       conventions,
-      /Human approval completes only that non-final milestone/u,
+      /never changes a status, lane, receipt, or another lane's work/u,
     );
-    assert.match(
-      conventions,
-      /multiple sinks or uncovered work requires a plan amendment before source work or timing/u,
-    );
-    assert.match(conventions, /no sibling active work/u);
-    assert.doesNotMatch(conventions, /no later milestone activates/u);
+    assert.doesNotMatch(conventions, /^\d\. /mu);
 
     const cli = readProjectFile("docs/cli.md");
     assert.match(cli, /plans\.maxActiveMilestones/u);

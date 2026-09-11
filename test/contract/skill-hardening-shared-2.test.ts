@@ -422,6 +422,22 @@ describe("skill hardening contracts: shared surfaces (2/3)", () => {
         /Recommended Changes[^\n]+proof class/,
         skillPath,
       );
+      // Readers trace each recommendation to one explanation: findings are explained once, and later sections cite the ID.
+      assert.match(
+        skillGuidance,
+        /Explain once:[^\n]+Later sections cite the finding ID and add only what they own/,
+        skillPath,
+      );
+      assert.match(
+        skillGuidance,
+        /## Recommended Changes  <!-- finding IDs from Validated Findings[^\n]+no restatement -->/,
+        skillPath,
+      );
+      assert.doesNotMatch(
+        skillGuidance,
+        /\*\*Integration hooks\.\*\* Populate from surviving findings/,
+        skillPath,
+      );
     });
   });
 
