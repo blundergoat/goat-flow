@@ -58,8 +58,9 @@ fails closed until controlling current authority bytes and provenance are explic
 working or committed rules silently. Record missing authority as `NOT_CHECKED`; never import another
 project's conventions.
 
-Read `references/target-scope-and-evidence.md` for selector, snapshot, drift, formatter, status, and
-receipt mechanics.
+Read `references/target-scope-and-evidence.md` by section: the `Selector Inventory` subsection for the
+accepted selector only; `Snapshot Records`, `Formatter Capability`, `Status and Claim Evidence`, and
+`Like-unit Receipt Ledgers` on every run; every other section at the step that calls for it.
 
 ### 0.2 Classify selected units
 

@@ -3,9 +3,14 @@ goat-flow-reference-version: "1.17.0"
 ---
 # Target Scope and Evidence
 
-Use this reference after goat-clarity resolves project authority. It owns deterministic selector,
-placement, snapshot, drift, formatter, evidence-status, and receipt mechanics. It grants no write authority;
+Use this reference after goat-clarity resolves project authority. It grants no write authority;
 `SKILL.md` owns surface eligibility, permanent prohibitions, diagnosis, and Scope v2.
+
+Every section from `Snapshot Records` onward loads on every run. Earlier sections load conditionally:
+the accepted selector's `Selector Inventory` subsection; `No-eligible-unit Receipt` at that exit;
+`Placement Decision` at a placement candidate; `Selector-driven Non-semantic Lane` only for a folder or
+file selector with a proven comment-only or private-name-only delta; `Test-case Manifest Checkpoint`
+whenever the test-value pass runs in the full lane.
 
 ## Selector Inventory
 
@@ -112,8 +117,7 @@ and disposition rows.
 
 ## Test-case Manifest Checkpoint
 
-When the test-value pass applies, complete this test-case manifest checkpoint before spending evidence
-capacity on broader clarity diagnosis:
+In the full lane, complete this checkpoint before broader clarity diagnosis:
 
 1. Before broader clarity diagnosis, enumerate every in-scope test case from the bound selector. Record
    its path, stable case anchor, baseline/current presence for a PR or uncommitted selector, and change

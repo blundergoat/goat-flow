@@ -41,7 +41,7 @@ goat-critique runs only full delegated mode: Phases 1-5, 5.5 meta-audit, 5.6 out
 - **Host ownership:** The host/root context owns Phases 1-5.6. A forked sub-agent returns control before Phase 1 and does not apply the shared sub-agent gate conversion. The host spawns agents, presents gates, and resumes Phase 5.6 after the response. Direct/chained host entry needs no delegation prompt; chained entry skips only intake confirmation.
 - **Resume:** For saved work, apply **Saved records and recovery** in `references/rubric-examples.md` before generating critics.
 - **Differential mode detection:** For matching artifact identity within 30 days, apply **Differential baselines** in `references/rubric-examples.md`: offer prior findings and available diff to A/B; C stays cold. Phase 5 links the baseline record and reports deltas.
-- **Read context map:** Merge the selected rubric map from `references/rubric-examples.md` into the fixed A/B/C split; never replace baseline context.
+- **Read context map:** Read only the selected rubric's `###` map under Rubric Context Maps in `references/rubric-examples.md`. Merge the selected rubric map into the fixed A/B/C split; never replace baseline context. Other reference sections load at the phase that names them.
 
 ## Phase 1 - Generate Competing Critiques
 
@@ -103,7 +103,7 @@ Execute in this order:
 
 **Early exit:** If Phase 2 yields zero split findings and zero unique HIGH/CRITICAL findings, skip Phase 3. Note `No findings require cross-examination` in output and proceed to Phase 4; unique MEDIUM and LOW findings survive the exit.
 
-If splits + unique HIGH/CRITICAL exceed the cross-examination budget (max 3 cross-exam agents total, 3 tool calls each - see Constraints), batch multiple disputes into a single agent prompt. Triage by severity - CRITICAL and HIGH first.
+If splits + unique HIGH/CRITICAL exceed the cross-examination budget (see Constraints), batch multiple disputes into a single agent prompt. Triage by severity - CRITICAL and HIGH first.
 
 For each split finding, spawn a cross-exam agent: "Agent A says [X], Agent B says [Y]. Which is correct given the actual codebase?"
 
@@ -129,12 +129,7 @@ Before drafting, apply Final-finding schema and Audit payload identity from `ref
 - Top 1-3 blockers (if any) - one line each, linked to findings below
 - If differential mode: append the **Differential baselines** delta block, including unassessed/unmapped prior findings.
 
-Then the full critique:
-- Consensus findings, unchanged
-- Resolved splits with rationale
-- Phase 4 human-directed findings
-- Verified unique findings
-- Retracted findings (listed so user sees what was considered and dismissed)
+**Explain once:** Validated Findings holds each surviving finding once, grouped consensus, resolved splits, Phase 4 human-directed, verified unique, with its Final-finding schema fields. Later sections cite the finding ID and add only what they own (see Output Format); the Comparison Matrix owns comparison and Rankings own order and criterion scores.
 
 **Open questions:** Items with INFERRED-only evidence, inconclusive single-agent findings, or unvalidated assumptions go here - not as recommendations. Each open question states: confidence, evidence needed to resolve, revisit trigger.
 
@@ -142,24 +137,17 @@ Then the full critique:
 
 **Proof Gate:** Apply the Proof Gate (see Constraints) to every synthesised finding before inclusion. Every synthesised finding must carry proof class `RUNTIME | CONTRACT-GREP | STATIC | NOT-REPRODUCED`.
 
-**Phase 5.5 - Meta-audit.** Assemble a self-contained packet for the 2-call meta-agent: the frozen draft with its `report_revision`, selected dimensions, and the reference pack's complete Meta-audit rubric (including Packet vocabulary), Final-finding schema and Audit payload identity. It grades that packet alone. Score each 0 or 10; their sum is `Meta-score`; no partial credit. Emit non-empty `## Auto-Detected Issues`: failures, or at 100/100 write exactly `No failed meta-audit checks.` Never invent issues. Put `Meta-score: N/100` in Verdict. Corrections edit the report, never the artifact.
+**Phase 5.5 - Meta-audit.** Assemble a self-contained packet for the 2-call meta-agent: the frozen draft with its `report_revision`, selected dimensions, and the reference pack's complete Meta-audit rubric (read now; including Packet vocabulary), Final-finding schema and Audit payload identity. It grades that packet alone. Score each 0 or 10; their sum is `Meta-score`; no partial credit. Emit non-empty `## Auto-Detected Issues`: failures, or at 100/100 write exactly `No failed meta-audit checks.` Never invent issues. Put `Meta-score: N/100` in Verdict. Corrections edit the report, never the artifact.
 
 **Persist final:** Before this gate, save the audited report as a fresh `finalized` record through **Saved records and recovery**.
 
 **BLOCKING GATE:** Present the synthesised critique (including Meta-score if 5.5 produced one). "Options: (A) apply, (B) dig deeper, (C) re-run, (D) close. Default: D." Picking (A) is the explicit apply instruction Constraints require, authorizing only the surviving Recommended Changes. After plan critique, suggest `/goat-plan`.
 
-**Phase 5.6 - Outcome capture.** After the host receives the human's A/B/C/D pick, save a fresh linked `outcomes` record using **Saved records and recovery**. A → accepted; D → deferred; B/C preserve the request with unspecified dispositions pending. Do not show `## Outcomes` in the initial Phase 5 gate response.
-
-**Integration hooks.** Populate from surviving findings when applicable:
-- `for-goat-plan` - milestone updates, reordering
-- `for-goat-debug` - hypothesis seeds, evidence to capture
-- `for-implementation` - immediate fixes, deferred items
-
-Empty sections collapsed to `none`.
+**Phase 5.6 - Outcome capture.** After the host receives the human's A/B/C/D pick, save a fresh linked `outcomes` record using **Saved records and recovery**. A → accepted; D → deferred; B/C preserve the request with unspecified dispositions pending.
 
 ## Critique Rubrics
 
-The rubric determines what sub-agents evaluate. Match to artifact type. Dimensions marked **[M]** are mandatory and **[O]** optional; an unaddressed dimension is an `unassessed` ledger row, never a finding. Each rubric has a context map (A/B/C file assignments) in `references/rubric-examples.md`; Step 0 reads the selected map.
+The rubric determines what sub-agents evaluate. Match to artifact type. Dimensions marked **[M]** are mandatory and **[O]** optional; an unaddressed dimension is an `unassessed` ledger row, never a finding. Step 0 reads only the selected rubric's map in `references/rubric-examples.md`.
 
 **Plan:** correctness against codebase [M], integration safety [M], sequencing quality [M], validation coverage [O], task specificity [O]
 **Security assessment:** threat model completeness [M], exploitability calibration [M], attack surface coverage [M], framework mitigation accuracy [O], data flow quality [O]
@@ -189,25 +177,25 @@ The rubric determines what sub-agents evaluate. Match to artifact type. Dimensio
 
 **Terse-first directive:** Informational sections (Sub-Agent Comparison Matrix, Retracted Findings, What Wasn't Critiqued) default to terse: one sentence per bullet, no qualifiers, no closing offers. Gate prompts and evidence-tagged findings retain full detail.
 
-Use this for the Phase 5 gate response. Omit `## Outcomes` until Phase 5.6.
+Use this for the Phase 5 gate response. Omit `## Outcomes` until Phase 5.6. Empty sections collapse to `none`.
 
 ```markdown
 ## Verdict  <!-- includes Gate: BLOCK|CONCERNS|CLEAN + Meta-score -->
 ## Delegation Evidence  <!-- ids/handles + tool-call counts or unavailable markers -->
 ## Critique Rubric
 ## Sub-Agent Comparison Matrix
-## Sub-Agent Rankings
+## Sub-Agent Rankings  <!-- order + criterion scores only -->
 ## Rubric Coverage  <!-- one ledger row per selected dimension -->
 ## Control Group Delta
 ## Validated Findings  <!-- source pool for Recommended Changes; every finding includes proof class -->
-## Cross-Examination Results
+## Cross-Examination Results  <!-- finding ID, outcome, winner -->
 ## Auto-Detected Issues  <!-- failures or exact clean attestation; always present -->
-## Retracted Findings
-## Human Decisions
+## Retracted Findings  <!-- finding ID + reason -->
+## Human Decisions  <!-- finding ID + Phase 4 answer -->
 ## Strengths
-## Recommended Changes  <!-- subset of Validated Findings; ordered by severity; each with concrete action and proof class -->
+## Recommended Changes  <!-- finding IDs from Validated Findings, by severity; concrete action and proof class; no restatement -->
 ## Open Questions
-## Integration Hooks  <!-- for-goat-plan, for-goat-debug, for-implementation -->
+## Integration Hooks  <!-- for-goat-plan, for-goat-debug, for-implementation; finding ID + action -->
 ## What Wasn't Critiqued
 <!-- Phase 5.6: fresh linked outcomes record; use Saved records and recovery -->
 ```

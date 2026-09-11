@@ -112,7 +112,7 @@ Add one current `**Status reason:**` after Status for these exceptional states:
 | superseded | Name a resolvable non-self successor milestone. |
 | deferred | Name the later release or record owning the scope. |
 
-Remove stale reasons on ordinary states.
+Remove stale reasons on ordinary states; reopening invalidates proof.
 
 ## High-risk additions
 
@@ -178,7 +178,16 @@ Before using an older checker, stop every extra open receipt. Keep one milestone
 - Recalibrate after completion.
 - Run `goat-flow plans check .goat-flow/plans/<active> --strict` before implementation and after transitions.
 
-### Timing receipts
+### Forecast bases and ranges
+
+```markdown
+**Forecast basis:** <units> agent work units; <low>-<likely>-<high> min/unit low-likely-high; source: <cold-start prior or local receipt history>
+**Forecast range:** <low>-<high> agent-time minutes on one recorded-unpaused milestone timeline; likely <n>; <confidence and why>
+```
+
+A basis requires its derived range/headline in both modes, excluding `[HUMAN]`/zero-minute units. Legacy points and range-only estimates remain valid.
+
+## Timing receipts
 
 Use absolute milestone paths under `.goat-flow/plans/`; retain repository cwd for source-loader resolution. CLI stamps UTC/epoch seconds.
 
@@ -207,15 +216,6 @@ Each milestone owns its receipt; separate valid lanes can hold simultaneous span
 | `retrospective: <numbers> - <reason>` | After-the-fact estimates, including untagged legacy numbers; prose never promotes them to measured. |
 | `unavailable: <reason>` | No trustworthy total or category allocation exists. |
 | `incomplete: <reason>` | Discarded spans leave elapsed time under-recorded. |
-
-### Forecast bases and ranges
-
-```markdown
-**Forecast basis:** <units> agent work units; <low>-<likely>-<high> min/unit low-likely-high; source: <cold-start prior or local receipt history>
-**Forecast range:** <low>-<high> agent-time minutes on one recorded-unpaused milestone timeline; likely <n>; <confidence and why>
-```
-
-A basis requires its derived range/headline in both modes, excluding `[HUMAN]`/zero-minute units. Legacy points and range-only estimates remain valid.
 
 ### Calibration
 

@@ -1,6 +1,6 @@
 ---
 name: goat-debug-diagnostic-techniques
-description: "Progressive causal, mutation-safety, and worked-example guidance for goat-debug Diagnose mode."
+description: "Progressive causal, reduction-method, mutation-safety, and worked-example guidance for goat-debug Diagnose mode."
 goat-flow-reference-version: "1.17.0"
 ---
 # Diagnostic Techniques
@@ -36,7 +36,7 @@ Repository instructions and the user's current-session authority always win.
 | Class | Examples | Required handling |
 |---|---|---|
 | Read-only observation | file reads, searches, existing logs, status | Proceed within repository rules; record literal evidence. |
-| Safe local execution | focused reproducer or test against disposable state | Disclose target-controlled execution when local policy requires it. |
+| Safe local execution | focused reproducer or test against disposable state | Disclose target-controlled execution (running the target's own code or configuration) when local policy requires it. |
 | Temporary instrumentation | logs, assertions, trace flags, config toggles | Before editing, name target, signal, affected state, approval, rollback, marker, and cleanup check. |
 | State-mutating local | database write, queue consumption, restart, generated state | Require explicit approval, pre-state evidence, bounded target, rollback, and post-state verification. |
 | Network, production, or sensitive | external call, production action, sensitive-data access | Apply the governing stricter gate; default to proposal or human-owned execution when authority is unclear. |

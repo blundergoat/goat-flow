@@ -46,21 +46,33 @@ If vague, ask about: goal, symptom/error message, area involved, and what was al
 
 **Browser evidence detection:** For a URL, local page, screenshot, rendering issue, or browser console/network symptom, read `.goat-flow/skill-docs/playbooks/browser-use.md` and follow its availability, installation-approval, and manual-fallback contract. The playbook is the sole owner of browser installation policy.
 
-Read `references/diagnostic-techniques.md` only when a diagnosis needs mutation classification, causal-distinction detail, or the worked output example.
+Read `references/diagnostic-techniques.md` only when a diagnosis needs mutation classification, reduction-method selection, causal-distinction detail, or the worked output example.
 
 ## Diagnose Mode
 
 ### D1 - Investigate (no fixes)
 
-After reading the primary file, declare a scope snapshot: symptom boundary (what is failing), affected components (files/modules/services involved), read estimate, and decision-relevant source/runtime/configuration state. Record material drift without persisting secrets or raw sensitive values.
+After reading the primary file (the first relevant file at the entry or failure boundary, not a file named by chance), declare a scope snapshot: symptom boundary (what is failing), affected components (files/modules/services involved), read estimate, and decision-relevant source/runtime/configuration state as the baseline. Drift is material when it touches an affected component or the reproduction; record it without persisting secrets or raw sensitive values.
 
-Write 2-3 hypotheses spanning at least 2 of: Data, Logic, Timing, Environment, Configuration. If the bug involves loops, indices, or pagination, include a boundary/counting hypothesis. After tracing, mark each: CONFIRMED / ADJUSTED / ELIMINATED / UNRESOLVED with `file + semantic anchor` evidence.
+Write 2-3 hypotheses spanning at least 2 of: Data, Logic, Timing, Environment, Configuration. If the bug involves loops, indices, or pagination, include a boundary/counting hypothesis.
+
+**Hypothesis ranking:** Before expensive tracing, reduction, or experiments, rank the hypotheses by likelihood and cost; re-rank whenever evidence changes.
+
+| Likelihood \ Cost | LOW cost | MEDIUM cost | HIGH cost |
+|---|---|---|---|
+| **HIGH** likelihood | 1st | 2nd | 3rd |
+| **MEDIUM** likelihood | 2nd | 3rd | 4th |
+| **LOW** likelihood | 3rd | 4th | Skip |
+
+Test cheap-and-likely first; skip expensive-and-unlikely until cheap options are eliminated. When survivors remain, run the cheapest authorized distinguishing check, or cite deterministic proof that entails the symptom; one intervention per hypothesis is never required.
+
+After tracing, mark each: CONFIRMED / ADJUSTED / ELIMINATED / UNRESOLVED with `file + semantic anchor` evidence.
 
 **Multi-component failures** (CI → build → deploy, request → middleware → handler → DB, etc.): inspect existing evidence boundary by boundary. Record input, output, and the broken invariant, then investigate the failing component. If new instrumentation is needed, apply the diagnostic-experiment authority below before modifying anything.
 
 **UI-visible bugs:** After writing hypotheses, use browser evidence to confirm or eliminate UI-related hypotheses. Follow the workflow in `.goat-flow/skill-docs/playbooks/browser-use.md`. Browser output is OBSERVED; interpretations remain INFERRED until mapped to `file + semantic anchor`.
 
-**Diagnostic-experiment authority:** Read-only observation may proceed within repository rules, as may execution against disposable state the investigation itself created; disclose target-controlled execution when local policy requires it. Any experiment affecting existing source, configuration, local state, network, production, or sensitive data follows the repository's stricter approval boundary. Before a mutation, state the target, expected signal, affected state, rollback, and a cleanup marker; then wait for explicit current-session approval. Track approved mutations separately from the proposed fix. Incomplete cleanup blocks a fixed claim, and user-owned diagnostics are never removed without permission.
+**Diagnostic-experiment authority:** Read-only observation may proceed within repository rules, as may execution against disposable state the investigation itself created; disclose target-controlled execution (running code or configuration the target project supplies) when local policy requires it. Any experiment affecting existing source, configuration, local state, network, production, or sensitive data follows the repository's stricter approval boundary. Before a mutation, state the target, expected signal, affected state, rollback, and a cleanup marker; then wait for explicit current-session approval. Track approved mutations separately from the proposed fix. Incomplete cleanup blocks a fixed claim, and user-owned diagnostics are never removed without permission.
 
 If repeated reads or experiments produce no new decision signal, checkpoint: state what was checked, which hypotheses remain, and the next distinguishing evidence needed.
 
@@ -77,15 +89,7 @@ If repeated reads or experiments produce no new decision signal, checkpoint: sta
 
 **Optional bisect path (state-mutating):** Bisect is never required for a reporting-only diagnosis. In reporting-only or no-write mode, describe the option but do not run it. Otherwise require a clean worktree, validate known-good and known-bad refs plus a deterministic, non-destructive predicate at both endpoints, disclose the commands and rollback, then wait for explicit current-session approval. Urgency, an outage, or broad permission to diagnose does not override these gates. A dirty worktree stops this path; an isolated worktree is a separately approved option, not an automatic workaround. After approval, run only the diagnostic predicate. Run `git bisect reset` on success, error, cancellation, or interruption while that approval still holds. A governing freeze leaves state unchanged and outranks this cleanup: report the pending reset and wait for explicit cleanup authority, because resumption alone does not release it.
 
-**Hypothesis ranking:** After minimisation, rank surviving hypotheses by cost and likelihood:
-
-| Likelihood \ Cost | LOW cost | MEDIUM cost | HIGH cost |
-|---|---|---|---|
-| **HIGH** likelihood | 1st | 2nd | 3rd |
-| **MEDIUM** likelihood | 2nd | 3rd | 4th |
-| **LOW** likelihood | 3rd | 4th | Skip |
-
-Test cheap-and-likely first. Skip expensive-and-unlikely until cheap options are eliminated.
+After minimisation, re-rank the survivors with the D1 table before D2.
 
 ### D2 - Diagnosis
 
@@ -98,7 +102,7 @@ Symptom reproduction is not root-cause proof. HIGH requires a traced mechanism p
 - **Necessity** - without this cause, does the symptom still occur? If yes, the cause is not necessary under the compared conditions; look for an alternative sufficient cause, hold relevant cofactors constant, and assess sufficiency separately.
 - **Sufficiency** - is this cause alone enough, or are there co-factors? Name them.
 
-For high-stakes diagnoses, run a 5-Whys chain. Every "because" MUST cite `file + semantic anchor` or a reproduction step, not just prose.
+For high-stakes diagnoses (production availability, persistent-data loss, or a security boundary at risk), run a 5-Whys chain. Every "because" MUST cite `file + semantic anchor` or a reproduction step, not just prose; the chain ends where cited evidence ends, and a missing link is reported as the gap, never invented to reach five.
 
 **BLOCKING GATE:** Present diagnosis, then pause. Human decides: dig deeper, propose fix, or stop. If confidence is MEDIUM or LOW with multiple competing hypotheses, consider `/goat-critique` on the hypothesis set before choosing a fix direction.
 
@@ -122,10 +126,11 @@ Rerun the **original, unminimized reproduction** from D2 - a code change is not 
 Every diagnose-mode report ends with this section. It tells the reader how much of the investigation is grounded.
 
 - **Files read:** count
-- **Hypotheses tested:** count (CONFIRMED + ADJUSTED + ELIMINATED + UNRESOLVED)
-- **Categories covered:** which of Data/Logic/Timing/Environment/Configuration were tested
+- **Hypotheses assessed:** count (CONFIRMED + ADJUSTED + ELIMINATED + UNRESOLVED); UNRESOLVED means insufficient distinguishing evidence, including untested hypotheses and tested but inconclusive hypotheses
+- **Checks executed:** count of hypothesis checks actually performed (reads, runs, or experiments), never inferred from the hypothesis total
+- **Categories covered:** which of Data/Logic/Timing/Environment/Configuration were assessed
 - **Reproduction attempted:** yes / no / partial
-- **Evidence states:** OBSERVED (literal result) / INFERRED (reasoned link) / UNVERIFIED (not executed) / HUMAN-PENDING: specific human-owned check
+- **Evidence states:** OBSERVED (literal result) / INFERRED (reasoned link) / UNVERIFIED (not executed) / HUMAN-PENDING: each human-owned check with its owner or role
 - **Proof class:** `RUNTIME | CONTRACT-GREP | STATIC | NOT-REPRODUCED` (per `skill-preamble.md` Proof Classification)
 - **Diagnostic mutations:** none / approved and tracked / cleanup incomplete
 - **Footgun retrieval:** hit (cite entry) / miss
@@ -186,10 +191,11 @@ Keep Quick output compact. Omit D3, D4, UI, and diagnostic-mutation fields when 
 ## UI Evidence  <!-- optional: only when browser evidence was captured -->
 ## Debug Integrity
 - Files read: [N]
-- Hypotheses tested: [N] (CONFIRMED: [n] / ADJUSTED: [n] / ELIMINATED: [n] / UNRESOLVED: [n])
+- Hypotheses assessed: [N] (CONFIRMED: [n] / ADJUSTED: [n] / ELIMINATED: [n] / UNRESOLVED: [n])
+- Checks executed: [N]
 - Categories covered: [list]
 - Reproduction attempted: [yes/no/partial]
-- Evidence states: OBSERVED=[n] / INFERRED=[n] / UNVERIFIED=[n] / HUMAN-PENDING=[n]
+- Evidence states: OBSERVED=[n] / INFERRED=[n] / UNVERIFIED=[n] / HUMAN-PENDING=[n]: [check - owner]
 - Proof class: [RUNTIME/CONTRACT-GREP/STATIC/NOT-REPRODUCED]
 - Diagnostic mutations: [none/approved and tracked/cleanup incomplete]
 - Footgun retrieval: [hit/miss]
