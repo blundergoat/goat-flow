@@ -97,9 +97,9 @@ Every permitted move must preserve behavior and compatibility; the root's perman
 
 ## Selector-driven Non-semantic Lane
 
-Use this lane only for an explicit folder or file selector when baseline, current bytes, and explicit
-request prove every change is limited to comments or docstrings, or local or private identifier
-spelling. Preserve all of:
+An explicit folder or file selector requires baseline, current bytes, and explicit request proving only
+comments or docstrings, or local or private identifier spelling across its entire inventory. Function
+relocation disqualifies the selector. Preserve:
 
 - test case presence, stable identity, title, registration, and parametrized membership;
 - assertions, expectations, snapshots, and failure semantics;
