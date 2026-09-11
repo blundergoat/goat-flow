@@ -115,7 +115,7 @@ The generated prompt asks the agent to:
 4. **Identify false paths** - references to files that don't exist, stale concepts, dead modes
 5. **Rate the system** - setup accuracy/relevance/completeness/friction + system usefulness/signal-to-noise/adaptability/learnability
 
-**Time and cost expectation:** A full assessment evaluates all 8 skills (file analysis by default; live invocation when context allows - `goat-critique` alone spawns 3 sub-agents if invoked). Expect 15-60 minutes depending on depth, with moderate token usage. If context is limited, the generated prompt requires at minimum testing `/goat` (routing), `/goat-review` (most common use), and `/goat-critique` (highest-cost skill).
+**Time and cost expectation:** A full assessment evaluates all 8 skills (file analysis by default; live invocation when context allows - `goat-critique` alone spawns at least 4 sub-agents if invoked: 3 critics plus 1 meta-agent, up to 3 more cross-examiners, and any replacement or recheck agents on top). Expect 15-60 minutes depending on depth, with moderate token usage. If context is limited, the generated prompt requires at minimum testing `/goat` (routing), `/goat-review` (most common use), and `/goat-critique` (highest-cost skill).
 
 The prompt includes the current `audit` summary so the agent knows what's
 already passing or failing. If audit is failing, the prompt explicitly asks the
