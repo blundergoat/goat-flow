@@ -1,6 +1,6 @@
 ---
 category: skill-authoring
-last_reviewed: 2026-09-05
+last_reviewed: 2026-09-12
 ---
 
 **Scope:** Skill candidacy, versioning, tool-isolated execution, and runtime authoring traps. Editing shipped guidance, authority, and size caps lives in [skill-guidance.md](skill-guidance.md); mirror sync lives in [skills.md](skills.md).
@@ -49,6 +49,22 @@ last_reviewed: 2026-09-05
 **Evidence:** `workflow/manifest.json` (search: `"canonical"`) lists eight skills; `.goat-flow/learning-loop/decisions/ADR-009-skill-consolidation.md` (search: `A skill must have at least one of`); `.goat-flow/learning-loop/decisions/ADR-021-goat-critique-full-mode-only.md` (search: `goat-critique runs in one mode: full delegated`); `docs/skill-authoring.md` (search: `Decide First`). External corroboration: obra/superpowers PR #1571 ("feat: add context-management skill with domain isolation") was closed as "a configuration system, not [a skill]".
 
 ---
+
+## Footgun: Evaluation fixtures built by selective byte copying diverge from the repository in both directions
+
+**Status:** active | **Created:** 2026-09-12 | **Evidence:** OBSERVED
+**Decision changed:** Before scoring any evaluator finding that turns on repository-wide presence or absence, diff the fixture's byte selection against the real repository. Host-authored working bytes leak answers in; omitted gitignored state generates false absences.
+**Trigger phase:** SCOPE
+**Caught at:** VERIFY
+**hallucination-risk:** high
+
+**Prevention:** List what the fixture adds and what it drops before admitting a case. Never copy the campaign's own in-flight learning or planning bytes into a fixture that tests a seeded defect, because those notes describe the defect. Never score a provenance, dangling-reference or absence criterion in a fixture that omits the gitignored plan and log state the repository's own files reference. Run every absence claim on the host over the real scope; a subagent's zero-result search proves only that its sandbox is empty.
+
+**Symptoms:** Two opposite failures from one cause. An evaluator preserves a seeded defect for no demonstrable reason, because the answer was already in its mandated retrieval path, so preservation cannot be distinguished from answer-following and the trial yields no behavioural evidence. Or an evaluator deletes a live cross-reference after an exact search finds nothing citing it, because the referents live outside the fixture, and the deletion reads as a clean finding while breaking real traceability.
+
+**Why it happens:** A fixture assembled from a committed checkout plus a hand-picked set of working-tree overlays is neither the committed tree nor the working tree. The overlay list is chosen for the owners a skill must read, so it tends to include the learning buckets the campaign is actively writing. Gitignored plan and log state is never copied and is often forbidden outright for containment, yet committed source legitimately cites it, so identifiers resolve inside the repository and dangle inside the fixture. Binding the overlays to committed bytes fixes the leak only until the leaking note is itself committed.
+
+**Evidence:** `.goat-flow/learning-loop/lessons/skill-trial-evidence.md` (search: `rewrote both decodeFixtureResult diagnostic descriptions`) states the seeded answer, names the rule under test and cites the exact test anchor; it reached an evaluator through the fixture's overlay set while uncommitted, then became committed. `test/unit/hook-provider-adapters.test.ts` (search: `HK-NA`) carries identifiers whose only referents are gitignored plan records, and an evaluator removed them as dangling provenance. `.goat-flow/skill-docs/skill-preamble.md` (search: `The host runs an exact zero-result search`) already rejects subagent negatives and is what refuted the claim.
 
 ## Resolved Entries
 

@@ -540,17 +540,36 @@ describe("skill playbook safety and evidence contracts", () => {
     `.goat-flow/skill-docs/playbooks/${name}`,
   ];
 
-  /** Assert the CLI-version and browser-ownership rules for one browser playbook copy. */
+  /** Protect capability selection and browser ownership in each shipped copy. */
   const assertBrowserUseContract = (playbookPath: string) => {
     const content = readFileSync(join(process.cwd(), playbookPath), "utf8");
     assert.match(content, /browser-use --help/u, playbookPath);
-    assert.match(content, /Current CLI 3\.0/u, playbookPath);
-    assert.match(content, /Legacy CLI 0\.12/u, playbookPath);
+    assert.match(content, /Python-stdin harness/u, playbookPath);
+    assert.match(content, /Legacy command compatibility/u, playbookPath);
     assert.match(content, /browser-use <<'PY'/u, playbookPath);
     assert.match(content, /new_tab\(/u, playbookPath);
     assert.match(content, /page_info\(\)/u, playbookPath);
-    assert.match(content, /capture_screenshot\(\)/u, playbookPath);
-    assert.match(content, /browser-use open <url>/u, playbookPath);
+    assert.match(content, /capture_screenshot\(path\)/u, playbookPath);
+    assert.match(content, /browser-use skill\b/u, playbookPath);
+    assert.match(content, /browser-use doctor\b/u, playbookPath);
+    assert.match(content, /BH_RECORD=0/u, playbookPath);
+    assert.match(content, /os\.environ/u, playbookPath);
+    assert.match(content, /wait_for_element/u, playbookPath);
+    assert.match(content, /fresh bounded call/u, playbookPath);
+    const legacy = content.split("## Legacy command compatibility");
+    assert.equal(legacy.length, 2, playbookPath);
+    assert.match(legacy[1], /browser-use open <url>/u, playbookPath);
+    for (const command of ["text", "value", "attributes", "bbox"]) {
+      assert.ok(
+        legacy[1].includes(`browser-use get ${command} <index>`),
+        `${playbookPath}: legacy get ${command} requires an element index`,
+      );
+    }
+    assert.doesNotMatch(
+      legacy[0],
+      /browser-use (?:open|state|input|click|screenshot|connect|sessions|switch|close-tab|close)\b/u,
+      playbookPath,
+    );
     assert.match(
       content,
       /attaches to the user's running Chrome/u,
@@ -563,7 +582,7 @@ describe("skill playbook safety and evidence contracts", () => {
     );
     assert.doesNotMatch(
       content,
-      /browser-use profile list|browser-use --version/u,
+      /browser-use profile list|browser-use skill show/u,
       playbookPath,
     );
   };
@@ -588,6 +607,100 @@ describe("skill playbook safety and evidence contracts", () => {
 
   it("keeps the installed browser playbook version-matched", () => {
     assertBrowserUseContract(".goat-flow/skill-docs/playbooks/browser-use.md");
+  });
+
+  it("selects the documented browser interface from help without controlling a browser", () => {
+    const content = readFileSync(
+      join(process.cwd(), "workflow/skills/playbooks/browser-use.md"),
+      "utf8",
+    );
+    const selector = content.match(
+      /<!-- browser-interface-selection -->\n```bash\n([\s\S]*?)\n```/u,
+    )?.[1];
+    assertExists(selector, "copyable browser capability selector");
+
+    // Minimal excerpts from the published stdin usage and installed command help.
+    const stdinHelp =
+      "Typical usage:\n  browser-use <<'PY'\n  print(page_info())\n  PY";
+    const legacyHelp =
+      "positional arguments:\n    open    Navigate to URL\n    state   Get browser state\n    input   Type text into specific element\n    click   Click element by index or coordinates";
+    const cases = [
+      {
+        name: "stdin",
+        help: stdinHelp,
+        helpStatus: 0,
+        status: 0,
+        output: "python-stdin",
+      },
+      {
+        name: "legacy",
+        help: legacyHelp,
+        helpStatus: 0,
+        status: 0,
+        output: "legacy-commands",
+      },
+      {
+        name: "stdin takes precedence",
+        help: `${stdinHelp}\n${legacyHelp}`,
+        helpStatus: 0,
+        status: 0,
+        output: "python-stdin",
+      },
+      {
+        name: "version alone",
+        help: "browser-use 0.1.9",
+        helpStatus: 0,
+        status: 2,
+        output: "unsupported-interface",
+      },
+      {
+        name: "prose is not command help",
+        help: "Previous commands: open state input click",
+        helpStatus: 0,
+        status: 2,
+        output: "unsupported-interface",
+      },
+      {
+        name: "incomplete commands",
+        help: legacyHelp.replace(/\n    click[^\n]*/u, ""),
+        helpStatus: 0,
+        status: 2,
+        output: "unsupported-interface",
+      },
+      {
+        name: "failed help",
+        help: stdinHelp,
+        helpStatus: 2,
+        status: 2,
+        output: "help-failed",
+      },
+    ];
+    for (const fixture of cases) {
+      const result = spawnSync(
+        "bash",
+        [
+          "-c",
+          `
+browser-use() {
+  if [[ "$*" != "--help" ]]; then return 99; fi
+  printf '%s\\n' "$BROWSER_HELP_FIXTURE"
+  return "$BROWSER_HELP_STATUS"
+}
+${selector}`,
+        ],
+        {
+          encoding: "utf8",
+          env: {
+            ...process.env,
+            BROWSER_HELP_FIXTURE: fixture.help,
+            BROWSER_HELP_STATUS: String(fixture.helpStatus),
+          },
+          timeout: 5_000,
+        },
+      );
+      assert.equal(result.status, fixture.status, fixture.name);
+      assert.equal(result.stdout.trim(), fixture.output, fixture.name);
+    }
   });
 
   it("keeps the source page-capture playbook version-matched", () => {

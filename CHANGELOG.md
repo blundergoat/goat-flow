@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixed
+
+- **Browser evidence instructions follow installed capabilities** - Check `browser-use --help` before choosing the Python-stdin workflow or legacy commands; the playbook now documents `browser-use skill`, bounded waits, fixture-login safeguards, and tab recovery.
+
 ## v1.17.0 - 2026-09-05
 
 The next release adds per-command `--help`, path-aware learning recall, one project-wide install baseline, whole-suite hook verification, and stricter `--strict` plan checks, and it untangles Claude and Copilot hook registrations.
