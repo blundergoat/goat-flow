@@ -41,6 +41,8 @@ interface RouteDecision {
   target?: string;
   mode?: RouteMode;
   flags?: RouteFlag[];
+  depth?: "destination" | "not-applicable";
+  requestedDepth?: "quick" | "full";
 }
 
 // Source-grounded prompt case with strict expectations and explicit leniency.
@@ -83,7 +85,14 @@ function assertExactKeys(
 
 // Invariant: each route kind uses only its permitted normalized fields and values.
 function assertDecision(decision: RouteDecision, label: string): void {
-  const permittedKeys = ["kind", "target", "mode", "flags"];
+  const permittedKeys = [
+    "kind",
+    "target",
+    "mode",
+    "flags",
+    "depth",
+    "requestedDepth",
+  ];
   assert.ok(
     sortedKeys(decision).every((key) => permittedKeys.includes(key)),
     `${label}: unsupported decision field`,
@@ -100,6 +109,28 @@ function assertDecision(decision: RouteDecision, label: string): void {
   } else {
     assert.equal(decision.target, undefined, `${label}: non-skill target`);
     assert.equal(decision.mode, undefined, `${label}: non-skill mode`);
+  }
+
+  // Depth selection stays with the destination; a user request never preselects it.
+  if (decision.kind === "skill") {
+    assert.equal(decision.depth, "destination", `${label}: depth owner`);
+    if (decision.requestedDepth !== undefined) {
+      assert.ok(
+        ["quick", "full"].includes(decision.requestedDepth),
+        `${label}: invalid depth request`,
+      );
+    }
+  } else {
+    assert.equal(
+      decision.depth,
+      decision.kind === "direct-execution" ? "not-applicable" : undefined,
+      `${label}: non-skill depth`,
+    );
+    assert.equal(
+      decision.requestedDepth,
+      undefined,
+      `${label}: non-skill depth request`,
+    );
   }
 
   // An explicit diagnostic mode belongs only to the debug workflow; omission leaves the workflow mode unspecified.
@@ -268,6 +299,56 @@ function assertCorpusIntegrity(): void {
 describe("dispatcher routing fixture contract", () => {
   it("keeps the minimum corpus source-grounded and structurally deterministic", () => {
     assertCorpusIntegrity();
+  });
+
+  describe("distinguishes requested depth from destination ownership and rejects foreign depth metadata", () => {
+    for (const requestedDepth of ["quick", "full"] as const) {
+      it(`accepts a ${requestedDepth} request while retaining destination ownership`, () => {
+        assertDecision(
+          {
+            kind: "skill",
+            target: "goat-debug",
+            depth: "destination",
+            requestedDepth,
+          },
+          requestedDepth,
+        );
+      });
+    }
+    const invalidDecisions = [
+      ["missing skill owner", '{"kind":"skill","target":"goat-debug"}'],
+      [
+        "concrete skill depth",
+        '{"kind":"skill","target":"goat-debug","depth":"quick"}',
+      ],
+      [
+        "owner marker as request",
+        '{"kind":"skill","target":"goat-debug","depth":"destination","requestedDepth":"destination"}',
+      ],
+      [
+        "skill owner on direct execution",
+        '{"kind":"direct-execution","depth":"destination"}',
+      ],
+      [
+        "requested depth on direct execution",
+        '{"kind":"direct-execution","depth":"not-applicable","requestedDepth":"quick"}',
+      ],
+      ["depth on quality", '{"kind":"quality-flow","depth":"destination"}'],
+      ["request on context", '{"kind":"context-only","requestedDepth":"full"}'],
+      [
+        "depth on factual answer",
+        '{"kind":"direct-answer","depth":"not-applicable"}',
+      ],
+    ];
+    for (const [label, decision] of invalidDecisions) {
+      it(`rejects ${label}`, () => {
+        assert.throws(
+          () => assertDecision(JSON.parse(decision), decision),
+          assert.AssertionError,
+          decision,
+        );
+      });
+    }
   });
 
   it("reconciles every live Route Map row and terminal kind", () => {

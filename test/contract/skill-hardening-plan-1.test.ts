@@ -54,6 +54,11 @@ describe("skill hardening contracts: goat-plan (1/2)", () => {
       );
       assert.match(
         breakdown,
+        /historical `source:` quantiles/u,
+        `${skillPath}: the copied rates must identify their historical pair`,
+      );
+      assert.match(
+        breakdown,
         /0\.5-2\.5-10 min\/unit/u,
         `${skillPath}: cold-start prior is missing`,
       );

@@ -450,7 +450,27 @@ describe("skill hardening contracts: shared surfaces (1/3)", () => {
   it("records routing depth and direct-execution learnings in the Route Snapshot", () => {
     assertForEachTarget(installedSkillPaths("goat"), (skillPath) => {
       const routingFlow = readMarkdownSection(skillPath, "How It Works");
-      assert.match(routingFlow, /Depth: <routing depth>/u, skillPath);
+      assert.match(
+        routingFlow,
+        /Depth: <user request \| destination Step 0 \| not applicable>/u,
+        skillPath,
+      );
+      assert.match(
+        routingFlow,
+        /Only user-requested depth is forwarded/u,
+        skillPath,
+      );
+      assert.match(
+        routingFlow,
+        /otherwise destination Step 0 selects/u,
+        skillPath,
+      );
+      assert.match(routingFlow, /Markers are not depth arguments/u, skillPath);
+      assert.match(
+        routingFlow,
+        /Direct: not applicable; quality: no Route Snapshot/u,
+        skillPath,
+      );
       assert.match(
         routingFlow,
         /Relevant prior learnings: <direct route: matches \| none \| retrieval miss; routed skill: omit>/u,
@@ -462,6 +482,26 @@ describe("skill hardening contracts: shared surfaces (1/3)", () => {
         skillPath,
       );
     });
+  });
+
+  it("keeps shared depth guidance subordinate to destination intake", () => {
+    for (const path of [
+      "workflow/skills/reference/skill-preamble.md",
+      ".goat-flow/skill-docs/skill-preamble.md",
+    ]) {
+      const depth = readMarkdownSection(path, "Depth Choice");
+      assert.match(
+        depth,
+        /Destination Step 0 selects unspecified depth/u,
+        path,
+      );
+      assert.match(
+        depth,
+        /explicit user requests remain subject to destination rules/u,
+        path,
+      );
+      assert.doesNotMatch(depth, /Dispatcher-selected depth/u, path);
+    }
   });
 
   it("keeps public skill workflows aligned with the installed control flow", () => {

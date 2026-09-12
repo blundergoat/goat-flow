@@ -1013,21 +1013,21 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
       "/goat - Dispatcher",
     );
 
-    assert.match(
+    assertMatchesAll(
       dispatcherDocumentation,
-      /Explicit -->\|Yes\| Execute\["Load (?:named|target) skill's Step 0"\]/u,
-      "explicit skill invocations must load the named skill",
+      [
+        /Explicit -->\|Yes\| Execute\["Load (?:named|target) skill's Step 0"\]/u,
+        /Explicit skill invocations pass through immediately to the named skill's Step 0 without reclassification/u,
+        /Multi-intent requests are split into numbered intents and routed separately/u,
+        /Destination Step 0 selects unspecified depth/u,
+        /applies its own rules to explicit requests/u,
+        /Snapshot markers are not depth arguments/u,
+        /direct execution records `not applicable`/u,
+        /quality flow has no Route Snapshot/u,
+      ],
+      "docs/skills.md dispatcher invocation, intent order, and depth ownership",
     );
-    assert.match(
-      dispatcherDocumentation,
-      /Explicit skill invocations pass through immediately to the named skill's Step 0 without reclassification/u,
-      "explicit invocations must bypass inferred routing",
-    );
-    assert.match(
-      dispatcherDocumentation,
-      /Multi-intent requests are split into numbered intents and routed separately/u,
-      "compound requests must retain separate ordered routes",
-    );
+
     assert.match(
       dispatcherDocumentation,
       /Snapshot --> Destination/u,
@@ -1078,6 +1078,7 @@ describe("skill hardening contracts: debug, qa, critique, dispatcher (2/2)", () 
       /Simple question[^\n]+Direct answer; no GATHER or Route Snapshot/u,
       "simple questions must terminate in a direct answer",
     );
+
     assert.doesNotMatch(
       skillsDocumentation,
       /Snapshot --> Execute(?:\s|$)/u,
