@@ -87,6 +87,8 @@ flowchart TD
 
 Explicit skill invocations pass through immediately to the named skill's Step 0 without reclassification. Otherwise, the dispatcher classifies intent conversationally - not by keyword lookup. Multi-intent requests are split into numbered intents and routed separately in their stated or clarified order. Simple factual questions receive a direct answer without GATHER or a Route Snapshot; inferred skill and direct-execution routes emit a Route Snapshot. It asks 0-2 clarification questions max and routes with a stated assumption if still ambiguous.
 
+The dispatcher forwards the complete brief and any user-requested depth. Destination Step 0 selects unspecified depth and applies its own rules to explicit requests. Snapshot markers are not depth arguments: direct execution records `not applicable`, and quality flow has no Route Snapshot.
+
 | Intent | Terminal outcome |
 |--------|------------------|
 | Bug, failure, unexpected behaviour; verify a fix | `/goat-debug` (diagnose) |
