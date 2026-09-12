@@ -1,6 +1,6 @@
 ---
 category: milestone-accounting
-last_reviewed: 2026-09-09
+last_reviewed: 2026-09-12
 ---
 
 **Scope:** Milestone state and effort accounting - activation order, where human gates belong, what a task section may contain, and why estimates counted from work units beat estimates written as durations. Multi-agent council coordination is [coordination.md](coordination.md).
@@ -216,7 +216,7 @@ Evidence anchors: `src/cli/plans-effort.ts` (search: `export function countAgent
 **Decision changed:** Reserve Tasks for estimated implementation checkboxes and keep each `(est: ...)` entry at the end of its item.
 **Trigger phase:** SCOPE
 **Caught at:** VERIFY
-**Incident count:** 8 | **Latest occurrence:** 2026-08-23
+**Incident count:** 9 | **Latest occurrence:** 2026-09-13
 **Merged:** 2026-09-05 - absorbed three plan-parsing recurrences (2026-07-29, 2026-07-31, 2026-08-21) from `.goat-flow/learning-loop/lessons/audit-contracts.md`, which filed them under artifact scanners.
 
 **Prevention:** Keep `## Tasks` to estimated work items. Put section-wide guidance before the first checkbox or under its own heading, never after the final estimated item; put discoveries in `## Context` and literal gate output in `## Actual evidence`; place a completion note before the terminal estimate. Keep `Plan/admin overhead` as the forecast input, keep measured variance outside the fixed Actual receipt reason, and rerun strict validation after closeout edits. Evidence anchors: `src/cli/plans-export.ts` (search: `function readChecklistItems`) converts every task checkbox into an estimate-bearing record; `src/cli/plans-effort.ts` (search: `const TASK_ESTIMATE_PATTERN`) requires the estimate at the item's end; `src/cli/plans-check.ts` (search: `function collectCoverageErrors`) rejects records without estimates.
@@ -238,9 +238,9 @@ Evidence anchors: `src/cli/plans-effort.ts` (search: `export function countAgent
 **Status:** active | **Created:** 2026-07-17
 **Decision changed:** After writing or restructuring `M*.md` files, validate them with the shipped plan exporter before handoff; visual Markdown completeness is insufficient.
 **Trigger phase:** VERIFY
-**Incident count:** 10 | **Latest occurrence:** 2026-09-05
+**Incident count:** 11 | **Latest occurrence:** 2026-09-12
 
-**Prevention:** Treat the canonical example as an executable consumer fixture. Cover compact and expanded representations through `parseMilestoneMarkdown`, run `goat-flow plans check <plan-directory> --strict`, require exporter records with zero warnings, and resolve every cited path plus exact search string before handoff. Dry-run executable plan commands against disposable inputs, including every directory or file precondition they rely on. Current objective parsing accepts a bold field, an `## Objective` section, or the outcome title; other portable anchors are Status, compact or section Scope, Tasks, Proof, Exit or Exit criteria, and Stop/rescope at H2 or as the compact `- Stop/rescope if ...` line inside Exit. Evidence anchors: `src/cli/plans-export.ts` (search: `readFieldOrSectionMarkdown`), `src/cli/plans-export.ts` (search: `readStopMarkdown`), `test/unit/plans-check.test.ts` (search: `accepts the compact Small rendering in strict mode`).
+**Prevention:** After the final write, run `goat-flow plans check <plan-directory> --strict`, require warning-free exporter records, and check cited paths/anchors. Keep one live metadata value; fence history. Exercise compact/expanded fixtures through `parseMilestoneMarkdown` and plan commands against prepared disposable paths. Current objective parsing accepts a bold field, an `## Objective` section, or the outcome title. Preserve Status, Scope, Tasks, Proof, Exit/Exit criteria and Stop/rescope; compact Stop/rescope belongs inside Exit. Anchors: `src/cli/plans-export.ts` (search: `readFieldOrSectionMarkdown`; `readStopMarkdown`), `test/unit/plans-check.test.ts` (search: `accepts the compact Small rendering in strict mode`).
 
 **What happened:** The 1.15.0 milestone files looked complete and passed a custom heading check, but the first `plans export` preview warned that all 11 records lacked portable objectives and boundary notes: the exporter then accepted only the bold `Objective` field while the files used a level-two section, omitted `Boundary Notes`, and placed CAO incident gates in peer sections the exporter would not include in task bodies.
 
@@ -254,6 +254,8 @@ Evidence anchors: `src/cli/plans-effort.ts` (search: `export function countAgent
 **Recurrence 2026-09-02:** Reconciliation produced a 220-character problem statement naming `M08`; strict validation rejected both defects, and one 90-character public sentence passed. `src/cli/plans-check-structure.ts` (search: `collectPlainLanguageSectionFindings`).
 **Recurrence 2026-09-03:** `plans check` was given the milestone file during M13 closeout; the loader called `readdirSync` on it and returned `ENOTDIR`, and the version directory `.goat-flow/plans/1.17.0-go-live` passed. `src/cli/plans-export.ts` (search: `function listMilestoneFiles`).
 **Recurrence 2026-09-05 (ACTUAL_MEASURED):** Duplicate Proof headings and linked ISSUE bands broke author checks. `src/cli/plans-export.ts` (search: `addRepresentationConflict`), `workflow/skills/goat-plan/references/issue-format.md` (search: `## Tasks`).
+
+**Recurrence 2026-09-12:** After M70 passed, an acceptance note repeated Actual metadata. The next check rejected it; a prose receipt label restored one live field. `src/cli/plans-effort.ts` (search: `multiple Actual values supplied`).
 
 ---
 

@@ -11,6 +11,9 @@ import {
   it,
   makeCtx,
   makeTempProject,
+  mkdir,
+  join,
+  writeFile,
   PROJECT_ROOT,
   runAudit,
   stubFS,
@@ -36,6 +39,7 @@ import {
   VERIFICATION_CHECKS,
 } from "../../src.js";
 import type { AuditContext } from "../../src.js";
+import { symlink } from "node:fs/promises";
 
 const SECURITY_POLICY_PATH = ".goat-flow/security-policy.md";
 
@@ -156,6 +160,103 @@ const otherFilesCheck = SETUP_CHECKS.find(
   (check) => check.id === "other-files",
 );
 assert.ok(otherFilesCheck, "other-files setup check must stay registered");
+
+describe("transient write-claim setup state", () => {
+  const claimDirectory = ".goat-flow/state/locks/";
+  const durableFile = ".goat-flow/.gitignore";
+
+  for (const scenario of [
+    { state: "absent", missing: null },
+    { state: "parent directory only", missing: null },
+    { state: "parent file", missing: claimDirectory },
+    { state: "directory", missing: null },
+    { state: "file", missing: claimDirectory },
+    { state: "broken link", missing: claimDirectory },
+    { state: "missing durable file", missing: durableFile },
+    {
+      state: "missing other local directory",
+      missing: ".goat-flow/logs/quality/",
+    },
+    {
+      state: "missing claim child",
+      missing: `${claimDirectory}required.claim`,
+    },
+  ]) {
+    it(`checks ${scenario.state} without creating claim state`, async (t) => {
+      let isSymlinkBlocked = false;
+      const fixture = await makeTempProject(async (root) => {
+        await mkdir(join(root, ".goat-flow"));
+        if (scenario.state !== "missing durable file") {
+          await writeFile(join(root, durableFile), "**/state/\n");
+        }
+        const claimPath = join(root, claimDirectory.slice(0, -1));
+        if (
+          [
+            "directory",
+            "file",
+            "broken link",
+            "parent directory only",
+          ].includes(scenario.state)
+        ) {
+          await mkdir(join(root, ".goat-flow/state"));
+        }
+        if (scenario.state === "parent file")
+          await writeFile(join(root, ".goat-flow/state"), "occupied");
+        if (scenario.state === "directory") await mkdir(claimPath);
+        if (scenario.state === "file") await writeFile(claimPath, "occupied");
+        if (scenario.state === "broken link") {
+          try {
+            await symlink(join(root, "absent-target"), claimPath, "dir");
+          } catch (error) {
+            if (
+              error instanceof Error &&
+              "code" in error &&
+              error.code === "EPERM"
+            ) {
+              isSymlinkBlocked = true;
+              t.skip("Host blocks unprivileged symlinks");
+              return;
+            }
+            throw error;
+          }
+        }
+      });
+      try {
+        if (isSymlinkBlocked) return;
+        const structure = buildProjectStructure();
+        assert.ok(structure.required_dirs.includes(claimDirectory));
+        assert.ok(structure.required_files.includes(durableFile));
+        const extraRequired =
+          scenario.missing &&
+          scenario.missing !== durableFile &&
+          scenario.missing !== claimDirectory
+            ? [scenario.missing]
+            : [];
+        const context = makeCtx({
+          projectPath: fixture.root,
+          fs: createFS(fixture.root),
+          structure: {
+            ...structure,
+            required_files: [durableFile],
+            required_dirs: [claimDirectory, ...extraRequired],
+          },
+        });
+        const before = context.fs.listDir(".goat-flow");
+        const failure = otherFilesCheck.run(context);
+        if (scenario.missing) {
+          assert.ok(failure);
+          assert.equal(failure.evidence, scenario.missing);
+          assert.equal(failure.message, `Missing: ${scenario.missing}`);
+        } else {
+          assert.equal(failure, null);
+        }
+        assert.deepEqual(createFS(fixture.root).listDir(".goat-flow"), before);
+      } finally {
+        await fixture.cleanup();
+      }
+    });
+  }
+});
 
 describe("optional security policy discovery", () => {
   it("fails when an installed policy is absent from the code map and Router Table", () => {

@@ -122,7 +122,7 @@ export const REQUIRED_GOAT_FLOW_GITIGNORE_PATTERNS = [
   "!**/plans/**",
   "!scratchpad/",
   "!**/scratchpad/**",
-  "**/write-claims/",
+  "**/state/",
   "**/logs/*/*/",
   "!logs/",
   "!**/logs/sessions/",
@@ -569,6 +569,16 @@ const otherFiles: BuildCheck = {
     );
     const missing = uncovered.filter((p) => {
       const trimmed = p.endsWith("/") ? p.slice(0, -1) : p;
+      // Claim writers create this gitignored directory on demand; audit must not require it first.
+      if (p === ".goat-flow/state/locks/") {
+        if (ctx.fs.isReadableDirectory(trimmed)) return false;
+        if (!ctx.fs.isReadableDirectory(".goat-flow")) return true;
+        if (!ctx.fs.listDir(".goat-flow").includes("state")) return false;
+        return (
+          !ctx.fs.isReadableDirectory(".goat-flow/state") ||
+          ctx.fs.listDir(".goat-flow/state").includes("locks")
+        );
+      }
       return !ctx.fs.exists(trimmed);
     });
     if (missing.length > 0) {

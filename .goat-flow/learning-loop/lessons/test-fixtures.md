@@ -1,6 +1,6 @@
 ---
 category: test-fixtures
-last_reviewed: 2026-09-11
+last_reviewed: 2026-09-12
 ---
 
 **Scope:** Building and keeping fixtures true - collision branches, semantic operands, in-memory against disk-backed corpora, and fixtures that drift from the code they model. Runner behaviour is [test-execution-environment.md](test-execution-environment.md).
@@ -164,7 +164,7 @@ last_reviewed: 2026-09-11
 **Decision changed:** Before a focused run, enumerate and create every fixture-owned file, browser global, and source input the assertion reaches.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
-**Incident count:** 17 | **Latest occurrence:** 2026-09-03
+**Incident count:** 18 | **Latest occurrence:** 2026-09-12
 
 **Prevention:** Treat each fixture as an isolated runtime: list the files, globals, source graph, and baseline validator invariants the system under test or the assertion will read, then create or satisfy them explicitly. Before asserting one strict-check behaviour, run the fixture through the unchanged strict baseline so unrelated errors are absent, and keep every non-target value inside its passing bounds. Assert that every text substitution changed its fixture before using the result as simulated input. Never assume a real-checkout file exists in a temp repo, a browser global exists in a VM, or a helper's name implies it includes an adjacent template. For an invalid-state case, name and trigger the exact production predicate; arbitrary content is not invalid when the implementation treats its bytes as opaque. In temp-repo stats fixtures, cite a file the fixture creates; `.goat-flow/learning-loop/footguns/hooks.md` can carry both the bucket body and a self-reference. Evidence anchor: `test/integration/stats-command.test.ts` (search: `missing semantic anchor`).
 
@@ -188,6 +188,8 @@ last_reviewed: 2026-09-11
 **Recurrence 2026-08-30:** A recall sanitization check rejected every C0 character in the rendered output, so the renderer's own newlines failed; restricting the assertion to controls forbidden inside dynamic fields proved the terminal boundary. `test/unit/learning-loop-recall.test.ts` (search: `escapes repository-controlled terminal sequences in text output`).
 **Recurrence 2026-08-31:** The pre-release full suite found the lifecycle fixture still creating a non-Git consumer without the current Commit Messages section; audit rejected the missing post-turn scan root first, then the incomplete instruction contract. `test/integration/setup-quality-lifecycle.test.ts` (search: `The passing lifecycle needs Git's implicit post-turn scan root`), `test/integration/setup-quality-lifecycle.test.ts` (search: `## Commit Messages`), `test/integration/setup-install-nongit-hooks.test.ts` (search: `names the blocked post-turn registration and its fix`).
 **Recurrence 2026-09-03:** A recovery test wrote arbitrary non-JSON bytes expecting rejection, but the helper treats any bounded regular-file bytes as opaque identity; writing 4,097 bytes crossed the 4,096-byte bound and exercised the structural-unsafe branch. `src/cli/path-write-claim.ts` (search: `const MAX_CLAIM_BYTES = 4096`), `test/integration/path-write-claim-recovery.test.ts` (search: `Oversized marker bytes violate`).
+
+**Recurrence 2026-09-12:** M67's malformed-path fixtures passed a trailing directory separator to `writeFile` and `symlink`, failing before the audit assertions. Strip the manifest separator when constructing the filesystem operand, then rerun to distinguish fixture failures from product failures. `test/unit/audit-command/main.test.ts` (search: `claimDirectory.slice(0, -1)`).
 
 ---
 

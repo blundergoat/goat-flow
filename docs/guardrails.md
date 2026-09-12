@@ -31,6 +31,21 @@ Guardrails are goat-flow's runtime command-safety hooks. Each agent registers `d
 
 Both policies default on. Upgrades preserve an explicit Git-hook choice or inherit the previous dangerous-hook choice once; later toggles are independent. Shared-file repairs can stale both proof records. `hooks sync` repairs installation, and each policy's verification group supplies fresh proof. Agents still never commit or push, regardless of toggle state.
 
+## Troubleshooting a blocked check
+
+A policy denial means the hook rejected the proposed command. An unavailable policy check also blocks the pending tool, but its diagnostic describes an execution problem rather than a finding about the command.
+
+| Diagnostic | Meaning and next step |
+| --- | --- |
+| A named policy or command-syntax denial | Review the proposed command against the named rule. Retrying after a delay does not change the rule. |
+| `Policy hook unavailable` | Read the named hook and reason. Check Bash availability and the installed entrypoint and shared policy store; repair an incomplete installation before retrying. |
+| `exceeded its deadline; process-tree termination was requested` | The launcher reached its deadline. Let other verification work finish, then retry the same check once on its own. If it times out again, retain the diagnostic and investigate the named hook. A successful sequential retry does not establish what caused the original timeout. |
+| `hook timeout configuration is invalid` | Remove or correct `GOAT_FLOW_HOOK_LAUNCH_TIMEOUT_MS`. An unset or empty value uses the registered deadline; a supplied value must be a positive whole number of milliseconds. Values above the registered ceiling are capped at that ceiling. |
+
+The launcher can report these failures only after Node starts. A host that cannot start Node or rejects the handler before launch has a host-prerequisite failure; the hook cannot guarantee a blocking response at that earlier boundary.
+
+For shell-context problems, distinguish the hook's launcher from the command being inspected. A PowerShell registration describes how the hook starts, not which shell will interpret the proposed command. Use the provider's captured command fields and established tool-shell context when diagnosing grammar. Missing context leaves the case unresolved; it does not justify stripping escapes or relaxing a denial.
+
 ## Limitations
 
 The shared parser is a defense-in-depth check for proposed command text. It applies the existing Git and GitHub write rules to commands wrapped in supported `xargs`, `find -exec`, `watch`, shell-c, and common GNU Parallel forms. It also blocks exact credential directories, protected curl file operands, and downloaded bytes passed to executable or unknown pipeline consumers. Known read-only download filters, local data passed to an explicit script file, and literal `vendor` or `target` cleanup remain available.

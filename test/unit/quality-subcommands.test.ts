@@ -760,11 +760,6 @@ describe("quality save", () => {
         currentQualityReport(projectRoot, nestedDetail),
       );
       assert.equal(result.status, 0, result.stderr || result.stdout);
-      assert.match(
-        result.stdout.trim(),
-        /^OK .+\.goat-flow\/logs\/quality\/.+\.json$/u,
-      );
-
       const qualityDir = join(projectRoot, ".goat-flow", "logs", "quality");
       const files = readdirSync(qualityDir);
       assert.equal(files.length, 1);
@@ -773,6 +768,7 @@ describe("quality save", () => {
         /^\d{4}-\d{2}-\d{2}-\d{4}-claude-[a-z0-9]{5}\.json$/u,
       );
       const reportPath = join(qualityDir, files[0] ?? "");
+      assert.equal(result.stdout.trim(), `OK ${reportPath}`);
       const stats = lstatSync(reportPath);
       assert.equal(stats.isFile(), true);
       assert.equal(stats.nlink, 1);
