@@ -76,7 +76,7 @@ jobs:
           shellcheck --exclude=SC2001 workflow/hooks/*.sh workflow/hooks/deny-dangerous/*.sh .goat-flow/hooks/*.sh .goat-flow/hooks/deny-dangerous/*.sh
 
       - name: Shell syntax
-        run: bash -n scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh workflow/install-goat-flow.sh workflow/hooks/*.sh workflow/hooks/deny-dangerous/*.sh .goat-flow/hooks/*.sh .goat-flow/hooks/deny-dangerous/*.sh
+        run: bash scripts/maintenance/check-shell-syntax.sh
 
       - name: Instruction parity
         run: node scripts/check-instruction-parity.mjs

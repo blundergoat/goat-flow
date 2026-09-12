@@ -30,6 +30,7 @@ const AUTOMATED_SHELL_VALIDATION_OWNERS = [
 ] as const;
 
 const WORKFLOW_INSTALLER = "workflow/install-goat-flow.sh";
+const SHELL_SYNTAX_HELPER = "scripts/maintenance/check-shell-syntax.sh";
 
 /**
  * Read the exact `shellcheck` line a surface publishes.
@@ -74,34 +75,30 @@ describe("documented shell-lint command", () => {
   });
 
   it("keeps the workflow installer in every shell lint and syntax owner", () => {
-    // Check the commands shown to each agent before comparing automated validation owners.
+    const helper = readFileSync(
+      resolve(PROJECT_ROOT, SHELL_SYNTAX_HELPER),
+      "utf8",
+    );
+    assert.ok(helper.includes(WORKFLOW_INSTALLER));
+    // Syntax coverage now belongs to the executable shared by every publisher.
     for (const surface of DOCUMENTING_SURFACES) {
       const content = readFileSync(resolve(PROJECT_ROOT, surface), "utf8");
-      const commandLines = content
-        .split("\n")
-        .filter((line) => /^(?:shellcheck|bash -n) /u.test(line));
-      assert.equal(
-        commandLines.length,
-        2,
-        `${surface}: expected two shell commands`,
+      assert.ok(
+        publishedShellcheckCommand(surface).includes(WORKFLOW_INSTALLER),
+        `${surface}: shellcheck omits ${WORKFLOW_INSTALLER}`,
       );
-      // Both lint and syntax checks must cover the installer that users run during setup.
-      for (const command of commandLines) {
-        assert.ok(
-          command.includes(WORKFLOW_INSTALLER),
-          `${surface}: ${command.split(" ", 1)[0]} omits ${WORKFLOW_INSTALLER}`,
-        );
-      }
+      assert.ok(content.includes(`\nbash ${SHELL_SYNTAX_HELPER}\n`), surface);
+      assert.doesNotMatch(content, /^bash -n .+\.sh\s+.+\.sh/mu, surface);
     }
 
     // Automated checks must retain the same installer coverage promised in agent instructions.
     for (const surface of AUTOMATED_SHELL_VALIDATION_OWNERS) {
       const content = readFileSync(resolve(PROJECT_ROOT, surface), "utf8");
-      const occurrences = content.split(WORKFLOW_INSTALLER).length - 1;
       assert.ok(
-        occurrences >= 2,
-        `${surface}: expected ${WORKFLOW_INSTALLER} in both shell lint and syntax validation`,
+        content.includes(WORKFLOW_INSTALLER),
+        `${surface}: shell lint omits ${WORKFLOW_INSTALLER}`,
       );
+      assert.ok(content.includes(`bash ${SHELL_SYNTAX_HELPER}`), surface);
     }
   });
 

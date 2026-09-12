@@ -54,6 +54,8 @@ test/
 
 ## Commands
 
+Run these checks from a goat-flow framework checkout. Installed target projects use their own configured toolchain commands.
+
 ```bash
 npm run build          # tsc -> dist/
 npm run test           # runs test:fast (node --test; excludes slow/dashboard/perf suites)
@@ -61,7 +63,7 @@ npm run typecheck      # tsc --noEmit
 npm run audit          # node dist/cli/cli.js audit .
 
 shellcheck scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh workflow/hooks/*.sh workflow/hooks/deny-dangerous/*.sh .goat-flow/hooks/*.sh .goat-flow/hooks/deny-dangerous/*.sh
-bash -n scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh workflow/hooks/*.sh workflow/hooks/deny-dangerous/*.sh .goat-flow/hooks/*.sh .goat-flow/hooks/deny-dangerous/*.sh
+bash scripts/maintenance/check-shell-syntax.sh
 bash scripts/preflight-checks.sh         # Full preflight gate
 
 # CLI commands (from the framework checkout)

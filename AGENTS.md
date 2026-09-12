@@ -44,7 +44,7 @@ Conventional `type(scope): subject` - imperative, ≤72 chars, concrete verbs no
 ## Essential Commands
 ```bash
 shellcheck scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh workflow/install-goat-flow.sh workflow/hooks/*.sh workflow/hooks/deny-dangerous/*.sh .goat-flow/hooks/*.sh .goat-flow/hooks/deny-dangerous/*.sh
-bash -n scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh workflow/install-goat-flow.sh workflow/hooks/*.sh workflow/hooks/deny-dangerous/*.sh .goat-flow/hooks/*.sh .goat-flow/hooks/deny-dangerous/*.sh
+bash scripts/maintenance/check-shell-syntax.sh
 npm run typecheck
 npm test
 bash scripts/preflight-checks.sh

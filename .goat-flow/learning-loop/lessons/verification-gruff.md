@@ -1,6 +1,6 @@
 ---
 category: verification-gruff
-last_reviewed: 2026-09-05
+last_reviewed: 2026-09-12
 ---
 
 **Scope:** The Gruff analyzer specifically - comment rules, doc-comment complexity, binary discovery, and baseline handling. Other repo-wide gates live in [verification-preflight.md](verification-preflight.md); size-gate crossings caused by added text live in [verification-testing.md](verification-testing.md).
@@ -100,10 +100,10 @@ last_reviewed: 2026-09-05
 
 ## Lesson: Gruff side-effect comments must name the side effect
 
-**Status:** active | **Created:** 2026-05-30
-**Incident count:** 4 | **Latest occurrence:** 2026-08-29
+**Status:** active | **Created:** 2026-05-30 | **Evidence:** OBSERVED
+**Incident count:** 5 | **Latest occurrence:** 2026-09-12
 
-**Prevention:** For helpers that write files, mutate fixtures, or run subprocesses, name the side effect in plain maintainer language (`Write`, `Run`, `Spawn`, `filesystem`) instead of a generic purpose sentence, and do not swap that verb for a synonym later. After a large docs batch, check the full rule delta, not only the original docs cluster. Evidence anchors: `test/integration/audit-drift.helpers.ts` (search: `Write canonical skill stubs`), `test/integration/setup-install.helpers.ts` (search: `Run the shell installer`), `CHANGELOG.md` (search: `gruff-ts cleanup follow-up`).
+**Prevention:** For helpers that write files, mutate fixtures, or run subprocesses, name the side effect in plain maintainer language (`Writes`, `Spawns`, `filesystem`) instead of a generic purpose sentence, and do not swap that verb for a synonym later. If the finding remains, read the installed rule before another rewrite. After a large docs batch, check the full rule delta, not only the original docs cluster. Evidence anchors: `test/integration/audit-drift.helpers.ts` (search: `Write canonical skill stubs`), `test/integration/setup-install.helpers.ts` (search: `Run the shell installer`), `CHANGELOG.md` (search: `gruff-ts cleanup follow-up`).
 
 **What happened:** The first internal-helper comment batch cleared `docs.missing-internal-function-doc` but reduced the full snapshot by only 175 findings, because Gruff then reported `docs.missing-side-effect-doc` on helpers that write fixture files or spawn tools. Saying `Writes` or `Spawns` explicitly moved the snapshot to `summary error=0 warning=121 advisory=598 total=719` and both doc clusters to zero.
 
@@ -112,6 +112,7 @@ last_reviewed: 2026-09-05
 **Recurrence 2026-08-06:** The Windows discovery comment described its purpose and fallback but not the `where.exe` process side effect; naming that action cleared three findings.
 **Recurrence 2026-08-27:** A new audit helper said it "launches one bounded child process", but Gruff still reported `docs.missing-side-effect-doc` until the contract read `Side effect: spawns one bounded child process`. `src/cli/audit/check-agent-deny-runtime.ts` (search: `function spawnConfiguredHookProbe`).
 **Recurrence 2026-08-29:** Changing a fixture helper's sentence from `writes` to `creates` introduced `docs.missing-side-effect-doc` although the sentence still described the file operation; restoring the filesystem verb returned the five-path identity comparison to zero introduced findings. `test/integration/setup-install.test.ts` (search: `Side effect: writes and marks one analyzer fixture executable`).
+**Recurrence 2026-09-12:** M69's publisher fixture comment said "Replay" without naming its file writes or subprocesses. The installed `hasSideEffectMarker` rule confirmed the missing vocabulary; a sentence naming both effects removed that introduced documentation finding, and the same 27 focused cases still passed. `test/integration/preflight-progress.test.ts` (search: `runs each published syntax command against a valid control and a later malformed file`), `node_modules/@blundergoat/gruff-ts/src/context-doc-rules.ts` (search: `hasSideEffectMarker`).
 
 ---
 

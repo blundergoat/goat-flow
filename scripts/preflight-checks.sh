@@ -721,22 +721,12 @@ _emit_footer() {
 
 # ── Shell Scripts ────────────────────────────────────────────────────
 section "Shell Scripts"
-if bash -n scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh workflow/install-goat-flow.sh 2>/dev/null; then
-    pass "Bash syntax (scripts)"
+if syntax_output=$(bash scripts/maintenance/check-shell-syntax.sh 2>&1); then
+    pass "Bash syntax (scripts and hooks)"
 else
-    fail "Bash syntax check (scripts)"
+    fail "Bash syntax check (scripts and hooks)"
+    printf '%s\n' "$syntax_output" | details_pipe
 fi
-
-# Also syntax-check installed hooks
-while IFS= read -r hookdir; do
-    if compgen -G "$hookdir/*.sh" >/dev/null 2>&1; then
-        if bash -n "$hookdir"/*.sh 2>/dev/null; then
-            pass "Bash syntax ($hookdir/)"
-        else
-            fail "Bash syntax check ($hookdir/)"
-        fi
-    fi
-done < <(manifest_eval hook-dirs)
 
 if command -v shellcheck >/dev/null 2>&1; then
     if shellcheck --exclude=SC2001 scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh workflow/install-goat-flow.sh >/dev/null 2>&1; then
