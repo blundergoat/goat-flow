@@ -110,7 +110,7 @@ Use complexity only for **pre-invocation routing**; an invoked skill runs its fu
 
 - **Quick:** compressed workflow and output
 - **Full:** selected skill protocol; critique on request
-- Dispatcher-selected depth needs no question
+- Destination Step 0 selects unspecified depth; explicit user requests remain subject to destination rules
 
 Before optional orchestration, load `skill-conventions.md` → Orchestration Admission.
 
