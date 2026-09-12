@@ -181,7 +181,7 @@ Before using an older checker, stop every extra open receipt. Keep one milestone
 ### Forecast bases and ranges
 
 ```markdown
-**Forecast basis:** <units> agent work units; <low>-<likely>-<high> min/unit low-likely-high; source: <cold-start prior or local receipt history>
+**Forecast basis:** <units> agent work units; <low>-<likely>-<high> min/unit low-likely-high; source: <cold-start prior or local pLow/pHigh receipt history>
 **Forecast range:** <low>-<high> agent-time minutes on one recorded-unpaused milestone timeline; likely <n>; <confidence and why>
 ```
 

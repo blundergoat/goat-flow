@@ -97,7 +97,7 @@ Each item states the claim and evidence with a proof-class tag. Omit inapplicabl
 
 **Tasks:** Use one action, target, and done condition. Put rationale, paths, and proof beneath the task only when needed. Pin paths when downstream work depends on them.
 
-**Effort estimate (agent-time):** Count positive agent-owned Task/Proof/Mid-proof plus one admin entry; exclude `[HUMAN]`/zero-minute items. `Forecast basis:` records `<n> agent work units` plus rates. Use `0.5-2.5-10 min/unit` until three eligible bases, then `plans check` evidence. Never use duration intuition; ~70/20/10 stays advisory. If scope changes, reforecast before implementation; `reforecast required` blocks. Execution uses `references/milestone-examples.md` → Timing receipts. `Forecast range:` is required with a basis; legacy points and range-only estimates remain valid.
+**Effort estimate (agent-time):** Count positive agent-owned Task/Proof/Mid-proof and one admin; exclude `[HUMAN]`/zero-minute items. `Forecast basis:` records agent work units, rates, historical `source:` quantiles. Use `0.5-2.5-10 min/unit` until three eligible bases, then `plans check` evidence. Never use duration intuition; ~70/20/10 stays advisory. If scope changes, reforecast before implementation; `reforecast required` blocks. Execution uses `references/milestone-examples.md` → Timing receipts. `Forecast range:` is required with a basis; legacy points and range-only estimates remain valid.
 
 **Cold-start bar:** Identify files, conventions, scope, commands, and recovery.
 
