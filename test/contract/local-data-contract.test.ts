@@ -200,12 +200,12 @@ describe("local data contract", () => {
     );
     const installedGitignore = readContractFile(".goat-flow/.gitignore");
     const installer = readContractFile("workflow/install-goat-flow.sh");
-    const claimDirectory = ".goat-flow/write-claims/";
-    const ignorePattern = "**/write-claims/";
+    const claimDirectory = ".goat-flow/state/locks/";
+    const ignorePattern = "**/state/";
 
     assert.match(
       architecture,
-      /\*\*Local coordination state\*\*.*`\.goat-flow\/write-claims\/\*\.claim`.*do not expire.*explicit operator-confirmed recovery/iu,
+      /\*\*Local coordination state\*\*.*`\.goat-flow\/state\/locks\/\*\.claim`.*do not expire.*explicit operator-confirmed recovery/iu,
     );
     assert.match(
       architecture,
@@ -230,7 +230,7 @@ describe("local data contract", () => {
     );
     assert.match(
       installer,
-      /for dir in [^\n]*\.goat-flow\/write-claims[^\n]*; do/u,
+      /for dir in [^\n]*\.goat-flow\/state\/locks[^\n]*; do/u,
     );
   });
 

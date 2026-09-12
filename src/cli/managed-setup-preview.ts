@@ -15,6 +15,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, posix } from "node:path";
+import { installStateRelativeDirectory } from "./local-state-migration.js";
 
 import { getPackageVersion, getTemplatePath } from "./paths.js";
 import { getSkillFiles, loadManifest } from "./manifest/manifest.js";
@@ -167,7 +168,7 @@ function readManagedInstallCutoverEvidence(
   const incompatibleAgents: AgentId[] = [];
   // Every provider marker must agree before the selected project can use the shared install history.
   for (const agent of KNOWN_AGENT_IDS) {
-    const relativePath = `.goat-flow/install-state/${agent}.json`;
+    const relativePath = `${installStateRelativeDirectory(projectPath)}/${agent}.json`;
     const target = readManagedTargetEvidence(projectPath, relativePath);
     // A missing or unsafe marker means migration is incomplete; keep it visible as a repair requirement.
     if (target.status !== "regular") {
@@ -226,7 +227,7 @@ function writeManagedInstallCutoverMarker(
   agent: AgentId,
   legacyEvidence: ManagedInstallCutoverMarker["legacyEvidence"],
 ): void {
-  const relativePath = `.goat-flow/install-state/${agent}.json`;
+  const relativePath = `.goat-flow/state/install/${agent}.json`;
   const markerPath = managedInstallStatePath(projectPath, agent);
   const markerBytes = managedInstallCutoverMarkerBytes(agent, legacyEvidence);
   const currentTarget = readManagedTargetEvidence(projectPath, relativePath);
@@ -301,7 +302,7 @@ function managedInstallMigratedAgents(
   for (const agent of existingEvidence.incompatibleAgents) {
     const target = readManagedTargetEvidence(
       projectPath,
-      `.goat-flow/install-state/${agent}.json`,
+      `.goat-flow/state/install/${agent}.json`,
     );
     // A remaining safe legacy file identifies a provider interrupted during receipt-free migration.
     if (target.status === "regular") migratedAgents.add(agent);

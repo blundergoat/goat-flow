@@ -123,7 +123,7 @@ function writeLegacyState(
   agent: "antigravity" | "codex",
   expectedSha256: string,
 ): void {
-  const stateDirectory = join(projectPath, ".goat-flow", "install-state");
+  const stateDirectory = join(projectPath, ".goat-flow", "state", "install");
   mkdirSync(stateDirectory, { recursive: true });
   writeFileSync(
     join(stateDirectory, `${agent}.json`),
@@ -203,7 +203,7 @@ describe("managed install status evidence", () => {
       `${readFileSync(join(projectPath, managedPath), "utf-8")}\nlocal edit\n`,
     );
     writeFileSync(
-      join(projectPath, ".goat-flow", "install-state", "codex.json"),
+      join(projectPath, ".goat-flow", "state", "install", "codex.json"),
       "replaced by a v1-only writer\n",
     );
 
@@ -224,7 +224,7 @@ describe("managed install status evidence", () => {
     const cutover = evidenceEntry(report, "cutover-incompatible");
     assert.deepEqual(cutover.subjects.agents, ["codex"]);
     assert.deepEqual(cutover.subjects.paths, [
-      ".goat-flow/install-state/codex.json",
+      ".goat-flow/state/install/codex.json",
     ]);
     assert.equal(cutover.canSelectInstalledAgent, false);
     assert.match(cutover.reason, /cannot select .*installed agent/iu);
@@ -248,8 +248,8 @@ describe("managed install status evidence", () => {
 
   it("identifies the malformed legacy agent and evidence path", () => {
     const projectPath = makeTempProject();
-    const evidencePath = ".goat-flow/install-state/antigravity.json";
-    mkdirSync(join(projectPath, ".goat-flow", "install-state"), {
+    const evidencePath = ".goat-flow/state/install/antigravity.json";
+    mkdirSync(join(projectPath, ".goat-flow", "state", "install"), {
       recursive: true,
     });
     writeFileSync(join(projectPath, evidencePath), "not json\n");
@@ -295,8 +295,8 @@ describe("managed install status evidence", () => {
 
   it("keeps malformed v2 evidence scoped to the authoritative state path", () => {
     const projectPath = makeTempProject();
-    const evidencePath = ".goat-flow/install-state/managed.json";
-    mkdirSync(join(projectPath, ".goat-flow", "install-state"), {
+    const evidencePath = ".goat-flow/state/install/managed.json";
+    mkdirSync(join(projectPath, ".goat-flow", "state", "install"), {
       recursive: true,
     });
     writeFileSync(managedInstallStateV2Path(projectPath), "not json\n");

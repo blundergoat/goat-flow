@@ -41,7 +41,12 @@ NODE
 # Refuse non-CLI mutation after v2 state or any old-reader cutover marker appears.
 # The environment value is cooperative admission supplied only after the public CLI owns and revalidates the complete write-claim batch.
 require_managed_install_admission() {
-  local managed_state_path="$PROJECT/.goat-flow/install-state/managed.json"
+  # Public install relocates legacy state before admission; direct Bash must not split the namespaces.
+  if [[ -e "$PROJECT/.goat-flow/install-state" || -L "$PROJECT/.goat-flow/install-state" || -e "$PROJECT/.goat-flow/write-claims" || -L "$PROJECT/.goat-flow/write-claims" ]]; then
+    echo "ERROR: legacy local state requires migration. Stop and upgrade all writers, then run: goat-flow install \"$PROJECT\" --agent \"$AGENT\"" >&2
+    return 1
+  fi
+  local managed_state_path="$PROJECT/.goat-flow/state/install/managed.json"
   local marker_path known_agent
   local -a known_agents=()
 
@@ -56,7 +61,7 @@ require_managed_install_admission() {
 
   IFS=',' read -r -a known_agents <<< "$SUPPORTED_AGENTS_CSV"
   for known_agent in "${known_agents[@]}"; do
-    marker_path="$PROJECT/.goat-flow/install-state/$known_agent.json"
+    marker_path="$PROJECT/.goat-flow/state/install/$known_agent.json"
     if [[ -L "$marker_path" || ( -e "$marker_path" && ! -f "$marker_path" ) ]]; then
       echo "ERROR: managed install state requires the public CLI. Run: goat-flow install \"$PROJECT\" --agent \"$AGENT\"" >&2
       return 1
@@ -3190,7 +3195,7 @@ echo ""
 # 2. Create .goat-flow/ directories
 # ==========================================================================
 echo "Directories:"
-for dir in .goat-flow/learning-loop/footguns .goat-flow/learning-loop/lessons .goat-flow/learning-loop/patterns .goat-flow/learning-loop/decisions .goat-flow/plans .goat-flow/scratchpad .goat-flow/write-claims .goat-flow/logs/sessions .goat-flow/logs/quality .goat-flow/logs/events .goat-flow/logs/critiques .goat-flow/logs/review .goat-flow/logs/security .goat-flow/skill-docs .goat-flow/skill-docs/playbooks .goat-flow/skill-docs/skill-quality-testing .goat-flow/hooks .goat-flow/hooks/deny-dangerous; do
+for dir in .goat-flow/learning-loop/footguns .goat-flow/learning-loop/lessons .goat-flow/learning-loop/patterns .goat-flow/learning-loop/decisions .goat-flow/plans .goat-flow/scratchpad .goat-flow/state/locks .goat-flow/logs/sessions .goat-flow/logs/quality .goat-flow/logs/events .goat-flow/logs/critiques .goat-flow/logs/review .goat-flow/logs/security .goat-flow/skill-docs .goat-flow/skill-docs/playbooks .goat-flow/skill-docs/skill-quality-testing .goat-flow/hooks .goat-flow/hooks/deny-dangerous; do
   assert_safe_installer_directory "$dir"
   # Missing safe directories are created for the user's local workflow surfaces.
   if [[ ! -d "$dir" ]]; then

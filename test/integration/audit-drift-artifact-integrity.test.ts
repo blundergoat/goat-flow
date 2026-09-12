@@ -611,7 +611,7 @@ describe("checkDrift: artifact integrity", () => {
       mkdirSync(dirname(guidePath), { recursive: true });
       writeFileSync(
         guidePath,
-        "An active writer may own `.goat-flow/write-claims/example.claim`.\n",
+        "An active writer may own `.goat-flow/state/locks/example.claim`.\n",
       );
       const context = {
         projectPath: fixtureRoot,
@@ -623,7 +623,7 @@ describe("checkDrift: artifact integrity", () => {
         report.findings.some(
           (finding) =>
             finding.rule === "path-ref-unresolved" &&
-            finding.message.includes("write-claims/example.claim"),
+            finding.message.includes("state/locks/example.claim"),
         ),
         false,
         `local coordination path produced an unresolved-path finding: ${JSON.stringify(report.findings)}`,
@@ -641,7 +641,7 @@ describe("checkDrift: artifact integrity", () => {
       mkdirSync(dirname(guidePath), { recursive: true });
       writeFileSync(
         guidePath,
-        "Managed installs use `.goat-flow/install-state/managed.json`; repair access to `.goat-flow/install-state/` before retrying.\n",
+        "Managed installs use `.goat-flow/state/install/managed.json`; repair access to `.goat-flow/state/install/` before retrying.\n",
       );
       const context = {
         projectPath: fixtureRoot,
@@ -653,7 +653,7 @@ describe("checkDrift: artifact integrity", () => {
         report.findings.some(
           (finding) =>
             finding.rule === "path-ref-unresolved" &&
-            finding.message.includes(".goat-flow/install-state/"),
+            finding.message.includes(".goat-flow/state/install/"),
         ),
         false,
         `managed install-state path produced an unresolved-path finding: ${JSON.stringify(report.findings)}`,

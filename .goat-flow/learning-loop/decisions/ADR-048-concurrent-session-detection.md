@@ -19,7 +19,7 @@ For each target the guarded writer:
 
 1. resolves and validates the project root and target before creating coordination state;
 2. captures an expected identity as file existence plus a SHA-256 of the exact bytes read (a create-only writer expects a missing file);
-3. acquires `.goat-flow/write-claims/<key>.claim`, keyed by the normalized project-relative path, with exclusive creation and mode `0o600`; binds the open descriptor to a stable snapshot of that empty path and revalidates the project-local directory chain before writing owner bytes; and stops on contention or failed binding without waiting, stealing, or expiring another claim;
+3. acquires `.goat-flow/state/locks/<key>.claim`, keyed by the normalized project-relative path, with exclusive creation and mode `0o600`; binds the open descriptor to a stable snapshot of that empty path and revalidates the project-local directory chain before writing owner bytes; and stops on contention or failed binding without waiting, stealing, or expiring another claim;
 4. re-reads the target under the claim and returns a concurrent-change result on any existence or digest mismatch, without staging or replacing bytes;
 5. stages complete output, flushes it, and uses the existing atomic replacement or create-only primitive while the claim is held;
 6. releases only the exact claim identity it acquired, reporting rather than deleting a missing or changed claim.
@@ -66,8 +66,12 @@ Until a writer is guarded, goat-plan re-reads the exact milestone or marker imme
 
 ## Consequences
 
+### Storage relocation — 2026-09-13
+
+The accepted storage layout is `.goat-flow/state/locks/` beneath one gitignored operational-state parent. Public install moves the former `.goat-flow/write-claims/` directory only when both lock namespaces are empty, preserves all installation evidence, and refuses occupied destinations. The operator must stop and upgrade every writer before migration. The user explicitly selected complete removal of old paths over retaining compatibility guards; running older writers afterward is unsupported. Recovery can inspect the sole legacy namespace before migration, but new claim acquisition refuses legacy storage and directs the operator to public install. Only install, hook changes and `learn new` acquire claims; further adoption remains deferred. The marker schema, key derivation, ownership checks and explicit recovery contract are unchanged. Evidence: `src/cli/local-state-migration.ts` (search: `migrateLegacyLocalState`), `test/integration/local-state-migration.test.ts` (search: `blocks legacy write admission`).
+
 - Cooperating writers either hold one target's claim and validate expected bytes or fail without replacement; user-facing claims say cooperative detection.
-- `.goat-flow/write-claims/` is transient gitignored coordination state registered in the local-state architecture and manifest.
+- `.goat-flow/state/locks/` is transient gitignored coordination state registered in the local-state architecture and manifest.
 - A crashed writer can block later writes until reviewed, trading availability for preservation of ambiguous state.
 
 ## Reversibility

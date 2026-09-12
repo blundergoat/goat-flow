@@ -86,7 +86,7 @@ describe("installer dependency preflight", () => {
     assert.deepEqual(readdirSync(targetProjectPath), []);
     assert.equal(
       existsSync(
-        join(targetProjectPath, ".goat-flow", "install-state", "codex.json"),
+        join(targetProjectPath, ".goat-flow", "state", "install", "codex.json"),
       ),
       false,
     );
@@ -118,7 +118,7 @@ describe("installer dependency preflight", () => {
     );
     assert.equal(
       existsSync(
-        join(targetProjectPath, ".goat-flow", "install-state", "codex.json"),
+        join(targetProjectPath, ".goat-flow", "state", "install", "codex.json"),
       ),
       false,
     );

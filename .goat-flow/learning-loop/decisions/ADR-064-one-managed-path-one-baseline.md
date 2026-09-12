@@ -7,13 +7,13 @@
 
 ## Context
 
-The predecessor design created disagreement by construction. `src/cli/managed-setup-state.ts` (search: `goat-flow.install-state.v1`) stored every selected preview path in `.goat-flow/install-state/<agent>.json`, and preview read only the selected agent's file although the manifest contributes project-wide paths and Codex and Antigravity share `.agents/skills/`. The RED fixture in `test/integration/setup-install-shared-state.test.ts` (search: `one baseline per managed path`) preserves the reported 1.15.1-to-1.16.0 shared-file cases: a local patch was `local-preserved` under the current Codex baseline and `both-changed` under stale Antigravity state, equal-version and unrankable disagreements stayed hidden when another agent was selected, an unselected malformed state remained `loaded`, and two synchronized public installs both exited zero.
+The predecessor design created disagreement by construction. `src/cli/managed-setup-state.ts` (search: `goat-flow.install-state.v1`) stored every selected preview path in `.goat-flow/state/install/<agent>.json`, and preview read only the selected agent's file although the manifest contributes project-wide paths and Codex and Antigravity share `.agents/skills/`. The RED fixture in `test/integration/setup-install-shared-state.test.ts` (search: `one baseline per managed path`) preserves the reported 1.15.1-to-1.16.0 shared-file cases: a local patch was `local-preserved` under the current Codex baseline and `both-changed` under stale Antigravity state, equal-version and unrankable disagreements stayed hidden when another agent was selected, an unselected malformed state remained `loaded`, and two synchronized public installs both exited zero.
 
 ADR-048 (search: `path-keyed exclusive claim plus expected content identity`) defines the cooperative writer primitive; this decision applies it to the complete install lifecycle rather than creating a second locking convention. Preview now reads the selection-independent v2 boundary (`src/cli/managed-setup-preview.ts`, search: `const baseline = readManagedSetupV2Baseline`).
 
 ## Decision
 
-`.goat-flow/install-state/managed.json` is the only authoritative managed-path hash store: one row per safe project-relative path, with hashless agent receipts embedded in the same atomic file.
+`.goat-flow/state/install/managed.json` is the only authoritative managed-path hash store: one row per safe project-relative path, with hashless agent receipts embedded in the same atomic file.
 
 Agent selection chooses which current skill mirror and receipt an install handles. It never chooses a baseline for a path, and current target bytes, incoming template bytes, directory presence, filename, modification time, and selected-agent order never resolve conflicting history. The ADR-048 helper stays under `src/cli/` for reuse by other writers; no managed-install-only lock is permitted.
 
@@ -95,7 +95,7 @@ Preview's `baselineStatus` is exactly one of `missing`, `loaded`, `malformed-blo
 
 ### Selection-independent v1 bootstrap
 
-When `managed.json` is absent, every known `.goat-flow/install-state/<agent>.json` is inventoried before any selected-agent preview can authorize a write. Each must be a safe regular file passing the complete v1 schema, agent, path, uniqueness, hash, and version checks, and one malformed file, selected or not, makes the global result `malformed-blocking` with nothing written. For each path in a clean inventory: identical hashes are accepted with every agreeing observation recorded; differing hashes require every version to pass the plain `X.Y.Z` comparator in `src/cli/version-compare.ts` (search: `isReleaseVersion`), keep only the highest-precedence observations, and accept them when they agree; an unrankable disagreeing observation or an equal-precedence disagreement returns `conflicting` and blocks the whole bootstrap. Current bytes and templates never invent history, so both selection orders produce identical virtual v2 bytes or the same refusal.
+When `managed.json` is absent, every known `.goat-flow/state/install/<agent>.json` is inventoried before any selected-agent preview can authorize a write. Each must be a safe regular file passing the complete v1 schema, agent, path, uniqueness, hash, and version checks, and one malformed file, selected or not, makes the global result `malformed-blocking` with nothing written. For each path in a clean inventory: identical hashes are accepted with every agreeing observation recorded; differing hashes require every version to pass the plain `X.Y.Z` comparator in `src/cli/version-compare.ts` (search: `isReleaseVersion`), keep only the highest-precedence observations, and accept them when they agree; an unrankable disagreeing observation or an equal-precedence disagreement returns `conflicting` and blocks the whole bootstrap. Current bytes and templates never invent history, so both selection orders produce identical virtual v2 bytes or the same refusal.
 
 A dry run reports without writing. An applying install acquires the complete ADR-048 claim batch, repeats inventory and resolution, publishes a receipt-free canonical `managed.json`, then replaces or creates every known agent file as a hashless cutover marker:
 
@@ -162,6 +162,10 @@ An orphan is a stored row absent from the manifest-derived managed path union an
 | Path-keyed state, embedded receipts, full-lifecycle ADR-048 claims | A crashed cooperative writer blocks availability, and manual edits stay outside enforcement | Accepted |
 
 ## Consequences
+
+### Storage relocation — 2026-09-13
+
+Installation evidence now lives in `.goat-flow/state/install/`; the former `.goat-flow/install-state/` directory is an upgrade input only. Public install validates its preview, then relocates the complete directory without rewriting records, rebuilds the preview and acquires its usual complete write-claim batch. Dry-run reads the sole existing location; two installation directories are ambiguous and block instead of selecting or merging their baselines. All writers must be stopped and upgraded before relocation; the user selected removal of old paths, so running an older CLI afterward is unsupported. Schemas, row generations, embedded receipt placement and per-agent cutover semantics remain unchanged. This is separate from the v1-to-v2 evidence migration. Evidence: `src/cli/local-state-migration.ts` (search: `installStateRelativeDirectory`), `test/integration/setup-install-shared-state.test.ts` (search: `previews legacy evidence without writes`).
 
 - Preview, post-verification, audit, and hook status consume one strict state facade; the hook-specific `expectedHashSets` reconciliation is obsolete.
 - The v2 file and cutover markers are gitignored local evidence and must not contain target bytes, absolute paths, timestamps, process IDs, or secrets.

@@ -275,14 +275,14 @@ describe("managed install state", () => {
     };
 
     try {
-      mkdirSync(join(projectPath, ".goat-flow"), { recursive: true });
+      mkdirSync(join(projectPath, ".goat-flow/state"), { recursive: true });
       symlinkSync(
         redirectedStatePath,
-        join(projectPath, ".goat-flow", "install-state"),
+        join(projectPath, ".goat-flow", "state", "install"),
       );
       assert.throws(
         () => writeManagedInstallState(projectPath, preview),
-        /.goat-flow\/install-state must be a project-local directory/u,
+        /.goat-flow\/state\/install must be a project-local directory/u,
       );
       assert.deepEqual(readdirSync(redirectedStatePath), []);
     } finally {
@@ -327,7 +327,7 @@ describe("managed install state", () => {
     };
 
     try {
-      mkdirSync(join(projectPath, ".goat-flow", "install-state"), {
+      mkdirSync(join(projectPath, ".goat-flow", "state", "install"), {
         recursive: true,
       });
       writeFileSync(victimPath, "untouched\n", "utf-8");
@@ -367,7 +367,7 @@ describe("managed install state", () => {
       join(tmpdir(), "goat-flow-preview-redirect-"),
     );
     try {
-      mkdirSync(join(projectPath, ".goat-flow"), { recursive: true });
+      mkdirSync(join(projectPath, ".goat-flow/state"), { recursive: true });
       writeFileSync(
         join(redirectedStatePath, "codex.json"),
         `${JSON.stringify({
@@ -380,7 +380,7 @@ describe("managed install state", () => {
       );
       symlinkSync(
         redirectedStatePath,
-        join(projectPath, ".goat-flow", "install-state"),
+        join(projectPath, ".goat-flow", "state", "install"),
       );
 
       const preview = buildManagedSetupPreview(projectPath, "codex");
@@ -389,7 +389,7 @@ describe("managed install state", () => {
       assert.equal(
         preview.limits.some((limit) =>
           limit.includes(
-            ".goat-flow/install-state must be a project-local directory.",
+            ".goat-flow/state/install must be a project-local directory.",
           ),
         ),
         true,
@@ -413,7 +413,7 @@ function writeLegacyStateFixture(
   files: Array<{ path: string; expectedSha256: string }>,
 ): void {
   const statePath = managedInstallStatePath(projectPath, agent);
-  mkdirSync(join(projectPath, ".goat-flow", "install-state"), {
+  mkdirSync(join(projectPath, ".goat-flow", "state", "install"), {
     recursive: true,
   });
   writeFileSync(
@@ -708,7 +708,7 @@ describe("managed install state v2 facade", () => {
     const projectPath = mkdtempSync(join(tmpdir(), "goat-flow-v2-malformed-"));
     try {
       writeLegacyStateFixture(projectPath, "codex", "1.16.0", []);
-      mkdirSync(join(projectPath, ".goat-flow", "install-state"), {
+      mkdirSync(join(projectPath, ".goat-flow", "state", "install"), {
         recursive: true,
       });
       writeFileSync(
@@ -904,7 +904,7 @@ describe("managed install state v2 facade", () => {
     it(`blocks ${fixture.name} in v2 state`, () => {
       const projectPath = mkdtempSync(join(tmpdir(), "goat-flow-v2-invalid-"));
       try {
-        mkdirSync(join(projectPath, ".goat-flow", "install-state"), {
+        mkdirSync(join(projectPath, ".goat-flow", "state", "install"), {
           recursive: true,
         });
         writeFileSync(
@@ -929,7 +929,7 @@ describe("managed install state v2 facade", () => {
   it("blocks non-canonical v2 bytes", () => {
     const projectPath = mkdtempSync(join(tmpdir(), "goat-flow-v2-invalid-"));
     try {
-      mkdirSync(join(projectPath, ".goat-flow", "install-state"), {
+      mkdirSync(join(projectPath, ".goat-flow", "state", "install"), {
         recursive: true,
       });
       writeFileSync(
@@ -957,7 +957,7 @@ function writeInvalidStateFixture(
   serializedState: string,
 ): void {
   const statePath = managedInstallStatePath(projectPath, "codex");
-  mkdirSync(join(projectPath, ".goat-flow", "install-state"), {
+  mkdirSync(join(projectPath, ".goat-flow", "state", "install"), {
     recursive: true,
   });
   writeFileSync(statePath, serializedState, "utf-8");

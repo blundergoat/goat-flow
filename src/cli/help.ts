@@ -102,7 +102,7 @@ const COMMAND_HELP_CATALOG = {
       ],
       [
         "Unrecorded",
-        "After verified bytes but a failed state write, repair .goat-flow/install-state/ and rerun the printed command.",
+        "After verified bytes but a failed state write, repair .goat-flow/state/install/ and rerun the printed command.",
       ],
       [
         "Direct script",

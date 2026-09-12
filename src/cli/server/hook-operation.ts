@@ -59,7 +59,7 @@ interface HookDestination {
   priority: number;
 }
 
-const STATE_DIRECTORY = ".goat-flow/install-state/";
+const STATE_DIRECTORY = ".goat-flow/state/install/";
 const STATE_PATHS = [
   `${STATE_DIRECTORY}managed.json`,
   ...KNOWN_AGENT_IDS.map((agent) => `${STATE_DIRECTORY}${agent}.json`),

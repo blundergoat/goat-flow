@@ -427,8 +427,8 @@ function managedBaselineEvidencePath(
   baseline: ManagedInstallStateFacade,
 ): string {
   return baseline.source === "v2"
-    ? ".goat-flow/install-state/managed.json"
-    : ".goat-flow/install-state";
+    ? ".goat-flow/state/install/managed.json"
+    : ".goat-flow/state/install";
 }
 
 // Hash in-memory expected or installed text with the install baseline's exact-byte contract.

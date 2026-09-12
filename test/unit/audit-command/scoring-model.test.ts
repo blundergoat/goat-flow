@@ -308,7 +308,7 @@ describe("Audit scoring model", () => {
               "Local scratch note `.goat-flow/scratchpad/notes.md`.",
               "Local project identity `.goat-flow/project-id`.",
               "Local dashboard state `.goat-flow/dashboard-state.json`.",
-              "Local path claim `.goat-flow/write-claims/example.claim`.",
+              "Local path claim `.goat-flow/state/locks/example.claim`.",
             ].join("\n");
           }
           return null;
@@ -320,7 +320,7 @@ describe("Audit scoring model", () => {
             ".goat-flow/scratchpad/notes.md",
             ".goat-flow/project-id",
             ".goat-flow/dashboard-state.json",
-            ".goat-flow/write-claims/example.claim",
+            ".goat-flow/state/locks/example.claim",
           ].includes(path),
       }),
     });

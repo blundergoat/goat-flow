@@ -483,8 +483,9 @@ function scanPathReferences(
 
 const INTENTIONAL_LOCAL_STATE_PATHS = new Set([".goat-flow/project-id"]);
 const INTENTIONAL_LOCAL_STATE_PREFIXES = [
-  ".goat-flow/install-state/",
-  ".goat-flow/write-claims/",
+  ".goat-flow/state/",
+  ".goat-flow/install-state/", // Legacy upgrade input, absent after migration.
+  ".goat-flow/write-claims/", // Legacy recovery input, absent after migration.
 ] as const;
 
 /** ADR-051 compatibility alias; remove this entry only when support for the former commit-guide path retires. */

@@ -7,6 +7,7 @@
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { migrateLegacyLocalState } from "./local-state-migration.js";
 
 import { getAgentProfile, getAgentProfiles } from "./agents/registry.js";
 import { classifyProjectState } from "./classify-state.js";
@@ -936,7 +937,7 @@ function managedInstallStateRecovery(
   agent: AgentId,
 ): CLIError {
   return new CLIError(
-    `Managed files were verified, but install state was not recorded. The previous managed baseline is intact and no confirmed receipt was written. Repair write access to .goat-flow/install-state/, then rerun: goat-flow install ${quoteManagedInstallProjectArgument(projectPath)} --agent ${agent}`,
+    `Managed files were verified, but install state was not recorded. The previous managed baseline is intact and no confirmed receipt was written. Repair write access to .goat-flow/state/install/, then rerun: goat-flow install ${quoteManagedInstallProjectArgument(projectPath)} --agent ${agent}`,
     1,
   );
 }
@@ -1033,7 +1034,7 @@ async function runClaimedManagedInstall(
 export async function handleInstallCommand(options: ParsedCLI): Promise<void> {
   const selectedAgent = validateManagedSetupRequest(options);
   const authority = readManagedSetupAuthority(options);
-  const installPreview = buildInstallPreview(options, selectedAgent, authority);
+  let installPreview = buildInstallPreview(options, selectedAgent, authority);
   const installerLaunch = buildInstallerInvocation({
     scriptPath: getTemplatePath("workflow/install-goat-flow.sh"),
     projectPath: options.projectPath,
@@ -1064,6 +1065,23 @@ export async function handleInstallCommand(options: ParsedCLI): Promise<void> {
   // Invalid launch arguments stop before Bash can change the selected target.
   if (!installerLaunch.ok) {
     throw new CLIError(installerLaunch.error, 1);
+  }
+
+  // Relocation is an apply-only upgrade step, after preview and launch admission.
+  try {
+    if (migrateLegacyLocalState(options.projectPath)) {
+      installPreview = buildInstallPreview(options, selectedAgent, authority);
+      const migrationBlocker = managedSetupAdmissionFailure(
+        installPreview,
+        authority,
+      );
+      if (migrationBlocker !== null) throw new CLIError(migrationBlocker, 1);
+    }
+  } catch (error) {
+    throw new CLIError(
+      error instanceof Error ? error.message : "Local-state migration failed.",
+      1,
+    );
   }
 
   const claims = acquireManagedInstallClaims(

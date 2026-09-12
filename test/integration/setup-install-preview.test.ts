@@ -32,7 +32,7 @@ import {
 
 const CODEX_GOAT_CLARITY_PATH = ".agents/skills/goat-clarity/SKILL.md";
 const MANAGED_INSTALL_STATE_PATH =
-  ".goat-flow/install-state/managed.json" as const;
+  ".goat-flow/state/install/managed.json" as const;
 
 /**
  * Read, mutate, and canonically replace the disposable project's v2 state fixture.
@@ -274,7 +274,7 @@ describe("managed setup preview", () => {
     assert.doesNotMatch(state, new RegExp(projectPath, "u"));
     assert.match(
       readFileSync(
-        join(projectPath, ".goat-flow", "install-state", "codex.json"),
+        join(projectPath, ".goat-flow", "state", "install", "codex.json"),
         "utf-8",
       ),
       /goat-flow\.install-state\.v1-cutover/u,
@@ -935,7 +935,7 @@ describe("managed setup preview", () => {
     const projectPath = makeTempProject();
     const redirectedStatePath = makeTempProject();
     try {
-      mkdirSync(join(projectPath, ".goat-flow"), { recursive: true });
+      mkdirSync(join(projectPath, ".goat-flow/state"), { recursive: true });
       writeFileSync(
         join(redirectedStatePath, "codex.json"),
         `${JSON.stringify({
@@ -950,7 +950,7 @@ describe("managed setup preview", () => {
         !symlinkDirectoryOrSkip(
           testContext,
           redirectedStatePath,
-          join(projectPath, ".goat-flow", "install-state"),
+          join(projectPath, ".goat-flow", "state", "install"),
         )
       ) {
         return;

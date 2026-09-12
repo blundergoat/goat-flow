@@ -226,7 +226,8 @@ describe("path write claims", () => {
     );
     const goatFlowDirectory = join(projectRoot, ".goat-flow");
     const originalGoatFlowDirectory = join(projectRoot, "owned-goat-flow");
-    const claimDirectory = join(goatFlowDirectory, "write-claims");
+    const claimDirectory = join(goatFlowDirectory, "state", "locks");
+    fs.mkdirSync(join(outsideRoot, "state"));
     const originalMkdirSync = fs.mkdirSync;
     let hasSwappedParent = false;
     context.mock.method(
@@ -255,7 +256,7 @@ describe("path write claims", () => {
     }
     assert.equal(capturedClaimError.reason, "claim-integrity");
     assert.equal(capturedClaimError.targetPath, targetPath);
-    const outsideClaimDirectory = join(outsideRoot, "write-claims");
+    const outsideClaimDirectory = join(outsideRoot, "state", "locks");
     const outsideClaimNames = fs.existsSync(outsideClaimDirectory)
       ? fs.readdirSync(outsideClaimDirectory)
       : [];
@@ -279,8 +280,8 @@ describe("path write claims", () => {
     );
     const goatFlowDirectory = join(projectRoot, ".goat-flow");
     const originalGoatFlowDirectory = join(projectRoot, "owned-goat-flow");
-    const outsideClaimDirectory = join(outsideRoot, "write-claims");
-    fs.mkdirSync(outsideClaimDirectory);
+    const outsideClaimDirectory = join(outsideRoot, "state", "locks");
+    fs.mkdirSync(outsideClaimDirectory, { recursive: true });
     const originalOpenSync = fs.openSync;
     let hasSwappedAtClaimOpen = false;
     context.mock.method(
@@ -503,7 +504,7 @@ describe("path write claims", () => {
     let replacementPath = "";
     context.mock.method(fs, "fsyncSync", (descriptor: number) => {
       originalFsyncSync(descriptor);
-      const claimDirectory = join(projectRoot, ".goat-flow", "write-claims");
+      const claimDirectory = join(projectRoot, ".goat-flow", "state", "locks");
       const markerName = fs.readdirSync(claimDirectory)[0];
       assert.ok(markerName);
       replacementPath = join(claimDirectory, markerName);
@@ -706,7 +707,7 @@ describe("path write claims", () => {
       targetPath,
     );
     assert.equal(
-      fs.existsSync(join(projectRoot, ".goat-flow", "write-claims")),
+      fs.existsSync(join(projectRoot, ".goat-flow", "state", "locks")),
       false,
     );
   });

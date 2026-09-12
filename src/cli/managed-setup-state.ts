@@ -22,6 +22,7 @@ import { dirname, isAbsolute, join, posix, win32 } from "node:path";
 import type { ManagedSetupPreview } from "./managed-setup-preview.js";
 import { compareVersions, isReleaseVersion } from "./version-compare.js";
 import { KNOWN_AGENT_IDS, type AgentId } from "./types.js";
+import { installStateRelativeDirectory } from "./local-state-migration.js";
 
 const MANAGED_INSTALL_STATE_SCHEMA = "goat-flow.install-state.v1" as const;
 
@@ -61,7 +62,11 @@ export function managedInstallStatePath(
   projectPath: string,
   agent: AgentId,
 ): string {
-  return join(projectPath, ".goat-flow", "install-state", `${agent}.json`);
+  return join(
+    projectPath,
+    installStateRelativeDirectory(projectPath),
+    `${agent}.json`,
+  );
 }
 
 /**
@@ -174,8 +179,12 @@ function assertManagedStateParentDirectories(projectPath: string): void {
   const parentDirectories = [
     { path: join(projectPath, ".goat-flow"), displayPath: ".goat-flow" },
     {
-      path: join(projectPath, ".goat-flow", "install-state"),
-      displayPath: ".goat-flow/install-state",
+      path: join(projectPath, ".goat-flow/state"),
+      displayPath: ".goat-flow/state",
+    },
+    {
+      path: join(projectPath, installStateRelativeDirectory(projectPath)),
+      displayPath: installStateRelativeDirectory(projectPath),
     },
   ];
   // Existing parents must be real directories so a target symlink cannot redirect state evidence.
@@ -209,12 +218,12 @@ function assertManagedStateWritePath(
   const statePath = managedInstallStatePath(projectPath, agent);
   const stateStats = readStatePathStats(
     statePath,
-    `.goat-flow/install-state/${agent}.json`,
+    `.goat-flow/state/install/${agent}.json`,
   );
   // An existing baseline may be replaced only when it is a regular local file.
   if (stateStats !== null && !stateStats.isFile()) {
     throw new Error(
-      `.goat-flow/install-state/${agent}.json must be a project-local regular file.`,
+      `.goat-flow/state/install/${agent}.json must be a project-local regular file.`,
     );
   }
 }
@@ -226,7 +235,7 @@ function assertManagedStateWritePath(
  * Invariant: only system-owned, non-retired rows enter the baseline, because a hash for user-owned or generated content would later read as drift
  * against bytes the user legitimately controls.
  *
- * Side effect: writes the agent's install-state file under `.goat-flow/install-state/`.
+ * Side effect: writes the agent's install-state file under `.goat-flow/state/install/`.
  * Error behavior: throws when the write path is unsafe, leaving the previous baseline in place.
  *
  * @param projectPath - selected target root; empty is invalid upstream and cannot store state safely
@@ -392,7 +401,11 @@ class ManagedInstallStateEvidenceError extends Error {
  * @returns absolute managed.json path below the selected project's install-state directory
  */
 export function managedInstallStateV2Path(projectPath: string): string {
-  return join(projectPath, ".goat-flow", "install-state", "managed.json");
+  return join(
+    projectPath,
+    installStateRelativeDirectory(projectPath),
+    "managed.json",
+  );
 }
 
 /** Compare text by its UTF-8 bytes, matching ADR-064 canonical array ordering. */
@@ -832,7 +845,7 @@ function readLegacyInstallStateInventory(
 ): ParsedLegacyInstallState[] {
   const inventory: ParsedLegacyInstallState[] = [];
   for (const agent of KNOWN_AGENT_IDS) {
-    const affectedPath = `.goat-flow/install-state/${agent}.json`;
+    const affectedPath = `${installStateRelativeDirectory(projectPath)}/${agent}.json`;
     try {
       const statePath = managedInstallStatePath(projectPath, agent);
       const stateStats = readStatePathStats(statePath, affectedPath);
@@ -1004,11 +1017,10 @@ function facadeEvidence(state: ManagedInstallStateV2): {
 function readPersistedManagedInstallStateFacade(
   statePath: string,
   stateStats: Stats,
+  relativeStatePath: string,
 ): ManagedInstallStateFacade {
   if (!stateStats.isFile() || stateStats.nlink !== 1) {
-    throw new Error(
-      ".goat-flow/install-state/managed.json must be a safe regular file.",
-    );
+    throw new Error(`${relativeStatePath} must be a safe regular file.`);
   }
   let serializedState: string;
   try {
@@ -1103,17 +1115,23 @@ function readLegacyManagedInstallStateFacade(
 export function readManagedInstallStateFacade(
   projectPath: string,
 ): ManagedInstallStateFacade {
-  const statePath = managedInstallStateV2Path(projectPath);
   let source: ManagedInstallStateFacade["source"] = "legacy-bootstrap";
+  let stateDirectory = ".goat-flow/state/install";
   try {
+    stateDirectory = installStateRelativeDirectory(projectPath);
     assertManagedStateParentDirectories(projectPath);
+    const statePath = managedInstallStateV2Path(projectPath);
     const stateStats = readStatePathStats(
       statePath,
-      ".goat-flow/install-state/managed.json",
+      `${stateDirectory}/managed.json`,
     );
     if (stateStats !== null) {
       source = "v2";
-      return readPersistedManagedInstallStateFacade(statePath, stateStats);
+      return readPersistedManagedInstallStateFacade(
+        statePath,
+        stateStats,
+        `${stateDirectory}/managed.json`,
+      );
     }
     return readLegacyManagedInstallStateFacade(projectPath);
   } catch (error) {
@@ -1129,9 +1147,7 @@ export function readManagedInstallStateFacade(
       staleReceiptAgents: [],
       affectedAgents: structuredError?.affectedAgents ?? [],
       affectedPaths: structuredError?.affectedPaths ?? [
-        source === "v2"
-          ? ".goat-flow/install-state/managed.json"
-          : ".goat-flow/install-state",
+        source === "v2" ? `${stateDirectory}/managed.json` : stateDirectory,
       ],
       error:
         error instanceof Error
@@ -1149,11 +1165,11 @@ function assertManagedStateV2WritePath(projectPath: string): void {
   assertManagedStateParentDirectories(projectPath);
   const stateStats = readStatePathStats(
     managedInstallStateV2Path(projectPath),
-    ".goat-flow/install-state/managed.json",
+    ".goat-flow/state/install/managed.json",
   );
   if (stateStats !== null && (!stateStats.isFile() || stateStats.nlink !== 1)) {
     throw new Error(
-      ".goat-flow/install-state/managed.json must be a safe regular file.",
+      ".goat-flow/state/install/managed.json must be a safe regular file.",
     );
   }
 }

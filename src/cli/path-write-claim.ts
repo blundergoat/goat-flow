@@ -1,6 +1,6 @@
 /**
- * Coordinates project-file writers used by `install` and `learn new` with path-keyed exclusive claims.
- * Use before either command replaces shared files, so a concurrent writer is refused instead of overwriting newer user work.
+ * Coordinates `install`, hook changes and `learn new` with path-keyed exclusive claims.
+ * Use before these operations replace shared files, so a concurrent writer is refused instead of overwriting newer user work.
  *
  * Callers capture target identities before admission, hold the returned batch through the complete write transaction, and release it in `finally`.
  * Claims never expire; an abandoned marker needs explicit operator-confirmed recovery.
@@ -8,8 +8,12 @@
 import { createHash, randomBytes } from "node:crypto";
 import fs from "node:fs";
 import { join, posix, resolve } from "node:path";
+import {
+  claimInspectionDirectory,
+  hasLegacyLocalState,
+} from "./local-state-migration.js";
 
-const CLAIM_DIRECTORY = ".goat-flow/write-claims";
+const CLAIM_DIRECTORY = ".goat-flow/state/locks";
 const CLAIM_SCHEMA = "goat-flow.path-write-claim.v1";
 const CLAIM_KEY_DOMAIN = `${CLAIM_SCHEMA}\0`;
 const MAX_CLAIM_BYTES = 4096;
@@ -39,6 +43,7 @@ export type PathWriteClaimFailureReason =
   | "duplicate-target"
   | "invalid-identity"
   | "invalid-target"
+  | "migration-required"
   | "target-changed"
   | "target-unreadable"
   | "unsafe-project"
@@ -85,6 +90,8 @@ const FAILURE_MESSAGES = {
     `${targetPath} has an invalid expected content identity.`,
   "invalid-target": (targetPath: string) =>
     `${targetPath} is not a normalized project-relative target path.`,
+  "migration-required": () =>
+    "Legacy local state requires migration. Stop and upgrade all writers, then run goat-flow install for this project before retrying.",
   "target-changed": (targetPath: string) =>
     `${targetPath} changed after it was read; no write admission was granted.`,
   "target-unreadable": (targetPath: string) =>
@@ -449,24 +456,38 @@ function assertClaimDirectory(
   }
 }
 
-/** Create and validate the project-local claim directory. */
+/**
+ * Create and validate the project-local claim directory after storage migration.
+ * @throws PathWriteClaimError when legacy storage remains or coordination paths are unsafe or unavailable
+ */
 function ensureClaimDirectory(
   projectRoot: string,
   targetPath: string,
 ): ClaimDirectory {
+  let hasLegacyState: boolean;
+  try {
+    hasLegacyState = hasLegacyLocalState(projectRoot);
+  } catch {
+    throw new PathWriteClaimError("claim-integrity", targetPath);
+  }
+  if (hasLegacyState) {
+    throw new PathWriteClaimError("migration-required", targetPath);
+  }
   const goatFlowDirectory = join(projectRoot, ".goat-flow");
   const goatFlowSnapshot = ensureCoordinationDirectory(
     goatFlowDirectory,
     targetPath,
   );
-  const claimDirectory = join(goatFlowDirectory, "write-claims");
+  const stateDirectory = join(goatFlowDirectory, "state");
+  const stateSnapshot = ensureCoordinationDirectory(stateDirectory, targetPath);
+  const claimDirectory = join(projectRoot, CLAIM_DIRECTORY);
   const claimDirectorySnapshot = ensureCoordinationDirectory(
     claimDirectory,
     targetPath,
   );
   const validatedClaimDirectory = {
     path: claimDirectory,
-    snapshots: [goatFlowSnapshot, claimDirectorySnapshot],
+    snapshots: [goatFlowSnapshot, stateSnapshot, claimDirectorySnapshot],
   };
   // Creating the child traverses its parent again, so reject a replacement before any marker allocation.
   assertClaimDirectory(validatedClaimDirectory, targetPath);
@@ -484,11 +505,20 @@ function existingClaimDirectory(
   projectRoot: string,
   targetPath: string,
 ): string | null {
+  let relativeDirectory: string;
+  try {
+    relativeDirectory = claimInspectionDirectory(projectRoot);
+  } catch {
+    throw new PathWriteClaimError("claim-integrity", targetPath);
+  }
   const components = [
     join(projectRoot, ".goat-flow"),
-    join(projectRoot, CLAIM_DIRECTORY),
+    ...(relativeDirectory === CLAIM_DIRECTORY
+      ? [join(projectRoot, ".goat-flow/state")]
+      : []),
+    join(projectRoot, relativeDirectory),
   ];
-  // Both coordination components must already exist as real directories before recovery evidence is trusted.
+  // Every ancestor must already exist as a real directory before recovery evidence is trusted.
   for (const component of components) {
     try {
       const stats = fs.lstatSync(component);
@@ -503,7 +533,7 @@ function existingClaimDirectory(
       throw new PathWriteClaimError("coordination-unavailable", targetPath);
     }
   }
-  return components[1] ?? null;
+  return join(projectRoot, relativeDirectory);
 }
 
 /** Derive the filesystem-safe claim filename from one canonical target path. */

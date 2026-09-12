@@ -228,7 +228,8 @@ export function recordStaleBaselineHashes(
   const statePath = join(
     projectPath,
     ".goat-flow",
-    "install-state",
+    "state",
+    "install",
     `${agent}.json`,
   );
   const selectedState = JSON.parse(readFileSync(statePath, "utf-8")) as {
@@ -353,7 +354,8 @@ export function downgradeCodexBaselineToSevenSkills(projectPath: string): void {
   const statePath = join(
     projectPath,
     ".goat-flow",
-    "install-state",
+    "state",
+    "install",
     "codex.json",
   );
   const state = JSON.parse(readFileSync(statePath, "utf-8")) as {

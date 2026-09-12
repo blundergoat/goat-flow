@@ -833,7 +833,7 @@ describe("dashboard guarded hook actions", () => {
       assert.deepEqual(hookApiFileSnapshot(projectPath), newerSnapshot);
       writeFileSync(hookPath, officialBytes);
       writeFileSync(
-        join(projectPath, ".goat-flow/install-state/managed.json"),
+        join(projectPath, ".goat-flow/state/install/managed.json"),
         "{",
       );
       const invalidSnapshot = hookApiFileSnapshot(projectPath);
@@ -862,7 +862,7 @@ function hookApiFileSnapshot(projectPath: string): Record<string, string> {
     })) {
       const path = relativePath ? `${relativePath}/${entry.name}` : entry.name;
       // Claim creation and owner-checked cleanup may happen during a refused operation.
-      if (path === ".goat-flow/write-claims") continue;
+      if (path === ".goat-flow/state/locks") continue;
       // Descend into fixture folders so a refusal cannot hide a changed nested hook file.
       if (entry.isDirectory()) readDirectory(path);
       else

@@ -93,7 +93,8 @@ function writeLegacyBaseline(
   const baselinePath = join(
     projectPath,
     ".goat-flow",
-    "install-state",
+    "state",
+    "install",
     `${agent}.json`,
   );
   mkdirSync(dirname(baselinePath), { recursive: true });
@@ -250,13 +251,13 @@ describe("managed divergence messaging", () => {
           agentFilter,
         });
         const auditEvidence = report.findings.find(
-          (finding) => finding.path === ".goat-flow/install-state",
+          (finding) => finding.path === ".goat-flow/state/install",
         );
         assert.equal(auditEvidence?.message, previewEvidence);
       }
 
       writeFileSync(
-        join(projectPath, ".goat-flow", "install-state", "antigravity.json"),
+        join(projectPath, ".goat-flow", "state", "install", "antigravity.json"),
         "{\n",
       );
       const preview = buildManagedSetupPreview(projectPath, "claude");
@@ -272,7 +273,7 @@ describe("managed divergence messaging", () => {
         agentFilter: "claude",
       });
       const auditEvidence = report.findings.find(
-        (finding) => finding.path === ".goat-flow/install-state",
+        (finding) => finding.path === ".goat-flow/state/install",
       );
       assert.equal(auditEvidence?.message, previewEvidence);
     } finally {
@@ -526,7 +527,7 @@ describe("guarded hook admission", () => {
         }
         // A directory at a late state destination must block earlier queued hook changes.
         if (blocker === "unsafe-state-target") {
-          mkdirSync(join(root, ".goat-flow/install-state/copilot.json"), {
+          mkdirSync(join(root, ".goat-flow/state/install/copilot.json"), {
             recursive: true,
           });
         }
@@ -565,7 +566,7 @@ function hookDestinationSnapshot(root: string): Record<string, string> {
     })) {
       const path = directory ? `${directory}/${entry.name}` : entry.name;
       // Write-claim markers coordinate writers and are outside the managed-destination no-change guarantee.
-      if (path === ".goat-flow/write-claims") continue;
+      if (path === ".goat-flow/state/locks") continue;
       // Nested hook files must participate in the exact-byte refusal comparison.
       if (entry.isDirectory()) readDirectory(path);
       else snapshot[path] = readFileSync(join(root, path)).toString("base64");
@@ -645,13 +646,13 @@ describe("guarded hook sync", () => {
         ),
       );
       const stateBytes = readFileSync(
-        join(projectPath, ".goat-flow/install-state/managed.json"),
+        join(projectPath, ".goat-flow/state/install/managed.json"),
         "utf-8",
       );
       syncHookStates(projectPath);
       assert.equal(
         readFileSync(
-          join(projectPath, ".goat-flow/install-state/managed.json"),
+          join(projectPath, ".goat-flow/state/install/managed.json"),
           "utf-8",
         ),
         stateBytes,
@@ -665,7 +666,7 @@ describe("guarded hook sync", () => {
   it("refuses differing unknown files through the real CLI and safely adopts identical copies", () => {
     const projectPath = createClaudeProject();
     try {
-      rmSync(join(projectPath, ".goat-flow/install-state"), {
+      rmSync(join(projectPath, ".goat-flow/state/install"), {
         recursive: true,
         force: true,
       });
@@ -713,7 +714,7 @@ describe("guarded hook sync", () => {
 
   it("keeps overlapping claims intact across real CLI hook sync and public install refusals", () => {
     const projectPath = createClaudeProject();
-    const targetPath = ".goat-flow/install-state/managed.json";
+    const targetPath = ".goat-flow/state/install/managed.json";
     const claim = acquirePathWriteClaims(projectPath, [
       {
         targetPath,
@@ -769,7 +770,7 @@ describe("guarded hook sync", () => {
       const otherPath = ".goat-flow/hooks/deny-git-mutations.sh";
       const baselinePath = join(
         projectPath,
-        ".goat-flow/install-state/managed.json",
+        ".goat-flow/state/install/managed.json",
       );
       const official = readFileSync(join(projectPath, scriptPath), "utf-8");
       const originalRename = fileSystem.renameSync;
@@ -931,13 +932,13 @@ describe("hook operation recovery boundaries", () => {
     const projectPath = createClaudeProject();
     const originalRename = fileSystem.renameSync;
     try {
-      rmSync(join(projectPath, ".goat-flow/install-state"), {
+      rmSync(join(projectPath, ".goat-flow/state/install"), {
         recursive: true,
         force: true,
       });
       const markerPath = join(
         projectPath,
-        ".goat-flow/install-state/copilot.json",
+        ".goat-flow/state/install/copilot.json",
       );
       const rename = context.mock.method(
         fileSystem,
@@ -959,7 +960,7 @@ describe("hook operation recovery boundaries", () => {
           assert.equal(error.details?.code, "hook-apply-failed");
           assert.ok(
             error.details.changedPaths?.includes(
-              ".goat-flow/install-state/managed.json",
+              ".goat-flow/state/install/managed.json",
             ),
           );
           return true;

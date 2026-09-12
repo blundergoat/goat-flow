@@ -821,7 +821,7 @@ function acquireLearningLoopWriteClaims(
       // Unreleased claims need inspection first; otherwise explain a busy claim or ask the author to retry current files.
       const recovery =
         unreleasedTargets.length > 0
-          ? `inspect .goat-flow/write-claims before retrying; cleanup was not confirmed for ${unreleasedTargets.join(", ")}.`
+          ? `inspect .goat-flow/state/locks before retrying; cleanup was not confirmed for ${unreleasedTargets.join(", ")}.`
           : error.reason === "busy"
             ? `inspect the claim before retrying: ${pathWriteClaimInspectCommand(projectRoot, error.targetPath)}.`
             : "re-run learn new against the current project.";
@@ -853,7 +853,7 @@ function releaseLearningLoopWriteClaims(
   }
   // Successful release needs no extra terminal message after the author's publication result.
   if (unreleasedTargets.length === 0) return;
-  const diagnostic = `Learning-loop write completed without confirmed claim release for ${unreleasedTargets.join(", ")}. Inspect .goat-flow/write-claims before retrying.`;
+  const diagnostic = `Learning-loop write completed without confirmed claim release for ${unreleasedTargets.join(", ")}. Inspect .goat-flow/state/locks before retrying.`;
   // Preserve the original publication failure while still telling the author that claim cleanup needs attention.
   if (didPublicationFail) {
     console.error(diagnostic);

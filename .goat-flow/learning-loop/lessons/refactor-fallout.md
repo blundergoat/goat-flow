@@ -1,6 +1,6 @@
 ---
 category: refactor-fallout
-last_reviewed: 2026-09-05
+last_reviewed: 2026-09-13
 ---
 
 **Scope:** What breaks downstream when code is split, renamed, or extracted - browser script load graphs, source-shape tests that pinned the old layout, and shared scope a split test no longer imports. Using the Gruff analyzer is [gruff-cleanup.md](gruff-cleanup.md); stale built dashboard assets are [dashboard-testing.md](dashboard-testing.md).
@@ -14,6 +14,8 @@ last_reviewed: 2026-09-05
 **What happened:** The 1.16.0 vocabulary rename (`ccf02efb`) renamed parameters and locals across `src` and `test`. Typecheck, build, and lint stayed green locally, and the breakage appeared 16 minutes into CI as 17 failures. Two functions took a parameter renamed onto a narrowed local already declared in the same body, which esbuild rejects with `The symbol "scope" has already been declared`, so all 15 dashboard integration files importing those helpers failed at transform time without running a test. A third file renamed `ms` to `elapsedMs` in a returned object literal but not in the declared return type or call sites, so `fresh.ms` read `undefined`, and a fourth pinned the pre-rename `item` identifier in a source-text assertion.
 
 **Root cause:** `tsconfig.json` excludes `test`, so `npm run typecheck` never compiles test files, and nothing validates a rename inside `test/` until tsx transforms it. A same-name parameter and local is a redeclaration rather than a shadow, so the file does not load at all.
+
+**Recurrence 2026-09-13:** Adding the operational-state parent left two symlink fixtures without their new parent and claim inspection returning the former positional directory component. Typecheck passed, but the focused run reported seven failures. Create the full fixture ancestry and select the leaf by its explicit path before rerunning recovery. Evidence: `src/cli/path-write-claim.ts` (search: `existingClaimDirectory`), `test/unit/managed-setup-preview.test.ts` (search: `refuses a target-controlled symlink`), `test/integration/local-state-migration.test.ts` (search: `blocks legacy write admission`).
 
 ## Lesson: Check staged deletions after bulk gruff rewrites
 

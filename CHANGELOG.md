@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Changed
+
+- **BREAKING: Local operational state moves under `.goat-flow/state/`** - Stop and upgrade every writer, then run `goat-flow install . --agent <id>` to move installation records to `state/install/` and write claims to `state/locks/`. Outstanding claims or occupied destinations block migration; the old paths are removed, and older goat-flow versions must not run afterward. This direct cutover replaces a compatibility-alias period.
+
 ### Fixed
 
 - **Browser evidence instructions follow installed capabilities** - Check `browser-use --help` before choosing the Python-stdin workflow or legacy commands; the playbook now documents `browser-use skill`, bounded waits, fixture-login safeguards, and tab recovery.

@@ -286,7 +286,7 @@ describe("contextual CLI help", () => {
       "Apply may update managed.json and every supported agent's cutover marker.",
       "After managed.json exists, legacy hashes are non-authoritative; ambiguous legacy history blocks every agent.",
       "Package, path-set, row-generation, target-byte, or cutover-marker drift makes a receipt stale.",
-      "After verified bytes but a failed state write, repair .goat-flow/install-state/ and rerun the printed command.",
+      "After verified bytes but a failed state write, repair .goat-flow/state/install/ and rerun the printed command.",
       "After cutover, workflow/install-goat-flow.sh refuses before mutation; use the public CLI.",
       "Force cannot repair install evidence, and ordinary install does not automatically prune it.",
     ]) {
@@ -301,8 +301,8 @@ describe("contextual CLI help", () => {
       "utf8",
     );
     for (const expectedReferenceGuidance of [
-      ".goat-flow/install-state/managed.json` is the sole project-wide baseline",
-      "every supported agent's `.goat-flow/install-state/<agent>.json` cutover marker",
+      ".goat-flow/state/install/managed.json` is the sole project-wide baseline",
+      "every supported agent's `.goat-flow/state/install/<agent>.json` cutover marker",
       "equal or unrankable versions that disagree on a path hash, blocks every agent",
       "The previous baseline remains intact and no new confirmed receipt is published.",
       "it never prunes them by inference.",

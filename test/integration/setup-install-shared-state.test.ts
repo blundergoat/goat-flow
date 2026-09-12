@@ -14,6 +14,8 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  readdirSync,
+  renameSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -35,7 +37,7 @@ import {
 const SHARED_HOOK_PATH = ".goat-flow/hooks/run-with-bash.mjs";
 const SHARED_SKILL_PATH = ".agents/skills/goat/SKILL.md";
 const CLAUDE_SKILL_PATH = ".claude/skills/goat/SKILL.md";
-const MANAGED_STATE_PATH = ".goat-flow/install-state/managed.json";
+const MANAGED_STATE_PATH = ".goat-flow/state/install/managed.json";
 
 /** One stable outcome the shared-state design must preserve. */
 interface DecisionRow {
@@ -218,7 +220,8 @@ function setLegacyVersion(
   const statePath = join(
     projectPath,
     ".goat-flow",
-    "install-state",
+    "state",
+    "install",
     `${agent}.json`,
   );
   const state = JSON.parse(readFileSync(statePath, "utf-8")) as {
@@ -250,7 +253,7 @@ function installedLegacyPair(): string {
 function readCutoverMarker(projectPath: string, agent: string): CutoverMarker {
   return JSON.parse(
     readFileSync(
-      join(projectPath, ".goat-flow", "install-state", `${agent}.json`),
+      join(projectPath, ".goat-flow", "state", "install", `${agent}.json`),
       "utf-8",
     ),
   ) as CutoverMarker;
@@ -560,7 +563,7 @@ describe("one baseline per managed path", () => {
   it("labels malformed selected legacy state as bootstrap-blocking", () => {
     const projectPath = installedLegacyPair();
     writeFileSync(
-      join(projectPath, ".goat-flow", "install-state", "antigravity.json"),
+      join(projectPath, ".goat-flow", "state", "install", "antigravity.json"),
       "not json\n",
     );
 
@@ -572,7 +575,7 @@ describe("one baseline per managed path", () => {
   it("blocks on malformed legacy state when another agent is selected", () => {
     const projectPath = installedLegacyPair();
     writeFileSync(
-      join(projectPath, ".goat-flow", "install-state", "antigravity.json"),
+      join(projectPath, ".goat-flow", "state", "install", "antigravity.json"),
       "not json\n",
     );
 
@@ -755,7 +758,8 @@ describe("one baseline per managed path", () => {
       const cutoverMarkerPath = join(
         projectPath,
         ".goat-flow",
-        "install-state",
+        "state",
+        "install",
         "codex.json",
       );
       const oldCutoverMarker = readFileSync(cutoverMarkerPath, "utf-8");
@@ -795,7 +799,7 @@ describe("one baseline per managed path", () => {
           '"$GOAT_FLOW_TEST_REAL_BASH" "$@"',
           "status=$?",
           'if [[ "$status" -eq 0 && "${1:-}" == */workflow/install-goat-flow.sh ]]; then',
-          '  mkdir "$2/.goat-flow/install-state/managed.json.tmp-$PPID"',
+          '  mkdir "$2/.goat-flow/state/install/managed.json.tmp-$PPID"',
           "fi",
           'exit "$status"',
           "",
@@ -815,7 +819,7 @@ describe("one baseline per managed path", () => {
       assert.equal(failedInstall.status, 1, failedInstall.stdout);
       assert.equal(
         failedInstall.stderr.trim().split("\n").at(-1),
-        `Managed files were verified, but install state was not recorded. The previous managed baseline is intact and no confirmed receipt was written. Repair write access to .goat-flow/install-state/, then rerun: goat-flow install '${projectPath.replace(/\\/gu, "/")}' --agent codex`,
+        `Managed files were verified, but install state was not recorded. The previous managed baseline is intact and no confirmed receipt was written. Repair write access to .goat-flow/state/install/, then rerun: goat-flow install '${projectPath.replace(/\\/gu, "/")}' --agent codex`,
       );
       assert.equal(readFileSync(cutoverMarkerPath, "utf-8"), oldCutoverMarker);
       assert.equal(readFileSync(hookPath, "utf-8"), expectedHookBytes);
@@ -928,5 +932,46 @@ describe("hook-only shared history upgrades", () => {
       );
       previousGeneration = hookRow.generation;
     }
+  });
+});
+
+describe("operational-state storage upgrade", () => {
+  it("previews legacy evidence without writes and upgrades through public install", () => {
+    const root = makeTempProject();
+    const fresh = runCliInstaller(root, "--agent", "codex");
+    assert.equal(fresh.status, 0, fresh.stderr || fresh.stdout);
+    const baseline = readFileSync(
+      join(root, ".goat-flow/state/install/managed.json"),
+    );
+    renameSync(
+      join(root, ".goat-flow/state/install"),
+      join(root, ".goat-flow/install-state"),
+    );
+    renameSync(
+      join(root, ".goat-flow/state/locks"),
+      join(root, ".goat-flow/write-claims"),
+    );
+    const preview = runCliInstaller(
+      root,
+      "--agent",
+      "codex",
+      "--dry-run",
+      "--format",
+      "json",
+    );
+    assert.equal(preview.status, 0, preview.stderr || preview.stdout);
+    assert.equal(JSON.parse(preview.stdout).baselineStatus, "loaded");
+    assert.deepEqual(readdirSync(join(root, ".goat-flow/state")), []);
+    const direct = runInstaller(root, "--agent", "codex");
+    assert.equal(direct.status, 1, direct.stderr || direct.stdout);
+    assert.match(direct.stderr, /legacy local state requires migration/u);
+    const upgrade = runCliInstaller(root, "--agent", "codex");
+    assert.equal(upgrade.status, 0, upgrade.stderr || upgrade.stdout);
+    assert.deepEqual(
+      readFileSync(join(root, ".goat-flow/state/install/managed.json")),
+      baseline,
+    );
+    assert.equal(existsSync(join(root, ".goat-flow/install-state")), false);
+    assert.equal(existsSync(join(root, ".goat-flow/write-claims")), false);
   });
 });

@@ -262,7 +262,7 @@ function conditionalProjectWrites(
           },
         ]),
     {
-      path: ".goat-flow/install-state/managed.json",
+      path: ".goat-flow/state/install/managed.json",
       ownership: "generated",
       seedable: true,
       replaceable: false,
@@ -270,7 +270,7 @@ function conditionalProjectWrites(
         "Install records the project-wide hash-only baseline and verified agent receipts after the managed refresh.",
     },
     ...KNOWN_AGENT_IDS.map((knownAgent) => ({
-      path: `.goat-flow/install-state/${knownAgent}.json`,
+      path: `.goat-flow/state/install/${knownAgent}.json`,
       ownership: "generated" as const,
       seedable: true,
       replaceable: false,

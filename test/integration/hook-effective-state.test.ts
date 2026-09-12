@@ -118,7 +118,7 @@ function recordManagedHookBaseline(
   agentId: "claude" | "codex",
   managedPaths: readonly string[],
 ): void {
-  const stateDirectory = join(projectPath, ".goat-flow", "install-state");
+  const stateDirectory = join(projectPath, ".goat-flow", "state", "install");
   mkdirSync(stateDirectory, { recursive: true });
   writeFileSync(
     join(stateDirectory, `${agentId}.json`),
@@ -365,7 +365,7 @@ describe("effective hook state", () => {
     initializeDisposableGitProject(projectPath);
     syncHookStates(projectPath);
     // A clone contains committed hooks but omits local install history, so this case removes the fixture-only state.
-    rmSync(join(projectPath, ".goat-flow/install-state"), {
+    rmSync(join(projectPath, ".goat-flow/state/install"), {
       recursive: true,
       force: true,
     });

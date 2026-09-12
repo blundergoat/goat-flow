@@ -114,7 +114,7 @@ function blockingEntry(
   status: "malformed-blocking" | "conflicting",
 ): ManagedInstallEvidenceEntry {
   const affectedPaths = baseline.facade.affectedPaths;
-  const subject = affectedPaths.join(", ") || ".goat-flow/install-state";
+  const subject = affectedPaths.join(", ") || ".goat-flow/state/install";
   const reasonPrefix = baseline.error ?? "Managed install evidence is invalid.";
   if (status === "malformed-blocking") {
     return {
@@ -176,7 +176,7 @@ function receiptProblems(
     baseline.cutoverEvidence?.incompatibleAgents.includes(receipt.agent) ===
     true
   ) {
-    const markerPath = `.goat-flow/install-state/${receipt.agent}.json`;
+    const markerPath = `.goat-flow/state/install/${receipt.agent}.json`;
     problems.push({
       path: markerPath,
       reason: `The cutover marker for ${receipt.agent} is missing or incompatible.`,
@@ -305,7 +305,7 @@ function cutoverEntry(
     status: "cutover-incompatible",
     subjects: {
       agents,
-      paths: agents.map((agent) => `.goat-flow/install-state/${agent}.json`),
+      paths: agents.map((agent) => `.goat-flow/state/install/${agent}.json`),
     },
     canSelectInstalledAgent: false,
     reason:

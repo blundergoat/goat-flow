@@ -95,9 +95,7 @@ describe("hook sync migration and claim recovery", () => {
         (path) => {
           // Lost delete permission strands only this fixture's claims, as a failed Sync can on a user's project.
           if (
-            String(path).startsWith(
-              join(projectPath, ".goat-flow/write-claims"),
-            )
+            String(path).startsWith(join(projectPath, ".goat-flow/state/locks"))
           ) {
             throw Object.assign(new Error("fixture claim cleanup denied"), {
               code: "EACCES",

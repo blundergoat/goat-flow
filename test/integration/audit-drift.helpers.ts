@@ -355,7 +355,7 @@ export function writeHookFixtures(root: string): void {
 export function setupInstallRoundTripFixture(): string {
   const parent = mkdtempSync(join(tmpdir(), "goat-flow-install-roundtrip-"));
   const root = join(parent, "repo");
-  const localInstallStateDirectory = join(".goat-flow", "install-state");
+  const localInstallStateDirectory = join(".goat-flow", "state", "install");
   cpSync(PROJECT_ROOT, root, {
     recursive: true,
     filter: (src) => {
