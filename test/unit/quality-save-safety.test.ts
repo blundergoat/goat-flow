@@ -4,8 +4,10 @@
  */
 import { execFileSync } from "node:child_process";
 import {
+  closeSync,
   mkdirSync,
   mkdtempSync,
+  openSync,
   readFileSync,
   readdirSync,
   renameSync,
@@ -68,8 +70,10 @@ describe("quality save safety", () => {
   /**
    * Fixture purpose: relocates the allocated parent during descriptor-bound writing and proves the post-write identity gate rejects it.
    * Filesystem side effects: renames and replaces paths only inside the temporary project root.
+   * Error behavior: skips only when the host denies the open-child rename with EPERM;
+   * other setup failures propagate.
    */
-  it("fails closed when the allocated report parent moves during writing", () => {
+  it("fails closed when the allocated report parent moves during writing", (t) => {
     const projectRoot = mkdtempSync(resolve(tmpdir(), "quality-relocated-"));
     execFileSync("git", ["-C", projectRoot, "init", "--quiet"]);
     writeFileSync(
@@ -83,6 +87,34 @@ describe("quality save safety", () => {
     );
 
     try {
+      // Probe the same open-child rename before crediting the saver with containment.
+      // Linux CI's test-fast job runs the invariant when this host cannot stage it.
+      const probeDirectory = resolve(projectRoot, "rename-probe");
+      mkdirSync(probeDirectory);
+      const probeDescriptor = openSync(
+        resolve(probeDirectory, "report"),
+        "wx",
+        0o600,
+      );
+      try {
+        renameSync(probeDirectory, `${probeDirectory}-moved`);
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          "code" in error &&
+          error.code === "EPERM" &&
+          "syscall" in error &&
+          error.syscall === "rename"
+        ) {
+          t.skip(
+            "Host denies renaming a directory with an open report (EPERM)",
+          );
+          return;
+        }
+        throw error;
+      } finally {
+        closeSync(probeDescriptor);
+      }
       assert.throws(
         () =>
           persistQualityReportText(

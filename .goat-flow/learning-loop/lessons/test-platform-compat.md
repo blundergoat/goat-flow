@@ -1,6 +1,6 @@
 ---
 category: test-platform-compat
-last_reviewed: 2026-08-27
+last_reviewed: 2026-09-13
 ---
 
 **Scope:** Platform and runtime differences that break tests - CI Node versions older than local, Windows path/URL shapes and symlink privileges, filesystem-clock skew, and npm scripts that assume a POSIX shell. Choosing and invoking the runner is [test-execution-environment.md](test-execution-environment.md); shell and process behaviour under a test is [test-shell-environment.md](test-shell-environment.md).
@@ -49,13 +49,14 @@ spawnSync(process.execPath, ["--import", TSX_LOADER_URL, CLI_PATH, ...args], ...
 
 ## Lesson: Windows test runs require explicit EPERM handling for symlink fixtures
 
-**Status:** active | **Created:** 2026-05-11 | **Trigger phase:** ACT | **Incident count:** 3 | **Latest occurrence:** 2026-08-27
+**Status:** active | **Created:** 2026-05-11 | **Trigger phase:** ACT | **Incident count:** 4 | **Latest occurrence:** 2026-09-13
 **Caught at:** VERIFY
 
 **Prevention:**
-1. Any new test that calls `symlinkSync`, `linkSync`, or any privileged fs op must guard against `EPERM` with a `t.skip(...)`.
+1. Isolate a privileged link operation before treating its EPERM as a capability skip; unexpected setup failures must propagate.
 2. The skip message must name the platform constraint so a reader knows why coverage dropped, not just that it dropped.
-3. Don't try to detect "is Windows" via `process.platform` - the privilege depends on Developer Mode / admin context, not the OS. Always try-and-catch.
+3. Do not decide a capability skip from process.platform; probe the operation because privileges depend on the host context. A supported equivalent fixture, such as a Windows directory junction, can retain the invariant without a skip.
+4. Capture the underlying error name, code, syscall, path and destination before a saver wraps it. Distinguish symlink refusal from rename or open failure, and name a capable host that runs any skipped security invariant.
 
 **What happened:** Three tests (`main-module guard via symlink`, `skips symlink entries in skill walk roots`, `rejects upload paths that escape through symlinked components`) call `fs.symlinkSync()` to build fixtures. On Windows without Developer Mode (or admin rights), `symlinkSync` throws `EPERM: operation not permitted`. The tests failed because they treated the fixture setup as guaranteed; the production code under test is correct on all platforms, but the test harness can't reach it.
 
@@ -82,6 +83,8 @@ Each test that uses `symlinkSync` accepts a `TestContext` arg (`(t) => { ... }`)
 
 **Recurrence 2026-08-27 (ACTUAL_MEASURED):** The full Gruff smoke suite reached 18 passes but failed six cases on Windows. Two fixture setups called `symlinkSync` without a capability guard and raised `EPERM`; four self-test cases expected `chmod -x` to make an analyzer non-executable, a Unix permission transition this Windows filesystem did not represent. The launcher suite later reached 34 passes but failed its three unguarded symlink fixtures for the same `EPERM`; its focused deadline, escaped-descendant, and output-cap retry passed 7/7. The focused Gruff contract and provider-adaptation suites also passed, so these failures remain test-platform debt rather than evidence against the Codex PostToolUse fix. Anchors: `test/integration/gruff-code-quality-smoke.test.ts` (search: `accepts a contained configured analyzer symlink`), `test/unit/hook-launcher.test.ts` (search: `fails closed when the managed hook script is a symlink`), and `workflow/hooks/gruff-code-quality.sh` (search: `non-executable config override diagnostic failed`).
 
+
+**Recurrence 2026-09-13:** The M68 Windows reproduction passed the successful save but failed three race fixtures. Callback tracing showed two completed directory renames followed by symlink EPERM, and a separate rename EPERM while the report descriptor was open; the latter two surfaced as generic persistence errors. Directory junctions let the redirect fixtures reach their original byte assertions on NTFS. An isolated open-child rename probe gates only EPERM from the rename syscall; other setup errors still fail. The unchanged race and all assertions ran on WSL Linux with zero skips. Evidence: test/unit/quality-subcommands.test.ts (search: "DIRECTORY_LINK_TYPE"; "first-save race replaces an existing ancestor"; "allocation follows a swapped parent"), test/unit/quality-save-safety.test.ts (search: "rename-probe"; "allocated report parent moves during writing"), and src/cli/quality/quality-command.ts (search: "could not persist the validated report").
 ---
 
 ## Lesson: Archive tools need shell-native relative paths on Windows

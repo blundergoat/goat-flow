@@ -28,6 +28,7 @@ import { parseQualityReport } from "../../src/cli/quality/schema.js";
 import { makeQualityScoreRationale } from "../fixtures/quality-score-rationale.js";
 
 const CLI_USAGE_EXIT_CODE = 2;
+const DIRECTORY_LINK_TYPE = process.platform === "win32" ? "junction" : "dir";
 const REPOSITORY_ROOT = resolve(import.meta.dirname, "..", "..");
 const QUALITY_REPORT_TOKEN_FIXTURE = `ghp_${"abcdefghijklmnopqrstuvwxyz"}`;
 
@@ -839,13 +840,18 @@ describe("quality save", () => {
     }
   });
 
+  /** Creates a directory link only in temporary roots and proves no report bytes escape. */
   it("refuses a redirected quality-report directory", () => {
     const projectRoot = makeIgnoredQualityRoot();
     const redirectRoot = mkdtempSync(
       join(tmpdir(), "goat-flow-quality-redirect-"),
     );
     try {
-      symlinkSync(redirectRoot, join(projectRoot, ".goat-flow"));
+      symlinkSync(
+        redirectRoot,
+        join(projectRoot, ".goat-flow"),
+        DIRECTORY_LINK_TYPE,
+      );
       const result = runQualitySave(
         projectRoot,
         currentQualityReport(projectRoot),
@@ -948,7 +954,11 @@ describe("quality save", () => {
             join(projectRoot, ".goat-flow"),
             join(projectRoot, ".goat-flow-original"),
           );
-          symlinkSync(outsideRoot, join(projectRoot, ".goat-flow"), "dir");
+          symlinkSync(
+            outsideRoot,
+            join(projectRoot, ".goat-flow"),
+            DIRECTORY_LINK_TYPE,
+          );
         }
         mkdirSync(directoryPath);
       },
@@ -979,7 +989,7 @@ describe("quality save", () => {
       /** Filesystem side effects: renames the checked parent, symlinks it outside, and allocates an empty report there. */
       openReportFile(reportPath: string): number {
         renameSync(qualityDirectory, `${qualityDirectory}-original`);
-        symlinkSync(outsideRoot, qualityDirectory, "dir");
+        symlinkSync(outsideRoot, qualityDirectory, DIRECTORY_LINK_TYPE);
         return openSync(reportPath, "wx", 0o600);
       },
     };
