@@ -1883,6 +1883,9 @@ if [[ -f package.json ]] && grep -q '"test"' package.json; then
     elif [[ "$test_exit" -eq 124 ]]; then
         fail "$test_label timed out after ${test_timeout_seconds}s"
         printf '%s\n' "$test_output" | tail -20 | details_pipe || true
+    elif [[ "$test_exit" -eq 127 ]] && [[ "$test_output" == *"[preflight] command failed to start:"* ]]; then
+        fail "$test_label unavailable: command failed to start"
+        printf '%s\n' "$test_output" | tail -20 | details_pipe || true
     else
         fail "Tests failed ($fail_count/$test_count failures)"
         grep -m 5 'not ok' <<< "$test_output" | details_pipe || true
@@ -1927,6 +1930,9 @@ if [[ -f package.json ]]; then
         pass "npm audit (0 vulnerabilities)"
     elif [[ "$audit_exit" -eq 124 ]]; then
         fail "npm audit timed out after ${audit_timeout_seconds}s"
+        printf '%s\n' "$audit_output" | tail -20 | details_pipe || true
+    elif [[ "$audit_exit" -eq 127 ]] && [[ "$audit_output" == *"[preflight] command failed to start:"* ]]; then
+        fail "npm audit unavailable: command failed to start"
         printf '%s\n' "$audit_output" | tail -20 | details_pipe || true
     else
         vuln_summary=$(printf '%s\n' "$audit_output" | grep -E '^[0-9]+ vulnerabilities? ' | tail -1 || true)
@@ -1988,6 +1994,9 @@ if [[ -f .gruff-ts.yaml ]]; then
         if [[ "$ratchet_exit" -eq 0 ]]; then
             pass "Gruff warning ratchet: accepted debt unchanged or reduced"
             printf '%s\n' "$ratchet_output" | tail -3 | details_pipe
+        elif [[ "$ratchet_exit" -eq 2 ]]; then
+            fail "Gruff warning ratchet unavailable: analyzer could not run"
+            printf '%s\n' "$ratchet_output" | head -20 | details_pipe
         else
             fail "Gruff warning ratchet failed (exit $ratchet_exit)"
             printf '%s\n' "$ratchet_output" | head -20 | details_pipe
