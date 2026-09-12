@@ -152,6 +152,28 @@ interface RatchetRunOptions {
 }
 
 describe("gruff warning ratchet", () => {
+  it(
+    "launches the installed analyzer through the production ratchet",
+    { skip: Number(process.versions.node.split(".")[0]) < 22 },
+    () => {
+      const environment = { ...process.env };
+      delete environment.GOAT_FLOW_GRUFF_RATCHET_ANALYZER_BIN;
+      delete environment.GOAT_FLOW_GRUFF_RATCHET_BASELINE;
+      const run = spawnSync(process.execPath, [CHECKER], {
+        cwd: REPO_ROOT,
+        env: environment,
+        encoding: "utf8",
+        timeout: 120_000,
+      });
+      assert.ifError(run.error);
+      assert.equal(run.status, 0, run.stderr);
+      assert.match(
+        run.stdout,
+        /gruff warning ratchet:.*analysedFiles \d+ >= floor \d+/u,
+      );
+    },
+  );
+
   let fixtureRoot = "";
   let runSerial = 0;
 
@@ -213,6 +235,7 @@ describe("gruff warning ratchet", () => {
 
   it("fails when the analyzer exits with an operational error", async () => {
     const run = await runRatchet({ analyzerExit: 2, analyzerStderr: "boom" });
+    assert.equal(run.status, 2);
     assertFailure(run, /analyzer failure:.*exit 2/s);
   });
 
@@ -434,6 +457,10 @@ describe("gruff warning ratchet", () => {
     );
     assert.match(preflight, /check-gruff-warning-ratchet\.mjs/);
     assert.match(preflight, /No gruff-ts rules disabled/);
+    assert.match(
+      preflight,
+      /fail "Gruff warning ratchet unavailable: analyzer could not run"/u,
+    );
   });
 
   it("runs the warning ratchet in a dedicated Node 22 CI job", () => {
@@ -447,8 +474,22 @@ describe("gruff warning ratchet", () => {
     // exactly its block; keep it last or tighten this slice when reordering.
     const jobBlock = ciWorkflow.slice(jobStart);
     assert.match(jobBlock, /node-version: "22"/);
+    assert.match(jobBlock, /os: \[ubuntu-latest, windows-latest\]/u);
+    assert.match(
+      jobBlock,
+      /test\/integration\/preflight-progress\.test\.ts test\/integration\/gruff-warning-ratchet\.test\.ts/u,
+    );
     assert.match(jobBlock, /node scripts\/check-gruff-warning-ratchet\.mjs/);
     // The Node 20 compatibility job must remain alongside the ratchet job.
     assert.match(ciWorkflow.slice(0, jobStart), /node-version: "20"/);
+    const minimumNodeJob = ciWorkflow.slice(
+      ciWorkflow.indexOf("windows-hook-contracts:"),
+      jobStart,
+    );
+    assert.match(minimumNodeJob, /node-version: "20\.11\.0"/u);
+    assert.match(
+      minimumNodeJob,
+      /node --import tsx --test test\/integration\/preflight-progress\.test\.ts/u,
+    );
   });
 });

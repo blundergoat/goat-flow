@@ -273,9 +273,8 @@ function dashboardUtilityActionsFragment(): DashboardAppFragment {
       try {
         await navigator.clipboard.writeText(text);
         return true;
-      } catch (err) {
-        // A browser without clipboard access, or one rejecting permission, gets a second copy attempt through the textarea fallback.
-        void err;
+      } catch {
+        // Clipboard access failure is non-fatal: continue to the textarea fallback and return its copy result.
       }
       const textarea = document.createElement("textarea");
       textarea.value = text;

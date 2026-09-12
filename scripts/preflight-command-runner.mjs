@@ -6,8 +6,9 @@
  * Timeout and parent-exit cleanup target the child process group before returning a result.
  * A final deadline prevents an escaped output holder from hiding that result indefinitely.
  */
-import { spawn } from "node:child_process";
-import { writeSync } from "node:fs";
+import { spawn, spawnSync } from "node:child_process";
+import { existsSync, writeSync } from "node:fs";
+import { delimiter, dirname, join } from "node:path";
 
 const FORCE_KILL_DELAY_MS = 1_000;
 const FORCED_RESULT_DELAY_MS = 100;
@@ -162,6 +163,7 @@ function displayCommand(childCommand, childArguments) {
 /**
  * Stop the complete child process group so timed-out verification cannot leak into the next run.
  * Use for timeout and parent termination; a missing PID means startup failed before work began.
+ * On Windows, spawns bounded taskkill to terminate descendants before their root disappears.
  * It swallows an already-finished process error because user-visible cleanup already succeeded.
  *
  * @param {import("node:child_process").ChildProcess} childProcess - spawned verification process
@@ -175,9 +177,16 @@ function stopChildProcessGroup(childProcess, stopSignal) {
   }
 
   try {
-    // Windows has no POSIX process group, so Node terminates the direct child instead.
+    // Stop the Windows tree before its root exits, or npm's script and workers can become orphaned.
     if (process.platform === "win32") {
-      childProcess.kill(stopSignal);
+      const treeStop = spawnSync(
+        "taskkill.exe",
+        ["/PID", String(childProcess.pid), "/T", "/F"],
+        { windowsHide: true, stdio: "ignore", timeout: FORCE_KILL_DELAY_MS },
+      );
+      // If tree termination is unavailable, still stop the direct child within the cleanup deadline.
+      if (treeStop.error || treeStop.status !== 0)
+        childProcess.kill(stopSignal);
       // POSIX process groups include descendants, so timeout cleanup removes the full verification tree.
     } else {
       process.kill(-childProcess.pid, stopSignal);
@@ -302,9 +311,9 @@ function capturedCommandFinalStatus(
           "\n",
       ),
     );
-    // A startup failure has no useful child code, so preflight returns status 1.
+    // Startup failures use the conventional unavailable-command status, separate from failed tests.
   } else if (state.hasCommandFailedToStart) {
-    finalStatus = 1;
+    finalStatus = 127;
     // Signal-only closes are failed verification with the signal named for the user.
   } else if (childExitCode === null) {
     finalStatus = 1;
@@ -467,15 +476,39 @@ function startCapturedCommandHeartbeat(state) {
 function runCapturedCommand(runnerOptions) {
   return new Promise((resolveCommand) => {
     const commandStartedAt = Date.now();
+    let childCommand = runnerOptions.childCommand;
+    let childArguments = runnerOptions.childArguments;
+    // Windows cannot execute npm's command shim without a shell; invoke its installed Node entry instead.
+    if (
+      process.platform === "win32" &&
+      /^(?:npm|npm\.cmd)$/iu.test(childCommand)
+    ) {
+      const npmDirectories = [
+        dirname(process.execPath),
+        ...(process.env.PATH ?? "").split(delimiter),
+      ];
+      const npmEntry = npmDirectories
+        .map((directory) =>
+          join(directory, "node_modules", "npm", "bin", "npm-cli.js"),
+        )
+        .find((candidate) => existsSync(candidate));
+      if (!npmEntry) {
+        resolveCommand({
+          status: 127,
+          capturedOutput: Buffer.from(
+            "\n[preflight] command failed to start: installed npm-cli.js not found\n",
+          ),
+        });
+        return;
+      }
+      childCommand = process.execPath;
+      childArguments = [npmEntry, ...childArguments];
+    }
     // Preflight supplies argv without a shell, so command arguments cannot become shell syntax.
-    const childProcess = spawn(
-      runnerOptions.childCommand,
-      runnerOptions.childArguments,
-      {
-        detached: process.platform !== "win32",
-        stdio: ["ignore", "pipe", "pipe"],
-      },
-    );
+    const childProcess = spawn(childCommand, childArguments, {
+      detached: process.platform !== "win32",
+      stdio: ["ignore", "pipe", "pipe"],
+    });
     const state = {
       runnerOptions,
       resolveCommand,

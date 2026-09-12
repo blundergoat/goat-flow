@@ -256,6 +256,36 @@ afterEach(() => {
 });
 
 describe("preflight Tests-phase progress", () => {
+  it("launches installed npm through the production runner", async () => {
+    const runnerResult = await runPreflightRunnerFixture({
+      childCommand: "npm",
+      childArguments: ["--version"],
+      timeoutSeconds: 10,
+      heartbeatSeconds: 0,
+    });
+    assert.equal(runnerResult.status, 0, runnerResult.capturedOutput);
+    assert.match(runnerResult.capturedOutput.trim(), /^\d+\.\d+\.\d+$/u);
+    assert.equal(runnerResult.runnerErrorOutput, "");
+  });
+
+  it("passes hostile literal arguments to installed npm without shell interpretation", async () => {
+    const literalArgument = "spaces & | ; $(echo INJECTED) %PATH% ! ' \"";
+    const runnerResult = await runPreflightRunnerFixture({
+      childCommand: process.platform === "win32" ? "npm.cmd" : "npm",
+      childArguments: [
+        "--user-agent",
+        literalArgument,
+        "config",
+        "get",
+        "user-agent",
+      ],
+      timeoutSeconds: 10,
+      heartbeatSeconds: 0,
+    });
+    assert.equal(runnerResult.status, 0, runnerResult.capturedOutput);
+    assert.equal(runnerResult.capturedOutput.trim(), literalArgument);
+  });
+
   it("shows test progress before close while keeping child output captured", async () => {
     const progressTemporaryDirectory = mkdtempSync(
       join(tmpdir(), "goat-flow-preflight-progress-"),
@@ -341,8 +371,12 @@ describe("preflight Tests-phase progress", () => {
     assert.equal(runnerResult.runnerErrorOutput, "");
   });
 
-  // This fixture reproduces a test tree that ignores graceful stop and keeps a worker alive.
-  it("times out with exit 124 and removes the whole child process group", async () => {
+  // Writes a temporary npm package and launches its script to check timeout cleanup through a real shell.
+  it("times out installed npm with exit 124 and removes its script and worker", async () => {
+    const timeoutTemporaryDirectory = mkdtempSync(
+      join(tmpdir(), "goat-flow-preflight-npm-timeout-"),
+    );
+    fixtureTemporaryDirectories.add(timeoutTemporaryDirectory);
     const timeoutFixtureSource = String.raw`
       const { spawn } = require("node:child_process");
       process.on("SIGTERM", () => {});
@@ -355,10 +389,19 @@ describe("preflight Tests-phase progress", () => {
       process.stdout.write("WORKER_PID=" + worker.pid + "\\n");
       setInterval(() => {}, 1000);
     `;
+    writeFileSync(
+      join(timeoutTemporaryDirectory, "package.json"),
+      JSON.stringify({ scripts: { hold: "node hold.cjs" } }),
+    );
+    writeFileSync(
+      join(timeoutTemporaryDirectory, "hold.cjs"),
+      timeoutFixtureSource,
+    );
     const runnerResult = await runPreflightRunnerFixture({
-      timeoutSeconds: 0.2,
+      childCommand: "npm",
+      childArguments: ["--prefix", timeoutTemporaryDirectory, "run", "hold"],
+      timeoutSeconds: 2,
       heartbeatSeconds: 0.05,
-      childSource: timeoutFixtureSource,
     });
     const parentProcessId = fixtureProcessId(
       runnerResult.capturedOutput,
@@ -425,7 +468,7 @@ describe("preflight Tests-phase progress", () => {
     },
   );
 
-  it("reports signal exits and spawn errors once with status 1", async () => {
+  it("reports child termination and unavailable commands separately", async () => {
     const signalledResult = await runPreflightRunnerFixture({
       childSource: 'process.kill(process.pid, "SIGTERM");',
     });
@@ -435,11 +478,15 @@ describe("preflight Tests-phase progress", () => {
     });
 
     assert.equal(signalledResult.status, 1);
-    assert.equal(
-      signalledResult.capturedOutput.split("terminated by SIGTERM").length - 1,
-      1,
-    );
-    assert.equal(missingCommandResult.status, 1);
+    // Windows reports this termination as a numeric child exit, without a POSIX signal name.
+    if (process.platform !== "win32") {
+      assert.equal(
+        signalledResult.capturedOutput.split("terminated by SIGTERM").length -
+          1,
+        1,
+      );
+    }
+    assert.equal(missingCommandResult.status, 127);
     assert.equal(
       missingCommandResult.capturedOutput.split("failed to start").length - 1,
       1,
@@ -447,14 +494,18 @@ describe("preflight Tests-phase progress", () => {
   });
 
   // This fixture reproduces a worker that remains active when the user closes preflight.
-  it("cleans the child process group before returning a parent termination", async () => {
-    const parentStopTemporaryDirectory = mkdtempSync(
-      join(tmpdir(), "goat-flow-preflight-parent-stop-"),
-    );
-    fixtureTemporaryDirectories.add(parentStopTemporaryDirectory);
-    const parentStopReadyFile = join(parentStopTemporaryDirectory, "ready");
-    // Fixture source for a process tree that ignores SIGTERM: spawns a worker and writes a ready file.
-    const parentStopFixtureSource = String.raw`
+  // Windows forcibly terminates the runner on kill(SIGTERM), so only POSIX can exercise its signal handler.
+  it(
+    "cleans the child process group before returning a parent termination",
+    { skip: process.platform === "win32" },
+    async () => {
+      const parentStopTemporaryDirectory = mkdtempSync(
+        join(tmpdir(), "goat-flow-preflight-parent-stop-"),
+      );
+      fixtureTemporaryDirectories.add(parentStopTemporaryDirectory);
+      const parentStopReadyFile = join(parentStopTemporaryDirectory, "ready");
+      // Fixture source for a process tree that ignores SIGTERM: spawns a worker and writes a ready file.
+      const parentStopFixtureSource = String.raw`
       const { spawn } = require("node:child_process");
       const { writeFileSync } = require("node:fs");
       process.on("SIGTERM", () => {});
@@ -468,30 +519,31 @@ describe("preflight Tests-phase progress", () => {
       writeFileSync(${JSON.stringify(parentStopReadyFile)}, "ready");
       setInterval(() => {}, 1000);
     `;
-    const runnerResult = await runPreflightRunnerFixture({
-      timeoutSeconds: 3,
-      heartbeatSeconds: 0.05,
-      parentStopAfterFile: parentStopReadyFile,
-      childSource: parentStopFixtureSource,
-    });
-    const parentProcessId = fixtureProcessId(
-      runnerResult.capturedOutput,
-      "PARENT_STOP_PID",
-    );
-    const workerProcessId = fixtureProcessId(
-      runnerResult.capturedOutput,
-      "PARENT_STOP_WORKER_PID",
-    );
+      const runnerResult = await runPreflightRunnerFixture({
+        timeoutSeconds: 3,
+        heartbeatSeconds: 0.05,
+        parentStopAfterFile: parentStopReadyFile,
+        childSource: parentStopFixtureSource,
+      });
+      const parentProcessId = fixtureProcessId(
+        runnerResult.capturedOutput,
+        "PARENT_STOP_PID",
+      );
+      const workerProcessId = fixtureProcessId(
+        runnerResult.capturedOutput,
+        "PARENT_STOP_WORKER_PID",
+      );
 
-    assert.equal(runnerResult.status, 143);
-    assert.equal(
-      runnerResult.capturedOutput.split("stopped after parent SIGTERM").length -
+      assert.equal(runnerResult.status, 143);
+      assert.equal(
+        runnerResult.capturedOutput.split("stopped after parent SIGTERM")
+          .length - 1,
         1,
-      1,
-    );
-    assert.equal(await waitForFixtureProcessExit(parentProcessId), true);
-    assert.equal(await waitForFixtureProcessExit(workerProcessId), true);
-  });
+      );
+      assert.equal(await waitForFixtureProcessExit(parentProcessId), true);
+      assert.equal(await waitForFixtureProcessExit(workerProcessId), true);
+    },
+  );
 
   it("pins one bounded coverage run to interactive ten-second heartbeats", () => {
     const preflightSource = readFileSync(PREFLIGHT_SCRIPT_PATH, "utf-8");
@@ -508,6 +560,10 @@ describe("preflight Tests-phase progress", () => {
     assert.ok(fastSelectionIndex >= 0);
     assert.ok(coverageSelectionIndex < fastSelectionIndex);
     assert.doesNotMatch(preflightSource, /Tests retry/u);
+    assert.match(
+      preflightSource,
+      /fail "\$test_label unavailable: command failed to start"/u,
+    );
     assert.doesNotMatch(preflightSource, /GOAT_FLOW_PREFLIGHT_TEST_COMMAND/u);
     assert.equal(
       [...preflightSource.matchAll(/run_command_capture_with_timeout/gu)]
@@ -546,6 +602,10 @@ describe("preflight Tests-phase progress", () => {
     assert.doesNotMatch(
       preflightSource,
       /GOAT_FLOW_PREFLIGHT_(?:SKIP_AUDIT|AUDIT_COMMAND)/u,
+    );
+    assert.match(
+      auditSource,
+      /fail "npm audit unavailable: command failed to start"/u,
     );
   });
 

@@ -1,9 +1,26 @@
 ---
 category: test-shell-environment
-last_reviewed: 2026-09-05
+last_reviewed: 2026-09-12
 ---
 
 **Scope:** The shell and process layer under a test - stdin and EOF handling, tools that silently skip paths, inherited permission profiles, and why silent output is not proof a child never ran. Choosing and invoking the runner is [test-execution-environment.md](test-execution-environment.md).
+
+## Lesson: Verify timeout cleanup through the real package-manager process tree
+
+**Status:** active | **Created:** 2026-09-12 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Verify timeout cleanup through the installed package manager before accepting a direct-child fixture as proof that all descendants exit.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Run an isolated package script through the production runner and assert that both its script process and worker exit after timeout. Keep the timeout status and diagnostic assertions, but do not treat them as proof of descendant cleanup. Preserve a failing run before changing the implementation.
+
+**What happened:** During M66 verification, I accepted a passing direct-Node timeout fixture as evidence that Windows cleanup removed the verification tree. The follow-up replaced that fixture with an actual `npm run` script. The runner returned timeout status 124, but the script-process exit assertion failed because the script remained alive.
+
+**Root cause:** The fixture omitted npm's additional process layers. Killing the runner's direct child did not prove that the package script and its worker had stopped.
+
+**Correction:** Windows cleanup now invokes bounded `taskkill /T /F` while npm's root process still exists. The replacement test failed before the fix and passed afterward on Windows; the same focused suite passed on Linux. Evidence anchors: `scripts/preflight-command-runner.mjs` (search: "stopChildProcessGroup") and `test/integration/preflight-progress.test.ts` (search: "times out installed npm with exit 124 and removes its script and worker").
+
+---
 
 ## Lesson: The session shell's `grep` is a ugrep wrapper that silently drops `.goat-flow/` subtrees, committed or ignored
 
