@@ -9,6 +9,7 @@
 
 import type { CLIOptions } from "./types.js";
 import type { QualityMode } from "./quality/schema.js";
+import type { ForecastBandQuantiles } from "./config/types.js";
 
 /** Supported CLI subcommand names. */
 export type Command =
@@ -227,6 +228,7 @@ export interface ParsedCLI extends CLIOptions {
   plansSubcommand: PlansSubcommand | null;
   plansStrict: boolean;
   plansMaxActive: number | null;
+  plansBandQuantiles: ForecastBandQuantiles | null;
   plansTimeAction: PlansTimeAction | null;
   plansTimeCategory: PlansTimeCategory | null;
   plansTimeFinalize: boolean;

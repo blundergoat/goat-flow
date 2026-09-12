@@ -11,6 +11,8 @@ import { load } from "js-yaml";
 import type { ReadonlyFS } from "../types.js";
 import { AUDIT_VERSION } from "../constants.js";
 import {
+  DEFAULT_FORECAST_BAND_QUANTILES,
+  isForecastBandQuantiles,
   isLearningLoopAutoCaptureTarget,
   isRecord,
   KNOWN_USER_ROLES,
@@ -24,7 +26,11 @@ const CONFIG_DEFAULTS: GoatFlowConfig = {
   footguns: { path: ".goat-flow/learning-loop/footguns/" },
   lessons: { path: ".goat-flow/learning-loop/lessons/" },
   decisions: { path: ".goat-flow/learning-loop/decisions/" },
-  plans: { path: ".goat-flow/plans/", maxActiveMilestones: 1 },
+  plans: {
+    path: ".goat-flow/plans/",
+    maxActiveMilestones: 1,
+    forecastBandQuantiles: DEFAULT_FORECAST_BAND_QUANTILES,
+  },
   logs: { path: ".goat-flow/logs/" },
   agents: null,
   skills: { install: "all" },
@@ -63,7 +69,10 @@ function cloneDefaults(): GoatFlowConfig {
     footguns: { ...CONFIG_DEFAULTS.footguns },
     lessons: { ...CONFIG_DEFAULTS.lessons },
     decisions: { ...CONFIG_DEFAULTS.decisions },
-    plans: { ...CONFIG_DEFAULTS.plans },
+    plans: {
+      ...CONFIG_DEFAULTS.plans,
+      forecastBandQuantiles: [...CONFIG_DEFAULTS.plans.forecastBandQuantiles],
+    },
     logs: { ...CONFIG_DEFAULTS.logs },
     agents: CONFIG_DEFAULTS.agents,
     skills: { install: CONFIG_DEFAULTS.skills.install },
@@ -306,12 +315,15 @@ function mergeConfig(raw: unknown): GoatFlowConfig {
   return merged;
 }
 
-/** Merge validated scheduling policy while retaining the fixed canonical plans path. */
+/** Merge validated plan policy while retaining the fixed canonical plans path. */
 function mergePlans(rawPlans: unknown, merged: GoatFlowConfig): void {
   if (!isRecord(rawPlans)) return;
   const cap = rawPlans.maxActiveMilestones;
   if (typeof cap === "number" && Number.isSafeInteger(cap) && cap >= 1) {
     merged.plans.maxActiveMilestones = cap;
+  }
+  if (isForecastBandQuantiles(rawPlans.forecastBandQuantiles)) {
+    merged.plans.forecastBandQuantiles = [...rawPlans.forecastBandQuantiles];
   }
 }
 

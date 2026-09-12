@@ -11,6 +11,8 @@ import { realpathSync } from "node:fs";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { CLIError } from "./cli-error.js";
 import { loadConfig } from "./config/reader.js";
+import { DEFAULT_FORECAST_BAND_QUANTILES } from "./config/config-vocabulary.js";
+import type { ForecastBandQuantiles } from "./config/types.js";
 import { writeOutput } from "./cli-output.js";
 import type { ParsedCLI } from "./cli-types.js";
 import {
@@ -762,7 +764,8 @@ function assertCheckUsage(options: ParsedCLI): void {
 function handlePlansCheckCommand(options: ParsedCLI): void {
   // e.g. the user finished writing milestones and ran `goat-flow plans check .goat-flow/plans/<active>`.
   assertCheckUsage(options);
-  const maxActive = resolvePlanMaxActive(options);
+  const { maxActiveMilestones: maxActive, forecastBandQuantiles } =
+    resolvePlanPolicy(options);
 
   let records: PlanExportRecord[];
   try {
@@ -802,7 +805,9 @@ function handlePlansCheckCommand(options: ParsedCLI): void {
 
   // Calibration only means something next to a mix summary, so it follows the same gate.
   if (planSummary.length > 0) {
-    reportLines.push(...renderCalibrationSummary(records));
+    reportLines.push(
+      ...renderCalibrationSummary(records, forecastBandQuantiles),
+    );
   }
 
   // No effort rows and no errors means the user selected a legacy plan, even when prose advice follows.
@@ -867,15 +872,38 @@ function canonicalPlanProjectRoot(planPath: string): string | null {
 }
 
 /**
- * Resolve CLI override, physically canonical project config, then the legacy cap of one.
+ * Resolve each plan flag over physically canonical project config, then built-in defaults.
  *
  * @throws CLIError with exit 2 and the config path when canonical config cannot be read or validated
  */
-function resolvePlanMaxActive(options: ParsedCLI): number {
-  // Explicit policy must work even when the project's config is malformed or unreadable.
-  if (options.plansMaxActive !== null) return options.plansMaxActive;
+function resolvePlanPolicy(options: ParsedCLI): {
+  maxActiveMilestones: number;
+  forecastBandQuantiles: ForecastBandQuantiles;
+} {
+  const defaults = {
+    maxActiveMilestones: options.plansMaxActive ?? 1,
+    forecastBandQuantiles:
+      options.plansBandQuantiles ?? DEFAULT_FORECAST_BAND_QUANTILES,
+  };
+  // Fully explicit policy can run even when the project's config cannot be trusted.
+  if (options.plansMaxActive !== null && options.plansBandQuantiles !== null)
+    return defaults;
   const projectRoot = canonicalPlanProjectRoot(options.projectPath);
-  if (projectRoot === null) return 1;
+  if (projectRoot === null) return defaults;
+  const policy = readPlanPolicy(projectRoot);
+  return {
+    maxActiveMilestones: options.plansMaxActive ?? policy.maxActiveMilestones,
+    forecastBandQuantiles:
+      options.plansBandQuantiles ?? policy.forecastBandQuantiles,
+  };
+}
+
+/**
+ * Read canonical project policy; config warnings stay out of plan output, while invalid config fails with its path.
+ *
+ * @throws CLIError with exit code 2 if reading or validating the owning config fails
+ */
+function readPlanPolicy(projectRoot: string) {
   const configPath = join(projectRoot, ".goat-flow", "config.yaml");
   let loaded: ReturnType<typeof loadConfig>;
   try {
@@ -892,8 +920,7 @@ function resolvePlanMaxActive(options: ParsedCLI): number {
       2,
     );
   }
-  // Valid warnings belong to config diagnostics and must not alter plans check output.
-  return loaded.config.plans.maxActiveMilestones;
+  return loaded.config.plans;
 }
 
 /**

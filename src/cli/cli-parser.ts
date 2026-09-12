@@ -17,6 +17,7 @@ import { CLIError } from "./cli-error.js";
 import {
   validatePlansFlags,
   parsePlansMaxActive,
+  parsePlansBandQuantiles,
   parsePlansTimeCategoryArg,
 } from "./cli-parser-plans.js";
 import {
@@ -110,6 +111,7 @@ const CLI_ARG_OPTIONS = {
   scenario: { type: "string" },
   strict: { type: "boolean", default: false },
   "max-active": { type: "string" },
+  "band-quantiles": { type: "string" },
   category: { type: "string" },
   target: { type: "string" },
   "marker-sha256": { type: "string" },
@@ -1041,7 +1043,9 @@ function parseCLITokens(filteredArgs: string[]) {
       error instanceof TypeError &&
       "code" in error &&
       error.code === "ERR_PARSE_ARGS_INVALID_OPTION_VALUE" &&
-      /'--(?:max-active|project|expected-version)\b/u.test(error.message)
+      /'--(?:max-active|band-quantiles|project|expected-version)\b/u.test(
+        error.message,
+      )
     ) {
       throw new CLIError(error.message, 2);
     }
@@ -1203,6 +1207,9 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
     ...reviewFields,
     plansSubcommand: plansPositionals.plansSubcommand,
     plansStrict: parsedFlag(parsedValues, "strict"),
+    plansBandQuantiles: parsePlansBandQuantiles(
+      parsedString(parsedValues, "band-quantiles"),
+    ),
     plansMaxActive: parsePlansMaxActive(
       parsedString(parsedValues, "max-active"),
     ),

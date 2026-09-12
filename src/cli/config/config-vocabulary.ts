@@ -11,7 +11,34 @@
  * A value that fails one of these is reported with its key name rather than silently dropped, because a typo the user never hears about looks to them
  * like the setting did nothing.
  */
-import type { LearningLoopAutoCaptureTarget } from "./types.js";
+import type {
+  ForecastBandQuantiles,
+  LearningLoopAutoCaptureTarget,
+} from "./types.js";
+
+/** Default historical rate band for projects without a selected pair. */
+export const DEFAULT_FORECAST_BAND_QUANTILES: ForecastBandQuantiles = [10, 90];
+
+/**
+ * Validate YAML or CLI percentiles without accepting strings or a band that excludes the median.
+ *
+ * @param candidate - untrusted YAML value or the numerically parsed CLI pair
+ * @returns true only for two numeric endpoints strictly surrounding the median within (0, 100)
+ */
+export function isForecastBandQuantiles(
+  candidate: unknown,
+): candidate is ForecastBandQuantiles {
+  return (
+    Array.isArray(candidate) &&
+    candidate.length === 2 &&
+    typeof candidate[0] === "number" &&
+    typeof candidate[1] === "number" &&
+    candidate[0] > 0 &&
+    candidate[0] < 50 &&
+    candidate[1] > 50 &&
+    candidate[1] < 100
+  );
+}
 
 /**
  * Recognized keys one level inside each named config block.
@@ -25,7 +52,7 @@ import type { LearningLoopAutoCaptureTarget } from "./types.js";
  * `quality` keys are the documented overrides `loadQualityConfig` reads, including its fixed subtype names.
  */
 export const KNOWN_NESTED_KEYS = new Map<string, ReadonlySet<string>>([
-  ["plans", new Set(["maxActiveMilestones"])],
+  ["plans", new Set(["maxActiveMilestones", "forecastBandQuantiles"])],
   ["line-limits", new Set(["target", "limit"])],
   ["toolchain", new Set(["test", "lint", "build", "package", "format"])],
   ["skills", new Set(["install", "goat-review"])],

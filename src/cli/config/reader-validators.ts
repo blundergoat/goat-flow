@@ -14,6 +14,7 @@ import { posix } from "node:path";
 import { isReleaseVersion } from "../version-compare.js";
 import type { ValidationIssue, ValidationResult } from "./types.js";
 import {
+  isForecastBandQuantiles,
   isLearningLoopAutoCaptureTarget,
   isRecord,
   KNOWN_TOP_LEVEL_KEYS,
@@ -834,20 +835,32 @@ function warnUnknownQualitySubtypeKeys(
   }
 }
 
-/** Validate the opt-in active milestone cap without accepting fractional or unsafe counts. */
+/** Validate optional plan policy before either scheduling or forecasting consumes it. */
 function validatePlansField(
   raw: RawConfig,
   warnings: ValidationIssue[],
   errors: ValidationIssue[],
 ): void {
   validateObjectField(raw, "plans", warnings, errors, (value) => {
-    if (!("maxActiveMilestones" in value)) return;
     const cap = value.maxActiveMilestones;
-    if (typeof cap !== "number" || !Number.isSafeInteger(cap) || cap < 1) {
+    if (
+      "maxActiveMilestones" in value &&
+      (typeof cap !== "number" || !Number.isSafeInteger(cap) || cap < 1)
+    ) {
       pushError(
         errors,
         "plans.maxActiveMilestones",
         "must be a positive safe integer",
+      );
+    }
+    if (
+      "forecastBandQuantiles" in value &&
+      !isForecastBandQuantiles(value.forecastBandQuantiles)
+    ) {
+      pushError(
+        errors,
+        "plans.forecastBandQuantiles",
+        "must be a pair with 0 < low < 50 < high < 100",
       );
     }
   });

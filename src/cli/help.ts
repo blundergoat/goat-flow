@@ -433,7 +433,7 @@ const COMMAND_HELP_CATALOG = {
     summary: "Export, check, or time milestone plans.",
     usage: [
       "goat-flow plans export <plan-path> [flags]",
-      "goat-flow plans check <plan-path> [--strict] [--max-active <n>]",
+      "goat-flow plans check <plan-path> [--strict] [--max-active <n>] [--band-quantiles <low,high>]",
       "goat-flow plans time <start|stop|status> <milestone-file> [flags]",
     ],
     subcommands: [
@@ -443,6 +443,10 @@ const COMMAND_HELP_CATALOG = {
     ],
     flags: [
       ["--strict", "Apply the current-plan authoring gate on check."],
+      [
+        "--band-quantiles <low,high>",
+        "Override plans.forecastBandQuantiles for check (default 10,90); require 0 < low < 50 < high < 100. Historical quantiles do not promise future coverage.",
+      ],
       [
         "--max-active <n>",
         "Set a positive active milestone cap for check; overrides plans.maxActiveMilestones in the owning project config (default 1).",

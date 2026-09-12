@@ -3,6 +3,8 @@
  * Usage errors name the misplaced or malformed flag and exit with code 2.
  */
 import { CLIError } from "./cli-error.js";
+import { isForecastBandQuantiles } from "./config/config-vocabulary.js";
+import type { ForecastBandQuantiles } from "./config/types.js";
 import type {
   Command,
   ParsedArgValues,
@@ -42,6 +44,12 @@ export function validatePlansFlags(
   plansTimeAction: PlansTimeAction | null,
 ): void {
   validatePlansStrictFlag(command, values, plansSubcommand);
+  if (
+    parsedString(values, "band-quantiles") !== undefined &&
+    (command !== "plans" || plansSubcommand !== "check")
+  ) {
+    throw new CLIError("--band-quantiles is only valid for plans check.", 2);
+  }
   if (
     parsedString(values, "max-active") !== undefined &&
     (command !== "plans" || plansSubcommand !== "check")
@@ -212,4 +220,27 @@ export function parsePlansMaxActive(rawCap: string | undefined): number | null {
     );
   }
   return cap;
+}
+
+/**
+ * Parse the one-command historical percentile override; an omitted flag leaves project selection to the checker.
+ * @param rawPair - comma-separated decimal percentiles, or undefined when the flag is absent
+ * @returns validated endpoints, or null to use config/defaults
+ * @throws CLIError with exit 2 for malformed syntax or a band that does not straddle 50
+ */
+export function parsePlansBandQuantiles(
+  rawPair: string | undefined,
+): ForecastBandQuantiles | null {
+  if (rawPair === undefined) return null;
+  const pair = rawPair.split(",").map(Number);
+  if (
+    !/^\d+(?:\.\d+)?,\d+(?:\.\d+)?$/u.test(rawPair) ||
+    !isForecastBandQuantiles(pair)
+  ) {
+    throw new CLIError(
+      "--band-quantiles must be low,high with 0 < low < 50 < high < 100.",
+      2,
+    );
+  }
+  return pair;
 }
