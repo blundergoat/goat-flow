@@ -1,6 +1,6 @@
 ---
 category: verification-formatting
-last_reviewed: 2026-09-05
+last_reviewed: 2026-09-12
 ---
 
 **Scope:** Formatter, lint, and Knip debt that only surfaces at repo-wide scope - style flags, copied or untracked files that inherit debt, and the static gates a touched TypeScript file must pass before a verification claim. Adding or tuning a preflight gate is [verification-preflight.md](verification-preflight.md).
@@ -43,7 +43,7 @@ last_reviewed: 2026-09-05
 **Decision changed:** After the first focused GREEN on any TypeScript change, run the repository formatter, file-scoped ESLint, the exact Knip command, and targeted Gruff before any suite, preflight, or completion claim; a receipt without their literal output is incomplete.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
-**Incident count:** 66 | **Latest occurrence:** 2026-09-04
+**Incident count:** 67 | **Latest occurrence:** 2026-09-12
 **Merged:** 2026-09-05 - renamed from "New tests need formatter gate before verification claims"; absorbed "Slow installer round-trip catches prompt/test lint debt" (2026-04-26, 5 incidents), "Format touched TypeScript tests before repo-wide preflight" (2026-04-30), "Preflight TypeScript gates include Knip binary policy and touched-test formatting" (2026-06-07, 28 incidents), and "Format patched hook test fixtures before full preflight" (2026-06-02, 2 incidents) from `.goat-flow/learning-loop/lessons/hook-testing.md`, plus five touched-file recurrences previously logged under the attribution lesson above and one 2026-08-09 static-gate recurrence from `.goat-flow/learning-loop/lessons/verification-gruff.md`; the count is the sum of the declared totals.
 
 **Prevention:** After the first focused GREEN that touches TypeScript, and before any suite, preflight, or completion claim, run these in order and quote each result: (1) `npx prettier --check <touched paths>` or `npm run format:check`; (2) file-scoped ESLint on touched `src/` files, since `test/**` sits outside the lint project; (3) the exact Knip command from `scripts/preflight-checks.sh` (search: `knip_command=(`), never an invented `npm run knip` or a bare `npx knip`, which exhausts the default heap; (4) targeted Gruff on the touched files. Keep helpers module-private until a current consumer imports them, and reference child-process fixtures with `fileURLToPath(new URL(...))` so Knip can see them, as in `test/helpers/concurrent-quality-workers.ts` (search: `quality-capture-concurrency-worker.ts`). When a later gate fails, fix it, rerun that gate, then restart the sequence; every earlier proof is stale. A milestone that edits `src/` lists `npx eslint src/cli src/dashboard` and `bash scripts/prettier-check.sh` in its Commands table. For goat-clarity, freeze the check and write commands before mutation; anchors `workflow/skills/goat-clarity/SKILL.md` (search: `Formatter proof:`) and `test/contract/skill-hardening-clarity.test.ts` (search: `freezes repository formatter commands and proof before mutation`).
@@ -84,6 +84,11 @@ last_reviewed: 2026-09-05
 Knip handling: run it with the repository gate's heap and traversal flags, `scripts/preflight-checks.sh` (search: `--no-gitignore keeps Knip from walking`) and `.goat-flow/learning-loop/footguns/preflight-plumbing.md` (search: `Knip's \`ignore\` cannot shrink`); a default `npx knip` out-of-memory abort is not the gate result. Binary policy lives in `knip.json` (search: `ignoreBinaries`).
 
 ---
+
+**Recurrence 2026-09-12:** M59's routing contracts passed before scoped Gruff found the expanded dispatcher-documentation test above its substantive-line budget. The existing multi-pattern helper preserved every assertion while clearing that size error. A separate labelled fixture loop still triggered an advisory; a named-callback experiment added another finding and was rewound. Run the scoped analyzer with the first focused contract result, measure substantive lines rather than raw lines, and preserve unresolved diagnostics instead of claiming all gates passed. Evidence: `test/contract/skill-hardening-skills-2.test.ts` (search: `documents every dispatcher terminal outcome without collapsing endpoints`) and `test/contract/dispatcher-routing-fixture.test.ts` (search: `distinguishes requested depth from destination ownership and rejects foreign depth metadata`).
+
+M59 continuation: individually registering the same quick/full requests and eight invalid metadata cases cleared the loop advisory without a suppression. Moving only the negative cases first left the positive loop reported; measure all reported boundaries before declaring the representation fixed. The ten existing inputs and assertion outcomes were preserved.
+
 
 ## Lesson: Untracked source-shadow files can poison lint, formatter, and drift gates together
 

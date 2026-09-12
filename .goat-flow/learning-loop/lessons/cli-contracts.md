@@ -89,7 +89,7 @@ Grep existing command tests before treating generic coverage as complete.
 Evidence: `src/cli/help.ts` (search: `Structural failures exit 1`) and `test/unit/review-command-parser.test.ts`
 (search: `advisory warnings.*exit 0`).
 
-**Recurrence 2026-09-05:** The first `--max-active` implementation validated supplied values, but a missing argument raised Node's raw option error and the CLI exited 1. The process-level omission test required exit 2. `src/cli/cli-parser.ts` (search: `parseCLITokens`) now translates this option-value error into `CLIError`; other option errors retain their existing behavior. The reproduction in `test/unit/plans-check-forecast.test.ts` (search: `rejects the cap on export, every timing action, and non-plan commands`) passed after that correction.
+**Recurrence 2026-09-05:** The first `--max-active` implementation validated supplied values, but a missing argument raised Node's raw option error and the CLI exited 1. The process-level omission test required exit 2. `src/cli/cli-parser.ts` (search: `parseCLITokens`) now translates this option-value error into `CLIError`; other option errors retain their existing behavior. The reproduction in `test/unit/config-reader.test.ts` (search: `rejects the cap on export, every timing action, and non-plan commands`) passed after that correction.
 
 **Root cause:** I treated omitted/defaulted fields as harmless while testing one relationship.
 An earlier relationship could still reject the same payload first.

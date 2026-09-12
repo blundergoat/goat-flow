@@ -45,8 +45,8 @@ last_reviewed: 2026-09-05
 
 ## Lesson: Split tests must import their former shared scope explicitly
 
-**Status:** active | **Created:** 2026-05-31
-**Incident count:** 2 | **Latest occurrence:** 2026-05-31
+**Status:** active | **Created:** 2026-05-31 | **Evidence:** OBSERVED
+**Incident count:** 3 | **Latest occurrence:** 2026-09-12
 
 **Prevention:** After splitting any test file, run the whole new file glob rather than one renamed slice, and add explicit imports before trusting the split even when the old parent imported the same helpers. Evidence anchors: `test/integration/audit-drift.helpers.ts` (search: `export {`), `test/integration/audit-drift-checkdrift-hook-templates.test.ts` (search: `COPILOT_GRUFF_HOOK_ENTRY`).
 
@@ -55,6 +55,8 @@ last_reviewed: 2026-09-05
 **Root cause:** Test-file extraction was treated as a filename move, but Node's test runner evaluates each `*.test.ts` file as its own module, so every split file needs its own `node:test`, assertion, filesystem, and helper imports.
 
 **Recurrence 2026-05-31:** Full preflight found the same standalone-module failure in the setup installer split, plus contract tests still reading the old unsplit dashboard and CLI files instead of the new owners. `test/integration/setup-install.helpers.ts` (search: `runCliInstaller`), `test/unit/dashboard-custom-prompts.test.ts` (search: `CUSTOM_PROMPTS_ACTIONS_PATH`), `src/dashboard/index.html` (search: `dashboard-app-merge.js`), `test/unit/quality-subcommands.test.ts` (search: `quality-command.ts`).
+
+**Recurrence 2026-09-12:** The forecast test file exceeded its enforced size limit after new band-replay cases. Moving five existing config-policy cases into `test/unit/config-reader.test.ts` preserved their bodies but omitted `PROJECT_ROOT`; the focused run reported 85 passes and one `ReferenceError`. Restoring the import from `test/unit/plans-check.helpers.ts` made all 86 cases pass. Read the destination imports before relocation and rerun both owning files; production typecheck excludes tests. Evidence anchors: `test/unit/config-reader.test.ts` (search: `uses the canonical configured cap unless an explicit flag overrides it`), `test/unit/plans-check-forecast.test.ts` (search: `replays tied completions from strictly earlier history`).
 
 ## Lesson: Parameterized matrix tests need named cases with direct assertions
 
