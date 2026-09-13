@@ -3,6 +3,7 @@
  */
 import { describe, it, type TestContext } from "node:test";
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import {
   existsSync,
   linkSync,
@@ -268,6 +269,46 @@ describe("EvidenceEnvelope", () => {
         validateEvidenceEnvelope(tailed[0] as EvidenceEnvelope),
         [],
       );
+    });
+  });
+
+  it("buckets daily event files by the process-local calendar date", () => {
+    withTempProject((root) => {
+      const childSource = `
+        import { appendEvidenceEnvelope, createEvidenceEnvelope } from "./src/cli/evidence/envelope.js";
+        const [projectRoot, timestamp] = process.argv.slice(1);
+        const envelope = createEvidenceEnvelope({
+          eventType: "plan.time",
+          actor: "cli",
+          projectRoot,
+          timestamp,
+        });
+        const result = appendEvidenceEnvelope(projectRoot, envelope);
+        process.stdout.write(JSON.stringify({ path: result.path, verifiedOn: envelope.verified_on }));
+      `;
+      const child = spawnSync(
+        process.execPath,
+        [
+          "--import",
+          "tsx",
+          "--input-type=module",
+          "--eval",
+          childSource,
+          root,
+          "2026-08-25T19:29:04.000Z",
+        ],
+        {
+          cwd: PROJECT_ROOT,
+          encoding: "utf-8",
+          env: { ...process.env, TZ: "Australia/Melbourne" },
+        },
+      );
+
+      assert.equal(child.status, 0, child.stderr);
+      assert.deepEqual(JSON.parse(child.stdout), {
+        path: join(root, ".goat-flow", "logs", "events", "2026-08-26.jsonl"),
+        verifiedOn: "2026-08-25",
+      });
     });
   });
 

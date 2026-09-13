@@ -1,10 +1,8 @@
 /**
- * Cold-path content lint aggregator for `audit --check-content`.
- * Runs the three content scanners (quality, factual-claim, snapshot-claim) over a single audit context and folds their findings into one
- * ContentReport.
+ * Collect documentation findings when the user requests audit --check-content.
  *
- * Lives apart from the build checks because content linting is opt-in and far more expensive than the deterministic pass/fail checks the orchestrator
- * always runs.
+ * Quality, factual-claim, and snapshot-claim scanners share the same project facts and configuration.
+ * Their findings become one optional report; warning findings fail this section, while information stays advisory.
  */
 import { runContentQualityChecks } from "./check-content-quality.js";
 import { runFactualClaimChecks } from "./check-factual-claims.js";
@@ -12,31 +10,36 @@ import { runSnapshotClaimChecks } from "./check-snapshot-claims.js";
 import type { AuditContext, ContentReport } from "./types.js";
 
 /**
- * Combine content-quality, factual-claim, and snapshot-claim findings into a single ContentReport.
+ * Merge the requested content scans into the report shown beside structural audit results.
+ * The report contract fails this section only for warnings; information stays advisory, and file counts include each scanner's coverage.
  *
- * Status is `fail` only when at least one warning-severity finding exists; info-only findings still report `pass` because they are advisory.
- * Scanned-file counts are summed so coverage reflects all three scanners.
- *
- * @param ctx - audit context shared by every scanner; supplies the readonly FS, facts, and config
- * @returns merged report whose `status` is `fail` when any finding has `warning` severity, else `pass`
+ * @param ctx - shared target filesystem, extracted facts, and configuration used by every content scanner
+ * @returns - merged findings and coverage; no warning findings means pass, including an empty findings list
  */
 export function computeContent(ctx: AuditContext): ContentReport {
-  const quality = runContentQualityChecks(ctx);
-  const factual = runFactualClaimChecks(ctx);
-  const snapshot = runSnapshotClaimChecks(ctx);
+  const qualityReport = runContentQualityChecks(ctx);
+  const factualClaimReport = runFactualClaimChecks(ctx);
+  const snapshotClaimReport = runSnapshotClaimChecks(ctx);
   const findings = [
-    ...quality.findings,
-    ...factual.findings,
-    ...snapshot.findings,
+    ...qualityReport.findings,
+    ...factualClaimReport.findings,
+    ...snapshotClaimReport.findings,
   ];
-  const warnings = findings.filter((f) => f.severity === "warning").length;
-  const infos = findings.filter((f) => f.severity === "info").length;
+  // Only warnings affect audit status; information remains available for the user's review.
+  const warnings = findings.filter(
+    (finding) => finding.severity === "warning",
+  ).length;
+  const infos = findings.filter(
+    (finding) => finding.severity === "info",
+  ).length;
   return {
     status: warnings === 0 ? "pass" : "fail",
     findings,
     warnings,
     infos,
     filesScanned:
-      quality.filesScanned + factual.filesScanned + snapshot.filesScanned,
+      qualityReport.filesScanned +
+      factualClaimReport.filesScanned +
+      snapshotClaimReport.filesScanned,
   };
 }

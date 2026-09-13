@@ -78,8 +78,17 @@ describe("dashboard Hooks view", () => {
     );
     // Every excluded provider gives the Hooks screen a practical reason beside its non-green state.
     for (const providerExclusion of providerExclusions) {
-      assert.notEqual(providerExclusion.event, "PreToolUse");
-      assert.match(providerExclusion.reason, /^(Antigravity|Copilot) /u);
+      const exclusionId = `${providerExclusion.hookId}/${providerExclusion.providerId}`;
+      assert.notEqual(
+        providerExclusion.event,
+        "PreToolUse",
+        `${exclusionId} excludes a PreToolUse hook`,
+      );
+      assert.match(
+        providerExclusion.reason,
+        /^(Antigravity|Copilot) /u,
+        `${exclusionId} has no provider-named reason`,
+      );
     }
   });
 });

@@ -1,125 +1,96 @@
 ---
 category: quality
-last_reviewed: 2026-08-06
+last_reviewed: 2026-09-05
 ---
 
 ## Footgun: Audit score tempering fields must survive every renderer
 
 **Status:** active | **Created:** 2026-05-19 | **Evidence:** ACTUAL_MEASURED
 
-**Symptoms:** A harness concern can truthfully pass while still needing a visible caveat, such as "Verification has no post-turn hook evidence" or "Constraints only prove known deny patterns; broad file read/write enforcement remains unknown." If a new renderer, dashboard reader, or prompt summary drops `AuditConcern.limits`, the UI can regress to a clean-looking PASS/100 even though the JSON contract contains the caveat.
+**Prevention:** When adding or changing a non-gating audit caveat, update every consumer in the same patch: core type, JSON reader types, text and Markdown renderer, dashboard reader, prompt summary, and at least one unit test that fails if the caveat disappears from a human-facing surface.
 
-**Why it happens:** Audit output fans out through several parallel consumers: `AuditConcern` JSON, text/Markdown renderers, dashboard readers/types, Home/Quality/Setup scoring views, and quality-prompt summaries. A field that tempers a score is load-bearing even though it is non-gating, so forgetting one consumer recreates the old "green but over-marketed" failure mode.
+**Symptoms:** A harness concern truthfully passes but still needs a visible caveat such as "Verification has no post-turn hook evidence". A renderer, dashboard reader, or prompt summary that drops `AuditConcern.limits` shows a clean PASS/100 while the JSON contract carries the caveat.
 
-**Evidence:**
-- `src/cli/audit/types.ts` (search: `limits: string[]`) - `limits` is part of the public concern contract.
-- `src/cli/audit/render.ts` (search: `Limit:`) - terminal and Markdown output preserve the caveat.
-- `src/dashboard/dashboard-readers.ts` (search: `limits: readStringArray`) - dashboard payload readers preserve the field.
-- `src/cli/prompt/compose-quality-common.ts` (search: `limits: ${concern.limits.join`) - quality prompts include limits beside score and metric counts.
+**Why it happens:** Audit output fans out through parallel consumers, and a field that tempers a score is load-bearing even though it is non-gating.
 
-**Prevention:** When adding or changing a non-gating audit caveat, update every audit consumer in the same patch: core type, JSON reader types, text/Markdown renderer, dashboard reader, prompt summary, and at least one unit test that fails if the caveat disappears from a human-facing surface.
+**Evidence:** `src/cli/audit/types.ts` (search: `limits: string[]`); `src/cli/audit/render.ts` (search: `Limit:`); `src/dashboard/dashboard-readers.ts` (search: `limits: readStringArray`); `src/cli/prompt/compose-quality-common.ts` (search: `limits: ${concern.limits.join`).
 
 ## Footgun: Unsupported runtime capabilities must be skipped, not scored missing
 
 **Status:** active | **Created:** 2026-06-11 | **Evidence:** ACTUAL_MEASURED
 
-**Symptoms:** A harness concern can remain capped below 100 for an agent even after all fixable setup work is complete, because the audit treats an unavailable platform feature as missing evidence. The 1.12.0 Verification workstream hit this with Copilot: `workflow/manifest.json` declares `hook_events.post_turn: null`, so Copilot cannot host a project-local post-turn hook, yet `post-turn-hook-integrity` originally lowered its Verification score to 75.
+**Prevention:** When an audit check depends on a runtime capability, use manifest-backed `supports*` facts to choose between fail and skip. Never award a neutral pass for unavailable capability evidence, and keep a fixture proving the same missing state still fails for a supporting agent.
 
-**Why it happens:** Missing evidence and not-applicable evidence look similar unless the check consults manifest-backed capability metadata. A neutral pass would inflate evidence; a failure punishes an unfixable runtime gap. The correct representation is a skipped check that stays out of the concern denominator, while supported agents with missing or masked hooks still lose the score.
+**Symptoms:** A concern stays capped below 100 for an agent after all fixable setup work is done. Copilot declares `hook_events.post_turn: null`, yet `post-turn-hook-integrity` once lowered its Verification score to 75.
 
-**Evidence:**
-- `workflow/manifest.json` (search: `"post_turn": null`) - Copilot has no post-turn hook event.
-- `src/cli/agents/registry.ts` (search: `supportsPostTurnHook`) - the runtime capability derives from manifest hook events.
-- `src/cli/audit/harness/check-verification.ts` (search: `supportsPostTurnHook === false`) - `post-turn-hook-integrity` skips unsupported agents but still evaluates supported agents.
-- `test/unit/audit-command/scoring-model.test.ts` (search: `skips post-turn hook integrity for agents without a post-turn hook event`) - Copilot reaches Verification 100 without a fake hook pass, while supporting-agent no-hook and masked-hook fixtures keep the 25-point loss.
+**Why it happens:** Missing evidence and not-applicable evidence look identical unless the check consults capability metadata. A skip stays out of the concern denominator; a neutral pass inflates evidence; a failure punishes an unfixable gap.
 
-**Prevention:** Any audit check tied to a runtime capability must first ask whether the selected agent can host that capability. Use manifest-backed `supports*` facts to choose between fail and skip. Never use a neutral pass for unavailable capability evidence, and always keep a regression fixture proving the same missing state still fails for at least one supporting agent.
-
+**Evidence:** `workflow/manifest.json` (search: `"post_turn": null`); `src/cli/agents/registry.ts` (search: `supportsPostTurnHook`); `src/cli/audit/harness/check-verification.ts` (search: `supportsPostTurnHook === false`); `test/unit/audit-command/scoring-model.test.ts` (search: `skips post-turn hook integrity for agents without a post-turn hook event`) keeps Copilot at 100 while supporting-agent no-hook and masked-hook fixtures keep the 25-point loss.
 
 ## Footgun: Structural validation passes while content is still unanswerable
 
-**Status:** active | **Created:** 2026-05-26 | **Evidence:** ACTUAL_MEASURED
+**Status:** active | **Created:** 2026-05-26 | **Evidence:** OBSERVED
 
-**Symptoms:** An audit reports PASS — every required section is present, every heading matches, every structural check is green — but the artifact still has unresolved open questions, unanswered specification ambiguities, or placeholder values that prevent downstream work. A fresh agent or maintainer reads the artifact and can't proceed; the audit signal was true but unhelpful. The gap between "structurally valid" and "implementation-ready" is invisible to the structural checks because they don't read inside the sections.
+**Prevention:** For any audit that gates "ready" on an artifact, pick one content marker (`?`, `TBD`, `Answer:`, `Resolved:`) and count unresolved instances as a finding separate from structural integrity, so a valid spec with five open questions surfaces `unresolved-content: 5` beside the green structural result and re-runs stay resumable. When goat-flow's audit is green but a downstream agent still cannot proceed, capture the missing content check as a new deterministic check before calling it user error.
 
-**Why it happens:** Structural checks (does the section exist? does the heading match? does the file have N required H2s?) are cheap to write and easy to make deterministic, so they accumulate first. Content-level checks (does each open question have an answer? is each placeholder resolved? is each decision recorded?) require parsing inside sections and detecting domain-specific markers. Skipping the content-level layer leaves a gap that nothing in the build-mode audit fills. The baseline already names this as pain point #2 ("Scanner compliance vs quality divergence"), but goat-flow's response to date routes it to inferential critique rather than to a deterministic content check.
+**Symptoms:** Every required section is present and every structural check is green, but the artifact still holds unanswered questions or placeholder values, so a fresh agent cannot proceed. The audit signal was true and unhelpful.
 
-**Evidence:**
-- External: `kennyjpowers/claude-flow` PR #6 ("Feat: spec open questions workflow", MERGED 2025-11-22, 5,502 additions). The motivating statement is in the external PR's specs/spec-open-questions-workflow/02-specification.md file (search: `only checks structural completeness (18 required sections), not whether open questions have been answered. There's a gap between "structurally valid" and "implementation-ready."`). The PR added an entire workflow command whose only job is to detect unresolved `?` questions inside an otherwise valid spec — re-parse on each run, detect already-resolved entries by `Answer:` keyword presence, prompt only for unresolved.
-- Goat-flow committed direction: `src/cli/audit/check-content-quality.ts` (search: `runContentQualityChecks`) is the deterministic content-quality layer that should own unresolved-content markers instead of relying on structural setup checks alone.
-- Related committed pattern: `.goat-flow/learning-loop/patterns/verification.md` (search: `Non-gating audit gaps belong in explicit limits`) maps over-interpreted audit evidence to explicit caveats; extend the same deterministic-content path before treating a green structural audit as implementation-ready.
-- Goat-flow surfaces at risk: `src/cli/audit/check-goat-flow.ts` (search: `16 setup-scope checks`) currently asserts structural presence of `.goat-flow/architecture.md`, `code-map.md`, etc. — but does not inspect their content for unresolved questions. Same applies to milestone files in `.goat-flow/plans/**`.
+**Why it happens:** Structural checks are cheap and deterministic, so they accumulate first; content checks need domain-specific markers inside sections. `src/cli/audit/check-goat-flow.ts` (search: `16 setup-scope checks`) asserts presence of `.goat-flow/architecture.md`, `code-map.md`, and siblings without reading them, and milestone files under `.goat-flow/plans/**` are not inspected at all. `src/cli/audit/check-content-quality.ts` (search: `runContentQualityChecks`) is the deterministic layer that owns such markers.
 
-**Prevention:**
-1. For any audit that gates "ready" status on an artifact (spec, plan, critique report, ADR draft, milestone file), pick one content marker (`?`, `TBD`, `Answer:`, `Resolved:`) and add a check that counts unresolved instances separately from structural integrity.
-2. Don't conflate "structural pass" with "ready to ship." A structurally valid spec with five unanswered questions should not block on the structural check; it should surface as a distinct `unresolved-content: 5` finding alongside the green structural result.
-3. Treat content markers as deliberate: pick the marker word once, enforce it in the audit, so re-running detects the same resolved items every time and the workflow becomes resumable. This is the kennyjpowers PR #6 mechanism — `Answer:` is the load-bearing keyword.
-4. When goat-flow's own audit reports green but a downstream agent still can't proceed, capture the specific missing content check as a new harness concern or a new build-mode check before treating the failure as "user error."
-
-Applies to: any goat-flow audit that gates progress on artifact completeness — `src/cli/audit/check-goat-flow.ts` for setup artifacts, `src/cli/audit/harness/check-*.ts` for harness concerns, and future content-level checks proposed by M14. Cross-reference: existing footgun "Audit score tempering fields must survive every renderer" (above) for the parallel concern about caveats; this footgun is about caveats that should *exist* in the first place, not about preserving caveats already present.
+**Evidence:** External: `kennyjpowers/claude-flow` PR #6 ("Feat: spec open questions workflow", merged 2025-11-22) added a command whose only job is to find unresolved `?` questions inside an otherwise valid spec, detecting resolved ones by `Answer:` presence; its specification (search: `only checks structural completeness (18 required sections), not whether open questions have been answered. There's a gap between "structurally valid" and "implementation-ready."`) states the gap. Related local rule: `.goat-flow/learning-loop/patterns/verification.md` (search: `Non-gating audit gaps belong in explicit limits`). The tempering-fields entry above protects caveats that exist; this entry is about caveats that should exist at all.
 
 ## Footgun: Audit checks must not prescribe machine-specific shared content
 
 **Status:** active | **Created:** 2026-05-27 | **Evidence:** ACTUAL_MEASURED
 
-**Symptoms:** A deterministic audit check can be technically satisfiable but push users toward committed content that is wrong for other developers, machines, or checkouts.
+**Prevention:** Before adding an audit check, ask whether the user can satisfy it with content that stays true across machines and checkouts. If not, redesign the check or its remediation wording before shipping.
 
-**Why it happens:** Checks that validate "presence of guidance" sometimes encode remediation examples too concretely. The original workspace-boundary guidance encouraged hardcoded absolute paths in version-controlled instruction files, which made the files stale anywhere except the author's checkout.
+**Symptoms:** A deterministic check is satisfiable but pushes users toward committed content that is wrong for other developers, machines, or checkouts.
 
-**Evidence:** `.goat-flow/learning-loop/decisions/ADR-026-keep-workspace-boundary-path-agnostic.md` (search: `path-agnostic`) records the current contract: the boundary concept stays, but remediation must be portable and current paths belong in runtime prompts.
+**Why it happens:** The original workspace-boundary guidance encouraged hardcoded absolute paths in version-controlled instruction files, which made them stale anywhere except the author's checkout.
 
-**Prevention:** Before adding an audit check, ask whether the user can satisfy it with content that remains true across machines and checkouts. If not, redesign the check or the remediation wording before shipping.
+**Evidence:** `.goat-flow/learning-loop/decisions/ADR-026-keep-workspace-boundary-path-agnostic.md` (search: `path-agnostic`) keeps the boundary concept, requires portable remediation, and moves current paths into runtime prompts.
 
 ## Footgun: Advisory warnings without enforcement train users to ignore output
 
 **Status:** active | **Created:** 2026-05-27 | **Evidence:** ACTUAL_MEASURED
 **Decision changed:** Optional missing metadata remains visible in structured facts; warnings are reserved for malformed supplied values.
-**Trigger phase:** VERIFY
+**Trigger phase:** SCOPE
+**Caught at:** VERIFY
 **Incident count:** 2
 **Latest occurrence:** 2026-07-17
 
-**Symptoms:** A command emits the same wall of warnings on every run, but the warnings never fail the gate and have no migration path. Users and agents learn to scroll past them, including warnings that might matter later.
+**Prevention:** An advisory warning needs an enforcement timeline, a migration path, or removal. A warning that fires on 100% of the corpus is not a safety net.
 
-**Why it happens:** Advisory metadata checks are easy to add, but if the existing corpus is not backfilled and no deadline is set, the warning stream becomes permanent noise.
+**Symptoms:** A command prints the same wall of warnings on every run; they never fail the gate and have no migration path, so users and agents scroll past them, including the ones that will matter.
 
-**Evidence:** `stats --check` previously emitted decision-metadata warnings for every ADR missing optional Author(s) and Ticket/Context fields. The current stats warning pipeline is anchored at `src/cli/stats/stats.ts` (search: `Collect advisory learning-loop warnings`), and `.goat-flow/learning-loop/decisions/README.md` (search: `Author(s):`) still recommends the metadata without forcing unavoidable warnings.
+**Why it happens:** Metadata warnings are easy to add, and without backfill or a deadline the stream becomes permanent noise.
 
-**Prevention:** Advisory warnings must have an enforcement timeline, a migration path, or be removed. A warning that fires on 100% of the corpus is not a safety net.
-
-**Recurrence update (2026-07-17):** `stats --check` passed while emitting 35 memory-quality warning groups covering 342 missing optional `Decision changed` values. The remediation kept `hasDecisionChangedGuidance` in JSON and removed absence-only warnings from `src/cli/stats/stats.ts` (search: `describeMemoryQualityIssues`).
+**Evidence:** `stats --check` once warned for every ADR missing optional Author(s) and Ticket/Context fields; the pipeline is anchored at `src/cli/stats/stats.ts` (search: `Collect advisory learning-loop warnings`), and `.goat-flow/learning-loop/decisions/README.md` (search: `Author(s):`) still recommends the metadata without forcing warnings. **Recurrence 2026-07-17:** `stats --check` passed while emitting 35 warning groups for 342 missing optional `Decision changed` values; `hasDecisionChangedGuidance` stays in JSON and absence-only warnings were removed from `src/cli/stats/stats.ts` (search: `describeMemoryQualityIssues`).
 
 ---
 
 ## Resolved Entries
 
----
+> Historical record. These entries are no longer active traps.
 
 ## Footgun: CI gates run only on pull_request, so direct pushes and merges bypass format/lint/test enforcement
 
 **Status:** resolved | **Created:** 2026-07-04 | **Resolved:** 2026-07-04 | **Evidence:** ACTUAL_MEASURED
 **hallucination-risk:** high
 
-**Symptoms:** `bash scripts/preflight-checks.sh` failed on a clean checkout of `dev` even though CI was green and a prior-day preflight passed. Observed 2026-07-04: `FAIL 75 checks` with `Prettier (17 unformatted files)` on files last touched weeks earlier with no red build anywhere.
+**Resolution:** `.github/workflows/ci.yml` (search: `push:`) declares both `push` and `pull_request` triggers for `[main, dev]` since 2026-07-04, and the 17 stale files were formatted in the same change; preflight returned `PASS 75 checks`.
 
-**Why it happened:** `.github/workflows/ci.yml` declared only a `pull_request` trigger for `[main, dev]` - there was no `push:` trigger. Commits made directly to `main` or `dev`, including `Merge branch 'main' into dev` merge commits, never ran `npm run format:check`, shellcheck, or the test job, so gate-breaking state accumulated on those branches and surfaced later on whoever ran preflight. The hallucination risk cuts both ways: a reviewer who sees the `format:check` step concludes "CI enforces formatting" (that reads the job, not the trigger), and a reviewer who sees the failure assumes the CI check is missing (a 2026-07-04 quality assessment claimed "no enforcement point exists" without reading the workflow).
+**Original symptoms:** `bash scripts/preflight-checks.sh` failed on a clean `dev` checkout with `Prettier (17 unformatted files)` last touched weeks earlier while CI was green. The workflow had only a `pull_request` trigger, so direct commits to `main` or `dev` and merge commits never ran `npm run format:check`, shellcheck, or tests. The step (search: `npm run format:check`) existed the whole time; a reviewer who read the steps concluded CI enforced formatting, and a quality assessment that saw the failure claimed no enforcement point existed.
 
-**Evidence:** Incident: 17 files under `src/` and `test/` failed Prettier on `dev` after the 2026-07-04 main-into-dev merge; they were last touched by direct-to-main commits between 2026-05-31 and 2026-07-03, none of which triggered CI. The format gate step existed in the workflow the whole time (search: `npm run format:check`).
-
-**Fix:** `.github/workflows/ci.yml` (search: `push:`) now declares both `push` and `pull_request` triggers for `[main, dev]` (2026-07-04, human-approved), so direct pushes and merge commits run the same gates as PRs. The 17 files were formatted via `npm run format` in the same change; preflight returned `PASS 75 checks`.
-
-**Prevention:** When verifying an enforcement claim about CI, read the workflow's `on:` trigger block, not just its steps - a present gate step proves nothing about when it runs. Running `bash scripts/preflight-checks.sh` before pushing remains the local belt-and-braces.
+**Prevention retained:** When verifying a CI enforcement claim, read the workflow's `on:` block, not only its steps; a present gate step proves nothing about when it runs.
 
 ## Footgun: Metric checks inflated harness concern scores to 100% even when the capability was absent
 
 **Status:** resolved | **Created:** 2026-04-30 | **Resolved:** 2026-04-30 | **Evidence:** ACTUAL_MEASURED
 
-**Symptoms:** `audit --harness` reported Verification score 100 and Recovery score 100 while its own findings said "no structured toolchain.test configured" and "26 milestone files at 0%." All four quality assessment agents (Claude, Codex, Copilot, Gemini) independently identified this as the top structural flaw across 16 quality reports.
+**Resolution:** Three layers were fixed separately. `computeHarness` in `src/cli/audit/audit.ts` (search: `counts[check.concern].total++`) treats metric-type degraded evidence as score-only; `agentScore()` in `home.html`, `quality.html`, and `setup.html` counts score-only metric failures in dashboard percentages and labels them warnings; `buildScope` in `src/cli/audit/audit.ts` (search: `impact === "scope-fail"`) keeps score-only failures out of the scope failure filter, so a failing metric no longer flips `harness.status` and `overall.status` to fail.
 
-**Root cause:** `computeHarness` in `src/cli/audit/audit.ts` (search: `counts[check.concern].total++`) counted every harness check the same way, so metric-type degraded evidence could be hidden or over-marketed. The `AuditConcern` type contract (search: `metrics: number`) distinguishes metric counts from status-gating integrity/advisory checks, and `applyCheckToConcern` skips metrics for status. But the score and scope calculations also need their own explicit metric/impact handling.
+**Original symptoms:** `audit --harness` reported Verification and Recovery at 100 while its own findings said "no structured toolchain.test configured" and "26 milestone files at 0%"; all four quality-assessment agents named it the top structural flaw across 16 reports. The `AuditConcern` contract already separated metric counts from gating checks, but the score and scope calculations lacked their own handling.
 
-**Fix:** Three layers of the same bug, fixed separately:
-1. `computeHarness` in `src/cli/audit/audit.ts` (search: `counts[check.concern].total++`) - handles metric-type degraded evidence as score-only rather than status-gating. Fixed concern scores that previously implied full readiness.
-2. `agentScore()` in `home.html`, `quality.html`, and `setup.html` - includes score-only metric failures in dashboard maturity percentages while keeping them out of audit status. A later audit found the earlier `c.type !== 'metric'` filter made the dashboard say 100% / "All checks passing" while verification evidence was missing, so the dashboard now scores all non-skipped checks and labels score-only failures as warnings.
-3. `buildScope` in `src/cli/audit/audit.ts` (search: `impact === "scope-fail"`) - excludes score-only failures from the scope failure filter. A metric returning `fail` was previously included in the scope's `failures` array, causing `harness.status = "fail"` and `overall.status = "fail"` even though all concerns were PASS. This made every project without optional runtime verification evidence fail the `--harness` gate.
-
-**Prevention:** The metric contract has three enforcement points, not one: concern score calculation, dashboard maturity display, and scope status. Metrics must lower concern/dashboard scores when they fail, but never create a scope failure. When adding new harness checks, verify the check type and impact are intentional. The contract: `integrity` gates status, `advisory` gates status unless acknowledged, `metric` can lower scores but never creates a scope failure.
+**Prevention retained:** The metric contract has three enforcement points: concern score, dashboard display, and scope status. `integrity` gates status, `advisory` gates status unless acknowledged, `metric` lowers scores but never creates a scope failure. Verify that check type and impact are intentional when adding harness checks.

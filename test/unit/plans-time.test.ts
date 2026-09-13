@@ -142,6 +142,69 @@ function symlinkOrSkip(
 }
 
 describe("plans time", () => {
+  /** Writes consumer fixtures only to a temporary project; each file retains its own open clock. */
+  it("keeps simultaneous lane receipts independent through start and finalize", () => {
+    const root = mkdtempSync(join(tmpdir(), "goat-flow-plan-parallel-time-"));
+    try {
+      const plan = join(root, ".goat-flow", "plans", "parallel");
+      mkdirSync(plan, { recursive: true });
+      for (const name of [
+        "M17-shared-baseline.md",
+        "M18-go-precision.md",
+        "M19-php-precision.md",
+      ]) {
+        writeFileSync(
+          join(plan, name),
+          readFileSync(
+            join(
+              REPOSITORY_ROOT,
+              "test",
+              "fixtures",
+              "plans",
+              "parallel-lanes",
+              name,
+            ),
+          ),
+        );
+      }
+      const go = join(plan, "M18-go-precision.md");
+      const php = join(plan, "M19-php-precision.md");
+      applyPlanTimeTransition(
+        go,
+        { action: "start", category: "product" },
+        100,
+      );
+      applyPlanTimeTransition(php, { action: "start", category: "proof" }, 110);
+      const before = readFileSync(php, "utf-8");
+      assert.equal(
+        applyPlanTimeTransition(go, { action: "status" }, 120).receipt.state,
+        "active",
+      );
+      assert.equal(
+        applyPlanTimeTransition(php, { action: "status" }, 120).receipt.state,
+        "active",
+      );
+      const goStop = applyPlanTimeTransition(
+        go,
+        { action: "stop", finalize: true, discardOpen: false },
+        160,
+      );
+      assert.equal(goStop.receipt.summary?.totalSeconds, 60);
+      assert.equal(readFileSync(php, "utf-8"), before);
+      const phpStop = applyPlanTimeTransition(
+        php,
+        { action: "stop", finalize: true, discardOpen: false },
+        230,
+      );
+      assert.equal(phpStop.receipt.summary?.totalSeconds, 120);
+      assert.equal(phpStop.receipt.state, "finalized");
+      const checked = runPlans("check", plan, "--strict", "--max-active", "2");
+      assert.equal(checked.status, 0, checked.stdout + checked.stderr);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it("parses the three timing actions and rejects contradictory flags", () => {
     const milestonePath = resolve("M01-fixture.md");
     const start = parseCLIArgs([

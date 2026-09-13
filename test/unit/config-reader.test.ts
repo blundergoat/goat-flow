@@ -4,6 +4,25 @@
  * project settings still produce predictable operator-facing results.
  */
 import { describe, it } from "node:test";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { parseCLIArgs } from "../../src/cli/cli-parser.js";
+import { CLIError } from "../../src/cli/cli-error.js";
+import {
+  PROJECT_ROOT,
+  runPlansCheck,
+  writeCheckFixture,
+  writeCheckPlan,
+  canonicalMilestoneBody,
+} from "./plans-check.helpers.js";
 import assert from "node:assert/strict";
 import { loadConfig } from "../../src/cli/config/reader.js";
 import { AUDIT_VERSION } from "../../src/cli/constants.js";
@@ -42,6 +61,127 @@ describe("config defaults when file is missing", () => {
     assert.deepStrictEqual(result.config.toolchain.test, []);
     assert.equal(result.config.learningLoop.autoCapture.enabled, false);
     assert.deepStrictEqual(result.config.learningLoop.autoCapture.targets, []);
+  });
+});
+
+describe("config validates active milestone policy", () => {
+  it("accepts optional asymmetric percentile pairs and rejects malformed bands by config key", () => {
+    for (const pair of [
+      [20, 80],
+      [12.5, 95],
+      [1, 99],
+    ]) {
+      const result = loadConfig(
+        "/tmp",
+        configFS(`plans:\n  forecastBandQuantiles: ${JSON.stringify(pair)}`),
+      );
+      assert.equal(result.valid, true);
+      assert.deepEqual(result.config.plans.forecastBandQuantiles, pair);
+      assert.deepEqual(result.warnings, []);
+    }
+    for (const raw of [
+      "null",
+      "true",
+      '"20,80"',
+      "[]",
+      "[10]",
+      "[10, 90, 95]",
+      '["10", 90]',
+      "[0, 90]",
+      "[50, 90]",
+      "[10, 50]",
+      "[10, 100]",
+      "[90, 10]",
+      "[.nan, 90]",
+      "[10, .inf]",
+    ]) {
+      const result = loadConfig(
+        "/tmp",
+        configFS(`plans:\n  forecastBandQuantiles: ${raw}`),
+      );
+      assert.equal(result.valid, false, raw);
+      assert.deepEqual(result.config.plans.forecastBandQuantiles, [10, 90]);
+      assert.deepEqual(result.errors, [
+        {
+          level: "error",
+          path: "plans.forecastBandQuantiles",
+          message: "must be a pair with 0 < low < 50 < high < 100",
+        },
+      ]);
+    }
+  });
+
+  it("defaults omitted policy to one and retains the canonical plans path", () => {
+    for (const yaml of [null, "", "plans: {}", "plans:\n  path: elsewhere"]) {
+      const result = loadConfig("/tmp", configFS(yaml));
+      assert.equal(result.valid, true);
+      assert.deepEqual(result.config.plans, {
+        path: ".goat-flow/plans/",
+        maxActiveMilestones: 1,
+        forecastBandQuantiles: [10, 90],
+      });
+    }
+  });
+
+  it("loads positive safe integer caps without config warnings", () => {
+    for (const cap of [1, 2, Number.MAX_SAFE_INTEGER]) {
+      const result = loadConfig(
+        "/tmp",
+        configFS(`plans:\n  maxActiveMilestones: ${cap}`),
+      );
+      assert.equal(result.valid, true);
+      assert.equal(result.config.plans.maxActiveMilestones, cap);
+      assert.deepEqual(result.warnings, []);
+    }
+  });
+
+  it("names malformed policy values instead of silently accepting defaults", () => {
+    for (const raw of [
+      "0",
+      "-1",
+      "1.5",
+      '"2"',
+      "true",
+      ".inf",
+      ".nan",
+      "9007199254740992",
+      "null",
+    ]) {
+      const result = loadConfig(
+        "/tmp",
+        configFS(`plans:\n  maxActiveMilestones: ${raw}`),
+      );
+      assert.equal(result.valid, false, raw);
+      assert.equal(result.config.plans.maxActiveMilestones, 1);
+      assert.deepEqual(result.errors, [
+        {
+          level: "error",
+          path: "plans.maxActiveMilestones",
+          message: "must be a positive safe integer",
+        },
+      ]);
+    }
+    for (const raw of ["null", "[]", "2"]) {
+      const result = loadConfig("/tmp", configFS(`plans: ${raw}`));
+      assert.equal(result.valid, false, raw);
+      assert.equal(result.errors[0]?.path, "plans");
+    }
+  });
+
+  it("warns about a misspelled cap while preserving the default", () => {
+    const result = loadConfig(
+      "/tmp",
+      configFS("plans:\n  maxActiveMilestone: 2"),
+    );
+    assert.equal(result.valid, true);
+    assert.equal(result.config.plans.maxActiveMilestones, 1);
+    assert.deepEqual(result.warnings, [
+      {
+        level: "warning",
+        path: "plans.maxActiveMilestone",
+        message: "unknown key",
+      },
+    ]);
   });
 });
 
@@ -600,5 +740,223 @@ hooks:
       ),
       [],
     );
+  });
+});
+
+describe("plans check: active cap input and project authority", () => {
+  it("parses only canonical positive decimal caps", () => {
+    assert.equal(parseCLIArgs(["plans", "check", "."]).plansMaxActive, null);
+    for (const cap of [1, 2, Number.MAX_SAFE_INTEGER]) {
+      assert.equal(
+        parseCLIArgs(["plans", "check", ".", "--max-active", String(cap)])
+          .plansMaxActive,
+        cap,
+      );
+    }
+    for (const raw of [
+      "",
+      "0",
+      "-1",
+      "1.5",
+      "01",
+      "+2",
+      "2e0",
+      "0x2",
+      " 2",
+      "2 ",
+      "Infinity",
+      "NaN",
+      "9007199254740992",
+    ]) {
+      assert.throws(
+        () => parseCLIArgs(["plans", "check", ".", `--max-active=${raw}`]),
+        (error: unknown) =>
+          error instanceof CLIError &&
+          error.exitCode === 2 &&
+          error.message.includes("--max-active"),
+      );
+    }
+  });
+
+  it("rejects the cap on export, every timing action, and non-plan commands", () => {
+    for (const args of [
+      ["plans", "export", "."],
+      ["plans", "time", "start", "M01.md", "--category", "product"],
+      ["plans", "time", "stop", "M01.md"],
+      ["plans", "time", "status", "M01.md"],
+      ["audit", "."],
+    ]) {
+      assert.throws(
+        () => parseCLIArgs([...args, "--max-active", "2"]),
+        (error: unknown) =>
+          error instanceof CLIError &&
+          error.exitCode === 2 &&
+          error.message === "--max-active is only valid for plans check.",
+      );
+    }
+    const missing = runPlansCheck(".", "--max-active");
+    assert.equal(missing.status, 2);
+    assert.match(missing.stderr, /--max-active/u);
+  });
+
+  /** Temporary canonical and external plans prove config errors, precedence, and quiet warnings through the CLI. */
+  it("loads only canonical project policy and lets fully explicit policy bypass malformed config", () => {
+    const root = mkdtempSync(join(tmpdir(), "goat-flow-plan-policy-"));
+    try {
+      const canonical = writeCheckFixture(
+        join(root, ".goat-flow", "plans"),
+        canonicalMilestoneBody(),
+      );
+      const external = writeCheckFixture(
+        join(root, "external"),
+        canonicalMilestoneBody(),
+      );
+      const configPath = join(root, ".goat-flow", "config.yaml");
+      const baseline = runPlansCheck(external, "--strict");
+      assert.equal(baseline.status, 0, baseline.stdout + baseline.stderr);
+      const missingConfig = runPlansCheck(canonical, "--strict");
+      assert.equal(missingConfig.stdout, baseline.stdout);
+      assert.equal(missingConfig.stderr, baseline.stderr);
+      assert.equal(missingConfig.status, 0);
+      for (const yaml of [
+        "plans:\n  maxActiveMilestones: 0",
+        "plans: []",
+        "plans: [",
+      ]) {
+        writeFileSync(configPath, yaml);
+        const invalid = runPlansCheck(canonical, "--strict");
+        assert.equal(invalid.status, 2);
+        assert.ok(invalid.stderr.includes(configPath), invalid.stderr);
+        if (yaml.includes("maxActiveMilestones"))
+          assert.match(invalid.stderr, /plans\.maxActiveMilestones/u);
+        const override = runPlansCheck(
+          canonical,
+          "--strict",
+          "--max-active",
+          "2",
+          "--band-quantiles",
+          "10,90",
+        );
+        assert.equal(override.status, 0, override.stdout + override.stderr);
+        assert.equal(override.stderr, "");
+        const outside = runPlansCheck(external, "--strict");
+        assert.equal(outside.stdout, baseline.stdout);
+        assert.equal(outside.stderr, baseline.stderr);
+        assert.equal(outside.status, baseline.status);
+      }
+      writeFileSync(
+        configPath,
+        "plans:\n  maxActiveMilestones: 1\n  future-policy: true\n",
+      );
+      const warning = runPlansCheck(canonical, "--strict");
+      assert.equal(warning.stdout, baseline.stdout);
+      assert.equal(warning.stderr, baseline.stderr);
+      assert.equal(warning.status, 0);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  /** Copies the consumer fixture into a temporary project to prove which positive cap reaches enforcement. */
+  it("uses the canonical configured cap unless an explicit flag overrides it", () => {
+    const root = mkdtempSync(join(tmpdir(), "goat-flow-plan-cap-precedence-"));
+    try {
+      const files: Record<string, string> = {};
+      for (const name of [
+        "M17-shared-baseline.md",
+        "M18-go-precision.md",
+        "M19-php-precision.md",
+      ]) {
+        files[name] = readFileSync(
+          join(
+            PROJECT_ROOT,
+            "test",
+            "fixtures",
+            "plans",
+            "parallel-lanes",
+            name,
+          ),
+          "utf-8",
+        );
+      }
+      const plan = writeCheckPlan(join(root, ".goat-flow", "plans"), files);
+      const config = join(root, ".goat-flow", "config.yaml");
+      writeFileSync(config, "plans:\n  maxActiveMilestones: 2\n");
+      const configured = runPlansCheck(plan, "--strict");
+      assert.equal(configured.status, 0, configured.stdout + configured.stderr);
+      assert.match(configured.stdout, /plan: 2 active milestones \(cap 2\)/u);
+      const overridden = runPlansCheck(plan, "--strict", "--max-active", "1");
+      assert.equal(overridden.status, 1);
+      assert.match(
+        overridden.stdout,
+        /error: plan: multiple active milestones: M18, M19/u,
+      );
+      assert.doesNotMatch(overridden.stdout, /^active:|\(cap /mu);
+      writeFileSync(config, "plans: {}\n");
+      const omitted = runPlansCheck(plan, "--strict");
+      assert.equal(omitted.status, overridden.status);
+      assert.equal(omitted.stdout, overridden.stdout);
+      assert.equal(omitted.stderr, overridden.stderr);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  /** Symlinked operands may be readable while lacking authority to use the apparent project's config. */
+  it("requires physical containment of both the plans root and selected directory", (context) => {
+    const root = mkdtempSync(join(tmpdir(), "goat-flow-plan-policy-links-"));
+    try {
+      const project = join(root, "project");
+      const canonical = writeCheckFixture(
+        join(project, ".goat-flow", "plans"),
+        canonicalMilestoneBody(),
+      );
+      const outsidePlans = writeCheckFixture(
+        join(project, "elsewhere"),
+        canonicalMilestoneBody(),
+      );
+      const escaped = join(project, ".goat-flow", "plans", "escaped");
+      const contained = join(project, ".goat-flow", "plans", "contained");
+      const redirectedProject = join(root, "redirected");
+      mkdirSync(join(redirectedProject, ".goat-flow"), { recursive: true });
+      try {
+        symlinkSync(outsidePlans, escaped, "dir");
+        symlinkSync(canonical, contained, "dir");
+        symlinkSync(
+          join(project, ".goat-flow", "plans"),
+          join(redirectedProject, ".goat-flow", "plans"),
+          "dir",
+        );
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          "code" in error &&
+          error.code === "EPERM"
+        ) {
+          context.skip("Host does not permit unprivileged symlinks.");
+          return;
+        }
+        throw error;
+      }
+      for (const owner of [project, redirectedProject]) {
+        writeFileSync(
+          join(owner, ".goat-flow", "config.yaml"),
+          "plans:\n  maxActiveMilestones: 0",
+        );
+      }
+      for (const selected of [
+        escaped,
+        join(redirectedProject, ".goat-flow", "plans", "plan"),
+      ]) {
+        const result = runPlansCheck(selected, "--strict");
+        assert.equal(result.status, 0, result.stdout + result.stderr);
+        assert.equal(result.stderr, "");
+      }
+      const within = runPlansCheck(contained, "--strict");
+      assert.equal(within.status, 2);
+      assert.match(within.stderr, /plans\.maxActiveMilestones/u);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });

@@ -45,17 +45,22 @@ after(cleanupHookTestDirs);
 
 describe("gruff-code-quality hook (gruff.hook.v1 contract)", () => {
   it("routes naming guidance to the naming and placement owner", () => {
-    const hookSource = readFileSync(
+    for (const hookPath of [
       join(PROJECT_ROOT, "workflow", "hooks", "gruff-code-quality.sh"),
-      "utf8",
-    );
-    const namingGuidance = hookSource.match(
-      /printf 'gruff-code-quality: naming findings[^']+'/u,
-    );
+      join(PROJECT_ROOT, ".goat-flow", "hooks", "gruff-code-quality.sh"),
+    ]) {
+      const hookSource = readFileSync(hookPath, "utf8");
+      const namingGuidance = hookSource.match(
+        /printf 'gruff-code-quality: naming findings[^']+'/u,
+      );
 
-    assert.ok(namingGuidance?.[0], "hook must retain focused naming guidance");
-    assert.match(namingGuidance[0], /naming-and-placement\.md/u);
-    assert.doesNotMatch(namingGuidance[0], /code-comments\.md/u);
+      assert.ok(
+        namingGuidance?.[0],
+        `${hookPath}: hook must retain focused naming guidance`,
+      );
+      assert.match(namingGuidance[0], /naming-and-placement\.md/u, hookPath);
+      assert.doesNotMatch(namingGuidance[0], /code-comments\.md/u, hookPath);
+    }
   });
 
   // Fixture purpose: writes a hook-envelope mock to cover finding and suppression rendering.

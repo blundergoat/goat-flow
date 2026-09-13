@@ -1,33 +1,32 @@
 ---
-goat-flow-reference-version: "1.16.0"
+goat-flow-reference-version: "1.17.0"
 ---
 # Hook Policy Testing
 
 Use this playbook after changing deny-hook policy, registration, or packaging.
 It helps an agent prove dangerous commands stay blocked while ordinary user work
-stays available, and confirms every supported agent loads the central hook.
+stays available, and checks each enabled policy's central registration.
 
 ## Availability Check
 
 From the selected project's root, run the bounded installed-policy check:
 
 ```bash
-test -x .goat-flow/hooks/deny-dangerous.sh &&
-  bash .goat-flow/hooks/deny-dangerous.sh --self-test=smoke
+for policy_hook in deny-dangerous deny-git-mutations; do
+  test -x ".goat-flow/hooks/$policy_hook.sh" || exit 1
+  bash ".goat-flow/hooks/$policy_hook.sh" --self-test=smoke || exit
+done
 ```
 
 Availability is proven only when the command exits `0` and ends with a `PASS`
 summary for the requested mode:
 
 ```text
-PASS: deny-dangerous self-test (mode=smoke, executed=<count>, skipped=0)
+PASS: deny-dangerous self-test (mode=smoke, executed=<count>, skipped=<excluded>)
+PASS: deny-git-mutations self-test (mode=smoke, executed=<count>, skipped=<excluded>)
 ```
 
-`<count>` tracks the installed policy corpus, so it differs by project and grows
-as cases are added. Record this project's number as its baseline and compare
-later runs against that, not against any figure quoted here. Cases skip only
-when a hook filter narrows the run, so an unfiltered `skipped=0` with a non-zero
-count is the passing shape.
+These illustrative summary shapes are not proof. Record each policy's literal counts and exit status. The shared corpus excludes cases owned by the sibling policy, so non-zero skips are expected; common bootstrap and resolver checks run for both. Reconcile the union against the baseline instead of treating one policy's skipped count as missing coverage.
 
 If the installed hook is absent, stop and repair setup or select the correct
 project. Do not substitute the workflow-source hook as proof that a consumer's
@@ -35,8 +34,7 @@ installed policy works.
 
 ## Intent
 
-The deny hook protects users from destructive shell, secret access, and
-repository writes. Policy testing proves three separate outcomes:
+`deny-dangerous` protects against destructive shell, secret access and GitHub CLI writes. `deny-git-mutations` protects native Git commit, publication and destructive operations. Both use one parser and policy store. Policy testing proves three separate outcomes:
 
 1. dangerous command grammar is denied;
 2. a nearby harmless control remains allowed;
@@ -63,6 +61,7 @@ Run the Availability Check before editing. Then run the complete corpus:
 
 ```bash
 bash .goat-flow/hooks/deny-dangerous.sh --self-test=full
+bash .goat-flow/hooks/deny-git-mutations.sh --self-test=full
 ```
 
 Record the literal summary line and exit status. A failing baseline is an
@@ -76,17 +75,34 @@ output is not a hook classifier result. Record that denial separately; do not sp
 guarded text to evade it.
 
 Use the sanctioned self-test for corpus coverage. If an exact one-off shape still needs classification,
-write the provider event to a gitignored JSON payload file with a non-Bash file tool, then pass that
-file on stdin using a command line that contains only its path. This keeps the guarded phrase in stdin,
-not provider-matched command text, so the resulting hook output has a truthful attribution boundary.
+first choose a fresh absent path. Write the provider event to a gitignored JSON payload file with a non-Bash
+file tool, then pass that file on stdin using a command line that contains only its path. This keeps the
+guarded phrase in stdin, not provider-matched command text, so the resulting hook output has a truthful
+attribution boundary. Treat the payload as a temporary machine diagnostic, not durable narrative: include
+no secrets, retain only the exit and sanitized result, and remove the payload after the probe.
+
+```bash
+bash .goat-flow/hooks/deny-dangerous.sh < .goat-flow/scratchpad/payload.json
+```
+
+Use `deny-git-mutations.sh` for a native Git payload and `deny-dangerous.sh` for shell, secret or GitHub policy. The redirect leaves the guarded phrase in the file, so the command line stays clear of
+provider-matched text. Read the exit and stream against the event shape your provider sends:
+
+| Provider shape | Event key | Expected result |
+|---|---|---|
+| Claude | `tool_name` | exits `2`, `BLOCKED:` message on stderr |
+| Copilot | `toolName` | exits `0`, deny JSON on stdout |
+| Antigravity | `toolCall` | exits `0`, deny JSON on stdout |
 
 For each policy behaviour, test a denied shape and a neighbouring allowed
 control. This prevents a broad matcher from making ordinary terminal work
-unusable.
+unusable. Run the direct forms below where the provider admits the quoted
+operand; where it denies first, route the same shapes through the stdin
+probe above.
 
 ```bash
-bash .goat-flow/hooks/deny-dangerous.sh --check="bash -lc 'git push'"
-bash .goat-flow/hooks/deny-dangerous.sh --check="git status"
+bash .goat-flow/hooks/deny-git-mutations.sh --check="bash -lc 'git push'"
+bash .goat-flow/hooks/deny-git-mutations.sh --check="git status"
 ```
 
 Expected results:
@@ -110,12 +126,12 @@ for command_shape in \
   "if true; then git push; fi" \
   'f(){ git push; }; f'
 do
-  bash .goat-flow/hooks/deny-dangerous.sh --check="$command_shape"
+  bash .goat-flow/hooks/deny-git-mutations.sh --check="$command_shape"
   printf 'exit=%s\n' "$?"
 done
 ```
 
-On 2026-07-14, each shape exited `2` with:
+On 2026-07-14, each shape exited `2` through the then-combined `deny-dangerous.sh` with the result below. The current commands above route those same operands to their native Git owner:
 
 ```text
 BLOCKED: Policy repository: git push is not allowed. Ask the user to push manually.
@@ -127,29 +143,31 @@ classified rather than trusted as inert wrapper text.
 
 ### 4. Verify installed policy and available canonical source
 
-The dispatcher and its policy modules are one runtime unit. Always verify the
+The two entrypoints and shared parser/policy modules form one installable runtime unit. Always verify the
 installed policy that protects the user's selected project:
 
 ```bash
 bash .goat-flow/hooks/deny-dangerous.sh --self-test=full
+bash .goat-flow/hooks/deny-git-mutations.sh --self-test=full
 
 # Framework maintainers also prove the source that future consumers will install.
 if test -f workflow/hooks/deny-dangerous.sh; then
   diff -q workflow/hooks/deny-dangerous.sh .goat-flow/hooks/deny-dangerous.sh
+  diff -q workflow/hooks/deny-git-mutations.sh .goat-flow/hooks/deny-git-mutations.sh
   diff -qr workflow/hooks/deny-dangerous .goat-flow/hooks/deny-dangerous
   bash workflow/hooks/deny-dangerous.sh --self-test=full
+  bash workflow/hooks/deny-git-mutations.sh --self-test=full
 fi
 ```
 
 In the controlling workspace, either dispatcher resolves policy modules from
 the installed `.goat-flow/hooks/deny-dangerous/` store. Therefore dispatcher
 parity alone is insufficient: keep the module directories byte-identical and
-run the installed full corpus.
+run both installed full corpora. Before live rollout of a parser change, create a disposable Git root with the complete candidate `.goat-flow/hooks/` store and run both corpora there.
 
 ### 5. Verify agent registration
 
-Every supported agent must call the installed central dispatcher rather than a
-private copy. Confirm current configuration and manifest pointers:
+Every enabled policy must have its own installed central registration in each configured supported agent. Confirm current configuration and manifest pointers:
 
 ```bash
 registration_files=()
@@ -177,10 +195,10 @@ fi
 # Ripgrep is not installed on every consumer machine; POSIX grep always is.
 if command -v rg >/dev/null 2>&1; then
   rg -n --with-filename \
-    '\.goat-flow/hooks/deny-dangerous\.sh' "${registration_files[@]}"
+    '\.goat-flow/hooks/deny-(dangerous|git-mutations)\.sh' "${registration_files[@]}"
 else
   grep -nHE \
-    '\.goat-flow/hooks/deny-dangerous\.sh' "${registration_files[@]}"
+    '\.goat-flow/hooks/deny-(dangerous|git-mutations)\.sh' "${registration_files[@]}"
 fi
 ```
 
@@ -199,17 +217,18 @@ the wrong command set. Both layers must pass.
 
 Use this deeper checkout-specific proof when validating managed hook registration
 and classifier behavior. The CLI must be available, and the selected agent must
-have the installed deny hook configured in a trusted checkout.
+have both installed policy hooks configured in a trusted checkout.
 
 ```bash
 goat-flow hooks verify . --agent <id> --scenario deny-hook --trusted-target
+goat-flow hooks verify . --agent <id> --scenario git-mutations-hook --trusted-target
+goat-flow hooks verify . --agent <id> --scenario all --trusted-target
 ```
 
-The command passes four fixed inert classifier operands to the managed script as
-`--check` arguments; it inspects but never executes those operands. A proven run
-exits `0`, reports `pass` for all four scenarios, and records one local
-`hook.verify` event per scenario. `fail`, `unsupported`, `not-configured`,
-`error`, or a missing evidence event means the requested proof is incomplete.
+Both policy groups send fixed provider-shaped inputs through the exact configured handler; command operands are classified, never executed. `deny-hook` checks secret reads, pipe-to-shell, GitHub writes and a read-only control. `git-mutations-hook` checks commit, push, destructive Git and a read-only control. `all` runs thirteen scenarios: four dangerous, four Git, three Gruff and two post-turn.
+A proven run exits `0`, reports `pass` for every selected scenario, and records one
+local `hook.verify` event per scenario. `fail`, `unsupported`, `not-configured`,
+`error`, a wrong total, or a missing evidence event means the requested proof is incomplete.
 
 The selected checkout's hook code runs only with `--trusted-target`. Omit that
 flag until you have inspected and trust the checkout; the CLI then returns
@@ -217,21 +236,23 @@ explicit `unsupported` results without starting the hook, so the safe default
 is not classifier proof. The deprecated `--untrusted-target` flag remains an
 explicit static alias throughout v1.16.x.
 
-This command proves only the selected checkout's managed script, registration
-state, and four fixed decisions. It does not launch the external coding agent
-and does not prove provider-side hook delivery. Never cite it as external-agent
+These commands prove only the selected checkout's managed scripts, registration
+state, and fixed scenario decisions. They do not launch the external coding agent
+and do not prove provider-side hook delivery. Never cite them as external-agent
 delivery evidence.
+
+A policy proof belongs to its exact hook and current complete runtime. Old combined-hook proof cannot close the Git gate. Repairing shared bytes can invalidate both policy proofs; re-run both groups after repair. Confirm independent enabled choices and registrations, all refreshed Hooks rows, and audit-cache invalidation when testing a toggle or shared-file change.
 
 ## Verification Gate
 
 After any hook-policy or registration change, require all of the following:
 
-- installed smoke suite passes;
-- installed and workflow full suites pass;
+- both installed smoke suites pass;
+- installed full suites pass; framework maintainers also run workflow-source suites;
 - every new deny case has a nearby allow control;
-- dispatcher and policy-module mirrors are identical;
-- supported agent configs point to the installed central dispatcher;
-- any requested managed-hook proof reports four passes and recorded events;
+- both entrypoint and shared-runtime mirrors are identical;
+- configured agents register each enabled policy separately;
+- any requested managed-hook proof reports its selected scenario total and recorded events;
 - manifest, drift audit, shell syntax, and ShellCheck pass;
 - the original bypass or false-positive reproduction now has the intended exit.
 

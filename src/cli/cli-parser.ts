@@ -1,12 +1,8 @@
 /**
- * Turns raw `process.argv` into the fully-resolved ParsedCLI object that command dispatch consumes.
+ * Resolve the operator's command, options, and input paths before dispatch.
  *
- * It owns the whole front door: positional command detection, per-flag validation, per-command positional grammars (quality/skill/events/hooks each
- * have their own arity rules), and cross-flag checks that strict parseArgs can't express.
- *
- * The deliberate contract is fail-fast for malformed commands, flags, values, or combinations, throwing CLIError with exit code 2 (usage error) and a
- * human-readable message, so the entry point can print it and exit without a stack trace.
- * Path positionals are resolved to absolute paths here so downstream handlers never see relative input.
+ * Use this entry point to reject malformed usage with an actionable CLIError and exit code 2.
+ * Command parsers keep report input, selected projects, and workflow-specific operands separate.
  */
 
 import { parseArgs } from "node:util";
@@ -19,28 +15,41 @@ import {
 } from "./cli-agent-options.js";
 import { CLIError } from "./cli-error.js";
 import {
+  validatePlansFlags,
+  parsePlansMaxActive,
+  parsePlansBandQuantiles,
+  parsePlansTimeCategoryArg,
+} from "./cli-parser-plans.js";
+import {
   COMMANDS,
   REMOVED_COMMANDS,
   VALID_FORMATS,
+  type ClaimsSubcommand,
   type Command,
   type DiagnosticsSubcommand,
   type HookSubcommand,
+  type LearnEntryType,
+  type LearnEvidenceKind,
+  type LearnSubcommand,
   type ParsedArgValues,
   type ParsedCLI,
   type PlansSubcommand,
   type PlansTimeAction,
-  type PlansTimeCategory,
   type QualitySubcommand,
   type SkillSubcommand,
 } from "./cli-types.js";
 import { parseDiagnosticsPositionals } from "./diagnostics-command-parser.js";
 import {
+  assertTerminalSafeClaimArgument,
   parseCommandPositionals,
+  parseClaimsPositionals,
   parseEventsPositionals,
   parseHookScenarioArg,
   parseHooksPositionals,
+  parseLearnPositionals,
   parsePlansPositionals,
   parseQualityModeArg,
+  parseRecallPositionals,
   resolveOutputPath,
 } from "./cli-parser-positionals.js";
 import { buildReviewCLIFields } from "./review-command-parser.js";
@@ -51,27 +60,98 @@ import {
   type SkillPositionals,
 } from "./skill-command-parser.js";
 
-/** Parse the positional subcommand from raw CLI args; throws CLIError for removed commands with migration help. */
+const GLOBAL_INFORMATIONAL_FLAGS = new Set(["--help", "-h", "--version", "-v"]);
+const CLAIM_MARKER_SHA256 = /^[a-f0-9]{64}$/u;
+
+/**
+ * Flags a developer can use to describe one learning-loop scaffold.
+ * Kept together so strict parsing and command-specific validation expose the same authoring vocabulary.
+ * The parser loads this group only as option declarations; validation still prevents other commands from accepting them.
+ */
+const LEARN_ARG_OPTIONS = {
+  type: { type: "string" },
+  title: { type: "string" },
+  evidence: { type: "string", multiple: true },
+  search: { type: "string", multiple: true },
+  "evidence-kind": { type: "string" },
+} as const;
+
+/** Every token accepted by strict `parseArgs`; command validators below still own placement and combinations. */
+const CLI_ARG_OPTIONS = {
+  project: { type: "string", multiple: true },
+  "expected-version": { type: "string", multiple: true },
+  format: { type: "string" },
+  agent: { type: "string" },
+  mode: { type: "string" },
+  verbose: { type: "boolean", default: false },
+  output: { type: "string", short: "o" },
+  all: { type: "boolean", default: false },
+  limit: { type: "string" },
+  harness: { type: "boolean", default: false },
+  "check-drift": { type: "boolean", default: false },
+  "check-content": { type: "boolean", default: false },
+  "trusted-target": { type: "boolean", default: false },
+  "untrusted-target": { type: "boolean", default: false },
+  "no-audit-details": { type: "boolean", default: false },
+  check: { type: "boolean", default: false },
+  apply: { type: "boolean", default: false },
+  "dry-run": { type: "boolean", default: false },
+  force: { type: "boolean", default: false },
+  "force-managed": { type: "boolean", default: false },
+  "force-user-owned": { type: "boolean", default: false },
+  "force-path": { type: "string", multiple: true },
+  "update-config-version": { type: "boolean", default: false },
+  "clean-deprecated": { type: "boolean", default: false },
+  dev: { type: "boolean", default: false },
+  draft: { type: "string" },
+  "red-log": { type: "string" },
+  interactive: { type: "boolean", default: false },
+  name: { type: "string" },
+  skill: { type: "string" },
+  scenario: { type: "string" },
+  strict: { type: "boolean", default: false },
+  "max-active": { type: "string" },
+  "band-quantiles": { type: "string" },
+  category: { type: "string" },
+  target: { type: "string" },
+  "marker-sha256": { type: "string" },
+  "confirm-abandoned": { type: "boolean", default: false },
+  ...LEARN_ARG_OPTIONS,
+  finalize: { type: "boolean", default: false },
+  "discard-open": { type: "boolean", default: false },
+  yes: { type: "boolean", short: "y", default: false },
+  json: { type: "boolean", default: false },
+  help: { type: "boolean", short: "h", default: false },
+  version: { type: "boolean", short: "v", default: false },
+} as const;
+
+/** Parse the positional subcommand from raw CLI args; throws CLIError for removed or unknown commands. */
 function parseCommand(argv: string[]): {
   command: Command;
   filteredArgs: string[];
 } {
   const filteredArgs = [...argv];
-  if (filteredArgs.length === 0) {
-    return { command: "menu", filteredArgs };
-  }
   const first = filteredArgs[0];
-  if (first !== undefined && Object.hasOwn(REMOVED_COMMANDS, first)) {
+  // With no command, open the CLI menu so the operator can choose a task.
+  if (first === undefined) return { command: "menu", filteredArgs };
+  // Retired command names need their migration message before any current command is selected.
+  if (Object.hasOwn(REMOVED_COMMANDS, first)) {
     const message = REMOVED_COMMANDS[first];
+    // A known replacement message tells the operator how to retry the removed command.
     if (message !== undefined) throw new CLIError(message, 2);
   }
-  if (
-    filteredArgs.length > 0 &&
-    COMMANDS.includes(filteredArgs[0] as Command)
-  ) {
+  // Consume the command name once so the remaining words keep their operand roles.
+  if (COMMANDS.includes(first as Command)) {
     return { command: filteredArgs.shift() as Command, filteredArgs };
   }
-  return { command: "audit", filteredArgs };
+  // Top-level help and version do not require the operator to choose a workflow first.
+  if (GLOBAL_INFORMATIONAL_FLAGS.has(first)) {
+    return { command: "menu", filteredArgs };
+  }
+  throw new CLIError(
+    `Unknown command: "${first}". Run "goat-flow --help" to list commands.`,
+    2,
+  );
 }
 
 /** Parse the `--format` flag; throws CLIError for invalid values before command dispatch. */
@@ -79,7 +159,9 @@ function parseFormatArg(rawFormat: string | undefined): CLIOptions["format"] {
   const defaultFormat: CLIOptions["format"] = process.stdout.isTTY
     ? "text"
     : "json";
+  // Without an explicit format, use this command's normal presentation.
   if (!rawFormat) return defaultFormat;
+  // Reject unsupported formats before a command produces an unreadable or misleading result.
   if (!VALID_FORMATS.includes(rawFormat as (typeof VALID_FORMATS)[number])) {
     throw new CLIError(
       `Invalid format: ${rawFormat}. Use: json, text, markdown, sarif`,
@@ -91,13 +173,16 @@ function parseFormatArg(rawFormat: string | undefined): CLIOptions["format"] {
 
 /** Parse the `--agent` flag; throws CLIError for invalid or deprecated aggregate values. */
 function parseAgentArg(rawAgent: string | undefined): AgentId | null {
+  // No agent selection leaves the command's own default or selection flow in control.
   if (!rawAgent) return null;
+  // Setup now targets one agent per invocation, so an all-agent request needs separate commands.
   if (rawAgent === "all") {
     throw new CLIError(
       `--agent all is no longer supported. Run setup separately for each agent: ${validAgentFlags()}`,
       2,
     );
   }
+  // A misspelled agent must not silently install another agent's harness.
   if (!validAgents().includes(rawAgent as AgentId)) {
     throw new CLIError(
       `Invalid agent: ${rawAgent}. Use: ${validAgentList()}`,
@@ -123,6 +208,7 @@ function rejectFlagOutsideCommand(
   flag: string,
   isSet: boolean,
 ): void {
+  // An omitted option imposes no restriction; a supplied option belongs only to its owning command.
   if (command === expectedCommand || !isSet) return;
   throw new CLIError(
     `${flag} is only valid for the ${expectedCommand} command.`,
@@ -158,10 +244,13 @@ function parsedString(
 
 /** Supply ignored, valid namespace positionals while help or version short-circuits dispatch. */
 const INFORMATIONAL_POSITIONALS: Partial<Record<Command, string[]>> = {
+  claims: ["inspect"],
   diagnostics: ["context"],
   events: ["tail"],
   hooks: ["list"],
+  learn: ["new"],
   plans: ["export", "."],
+  recall: ["."],
   review: ["validate"],
 };
 /** Choose real positionals unless the CLI will stop after rendering information. */
@@ -177,7 +266,12 @@ function selectCommandPositionals(
     : positionals;
 }
 
-/** Reject shared flags when they are attached to commands that do not support them. */
+/**
+ * Reject shared flags when they are attached to commands that do not support them.
+ *
+ * Use after parsing so the user sees the first incompatible flag before any command starts.
+ * Error behavior: throws `CLIError` with exit code 2 for the first incompatible flag.
+ */
 function validateCommonFlags(command: Command, values: ParsedArgValues): void {
   rejectFlagOutsideCommand(
     command,
@@ -209,10 +303,141 @@ function validateCommonFlags(command: Command, values: ParsedArgValues): void {
     "--no-audit-details",
     parsedFlag(values, "no-audit-details"),
   );
+  // Recall is read-only and owns stricter output choices than the shared parser can express.
+  if (command === "recall") {
+    // Writing recall results to a file would violate the command's read-only user contract.
+    if (parsedString(values, "output") !== undefined) {
+      throw new CLIError(
+        "recall is read-only and does not support --output.",
+        2,
+      );
+    }
+    // Recall renders only its text and JSON views, so Markdown is rejected instead of silently changing format.
+    if (parsedString(values, "format") === "markdown") {
+      throw new CLIError("recall supports only text or json output.", 2);
+    }
+  }
+}
+
+/** Reject claims-only flags before another command can silently ignore them. Error behavior: throws CLIError for the first misplaced option. */
+function rejectClaimsFlagsOutsideCommand(values: ParsedArgValues): void {
+  const claimsOnlyFlags: Array<[string, boolean]> = [
+    ["--target", parsedString(values, "target") !== undefined],
+    ["--marker-sha256", parsedString(values, "marker-sha256") !== undefined],
+    ["--confirm-abandoned", parsedFlag(values, "confirm-abandoned")],
+  ];
+  // Recovery-only options must not acquire meaning in an unrelated CLI workflow.
+  for (const [flag, isSupplied] of claimsOnlyFlags) {
+    // An option the operator did not supply cannot invalidate another command.
+    if (!isSupplied) continue;
+    throw new CLIError(
+      `${flag} is only valid for ${flag === "--target" ? "claims" : "claims recover"}.`,
+      2,
+    );
+  }
+}
+
+/** Require terminal text/JSON output because claim inspection is not a report-file writer. Error behavior: throws CLIError before dispatch. */
+function validateClaimsOutput(values: ParsedArgValues): void {
+  // Claim inspection and recovery report to the terminal; they do not create an output artifact.
+  if (parsedString(values, "output") !== undefined) {
+    throw new CLIError(
+      "claims is terminal-only and does not support --output.",
+      2,
+    );
+  }
+  const selectedFormat = parsedString(values, "format");
+  // Claim results support human text or machine JSON, with no implied conversion to other report formats.
+  if (
+    selectedFormat !== undefined &&
+    selectedFormat !== "text" &&
+    selectedFormat !== "json"
+  ) {
+    throw new CLIError("claims supports only text or json output.", 2);
+  }
+}
+
+/** Keep recovery-only proof away from read-only inspection. Error behavior: throws CLIError when either mutation flag is supplied. */
+function validateClaimsInspectFlags(values: ParsedArgValues): void {
+  // A marker hash authorizes a specific recovery candidate and has no role in inspection.
+  if (parsedString(values, "marker-sha256") !== undefined) {
+    throw new CLIError("--marker-sha256 is only valid for claims recover.", 2);
+  }
+  // Inspecting a claim does not consume a declaration that its writer has abandoned it.
+  if (parsedFlag(values, "confirm-abandoned")) {
+    throw new CLIError(
+      "--confirm-abandoned is only valid for claims recover.",
+      2,
+    );
+  }
+}
+
+/** Require exact digest syntax and a separate human confirmation before recovery dispatch. Error behavior: throws CLIError before marker access. */
+function validateClaimsRecoveryFlags(values: ParsedArgValues): void {
+  const markerSha256 = parsedString(values, "marker-sha256");
+  // Recovery needs the exact marker the operator inspected so a newer claim cannot be released accidentally.
+  if (markerSha256 === undefined) {
+    throw new CLIError(
+      "claims recover requires --marker-sha256 <64-lowercase-hex>.",
+      2,
+    );
+  }
+  // A malformed marker hash cannot identify the claim the operator intended to recover.
+  if (!CLAIM_MARKER_SHA256.test(markerSha256)) {
+    throw new CLIError(
+      "--marker-sha256 must be exactly 64 lowercase hexadecimal characters.",
+      2,
+    );
+  }
+  // Recovery requires the operator's explicit abandoned-writer declaration before releasing a claim.
+  if (!parsedFlag(values, "confirm-abandoned")) {
+    throw new CLIError(
+      "claims recover requires --confirm-abandoned after you verify that no writer still owns the target.",
+      2,
+    );
+  }
+}
+
+/**
+ * Keep marker identity and explicit confirmation on the single recovery route that consumes them.
+ * The branches stay separate because inspection must remain read-only while recovery requires two independent operator inputs.
+ * Error behavior: throws CLIError with exit code 2 before marker access for misplaced, missing, malformed, or persistence-capable options.
+ */
+function validateClaimsFlags(
+  command: Command,
+  values: ParsedArgValues,
+  claimsSubcommand: ClaimsSubcommand | null,
+): void {
+  // Other workflows reject claim-specific options instead of ignoring a misplaced recovery request.
+  if (command !== "claims") {
+    rejectClaimsFlagsOutsideCommand(values);
+    return;
+  }
+  // Operators can inspect usage or version without supplying a claim target.
+  if (parsedFlag(values, "help") || parsedFlag(values, "version")) return;
+  validateClaimsOutput(values);
+  // Claim inspection and recovery both need the project-relative target being investigated.
+  if (parsedString(values, "target") === undefined) {
+    throw new CLIError(
+      `claims ${claimsSubcommand ?? "inspect"} requires --target <project-relative-path>.`,
+      2,
+    );
+  }
+  assertTerminalSafeClaimArgument(
+    "target path",
+    parsedString(values, "target") ?? "",
+  );
+  // Inspection checks its own options and never enters the recovery confirmation route.
+  if (claimsSubcommand === "inspect") {
+    validateClaimsInspectFlags(values);
+    return;
+  }
+  validateClaimsRecoveryFlags(values);
 }
 
 /**
  * Reject runtime scenario flags outside the explicit hooks verification route.
+ *
  * Error behavior: throws CLIError with exit code 2; a scenario name has no meaning for listing, toggling, or syncing, so accepting it silently would
  * imply a check that never ran.
  *
@@ -239,153 +464,6 @@ function validateHookFlags(
   }
 }
 
-/** Reject strict plan accounting anywhere except the read-only plans check route. */
-function validatePlansFlags(
-  command: Command,
-  values: ParsedArgValues,
-  plansSubcommand: PlansSubcommand | null,
-  plansTimeAction: PlansTimeAction | null,
-): void {
-  validatePlansStrictFlag(command, values, plansSubcommand);
-  validatePlansCategoryFlag(command, values, plansSubcommand, plansTimeAction);
-  validatePlansStopFlags(command, values, plansSubcommand, plansTimeAction);
-  validatePlansForceFlag(command, values, plansSubcommand);
-}
-
-/**
- * Keep strict plan accounting on the read-only check route.
- * Error behavior: throws CLIError with exit code 2 when `--strict` appears anywhere else.
- *
- * @param command - command the user invoked
- * @param values - parsed flag map; only `--strict` is inspected here
- * @param plansSubcommand - plans subcommand, or null when the command is not `plans`
- * @returns nothing; returning means the flag is on its only valid route
- */
-function validatePlansStrictFlag(
-  command: Command,
-  values: ParsedArgValues,
-  plansSubcommand: PlansSubcommand | null,
-): void {
-  if (
-    parsedFlag(values, "strict") &&
-    (command !== "plans" || plansSubcommand !== "check")
-  ) {
-    throw new CLIError("--strict is only valid for plans check.", 2);
-  }
-}
-
-/**
- * Require a category on timing starts and reject it everywhere else.
- * Error behavior: throws CLIError with exit code 2 in both directions, because a start with no category would record time that no later report can
- * attribute.
- *
- * @param command - command the user invoked
- * @param values - parsed flag map; only `--category` is inspected here
- * @param plansSubcommand - plans subcommand, or null when the command is not `plans`
- * @param plansTimeAction - timing action, or null when the subcommand is not `time`
- * @returns nothing; returning means the category is present exactly where it is required
- */
-function validatePlansCategoryFlag(
-  command: Command,
-  values: ParsedArgValues,
-  plansSubcommand: PlansSubcommand | null,
-  plansTimeAction: PlansTimeAction | null,
-): void {
-  const category = parsedString(values, "category");
-  const isTimingStart =
-    command === "plans" &&
-    plansSubcommand === "time" &&
-    plansTimeAction === "start";
-  if (category !== undefined && !isTimingStart) {
-    throw new CLIError("--category is only valid for plans time start.", 2);
-  }
-  if (isTimingStart && category === undefined) {
-    throw new CLIError("plans time start requires --category.", 2);
-  }
-}
-
-/**
- * Keep pause recovery and finalization flags on timing stops, and mutually exclusive.
- * Error behavior: throws CLIError with exit code 2 for a misplaced flag and again for the combined pair, because finalizing and discarding open
- * entries are opposite resolutions of the same state.
- *
- * @param command - command the user invoked
- * @param values - parsed flag map; `--finalize` and `--discard-open` are inspected here
- * @param plansSubcommand - plans subcommand, or null when the command is not `plans`
- * @param plansTimeAction - timing action, or null when the subcommand is not `time`
- * @returns nothing; returning means at most one stop flag is set, on the stop route
- */
-function validatePlansStopFlags(
-  command: Command,
-  values: ParsedArgValues,
-  plansSubcommand: PlansSubcommand | null,
-  plansTimeAction: PlansTimeAction | null,
-): void {
-  const shouldFinalize = parsedFlag(values, "finalize");
-  const shouldDiscardOpen = parsedFlag(values, "discard-open");
-  const hasStopFlag = shouldFinalize || shouldDiscardOpen;
-  const isTimingStop =
-    command === "plans" &&
-    plansSubcommand === "time" &&
-    plansTimeAction === "stop";
-  if (hasStopFlag && !isTimingStop) {
-    throw new CLIError(
-      "--finalize and --discard-open are only valid for plans time stop.",
-      2,
-    );
-  }
-  if (shouldFinalize && shouldDiscardOpen) {
-    throw new CLIError("--finalize and --discard-open cannot be combined.", 2);
-  }
-}
-
-/**
- * Keep plan-force semantics limited to generated export replacement.
- * Error behavior: throws CLIError with exit code 2 when `--force` is used on another plans route, so force can never mean "overwrite" for a command
- * that was not designed to replace a file.
- *
- * @param command - command the user invoked; non-plans commands are left to their own validators
- * @param values - parsed flag map; only `--force` is inspected here
- * @param plansSubcommand - plans subcommand, or null when the command is not `plans`
- * @returns nothing; returning means force is absent or on the export route
- */
-function validatePlansForceFlag(
-  command: Command,
-  values: ParsedArgValues,
-  plansSubcommand: PlansSubcommand | null,
-): void {
-  if (
-    parsedFlag(values, "force") &&
-    command === "plans" &&
-    plansSubcommand !== "export"
-  ) {
-    throw new CLIError("--force is only valid for plans export.", 2);
-  }
-}
-
-/**
- * Parse a start category after route validation has rejected misplaced flags.
- * Error behavior: throws CLIError with exit code 2 for an unrecognised category name.
- *
- * @param rawCategory - flag text as typed; undefined is only valid on a non-start action
- * @param action - timing action; anything but `start` yields null without inspecting the text
- * @returns the category, or null when this action does not carry one
- */
-function parsePlansTimeCategoryArg(
-  rawCategory: string | undefined,
-  action: PlansTimeAction | null,
-): PlansTimeCategory | null {
-  if (action !== "start" || rawCategory === undefined) return null;
-  if (
-    rawCategory !== "product" &&
-    rawCategory !== "proof" &&
-    rawCategory !== "other"
-  ) {
-    throw new CLIError("--category must be product, proof, or other.", 2);
-  }
-  return rawCategory;
-}
-
 /** Returns true when the command resolves to a deterministic install or setup preview/apply path. */
 function isInstallCommand(command: Command, values: ParsedArgValues): boolean {
   return (
@@ -397,10 +475,14 @@ function isInstallCommand(command: Command, values: ParsedArgValues): boolean {
 /** Validate managed-preview combinations; throws CLIError before ignored write flags confuse users. */
 function validateDryRunFlag(command: Command, values: ParsedArgValues): void {
   const shouldDryRun = parsedFlag(values, "dry-run");
-  const commandSupportsDryRun = command === "install" || command === "setup";
-  // Preview is meaningful only where users can otherwise run deterministic setup writes.
+  const commandSupportsDryRun =
+    command === "install" || command === "setup" || command === "learn";
+  // A dry run on another command would promise a preview that command cannot produce, so the CLI rejects it before dispatch.
   if (shouldDryRun && !commandSupportsDryRun) {
-    throw new CLIError("--dry-run is only valid for install or setup.", 2);
+    throw new CLIError(
+      "--dry-run is only valid for install, setup, or learn new.",
+      2,
+    );
   }
   // Authority and migration flags change what apply would do, so a preview that
   // rejected them could not answer the question the user is actually asking.
@@ -425,7 +507,9 @@ function validateAuthorityFlags(
     ["--force-user-owned", parsedFlag(values, "force-user-owned")],
     ["--force-path", parsedStringList(values, "force-path").length > 0],
   ];
+  // Installation authority options apply only where the CLI can plan or write an installation.
   for (const [flag, isSupplied] of authorityFlags) {
+    // Reject an installation approval flag on a command that cannot use that approval.
     if (isSupplied && !isInstallCommand(command, values)) {
       throw new CLIError(
         `${flag} is only valid for install or setup --apply/--dry-run.`,
@@ -449,6 +533,7 @@ function validateAuthorityFlags(
 function validateInstallFlags(command: Command, values: ParsedArgValues): void {
   validateDryRunFlag(command, values);
   validateAuthorityFlags(command, values);
+  // Applying setup changes is specific to setup; another command cannot inherit that request.
   if (command !== "setup" && parsedFlag(values, "apply")) {
     throw new CLIError("--apply is only valid for the setup command.", 2);
   }
@@ -467,7 +552,9 @@ function validateInstallFlags(command: Command, values: ParsedArgValues): void {
     ["--update-config-version", parsedFlag(values, "update-config-version")],
     ["--clean-deprecated", parsedFlag(values, "clean-deprecated")],
   ];
+  // Installation-only settings must not silently change the meaning of another workflow.
   for (const [flag, set] of installOnly) {
+    // Only supplied installation settings need this command-boundary check.
     if (set === true && !isInstallCommand(command, values)) {
       throw new CLIError(
         `${flag} is only valid for install or setup --apply/--dry-run.`,
@@ -479,7 +566,9 @@ function validateInstallFlags(command: Command, values: ParsedArgValues): void {
 
 /** Return the one target-trust choice supplied by the user, if any. */
 function suppliedTargetTrustFlag(values: ParsedArgValues): string | null {
+  // Preserve the operator's explicit trusted-target declaration for the execution boundary.
   if (parsedFlag(values, "trusted-target")) return "--trusted-target";
+  // Preserve an explicit untrusted-target declaration so later execution checks can apply it.
   if (parsedFlag(values, "untrusted-target")) return "--untrusted-target";
   return null;
 }
@@ -491,6 +580,7 @@ function routeCanExecuteTarget(
   qualitySubcommand: QualitySubcommand,
   hookSubcommand: HookSubcommand | null,
 ): boolean {
+  // These routes can reach target-controlled commands, so their trust declarations are meaningful.
   if (
     command === "audit" ||
     (command === "quality" && qualitySubcommand === "prompt") ||
@@ -513,8 +603,10 @@ function validateTargetTrustFlags(
   hookSubcommand: HookSubcommand | null,
 ): void {
   const suppliedFlag = suppliedTargetTrustFlag(values);
+  // Without an explicit trust declaration, leave the route's normal execution checks in control.
   if (suppliedFlag === null) return;
 
+  // Trust flags must not imply an execution policy on a route that cannot run target code.
   if (
     !routeCanExecuteTarget(command, values, qualitySubcommand, hookSubcommand)
   ) {
@@ -541,6 +633,7 @@ function validateTargetTrustFlags(
 
 /**
  * Validate quality mode flags against the selected quality subcommand.
+ *
  * Error behavior: throws CLIError with exit code 2 for `--mode` off its three routes, and for `--output` on save, which owns its report destination
  * and must not be redirected.
  *
@@ -554,6 +647,7 @@ function validateQualityFlags(
   values: ParsedArgValues,
   qualitySubcommand: QualitySubcommand,
 ): void {
+  // A quality mode selects prompt or historical results; it cannot alter report persistence.
   if (
     command === "quality" &&
     parsedString(values, "mode") !== undefined &&
@@ -564,6 +658,7 @@ function validateQualityFlags(
       2,
     );
   }
+  // Quality save chooses its own receipt destination so the caller cannot redirect the saved assessment.
   if (
     command === "quality" &&
     qualitySubcommand === "save" &&
@@ -574,6 +669,147 @@ function validateQualityFlags(
       2,
     );
   }
+}
+
+/**
+ * Keep learning-entry details on `learn new`, where the developer can see what they affect.
+ * Use during cross-flag validation before any command handler runs.
+ *
+ * @throws CLIError with exit code 2 for the first misplaced learn-only flag
+ */
+function validateLearnFlagPlacement(
+  command: Command,
+  values: ParsedArgValues,
+): void {
+  const learnOnlyFlags: Array<[string, boolean]> = [
+    ["--type", parsedString(values, "type") !== undefined],
+    ["--title", parsedString(values, "title") !== undefined],
+    ["--evidence", parsedStringList(values, "evidence").length > 0],
+    ["--search", parsedStringList(values, "search").length > 0],
+    ["--evidence-kind", parsedString(values, "evidence-kind") !== undefined],
+  ];
+  // The learn command owns every listed flag, so its request proceeds to the content validators below.
+  if (command === "learn") return;
+  // Another command may have received a learn-only flag, so report the first misplaced option rather than ignore author intent.
+  for (const [flag, isSupplied] of learnOnlyFlags) {
+    // A supplied flag would otherwise have no user-visible effect on this command.
+    if (isSupplied) {
+      throw new CLIError(`${flag} is only valid for learn new.`, 2);
+    }
+  }
+}
+
+/**
+ * Read the entry type after confirming the developer named a type, category, and title.
+ * Use before validating type-specific citations or evidence taxonomy.
+ *
+ * @throws CLIError with exit code 2 when a required value is absent or the entry type is unknown
+ */
+function requireLearnEntryType(values: ParsedArgValues): LearnEntryType {
+  const entryType = parsedString(values, "type");
+  const category = parsedString(values, "category");
+  const title = parsedString(values, "title");
+  // A missing core value leaves either the bucket or heading unknown, so the CLI stops before resolving a destination.
+  if (
+    entryType === undefined ||
+    category === undefined ||
+    title === undefined
+  ) {
+    throw new CLIError(
+      "learn new requires --type, --category, and --title.",
+      2,
+    );
+  }
+  // Decisions require human routing and are intentionally absent; any other unknown type gets the supported scaffold list.
+  if (
+    entryType !== "footgun" &&
+    entryType !== "lesson" &&
+    entryType !== "pattern"
+  ) {
+    throw new CLIError("--type must be footgun, lesson, or pattern.", 2);
+  }
+  return entryType;
+}
+
+/**
+ * Pair each cited project file with the literal text the developer verified there.
+ * Use before the writer asks the shared anchor checker to resolve those pairs.
+ *
+ * @throws CLIError with exit code 2 for unequal pairs or a footgun with no citation
+ */
+function validateLearnCitationFlags(
+  entryType: LearnEntryType,
+  values: ParsedArgValues,
+): void {
+  const evidencePaths = parsedStringList(values, "evidence");
+  const searchLiterals = parsedStringList(values, "search");
+  // Unequal lists cannot identify which literal belongs to which file, so no prospective entry is built.
+  if (evidencePaths.length !== searchLiterals.length) {
+    throw new CLIError(
+      "Each --evidence <path> requires one paired --search <literal>, in the same order.",
+      2,
+    );
+  }
+  // A footgun without local file evidence would be an unsupported warning rather than a durable architectural trap.
+  if (entryType === "footgun" && evidencePaths.length === 0) {
+    throw new CLIError(
+      "Footgun scaffolds require at least one --evidence/--search pair.",
+      2,
+    );
+  }
+}
+
+/**
+ * Validate the evidence label shown to readers of a footgun entry.
+ * Use after the entry type is known, because lessons and patterns do not carry this taxonomy.
+ *
+ * @throws CLIError with exit code 2 for a missing, misplaced, or unknown taxonomy value
+ */
+function validateLearnEvidenceKindFlag(
+  entryType: LearnEntryType,
+  values: ParsedArgValues,
+): void {
+  const evidenceKind = parsedString(values, "evidence-kind");
+  // A footgun reader needs to know whether its warning was measured, observed, or externally sourced.
+  if (entryType === "footgun" && evidenceKind === undefined) {
+    throw new CLIError("Footgun scaffolds require --evidence-kind.", 2);
+  }
+  // Lessons and patterns have no evidence-kind schema field, so accepting one would misrepresent their generated shape.
+  if (entryType !== "footgun" && evidenceKind !== undefined) {
+    throw new CLIError(
+      "--evidence-kind is only valid for footgun scaffolds.",
+      2,
+    );
+  }
+  // Unknown taxonomy text cannot pass the same stats check that later verifies the written bucket.
+  if (
+    evidenceKind !== undefined &&
+    evidenceKind !== "ACTUAL_MEASURED" &&
+    evidenceKind !== "OBSERVED" &&
+    evidenceKind !== "EXTERNAL_REFERENCE"
+  ) {
+    throw new CLIError(
+      "--evidence-kind must be ACTUAL_MEASURED, OBSERVED, or EXTERNAL_REFERENCE.",
+      2,
+    );
+  }
+}
+
+/**
+ * Validate the flags that define one explicit learning-loop scaffold request.
+ * The checks stay separated by concern so placement, paired citations, and taxonomy failures each produce one stable usage error.
+ *
+ * @throws CLIError with exit code 2 when a learn-only flag is misplaced or the scaffold grammar is incomplete
+ */
+function validateLearnFlags(command: Command, values: ParsedArgValues): void {
+  validateLearnFlagPlacement(command, values);
+  // Non-learning commands have no scaffold content to validate after placement checks pass.
+  if (command !== "learn") return;
+  // Help and version stop before dispatch, so developers can discover required authoring flags without supplying a fake scaffold request.
+  if (parsedFlag(values, "help") || parsedFlag(values, "version")) return;
+  const entryType = requireLearnEntryType(values);
+  validateLearnCitationFlags(entryType, values);
+  validateLearnEvidenceKindFlag(entryType, values);
 }
 
 /**
@@ -591,15 +827,27 @@ function validateQualityFlags(
  * @param plansTimeAction - timing action, or null when the subcommand is not `time`
  * @returns nothing; returning means every combination check passed. It throws the first CLIError raised by any validator, all with exit code 2.
  */
+interface SelectedSubcommands {
+  claims: ClaimsSubcommand | null;
+  quality: QualitySubcommand;
+  skill: SkillSubcommand | null;
+  hooks: HookSubcommand | null;
+  plans: PlansSubcommand | null;
+  plansTimeAction: PlansTimeAction | null;
+}
+
+/**
+ * Apply every command-specific flag contract in one deterministic order.
+ * The fixed order preserves one stable diagnostic when several supplied flags conflict.
+ *
+ * @throws CLIError with usage exit code 2 for the first invalid combination
+ */
 function validateFlagCombinations(
   command: Command,
   values: ParsedArgValues,
-  qualitySubcommand: QualitySubcommand,
-  skillSubcommand: SkillSubcommand | null,
-  hookSubcommand: HookSubcommand | null,
-  plansSubcommand: PlansSubcommand | null,
-  plansTimeAction: PlansTimeAction | null,
+  selected: SelectedSubcommands,
 ): void {
+  // Conflicting trust declarations leave no single execution policy for the selected target.
   if (
     parsedFlag(values, "trusted-target") &&
     parsedFlag(values, "untrusted-target")
@@ -609,42 +857,200 @@ function validateFlagCombinations(
       2,
     );
   }
-  validateTargetTrustFlags(command, values, qualitySubcommand, hookSubcommand);
+  validateClaimsFlags(command, values, selected.claims);
+  validateTargetTrustFlags(command, values, selected.quality, selected.hooks);
   validateCommonFlags(command, values);
   validateInstallFlags(command, values);
-  validateQualityFlags(command, values, qualitySubcommand);
-  validateSkillFlags(command, values, qualitySubcommand, skillSubcommand);
-  validateHookFlags(command, values, hookSubcommand);
-  validatePlansFlags(command, values, plansSubcommand, plansTimeAction);
+  validateQualityFlags(command, values, selected.quality);
+  validateLearnFlags(command, values);
+  validateSkillFlags(command, values, selected.quality, selected.skill);
+  validateHookFlags(command, values, selected.hooks);
+  validatePlansFlags(command, values, selected.plans, selected.plansTimeAction);
 }
 
 /** Parse the events tail limit; throws CLIError for invalid values before clamping to the display cap. */
 function parseEventsLimitArg(rawLimit: string | undefined): number {
+  // History and list views show the default 20 entries when no limit is requested.
   if (rawLimit === undefined) return 20;
   const parsed = Number.parseInt(rawLimit, 10);
+  // Reject malformed limits instead of silently truncating or widening the requested result set.
   if (!Number.isFinite(parsed) || parsed <= 0 || String(parsed) !== rawLimit) {
     throw new CLIError("--limit must be a positive integer.", 2);
   }
   return Math.min(parsed, 500);
 }
 
-/** Select the path consumed by the chosen command after each positional grammar is parsed. */
+/**
+ * Project choices produced by each positional grammar before the active command selects one.
+ * Every value is absolute, so dispatch never has to reinterpret what directory the developer named.
+ * Keeping all namespaces visible here prevents a new command from accidentally using another command's path.
+ */
+interface CommandProjectPaths {
+  review: string | null;
+  quality: string;
+  claims: string;
+  events: string;
+  hooks: string;
+  plans: string;
+  diagnostics: string;
+  skill: string;
+  learn: string;
+}
+
+/** Select the absolute project path owned by the command the developer invoked. */
 function selectCommandProjectPath(
   command: Command,
-  qualityProjectPath: string,
-  eventsProjectPath: string,
-  hooksProjectPath: string,
-  plansProjectPath: string,
-  diagnosticsProjectPath: string,
-  skillProjectPath: string,
+  paths: CommandProjectPaths,
 ): string {
-  // Each namespaced command owns the path position its users supplied.
-  if (command === "events") return eventsProjectPath;
-  if (command === "hooks") return hooksProjectPath;
-  if (command === "plans") return plansProjectPath;
-  if (command === "diagnostics") return diagnosticsProjectPath;
-  if (command === "skill") return skillProjectPath;
-  return qualityProjectPath;
+  // Review input files stay relative to the invoking directory; evidence comes from the separately selected project.
+  if (command === "review") return paths.review ?? paths.quality;
+  // Claim actions place the selected project after their explicit inspect/recover subcommand.
+  if (command === "claims") return paths.claims;
+  // An events path follows `tail`, so it differs from the default first-position path used by simple commands.
+  if (command === "events") return paths.events;
+  // Hook actions can carry a hook id before the project, so their parser owns the selected path.
+  if (command === "hooks") return paths.hooks;
+  // Plan commands point at plan artifacts rather than a normal project positional.
+  if (command === "plans") return paths.plans;
+  // Diagnostic subcommands parse their own optional project after the diagnostic name.
+  if (command === "diagnostics") return paths.diagnostics;
+  // Skill authoring and diagnosis accept different positional shapes, so they keep their resolved path.
+  if (command === "skill") return paths.skill;
+  // Learning authoring places the project after `new`, so its namespace supplies the write target.
+  if (command === "learn") return paths.learn;
+  // Simple commands and quality's default route use the first project positional, or the current directory when it is absent.
+  return paths.quality;
+}
+
+/** Read claim positionals only for the claim namespace; other commands keep their resolved project path. */
+function parseOptionalClaimsPositionals(
+  command: Command,
+  commandPositionals: string[],
+  fallbackProjectPath: string,
+): { claimsSubcommand: ClaimsSubcommand | null; projectPath: string } {
+  return command === "claims"
+    ? parseClaimsPositionals(commandPositionals)
+    : { claimsSubcommand: null, projectPath: fallbackProjectPath };
+}
+
+/** Read skill positionals only when the developer invoked `skill`; other commands receive inert fields and their existing project path. */
+function parseOptionalSkillPositionals(
+  command: Command,
+  commandPositionals: string[],
+  fallbackProjectPath: string,
+): SkillPositionals {
+  return command === "skill"
+    ? parseSkillPositionals(commandPositionals)
+    : {
+        skillSubcommand: null,
+        skillDescription: null,
+        projectPath: fallbackProjectPath,
+      };
+}
+
+/** Read `learn new` positionals only for that authoring route; other commands keep their existing project path and no learn action. */
+function parseOptionalLearnPositionals(
+  command: Command,
+  commandPositionals: string[],
+  fallbackProjectPath: string,
+) {
+  return command === "learn"
+    ? parseLearnPositionals(commandPositionals)
+    : { learnSubcommand: null, projectPath: fallbackProjectPath };
+}
+
+/**
+ * Build the learning fields consumed by the scaffold handler after flag validation succeeds.
+ * Use inert null and empty values on other commands so dispatch sees one stable `ParsedCLI` shape.
+ */
+function buildLearnCLIFields(
+  command: Command,
+  values: ParsedArgValues,
+  learnSubcommand: LearnSubcommand | null,
+): Pick<
+  ParsedCLI,
+  | "learnSubcommand"
+  | "learnEntryType"
+  | "learnCategory"
+  | "learnTitle"
+  | "learnEvidencePaths"
+  | "learnSearchLiterals"
+  | "learnEvidenceKind"
+> {
+  // Another command must not receive stale learning values that could imply it will write a bucket.
+  if (command !== "learn") {
+    return {
+      learnSubcommand: null,
+      learnEntryType: null,
+      learnCategory: null,
+      learnTitle: null,
+      learnEvidencePaths: [],
+      learnSearchLiterals: [],
+      learnEvidenceKind: null,
+    };
+  }
+  return {
+    learnSubcommand,
+    learnEntryType: (parsedString(values, "type") ??
+      null) as LearnEntryType | null,
+    learnCategory: parsedString(values, "category") ?? null,
+    learnTitle: parsedString(values, "title") ?? null,
+    learnEvidencePaths: parsedStringList(values, "evidence"),
+    learnSearchLiterals: parsedStringList(values, "search"),
+    learnEvidenceKind: (parsedString(values, "evidence-kind") ??
+      null) as LearnEvidenceKind | null,
+  };
+}
+
+/** Route top-level quality/review/recall operands without adding command branches to the main parser. */
+function parsePrimaryPositionals(
+  command: Command,
+  commandPositionals: string[],
+  draftFlag: string | null,
+): {
+  qualityPositionals: ReturnType<typeof parseCommandPositionals>;
+  recallPaths: readonly string[];
+} {
+  const isRecall = command === "recall";
+  return {
+    qualityPositionals: parseCommandPositionals(
+      command,
+      command === "review" || isRecall ? [] : commandPositionals,
+      draftFlag,
+    ),
+    recallPaths: isRecall ? parseRecallPositionals(commandPositionals) : [],
+  };
+}
+
+/**
+ * Parse option tokens and classify missing or ambiguous active-cap values as usage errors.
+ * Other option-parsing failures propagate unchanged.
+ *
+ * @throws CLIError with exit 2 when Node rejects the value of --max-active
+ */
+function parseCLITokens(filteredArgs: string[]) {
+  try {
+    return parseArgs({
+      args: filteredArgs,
+      options: CLI_ARG_OPTIONS,
+      allowPositionals: true,
+      strict: true,
+    });
+    // A value flag such as --project without its argument needs a usage error before input or target files are read.
+  } catch (error) {
+    // Normalize the supported value-option failures to the same usage exit code as the command parsers.
+    if (
+      error instanceof TypeError &&
+      "code" in error &&
+      error.code === "ERR_PARSE_ARGS_INVALID_OPTION_VALUE" &&
+      /'--(?:max-active|band-quantiles|project|expected-version)\b/u.test(
+        error.message,
+      )
+    ) {
+      throw new CLIError(error.message, 2);
+    }
+    throw error;
+  }
 }
 
 /**
@@ -658,61 +1064,22 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
   const { command, filteredArgs } = parseCommand(argv);
 
   /** Destructured parseArgs result containing option values and positional arguments */
-  const { values, positionals } = parseArgs({
-    args: filteredArgs,
-    options: {
-      format: { type: "string" },
-      agent: { type: "string" },
-      mode: { type: "string" },
-      verbose: { type: "boolean", default: false },
-      output: { type: "string", short: "o" },
-      all: { type: "boolean", default: false },
-      limit: { type: "string" },
-      harness: { type: "boolean", default: false },
-      "check-drift": { type: "boolean", default: false },
-      "check-content": { type: "boolean", default: false },
-      "trusted-target": { type: "boolean", default: false },
-      "untrusted-target": { type: "boolean", default: false },
-      "no-audit-details": { type: "boolean", default: false },
-      check: { type: "boolean", default: false },
-      apply: { type: "boolean", default: false },
-      "dry-run": { type: "boolean", default: false },
-      force: { type: "boolean", default: false },
-      "force-managed": { type: "boolean", default: false },
-      "force-user-owned": { type: "boolean", default: false },
-      "force-path": { type: "string", multiple: true },
-      "update-config-version": { type: "boolean", default: false },
-      "clean-deprecated": { type: "boolean", default: false },
-      dev: { type: "boolean", default: false },
-      draft: { type: "string" },
-      "red-log": { type: "string" },
-      interactive: { type: "boolean", default: false },
-      name: { type: "string" },
-      skill: { type: "string" },
-      scenario: { type: "string" },
-      strict: { type: "boolean", default: false },
-      category: { type: "string" },
-      finalize: { type: "boolean", default: false },
-      "discard-open": { type: "boolean", default: false },
-      yes: { type: "boolean", short: "y", default: false },
-      json: { type: "boolean", default: false },
-      help: { type: "boolean", short: "h", default: false },
-      version: { type: "boolean", short: "v", default: false },
-    },
-    allowPositionals: true,
-    strict: true,
-  });
-
+  const { values, positionals } = parseCLITokens(filteredArgs);
   const parsedValues = values as ParsedArgValues;
   const commandPositionals = selectCommandPositionals(
     command,
     positionals,
     parsedValues,
   );
-  const qualityPositionals = parseCommandPositionals(
+  const { qualityPositionals, recallPaths } = parsePrimaryPositionals(
     command,
-    command === "review" ? [] : commandPositionals,
+    commandPositionals,
     parsedString(parsedValues, "draft") ?? null,
+  );
+  const claimsPositionals = parseOptionalClaimsPositionals(
+    command,
+    commandPositionals,
+    qualityPositionals.projectPath,
   );
   const eventsPositionals =
     command === "events"
@@ -734,7 +1101,12 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
           plansTimeAction: null,
           projectPath: qualityPositionals.projectPath,
         };
-  const reviewFields = buildReviewCLIFields(command, commandPositionals);
+  const { reviewProjectPath, ...reviewFields } = buildReviewCLIFields(
+    command,
+    commandPositionals,
+    parsedStringList(parsedValues, "project"),
+    parsedStringList(parsedValues, "expected-version"),
+  );
   const diagnosticsPositionals: {
     diagnosticsSubcommand: DiagnosticsSubcommand | null;
     projectPath: string;
@@ -745,36 +1117,44 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
           diagnosticsSubcommand: null,
           projectPath: qualityPositionals.projectPath,
         };
-  const skillPositionals: SkillPositionals =
-    command === "skill"
-      ? parseSkillPositionals(commandPositionals)
-      : {
-          skillSubcommand: null,
-          skillDescription: null,
-          projectPath: qualityPositionals.projectPath,
-        };
-  const projectPath = selectCommandProjectPath(
+  const skillPositionals = parseOptionalSkillPositionals(
     command,
+    commandPositionals,
     qualityPositionals.projectPath,
-    eventsPositionals.projectPath,
-    hooksPositionals.projectPath,
-    plansPositionals.projectPath,
-    diagnosticsPositionals.projectPath,
-    skillPositionals.projectPath,
   );
+  const learnPositionals = parseOptionalLearnPositionals(
+    command,
+    commandPositionals,
+    qualityPositionals.projectPath,
+  );
+  const projectPath = selectCommandProjectPath(command, {
+    review: reviewProjectPath,
+    quality: qualityPositionals.projectPath,
+    claims: claimsPositionals.projectPath,
+    events: eventsPositionals.projectPath,
+    hooks: hooksPositionals.projectPath,
+    plans: plansPositionals.projectPath,
+    diagnostics: diagnosticsPositionals.projectPath,
+    skill: skillPositionals.projectPath,
+    learn: learnPositionals.projectPath,
+  });
   const skillFields = buildSkillCLIFields(
     command,
     parsedValues,
     skillPositionals,
   );
-  validateFlagCombinations(
+  validateFlagCombinations(command, parsedValues, {
+    claims: claimsPositionals.claimsSubcommand,
+    quality: qualityPositionals.qualitySubcommand,
+    skill: skillPositionals.skillSubcommand,
+    hooks: hooksPositionals.hookSubcommand,
+    plans: plansPositionals.plansSubcommand,
+    plansTimeAction: plansPositionals.plansTimeAction,
+  });
+  const learnFields = buildLearnCLIFields(
     command,
     parsedValues,
-    qualityPositionals.qualitySubcommand,
-    skillPositionals.skillSubcommand,
-    hooksPositionals.hookSubcommand,
-    plansPositionals.plansSubcommand,
-    plansPositionals.plansTimeAction,
+    learnPositionals.learnSubcommand,
   );
 
   return {
@@ -796,7 +1176,7 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
     checkContent: parsedFlag(parsedValues, "check-content"),
     isTargetTrusted: parsedFlag(parsedValues, "trusted-target"),
     isTargetUntrusted: parsedFlag(parsedValues, "untrusted-target"),
-    auditDetails: !parsedFlag(parsedValues, "no-audit-details"),
+    includeAuditDetails: !parsedFlag(parsedValues, "no-audit-details"),
     shouldCheck: parsedFlag(parsedValues, "check"),
     shouldApply: parsedFlag(parsedValues, "apply"),
     shouldDryRun: parsedFlag(parsedValues, "dry-run"),
@@ -820,9 +1200,19 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
       hooksPositionals.hookSubcommand,
       parsedString(parsedValues, "scenario"),
     ),
+    claimsSubcommand: claimsPositionals.claimsSubcommand,
+    claimsTargetPath: parsedString(parsedValues, "target") ?? null,
+    claimsMarkerSha256: parsedString(parsedValues, "marker-sha256") ?? null,
+    shouldConfirmAbandoned: parsedFlag(parsedValues, "confirm-abandoned"),
     ...reviewFields,
     plansSubcommand: plansPositionals.plansSubcommand,
     plansStrict: parsedFlag(parsedValues, "strict"),
+    plansBandQuantiles: parsePlansBandQuantiles(
+      parsedString(parsedValues, "band-quantiles"),
+    ),
+    plansMaxActive: parsePlansMaxActive(
+      parsedString(parsedValues, "max-active"),
+    ),
     plansTimeAction: plansPositionals.plansTimeAction,
     plansTimeCategory: parsePlansTimeCategoryArg(
       parsedString(parsedValues, "category"),
@@ -830,6 +1220,8 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
     ),
     plansTimeFinalize: parsedFlag(parsedValues, "finalize"),
     plansTimeDiscardOpen: parsedFlag(parsedValues, "discard-open"),
+    ...learnFields,
+    recallPaths,
     diagnosticsSubcommand: diagnosticsPositionals.diagnosticsSubcommand,
     includeAll: parsedFlag(parsedValues, "all"),
     isDevMode: parsedFlag(parsedValues, "dev"),

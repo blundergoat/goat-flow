@@ -12,11 +12,13 @@ import {
 import { PROFILES } from "../../src/cli/detect/agents.js";
 import {
   getRepoAudit,
+  makeCtx,
   renderAuditJson,
   renderAuditText,
 } from "./audit-command/helpers.js";
 import type { AuditReport, AuditScope } from "../../src/cli/audit/types.js";
 import type { AgentFacts, AgentProfile } from "../../src/cli/types.js";
+import { CONSTRAINTS_CHECKS } from "../../src/cli/audit/harness/check-constraints.js";
 
 /** Build a minimal agent scope because enforcement capability logic only needs status-shaped checks. */
 function agentScope(status: "pass" | "fail" | "skipped"): AuditScope {
@@ -105,6 +107,9 @@ function facts(
       denyBlocksCloudDestructive: true,
       denyIsRegistered: true,
       denyRegisteredPath: agent.denyHookFile,
+      gitDenyExists: true,
+      gitDenyIsRegistered: true,
+      gitDenyRegisteredPath: ".goat-flow/hooks/deny-git-mutations.sh",
       postTurnExists: false,
       postTurnRegistered: false,
       postTurnRegisteredPath: null,
@@ -177,6 +182,39 @@ function assertSecretFileStatusForAgent(
 }
 
 describe("agent enforcement capability matrix", () => {
+  it("requires both policy hooks despite settings-layer Git denials", () => {
+    const registrationCheck = CONSTRAINTS_CHECKS.find(
+      (check) => check.id === "deny-hook-registered",
+    );
+    assert.ok(registrationCheck);
+    for (const override of [
+      { gitDenyExists: false },
+      { gitDenyIsRegistered: false },
+      { gitDenyRegisteredPath: ".goat-flow/hooks/other.sh" },
+    ]) {
+      const agent = facts(PROFILES.claude, override);
+      const result = registrationCheck.run(makeCtx({ agents: [agent] }));
+      assert.equal(result.status, "fail", JSON.stringify(override));
+      assert.match(result.recommendations.join(" "), /deny-git-mutations/);
+    }
+    for (const override of [
+      { gitDenyExists: false },
+      { gitDenyIsRegistered: false },
+    ]) {
+      const matrix = buildAgentEnforcementCapability(
+        facts(PROFILES.claude, override),
+        { agentScope: agentScope("pass"), denyMechanismEvidenceLevel: "full" },
+      );
+      assert.notEqual(byId(matrix, "shell-dangerous").status, "hard");
+      assert.notEqual(byId(matrix, "hook-registration").status, "hard");
+    }
+    assert.equal(
+      registrationCheck.run(makeCtx({ agents: [facts(PROFILES.claude)] }))
+        .status,
+      "pass",
+    );
+  });
+
   it("derives fact-backed statuses for all supported agents", () => {
     assertFactBackedStatusesForAgents([
       PROFILES.claude,

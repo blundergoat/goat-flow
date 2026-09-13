@@ -1,9 +1,9 @@
 /**
- * Defines and enforces the exact shape of a quality report, both when an agent emits one and when the CLI persists it.
+ * Define the fields and vocabulary shared by quality report authors, validation, and saved history.
  *
- * Validation is strict on purpose: a report that saved with unexpected fields would later open as a history row nobody can trust.
+ * The parser uses these definitions to reject data that a maintainer could not inspect reliably after saving.
  *
- * The accepted finding types, severities, and score values are fixed here, so the dashboard always has a badge it can render.
+ * Fixed finding types, severity labels, and score bands keep CLI and dashboard reports consistent.
  */
 import type { AgentId } from "../types.js";
 
@@ -50,13 +50,36 @@ export const QUALITY_GROUNDING_STATUSES = [
   "blocked",
 ] as const;
 export const QUALITY_SCORE_CONFIDENCES = ["high", "medium", "low"] as const;
+export const QUALITY_IMPROVEMENT_CATEGORIES = [
+  "defect",
+  "qualification-gap",
+  "maintenance",
+  "design-opportunity",
+] as const;
+/** The five-item limit bounds the work a history reader scans and matches the prompt's Top 5 Improvements. */
+export const QUALITY_MAX_IMPROVEMENTS = 5;
 export const QUALITY_SCORE_VALUES = [0, 5, 10, 15, 20, 25] as const;
+export const QUALITY_SETUP_SCORE_AXES = [
+  "accuracy",
+  "relevance",
+  "completeness",
+  "friction",
+] as const;
+export const QUALITY_SYSTEM_SCORE_AXES = [
+  "usefulness",
+  "signal_to_noise",
+  "adaptability",
+  "learnability",
+] as const;
+/** The 240-character cap keeps eight-axis history and diff ledgers scannable while leaving room for one concrete evidence sentence. */
+export const QUALITY_SCORE_RATIONALE_MAX_CHARACTERS = 240;
 
 type QualityFindingType = (typeof QUALITY_FINDING_TYPES)[number];
 type QualityFindingSeverity = (typeof QUALITY_FINDING_SEVERITIES)[number];
 type QualityEvidenceQuality = (typeof QUALITY_EVIDENCE_QUALITIES)[number];
 /**
  * How a finding was gathered: a live `runtime-probe`, `static-analysis` of source, or a `mixed` combination.
+ *
  * Present on v2+ reports; v1 reports omit it and are defaulted to static-analysis at parse time, so readers should treat a defaulted value as
  * "unknown", not a confirmed static check.
  */
@@ -69,8 +92,8 @@ export type QualityScope = (typeof QUALITY_SCOPES)[number];
 /** Quality workflow mode used to keep history and diffs within comparable report families. */
 export type QualityMode = (typeof QUALITY_MODES)[number];
 /**
- * Whether a finding first appeared in this report (`new`) or carried over from the prior same-agent
- * report (`persisted`). Computed during history comparison; null on findings with no prior context.
+ * Whether a finding first appeared in this report (`new`) or carried over from the prior same-agent report (`persisted`).
+ * Computed during history comparison; null on findings with no prior context.
  */
 export type QualityDeltaTag = (typeof QUALITY_DELTA_TAGS)[number];
 type QualityAuditStatus = (typeof QUALITY_AUDIT_STATUSES)[number];
@@ -78,8 +101,8 @@ type QualityWorktreeState = (typeof QUALITY_WORKTREE_STATES)[number];
 type QualityGroundingStatus = (typeof QUALITY_GROUNDING_STATUSES)[number];
 type QualityScoreConfidence = (typeof QUALITY_SCORE_CONFIDENCES)[number];
 /**
- * A single rubric axis score, constrained to the fixed 0-25 five-point band so totals stay
- * comparable across reports. Values outside this set are rejected by the schema parser.
+ * A single rubric axis score, constrained to the fixed 0-25 five-point band so totals stay comparable across reports.
+ * Values outside this set are rejected by the schema parser.
  */
 export type QualityAxisScore = (typeof QUALITY_SCORE_VALUES)[number];
 
@@ -107,6 +130,24 @@ export interface QualityScores {
   system: QualitySystemScores;
 }
 
+/** Compact evidence and deduction recorded beside one assessor-chosen score axis. */
+export interface QualityScoreAxisRationale {
+  evidence: string;
+  deduction: string;
+}
+
+/** Complete rationale ledger for the eight setup and system score axes. */
+export interface QualityScoreRationale {
+  setup: Record<
+    (typeof QUALITY_SETUP_SCORE_AXES)[number],
+    QualityScoreAxisRationale
+  >;
+  system: Record<
+    (typeof QUALITY_SYSTEM_SCORE_AXES)[number],
+    QualityScoreAxisRationale
+  >;
+}
+
 /** Evidence coverage and workspace provenance needed to compare independently produced reports. */
 export interface QualityAssessmentContext {
   /** Git revision assessed, or null when the target is not Git-backed or the revision was unavailable. */
@@ -119,6 +160,17 @@ export interface QualityAssessmentContext {
   unverified_probes: string[];
   /** Assessor confidence in the scores after accounting for evidence coverage. */
   score_confidence: QualityScoreConfidence;
+  /** Assessor-copied review snapshot fingerprints; null means capture was unavailable, not unchanged. */
+  workspace_snapshot?: { start: string | null; end: string | null };
+}
+
+/** A bounded proposed action, kept separate from the report's current defect list. */
+export interface QualityImprovement {
+  category: (typeof QUALITY_IMPROVEMENT_CATEGORIES)[number];
+  summary: string;
+  action: string;
+  evidence: string;
+  file: string | null;
 }
 
 /** One current agent-emitted quality finding before deterministic IDs are attached. */
@@ -130,17 +182,42 @@ export interface QualityFinding {
   summary: string;
   detail: string;
   evidence_quality: QualityEvidenceQuality;
-  /** How the finding was observed. Present on v2+ reports (2026-04-19+).
-   *  Absent on v1 reports, defaulted to "static-analysis" at parse time. */
+  /**
+   * How the finding was observed.
+   *
+   * Present on v2+ reports (2026-04-19+).
+   * Absent on v1 reports, defaulted to "static-analysis" at parse time.
+   */
   evidence_method: QualityEvidenceMethod;
-  /** Optional compact command provenance for runtime-probe or mixed evidence.
-   *  These fields are intentionally summaries, not raw terminal transcripts. */
+  /**
+   * Optional compact command provenance for runtime-probe or mixed evidence.
+   * These fields are intentionally summaries, not raw terminal transcripts.
+   */
   evidence_command?: string;
   evidence_exit_code?: number;
   evidence_summary?: string;
   evidence_warning_count?: number;
   evidence_excerpt?: string;
   delta_tag: QualityDeltaTag | null;
+}
+
+/**
+ * One suspected finding the assessor tested and excluded from the user's actionable findings.
+ *
+ * The ledger keeps the disproval reason and compact evidence visible, so later reviews do not repeat the same dead end.
+ * File and line are explicit nullable fields because runtime evidence may have no source location.
+ */
+export interface QualityRefutedCandidate {
+  claim: string;
+  why_excluded: string;
+  file: string | null;
+  line: number | null;
+  evidence_quality: QualityEvidenceQuality;
+  evidence_method: QualityEvidenceMethod;
+  evidence_summary: string;
+  evidence_command?: string;
+  evidence_exit_code?: number;
+  evidence_excerpt?: string;
 }
 
 /** Persisted quality finding with a deterministic history/diff ID. */
@@ -156,22 +233,37 @@ export interface QualityReport {
   project_path: string;
   run_date: string;
   audit_status: QualityAuditStatus;
-  /** Optional: "framework-self" for a goat-flow-on-goat-flow review,
-   *  "consumer" for a review of a downstream project. Absent on v1 reports. */
+  /**
+   * Optional: "framework-self" for a goat-flow-on-goat-flow review, "consumer" for a review of a downstream project.
+   * Absent on v1 reports.
+   */
   scope?: QualityScope;
-  /** Optional: the rubric version under which scores were produced.
-   *  Lets readers trace score derivation. Absent on v1 reports. */
+  /**
+   * Optional: the rubric version under which scores were produced.
+   *
+   * Lets readers trace score derivation.
+   * Absent on v1 reports.
+   */
   rubric_version?: string;
-  /** Optional: the quality workflow that produced the report.
-   *  Absent on legacy reports, which are treated as agent-setup history. */
+  /**
+   * Optional: the quality workflow that produced the report.
+   * Absent on legacy reports, which are treated as agent-setup history.
+   */
   quality_mode?: QualityMode;
-  /** Optional: the previous same-agent report used for delta_tag comparison.
-   *  Null or absent means no prior report context was available. */
+  /**
+   * Optional: the previous same-agent report used for delta_tag comparison.
+   * Null or absent means no prior report context was available.
+   */
   prior_report_id?: string | null;
   /** Required on current emissions and optional on historical reports that predate provenance capture. */
   assessment_context?: QualityAssessmentContext;
   scores: QualityScores;
+  /** Required on current emissions; absent on legacy reports written before axis provenance was captured. */
+  score_rationale?: QualityScoreRationale;
+  /** Ordered recommendations; omission means the older report did not preserve this section. */
+  improvements?: QualityImprovement[];
   findings: QualityFinding[];
+  refuted_candidates: QualityRefutedCandidate[];
 }
 
 /** Saved quality report schema after `attachFindingIds` has materialized finding IDs. */

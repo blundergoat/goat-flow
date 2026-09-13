@@ -1,11 +1,8 @@
 /**
- * Checks that a review's Ship Verdict matches the findings it actually raised.
+ * Check that the Ship Verdict follows the report's active findings and declared confidence.
  *
- * The verdict is the one line a reader acts on, so it must be derivable from the report rather than asserted: an open MUST cannot coexist with a
- * clean YES, and a verdict may be downgraded by degradation flags even when every finding was resolved.
- *
- * Both the full and compact report shapes are handled, because a compact clean review states
- * its verdict in a different form while carrying the same obligation to be earned.
+ * Use after findings and integrity fields are parsed, in either full or compact output.
+ * An active MUST blocks shipping; reduced confidence lowers the finding-derived verdict once.
  */
 import {
   SURFACED_FINDING_SECTIONS,
@@ -14,6 +11,12 @@ import {
   SHIP_VERDICT_LADDER,
   readSections,
   addViolation,
+  KNOWN_DEGRADATION_FLAGS,
+  RETIRED_DEGRADATION_FLAGS,
+  readIntegrityJson,
+  record,
+  requireAuthority,
+  type IntegrityFieldMap,
   type ReviewValidationViolation,
   type MarkdownSection,
   type IntegrityResult,
@@ -50,7 +53,7 @@ function readFullShipVerdictClaim(
     /^\s*Decision:/u.test(text),
   );
   const decisionLine = decisionLines.at(0);
-  // The UI needs exactly one decision line to summarize the review safely.
+  // The reader needs exactly one decision line to act on the review.
   if (decisionLines.length !== 1 || !decisionLine) {
     addViolation(
       violations,
@@ -89,6 +92,7 @@ function readShipVerdictClaim(
     .filter(({ text }) => /^\s*Ship Verdict:/u.test(text));
   // Full reports show the decision beneath a dedicated heading.
   if (fullVerdictSection) {
+    // A second compact verdict would give the reader a competing outcome beside the full decision.
     for (const compactVerdict of compactVerdictLines) {
       addViolation(
         violations,
@@ -154,35 +158,65 @@ function downgradeShipVerdict(
 }
 
 /**
- * Reject the strongest confidence claim when the reviewer disclosed reduced coverage.
+ * Require the exact conclusion justified by the report's disclosed limits.
  *
- * @param flags - normalized disclosure tokens; `none` is the only non-degrading value
+ * @param flags - normalized limits and disclosures; intent-unstated and base-fetch-skipped alone do not reduce confidence
  * @param conclusion - claimed coverage level; absent or malformed values fail elsewhere
  * @param line - source line attached to a confidence contradiction
- * @param violations - shared structural failures, appended only for overconfidence
+ * @param violations - report errors to append when the claimed confidence differs from its disclosed limits
  */
-export function validateDegradationConclusion(
+function validateDegradationConclusion(
   flags: ReadonlySet<string>,
   conclusion: string | undefined,
   line: number,
   violations: ReviewValidationViolation[],
 ): void {
-  const hasDegradation = Array.from(flags).some(
-    (flag) => flag.length > 0 && flag !== "none",
-  );
-  if (!hasDegradation || conclusion !== "confident") return;
+  const requiredConclusion = conclusionForDegradationFlags(flags);
+  // Confidence describes the strongest disclosed limit once, regardless of how many flags explain it.
+  if (conclusion === requiredConclusion || conclusion === undefined) return;
   addViolation(
     violations,
     "integrity-format",
     line,
-    "degradation flags require a non-confident Conclusion",
+    `degradation flags require Conclusion: ${requiredConclusion}`,
   );
+}
+
+/**
+ * Combine disclosed limits once; partial source/depth coverage outranks coverage gaps, which outrank inferred evidence.
+ *
+ * @param flags - declared limits and disclosures; empty or disclosure-only sets permit confident
+ * @returns strongest applicable confidence limit, applied once across all flags
+ */
+function conclusionForDegradationFlags(
+  flags: ReadonlySet<string>,
+): ReviewIntegrityConclusion {
+  const limits = [...flags].filter(
+    (flag) => !["none", "intent-unstated", "base-fetch-skipped"].includes(flag),
+  );
+  // Incomplete chunks or a declined depth pass cannot claim a completed review.
+  if (
+    limits.some((flag) =>
+      ["chunked-partial", "risk-depth-declined"].includes(flag),
+    )
+  )
+    return "partial";
+  const inferenceFlags = new Set([
+    "high-inference-ratio",
+    "not-reproduced-findings",
+    "cross-model-unresolved",
+    "refuter-citation-unverified",
+  ]);
+  // Missing coverage or execution evidence takes precedence over the quality of the remaining findings.
+  if (limits.some((flag) => !inferenceFlags.has(flag)))
+    return "coverage-degraded";
+  return limits.length > 0 ? "high-inference" : "confident";
 }
 
 /**
  * Derive the decision users should see from surfaced severity and integrity confidence.
  *
- * @param definitions - findings parsed from the report; empty means the review raised none, which is legitimate only if it also attests to that
+ * @param definitions - parsed active findings and optional refuter history; empty means the report defines no issue IDs
  * @param conclusion - the report's own coverage conclusion; an absent one means the author did not state how complete the review was
  * @param isRiskDepthDeclined - whether the author explicitly declined risk-depth analysis, which is allowed but must be stated
  * @returns the verdict the findings actually justify, which the report's own verdict is compared against
@@ -230,7 +264,7 @@ function expectedShipVerdict(
  *
  * @param lines - the report split into lines; an empty report fails earlier than this
  * @param integrity - the parsed Review Integrity block; absent fields are reported individually rather than failing the whole block
- * @param definitions - findings parsed from the report; empty means the review raised none, which is legitimate only if it also attests to that
+ * @param definitions - parsed active findings and optional refuter history; empty means the report defines no issue IDs
  * @param violations - shared violation list, appended in report order so a reader sees issues top-down; a violation makes the report fail
  */
 export function validateShipVerdict(
@@ -242,8 +276,26 @@ export function validateShipVerdict(
   const verdictClaim = readShipVerdictClaim(lines, violations);
   // A missing or malformed claim already has a user-actionable format error.
   if (verdictClaim === null) return;
-  // Pending review states intentionally defer the final risk decision.
-  if (verdictClaim.decision === "PENDING REFUTER/HUMAN") return;
+  // An unfinished human/refuter decision belongs only in a draft and cannot hide an already visible blocker.
+  if (verdictClaim.decision === "PENDING REFUTER/HUMAN") {
+    // A final report or an already blocking finding cannot use a pending decision to defer its required verdict.
+    if (
+      integrity.validationStage !== "draft" ||
+      definitions.some(
+        (definition) =>
+          SURFACED_FINDING_SECTIONS.has(definition.section) &&
+          (definition.severity === "MUST" ||
+            definition.action === "intent-mismatch"),
+      )
+    )
+      addViolation(
+        violations,
+        "ship-verdict-contradiction",
+        verdictClaim.line,
+        "PENDING REFUTER/HUMAN cannot certify final proof or conceal an active blocker",
+      );
+    return;
+  }
   // Area audits may report no release decision because shipping was outside the user's question.
   if (verdictClaim.decision === "N/A - AREA AUDIT ONLY") {
     // Diff and PR reviews must still give the user a release decision.
@@ -271,3 +323,208 @@ export function validateShipVerdict(
     `Ship Verdict claims ${verdictClaim.decision} but surfaced findings and Review Integrity require ${expectedDecision}`,
   );
 }
+
+/**
+ * Read the validated integrity conclusion used to apply the user-visible verdict downgrade.
+ *
+ * @param fields - visible integrity fields collected from either report presentation
+ * @returns recognized conclusion; null leaves absent or malformed confidence to the field validator
+ */
+export function readIntegrityConclusion(
+  fields: IntegrityFieldMap,
+): ReviewIntegrityConclusion | null {
+  const conclusion = fields.get("Conclusion")?.value;
+  return [
+    "confident",
+    "coverage-degraded",
+    "high-inference",
+    "partial",
+  ].includes(conclusion ?? "")
+    ? (conclusion as ReviewIntegrityConclusion)
+    : null;
+}
+
+/** Reject undocumented limitation tokens so a report cannot invent its own confidence rules. */
+function rejectUnknownDegradationFlags(
+  flags: ReadonlySet<string>,
+  line: number,
+  violations: ReviewValidationViolation[],
+): void {
+  // Every declared token must have a defined confidence effect before the report can pass.
+  for (const flag of flags) {
+    const configuredBase = /^configured-base-unresolved=\S+$/u.test(flag);
+    // Recognized tokens and separately rejected retired tokens need no second unknown-token error.
+    if (
+      KNOWN_DEGRADATION_FLAGS.has(flag) ||
+      RETIRED_DEGRADATION_FLAGS.has(flag) ||
+      configuredBase
+    )
+      continue;
+    addViolation(
+      violations,
+      "degradation-flag-unknown",
+      line,
+      `unknown degradation flag: ${flag || "<empty>"}`,
+    );
+  }
+}
+
+/** Reject historical escape hatches that bypass the skill's mandatory size stop. */
+function rejectRetiredDegradationFlags(
+  flags: ReadonlySet<string>,
+  line: number,
+  violations: ReviewValidationViolation[],
+): void {
+  // Check every declared limit for retired ways of bypassing mandatory chunking.
+  for (const flag of flags) {
+    // Only retired flags belong to this refusal; current flags are checked by their own rules.
+    if (!RETIRED_DEGRADATION_FLAGS.has(flag)) continue;
+    addViolation(
+      violations,
+      "integrity-format",
+      line,
+      `${flag} is retired; an oversized review must stop before Pass 1 or use accepted chunks`,
+    );
+  }
+}
+
+/** Keep the declared review confidence within the documented declined-depth cap. */
+function validateRiskDepthConclusion(
+  flags: ReadonlySet<string>,
+  fields: IntegrityFieldMap,
+  fallbackLine: number,
+  violations: ReviewValidationViolation[],
+): void {
+  // Declining the recommended depth caps the report at a partial conclusion.
+  if (
+    flags.has("risk-depth-declined") &&
+    fields.get("Conclusion")?.value !== "partial"
+  ) {
+    addViolation(
+      violations,
+      "integrity-format",
+      fields.get("Conclusion")?.line ?? fallbackLine,
+      "risk-depth-declined requires Conclusion: partial",
+    );
+  }
+}
+
+/**
+ * Validate declared limitation tokens and their required confidence before deriving a ship verdict.
+ *
+ * @param fields - visible integrity fields; a missing flags row is diagnosed by the required-field check
+ * @param violations - errors to append for unknown, duplicate, empty, retired, or inconsistent flags
+ * @returns unique declared tokens, including invalid ones for subsequent checks; empty means no flags row was available
+ */
+export function validateDegradationFlags(
+  fields: IntegrityFieldMap,
+  violations: ReviewValidationViolation[],
+): Set<string> {
+  const field = fields.get("Degradation flags");
+  // A missing row is already explained by the required-field check shown to the reviewer.
+  if (!field) return new Set();
+  const listedFlags = field.value.split(",").map((flag) => flag.trim());
+  const flags = new Set(listedFlags);
+  // Duplicate tokens cannot stand in for independent evidence about the same limitation.
+  if (flags.size !== listedFlags.length)
+    addViolation(
+      violations,
+      "integrity-format",
+      field.line,
+      "Degradation flags must not contain duplicate tokens",
+    );
+
+  // An empty list item leaves the reviewer unable to tell which degradation was intended.
+  if (listedFlags.some((flag) => flag.length === 0)) {
+    addViolation(
+      violations,
+      "integrity-format",
+      field.line,
+      "Degradation flags must not contain an empty list item",
+    );
+  }
+
+  // "none" is the reader-facing claim that no degradation occurred, so another flag contradicts it.
+  if (flags.has("none") && listedFlags.some((flag) => flag !== "none")) {
+    addViolation(
+      violations,
+      "integrity-format",
+      field.line,
+      'Degradation flags cannot combine "none" with another flag',
+    );
+  }
+
+  rejectRetiredDegradationFlags(flags, field.line, violations);
+  rejectUnknownDegradationFlags(flags, field.line, violations);
+  const conclusionField = fields.get("Conclusion");
+  validateDegradationConclusion(
+    flags,
+    conclusionField?.value,
+    conclusionField?.line ?? field.line,
+    violations,
+  );
+  validateRiskDepthConclusion(flags, fields, field.line, violations);
+  return flags;
+}
+
+/**
+ * Require one nonempty explanation for each declared limit; explanations disclose host work rather than proving it occurred.
+ *
+ * @param integrity - declared flags and their explanation map; no flags requires an empty object
+ * @param violations - errors to append for missing, extra, or incompatible explanations
+ */
+export function validateDegradationEvidence(
+  integrity: IntegrityResult,
+  violations: ReviewValidationViolation[],
+): void {
+  const field = integrity.fields.get("Degradation evidence");
+  const value = readIntegrityJson(
+    integrity.fields,
+    "Degradation evidence",
+    violations,
+  );
+  try {
+    const evidence = record(value, "Degradation evidence");
+    const flags = [...integrity.flags].filter((flag) => flag !== "none");
+    requireAuthority(
+      Object.keys(evidence).length === flags.length &&
+        flags.every(
+          (flag) =>
+            typeof evidence[flag] === "string" &&
+            evidence[flag].trim().length > 0,
+        ),
+      "Degradation evidence must contain exactly one nonempty explanation per emitted flag; none uses {}",
+    );
+    const authority = integrity.anchorAuthority;
+    // A fetch limitation can refer only to a resolved local comparison; a flag cannot create missing source authority.
+    if (
+      flags.some((flag) =>
+        ["base-fetch-skipped", "base-fetch-failed"].includes(flag),
+      ) &&
+      authority.kind === "snapshot"
+    )
+      requireAuthority(
+        reviewScopeLabels(authority.snapshot).base !== "n/a",
+        "base-fetch disclosures require a resolved local comparison and no remote-freshness claim",
+      );
+    // A PR ingestion failure must refer to an actual PR review, not a local review without that data source.
+    if (
+      flags.includes("automated-review-uningested") &&
+      authority.kind === "snapshot"
+    )
+      requireAuthority(
+        authority.snapshot.source.kind === "pr",
+        "automated-review-uningested requires a PR ingestion surface",
+      );
+  } catch (error) {
+    // A reviewer may add a limitation without its reason or retain stale evidence after removing the flag.
+    addViolation(
+      violations,
+      "integrity-format",
+      field?.line ?? null,
+      error instanceof Error ? error.message : "invalid Degradation evidence",
+    );
+  }
+}
+
+import { reviewScopeLabels } from "./review-validate-authority.js";

@@ -193,7 +193,7 @@ export function expectOptionalNonNegativeInteger(
   // Missing legacy count fields stay absent so old reports still open.
   if (candidate === undefined) return { ok: true, value: undefined };
   // Negative or fractional counts cannot be displayed as reliable evidence.
-  if (!Number.isInteger(candidate) || Number(candidate) < 0) {
+  if (!Number.isSafeInteger(candidate) || Number(candidate) < 0) {
     return { ok: false, error: `${path} must be a non-negative integer` };
   }
   return { ok: true, value: Number(candidate) };

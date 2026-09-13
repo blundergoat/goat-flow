@@ -32,7 +32,9 @@ import {
   collectFootgunStructureDiagnostics,
   splitFootgunSections,
 } from "./learning-loop-sections.js";
+import { extractIncidentCount } from "./learning-loop-entries.js";
 import { isFileRef } from "./reference-paths.js";
+import { maskNonRenderedMarkdown } from "../../rendered-markdown.js";
 
 export { extractLearningLoopEntries } from "./learning-loop-entries.js";
 
@@ -265,27 +267,57 @@ function extractMaxEntryDate(body: string): string | null {
   return max;
 }
 
+/** Count recognized line-start recurrence labels without interpreting dates or quantities in prose. */
+function countRecurrenceLabels(entryContent: string): number {
+  return Array.from(
+    entryContent.matchAll(/^\*\*([^*\r\n]+):\*\*/gm),
+    (labelMatch) => labelMatch[1]?.trim() ?? "",
+  ).filter((label) => {
+    // These metadata labels describe prevention or an explicit absence, not another observed incident.
+    if (/^(?:No recurrences?|Recurrence prevention)\b/iu.test(label)) {
+      return false;
+    }
+    return (
+      /\brecurrences?\b/iu.test(label) || /^Repeat incident\b/iu.test(label)
+    );
+  }).length;
+}
+
 /**
  * Collect feedback-loop graduation candidates from one bucket body.
  *
- * A line-start `**Recurrence update` marker under an entry heading records that the mistake happened again after the entry existed; per the
- * feedback-loop doctrine the prevention should then graduate from prose to a structural gate (preflight check, CI step, deny pattern).
- * Resolved entries are skipped because their trap is closed.
+ * Declared incident totals preserve consolidated histories, while line-start recurrence labels preserve individual incident evidence. The larger
+ * total wins so an under-declared total cannot hide stronger prose evidence. Resolved entries are skipped because their trap is closed.
  *
  * The result is report-only `stats` data - never a `--check` finding - so the existing corpus cannot turn the gate into permanent warning noise.
  *
  * @param body Bucket markdown body with frontmatter already stripped.
- * @returns Entries with at least one recurrence marker, in file order.
+ * @returns Active entries with at least two effective incidents, in file order.
  */
 function collectGraduationCandidates(body: string): GraduationCandidate[] {
   const candidates: GraduationCandidate[] = [];
-  for (const section of body.split(/^(?=##\s)/m)) {
+  const renderedBody = maskNonRenderedMarkdown(body);
+  for (const section of renderedBody.split(/^(?=##\s)/m)) {
     const heading = section.match(/^##\s+(?:Footgun|Lesson|Pattern):\s*(.+)/);
     if (heading?.[1] === undefined) continue;
     if (/^\*\*Status:\*\*\s*resolved\b/im.test(section)) continue;
-    const recurrenceCount = countMatches(section, /^\*\*Recurrence update\b/gm);
-    if (recurrenceCount === 0) continue;
-    candidates.push({ title: heading[1].trim(), recurrenceCount });
+    const recurrenceCount = countRecurrenceLabels(section);
+    const observedIncidentCount = recurrenceCount + 1;
+    const declaredIncidentCount = extractIncidentCount(section);
+    const incidentCount = Math.max(
+      declaredIncidentCount ?? 0,
+      observedIncidentCount,
+    );
+    if (incidentCount < 2) continue;
+    candidates.push({
+      title: heading[1].trim(),
+      recurrenceCount,
+      declaredIncidentCount,
+      incidentCount,
+      hasIncidentCountDivergence:
+        declaredIncidentCount !== null &&
+        declaredIncidentCount < observedIncidentCount,
+    });
   }
   return candidates;
 }

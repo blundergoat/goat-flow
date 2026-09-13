@@ -1,12 +1,14 @@
-// goat-flow-hook-version: 1.16.0
+// goat-flow-hook-version: 1.17.0
 /**
  * Cross-platform launcher for goat-flow's Bash hook scripts.
+ *
  * Agent hook commands use Node so native Windows avoids the System32 WSL shim.
  * The launcher preserves the user's stdin, output, cwd, deadline, and hook status.
  */
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, lstatSync, realpathSync } from "node:fs";
 import {
+  basename,
   delimiter,
   dirname,
   isAbsolute,
@@ -265,7 +267,7 @@ function reportProviderPolicyUnavailable(
  * @param {string} userFacingReason - Practical failure detail; empty gives a generic message.
  * @returns {number} Exit status the host should treat as handled or blocked.
  */
-function reportUnavailable(hookResponseMode, userFacingReason) {
+function reportUnavailable(hookResponseMode, userFacingReason, hookIdentifier) {
   const lineBreak = String.fromCharCode(10);
   const namespacedModeParts = hookResponseMode.split(":");
   // Invalid or empty fields fall back to fail-closed policy output without loading an adapter.
@@ -279,7 +281,11 @@ function reportUnavailable(hookResponseMode, userFacingReason) {
       : namespacedModeParts[1] || "policy";
   // Concatenate because a template literal nested in another can confuse block scanners.
   const unavailableReason =
-    "Policy hook unavailable: " + userFacingReason + ".";
+    "Policy hook unavailable: " +
+    hookIdentifier +
+    ": " +
+    userFacingReason +
+    ".";
   // Feedback and stop failures bypass permission JSON and keep their own category.
   const providerPolicyExitCode =
     responseKind === "policy"
@@ -305,9 +311,7 @@ function reportUnavailable(hookResponseMode, userFacingReason) {
     );
     return 2;
   }
-  process.stderr.write(
-    `BLOCKED: Policy hook unavailable: ${userFacingReason}.${lineBreak}`,
-  );
+  process.stderr.write(`BLOCKED: ${unavailableReason}${lineBreak}`);
   return 2;
 }
 
@@ -318,20 +322,21 @@ function reportUnavailable(hookResponseMode, userFacingReason) {
  * @param {string} hookResponseMode - registered mode; empty text falls back to policy failure
  * @param {object | null} providerAdapterRuntime - loaded adapter, or null for legacy hooks
  * @param {object | null} launchContract - decoded managed contract, or null for legacy hooks
- * @param {string} unavailableReasonCode - stable failure code; empty text cannot explain the outcome
- * @param {string} userFacingReason - practical detail; empty text would leave the user without recovery context
- * @param {string} childStandardError - bounded child diagnostics; empty means the child produced none
- * @param {number} launcherDurationMs - measured wait; zero means no meaningful duration completed
+ * @param {string} hookIdentifier - entrypoint identity used to attribute policy startup failures
+ * @param {object} failure - reason code and user context, with optional child diagnostics and duration
  * @returns {number} Exit status the registered host treats as handled or blocked.
  */
 function reportLauncherUnavailable(
   hookResponseMode,
   providerAdapterRuntime,
   launchContract,
-  unavailableReasonCode,
-  userFacingReason,
-  childStandardError = "",
-  launcherDurationMs = 0,
+  hookIdentifier,
+  {
+    unavailableReasonCode,
+    userFacingReason,
+    childStandardError = "",
+    launcherDurationMs = 0,
+  },
 ) {
   // A migrated hook can translate launcher failure into the active provider's model response.
   if (providerAdapterRuntime !== null && launchContract !== null) {
@@ -343,6 +348,7 @@ function reportLauncherUnavailable(
         userFacingReason,
         childStandardError,
         launcherDurationMs,
+        hookIdentifier,
       );
     // A valid provider response reaches the model instead of becoming plain terminal text.
     if (providerUnavailableDelivery.state === "delivered") {
@@ -363,9 +369,10 @@ function reportLauncherUnavailable(
     return reportUnavailable(
       hookResponseMode,
       providerUnavailableDelivery.reason,
+      hookIdentifier,
     );
   }
-  return reportUnavailable(hookResponseMode, userFacingReason);
+  return reportUnavailable(hookResponseMode, userFacingReason, hookIdentifier);
 }
 
 /**
@@ -474,6 +481,18 @@ function stopHookProcessTree(hookProcess, hostPlatform, hookEnvironment) {
 }
 
 /**
+ * Relay one legacy hook stream while honoring the host stream's backpressure.
+ * Side effect: pipes child bytes into the host without closing the host stream when the child ends.
+ *
+ * @param {NodeJS.ReadableStream} hookOutputStream - Child output; an ended stream simply pipes no more bytes.
+ * @param {NodeJS.WritableStream} hostOutputStream - Host destination; a saturated stream pauses the child source until drain.
+ * @returns {void} No value; Node's pipe lifecycle owns pause and resume behavior.
+ */
+export function relayLegacyHookOutput(hookOutputStream, hostOutputStream) {
+  hookOutputStream.pipe(hostOutputStream, { end: false });
+}
+
+/**
  * Run a verified hook until it exits, fails, or reaches the user's deadline.
  *
  * @param {string} bashExecutable - Resolved Bash command; empty would fail through the launch-error result.
@@ -482,8 +501,8 @@ function stopHookProcessTree(hookProcess, hostPlatform, hookEnvironment) {
  * @param {NodeJS.ProcessEnv} hookEnvironment - Hook environment; missing values remain unavailable to the script.
  * @param {number} launchTimeout - Positive deadline in milliseconds; zero would time out immediately.
  * @param {NodeJS.Platform} hostPlatform - Active host used for process-tree cleanup.
- * @param {Function | null} appendCapturedHookOutput - adapter writer; null preserves direct legacy streams.
- * @returns {Promise<{status: number | null, timedOut: boolean, launchError: Error | null, stdout: string, stderr: string, hasExceededOutputLimit: boolean}>} Result for the user; empty streams mean legacy passthrough or no child output.
+ * @param {Function | null} appendCapturedHookOutput - adapter writer; null relays legacy streams without exposing provider handles to descendants.
+ * @returns {ReturnType<typeof captureHookProcessUntilDeadline>} Result for the user; empty streams mean legacy relay or no child output.
  */
 function runHookProcessUntilDeadline(
   bashExecutable,
@@ -506,10 +525,16 @@ function runHookProcessUntilDeadline(
       detached: hostPlatform !== "win32",
       env: hookEnvironment,
       shell: false,
-      stdio: shouldCaptureResult ? ["inherit", "pipe", "pipe"] : "inherit",
+      // Launcher-owned pipes keep an escaped descendant from retaining provider-facing handles.
+      stdio: ["inherit", "pipe", "pipe"],
       windowsHide: true,
     },
   );
+  // Legacy output stays live while the launcher retains ownership of the underlying handles.
+  if (!shouldCaptureResult && hookProcess.stdout && hookProcess.stderr) {
+    relayLegacyHookOutput(hookProcess.stdout, process.stdout);
+    relayLegacyHookOutput(hookProcess.stderr, process.stderr);
+  }
   return captureHookProcessUntilDeadline(
     hookProcess,
     hookEnvironment,
@@ -624,6 +649,7 @@ function renderHookExecutionResult(
   launchContract,
   hookExecution,
   launchTimeout,
+  hookIdentifier,
 ) {
   // A deadline means the hook tree was stopped before the user-facing response is rendered.
   if (hookExecution.timedOut) {
@@ -631,10 +657,14 @@ function renderHookExecutionResult(
       hookResponseMode,
       providerAdapterRuntime,
       launchContract,
-      "execution-timeout",
-      "hook exceeded its deadline and was killed",
-      hookExecution.stderr,
-      launchTimeout,
+      hookIdentifier,
+      {
+        unavailableReasonCode: "execution-timeout",
+        userFacingReason:
+          "hook exceeded its deadline; process-tree termination was requested",
+        childStandardError: hookExecution.stderr,
+        launcherDurationMs: launchTimeout,
+      },
     );
   }
   // For example, endpoint protection may stop Git Bash before the user's hook starts.
@@ -643,9 +673,12 @@ function renderHookExecutionResult(
       hookResponseMode,
       providerAdapterRuntime,
       launchContract,
-      "hook-unavailable",
-      "Bash could not start",
-      hookExecution.stderr,
+      hookIdentifier,
+      {
+        unavailableReasonCode: "hook-unavailable",
+        userFacingReason: "Bash could not start",
+        childStandardError: hookExecution.stderr,
+      },
     );
   }
   // Migrated hooks use the bounded neutral result and final provider adapter path.
@@ -661,9 +694,12 @@ function renderHookExecutionResult(
         hookResponseMode,
         providerAdapterRuntime,
         launchContract,
-        "adapter-delivery-failed",
-        providerHookDelivery.reason,
-        providerHookDelivery.stderr,
+        hookIdentifier,
+        {
+          unavailableReasonCode: "adapter-delivery-failed",
+          userFacingReason: providerHookDelivery.reason,
+          childStandardError: providerHookDelivery.stderr,
+        },
       );
     }
     // Empty stderr means neither the child nor adapter has a human-only diagnostic.
@@ -683,17 +719,21 @@ function renderHookExecutionResult(
   return reportUnavailable(
     hookResponseMode,
     "Bash ended without an exit status",
+    hookIdentifier,
   );
 }
 
 /**
  * Run a managed project hook through Bash while preserving its host-facing result.
- * Error behavior: expected validation, adapter, launch, and delivery failures return host-specific status.
+ *
+ * Use when an agent event must reach the selected project's managed policy or feedback script.
+ * Expected failures return host-specific status; unexpected host I/O rejects the promise so the agent can report a launcher fault.
  *
  * @param {string} hookScriptArgument - Project-relative hook path; empty is rejected.
  * @param {string} hookResponseMode - Agent response protocol; empty uses policy behavior.
  * @param {object} launchOptions - Test/platform overrides; omitted values use the live project.
  * @returns {Promise<number>} Hook exit status, or the protocol-specific unavailable result.
+ * @throws {Error} When unexpected filesystem or process I/O prevents a host-specific result.
  */
 export async function runHookWithBash(
   hookScriptArgument,
@@ -701,6 +741,10 @@ export async function runHookWithBash(
   launchOptions = {},
 ) {
   // A normal hook starts in the selected project; tests can provide a fixture root.
+  const hookIdentifier = basename(
+    hookScriptArgument.replaceAll("\\", "/"),
+    ".sh",
+  );
   const projectRoot = launchOptions.root ?? process.cwd();
   const hookScriptPath = resolve(projectRoot, hookScriptArgument);
   let containmentProjectRoot;
@@ -711,7 +755,7 @@ export async function runHookWithBash(
     containmentProjectRoot = realpathSync(projectRoot);
     containmentHookScriptPath = realpathSync(hookScriptPath);
   } catch {
-    // The existence and shape checks below retain their more specific unavailable reason.
+    // For example, a user may sync hooks between path lookup and launch; later checks then report the missing or replaced script.
     containmentProjectRoot = resolve(projectRoot);
     containmentHookScriptPath = resolve(hookScriptPath);
   }
@@ -731,18 +775,27 @@ export async function runHookWithBash(
     return reportUnavailable(
       hookResponseMode,
       "hook script path escaped the project root",
+      hookIdentifier,
     );
   }
   // For example, a partial install may register a hook whose script was never copied.
   if (!existsSync(hookScriptPath)) {
-    return reportUnavailable(hookResponseMode, "hook script was not found");
+    return reportUnavailable(
+      hookResponseMode,
+      "hook script was not found",
+      hookIdentifier,
+    );
   }
   const hookScriptShapeReason = hookScriptShapeFailure(
     projectRoot,
     hookScriptPath,
   );
   if (hookScriptShapeReason !== null) {
-    return reportUnavailable(hookResponseMode, hookScriptShapeReason);
+    return reportUnavailable(
+      hookResponseMode,
+      hookScriptShapeReason,
+      hookIdentifier,
+    );
   }
 
   // Normal launches follow the host platform; tests can model native Windows.
@@ -761,6 +814,7 @@ export async function runHookWithBash(
     return reportUnavailable(
       hookResponseMode,
       "Windows-compatible Bash was not found; install Git for Windows",
+      hookIdentifier,
     );
   }
 
@@ -780,7 +834,11 @@ export async function runHookWithBash(
     hookEnvironment,
   );
   if (launchRuntime.failureReason !== null) {
-    return reportUnavailable(hookResponseMode, launchRuntime.failureReason);
+    return reportUnavailable(
+      hookResponseMode,
+      launchRuntime.failureReason,
+      hookIdentifier,
+    );
   }
   hookEnvironment = launchRuntime.hookEnvironment;
   const { launchContract, providerAdapterRuntime, launchTimeout } =
@@ -803,6 +861,7 @@ export async function runHookWithBash(
     launchContract,
     hookExecution,
     launchTimeout,
+    hookIdentifier,
   );
 }
 
@@ -814,6 +873,7 @@ if (launchedModuleArgument) {
   try {
     launchedModulePath = realpathSync(resolvedLaunchPath);
   } catch {
+    // For example, an upgrade may replace the launcher path after Node loads it; the lexical path keeps import detection deterministic.
     launchedModulePath = resolvedLaunchPath;
   }
 }

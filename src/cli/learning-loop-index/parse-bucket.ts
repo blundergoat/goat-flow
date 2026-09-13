@@ -1,20 +1,19 @@
 /**
- * Parses learning-loop bucket markdown into the entry list behind generated INDEX.md files.
+ * Parses learning-loop Markdown for generated INDEX.md files.
+ * Use it when the CLI rebuilds or verifies indexes for footguns, lessons, patterns, and decisions.
  *
- * One parser covers all four buckets: footguns/lessons/patterns split per `## <Kind>:` heading (skipping `## Resolved Entries` sections and
- * `**Status:** resolved` entries), while decisions derive one entry per ADR file.
- *
- * Hooks are extracted mechanically - first sentence of the bucket-specific lead paragraph - so regeneration stays deterministic and never needs
- * hand-curated metadata.
- * Nothing here reads the clock; `index-fresh` re-runs this parser and diffs, so any time-derived output would break freshness detection.
+ * Entry buckets are split by their kind heading; decisions produce one row per ADR file.
+ * Hooks, dates, and reading costs come only from entry text, so repeated runs stay deterministic.
  */
 import type { ReadonlyFS } from "../types.js";
 import type { GoatFlowConfig } from "../config/types.js";
 import {
+  findResolvedEntriesHeadingIndex,
   listMarkdownEntries,
   parseMarkdownFrontmatter,
   type MarkdownEntry,
 } from "../facts/shared/learning-loop-common.js";
+import { maskNonRenderedMarkdown } from "../rendered-markdown.js";
 
 /** Learning-loop buckets that receive a generated INDEX.md. */
 export type IndexBucket = "footguns" | "lessons" | "patterns" | "decisions";
@@ -28,8 +27,10 @@ export const INDEX_BUCKETS: IndexBucket[] = [
 ];
 
 /**
- * One generated index row. The anchor is the entry's verbatim heading line (semantic anchor,
- * never a line number) so `(search: "...")` retrieval survives bucket edits.
+ * One deterministic row shown to a developer searching the generated learning index.
+ *
+ * The anchor is the verbatim heading, never a line number, so retrieval survives bucket edits.
+ * Invariant: only footgun and lesson renderers may replace `hook` with optional `decisionChanged` guidance.
  */
 export interface IndexEntry {
   /** Entry heading text without the `## <Kind>:` prefix; decisions carry the full H1 text. */
@@ -43,6 +44,32 @@ export interface IndexEntry {
   anchor: string;
   /** One-sentence routing hook extracted mechanically from the entry body. */
   hook: string;
+  /** Optional future action; null means the generated row keeps its incident or context hook. */
+  decisionChanged: string | null;
+  /** Declared date shown in the row suffix: `Created` for bucket entries, the index date for ADRs. */
+  declaredDate: string | null;
+  /** Stable reading-cost heuristic: UTF-8 bytes divided by four, rounded to the nearest ten. */
+  approxTokenEstimate: number;
+}
+
+/**
+ * One active learning-loop section with enough source evidence for non-index consumers.
+ * Recall uses this shape so entry identity/status and `(search: ...)` extraction share the
+ * indexer's resolved filtering instead of growing a second Markdown section parser.
+ */
+export interface ActiveLearningLoopSection {
+  bucket: IndexBucket;
+  title: string;
+  /** Exact Markdown heading used as the entry's semantic anchor. */
+  heading: string;
+  /** Project-relative bucket file containing this entry. */
+  sourcePath: string;
+  /** Declared status, or `active` for entry buckets whose live status is implicit. */
+  status: string;
+  /** Optional future-agent guidance carried by the entry metadata. */
+  decisionChanged: string | null;
+  /** Section-local Markdown supplied to shared evidence extractors, never rendered wholesale. */
+  content: string;
 }
 
 /** Heading keyword per entry-style bucket (`## Footgun:` / `## Lesson:` / `## Pattern:`). */
@@ -59,24 +86,94 @@ const HOOK_MARKER = {
   patterns: "**Context:**",
 } as const;
 
-/** Entries below this marker are resolved history and stay out of the generated index. */
-const RESOLVED_MARKER = "## Resolved Entries";
+/** Labels allowed to start metadata lines for each learning-loop bucket. */
+const ENTRY_METADATA_LEAD_LABELS: Record<IndexBucket, ReadonlySet<string>> = {
+  footguns: new Set([
+    "Status",
+    "Created",
+    "Updated",
+    "Resolved",
+    "Related",
+    "Decision changed",
+    "Trigger phase",
+    "Caught at",
+    "Incident count",
+    "Latest occurrence",
+    "Reason",
+    "Corrected",
+    "Dependency note",
+    "Depends on",
+    "hallucination-risk",
+  ]),
+  lessons: new Set([
+    "Status",
+    "Created",
+    "Updated",
+    "Resolved",
+    "Related",
+    "Decision changed",
+    "Trigger phase",
+    "Caught at",
+    "Incident count",
+    "Latest occurrence",
+    "Last recurrence",
+    "Recurrences",
+    "Reason",
+    "Merged",
+    "Merged during",
+  ]),
+  patterns: new Set(["Status", "Created", "Updated", "Resolved", "Related"]),
+  decisions: new Set([
+    "Status",
+    "Date",
+    "Superseded",
+    "Related",
+    "Decision changed",
+  ]),
+};
 
-/** Metadata-only paragraphs skipped when falling back to the first body paragraph. */
-const METADATA_LABEL =
-  /^\*\*(?:Status|Created|Updated|Resolved|Evidence|Date|Superseded|Related):\*\*/;
+/** Every label accepted after a leading metadata label on the same line. */
+const INLINE_ENTRY_METADATA_LABELS = new Set([
+  "Status",
+  "Created",
+  "Updated",
+  "Resolved",
+  "Evidence",
+  "Date",
+  "Superseded",
+  "Related",
+  "Decision changed",
+  "Trigger phase",
+  "Caught at",
+  "Incident count",
+  "Latest occurrence",
+  "Last recurrence",
+  "Recurrences",
+  "Reason",
+  "Corrected",
+  "Dependency note",
+  "Depends on",
+  "hallucination-risk",
+  "Merged",
+  "Merged during",
+]);
+
+/** Bold `**Label:**` fields recognised only through the private metadata grammar. */
+const ENTRY_METADATA_LABEL = /\*\*([^*\n]+):\*\*/gu;
 
 /** ADR record filenames; non-ADR files in the decisions dir are a stats finding, not index rows. */
 const ADR_FILE = /^ADR-\d{3}-.+\.md$/;
 
 /**
- * Limit rationale: the hook only has to answer "is this row worth opening?", and every agent reads a whole INDEX before starting work, so the cap is
- * a direct retrieval tax.
- * At 200 the lessons index reached 84KB - larger than any bucket it indexes, and over twice the 40,000-byte bucket gate.
- *
- * 100 keeps the routing sentence intact while roughly halving that cost.
+ * Limit rationale: the hook only has to answer "is this row worth opening?" Search returns at most 13 rows, but every returned hook consumes the
+ * bounded Step 0 budget. One hundred characters keeps the routing sentence useful without letting summaries dominate that result set.
  */
 const HOOK_MAX_CHARS = 100;
+
+/** Deterministic approximation used only to compare entry reading costs. */
+function approximateTokenEstimate(content: string): number {
+  return Math.round(Buffer.byteLength(content, "utf8") / 40) * 10;
+}
 
 /**
  * The patterns bucket has no config.yaml key (unlike footguns/lessons/decisions), so the path is
@@ -119,7 +216,7 @@ const DEGENERATE_NEEDLE = /^#{1,2}\s*(?:[A-Za-z-]+:)?$/;
  * Headings with an embedded double quote are cut before the quote to keep the needle copy-pasteable - but for quote-FIRST titles (e.g.
  *
  * `## Lesson: "Double check" means read the files`) that cut collapses to the bare `## Lesson:` prefix shared by every entry.
- * Those keep the full heading line instead, and the renderer wraps them in single quotes (M04, 1.13.0).
+ * Those keep the full heading line instead, and the renderer wraps them in single quotes.
  *
  * @param headingLine - verbatim `## <Kind>: ...` or ADR `# ...` heading line
  * @returns the needle to embed in the row's `(search: ...)` anchor
@@ -150,29 +247,118 @@ function firstSentence(text: string): string {
 
 /** Return the first paragraph following a literal marker, or null when the marker is absent. */
 function paragraphAfter(content: string, marker: string): string | null {
-  const idx = content.indexOf(marker);
-  if (idx === -1) return null;
-  const after = content.slice(idx + marker.length).trimStart();
-  const paragraph = (after.split(/\n\s*\n/)[0] ?? "").trim();
-  return paragraph.length > 0 ? paragraph : null;
+  const renderedContent = maskNonRenderedMarkdown(content);
+  const markerIndex = renderedContent.indexOf(marker);
+  if (markerIndex === -1) return null;
+  const after = renderedContent.slice(markerIndex + marker.length).trimStart();
+  return (
+    after
+      .split(/\n\s*\n/)
+      .map((paragraph) => paragraph.trim())
+      .find(
+        (paragraph) =>
+          paragraph.length > 0 &&
+          !paragraph
+            .split("\n")
+            .every((line) => /^#{1,6}\s+\S/u.test(line.trim())),
+      ) ?? null
+  );
 }
 
-/** First non-metadata body paragraph, with any leading `**Label:**` stripped - the hook fallback. */
-function firstBodyParagraph(content: string): string {
-  const withoutHeading = content.replace(/^#{1,2}[^\n]*\n/, "");
-  for (const raw of withoutHeading.split(/\n\s*\n/)) {
-    const paragraph = raw.trim();
-    if (paragraph.length === 0 || METADATA_LABEL.test(paragraph)) continue;
-    const paragraphLines = paragraph
-      .split("\n")
-      .map((line) => line.trim())
-      .filter((line) => line.length > 0);
-    if (
-      paragraphLines.length > 0 &&
-      paragraphLines.every((line) => /^#{1,6}\s+\S/u.test(line))
-    ) {
-      continue;
-    }
+/** True when every visible line is metadata owned by the selected bucket. */
+function isMetadataParagraph(paragraph: string, bucket: IndexBucket): boolean {
+  const paragraphLines = paragraph
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+  return (
+    paragraphLines.length > 0 &&
+    paragraphLines.every((line) => {
+      const labels = Array.from(line.matchAll(ENTRY_METADATA_LABEL));
+      const leadingLabel = labels[0];
+      return (
+        leadingLabel?.index === 0 &&
+        ENTRY_METADATA_LEAD_LABELS[bucket].has(leadingLabel[1] ?? "") &&
+        labels.every((match) =>
+          INLINE_ENTRY_METADATA_LABELS.has(match[1] ?? ""),
+        )
+      );
+    })
+  );
+}
+
+/** True when a paragraph carries no retrievable prose: blank, metadata-only, or nothing but headings. */
+function isNonProseParagraph(paragraph: string, bucket: IndexBucket): boolean {
+  if (paragraph.length === 0 || isMetadataParagraph(paragraph, bucket)) {
+    return true;
+  }
+  const paragraphLines = paragraph
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+  return (
+    paragraphLines.length > 0 &&
+    paragraphLines.every((line) => /^#{1,6}\s+\S/u.test(line))
+  );
+}
+
+/** True for a `**Prevention:**` block, whose guidance is not the incident a maintainer searches for. */
+function isPreventionParagraph(paragraph: string): boolean {
+  return /^\*\*Prevention:\*\*/u.test(paragraph);
+}
+
+/** True for a top-level Markdown list item, the shape the rules under a Prevention label take. */
+function isListParagraph(paragraph: string): boolean {
+  return /^(?:[*+-]|\d{1,9}[.)])(?:[ \t]+|$)/u.test(paragraph);
+}
+
+/** Return rendered body paragraphs after removing the entry heading and bucket-owned metadata. */
+function learningEntryBodyParagraphs(
+  section: Pick<ActiveLearningLoopSection, "bucket" | "content">,
+): string[] {
+  const withoutHeading = maskNonRenderedMarkdown(section.content).replace(
+    /^#{1,2}[^\n]*\n/,
+    "",
+  );
+  return withoutHeading
+    .split(/\n\s*\n/)
+    .map((paragraph) => paragraph.trim())
+    .filter((paragraph) => !isNonProseParagraph(paragraph, section.bucket));
+}
+
+/**
+ * Read the first rendered body paragraph after bucket-owned, line-complete metadata.
+ * Mixed metadata and prose stays visible so a malformed entry cannot satisfy ordering checks by omission.
+ *
+ * @param section - bucket identity and complete entry section content
+ * @returns first semantic body paragraph, or an empty string when none exists
+ */
+export function firstLearningEntryBodyParagraph(
+  section: Pick<ActiveLearningLoopSection, "bucket" | "content">,
+): string {
+  return learningEntryBodyParagraphs(section)[0] ?? "";
+}
+
+/**
+ * Find fallback prose for a generated INDEX retrieval hook after ignoring metadata.
+ * For footguns and lessons, keep the incident visible when maintainers move Prevention first,
+ * including a leading Prevention list.
+ */
+function fallbackHookParagraph(
+  section: Pick<ActiveLearningLoopSection, "bucket" | "content">,
+  shouldPreserveIncidentHook: boolean,
+): string {
+  const firstBodyParagraph = firstLearningEntryBodyParagraph(section);
+  if (
+    !shouldPreserveIncidentHook ||
+    !isPreventionParagraph(firstBodyParagraph)
+  ) {
+    return firstBodyParagraph.replace(/^\*\*[^*\n]+:\*\*\s*/, "");
+  }
+  const [, ...paragraphsAfterPrevention] = learningEntryBodyParagraphs(section);
+  for (const paragraph of paragraphsAfterPrevention) {
+    // A leading list belongs to Prevention, not the incident a maintainer expects to find through the generated INDEX.
+    if (isListParagraph(paragraph)) continue;
     return paragraph.replace(/^\*\*[^*\n]+:\*\*\s*/, "");
   }
   return "";
@@ -189,11 +375,15 @@ interface RawSection {
 /** Slice a bucket body at each `## <Kind>:` heading into document-ordered sections. */
 function splitEntrySections(body: string, kind: string): RawSection[] {
   const headingPattern = new RegExp(`^##\\s+${kind}:\\s+(.+)$`, "gm");
-  const headings = Array.from(body.matchAll(headingPattern), (match) => ({
-    title: (match[1] ?? "").trim(),
-    headingLine: match[0],
-    start: match.index,
-  }));
+  const renderedBody = maskNonRenderedMarkdown(body);
+  const headings = Array.from(
+    renderedBody.matchAll(headingPattern),
+    (match) => ({
+      title: (match[1] ?? "").trim(),
+      headingLine: match[0],
+      start: match.index,
+    }),
+  );
   return headings.map((heading, index) => ({
     ...heading,
     content: body.slice(
@@ -203,33 +393,70 @@ function splitEntrySections(body: string, kind: string): RawSection[] {
   }));
 }
 
+/** Read one line-scoped bold metadata value without interpreting its prose. */
+function metadataValue(body: string, label: string): string | null {
+  return (
+    maskNonRenderedMarkdown(body)
+      .match(new RegExp(`^\\*\\*${label}:\\*\\*\\s*(.+)$`, "m"))?.[1]
+      ?.trim() ?? null
+  );
+}
+
+/** Entry-bucket status uses its first pipe-delimited field; omission means the live default. */
+function entryStatus(body: string): string {
+  return metadataValue(body, "Status")?.split("|")[0]?.trim() || "active";
+}
+
+/** Parse one footgun/lesson/pattern bucket file into active source sections. */
+function parseEntryFileSections(
+  file: MarkdownEntry,
+  bucket: Exclude<IndexBucket, "decisions">,
+): ActiveLearningLoopSection[] {
+  const { body } = parseMarkdownFrontmatter(file.content);
+  const resolvedAt = findResolvedEntriesHeadingIndex(body);
+  return splitEntrySections(body, HEADING_KIND[bucket])
+    .filter((section) => resolvedAt === -1 || section.start < resolvedAt)
+    .filter(
+      (section) => entryStatus(section.content).toLowerCase() !== "resolved",
+    )
+    .map((section) => ({
+      bucket,
+      title: section.title,
+      heading: section.headingLine,
+      sourcePath: file.path,
+      status: entryStatus(section.content),
+      decisionChanged: metadataValue(section.content, "Decision changed"),
+      content: section.content,
+    }));
+}
+
 /** Parse one footgun/lesson/pattern bucket file into active-entry index rows. */
 function parseEntryFile(
   file: MarkdownEntry,
   bucket: Exclude<IndexBucket, "decisions">,
 ): IndexEntry[] {
-  const { body } = parseMarkdownFrontmatter(file.content);
-  const resolvedAt = body.indexOf(RESOLVED_MARKER);
-  const sourceFile = baseName(file.path);
-  return splitEntrySections(body, HEADING_KIND[bucket])
-    .filter((section) => resolvedAt === -1 || section.start < resolvedAt)
-    .filter((section) => !/\*\*Status:\*\*\s*resolved\b/i.test(section.content))
-    .map((section) => ({
-      title: section.title,
-      sourceFile,
-      anchor: searchNeedle(section.headingLine),
-      hook: firstSentence(
-        paragraphAfter(section.content, HOOK_MARKER[bucket]) ??
-          firstBodyParagraph(section.content),
-      ),
-    }));
+  return parseEntryFileSections(file, bucket).map((section) => ({
+    title: section.title,
+    sourceFile: baseName(section.sourcePath),
+    anchor: searchNeedle(section.heading),
+    hook: firstSentence(
+      paragraphAfter(section.content, HOOK_MARKER[bucket]) ??
+        fallbackHookParagraph(section, bucket !== "patterns"),
+    ),
+    decisionChanged: section.decisionChanged,
+    declaredDate: metadataDate(section.content, "Created"),
+    approxTokenEstimate: approximateTokenEstimate(section.content),
+  }));
 }
 
-/** Read one `**Label:** YYYY-MM-DD` metadata date from an ADR body. */
+/** Read one declared `**Label:** YYYY-MM-DD` date from an entry body. */
 function metadataDate(body: string, label: string): string | null {
   return (
-    body.match(
-      new RegExp(`^\\*\\*${label}:\\*\\*\\s*(\\d{4}-\\d{2}-\\d{2})`, "m"),
+    maskNonRenderedMarkdown(body).match(
+      new RegExp(
+        `(?:^|\\|\\s*)\\*\\*${label}:\\*\\*\\s*(\\d{4}-\\d{2}-\\d{2})`,
+        "m",
+      ),
     )?.[1] ?? null
   );
 }
@@ -242,35 +469,81 @@ function decisionIndexDate(body: string, status: string): string | null {
   return metadataDate(body, "Date");
 }
 
-/** Read the status/date prefix for one ADR index hook. */
-function decisionStatusPart(body: string): string {
-  const status = firstSentence(
-    body.match(/^\*\*Status:\*\*\s*(.+)$/m)?.[1]?.trim() ?? "Unknown status",
+/** Read the status prefix for one ADR index hook. */
+function decisionStatus(body: string): string {
+  return firstSentence(
+    maskNonRenderedMarkdown(body)
+      .match(/^\*\*Status:\*\*\s*(.+)$/m)?.[1]
+      ?.trim() ?? "Unknown status",
   );
-  const date = decisionIndexDate(body, status);
-  return date === null ? status : `${status}, ${date}`;
 }
 
 /** Read the first ADR decision sentence, falling back to body prose for older ADR shapes. */
-function decisionSummary(body: string): string {
+function decisionSummary(section: ActiveLearningLoopSection): string {
   return firstSentence(
-    paragraphAfter(body, "\n## Decision") ?? firstBodyParagraph(body),
+    paragraphAfter(section.content, "\n## Decision") ??
+      fallbackHookParagraph(section, false),
   );
 }
 
 /** Parse one ADR file into its index row; null when the file lacks an H1 title. */
 function parseDecisionFile(file: MarkdownEntry): IndexEntry | null {
-  const { body } = parseMarkdownFrontmatter(file.content);
-  const titleMatch = body.match(/^#\s+(.+)$/m);
-  if (!titleMatch) return null;
-  // ADR shapes vary: status/date lines are mandatory in current records, but older records may put
-  // status prose in paragraphs, so the parser composes a compact hook from whichever stable parts exist.
+  const section = parseDecisionSection(file);
+  if (section === null) return null;
+  const body = section.content;
+  const status = section.status;
   return {
-    title: (titleMatch[1] ?? "").trim(),
-    sourceFile: baseName(file.path),
-    anchor: searchNeedle(titleMatch[0]),
-    hook: `${decisionStatusPart(body)} - ${decisionSummary(body)}`,
+    title: section.title,
+    sourceFile: baseName(section.sourcePath),
+    anchor: searchNeedle(section.heading),
+    hook: `${status} - ${decisionSummary(section)}`,
+    decisionChanged: section.decisionChanged,
+    declaredDate: decisionIndexDate(body, status),
+    approxTokenEstimate: approximateTokenEstimate(body),
   };
+}
+
+/** Parse one ADR file into the active source-section shape; null when it has no H1 title. */
+function parseDecisionSection(
+  file: MarkdownEntry,
+): ActiveLearningLoopSection | null {
+  const { body } = parseMarkdownFrontmatter(file.content);
+  const titleMatch = maskNonRenderedMarkdown(body).match(/^#\s+(.+)$/m);
+  if (!titleMatch) return null;
+  const status = decisionStatus(body);
+  return {
+    bucket: "decisions",
+    title: (titleMatch[1] ?? "").trim(),
+    heading: titleMatch[0],
+    sourcePath: file.path,
+    status,
+    decisionChanged: metadataValue(body, "Decision changed"),
+    content: body,
+  };
+}
+
+/**
+ * Parse one bucket into active source sections for consumers that need entry-local evidence.
+ * Files and sections retain deterministic source order; resolved entry-bucket history is omitted,
+ * while ADRs retain their declared status so callers do not follow superseded decisions blind.
+ *
+ * @param fs - read-only filesystem adapter rooted at the target project
+ * @param dirPath - bucket directory path relative to the project root
+ * @param bucket - grammar and status policy for the selected learning-loop bucket
+ * @returns active source sections in deterministic file and document order
+ */
+export function parseActiveBucketSections(
+  fs: ReadonlyFS,
+  dirPath: string,
+  bucket: IndexBucket,
+): ActiveLearningLoopSection[] {
+  const dir = listMarkdownEntries(fs, dirPath);
+  if (bucket === "decisions") {
+    return dir.files
+      .filter((file) => ADR_FILE.test(baseName(file.path)))
+      .flatMap((file) => parseDecisionSection(file) ?? []);
+  }
+  return dir.files.flatMap((file) => parseEntryFileSections(file, bucket));
 }
 
 /**
@@ -288,11 +561,12 @@ export function parseBucket(
   dirPath: string,
   bucket: IndexBucket,
 ): IndexEntry[] {
-  const dir = listMarkdownEntries(fs, dirPath);
   if (bucket === "decisions") {
-    return dir.files
-      .filter((file) => ADR_FILE.test(baseName(file.path)))
+    return listMarkdownEntries(fs, dirPath)
+      .files.filter((file) => ADR_FILE.test(baseName(file.path)))
       .flatMap((file) => parseDecisionFile(file) ?? []);
   }
-  return dir.files.flatMap((file) => parseEntryFile(file, bucket));
+  return listMarkdownEntries(fs, dirPath).files.flatMap((file) =>
+    parseEntryFile(file, bucket),
+  );
 }

@@ -1,9 +1,9 @@
 ---
-goat-flow-reference-version: "1.16.0"
+goat-flow-reference-version: "1.17.0"
 ---
 # ISSUE.md Format
 
-Write `ISSUE.md` beside the milestones as the GitHub-facing case for the work. It serves requesters, reviewers, and implementers with different technical backgrounds; milestone files remain the executor handoff.
+Write `ISSUE.md` beside milestones for requesters, reviewers and implementers; milestone files remain the executor handoff.
 
 ## When to emit it
 
@@ -14,9 +14,9 @@ Write `ISSUE.md` beside the milestones as the GitHub-facing case for the work. I
 
 ## Writing rules
 
-Write for GitHub readers across technical levels. The floor is a reader with no coding background: a product owner, operations person, or client must be able to act on every prose sentence in Outcome, At a glance, the problem and benefit sections, and Out of scope.
+Write for GitHub readers across technical levels. Make Outcome, At a glance, problem, benefit and Out of scope prose actionable without coding knowledge.
 
-- Cut words, never facts: prefer the shortest version that keeps every distinct fact; a fact may live in its named home (milestone, test, table row) instead of being restated.
+- Cut words, never facts: reference each fact's named owner (milestone, test, table row) instead of repeating it.
 - Use plain professional sentences: neutral tone, everyday words, no compressed noun chains.
 - Prose bullets contain 6-25 visible words on one physical line; count after checkbox and Markdown markers but before ` = <agent-time range>`; punctuation adds no words.
 - Problem and task lines lean to the short end, and a task line still names each distinct deliverable; mechanism belongs in milestone files.
@@ -69,7 +69,7 @@ State the smallest complete result in one or two plain-language sentences.
 
 ## At a glance
 
-Put delivery decisions before background. Use the seven rows below and keep each answer concise.
+Lead with delivery decisions; use these seven concise rows.
 
 ```markdown
 ## At a glance
@@ -87,7 +87,7 @@ Put delivery decisions before background. Use the seven rows below and keep each
 
 ## What problem are we solving
 
-Name the problem and its cost in plain words, not the implementation. Ground bullets in observed evidence where available.
+Name the problem and its cost, grounding claims in observed evidence rather than implementation details.
 
 ```markdown
 ## What problem are we solving
@@ -98,7 +98,7 @@ Name the problem and its cost in plain words, not the implementation. Ground bul
 
 ## Who benefits and how
 
-Use two to six bullets in plain language. Lead with the bold reader group when benefits differ by reader, or with the bold claim when one benefit serves everyone; gloss roles in plain words, cite measured baselines when available, and avoid marketing claims.
+Use two to six plain bullets. Bold reader groups for differing benefits, or claims for shared benefits; gloss roles, cite available measured baselines, and avoid marketing claims.
 
 ```markdown
 ## Who benefits and how
@@ -108,7 +108,7 @@ Use two to six bullets in plain language. Lead with the bold reader group when b
 - **Implementers** (whoever builds it) receive <concrete change in execution or recovery work>.
 ```
 
-Mention unchanged safeguards or delayed payoff only when materially relevant; never invent either to fill the section.
+Mention unchanged safeguards or delayed payoff only when relevant; never invent either.
 
 ## Requirements
 
@@ -123,7 +123,7 @@ State testable requirements without file-level detail. During authoring and clos
 
 ## Tasks
 
-Show three to six delivery phases, not duplicated milestone tasks; after the ` = ` estimate a line carries nothing else, and human actions are named in At a glance instead. Tasks remain open at authoring and close only after verified delivery.
+Show three to six delivery phases without duplicating milestone tasks. End lines with the ` = ` estimate; put human actions in At a glance. Tasks remain open at authoring and close only after verified delivery.
 
 ```markdown
 ## Tasks
@@ -134,11 +134,11 @@ Show three to six delivery phases, not duplicated milestone tasks; after the ` =
 - [ ] <Next delivery phase with one outcome and no executor-only detail.> = <agent-time range>
 ```
 
-Every ISSUE delivery band is derived from milestone forecasts; reconcile Tasks with the "How long will it take?" answer. ISSUE bands summarize estimates and never input a milestone estimate. Exclude prerequisites from the subtotal.
+Every ISSUE delivery band is derived from milestone forecasts; reconcile Tasks with the "How long will it take?" answer separately: `plans check` ignores ISSUE content. ISSUE bands never input a milestone estimate. Exclude prerequisites from the subtotal.
 
 ## Out of scope
 
-List only the one to three tempting, ambiguous, or high-cost exclusions, each with why reviewers might otherwise expect it. Do not repeat the "What is left out?" row verbatim: the row lists, this section explains.
+List one to three tempting, ambiguous or costly exclusions and explain why readers might expect them. Avoid repeating "What is left out?": the row lists, this section explains.
 
 ```markdown
 ## Out of scope
@@ -161,7 +161,7 @@ Anyone searching the dashboard gets results in under one second, without changes
 
 | Question | Answer |
 |---|---|
-| How long will it take? | 6-9 hours of agent work |
+| How long will it take? | 4-8 hours of agent work |
 | What must ship? | Common searches answer in under one second |
 | What is left out? | Ranking changes, mobile layout work |
 | Biggest risk? | Stored results going stale after edits |
@@ -192,7 +192,7 @@ Anyone searching the dashboard gets results in under one second, without changes
 
 - [ ] Measure where search time goes today. = 1-2h
 - [ ] Reuse stored results for common searches. = 2-4h
-- [ ] Prove searches return in under one second. = 1-2h
+- [ ] Prove search speed, saved searches and fresh results after edits. = 1-2h
 
 ## Out of scope
 

@@ -14,16 +14,21 @@ Create local instruction files only when you are seeing real drift:
 
 When generating local instructions, prefer this order:
 
-1. Existing project docs such as `.github/instructions/`, `docs/`, or team playbooks
+1. Existing provider-appropriate instruction files, project docs, and team playbooks
 2. Real patterns observed in the codebase
 
 Do not create parallel surfaces that duplicate the same guidance in multiple places.
 
 ## If you add local instruction files
 
-Use `.github/instructions/` as the canonical surface:
-- Start with `conventions.instructions.md` only
-- Add `frontend.instructions.md`, `backend.instructions.md`, etc. only when they reflect real project patterns
+Use the active agent profile in `workflow/manifest.json` to choose the provider surface:
+
+- Copilot path-scoped rules use `.github/instructions/**/*.instructions.md`.
+- Codex directory-scoped rules use nested `AGENTS.override.md` or `AGENTS.md` files.
+- Claude directory-scoped rules use `.claude/rules/*.md` with `paths:` frontmatter.
+- Antigravity uses nested `AGENTS.md` files where a narrower scope is required.
+
+Do not claim another harness reads a provider-specific surface. Add the smallest file that owns a demonstrated local rule.
 
 ## What good local instructions look like
 

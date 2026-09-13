@@ -22,45 +22,44 @@ import {
 } from "../../src.js";
 
 /** Extract hook facts from the packaged deny hook plus its shared pattern libraries. */
-function extractPackagedDenyHookFacts(): ReturnType<typeof extractHookFacts> {
-  const gitTemplate = readFileSync(
-    resolve(PROJECT_ROOT, "workflow/hooks/deny-dangerous.sh"),
-    "utf8",
-  );
-  const secretTemplate = readFileSync(
-    resolve(PROJECT_ROOT, "workflow/hooks/deny-dangerous/patterns-paths.sh"),
-    "utf8",
-  );
-  const destructiveTemplate = readFileSync(
-    resolve(PROJECT_ROOT, "workflow/hooks/deny-dangerous/patterns-shell.sh"),
-    "utf8",
+function extractPackagedDenyHookFacts(
+  missingPath?: string,
+): ReturnType<typeof extractHookFacts> {
+  const files = new Map(
+    [
+      "deny-dangerous.sh",
+      "deny-git-mutations.sh",
+      "deny-dangerous/guard-runtime.sh",
+      "deny-dangerous/patterns-shell.sh",
+      "deny-dangerous/patterns-paths.sh",
+      "deny-dangerous/patterns-writes.sh",
+      "deny-dangerous/deny-dangerous-self-test.sh",
+    ]
+      .filter((file) => file !== missingPath)
+      .map((file) => [
+        `.goat-flow/hooks/${file}`,
+        readFileSync(resolve(PROJECT_ROOT, "workflow/hooks", file), "utf8"),
+      ]),
   );
   const fs = stubFS({
-    exists: (path) =>
-      [
-        ".goat-flow/hooks/deny-dangerous.sh",
-        ".goat-flow/hooks/deny-dangerous/patterns-shell.sh",
-        ".goat-flow/hooks/deny-dangerous/patterns-paths.sh",
-        ".goat-flow/hooks/deny-dangerous/patterns-writes.sh",
-        ".goat-flow/hooks/deny-dangerous/deny-dangerous-self-test.sh",
-      ].includes(path),
-    readFile: (path) => {
-      if (path === ".goat-flow/hooks/deny-dangerous/patterns-shell.sh") {
-        return destructiveTemplate;
-      }
-      if (path === ".goat-flow/hooks/deny-dangerous/patterns-paths.sh") {
-        return secretTemplate;
-      }
-      if (path === ".goat-flow/hooks/deny-dangerous.sh") {
-        return gitTemplate;
-      }
-      return null;
-    },
+    exists: (path) => files.has(path),
+    readFile: (path) => files.get(path) ?? null,
   });
   return extractHookFacts(fs, STUB_AGENT_PROFILE, {}, true, true);
 }
 
 describe("hook fact extraction", () => {
+  it("does not borrow Git coverage from settings when the managed Git store is incomplete", () => {
+    for (const missingPath of [
+      "deny-git-mutations.sh",
+      "deny-dangerous/guard-runtime.sh",
+    ]) {
+      const facts = extractPackagedDenyHookFacts(missingPath);
+      assert.equal(facts.denyBlocksGitPush, false, missingPath);
+    }
+    assert.equal(extractPackagedDenyHookFacts().denyBlocksGitPush, true);
+  });
+
   it("derives hook registration and skill facts from agent-owned surfaces", () => {
     const fs = stubFS({
       exists: (path) =>
@@ -105,6 +104,32 @@ describe("hook fact extraction", () => {
       denyRegisteredPath: ".goat-flow/hooks/deny-dangerous.sh",
     });
     assert.equal(extractSkillFacts(fs, STUB_AGENT_PROFILE).hasDispatcher, true);
+  });
+
+  it("reads managed Claude exec operands before inert shell routes", () => {
+    const claudeTemplate = JSON.parse(
+      readFileSync(
+        resolve(PROJECT_ROOT, "workflow/hooks/agent-config/claude.json"),
+        "utf8",
+      ),
+    ) as unknown;
+
+    assert.deepEqual(
+      {
+        deny: buildDenyRegistration(STUB_AGENT_PROFILE, claudeTemplate),
+        postTurn: buildHookRegistration(STUB_AGENT_PROFILE, claudeTemplate),
+      },
+      {
+        deny: {
+          denyIsRegistered: true,
+          denyRegisteredPath: ".goat-flow/hooks/deny-dangerous.sh",
+        },
+        postTurn: {
+          postTurnRegistered: true,
+          postTurnRegisteredPath: ".goat-flow/hooks/post-turn-safety.sh",
+        },
+      },
+    );
   });
 
   it("normalizes root-resolving hook launcher commands", () => {

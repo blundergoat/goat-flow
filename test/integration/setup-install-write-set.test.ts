@@ -177,6 +177,7 @@ function hookRowsNaming(configValue: unknown, scriptName: string): unknown[] {
   const configEntry = configValue as Record<string, unknown>;
   const runnableText = [
     configEntry.command,
+    configEntry.commandWindows,
     configEntry.bash,
     configEntry.powershell,
     ...(Array.isArray(configEntry.args) ? configEntry.args : []),
@@ -201,7 +202,12 @@ function asUserOwnedContent(managedContent: unknown): unknown {
     const runnableRow = clonedRow as Record<string, unknown>;
     // Structured exec-form operands name goat-flow's managed script and launcher.
     delete runnableRow.args;
-    for (const runnableField of ["command", "bash", "powershell"]) {
+    for (const runnableField of [
+      "command",
+      "commandWindows",
+      "bash",
+      "powershell",
+    ]) {
       if (typeof runnableRow[runnableField] === "string") {
         runnableRow[runnableField] = USER_HOOK_COMMAND;
       }

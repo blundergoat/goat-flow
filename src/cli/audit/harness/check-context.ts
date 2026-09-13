@@ -306,6 +306,9 @@ function isGitignoredLocalStatePath(path: string): boolean {
     path === ".goat-flow/project-id" ||
     path.startsWith(".goat-flow/plans/") ||
     path.startsWith(".goat-flow/scratchpad/") ||
+    path.startsWith(".goat-flow/state/") ||
+    path.startsWith(".goat-flow/install-state/") ||
+    path.startsWith(".goat-flow/write-claims/") ||
     path.startsWith(".goat-flow/logs/")
   );
 }

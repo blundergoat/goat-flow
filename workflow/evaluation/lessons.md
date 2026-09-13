@@ -27,6 +27,9 @@ category: verification
 
 ## Lesson: [Short title]
 **Created:** YYYY-MM-DD
+**Decision changed:** [the future agent decision this evidence changes]
+**Trigger phase:** READ | SCOPE | ACT | VERIFY (optional)
+**Caught at:** READ | SCOPE | ACT | VERIFY (optional; use only when different)
 **What happened:** [real mistake and impact]
 **Evidence:** `file` (search: `semantic anchor`) - [what was found] (required for code-specific lessons; use grep-friendly anchors, not line numbers - see ADR-024)
 **Prevention:** [action that would have prevented the mistake]
@@ -49,6 +52,8 @@ RULES:
 - Do NOT log ordinary code defects unless the agent behaviour caused them
 - Prefer one concrete lesson per entry over a vague umbrella statement
 - Keep the Prevention action-oriented and enforceable
+- `Trigger phase` names the earliest phase where retrieval can prevent the failure, not where the failure surfaced; use optional `Caught at` when those phases differ
+- Real example: `Isolated fixtures must create every dependency they assert` uses `Trigger phase: ACT` because fixture construction prevents the failure and `Caught at: VERIFY` because the missing dependency surfaced during proof
 - Use the current repo format, not a temporary AI-generated placeholder
 
 VERIFICATION:

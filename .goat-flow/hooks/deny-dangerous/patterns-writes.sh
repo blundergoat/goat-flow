@@ -1,8 +1,8 @@
 # patterns-writes.sh
 #
 # Protects the developer's repository and GitHub project from agent-authored writes.
-# Use through deny-dangerous.sh when an agent proposes a shell command that may
-# change history, publish work, or mutate remote project state.
+# deny-git-mutations.sh selects native Git rules; deny-dangerous.sh selects GitHub rules.
+# Both use the shared parser before classifying history, publication, or remote writes.
 # Read-only status and search evidence remain available to the developer.
 # shellcheck shell=bash disable=SC2034,SC2154,SC2317,SC2319
 
@@ -287,9 +287,8 @@ is_gh_write_operation() {
   return 1
 }
 
-# Check each executable pipeline stage before the developer lets an agent run it.
-# Quoted search text stays evidence; real repository or GitHub write stages are refused.
-check_repository_segment() {
+# Apply native Git policy to each executable pipeline stage.
+check_git_segment() {
   local developer_command="$1"
   developer_command="$CMD_TRIMMED"
 
@@ -325,6 +324,15 @@ check_repository_segment() {
     fi
   done
 
+}
+
+# Apply GitHub CLI policy after shared shell and secret checks.
+check_repository_segment() {
+  local developer_command="$CMD_TRIMMED"
+  is_unredirected_unpiped_read_only "$developer_command" && return 0
+  local -a repository_pipeline_stages=()
+  local repository_pipeline_stage=""
+  split_top_level_pipeline_stages_into repository_pipeline_stages "$developer_command"
   # Remote project stages are checked separately so read-only Git evidence does not mask a GitHub mutation.
   for repository_pipeline_stage in "${repository_pipeline_stages[@]}"; do
     # A GitHub mutation is drafted for the developer instead of being sent without approval.

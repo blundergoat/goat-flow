@@ -1,6 +1,8 @@
 /**
- * Contracts for goat-clarity's bounded code-remediation workflow.
- * The source is read directly so the first run fails until the canonical skill exists.
+ * Check the scope, evidence, and write rules used by goat-clarity.
+ *
+ * The contracts read canonical guidance and shared conventions so edits remain bounded by the user’s selected files and intent.
+ * Use them when changing clarity intake, delegated work, verification, or its completion receipt.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -9,20 +11,37 @@ import {
   installedSkillPaths,
   installedSkillReferencePaths,
   readMarkdownSection,
+  readMarkdownSubsection,
   readProjectFile,
 } from "./skill-hardening.helpers.js";
 
 const SKILL_PATH = "workflow/skills/goat-clarity/SKILL.md";
 const SCOPE_REFERENCE_PATH =
   "workflow/skills/goat-clarity/references/target-scope-and-evidence.md";
+const SHARED_PREAMBLE_PATH = "workflow/skills/reference/skill-preamble.md";
+// Both shared axes enumerate exactly four tokens: OBSERVED/INFERRED/UNVERIFIED/HUMAN-PENDING and RUNTIME/CONTRACT-GREP/STATIC/NOT-REPRODUCED.
+const SHARED_VOCABULARY_TOKEN_COUNT = 4;
 const clarityGuidance = readProjectFile(SKILL_PATH);
 
 /**
- * Match load-bearing phrases without coupling contracts to Markdown wrapping or capitalisation.
+ * Read the shared vocabulary in definition order so every skill reports the same evidence labels.
+ * A renamed or reordered owner token makes a stale consumer fail this contract.
  *
- * @param guidance - user-facing guidance under contract
+ * @param ownerRegion - one vocabulary's defining text; empty text or missing bold tokens provides no labels
+ * @returns labels in definition order; an empty list means the owner supplied no vocabulary to compare
+ */
+function readOwnerVocabulary(ownerRegion: string): string[] {
+  return [...ownerRegion.matchAll(/\*\*([A-Z][A-Z-]+)/gu)].map(
+    (tokenMatch) => tokenMatch[1],
+  );
+}
+
+/**
+ * Match required instructions while allowing harmless Markdown wrapping and capitalization changes.
+ *
+ * @param guidance - agent instructions under contract; empty text fails any required safeguard
  * @param sourcePath - repository-relative path used in assertion failures
- * @param requiredPhrases - phrases that the installed workflow must retain
+ * @param requiredPhrases - instructions the workflow must retain; an empty list performs no checks
  */
 function assertGuidanceIncludesAll(
   guidance: string,
@@ -31,6 +50,7 @@ function assertGuidanceIncludesAll(
 ): void {
   const normalizedGuidance = guidance.replace(/\s+/gu, " ").toLowerCase();
 
+  // Require each instruction independently so one retained phrase cannot hide another missing safeguard.
   for (const requiredPhrase of requiredPhrases) {
     const normalizedPhrase = requiredPhrase.replace(/\s+/gu, " ").toLowerCase();
     assert.ok(
@@ -40,9 +60,49 @@ function assertGuidanceIncludesAll(
   }
 }
 
-/** Match load-bearing phrases in the canonical goat-clarity skill. */
+/**
+ * Check the canonical clarity instructions before an agent uses them for the user's selected target.
+ *
+ * @param requiredPhrases - required safeguards; an empty list checks no instructions
+ */
 function assertIncludesAll(requiredPhrases: readonly string[]): void {
   assertGuidanceIncludesAll(clarityGuidance, SKILL_PATH, requiredPhrases);
+}
+
+/**
+ * Keep the four documentation write-authority rules in first-match order.
+ * A report request must withhold writes before the later documentation-keyword rule can grant them.
+ *
+ * @param sourcePath - repository-relative skill path named in assertion failures
+ * @param guidance - normalized lowercase skill text; missing rules, including an empty document, fail the contract
+ */
+function assertRulePrecedence(sourcePath: string, guidance: string): void {
+  const rules: readonly (readonly [string, string])[] = [
+    ["explicit write intent", "explicit update/edit/fix instruction grants it"],
+    [
+      "explicit report intent",
+      "explicit report/review/check request withholds it",
+    ],
+    [
+      "documentation keyword",
+      "`documentation` keyword before the target grants it",
+    ],
+    ["unanswered fallback", "defaulting to report only when unanswered"],
+  ];
+  const offsets = rules.map(([label, phrase]) => {
+    const offset = guidance.indexOf(phrase);
+    assert.ok(offset >= 0, `${sourcePath}: missing the ${label} rule`);
+    return [label, offset] as const;
+  });
+  // Compare adjacent authority rules so the first applicable user intent controls whether the agent may write.
+  for (let index = 1; index < offsets.length; index += 1) {
+    const [previousLabel, previousOffset] = offsets[index - 1]!;
+    const [label, offset] = offsets[index]!;
+    assert.ok(
+      previousOffset < offset,
+      `${sourcePath}: ${previousLabel} must be resolved before ${label}`,
+    );
+  }
 }
 
 describe("skill hardening contracts: goat-clarity", () => {
@@ -73,13 +133,35 @@ describe("skill hardening contracts: goat-clarity", () => {
       "cannot be combined with paths",
       "ask for a target when none is supplied",
       "refuse an ambiguous or combined selector",
-      "human documentation is read-only until write authority is resolved",
-      "explicit update/edit/fix instruction, grants it",
+      "human documentation is read-only until write authority resolves by first match",
+      "explicit update/edit/fix instruction grants it",
       "explicit report/review/check request withholds it",
       "Report only, or update the documentation?",
       "defaulting to report only when unanswered, including sub-agent mode",
       "without write authority, documentation is diagnosed and reported, never edited",
     ]);
+  });
+
+  it("resolves documentation write authority by first match, intent before keyword", () => {
+    assertForEachTarget(
+      [SKILL_PATH, ...installedSkillPaths("goat-clarity")],
+      (skillPath) => {
+        const guidance = readProjectFile(skillPath)
+          .replace(/\s+/gu, " ")
+          .toLowerCase();
+        assertRulePrecedence(skillPath, guidance);
+        assert.ok(
+          guidance.includes("write authority resolves by first match"),
+          `${skillPath}: authority resolution does not declare first-match precedence`,
+        );
+        // The keyword sharing the write-granting clause is what let documentation wording outrank explicit report intent.
+        assert.equal(
+          guidance.includes("keyword before the target, or an explicit"),
+          false,
+          `${skillPath}: the documentation keyword still shares the first grant clause`,
+        );
+      },
+    );
   });
 
   it("classifies every selected unit before freezing write authority", () => {
@@ -120,19 +202,26 @@ describe("skill hardening contracts: goat-clarity", () => {
       "PRUNE CANDIDATE",
       "UNRESOLVED",
       "Each assessed test gets one row",
-      "assessed_existing = KEEP + CONSOLIDATE + MOVE LEVEL + PRUNE CANDIDATE + UNRESOLVED",
       "report-only",
       "no replacement is required",
       "keeps the original until replacement coverage passes",
-      "Added-test dispositions: `ADDED KEEP`, `ADDED CONSOLIDATE`, `ADDED MOVE LEVEL`, `ADDED DROP CANDIDATE`, `ADDED UNRESOLVED`",
-      "Removed-test dispositions: `REMOVAL SUPPORTED`, `RESTORE`, `REPLACE`, `REMOVAL UNRESOLVED`",
+      "drop, deletion, restore, or replacement candidates",
+      "Before assessing cases, load `.goat-flow/skill-docs/playbooks/test-selection.md` (`Decision Record and Handoff`)",
+      "disposition meanings and equations",
+      "every existing, added, removed, relocated, and materially changed row",
+      "missing proof keeps the matching unresolved disposition",
+    ]);
+    const testSelectionRecord = readMarkdownSection(
+      "workflow/skills/playbooks/test-selection.md",
+      "Decision Record and Handoff",
+    );
+    assertGuidanceIncludesAll(testSelectionRecord, "test-selection.md", [
+      "assessed_existing = KEEP + CONSOLIDATE + MOVE LEVEL + PRUNE CANDIDATE + UNRESOLVED",
       "assessed_added = ADDED_KEEP + ADDED_CONSOLIDATE + ADDED_MOVE_LEVEL + ADDED_DROP_CANDIDATE + ADDED_UNRESOLVED",
       "assessed_removed = REMOVAL_SUPPORTED + RESTORE + REPLACE + REMOVAL_UNRESOLVED",
       "assessed_materially_changed = KEEP + CONSOLIDATE + MOVE_LEVEL + PRUNE_CANDIDATE + UNRESOLVED",
       "assessed_relocated = RELOCATED",
       "assessed_pr_or_uncommitted = assessed_added + assessed_removed + assessed_materially_changed + assessed_relocated",
-      "`test-selection.md` meanings and evidence gates to every existing, added, removed, relocated, and materially changed row",
-      "drop, deletion, restore, or replacement candidates",
     ]);
 
     const targetEvidence = readProjectFile(SCOPE_REFERENCE_PATH);
@@ -155,6 +244,62 @@ describe("skill hardening contracts: goat-clarity", () => {
     ]);
   });
 
+  it("routes proven comment or private-name-only selectors around case rows", () => {
+    assertForEachTarget(installedSkillPaths("goat-clarity"), (skillPath) => {
+      const clarityPass = readMarkdownSection(skillPath, "Clarity Pass");
+      const testValuePass = readMarkdownSubsection(
+        clarityPass,
+        "1. Run the test-value pass",
+        skillPath,
+      );
+      assertGuidanceIncludesAll(testValuePass, skillPath, [
+        "For a folder or file selector, assess every test case in selected test-source units unless",
+        "selector-driven non-semantic lane",
+        "comment/private-name-only equivalence",
+        "waives only per-case value and disposition rows",
+        "otherwise the full case-level manifest and four-part value gate apply",
+      ]);
+      assert.ok(
+        clarityPass.indexOf(testValuePass) <
+          clarityPass.indexOf("### 2. Diagnose naming and placement"),
+        `${skillPath}: complete applicable case accounting before broader diagnosis`,
+      );
+    });
+
+    assertForEachTarget(
+      installedSkillReferencePaths(
+        "goat-clarity",
+        "references/target-scope-and-evidence.md",
+      ),
+      (referencePath) => {
+        const reference = readProjectFile(referencePath);
+        assertGuidanceIncludesAll(reference, referencePath, [
+          "selector-driven non-semantic lane",
+          "explicit folder or file selector",
+          "baseline, current bytes, and explicit request",
+          "comments or docstrings, or local or private identifier spelling",
+          "test case presence, stable identity, title, registration, and parametrized membership",
+          "assertions, expectations, snapshots, and failure semantics",
+          "fixture values, setup and teardown, mocks, stubs, fakes, data builders, and environment controls",
+          "grouping, execution level, skip or focus state, coverage intent, observable output, and user-visible meaning",
+          "a change to any preserved item is semantic and forces the full lane",
+          "existing PR or uncommitted diff contains a semantic test change",
+          "equivalence is uncertain",
+          "full case-level manifest and four-part value gate",
+          "selected test-source units, selected spans, baseline and current identity, write set, and focused verification command",
+          "reconcile every changed span and prove untouched bytes remain untouched",
+          "waives only per-case value and disposition rows",
+        ]);
+      },
+    );
+
+    assert.match(
+      readMarkdownSection("docs/skills.md", "/goat-clarity"),
+      /every test in selected folder or file test-source units.*except.*comment.*private.*name.*only/isu,
+      "docs/skills.md",
+    );
+  });
+
   it("uses an authority-aware empty-selection gate", () => {
     assertIncludesAll([
       "when no selected unit is source code, test source, or eligible human documentation",
@@ -164,6 +309,20 @@ describe("skill hardening contracts: goat-clarity", () => {
       "Without documentation write authority, documentation and READMEs are read-only",
       "with it, only eligible selected human prose changes",
       "With documentation write authority, apply the routed human-prose and surface owners only to eligible human documentation",
+    ]);
+    const emptyReceipt = readMarkdownSection(
+      SCOPE_REFERENCE_PATH,
+      "No-eligible-unit Receipt",
+    );
+    assertGuidanceIncludesAll(emptyReceipt, SCOPE_REFERENCE_PATH, [
+      "selector and stop reason",
+      "classification and outcome counts",
+      "protected-byte evidence",
+      "clarity assessment `NOT_CHECKED`",
+      "zero writes",
+      "skip unrelated owners, formatter discovery, and test-value work",
+      "omitted discovery is `NOT_CHECKED`, not `NOT_FOUND`",
+      "an empty writable set alone does not select this exit",
     ]);
     assert.doesNotMatch(
       clarityGuidance,
@@ -181,15 +340,23 @@ describe("skill hardening contracts: goat-clarity", () => {
     assertIncludesAll([
       "Target Scope Snapshot",
       "Identity:",
+      "Documentation writes: <granted | withheld>",
       "Writable paths:",
+      "Read-only/protected:",
       "Exclusions:",
       "Unknowns:",
       "Read-only context:",
       "Baseline proof:",
       "Formatter check:",
       "Formatter write:",
+      "Formatter capability:",
       "membership drift",
     ]);
+    assert.doesNotMatch(
+      clarityGuidance,
+      /^Exclusions:.*\b(?:protected|context-only)\b/mu,
+      `${SKILL_PATH}: protected selection must not also be counted as excluded`,
+    );
   });
 
   it("binds authority provenance and reconciles the frozen inventory", () => {
@@ -251,7 +418,7 @@ describe("skill hardening contracts: goat-clarity", () => {
       "naming-and-placement.md",
       "gruff-code-quality.md",
       "test-selection.md",
-      "writing-style.md",
+      "writing-human-facing-prose.md",
       ".goat-flow/glossary.md",
       "Naming and placement before comments",
     ]);
@@ -266,9 +433,18 @@ describe("skill hardening contracts: goat-clarity", () => {
       "journey anchors",
       "branch, loop, and null/empty consequences",
       "catch cause and next visible state",
-      "current contract, never history",
       "compliant incumbent",
+      "Never cite gitignored paths, local state, or removed symbols",
+      "durable contract, removal trigger, or verification path",
     ]);
+    const historyException =
+      /current compatibility obligation or a checkable removal trigger/u;
+    assert.match(
+      readProjectFile("workflow/skills/playbooks/code-comments.md"),
+      historyException,
+    );
+    assert.match(clarityGuidance.replace(/\s+/gu, " "), historyException);
+    assert.doesNotMatch(clarityGuidance, /never history/u);
   });
 
   it("requires an evidence-backed defect before rewriting an incumbent", () => {
@@ -299,6 +475,39 @@ describe("skill hardening contracts: goat-clarity", () => {
   });
 
   it("keeps safe edits separate from scope expansion", () => {
+    const placementDecision = readMarkdownSection(
+      SCOPE_REFERENCE_PATH,
+      "Placement Decision",
+    );
+    assertGuidanceIncludesAll(placementDecision, SCOPE_REFERENCE_PATH, [
+      "explicit current user instruction identifies the private symbol and destination",
+      "wholly inside one frozen writable file",
+      "Safe apply",
+      "general clarity request or placement diagnosis alone",
+      "cross-file or uncertain placement",
+      "Scope v2",
+      "public or exported identifier",
+      "second approval and per-identifier compatibility disclosure",
+      "named-argument parameters, serialized fields or keys",
+      "goat-plan",
+    ]);
+    // Every decision point must use the same placement owner before authorizing a user's requested move.
+    for (const section of [
+      "0.2 Classify selected units",
+      "2. Diagnose naming and placement",
+      "Safe apply",
+      "Scope v2",
+    ]) {
+      const sectionStart = clarityGuidance.indexOf(` ${section}\n`);
+      assert.ok(sectionStart >= 0, `${SKILL_PATH}: missing ${section}`);
+      const decisionPoint = clarityGuidance
+        .slice(sectionStart)
+        .split(/\n#{2,4} /u)[0];
+      assert.ok(
+        decisionPoint.includes("Placement Decision"),
+        `${SKILL_PATH}: ${section} must route placement to its decision table`,
+      );
+    }
     assertIncludesAll([
       "Safe apply",
       "Scope v2",
@@ -390,6 +599,7 @@ describe("skill hardening contracts: goat-clarity", () => {
       "freeze Target Scope Snapshot v2 before mutation",
     ]);
 
+    // Delegated agents must obey Scope v2 in both copies of the shared conventions.
     for (const conventionsPath of [
       "workflow/skills/reference/skill-conventions.md",
       ".goat-flow/skill-docs/skill-conventions.md",
@@ -406,15 +616,33 @@ describe("skill hardening contracts: goat-clarity", () => {
   });
 
   it("routes owners from a closed per-unit matrix", () => {
+    const stepZero = readMarkdownSection(
+      SKILL_PATH,
+      "Step 0 - Resolve Authority and Target",
+    );
+    const classification = stepZero.indexOf("### 0.2 Classify selected units");
+    const eligibility = stepZero.indexOf("Fail closed on unmerged state");
+    const ownerMatrix = stepZero.indexOf("per-unit owner routing matrix");
+    assert.ok(
+      classification >= 0 &&
+        eligibility > classification &&
+        ownerMatrix > eligibility,
+      `${SKILL_PATH}: inventory, restrictive classification, and eligibility must precede per-unit routing`,
+    );
     assertIncludesAll([
       "per-unit owner routing matrix",
       "load an owner only when at least one classified unit meets its condition",
       "do not load every clarity owner unconditionally",
+      "candidate-specific owners stay pending until the first supported candidate",
+      "load them before judging that candidate",
+      "naming/comment owner reads wait until Snapshot v1 is frozen and applicable case accounting is complete",
+      "do not diagnose names or comments while collecting the inventory",
+      "accounting completed afterward cannot repair this order",
       "naming-and-placement.md",
       "code-comments.md",
       "gruff-code-quality.md",
       "test-selection.md",
-      "writing-style.md",
+      "writing-human-facing-prose.md",
       ".goat-flow/glossary.md",
     ]);
     assert.doesNotMatch(
@@ -460,6 +688,35 @@ describe("skill hardening contracts: goat-clarity", () => {
 
   it("uses drift-safe selector inventories and content identity", () => {
     const targetEvidence = readProjectFile(SCOPE_REFERENCE_PATH);
+    const snapshotRecords = readMarkdownSection(
+      SCOPE_REFERENCE_PATH,
+      "Snapshot Records",
+    );
+    const dependencyAuthority = readMarkdownSubsection(
+      snapshotRecords,
+      "Authority state",
+      SCOPE_REFERENCE_PATH,
+    );
+    const batchDriftRules = readMarkdownSubsection(
+      snapshotRecords,
+      "Drift revalidation",
+      SCOPE_REFERENCE_PATH,
+    );
+    assertGuidanceIncludesAll(dependencyAuthority, SCOPE_REFERENCE_PATH, [
+      "permissions, surface classification, formatter ownership, and exact commands",
+      "even outside the selected inventory",
+      "canonical identity, existence/type, current bytes or digest, and provenance",
+      "bounded absence/discovery evidence",
+      "rediscovery stays within the original scope",
+    ]);
+    assertGuidanceIncludesAll(batchDriftRules, SCOPE_REFERENCE_PATH, [
+      "Recheck these governing inputs and bounded discovery before every batch",
+      "unchanged selected bytes or HEAD do not prove they are current",
+      "invalidates the old snapshot and command decision",
+      "requires rebinding before continuation",
+      "unchanged grants need no new approval",
+      "Unrelated files are not dependencies",
+    ]);
     assertGuidanceIncludesAll(targetEvidence, SCOPE_REFERENCE_PATH, [
       "reconcile the complete paginated PR path count",
       "NUL-delimited",
@@ -490,6 +747,8 @@ describe("skill hardening contracts: goat-clarity", () => {
       "complete formatter-capability outcome",
       "current project authority",
       "temporary copy inside the repository is forbidden",
+      "owned command with a failed availability check has execution status `UNAVAILABLE`, not capability `NOT_FOUND`",
+      "baseline `FAIL` remains recorded even when the final check passes",
     ]);
   });
 
@@ -501,9 +760,88 @@ describe("skill hardening contracts: goat-clarity", () => {
       "Claim verdict",
       "VERIFIED | REFUTED | NOT_CHECKED",
       "a passing command never makes an untested claim verified",
-      "Shared proof-class tag",
+      "Shared evidence quality",
       "OBSERVED | INFERRED | UNVERIFIED | HUMAN-PENDING",
+      "Shared proof class",
+      "RUNTIME | CONTRACT-GREP | STATIC | NOT-REPRODUCED",
+      "proof class states the method that produced",
+      "A claim carries both",
+      "literal result, proof class",
     ]);
+  });
+
+  // Literal-presence checks on both sides can preserve two contradictory owners, so compare the consumer to the owner.
+
+  it("binds clarity evidence labels to the shared preamble vocabularies", () => {
+    const sharedPreamble = readProjectFile(SHARED_PREAMBLE_PATH);
+    const evidenceQualityDefinition = /^.*Tag evidence quality.*$/mu.exec(
+      sharedPreamble,
+    );
+    // A missing definition leaves the agent without evidence labels to compare against its report.
+    assert.ok(
+      evidenceQualityDefinition,
+      `${SHARED_PREAMBLE_PATH} must define the shared evidence-quality vocabulary`,
+    );
+
+    // Read the quality axis from its defining line; the surrounding section also names a proof class in its claim table.
+    const evidenceQualityTokens = readOwnerVocabulary(
+      evidenceQualityDefinition[0],
+    );
+    const proofClassTokens = readOwnerVocabulary(
+      readMarkdownSection(SHARED_PREAMBLE_PATH, "Proof Classification"),
+    );
+
+    // A shortened owner list would let the agreement checks below pass without comparing anything.
+    assert.equal(
+      evidenceQualityTokens.length,
+      SHARED_VOCABULARY_TOKEN_COUNT,
+      SHARED_PREAMBLE_PATH,
+    );
+    assert.equal(
+      proofClassTokens.length,
+      SHARED_VOCABULARY_TOKEN_COUNT,
+      SHARED_PREAMBLE_PATH,
+    );
+
+    const evidenceQualityList = evidenceQualityTokens.join(" | ");
+    const proofClassList = proofClassTokens.join(" | ");
+    const mislabelledQualityPattern = new RegExp(
+      `proof[- ]class[^.]*?\\b(?:${evidenceQualityTokens.join("|")})\\b`,
+      "u",
+    );
+
+    assertForEachTarget(
+      installedSkillReferencePaths(
+        "goat-clarity",
+        "references/target-scope-and-evidence.md",
+      ),
+      (referencePath) => {
+        const statusAndClaimEvidence = readMarkdownSection(
+          referencePath,
+          "Status and Claim Evidence",
+        );
+
+        assert.ok(
+          statusAndClaimEvidence.includes(
+            `Shared evidence quality: \`${evidenceQualityList}\``,
+          ),
+          `${referencePath} must label ${evidenceQualityList} as evidence quality`,
+        );
+        assert.ok(
+          statusAndClaimEvidence.includes(
+            `Shared proof class: \`${proofClassList}\``,
+          ),
+          `${referencePath} must route the shared proof class ${proofClassList}`,
+        );
+
+        // Quality and method are separate axes, so a quality token under a proof-class label is a contradiction, not a synonym.
+        assert.doesNotMatch(
+          statusAndClaimEvidence,
+          mislabelledQualityPattern,
+          `${referencePath} must not present an evidence-quality token as a proof class`,
+        );
+      },
+    );
   });
 
   it("attributes every mechanical check against an equivalent bound baseline", () => {
@@ -535,17 +873,26 @@ describe("skill hardening contracts: goat-clarity", () => {
       "no JSON schema is promised",
       "aggregate spans by file and diagnosed rule",
       "symbol-level evidence",
+      "write-classification totals and terminal-outcome totals independently equal the same inventory",
+      "protected and context-only units never enter excluded counts",
+      "preserved protected requires a byte comparison; clarity assessment stays `NOT_CHECKED`",
+      "compliant unchanged requires an applicable clarity assessment with no finding",
+      "read-only human prose may be assessed without write permission",
     ]);
   });
 
   it("returns a complete but proportional remediation receipt", () => {
+    // The completion receipt must account for changed, retained, deferred, and unchecked work so the user can review the actual scope.
     for (const receiptLabel of [
       "Agent:",
       "Selector:",
       "Snapshot:",
+      "Documentation writes:",
       "Write paths:",
+      "Unit totals:",
       "Modified:",
       "Compliant unchanged:",
+      "Preserved protected:",
       "Deferred:",
       "Excluded:",
       "Inaccessible:",
@@ -566,6 +913,7 @@ describe("skill hardening contracts: goat-clarity", () => {
       "Selector: <github-pr | uncommitted | paths>",
       "Summary: <paste-ready pull-request summary when requested or needed for headless/sub-agent handoff; otherwise not requested>",
       "A receipt is complete when formatter capability is classified",
+      "or deliberately omitted with a reason at the no-eligible-unit exit",
     ]);
   });
 
@@ -604,6 +952,10 @@ describe("skill hardening contracts: goat-clarity", () => {
       "/goat-clarity path/to/folder path/to/file.ext",
       "Report only, or update the documentation?",
       "most restrictive applicable class wins",
+      "naming and comment owners wait until the snapshot is frozen and applicable test-case accounting is complete",
+      "private symbol and its destination",
+      "wholly inside one frozen writable file",
+      "cross-file or uncertain placement still needs second approval",
       "enumerated public/exported identifier renames plus mechanical references",
       "second approval",
       "initial request does not satisfy",
@@ -620,6 +972,10 @@ describe("skill hardening contracts: goat-clarity", () => {
       "BLOCKED-ON-BEHAVIOUR",
       "named arguments",
       "formatter capability",
+      "classification and outcome totals each reconcile to the inventory",
+      "protected preservation does not claim clarity assessment",
+      "omitted discovery is not a no-owner result",
+      "an unavailable owned command remains `UNAVAILABLE`",
       "PR and uncommitted work",
     ]);
   });

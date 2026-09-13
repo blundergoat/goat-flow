@@ -1,9 +1,8 @@
 /**
- * Contracts for the remaining user-invocable skills and the router that selects them.
- * Grouped because each is small alone but shares the same install-mirror rules.
+ * Check the dispatcher and user-invoked workflows covered by the shared skill contracts.
  *
- * Reads the installed copies rather than sources, so a contract fails when the guidance a user
- * actually receives drifts - not merely when the template does.
+ * These contracts inspect canonical and installed guidance so supported agents apply the same mode and evidence rules.
+ * Use them when changing workflow routing, behavior, or required output.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -15,6 +14,9 @@ import {
   readProjectFile,
   INSTALLED_SKILL_ROOTS,
 } from "./skill-hardening.helpers.js";
+
+// Users can finish goat-qa through five output variants, and each one must show what the agent disproved.
+const GOAT_QA_FINAL_OUTPUT_VARIANT_COUNT = 5;
 
 describe("skill hardening contracts: debug, qa, critique, security, dispatcher (1/2)", () => {
   it("keeps goat-debug bisect reporting-only until explicit approval", () => {
@@ -42,6 +44,23 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
       assert.match(
         skillGuidance,
         /success, error, cancellation, or interruption/,
+        skillPath,
+      );
+
+      // A governing freeze outranks bisect cleanup: resuming must not silently authorise a worktree write.
+      assert.match(
+        skillGuidance,
+        /governing freeze leaves state unchanged/u,
+        skillPath,
+      );
+      assert.match(
+        skillGuidance,
+        /resumption alone does not release it/u,
+        skillPath,
+      );
+      assert.doesNotMatch(
+        skillGuidance,
+        /on resumption, reset before any other repository work/u,
         skillPath,
       );
     });
@@ -73,7 +92,49 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
       );
       assert.match(
         skillGuidance,
-        /### D4 - Post-Fix Verification \(only after approved implementation\)/u,
+        /### D4 - Post-Fix Verification \(approved implementation or existing fix\)/u,
+        skillPath,
+      );
+      const intake = readMarkdownSection(skillPath, "Step 0 - Choose Depth");
+      assert.match(
+        intake,
+        /existing-fix verification[\s\S]*directly to D4/u,
+        skillPath,
+      );
+      assert.match(
+        intake,
+        /without D2\/D3, hypotheses, minimisation, or causal confidence/u,
+        skillPath,
+      );
+      assert.match(intake, /historical proof is context/u, skillPath);
+      assert.match(
+        intake,
+        /Valid explicit depth wins within governing policy/u,
+        skillPath,
+      );
+      assert.match(
+        intake,
+        /Full risk\/scope triggers override Quick defaults/u,
+        skillPath,
+      );
+      assert.match(
+        intake,
+        /Quick[\s\S]*bounded[\s\S]*Full[\s\S]*component boundaries/u,
+        skillPath,
+      );
+      assert.match(
+        skillGuidance,
+        /Missing or unsafe original proof: UNVERIFIED; human-owned: HUMAN-PENDING with owner/u,
+        skillPath,
+      );
+      assert.match(
+        skillGuidance,
+        /Remaining symptom: return to D1; no new patch authority/u,
+        skillPath,
+      );
+      assert.match(
+        skillGuidance,
+        /Passing verification does not prove root cause/u,
         skillPath,
       );
       assert.doesNotMatch(
@@ -84,12 +145,21 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
     });
   });
 
-  /*
-   * D4 is where a fix gets called done, so the protections that decide closure
-   * must be stated there. A cleanup rule that lives only in D1 is not
-   * load-bearing at the moment someone declares the bug fixed, and a minimised
-   * reproducer proves a narrower claim than the one the reporter filed.
-   */
+  it("requires a hit or miss for every goat-debug footgun retrieval", () => {
+    assertForEachTarget(installedSkillPaths("goat-debug"), (skillPath) => {
+      const retrievalLines = readProjectFile(skillPath)
+        .split(/\r?\n/u)
+        .filter((line) => line.includes("Footgun retrieval:"));
+
+      assert.equal(retrievalLines.length, 2, skillPath);
+      assert.match(retrievalLines[0] ?? "", /hit.*miss/u, skillPath);
+      assert.doesNotMatch(retrievalLines[0] ?? "", /\bskip\b/u, skillPath);
+      assert.match(retrievalLines[1] ?? "", /hit.*miss/u, skillPath);
+      assert.doesNotMatch(retrievalLines[1] ?? "", /\bskip\b/u, skillPath);
+    });
+  });
+
+  // The debug closure step must require cleanup and the original reproduction before an agent declares the reported bug fixed.
 
   it("closes goat-debug only on the original reproduction with diagnostics cleaned", () => {
     assertForEachTarget(installedSkillPaths("goat-debug"), (skillPath) => {
@@ -109,6 +179,28 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
       assert.match(
         skillGuidance,
         /user-owned diagnostics are never removed without permission/u,
+        skillPath,
+      );
+      const reduction = skillGuidance.slice(
+        skillGuidance.indexOf("### D1.5 - Minimise"),
+        skillGuidance.indexOf("### D2 - Diagnosis"),
+      );
+      assert.match(
+        reduction,
+        /Before reducing, preserve the original[\s\S]*beside the reduced case/u,
+        skillPath,
+      );
+      const closure = skillGuidance.slice(
+        skillGuidance.indexOf("### D4 - Post-Fix Verification"),
+      );
+      assert.match(
+        closure,
+        /First complete approved diagnostic cleanup[\s\S]*confirm the intended source\/configuration state[\s\S]*Rerun the \*\*original, unminimized reproduction\*\*/u,
+        skillPath,
+      );
+      assert.match(
+        closure,
+        /adjacent checks at the changed causal boundary/u,
         skillPath,
       );
     });
@@ -132,6 +224,26 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
       assert.match(skillGuidance, /Necessity/u, skillPath);
       assert.match(skillGuidance, /Sufficiency/u, skillPath);
       assert.doesNotMatch(skillGuidance, /HIGH = reproduced/u, skillPath);
+
+      // A surviving symptom disproves necessity; calling that insufficiency conflates the two independent properties.
+      assert.match(skillGuidance, /not necessary/u, skillPath);
+      assert.doesNotMatch(
+        skillGuidance,
+        /the cause is insufficient or incomplete/u,
+        skillPath,
+      );
+
+      // ADR-009 keeps 5-Whys in D2; the root states its rule: a named trigger selects the chain, which stops where cited evidence stops.
+      assert.match(
+        skillGuidance,
+        /high-stakes diagnoses \(production availability, persistent-data loss, or a security boundary at risk\)/u,
+        skillPath,
+      );
+      assert.match(
+        skillGuidance,
+        /the chain ends where cited evidence ends/u,
+        skillPath,
+      );
     });
   });
 
@@ -175,6 +287,7 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
         "Investigate Mode",
       );
 
+      // Debug guidance must distinguish observed facts, inferences, unverified claims, and evidence awaiting human action.
       for (const evidenceState of [
         "OBSERVED",
         "INFERRED",
@@ -196,10 +309,7 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
     });
   });
 
-  /*
-   * A user asking for a code tour can use Investigate without inventing a bug.
-   * This contract keeps diagnosis-only work out of that user path.
-   */
+  // A code tour can use Investigate without a bug report; diagnosis-only requirements must stay outside that path.
   it("scopes goat-debug diagnosis requirements away from Investigate mode", () => {
     assertForEachTarget(installedSkillPaths("goat-debug"), (skillPath) => {
       const boundaryCommands = readMarkdownSection(
@@ -249,14 +359,32 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
         /mark each: CONFIRMED \/ ADJUSTED \/ ELIMINATED \/ UNRESOLVED/u,
         skillPath,
       );
+      // UNRESOLVED includes untested and inconclusive hypotheses, so assessed totals cannot determine executed-check counts.
       assert.match(
         skillGuidance,
-        /Hypotheses tested:\*\* count \(CONFIRMED \+ ADJUSTED \+ ELIMINATED \+ UNRESOLVED\)/u,
+        /Hypotheses assessed:\*\* count \(CONFIRMED \+ ADJUSTED \+ ELIMINATED \+ UNRESOLVED\)/u,
+        skillPath,
+      );
+      assert.match(skillGuidance, /Checks executed:\*\* count/u, skillPath);
+      assert.doesNotMatch(
+        skillGuidance,
+        /Hypotheses tested:\*\* count/u,
         skillPath,
       );
       assert.match(
         skillGuidance,
         /CONFIRMED: \[n\] \/ ADJUSTED: \[n\] \/ ELIMINATED: \[n\] \/ UNRESOLVED: \[n\]/u,
+        skillPath,
+      );
+      // The definition demands a named human-owned check, so the template cannot reduce it to a bare count.
+      assert.match(
+        skillGuidance,
+        /HUMAN-PENDING: each human-owned check with its owner or role/u,
+        skillPath,
+      );
+      assert.match(
+        skillGuidance,
+        /HUMAN-PENDING=\[n\]: \[check - owner\]/u,
         skillPath,
       );
     });
@@ -276,6 +404,12 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
         /`references\/diagnostic-techniques\.md`/u,
         skillPath,
       );
+      // The exclusive loading route must cover both diagnosis techniques and existing-fix reporting.
+      assert.match(
+        readProjectFile(skillPath),
+        /only for ranking-matrix detail, mutation classification, reduction-method selection, causal-distinction detail, worked diagnosis, or existing-fix reporting/u,
+        skillPath,
+      );
     });
 
     assertForEachTarget(
@@ -290,11 +424,41 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
           /Illustrative scenario - input\/output shape only; never evidence/u,
           referencePath,
         );
+        const verification = readMarkdownSection(
+          referencePath,
+          "Existing-Fix Verification Report",
+        );
+        for (const field of [
+          "Change and tested state",
+          "Original steps",
+          "Expected versus observed",
+          "Approved cleanup",
+          "Retained user diagnostics",
+          "Adjacent checks",
+          "Proof class and limits",
+          "Human-pending checks and owners",
+        ]) {
+          assert.ok(
+            verification.includes(field),
+            `${referencePath}: missing verification field ${field}`,
+          );
+        }
+        assert.match(
+          referenceGuidance,
+          /## Hypothesis Ranking Matrix/u,
+          referencePath,
+        );
+        // The discovery pointer must name reduction so the D1.5 route is visible before the body is read.
+        assert.match(
+          referenceGuidance,
+          /^description: ".*reduction-method.*"$/mu,
+          referencePath,
+        );
         // Reference files carry `reference-version`; `skill-version` is the SKILL.md key.
         // Asserting the wrong one here is what let this file drift out of version parity.
         assert.match(
           referenceGuidance,
-          /goat-flow-reference-version: "1\.16\.0"/u,
+          /goat-flow-reference-version: "1\.17\.0"/u,
           referencePath,
         );
       },
@@ -357,6 +521,41 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
     });
   });
 
+  // Ranking decides which hypotheses to test first, so it must appear before tracing rather than after minimisation.
+  it("ranks goat-debug hypotheses before expensive tracing", () => {
+    assertForEachTarget(installedSkillPaths("goat-debug"), (skillPath) => {
+      const diagnoseMode = readMarkdownSection(skillPath, "Diagnose Mode");
+      const rankingIndex = diagnoseMode.indexOf("**Hypothesis ranking:**");
+      const tracingIndex = diagnoseMode.indexOf("After tracing, mark each");
+      assert.ok(rankingIndex !== -1, `${skillPath}: ranking rule missing`);
+      assert.ok(tracingIndex !== -1, `${skillPath}: tracing rule missing`);
+      assert.ok(
+        rankingIndex < tracingIndex,
+        `${skillPath}: ranking must precede tracing`,
+      );
+      assert.match(
+        diagnoseMode,
+        /\*\*Hypothesis ranking:\*\* Before expensive tracing, reduction, or experiments/u,
+        skillPath,
+      );
+      assert.match(
+        diagnoseMode,
+        /re-rank whenever evidence changes/u,
+        skillPath,
+      );
+      assert.match(
+        diagnoseMode,
+        /cheapest authorized distinguishing check, or cite deterministic proof/u,
+        skillPath,
+      );
+      assert.doesNotMatch(
+        diagnoseMode,
+        /After minimisation, rank surviving hypotheses/u,
+        skillPath,
+      );
+    });
+  });
+
   it("does not eliminate intermittent goat-debug hypotheses after one pass", () => {
     assertForEachTarget(
       installedSkillReferencePaths(
@@ -411,7 +610,12 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
       const skillGuidance = readProjectFile(skillPath);
       assert.match(
         skillGuidance,
-        /gap analysis plus Verification Integrity/,
+        /Run the Candidate Disproval Pass, then present gap analysis, Refuted Candidates, and Verification Integrity/u,
+        skillPath,
+      );
+      assert.match(
+        skillGuidance,
+        /`confirm`[\s\S]+`kill as false positive`[\s\S]+`keep with named missing evidence`/u,
         skillPath,
       );
     });
@@ -422,6 +626,11 @@ describe("skill hardening contracts: debug, qa, critique, security, dispatcher (
         assert.match(
           outputTemplates,
           /Intent spec: \[PR\/issue\/test plan URL or `no-intent-spec`\]/,
+          referencePath,
+        );
+        assert.equal(
+          outputTemplates.match(/^## Refuted Candidates$/gmu)?.length,
+          GOAT_QA_FINAL_OUTPUT_VARIANT_COUNT,
           referencePath,
         );
         assert.match(outputTemplates, /Evidence limit:/, referencePath);

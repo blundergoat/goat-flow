@@ -1,29 +1,28 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC2317
-# Many helpers (render_report and friends) are reached only via the EXIT
-# trap below, which shellcheck's reachability analysis doesn't follow.
-# Disable the warning file-wide rather than tagging every function.
+# The EXIT trap calls report helpers that shellcheck cannot trace, so its unreachable-code warning is disabled here.
 
 # preflight-checks.sh
 #
 # Runs the local quality gate a developer uses before accepting risky work or a release.
 # Use it to see one phased verdict for shell policy, source checks, tests, drift, and links.
-# Interactive Tests runs show bounded progress while their output stays captured for diagnostics.
+#
+# Interactive long-running checks show bounded progress while output stays captured for diagnostics.
 # Redirected and CI runs keep a deterministic report that automation can parse safely.
 #
 # Usage:
-#   bash scripts/preflight-checks.sh
+# bash scripts/preflight-checks.sh
 #
 # Behavior:
-#   - runs project quality gates
-#   - runs shell and CLI syntax checks
-#   - checks formatting and project-specific quality signals
+# - runs project quality gates
+# - runs shell and CLI syntax checks
+# - checks formatting and project-specific quality signals
 #
 # Exit:
-#   0 when all checks pass, non-zero on any failing check.
+# 0 when all checks pass, non-zero on any failing check.
 #
 # Requirements:
-#   - bash, node, npm, git
+# - bash, node, npm, git
 
 set -euo pipefail
 
@@ -31,11 +30,11 @@ ROOT_DIR="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 cd "$ROOT_DIR" || exit 1
 MANIFEST_PATH="$ROOT_DIR/workflow/manifest.json"
 
-# ── Output mode flags ────────────────────────────────────────────────
-# Parsed before anything else so capability detection can use them.
+# ── Output mode flags ──────────────────────────────────────────────── Parsed before anything else so capability detection can use them.
 verbose=0
 no_color=
 ascii_mode=
+# Read display options before choosing the report format the developer will see.
 for arg in "$@"; do
     case "$arg" in
         -v|--verbose) verbose=1 ;;
@@ -48,8 +47,9 @@ Usage: preflight-checks.sh [--verbose] [--no-color] [--ascii] [--help]
 Runs the local pre-flight quality gate. Exits 0 when all checks pass,
 non-zero otherwise.
 
-Interactive Tests runs show one elapsed-time heartbeat every 10 seconds.
-Redirected and CI output remains deterministic and contains no heartbeat lines.
+Interactive Tests and Dependency Audit runs show one elapsed-time heartbeat
+every 10 seconds. Redirected and CI output remains deterministic and contains
+no heartbeat lines.
 
 Options:
   -v, --verbose    Expand every sub-check (default collapses to one row per
@@ -66,6 +66,8 @@ Environment:
   CI=true        - implies --no-color unless FORCE_COLOR is set
   GOAT_FLOW_PREFLIGHT_TEST_TIMEOUT_SECONDS=N
                  - test command timeout in seconds (default: 600; 0 disables)
+  GOAT_FLOW_PREFLIGHT_AUDIT_TIMEOUT_SECONDS=N
+                 - dependency audit timeout in seconds (default: 120; 0 disables)
 HELP
             exit 0
             ;;
@@ -76,6 +78,8 @@ HELP
             ;;
     esac
 done
+
+# Read the manifest-owned inventory used by preflight so checks follow supported agents and managed files.
 
 manifest_eval() {
     node - "$MANIFEST_PATH" "$@" <<'NODE'
@@ -117,6 +121,22 @@ if (mode === "hook-dirs") {
   process.exit(0);
 }
 
+if (mode === "instruction-files") {
+  const files = [
+    ...new Set(
+      Object.values(manifest.agents || {})
+        .map((agent) =>
+          typeof agent.instruction_file === "string"
+            ? agent.instruction_file
+            : "",
+        )
+        .filter(Boolean),
+    ),
+  ];
+  for (const file of files) console.log(file);
+  process.exit(0);
+}
+
 if (mode === "supported-skills") {
   for (const skill of manifest.skills?.canonical || []) console.log(skill);
   process.exit(0);
@@ -146,34 +166,38 @@ process.exit(1);
 NODE
 }
 
-# ── Output formatter (M-preflight-redesign) ──────────────────────────
-# Buffer-then-render: helpers append rows to a TSV ledger; render_report
-# walks the ledger at the end and emits a phased summary. Default output
-# collapses each section to one row; --verbose or any FAIL/WARN expands
-# the section under an indent guide. Adding a new check needs three
-# things: (1) call section "Display Name" before the sub-checks run;
-# (2) call pass/fail/warn/skip from inside each sub-check; (3) add an
-# entry to phase_for / display_for / collapsed_desc_for so the section
-# lands under the right phase heading with a meaningful summary line.
+# ── Output formatter (M-preflight-redesign) ────────────────────────── Buffer-then-render: helpers append rows to a TSV ledger; render_report walks
+# the ledger at the end and emits a phased summary.
+#
+# Default output collapses each section to one row; --verbose or any FAIL/WARN expands the section under an indent guide.
+# Adding a new check needs three things: (1) call section "Display Name" before the sub-checks run; (2) call pass/fail/warn/skip from inside each
+#
+# sub-check; (3) add an entry to phase_for / display_for / collapsed_desc_for so the section lands under the right phase heading with a meaningful
+# summary line.
 
 # ── Capability detection ─────────────────────────────────────────────
 _is_tty=0
 [[ -t 1 ]] && _is_tty=1
-preflight_test_heartbeat_seconds=10
+preflight_heartbeat_seconds=10
 
 _use_color=1
+# An explicit no-color preference keeps copied output free of terminal escape codes.
 if [[ -n "$no_color" ]] || [[ -n "${NO_COLOR:-}" ]]; then
     _use_color=0
+# CI output stays plain unless the caller explicitly forces color.
 elif [[ "${CI:-}" == "true" ]] && [[ -z "${FORCE_COLOR:-}" ]]; then
     _use_color=0
+# Redirected output stays plain unless the caller explicitly requests color.
 elif [[ "$_is_tty" -eq 0 ]] && [[ -z "${FORCE_COLOR:-}" ]]; then
     _use_color=0
 fi
+# A terminal without enough color support receives the plain report format.
 if [[ "$_use_color" -eq 1 ]] && command -v tput >/dev/null 2>&1; then
     _color_count=$(tput colors 2>/dev/null || echo 0)
     [[ "$_color_count" -lt 8 ]] && _use_color=0
 fi
 
+# Use colored verdicts only after terminal support and caller preferences allow them.
 if [[ "$_use_color" -eq 1 ]]; then
     R=$'\033[0;31m'; G=$'\033[0;32m'; Y=$'\033[0;33m'; CY=$'\033[0;36m'
     DIM=$'\033[2m'; BOLD=$'\033[1m'; RST=$'\033[0m'
@@ -182,12 +206,15 @@ else
 fi
 
 _use_ascii=0
+# The ASCII option uses portable report markers for limited terminals.
 if [[ -n "$ascii_mode" ]]; then
     _use_ascii=1
+# A non-UTF-8 locale receives ASCII markers so report status remains readable.
 elif [[ "${LANG:-}${LC_ALL:-}" != *UTF-8* ]] && [[ "${LANG:-}${LC_ALL:-}" != *utf8* ]]; then
     _use_ascii=1
 fi
 
+# Choose portable separators and verdict markers when the user requested ASCII output.
 if [[ "$_use_ascii" -eq 1 ]]; then
     GLYPH_PASS='+'; GLYPH_FAIL='x'; GLYPH_WARN='!'; GLYPH_SKIP='-'
     RULE_TOP='='; RULE_MID='-'; GUIDE='|'
@@ -199,7 +226,9 @@ fi
 
 # Terminal width (overridden by COLUMNS, then tput cols, then 80).
 _term_cols=${COLUMNS:-}
+# Without an explicit width, discover one before sizing report columns.
 if [[ -z "$_term_cols" ]]; then
+    # An interactive terminal can supply its width; redirected output uses the fixed fallback.
     if [[ "$_is_tty" -eq 1 ]] && command -v tput >/dev/null 2>&1; then
         _term_cols=$(tput cols 2>/dev/null || echo 80)
     else
@@ -213,27 +242,27 @@ LEDGER_DIR=$(mktemp -d -t preflight.XXXXXX)
 LEDGER="$LEDGER_DIR/ledger.tsv"
 : > "$LEDGER"
 
-# render_report runs from the EXIT trap so the report still prints when
-# set -e + pipefail kills the script mid-check (e.g. a failure-detail
-# pipeline tripping pipefail). Cleanup follows render. We override the
-# exit code to FAIL when errors were recorded, since set -e may exit
-# the script before the explicit exit statement runs.
+# render_report runs from the EXIT trap so the report still prints when set -e + pipefail kills the script mid-check (e.g. a failure-detail pipeline
+# tripping pipefail).
+#
+# Cleanup follows render.
+# We override the exit code to FAIL when errors were recorded, since set -e may exit the script before the explicit exit statement runs.
 _render_done=0
+# Finish the captured report and preserve a failing exit when any check failed or the command was interrupted.
 _on_exit() {
-    # NB: variable name avoids `rc` because bash uses dynamic scoping
-    # for locals; sub-functions like _emit_section_row's `read -r ...`
-    # would otherwise clobber it on every row and `exit "$rc"` ends up
-    # as `exit ""`.
+    # NB: variable name avoids `rc` because bash uses dynamic scoping for locals; sub-functions like _emit_section_row's `read -r ...` would otherwise
+    # clobber it on every row and `exit "$rc"` ends up as `exit ""`.
     local _exit_rc=$?
     [[ "$_exit_rc" =~ ^[0-9]+$ ]] || _exit_rc=0
+    # Render the final report once even when a failed check exits through the shell trap.
     if [[ "$_render_done" -eq 0 ]]; then
         _render_done=1
-        # Render anything left over: the just-finished section's row
-        # (if not yet emitted) and the footer. Wrap in `|| true` so a
-        # render error doesn't mask the script's real exit code.
+        # Render anything left over: the just-finished section's row (if not yet emitted) and the footer.
+        # Wrap in `|| true` so a render error doesn't mask the script's real exit code.
         {
             _emit_header_once
             _record_section_elapsed
+            # A pending section still needs its final verdict before the report footer appears.
             if [[ -n "$current_section" ]]; then
                 _emit_section_row "$current_section"
                 current_section=""
@@ -242,6 +271,7 @@ _on_exit() {
         } 2>&1 || true
     fi
     rm -rf "$LEDGER_DIR" 2>/dev/null || true
+    # Recorded failures must produce a failing exit even when the last shell command succeeded.
     if [[ "${errors:-0}" -gt 0 ]] && [[ "$_exit_rc" -eq 0 ]]; then
         _exit_rc=1
     fi
@@ -255,17 +285,22 @@ checks=0
 
 # Millisecond-precision timing with portable fallback (macOS date lacks %N).
 if date +%s%N 2>/dev/null | grep -qv N; then
+    # Read the available clock in milliseconds for elapsed-time labels in the developer's report.
     now_ms() { echo $(( $(date +%s%N) / 1000000 )); }
+# Node supplies timing when the preferred shell clock is unavailable.
 elif command -v node >/dev/null 2>&1; then
+    # Read the available clock in milliseconds for elapsed-time labels in the developer's report.
     now_ms() { node -e 'process.stdout.write(String(Date.now()))'; }
 else
+    # Read the available clock in milliseconds for elapsed-time labels in the developer's report.
     now_ms() { echo $(( $(date +%s) * 1000 )); }
 fi
+# Format elapsed milliseconds as a compact seconds label; backwards clock movement is clamped to zero.
 fmt_elapsed() {
-    # one-decimal seconds, e.g. 5.1s, 0.0s. now_ms is wall clock, which can
-    # step backwards mid-run (WSL2/NTP correction), so clamp negative deltas
-    # to 0.0s instead of rendering "-1.0s" in the evidence output.
+    # one-decimal seconds, e.g. 5.1s, 0.0s. now_ms is wall clock, which can step backwards mid-run (WSL2/NTP correction), so clamp negative deltas to
+    # 0.0s instead of rendering "-1.0s" in the evidence output.
     local ms=$(( $1 ))
+    # Clamp a backwards clock difference so the report never shows negative elapsed time.
     if (( ms < 0 )); then ms=0; fi
     local secs=$(( ms / 1000 ))
     local frac=$(( (ms % 1000) / 100 ))
@@ -278,6 +313,7 @@ current_section=""
 
 # ── Helpers ──────────────────────────────────────────────────────────
 _record_section_elapsed() {
+    # Record elapsed time only after a real report section has started.
     if [[ -n "$current_section" ]]; then
         local now elapsed
         now=$(now_ms)
@@ -287,9 +323,12 @@ _record_section_elapsed() {
     return 0
 }
 
+# Close the previous section and start the next group of checks in the terminal report.
+
 section() {
     _record_section_elapsed
     _emit_header_once
+    # Finish the previous section before displaying the next group of checks.
     if [[ -n "$current_section" ]]; then
         _emit_section_row "$current_section"
     fi
@@ -302,28 +341,32 @@ section() {
     return 0
 }
 
-# Sub-check helpers append one ROW per call; counters increment for the
-# verdict tally exactly as before. Embedded newlines in the message are
-# collapsed to ` | ` so the TSV ledger stays one row per call (some
-# checks compose messages from grep -c output that can include a stray
-# trailing newline).
+# Keep a multi-line diagnostic in one report row by replacing newlines with a visible separator.
+# Use before writing verdict messages to the temporary report ledger.
 _one_line() { printf '%s' "${1//$'\n'/ | }"; }
+# Record one successful check for the current report section and final tally.
 pass()  { checks=$((checks + 1)); printf 'ROW\tPASS\t%s\t%s\n' "$current_section" "$(_one_line "$1")" >> "$LEDGER"; }
+# Record one failed check so the report explains the failure and the command exits unsuccessfully.
 fail()  { checks=$((checks + 1)); errors=$((errors + 1)); printf 'ROW\tFAIL\t%s\t%s\n' "$current_section" "$(_one_line "$1")" >> "$LEDGER"; }
+# Record one successful check with a warning so maintenance work stays visible without failing preflight.
 warn()  { checks=$((checks + 1)); warnings=$((warnings + 1)); printf 'ROW\tWARN\t%s\t%s\n' "$current_section" "$(_one_line "$1")" >> "$LEDGER"; }
+# Record an unexecuted check without counting it as successful verification.
 skip()  { printf 'ROW\tSKIP\t%s\t%s\n' "$current_section" "$(_one_line "$1")" >> "$LEDGER"; }
+# Record a warning-only note without increasing the number of executed checks.
 note()  { warnings=$((warnings + 1)); printf 'ROW\tWARN\t%s\t%s\n' "$current_section" "$(_one_line "$1")" >> "$LEDGER"; }
 
-# Detail lines belong to the current section. They render under the
-# failure expansion (verbose mode, or any failed/warned section). Pipe
-# any multi-line output through details_pipe to attach it to the row.
+# Detail lines belong to the current section.
+#
+# They render under the failure expansion (verbose mode, or any failed/warned section).
+# Pipe any multi-line output through details_pipe to attach it to the row.
 details_pipe() {
+    # Preserve captured diagnostic lines under the section the developer will expand.
     while IFS= read -r line; do
         printf 'DETAIL\t%s\t%s\n' "$current_section" "$line" >> "$LEDGER"
     done
 }
 
-# Run one Tests command while retaining final diagnostics and showing bounded TTY liveness.
+# Run one long command while retaining final diagnostics and showing bounded TTY liveness.
 run_command_capture_with_timeout() {
     local __output_var="$1"
     local __status_var="$2"
@@ -335,11 +378,11 @@ run_command_capture_with_timeout() {
     local -a command_runner_arguments=(
         scripts/preflight-command-runner.mjs
         --timeout-seconds "$timeout_seconds"
-        --heartbeat-seconds "$preflight_test_heartbeat_seconds"
+        --heartbeat-seconds "$preflight_heartbeat_seconds"
         --label "$progress_label"
     )
 
-    # e.g. a developer ran preflight before release; long Tests show liveness outside captured CI output.
+    # e.g. a developer ran preflight before release; long checks show liveness outside captured CI output.
     if [[ "$_is_tty" -eq 1 ]]; then
         exec {operator_progress_fd}>&1
         command_runner_arguments+=(--progress-fd "$operator_progress_fd")
@@ -357,11 +400,8 @@ run_command_capture_with_timeout() {
     printf -v "$__status_var" '%s' "$status"
 }
 
-# ── Phase mapping (centralised) ──────────────────────────────────────
-# In live rendering, the phase heading prints whenever the phase
-# changes between two consecutive sections. There's no precomputed
-# phase order - sections appear in execution order, and a phase's
-# heading may repeat if its sections aren't contiguous.
+# Group a report section under its visible phase heading.
+# Sections drive phase order as they execute, so the displayed headings follow the actual check sequence.
 phase_for() {
     case "$1" in
         "Shell Scripts"|"TypeScript") printf 'STATIC' ;;
@@ -374,6 +414,8 @@ phase_for() {
         *) printf 'OTHER' ;;
     esac
 }
+
+# Choose the readable section label shown in the compact terminal report.
 
 display_for() {
     case "$1" in
@@ -405,6 +447,8 @@ display_for() {
     esac
 }
 
+# Describe a section's checks before the developer expands its captured details.
+
 collapsed_desc_for() {
     case "$1" in
         "Shell Scripts") printf 'bash syntax + shellcheck' ;;
@@ -435,15 +479,14 @@ collapsed_desc_for() {
     esac
 }
 
-# ── Live renderer ────────────────────────────────────────────────────
-# Each section's collapsed row (and any auto-expansion on FAIL/WARN)
-# is printed when the section completes - i.e. when the next section()
-# call fires, or when _on_exit runs for the last section. The header
-# prints once, lazily, on the first section() call. Phase headings
-# print whenever the phase changes between two consecutive sections.
-# Widths are computed once from a fixed list of known sections, so the
-# columns stay aligned across all rows regardless of which sections
-# end up running.
+# ── Live renderer ──────────────────────────────────────────────────── Each section's collapsed row (and any auto-expansion on FAIL/WARN) is printed
+# when the section completes - i.e. when the next section() call fires, or when _on_exit runs for the last section.
+#
+# The header prints once, lazily, on the first section() call.
+# Phase headings print whenever the phase changes between two consecutive sections.
+#
+# Widths are computed once from a fixed list of known sections, so the columns stay aligned across all rows regardless of which sections end up
+# running.
 
 _widths_computed=0
 _header_printed=0
@@ -457,37 +500,45 @@ SHOW_ELAPSED=1
 RULE_TOP_LINE=""
 RULE_MID_LINE=""
 
+# Build a repeated separator sized for the current terminal report.
+
 _repeat() {
     local ch="$1" n="$2" out=""
     local i=0
+    # Build a separator sized to the visible report rather than a fixed terminal width.
     while (( i < n )); do out+="$ch"; i=$((i + 1)); done
     printf '%s' "$out"
 }
 
-# printf %-*s measures bytes, so multi-byte UTF-8 (·, …) breaks
-# alignment. _pad_right / _pad_left use ${#s} (character count in
-# UTF-8 locales) and pad with explicit spaces.
+# printf %-*s measures bytes, so multi-byte UTF-8 (·, …) breaks alignment. _pad_right / _pad_left use ${#s} (character count in UTF-8 locales) and pad
+# with explicit spaces.
 _pad_right() {
     local s="$1" w="$2" len=${#1}
     printf '%s' "$s"
+    # Pad short labels so neighboring report columns remain aligned.
     if (( len < w )); then printf '%*s' $((w - len)) ''; fi
 }
+# Right-align short values so elapsed-time and count columns remain easy to compare.
 _pad_left() {
     local s="$1" w="$2" len=${#1}
+    # Pad short values so elapsed times line up along their right edge.
     if (( len < w )); then printf '%*s' $((w - len)) ''; fi
     printf '%s' "$s"
 }
 
-# Truncate $1 to width $2 (character count) with an ellipsis if it
-# would overflow. Bash slicing is character-aware in UTF-8 locales.
+# Truncate $1 to width $2 (character count) with an ellipsis if it would overflow.
+# Bash slicing is character-aware in UTF-8 locales.
 _truncate() {
     local s="$1" w="$2"
+    # A label that already fits can be shown without losing information.
     if (( ${#s} <= w )); then
         printf '%s' "$s"
+    # Very narrow columns show only the available characters without overrunning the terminal.
     elif (( w <= 1 )); then
         printf '%s' "${s:0:w}"
     else
         local head=$((w - 1))
+        # ASCII output uses a plain truncation marker for the shortened label.
         if [[ "$_use_ascii" -eq 1 ]]; then
             printf '%s.' "${s:0:head}"
         else
@@ -496,10 +547,10 @@ _truncate() {
     fi
 }
 
-# In ASCII mode (or when LANG is non-UTF-8 and we auto-fell-back to
-# ASCII), strip `·` from labels so padding via ${#str} (byte count
-# under LANG=C) matches what's displayed on screen.
+# In ASCII mode (or when LANG is non-UTF-8 and we auto-fell-back to ASCII), strip `·` from labels so padding via ${#str} (byte count under LANG=C)
+# matches what's displayed on screen.
 _ascii_safe() {
+    # Replace decorative middle dots when the user selected ASCII output.
     if [[ "$_use_ascii" -eq 1 ]]; then
         printf '%s' "${1//·/+}"
     else
@@ -507,9 +558,8 @@ _ascii_safe() {
     fi
 }
 
-# Computed once from a hardcoded list of known sections. Adding a
-# new section means adding it here AND to phase_for / display_for /
-# collapsed_desc_for.
+# Computed once from a hardcoded list of known sections.
+# Adding a new section means adding it here AND to phase_for / display_for / collapsed_desc_for.
 _compute_widths() {
     [[ "$_widths_computed" -eq 1 ]] && return 0
     _widths_computed=1
@@ -526,6 +576,7 @@ _compute_widths() {
         "Skill Docs Sync" "Skill SKILL.md Parity"
         "Path Integrity" "Markdown Links" "Package README Links"
     )
+    # Measure known section labels before choosing a layout that fits the terminal.
     for sec in "${known[@]}"; do
         disp=$(_ascii_safe "$(display_for "$sec")")
         d=$(_ascii_safe "$(collapsed_desc_for "$sec")")
@@ -539,7 +590,9 @@ _compute_widths() {
     local row_full=$((fixed + NAME_W + 2 + DESC_W + 2 + ELAPSED_W))
     SHOW_DESC=1
     SHOW_ELAPSED=1
+    # Hide optional descriptions when the full report row would exceed the terminal width.
     if (( row_full > _term_cols )); then SHOW_DESC=0; fi
+    # Hide elapsed time when even the reduced row is too wide for the terminal.
     if (( fixed + NAME_W + 2 + ELAPSED_W > _term_cols )); then SHOW_ELAPSED=0; fi
 
     BLOCK_W=$row_full
@@ -553,6 +606,8 @@ _compute_widths() {
     RULE_MID_LINE=$(_repeat "$RULE_MID" "$BLOCK_W")
 }
 
+# Print the report title and version once, after the first real section is ready to display.
+
 _emit_header_once() {
     [[ "$_header_printed" -eq 1 ]] && return 0
     _header_printed=1
@@ -562,6 +617,7 @@ _emit_header_once() {
     repo_name=$(basename "$ROOT_DIR")
     branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)
     version_label=""
+    # Read the project version when a package manifest is available for the heading.
     if [[ -f package.json ]]; then
         pkg_version=$(grep -oE '"version":[[:space:]]*"[^"]+"' package.json | head -1 | sed -E 's/.*"([^"]+)"$/\1/' || true)
         [[ -n "${pkg_version:-}" ]] && version_label="v$pkg_version"
@@ -571,6 +627,7 @@ _emit_header_once() {
     title=$(_ascii_safe "$title")
 
     printf '%s%s%s\n' "$DIM" "$RULE_TOP_LINE" "$RST"
+    # Include the discovered version so the developer knows which checkout was checked.
     if [[ -n "$version_label" ]]; then
         local title_len=${#title}
         local ver_len=${#version_label}
@@ -585,8 +642,11 @@ _emit_header_once() {
     printf '%s%s%s\n' "$DIM" "$RULE_TOP_LINE" "$RST"
 }
 
+# Print a phase heading only when the report enters a different group of checks.
+
 _emit_phase_if_changed() {
     local phase="$1"
+    # Print a phase heading only when the report moves into a different group of checks.
     if [[ "$phase" != "$_last_phase" ]]; then
         printf '\n %s%s%s\n' "$DIM" "$phase" "$RST"
         _last_phase="$phase"
@@ -594,9 +654,8 @@ _emit_phase_if_changed() {
     return 0
 }
 
-# Aggregate the just-completed section's status from its ledger rows
-# and print: collapsed row + (if FAIL/WARN, or --verbose) the indent-
-# guide expansion of every sub-row and detail line.
+# Aggregate the just-completed section's status from its ledger rows and print: collapsed row + (if FAIL/WARN, or --verbose) the indent- guide
+# expansion of every sub-row and detail line.
 _emit_section_row() {
     local sec="$1"
     [[ -z "$sec" ]] && return 0
@@ -637,10 +696,12 @@ _emit_section_row() {
 
     printf '  %s%s%s  ' "$color" "$glyph" "$RST"
     _pad_right "$disp" "$NAME_W"
+    # Show the description only when the computed layout has room for it.
     if (( SHOW_DESC == 1 )); then
         printf '  '
         _pad_right "$desc" "$DESC_W"
     fi
+    # Show elapsed time only when that column fits the terminal.
     if (( SHOW_ELAPSED == 1 )); then
         printf '  %s' "$DIM"
         _pad_left "$elapsed_str" "$ELAPSED_W"
@@ -651,6 +712,7 @@ _emit_section_row() {
     local expand=0
     (( verbose == 1 )) && expand=1
     [[ "$status" == "FAIL" || "$status" == "WARN" ]] && expand=1
+    # Expanded sections show captured details only when rows are available.
     if (( expand == 1 )) && (( rc > 0 )); then
         printf '     %s%s%s\n' "$DIM" "$GUIDE" "$RST"
         awk -F '\t' -v target="$sec" '
@@ -660,6 +722,7 @@ _emit_section_row() {
             $1 == "ROW"    { printf "ROW\t%s\t%s\n", $2, $4 }
             $1 == "DETAIL" { printf "DETAIL\t%s\n", $3 }
         ' "$LEDGER" | while IFS=$'\t' read -r kind a b; do
+            # A verdict row needs its own status marker beneath the expanded section.
             if [[ "$kind" == "ROW" ]]; then
                 local sub_glyph sub_color
                 case "$a" in
@@ -669,6 +732,7 @@ _emit_section_row() {
                     *)    sub_glyph="$GLYPH_PASS"; sub_color="$G" ;;
                 esac
                 printf '     %s%s%s  %s%s%s  %s\n' "$DIM" "$GUIDE" "$RST" "$sub_color" "$sub_glyph" "$RST" "$b"
+            # Indent diagnostic text beneath its check instead of showing another verdict.
             elif [[ "$kind" == "DETAIL" ]]; then
                 printf '     %s%s%s        %s%s%s\n' "$DIM" "$GUIDE" "$RST" "$DIM" "$a" "$RST"
             fi
@@ -678,12 +742,16 @@ _emit_section_row() {
     return 0
 }
 
+# Show the final verdict, warning and error totals, and elapsed time after the captured sections.
+
 _emit_footer() {
     _compute_widths
-    local total_elapsed verdict verdict_color sep
+    local total_elapsed verdict verdict_color sep warning_label
     total_elapsed=$(fmt_elapsed $(( $(now_ms) - preflight_start )))
+    # Any recorded error makes the final preflight verdict fail.
     if [[ "$errors" -gt 0 ]]; then
         verdict="FAIL"; verdict_color="$R"
+    # Warnings remain visible in a successful verdict without becoming errors.
     elif [[ "$warnings" -gt 0 ]]; then
         verdict="PASS (with warnings)"; verdict_color="$Y"
     else
@@ -691,43 +759,41 @@ _emit_footer() {
     fi
     sep="·"
     [[ "$_use_ascii" -eq 1 ]] && sep="+"
+    warning_label="warning"
+    [[ "$warnings" -ne 1 ]] && warning_label="warnings"
     printf '%s%s%s\n' "$DIM" "$RULE_MID_LINE" "$RST"
-    printf ' %s%s%s%s   %d checks %s %d warnings %s %s%s\n' \
+    printf ' %s%s%s%s   %d checks %s %d %s %s %s%s\n' \
         "$BOLD" "$verdict_color" "$verdict" "$RST" \
-        "$checks" "$sep" "$warnings" "$sep" "$total_elapsed" "$RST"
+        "$checks" "$sep" "$warnings" "$warning_label" "$sep" "$total_elapsed" "$RST"
     printf '%s%s%s\n' "$DIM" "$RULE_MID_LINE" "$RST"
 }
 
 # ── Shell Scripts ────────────────────────────────────────────────────
 section "Shell Scripts"
-if bash -n scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh 2>/dev/null; then
-    pass "Bash syntax (scripts)"
+# Only a successful syntax check earns a pass for project scripts and hooks.
+if syntax_output=$(bash scripts/maintenance/check-shell-syntax.sh 2>&1); then
+    pass "Bash syntax (scripts and hooks)"
 else
-    fail "Bash syntax check (scripts)"
+    fail "Bash syntax check (scripts and hooks)"
+    printf '%s\n' "$syntax_output" | details_pipe
 fi
 
-# Also syntax-check installed hooks
-while IFS= read -r hookdir; do
-    if compgen -G "$hookdir/*.sh" >/dev/null 2>&1; then
-        if bash -n "$hookdir"/*.sh 2>/dev/null; then
-            pass "Bash syntax ($hookdir/)"
-        else
-            fail "Bash syntax check ($hookdir/)"
-        fi
-    fi
-done < <(manifest_eval hook-dirs)
-
+# Run the installed shell linter when it is available to inspect project scripts.
 if command -v shellcheck >/dev/null 2>&1; then
-    if shellcheck --exclude=SC2001 scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh >/dev/null 2>&1; then
+    # Report script lint success only after shellcheck completes successfully.
+    if shellcheck --exclude=SC2001 scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh workflow/install-goat-flow.sh >/dev/null 2>&1; then
         pass "Shellcheck (scripts)"
     else
-        fail "Shellcheck (scripts) - run shellcheck scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh for details"
+        fail "Shellcheck (scripts) - run shellcheck scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh workflow/install-goat-flow.sh for details"
     fi
 
-    # Also shellcheck installed hooks (SC2016 excluded: sed patterns intentionally use single quotes)
+    # Also shellcheck installed hooks. SC2001 stays excluded (sed rewrites are deliberate); SC2016 no longer is,
+    # because the one literal that raised it now carries a narrow directive at its own site.
     while IFS= read -r hookdir; do
+        # Only directories containing shell hooks can contribute a hook lint result.
         if compgen -G "$hookdir/*.sh" >/dev/null 2>&1; then
-            if shellcheck --exclude=SC2001,SC2016 "$hookdir"/*.sh >/dev/null 2>&1; then
+            # Each hook directory needs a successful shellcheck result before receiving a pass.
+            if shellcheck --exclude=SC2001 "$hookdir"/*.sh >/dev/null 2>&1; then
                 pass "Shellcheck ($hookdir/)"
             else
                 fail "Shellcheck ($hookdir/) - run shellcheck $hookdir/*.sh for details"
@@ -740,31 +806,47 @@ fi
 
 # ── Deny Policy ──────────────────────────────────────────────────────
 section "Deny Policy"
-if deny_self_test_output=$(bash workflow/hooks/deny-dangerous.sh --self-test=full 2>&1); then
-    pass "workflow/hooks/deny-dangerous.sh ${deny_self_test_output}"
-else
-    fail "workflow/hooks/deny-dangerous.sh full self-test"
-fi
-
-# Also smoke-test installed hooks. Routine audit/preflight only needs the
-# install-safe representative set; the local scripts/ copy runs the full corpus
-# above.
-while IFS= read -r hookdir; do
-    if [[ -f "$hookdir/deny-dangerous.sh" ]]; then
-        if bash "$hookdir/deny-dangerous.sh" --self-test=smoke >/dev/null 2>&1; then
-            pass "$hookdir/deny-dangerous.sh smoke self-test"
-        else
-            fail "$hookdir/deny-dangerous.sh smoke self-test"
-        fi
+# Check both canonical deny policies so a release cannot omit one protection family.
+for policy_hook in deny-dangerous deny-git-mutations; do
+    # A canonical hook passes only after its full policy corpus succeeds.
+    if deny_self_test_output=$(bash "workflow/hooks/$policy_hook.sh" --self-test=full 2>&1); then
+        pass "workflow/hooks/$policy_hook.sh ${deny_self_test_output}"
+    else
+        fail "workflow/hooks/$policy_hook.sh full self-test"
     fi
+done
+
+# Shared installed paths need one complete run each, regardless of how many providers own them.
+declare -A checked_policy_hook_paths=()
+# Check each declared installed hook directory before reporting installation safety.
+while IFS= read -r hookdir; do
+    # Both deny policies must be present and runnable in each installed directory.
+    for policy_hook in deny-dangerous deny-git-mutations; do
+        installed_policy_hook="$hookdir/$policy_hook.sh"
+        [[ -n "${checked_policy_hook_paths[$installed_policy_hook]+present}" ]] && continue
+        checked_policy_hook_paths["$installed_policy_hook"]=1
+        # A missing required policy hook is an installation failure, not a skipped check.
+        if [[ ! -f "$installed_policy_hook" ]]; then
+            fail "$installed_policy_hook required policy hook missing"
+        # An installed hook passes only after its full policy corpus succeeds.
+        elif deny_self_test_output=$(bash "$installed_policy_hook" --self-test=full 2>&1); then
+            pass "$installed_policy_hook ${deny_self_test_output}"
+        else
+            fail "$installed_policy_hook full self-test"
+        fi
+    done
 done < <(manifest_eval hook-dirs)
 
 # Runtime smoke test: pipe a known-blocked command through installed deny hooks
 while IFS= read -r hookdir; do
+    # Exercise an installed dangerous-command hook when its entrypoint exists.
     if [[ -f "$hookdir/deny-dangerous.sh" ]]; then
+        # Copilot needs its own payload and JSON denial contract for this smoke test.
         if [[ "$hookdir" == ".github/hooks" ]]; then
             test_payload='{"toolName":"bash","toolArgs":"{\"command\":\"rm -rf /\"}"}'
+            # The provider must exit successfully before its denial response can be assessed.
             if output=$(bash "$hookdir/deny-dangerous.sh" <<< "$test_payload" 2>&1); then
+                # Only an explicit Copilot deny response proves this smoke request was blocked.
                 if echo "$output" | grep -q '"permissionDecision":"deny"'; then
                     pass "$hookdir/deny-dangerous.sh runtime smoke test (copilot payload denied rm -rf)"
                 else
@@ -774,9 +856,12 @@ while IFS= read -r hookdir; do
                 exit_code=$?
                 warn "$hookdir/deny-dangerous.sh exited $exit_code on Copilot deny payload (expected 0 + deny JSON)"
             fi
+        # Antigravity needs its own payload and JSON denial contract for this smoke test.
         elif [[ "$hookdir" == ".agents/hooks" ]]; then
             test_payload='{"hookEventName":"PreToolUse","toolCall":{"name":"run_command","args":{"CommandLine":"rm -rf /"}}}'
+            # A successful provider exit permits inspection of the returned Antigravity denial.
             if output=$(bash "$hookdir/deny-dangerous.sh" <<< "$test_payload" 2>&1); then
+                # Only an explicit Antigravity deny response earns a passing smoke row.
                 if echo "$output" | grep -q '"decision":"deny"'; then
                     pass "$hookdir/deny-dangerous.sh runtime smoke test (antigravity payload denied rm -rf)"
                 else
@@ -789,10 +874,12 @@ while IFS= read -r hookdir; do
         else
             # Simulate a VS Code-style Bash tool call with a dangerous command
             test_payload='{"tool_name":"Bash","tool_input":{"command":"rm -rf /"}}'
+            # An allowed destructive smoke request is a failed protection check.
             if bash "$hookdir/deny-dangerous.sh" <<< "$test_payload" >/dev/null 2>&1; then
                 fail "$hookdir/deny-dangerous.sh did not block 'rm -rf /' (exit 0)"
             else
                 exit_code=$?
+                # The documented blocked exit distinguishes a real denial from a launcher failure.
                 if [[ $exit_code -eq 2 ]]; then
                     pass "$hookdir/deny-dangerous.sh runtime smoke test (blocked rm -rf)"
                 else
@@ -803,16 +890,15 @@ while IFS= read -r hookdir; do
     fi
 done < <(manifest_eval hook-dirs)
 
-# Runtime smoke test the exact command strings in installed agent configs. This
-# catches failures before the guard script starts, including stale paths and
-# exit-127 command-shape regressions.
+# Runtime smoke test the exact command strings in installed agent configs.
+# This catches failures before the guard script starts, including stale paths and exit-127 command-shape regressions.
 configured_hook_smoke_output=$(
     node <<'NODE'
 const fs = require("node:fs");
 const path = require("node:path");
 const { spawnSync } = require("node:child_process");
 
-const guardScripts = ["deny-dangerous.sh"];
+const guardScripts = ["deny-dangerous.sh", "deny-git-mutations.sh"];
 const configs = [
   { agent: "claude", path: ".claude/settings.json", mode: "stderr" },
   { agent: "codex", path: ".codex/hooks.json", mode: "stderr" },
@@ -825,7 +911,7 @@ function emit(status, message) {
 }
 
 function payloadFor(mode, script) {
-  const command = "git push origin main";
+  const command = script === "deny-git-mutations.sh" ? "git push origin main" : "gh pr create --fill";
   if (mode === "copilot-json") {
     return {
       input: JSON.stringify({ toolName: "bash", toolArgs: { command } }),
@@ -869,7 +955,19 @@ function collect(value, out = []) {
     );
     if (script) out.push({ command: value.command, args: argumentOperands, script });
   }
-  for (const key of ["command", "bash"]) {
+  // Shell rows retain the provider's default command and any Windows-only override as one descriptor.
+  if (typeof value.command === "string" && !Array.isArray(value.args)) {
+    const commandWindows =
+      typeof value.commandWindows === "string" ? value.commandWindows : undefined;
+    const script = guardScripts.find((name) =>
+      [value.command, commandWindows].some(
+        (commandText) =>
+          typeof commandText === "string" && commandText.includes(name),
+      ),
+    );
+    if (script) out.push({ command: value.command, commandWindows, script });
+  }
+  for (const key of ["bash"]) {
     if (typeof value[key] !== "string") continue;
     const script = guardScripts.find((name) => value[key].includes(name));
     if (script) out.push({ command: value[key], script });
@@ -898,6 +996,19 @@ function runCommand(entry, input, cwd) {
       input,
       timeout: 5000,
     });
+  }
+  // Codex documents commandWindows as the native Windows replacement for its default shell command.
+  if (process.platform === "win32" && entry.commandWindows !== undefined) {
+    return spawnSync(
+      "powershell.exe",
+      ["-NoProfile", "-NonInteractive", "-Command", entry.commandWindows],
+      {
+        cwd,
+        encoding: "utf8",
+        input,
+        timeout: 5000,
+      },
+    );
   }
   return spawnSync("bash", ["-c", `printf %s "$GOAT_HOOK_SMOKE_PAYLOAD" | { ${entry.command}; }`], {
     cwd,
@@ -931,11 +1042,21 @@ for (const config of configs) {
   const seen = new Set();
   const commands = collect(parsed).filter((entry) => {
     // Args join the identity so two handlers sharing one executable stay distinct.
-    const key = [entry.command, ...(entry.args ?? []), entry.script].join("\0");
+    const key = [
+      entry.command,
+      entry.commandWindows ?? "",
+      ...(entry.args ?? []),
+      entry.script,
+    ].join("\0");
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
   });
+  for (const script of guardScripts) {
+    if (!commands.some((entry) => entry.script === script)) {
+      emit("FAIL", `${config.agent}: required ${script} registration missing in ${config.path}`);
+    }
+  }
   if (commands.length === 0) {
     emit("FAIL", `${config.agent}: no configured guard hook commands found in ${config.path}`);
     continue;
@@ -971,6 +1092,7 @@ for (const config of configs) {
 if (checked === 0) emit("SKIP", "No configured guard hook commands checked");
 NODE
 )
+# Translate each machine-produced result into the developer's preflight report.
 while IFS=$'\t' read -r status message; do
     [[ -z "${status:-}" ]] && continue
     case "$status" in
@@ -1225,7 +1347,9 @@ for (const [agentId, agent] of Object.entries(manifest.agents || {})) {
 if (checked === 0) emit("SKIP", "No agent config files declared in manifest");
 NODE
 )
+# Translate each machine-produced result into the developer's preflight report.
 while IFS=$'\t' read -r status message; do
+    # Blank diagnostic rows contain no result and must not appear as checks.
     if [[ -z "${status:-}" ]]; then
         continue
     fi
@@ -1240,27 +1364,35 @@ done <<< "$agent_config_output"
 # ── Skill and Reference Versions ─────────────────────────────────────
 section "Skill and Reference Versions"
 skill_version=$(node -e "console.log(require('./package.json').version)" 2>/dev/null || true)
+# Without a package version, preflight cannot compare installed skill versions.
 if [[ -z "$skill_version" ]]; then
     note "Could not read version from package.json"
 else
     template_fail=0
+    # Inspect each canonical skill version before comparing installed copies.
     while IFS= read -r -d '' f; do
         ver=$(grep -o 'goat-flow-skill-version: "[^"]*"' "$f" | grep -o '"[^"]*"' | tr -d '"' || true)
+        # A template version mismatch means the shipped skill contract is stale.
         if [[ "$ver" != "$skill_version" ]]; then
             fail "Skill template $f has version '$ver', expected '$skill_version'"
             template_fail=1
         fi
     done < <(find workflow/skills -maxdepth 2 -name 'SKILL.md' -print0)
+    # Report template consistency only when no skill mismatch was found.
     if [[ "$template_fail" -eq 0 ]]; then
         pass "All workflow skill templates at version $skill_version"
     fi
 
     # Installed skill copies must also match
     installed_fail=0
+    # Inspect every installed agent's skill directory for version drift.
     while IFS= read -r dir; do
+        # A present agent directory supplies the installed skills to compare.
         if [[ -d "$dir" ]]; then
+            # Check each installed skill instead of assuming one shared version.
             while IFS= read -r -d '' f; do
                 ver=$(grep -o 'goat-flow-skill-version: "[^"]*"' "$f" | grep -o '"[^"]*"' | tr -d '"' || true)
+                # A declared installed skill version must match the package version.
                 if [[ -n "$ver" ]] && [[ "$ver" != "$skill_version" ]]; then
                     fail "Installed skill $f has version '$ver', expected '$skill_version'"
                     installed_fail=1
@@ -1268,34 +1400,44 @@ else
             done < <(find "$dir" -name 'SKILL.md' -print0)
         fi
     done < <(manifest_eval skill-roots)
+    # Report installed skill consistency only after all inspected copies agree.
     if [[ "$installed_fail" -eq 0 ]]; then
         pass "All installed skills at version $skill_version"
     fi
 
     reference_fail=0
+    # Check the shared reference templates used by installed skill workflows.
     while IFS= read -r -d '' f; do
         ver=$(grep -o 'goat-flow-reference-version: "[^"]*"' "$f" | grep -o '"[^"]*"' | tr -d '"' || true)
+        # A reference template with a different version would ship mismatched guidance.
         if [[ "$ver" != "$skill_version" ]]; then
             fail "Reference template $f has version '$ver', expected '$skill_version'"
             reference_fail=1
         fi
     done < <(find workflow/skills/reference -type f -name '*.md' -print0)
+    # Check every canonical playbook version before comparing installed references.
     while IFS= read -r -d '' f; do
         ver=$(grep -o 'goat-flow-reference-version: "[^"]*"' "$f" | grep -o '"[^"]*"' | tr -d '"' || true)
+        # A playbook template version must agree with the package that ships it.
         if [[ "$ver" != "$skill_version" ]]; then
             fail "Reference template $f has version '$ver', expected '$skill_version'"
             reference_fail=1
         fi
     done < <(find workflow/skills -path '*/references/*.md' -print0)
+    # Report canonical reference consistency only when all inspected versions agree.
     if [[ "$reference_fail" -eq 0 ]]; then
         pass "All workflow reference templates at version $skill_version"
     fi
 
     installed_reference_fail=0
+    # Inspect installed shared doctrine and playbook directories separately.
     for installed_dir in .goat-flow/skill-docs .goat-flow/skill-docs/playbooks; do
+        # A present reference directory supplies the installed documents to check.
         if [[ -d "$installed_dir" ]]; then
+            # Check each installed reference so one stale document cannot hide behind its siblings.
             while IFS= read -r -d '' f; do
                 ver=$(grep -o 'goat-flow-reference-version: "[^"]*"' "$f" | grep -o '"[^"]*"' | tr -d '"' || true)
+                # A stale reference version can give the user instructions from another release.
                 if [[ "$ver" != "$skill_version" ]]; then
                     fail "Installed shared reference $f has version '$ver', expected '$skill_version'"
                     installed_reference_fail=1
@@ -1303,10 +1445,14 @@ else
             done < <(find "$installed_dir" -type f -name '*.md' -print0)
         fi
     done
+    # Inspect each installed skill root for bundled reference versions.
     while IFS= read -r dir; do
+        # Only a present installed skill root contributes reference-version evidence.
         if [[ -d "$dir" ]]; then
+            # Check each bundled reference rather than assuming it matches its parent skill.
             while IFS= read -r -d '' f; do
                 ver=$(grep -o 'goat-flow-reference-version: "[^"]*"' "$f" | grep -o '"[^"]*"' | tr -d '"' || true)
+                # A bundled reference from another release is installation drift.
                 if [[ "$ver" != "$skill_version" ]]; then
                     fail "Installed skill reference $f has version '$ver', expected '$skill_version'"
                     installed_reference_fail=1
@@ -1314,31 +1460,36 @@ else
             done < <(find "$dir" -path '*/references/*.md' -print0)
         fi
     done < <(manifest_eval skill-roots)
+    # Report installed reference consistency only after all inspected copies agree.
     if [[ "$installed_reference_fail" -eq 0 ]]; then
         pass "All installed references at version $skill_version"
     fi
 
-    # Shipped test fixtures: the installer round-trip integration test copies
-    # these into a temp repo and runs preflight there. Catching stale versions
-    # here avoids a 30s+ round-trip just to learn the fixture drifted.
-    # Dynamic stale-version fixtures created programmatically inside tests
-    # are not on disk under test/fixtures/, so this scan only hits real ones.
+    # Shipped test fixtures: the installer round-trip integration test copies these into a temp repo and runs preflight there.
+    #
+    # Catching stale versions here avoids a 30s+ round-trip just to learn the fixture drifted.
+    # Dynamic stale-version fixtures created programmatically inside tests are not on disk under test/fixtures/, so this scan only hits real ones.
     if [[ -d test/fixtures ]]; then
         fixtures_fail=0
+        # Check fixture skill versions so tests exercise the release being validated.
         while IFS= read -r -d '' f; do
             ver=$(grep -o 'goat-flow-skill-version: "[^"]*"' "$f" | grep -o '"[^"]*"' | tr -d '"' || true)
+            # A fixture declaring another skill version would test an outdated contract.
             if [[ -n "$ver" ]] && [[ "$ver" != "$skill_version" ]]; then
                 fail "Test fixture $f has version '$ver', expected '$skill_version'"
                 fixtures_fail=1
             fi
         done < <(find test/fixtures -name 'SKILL.md' -print0)
+        # Check fixture reference versions alongside their skill definitions.
         while IFS= read -r -d '' f; do
             ver=$(grep -o 'goat-flow-reference-version: "[^"]*"' "$f" | grep -o '"[^"]*"' | tr -d '"' || true)
+            # An outdated fixture reference cannot prove the current shipped contract.
             if [[ "$ver" != "$skill_version" ]]; then
                 fail "Test fixture reference $f has version '$ver', expected '$skill_version'"
                 fixtures_fail=1
             fi
         done < <(find test/fixtures -path '*/references/*.md' -print0)
+        # Report fixture consistency only after its skills and references agree with this package.
         if [[ "$fixtures_fail" -eq 0 ]]; then
             pass "All test fixture skills and references at version $skill_version"
         fi
@@ -1347,7 +1498,9 @@ fi
 
 # Derive instruction file list from manifest once, reuse across sections
 agent_files=()
-if manifest_agent_lines=$(node -e "const m=require('./workflow/manifest.json');for(const a of Object.values(m.agents))console.log(a.instruction_file)" 2>/dev/null); then
+# Use manifest-declared instruction files when the registry can be read.
+if manifest_agent_lines=$(manifest_eval instruction-files 2>/dev/null); then
+    # Collect existing instruction surfaces so later checks cover installed agents only.
     while IFS= read -r af; do
         [[ -f "$af" ]] && agent_files+=("$af")
     done <<< "$manifest_agent_lines"
@@ -1357,6 +1510,7 @@ fi
 
 # ── Version Consistency ──────────────────────────────────────────────
 section "Version Consistency"
+# The package manifest supplies the version used to compare managed artifacts.
 if [[ -f package.json ]]; then
     pkg_version=$(node -e "console.log(require('./package.json').version)")
     pass "package.json ($pkg_version)"
@@ -1366,7 +1520,9 @@ if [[ -f package.json ]]; then
     # .goat-flow/config.yaml version should match package version
     if [[ -f .goat-flow/config.yaml ]]; then
         config_version=$(grep '^version:' .goat-flow/config.yaml | grep -oE '"[^"]+"' | tr -d '"' || true)
+        # Compare a declared configuration version instead of inventing an absent value.
         if [[ -n "$config_version" ]]; then
+            # A configuration version mismatch signals stale project setup.
             if [[ "$config_version" != "$pkg_version" ]]; then
                 fail ".goat-flow/config.yaml version ($config_version) does not match package.json ($pkg_version)"
             else
@@ -1380,6 +1536,7 @@ if [[ -f package.json ]]; then
     # Instruction file headers must match package version
     for ifile in "${agent_files[@]}"; do
         header_version=$(head -1 "$ifile" | grep -oE 'v[0-9]+\.[0-9]+(\.[0-9]+)?' | sed 's/^v//' || true)
+        # An instruction header from another release is reported as version drift.
         if [[ -n "$header_version" ]] && [[ "$header_version" != "$pkg_version" ]]; then
             fail "$ifile header says v${header_version}, expected v${pkg_version}"
         fi
@@ -1397,38 +1554,46 @@ bad_goat_critique_patterns=(
     "confirm ""delegation ""consent once ""before spawning"
 )
 goat_critique_files=("workflow/skills/goat-critique/SKILL.md")
+# Include every installed agent copy when checking delegated critique requirements.
 while IFS= read -r agent_dir; do
     [[ -d "$agent_dir" ]] || continue
     goat_critique_files+=("${agent_dir}/goat-critique/SKILL.md")
 done < <(manifest_eval skill-roots)
 
+# Check canonical and installed critique skills for retired routing exceptions.
 for f in "${goat_critique_files[@]}"; do
     [[ -f "$f" ]] || continue
+    # Each retired exception must stay absent from the current critique contract.
     for pattern in "${bad_goat_critique_patterns[@]}"; do
+        # A retired exception would route the user through an unsupported critique workflow.
         if grep -Fq "$pattern" "$f"; then
             fail "$f contains obsolete goat-critique delegation exception: $pattern"
             contract_ok=false
         fi
     done
 done
+# The critique routing check passes only when no obsolete exception was found.
 if [[ "$contract_ok" == true ]]; then
     pass "goat-critique direct invocation has no obsolete Codex delegation exception"
 fi
 
-# Deployed HTML must never resolve the deprecated unscoped `goat-flow` npm
-# package. Keep this direct grep in preflight even though the TypeScript
-# contract suite also covers user-facing command surfaces: this fails early
-# with the exact deployed file and line.
+# Deployed HTML must never resolve the deprecated unscoped `goat-flow` npm package.
+#
+# Keep this direct grep in preflight even though the TypeScript contract suite also covers user-facing command surfaces: this fails early with the
+# exact deployed file and line.
 site_package_commands_ok=true
+# Inspect published HTML pages for commands that could invoke the wrong npm package.
 for f in docs/site/*.html; do
     [[ -f "$f" ]] || continue
     unscoped_site_commands=$(grep -nE 'npx[[:space:]]+goat-flow([[:space:]]|$)' "$f" || true)
+    # An unscoped package command can send a reader to an unrelated executable.
     if [[ -n "$unscoped_site_commands" ]]; then
         fail "$f contains an unscoped npx goat-flow command"
         printf '%s\n' "$unscoped_site_commands" | details_pipe
         site_package_commands_ok=false
     fi
 done
+# Report correct site command ownership only after every inspected page agrees.
 if [[ "$site_package_commands_ok" == true ]]; then
     pass "Deployed site npx commands name @blundergoat/goat-flow"
 fi
@@ -1464,9 +1629,10 @@ const files = [
       "release-notes.md",
       "skill-playbook-authoring-sync.md",
       "test-selection.md",
+      "writing-agent-facing-instructions.md",
       "writing-sentence-diagnostics.md",
       "writing-structure-diagnostics.md",
-      "writing-style.md",
+      "writing-human-facing-prose.md",
     ].flatMap((name) => [
       `workflow/skills/playbooks/${name}`,
       `.goat-flow/skill-docs/playbooks/${name}`,
@@ -1480,6 +1646,18 @@ const files = [
       `.goat-flow/skill-docs/skill-quality-testing/${name}`,
     ]),
   ] },
+  // Skill bodies use the canonical workflow source alone. `Skill SKILL.md parity` separately proves the four installed mirrors are
+  // byte-identical, so listing every mirror here would report one near-cap skill four times.
+  { cap: 600, paths: ["workflow/skills/goat/SKILL.md"] },
+  { cap: 2500, paths: [
+    "goat-clarity",
+    "goat-critique",
+    "goat-debug",
+    "goat-plan",
+    "goat-qa",
+    "goat-review",
+    "goat-security",
+  ].map((name) => `workflow/skills/${name}/SKILL.md`) },
 ];
 
 function bodyWordCount(file) {
@@ -1503,6 +1681,7 @@ process.stdout.write(
 );
 NODE
 )
+# Surface measured budget headroom so the maintainer can see guidance near its cap.
 if [[ -n "$budget_headroom_output" ]]; then
     pass "ADR-023 headroom above 90%: $budget_headroom_output"
 else
@@ -1519,11 +1698,13 @@ if [[ ${#agent_files[@]} -ge 2 ]]; then
     }
     ref_loop=$(extract_loop "${agent_files[0]}")
     loop_ok=true
+    # Compare each agent's execution loop against the first available instruction surface.
     for af in "${agent_files[@]:1}"; do
         other_loop=$(extract_loop "$af")
         # Simple word-count divergence check (structural drift detection)
         ref_words=$(echo "$ref_loop" | wc -w)
         other_words=$(echo "$other_loop" | wc -w)
+        # An absent execution loop cannot establish instruction consistency.
         if [[ "$ref_words" -eq 0 ]] || [[ "$other_words" -eq 0 ]]; then
             fail "Execution loop missing in $af - copy from ${agent_files[0]}"
             loop_ok=false
@@ -1531,18 +1712,19 @@ if [[ ${#agent_files[@]} -ge 2 ]]; then
             # Check word count ratio - >40% divergence = structural drift
             diff_pct=$(( (ref_words - other_words) * 100 / ref_words ))
             abs_diff=${diff_pct#-}
+            # Large word-count divergence flags a possible workflow mismatch for inspection.
             if [[ "$abs_diff" -gt 40 ]]; then
                 fail "Execution loop in $af diverges from ${agent_files[0]} (${abs_diff}% word count difference)"
                 loop_ok=false
             fi
         fi
     done
+    # Report execution-loop consistency only after every inspected surface passes.
     if $loop_ok; then
         pass "Execution loops consistent across ${#agent_files[@]} agent files"
     fi
 
-    # Router Table path parity (path-based, not label-based - labels drift
-    # across agents but .goat-flow/ paths are consistent)
+    # Router Table path parity (path-based, not label-based - labels drift across agents but .goat-flow/ paths are consistent)
     router_parity_output=$(
         node - "${agent_files[@]}" <<'NODE'
 const fs = require("node:fs");
@@ -1609,6 +1791,7 @@ for (const p of [...allPaths].sort()) {
 if (ok) console.log("PASS\tRouter Table path parity across " + total + " agent files");
 NODE
     )
+    # Render each instruction-safety diagnostic without losing its assigned status.
     while IFS=$'\t' read -r status message; do
         [[ -z "${status:-}" ]] && continue
         case "$status" in
@@ -1621,8 +1804,10 @@ fi
 
 # ── Instruction Parity Contract ──────────────────────────────────────
 section "Instruction Parity Contract"
+# Run the repository-owned instruction parity checker when available.
 if [[ -f scripts/check-instruction-parity.mjs ]]; then
     parity_output=$(node scripts/check-instruction-parity.mjs 2>&1) && parity_exit=0 || parity_exit=$?
+    # A successful parity process supplies the passing verdict shown in the report.
     if [[ "$parity_exit" -eq 0 ]]; then
         pass "$parity_output"
     else
@@ -1638,16 +1823,18 @@ section "Instruction File Quality"
 
 # Line-count check (thresholds from manifest, not hard-coded)
 #
-# String() is load-bearing: console.log of a bare number is inspected, and Node colourizes inspected numbers when
-# FORCE_COLOR is set, which injects ANSI codes into the arithmetic comparisons below and silently skips every
-# per-file verdict.
+# String() is load-bearing: console.log of a bare number is inspected, and Node colourizes inspected numbers when FORCE_COLOR is set, which injects
+# ANSI codes into the arithmetic comparisons below and silently skips every per-file verdict.
 line_target=$(node -e "console.log(String(require('./workflow/manifest.json').instruction_file.line_target))" 2>/dev/null || echo "125")
 line_limit=$(node -e "console.log(String(require('./workflow/manifest.json').instruction_file.line_limit))" 2>/dev/null || echo "150")
 
+# Measure each installed instruction file against the configured context budget.
 for ifile in "${agent_files[@]}"; do
     count=$(wc -l < "$ifile")
+    # Exceeding the hard instruction limit fails preflight because loaded guidance is too large.
     if [[ "$count" -gt "$line_limit" ]]; then
         fail "$ifile exceeds line limit ($count lines, limit $line_limit)"
+    # Exceeding the target stays visible as a warning below the hard limit.
     elif [[ "$count" -gt "$line_target" ]]; then
         warn "$ifile exceeds line target ($count lines, target $line_target)"
     else
@@ -1658,10 +1845,14 @@ done
 # Encyclopedia guard (advisory - downstream projects may have edge cases)
 encyclopedia_patterns="database schema|api reference|endpoint list|table definition|historical background|architecture history|full project overview"
 enc_ok=true
+# Inspect instruction surfaces for content that belongs in an on-demand reference.
 for ifile in "${agent_files[@]}"; do
+    # Only existing instruction files can supply content for this scan.
     if [[ -f "$ifile" ]]; then
         enc_hits=$(grep -inE "$encyclopedia_patterns" "$ifile" || true)
+        # Detected reference-style content is a context-cost warning for the maintainer to review.
         if [[ -n "$enc_hits" ]]; then
+            # Show detected passages separately so the maintainer can locate excess instruction content.
             while IFS= read -r hit; do
                 warn "Encyclopedia content in $ifile: $(echo "$hit" | head -c 120)"
                 enc_ok=false
@@ -1669,6 +1860,7 @@ for ifile in "${agent_files[@]}"; do
         fi
     fi
 done
+# Report a clean content scan only when no encyclopedia-style passages were found.
 if $enc_ok; then
     pass "No encyclopedia content in instruction files"
 fi
@@ -1677,6 +1869,7 @@ fi
 if [[ -f tsconfig.json ]]; then
     section "TypeScript"
 
+    # A successful compiler run validates CLI types and produces the build used by later checks.
     if npx tsc 2>/dev/null; then
         pass "Typecheck + build (dist/ produced)"
     else
@@ -1685,6 +1878,7 @@ if [[ -f tsconfig.json ]]; then
 
     # Dashboard TypeScript (excluded from main tsconfig.json)
     if [[ -f tsconfig.dashboard.json ]]; then
+        # The separate dashboard compiler must pass before its source is considered type-safe.
         if npx tsc -p tsconfig.dashboard.json --noEmit 2>/dev/null; then
             pass "Dashboard typecheck (tsconfig.dashboard.json)"
         else
@@ -1699,40 +1893,55 @@ if [[ -f tsconfig.json ]]; then
         # Count only diagnostic rows, not ESLint's summary/fixability footer.
         lint_errors=$(echo "$lint_output" | grep -Ec '^[[:space:]]*[0-9]+:[0-9]+[[:space:]]+error[[:space:]]' || true)
         lint_warnings=$(echo "$lint_output" | grep -Ec '^[[:space:]]*[0-9]+:[0-9]+[[:space:]]+warning[[:space:]]' || true)
+        # A zero lint exit permits a clean or warning-only verdict from the captured diagnostic rows.
         if [[ "$lint_exit" -eq 0 ]]; then
+            # Warning-only lint remains successful while exposing maintenance work to the developer.
             if [[ "$lint_warnings" -gt 0 ]]; then
                 warn "ESLint (0 errors, $lint_warnings warnings) - run npx eslint ${lint_targets[*]}"
                 echo "$lint_output" | sed -n '1,20p' | details_pipe
+                # Count every warning once after the first row has already incremented the total.
                 if [[ "$lint_warnings" -gt 1 ]]; then
                     warnings=$((warnings + lint_warnings - 1))
                 fi
             else
                 pass "ESLint (0 warnings)"
             fi
+        # Ordinary lint errors fail preflight and retain their diagnostics for repair.
         elif [[ "$lint_errors" -gt 0 ]]; then
             fail "ESLint ($lint_errors errors, $lint_warnings warnings) - run npx eslint ${lint_targets[*]}"
             echo "$lint_output" | sed -n '1,20p' | details_pipe
         else
-            pass "ESLint (0 errors, $lint_warnings warnings)"
+            fail "ESLint execution failed (exit $lint_exit) - run npx eslint ${lint_targets[*]}"
+            echo "$lint_output" | sed -n '1,20p' | details_pipe
         fi
     else
         skip "ESLint (not configured)"
     fi
 
-    # Knip (unused exports, dead code - breaking error). The project graph exceeds
-    # Node's default 4 GiB heap on the supported Node 20 runtime.
-    # --no-gitignore keeps Knip from walking the whole checkout to collect every nested .gitignore.
+    # Knip (unused exports, dead code - breaking error).
     #
-    # That walk, not the analysis, is what exhausts the heap when a developer keeps large gitignored trees under
-    # .goat-flow/scratchpad, and Knip's own `ignore` option cannot help because it filters the report rather than the
-    # file walk. Nothing under src/, test/, or scripts/ is gitignored, so the analysed set is unchanged.
+    # The project graph exceeds Node's default 4 GiB heap on the supported Node 20 runtime. --no-gitignore keeps Knip from walking the whole checkout
+    # to collect every nested .gitignore.
+    #
+    # That walk, not the analysis, is what exhausts the heap when a developer keeps large gitignored trees under .goat-flow/scratchpad, and Knip's own
+    #
+    # `ignore` option cannot help because it filters the report rather than the file walk.
+    # Nothing under src/, test/, or scripts/ is gitignored, so the analysed set is unchanged.
     if command -v npx >/dev/null 2>&1 && npx knip --version >/dev/null 2>&1; then
-        knip_output=$(node --max-old-space-size=5120 node_modules/knip/bin/knip.js --no-progress --no-gitignore 2>&1) && knip_exit=0 || knip_exit=$?
+        knip_command=(
+            node
+            --max-old-space-size=5120
+            node_modules/knip/bin/knip.js
+            --no-progress
+            --no-gitignore
+        )
+        knip_output=$("${knip_command[@]}" 2>&1) && knip_exit=0 || knip_exit=$?
+        # Unused-code analysis passes only after its tool completes successfully.
         if [[ "$knip_exit" -eq 0 ]]; then
             pass "Knip (no unused exports or deps)"
         else
             unused_count=$(echo "$knip_output" | grep -c '^[A-Za-z].*  ' || echo "?")
-            fail "Knip: $unused_count unused exports/types - run npx knip for details"
+            fail "Knip: $unused_count unused exports/types - run ${knip_command[*]} for details"
         fi
     else
         skip "Knip (not installed)"
@@ -1741,6 +1950,7 @@ if [[ -f tsconfig.json ]]; then
     # Prettier format check
     if command -v npx >/dev/null 2>&1 && [[ -f node_modules/.bin/prettier ]]; then
         prettier_output=$(bash scripts/prettier-check.sh 2>&1) && prettier_exit=0 || prettier_exit=$?
+        # Formatting passes only when the repository-owned formatter check succeeds.
         if [[ "$prettier_exit" -eq 0 ]]; then
             pass "Prettier (all formatted)"
         else
@@ -1751,8 +1961,7 @@ if [[ -f tsconfig.json ]]; then
         skip "Prettier (not installed)"
     fi
 
-    # Quality checks (warnings, not failures)
-    # console.log is fine - this is a local CLI tool, not a library
+    # Quality checks (warnings, not failures) console.log is fine - this is a local CLI tool, not a library
 
     any_hits=$(grep -rn ': any\b' src/cli/ --include='*.ts' || true)
     [[ -n "$any_hits" ]] && note "Explicit 'any' types ($(echo "$any_hits" | wc -l) hits)"
@@ -1765,10 +1974,12 @@ if [[ -f package.json ]] && grep -q '"test"' package.json; then
     section "Tests"
     test_reports_coverage=false
     coverage_output=""
+    # Prefer the declared coverage suite so preflight can report actual coverage.
     if grep -q '"test:coverage"' package.json; then
         test_command=(npm run test:coverage)
         test_label="Tests + coverage"
         test_reports_coverage=true
+    # Use the declared fast suite when no coverage command is available.
     elif grep -q '"test:fast"' package.json; then
         test_command=(npm run test:fast)
         test_label="Fast suite"
@@ -1779,6 +1990,7 @@ if [[ -f package.json ]] && grep -q '"test"' package.json; then
     test_output=""
     test_exit=1
     test_timeout_seconds="${GOAT_FLOW_PREFLIGHT_TEST_TIMEOUT_SECONDS:-600}"
+    # A numeric timeout is required before launching the potentially long test suite.
     if [[ "$test_timeout_seconds" =~ ^[0-9]+$ ]]; then
         :
     else
@@ -1792,26 +2004,37 @@ if [[ -f package.json ]] && grep -q '"test"' package.json; then
     pass_count=$(echo "$test_output" | grep '# pass' | grep -oE '[0-9]+' || echo "?")
     fail_count=$(echo "$test_output" | grep '# fail' | grep -oE '[0-9]+' || echo "0")
 
+    # Tests pass only when the process succeeded and reported a real non-zero test count.
     if [[ "$test_exit" -eq 0 ]] && [[ "$test_count" != "0" ]] && [[ "$test_count" != "?" ]]; then
         pass "$test_label passing ($pass_count/$test_count)"
         coverage_output="$test_output"
+    # A successful process with no confirmed tests is an evidence gap, shown as a warning.
     elif [[ "$test_exit" -eq 0 ]] && [[ "$test_count" == "0" || "$test_count" == "?" ]]; then
         warn "No tests found ($pass_count/$test_count) - test suite needs rebuilding"
+    # A timed-out suite fails instead of treating partial output as a completed run.
     elif [[ "$test_exit" -eq 124 ]]; then
         fail "$test_label timed out after ${test_timeout_seconds}s"
+        printf '%s\n' "$test_output" | tail -20 | details_pipe || true
+    # A test command that could not start fails separately from a failing assertion.
+    elif [[ "$test_exit" -eq 127 ]] && [[ "$test_output" == *"[preflight] command failed to start:"* ]]; then
+        fail "$test_label unavailable: command failed to start"
         printf '%s\n' "$test_output" | tail -20 | details_pipe || true
     else
         fail "Tests failed ($fail_count/$test_count failures)"
         grep -m 5 'not ok' <<< "$test_output" | details_pipe || true
     fi
 
+    # Show coverage only when the selected command promised it and returned output.
     if [[ "$test_reports_coverage" == true && -n "$coverage_output" ]]; then
+        # A completed coverage marker is required before reading aggregate percentages.
         if printf '%s\n' "$coverage_output" | grep -Fq '# end of coverage report'; then
             coverage_line=$(printf '%s\n' "$coverage_output" | grep -E '^# all files[[:space:]]*\|' | tail -1 || true)
+            # An aggregate coverage row supplies the three percentages shown to the maintainer.
             if [[ -n "$coverage_line" ]]; then
                 line_coverage=$(printf '%s\n' "$coverage_line" | awk -F'|' '{ gsub(/^[ \t]+|[ \t]+$/, "", $2); print $2 }')
                 branch_coverage=$(printf '%s\n' "$coverage_line" | awk -F'|' '{ gsub(/^[ \t]+|[ \t]+$/, "", $3); print $3 }')
                 function_coverage=$(printf '%s\n' "$coverage_line" | awk -F'|' '{ gsub(/^[ \t]+|[ \t]+$/, "", $4); print $4 }')
+                # Only a complete set of coverage values can produce the visible summary.
                 if [[ -n "$line_coverage" && -n "$branch_coverage" && -n "$function_coverage" ]]; then
                     pass "Coverage (line: ${line_coverage}% / branch: ${branch_coverage}% / function: ${function_coverage}%) [fast suite only]"
                 else
@@ -1829,11 +2052,32 @@ fi
 # ── Dependency Audit ─────────────────────────────────────────────────
 if [[ -f package.json ]]; then
     section "Dependency Audit"
-    audit_output=$(npm audit 2>&1) && audit_exit=0 || audit_exit=$?
+    audit_output=""
+    audit_exit=1
+    audit_timeout_seconds="${GOAT_FLOW_PREFLIGHT_AUDIT_TIMEOUT_SECONDS:-120}"
+    # A numeric timeout is required before launching the dependency advisory check.
+    if [[ "$audit_timeout_seconds" =~ ^[0-9]+$ ]]; then
+        :
+    else
+        warn "Invalid GOAT_FLOW_PREFLIGHT_AUDIT_TIMEOUT_SECONDS=$audit_timeout_seconds; using 120"
+        audit_timeout_seconds=120
+    fi
+    run_command_capture_with_timeout \
+        audit_output audit_exit "$audit_timeout_seconds" "Dependency Audit" npm audit
+    # A successful dependency audit reports that this run found no vulnerabilities.
     if [[ "$audit_exit" -eq 0 ]]; then
         pass "npm audit (0 vulnerabilities)"
+    # A dependency audit timeout leaves security checking incomplete and fails preflight.
+    elif [[ "$audit_exit" -eq 124 ]]; then
+        fail "npm audit timed out after ${audit_timeout_seconds}s"
+        printf '%s\n' "$audit_output" | tail -20 | details_pipe || true
+    # An audit that could not start is an unavailable check, not a clean result.
+    elif [[ "$audit_exit" -eq 127 ]] && [[ "$audit_output" == *"[preflight] command failed to start:"* ]]; then
+        fail "npm audit unavailable: command failed to start"
+        printf '%s\n' "$audit_output" | tail -20 | details_pipe || true
     else
         vuln_summary=$(printf '%s\n' "$audit_output" | grep -E '^[0-9]+ vulnerabilities? ' | tail -1 || true)
+        # An available vulnerability summary explains why the dependency audit failed.
         if [[ -n "$vuln_summary" ]]; then
             fail "npm audit failed - $vuln_summary"
         else
@@ -1853,9 +2097,11 @@ removed_patterns=(
     "--shape"
 )
 adr_clean=true
+# Check retired patterns so removed contracts do not remain in shipped guidance or code.
 for pattern in "${removed_patterns[@]}"; do
     hits=$(grep -rn "$pattern" setup/ workflow/ src/ test/ docs/ ai/ .github/ --include='*.md' --include='*.ts' --include='*.yml' 2>/dev/null \
         | grep -v 'CHANGELOG\|TODO_\|ADR-\|design-rationale\|footguns.*RESOLVED\|decisions/\|preflight-checks' || true)
+    # A surviving retired pattern gives the maintainer concrete locations to repair.
     if [[ -n "$hits" ]]; then
         fail "Removed pattern '$pattern' still found"
         echo "$hits" | head -3 | details_pipe
@@ -1864,16 +2110,15 @@ for pattern in "${removed_patterns[@]}"; do
 done
 $adr_clean && pass "No removed patterns found"
 
-# ── Gruff Policy ─────────────────────────────────────────────────────
-# Enforces the project rule "never disable gruff-ts rules" structurally
-# instead of relying on agent memory (see feedback_gruff_never_disable.md
-# and the gruff cleanup work). Findings get fixed, tuned via
-# thresholds/allowlists, or baselined with rationale - never silenced via
-# `enabled: false`. A single line in .gruff-ts.yaml setting `enabled: false`
-# on any rule fails this check.
+# ── Gruff Policy ───────────────────────────────────────────────────── Enforces the project rule "never disable gruff-ts rules" structurally instead
+# of relying on agent memory (see feedback_gruff_never_disable.md and the gruff cleanup work).
+#
+# Findings get fixed, tuned via thresholds/allowlists, or baselined with rationale - never silenced via `enabled: false`.
+# A single line in .gruff-ts.yaml setting `enabled: false` on any rule fails this check.
 if [[ -f .gruff-ts.yaml ]]; then
     section "Gruff Policy"
     disabled_lines=$(grep -nE '^[[:space:]]*enabled:[[:space:]]*false' .gruff-ts.yaml || true)
+    # An empty disabled-rule list confirms analyzer policy was not weakened to pass checks.
     if [[ -z "$disabled_lines" ]]; then
         pass "No gruff-ts rules disabled (satisfy or tune)"
     else
@@ -1881,17 +2126,21 @@ if [[ -f .gruff-ts.yaml ]]; then
         printf '%s\n' "$disabled_lines" | head -5 | details_pipe
     fi
 
-    # Reviewed warning-debt ratchet: run the repo-local analyzer once and
-    # compare warning stableIdentity debt against the reviewed manifest.
-    # Fails closed on analyzer errors, new or duplicated warnings, worsened
-    # metadata, stale accepted debt, or degraded scan coverage; unchanged
-    # accepted debt stays visible in the row details. Never satisfy this gate
-    # by disabling a rule or raising a threshold.
+    # Reviewed warning-debt ratchet: run the repo-local analyzer once and compare warning stableIdentity debt against the reviewed manifest.
+    # Fails closed on analyzer errors, new or duplicated warnings, worsened metadata, stale accepted debt, or degraded scan coverage; unchanged
+    #
+    # accepted debt stays visible in the row details.
+    # Never satisfy this gate by disabling a rule or raising a threshold.
     if [[ -f scripts/check-gruff-warning-ratchet.mjs ]]; then
         ratchet_output=$(node scripts/check-gruff-warning-ratchet.mjs 2>&1) && ratchet_exit=0 || ratchet_exit=$?
+        # The analyzer ratchet passes only when warnings stay within accepted debt.
         if [[ "$ratchet_exit" -eq 0 ]]; then
             pass "Gruff warning ratchet: accepted debt unchanged or reduced"
             printf '%s\n' "$ratchet_output" | tail -3 | details_pipe
+        # Analyzer startup failure cannot establish whether warning debt changed.
+        elif [[ "$ratchet_exit" -eq 2 ]]; then
+            fail "Gruff warning ratchet unavailable: analyzer could not run"
+            printf '%s\n' "$ratchet_output" | head -20 | details_pipe
         else
             fail "Gruff warning ratchet failed (exit $ratchet_exit)"
             printf '%s\n' "$ratchet_output" | head -20 | details_pipe
@@ -1907,6 +2156,7 @@ fi
 if [[ -f dist/cli/cli.js ]]; then
     section "GOAT Flow Audit"
     audit_output=$(node dist/cli/cli.js audit . --format text 2>&1) && audit_exit=0 || audit_exit=$?
+    # Only a successful deterministic project audit earns a passing preflight row.
     if [[ "$audit_exit" -eq 0 ]]; then
         pass "Audit passes"
     else
@@ -1917,35 +2167,53 @@ else
     skip "GOAT Flow Audit (dist/cli/cli.js not built)"
 fi
 
-# ── Learning-Loop Schema ──────────────────────────────────────────────
-# Gates footgun schema rules: machine-simple status (active|resolved),
+# ── Learning-Loop Schema ────────────────────────────────────────────── Gates footgun schema rules: machine-simple status (active|resolved),
 # file:line or (search:) evidence on active entries, resolved-below-section.
 if [[ -f dist/cli/cli.js ]]; then
     section "Learning-Loop Schema"
-    stats_output=$(node dist/cli/cli.js stats . --check 2>&1) && stats_exit=0 || stats_exit=$?
+    stats_output=$(node dist/cli/cli.js stats . --check --format text 2>&1) && stats_exit=0 || stats_exit=$?
+    # A successful memory check still needs its warning summary preserved.
     if [[ "$stats_exit" -eq 0 ]]; then
-        pass "Footgun/lesson schema passes"
+        stats_summary=$(printf '%s\n' "$stats_output" | head -1)
+        # The memory checker's warning receipt supplies the number shown to the maintainer.
+        if [[ "$stats_summary" =~ ^stats\ --check:\ PASS\ \(([0-9]+)\ warnings?\)$ ]]; then
+            stats_warning_count="${BASH_REMATCH[1]}"
+            stats_warning_label="warning"
+            [[ "$stats_warning_count" -ne 1 ]] && stats_warning_label="warnings"
+            warn "Footgun/lesson schema passes (${stats_warning_count} ${stats_warning_label})"
+            printf '%s\n' "$stats_output" | sed -n '2,11p' | details_pipe
+            # Count every memory warning once after recording the first visible warning row.
+            if [[ "$stats_warning_count" -gt 1 ]]; then
+                warnings=$((warnings + stats_warning_count - 1))
+            fi
+        # The exact clean receipt confirms schema validation completed without memory warnings.
+        elif [[ "$stats_summary" == "stats --check: PASS" ]]; then
+            pass "Footgun/lesson schema passes"
+        else
+            fail "stats --check returned an unrecognized passing result"
+            printf '%s\n' "$stats_output" | head -10 | details_pipe
+        fi
     else
         fail "Footgun/lesson schema violations (exit $stats_exit)"
-        echo "$stats_output" | head -10 | details_pipe
+        printf '%s\n' "$stats_output" | head -10 | details_pipe
     fi
 else
     skip "Learning-Loop Schema (dist/cli/cli.js not built)"
 fi
 
-# ── Content Drift ────────────────────────────────────────────────────
-# Sibling auditor: surface `audit --check-content` (cold-path content lint
-# + dashboard view-name drift) in the preflight gate so a green preflight
-# cannot hide warning-severity drift in code-map.md, docs/dashboard.md, or
+# ── Content Drift ──────────────────────────────────────────────────── Sibling auditor: surface `audit --check-content` (cold-path content lint +
+#
+# dashboard view-name drift) in the preflight gate so a green preflight cannot hide warning-severity drift in code-map.md, docs/dashboard.md, or
 # skill-playbook prose.
 if [[ -f dist/cli/cli.js ]]; then
     section "Content Drift"
     content_output=$(node dist/cli/cli.js audit . --check-content --format text 2>&1) && content_exit=0 || content_exit=$?
+    # A successful content scan means no blocking drift; informational findings may remain.
     if [[ "$content_exit" -eq 0 ]]; then
-        # exit 0 = no warning-severity drift. INFO findings (e.g.
-        # non-actionable-remember) are surfaced inside the audit text but
-        # do not gate preflight on their own.
+        # exit 0 = no warning-severity drift.
+        # INFO findings (e.g. non-actionable-remember) are surfaced inside the audit text but do not gate preflight on their own.
         info_count=$(printf '%s\n' "$content_output" | grep -cE '^\s*\[?(33mINFO|INFO)' || true)
+        # Keep informational findings visible without promoting them to lint failures.
         if [[ "${info_count:-0}" -gt 0 ]]; then
             pass "Cold-path content lint clean (${info_count} info)"
         else
@@ -1963,13 +2231,14 @@ fi
 if [[ -f dist/cli/audit/check-goat-flow.js ]]; then
     section "Doc/Code Drift"
 
-    # B.8a: Architecture count validation
-    # Pipe through grep to strip any stray node diagnostics down to a bare number.
+    # B.8a: Architecture count validation Pipe through grep to strip any stray node diagnostics down to a bare number.
     build_count=$(node --input-type=module -e "const s=await import('./dist/cli/audit/check-goat-flow.js');const a=await import('./dist/cli/audit/check-agent-setup.js');console.log(s.SETUP_CHECKS.length+a.AGENT_CHECKS.length)" 2>/dev/null | grep -oE '^[0-9]+$' | tail -1 || echo "")
     quality_count=$(node --input-type=module -e "const q=await import('./dist/cli/audit/harness/index.js');console.log(q.HARNESS_CHECKS.length)" 2>/dev/null | grep -oE '^[0-9]+$' | tail -1 || echo "")
 
     setup_count=""
+    # Compare documented counts only when the architecture and measured totals are available.
     if [[ -f .goat-flow/architecture.md ]] && [[ -n "$build_count" ]] && [[ -n "$quality_count" ]]; then
+        # The architecture must describe check totals produced by the live registry.
         if grep -Fq "${build_count} build" .goat-flow/architecture.md && grep -Fq "${quality_count} AI harness" .goat-flow/architecture.md; then
             pass "Architecture doc counts match code (build: ${build_count}, AI harness: ${quality_count})"
         else
@@ -1978,7 +2247,9 @@ if [[ -f dist/cli/audit/check-goat-flow.js ]]; then
         # B.8a2: Sub-breakdown validation (setup + agent)
         setup_count=$(node --input-type=module -e "const s=await import('./dist/cli/audit/check-goat-flow.js');console.log(s.SETUP_CHECKS.length)" 2>/dev/null | grep -oE '^[0-9]+$' | tail -1 || echo "")
         agent_count=$(node --input-type=module -e "const a=await import('./dist/cli/audit/check-agent-setup.js');console.log(a.AGENT_CHECKS.length)" 2>/dev/null | grep -oE '^[0-9]+$' | tail -1 || echo "")
+        # Available setup and agent subtotals allow validation of the documented breakdown.
         if [[ -n "$setup_count" ]] && [[ -n "$agent_count" ]]; then
+            # Documented subtotals must agree with the current registry before the breakdown passes.
             if grep -Fq "${setup_count} setup" .goat-flow/architecture.md && grep -Fq "${agent_count} agent" .goat-flow/architecture.md; then
                 pass "Architecture doc sub-breakdown matches code (setup: ${setup_count}, agent: ${agent_count})"
             else
@@ -1989,22 +2260,24 @@ if [[ -f dist/cli/audit/check-goat-flow.js ]]; then
         skip "Architecture count validation (dist/ not fully built or architecture.md missing)"
     fi
 
-    # B.8a3: Downstream doc sub-breakdown drift
-    # Architecture.md validated above. This catches stale sub-breakdown numbers
-    # in other current-state docs that reference the same counts.
-    # Excludes: CHANGELOG.md and workflow/manifest-snapshots/** (frozen per
-    # release), .goat-flow/logs/ (historical), .goat-flow/scratchpad/ (WIP),
+    # B.8a3: Downstream doc sub-breakdown drift Architecture.md validated above.
+    # This catches stale sub-breakdown numbers in other current-state docs that reference the same counts.
+    #
+    # Excludes: CHANGELOG.md and workflow/manifest-snapshots/** (frozen per release), .goat-flow/logs/ (historical), .goat-flow/scratchpad/ (WIP),
     # .goat-flow/learning-loop/lessons/ (narrative may include historical numbers).
     if [[ -n "$setup_count" ]]; then
         b8a3_ok=true
+        # Check downstream instructions and orientation docs for stale setup-check totals.
         for doc in CLAUDE.md AGENTS.md .goat-flow/code-map.md CONTRIBUTING.md; do
             [[ -f "$doc" ]] || continue
             stale=$(grep -oE '[0-9]+ setup' "$doc" 2>/dev/null | grep -Fv "${setup_count} setup" | head -1 || true)
+            # A stale published count can mislead agents about coverage and needs repair.
             if [[ -n "$stale" ]]; then
                 fail "Downstream doc sub-breakdown drift in ${doc}: found '${stale}' (expected '${setup_count} setup')"
                 b8a3_ok=false
             fi
         done
+        # Report downstream count consistency only when no stale total was found.
         if $b8a3_ok; then
             pass "Downstream docs match setup sub-breakdown (${setup_count} setup)"
         fi
@@ -2014,20 +2287,22 @@ if [[ -f dist/cli/audit/check-goat-flow.js ]]; then
     if [[ -n "$build_count" ]]; then
         check_ids=$(node --input-type=module -e "const s=await import('./dist/cli/audit/check-goat-flow.js');const a=await import('./dist/cli/audit/check-agent-setup.js');[...s.SETUP_CHECKS,...a.AGENT_CHECKS].forEach(c=>console.log(c.id))" 2>/dev/null || echo "")
         b8b_ok=true
+        # Check documented audit IDs against the live registry before agents rely on them.
         while IFS= read -r ref; do
             id=$(echo "$ref" | grep -oP '[\w.-]+' | tail -1)
+            # An ID missing from the registry sends readers to a check that cannot run.
             if [[ -n "$id" ]] && ! echo "$check_ids" | grep -q "^${id}$"; then
                 fail "Setup doc references non-existent check ID: $id"
                 b8b_ok=false
             fi
         done < <(grep -ohP '\(check [\w.-]+\)' workflow/setup/*.md 2>/dev/null || true)
+        # Report valid documented check IDs only when every inspected reference resolves.
         if $b8b_ok; then
             pass "Setup doc check IDs are valid"
         fi
     fi
 
-    # B.8d: code-map.md scripts list matches filesystem (catches drift like
-    # code-map listing 3 scripts when scripts/ actually has 14).
+    # B.8d: code-map.md scripts list matches filesystem (catches drift like code-map listing 3 scripts when scripts/ actually has 14).
     if [[ -f .goat-flow/code-map.md ]]; then
         listed_scripts=$(awk '
             /^## scripts\/ -- Shell scripts/ { in_section=1; next }
@@ -2035,6 +2310,7 @@ if [[ -f dist/cli/audit/check-goat-flow.js ]]; then
             in_section
         ' .goat-flow/code-map.md | grep -oE '[a-z][a-zA-Z0-9_.-]*\.(sh|mjs)' | sort -u || true)
         actual_scripts=$(find scripts/ -maxdepth 1 -type f \( -name '*.sh' -o -name '*.mjs' \) -printf '%f\n' | sort -u)
+        # The code-map script list must match the current script inventory to remain useful.
         if [[ "$listed_scripts" == "$actual_scripts" ]]; then
             pass "code-map.md scripts list matches scripts/ filesystem"
         else
@@ -2047,12 +2323,15 @@ fi
 # Check template-refs.ts doesn't reference missing workflow docs
 if [[ -f src/cli/prompt/template-refs.ts ]]; then
     stale_refs=0
+    # Inspect template paths used by setup guidance before reporting their references intact.
     while IFS= read -r template_path; do
+        # A missing template path would break the setup workflow that consumes it.
         if [[ ! -f "$template_path" ]]; then
             fail "template-refs.ts references missing: $template_path"
             stale_refs=1
         fi
     done < <(grep -v '^\s*//' src/cli/prompt/template-refs.ts | grep -oE "workflow/[^'\"]*\.md" | sort -u)
+    # Report intact template references only when every inspected path exists.
     if [[ "$stale_refs" -eq 0 ]]; then
         pass "template-refs.ts: all referenced workflow docs exist"
     fi
@@ -2067,7 +2346,9 @@ if [[ -f dist/cli/audit/harness/index.js ]] && [[ -f src/dashboard/views/home.ht
     " 2>/dev/null || echo "")
     html_keys=$(grep -oP "concernKeys:\s*\[([^\]]+)\]" src/dashboard/views/home.html \
         | head -1 | grep -oP "'[^']+'" | tr -d "'" | sort | paste -sd, 2>/dev/null || echo "")
+    # Both the registry and dashboard markup must supply concern keys before comparison.
     if [[ -n "$code_keys" ]] && [[ -n "$html_keys" ]]; then
+        # Matching concern keys keep the dashboard aligned with the harness checks it presents.
         if [[ "$code_keys" == "$html_keys" ]]; then
             pass "Dashboard concern keys match harness checks"
         else
@@ -2080,6 +2361,7 @@ fi
 
 # B.8e: Dashboard view-name prose sync
 if [[ -f workflow/manifest.json ]] && [[ -f .goat-flow/architecture.md ]]; then
+    # Validate documented dashboard view names against current navigation.
     if dashboard_view_doc_check=$(node --input-type=module <<'NODE'
 import { readFileSync } from "node:fs";
 
@@ -2111,7 +2393,9 @@ fi
 
 # ── Skill Docs Sync ─────────────────────────────────────────────────
 section "Skill Docs Sync"
+# Matching canonical and installed bytes keep the agent's reference guidance consistent.
 if [[ -f workflow/skills/reference/README.md ]] && [[ -f .goat-flow/skill-docs/README.md ]]; then
+    # Matching canonical and installed bytes keep the agent's reference guidance consistent.
     if diff -q workflow/skills/reference/README.md .goat-flow/skill-docs/README.md >/dev/null 2>&1; then
         pass "skill-docs README.md: template and installed copy match"
     else
@@ -2120,7 +2404,9 @@ if [[ -f workflow/skills/reference/README.md ]] && [[ -f .goat-flow/skill-docs/R
 else
     skip "skill-docs README.md sync (one or both files missing)"
 fi
+# Matching canonical and installed bytes keep the agent's reference guidance consistent.
 if [[ -f workflow/skills/reference/skill-preamble.md ]] && [[ -f .goat-flow/skill-docs/skill-preamble.md ]]; then
+    # Matching canonical and installed bytes keep the agent's reference guidance consistent.
     if diff -q workflow/skills/reference/skill-preamble.md .goat-flow/skill-docs/skill-preamble.md >/dev/null 2>&1; then
         pass "skill-preamble.md: template and installed copy match"
     else
@@ -2129,7 +2415,9 @@ if [[ -f workflow/skills/reference/skill-preamble.md ]] && [[ -f .goat-flow/skil
 else
     skip "skill-preamble.md sync (one or both files missing)"
 fi
+# Matching canonical and installed bytes keep the agent's reference guidance consistent.
 if [[ -f workflow/skills/reference/skill-conventions.md ]] && [[ -f .goat-flow/skill-docs/skill-conventions.md ]]; then
+    # Matching canonical and installed bytes keep the agent's reference guidance consistent.
     if diff -q workflow/skills/reference/skill-conventions.md .goat-flow/skill-docs/skill-conventions.md >/dev/null 2>&1; then
         pass "skill-conventions.md: template and installed copy match"
     else
@@ -2138,7 +2426,9 @@ if [[ -f workflow/skills/reference/skill-conventions.md ]] && [[ -f .goat-flow/s
 else
     skip "skill-conventions.md sync (one or both files missing)"
 fi
+# Matching canonical and installed bytes keep the agent's reference guidance consistent.
 if [[ -f workflow/skills/playbooks/README.md ]] && [[ -f .goat-flow/skill-docs/playbooks/README.md ]]; then
+    # Matching canonical and installed bytes keep the agent's reference guidance consistent.
     if diff -q workflow/skills/playbooks/README.md .goat-flow/skill-docs/playbooks/README.md >/dev/null 2>&1; then
         pass "skill-docs playbooks README.md: template and installed copy match"
     else
@@ -2147,7 +2437,9 @@ if [[ -f workflow/skills/playbooks/README.md ]] && [[ -f .goat-flow/skill-docs/p
 else
     skip "skill-docs playbooks README.md sync (one or both files missing)"
 fi
+# Matching canonical and installed bytes keep the agent's reference guidance consistent.
 if [[ -f workflow/skills/playbooks/browser-use.md ]] && [[ -f .goat-flow/skill-docs/playbooks/browser-use.md ]]; then
+    # Matching canonical and installed bytes keep the agent's reference guidance consistent.
     if diff -q workflow/skills/playbooks/browser-use.md .goat-flow/skill-docs/playbooks/browser-use.md >/dev/null 2>&1; then
         pass "browser-use.md: template and installed copy match"
     else
@@ -2156,7 +2448,9 @@ if [[ -f workflow/skills/playbooks/browser-use.md ]] && [[ -f .goat-flow/skill-d
 else
     skip "browser-use.md sync (one or both files missing)"
 fi
+# Matching canonical and installed bytes keep the agent's reference guidance consistent.
 if [[ -f workflow/skills/playbooks/code-comments.md ]] && [[ -f .goat-flow/skill-docs/playbooks/code-comments.md ]]; then
+    # Matching canonical and installed bytes keep the agent's reference guidance consistent.
     if diff -q workflow/skills/playbooks/code-comments.md .goat-flow/skill-docs/playbooks/code-comments.md >/dev/null 2>&1; then
         pass "code-comments.md: template and installed copy match"
     else
@@ -2165,7 +2459,9 @@ if [[ -f workflow/skills/playbooks/code-comments.md ]] && [[ -f .goat-flow/skill
 else
     skip "code-comments.md sync (one or both files missing)"
 fi
+# Matching canonical and installed bytes keep the agent's reference guidance consistent.
 if [[ -f workflow/skills/playbooks/gruff-code-quality.md ]] && [[ -f .goat-flow/skill-docs/playbooks/gruff-code-quality.md ]]; then
+    # Matching canonical and installed bytes keep the agent's reference guidance consistent.
     if diff -q workflow/skills/playbooks/gruff-code-quality.md .goat-flow/skill-docs/playbooks/gruff-code-quality.md >/dev/null 2>&1; then
         pass "gruff-code-quality.md: template and installed copy match"
     else
@@ -2174,7 +2470,9 @@ if [[ -f workflow/skills/playbooks/gruff-code-quality.md ]] && [[ -f .goat-flow/
 else
     skip "gruff-code-quality.md sync (one or both files missing)"
 fi
+# Matching canonical and installed bytes keep the agent's reference guidance consistent.
 if [[ -f workflow/skills/playbooks/naming-and-placement.md ]] && [[ -f .goat-flow/skill-docs/playbooks/naming-and-placement.md ]]; then
+    # Matching canonical and installed bytes keep the agent's reference guidance consistent.
     if diff -q workflow/skills/playbooks/naming-and-placement.md .goat-flow/skill-docs/playbooks/naming-and-placement.md >/dev/null 2>&1; then
         pass "naming-and-placement.md: template and installed copy match"
     else
@@ -2183,7 +2481,9 @@ if [[ -f workflow/skills/playbooks/naming-and-placement.md ]] && [[ -f .goat-flo
 else
     skip "naming-and-placement.md sync (one or both files missing)"
 fi
+# Matching canonical and installed bytes keep the agent's reference guidance consistent.
 if [[ -f workflow/skills/playbooks/observability.md ]] && [[ -f .goat-flow/skill-docs/playbooks/observability.md ]]; then
+    # Matching canonical and installed bytes keep the agent's reference guidance consistent.
     if diff -q workflow/skills/playbooks/observability.md .goat-flow/skill-docs/playbooks/observability.md >/dev/null 2>&1; then
         pass "observability.md: template and installed copy match"
     else
@@ -2192,7 +2492,9 @@ if [[ -f workflow/skills/playbooks/observability.md ]] && [[ -f .goat-flow/skill
 else
     skip "observability.md sync (one or both files missing)"
 fi
+# Matching canonical and installed bytes keep the agent's reference guidance consistent.
 if [[ -f workflow/skills/playbooks/changelog.md ]] && [[ -f .goat-flow/skill-docs/playbooks/changelog.md ]]; then
+    # Matching canonical and installed bytes keep the agent's reference guidance consistent.
     if diff -q workflow/skills/playbooks/changelog.md .goat-flow/skill-docs/playbooks/changelog.md >/dev/null 2>&1; then
         pass "changelog.md: template and installed copy match"
     else
@@ -2201,7 +2503,9 @@ if [[ -f workflow/skills/playbooks/changelog.md ]] && [[ -f .goat-flow/skill-doc
 else
     skip "changelog.md sync (one or both files missing)"
 fi
+# Matching canonical and installed bytes keep the agent's reference guidance consistent.
 if [[ -f workflow/skills/playbooks/page-capture.md ]] && [[ -f .goat-flow/skill-docs/playbooks/page-capture.md ]]; then
+    # Matching canonical and installed bytes keep the agent's reference guidance consistent.
     if diff -q workflow/skills/playbooks/page-capture.md .goat-flow/skill-docs/playbooks/page-capture.md >/dev/null 2>&1; then
         pass "page-capture.md: template and installed copy match"
     else
@@ -2210,7 +2514,9 @@ if [[ -f workflow/skills/playbooks/page-capture.md ]] && [[ -f .goat-flow/skill-
 else
     skip "page-capture.md sync (one or both files missing)"
 fi
+# Matching canonical and installed bytes keep the agent's reference guidance consistent.
 if [[ -f workflow/skills/playbooks/release-notes.md ]] && [[ -f .goat-flow/skill-docs/playbooks/release-notes.md ]]; then
+    # Matching canonical and installed bytes keep the agent's reference guidance consistent.
     if diff -q workflow/skills/playbooks/release-notes.md .goat-flow/skill-docs/playbooks/release-notes.md >/dev/null 2>&1; then
         pass "release-notes.md: template and installed copy match"
     else
@@ -2221,6 +2527,7 @@ else
 fi
 # Routed writing diagnostics must match the installed copies users load on demand.
 if [[ -f workflow/skills/playbooks/writing-sentence-diagnostics.md ]] && [[ -f .goat-flow/skill-docs/playbooks/writing-sentence-diagnostics.md ]]; then
+    # Matching canonical and installed bytes keep the agent's reference guidance consistent.
     if diff -q workflow/skills/playbooks/writing-sentence-diagnostics.md .goat-flow/skill-docs/playbooks/writing-sentence-diagnostics.md >/dev/null 2>&1; then
         pass "writing-sentence-diagnostics.md: template and installed copy match"
     else
@@ -2229,7 +2536,9 @@ if [[ -f workflow/skills/playbooks/writing-sentence-diagnostics.md ]] && [[ -f .
 else
     skip "writing-sentence-diagnostics.md sync (one or both files missing)"
 fi
+# Matching canonical and installed bytes keep the agent's reference guidance consistent.
 if [[ -f workflow/skills/playbooks/writing-structure-diagnostics.md ]] && [[ -f .goat-flow/skill-docs/playbooks/writing-structure-diagnostics.md ]]; then
+    # Matching canonical and installed bytes keep the agent's reference guidance consistent.
     if diff -q workflow/skills/playbooks/writing-structure-diagnostics.md .goat-flow/skill-docs/playbooks/writing-structure-diagnostics.md >/dev/null 2>&1; then
         pass "writing-structure-diagnostics.md: template and installed copy match"
     else
@@ -2238,15 +2547,27 @@ if [[ -f workflow/skills/playbooks/writing-structure-diagnostics.md ]] && [[ -f 
 else
     skip "writing-structure-diagnostics.md sync (one or both files missing)"
 fi
-# Consumers receive prose-style guidance; a drifted copy teaches the wrong scope gate.
-if [[ -f workflow/skills/playbooks/writing-style.md ]] && [[ -f .goat-flow/skill-docs/playbooks/writing-style.md ]]; then
-    if diff -q workflow/skills/playbooks/writing-style.md .goat-flow/skill-docs/playbooks/writing-style.md >/dev/null 2>&1; then
-        pass "writing-style.md: template and installed copy match"
+# Consumers receive agent-document authoring guidance; a drifted copy teaches the wrong ladder.
+if [[ -f workflow/skills/playbooks/writing-agent-facing-instructions.md ]] && [[ -f .goat-flow/skill-docs/playbooks/writing-agent-facing-instructions.md ]]; then
+    # Matching canonical and installed bytes keep the agent's reference guidance consistent.
+    if diff -q workflow/skills/playbooks/writing-agent-facing-instructions.md .goat-flow/skill-docs/playbooks/writing-agent-facing-instructions.md >/dev/null 2>&1; then
+        pass "writing-agent-facing-instructions.md: template and installed copy match"
     else
-        fail "writing-style.md: template (workflow/skills/playbooks/) and installed (.goat-flow/skill-docs/playbooks/) differ"
+        fail "writing-agent-facing-instructions.md: template (workflow/skills/playbooks/) and installed (.goat-flow/skill-docs/playbooks/) differ"
     fi
 else
-    skip "writing-style.md sync (one or both files missing)"
+    skip "writing-agent-facing-instructions.md sync (one or both files missing)"
+fi
+# Consumers receive prose-style guidance; a drifted copy teaches the wrong scope gate.
+if [[ -f workflow/skills/playbooks/writing-human-facing-prose.md ]] && [[ -f .goat-flow/skill-docs/playbooks/writing-human-facing-prose.md ]]; then
+    # Matching canonical and installed bytes keep the agent's reference guidance consistent.
+    if diff -q workflow/skills/playbooks/writing-human-facing-prose.md .goat-flow/skill-docs/playbooks/writing-human-facing-prose.md >/dev/null 2>&1; then
+        pass "writing-human-facing-prose.md: template and installed copy match"
+    else
+        fail "writing-human-facing-prose.md: template (workflow/skills/playbooks/) and installed (.goat-flow/skill-docs/playbooks/) differ"
+    fi
+else
+    skip "writing-human-facing-prose.md sync (one or both files missing)"
 fi
 # Hook maintainers need the same policy-test workflow that consumer agents receive.
 if [[ -f workflow/skills/playbooks/hook-policy-testing.md ]] && [[ -f .goat-flow/skill-docs/playbooks/hook-policy-testing.md ]]; then
@@ -2272,6 +2593,7 @@ else
 fi
 # Test decisions must not differ between maintainers and installed consumers.
 if [[ -f workflow/skills/playbooks/test-selection.md ]] && [[ -f .goat-flow/skill-docs/playbooks/test-selection.md ]]; then
+    # Matching canonical and installed bytes keep the agent's reference guidance consistent.
     if diff -q workflow/skills/playbooks/test-selection.md .goat-flow/skill-docs/playbooks/test-selection.md >/dev/null 2>&1; then
         pass "test-selection.md: template and installed copy match"
     else
@@ -2280,7 +2602,9 @@ if [[ -f workflow/skills/playbooks/test-selection.md ]] && [[ -f .goat-flow/skil
 else
     skip "test-selection.md sync (one or both files missing)"
 fi
+# Matching canonical and installed bytes keep the agent's reference guidance consistent.
 if [[ -f workflow/skills/playbooks/skill-quality-testing.md ]] && [[ -f .goat-flow/skill-docs/skill-quality-testing/README.md ]]; then
+    # Matching canonical and installed bytes keep the agent's reference guidance consistent.
     if diff -q workflow/skills/playbooks/skill-quality-testing.md .goat-flow/skill-docs/skill-quality-testing/README.md >/dev/null 2>&1; then
         pass "skill-quality-testing.md: template and installed copy match"
     else
@@ -2289,10 +2613,13 @@ if [[ -f workflow/skills/playbooks/skill-quality-testing.md ]] && [[ -f .goat-fl
 else
     skip "skill-quality-testing.md sync (one or both files missing)"
 fi
+# Compare each topical skill-testing reference with its installed counterpart.
 for topical in tdd-iteration adversarial-framing deployment; do
     tpl="workflow/skills/playbooks/skill-quality-testing/${topical}.md"
     inst=".goat-flow/skill-docs/skill-quality-testing/${topical}.md"
+    # Matching canonical and installed bytes keep the agent's reference guidance consistent.
     if [[ -f "$tpl" ]] && [[ -f "$inst" ]]; then
+        # Matching canonical and installed bytes keep the agent's reference guidance consistent.
         if diff -q "$tpl" "$inst" >/dev/null 2>&1; then
             pass "skill-quality-testing/${topical}.md: template and installed copy match"
         else
@@ -2303,33 +2630,39 @@ for topical in tdd-iteration adversarial-framing deployment; do
     fi
 done
 
-# ── Skill SKILL.md Parity ────────────────────────────────────────────
-# Byte-exact diff (bash) for speed. For semantic comparison (frontmatter key
-# reorder, trailing whitespace), see `goat-flow audit --check-drift` which
-# adds YAML-aware normalisation. Both paths coexist for backward compatibility.
+# ── Skill SKILL.md Parity ──────────────────────────────────────────── Byte-exact diff (bash) for speed.
+#
+# For semantic comparison (frontmatter key reorder, trailing whitespace), see `goat-flow audit --check-drift` which adds YAML-aware normalisation.
+# Both paths coexist for backward compatibility.
 section "Skill SKILL.md Parity"
 skill_parity_ok=true
+# Check supported skills for installed workflows that diverge from canonical source.
 while IFS= read -r skill_name; do
+    # Inspect every declared skill file, including supporting references.
     while IFS= read -r relative_file; do
         [[ -n "$relative_file" ]] || continue
         template="workflow/skills/${skill_name}/${relative_file}"
+        # A missing canonical skill file means the release cannot be installed completely.
         if [[ ! -f "$template" ]]; then
             fail "Skill template missing: ${template}"
             skill_parity_ok=false
             continue
         fi
+        # Compare installed agent roots while leaving absent runtimes out of this parity check.
         while IFS= read -r agent_dir; do
-            # Skip manifest-declared agent roots that aren't installed in this
-            # project. Single-agent consumer installs (only .claude/ or only
-            # .agents/) would otherwise get "Skill file missing" failures for
-            # every uninstalled agent tree - phantom drift.
+            # Skip manifest-declared agent roots that aren't installed in this project.
+            #
+            # Single-agent consumer installs (only .claude/ or only .agents/) would otherwise get "Skill file missing" failures for every uninstalled
+            # agent tree - phantom drift.
             [[ -d "$agent_dir" ]] || continue
             installed="${agent_dir}/${skill_name}/${relative_file}"
+            # A missing installed skill file leaves the agent without part of its declared workflow.
             if [[ ! -f "$installed" ]]; then
                 fail "Skill file missing: ${installed}"
                 skill_parity_ok=false
                 continue
             fi
+            # Different installed skill bytes can give agents inconsistent instructions and fail parity.
             if ! diff -q "$template" "$installed" >/dev/null 2>&1; then
                 fail "Skill file diverged: ${template} vs ${installed}"
                 skill_parity_ok=false
@@ -2337,21 +2670,23 @@ while IFS= read -r skill_name; do
         done < <(manifest_eval skill-roots)
     done < <(manifest_eval skill-files "$skill_name")
 done < <(manifest_eval supported-skills)
+# Report skill parity only after all inspected canonical and installed files agree.
 if [[ "$skill_parity_ok" == true ]]; then
     pass "All installed skill files match workflow templates"
 fi
 
 # ── Path Integrity ───────────────────────────────────────────────────
 section "Path Integrity"
+# A successful path-integrity check confirms inspected internal references resolve.
 if bash scripts/check-path-integrity.sh . >/dev/null 2>&1; then
     pass "All internal path references resolve"
 else
-    # Process substitution keeps the `while` body in the current shell, so
-    # fail() correctly increments the global error counter (cmd | while
-    # reads in a subshell and counter mutations get lost). The first
-    # invocation captures stdout into a variable so set -e + pipefail
-    # don't kill the script when the helper exits non-zero.
+    # Process substitution keeps the `while` body in the current shell, so fail() correctly increments the global error counter (cmd | while reads in
+    #
+    # a subshell and counter mutations get lost).
+    # The first invocation captures stdout into a variable so set -e + pipefail don't kill the script when the helper exits non-zero.
     pi_output=$(bash scripts/check-path-integrity.sh . 2>&1 || true)
+    # Show each broken internal reference as an actionable preflight failure.
     while IFS= read -r line; do
         fail "$line"
     done < <(printf '%s\n' "$pi_output" | grep "^FAIL:" || true)
@@ -2359,11 +2694,13 @@ fi
 
 # ── Markdown Links ───────────────────────────────────────────────────
 section "Markdown Links"
+# A successful link report confirms the inspected documentation links resolve.
 if bash scripts/check-markdown-links.sh . 2>&1 | grep -q "^All"; then
     link_count=$(bash scripts/check-markdown-links.sh . 2>&1 | grep -oP '\d+' | head -1)
     pass "All $link_count markdown links resolve"
 else
     ml_output=$(bash scripts/check-markdown-links.sh . 2>&1 || true)
+    # Show each broken Markdown link separately so the maintainer can repair it.
     while IFS= read -r line; do
         fail "$line"
     done < <(printf '%s\n' "$ml_output" | grep "^BROKEN" || true)
@@ -2371,8 +2708,10 @@ fi
 
 # ── Package README Links ─────────────────────────────────────────────
 section "Package README Links"
+# Run the package-link checker when this checkout provides it.
 if [[ -f scripts/check-package-readme-links.mjs ]]; then
     package_link_output=$(node scripts/check-package-readme-links.mjs 2>&1) && package_link_exit=0 || package_link_exit=$?
+    # A successful package-link check validates links in the published README context.
     if [[ "$package_link_exit" -eq 0 ]]; then
         pass "$package_link_output"
     else
@@ -2383,8 +2722,7 @@ else
     skip "Package README link check (scripts/check-package-readme-links.mjs missing)"
 fi
 
-# ── Summary ──────────────────────────────────────────────────────────
-# render_report runs from the EXIT trap registered near the top.
+# ── Summary ────────────────────────────────────────────────────────── render_report runs from the EXIT trap registered near the top.
 if [[ "$errors" -gt 0 ]]; then
     exit 1
 fi

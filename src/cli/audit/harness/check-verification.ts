@@ -86,7 +86,7 @@ function postTurnHookReason(agentFacts: AgentFacts): {
   if (!agentFacts.hooks.postTurnExists) {
     return {
       reason: "post-turn hook missing",
-      expected: "hook absent or meaningful validation",
+      expected: "universal safety guard or meaningful validation",
       actual: "missing",
     };
   }
@@ -520,7 +520,9 @@ const postTurnHookIntegrity: HarnessCheck = {
   skip: (ctx) =>
     ctx.agents.every(
       (agentFacts) => agentFacts.agent.supportsPostTurnHook === false,
-    ),
+    ) ||
+    (ctx.config.config.hooks["post-turn-safety"]?.enabled === false &&
+      ctx.agents.every((agentFacts) => !agentFacts.hooks.postTurnExists)),
   /** Run the Post-turn hook integrity check. */
   run: (ctx) => {
     const findings: string[] = [];

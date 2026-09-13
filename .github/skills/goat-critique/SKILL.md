@@ -1,62 +1,63 @@
 ---
 name: goat-critique
 description: "Use when a decision or analysis needs multi-lens critique to surface blind spots before shipping."
-goat-flow-skill-version: "1.16.0"
+goat-flow-skill-version: "1.17.0"
 ---
 # /goat-critique
 
 ## Shared Conventions
 
-Read `.goat-flow/skill-docs/skill-preamble.md` and `.goat-flow/skill-docs/skill-conventions.md` for shared conventions before proceeding.
+Read `.goat-flow/skill-docs/skill-preamble.md` and `.goat-flow/skill-docs/skill-conventions.md`.
 
 ## When to Use
 
-Use when a concrete artifact deserves multi-perspective critique before shipping: plan, security assessment, debug hypotheses, review findings, test strategy, architecture proposal, or refactor approach.
+Use for multi-perspective critique of a concrete plan, security assessment, debug hypothesis set, review, test strategy, architecture proposal, or refactor approach.
 
 ## Boundary Commands
 
-- **NEVER:** Replace delegated critique with inline role-play, skip required phases, or auto-apply recommendations.
-- **ALWAYS:** Treat explicit invocation as consent to run the full delegated protocol against a concrete artifact.
-- **DEFER TO:** Before invocation only, create a missing artifact first, answer simple facts directly, or use `/goat-review` for a trivial artifact; explicit `/goat-critique` still runs in full.
+- **NEVER:** Replace delegation with inline role-play, skip phases, or auto-apply recommendations.
+- **ALWAYS:** Treat explicit invocation as consent for the full delegated protocol on a concrete artifact.
+- **DEFER TO:** Before invocation, create a missing artifact, answer simple facts, or use `/goat-review` for a trivial artifact; explicit `/goat-critique` still runs fully.
 
 | Excuse | Reality |
 |--------|---------|
-| "The artifact is trivial - a quick critique would cover it" | Quick mode was tried and removed. A single reviewer running lens passes in one context is self-talk under three labels, not multi-perspective critique. |
-| "All three agents agree so it must be right" | Consensus without orchestrator verification is unverified self-declaration. The orchestrator's job is to verify claims, not count votes. |
-| "Inline role-play is faster than spawning agents" | Agents that role-play SKEPTIC/ANALYST/STRATEGIST inline produce indistinguishable perspectives. Isolated context is what makes findings independent. |
-| "Closing checks happen after the main answer - skip them" | End-of-task rules have near-zero voluntary compliance. Phase 5.5 meta-audit and outcome capture exist because post-deliverable steps get skipped. |
+| "The artifact is trivial - a quick critique would cover it" | Quick mode was removed: one context under three lens labels is not independent critique. |
+| "All three agents agree so it must be right" | Consensus without orchestrator verification is unverified. Verify claims; do not count votes. |
+| "Inline role-play is faster than spawning agents" | Inline lenses correlate; isolated contexts create independent findings. |
+| "Closing checks happen after the main answer - skip them" | Phase 5.5 and outcome capture exist because agents skip closing work. |
 
-**Direct invocation is binding.** `$goat-critique` or `/goat-critique` runs Phases 1-5 plus mandatory post-synthesis steps (5.5, 5.6). Dispatcher ambiguity rules do not override direct invocation; raise scope concerns after synthesis.
+**Direct invocation is binding.** `$goat-critique` or `/goat-critique` runs Phases 1-5 plus 5.5/5.6. Dispatcher ambiguity does not override it; raise scope concerns after synthesis.
 
-**Report-only by default.** `$goat-critique make X shorter` = critique only; `$goat-critique ... then apply it` = critique first, apply after gate. See Constraints for mutation and apply rules.
+**Report-only by default.** `$goat-critique make X shorter` critiques only; `then apply it` permits application after the gate. Constraints own mutation rules.
 
 ## Step 0 - Intake
 
 goat-critique runs only full delegated mode: Phases 1-5, 5.5 meta-audit, 5.6 outcome capture, three critique sub-agents, one meta-agent. Lighter-mode suggestions are the failure this design prevents.
 
 **Intake checklist:**
-- Confirm the artifact exists and is concrete (a file, a plan document, a specific set of findings - not a vague idea).
-- Select the critique rubric for the artifact type (see Critique Rubrics below). If unclear, ask the user.
-- Use the preamble's learning-loop retrieval on relevant `.goat-flow/learning-loop/footguns/` and `.goat-flow/learning-loop/lessons/`; record explicit misses instead of broad-loading buckets.
-- Delegation consent: proceed directly to Phase 1. Skill-chained entry: skip intake confirmation, use caller context; still run retrieval + rubric selection. All phases (1-5 + 5.5 + 5.6) always run.
-- **Differential mode detection:** If `.goat-flow/logs/critiques/` has a same-artifact slug within 30 days, offer differential mode: A/B receive prior log + artifact diff; C stays cold. Phase 5 adds delta counts and `[diff-of: <prior-uuid>]`.
-- **Read context map:** Merge the selected rubric map from `references/rubric-examples.md` into the fixed A/B/C split; never replace baseline context.
+- Require a concrete artifact (file, plan, or findings), not a vague idea.
+- Select its Critique Rubric; ask if unclear.
+- Run preamble learning-loop retrieval for artifact/risk terms; record misses without broad-loading buckets.
+- **Host ownership:** The host/root context owns Phases 1-5.6. A forked sub-agent returns control before Phase 1 and does not apply the shared sub-agent gate conversion. The host spawns agents, presents gates, and resumes Phase 5.6 after the response. Direct/chained host entry needs no delegation prompt; chained entry skips only intake confirmation.
+- **Resume:** For saved work, apply **Saved records and recovery** in `references/rubric-examples.md` before generating critics.
+- **Differential mode detection:** For matching artifact identity within 30 days, apply **Differential baselines** in `references/rubric-examples.md`: offer prior findings and available diff to A/B; C stays cold. Phase 5 links the baseline record and reports deltas.
+- **Read context map:** Read only the selected rubric's `###` map under Rubric Context Maps in `references/rubric-examples.md`. Merge the selected rubric map into the fixed A/B/C split; never replace baseline context. Other reference sections load at the phase that names them.
 
 ## Phase 1 - Generate Competing Critiques
 
 Spawn all three sub-agents in parallel using the host's real delegation mechanism.
 
-Context varies intentionally - informational diversity catches more than tonal diversity.
+Before spawning C, assemble its inline payload and initialize run state using **Fresh-eyes boundary and recovery** in `references/sub-agent-directives.md`.
 
 ### The Core Trio Lens
 
-Agents A and B both use the SKEPTIC/ANALYST/STRATEGIST combined lens. These three perspectives work as a unit - never split them into separate agents:
+Agents A and B each use the combined SKEPTIC/ANALYST/STRATEGIST lens; never split its perspectives across agents:
 
 - **SKEPTIC** - "What could go wrong? What assumptions are unproven? What's the worst-case scenario?"
 - **ANALYST** - "What does the evidence actually say? What's the cost/benefit? What do the numbers and code paths tell us?"
 - **STRATEGIST** - "What's the fastest path to shipping? What can we defer? What's the highest-leverage change?"
 
-A/B must use all three perspectives. Agent C is the control group: same fields, no per-lens quota; use `N/A - fresh-eyes scope` only when a lens adds nothing.
+A/B use all three perspectives. C provides a fresh-eyes comparison with no lens quota; use `N/A - fresh-eyes scope` when a lens adds nothing.
 
 **Context split:**
 
@@ -64,7 +65,7 @@ A/B must use all three perspectives. Agent C is the control group: same fields, 
 |---|---|---|
 | A (Risk) | artifact + architecture.md + targeted INDEX-first footgun/lesson hits + rubric | git history, config.yaml |
 | B (Alternatives) | artifact + architecture.md + `git log --oneline -20` + config.yaml + rubric | footguns, lessons |
-| C (Fresh Eyes) | artifact + rubric ONLY | everything else (isolation enforced) |
+| C (Fresh Eyes) | supplied artifact + selected rubric payload ONLY | other project evidence; disclose harness context |
 
 ### Sub-Agent Definitions
 
@@ -72,27 +73,27 @@ Full directives: `references/sub-agent-directives.md`.
 
 - **A (Risk):** SKEPTIC/ANALYST/STRATEGIST on risks, 2nd-order impacts, fastest safe path. Must cite downstream files by name.
 - **B (Alternatives):** SKEPTIC/ANALYST/STRATEGIST on alternatives, ranked by implementation friction. Must surface at least one alternative.
-- **C (Fresh Eyes):** No project context. Flags unstated assumptions and readability gaps. ISOLATION RULE enforced.
+- **C (Fresh Eyes):** Flags unstated assumptions and readability gaps using the permitted payload; follow the reference's ISOLATION RULE.
 
-Each sub-agent normally returns 3-7 evidence-backed findings plus required lens fields, severity, evidence, confidence, Proof class, rubric dimensions, overall assessment, and one strength. Zero findings are valid only through the reference pack's clean-result attestation after one documented second pass.
+Each sub-agent normally returns the reference pack's Result envelope and Per-finding output spec, including Proof class. Three to seven findings is the normal range; zero uses the same envelope with an empty finding list after one documented second pass.
 
-**Lens coverage:** A/B must analyse every lens and C must probe assumptions/readability. A lens with no supported issue gets one documented second pass, then records `No supported finding` instead of inventing one. See the reference pack.
+**Lens coverage:** A/B analyse every lens; C probes assumptions/readability. See the reference pack Lens-finding floor.
 
 ## Phase 2 - Rank and Compare
 
 Execute in this order:
 
-**1. Context leak scan.** Grep Agent C output for `.goat-flow/`, `goat-*`, `architecture.md`, `config.yaml`, or project-specific namespace references. Only flag references absent from Agent C's input. Untraceable match = CONTEXT LEAK; discard and re-spawn stricter. **Framework-self exemption:** for artifacts inside `.goat-flow/`, `skills/goat-*`, or a goat-flow instruction file, skip `.goat-flow/` and `goat-*` term scans. Check only structural navigation leaks: file paths, config keys, or architecture sections absent from the input.
+**1. Context leak scan.** Apply **Fresh-eyes boundary and recovery** first: scan C's response through stdin, trace candidate matches to its artifact/rubric payload, and inspect available activity. Textual absence never proves isolation; the host discards leaks and owns the shared replacement allowance.
 
-**1b. Completeness gate.** Verify each sub-agent returned required fields in either its findings or a clean-result attestation (`Evidence reviewed:` through `Residual uncertainty:` and strength per the reference pack, plus B's unconditional ranked alternative). Incomplete → re-spawn once.
+**1b. Completeness gate.** Verify every applicable Result-envelope field (`Evidence reviewed:` through `Residual uncertainty:`, strength, coverage ledger and B's ranked alternative). A/B each get one completeness replacement; C uses the same run-wide allowance as leaks. Unresolved omissions produce `sub-agent completeness limited`; honest unassessed rows are complete.
 
 **2. Classify each finding:** **Consensus** (≥2 agents, severity within ±1), **Split** (≥2 agents, severity differs ≥2 levels or explicit reject vs blocking), **Unique** (one agent only). Silence is not a dismiss; treat as Unique.
 
-**3. Score each sub-agent's critique** on Grounding, Specificity, Actionability, Coverage, and Calibration.
+**3. Rank each sub-agent's critique** using the reference pack's Ranking criteria: Grounding, Specificity, Actionability, Coverage and Calibration; strong, adequate or limited with evidence, never summed.
 
-**4. Verify sub-agent dimension coverage.** Skim each agent's findings, or a clean attestation's `Rubric coverage:` entries; confirm each claimed dimension has substantive content or named evidence. Demote unsubstantiated claims. Use orchestrator-verified dimensions as input to step 5.
+**4. Verify sub-agent dimension coverage.** Verify each Coverage-ledger scope against its named evidence for clean and non-clean returns. Demote unsubstantiated claims before the union in step 5.
 
-**5. Compute rubric coverage gates.** A dimension is addressed by a substantive finding or step-4-verified attestation coverage. Unaddressed mandatory → auto-generate HIGH coverage-gap finding; optional → MEDIUM.
+**5. Union the coverage ledgers.** Merge the agents' rows into one host ledger per selected dimension - `finding`, `checked-clean` or `unassessed` - by the reference pack's union rule. Unassessed coverage never generates a HIGH or MEDIUM artifact finding.
 
 **6. Spot-check OBSERVED claims.** For each finding marked OBSERVED, re-read the cited file + semantic anchor or proof artifact. Findings that fail spot-check get tagged `[evidence-gap: spot-check failed]`; Phase 3 decides retract or upgrade.
 
@@ -100,9 +101,9 @@ Execute in this order:
 
 ## Phase 3 - Cross-Examine
 
-**Early exit:** If Phase 2 yields zero split findings and zero unique HIGH/CRITICAL findings, skip Phase 3. Note "no disputes - full consensus" in output and proceed to Phase 4.
+**Early exit:** If Phase 2 yields zero split findings and zero unique HIGH/CRITICAL findings, skip Phase 3. Note `No findings require cross-examination` in output and proceed to Phase 4; unique MEDIUM and LOW findings survive the exit.
 
-If splits + unique HIGH/CRITICAL exceed the cross-examination budget (max 3 cross-exam agents total, 3 tool calls each - see Constraints), batch multiple disputes into a single agent prompt. Triage by severity - CRITICAL and HIGH first.
+If splits + unique HIGH/CRITICAL exceed the cross-examination budget (see Constraints), batch multiple disputes into a single agent prompt. Triage by severity - CRITICAL and HIGH first.
 
 For each split finding, spawn a cross-exam agent: "Agent A says [X], Agent B says [Y]. Which is correct given the actual codebase?"
 
@@ -112,61 +113,41 @@ Mark each: RESOLVED (with winner) / STILL DISPUTED / RETRACTED (false positive c
 
 ## Phase 4 - Clarify
 
-**Persist before gate:** Write Phase 1-3 results to `.goat-flow/logs/critiques/<YYYY-MM-DD>-<HHMM>-<artifact-slug>-<rand5>.md` - delegation evidence (ids/handles, calls/limit, unavailable markers), summaries, matrix, cross-exams. Runs even on Phase 3 early exit.
+**Persist before gate:** Keep the Phase 1-3 draft in memory; save a fresh `pre-clarification` record through **Saved records and recovery** in `references/rubric-examples.md`. Do this after Phase 3 early exit too; save failures continue to the human gate.
 
-Before synthesising, present the unresolved items to the human conversationally.
+Present unresolved items conversationally. Open with decision count and titles. Ask each as `Q[N]: [decision]? (A) [option] (B) [option] Default: [A/B]. Background: [one sentence]`. For 3+, use `| # | Decision | Option A (default) | Option B | Why |`, then ask for numbered overrides or default approval. Cover Phase-3 disputes, valid trade-offs, and whether context drift is intentional. End by requesting picks or pushback.
 
-**Opener:** Lead with a one-line summary of how many decisions are needed and their titles. Example: "3 decisions before synthesis: (1) SEC-01 severity, (2) remediation path, (3) attacker model scope."
-
-**Per-question format:** `Q[N]: [decision]? (A) [option] (B) [option] Default: [A/B]. Background: [1 sentence]`.
-
-**Compact table (3+ questions):** `| # | Decision | Option A (default) | Option B | Why |`. Follow with: "Reply with numbers to override defaults; or approve to proceed."
-
-Question types: (1) Disputes from Phase 3, (2) Trade-offs with two valid approaches, (3) Context drift findings - intentional vs oversight.
-
-**Closer:** After all questions, end with: "Reply with your picks (e.g. 'A, B, go with defaults on the rest') or push back on any framing."
-
-**If questions exist:** BLOCKING GATE - STOP and wait for human response.
-**If no questions (full consensus, no trade-offs, no context drift):** CHECKPOINT - note "no disputes - proceeding to synthesis" and continue.
+**Questions:** BLOCKING GATE - STOP for the human.
+**None:** CHECKPOINT - record "no disputes - proceeding to synthesis" and continue.
 
 ## Phase 5 - Synthesise
 
-Produce the prime critique. Lead with a **Verdict** block:
-- **Gate: BLOCK | CONCERNS | CLEAN** - derived from surviving findings: any CRITICAL → BLOCK, any HIGH (no CRITICAL) → CONCERNS, else CLEAN
+Before drafting, apply Final-finding schema and Audit payload identity from `references/rubric-examples.md`. Lead with a **Verdict** block:
+- **Gate: BLOCK | CONCERNS | CLEAN** - derived from surviving findings: any CRITICAL → BLOCK, any HIGH (no CRITICAL) → CONCERNS, else CLEAN. CLEAN coexists with lower-severity findings and with limited coverage; show coverage status beside it.
 - Assessment: STRONG / ADEQUATE / WEAK / FLAWED (synthesised from sub-agent assessments and cross-examination outcomes)
-- Risk level: LOW / MEDIUM / HIGH / CRITICAL
+- Risk level: the highest surviving evidenced artifact severity, floored at LOW and labelled `no evidenced defect` when none survives - a floor, not a clearance
 - Top 1-3 blockers (if any) - one line each, linked to findings below
-- If differential mode: append delta block (`Resolved: N | Regressed: M | New: K | Unchanged: J` vs prior critique)
+- If differential mode: append the **Differential baselines** delta block, including unassessed/unmapped prior findings.
 
-Then the full critique:
-- Consensus findings, unchanged
-- Resolved splits with rationale
-- Phase 4 human-directed findings
-- Verified unique findings
-- Retracted findings (listed so user sees what was considered and dismissed)
+**Explain once:** Validated Findings holds each surviving finding once, grouped consensus, resolved splits, Phase 4 human-directed, verified unique, with its Final-finding schema fields. Later sections cite the finding ID and add only what they own (see Output Format); the Comparison Matrix owns comparison and Rankings own order and criterion scores.
 
 **Open questions:** Items with INFERRED-only evidence, inconclusive single-agent findings, or unvalidated assumptions go here - not as recommendations. Each open question states: confidence, evidence needed to resolve, revisit trigger.
 
-**Blind spot check:** List unaddressed artifact sections, unmapped rubric aspects, and unread referenced files as "What Wasn't Critiqued." Must never be empty.
+**Blind spot check:** List unaddressed artifact sections, unmapped rubric aspects, and unread referenced files as "What Wasn't Critiqued." Name actual limits, or a supported `none identified` statement within a declared scope; never invent one.
 
 **Proof Gate:** Apply the Proof Gate (see Constraints) to every synthesised finding before inclusion. Every synthesised finding must carry proof class `RUNTIME | CONTRACT-GREP | STATIC | NOT-REPRODUCED`.
 
-**Phase 5.5 - Meta-audit.** Give a 2-call meta-agent only the Phase 5 draft and the 10 checks in `references/rubric-examples.md`. Score each 0 or 10; their sum is `Meta-score`; no partial credit. Emit non-empty `## Auto-Detected Issues`: failures, or at 100/100 write exactly `No failed meta-audit checks.` Never invent issues. Put `Meta-score: N/100` in Verdict.
+**Phase 5.5 - Meta-audit.** Assemble a self-contained packet for the 2-call meta-agent: the frozen draft with its `report_revision`, selected dimensions, and the reference pack's complete Meta-audit rubric (read now; including Packet vocabulary), Final-finding schema and Audit payload identity. It grades that packet alone. Score each 0 or 10; their sum is `Meta-score`; no partial credit. Emit non-empty `## Auto-Detected Issues`: failures, or at 100/100 write exactly `No failed meta-audit checks.` Never invent issues. Put `Meta-score: N/100` in Verdict. Corrections edit the report, never the artifact.
 
-**BLOCKING GATE:** Present the synthesised critique (including Meta-score if 5.5 produced one). "Options: (A) apply, (B) dig deeper, (C) re-run, (D) close. Default: D." After plan critique, suggest `/goat-plan`.
+**Persist final:** Before this gate, save the audited report as a fresh `finalized` record through **Saved records and recovery**.
 
-**Phase 5.6 - Outcome capture.** After the human picks A/B/C/D, tag each surviving finding: `accepted | rejected | deferred | partial`. Defaults: A → accepted, D → deferred. Persist under `## Outcomes`. Do not show `## Outcomes` in the initial Phase 5 gate response.
+**BLOCKING GATE:** Present the synthesised critique (including Meta-score if 5.5 produced one). "Options: (A) apply, (B) dig deeper, (C) re-run, (D) close. Default: D." Picking (A) is the explicit apply instruction Constraints require, authorizing only the surviving Recommended Changes. After plan critique, suggest `/goat-plan`.
 
-**Integration hooks.** Populate from surviving findings when applicable:
-- `for-goat-plan` - milestone updates, reordering
-- `for-goat-debug` - hypothesis seeds, evidence to capture
-- `for-implementation` - immediate fixes, deferred items
-
-Empty sections collapsed to `none`.
+**Phase 5.6 - Outcome capture.** After the host receives the human's A/B/C/D pick, save a fresh linked `outcomes` record using **Saved records and recovery**. A → accepted; D → deferred; B/C preserve the request with unspecified dispositions pending.
 
 ## Critique Rubrics
 
-The rubric determines what sub-agents evaluate. Match to artifact type. Dimensions marked **[M]** are mandatory (unaddressed → auto-HIGH coverage-gap finding); dimensions marked **[O]** are optional (unaddressed → auto-MEDIUM). Each rubric has a context map (A/B/C file assignments) in `references/rubric-examples.md`; Step 0 reads the selected map.
+The rubric determines what sub-agents evaluate. Match to artifact type. Dimensions marked **[M]** are mandatory and **[O]** optional; an unaddressed dimension is an `unassessed` ledger row, never a finding. Step 0 reads only the selected rubric's map in `references/rubric-examples.md`.
 
 **Plan:** correctness against codebase [M], integration safety [M], sequencing quality [M], validation coverage [O], task specificity [O]
 **Security assessment:** threat model completeness [M], exploitability calibration [M], attack surface coverage [M], framework mitigation accuracy [O], data flow quality [O]
@@ -181,11 +162,11 @@ The rubric determines what sub-agents evaluate. Match to artifact type. Dimensio
 - MUST run in one mode: full delegated, Phases 1-5 plus 5.5/5.6, three critique sub-agents plus one meta-agent. 5.5 runs before the human gate; 5.6 after the human responds. Quick/lite modes were removed: single-context lenses are self-talk, not multi-perspective critique.
 - Explicit `$goat-critique` or `/goat-critique` invocation IS consent to spawn sub-agents and the full protocol. Do NOT ask again.
 - Report-only by default. Do not mutate the target artifact or committed files unless the user separately says to apply, edit, update, fix, or otherwise implement. If interrupted, freeze writes.
-- MUST Spawn all three sub-agents in a single parallel batch. Sequential spawning loses the informational-diversity benefit.
+- MUST Spawn all three sub-agents in a single parallel batch. Preserve separate input payloads and no result sharing; timing alone does not prove independence.
 - MUST set max 5 tool-call budget per critique sub-agent; log calls/limit when exposed, otherwise unavailable markers. Do not claim mechanical enforcement when counts are unavailable.
 - MUST log per spawned critique/cross-exam/meta agent: id/handle if exposed, calls/limit, or unavailable markers.
-- MUST Scan Agent C output for context leaks before any other Phase 2 work. Only flag references absent from the input artifact. Any untraceable match = CONTEXT LEAK; discard and re-spawn.
-- MUST Check sub-agent completeness: verify all required fields in the evidence-backed findings or a clean-result attestation after one documented second pass against `references/sub-agent-directives.md`. Incomplete → re-spawn once; if still incomplete, record `sub-agent completeness limited`.
+- MUST Scan Agent C output before other Phase 2 work using **Fresh-eyes boundary and recovery**, including its permitted payload and shared replacement counter.
+- MUST Check sub-agent completeness against `references/sub-agent-directives.md`, including a clean-result attestation after one documented second pass. Phase 2 owns the bounded repair; never reset C's allowance.
 - MUST enforce cross-examination budget: Max 3 cross-examination agents total, max 3 tool calls per agent.
 - Recommendations are never auto-applied. After synthesis, stop. Do not enter implementation mode unless the user explicitly asks to apply changes.
 - MUST apply the Proof Gate from `skill-preamble.md` to every synthesised finding and preserve one proof class tag (`RUNTIME | CONTRACT-GREP | STATIC | NOT-REPRODUCED`) on each. Sub-agent reports are inputs to verify, not evidence to launder. Re-read applies to findings surviving to Phase 5 (typically 3-7 after Phase 3/4 filtering), not to all findings raised in Phase 1.
@@ -196,25 +177,25 @@ The rubric determines what sub-agents evaluate. Match to artifact type. Dimensio
 
 **Terse-first directive:** Informational sections (Sub-Agent Comparison Matrix, Retracted Findings, What Wasn't Critiqued) default to terse: one sentence per bullet, no qualifiers, no closing offers. Gate prompts and evidence-tagged findings retain full detail.
 
-Use this for the Phase 5 gate response. Omit `## Outcomes` until Phase 5.6.
+Use this for the Phase 5 gate response. Omit `## Outcomes` until Phase 5.6. Empty sections collapse to `none`.
 
 ```markdown
 ## Verdict  <!-- includes Gate: BLOCK|CONCERNS|CLEAN + Meta-score -->
 ## Delegation Evidence  <!-- ids/handles + tool-call counts or unavailable markers -->
 ## Critique Rubric
 ## Sub-Agent Comparison Matrix
-## Sub-Agent Rankings
-## Rubric Coverage Gaps
+## Sub-Agent Rankings  <!-- order + criterion scores only -->
+## Rubric Coverage  <!-- one ledger row per selected dimension -->
 ## Control Group Delta
 ## Validated Findings  <!-- source pool for Recommended Changes; every finding includes proof class -->
-## Cross-Examination Results
+## Cross-Examination Results  <!-- finding ID, outcome, winner -->
 ## Auto-Detected Issues  <!-- failures or exact clean attestation; always present -->
-## Retracted Findings
-## Human Decisions
+## Retracted Findings  <!-- finding ID + reason -->
+## Human Decisions  <!-- finding ID + Phase 4 answer -->
 ## Strengths
-## Recommended Changes  <!-- subset of Validated Findings; ordered by severity; each with concrete action and proof class -->
+## Recommended Changes  <!-- finding IDs from Validated Findings, by severity; concrete action and proof class; no restatement -->
 ## Open Questions
-## Integration Hooks  <!-- for-goat-plan, for-goat-debug, for-implementation -->
+## Integration Hooks  <!-- for-goat-plan, for-goat-debug, for-implementation; finding ID + action -->
 ## What Wasn't Critiqued
-<!-- Phase 5.6 after human response: append ## Outcomes with per-finding accepted|rejected|deferred|partial -->
+<!-- Phase 5.6: fresh linked outcomes record; use Saved records and recovery -->
 ```

@@ -472,7 +472,7 @@ describe("deny-hook-registered harness check", () => {
     });
     const result = denyRegisteredCheck.run(ctx);
     assert.equal(result.status, "fail");
-    const finding = result.findings.find((f) => f.includes("does not match"));
+    const finding = result.findings.find((f) => f.includes("must match"));
     assert.ok(finding, "should report path mismatch");
     assert.ok(finding.includes(".claude/hooks/deny-dangerous.sh"));
     assert.ok(finding.includes(".goat-flow/hooks/deny-dangerous.sh"));

@@ -88,13 +88,19 @@ interface ManifestInstructionParityRule {
   phrases: string[];
 }
 
+/** One live section allowed to differ because its facts belong to a provider. */
+interface ManifestInstructionProviderDelta {
+  section: string;
+  reason: string;
+}
+
 /**
  * The shape every agent instruction file declares in `workflow/manifest.json`: `CLAUDE.md`, `AGENTS.md`, and the
  * Copilot file.
  *
- * Two fields are load-bearing. `required_sections` is read by manifest-json to build the label and pattern pairs
- * section checks match on, and `parity_phrases` is read by the drift check, so this block rather than the check
- * source is what keeps the three instruction files saying the same thing.
+ * `required_sections` builds the section checks. `shared_sections` and
+ * `provider_delta_sections` partition that list for live-file byte parity,
+ * while `parity_phrases` enforces common semantics inside allowed deltas.
  *
  * `line_target`, `line_limit`, and `version_header_pattern` are declared and typed for passthrough, but no check
  * reads them: treat them as the documented budget authors aim at, target 125 and hard limit 150, rather than
@@ -104,6 +110,8 @@ interface ManifestInstructionFile {
   line_target: number;
   line_limit: number;
   required_sections: string[];
+  shared_sections: string[];
+  provider_delta_sections: ManifestInstructionProviderDelta[];
   parity_phrases: ManifestInstructionParityRule[];
   version_header_pattern: string;
 }

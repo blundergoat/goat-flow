@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.16.0"
+goat-flow-reference-version: "1.17.0"
 ---
 # Cross-Model Refuter Specification
 
@@ -62,7 +62,7 @@ The host reviewer applies these rules to the refuter output:
 
 - Refuter output is advisory. Empty, broad, uncited, or unresolvable evidence has no effect on the final finding.
 - Before any refuter result changes severity, action, disposition, or Ship Verdict, the host re-derives the evidence from the declared authority and records the relevant Pass 2 proof. Failure preserves the finding and adds `refuter-citation-unverified`.
-- Preserve the original R-ID through synthesis.
+- Preserve the original R-ID through synthesis. `Final dispositions` assigns one terminal outcome per ID; active findings exclude refuted history. Every host-verified refutation also has one ledger record.
 
 | Refuter Verdict | Host Action |
 |-----------------|-------------|
@@ -77,9 +77,12 @@ When Pass 3 runs, add to Review Integrity:
 
 ```
 - Refuter pass: yes | no | skipped; confirmed=<N>, refuted=<M>, unresolved=<K>, leads-verified=<N>, model=<model-identifier|n/a>
+- Refuter outcomes: <canonical JSON submitted R-ID map: confirmed|refuted|unresolved>
 ```
 
-Use `skipped` when Pass 3 was triggered but no authenticated external refuter was available. Use `n/a` for the model when no refuter actually ran.
+Nonzero submitted outcomes require `Refuter outcomes` with matching counts; leads stay separate. Confirmed may end adjusted; refuted/unresolved must match the final map. Unresolved findings use `Unconfirmed:`, needs-signal/needs-decision, `Missing proof:`, and `Next check:`.
+
+Emit `skipped` with zero counts and model=n/a when no refuter ran; truthful legacy `no` remains accepted. The host's nonempty result map names its actual model.
 
 ## Pre-flight Check
 
@@ -93,3 +96,45 @@ command -v claude && claude auth status
 ```
 
 Version-only commands such as `claude --version`, `codex --version`, `copilot --version`, or `agy --version` prove installation only; they do not prove authentication. If the opposite runtime is not authenticated, skip Pass 3 and log `cross-model-refuter-failed` in Review Integrity. Do not attempt to authenticate during a review.
+
+## Supported Invocation Recipes
+
+Each recipe below comes from the runtime's own `--help` output on this host. Re-read that help before using one:
+flags move between versions, and a recipe you cannot verify is not a supported recipe. Send only the R-ID findings
+list and authority metadata. Never send the diff, and never grant write access to the reviewed files, Git state, or
+review artifacts.
+
+**Codex as refuter, from a Claude Code host:**
+
+```bash
+codex exec --sandbox read-only --ephemeral --ignore-user-config --ignore-rules \
+  --output-schema <schema.json> --output-last-message <result.json> "<refuter prompt>"
+```
+
+`--sandbox read-only` is the enforced boundary: it is the sandbox policy applied to model-generated shell commands.
+`--ephemeral` suppresses session-file persistence, and `--ignore-user-config` with `--ignore-rules` keeps host
+configuration and execpolicy rules out of the run. Those three are configuration isolation and provider
+bookkeeping. None of them proves that no filesystem write can occur.
+
+**Claude Code as refuter, from a Codex, Copilot, or Antigravity host:**
+
+```bash
+claude -p --restricted --output-format json --json-schema <schema.json> \
+  --strict-mcp-config --setting-sources '' "<refuter prompt>"
+```
+
+`--restricted` is the enforced boundary: it removes the built-in command- and code-running tools and WebFetch.
+`--strict-mcp-config` and `--setting-sources` bound which servers and settings load. Add `--bare` when the host also
+wants hooks, plugin sync, auto-memory, and instruction-file auto-discovery skipped.
+
+**Forbidden in any recipe:** `--dangerously-bypass-approvals-and-sandbox`, `--dangerously-bypass-hook-trust`,
+`--dangerously-skip-permissions`, and `--allow-dangerously-skip-permissions`. A configuration that needs one of these
+is unsupported.
+
+**Fail closed.** If the required flags are missing from the installed version, the schema is rejected, or the runtime
+is unauthenticated, do not improvise a weaker invocation. Skip Pass 3, log `cross-model-refuter-failed`, and finish
+the local review. Withholding a recipe never blocks local delivery.
+
+One recipe describes one approved CLI invocation, which may still contain several model turns and tool calls. Record
+the runtime, model, and configuration actually used, and the cost when the runtime reports one; otherwise record it
+unknown. Constructing a command proves its configuration, never its runtime containment.

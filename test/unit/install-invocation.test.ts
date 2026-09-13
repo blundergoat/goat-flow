@@ -28,7 +28,6 @@ const windowsWhereExecutablePath = (
 describe("discoverWindowsBashCandidates", () => {
   /** Proves setup never resolves its PATH lookup utility from the user's selected project. */
   it("resolves Windows PATH lookup from the system root", () => {
-    assert.equal(typeof windowsWhereExecutablePath, "function");
     assert.equal(
       windowsWhereExecutablePath?.({ SystemRoot: "D:\\Windows" }),
       "D:\\Windows\\System32\\where.exe",

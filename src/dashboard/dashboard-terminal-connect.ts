@@ -1,10 +1,16 @@
 /**
  * Dashboard terminal WebSocket connection and session switching helpers.
+ *
  * Use when a Workspace user attaches, retries, switches, or ends a terminal session.
  * Recovery paths retain the access and report-capture intent of the original launch.
  */
 
-/** One attached terminal pane: the session row it shows, its xterm instance, and the socket feeding it. */
+/**
+ * The resources for one attached terminal pane in Workspace.
+ *
+ * Its session id connects the visible row to the terminal and the socket carrying runner output.
+ * Event handlers use this attachment to keep output, connection state, and cleanup on the same pane.
+ */
 interface DashboardTerminalAttachment {
   ctx: DashboardTerminalContext;
   sessionId: string;
@@ -16,12 +22,12 @@ interface DashboardTerminalAttachment {
 /**
  * Build the xterm instance for one terminal pane and mount it in the container.
  *
- * Error behavior: throws nothing; when the xterm assets are missing it reports the reason as a toast and returns null, so
- * the caller stops instead of attaching a socket to a pane that cannot display it.
+ * It reports missing xterm globals as a toast and returns null so the caller stops attaching the pane.
+ * Errors while constructing or mounting xterm propagate to the caller.
  *
  * @param ctx - dashboard state, used for the toast shown when xterm is unavailable
  * @param container - the empty pane element the terminal is mounted into
- * @returns the terminal and its fit addon, or null when xterm could not be constructed
+ * @returns the mounted terminal and fit addon, or null when the required xterm globals are unavailable
  */
 function dashboardCreateTerminalInstance(
   ctx: DashboardTerminalContext,
@@ -34,7 +40,7 @@ function dashboardCreateTerminalInstance(
     TerminalCtor = constructors.Terminal;
     FitAddonCtor = constructors.FitAddon;
   } catch (err) {
-    // xterm assets never loaded - for example the user opened the dashboard while the asset fetch was still failing.
+    // Opening a pane without the loaded xterm globals reports their absence as a toast and stops attachment.
     ctx.showToast(err instanceof Error ? err.message : String(err), true);
     return null;
   }
@@ -60,8 +66,7 @@ function dashboardCreateTerminalInstance(
 /**
  * Keep the terminal sized to its pane and tell the backend whenever that size changes.
  *
- * A wrong size is visible straight away as wrapped or clipped output, so this fits on a few staggered frames as well as on
- * every later resize.
+ * Staggered initial fits and later resize events keep the runner's output aligned with the visible pane.
  *
  * @param container - the pane element the terminal is measured against; zero width means it is hidden and not measurable
  * @param term - the terminal whose column and row count is reported
@@ -80,11 +85,12 @@ function dashboardInstallTerminalFit(
   resizeObserver: ResizeObserver;
   resizeHandler: () => void;
 } {
-  /** Fit the active xterm instance and report its size to the server. */
+  // Fit the active xterm instance and report its size to the server.
   const doFit = (): void => {
     // Zero width means the pane is hidden or mid-transition, so measuring now would lock in the wrong size.
     if (!container.offsetWidth) return;
     fitAddon.fit();
+    // Send the measured size only while this pane has a live connection to the runner.
     if (socket.readyState === WebSocket.OPEN) {
       socket.send(
         JSON.stringify({ type: "resize", cols: term.cols, rows: term.rows }),
@@ -103,7 +109,7 @@ function dashboardInstallTerminalFit(
   });
   resizeObserver.observe(container);
 
-  /** Handle browser resizes for the active terminal. */
+  // Handle browser resizes for the active terminal.
   const resizeHandler = (): void => {
     doFit();
   };
@@ -114,8 +120,7 @@ function dashboardInstallTerminalFit(
 /**
  * Build the age label under a session row, adding an idle warning as the timeout approaches.
  *
- * The warning is what tells a user their terminal is about to be closed for them, so it replaces the plain age once the
- * deadline is close enough to act on.
+ * Near the idle deadline, a countdown replaces the plain age so the user has time to keep the session active.
  *
  * @param ctx - dashboard state, read for the configured idle timeout; zero or less disables the warning entirely
  * @param session - the session being labelled
@@ -208,7 +213,7 @@ function dashboardHandleTerminalSocketOpen(
   if (previousAgeInterval) clearInterval(previousAgeInterval);
   const ageInterval = dashboardStartSessionAgeTicker(ctx, sessionId, session);
   const refs = ctx._terminalRefs[sessionId];
-  // Refs are absent on the very first open, where they are written moments after this returns.
+  // Update stored pane refs when present; a pane without refs cannot retain this ticker there.
   if (refs) refs.ageInterval = ageInterval;
   return ageInterval;
 }
@@ -216,8 +221,7 @@ function dashboardHandleTerminalSocketOpen(
 /**
  * Show or delay the "waiting for you" badge after a chunk of runner output.
  *
- * A badge that is already up stays up immediately, while a new one is delayed slightly so a runner that is merely redrawing
- * does not make the badge flicker.
+ * Keep an existing badge visible; delay a new badge so runner redraws do not make it flicker.
  *
  * @param attachment - the pane, its session, and its socket
  * @param reactive - the live Alpine copy of the session row, or undefined when the row has already been dropped
@@ -247,8 +251,7 @@ function dashboardApplyAwaitingInputState(
 /**
  * Write one chunk of runner output into the pane and update everything that reads from it.
  *
- * The same chunk drives four separate things the user sees: the visible text, the loading state, the paste-submit machinery,
- * and the waiting badge.
+ * Each chunk updates visible text, loading feedback, pending paste submission, and the waiting badge.
  *
  * @param attachment - the pane, its session, and its socket
  * @param output - the output chunk; an empty chunk still refreshes state from the existing tail
@@ -261,7 +264,9 @@ function dashboardApplyTerminalOutput(
   const { ctx, sessionId, session, term } = attachment;
   const reactive = ctx.sessions.find((s) => s.id === sessionId);
   const refs = ctx._terminalRefs[sessionId];
+  // A restored pane may have no captured output yet; use an empty history until its runner sends text.
   const previousTail = reactive?.outputTail ?? session.outputTail ?? "";
+  // Keep waiting state from either session copy or its pending reveal; another output chunk must not clear it.
   const previousAwaiting =
     reactive?.awaitingInput === true ||
     session.awaitingInput === true ||
@@ -305,32 +310,19 @@ function dashboardApplyTerminalOutput(
 
   // Round-6 design: the awaitingInput badge is NEVER cleared by output chunks.
   //
-  // Five rounds of trying to classify chunks (glyph allowlists, tail-end heuristics, OSC-title preservation) failed because runners emit
-  // continuous spinner / redraw cycles that vary by version and accumulate over time, pushing the prompt content out of any bounded tail
-  // window.
+  // Runner redraws cannot prove the user answered; clear the badge only on these signals:
+  // - User typing, clipboard pastes, or dashboard sends.
+  // - Session exit or confirmed termination.
   //
-  // The badge is now cleared only by signals that unambiguously mean "user moved on": 1.
-  // `term.onData` - user typed in the dashboard xterm.
-  // Xterm protocol replies such as focus-in/focus-out and DA responses still go to the PTY but do not clear pending paste-submit state. 2.
+  // An answer outside the dashboard leaves the badge visible until one of those signals arrives.
   //
-  // Ctrl+V paste from `attachCustomKeyEventHandler` - clipboard input goes straight to the WebSocket and bypasses `term.onData`, so it shares
-  // `markUserInputSent()` with the keystroke path 3.
-  //
-  // `dashboardSendToTerminalSession` - programmatic input from a preset launch 4.
-  //
-  // Session lifecycle (exit, terminal-ending error, refresh proves gone, detach-as-end) - multiple paths in this handler If the runner is
-  // answered out-of-band (e.g. via Claude's remote control), the badge stays on until session exit.
-  //
-  // That trade-off is explicit and acceptable: a stuck badge after out-of-band answer is far less harmful than a badge that never fires at all,
-  // which was the bug we shipped five rounds trying to fix.
-  //
-  // See .goat-flow/learning-loop/patterns/architecture.md (search: `Asymmetric trust - set state from output`) and
-  // .goat-flow/learning-loop/footguns/dashboard-terminal.md (search: `Workspace terminal waiting state`).
+  // See .goat-flow/learning-loop/patterns/architecture.md (search: `Asymmetric trust - set state from output`).
+  // See .goat-flow/learning-loop/footguns/dashboard-terminal.md (search: `Workspace terminal waiting state`).
   term.write(output);
 }
 
 /**
- * Retire a session row: stop every pending timer and mark it ended, disconnected, and no longer waiting.
+ * Retire a session row: cancel pending input/loading work and mark it ended, disconnected, and no longer waiting.
  *
  * @param ctx - dashboard state holding the row and its timers
  * @param sessionId - id of the session being retired
@@ -357,7 +349,7 @@ function dashboardMarkTerminalSessionEnded(
  * Handle the runner exiting normally: retire the row, keep it in recents, and settle any preset badge.
  *
  * @param attachment - the pane, its session, and its socket
- * @returns nothing; the row stays visible in recents so the user can still read the final output
+ * @returns nothing; this handler keeps the ended row so the user can still read its terminal's final output
  */
 function dashboardApplyTerminalExit(
   attachment: DashboardTerminalAttachment,
@@ -404,8 +396,7 @@ function dashboardApplyTerminalError(
 /**
  * Route one WebSocket frame to the handler for its message type.
  *
- * Error behavior: throws nothing; a malformed frame swallows its error, because one bad message must not tear down a
- * working terminal.
+ * This swallows parsing and handler errors so a bad frame does not escape the socket listener.
  *
  * @param attachment - the pane, its session, and its socket
  * @param event - the raw message event; non-string data is ignored, as this protocol is JSON text only
@@ -446,7 +437,7 @@ function dashboardRouteTerminalMessage(
         break;
     }
   } catch {
-    /* ignore malformed messages */
+    // Ignore a non-JSON frame or malformed message record so the terminal listener remains usable without an extra toast.
   }
 }
 
@@ -463,7 +454,7 @@ function dashboardBindTerminalSocketLifecycle(
 ): void {
   const { ctx, sessionId, session, socket } = attachment;
 
-  /** Handle the terminal WebSocket closing. */
+  // Handle the terminal WebSocket closing.
   socket.onclose = () => {
     // A stale socket closing must not mark the pane the user is currently looking at as disconnected.
     if (ctx._terminalRefs[sessionId]?.ws !== socket) return;
@@ -473,8 +464,9 @@ function dashboardBindTerminalSocketLifecycle(
     void ctx.updateSessionCount();
   };
 
-  /** Handle terminal WebSocket errors. */
+  // Mark a failed socket disconnected and show an error when its pane was still loading.
   socket.onerror = () => {
+    // A superseded connection must not change the terminal the user has since reattached.
     if (ctx._terminalRefs[sessionId]?.ws !== socket) return;
     // The pane never finished loading, so the failure replaces the spinner instead of appearing behind a live terminal.
     if (session.loadingPhase !== "ready") {
@@ -495,7 +487,7 @@ function dashboardBindTerminalSocketLifecycle(
 /**
  * Send the clipboard to the runner as one bracketed paste. Runs when the user presses Ctrl+V in a Workspace terminal.
  *
- * Error behavior: throws nothing; a denied clipboard read swallows its error because the browser has already shown the user its own prompt.
+ * The promise chain swallows clipboard-read or send errors, leaving the paste unsent without an extra toast.
  *
  * @param socket - the session socket; a closed socket drops the paste rather than queueing it
  * @param markUserInputSent - records that the user acted, clearing the waiting badge and resetting the idle clock
@@ -511,26 +503,21 @@ function dashboardSendClipboardPaste(
       // Nothing on the clipboard, or a session that already closed, leaves nothing to send.
       if (!text || socket.readyState !== WebSocket.OPEN) return;
 
-      // Bracketed-paste markers tell runners "this is one paste, do not submit on internal newlines." Copilot in particular submits on every
-      // '\n' without these markers, so multi-line clipboard text gets fragmented across queries.
-      //
-      // Claude / Codex / Antigravity composers tolerate raw multi-line text but still benefit from the explicit marker, so wrap
-      // unconditionally.
+      // Bracketed-paste markers keep the user's multiline clipboard text together instead of submitting each newline separately.
       const prepared = dashboardPreparePasteBody(text);
       const bracketedPaste = "\x1b[200~" + prepared + "\x1b[201~";
       // The server accepts terminal input only under `data`; any other field name is rejected and the paste never reaches the runner.
       socket.send(JSON.stringify({ type: "input", data: bracketedPaste }));
       markUserInputSent();
     })
-    // For example the user declined the browser's clipboard permission prompt; the browser already told them, so nothing more is shown.
+    // A denied clipboard read leaves Ctrl+V with nothing to send; this path adds no dashboard toast.
     .catch(() => {});
 }
 
 /**
  * Wire keyboard, typing, and resize events from the terminal back to the backend session.
  *
- * Ctrl+V and Ctrl+C are intercepted because a user expects them to mean paste and copy in a browser, while a raw terminal
- * would send them straight to the runner as control codes.
+ * Ctrl+V pastes clipboard text; Ctrl+C copies selected terminal text and otherwise retains terminal interrupt behavior.
  *
  * @param attachment - the pane, its session, and its socket
  * @param markUserInputSent - records that the user acted, clearing the waiting badge and resetting the idle clock
@@ -556,6 +543,7 @@ function dashboardInstallTerminalInputHandlers(
       e.key === "c" &&
       term.hasSelection()
     ) {
+      // Browser clipboard permission can block copying the selection; this handler leaves the terminal open without a toast.
       navigator.clipboard.writeText(term.getSelection()).catch(() => {});
       return false;
     }
@@ -563,6 +551,7 @@ function dashboardInstallTerminalInputHandlers(
   });
 
   term.onData((data: string) => {
+    // A disconnected pane drops keystrokes instead of replaying them after Reconnect.
     if (socket.readyState === WebSocket.OPEN) {
       socket.send(JSON.stringify({ type: "input", data }));
     }
@@ -571,6 +560,7 @@ function dashboardInstallTerminalInputHandlers(
   });
 
   term.onResize(({ cols, rows }: { cols: number; rows: number }) => {
+    // Resizing a disconnected pane cannot update the runner until a connection is open.
     if (socket.readyState === WebSocket.OPEN) {
       socket.send(JSON.stringify({ type: "resize", cols, rows }));
     }
@@ -578,15 +568,14 @@ function dashboardInstallTerminalInputHandlers(
 }
 
 /**
- * Build the teardown that releases every browser resource this pane holds.
+ * Release the pane's observer, listener, session timers, socket, and xterm instance when the user leaves or closes it.
  *
- * Runs when the user closes a terminal, switches project, or leaves the page; missing any one of these leaves a listener or
- * timer running against a pane that is no longer on screen.
+ * Socket-close and xterm-disposal failures are swallowed independently so cleanup can continue.
  *
  * @param attachment - the pane, its session, and its socket
  * @param fit - the resize observer and window listener installed for this pane
  * @param getAgeInterval - reads the current age ticker, which is null when the socket never opened
- * @returns the cleanup function stored on the pane's refs; it swallows teardown errors so one dead listener cannot block the rest
+ * @returns the cleanup function stored on the pane's refs; it swallows socket-close and xterm-disposal errors
  */
 function dashboardBuildTerminalCleanup(
   attachment: DashboardTerminalAttachment,
@@ -609,12 +598,12 @@ function dashboardBuildTerminalCleanup(
     try {
       socket.close();
     } catch {
-      /* ignore: a socket that is already closed needs no closing */
+      // Intentionally ignore socket cleanup failures so closing the pane can still dispose its terminal.
     }
     try {
       term.dispose();
     } catch {
-      /* ignore: a terminal that is already disposed needs no disposal */
+      // Intentionally ignore xterm disposal failures while the user closes or leaves this pane; teardown has no further steps.
     }
   };
 }
@@ -622,14 +611,13 @@ function dashboardBuildTerminalCleanup(
 /**
  * Attach one browser terminal pane to its backend session over a WebSocket.
  *
- * This is what runs after a user clicks Launch or Reconnect: the pane is mounted, sized, wired to the socket, and
- * focused so they can start typing straight away.
+ * After Launch or Reconnect, mount and size the pane, connect its socket, and focus it for typing.
  *
  * @param ctx - dashboard state holding the session rows and pane refs
  * @param sessionId - the session being attached; an id with no row or no pane element is a no-op
  * @param wsUrl - backend socket path returned by the create call
- * @returns nothing. It mounts an xterm instance in the pane, opens a WebSocket, and registers the pane's refs and
- *   cleanup; a failure to construct xterm reports as a toast and leaves the pane empty.
+ * @returns nothing; it mounts xterm, opens the socket, and registers pane refs and cleanup
+ *   Missing xterm globals produce a toast and leave the pane empty; construction and mounting errors propagate.
  */
 function dashboardConnectTerminal(
   ctx: DashboardTerminalContext,
@@ -648,6 +636,7 @@ function dashboardConnectTerminal(
   // A null view means xterm could not be built, and the user has already been told why.
   if (!view) return;
 
+  // A dashboard opened over HTTPS also needs an encrypted socket to its terminal server.
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
   const socket = new WebSocket(
     `${proto}//${location.host}${dashboardTerminalWsPath(wsUrl)}`,
@@ -666,7 +655,9 @@ function dashboardConnectTerminal(
     socket,
   );
 
+  // No age ticker exists until the socket opens; cleanup can leave it alone if connection never succeeds.
   let ageInterval: ReturnType<typeof setInterval> | null = null;
+  // Start connected-state feedback and the session age once the runner socket opens.
   socket.onopen = () => {
     ageInterval = dashboardHandleTerminalSocketOpen(
       attachment,
@@ -674,12 +665,13 @@ function dashboardConnectTerminal(
       ageInterval,
     );
   };
+  // Route this pane's output and lifecycle messages back to its visible session row.
   socket.onmessage = (event: MessageEvent) => {
     dashboardRouteTerminalMessage(attachment, event);
   };
   dashboardBindTerminalSocketLifecycle(attachment);
 
-  /** Record that the user just typed or pasted, which drops the waiting badge and restarts the idle clock. */
+  // Record that the user just typed or pasted, which drops the waiting badge and restarts the idle clock.
   const markUserInputSent = (): void => {
     const lastInputTime = Date.now();
     dashboardClearAwaitingInputTimer(ctx, sessionId);
@@ -712,11 +704,15 @@ function dashboardEndSession(
   sessionId: string,
 ): void {
   const session = ctx.sessions.find((s) => s.id === sessionId);
+  // A session already removed from Workspace needs no second close action.
   if (!session) return;
+  // Closing the session settles any preset badge still marked as running.
   if (session.presetId && ctx.promptRunStates[session.presetId] === "running") {
     ctx.promptRunStates[session.presetId] = "pass";
   }
+  // Ask the server to end a live session before removing its browser pane.
   if (!session.ended) {
+    // Losing the server connection during Close must not prevent the local pane from being removed.
     dashboardFetch(`/api/terminal/${sessionId}`, { method: "DELETE" }).catch(
       () => {},
     );
@@ -724,25 +720,29 @@ function dashboardEndSession(
   ctx.rememberRecentSession(session);
   const refs = ctx._terminalRefs[sessionId];
   dashboardClearTerminalLoadingTimers(ctx, sessionId);
+  // A session without attached pane resources has no browser cleanup to run.
   if (refs?.cleanup) refs.cleanup();
   Reflect.deleteProperty(ctx._terminalRefs, sessionId);
   ctx.sessions = ctx.sessions.filter((s) => s.id !== sessionId);
   ctx._forgetSavedSession(sessionId);
+  // Closing the active tab selects the first remaining session, or clears selection when none remain.
   if (ctx.activeSessionId === sessionId) {
     ctx.activeSessionId = ctx.sessions[0]?.id || null;
   }
   void ctx.updateSessionCount();
 }
 
-/** Exit the active terminal session from the workspace view. */
+// Exit the active terminal session from the workspace view.
 function dashboardExitTerminal(ctx: DashboardTerminalContext): void {
+  // Exit does nothing when the user has no active terminal tab.
   if (ctx.activeSessionId) ctx.endSession(ctx.activeSessionId);
 }
 
 /**
  * Retry a session that never produced output, reusing the prompt the user originally launched with.
- * A session restored from the server has no recorded prompt, so it is left intact rather than restarted empty; it reports other failures
- * through the pane's own error state.
+ *
+ * A restored session without a recorded prompt stays intact; retry is hidden because its launch cannot be reproduced.
+ * It swallows the old session's delete-request failure before retrying through the launch helper.
  *
  * @param ctx - live Alpine terminal context
  * @param sessionId - session the user asked to retry
@@ -752,16 +752,18 @@ async function dashboardRetryTerminalSession(
   sessionId: string,
 ): Promise<void> {
   const session = ctx.sessions.find((s) => s.id === sessionId);
+  // A retry clicked after its row was removed has no session to restart.
   if (!session) return;
   const refs = ctx._terminalRefs[sessionId];
-  // A server-rehydrated session has no reproducible launch prompt. Keep it
-  // intact instead of deleting it and silently starting an empty retry.
+  // A restored session without its original prompt cannot be reproduced, so keep it open and hide Retry.
   if (!dashboardHasTerminalRetryPrompt(refs)) {
     session.loadingShowRetry = false;
     return;
   }
+  // An intentionally empty launch prompt remains empty; stored launch options preserve the user's original choice.
   const prompt = refs?.retryPrompt ?? refs?.launchPrompt ?? "";
   const runner = session.runner;
+  // Missing per-launch overrides use the session's original label, preset, paths, and access mode.
   const promptLabel = refs?.retryPromptLabel ?? session.promptLabel;
   const presetId = refs?.retryPresetId ?? session.presetId;
   const cwdPath = refs?.retryCwdPath ?? session.cwd;
@@ -775,10 +777,13 @@ async function dashboardRetryTerminalSession(
     refs?.retryQualityReportProjectPath ?? session.qualityReportProjectPath;
 
   dashboardClearTerminalLoadingTimers(ctx, sessionId);
+  // An unattached session has no browser resources to release before retrying.
   if (refs?.cleanup) refs.cleanup();
   Reflect.deleteProperty(ctx._terminalRefs, sessionId);
   ctx.sessions = ctx.sessions.filter((s) => s.id !== sessionId);
+  // The replacement launch will supply a new tab; clear selection of the retired one first.
   if (ctx.activeSessionId === sessionId) ctx.activeSessionId = null;
+  // If the server connection fails during removal, retry still proceeds to the launch helper's own request and error handling.
   await dashboardFetch(`/api/terminal/${sessionId}`, {
     method: "DELETE",
   }).catch(() => {});
@@ -790,20 +795,22 @@ async function dashboardRetryTerminalSession(
     targetPath,
     accessMode,
     captureQualityDrafts,
+    // Without a report owner, retry leaves that optional launch destination unset.
     ...(qualityReportProjectPath ? { qualityReportProjectPath } : {}),
   });
 }
 
-/** Switch the workspace to an existing local terminal session. */
+// Switch the workspace to an existing local terminal session.
 function dashboardSwitchToSession(
   ctx: DashboardTerminalContext,
   sessionId: string,
 ): void {
+  // A tab for a row no longer in Workspace cannot become the active session.
   if (!ctx.sessions.find((s) => s.id === sessionId)) return;
   ctx.activeSessionId = sessionId;
 }
 
-/** Attach the workspace to an existing backend terminal session. */
+// Attach the workspace to an existing backend terminal session.
 async function dashboardOpenServerSession(
   ctx: DashboardTerminalContext,
   serverSession: ServerSessionInfo,
@@ -817,9 +824,11 @@ async function dashboardOpenServerSession(
     ctx.activeSessionId = local.id;
     ctx.activeView = "workspace";
     ctx.workspacePanel = "terminal";
+    // A disconnected row needs fresh browser bindings before its terminal can receive output again.
     if (!local.connected) {
       const refs = ctx._terminalRefs[local.id];
       dashboardClearTerminalLoadingTimers(ctx, local.id);
+      // Release earlier pane bindings when this browser previously attached the session.
       if (refs?.cleanup) refs.cleanup();
       ctx._terminalRefs[local.id] = {
         ...ctx._terminalRefs[local.id],
@@ -854,6 +863,7 @@ async function dashboardOpenServerSession(
     captureQualityDrafts: serverSession.captureQualityDrafts,
     qualityReportProjectPath: serverSession.qualityReportProjectPath,
     startTime: new Date(serverSession.createdAt).getTime(),
+    // Without a recorded last input time, start the visible idle clock from this attachment.
     lastInputTime: serverSession.lastInputAt || Date.now(),
     connected: false,
     ended: false,
@@ -886,7 +896,7 @@ async function dashboardOpenServerSession(
 
 /**
  * End a session on the server, whether or not this browser still has a pane for it.
- * It swallows the delete failure, because a session that is already gone is the expected case when cleaning up stale rows.
+ * It swallows request failures so a lost server connection does not block refreshing the session count.
  *
  * @param ctx - live Alpine terminal context
  * @param sessionId - session to terminate
@@ -896,9 +906,11 @@ async function dashboardEndServerSession(
   sessionId: string,
 ): Promise<void> {
   const local = ctx.sessions.find((s) => s.id === sessionId);
+  // A row in this browser needs local pane cleanup as well as the server's termination request.
   if (local) {
     ctx.endSession(sessionId);
   } else {
+    // Losing the server connection during End session is ignored here; the count refresh still runs.
     await dashboardFetch(`/api/terminal/${sessionId}`, {
       method: "DELETE",
     }).catch(() => {});

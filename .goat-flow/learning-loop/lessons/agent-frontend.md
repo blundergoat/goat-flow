@@ -1,105 +1,81 @@
 ---
 category: agent-frontend
-last_reviewed: 2026-08-20
+last_reviewed: 2026-09-05
 ---
 
-**Scope:** Building and visually verifying the dashboard UI - stale dev-mode audit caches, mockup-parity discipline, partial-data UI states, rendered-CSS diagnosis, and toast/loading semantics. Proving browser-visible behaviour with live runs is [browser-evidence.md](browser-evidence.md); testing the built dashboard is [dashboard-testing.md](dashboard-testing.md).
+**Scope:** Building and visually verifying the dashboard UI - stale dev-mode audit caches, mockup-parity discipline, partial-data UI states, rendered-CSS diagnosis, and toast and loading semantics. Proving browser-visible behaviour with live runs is [browser-evidence.md](browser-evidence.md); testing the built dashboard is [dashboard-testing.md](dashboard-testing.md).
 
 ## Lesson: Dashboard audit cache survives code changes because signature doesn't cover compiled JS
 
-**Created:** 2026-05-01
+**Status:** active | **Created:** 2026-05-01
 
-**What happened:** After fixing `buildScope` in `src/cli/audit/audit.ts` to exclude metric failures from harness scope status, rebuilding (`npm run build`), and reloading the dashboard, the dashboard still showed 94% and stale FAIL results. The local audit cache file controlled by `src/cli/server/dashboard-reporting.ts` (search: `AUDIT_CACHE_FILE`) was keyed on config, instruction files, and learning-loop directories - not on the compiled audit code itself. The `Re-audit` button hit the cache and returned the pre-fix result.
+**Prevention:** After changing audit logic in a source-run dashboard, delete the local audit cache file before re-testing through the UI, or request the route's fresh path. Packaged installs are unaffected because the package version changes between releases. Evidence anchors: `src/cli/server/dashboard-reporting.ts` (search: `AUDIT_CACHE_FILE`), `src/cli/server/dashboard-reporting.ts` (search: `buildAuditCacheSignature`).
 
-**Root cause:** `buildAuditCacheSignature` in `src/cli/server/dashboard-reporting.ts` (search: `buildAuditCacheSignature`) hashes project content files but not the package version or compiled code. In packaged installs, the package version changes on upgrade and invalidates the cache. In dev mode (running from source via `tsx`), the package version stays the same across code changes, so the cache signature doesn't change when audit logic changes.
+**What happened:** After fixing `buildScope` in `src/cli/audit/audit.ts` to exclude metric failures from harness scope status, rebuilding, and reloading the dashboard, the UI still showed 94 percent and stale FAIL results, because the `Re-audit` button hit the cache and returned the pre-fix report.
 
-**Why it matters:** During development, every audit logic change (new checks, scoring fixes, concern removal) produces stale dashboard results until the cache file is manually deleted. The developer sees the old result and concludes the fix didn't work.
+**Root cause:** The cache signature covers project content files plus the running package version and config version, and never the compiled audit code. An upgrade therefore invalidates every cache, but a dev-mode run from source keeps the same package version across source edits, so changing audit logic changes nothing the signature can see.
 
-**Prevention:** After changing audit logic during development, clear the local dashboard audit cache file identified by `src/cli/server/dashboard-reporting.ts` (search: `AUDIT_CACHE_FILE`) before re-testing via the dashboard. For packaged installs this is a non-issue because the package version bumps between releases.
+**Why it matters:** In development every audit logic change produces stale dashboard results until the cache file is deleted, so the developer sees the old result and concludes the fix did not work.
 
 ---
 
 ## Lesson: A mockup is the spec, and parity is a layer-by-layer diff
 
-**Created:** 2026-04-05
+**Status:** active | **Created:** 2026-04-05
 **Decision changed:** Treat a supplied mockup as a binding spec and diff it across all four layers before calling UI work done, rather than reproducing its general look.
-**Incident count:** 3
-**Latest occurrence:** 2026-04-26
+**Incident count:** 3 | **Latest occurrence:** 2026-04-26
 
-**What happened:** Three separate rounds, one root cause.
+**Prevention:** For UI work backed by a mockup or screenshots, diff four layers before calling it done; a pass on one layer says nothing about the others, and each incident below cleared some layers and failed a different one. Map mockup classes onto existing `gf-*` classes rather than reorganising the DOM around what seems right.
 
-- **2026-04-05, setup view.** A mockup gave exact structure - a `.left` div holding title, agent strip, and detected config; a `.right` div holding the prompt card. The agent reinterpreted it: title above both columns, agent strip full-width, left column as plain text with no card background. Six-plus correction rounds followed - move the title in, move the strip in, add the card background, change width from 340px to 50%, add `align-self: flex-start` so the card stops stretching. Every one was visible in the mockup from the start.
-- **2026-04-26, M05b Home, bindings.** The implementation copied the broad section order but dropped the top rollup identity row, so Home opened with "Home readiness" instead of project name plus audit age. It also called a non-existent Alpine helper (`agentLabel(...)`) where the dashboard exposes `agentName(...)`, so the title expression failed silently in the browser and the section looked missing in the user's screenshots.
-- **2026-04-26, M05b Home, spacing.** Subtitle `<p>` elements were invented under headings the mockup does not have; section margins were missing (rollup 12px, next-action 20px, section-head `0 0 10px`, agent-grid 22px); padding differed (next-action 16px against the mockup's `18px 22px`); titles used mono where the mockup used sans-serif; the ring rendered 128px against 92px and grade-letter 24px/800 against 18px/600. The first fix round corrected fonts and sizes but missed both the invented elements and the spacing model.
-
-**Root cause:** The mockup was read as layout inspiration rather than a spec. Verification confirmed the page had one root and the API returned data, and compared CSS properties in isolation, instead of diffing the live DOM against the mockup. Adding "helpful" elements the mockup does not contain never got flagged, because nothing was checking for additions.
-
-**Prevention:** For UI work backed by a mockup or screenshots, diff four layers before calling it done. A pass on one layer says nothing about the others - each incident above cleared some layers and failed a different one.
-
-- **Structure:** sections appear in the mockup's order, element-for-element. Every element in the live page absent from the mockup is a removal candidate; do not add text, elements, or wrappers the mockup does not contain.
-- **Copy/data:** visible text - project name, audit age, pill labels, CTA labels - matches the mockup's intent.
+- **Structure:** sections appear in the mockup's order, element for element. Every live element absent from the mockup is a removal candidate, and no text, element, or wrapper the mockup lacks may be added.
+- **Copy and data:** visible text, including project name, audit age, pill labels, and CTA labels, matches the mockup's intent.
 - **Bindings:** every Alpine helper used in markup is local to `x-data` or exists on `app()`. Grep the helper names, then smoke the rendered view after rebuilding `dist/dashboard`; a missing helper fails silently and reads as a missing section.
-- **Spacing and type:** every margin, padding, font-family, and font-size in the mockup CSS is a hard spec, not a suggestion.
+- **Spacing and type:** every margin, padding, font family, and font size in the mockup CSS is a hard spec.
 
-Map mockup classes onto existing `gf-*` classes rather than reorganising the DOM around what seems right.
+**What happened:** Three rounds shared one root cause. In the 2026-04-05 setup view, a mockup specified a `.left` div holding title, agent strip, and detected config beside a `.right` div holding the prompt card; the implementation put the title above both columns, made the strip full-width, and left the column as plain text with no card background, costing six correction rounds that were all visible in the mockup from the start. On 2026-04-26 the M05b Home work dropped the top rollup identity row and called a non-existent helper `agentLabel(...)` where the dashboard exposes `agentName(...)`, so the title expression failed silently and the section looked missing in screenshots. The same day, invented subtitle paragraphs appeared under headings the mockup lacks, section margins and padding differed from the spec, titles used mono where the mockup used sans-serif, and the ring rendered 128px against 92px; the first fix round corrected fonts and sizes but missed both the invented elements and the spacing model.
 
-**Evidence:** `src/dashboard/views/home.html` (search: `rollup-heading`) renders the project name row; `src/dashboard/dashboard-app-state-fragments.ts` (search: `agentName(agentId`) is the helper Home bindings actually use.
+**Root cause:** The mockup was read as layout inspiration rather than a spec. Verification confirmed the page had one root and the API returned data, and compared CSS properties in isolation, instead of diffing the live DOM against the mockup, so added elements were never flagged.
+
+**Evidence:** `src/dashboard/views/home.html` (search: `rollup-heading`) renders the project name row; `src/dashboard/dashboard-app-state-fragments.ts` (search: `agentName(agentId`) is the helper Home bindings use.
 
 ---
 
 ## Lesson: UI state matrices must include partial data states
-**Created:** 2026-04-26
 
-**What happened:** The M05b Home view treated every non-passing setup audit as the same "not installed" state. A project with a partial goat-flow install (`1 of 13` setup components present) rendered the fresh-install top section, disabled preview cards, and "Not installed" label even though the audit response included partial setup evidence and agent scores.
+**Status:** active | **Created:** 2026-04-26
 
-**Root cause:** Verification covered the fully installed and fresh-install branches, but not the intermediate state where setup fails while some checks and agent audit data are present. The view used a broad `setupFailed()` predicate for identity, preview copy, and learning-loop visibility instead of explicit `setupMissing()`, `setupPartial()`, and `setupComplete()` branches.
+**Prevention:** For dashboard status UIs, enumerate each meaningful state before testing the rendered screen: missing, partial, complete, stale, and unavailable. Verify that visible labels, project identity, card data source, and CTAs use the same state model; a broad failure helper is acceptable only for actions that truly apply to every failure mode. Evidence anchors: `src/dashboard/views/home.html` (search: `setupPartial()`), `src/dashboard/views/home.html` (search: `showPreviewAgents()`).
 
-**Prevention:** For dashboard status UIs, enumerate each meaningful state before testing the rendered screen: missing, partial, complete, stale, and unavailable. Verify that visible labels, project identity, card data source, and CTAs all use the same state model; broad failure helpers are acceptable only for actions that truly apply to every failure mode.
+**What happened:** The M05b Home view treated every non-passing setup audit as the same "not installed" state, so a project with `1 of 13` setup components present rendered the fresh-install top section, disabled preview cards, and the "Not installed" label although the audit response carried partial setup evidence and agent scores.
 
-**Evidence:** `src/dashboard/views/home.html` (search: `setupPartial()`) now distinguishes partial setup from missing setup; `src/dashboard/views/home.html` (search: `showPreviewAgents()`) uses real agent audit data when present instead of disabling cards solely because setup failed.
-
----
-
-## Lesson: CLI agents cannot diagnose rendered CSS - ask for browser inspection
-
-**Created:** 2026-04-26
-
-**What happened:** The dashboard's donut chart had a dark hairline border that the user asked to remove. The agent added `border: none` to the `.ring` CSS rule but the hairline persisted. Multiple rounds of CSS changes failed because the agent was guessing at the cause from source code alone. The actual problem was a Tailwind v4 `.ring` utility injecting `box-shadow` onto the element - a class-name collision invisible in source. The user had to use a browser extension (Claude browser) to inspect the rendered computed styles and identify the `box-shadow` from Tailwind's generated CSS. Only then was the real fix clear: rename the class from `ring` to `ring-chart`.
-
-**Root cause:** The agent cannot render CSS or inspect computed styles. It can only read source files. When a visual bug comes from framework-generated CSS (Tailwind, PostCSS, CSS-in-JS) colliding with custom styles, the source code shows no conflict. The agent kept applying source-level fixes (`border: none`, adding properties) that couldn't work because the wrong property was being targeted and the collision was in generated output.
-
-**Prevention:** When a CSS visual bug persists after a source-level fix that should have worked, stop guessing. Tell the user: "I can't see the rendered styles from here. Can you inspect the element's computed styles in devtools and tell me what properties are applied?" One browser inspection gives more diagnostic value than five rounds of blind CSS edits. For Tailwind projects specifically, check whether custom class names collide with Tailwind utility names before writing the CSS rule.
+**Root cause:** Verification covered the fully installed and fresh-install branches but not the intermediate state, and the view used one broad `setupFailed()` predicate for identity, preview copy, and learning-loop visibility instead of explicit missing, partial, and complete branches.
 
 ---
 
-## Lesson: Check repo-provided browser tooling before declaring no browser
+## Lesson: Check browser tooling before blaming source when rendered CSS disagrees
 
-**Created:** 2026-04-27
+**Status:** active | **Created:** 2026-04-26
+**Decision changed:** When a visual bug survives a source-level fix that should have worked, capture the rendered computed styles before editing again; ask a person only when no browser tool is available.
+**Trigger phase:** READ
+**Incident count:** 2 | **Latest occurrence:** 2026-04-27
+**Merged:** 2026-09-05 - renamed from "CLI agents cannot diagnose rendered CSS - ask for browser inspection", whose Prevention predated the local browser tooling and contradicted the READ routing rule; absorbed "Check repo-provided browser tooling before declaring no browser" (2026-04-27).
 
-**What happened:** User asked the agent to view two static site pages (`docs/site/goat-flow-landing.html` and `docs/site/goat-flow-harness-engineering.html`). The agent checked for Playwright, Chromium, Firefox, and text browsers, then claimed there was no headless browser installed. The user pointed at the repo's browser-use skill reference, now canonical at `.goat-flow/skill-docs/playbooks/browser-use.md`, which documents the local `browser-use` CLI. `browser-use` was installed and worked immediately: `browser-use doctor` reported 4/5 checks passed, and the agent was able to open both local routes, capture rendered state, and save screenshots.
+**Prevention:** Run the availability check in `.goat-flow/skill-docs/playbooks/browser-use.md` (search: `command -v browser-use || command -v browser-use-python`) before claiming any browser task is impossible or asking a person to inspect for you; a project-local CLI at `~/.local/bin/` is a real tool, and no harness tool does not mean no tool. With the browser available, capture the element's computed styles and rendered state (search: `browser-use screenshot [path.png]`) rather than making another blind source edit. Only when the check fails, and after following the playbook's ask-before-install fallback, ask the user for devtools output: one inspection is worth more than five speculative CSS edits. For Tailwind projects, check whether a custom class name collides with a utility name before writing the rule.
 
-**Root cause:** The agent treated "view this HTML" as a generic static-file inspection task instead of a UI/browser-evidence task. It searched for familiar tools from habit and failed to check repository-provided skill references before making a broad tooling claim.
+**What happened:** The dashboard donut chart kept a dark hairline after `border: none` was added to the `.ring` rule, and several further CSS rounds failed because the cause was invisible in source: a Tailwind v4 `.ring` utility injected `box-shadow` onto the element. A browser inspection of the computed styles identified it, and renaming the class to `ring-chart` fixed it.
 
-**Why this matters:** Saying "there is no browser" when a project-specific browser tool exists creates false constraints and wastes the user's time. It also undermines the purpose of local skill references: they are there to encode exactly this kind of workflow knowledge.
+**Root cause:** Source files cannot show framework-generated CSS colliding with custom styles, so every source-level fix targeted the wrong property while the collision lived in generated output.
 
-**Evidence:**
-- `.goat-flow/skill-docs/playbooks/browser-use.md` (search: `command -v browser-use || command -v browser-use-python`) documents the availability check.
-- `.goat-flow/skill-docs/playbooks/browser-use.md` (search: `browser-use screenshot [path.png]`) documents rendered evidence capture.
-
-**Prevention:** When a task asks to view, inspect, screenshot, debug, or verify a local UI, check local browser references before falling back to generic tooling assumptions. Run `command -v browser-use || command -v browser-use-python` before saying browser automation is unavailable. If `browser-use` is missing, follow the reference's ask-before-install fallback instead of declaring the task impossible.
-
-**2026-05-03 reinforcement:** A downstream incident showed the broader failure mode: agents that skip `.goat-flow/skill-docs/playbooks/` and go straight to harness ToolSearch can declare project-local CLI tools unavailable when they are not. The structural fix is to route every instruction file to `.goat-flow/skill-docs/playbooks/` and make audit fail when that pointer disappears.
+**Recurrence 2026-04-27:** Asked to view `docs/site/goat-flow-landing.html` and `docs/site/goat-flow-harness-engineering.html`, the agent checked for Playwright, Chromium, Firefox, and text browsers, then claimed no headless browser was installed. The user pointed at the repo's browser-use playbook: `browser-use doctor` reported 4 of 5 checks passing, and both local routes opened with rendered state and screenshots captured. Saying "there is no browser" when a project-local tool exists creates a false constraint and defeats the purpose of the playbooks. A 2026-05-03 downstream incident generalised it: agents that skip the playbook directory and go straight to harness tool search declare project-local CLI tools unavailable, so every instruction file routes to `.goat-flow/skill-docs/playbooks/` and audit fails when that pointer disappears.
 
 ---
 
 ## Lesson: Do not use error-colored toasts for expected loading states
 
-**Created:** 2026-04-29
+**Status:** active | **Created:** 2026-04-29
 
-**What happened:** While making the Workspace terminal launch feel more responsive, the first UX pass added a toast saying `Launching Terminal...` even though launch was a normal expected action and the button itself already changed to `Launching terminal...`. Because dashboard toasts use the same channel for failures, that extra message read like an alert rather than helpful progress feedback.
+**Prevention:** For expected in-place loading, put the state on the initiating control first: disable the button, change its label, or show a local spinner. Reserve toasts, especially error-coloured ones, for outcomes that are exceptional, backgrounded, or detached from the control the user is watching. Evidence anchors: `src/dashboard/views/workspace.html` (search: `Launching terminal...`), `src/dashboard/dashboard-terminal-runtime.ts` (search: `dashboardLaunchInTerminal`).
 
-**Root cause:** The implementation reached for an existing feedback mechanism without checking whether the state was exceptional or already visible in the primary control. A toast is appropriate when the user needs asynchronous feedback they might otherwise miss; it is poor UX when the user just clicked the exact button whose label already reflects the loading state.
+**What happened:** Making the Workspace terminal launch feel more responsive, the first UX pass added a toast saying `Launching Terminal...` although launch is a normal action and the button already read `Launching terminal...`. Because dashboard toasts share one channel with failures, the extra message read as an alert.
 
-**Prevention:** For expected in-place loading, prefer inline state on the initiating control first: disable the button, change its label, or show a local spinner. Reserve toast messages, especially error-colored or alert-styled ones, for outcomes that are exceptional, backgrounded, or detached from the control the user is watching. Evidence anchors: `src/dashboard/views/workspace.html` (search: `Launching terminal...`), `src/dashboard/dashboard-terminal-runtime.ts` (search: `dashboardLaunchInTerminal`).
-
----
+**Root cause:** An existing feedback mechanism was reused without checking whether the state was exceptional or already visible in the primary control.

@@ -99,6 +99,9 @@ const TASK_ESTIMATE_PATTERN =
 /** Anything est-shaped at a task's end, used to warn on drifted notation. */
 const TASK_ESTIMATE_SHAPE = /\(est:[^)]*\)\s*$/iu;
 
+/** Copy-ready task estimate shape shown when an author supplies unreadable notation. */
+const TASK_ESTIMATE_GRAMMAR = "(est: <minutes> min <product|proof|other>)";
+
 /** Complete effort-line grammar, including an optional category split. */
 const EFFORT_ESTIMATE_PATTERN =
   /^\s*~?\s*(\d+)\s*min(?:ute)?s?(?:\s+agent-time)?(?:\s*\((\d+)\s+product\s*\/\s*(\d+)\s+proof\s*\/\s*(\d+)\s+other\))?\s*$/iu;
@@ -116,6 +119,9 @@ const ACTUAL_UNKNOWN_STATE_PATTERN = /^\s*(unavailable|incomplete):\s*(.+)$/iu;
 /** Dedicated non-checkbox estimate for orientation, plan upkeep, and status work. */
 const PLAN_ADMIN_PATTERN = /^\s*(\d+)\s*min(?:ute)?s?\s+other\s*$/iu;
 
+/** Copy-ready plan/admin shape shown when an author supplies unreadable overhead. */
+const PLAN_ADMIN_GRAMMAR = "<minutes> min other";
+
 /**
  * Optional forecast band, unit phrase included so the range can never be read
  * in different units from the headline it must agree with.
@@ -123,12 +129,32 @@ const PLAN_ADMIN_PATTERN = /^\s*(\d+)\s*min(?:ute)?s?\s+other\s*$/iu;
 const FORECAST_RANGE_PATTERN =
   /^\s*(\d+)\s*-\s*(\d+)\s+agent-time minutes on one recorded-unpaused milestone timeline;\s*likely\s+(\d+)\s*(?:;\s*(.+))?$/iu;
 
+/** Canonical forecast-range shape shown directly in a parse error. */
+const FORECAST_RANGE_GRAMMAR =
+  "<low>-<high> agent-time minutes on one recorded-unpaused milestone timeline; likely <minutes>[; <rationale>]";
+
 /** Countable forecast inputs with decimal minute-per-unit rates and visible provenance. */
 const FORECAST_BASIS_PATTERN =
   /^\s*(\d+)\s+agent work units;\s*(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)\s+min\/unit low-likely-high;\s*source:\s*(\S(?:.*\S)?)\s*$/iu;
 
+/** Canonical forecast-basis shape shown directly in a parse error. */
+const FORECAST_BASIS_GRAMMAR =
+  "<units> agent work units; <low>-<likely>-<high> min/unit low-likely-high; source: <source>";
+
 /** A `[HUMAN]` prefix keeps approval time outside coding-agent forecasts. */
 const HUMAN_ONLY_WORK_PATTERN = /^\s*\[human\](?:\s|$)/iu;
+
+/**
+ * Build a parse warning that tells a plan author both how to fix the field and what the checker received.
+ * JSON string encoding keeps pasted control characters visible as escaped text instead of executing them in the user's terminal.
+ */
+function formatActionableParseWarning(
+  fieldLabel: string,
+  expectedGrammar: string,
+  receivedValue: string,
+): string {
+  return `${fieldLabel} not parseable; expected ${JSON.stringify(expectedGrammar)}; received ${JSON.stringify(receivedValue.trim())}`;
+}
 
 /**
  * Narrow a regex-captured category word to the effort vocabulary without casting.
@@ -153,12 +179,16 @@ function readCapturedSplit(
   proof: string | undefined,
   other: string | undefined,
 ): PlanEffortSplit | undefined {
+  // Without product minutes, the user did not provide a complete category split.
   if (product === undefined) return undefined;
+  // Without proof minutes, the user did not provide a complete category split.
   if (proof === undefined) return undefined;
+  // Without other minutes, the user did not provide a complete category split.
   if (other === undefined) return undefined;
   const parsedProduct = readSafeMinutes(product);
   const parsedProof = readSafeMinutes(proof);
   const parsedOther = readSafeMinutes(other);
+  // Any unsafe category value makes the displayed split unreliable as a whole.
   if (
     parsedProduct === undefined ||
     parsedProof === undefined ||
@@ -195,14 +225,18 @@ interface ParsedEffortNumbers {
 function readEffortNumbers(
   match: RegExpMatchArray | null,
 ): ParsedEffortNumbers | undefined {
+  // A missing headline capture means the user's effort text did not match the accepted shape.
   if (!match?.[1]) return undefined;
   const totalMinutes = readSafeMinutes(match[1]);
+  // Unsafe headline minutes cannot become arithmetic authority in checks or exports.
   if (totalMinutes === undefined) return undefined;
 
   const split = readCapturedSplit(match[2], match[3], match[4]);
+  // If the user started a split, every category must parse before the headline is usable.
   if (match[2] !== undefined && split === undefined) return undefined;
 
   const parsed: ParsedEffortNumbers = { totalMinutes };
+  // A headline-only legacy estimate stays valid, while a supplied split travels with it.
   if (split) parsed.split = split;
   return parsed;
 }
@@ -221,7 +255,9 @@ function selectActualText(
   inlineActual: string,
   warnings: string[],
 ): string {
+  // Without a standalone field, the user's legacy inline Actual remains the selected value.
   if (actualFieldValue.length === 0) return inlineActual;
+  // Two visible Actual representations are ambiguous, even when their text happens to match.
   if (inlineActual.length > 0) {
     warnings.push("multiple Actual values supplied");
   }
@@ -253,6 +289,7 @@ export function readTaskEstimate(
   const estimateMinutes = estimateMatch?.[1]
     ? readSafeMinutes(estimateMatch[1])
     : undefined;
+  // A complete estimate gives the user's task both minutes and a category for later reconciliation.
   if (estimateMinutes !== undefined && category) {
     return {
       estimateMinutes,
@@ -260,9 +297,16 @@ export function readTaskEstimate(
     };
   }
 
-  // Est-shaped but unreadable is drifted notation the plan author needs to fix.
-  if (TASK_ESTIMATE_SHAPE.test(text)) {
-    warnings.push(`${itemLabel} ${taskIndex + 1}: estimate not parseable`);
+  const receivedEstimate = text.match(TASK_ESTIMATE_SHAPE)?.[0];
+  // Est-shaped but unreadable text gives the author its accepted shape and the exact safe value to replace.
+  if (receivedEstimate !== undefined) {
+    warnings.push(
+      formatActionableParseWarning(
+        `${itemLabel} ${taskIndex + 1}: estimate`,
+        TASK_ESTIMATE_GRAMMAR,
+        receivedEstimate,
+      ),
+    );
   }
   return {};
 }
@@ -278,11 +322,19 @@ export function readPlanAdminEstimate(
   estimateText: string,
   warnings: string[],
 ): TaskEstimateFields {
+  // No overhead field means the author intentionally declared no separate plan/admin estimate.
   if (estimateText.length === 0) return {};
   const match = estimateText.match(PLAN_ADMIN_PATTERN);
   const estimateMinutes = match?.[1] ? readSafeMinutes(match[1]) : undefined;
+  // An unreadable supplied value needs a copy-ready shape and the exact safe text the author should replace.
   if (estimateMinutes === undefined) {
-    warnings.push("plan/admin overhead estimate not parseable");
+    warnings.push(
+      formatActionableParseWarning(
+        "plan/admin overhead estimate",
+        PLAN_ADMIN_GRAMMAR,
+        estimateText,
+      ),
+    );
     return {};
   }
   return {
@@ -303,6 +355,7 @@ function readRangeMinutes(
   const lowMinutes = readOptionalMinutes(match?.[1]);
   const highMinutes = readOptionalMinutes(match?.[2]);
   const likelyMinutes = readOptionalMinutes(match?.[3]);
+  // All three bounds must be safe numbers before the user can rely on the displayed band.
   if (
     lowMinutes === undefined ||
     highMinutes === undefined ||
@@ -337,13 +390,21 @@ function parseForecastRangeValue(
 
   const match = normalized.match(FORECAST_RANGE_PATTERN);
   const bounds = readRangeMinutes(match);
+  // A supplied but unreadable band cannot support the duration shown to the user.
   if (!bounds) {
-    warnings.push("forecast range not parseable");
+    warnings.push(
+      formatActionableParseWarning(
+        "forecast range",
+        FORECAST_RANGE_GRAMMAR,
+        normalized,
+      ),
+    );
     return undefined;
   }
 
   const range: PlanEffortForecastRange = { ...bounds };
   const rationale = match?.[4]?.trim();
+  // Optional rationale is preserved only when the user supplied visible text.
   if (rationale) range.rationale = rationale;
   return range;
 }
@@ -404,7 +465,13 @@ function parseForecastBasisValue(
 
   // A partial or zero-unit basis cannot explain the duration shown to the user.
   if (!hasCompleteForecastBasis(forecastBasisCandidate)) {
-    warnings.push("forecast basis not parseable");
+    warnings.push(
+      formatActionableParseWarning(
+        "forecast basis",
+        FORECAST_BASIS_GRAMMAR,
+        normalizedBasis,
+      ),
+    );
     return undefined;
   }
 
@@ -535,6 +602,7 @@ export function sumTaskEstimates(
 
   // Accumulate minutes under each task's declared category.
   for (const task of estimatedTasks) {
+    // Only a parsed category can receive the task's minutes; malformed categories already produced a warning.
     if (task.estimateCategory) {
       totals[task.estimateCategory] += task.estimateMinutes ?? 0;
     }
@@ -623,12 +691,16 @@ function parseActualValue(
   warnings: string[],
 ): PlanEffortActual | undefined {
   const normalized = actualText.trim();
+  // An empty field means completed-work evidence is not available yet.
   if (normalized.length === 0) return undefined;
+  // The milestone template's underscore is an explicit placeholder, not an Actual value.
   if (normalized === "_") return undefined;
 
   const unknownActual = parseUnknownActual(normalized);
+  // An honest no-number state is complete as soon as its reason parses.
   if (unknownActual) return unknownActual;
   const numericActual = parseNumericActual(normalized);
+  // A valid measured or retrospective value can now feed reconciliation and reporting.
   if (numericActual) return numericActual;
   warnings.push("actual effort not parseable");
   return undefined;
@@ -641,6 +713,7 @@ function parseUnknownActual(
   const unknownMatch = normalized.match(ACTUAL_UNKNOWN_STATE_PATTERN);
   const state = unknownMatch?.[1]?.toLowerCase();
   const reason = unknownMatch?.[2]?.trim();
+  // Missing state or reason means the user has not supplied an actionable honest no-number declaration.
   if (!state || !reason) return undefined;
   return {
     state: state === "unavailable" ? "unavailable" : "incomplete",
@@ -656,12 +729,14 @@ function parseNumericActual(
   const numericText = readNumericActualText(explicitMatch, normalized);
   const match = numericText.match(ACTUAL_PATTERN);
   const parsedNumbers = readEffortNumbers(match);
+  // A numeric Actual is unusable unless both its outer shape and safe minute values parse.
   if (!match || !parsedNumbers) return undefined;
   const actual: PlanEffortNumericActual = {
     state: readNumericActualState(explicitMatch),
     totalMinutes: parsedNumbers.totalMinutes,
     reason: match[5]?.trim() ?? "",
   };
+  // A supplied category split travels with the Actual so strict checks can reconcile it.
   if (parsedNumbers.split) actual.split = parsedNumbers.split;
   return actual;
 }
@@ -735,6 +810,7 @@ export function renderForecastBasisLine(
  * @returns one standalone `**Actual:**` Markdown line
  */
 export function renderActualLine(actual: PlanEffortActual): string {
+  // Honest no-number states render their reason directly because they have no minute fields.
   if (!isNumericActual(actual)) {
     return `**Actual:** ${actual.state}: ${actual.reason}`;
   }

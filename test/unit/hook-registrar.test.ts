@@ -1,8 +1,8 @@
 /**
- * How hooks arrive on disk: newer installed copies are never overwritten, stale timeouts
- * read as uninstalled, and the generated launchers resolve the correct repo root from
- * worktrees, submodules, and outside-repo working directories.
- * Every case builds a real project and reads back what the registrar actually wrote.
+ * Check the hook registrations and launchers used by CLI and dashboard actions.
+ *
+ * Disposable projects cover newer-file protection, registration drift, duplicate repair and preserved user hooks.
+ * Generated launchers prove project-root selection and input forwarding across supported repository layouts.
  */
 import assert from "node:assert/strict";
 import {
@@ -54,6 +54,7 @@ import {
   runCodexLauncher,
   SUPPORTED_PROVIDER_HOOK_CASES,
   countOwnedCommandRows,
+  assertProviderDenyDescriptorsMatchInstallerContract,
 } from "./hook-registrar.helpers.js";
 
 describe("hook registrar: launchers and installation", () => {
@@ -463,6 +464,7 @@ describe("hook registrar: launchers and installation", () => {
         copilotHooksPath,
       ];
       const configBytesPerRun: string[][] = [];
+      // Repeated user Sync actions must converge to identical provider config without accumulating duplicate rows.
       for (let syncRun = 0; syncRun < 3; syncRun += 1) {
         syncHookStates(root);
         configBytesPerRun.push(
@@ -527,7 +529,13 @@ describe("hook registrar: launchers and installation", () => {
         "deny-dangerous.sh",
       );
       assert.equal(existsSync(managedHookPath), true);
-      assert.equal(existsSync(join(root, ".codex", "hooks.json")), false);
+      // Git retains its independently inherited choice while the selected hook stays disabled.
+      const initialConfig = readFileSync(
+        join(root, ".codex", "hooks.json"),
+        "utf-8",
+      );
+      assert.equal(initialConfig.includes("deny-dangerous.sh"), false);
+      assert.equal(initialConfig.includes("deny-git-mutations.sh"), true);
 
       // For example, the user may restore a checkout after its managed hook file was deleted.
       rmSync(managedHookPath);
@@ -541,9 +549,13 @@ describe("hook registrar: launchers and installation", () => {
         PROFILES.codex,
         denyDangerousSpec,
       );
-      assert.equal(disabledState.registrationIssue, undefined);
-      assert.equal(disabledState.configMissing, true);
-      assert.equal(existsSync(join(root, ".codex", "hooks.json")), false);
+      assert.equal(disabledState.registrationIssue, "registration-missing");
+      assert.equal(disabledState.configMissing, undefined);
+      assert.equal(disabledState.installed, false);
+      // Git retains its independently inherited choice while the selected hook stays disabled.
+      const config = readFileSync(join(root, ".codex", "hooks.json"), "utf-8");
+      assert.equal(config.includes("deny-dangerous.sh"), false);
+      assert.equal(config.includes("deny-git-mutations.sh"), true);
     });
   });
 
@@ -682,6 +694,7 @@ describe("hook registrar: launchers and installation", () => {
         PROFILES.claude,
         denySpec,
       );
+      // This fixture requires the current argv launcher so migration assertions cannot silently accept an older command shape.
       if (expectedDescriptor.form !== "argv") {
         assert.fail("Claude must register the approved argv handler");
       }
@@ -692,6 +705,8 @@ describe("hook registrar: launchers and installation", () => {
             type: "command",
             command: expectedDescriptor.command,
             args: expectedDescriptor.args,
+            bash: expectedDescriptor.bash,
+            powershell: expectedDescriptor.powershell,
             timeout: denySpec.timeoutSec,
           },
         ],
@@ -706,100 +721,63 @@ describe("hook registrar: launchers and installation", () => {
     });
   });
 
-  it("keeps deferred provider deny descriptors byte-identical to the committed installer contract", () => {
-    const denySpec = getHookSpec(HOOK_IDENTIFIER);
-    assert.ok(denySpec);
-    const contract = JSON.parse(
-      readFileSync(
-        join(
-          import.meta.dirname,
-          "..",
-          "..",
-          "workflow",
-          "hooks",
-          "agent-config",
-          "managed-hook-desired-state.json",
-        ),
-        "utf-8",
-      ),
-    ) as {
-      agents: Record<
-        string,
-        { hooks: Record<string, { config: Record<string, never> }> }
-      >;
-    };
-    // Read one agent's deny-hook config out of the contract snapshot.
-    const denyContractConfig = (agentId: string): Record<string, never> =>
-      contract.agents[agentId]!.hooks["deny-dangerous"]!.config;
-
-    // Codex and Antigravity store one deferred shell command each; bytes must not move.
-    const codexDescriptor = managedAgentHookDescriptor(
-      PROFILES.codex,
-      denySpec,
-    );
-    if (codexDescriptor.form !== "shell") {
-      assert.fail("Codex stays on its deferred shell registration");
-    }
-    const codexContractRow = (
-      denyContractConfig("codex") as {
-        hooks: { PreToolUse: Array<{ hooks: Array<{ command: string }> }> };
-      }
-    ).hooks.PreToolUse[0]!.hooks[0]!;
-    assert.equal(codexContractRow.command, codexDescriptor.command);
-
-    const antigravityDescriptor = managedAgentHookDescriptor(
-      PROFILES.antigravity,
-      denySpec,
-    );
-    if (antigravityDescriptor.form !== "shell") {
-      assert.fail("Antigravity stays on its deferred shell registration");
-    }
-    const antigravityContractRow = (
-      denyContractConfig("antigravity") as {
-        "deny-dangerous": {
-          PreToolUse: Array<{ hooks: Array<{ command: string }> }>;
-        };
-      }
-    )["deny-dangerous"].PreToolUse[0]!.hooks[0]!;
-    assert.equal(antigravityContractRow.command, antigravityDescriptor.command);
-
-    // Copilot's deferred registration keeps the same command in both shell fields.
-    const copilotDescriptor = managedAgentHookDescriptor(
-      PROFILES.copilot,
-      denySpec,
-    );
-    if (copilotDescriptor.form !== "shell") {
-      assert.fail("Copilot stays on its deferred shell registration");
-    }
-    const copilotContractRow = (
-      denyContractConfig("copilot") as {
-        hooks: {
-          preToolUse: Array<{ bash: string; powershell: string }>;
-        };
-      }
-    ).hooks.preToolUse[0]!;
-    assert.equal(copilotContractRow.bash, copilotDescriptor.command);
-    assert.equal(copilotContractRow.powershell, copilotDescriptor.command);
-
-    // Claude's approved argv handler is the only migrated fragment in the contract.
-    const claudeDescriptor = managedAgentHookDescriptor(
-      PROFILES.claude,
-      denySpec,
-    );
-    if (claudeDescriptor.form !== "argv") {
-      assert.fail("Claude must register the approved argv handler");
-    }
-    const claudeContractRow = (
-      denyContractConfig("claude") as {
+  // Mutating an isolated installed row proves a loader cannot drop one no-op field and revive Copilot's bare-node failure after sync.
+  it("reports a partial Claude routing descriptor as command drift", () => {
+    withTempProject((root) => {
+      installClaudeDenyHook(root);
+      const configPath = join(root, ".claude", "settings.json");
+      const config = JSON.parse(readFileSync(configPath, "utf-8")) as {
         hooks: {
           PreToolUse: Array<{
-            hooks: Array<{ command: string; args: string[] }>;
+            hooks: Array<Record<string, unknown>>;
           }>;
         };
-      }
-    ).hooks.PreToolUse[0]!.hooks[0]!;
-    assert.equal(claudeContractRow.command, claudeDescriptor.command);
-    assert.deepEqual(claudeContractRow.args, claudeDescriptor.args);
+      };
+      const dangerRow = config.hooks.PreToolUse.flatMap(
+        (group) => group.hooks,
+      ).find((row) => JSON.stringify(row).includes("deny-dangerous.sh"));
+      assert.ok(dangerRow);
+      delete dangerRow.powershell;
+      writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
+
+      const denySpec = getHookSpec(HOOK_IDENTIFIER);
+      assert.ok(denySpec);
+      assert.equal(
+        readAgentHookState(root, PROFILES.claude, denySpec).registrationIssue,
+        "command-or-response-mismatch",
+      );
+    });
+  });
+
+  it("keeps provider deny descriptors byte-identical to the committed installer contract", () => {
+    assertProviderDenyDescriptorsMatchInstallerContract();
+  });
+
+  it("reports a stale Codex Windows override as command drift", () => {
+    withTempProject((root) => {
+      installCodexDenyHook(root);
+      const configPath = join(root, ".codex", "hooks.json");
+      const config = JSON.parse(readFileSync(configPath, "utf-8")) as {
+        hooks: {
+          PreToolUse: Array<{
+            hooks: Array<{ commandWindows: string }>;
+          }>;
+        };
+      };
+      const dangerRow = config.hooks.PreToolUse.flatMap(
+        (group) => group.hooks,
+      ).find((row) => JSON.stringify(row).includes("deny-dangerous.sh"));
+      assert.ok(dangerRow);
+      dangerRow.commandWindows += " stale";
+      writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
+
+      const denySpec = getHookSpec(HOOK_IDENTIFIER);
+      assert.ok(denySpec);
+      assert.equal(
+        readAgentHookState(root, PROFILES.codex, denySpec).registrationIssue,
+        "command-or-response-mismatch",
+      );
+    });
   });
 
   // Fixture: writes four repository shapes a user can really be sitting in.
@@ -929,10 +907,12 @@ describe("hook registrar: launchers and installation", () => {
       applyHookState(HOOK_IDENTIFIER, true, root);
 
       const launcher = readCodexDenyLauncher(root);
-      assert.match(launcher, /run-with-bash\.mjs/u);
-      assert.match(launcher, /--show-toplevel/u);
-      assert.doesNotMatch(launcher, /CLAUDE_PROJECT_DIR/u);
-      assert.doesNotMatch(launcher, /^\.goat-flow\/hooks/u);
+      assert.match(launcher.command, /run-with-bash\.mjs/u);
+      assert.match(launcher.command, /--show-toplevel/u);
+      assert.doesNotMatch(launcher.command, /CLAUDE_PROJECT_DIR/u);
+      assert.doesNotMatch(launcher.command, /^\.goat-flow\/hooks/u);
+      assert.match(launcher.commandWindows, /Buffer\.from/u);
+      assert.doesNotMatch(launcher.commandWindows, /--show-toplevel/u);
 
       const nested = join(root, "src", "cli");
       mkdirSync(nested, { recursive: true });
@@ -987,7 +967,7 @@ describe("hook registrar: launchers and installation", () => {
 
       const inner = join(root, "workspace", "managed-inner");
       const innerLauncher = installCodexDenyHook(inner);
-      assert.equal(typeof innerLauncher, "string");
+      assert.equal(typeof innerLauncher.commandWindows, "string");
       writeFileSync(
         join(inner, ".goat-flow", "hooks", "deny-dangerous.sh"),
         "#!/usr/bin/env bash\nprintf 'INNER_MANAGED_ROOT\\n'\n",
@@ -1043,7 +1023,7 @@ describe("hook registrar: launchers and installation", () => {
         `${partialResult.stdout}\n${partialResult.stderr}`,
       );
       assert.match(partialResult.stderr, /managed root incomplete/iu);
-      assert.doesNotMatch(partialResult.stderr, new RegExp(root, "u"));
+      assert.equal(partialResult.stderr.includes(root), false);
     });
   });
 
@@ -1062,7 +1042,7 @@ describe("hook registrar: launchers and installation", () => {
         [
           "#!/usr/bin/env bash",
           'cat > "$GOAT_FLOW_TEST_PAYLOAD_PATH"',
-          'pwd > "$GOAT_FLOW_TEST_CWD_PATH"',
+          'if pwd -W >/dev/null 2>&1; then pwd -W; else pwd; fi > "$GOAT_FLOW_TEST_CWD_PATH"',
           "",
         ].join("\n"),
       );
@@ -1077,7 +1057,10 @@ describe("hook registrar: launchers and installation", () => {
 
       assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
       assert.equal(readFileSync(payloadPath, "utf8"), payload);
-      assert.equal(readFileSync(cwdPath, "utf8").trim(), root);
+      const capturedCwd = readFileSync(cwdPath, "utf8")
+        .trim()
+        .replaceAll("\\", "/");
+      assert.equal(capturedCwd, root.replaceAll("\\", "/"));
     });
   });
 });

@@ -1,59 +1,43 @@
 ---
 category: skills
-last_reviewed: 2026-08-15
+last_reviewed: 2026-09-05
 ---
 
 ## Footgun: Skill parity edits can miss `.github/skills/` and fail repo-level drift checks
 
 **Status:** active | **Created:** 2026-04-21 | **Evidence:** ACTUAL_MEASURED
 
-**Symptoms:** A skill edit looks complete because `workflow/skills/`, `.agents/skills/`, and `.claude/skills/` match, but repo verification still fails. The remaining drift lives in `.github/skills/`, so `test/integration/audit-drift.test.ts` fails on the repo root even though the more obvious mirrors were updated.
+**Prevention:** When editing `workflow/skills/*/SKILL.md`, update every installed mirror in `.claude/skills/`, `.agents/skills/`, and `.github/skills/` in the same change, deriving the roots from `workflow/manifest.json` or `getInstalledSkillRoots()` rather than memory. Re-run `test/integration/audit-drift.test.ts` or `goat-flow audit --check-drift` so a missed mirror fails immediately.
 
-**Why it happens:** The installed skill surface is broader than the two local agent mirrors most edits cover. `workflow/manifest.json` includes a GitHub agent with `skills_dir: ".github/skills/"`, the manifest helper exposes that root to the drift fixture, and path-integrity checks treat it as a first-class installed mirror. A hand-written file list that omits `.github/skills/` is incomplete.
+**Symptoms:** A skill edit looks complete because `workflow/skills/`, `.agents/skills/`, and `.claude/skills/` match, but `test/integration/audit-drift.test.ts` fails on the repo root because `.github/skills/` still differs.
 
-**Evidence:**
-- `workflow/manifest.json` (search: `"skills_dir": ".github/skills/"`) declares the GitHub agent skill root.
-- `src/cli/manifest/manifest.ts` (search: `getInstalledSkillRoots`) exposes installed skill roots from the manifest-backed agent set.
-- `scripts/check-path-integrity.sh` (search: `skill_dirs=".claude/skills .agents/skills .github/skills"`) checks `.github/skills/` alongside the other installed mirrors.
-- `test/integration/audit-drift-checkdrift-this-repo.test.ts` (search: `goat-flow root should be drift-clean`) failed on 2026-04-21 with finding `goat-review: template (workflow/skills/goat-review/SKILL.md) and installed copy (.github/skills/goat-review/SKILL.md) differ`.
-- 2026-08-04 goat-review contract synchronization updated all four roots and recorded the RED/GREEN evidence in `.goat-flow/logs/sessions/2026-08-04-goat-review-tdd.md`; byte parity and the 105-artifact drift audit passed before goat-debug work began.
-- 2026-08-04 goat-debug disposition synchronization likewise updated all four roots; `.goat-flow/logs/sessions/2026-08-04-goat-debug-tdd.md` records the focused 2/2 and full 132/132 contract passes plus mirror/drift evidence.
+**Why it happens:** The installed surface is broader than the two mirrors most edits cover. `workflow/manifest.json` (search: `"skills_dir": ".github/skills/"`) declares the GitHub agent root, `src/cli/manifest/manifest.ts` (search: `getInstalledSkillRoots`) exposes it to the drift fixture, and `scripts/check-path-integrity.sh` (search: `skill_dirs=".claude/skills .agents/skills .github/skills"`) treats it as a first-class mirror, so a hand-written file list that omits it is incomplete.
 
-**Prevention:**
-1. When editing `workflow/skills/*/SKILL.md`, update every installed mirror in `.claude/skills/`, `.agents/skills/`, and `.github/skills/` in the same change.
-2. Derive installed skill roots from `workflow/manifest.json` or `getInstalledSkillRoots()` rather than from memory.
-3. Re-run `test/integration/audit-drift.test.ts` or `goat-flow audit --check-drift` after any skill-parity edit so a missed mirror fails immediately.
+**Evidence:** `test/integration/audit-drift-checkdrift-this-repo.test.ts` (search: `goat-flow root should be drift-clean`) failed on 2026-04-21 with `goat-review: template (workflow/skills/goat-review/SKILL.md) and installed copy (.github/skills/goat-review/SKILL.md) differ`. Mirror budgets across all four roots are pinned by `test/contract/skill-hardening-contracts.test.ts` (search: `functional skills stay within the 2500-word cap across all mirrors`).
 
 ## Footgun: Shared reference edits can split workflow templates from installed runtime copies
 
 **Status:** active | **Created:** 2026-04-25 | **Evidence:** ACTUAL_MEASURED
 
-**Symptoms:** An edit to shared skill guidance can look correct in the loaded runtime copy but leave the workflow template behind, causing consumers installed from the template to miss the rule and causing preflight/drift tests to fail.
+**Prevention:** When changing `skill-preamble.md`, `skill-conventions.md`, or topical files under `workflow/skills/reference/`, edit the workflow template and installed copy together; when changing playbooks under `workflow/skills/playbooks/`, update the matching `.goat-flow/skill-docs/playbooks/` surface too. Exception: the `skill-quality-testing` methodology starts at `workflow/skills/playbooks/skill-quality-testing.md` plus its topical files and installs to `.goat-flow/skill-docs/skill-quality-testing/README.md` plus the installed topical files. Re-run `bash scripts/preflight-checks.sh`, or at minimum `node --import tsx src/cli/cli.ts audit . --check-drift --format json`, before treating the change as complete.
 
-**Why it happens:** Shared skill reference files have two live surfaces: `workflow/skills/reference/` is the install template source, while `.goat-flow/skill-docs/` is the installed runtime copy loaded by this repo's agents. Agents naturally edit the file they just read at runtime, but the package source of truth also has to move in the same change.
+**Symptoms:** An edit to shared skill guidance looks correct in the loaded runtime copy but leaves the workflow template behind, so projects installed from that template miss the rule and preflight or drift tests fail.
 
-**Evidence:**
-- `.goat-flow/skill-docs/skill-preamble.md` (search: `Routing rule`) contains the runtime rule that triggered the current drift.
-- `workflow/skills/reference/skill-preamble.md` (search: `Learning-Loop Retrieval`) is the corresponding template source that must remain byte-equivalent except for intentionally synchronized edits.
-- `scripts/preflight-checks.sh` (search: `Skill Docs Sync`) fails when shared skill-doc templates and installed copies differ.
-- `src/cli/audit/check-artifact-integrity.ts` (search: `SHARED_ARTIFACT_MIRRORS`) owns the canonical shared-reference mirror registry used by the audit path.
+**Why it happens:** Shared reference files have two live surfaces, `workflow/skills/reference/` as the install source and `.goat-flow/skill-docs/` as the runtime copy this repo's agents load, and agents naturally edit the file they just read.
 
-**Prevention:** When changing shared skill-reference files (`skill-preamble.md`, `skill-conventions.md`) or topical files under `workflow/skills/reference/`, edit the workflow template and installed copy together. When changing standalone playbooks under `workflow/skills/playbooks/`, update the matching `.goat-flow/skill-docs/playbooks/` surfaces too. Exception: the `skill-quality-testing` methodology source starts at `workflow/skills/playbooks/skill-quality-testing.md` plus topical files under `workflow/skills/playbooks/skill-quality-testing/`, but installs to `.goat-flow/skill-docs/skill-quality-testing/README.md` plus the installed topical files. Re-run `bash scripts/preflight-checks.sh` or at minimum `node --import tsx src/cli/cli.ts audit . --check-drift --format json` before treating the change as complete.
+**Evidence:** `.goat-flow/skill-docs/skill-preamble.md` (search: `Routing rule`) is the runtime rule that triggered the drift; `workflow/skills/reference/skill-preamble.md` (search: `Learning-Loop Retrieval`) is its template source; `scripts/preflight-checks.sh` (search: `Skill Docs Sync`) fails when they differ; `src/cli/audit/check-artifact-integrity.ts` (search: `SHARED_ARTIFACT_MIRRORS`) owns the mirror registry the audit path uses.
 
 ## Footgun: Skill reference-pack merges can leave stale installed files behind
 
 **Status:** active | **Created:** 2026-05-21 | **Evidence:** ACTUAL_MEASURED
 
-**Symptoms:** A target project upgraded to the current goat-flow release has current `SKILL.md` files and current manifest-listed references, but old per-skill Markdown reference files remain beside them. Agents that grep the `references/` directory can read superseded guidance with old `goat-flow-reference-version` frontmatter even though setup and agent-skill audit checks pass.
+**Prevention:** After any per-skill reference merge, rename, or deletion, update `workflow/manifest.json` `skills.references`, run an installer round-trip that starts with a stale reference file, and run `node --import tsx src/cli/cli.ts audit <target> --agent <id>` against a target holding the stale file to prove audit fails before reinstall and passes after.
 
-**Why it happens:** Skill installation overwrites files listed by `workflow/manifest.json` `skills.references`, but a reference merge or rename removes files from the manifest. A copy-only upgrade does not delete files that are no longer listed, so old files survive unless the installer or audit explicitly treats unlisted references as stale.
+**Symptoms:** A target upgraded to the current release has current `SKILL.md` files and manifest-listed references, but old per-skill Markdown files remain beside them, so agents that grep `references/` read superseded guidance with old `goat-flow-reference-version` frontmatter while setup and agent-skill audits pass.
 
-**Evidence:**
-- `workflow/install-goat-flow.sh` (search: `prune_unlisted_skill_references`) now removes unlisted Markdown files from canonical skill `references/` directories before copying current templates.
-- `src/cli/audit/check-agent-setup.ts` (search: `checkUnexpectedSkillReferences`) fails the `agent-skills` check when installed goat skill references are not listed in the manifest.
-- Downstream gruff-php upgrade on 2026-05-21 left `auth-authz.md`, `cicd-and-agent-surfaces.md`, `dependency-and-supply-chain.md`, and `secrets-and-data-exposure.md` under `.claude/skills/goat-security/references/` after those files were merged into the v1.7.0 `identity-and-data.md` and `supply-chain-and-cicd.md` reference set.
+**Why it happens:** Installation overwrites the files the manifest lists, and a copy-only upgrade never deletes files a merge removed from that list.
 
-**Prevention:** After any per-skill reference merge, rename, or deletion, update `workflow/manifest.json` `skills.references`, run an installer round-trip test that starts with a stale reference file, and run `node --import tsx src/cli/cli.ts audit <target> --agent <id>` against a target containing the stale file to prove audit fails before reinstall and passes after reinstall.
+**Evidence:** A gruff-php upgrade on 2026-05-21 left `auth-authz.md`, `cicd-and-agent-surfaces.md`, `dependency-and-supply-chain.md`, and `secrets-and-data-exposure.md` under `.claude/skills/goat-security/references/` after they were merged into the v1.7.0 `identity-and-data.md` and `supply-chain-and-cicd.md` set. `workflow/install-goat-flow.sh` (search: `prune_unlisted_skill_references`) now removes unlisted Markdown from canonical `references/` directories before copying, and `src/cli/audit/check-agent-setup.ts` (search: `checkUnexpectedSkillReferences`) fails `agent-skills` when installed references are not listed.
 
 ---
 
@@ -65,40 +49,18 @@ last_reviewed: 2026-08-15
 
 **Status:** resolved | **Created:** 2026-05-02 | **Resolved:** 2026-05-02 | **Evidence:** ACTUAL_MEASURED
 
-**Original symptoms:** Agents in consumer projects found ADR-021 and the removed historical `ADR-018-no-goat-verify-skill.md` citations in installed skill files, tried to look them up in `.goat-flow/learning-loop/decisions/`, and either hallucinated ADR content or lost context. The rules themselves worked, but the authority citations were dead links.
+**Resolution:** All ADR references were removed from installed skill files in v1.4.0 and the rules restated inline with their rationale; `rg 'ADR-\d+' workflow/skills/` returns zero matches. Agents in consumer projects had been looking up ADR-021 and a removed ADR in `.goat-flow/learning-loop/decisions/` and either hallucinating content or losing context.
 
-**Resolution:** All ADR references removed from installed skill files in v1.4.0 (goat-critique excuse table, goat-qa regression guard and constraints). Rules are now self-contained with inline rationale. Verified: `rg 'ADR-\d+' workflow/skills/` returns zero matches.
-
-**Prevention (retained):**
-1. Skill SKILL.md files and their reference packs must be self-contained. The rule and its rationale must be stated inline - never behind an ADR citation the consumer doesn't have.
-2. ADR references are fine in framework-internal files (footguns, lessons, architecture, code-map, instruction files) because those live in the framework repo. The boundary is: if the file gets copied to consumer projects by the installer, it must not reference framework ADRs.
-3. When adding a rule to a skill that came from an ADR, state the rule and a one-line "why" inline. Cross-reference the ADR only in the framework's own learning-loop artifacts.
+**Prevention retained:** Any file the installer copies to consumer projects states its rules and a one-line why inline and never cites a framework ADR; ADR references stay in framework-internal files (footguns, lessons, architecture, code-map, instruction files).
 
 ## Footgun: Installed skill copies can drift on punctuation-only edits and fail unrelated test runs
 
 **Status:** resolved | **Created:** 2026-04-18 | **Resolved:** 2026-04-18 | **Evidence:** ACTUAL_MEASURED
 
-**Original symptoms:** `npm test` failed in `test/integration/audit-drift.test.ts` even when the code change did not touch skills, because the tracked installed copies under `.claude/skills/` and `.agents/skills/` had Unicode em dashes while `workflow/skills/` templates had ASCII hyphens.
-
-**Original evidence:**
-- `workflow/skills/goat-plan/SKILL.md` vs `.claude/skills/goat-plan/SKILL.md` (search: `## When to Use`) - hyphen vs em dash in the historical text at that section
-- `workflow/skills/goat-plan/SKILL.md` vs `.claude/skills/goat-plan/SKILL.md` (search: `Milestone files exist for`) - hyphen vs em dash
-
-**Resolution:** Installed copies are now byte-identical with the workflow templates (verified by `diff` returning empty output). The drift check at `test/integration/audit-drift.test.ts` now passes on these files.
-
-**Prevention (retained):** When editing `workflow/skills/*/SKILL.md`, update the installed copies in `.claude/skills/` and `.agents/skills/` in the same change. The preflight `Skill SKILL.md Parity` check and `goat-flow audit --check-drift` both catch byte-level divergence before unrelated work is blocked by stale fixtures.
+**Resolution:** Installed copies under `.claude/skills/` and `.agents/skills/` are byte-identical with the templates. `npm test` had failed in `test/integration/audit-drift.test.ts` on an unrelated change because the tracked copies had Unicode em dashes where `workflow/skills/goat-plan/SKILL.md` (search: `## When to Use`) had ASCII hyphens; the preflight `Skill SKILL.md Parity` check and `goat-flow audit --check-drift` both catch byte-level divergence.
 
 ## Footgun: Workflow template source and installed copy can silently diverge
 
 **Status:** resolved | **Created:** 2026-04-15 | **Resolved:** 2026-04-15 | **Updated:** 2026-04-17 | **Evidence:** ACTUAL_MEASURED
 
-**Symptoms:** Agents on consumer projects follow a different rule than agents on the goat-flow repo, because the workflow template (install source) says one thing and the installed copy says another. The divergence is invisible - both files exist, both parse correctly, and no automated check compares their content.
-
-**Resolution:** Four preventions implemented:
-1. Divergence fixed - both files now match (verified by diff).
-2. Preflight skill-docs sync check (search: `Skill Docs Sync` in `scripts/preflight-checks.sh`) - byte-exact diff of preamble, conventions, and playbooks against workflow templates, fails if any differ.
-3. Preflight skill parity check (search: `Skill SKILL.md Parity` in `scripts/preflight-checks.sh`) - byte-exact diff of each workflow template vs `.claude/skills/` and `.agents/skills/` installed copies.
-4. CLI drift check (M04, 2026-04-17) via `goat-flow audit --check-drift` (search: `skillContentsEquivalent` in `src/cli/audit/check-drift.ts`) - YAML-aware normalisation so frontmatter key reorder and trailing whitespace do not false-positive; also detects orphan directories and deprecated skill names from `workflow/manifest.json:stale_names`.
-5. Integration tests: `test/integration/preamble-sync.test.ts` covers shared docs; `test/integration/audit-drift.test.ts` covers the CLI path with tmpdir fixtures.
-
-**Original evidence (historical):** The shared preamble (template at `workflow/skills/reference/skill-preamble.md`, installed at `.goat-flow/skill-docs/skill-preamble.md`) diverged between template and installed copy around a single-line change; discovered 2026-04-15 by multi-agent critique. Exact line numbers from that incident are no longer recorded here because the file has been edited since.
+**Resolution:** The shared preamble template at `workflow/skills/reference/skill-preamble.md` and its installed copy at `.goat-flow/skill-docs/skill-preamble.md` had diverged by one line, discovered 2026-04-15 by multi-agent critique, so agents on consumer projects followed a different rule from agents in this repo. Guards: `scripts/preflight-checks.sh` (search: `Skill Docs Sync`) diffs preamble, conventions, and playbooks byte-exactly against templates and (search: `Skill SKILL.md Parity`) diffs each template against `.claude/skills/` and `.agents/skills/`; `goat-flow audit --check-drift` via `src/cli/audit/check-drift.ts` (search: `skillContentsEquivalent`) normalises frontmatter key order and trailing whitespace and detects orphan directories and deprecated names from the manifest's `stale_names`; `test/integration/preamble-sync.test.ts` and `test/integration/audit-drift.test.ts` cover both paths.

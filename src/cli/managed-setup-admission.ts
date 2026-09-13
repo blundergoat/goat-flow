@@ -62,6 +62,9 @@ function unmatchedPathReason(
   if (row.authority === "refused-replaceability") {
     return "--force-path names a user-owned file that is not replaceable from a package source.";
   }
+  if (row.authority === "refused-path-safety") {
+    return "--force-path names a symlinked, non-regular, or unreadable target; no authority bypasses path safety.";
+  }
   // Naming a user-owned path is the common near-miss: the second authority is missing.
   if (row.ownership === "user-owned") {
     return "--force-path names a user-owned file; add --force-user-owned to replace it.";

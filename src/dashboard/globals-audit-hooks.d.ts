@@ -1,9 +1,8 @@
 /**
- * Ambient audit and hook contracts consumed by dashboard browser scripts.
+ * Declare the audit and hook payloads used by dashboard browser scripts.
  *
- * Use when Audit, Home, or Hooks UI payloads add fields users can inspect.
- * These declarations stay import-free so every classic dashboard script shares the same API shapes without pulling CLI-only code into the browser
- * build.
+ * Keep Audit, Home and Hooks aligned when the API adds information users can inspect.
+ * These import-free declarations share response shapes without including server code in the browser bundle.
  */
 
 type AuditStatus = "pass" | "fail" | "skipped";
@@ -28,8 +27,7 @@ type EnforcementCapabilityAssurance =
   | "provider-documented"
   | "not-observed";
 
-// ---------------------------------------------------------------------------
-// Audit API response types
+// --------------------------------------------------------------------------- Audit API response types
 // ---------------------------------------------------------------------------
 
 /** Failure entry returned by the audit API for a failed check. */
@@ -174,8 +172,7 @@ interface RecentLesson {
   path: string;
 }
 
-// ---------------------------------------------------------------------------
-// Hook API response types
+// --------------------------------------------------------------------------- Hook API response types
 // ---------------------------------------------------------------------------
 
 type HookDrift = "desired-on-actual-off" | "desired-off-actual-on";
@@ -240,4 +237,26 @@ interface HookState extends Record<"togglable" | "enabled", boolean> {
   defaultEnabled: boolean;
   requiresConfirmDialog: boolean;
   agents: Partial<Record<RunnerId, HookAgentState>>;
+}
+
+/** The explicit action retained while the Hooks page asks about replacing local files. */
+type HookUserAction =
+  | { kind: "sync" }
+  | { kind: "toggle"; hookId: string; hookName: string; enabled: boolean };
+
+/** One server-derived local difference; all named hooks share the listed file. */
+interface HookReplacementFile {
+  path: string;
+  hookIds: string[];
+  reason: "diverged" | "unclassified";
+}
+
+/** A replacement review belongs to one project visit and request, and disappears when either changes. */
+interface HookReplacementReview {
+  projectPath: string;
+  visitGeneration: number;
+  requestGeneration: number;
+  action: HookUserAction;
+  confirmationIdentity: string;
+  conflicts: HookReplacementFile[];
 }

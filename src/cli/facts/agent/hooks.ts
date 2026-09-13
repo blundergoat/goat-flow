@@ -18,7 +18,8 @@ const LEGACY_GUARDRAIL_HOOK_FILES = [
   "guard-secret-paths.sh",
   "guard-repository-writes.sh",
 ];
-const DENY_DANGEROUS_POLICY_FILES = [
+const SHARED_POLICY_FILES = [
+  ".goat-flow/hooks/deny-dangerous/guard-runtime.sh",
   ".goat-flow/hooks/deny-dangerous/patterns-shell.sh",
   ".goat-flow/hooks/deny-dangerous/patterns-paths.sh",
   ".goat-flow/hooks/deny-dangerous/patterns-writes.sh",
@@ -127,7 +128,7 @@ function applySettingsDenyOverrides(
   // Mirror the shell-hook safety checks against settings-based Bash deny rules.
   if (/Bash\(.*rm -rf|Bash\(.*rm -fr/i.test(denyStr))
     hook.denyBlocksRmRf = true;
-  if (/Bash\(.*git push/i.test(denyStr)) hook.denyBlocksGitPush = true;
+  // Settings Git denials remain separate defence in depth; they cannot stand in for the managed Git policy.
   if (/Bash\(.*chmod 777/i.test(denyStr)) hook.denyBlocksChmod = true;
   if (
     /Bash\(.*(curl|wget).*(\|\s*(ba)?sh|\|\s*sh)/i.test(denyStr) ||
@@ -254,9 +255,9 @@ function siblingGuardrailPaths(
   // Nothing registered, so there are no supporting files to report either way.
   if (!denyHookPath) return [];
   // The current deny hook keeps its policy files at fixed paths shared by every agent.
-  if (denyHookPath.endsWith("/deny-dangerous.sh")) {
-    return DENY_DANGEROUS_POLICY_FILES.every((path) => fs.exists(path))
-      ? DENY_DANGEROUS_POLICY_FILES
+  if (/\/deny-(?:dangerous|git-mutations)\.sh$/u.test(denyHookPath)) {
+    return SHARED_POLICY_FILES.every((path) => fs.exists(path))
+      ? SHARED_POLICY_FILES
       : [];
   }
   const slash = denyHookPath.lastIndexOf("/");
@@ -299,7 +300,14 @@ function analyzeDenyHookPath(
     return hook;
   }
 
-  const guardrailContents = siblingGuardrailPaths(fs, denyHookPath)
+  const requiredPaths = siblingGuardrailPaths(fs, denyHookPath);
+  if (
+    /\/deny-(?:dangerous|git-mutations)\.sh$/u.test(denyHookPath) &&
+    requiredPaths.length === 0
+  ) {
+    return createEmptyDenyFacts(false);
+  }
+  const guardrailContents = requiredPaths
     .map((path) => fs.readFile(path))
     .filter((content): content is string => typeof content === "string");
   const analysis = analyzeDenyScript(
@@ -311,7 +319,8 @@ function analyzeDenyHookPath(
     denyUsesJq: analysis.usesJq,
     denyHandlesChaining: analysis.handlesChaining,
     denyBlocksRmRf: analysis.blocksRmRf,
-    denyBlocksGitPush: analysis.blocksGitPush,
+    denyBlocksGitPush:
+      denyHookPath.endsWith("/deny-git-mutations.sh") && analysis.blocksGitPush,
     denyBlocksChmod: analysis.blocksChmod,
     denyBlocksPipeToShell: analysis.blocksPipeToShell,
     denyBlocksCloudDestructive: analysis.blocksCloudDestructive,
@@ -340,24 +349,27 @@ function denyHookHasNormalizedSecretRoots(content: string): boolean {
   return hasRootMatcher || hasBoundaryAwareDirectoryMatcher || hasSelfTestRoots;
 }
 
-/** Detect the direct literal secret-path families the Bash hook should block. */
+/**
+ * Detect the secret-path families the Bash hook must still block: env files, the SSH and AWS stores, registry credentials, and key extensions.
+ * A bare `secrets` folder is deliberately not a family, so a project with a secrets route passes this check.
+ *
+ * @param content - text of the installed secret-path policy file; an older hook without these markers reports no coverage
+ * @returns true only when every family marker is present
+ */
 function denyHookHasSecretFamilyMarkers(content: string): boolean {
-  const hasKeys =
+  const hasKeyExtensionFamily =
     content.includes("\\.(pem|key|pfx)") ||
     content.includes("\\.(pem|key|pfx|p12)") ||
     content.includes("\\.\\(pem\\|key\\|pfx\\)");
-  const hasSecretDirectoryFamilies =
+  const hasCredentialStoreFamilies =
     (content.includes("\\.ssh/") && content.includes("\\.aws/")) ||
     content.includes("(\\.ssh|\\.aws|");
-  const hasSecretsDirectoryFamily =
-    /secrets\//.test(content) || content.includes("|secrets)");
   return [
     /\\\.env/.test(content),
     /\\\.env\\\.example/.test(content) || /\.env\.example/.test(content),
-    hasSecretDirectoryFamilies,
-    hasSecretsDirectoryFamily,
+    hasCredentialStoreFamilies,
     /credentials/.test(content) || /\\\.npmrc|\\\.pypirc/.test(content),
-    hasKeys,
+    hasKeyExtensionFamily,
   ].every(Boolean);
 }
 
@@ -440,6 +452,15 @@ export function extractHookFacts(
   const hook = analyzeDenyHookPath(fs, denyHookPath);
   const absolutePathHooks = findAbsolutePathHooks(fs, agent.hooksDir);
   const denyRegistration = buildDenyRegistration(agent, hookConfig.parsed);
+  const gitRegistration = buildDenyRegistration(
+    agent,
+    hookConfig.parsed,
+    "deny-git-mutations",
+  );
+  const gitPath = agent.hooksDir
+    ? `${agent.hooksDir}/deny-git-mutations.sh`
+    : null;
+  const gitHook = analyzeDenyHookPath(fs, gitPath);
   const bashDenyCoversSecrets = detectBashDenyCoversSecrets(fs, denyHookPath);
 
   // Second: also check settings.json Bash deny patterns
@@ -450,6 +471,10 @@ export function extractHookFacts(
   return {
     ...hook,
     ...denyRegistration,
+    gitDenyExists: gitHook.denyExists,
+    gitDenyIsRegistered: gitRegistration.denyIsRegistered,
+    gitDenyRegisteredPath: gitRegistration.denyRegisteredPath,
+    denyBlocksGitPush: gitHook.denyBlocksGitPush,
     ...postTurn,
     absolutePathHooks,
     bashDenyCoversSecrets,

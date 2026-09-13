@@ -4,8 +4,16 @@
  * process text.
  */
 import { spawnSync } from "node:child_process";
-import { realpathSync } from "node:fs";
-import { relative, resolve, sep } from "node:path";
+import {
+  closeSync,
+  mkdtempSync,
+  openSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { join, relative, resolve, sep } from "node:path";
 import { performance } from "node:perf_hooks";
 
 import { AUDIT_VERSION } from "./constants.js";
@@ -25,26 +33,52 @@ import {
   type HookRuntimeReasonCode,
   type HookRuntimeReport,
   type HookRuntimeScenarioResult,
+  type HookRuntimeSummary,
 } from "./hooks-configured-runtime-evidence.js";
 import {
   type AppendEvidenceEnvelopeResult,
   type CreateEvidenceEnvelopeInput,
 } from "./evidence/envelope.js";
 import type { AgentId } from "./types.js";
+import type { HookScenario } from "./cli-types.js";
 import { readAllHookStates } from "./server/hook-registrar.js";
 import { getAgentProfiles } from "./agents/registry.js";
 import {
+  agentHookSpawnDescriptor,
   buildAgentHookDescriptor,
   type AgentHookHandlerDescriptor,
 } from "./server/agent-hook-command.js";
 import { getHookSpec } from "./server/hooks-registry.js";
+import { managedPolicyRuntimeIdentity } from "./server/hook-runtime-proof.js";
 
 export type {
   HookProbeExecution,
   HookRuntimeReport,
 } from "./hooks-configured-runtime-evidence.js";
 
+type PolicyScenarioGroup = "deny-hook" | "git-mutations-hook";
+// Both policy registrations retain the same provider deadline.
 const MANAGED_HOOK_IDENTIFIER = HOOK_VERIFICATION_CONTRACTS["deny-hook"].hookId;
+const managedHookTimeoutSeconds = getHookSpec(
+  MANAGED_HOOK_IDENTIFIER,
+)?.timeoutSec;
+/**
+ * Windows spends this long starting a scrubbed replay before the hook does any work: the same registered Codex
+ * command costs ~1.4s under the host environment and 24-32s under the managed one, measured by the
+ * codex-windows-replay diagnostics in test/integration/hook-command-spawn-matrix.test.ts. That surcharge belongs to
+ * the verification harness, not to the hook, so it is added to the registered budget rather than taken out of it -
+ * otherwise a hook that answers well inside its own budget is reported as `probe-timed-out`.
+ */
+const WINDOWS_MANAGED_PROBE_STARTUP_ALLOWANCE_MS = 60_000;
+
+/** Exact configured-launcher replay gets the registered hook budget; direct classifier probes keep the shared fast cap. */
+const MANAGED_CONFIGURED_PROBE_TIMEOUT_MS =
+  (managedHookTimeoutSeconds === undefined
+    ? PROBE_TIMEOUT_MS
+    : managedHookTimeoutSeconds * 1000) +
+  (process.platform === "win32"
+    ? WINDOWS_MANAGED_PROBE_STARTUP_ALLOWANCE_MS
+    : 0);
 
 /** One fixed classifier input; `command` is never copied into reports or events. */
 export interface HookProbeScenario {
@@ -68,15 +102,17 @@ export interface ManagedDenyHookState {
 export interface HookRuntimeRequest {
   projectPath: string;
   agent: AgentId;
-  scenarioGroup: "deny-hook";
+  scenarioGroup: PolicyScenarioGroup;
   isTargetUntrusted: boolean;
 }
 
 /** Replaceable boundaries keep verdict tests deterministic without spawning hook code. */
 export interface HookRuntimeDependencies {
+  readRuntimeIdentity?: typeof managedPolicyRuntimeIdentity;
   readDenyHookState: (
     projectPath: string,
     agent: AgentId,
+    scenarioGroup: PolicyScenarioGroup,
   ) => ManagedDenyHookState;
   executeProbe: (
     projectPath: string,
@@ -109,12 +145,39 @@ const DENY_HOOK_SCENARIOS: readonly HookProbeScenario[] = [
   },
   {
     id: HOOK_VERIFICATION_CONTRACTS["deny-hook"].requiredScenarioIds[2],
-    label: "Repository push is blocked",
+    label: "GitHub CLI writes are blocked",
+    expected: "blocked",
+    command: "gh pr create --fill",
+  },
+  {
+    id: HOOK_VERIFICATION_CONTRACTS["deny-hook"].requiredScenarioIds[3],
+    label: "Read-only repository status is allowed",
+    expected: "allowed",
+    command: "git status",
+  },
+];
+
+const GIT_HOOK_SCENARIOS: readonly HookProbeScenario[] = [
+  {
+    id: "repository-commit",
+    label: "Git commits are blocked",
+    expected: "blocked",
+    command: "git commit -m probe",
+  },
+  {
+    id: "repository-push",
+    label: "Git publication is blocked",
     expected: "blocked",
     command: "git push origin main",
   },
   {
-    id: HOOK_VERIFICATION_CONTRACTS["deny-hook"].requiredScenarioIds[3],
+    id: "repository-destructive",
+    label: "Destructive Git operations are blocked",
+    expected: "blocked",
+    command: "git reset --hard",
+  },
+  {
+    id: "read-only-control",
     label: "Read-only repository status is allowed",
     expected: "allowed",
     command: "git status",
@@ -125,9 +188,11 @@ const DENY_HOOK_SCENARIOS: readonly HookProbeScenario[] = [
 function readManagedDenyHookState(
   projectPath: string,
   agent: AgentId,
+  scenarioGroup: PolicyScenarioGroup,
 ): ManagedDenyHookState {
+  const hookIdentifier = HOOK_VERIFICATION_CONTRACTS[scenarioGroup].hookId;
   const denyHook = readAllHookStates(projectPath).find(
-    (hook) => hook.id === MANAGED_HOOK_IDENTIFIER,
+    (hook) => hook.id === hookIdentifier,
   );
   // A missing registry row is an internal capability gap, not proof of support.
   if (!denyHook) {
@@ -141,7 +206,7 @@ function readManagedDenyHookState(
     };
   }
   const agentState = denyHook.agents[agent];
-  const denyHookSpec = getHookSpec(MANAGED_HOOK_IDENTIFIER);
+  const denyHookSpec = getHookSpec(hookIdentifier);
   const agentProfile = getAgentProfiles().find(
     (knownAgent) => knownAgent.id === agent,
   );
@@ -273,9 +338,106 @@ function configuredDenyHookPayload(
   });
 }
 
+/** Process inputs for one configured-hook replay, including who owns its standard-input stream. */
+export interface ManagedConfiguredProbeTransport {
+  command: string;
+  args: string[];
+  environment: NodeJS.ProcessEnv;
+  input: string;
+  stdin: "file" | "pipe";
+}
+
+/**
+ * Select the standard-input source for one exact configured-handler replay.
+ * Windows shell handlers use a finite file because nested PowerShell, Node, and Bash processes must observe EOF without depending on a parent pipe.
+ * Other handlers retain direct Node input, and every platform keeps the registered executable tuple unchanged.
+ *
+ * @param projectPath - selected checkout used for the scrubbed child environment
+ * @param configuredHandler - exact managed handler whose current-platform command must run
+ * @param payload - fixed provider-shaped policy input; never user-authored content
+ * @param hostEnvironment - host variables filtered before the configured command starts
+ * @param platform - host platform selecting the Windows-only file transport
+ * @returns executable, argv, environment, and standard-input ownership for one bounded spawn
+ */
+export function managedConfiguredProbeTransport(
+  projectPath: string,
+  configuredHandler: AgentHookHandlerDescriptor,
+  payload: string,
+  hostEnvironment: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform,
+): ManagedConfiguredProbeTransport {
+  const probe = agentHookSpawnDescriptor(configuredHandler, platform);
+  const environment = managedHookEnvironment(
+    projectPath,
+    hostEnvironment,
+    platform,
+  );
+  const needsFileBackedInput =
+    platform === "win32" &&
+    configuredHandler.form === "shell" &&
+    configuredHandler.commandWindows !== undefined;
+  return {
+    ...probe,
+    environment,
+    input: payload,
+    stdin: needsFileBackedInput ? "file" : "pipe",
+  };
+}
+
+/**
+ * Spawn one configured built-in probe with either Node-owned input or a finite read-only file.
+ * Side effects: creates and removes one uniquely named temporary directory in file mode, and starts the registrar-derived child command.
+ * Error behavior: filesystem failures propagate so the caller cannot classify an incomplete cleanup as successful evidence.
+ */
+function spawnManagedConfiguredProbe(
+  projectPath: string,
+  probe: ManagedConfiguredProbeTransport,
+) {
+  const spawnOptions = {
+    cwd: projectPath,
+    encoding: "utf-8" as const,
+    env: probe.environment,
+    shell: false,
+    timeout: MANAGED_CONFIGURED_PROBE_TIMEOUT_MS,
+    maxBuffer: PROBE_OUTPUT_CAP_BYTES,
+  };
+  if (probe.stdin === "pipe") {
+    return spawnSync(probe.command, probe.args, {
+      ...spawnOptions,
+      input: probe.input,
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+  }
+
+  const payloadDirectory = mkdtempSync(join(tmpdir(), "goat-flow-hook-probe-"));
+  const payloadPath = join(payloadDirectory, "payload.json");
+  let payloadDescriptor: number | null = null;
+  try {
+    writeFileSync(payloadPath, probe.input, {
+      encoding: "utf-8",
+      flag: "wx",
+      mode: 0o600,
+    });
+    payloadDescriptor = openSync(payloadPath, "r");
+    return spawnSync(probe.command, probe.args, {
+      ...spawnOptions,
+      stdio: [payloadDescriptor, "pipe", "pipe"],
+    });
+  } finally {
+    if (payloadDescriptor !== null) closeSync(payloadDescriptor);
+    rmSync(payloadDirectory, {
+      recursive: true,
+      force: true,
+      maxRetries: 3,
+      retryDelay: 20,
+    });
+  }
+}
+
 /**
  * Replay one inert policy input through the exact handler setup the user registered.
  * It spawns that registered launcher, so verification proves the same path the user's agent takes rather than an equivalent one.
+ * Error behavior: swallows temporary-input and process-startup failures as a rejected-result fallback without captured process text.
  *
  * @param projectPath - selected checkout; empty text cannot provide a safe working directory
  * @param configuredHandler - exact managed handler; a missing executable produces a bounded spawn error
@@ -290,20 +452,20 @@ function executeManagedConfiguredHookProbe(
   scenario: HookProbeScenario,
 ): HookProbeExecution {
   const startedAt = performance.now();
-  // Argv handlers run exactly as the provider spawns them; shell handlers keep Bash parsing.
-  const [probeExecutable, probeArguments] =
-    configuredHandler.form === "argv"
-      ? [configuredHandler.command, configuredHandler.args]
-      : ["bash", ["-c", configuredHandler.command]];
-  const execution = spawnSync(probeExecutable, probeArguments, {
-    cwd: projectPath,
-    encoding: "utf-8",
-    env: managedHookEnvironment(projectPath),
-    input: configuredDenyHookPayload(agent, scenario),
-    shell: false,
-    timeout: PROBE_TIMEOUT_MS,
-    maxBuffer: PROBE_OUTPUT_CAP_BYTES,
-  });
+  const probe = managedConfiguredProbeTransport(
+    projectPath,
+    configuredHandler,
+    configuredDenyHookPayload(agent, scenario),
+  );
+  let execution: ReturnType<typeof spawnManagedConfiguredProbe>;
+  try {
+    execution = spawnManagedConfiguredProbe(projectPath, probe);
+  } catch {
+    return {
+      ...rejectedProbeExecution(),
+      durationMs: Math.max(0, Math.round(performance.now() - startedAt)),
+    };
+  }
   return {
     exitCode: execution.status,
     stdout: execution.stdout,
@@ -426,6 +588,7 @@ function recordScenarioEvidence(
   scriptPath: string | null,
   result: HookRuntimeScenarioResult,
   recordEvidence: HookRuntimeDependencies["recordEvidence"],
+  runtimeIdentity: string | null,
 ): HookRuntimeScenarioResult {
   const appendResult = recordEvidence({
     producer: "hooks-runtime-evidence",
@@ -433,7 +596,8 @@ function recordScenarioEvidence(
     actor: "cli",
     projectRoot: request.projectPath,
     payload: {
-      hook_id: MANAGED_HOOK_IDENTIFIER,
+      hook_id: HOOK_VERIFICATION_CONTRACTS[request.scenarioGroup].hookId,
+      runtime_identity: runtimeIdentity,
       framework_version: AUDIT_VERSION,
       scenario_group: request.scenarioGroup,
       scenario_id: result.id,
@@ -464,6 +628,7 @@ function recordScenarioEvidence(
 }
 
 const DEFAULT_DEPENDENCIES: HookRuntimeDependencies = {
+  readRuntimeIdentity: managedPolicyRuntimeIdentity,
   readDenyHookState: readManagedDenyHookState,
   executeProbe: executeManagedHookProbe,
   executeConfiguredProbe: executeManagedConfiguredHookProbe,
@@ -479,21 +644,25 @@ function selectHookScenarioResults(
   hookState: ManagedDenyHookState,
   dependencies: HookRuntimeDependencies,
 ): HookRuntimeScenarioResult[] {
+  const scenarios =
+    request.scenarioGroup === "deny-hook"
+      ? DENY_HOOK_SCENARIOS
+      : GIT_HOOK_SCENARIOS;
   // Without explicit trusted-target approval, checkout-owned hook code cannot run.
   if (request.isTargetUntrusted) {
-    return DENY_HOOK_SCENARIOS.map((scenario) =>
+    return scenarios.map((scenario) =>
       skippedScenarioResult(scenario, "unsupported", "target-marked-untrusted"),
     );
   }
   // A missing registry entry is an internal error, not an unsupported agent capability.
   if (hookState.reasonCode === "hook-registry-missing") {
-    return DENY_HOOK_SCENARIOS.map((scenario) =>
+    return scenarios.map((scenario) =>
       skippedScenarioResult(scenario, "error", "hook-registry-missing"),
     );
   }
   // Unsupported agents receive explicit skipped results and never start the managed script.
   if (!hookState.isSupported) {
-    return DENY_HOOK_SCENARIOS.map((scenario) =>
+    return scenarios.map((scenario) =>
       skippedScenarioResult(scenario, "unsupported", "agent-hook-unsupported"),
     );
   }
@@ -507,14 +676,14 @@ function selectHookScenarioResults(
       hookState.reasonCode === "hook-disabled"
         ? "hook-disabled"
         : "hook-not-installed";
-    return DENY_HOOK_SCENARIOS.map((scenario) =>
+    return scenarios.map((scenario) =>
       skippedScenarioResult(scenario, "not-configured", notConfiguredReason),
     );
   }
   const managedHookScriptPath = hookState.scriptPath;
   const configuredProbe = dependencies.executeConfiguredProbe;
   // A configured managed script receives only the four fixed inert classifier operands.
-  return DENY_HOOK_SCENARIOS.map((scenario) =>
+  return scenarios.map((scenario) =>
     completedScenarioResult(
       scenario,
       // Production replays the exact registered handler; injected tests retain the direct seam.
@@ -534,6 +703,21 @@ function selectHookScenarioResults(
   );
 }
 
+/** Read a policy revision only after the caller has trusted the selected checkout. */
+function readRequestedRuntimeIdentity(
+  request: HookRuntimeRequest,
+  dependencies: HookRuntimeDependencies,
+): string | null {
+  if (request.isTargetUntrusted) return null;
+  return (
+    dependencies.readRuntimeIdentity?.(
+      request.projectPath,
+      request.agent,
+      HOOK_VERIFICATION_CONTRACTS[request.scenarioGroup].hookId,
+    ) ?? null
+  );
+}
+
 /**
  * Run all fixed deny-hook scenarios and return one complete local-evidence report.
  * Users call this through `hooks verify` when they need checkout-specific policy proof.
@@ -549,12 +733,25 @@ export function verifyManagedDenyHook(
   const hookState = dependencies.readDenyHookState(
     request.projectPath,
     request.agent,
+    request.scenarioGroup,
   );
-  const scenarioResults = selectHookScenarioResults(
+  const beforeIdentity = readRequestedRuntimeIdentity(request, dependencies);
+  let scenarioResults = selectHookScenarioResults(
     request,
     hookState,
     dependencies,
   );
+  const afterIdentity = readRequestedRuntimeIdentity(request, dependencies);
+  const runtimeIdentity =
+    beforeIdentity === afterIdentity ? afterIdentity : null;
+  // A file replacement during replay cannot prove one complete installed runtime.
+  if (dependencies.readRuntimeIdentity && runtimeIdentity === null) {
+    scenarioResults = scenarioResults.map((scenario) =>
+      scenario.verdict === "pass"
+        ? { ...scenario, verdict: "error", reasonCode: "hook-unavailable" }
+        : scenario,
+    );
+  }
 
   // With runtime approval withheld, suppress every target-local side effect, including event writes.
   const recordedScenarios = request.isTargetUntrusted
@@ -565,6 +762,7 @@ export function verifyManagedDenyHook(
           hookState.scriptPath,
           scenario,
           dependencies.recordEvidence,
+          runtimeIdentity,
         ),
       );
   const summary = summarizeScenarioResults(recordedScenarios);
@@ -577,13 +775,106 @@ export function verifyManagedDenyHook(
     command: "hooks.verify",
     projectPath: request.projectPath,
     agent: request.agent,
-    hookId: MANAGED_HOOK_IDENTIFIER,
+    hookId: HOOK_VERIFICATION_CONTRACTS[request.scenarioGroup].hookId,
     scenarioGroup: request.scenarioGroup,
     evidenceLimit:
       "Direct managed hook classifier evidence only; external agent delivery and provider-side hook invocation are not exercised.",
     summary,
     scenarios: recordedScenarios,
   };
+}
+
+/** Schema id for one batch run; single-scenario reports keep emitting `REPORT_SCHEMA` unchanged. */
+export const BATCH_REPORT_SCHEMA = "goat-flow.hook-runtime-batch.v1";
+
+/**
+ * One `--scenario all` run: every group's unmodified report plus a total across them.
+ * Wrapping rather than merging keeps each report readable by existing single-scenario consumers.
+ */
+export interface HookRuntimeBatchReport {
+  schema: typeof BATCH_REPORT_SCHEMA;
+  status: "pass" | "fail";
+  command: "hooks.verify";
+  projectPath: string;
+  agent: AgentId;
+  scenarioGroups: HookScenario[];
+  summary: HookRuntimeSummary;
+  reports: HookRuntimeReport[];
+}
+
+/**
+ * Total one batch without reclassifying any group, so an unsupported or failed group stays visible.
+ * Use after every requested group has run; a batch passes only when each contained report passed.
+ *
+ * @param projectPath - checkout the batch verified; echoed so one document identifies its target
+ * @param agent - selected agent every contained report belongs to
+ * @param reports - one completed report per requested group, in execution order; never empty
+ * @returns the wrapping report; `status` is "fail" when any contained report failed
+ */
+export function summarizeHookRuntimeBatch(
+  projectPath: string,
+  agent: AgentId,
+  reports: HookRuntimeReport[],
+): HookRuntimeBatchReport {
+  const summary = reports.reduce<HookRuntimeSummary>(
+    (totals, report) => ({
+      pass: totals.pass + report.summary.pass,
+      fail: totals.fail + report.summary.fail,
+      unsupported: totals.unsupported + report.summary.unsupported,
+      notConfigured: totals.notConfigured + report.summary.notConfigured,
+      error: totals.error + report.summary.error,
+    }),
+    { pass: 0, fail: 0, unsupported: 0, notConfigured: 0, error: 0 },
+  );
+
+  // One failed group fails the batch; an empty run would otherwise report a vacuous pass.
+  const everyGroupPassed =
+    reports.length > 0 && reports.every((report) => report.status === "pass");
+
+  return {
+    schema: BATCH_REPORT_SCHEMA,
+    status: everyGroupPassed ? "pass" : "fail",
+    command: "hooks.verify",
+    projectPath,
+    agent,
+    scenarioGroups: reports.map((report) => report.scenarioGroup),
+    summary,
+    reports,
+  };
+}
+
+/**
+ * Render one batch as a single JSON document for CI and local automation.
+ *
+ * @param batch - completed batch; contained reports stay in their original schema
+ * @returns indented JSON; never null or empty for a valid batch
+ */
+export function renderHookRuntimeBatchReportJson(
+  batch: HookRuntimeBatchReport,
+): string {
+  return JSON.stringify(batch, null, 2);
+}
+
+/**
+ * Render one batch as grouped terminal verdicts without exposing operands or captured text.
+ *
+ * @param batch - completed batch shown after a user verifies every group at once
+ * @returns plain-text verdict lines, one block per group; never null or empty
+ */
+export function renderHookRuntimeBatchReportText(
+  batch: HookRuntimeBatchReport,
+): string {
+  const groupBlocks = batch.reports.map((report) =>
+    renderHookRuntimeReportText(report),
+  );
+  return [
+    `Hook runtime batch: ${batch.status.toUpperCase()}`,
+    `Agent: ${batch.agent}`,
+    `Groups: ${batch.scenarioGroups.join(", ")}`,
+    `Totals: pass=${batch.summary.pass} fail=${batch.summary.fail} unsupported=${batch.summary.unsupported} not-configured=${batch.summary.notConfigured} error=${batch.summary.error}`,
+    "",
+    ...groupBlocks,
+  ].join("\n");
 }
 
 /**

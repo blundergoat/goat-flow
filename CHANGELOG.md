@@ -2,6 +2,111 @@
 
 ## Unreleased
 
+### Changed
+
+- **BREAKING: Local operational state moves under `.goat-flow/state/`** - Stop and upgrade every writer, then run `goat-flow install . --agent <id>` to move installation records to `state/install/` and write claims to `state/locks/`. Outstanding claims or occupied destinations block migration; the old paths are removed, and older goat-flow versions must not run afterward. This direct cutover replaces a compatibility-alias period.
+
+### Fixed
+
+- **Learning reports cannot replace learning content** - `learn new --output` rejects destinations inside learning storage and linked report files before publishing, including during dry runs.
+- **Hook changes preserve quoted configuration sections** - Toggling hooks retains following settings whose YAML keys are single- or double-quoted.
+- **Installation preserves retired writing playbooks** - Existing `writing-for-agents.md` and `writing-style.md` copies remain untouched; review their local content before removing them.
+- **Browser evidence instructions follow installed capabilities** - Check `browser-use --help` before choosing the Python-stdin workflow or legacy commands; the playbook now documents `browser-use skill`, bounded waits, fixture-login safeguards, and tab recovery.
+
+## v1.17.0 - 2026-09-05
+
+The next release adds per-command `--help`, path-aware learning recall, one project-wide install baseline, whole-suite hook verification, and stricter `--strict` plan checks, and it untangles Claude and Copilot hook registrations.
+
+- **BREAKING: path audits now require the `audit` command** - Replace `goat-flow <path>` with `goat-flow audit <path>`. Bare `goat-flow` opens the menu; a misspelled command exits `2` instead of auditing a path of that name.
+- **BREAKING: install state is now project-wide** - On the first 1.17.0 install, clean per-agent baselines move from `.goat-flow/install-state/<agent>.json` to `.goat-flow/install-state/managed.json`. If they disagree, install stops and `goat-flow status . --format json` names the paths to repair.
+- **BREAKING: the legacy installer refuses managed projects** - Once `managed.json` or a cutover marker exists, `workflow/install-goat-flow.sh` exits before writing and prints the `goat-flow install <path> --agent <id>` command to run instead.
+- **BREAKING: `writing-style.md` is removed** - Update instruction files created by 1.16.0 setup to reference `writing-human-facing-prose.md` (human prose) or `writing-agent-facing-instructions.md` (agent controls); install now deletes the old playbook.
+- **BREAKING: `plans check --strict` validates milestone status** - Blocked and abandoned milestones require exactly one `Status reason:` line; every other status must omit it, and `Status` must agree with tasks, proof, and `Actual`. Because `/goat-plan` runs this check, fix in-flight plans first. Exports retain the redacted reason; default checks are unchanged.
+- **BREAKING: `plans check --strict` validates the milestone graph** - Use `M<digits>` filenames and titles with exact local `Depends on` IDs; dependencies must be acyclic, prerequisites complete, and no more than one milestone active.
+- **BREAKING: `plans check --strict` validates milestone summaries** - `What problem are we solving` and `Who benefits and how` must each be one plain 70–120-character sentence without a milestone ID, ADR number, version, flag, or internal path; legacy headings remain advisory.
+- **`plans check --strict` accepts `superseded` and `deferred`** - Both are terminal statuses that require `Status reason:`. A superseded reason names a successor milestone that resolves in the plan; nothing active or complete may depend on either; open checkboxes and paused receipts are allowed without `Actual`; their estimates leave the plan total and appear on the `excluded:` line.
+- **BREAKING: `quality save` requires a refutation ledger** - Add `"refuted_candidates":[]` before saving a report. The shipped quality prompt already emits it, and older reports still open in `validate`, `history`, and `diff`.
+- **BREAKING: `redact --output` never overwrites** - Use a fresh project-local path for every run; existing files, linked parent directories, and paths outside the project are refused.
+- **`audit --check-content` detects semantic drift** - It compares documented states, limits, routes, and inventories with the shipped sources.
+- **`hooks verify --scenario all` runs every group** - `goat-flow hooks verify <path> --agent <id> --scenario all --trusted-target` retains every verdict and exits `1` unless all groups pass; JSON uses `goat-flow.hook-runtime-batch.v1`.
+- **Effective hook coverage distinguishes warnings from failures** - Audit, Markdown, dashboard, and quality prompts expose `hookCoverage.status` as `pass`, `warning`, or `fail` without changing the top-level audit verdict, so consumers must read both fields.
+- **Every command has dedicated `--help`** - `goat-flow <command> --help` shows usage, subcommands, flags, and examples without executing it.
+- **`recall` accepts evidence paths** - `goat-flow recall <path> [path...]` lists active entries whose evidence cites those files or directories.
+- **`learn new` scaffolds a validated entry** - `goat-flow learn new` previews with `--dry-run`, validates the entry, and refreshes indexes.
+- **Deny hooks inspect downstream shell `eval`** - Every executable pipeline stage is checked; `yq eval` and quoted evidence remain usable.
+- **Deny hooks respect shell syntax** - Quoted arrows and escapes remain usable; background commands and direct lockfile redirects are blocked.
+- **Competing installs stop before writing** - Concurrent runs halt before changing the project, and `status` explains stale or conflicting evidence.
+- **Interrupted writers have an identity-bound recovery path** - Run `claims inspect <path> --target <project-relative-path>`, verify that no writer remains, then pass its exact marker digest to `claims recover` with `--confirm-abandoned`; changed or unsafe markers remain untouched.
+- **Dashboard state survives interrupted writes** - Atomic replacement protects project identity, registry, and active-plan selections from partial files.
+- **Claude and Copilot hooks no longer collide** - Claude uses argv-safe handlers; Copilot ignores cross-loaded rows and runs its native hooks.
+- **Codex hooks launch from Windows paths** - After upgrading from 1.16.0, run `goat-flow hooks sync .` and restart Codex; `commandWindows` preserves the working directory. A 2026-08-27 Codex CLI 0.149.1 capture recorded PostToolUse delivery; fixed-scenario proof remains pending, and Stop evidence is stale.
+- **Installer dependencies fail before project writes** - Missing `js-yaml` names the goat-flow package root and the required `npm install` or reinstall.
+- **Preflight bounds dependency audits** - A stalled registry now fails the gate after 120 seconds. Set `GOAT_FLOW_PREFLIGHT_AUDIT_TIMEOUT_SECONDS=N` to choose the deadline; `0` disables only this deadline, while the audit still runs and remains blocking.
+- **Skipped hooks explain non-Git limits** - Install and sync name the hook, explain why no safe post-turn scan root exists, and show how to configure one.
+- **`/goat-review` staged reviews leave Git unchanged** - Staged authority uses `git ls-files -s`, `git diff --cached --binary`, and `git show :<path>` instead of `git write-tree`, so report-only review creates no tree object.
+- **`/goat-review` reports validate on first emission** - Refuted suspicions keep their IDs in the disposition map, JSON rows are bare, the gates record is always present, and conclusion labels follow validator precedence.
+- **`/goat-review` finding tags use MUST, SHOULD, or MAY** - A reviewed project's own severity ordering ranks findings but never fills the severity slot.
+- **`/goat-review` names its Quick and Full diff routes** - Full continues into Pass 2.5, the spec-drift offer, and the optional refuter; area audits reach the same terminal steps.
+- **Refuter recipes state their enforced boundary** - Each runtime recipe names the flag that restricts it, forbids bypass flags, and falls back to a local-only review when unsupported.
+- **PR bot logins normalize by suffix** - Overlap matching strips one trailing `[bot]` before alias mapping, compares semantic location instead of line ranges, and leaves unknown authors unknown.
+- **Three review traps ship from real incidents** - A finding that contradicts a passing test, a guard rewrite that needs both builds run, and a bot's own addressed marker join the shipped traps.
+- **BREAKING: `/goat-critique` uses one result contract** - Clean and finding-bearing returns share an envelope and Coverage ledger. Findings keep
+  stable IDs, rubric dimensions, host verification and source agent IDs; evidence quality includes `HUMAN-PENDING` separately from confidence. Update
+  report consumers to read those fields.
+- **BREAKING: critique coverage is separate from severity** - Replace `## Rubric Coverage Gaps` with `## Rubric Coverage` in report consumers. Each
+  selected dimension is `finding`, `checked-clean` or `unassessed`; unread scope records its limits and next evidence instead of creating an automatic
+  defect. `CLEAN` can coexist with lower-severity findings or limited coverage and does not grant clearance.
+- **BREAKING: critique meta-audits bind their score to a report revision** - Consumers must bind `audited_revision` to `report_revision` and use the
+  current check names. One correction batch may receive one recheck; later report edits require that remaining allowance or an unaudited label. The
+  host cannot calculate a replacement score, and conformance does not prove artifact correctness.
+- **Critique recommendations retain their evidence** - Recommendations and integration hooks cite surviving finding IDs; a finding may have no hook or
+  several. Blind spots name real limits or a supported `none identified` statement, rankings use explained qualitative labels, and early exits retain
+  lower-severity findings. Apply actions can use only surviving recommendations after the human gate.
+- **Fresh-eyes critiques use a bounded evidence packet** - Supplied artifacts and rubric content remain valid regardless of storage path, embedded
+  instructions grant no extra reads, and a clean response scan does not certify isolation.
+- **Fresh-eyes critique recovery allows one replacement** - A context leak ends that critic, and leaks and missing fields share one fresh replacement
+  per run; exhausting it leaves fresh-eyes coverage incomplete while the review continues with valid findings from the other critics.
+- **`/goat-qa` test plans keep their risk map** - Asking for a test plan up front now returns the change risk map and gap analysis alongside the plan, in one response.
+- **Setup accepts the `Use when` trigger form** - Skill installation no longer demands a `When to Use` heading when the frontmatter description states the trigger.
+- **Gruff finds project wrappers again** - `gruff-<language>.sh` in `bin/test/`, `bin/`, or `scripts/` preserves project config, paths, and reports.
+- **Quality prompts reuse project evidence** - Failed audits add bounded learning context; previously refuted candidates stay out of findings.
+- **Focused quality prompts assess the requested project** - Process and harness grounding use its path instead of `.`; prompts omit selected targets absent from the request.
+- **Quality reports explain each score** - Current reports require `score_rationale` with per-axis evidence and deduction; historical reports without it remain legacy-compatible.
+- **`/goat-plan` keeps plans connected** - New milestones link through the prior terminal milestone, and `ISSUE.md` bands and totals are recalculated.
+- **Milestone work uses one agent contract** - Start timing before source edits, pause at gates, finalize at exit, and run `goat-clarity` once.
+- **`/goat-clarity` resolves explicit intent first** - Write authority uses the first matching term: update/edit/fix grants it, report/review/check withholds it, then the `documentation` keyword applies. A request to report on documentation remains report-only.
+- **Clarity completes scope and test accounting before diagnosis** - Selected files are inventoried and classified before write permissions are
+  frozen, and applicable test-case accounting finishes before naming or comment review.
+- **Clarity honors explicit private-placement approval** - An explicit instruction to move a private symbol to a named destination within one frozen
+  writable file needs no second approval; general clarity requests, cross-file moves and public renames retain their approval gates.
+- **Clarity receipts distinguish assessed files from protected files** - Each selected file appears once in both permission and outcome totals;
+  preserved protected files remain unassessed, and selections with no eligible files get a compact receipt.
+- **Clarity reports formatter limits accurately** - Reports preserve exact project commands and baseline/final results, distinguish unavailable tools
+  from missing ownership or skipped checks, and pause affected edits when ownership is ambiguous.
+- **Clarity keeps compatibility explanations** - Comments retain history tied to current compatibility obligations or checkable removal triggers.
+- **Clarity rechecks the rules behind each edit batch** - New or changed governing instructions and formatter settings pause writes for revalidation
+  even when selected files are unchanged; permissions that remain valid need no new approval.
+- **Skill qualification is model-scoped** - Retirement requires repeated provider/model/config ablations; retained cases guard against reintroduction.
+- **Learning indexes show age and token cost** - Rows include declared dates and token estimates; `stats` lists recurring entries for structural enforcement.
+- **Learning-loop entries put prevention first** - Existing footguns and lessons, `learn new`, and the shared templates place `Prevention` before incident history; preflight enforces that order while accepting metadata such as `hallucination-risk` and `Merged`.
+- **Setup separates template policy from generated writes** - Step 01 limits `workflow/manifest.json` to exact-copy templates and directs user-owned and generated destinations to `goat-flow install . --dry-run`.
+- **Playbook discovery routes skill testing correctly** - The playbook index sends skill testing and hardening to `skill-quality-testing/README.md` instead of a table with no matching row.
+- **Review artifacts have documented evidence ownership** - Architecture and review-log guidance list the redacted `.diff` bundle and `.md` chunk receipt that `/goat-review` writes.
+- **Architecture and code-map inventories match current modules** - Both name all six config modules and the threat-model collector, and the duplicate diagnostics entry is gone.
+- **Security skill documentation uses topic-sized paragraphs** - The goat-security guide is split into readable sections without changing its requirements.
+- **Empty pattern bucket removed** - The frontmatter-only `patterns/external-lessons.md` bucket had no retrievable entries and was removed.
+- **`/goat-security` reports an evidenced risk without waiting for full coverage** - A finding whose own binding, mitigation re-check, and severity evidence are sufficient is reported at every depth. Incomplete inventories still withhold clearance and keep the assessment coverage-degraded, but they no longer suppress the finding.
+- **`/goat-security` declares its threat model instead of proving it complete** - Assessments reconcile finite inventories against observed scope and declare attackers and assumptions with their justification, so a review is no longer blocked by a completeness proof nobody can produce.
+- **`/goat-security` states which checkout guarantees it supports** - Passive inspection of an explicitly trusted checkout is supported; hostile-checkout containment and exclusion of concurrent changes are disclosed as unsupported, keeping affected evidence unverified rather than demanding a guarantee the tools cannot give.
+- **`/goat-security` can save an approved report again** - Persistence uses the redactor route to a fresh path under the target's `.goat-flow/logs/security/`, replacing a rule that forbade the only supported command. Reports state whether the artifact was written, skipped, or left needing cleanup.
+- **Accepted-risk exceptions are validated against every recorded field** - Assessment now checks finding class and compensating controls with verification evidence, and an exception may record no compensating control only where the governing policy explicitly permits it. A missing or unvalidated field keeps the finding `OPEN`.
+- **`/goat-security` reports name a posture and a two-value conclusion** - Every report carries `block`, `needs-decision`, `accepted-risk`, `watch`, or `none` with the finding that governs it, and concludes `confident` or `coverage-degraded`; `tool-limited` is a defined degradation flag rather than an undefined third conclusion.
+- **`/goat-security` Quick output is a fixed template** - Quick reports use exactly eight sections; lead fields stay owned by step 5 and accepted-risk fields defer to the policy validator's complete list, so a report can no longer carry fewer fields than validation checks.
+- **`/goat-security` loads the same references at both depths** - Both load the mandatory set before Quick step 1 or Full Phase 0; conditional references and the class map live in a reference loading map, and an unavailable reference, the map's own file included, degrades coverage without stopping the run.
+- **`/goat-security` returns late leads to verification** - The dependency audit runs during lead gathering when authorized; missing execution controls yield `execution-withheld`, while an approval-only gap yields `scanner-withheld`. Any later lead re-enters Phase 2 before the proof gate; reporting having begun neither suppresses nor promotes it.
+- **Fast security checks run against source** - Stale built dashboard presets no longer fail security checks; preset parity runs after the build.
+- **`/goat-security` uses one gate name, one spelling, and ten diff states** - Consumer aliases resolve to the Shared Pre-Probe Gate and the Exhaustive inventory gate, ledger values are spelled one way everywhere, the common reference lists all ten Git delta states, design text is evidence for a stated requirement but never for deployed behaviour, and an escaped anchor is labelled so it stays findable.
+
 ## v1.16.0 - 2026-08-20
 
 1.16.0 adds `/goat-clarity`, makes audits static by default, preserves local setup edits during upgrades, strengthens hooks across Windows and non-Git workspaces, and sharpens review, QA, planning, and security workflows.

@@ -1,21 +1,34 @@
 /**
- * setup --apply installer behaviour: scaffolds config.yaml without an agents allowlist and manages
- * that allowlist on existing configs (removing single/multi-agent lists or a null value, leaving an
- * absent one absent), does not duplicate an existing node_modules gitignore entry, and installs
- * deterministic Git commit instructions only for Git projects. Upgrade migration and prune cases live in
- * setup-install-migrations.test.ts.
+ * Proves the files and settings a user receives from `setup --apply`.
+ * Use when config allowlists, the `node_modules` ignore rule, or Git commit-guidance installation changes.
+ *
+ * The suite covers absent, null, single-agent, and multi-agent config states without duplicating existing user content.
+ * Upgrade migration and prune cases remain in `setup-install-migrations.test.ts`.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import {
+  chmodSync,
+  closeSync,
   existsSync,
   mkdirSync,
+  openSync,
   readFileSync,
+  statSync,
+  symlinkSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
+import { load } from "js-yaml";
 
+import { emitCommitGuidanceInstallResult } from "../../src/cli/prompt/commit-guidance.js";
+import {
+  acquirePathWriteClaims,
+  readPathWriteTargetIdentity,
+  releasePathWriteClaims,
+} from "../../src/cli/path-write-claim.js";
 import {
   git,
   makeTempProject,
@@ -25,6 +38,11 @@ import {
   runCliInstaller,
   runInstaller,
 } from "./setup-install.helpers.js";
+import {
+  readInvocations,
+  resolveTool,
+  writeMockGruffBinary,
+} from "./gruff-code-quality-smoke.helpers.js";
 
 /**
  * Groups the permission choices a Claude user sees after setup migration.
@@ -37,7 +55,19 @@ interface ClaudePermissionGroups {
 }
 
 /**
+ * Assert the permission bits a Unix user receives on an installed file.
+ * Use for security-sensitive setup output; Windows reports synthetic modes outside this contract.
+ */
+function assertPosixFileMode(filePath: string, expectedMode: number): void {
+  // Windows users receive synthetic mode bits, so this POSIX-only assertion has no meaningful UI or filesystem result there.
+  if (process.platform === "win32") return;
+  assert.equal(statSync(filePath).mode & 0o777, expectedMode);
+}
+
+/**
  * Reads the permission groups users receive after setup migrates their settings.
+ * Use when a test needs the same deny, allow, and ask categories a Claude user sees after upgrade.
+ *
  * @param projectRoot - non-empty fixture root containing `.claude/settings.json`
  * @returns all three groups; a missing group appears as an empty user rule list
  */
@@ -57,6 +87,8 @@ function readClaudePermissionGroups(
 
 /**
  * Finds stale rules that would show misleading permission choices after upgrade.
+ * Use after reading migrated settings so tests can report any retired tool label still visible to the user.
+ *
  * @param groups - migrated groups; empty arrays mean the user saved no rules there
  * @returns stale rule labels, or an empty list when the UI contract is current
  */
@@ -65,6 +97,24 @@ function stalePermissionRules(groups: ClaudePermissionGroups): string[] {
   return [groups.deny, groups.allow, groups.ask]
     .flat()
     .filter((rule) => stalePrefixes.some((prefix) => rule.startsWith(prefix)));
+}
+
+/**
+ * Create the executable nested analyzer convention inside a disposable project.
+ *
+ * Use before setup so tests can verify the analyzer path a user receives in generated config.
+ * Side effect: writes and marks one analyzer fixture executable inside `projectRoot`; fixture calls supply a disposable project.
+ *
+ * @param projectRoot - non-empty disposable project that owns the generated analyzer fixture
+ * @returns executable analyzer path; never empty after fixture creation succeeds
+ */
+function writeConventionalGruffPy(projectRoot: string): string {
+  const binaryDirectory = join(projectRoot, "strands_agents", ".venv", "bin");
+  const binaryPath = join(binaryDirectory, "gruff-py");
+  mkdirSync(binaryDirectory, { recursive: true });
+  writeFileSync(binaryPath, "#!/usr/bin/env python3\n");
+  chmodSync(binaryPath, 0o755);
+  return binaryPath;
 }
 
 describe("setup --apply installer", () => {
@@ -147,6 +197,284 @@ describe("setup --apply installer", () => {
         ),
       ),
       true,
+    );
+  });
+
+  // Fixture purpose: installs with the nested analyzer and proves an explicit path wins; writes stay in the disposable project.
+  it("pins a conventional strands_agents gruff-py during install", () => {
+    const root = makeTempProject();
+    writeConventionalGruffPy(root);
+
+    const result = runInstaller(root, "--agent", "codex");
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const config = readFileSync(
+      join(root, ".goat-flow", "config.yaml"),
+      "utf-8",
+    );
+    assert.match(
+      config,
+      /binaries:\n {6}py: strands_agents\/\.venv\/bin\/gruff-py/u,
+    );
+
+    const configPath = join(root, ".goat-flow", "config.yaml");
+    writeFileSync(
+      configPath,
+      config.replace("strands_agents/.venv/bin/gruff-py", "tools/gruff-py"),
+    );
+    const secondResult = runInstaller(root, "--agent", "codex");
+    assert.equal(
+      secondResult.status,
+      0,
+      secondResult.stderr || secondResult.stdout,
+    );
+    const preservedConfig = readFileSync(configPath, "utf-8");
+    assert.match(preservedConfig, /binaries:\n {6}py: tools\/gruff-py/u);
+    assert.doesNotMatch(
+      preservedConfig,
+      /strands_agents\/\.venv\/bin\/gruff-py/u,
+    );
+  });
+
+  // Fixture purpose: runs the installed hook through its persisted nested analyzer override; writes stay in the disposable project.
+  it(
+    "runs the installed Gruff hook through the detected strands_agents binary",
+    { skip: process.platform === "win32" },
+    () => {
+      const root = makeTempProject();
+      writeMockGruffBinary(
+        root,
+        "strands_agents/.venv/bin",
+        "gruff-py",
+        "installed-config.rule",
+      );
+      writeFileSync(join(root, ".gruff-py.yaml"), "rules: {}\n");
+      mkdirSync(join(root, "src"), { recursive: true });
+      writeFileSync(join(root, "src", "sample.py"), "a\nb\nc\n");
+
+      const installResult = runCliInstaller(root, "--agent", "codex");
+      assert.equal(
+        installResult.status,
+        0,
+        installResult.stderr || installResult.stdout,
+      );
+
+      const payloadPath = join(root, "post-tool-payload.json");
+      writeFileSync(
+        payloadPath,
+        JSON.stringify({
+          tool_name: "Edit",
+          tool_input: {
+            file_path: "src/sample.py",
+            changed_ranges: [{ startLine: 3, endLine: 3 }],
+          },
+        }),
+      );
+      const bashPath = resolveTool("bash");
+      const payloadHandle = openSync(payloadPath, "r");
+      let hookResult: ReturnType<typeof spawnSync>;
+      try {
+        // Argv contains only the test runner's resolved Bash and the hook installed below this disposable fixture root.
+        hookResult = spawnSync(
+          bashPath,
+          [join(root, ".goat-flow", "hooks", "gruff-code-quality.sh")],
+          {
+            cwd: root,
+            encoding: "utf-8",
+            env: {
+              ...process.env,
+              GRUFF_PY_BIN: "",
+              PATH: "/usr/bin:/bin",
+            },
+            stdio: [payloadHandle, "pipe", "pipe"],
+          },
+        );
+      } finally {
+        // For example, a hook process can fail while reading the payload, so its file handle and one-use fixture must still be released.
+        closeSync(payloadHandle);
+        unlinkSync(payloadPath);
+      }
+
+      assert.equal(
+        hookResult.status,
+        0,
+        hookResult.stderr || hookResult.stdout,
+      );
+      assert.match(hookResult.stdout, /installed-config\.rule/u);
+      assert.deepEqual(readInvocations(root), ["src/sample.py"]);
+    },
+  );
+
+  // Fixture purpose: reproduces an enabled hook without its nested analyzer override; writes stay in the disposable project.
+  it("repairs a missing gruff-py override for an enabled existing hook", () => {
+    const root = makeTempProject();
+    writeConventionalGruffPy(root);
+    mkdirSync(join(root, ".goat-flow"), { recursive: true });
+    writeFileSync(
+      join(root, ".goat-flow", "config.yaml"),
+      [
+        'version: "1.16.0"',
+        "hooks:",
+        "    deny-dangerous:",
+        "        enabled: true",
+        "    post-turn-safety:",
+        "        enabled: true",
+        "# Keep the project-specific Gruff choice visible.",
+        "    gruff-code-quality:",
+        "        enabled: true",
+        "",
+      ].join("\n"),
+    );
+
+    const result = runInstaller(root, "--agent", "codex");
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const config = readFileSync(
+      join(root, ".goat-flow", "config.yaml"),
+      "utf-8",
+    );
+    assert.match(config, /gruff-code-quality:\n {8}enabled: true/u);
+    assert.match(
+      config,
+      / {8}binaries:\n {12}py: strands_agents\/\.venv\/bin\/gruff-py/u,
+    );
+    const parsedConfig = load(config) as {
+      hooks: Record<string, { binaries?: Record<string, string> }>;
+    };
+    assert.equal(
+      parsedConfig.hooks["gruff-code-quality"].binaries?.py,
+      "strands_agents/.venv/bin/gruff-py",
+    );
+  });
+
+  // Fixture purpose: redirects the conventional analyzer outside the selected target; side effects: writes only inside cleaned temp projects.
+  it(
+    "does not pin a conventional gruff-py symlink that escapes the project",
+    { skip: process.platform === "win32" },
+    () => {
+      const outsideRoot = makeTempProject();
+      const outsideBinary = join(outsideRoot, "gruff-py");
+      writeFileSync(outsideBinary, "#!/usr/bin/env python3\n");
+      chmodSync(outsideBinary, 0o755);
+      const root = makeTempProject();
+      const binaryDirectory = join(root, "strands_agents", ".venv", "bin");
+      mkdirSync(binaryDirectory, { recursive: true });
+      symlinkSync(outsideBinary, join(binaryDirectory, "gruff-py"));
+
+      const result = runInstaller(root, "--agent", "codex");
+
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+      const config = readFileSync(
+        join(root, ".goat-flow", "config.yaml"),
+        "utf-8",
+      );
+      assert.doesNotMatch(config, /binaries:/u);
+    },
+  );
+
+  // Fixture purpose: removes execute permission from the nested analyzer; writes stay in the disposable project.
+  it(
+    "does not pin a non-executable conventional gruff-py during install",
+    { skip: process.platform === "win32" },
+    () => {
+      const root = makeTempProject();
+      chmodSync(writeConventionalGruffPy(root), 0o644);
+
+      const result = runInstaller(root, "--agent", "codex");
+
+      assert.equal(result.status, 0, result.stderr || result.stdout);
+      const config = readFileSync(
+        join(root, ".goat-flow", "config.yaml"),
+        "utf-8",
+      );
+      assert.doesNotMatch(config, /binaries:/u);
+    },
+  );
+
+  // Fixture purpose: keeps compact hook YAML while detecting the nested analyzer; writes stay in the disposable project.
+  it("pins gruff-py without expanding a flow-style hooks mapping", () => {
+    const root = makeTempProject();
+    writeConventionalGruffPy(root);
+    mkdirSync(join(root, ".goat-flow"), { recursive: true });
+    const configPath = join(root, ".goat-flow", "config.yaml");
+    writeFileSync(
+      configPath,
+      'version: "1.16.0"\nhooks: { "gruff-code-quality": { enabled: true } }\n',
+    );
+
+    const result = runInstaller(root, "--agent", "codex");
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const config = readFileSync(configPath, "utf-8");
+    assert.match(
+      config,
+      /^hooks: \{.*"gruff-code-quality": \{ enabled: true, binaries: \{ py: strands_agents\/\.venv\/bin\/gruff-py \} \}.*\}$/mu,
+    );
+    const parsedConfig = load(config) as {
+      hooks: Record<string, { binaries?: Record<string, string> }>;
+    };
+    assert.equal(
+      parsedConfig.hooks["gruff-code-quality"].binaries?.py,
+      "strands_agents/.venv/bin/gruff-py",
+    );
+  });
+
+  // Fixture purpose: puts multiline colliding and direct flow keys before Gruff; writes stay in the disposable project.
+  it("pins gruff-py to the exact multiline flow-style hook key", () => {
+    const root = makeTempProject();
+    writeConventionalGruffPy(root);
+    mkdirSync(join(root, ".goat-flow"), { recursive: true });
+    const configPath = join(root, ".goat-flow", "config.yaml");
+    writeFileSync(
+      configPath,
+      [
+        'version: "1.16.0"',
+        'hooks: { other-hook: { note: "#, gruff-code-quality: { enabled: true }" },',
+        "  other-flow-hook: {}, #, gruff-code-quality: { enabled: true }",
+        "  not-gruff-code-quality: {",
+        "    enabled: true,",
+        "    gruff-code-quality: {",
+        "      enabled: true",
+        "    }",
+        "  },",
+        '  "deny-dangerous": { enabled: true },',
+        '  "post-turn-safety": { enabled: true },',
+        '  "gruff-code-quality": {',
+        "    enabled: true,",
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    );
+
+    const result = runInstaller(root, "--agent", "codex");
+
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const parsedConfig = load(readFileSync(configPath, "utf-8")) as {
+      hooks: Record<
+        string,
+        {
+          binaries?: Record<string, string>;
+          "gruff-code-quality"?: { binaries?: Record<string, string> };
+        }
+      >;
+    };
+    assert.equal(
+      parsedConfig.hooks["not-gruff-code-quality"].binaries,
+      undefined,
+    );
+    assert.equal(
+      parsedConfig.hooks["not-gruff-code-quality"]["gruff-code-quality"]
+        ?.binaries,
+      undefined,
+    );
+    assert.equal(
+      parsedConfig.hooks["gruff-code-quality"].binaries?.py,
+      "strands_agents/.venv/bin/gruff-py",
+    );
+    assert.match(
+      readFileSync(configPath, "utf-8"),
+      /#, gruff-code-quality: \{ enabled: true \}\n/u,
     );
   });
 
@@ -262,7 +590,18 @@ describe("setup --apply installer", () => {
       "quality",
       "README.md",
     );
+    const installedPatternsReadmePath = join(
+      projectRoot,
+      ".goat-flow",
+      "learning-loop",
+      "patterns",
+      "README.md",
+    );
     writeFileSync(installedReadmePath, "user edited a system file\n");
+    writeFileSync(
+      installedPatternsReadmePath,
+      "user edited the patterns guide\n",
+    );
 
     const reinstall = runInstaller(projectRoot, "--agent", "codex");
     assert.equal(reinstall.status, 0, reinstall.stderr || reinstall.stdout);
@@ -280,6 +619,23 @@ describe("setup --apply installer", () => {
         ),
         "utf-8",
       ),
+    );
+    const canonicalPatternsReadme = readFileSync(
+      join(
+        import.meta.dirname,
+        "..",
+        "..",
+        "workflow",
+        "setup",
+        "reference",
+        "patterns-readme.md",
+      ),
+      "utf-8",
+    );
+    assert.match(canonicalPatternsReadme, /^## Bucket Size$/mu);
+    assert.equal(
+      readFileSync(installedPatternsReadmePath, "utf-8"),
+      canonicalPatternsReadme,
     );
   });
 
@@ -363,6 +719,141 @@ describe("setup --apply installer", () => {
     );
   });
 
+  // Fixture purpose: the selected Copilot instruction holds the only former-path link; a following section proves other bytes and mode survive.
+  // Side effects: creates and mutates a disposable project owned by this test.
+  it("commit guidance rewrites the selected Commit Messages bridge before renaming", () => {
+    const root = makeTempProject();
+    const guidanceDir = join(root, "docs", "coding-standards");
+    const legacyGuidancePath = join(guidanceDir, "git-commit.md");
+    const preferredGuidancePath = join(guidanceDir, "git-commit-message.md");
+    const instructionPath = join(root, ".github", "copilot-instructions.md");
+    const legacyGuidance = "# Team Commit Rules\n\nKeep this project rule.\n";
+    const instructionContent =
+      "# Copilot\n\n## Commit Messages\n\nRead docs/coding-standards/git-commit.md before proposing a commit.\n\n## Verification\n\nKeep this section unchanged.\n";
+    mkdirSync(join(root, ".git"));
+    mkdirSync(guidanceDir, { recursive: true });
+    mkdirSync(join(root, ".github"), { recursive: true });
+    writeFileSync(legacyGuidancePath, legacyGuidance);
+    writeFileSync(instructionPath, instructionContent);
+    chmodSync(instructionPath, 0o640);
+
+    emitCommitGuidanceInstallResult(root, "copilot");
+
+    assert.equal(existsSync(legacyGuidancePath), false);
+    assert.equal(readFileSync(preferredGuidancePath, "utf-8"), legacyGuidance);
+    assert.equal(
+      readFileSync(instructionPath, "utf-8"),
+      instructionContent.replace(
+        "docs/coding-standards/git-commit.md",
+        "docs/coding-standards/git-commit-message.md",
+      ),
+    );
+    assertPosixFileMode(instructionPath, 0o640);
+  });
+
+  // Fixture purpose: the same selected bridge must appear in dry-run and contend through the public install claim boundary.
+  // Side effects: writes one disposable target, spawns dry-run and install subprocesses, and acquires then releases one owner-checked claim.
+  it("previews and claims the selected commit-guidance migration bridge", () => {
+    const root = makeTempProject();
+    const guidanceDir = join(root, "docs", "coding-standards");
+    const legacyGuidancePath = join(guidanceDir, "git-commit.md");
+    const preferredGuidancePath = join(guidanceDir, "git-commit-message.md");
+    const instructionRelativePath = ".github/copilot-instructions.md";
+    const instructionPath = join(root, instructionRelativePath);
+    const legacyGuidance = "# Team Commit Rules\n\nKeep this project rule.\n";
+    const instructionContent =
+      "# Copilot\n\n## Commit Messages\n\nRead docs/coding-standards/git-commit.md before proposing a commit.\n";
+    mkdirSync(join(root, ".git"));
+    mkdirSync(guidanceDir, { recursive: true });
+    mkdirSync(join(root, ".github"), { recursive: true });
+    writeFileSync(legacyGuidancePath, legacyGuidance);
+    writeFileSync(instructionPath, instructionContent);
+
+    const dryRun = runCliInstaller(
+      root,
+      "--agent",
+      "copilot",
+      "--dry-run",
+      "--format",
+      "json",
+    );
+    assert.equal(dryRun.status, 0, dryRun.stderr || dryRun.stdout);
+    const report = JSON.parse(dryRun.stdout) as {
+      files: Array<{ path: string; action: string; reason: string }>;
+    };
+    const bridgeRow = report.files.find(
+      (file) => file.path === instructionRelativePath,
+    );
+    assert.equal(bridgeRow?.action, "migrate");
+    assert.match(bridgeRow?.reason ?? "", /Commit Messages/u);
+
+    const bridgeClaim = acquirePathWriteClaims(root, [
+      {
+        targetPath: instructionRelativePath,
+        expectedIdentity: readPathWriteTargetIdentity(
+          root,
+          instructionRelativePath,
+        ),
+      },
+    ]);
+    let blockedInstall: ReturnType<typeof runCliInstaller> | null = null;
+    try {
+      blockedInstall = runCliInstaller(root, "--agent", "copilot");
+    } finally {
+      assert.deepEqual(releasePathWriteClaims(bridgeClaim), [
+        { targetPath: instructionRelativePath, status: "released" },
+      ]);
+    }
+
+    assert.ok(blockedInstall, "the claimed public install must return");
+    assert.equal(blockedInstall.status, 1, blockedInstall.stdout);
+    assert.match(blockedInstall.stderr, /copilot-instructions\.md/u);
+    assert.equal(readFileSync(legacyGuidancePath, "utf-8"), legacyGuidance);
+    assert.equal(existsSync(preferredGuidancePath), false);
+    assert.equal(readFileSync(instructionPath, "utf-8"), instructionContent);
+  });
+
+  // Fixture purpose: a Claude-owned former-path link blocks a Copilot install from renaming the shared guide, preserving every involved file.
+  // Side effects: creates and mutates a disposable project owned by this test.
+  it("commit guidance keeps the former guide when another agent instruction still references it", () => {
+    const root = makeTempProject();
+    const guidanceDir = join(root, "docs", "coding-standards");
+    const legacyGuidancePath = join(guidanceDir, "git-commit.md");
+    const preferredGuidancePath = join(guidanceDir, "git-commit-message.md");
+    const foreignInstructionPath = join(root, "CLAUDE.md");
+    const legacyGuidance = "# Team Commit Rules\n\nKeep this project rule.\n";
+    const foreignInstruction =
+      "# Claude\n\n## Commit Messages\n\nRead docs/coding-standards/git-commit.md before proposing a commit.\n";
+    mkdirSync(join(root, ".git"));
+    mkdirSync(guidanceDir, { recursive: true });
+    writeFileSync(legacyGuidancePath, legacyGuidance);
+    writeFileSync(foreignInstructionPath, foreignInstruction);
+
+    const output: string[] = [];
+    const originalLog = console.log;
+    console.log = (...values: unknown[]) => {
+      output.push(values.map(String).join(" "));
+    };
+    try {
+      emitCommitGuidanceInstallResult(root, "copilot");
+    } finally {
+      // For example, a failed guidance migration can throw after console capture starts, so later tests still need normal user-facing output.
+      console.log = originalLog;
+    }
+
+    assert.equal(readFileSync(legacyGuidancePath, "utf-8"), legacyGuidance);
+    assert.equal(existsSync(preferredGuidancePath), false);
+    assert.equal(
+      readFileSync(foreignInstructionPath, "utf-8"),
+      foreignInstruction,
+    );
+    assert.match(
+      output.join("\n"),
+      /kept docs\/coding-standards\/git-commit\.md/,
+    );
+    assert.match(output.join("\n"), /legacy references in CLAUDE\.md/);
+  });
+
   it("CLI install copies the reviewed template for a Git project", () => {
     const root = makeTempProject();
     mkdirSync(join(root, ".git"));
@@ -427,6 +918,102 @@ describe("setup --apply installer", () => {
 });
 
 describe("setup --apply permission upgrade migrations", () => {
+  // Fixture purpose: a 1.16-era settings file carrying the retired shell and folder-name denies, the in-project
+  // credential-store rules, and two rules the project added itself.
+  // Filesystem side effects: creates one temporary project and runs the standalone installer against it.
+  it("retires shipped shell and folder-name denies, anchors credential-store rules at home, and keeps project rules", () => {
+    const root = makeTempProject();
+    mkdirSync(join(root, ".claude"), { recursive: true });
+    // Example: a team with a src/pages/secrets route upgrades; the folder deny goes, their own MCP and phpstan rules stay.
+    const projectOwnedDenies = [
+      "Bash(*vendor/bin/phpstan*)",
+      "mcp__github__push_files",
+    ];
+    writeFileSync(
+      join(root, ".claude", "settings.json"),
+      JSON.stringify(
+        {
+          permissions: {
+            allow: ["Read(**/.env.example)", "Bash(*sudo *)"],
+            deny: [
+              "Bash(*git commit*)",
+              "Bash(*git push*)",
+              "Bash(*sudo *)",
+              "Bash(*mkfs*)",
+              "Bash(*dd if=*)",
+              "Bash(*git reset --hard*)",
+              "Read(**/.env)",
+              "Read(**/secrets/**)",
+              "Read(**/.ssh/**)",
+              "Read(**/.docker/config.json)",
+              "Read(**/credentials*)",
+              "Edit(**/secrets/**)",
+              "Edit(**/.kube/config)",
+              "Edit(~/.kube/**)",
+              ...projectOwnedDenies,
+            ],
+          },
+        },
+        null,
+        2,
+      ) + "\n",
+    );
+
+    const result = runInstaller(root, "--agent", "claude");
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    assert.match(result.stdout, /stale or superseded permission rules/);
+    assert.match(
+      result.stderr,
+      /retired Claude deny rule removed: Read\(\*\*\/secrets\/\*\*\)/,
+    );
+
+    const { deny, allow } = readClaudePermissionGroups(root);
+    const retiredRules = [
+      "Bash(*sudo *)",
+      "Bash(*mkfs*)",
+      "Bash(*dd if=*)",
+      "Bash(*git reset --hard*)",
+      "Read(**/secrets/**)",
+      "Read(**/credentials*)",
+      "Edit(**/secrets/**)",
+    ];
+    assert.deepEqual(
+      deny.filter((rule) => retiredRules.includes(rule)),
+      [],
+      "retired shipped denies should be gone",
+    );
+    // The in-project store rules become home-anchored, and the rewrite dedupes against a home rule already present.
+    assert.ok(deny.includes("Read(~/.ssh/**)"), "ssh rule anchored at home");
+    assert.ok(
+      deny.includes("Read(~/.docker/**)"),
+      "docker rule anchored at home",
+    );
+    assert.deepEqual(
+      deny.filter((rule) => rule === "Edit(~/.kube/**)"),
+      ["Edit(~/.kube/**)"],
+      "kube rewrite deduped into the existing home rule",
+    );
+    assert.ok(
+      !deny.includes("Read(**/.ssh/**)"),
+      "in-project ssh rule removed",
+    );
+    assert.ok(
+      !deny.includes("Edit(**/.kube/config)"),
+      "in-project kube rule removed",
+    );
+    // Rules the project wrote and the ADR-025 pair are untouched, in their original relative order.
+    assert.deepEqual(
+      deny.filter((rule) => projectOwnedDenies.includes(rule)),
+      projectOwnedDenies,
+      "project-owned denies preserved",
+    );
+    assert.ok(
+      deny.includes("Bash(*git commit*)") && deny.includes("Bash(*git push*)"),
+    );
+    // Retirement never reaches the allow list: an allow with the same text is the user's own decision.
+    assert.ok(allow.includes("Bash(*sudo *)"), "allow list left alone");
+  });
+
   // Covers removed-tool, unmatched-rule, and broad env-deny migrations together.
   // Fixture purpose: writes stale Claude rules for pruning, rewriting, and env-deny expansion.
   it("prunes removed-tool (MultiEdit) denies and rewrites unmatched Write/NotebookEdit/Glob denies on upgrade", () => {

@@ -10,9 +10,11 @@ import { buildQualityDiff } from "../../src/cli/quality/history-diff.js";
 import type { QualityHistoryEntry } from "../../src/cli/quality/history.js";
 import { renderQualityDiffText } from "../../src/cli/quality/history-render.js";
 import type {
+  QualityScoreRationale,
   SavedQualityFinding,
   SavedQualityReport,
 } from "../../src/cli/quality/schema.js";
+import { makeQualityScoreRationale } from "../fixtures/quality-score-rationale.js";
 
 /** Build one saved finding row with sane defaults; the id is what the diff contract matches on, so tests set it deliberately. */
 function finding(
@@ -39,6 +41,7 @@ function entry(
   runDate: string,
   findings: SavedQualityFinding[],
   priorReportId: string | null,
+  scoreRationale?: QualityScoreRationale,
 ): QualityHistoryEntry {
   const report: SavedQualityReport = {
     report_kind: "goat-flow-quality-report",
@@ -67,6 +70,7 @@ function entry(
         learnability: 15,
       },
     },
+    ...(scoreRationale ? { score_rationale: scoreRationale } : {}),
     findings,
   };
   return {
@@ -85,6 +89,52 @@ const TO_ID = "2026-06-15-0900-claude-bbbbb";
 const STREAK_OLDEST_ID = "2026-05-01-0900-claude-ccccc";
 const STREAK_MIDDLE_ID = "2026-05-15-0900-claude-ddddd";
 const STREAK_NEWEST_ID = "2026-06-01-0900-claude-eeeee";
+
+describe("quality diff score rationale", () => {
+  it("renders all current axes beside unchanged arithmetic and labels a legacy side", () => {
+    const older = entry(FROM_ID, "2026-06-01", [], null);
+    const newer = entry(
+      TO_ID,
+      "2026-06-15",
+      [],
+      FROM_ID,
+      makeQualityScoreRationale(),
+    );
+    const result = buildQualityDiff([newer, older], {
+      agent: "claude",
+      pair: `${FROM_ID}:${TO_ID}`,
+    });
+    assert.ok(result.ok, !result.ok ? result.error : "");
+    assert.equal(result.diff.setupDelta, 0);
+    assert.equal(result.diff.systemDelta, 0);
+
+    const rendered = renderQualityDiffText(result.diff);
+    assert.match(
+      rendered,
+      /Setup 60\/100 → 60\/100 \(\+0\)\. System 60\/100 → 60\/100 \(\+0\)\./u,
+    );
+    assert.match(
+      rendered,
+      new RegExp(
+        `From ${FROM_ID}[\\s\\S]*rationale unavailable \\(legacy report\\)`,
+      ),
+    );
+    for (const axis of [
+      "setup.accuracy",
+      "setup.relevance",
+      "setup.completeness",
+      "setup.friction",
+      "system.usefulness",
+      "system.signal_to_noise",
+      "system.adaptability",
+      "system.learnability",
+    ]) {
+      assert.match(rendered, new RegExp(`${axis} 15/25`), axis);
+    }
+    assert.match(rendered, /evidence: The cited source and runtime evidence/u);
+    assert.match(rendered, /deduction: The cited rating-band evidence/u);
+  });
+});
 
 /**
  * Count stuck findings across three newest-first report dates.

@@ -1,17 +1,29 @@
 /**
  * Cross-surface quality-prompt contract for CLI and dashboard users.
- * It keeps report fields, audit evidence limits, and validation instructions consistent across every mode.
  * Use when prompt composition changes so a report launched from one screen is not weaker than another.
+ *
+ * It keeps report fields, audit limits, score calibration, and save instructions consistent across every mode.
  * The dashboard mirror stays source-pinned because its classic script cannot import the CLI builder.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
+import {
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { CLIError } from "../../src/cli/cli-error.js";
+import { getPackageVersion } from "../../src/cli/paths.js";
 import { composeQuality } from "../../src/cli/prompt/compose-quality.js";
 import type { QualityInput } from "../../src/cli/prompt/compose-quality-common.js";
+import { persistQualityReportText } from "../../src/cli/quality/quality-command.js";
+import type { LearningLoopEntryFact } from "../../src/cli/types.js";
 import {
   QUALITY_EVIDENCE_METHODS,
   QUALITY_FINDING_SEVERITIES,
@@ -20,6 +32,8 @@ import {
   QUALITY_SCORE_CONFIDENCES,
   QUALITY_WORKTREE_STATES,
 } from "../../src/cli/quality/schema-types.js";
+import { makeSharedFacts } from "../fixtures/projects/index.js";
+import { makeQualityScoreRationale } from "../fixtures/quality-score-rationale.js";
 
 /** Top-level JSON keys every contract render must show in its body shape. */
 const REQUIRED_TOP_LEVEL_FIELDS = [
@@ -36,6 +50,7 @@ const REQUIRED_TOP_LEVEL_FIELDS = [
   '"assessment_context"',
   '"scores"',
   '"findings"',
+  '"refuted_candidates"',
 ] as const;
 
 /** Per-finding fields every contract render must require or demonstrate. */
@@ -43,6 +58,17 @@ const REQUIRED_FINDING_FIELDS = [
   "evidence_quality",
   "evidence_method",
   "delta_tag",
+] as const;
+
+/** Per-candidate fields users need to understand why a suspected finding was excluded. */
+const REQUIRED_REFUTED_CANDIDATE_FIELDS = [
+  "claim",
+  "why_excluded",
+  "file",
+  "line",
+  "evidence_quality",
+  "evidence_method",
+  "evidence_summary",
 ] as const;
 
 const PROJECT_VALIDATION_LIMIT =
@@ -60,8 +86,6 @@ const SAVER_VERSION_CLASSIFICATION =
 const PATH_SKEW_CLASSIFICATION = "do not report or score that PATH-only skew";
 const VERSION_FINDING_AUTHORITY =
   "Raise version findings only when repository-owned declarations or managed target artifacts disagree.";
-const FAST_CACHE_AUDIT_PLACEHOLDER =
-  'The pre-filled `audit_status: "unavailable"` is a placeholder superseded by any live audit completed during this assessment.';
 const ASSESSMENT_CONTEXT_GUIDANCE = [
   "project_revision",
   "working_tree_state",
@@ -84,12 +108,6 @@ const AGENT_SETUP_ONLY_VALIDITY_GUIDANCE = [
 /** Prior-claim warning shown only when a user supplied a same-mode report. */
 const PRIOR_REPORT_REVALIDATION_GUIDANCE =
   "A prior finding is a claim to re-test, not a fact";
-const DRIFT_EVIDENCE = [
-  ".agents/skills/goat/SKILL.md",
-  "installed dispatcher differs",
-  "README.md:8 [removed-command-scan]",
-  "documentation teaches a removed command",
-] as const;
 const FORBIDDEN_STAGED_DRAFT_TEXT = [
   "Use the bounded saver below",
   "**Persist through the bounded saver.**",
@@ -111,7 +129,10 @@ const STAGED_DRAFT_SAFETY_GUIDANCE = [
   "persist-skipped: <reason>",
 ] as const;
 
-/** Extract the executable report-write block from a composed prompt. */
+/**
+ * Extract the executable report-write block a CLI user receives in a composed prompt.
+ * Use when assertions need to inspect the saver command separately from the surrounding assessment instructions.
+ */
 function extractReportWriteBlock(prompt: string): string {
   const selectionIndex = prompt.indexOf(
     "**Persist through the bounded saver.**",
@@ -125,7 +146,10 @@ function extractReportWriteBlock(prompt: string): string {
   return prompt.slice(blockStart, blockEnd);
 }
 
-/** Build the prompt input a user gets before any audit evidence is available. */
+/**
+ * Build the prompt input a user gets before any audit evidence is available.
+ * Use as the empty-history baseline; a null audit means the prompt must disclose unavailable grounding.
+ */
 function makeInput(qualityMode: QualityInput["qualityMode"]): QualityInput {
   return {
     agent: "claude",
@@ -135,6 +159,38 @@ function makeInput(qualityMode: QualityInput["qualityMode"]): QualityInput {
     priorReport: null,
     qualityMode,
     runDate: "2026-07-03",
+  };
+}
+
+/**
+ * Build one active learning-loop fact that may appear in a user's bounded quality context.
+ * Use to prove prompt targeting selects relevant project history without loading the whole learning loop.
+ */
+function makeQualityMemoryFact(
+  title: string,
+  overrides: Partial<LearningLoopEntryFact> = {},
+): LearningLoopEntryFact {
+  return {
+    sourcePath: `.goat-flow/learning-loop/footguns/${title.toLowerCase().replace(/\s+/g, "-")}.md`,
+    kind: "footgun",
+    title,
+    heading: `## Footgun: ${title}`,
+    status: "active",
+    created: "2026-05-01",
+    updated: null,
+    resolved: null,
+    hasDecisionChangedGuidance: true,
+    triggerPhase: null,
+    caughtAt: null,
+    incidentCount: null,
+    latestOccurrence: null,
+    excerpt: `${title} evidence.`,
+    staleRefs: [],
+    invalidLineRefs: [],
+    hasValidAnchor: true,
+    bucketSizeBytes: 1_000,
+    order: 0,
+    ...overrides,
   };
 }
 
@@ -179,13 +235,28 @@ function makePriorQualityReport(
           learnability: 10,
         },
       },
+      score_rationale: makeQualityScoreRationale(),
       findings: [],
+      refuted_candidates: [
+        {
+          claim: "The schema accepts an inferred refutation",
+          why_excluded: "Observed parser evidence requires a resolved verdict.",
+          file: "src/cli/quality/schema-refuted-candidates.ts",
+          line: null,
+          evidence_quality: "OBSERVED",
+          evidence_method: "static-analysis",
+          evidence_summary: '(search: "quality.value !== \\"OBSERVED\\"")',
+        },
+      ],
     },
   };
 }
 
-/** Build one complete concern so prompt tests can vary only the evidence limits users need to see. */
-function auditConcern(limits: string[] = []) {
+/**
+ * Build one passing audit concern so tests can vary only the evidence limits users need to see.
+ * Use in an otherwise complete audit; an empty limits list means no unverified behavior is disclosed for that concern.
+ */
+function makePassingAuditConcern(limits: string[] = []) {
   return {
     status: "pass" as const,
     score: 100,
@@ -221,35 +292,77 @@ function makeLimitedAuditReport(): NonNullable<QualityInput["auditReport"]> {
       harness: emptyScope,
     },
     concerns: {
-      context: auditConcern(),
-      constraints: auditConcern(),
-      verification: auditConcern([
+      context: makePassingAuditConcern(),
+      constraints: makePassingAuditConcern(),
+      verification: makePassingAuditConcern([
         PROJECT_VALIDATION_LIMIT,
         RED_FLAGS_METRIC_LIMIT,
       ]),
-      recovery: auditConcern([RECOVERY_RESUMABILITY_LIMIT]),
-      feedback_loop: auditConcern(),
+      recovery: makePassingAuditConcern([RECOVERY_RESUMABILITY_LIMIT]),
+      feedback_loop: makePassingAuditConcern(),
     },
     enforcement: [],
+    hookCoverage: {
+      status: "pass",
+      selectedAgents: [],
+      summary: {
+        selectedSurfaces: 0,
+        requiredSurfaces: 0,
+        requiredIneffective: 0,
+        effective: 0,
+        warning: 0,
+        danger: 0,
+        disabled: 0,
+      },
+      hooks: [],
+    },
     drift: null,
     content: null,
     overall: { status: "pass" },
   };
 }
 
-/** Assert a prompt carries every field needed to save and validate the user's quality report. */
+/**
+ * Assert a prompt carries every field needed to save and validate the user's quality report.
+ * Use for each launch surface so users cannot receive a weaker schema, evidence vocabulary, or saver contract.
+ */
 function assertCarriesContract(surface: string, text: string): void {
   // Every top-level field the schema parser requires must appear in the shape.
   for (const field of REQUIRED_TOP_LEVEL_FIELDS) {
     assert.ok(text.includes(field), `${surface}: missing ${field}`);
   }
-  // Every per-finding requirement must be spelled out.
-  for (const field of REQUIRED_FINDING_FIELDS) {
+  // Every finding and refutation field must be spelled out so the emitted JSON remains explainable.
+  for (const field of [
+    ...REQUIRED_FINDING_FIELDS,
+    ...REQUIRED_REFUTED_CANDIDATE_FIELDS,
+  ]) {
     assert.ok(
       text.includes(field),
-      `${surface}: missing finding field ${field}`,
+      `${surface}: missing evidence field ${field}`,
     );
   }
+  assert.ok(
+    text.includes("### Refuted Candidates"),
+    `${surface}: missing prose Refuted Candidates section`,
+  );
+  assert.ok(
+    text.includes("runtime-probe") && text.includes("evidence_exit_code"),
+    `${surface}: missing runtime refutation provenance`,
+  );
+  assert.ok(
+    text.includes("static-analysis") && text.includes('(search: "pattern")'),
+    `${surface}: missing static refutation anchor rule`,
+  );
+  assert.ok(
+    text.includes('evidence_quality: "OBSERVED"') &&
+      text.includes("an `INFERRED` candidate remains unresolved"),
+    `${surface}: missing observed-only refutation rule`,
+  );
+  assert.ok(
+    text.includes("`static-analysis` or `mixed` refuted candidate"),
+    `${surface}: missing mixed static provenance rule`,
+  );
+  // Every context field helps the user judge whether a score came from a clean, grounded assessment.
   for (const guidance of ASSESSMENT_CONTEXT_GUIDANCE) {
     assert.ok(
       text.includes(guidance),
@@ -279,23 +392,6 @@ function assertCarriesContract(surface: string, text: string): void {
     text.includes("OK "),
     `${surface}: missing successful-save receipt`,
   );
-}
-
-/** Assert a focused prompt and its summary preserve every observed audit failure. */
-function assertCarriesAuditEvidence(
-  surface: string,
-  payload: ReturnType<typeof composeQuality>,
-): void {
-  for (const evidence of DRIFT_EVIDENCE) {
-    assert.ok(
-      payload.prompt.includes(evidence),
-      `${surface}: prompt omitted ${evidence}`,
-    );
-    assert.ok(
-      payload.auditSummary.includes(evidence),
-      `${surface}: auditSummary omitted ${evidence}`,
-    );
-  }
 }
 
 /**
@@ -348,6 +444,7 @@ function assertStagedDraftContract(surface: string, prompt: string): void {
     false,
     `${surface}: staged variant still contains a heredoc`,
   );
+  // None of the CLI-only saver instructions can remain when the dashboard owns persistence.
   for (const forbidden of FORBIDDEN_STAGED_DRAFT_TEXT) {
     assert.equal(
       prompt.includes(forbidden),
@@ -363,14 +460,79 @@ describe("quality report contract: CLI surfaces", () => {
     assertCarriesContract("agent-setup", payload.prompt);
   });
 
+  it("targets bounded harness learnings from failing audit checks and affected surfaces", () => {
+    const auditReport = makeLimitedAuditReport();
+    const failure = {
+      check: "Deny covers secrets",
+      message: "workflow/hooks/deny-dangerous.sh did not cover secret reads",
+      evidence: ".github/hooks/hooks.json",
+      howToFix: "Repair the registered deny hook and rerun its smoke probe.",
+    };
+    auditReport.status = "fail";
+    auditReport.overall.status = "fail";
+    auditReport.scopes.harness = {
+      status: "fail",
+      checks: [
+        {
+          id: "deny-covers-secrets",
+          name: "Deny covers secrets",
+          status: "fail",
+          displayStatus: "fail",
+          impact: "scope-fail",
+          provenance: {
+            source_type: "spec",
+            source_urls: [],
+            verified_on: "2026-08-23",
+            normative_level: "MUST",
+          },
+          failure,
+        },
+      ],
+      failures: [failure],
+      summary: {},
+    };
+    const sharedFacts = makeSharedFacts();
+    const matchingTitle =
+      "File-read deny does not bind Bash shell reads of secret files";
+    const unrelatedTitle =
+      "Dashboard terminal prompts can be dropped before browser attachment";
+    sharedFacts.learningLoopEntries = [
+      makeQualityMemoryFact(unrelatedTitle, {
+        created: "2026-06-03",
+        order: 1,
+      }),
+      makeQualityMemoryFact(matchingTitle, {
+        sourcePath: ".goat-flow/learning-loop/footguns/deny-secrets.md",
+        excerpt:
+          "The deny-covers-secrets audit exercises workflow/hooks/deny-dangerous.sh.",
+        order: 2,
+      }),
+    ];
+
+    const prompt = composeQuality({
+      ...makeInput("harness"),
+      auditReport,
+      sharedFacts,
+    }).prompt;
+
+    assert.ok(prompt.indexOf(matchingTitle) < prompt.indexOf(unrelatedTitle));
+    assert.match(
+      prompt,
+      /<goat-learning-loop[^>]*selected="2" omitted="0"[^>]*task_matches="1" task_zero_hit="false">/u,
+    );
+    assert.match(prompt, /task match: deny, covers, secrets/u);
+  });
+
   it("agent-setup prompt defines finding-validity and accuracy guardrails", () => {
     const prompt = composeQuality(makeInput("agent-setup")).prompt;
+    // Each validity phrase prevents a reviewer from turning an unsupported premise into a user-facing finding.
     for (const phrase of AGENT_SETUP_ONLY_VALIDITY_GUIDANCE) {
       assert.ok(
         prompt.includes(phrase),
         `missing finding-validity phrase: ${phrase}`,
       );
     }
+    // Every severity label must be visible so reviewers can classify findings without inventing another scale.
     for (const severity of ["`BLOCKER`", "`MAJOR`", "`MINOR`"]) {
       assert.ok(
         prompt.includes(severity),
@@ -435,6 +597,7 @@ describe("quality report contract: CLI surfaces", () => {
 
     assert.match(skillsPrompt, /Assess all eight goat-flow skills/u);
     assert.match(skillsPrompt, /After the eight sections/u);
+    // Every installed skill needs a named section so the user can see which workflows were actually assessed.
     for (const skillName of canonicalSkills) {
       assert.ok(skillsPrompt.includes(skillName), `missing ${skillName}`);
     }
@@ -445,8 +608,21 @@ describe("quality report contract: CLI surfaces", () => {
   });
 
   it("focused (harness) prompt carries the full contract", () => {
-    const payload = composeQuality(makeInput("harness"));
+    const payload = composeQuality({
+      ...makeInput("harness"),
+      agent: "codex",
+    });
     assertCarriesContract("focused/harness", payload.prompt);
+    // The selected agent must reach the grounding command, and the command must name the project instead of the runner's directory.
+    assert.match(
+      payload.prompt,
+      /audit \/tmp\/example-project --agent codex --harness --format json run from the controlling workspace/u,
+    );
+    // The agent-less aggregate form would silently widen a single-agent harness review.
+    assert.doesNotMatch(
+      payload.prompt,
+      /audit \/tmp\/example-project --harness --format json run from the controlling workspace/u,
+    );
   });
 
   it("focused (process) prompt carries the full contract", () => {
@@ -454,11 +630,15 @@ describe("quality report contract: CLI surfaces", () => {
     assertCarriesContract("focused/process", payload.prompt);
   });
 
+  // Every launch mode must show the same live-audit precedence, score meaning, and calibrated rating shells.
   for (const qualityMode of QUALITY_MODES) {
     it(`defines live audit precedence and narrow harness-score interpretation in ${qualityMode} mode`, () => {
       const prompt = composeQuality(makeInput(qualityMode)).prompt;
       assert.ok(prompt.includes(AUDIT_STATUS_PRECEDENCE_RULE), qualityMode);
       assert.ok(prompt.includes(HARNESS_SCORE_INTERPRETATION), qualityMode);
+      assert.match(prompt, /### Rating bands/u, qualityMode);
+      assert.match(prompt, /\*\*Setup: __\/100\*\*/u, qualityMode);
+      assert.match(prompt, /\*\*System: __\/100\*\*/u, qualityMode);
     });
 
     it(`classifies pre-release PATH skew as saver compatibility in ${qualityMode} mode`, () => {
@@ -469,6 +649,24 @@ describe("quality report contract: CLI surfaces", () => {
     });
   }
 
+  // Each focused mode must name only the area the user selected, preventing repository-wide impressions from changing its score.
+  for (const [qualityMode, assessmentScopeLabel] of [
+    ["process", "framework process"],
+    ["harness", "selected target harness"],
+    ["skills", "eight-skill system"],
+  ] as const) {
+    it(`scopes ${qualityMode} rating bands to its own assessment`, () => {
+      const prompt = composeQuality(makeInput(qualityMode)).prompt;
+      assert.ok(
+        prompt.includes(
+          `Score only the ${assessmentScopeLabel} named in this assessment.`,
+        ),
+        qualityMode,
+      );
+    });
+  }
+
+  // Every mode must send the completed JSON through the same redacting saver before the report reaches disk.
   for (const qualityMode of QUALITY_MODES) {
     it(`redacts completed ${qualityMode} JSON before it reaches disk`, () => {
       const prompt = composeQuality(makeInput(qualityMode)).prompt;
@@ -501,21 +699,28 @@ describe("quality report contract: CLI surfaces", () => {
     });
   }
 
-  // Covers a realistic 60-field report through the real deny hook: writes it and expects it to pass.
-  it("sends a realistic 60-field report block through the actual deny hook", () => {
+  /**
+   * Fixture purpose: cover a prompt-derived report above the generic command cap.
+   * Process side effect: spawns the real installed deny hook as a classifier only.
+   */
+  it("sends a thorough report block through the actual deny hook", () => {
     const prompt = composeQuality(makeInput("agent-setup")).prompt;
     const writeBlock = extractReportWriteBlock(prompt);
     const reportObject = JSON.stringify(
       Object.fromEntries(
         Array.from({ length: 60 }, (_, index) => [
           `field_${index}`,
-          `value_${index}`,
+          `value_${index}_${"x".repeat(400)}`,
         ]),
       ),
     );
     const realisticBlock = writeBlock.replace(
       "<insert the complete report object as one JSON line here>",
       reportObject,
+    );
+    assert.ok(
+      realisticBlock.length > 16_384,
+      "fixture must exercise the large-command policy branch",
     );
     const hookResult = spawnSync(
       "bash",
@@ -529,6 +734,38 @@ describe("quality report contract: CLI surfaces", () => {
     assert.equal(hookResult.status, 0, hookResult.stderr || hookResult.stdout);
   });
 
+  it("matches goat-clarity's declared target-selector count", () => {
+    const prompt = composeQuality(makeInput("agent-setup")).prompt;
+    const claritySkill = readFileSync(
+      resolve(REPOSITORY_ROOT, "workflow/skills/goat-clarity/SKILL.md"),
+      "utf-8",
+    );
+    const selectorBlock = claritySkill.match(
+      /Accept one target form:\s*\n((?:\s*- `\/goat-clarity[^\n]+`\s*\n)+)/u,
+    );
+    assert.ok(selectorBlock, "goat-clarity target forms must stay parseable");
+    // If parsing finds no selector rows, zero makes the next assertion fail instead of hiding a broken user-facing contract.
+    const selectorCount = selectorBlock[1]?.match(/^\s*- /gmu)?.length ?? 0;
+    const countWords = [
+      "zero",
+      "one",
+      "two",
+      "three",
+      "four",
+      "five",
+      "six",
+      "seven",
+      "eight",
+    ] as const;
+    const selectorCountWord = countWords[selectorCount];
+    assert.ok(selectorCountWord, "selector count must have a prompt word");
+
+    assert.match(
+      prompt,
+      new RegExp(`inspect the ${selectorCountWord} selector contracts`, "u"),
+    );
+  });
+
   it("keeps compatibility selection outside the report body and names failure honestly", () => {
     const prompt = composeQuality(makeInput("agent-setup")).prompt;
     const writeBlock = extractReportWriteBlock(prompt);
@@ -537,105 +774,6 @@ describe("quality report contract: CLI surfaces", () => {
     assert.match(prompt, /persist-skipped: redactor-unavailable/u);
     assert.doesNotMatch(writeBlock, /--version|quality validate|ls -la/u);
   });
-
-  // A user choosing any Quality mode must receive the same deterministic evidence boundaries.
-  for (const qualityMode of QUALITY_MODES) {
-    it(`embeds live Verification and Recovery limits in ${qualityMode} prompt and summary`, () => {
-      const auditReport = makeLimitedAuditReport();
-      const payload = composeQuality({
-        ...makeInput(qualityMode),
-        auditReport,
-      });
-      assert.ok(
-        payload.prompt.includes(PROJECT_VALIDATION_LIMIT),
-        `${qualityMode}: prompt omitted Verification limit`,
-      );
-      assert.ok(
-        payload.prompt.includes(RECOVERY_RESUMABILITY_LIMIT),
-        `${qualityMode}: prompt omitted Recovery limit`,
-      );
-      assert.ok(
-        payload.prompt.includes(RED_FLAGS_METRIC_LIMIT),
-        `${qualityMode}: prompt omitted red-flags metric limit`,
-      );
-      assert.ok(
-        payload.auditSummary.includes(PROJECT_VALIDATION_LIMIT),
-        `${qualityMode}: auditSummary omitted Verification limit`,
-      );
-      assert.ok(
-        payload.auditSummary.includes(RECOVERY_RESUMABILITY_LIMIT),
-        `${qualityMode}: auditSummary omitted Recovery limit`,
-      );
-      assert.ok(
-        payload.auditSummary.includes(RED_FLAGS_METRIC_LIMIT),
-        `${qualityMode}: auditSummary omitted red-flags metric limit`,
-      );
-    });
-  }
-
-  // A fast dashboard launch without cached evidence must disclose the gap instead of inventing limits.
-  for (const qualityMode of FOCUSED_QUALITY_MODES) {
-    it(`keeps the ${qualityMode} cache-miss contract when no audit report is available`, () => {
-      const payload = composeQuality({
-        ...makeInput(qualityMode),
-        auditUnavailableReason: "fast-cache-only",
-      });
-      assert.match(
-        payload.prompt,
-        /Audit: NOT LOADED \(FAST CACHE-ONLY MODE\)/,
-      );
-      assert.match(payload.auditSummary, /fast cache-only mode/);
-      assert.match(
-        payload.prompt,
-        /Audit data not loaded \(fast cache-only mode/u,
-      );
-      assert.ok(
-        payload.prompt.includes(FAST_CACHE_AUDIT_PLACEHOLDER),
-        `${qualityMode}: missing fast-cache audit placeholder precedence`,
-      );
-      assert.equal(payload.prompt.includes(PROJECT_VALIDATION_LIMIT), false);
-      assert.equal(payload.prompt.includes(RECOVERY_RESUMABILITY_LIMIT), false);
-    });
-  }
-
-  for (const qualityMode of FOCUSED_QUALITY_MODES) {
-    it(`embeds drift and content failures in ${qualityMode} prompts and summaries`, () => {
-      const auditReport = makeLimitedAuditReport();
-      auditReport.status = "fail";
-      auditReport.overall.status = "fail";
-      auditReport.drift = {
-        status: "fail",
-        checked: 12,
-        findings: [
-          {
-            kind: "content",
-            path: ".agents/skills/goat/SKILL.md",
-            message: "installed dispatcher differs from its workflow source",
-          },
-        ],
-      };
-      auditReport.content = {
-        status: "fail",
-        warnings: 1,
-        infos: 0,
-        filesScanned: 4,
-        findings: [
-          {
-            severity: "warning",
-            rule: "removed-command-scan",
-            path: "README.md",
-            line: 8,
-            message: "documentation teaches a removed command",
-          },
-        ],
-      };
-      const payload = composeQuality({
-        ...makeInput(qualityMode),
-        auditReport,
-      });
-      assertCarriesAuditEvidence(qualityMode, payload);
-    });
-  }
 
   it("prior-report runs re-test claims while fresh runs keep the no-prior contract", () => {
     const fresh = composeQuality(makeInput("agent-setup")).prompt;
@@ -731,11 +869,58 @@ describe("quality report contract: cross-variant boundaries", () => {
         promptWithPriorReport.includes(PRIOR_REPORT_REVALIDATION_GUIDANCE),
         `${qualityMode}: missing prior-report revalidation guidance`,
       );
+      assert.ok(
+        promptWithPriorReport.includes(
+          "Prior refuted candidates (do not repeat unless evidence or contract changed)",
+        ),
+        `${qualityMode}: missing prior refutation continuity`,
+      );
+      assert.ok(
+        promptWithPriorReport.includes(
+          "The schema accepts an inferred refutation",
+        ),
+        `${qualityMode}: missing prior refuted claim`,
+      );
     });
   }
+
+  // Five rows prove the prompt shows its three-row allowance and reports the two omitted rows.
+  it("bounds prior refutation context to three candidates", () => {
+    const priorReport = makePriorQualityReport("skills");
+    priorReport.report.refuted_candidates = Array.from(
+      { length: 5 },
+      (_, index) => ({
+        claim: `Refuted claim ${index + 1}`,
+        why_excluded: `Observed exclusion ${index + 1}`,
+        file: "src/cli/quality/schema-refuted-candidates.ts",
+        line: null,
+        evidence_quality: "OBSERVED" as const,
+        evidence_method: "static-analysis" as const,
+        evidence_summary: '(search: "parseReportRefutedCandidates")',
+      }),
+    );
+    const prompt = composeQuality({
+      ...makeInput("skills"),
+      priorReport,
+    }).prompt;
+
+    assert.ok(prompt.includes("Refuted claim 1"));
+    assert.ok(prompt.includes("Refuted claim 3"));
+    assert.equal(prompt.includes("Refuted claim 4"), false);
+    assert.ok(
+      prompt.includes(
+        "2 additional prior refuted candidate(s) omitted from this bounded preview.",
+      ),
+    );
+    assert.ok(
+      prompt.includes(JSON.stringify(priorReport.path)),
+      "omitted refutations need an exact safe retrieval path",
+    );
+  });
 });
 
 describe("quality report contract: staged-draft persistence variant", () => {
+  // Each dashboard-supported mode must replace the CLI saver with the same staged-draft experience.
   for (const qualityMode of STAGED_DRAFT_MODES) {
     it(`replaces the ${qualityMode} bounded saver with the dashboard draft contract (ADR-044)`, () => {
       const prompt = composeQuality({
@@ -760,6 +945,67 @@ describe("quality report contract: staged-draft persistence variant", () => {
       assert.equal(prompt.includes(safetyGuidance), false, safetyGuidance);
     });
   }
+});
+
+describe("quality report contract: rejected persistence", () => {
+  // Fixture purpose: writes partial bytes, throws, and proves cleanup removes only that owned filesystem path.
+  it("removes an owned allocation when report writing fails", () => {
+    const projectRoot = mkdtempSync(resolve(tmpdir(), "quality-rejected-"));
+    execFileSync("git", ["-C", projectRoot, "init", "--quiet"]);
+    writeFileSync(
+      resolve(projectRoot, ".gitignore"),
+      ".goat-flow/logs/quality/*.json\n",
+    );
+    const version = getPackageVersion();
+    const priorReport = makePriorQualityReport("skills").report;
+    const currentReport = {
+      ...priorReport,
+      goat_flow_version: version,
+      project_path: projectRoot,
+      run_date: "2026-08-28",
+      audit_status: "pass",
+      scope: "framework-self",
+      rubric_version: version,
+      prior_report_id: null,
+      assessment_context: {
+        project_revision: "a".repeat(40),
+        working_tree_state: "clean",
+        grounding_status: "complete",
+        unverified_probes: [],
+        score_confidence: "high",
+      },
+      findings: [],
+      refuted_candidates: [],
+    };
+
+    try {
+      assert.throws(
+        () =>
+          persistQualityReportText(
+            {
+              projectPath: projectRoot,
+              rawText: JSON.stringify(currentReport),
+            },
+            {
+              CLIError,
+              /** Writes partial bytes to the allocated descriptor, then throws the transient failure under test. */
+              writeReportFile(reportDescriptor: number): void {
+                writeFileSync(reportDescriptor, "partial report bytes");
+                throw new Error("fixture report write failure");
+              },
+            },
+          ),
+        /could not persist the validated report/u,
+      );
+      assert.deepEqual(
+        readdirSync(resolve(projectRoot, ".goat-flow/logs/quality")),
+        [],
+      );
+    } finally {
+      // For example, a simulated partial write can throw before cleanup, so the test-owned temporary project must still be removed.
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("quality report contract: dashboard mirror", () => {

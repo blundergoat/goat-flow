@@ -1,8 +1,7 @@
 /**
- * Verifies the effort-estimate notation grammar directly: milestone effort
- * lines, countable forecast inputs, per-task entries, and category sums parse
- * one way for both `plans export` and `plans check`. Legacy absence stays
- * warning-free so existing users can adopt the new basis deliberately.
+ * Verifies the milestone effort grammar shared by `plans export` and `plans check`, including forecasts, task entries, Actuals, and category sums.
+ * Keeps legacy absence warning-free while proving malformed user input produces actionable diagnostics.
+ * Every case is in-memory and leaves the user's plans and filesystem unchanged.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -18,6 +17,7 @@ import {
 } from "../../src/cli/plans-effort.js";
 
 describe("plans effort notation", () => {
+  /** Proves a standard headline gives users the same total and category split they authored. No filesystem or process state changes. */
   it("parses a bare effort value with split and no Actual", () => {
     const warnings: string[] = [];
     const effort = parseEffortLineValue(
@@ -32,6 +32,7 @@ describe("plans effort notation", () => {
     assert.deepEqual(warnings, []);
   });
 
+  /** Proves users can inspect and re-render the countable basis behind a forecast. No filesystem or process state changes. */
   it("parses and renders the countable basis behind a forecast", () => {
     const warnings: string[] = [];
     const effort = parseEffortLineValue(
@@ -58,6 +59,7 @@ describe("plans effort notation", () => {
     assert.deepEqual(warnings, []);
   });
 
+  /** Proves an unreadable basis tells the author both the accepted grammar and received text. No filesystem or process state changes. */
   it("warns when a supplied forecast basis cannot be counted", () => {
     const warnings: string[] = [];
 
@@ -69,9 +71,12 @@ describe("plans effort notation", () => {
       "roughly twelve tasks at a few minutes each",
     );
 
-    assert.deepEqual(warnings, ["forecast basis not parseable"]);
+    assert.deepEqual(warnings, [
+      'forecast basis not parseable; expected "<units> agent work units; <low>-<likely>-<high> min/unit low-likely-high; source: <source>"; received "roughly twelve tasks at a few minutes each"',
+    ]);
   });
 
+  /** Proves an inline Actual remains available for planned-versus-recorded comparison. No filesystem or process state changes. */
   it("parses a structured Actual tail with an optional reason", () => {
     const warnings: string[] = [];
     const effort = parseEffortLineValue(
@@ -88,6 +93,7 @@ describe("plans effort notation", () => {
     assert.deepEqual(warnings, []);
   });
 
+  /** Proves a separately authored Actual has the same user-visible structure as an inline one. No filesystem or process state changes. */
   it("parses a separate structured Actual field", () => {
     const warnings: string[] = [];
     const effort = parseEffortLineValue(
@@ -105,6 +111,7 @@ describe("plans effort notation", () => {
     assert.deepEqual(warnings, []);
   });
 
+  /** Proves each supported Actual state preserves the evidence level the author selected. No filesystem or process state changes. */
   it("parses explicit measured, retrospective, unavailable, and incomplete states", () => {
     const warnings: string[] = [];
 
@@ -159,6 +166,7 @@ describe("plans effort notation", () => {
     assert.deepEqual(warnings, []);
   });
 
+  /** Proves legacy empty effort stays silent while visible drift gives the author a warning. No filesystem or process state changes. */
   it("treats an empty value as legacy silence and drifted text as a warning", () => {
     const warnings: string[] = [];
 
@@ -169,6 +177,7 @@ describe("plans effort notation", () => {
     assert.deepEqual(warnings, ["effort estimate not parseable"]);
   });
 
+  /** Proves extra text cannot make a partial estimate look valid to the user. No filesystem or process state changes. */
   it("rejects trailing estimate text instead of accepting a valid prefix", () => {
     const warnings: string[] = [];
 
@@ -182,6 +191,7 @@ describe("plans effort notation", () => {
     assert.deepEqual(warnings, ["effort estimate not parseable"]);
   });
 
+  /** Proves unsafe minute values cannot become misleading plan totals or checklist estimates. No filesystem or process state changes. */
   it("rejects precision-losing minute values in every effort shape", () => {
     const unsafe = "9007199254740992";
     const effortWarnings: string[] = [];
@@ -224,12 +234,15 @@ describe("plans effort notation", () => {
     assert.deepEqual(effortWarnings, ["effort estimate not parseable"]);
     assert.deepEqual(splitWarnings, ["effort estimate not parseable"]);
     assert.deepEqual(actualWarnings, ["actual effort not parseable"]);
-    assert.deepEqual(taskWarnings, ["task 1: estimate not parseable"]);
+    assert.deepEqual(taskWarnings, [
+      'task 1: estimate not parseable; expected "(est: <minutes> min <product|proof|other>)"; received "(est: 9007199254740992 min product)"',
+    ]);
     assert.deepEqual(adminWarnings, [
-      "plan/admin overhead estimate not parseable",
+      'plan/admin overhead estimate not parseable; expected "<minutes> min other"; received "9007199254740992 min other"',
     ]);
   });
 
+  /** Proves vague Actual prose cannot be presented to users as machine-readable evidence. No filesystem or process state changes. */
   it("warns when a supplied Actual is not machine-readable", () => {
     const warnings: string[] = [];
     const effort = parseEffortLineValue(
@@ -242,6 +255,7 @@ describe("plans effort notation", () => {
     assert.deepEqual(warnings, ["actual effort not parseable"]);
   });
 
+  /** Proves valid task estimates parse while drifted entries show authors the exact repair shape. No filesystem or process state changes. */
   it("parses well-formed task est entries and warns on drifted ones", () => {
     const warnings: string[] = [];
 
@@ -262,11 +276,12 @@ describe("plans effort notation", () => {
       {},
     );
     assert.deepEqual(warnings, [
-      "task 3: estimate not parseable",
-      "task 4: estimate not parseable",
+      'task 3: estimate not parseable; expected "(est: <minutes> min <product|proof|other>)"; received "(est: soon)"',
+      'task 4: estimate not parseable; expected "(est: <minutes> min <product|proof|other>)"; received "(est: 5 min docs)"',
     ]);
   });
 
+  /** Proves plan overhead accepts only the category users see as administrative work. No filesystem or process state changes. */
   it("parses plan/admin overhead only as other work", () => {
     const warnings: string[] = [];
 
@@ -276,9 +291,12 @@ describe("plans effort notation", () => {
     });
     assert.deepEqual(readPlanAdminEstimate("", warnings), {});
     assert.deepEqual(readPlanAdminEstimate("2 min proof", warnings), {});
-    assert.deepEqual(warnings, ["plan/admin overhead estimate not parseable"]);
+    assert.deepEqual(warnings, [
+      'plan/admin overhead estimate not parseable; expected "<minutes> min other"; received "2 min proof"',
+    ]);
   });
 
+  /** Proves category totals reflect only tasks with estimates and stay absent for an unestimated list. No filesystem or process state changes. */
   it("sums estimates by category and stays absent without any", () => {
     assert.equal(sumTaskEstimates([{}, {}]), undefined);
     assert.deepEqual(
@@ -291,6 +309,7 @@ describe("plans effort notation", () => {
     );
   });
 
+  /** Proves rendered effort and Actual lines match the notation authors copy into milestones. No filesystem or process state changes. */
   it("renders effort back into the notation authors write", () => {
     assert.equal(
       renderEffortLine({

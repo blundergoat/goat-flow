@@ -251,7 +251,7 @@ export function assertDashboardReport(
     report.hookCoverage,
     "Dashboard report hookCoverage",
   );
-  assert.match(String(hookCoverage.status), /^(pass|fail)$/);
+  assert.match(String(hookCoverage.status), /^(pass|warning|fail)$/);
   assert.ok(
     Array.isArray(hookCoverage.hooks),
     "Dashboard report hookCoverage.hooks should be an array",

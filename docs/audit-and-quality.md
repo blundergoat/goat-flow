@@ -74,7 +74,7 @@ Sample harness output:
 ```
 GOAT Flow Setup:          PASS
   Skills:                 8/8 installed
-  Config:                 valid, version 1.16.0
+  Config:                 valid, version 1.17.0
   InstructionFile:        118 lines
 
 Agent Setup:              PASS
@@ -115,7 +115,7 @@ The generated prompt asks the agent to:
 4. **Identify false paths** - references to files that don't exist, stale concepts, dead modes
 5. **Rate the system** - setup accuracy/relevance/completeness/friction + system usefulness/signal-to-noise/adaptability/learnability
 
-**Time and cost expectation:** A full assessment evaluates all 8 skills (file analysis by default; live invocation when context allows - `goat-critique` alone spawns 3 sub-agents if invoked). Expect 15-60 minutes depending on depth, with moderate token usage. If context is limited, the generated prompt requires at minimum testing `/goat` (routing), `/goat-review` (most common use), and `/goat-critique` (highest-cost skill).
+**Time and cost expectation:** A full assessment evaluates all 8 skills (file analysis by default; live invocation when context allows - `goat-critique` alone spawns at least 4 sub-agents if invoked: 3 critics plus 1 meta-agent, up to 3 more cross-examiners, and any replacement or recheck agents on top). Expect 15-60 minutes depending on depth, with moderate token usage. If context is limited, the generated prompt requires at minimum testing `/goat` (routing), `/goat-review` (most common use), and `/goat-critique` (highest-cost skill).
 
 The prompt includes the current `audit` summary so the agent knows what's
 already passing or failing. If audit is failing, the prompt explicitly asks the
@@ -154,8 +154,12 @@ The `--mode` flag selects a focused quality assessment. Each mode generates a di
 `history` and `diff` compare within the same mode by default. Cross-mode comparison is not supported since the scoring rubrics differ.
 
 - `quality` composes a structured prompt with a bounded persistence contract. Positional finding IDs are computed at load time by `history` / `diff`.
-- `quality history` lists saved reports and same-agent setup/system score deltas. New reports also retain revision, worktree, grounding, unverified-probe, and score-confidence context so readers can identify non-comparable runs without changing the scores.
-- `quality diff` derives `absent`, `new`, `persisted`, and `stuck` from saved same-agent report ids.
+- `quality history` lists saved reports and same-agent setup/system score deltas. New reports also retain revision, worktree, grounding, unverified-probe, and score-confidence context so readers can identify non-comparable runs without changing the scores. Each of the eight score axes carries a compact `evidence` and `deduction` rationale; text output shows it beside the original `/25` value, while older reports are labeled `rationale unavailable (legacy report)`.
+- `quality diff` derives `absent`, `new`, `persisted`, and `stuck` from saved same-agent report ids, then shows each side's recorded score rationale without recalculating or averaging scores.
+
+New prompts also retain up to five categorized `improvements` and before/after `workspace_snapshot` fingerprints. Runtime findings require the actual command, exit code, and result summary. History shows saved recommendations; diff exposes `comparisonWarnings` for missing or differing provenance without changing scores. Missing legacy recommendations mean they were not recorded, not that none existed. See the [quality save contract](cli.md#goat-flow-quality-save-project) for fields, bounds, and capture limits.
+
+Score rationale makes an assessor's rating-band judgment inspectable; it does not turn subjective scores into deterministic measurements or make different agents' reports comparable. History and diff therefore continue to compare only the same agent and quality mode.
 
 The two commands stay separated in storage as well as terminology: audit output goes to stdout or `--output`, while quality reports land in a gitignored log directory for local trend analysis.
 

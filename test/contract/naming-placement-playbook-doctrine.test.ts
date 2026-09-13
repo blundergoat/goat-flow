@@ -1,5 +1,8 @@
 /**
- * Locks the responsibility-first naming and placement doctrine across both shipped copies.
+ * Check the naming and placement guidance agents use to explain code responsibilities.
+ *
+ * Both shipped copies must preserve project vocabulary, compatibility checks, and complete rename accounting.
+ * Use these contracts when changing how a clarity pass diagnoses or verifies names.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -10,23 +13,25 @@ const PLAYBOOK_ROOTS = [
   ".goat-flow/skill-docs/playbooks",
 ] as const;
 
-/** Apply one doctrine assertion to the canonical and installed playbooks. */
+// Apply one doctrine assertion to the canonical and installed playbooks.
 function assertForNamingPlaybook(
   assertion: (content: string, playbookPath: string) => void,
 ): void {
+  // Check both shipped naming guides so each installation preserves the same responsibility and compatibility rules.
   for (const playbookRoot of PLAYBOOK_ROOTS) {
     const playbookPath = `${playbookRoot}/naming-and-placement.md`;
     assertion(readFileSync(playbookPath, "utf8"), playbookPath);
   }
 }
 
-/** Require anchors to appear in the order a user must follow them. */
+// Require anchors to appear in the order a user must follow them.
 function assertOrdered(
   content: string,
   anchors: readonly string[],
   playbookPath: string,
 ): void {
   let previousOffset = -1;
+  // Require every step in order so an agent cannot rename code before completing its prerequisite checks.
   for (const anchor of anchors) {
     const offset = content.indexOf(anchor);
     assert.ok(
@@ -41,7 +46,7 @@ function assertOrdered(
   }
 }
 
-/** Parse one normalized accounting equation into its right-hand units. */
+// Parse one normalized accounting equation into its right-hand units.
 function equationTerms(
   content: string,
   leftHandUnit: string,
@@ -143,6 +148,7 @@ describe("naming and placement playbook doctrine", () => {
 
   it("treats role suffixes as project-governed semantic claims", () => {
     assertForNamingPlaybook((content, playbookPath) => {
+      // Each role suffix needs an explicit meaning so a clearer-sounding name cannot imply behavior the code lacks.
       for (const role of [
         "Builder",
         "Factory",
@@ -182,6 +188,7 @@ describe("naming and placement playbook doctrine", () => {
       assert.match(content, /Local or private renames/u, playbookPath);
       assert.match(content, /relevant test or check signature/u, playbookPath);
       assert.match(content, /Public or exported renames/u, playbookPath);
+      // Renaming guidance must cover every consumer boundary that can retain or depend on the old spelling.
       for (const boundary of [
         "consumers",
         "reflection",
@@ -218,6 +225,7 @@ describe("naming and placement playbook doctrine", () => {
     assertForNamingPlaybook((content, playbookPath) => {
       assert.match(content, /Singular names one object/u, playbookPath);
       assert.match(content, /plural or established collective/u, playbookPath);
+      // Time names must distinguish representations that callers would otherwise interpret differently.
       for (const timeKind of [
         "instant",
         "wall-clock or display value",
@@ -238,6 +246,7 @@ describe("naming and placement playbook doctrine", () => {
 
   it("classifies guards before separately authorized behaviour changes", () => {
     assertForNamingPlaybook((content, playbookPath) => {
+      // Classify each kind of guard before deciding whether a behavior change needs separate authority.
       for (const guardClass of [
         "user-controlled absence",
         "legacy nullable input",
@@ -366,9 +375,11 @@ const ENROLLMENT_OWNERS = [
 ] as const;
 
 describe("naming and placement enrollment", () => {
+  // Each discovery owner must expose the naming playbook so agents can find it before editing.
   for (const owner of ENROLLMENT_OWNERS) {
     it(`enrolls the playbook in ${owner.path}`, () => {
       const content = readFileSync(owner.path, "utf8");
+      // Require every discovery phrase assigned to this owner so partial enrollment cannot satisfy the contract.
       for (const requiredText of owner.required) {
         assert.ok(
           content.includes(requiredText),

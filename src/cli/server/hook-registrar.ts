@@ -6,16 +6,15 @@
  * Registration is per agent because each one stores hooks differently, so enabling one hook can mean editing several config files.
  */
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { realpathSync, statSync } from "node:fs";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { getAgentProfiles } from "../agents/registry.js";
 import {
   hookScanRootsUseYamlAliases,
+  prepareHookConfig,
+  readConfiguredHookChoices,
   readHookEnabled,
   readHookScanRoots,
-  removeHookConfig,
-  removeTopLevelConfigBlock,
-  setHookEnabled,
 } from "../config/writer.js";
 import {
   classifyHookEffectiveState,
@@ -34,14 +33,15 @@ import {
 import {
   deriveManagedHookDesiredState,
   readAgentHookState,
-  writeAgentHookState,
+  prepareAgentHookState,
   type AgentHookReadState,
   type AgentHookRegistrationIssue,
 } from "./agent-hook-writer.js";
 import {
   HookManagedInstallationError as HookRegistrarError,
   copyHookScripts,
-  hookConfigExists,
+  createManagedHookInspection,
+  type ManagedHookInspection,
   managedFileIsTrusted,
   managedHookInstallationFacts,
   removeHookScripts,
@@ -49,7 +49,12 @@ import {
   type ManagedHookInstallationFacts,
 } from "./hook-managed-installation.js";
 import { hookSupportGateAfterLocalProof } from "./hook-runtime-proof.js";
-import { writeFileAtomic } from "./safe-exec.js";
+import {
+  executeHookChange,
+  PreparedHookChange,
+  type HookChangeIntent,
+  type HookReplacementConfirmation,
+} from "./hook-operation.js";
 
 const REMOVED_HOOK_TOMBSTONES: HookSpec[] = [
   {
@@ -157,12 +162,17 @@ const HOOK_GATE_FACT_OVERRIDES: Record<
   effective: {},
 };
 
-/** Validate and resolve a hook id into the registry spec; bad ids throw 400 and unknown ids throw 404. Throws on invalid input. */
+/**
+ * Resolve the hook selected by the user.
+ * Throws HTTP 400 for invalid IDs and HTTP 404 when a valid ID names no shipped hook.
+ */
 function resolveSpec(hookId: string): HookSpec {
+  // Reject an invalid hook ID before it can select a registration or filesystem destination.
   if (!isValidHookIdShape(hookId)) {
     throw new HookRegistrarError("Invalid hook id", 400);
   }
   const spec = getHookSpec(hookId);
+  // A well-formed ID still needs to name a shipped hook the user can manage.
   if (!spec) throw new HookRegistrarError(`Unknown hook: ${hookId}`, 404);
   return spec;
 }
@@ -185,18 +195,21 @@ function unsupportedReasonForSpec(
 }
 
 /**
- * Resolve an existing directory to its physical path.
- * Missing, non-directory, and filesystem-error inputs return `null` instead of throwing.
+ * Resolve a project or scan folder to its physical path before checking coverage.
+ * Missing folders, non-directories and filesystem failures return null so callers can show an invalid-root state.
  *
  * @param directoryPath - candidate directory; missing or unreadable paths are invalid facts
+ *
  * @returns physical directory path, or `null` after any filesystem lookup failure
  * @throws Never; filesystem lookup errors are converted to `null`
  */
 function physicalDirectory(directoryPath: string): string | null {
   try {
+    // A selected file cannot serve as a project or post-turn scan folder.
     if (!statSync(directoryPath).isDirectory()) return null;
     return realpathSync(directoryPath);
   } catch {
+    // A folder may be moved or become unreadable after selection; report no usable physical root.
     return null;
   }
 }
@@ -216,7 +229,9 @@ type DirectoryIdentityResolver = (
 ) => FilesystemDirectoryIdentity | null;
 
 /**
- * Read one directory's device and inode/file ID without accepting unavailable zero identities.
+ * Read a folder's device and file ID to recognize aliases of the same selected scan root.
+ * Missing, unreadable or unavailable identities return null; they cannot prove folder equivalence.
+ *
  * @throws Never; missing paths and filesystem lookup failures return `null`
  */
 function filesystemDirectoryIdentity(
@@ -224,21 +239,25 @@ function filesystemDirectoryIdentity(
 ): FilesystemDirectoryIdentity | null {
   try {
     const stats = statSync(directoryPath, { bigint: true });
+    // Without a real directory ID, aliases cannot safely prove that two selected paths name the same folder.
     if (!stats.isDirectory() || stats.ino === 0n) return null;
     return { device: stats.dev, inode: stats.ino };
   } catch {
+    // A removed folder or permission failure leaves directory identity unknown.
     return null;
   }
 }
 
 /**
- * Report whether two physical directory spellings identify the same filesystem location.
- * The injected resolver lets cross-platform tests exercise Windows path semantics on any host.
+ * Check whether two path spellings name the same selected project or scan folder.
+ * The platform path resolver and physical IDs account for aliases such as Windows short paths.
  *
  * @param leftDirectory - first physical directory spelling; empty cannot name a useful root
  * @param rightDirectory - second physical directory spelling; empty cannot name a useful root
+ *
  * @param relativePath - platform-native relative-path implementation used for equivalence
  * @param directoryIdentity - physical identity fallback for aliases such as Windows short paths
+ *
  * @returns true only when both spellings are identical under the selected path semantics
  */
 export function filesystemPathsAreEquivalent(
@@ -247,10 +266,12 @@ export function filesystemPathsAreEquivalent(
   relativePath: RelativePathResolver = relative,
   directoryIdentity: DirectoryIdentityResolver = filesystemDirectoryIdentity,
 ): boolean {
+  // An empty path cannot establish that the user's selected folder matches a Git root.
   if (leftDirectory.length === 0 || rightDirectory.length === 0) return false;
   const spellingsMatch =
     relativePath(leftDirectory, rightDirectory) === "" &&
     relativePath(rightDirectory, leftDirectory) === "";
+  // Matching physical spellings already establish that both paths identify the same scan folder.
   if (spellingsMatch) return true;
 
   const leftIdentity = directoryIdentity(leftDirectory);
@@ -281,13 +302,16 @@ function gitTopLevel(directoryPath: string): string | null {
       maxBuffer: 16_384,
     },
   );
+  // Missing Git, a timeout or a non-repository folder supplies no proven scan root.
   if (result.error || result.status !== 0 || result.stdout.trim() === "") {
     return null;
   }
   return physicalDirectory(result.stdout.trim());
 }
 
-/** Return whether a relative-path result escapes the root it was measured from. */
+/**
+ * Detect a scan path outside its selected root before post-turn registration can include another project.
+ */
 function relativePathEscapesRoot(relativePath: string): boolean {
   return (
     relativePath === ".." ||
@@ -312,10 +336,13 @@ function containedScanRoot(
   }
   const lexicalCandidate = resolve(projectRoot, configuredRoot);
   const lexicalRelative = relative(projectRoot, lexicalCandidate);
+  // A configured relative folder must stay beneath the project selected in the dashboard.
   if (relativePathEscapesRoot(lexicalRelative)) return null;
   const physicalCandidate = physicalDirectory(lexicalCandidate);
+  // A missing or unreadable scan folder needs repair before registration.
   if (physicalCandidate === null) return null;
   const physicalRelative = relative(projectRoot, physicalCandidate);
+  // A linked folder outside the project cannot become an implicit post-turn scan target.
   if (relativePathEscapesRoot(physicalRelative)) return null;
   return physicalCandidate;
 }
@@ -328,8 +355,10 @@ function postTurnScanRootState(
   projectPath: string,
   spec: HookSpec,
 ): HookScanRootState | null {
+  // Only post-turn safety uses scan-root status; other hook rows have no root requirement.
   if (spec.id !== "post-turn-safety") return null;
   const projectRoot = physicalDirectory(resolve(projectPath));
+  // The selected project must still exist before its post-turn hook can be registered.
   if (projectRoot === null) {
     return {
       status: "invalid",
@@ -337,12 +366,14 @@ function postTurnScanRootState(
       issue: "Selected project is not an existing directory.",
     };
   }
+  // A project that is itself a Git worktree can scan its own root without extra folder settings.
   if (
     filesystemPathsAreEquivalent(gitTopLevel(projectRoot) ?? "", projectRoot)
   ) {
     return { status: "implicit", roots: ["."], issue: null };
   }
   const configuredRoots = readHookScanRoots(projectPath, spec.id);
+  // A non-Git workspace needs the user to select its child Git repositories explicitly.
   if (configuredRoots === null) {
     return {
       status: "missing",
@@ -350,8 +381,8 @@ function postTurnScanRootState(
       issue: "A non-Git workspace requires explicit post-turn scan roots.",
     };
   }
-  // js-yaml has already resolved any anchor or alias here, but the hook's own parser cannot: at Stop time such a config reads as no
-  // roots and fails closed with a misleading message. Refuse it now, while the user is looking at the Hooks page or the sync output.
+  // js-yaml has already resolved any anchor or alias here, but the hook's own parser cannot: at Stop time such a config reads as no roots and fails
+  // closed with a misleading message. Refuse it now, while the user is looking at the Hooks page or the sync output.
   if (hookScanRootsUseYamlAliases(projectPath)) {
     return {
       status: "invalid",
@@ -368,6 +399,7 @@ function postTurnScanRootState(
  * The first failing root names the problem so the user can fix that one line of config.
  *
  * @param projectRoot - physical directory of the selected project; roots are resolved relative to it
+ *
  * @param configuredRoots - the user's explicit `scan-roots` list, already free of YAML aliases
  * @returns `configured` with the same list when every root passes, else `invalid` naming the first bad root
  */
@@ -375,8 +407,10 @@ function explicitScanRootState(
   projectRoot: string,
   configuredRoots: string[],
 ): HookScanRootState {
+  // Every configured repository must qualify before the post-turn hook can cover the chosen workspace.
   for (const configuredRoot of configuredRoots) {
     const physicalRoot = containedScanRoot(projectRoot, configuredRoot);
+    // Show the first missing or escaping folder so the user can correct its config entry.
     if (physicalRoot === null) {
       return {
         status: "invalid",
@@ -384,6 +418,7 @@ function explicitScanRootState(
         issue: `Configured scan root is missing or escapes the selected project: ${configuredRoot}`,
       };
     }
+    // A contained folder still needs to be its own Git repository to qualify as a scan root.
     if (
       !filesystemPathsAreEquivalent(
         gitTopLevel(physicalRoot) ?? "",
@@ -411,35 +446,25 @@ function scanRootsPermitRegistration(
   );
 }
 
-/**
- * Remove one retired Goat Flow ignore rule while preserving user entries.
- * Use when an upgrade prunes a removed hook's final state file.
- * @param projectPath - selected project; empty text cannot locate an owned ignore file
- * @param gitignoreEntry - exact managed rule; empty text matches no useful entry
- * @returns nothing; missing files or rules leave the user's policy unchanged
- */
-function removeGoatFlowGitignoreEntry(
-  projectPath: string,
-  gitignoreEntry: string,
-): void {
-  const goatFlowGitignorePath = join(projectPath, ".goat-flow", ".gitignore");
-  // No local ignore file means the retired state rule is already absent for the user.
-  if (!existsSync(goatFlowGitignorePath)) return;
-
-  const originalGitignore = readFileSync(goatFlowGitignorePath, "utf-8");
-  const hadFinalNewline = originalGitignore.endsWith("\n");
-  const gitignoreLines = originalGitignore.split(/\r?\n/u);
-  // A final split item is not a rule, so exclude it from the retained content.
-  if (hadFinalNewline) gitignoreLines.pop();
-  // Keep every rule except the exact retired Goat Flow entry.
-  const retainedGitignoreLines = gitignoreLines.filter(
-    (gitignoreLine) => gitignoreLine !== gitignoreEntry,
+/** Remove the retired plan-guard ignore entry from the prepared file while retaining user rules. */
+function removeGoatFlowGitignoreEntry(change: PreparedHookChange): void {
+  const path = ".goat-flow/.gitignore";
+  const original = change.readText(path);
+  // A fresh project has no retired ignore rule and needs no cleanup write.
+  if (original === null) return;
+  const hadFinalNewline = original.endsWith("\n");
+  const lines = original.split(/\r?\n/u);
+  // The final newline is formatting, not an extra retained rule.
+  if (hadFinalNewline) lines.pop();
+  const retained = lines.filter(
+    (line) => line !== "logs/plan-guard-state.json",
   );
-  // The rule was already absent, so setup must not rewrite the user's file.
-  if (retainedGitignoreLines.length === gitignoreLines.length) return;
-
-  const updatedGitignore = `${retainedGitignoreLines.join("\n")}${hadFinalNewline ? "\n" : ""}`;
-  writeFileAtomic(goatFlowGitignorePath, updatedGitignore, projectPath);
+  // Preserve exact bytes when the user has no obsolete rule.
+  if (retained.length === lines.length) return;
+  change.replaceText(
+    path,
+    `${retained.join("\n")}${hadFinalNewline ? "\n" : ""}`,
+  );
 }
 
 /** Start with a complete chain, then lower the one registry-owned evidence gate. */
@@ -552,19 +577,20 @@ interface HookAgentStateFacts {
 }
 
 /**
- * Combine registry and local facts into the single hook state a user sees, while preserving the causal provider gap.
- *
- * The facts arrive as one named object rather than five positional booleans, because a call reading
- * `false, false, false` tells the next reader nothing about which condition each one describes.
+ * Combine provider support and local evidence into the hook state, label and next repair shown to the user.
+ * Provider exclusions take precedence so the page does not offer local repairs for coverage the provider cannot deliver.
  *
  * @param projectPath - selected project, used to check local proof of provider support
  * @param agent - agent whose hook state is being resolved
+ *
  * @param spec - hook being resolved, supplying its provider evidence
- * @param facts - the observed hook facts; `doesProviderExclusionOwnState` defaults to false. When the provider
- *   excludes the hook, that exclusion owns the state and the local facts count as satisfied, so the user is shown
- *   "the provider does not support this" instead of a repair they cannot perform.
- * @returns the effective state, its label, evidence identity, and the repair the user should run; the identity is null
- *   when the provider is undocumented
+ * @param facts - the observed hook facts; `doesProviderExclusionOwnState` defaults to false. When the provider excludes the hook, that exclusion owns
+ *
+ * the state and the local facts count as satisfied, so the user is shown "the provider does not support this" instead of a repair they cannot
+ * perform.
+ *
+ * @returns the effective state, its label, evidence identity, and the repair the user should run; the identity is null when the provider is
+ * undocumented
  */
 function effectiveAgentState(
   projectPath: string,
@@ -633,9 +659,11 @@ function installedHookIssue(
   }
   // M02's shared direction decides whether sync is safe, destructive, or unproven.
   if (!installationFacts.hasCurrentRequiredFiles) {
+    // A pristine older copy can be advanced by bundled Sync.
     if (installationFacts.changeDirection === "behind") {
       return "installed-version-behind";
     }
+    // Local byte changes require review before the user replaces the installed hook.
     if (installationFacts.changeDirection === "diverged") {
       return "installed-content-diverged";
     }
@@ -722,6 +750,7 @@ function unsupportedAgentHookState(
  * Name the gap between what the user asked for and what is actually installed, which is what the Hooks card shows as a repair prompt.
  *
  * @param shouldBeEnabled - whether the user has this hook switched on
+ *
  * @param installed - whether the file is really present and registered
  * @returns the drift direction, or `undefined` when the two agree and nothing needs repairing
  */
@@ -729,7 +758,9 @@ function hookDrift(
   shouldBeEnabled: boolean,
   installed: boolean,
 ): HookDrift | undefined {
+  // The user enabled this hook, but its installed state does not yet provide that coverage.
   if (shouldBeEnabled && !installed) return "desired-on-actual-off";
+  // An installed registration can still run even though the user asked for the hook to be disabled.
   if (!shouldBeEnabled && installed) return "desired-off-actual-on";
   return undefined;
 }
@@ -737,12 +768,16 @@ function hookDrift(
 /**
  * Resolve local trust, installed-file drift, script path, and the first repair reason.
  * Use once per supported agent so every Hooks UI presents the same local diagnosis.
- * @param projectPath - selected project; empty text cannot identify trusted managed files
+ *
+ * @param projectPath - selected project whose hook files and config supply the displayed repair diagnosis
  * @param agent - selected provider; null config or hook paths remain untrusted or absent
+ *
  * @param spec - managed hook contract; empty script metadata cannot produce a path
  * @param registrationState - parsed config state; empty issue flags mean registration is healthy
+ *
  * @param isRegistered - false keeps installed-file issues behind registration repair
  * @param installationFacts - managed file facts; false values identify missing, stale, or unsafe files
+ *
  * @returns complete local details; null fields mean no path or repair issue is available
  */
 function supportedHookLocalDetails(
@@ -770,14 +805,17 @@ function supportedHookLocalDetails(
   // Managed file and trust problems are the last local link and the first repair shown.
   if (installationIssue !== null) {
     repairReason = installationIssueReason(installationIssue);
-    // Registration mismatches are more specific than generic config flags.
-  } else if (registrationState.registrationIssue !== undefined) {
+  }
+  // Explain a specific registration mismatch before less precise file-level repair guidance.
+  else if (registrationState.registrationIssue !== undefined) {
     repairReason = registrationIssueReason(registrationState.registrationIssue);
-    // Invalid JSON prevents the user from relying on any configured row.
-  } else if (registrationState.configInvalid) {
+  }
+  // Invalid JSON prevents the user from relying on any saved registration.
+  else if (registrationState.configInvalid) {
     repairReason = "Hook config file is invalid JSON.";
-    // A missing config tells the user to create or sync the provider registration.
-  } else if (registrationState.configMissing) {
+  }
+  // A missing provider config needs creation or synchronization before the hook can run.
+  else if (registrationState.configMissing) {
     repairReason = "Hook config file is missing.";
   }
   const scriptPath =
@@ -793,6 +831,7 @@ function applyScanRootRepairGuidance(
   isDesiredByUser: boolean,
   doesRootContractAllowRegistration: boolean,
 ): void {
+  // A disabled hook or valid root selection needs no scan-folder repair prompt.
   if (!isDesiredByUser || doesRootContractAllowRegistration) return;
   effectivePresentation.repairCommand = null;
   effectivePresentation.repairSummary =
@@ -809,19 +848,22 @@ function applyManagedFileRepairGuidance(
   installationFacts: ManagedHookInstallationFacts,
 ): void {
   const changedPaths = installationFacts.changedPaths.join(", ");
+  // Known pristine history lets the page explain that a bundled refresh is safe.
   if (installationIssue === "installed-version-behind") {
     effectivePresentation.repairSummary =
       "Installed bytes still match the previous-install baseline, so sync safely advances the managed files to this registry version.";
     return;
   }
+  // Local edits need an explicit replacement review, so do not offer a command that implies unconditional repair.
   if (installationIssue === "installed-content-diverged") {
     effectivePresentation.repairCommand = null;
-    effectivePresentation.repairSummary = `A sync would overwrite local content at ${changedPaths}; preserve or port those changes before any explicit replacement.`;
+    effectivePresentation.repairSummary = `A sync would overwrite local content at ${changedPaths}; it pauses for your review and explicit replacement approval on the Hooks page. Save wanted edits first.`;
     return;
   }
+  // Without matching history, differing bytes need review even though their origin is unknown.
   if (installationIssue === "installed-version-unclassified") {
     effectivePresentation.repairCommand = null;
-    effectivePresentation.repairSummary = `No matching previous-install baseline proves the drift direction at ${changedPaths}; compare those files before choosing sync, which replaces their current bytes.`;
+    effectivePresentation.repairSummary = `No matching previous-install baseline proves the drift direction at ${changedPaths}; Sync pauses for your review before replacing differing local bytes.`;
   }
 }
 
@@ -831,6 +873,7 @@ function supportedHookReason(
   scanRootState: HookScanRootState | null,
   installationReason: string | null,
 ): string | null {
+  // An enabled post-turn hook's invalid scan folders take precedence over generic install guidance.
   if (isDesiredByUser && scanRootState?.issue) return scanRootState.issue;
   return installationReason;
 }
@@ -845,12 +888,14 @@ function supportedAgentHookState(
   spec: HookSpec,
   isDesiredByUser: boolean,
   scanRootState: HookScanRootState | null,
+  inspection: ManagedHookInspection,
 ): HookAgentState {
   const registrationState = readAgentHookState(projectPath, agent, spec);
   const installationFacts = managedHookInstallationFacts(
     projectPath,
     agent,
     spec,
+    inspection,
   );
   const doesRootContractAllowRegistration =
     scanRootsPermitRegistration(scanRootState);
@@ -915,6 +960,7 @@ function agentHookState(
   spec: HookSpec,
   shouldBeEnabled: boolean,
   scanRootState: HookScanRootState | null,
+  inspection: ManagedHookInspection,
 ): HookAgentState {
   const unsupportedReason = unsupportedReasonForSpec(spec, agent);
   // A provider exclusion stays visible even when shared script files exist on disk.
@@ -944,6 +990,7 @@ function agentHookState(
     spec,
     shouldBeEnabled,
     scanRootState,
+    inspection,
   );
 }
 
@@ -952,178 +999,93 @@ function readDesired(projectPath: string, spec: HookSpec): boolean {
   return readHookEnabled(projectPath, spec.id, spec.defaultEnabled);
 }
 
-/**
- * Remove leftover hook config entries from an agent the registry now marks unsupported for this spec.
- * Without this, flipping an agent to unsupported strands dead registrations that agents may still attempt to run.
- *
- * Cleanup intentionally does not trust current manifest event metadata: a manifest can be corrected to remove a bogus event while stale managed
- * entries for that same event still exist on disk.
- *
- * Scripts are shared across agents and stay untouched.
- */
-function pruneUnsupportedAgentHookEntries(
-  projectPath: string,
-  agent: AgentProfile,
-  spec: HookSpec,
-): void {
-  if (!isSupportedAgent(agent)) return;
-  if (!hookConfigExists(projectPath, agent)) return;
-  writeAgentHookState(projectPath, agent, spec, false);
-}
-
-/**
- * Reconcile one supported provider's scripts and registration without changing the desired toggle.
- * Side effects: may write managed scripts and the provider's existing hook configuration.
- * @throws HookRegistrarError when managed files cannot be replaced safely
- */
-function reconcileSupportedAgentHook(
-  projectPath: string,
+/** Compose one provider's registration change from captured JSON, keeping unrelated user commands. */
+function prepareHookRegistration(
+  change: PreparedHookChange,
   agent: AgentProfile,
   spec: HookSpec,
   isEnabled: boolean,
-  doesRootContractAllowRegistration: boolean,
-  profiles: AgentProfile[],
 ): void {
-  if (!shouldReconcileAgent(projectPath, agent, spec, profiles)) return;
-  const desiredState = deriveManagedHookDesiredState(agent, spec, isEnabled);
-  const shouldRegisterHook =
-    desiredState.registrationTargets.length > 0 &&
-    doesRootContractAllowRegistration;
-  // Disabling fills missing managed files but never refreshes existing inert bytes.
-  if (!isEnabled) {
-    if (desiredState.managedScriptFiles.length > 0) {
-      copyHookScripts(projectPath, agent, spec, false);
-    }
-    if (hookConfigExists(projectPath, agent)) {
-      writeAgentHookState(projectPath, agent, spec, false);
-    }
-    return;
-  }
-  // Current inert files let install and sync repair drift without changing the user's disabled choice.
-  if (desiredState.managedScriptFiles.length > 0) {
-    copyHookScripts(projectPath, agent, spec);
-  }
-  // A disabled hook removes managed rows from existing config but never scaffolds a missing config file.
-  if (shouldRegisterHook || hookConfigExists(projectPath, agent)) {
-    writeAgentHookState(projectPath, agent, spec, shouldRegisterHook);
-  }
-}
-
-/** Converge one hook without registering a post-turn command against incomplete root coverage. */
-function reconcileHook(
-  projectPath: string,
-  spec: HookSpec,
-  isEnabled: boolean,
-): void {
-  const profiles = getAgentProfiles();
-  const scanRootState = postTurnScanRootState(projectPath, spec);
-  const doesRootContractAllowRegistration =
-    scanRootsPermitRegistration(scanRootState);
-  for (const agent of profiles) {
-    if (unsupportedReasonForSpec(spec, agent)) {
-      pruneUnsupportedAgentHookEntries(projectPath, agent, spec);
-      continue;
-    }
-    if (!isSupportedAgent(agent)) continue;
-    reconcileSupportedAgentHook(
-      projectPath,
-      agent,
-      spec,
-      isEnabled,
-      doesRootContractAllowRegistration,
-      profiles,
-    );
-  }
-}
-
-/**
- * Refuse a registrar mutation when M02 proves that sync would erase local hook content.
- * The preflight runs before any config, script, or tombstone write and names only project-relative paths.
- * Invariant: every requested hook and installed agent is inspected before the first mutation.
- *
- * @param projectPath - selected project inspected before any registrar mutation
- * @param specs - hook contracts the requested mutation would reconcile
- * @returns nothing when every changed path is behind, current, missing, or unclassified
- * @throws HookRegistrarError when any trusted baseline proves local divergence
- */
-function assertNoKnownManagedHookDivergence(
-  projectPath: string,
-  specs: readonly HookSpec[],
-): void {
-  const profiles = getAgentProfiles();
-  const divergedPaths = new Set<string>();
-  for (const spec of specs) {
-    for (const agent of profiles) {
-      if (unsupportedReasonForSpec(spec, agent) || !isSupportedAgent(agent)) {
-        continue;
-      }
-      if (!shouldReconcileAgent(projectPath, agent, spec, profiles)) continue;
-      const installationFacts = managedHookInstallationFacts(
-        projectPath,
-        agent,
-        spec,
-      );
-      if (installationFacts.changeDirection !== "diverged") continue;
-      for (const changedPath of installationFacts.changedPaths) {
-        divergedPaths.add(changedPath);
-      }
-    }
-  }
-  if (divergedPaths.size === 0) return;
-  throw new HookRegistrarError(
-    `Refusing to sync diverged managed hook files: ${[...divergedPaths].sort().join(", ")}. A sync would overwrite local content; preserve or port those changes before an explicit replacement.`,
-    409,
+  // Profiles without a hook config cannot store a registration.
+  if (!agent.hookConfigFile) return;
+  const text = change.readText(agent.hookConfigFile);
+  change.replaceText(
+    agent.hookConfigFile,
+    prepareAgentHookState(text, agent, spec, isEnabled),
+    0,
   );
 }
 
-/**
- * Disable and remove one hook that used to exist in older installs.
- * Use during hook reconciliation so users do not keep stale controls for removed hooks.
- * @param projectPath - project being cleaned; empty means no project hook files can be found
- * @param spec - removed hook descriptor; empty script lists mean only config state is cleared
- * @returns nothing; stale files and agent registrations are removed when present
- */
-function pruneRemovedHookTombstone(projectPath: string, spec: HookSpec): void {
+/** Prepare one hook without registering a Stop command against incomplete scan-root coverage. */
+function reconcileHook(
+  change: PreparedHookChange,
+  spec: HookSpec,
+  isEnabled: boolean,
+): void {
   const profiles = getAgentProfiles();
-
-  // Each agent may have old registration state or old hook scripts from a previous release.
-  for (const agent of profiles) {
-    // Supported agents keep an explicit disabled state so the dashboard no longer offers the hook.
-    if (isSupportedAgent(agent) && hookConfigExists(projectPath, agent)) {
-      writeAgentHookState(projectPath, agent, spec, false);
+  const rootsPermitRegistration = scanRootsPermitRegistration(
+    postTurnScanRootState(change.projectPath, spec),
+  );
+  // Each provider needs its own config shape, while shared hook files are deduplicated by the operation.
+  for (const agent of profiles.filter(isSupportedAgent)) {
+    // A provider without a hook config cannot receive registrations.
+    if (!agent.hookConfigFile) continue;
+    const configExists = change.readText(agent.hookConfigFile) !== null;
+    // A provider excluded by this hook still needs its old owned registration removed.
+    if (unsupportedReasonForSpec(spec, agent)) {
+      // Remove an unsupported registration only from existing config; do not scaffold an unused provider.
+      if (configExists) prepareHookRegistration(change, agent, spec, false);
+      continue;
     }
-
-    // Legacy script files are removed so future audits do not report dead hook artifacts.
-    if (agent.hooksDir) removeHookScripts(projectPath, agent, spec);
+    // A provider that is absent from the selected project must not be silently installed by Sync.
+    if (!shouldReconcileAgent(change.projectPath, agent, spec, profiles))
+      continue;
+    const desired = deriveManagedHookDesiredState(agent, spec, isEnabled);
+    const shouldRegister =
+      desired.registrationTargets.length > 0 && rootsPermitRegistration;
+    // Disabled hooks fill missing inert files but preserve every existing disabled-only byte.
+    if (desired.managedScriptFiles.length > 0)
+      copyHookScripts(change, agent, spec, isEnabled);
+    // Disabling edits an existing config only; enabling may create the provider's missing hook config.
+    if (shouldRegister || configExists)
+      prepareHookRegistration(change, agent, spec, shouldRegister);
   }
 }
 
-/**
- * Remove all tombstoned hook artifacts from a project.
- * Use during reconciliation after a user upgrades from an older hook set.
- * @param projectPath - project being cleaned; empty means there are no hook files or config blocks to edit
- * @returns nothing; removed hooks disappear from config, gitignore, and agent hook folders
- */
-function pruneRemovedHookTombstones(projectPath: string): void {
-  // Every tombstone clears both agent hook state and goat-flow config overrides.
+/** Prepare exact tombstone cleanup before any config, registration, or script can be changed. */
+function pruneRemovedHookTombstones(change: PreparedHookChange): void {
+  // Every removed hook contributes exact owned files and registrations to the complete admission set.
   for (const spec of REMOVED_HOOK_TOMBSTONES) {
-    pruneRemovedHookTombstone(projectPath, spec);
-    removeHookConfig(projectPath, spec.id);
+    // Check each provider for exact retired hook state left by an earlier installation.
+    for (const agent of getAgentProfiles()) {
+      // An existing supported config can lose its retired managed row while preserving user commands.
+      if (
+        isSupportedAgent(agent) &&
+        agent.hookConfigFile &&
+        change.readText(agent.hookConfigFile) !== null
+      ) {
+        prepareHookRegistration(change, agent, spec, false);
+      }
+      // Only profiles with a hook directory can own retired script cleanup.
+      if (agent.hooksDir) removeHookScripts(change, agent, spec);
+    }
   }
-
-  removeTopLevelConfigBlock(projectPath, "plan-guard");
-  removeGoatFlowGitignoreEntry(projectPath, "logs/plan-guard-state.json");
+  removeGoatFlowGitignoreEntry(change);
 }
 
 /** Snapshot one hook across all known agents for dashboard and CLI consumers. */
-function readHookState(hookId: string, projectPath: string): HookState {
+function readHookState(
+  hookId: string,
+  projectPath: string,
+  inspection: ManagedHookInspection = createManagedHookInspection(projectPath),
+): HookState {
   const spec = resolveSpec(hookId);
   const enabled = readDesired(projectPath, spec);
   const scanRoots = postTurnScanRootState(projectPath, spec);
   const agents = Object.fromEntries(
     getAgentProfiles().map((agent) => [
       agent.id,
-      agentHookState(projectPath, agent, spec, enabled, scanRoots),
+      agentHookState(projectPath, agent, spec, enabled, scanRoots, inspection),
     ]),
   ) as Record<AgentId, HookAgentState>;
   return {
@@ -1139,56 +1101,141 @@ function readHookState(hookId: string, projectPath: string): HookState {
   };
 }
 
-// Snapshots the current enabled/installed state of every known hook for one
-// project; reads settings + script presence, so the result reflects on-disk
-// reality, not the in-memory registry defaults.
+/**
+ * Read saved choices, registrations, files and available proof for every hook in the selected project.
+ * Use after Sync or a toggle so shared dependencies refresh all affected rows.
+ *
+ * @param projectPath - selected project whose current hook state is read
+ * @returns all registry hook rows; unavailable provider evidence remains visible in each row
+ */
 export function readAllHookStates(projectPath: string): HookState[] {
-  return listHookSpecs().map((spec) => readHookState(spec.id, projectPath));
+  const inspection = createManagedHookInspection(projectPath);
+  return listHookSpecs().map((spec) =>
+    readHookState(spec.id, projectPath, inspection),
+  );
+}
+
+/** Keep Git protection registered before Sync can replace an older combined guard with separate policies. */
+function prepareGitProtection(
+  change: PreparedHookChange,
+  gitSpec: HookSpec,
+): void {
+  const profiles = getAgentProfiles();
+  // Only providers already present in the selected project receive this preparatory registration.
+  for (const agent of profiles) {
+    // Install separate Git protection only for supported providers already present in this project.
+    if (
+      isSupportedAgent(agent) &&
+      !unsupportedReasonForSpec(gitSpec, agent) &&
+      shouldReconcileAgent(change.projectPath, agent, gitSpec, profiles)
+    ) {
+      prepareHookRegistration(change, agent, gitSpec, true);
+    }
+  }
 }
 
 /**
- * Apply one enabled choice after proving the registrar will not erase known local hook content.
+ * Prepare the complete Sync or toggle result before any destination mutation.
  *
- * @param hookId - registry hook selected by the caller; unknown or fixed hooks are rejected
- * @param isEnabled - desired persisted state written after divergence preflight
- * @param projectPath - selected project whose managed hook surface may change
- * @returns refreshed public state for the selected hook
- * @throws HookRegistrarError for unknown hooks, fixed hooks, unsafe paths, or proven divergence
+ * @param projectPath - project selected by the CLI or Hooks page
+ * @param intent - requested action; toggles preserve the inherited Git choice before changing its sibling
+ *
+ * @returns captured, deduplicated operation with prepared provider configs and official files
+ * @throws when captured state cannot safely produce the requested change
+ */
+function prepareHookChange(
+  projectPath: string,
+  intent: HookChangeIntent,
+): PreparedHookChange {
+  const change = new PreparedHookChange(projectPath, intent);
+  const configPath = ".goat-flow/config.yaml";
+  const config = prepareHookConfig(
+    change.readText(configPath),
+    change.projectPath,
+    intent.kind === "toggle" ? intent : undefined,
+    REMOVED_HOOK_TOMBSTONES.map((spec) => spec.id),
+  );
+  change.replaceText(configPath, config);
+  const configuredChoices = readConfiguredHookChoices(config);
+  /** Read the prepared enabled choice so Sync preserves saved settings and a toggle changes only its selected hook. */
+  const desiredChoice = (spec: HookSpec): boolean =>
+    configuredChoices[spec.id]?.enabled ?? spec.defaultEnabled;
+  pruneRemovedHookTombstones(change);
+  const gitSpec = resolveSpec("deny-git-mutations");
+  // Register enabled Git protection before narrower policy bytes can replace an older combined guard.
+  if (
+    desiredChoice(gitSpec) &&
+    (intent.kind === "sync" ||
+      intent.hookId === "deny-dangerous" ||
+      intent.hookId === "deny-git-mutations")
+  ) {
+    prepareGitProtection(change, gitSpec);
+  }
+  // Global Sync preserves every saved choice and refreshes all installed supported surfaces.
+  if (intent.kind === "sync") {
+    // Global Sync reconciles every toggle using its saved or inherited enabled choice.
+    for (const spec of listHookSpecs().filter((spec) => spec.togglable))
+      reconcileHook(change, spec, desiredChoice(spec));
+  } else {
+    const spec = resolveSpec(intent.hookId);
+    // The dangerous-command toggle can also repair shared files required by enabled Git protection.
+    if (spec.id === "deny-dangerous" && desiredChoice(gitSpec))
+      reconcileHook(change, gitSpec, true);
+    reconcileHook(change, spec, intent.enabled);
+  }
+  return change;
+}
+
+/**
+ * Apply a user toggle after complete admission and any exact replacement confirmation.
+ *
+ * @param hookId - registry hook selected by the user; unknown or fixed hooks refuse the action
+ * @param isEnabled - explicit desired choice to persist
+ *
+ * @param projectPath - selected project's hook files and settings
+ * @param confirmation - reviewed replacement intent; omitted for ordinary safe toggles
+ *
+ * @returns refreshed state for the selected hook; shared rows are available through readAllHookStates
+ * @throws HookRegistrarError for unsafe state, a replacement conflict, or a reported partial apply
  */
 export function applyHookState(
   hookId: string,
   isEnabled: boolean,
   projectPath: string,
+  confirmation?: HookReplacementConfirmation,
 ): HookState {
   const spec = resolveSpec(hookId);
-  if (!spec.togglable) {
+  // Fixed registry entries cannot acquire toggle authority through a crafted request.
+  if (!spec.togglable)
     throw new HookRegistrarError(`Hook is not togglable: ${hookId}`, 400);
-  }
-  // Enabled reconciliation may replace scripts, so prove authority before any cleanup or config write.
-  if (isEnabled) assertNoKnownManagedHookDivergence(projectPath, [spec]);
-  pruneRemovedHookTombstones(projectPath);
-  setHookEnabled(projectPath, spec.id, isEnabled);
-  reconcileHook(projectPath, spec, isEnabled);
+  executeHookChange(
+    () =>
+      prepareHookChange(projectPath, {
+        kind: "toggle",
+        hookId,
+        enabled: isEnabled,
+      }),
+    confirmation,
+  );
   return readHookState(spec.id, projectPath);
 }
 
 /**
- * Reapply persisted hook choices after refusing any baseline-proven local divergence.
- * Unclassified legacy bytes retain the existing explicit-sync upgrade path.
+ * Sync installed hooks with the running CLI's bundle while retaining every persisted choice.
  *
- * @param projectPath - selected project whose togglable hook surfaces may be reconciled
- * @returns refreshed state for every registered hook after successful reconciliation
- * @throws HookRegistrarError when a managed path is unsafe, newer, or proven diverged
+ * @param projectPath - selected project; unsafe paths or invalid history refuse before destination writes
+ * @param confirmation - exact replacement approval; absent means differing unknown or diverged files refuse
+ *
+ * @returns all hook rows after files and canonical hook history are verified
+ * @throws HookRegistrarError for a refusal, stale review, partial apply, or failed claim release
  */
-export function syncHookStates(projectPath: string): HookState[] {
-  const togglableSpecs = listHookSpecs().filter((spec) => spec.togglable);
-  const enabledSpecs = togglableSpecs.filter((spec) =>
-    readDesired(projectPath, spec),
+export function syncHookStates(
+  projectPath: string,
+  confirmation?: HookReplacementConfirmation,
+): HookState[] {
+  executeHookChange(
+    () => prepareHookChange(projectPath, { kind: "sync" }),
+    confirmation,
   );
-  assertNoKnownManagedHookDivergence(projectPath, enabledSpecs);
-  pruneRemovedHookTombstones(projectPath);
-  for (const spec of togglableSpecs) {
-    reconcileHook(projectPath, spec, readDesired(projectPath, spec));
-  }
   return readAllHookStates(projectPath);
 }

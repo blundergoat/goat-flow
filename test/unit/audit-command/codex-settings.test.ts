@@ -128,13 +128,15 @@ describe("codex settings feature flags", () => {
 });
 
 describe("codex settings feature flags", () => {
-  it("does not count old exact env and credentials denies as full coverage", () => {
+  // A profile from before the registry-auth denies existed, in a project that has a real .npmrc: every other family
+  // is present, so only the missing .npmrc and .pypirc entries can explain the negative result.
+  it("does not count a profile missing the registry auth file denies as full coverage", () => {
     const facts = extractSettingsFacts(
       stubFS({
         exists: (path) =>
           path === ".codex/config.toml" ||
           path === ".env.local.bak" ||
-          path === "credentials.json",
+          path === ".npmrc",
         readFile: (path) =>
           path === ".codex/config.toml"
             ? [
@@ -148,13 +150,43 @@ describe("codex settings feature flags", () => {
                   '"**/.env.staging" = "deny"',
                   '"**/.env.test" = "deny"',
                   '"**/.envrc" = "deny"',
-                  '"**/secrets/**" = "deny"',
                   '"**/.ssh/**" = "deny"',
                   '"**/.aws/**" = "deny"',
                   '"**/.docker/**" = "deny"',
                   '"**/.gnupg/**" = "deny"',
                   '"**/.kube/**" = "deny"',
-                  '"**/credentials" = "deny"',
+                  '"**/*.pem" = "deny"',
+                  '"**/*.key" = "deny"',
+                  '"**/*.pfx" = "deny"',
+                ]),
+              ].join("\n")
+            : null,
+      }),
+      PROFILES.codex,
+    );
+
+    assert.equal(facts.readDenyCoversSecrets, false);
+  });
+
+  // The retired folder and file-name patterns must not be required any more: a project with a secrets route
+  // passes the audit on content-shape and credential-store denies alone.
+  it("counts coverage without the retired secrets folder and credentials name patterns", () => {
+    const facts = extractSettingsFacts(
+      stubFS({
+        exists: (path) => path === ".codex/config.toml",
+        readFile: (path) =>
+          path === ".codex/config.toml"
+            ? [
+                'default_permissions = "goat-flow"',
+                "[permissions.goat-flow.filesystem]",
+                codexWorkspaceRootsTable([
+                  '"**/.env*" = "deny"',
+                  '"**/.ssh/**" = "deny"',
+                  '"**/.aws/**" = "deny"',
+                  '"**/.gnupg/**" = "deny"',
+                  '"**/.config/gcloud/**" = "deny"',
+                  '"**/.docker/**" = "deny"',
+                  '"**/.kube/**" = "deny"',
                   '"**/.npmrc" = "deny"',
                   '"**/.pypirc" = "deny"',
                   '"**/*.pem" = "deny"',
@@ -167,7 +199,7 @@ describe("codex settings feature flags", () => {
       PROFILES.codex,
     );
 
-    assert.equal(facts.readDenyCoversSecrets, false);
+    assert.equal(facts.readDenyCoversSecrets, true);
   });
 
   it("does not count incomplete Codex exact/subtree denies as secret coverage", () => {

@@ -1,6 +1,6 @@
 # Quality Report History
 
-Saved agent quality reports land here. Agents write the JSON directly from the quality prompt - no `capture` step.
+Saved agent quality reports land here. Agents send completed JSON from the quality prompt through the bounded `quality save` command; there is no legacy `capture` step.
 
 Committed:
 

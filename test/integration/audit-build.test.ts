@@ -51,9 +51,10 @@ const requiredSkillDocsFiles = [
   ".goat-flow/skill-docs/playbooks/release-notes.md",
   ".goat-flow/skill-docs/playbooks/skill-playbook-authoring-sync.md",
   ".goat-flow/skill-docs/playbooks/test-selection.md",
+  ".goat-flow/skill-docs/playbooks/writing-agent-facing-instructions.md",
   ".goat-flow/skill-docs/playbooks/writing-sentence-diagnostics.md",
   ".goat-flow/skill-docs/playbooks/writing-structure-diagnostics.md",
-  ".goat-flow/skill-docs/playbooks/writing-style.md",
+  ".goat-flow/skill-docs/playbooks/writing-human-facing-prose.md",
   ".goat-flow/skill-docs/skill-quality-testing/README.md",
   ".goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md",
   ".goat-flow/skill-docs/skill-quality-testing/adversarial-framing.md",
@@ -486,6 +487,8 @@ assertExists(hookVersionCheck);
 const CURRENT_HOOK_STAMP = `#!/usr/bin/env bash\n# goat-flow-hook-version: ${AUDIT_VERSION}\n`;
 const REQUIRED_HOOKS = new Map([
   [".goat-flow/hooks/deny-dangerous.sh", CURRENT_HOOK_STAMP],
+  [".goat-flow/hooks/deny-git-mutations.sh", CURRENT_HOOK_STAMP],
+  [".goat-flow/hooks/deny-dangerous/guard-runtime.sh", CURRENT_HOOK_STAMP],
   [".goat-flow/hooks/post-turn-safety.sh", CURRENT_HOOK_STAMP],
 ]);
 
@@ -593,6 +596,32 @@ describe("audit build: hook version currency", () => {
     assert.match(result.message, /post-turn-safety\.sh is missing/u);
     assert.match(result.howToFix ?? "", /hooks sync/u);
   });
+
+  for (const path of [
+    ".goat-flow/hooks/deny-git-mutations.sh",
+    ".goat-flow/hooks/deny-dangerous/guard-runtime.sh",
+  ]) {
+    it(`fails when the required policy file ${path} is missing`, () => {
+      const result = hookVersionCheck.run(requiredHookVersionCtx(path, null));
+      assertExists(result);
+      assert.ok(result.message.includes(`${path} is missing`));
+      assert.match(result.howToFix ?? "", /hooks sync/u);
+    });
+
+    it(`fails when the required policy file ${path} is stale`, () => {
+      const result = hookVersionCheck.run(
+        requiredHookVersionCtx(
+          path,
+          "#!/usr/bin/env bash\n# goat-flow-hook-version: 0.0.1\n",
+        ),
+      );
+      assertExists(result);
+      assert.ok(
+        result.message.includes(`${path} is goat-flow-hook-version 0.0.1`),
+      );
+      assert.match(result.howToFix ?? "", /hooks sync/u);
+    });
+  }
 });
 
 // ---------------------------------------------------------------------------

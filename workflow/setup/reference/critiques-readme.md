@@ -1,6 +1,6 @@
 # Critique Run History
 
-Phase 3 snapshots from `/goat-critique` runs land here. Written automatically before the Phase 4 blocking gate so work survives session interruptions.
+Saved phases from `/goat-critique` runs land here so findings and pending human decisions survive interruptions. Each save creates a fresh redacted record; earlier records remain unchanged.
 
 Committed:
 
@@ -8,12 +8,17 @@ Committed:
 
 Local-only (gitignored):
 
-- `<YYYY-MM-DD>-<HHMM>-<artifact-slug>-<rand5>.md` - sub-agent summaries, comparison matrix, cross-examination outcomes, rubric coverage gaps (`HHMM` + random suffix prevent collisions across concurrent agents)
+- `<YYYY-MM-DD>-<HHMM>-<artifact-slug>-<rand5>.md` - the random suffix prevents collisions; metadata identifies the run, artifact and saved phase
 
-Use:
+| Saved phase | Contents | Resume at |
+|---|---|---|
+| `pre-clarification` | Phase 1–3 findings, coverage, verification, retractions and pending questions | Phase 4 clarification |
+| `finalized` | Final findings, clarification decisions, audited revision, limits and pending final question | Final human gate |
+| `outcomes` | Actual human reply and per-finding dispositions, linked to the finalized record | Follow-up context |
 
-- Resume an interrupted critique by reading the snapshot and re-entering Phase 4
-- Compare critique runs across sessions on the same artifact
+The installed `goat-critique` skill's `references/rubric-examples.md` owns **Saved records and recovery** and **Differential baselines**. Verify record links and current artifact identity before resuming. Legacy snapshots retain explicit unknown/preliminary provenance; they are not silently migrated.
+
+Comparisons prefer finalized findings for the same artifact identity. An artifact diff needs recoverable prior bytes; a digest or redaction-altered receipt alone supports no artifact diff. Saved acceptance provides continuity, never independent permission to apply changes. Failed saves remain explicit while the human interaction continues.
 
 These files are gitignored by design. If a finding should become durable project knowledge, promote it into `.goat-flow/learning-loop/footguns/`, `.goat-flow/learning-loop/lessons/`, or `.goat-flow/learning-loop/decisions/`.
 

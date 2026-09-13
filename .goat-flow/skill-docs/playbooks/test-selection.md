@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.16.0"
+goat-flow-reference-version: "1.17.0"
 ---
 # Test Selection
 
@@ -33,6 +33,19 @@ This playbook supplies a decision and handoff. It grants no authority to add, re
 Start from the changed or assessed behaviour. Trace the production path, callers, consumers, failure effects, and current assertions. Record the risk if the behaviour regresses and who or what experiences the impact. Search broadly enough to find coverage at other levels; then read assertions instead of inferring depth from paths or names.
 
 Separate coverage discovery from disposition. Existing coverage can protect the behaviour while still being costly, misplaced, or duplicated. Conversely, an uncovered branch does not earn a new test until the value gate passes.
+
+#### Selector-driven non-semantic lane
+
+Use this lane only for an explicit folder or file selector when baseline, current bytes, and explicit request prove every change is limited to comments or docstrings, or local or private identifier spelling. Preserve all of:
+
+- test case presence, stable identity, title, registration, and parametrized membership;
+- assertions, expectations, snapshots, and failure semantics;
+- fixture values, setup and teardown, mocks, stubs, fakes, data builders, and environment controls; and
+- grouping, execution level, skip or focus state, coverage intent, observable output, and user-visible meaning.
+
+A change to any preserved item is semantic and forces the full lane.
+
+If an existing PR or uncommitted diff contains a semantic test change, or equivalence is uncertain, run the full case-level manifest and four-part value gate. Otherwise freeze selected test-source units, selected spans, baseline and current identity, write set, and focused verification command. Reconcile every changed span and prove untouched bytes remain untouched. This lane waives only per-case value and disposition rows.
 
 ### 2. Apply the four-part value gate
 
@@ -191,6 +204,6 @@ Before handing off a selection:
 
 ## Related References
 
-- `skill-quality-testing/README.md` and `skill-quality-testing/tdd-iteration.md` — capability-aware fixtures and application-not-citation scoring when testing a skill.
-- `skill-preamble.md` — shared proof classes, evidence discipline, and actor boundaries.
-- `goat-qa` — report-only coverage analysis that applies this playbook before emitting recommendations.
+- `.goat-flow/skill-docs/skill-quality-testing/README.md` and `.goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md` - capability-aware fixtures and application-not-citation scoring when testing a skill.
+- `.goat-flow/skill-docs/skill-preamble.md` - shared proof classes, evidence discipline, and actor boundaries.
+- `.agents/skills/goat-qa/SKILL.md` - report-only coverage analysis that applies this playbook before emitting recommendations.

@@ -97,8 +97,8 @@ describe("detectStack", () => {
     ]);
     assert.equal(stack.signals.codeGenTools.includes("sqlc"), true);
     assert.equal(stack.signals.deployPlatforms.includes("docker"), true);
-    assert.equal(stack.signals.llmIntegration, true);
-    assert.equal(stack.signals.complianceSignals, true);
+    assert.equal(stack.signals.hasLlmIntegration, true);
+    assert.equal(stack.signals.hasComplianceSignals, true);
     assert.deepEqual(stack.signals.staticAnalysis, [
       { tool: "eslint", level: null },
     ]);

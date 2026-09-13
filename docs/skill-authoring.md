@@ -46,6 +46,8 @@ Use the smallest durable artifact that fits the evidence:
 
 Before editing shared references or playbooks, check the ADR-023 tier. Always-loaded shared references must stay under 1500 body words; top-level playbooks and progressive topical files must stay under 3000 body words.
 
+Once the artifact is chosen, `.goat-flow/skill-docs/playbooks/writing-agent-facing-instructions.md` guides its body: what earns a line, where each piece sits between in-file steps and disclosed reference, and what to cut when the file reaches its cap.
+
 ## Scaffold from a description
 
 For a skill, run the failing scenario before scaffolding and capture the RED

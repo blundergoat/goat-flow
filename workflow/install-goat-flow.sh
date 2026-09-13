@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 # =============================================================================
-# install-goat-flow.sh installs canonical goat-flow files into a selected project.
-# Use it through `goat-flow install` or `setup --apply` when refreshing one agent.
-# Each file is completed beside its destination before becoming user-visible.
-# System files refresh after managed preflight; user-owned settings and config remain authoritative.
-# `--force` admits inspected system-owned conflicts but never resets user content or bypasses path safety.
-# Project-specific instruction and architecture content remains a later setup step.
+# Installs canonical Goat Flow files into one selected project; use it through `goat-flow install` or `setup --apply` when refreshing an agent.
+# Direct use skips the CLI preview, post-write verification, and verified install-state receipt.
+#
+# - System-owned files become user-visible only after managed preflight and destination-side completion.
+# - User-owned settings and configuration remain authoritative.
+# - `--force` accepts inspected system conflicts but never resets user content or bypasses path safety.
+#
+# Project-specific instructions and architecture remain a later setup step.
 # Usage: bash workflow/install-goat-flow.sh /path/to/project --agent claude
 # =============================================================================
 set -euo pipefail
@@ -14,6 +16,64 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GOAT_FLOW_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 MANIFEST_PATH="$GOAT_FLOW_ROOT/workflow/manifest.json"
+REQUIRED_INLINE_NODE_PACKAGES=("js-yaml")
+
+# Confirm every third-party package used by inline Node transforms is available from this goat-flow package.
+# Use before entering the selected project so CLI and direct users fail before any project file can change.
+preflight_installer_dependencies() {
+  local required_package_name
+
+  # Each declared package is resolved from the shipped framework root, matching the later user-config transforms.
+  for required_package_name in "${REQUIRED_INLINE_NODE_PACKAGES[@]}"; do
+    # A missing package stops here so the user's target stays empty instead of receiving a partial setup.
+    if ! node - "$required_package_name" "$GOAT_FLOW_ROOT" >/dev/null 2>&1 <<'NODE'
+const [requiredPackageName, frameworkRoot] = process.argv.slice(2);
+require.resolve(requiredPackageName, { paths: [frameworkRoot] });
+NODE
+    then
+      echo "ERROR: installer dependency '$required_package_name' is missing from goat-flow root '$GOAT_FLOW_ROOT'; run npm install in that root" \
+        "or reinstall @blundergoat/goat-flow, then retry." >&2
+      return 1
+    fi
+  done
+}
+
+# Refuse non-CLI mutation after v2 state or any old-reader cutover marker appears.
+# The environment value is cooperative admission supplied only after the public CLI owns and revalidates the complete write-claim batch.
+require_managed_install_admission() {
+  # Public install relocates legacy state before admission; direct Bash must not split the namespaces.
+  if [[ -e "$PROJECT/.goat-flow/install-state" || -L "$PROJECT/.goat-flow/install-state" || -e "$PROJECT/.goat-flow/write-claims" || -L "$PROJECT/.goat-flow/write-claims" ]]; then
+    echo "ERROR: legacy local state requires migration. Stop and upgrade all writers, then run: goat-flow install \"$PROJECT\" --agent \"$AGENT\"" >&2
+    return 1
+  fi
+  local managed_state_path="$PROJECT/.goat-flow/state/install/managed.json"
+  local marker_path known_agent
+  local -a known_agents=()
+
+  if [[ "${GOAT_FLOW_INSTALL_ADMISSION:-}" == "v2" ]]; then
+    return 0
+  fi
+  # Any object at the sole v2 authority path activates the guard; the CLI reports malformed state in detail.
+  if [[ -e "$managed_state_path" || -L "$managed_state_path" ]]; then
+    echo "ERROR: managed install state requires the public CLI. Run: goat-flow install \"$PROJECT\" --agent \"$AGENT\"" >&2
+    return 1
+  fi
+
+  IFS=',' read -r -a known_agents <<< "$SUPPORTED_AGENTS_CSV"
+  for known_agent in "${known_agents[@]}"; do
+    marker_path="$PROJECT/.goat-flow/state/install/$known_agent.json"
+    if [[ -L "$marker_path" || ( -e "$marker_path" && ! -f "$marker_path" ) ]]; then
+      echo "ERROR: managed install state requires the public CLI. Run: goat-flow install \"$PROJECT\" --agent \"$AGENT\"" >&2
+      return 1
+    fi
+    if [[ -f "$marker_path" ]]; then
+      if [[ ! -r "$marker_path" ]] || grep -Eq '"schemaVersion"[[:space:]]*:[[:space:]]*"goat-flow\.install-state\.v1-cutover"' "$marker_path"; then
+        echo "ERROR: managed install state requires the public CLI. Run: goat-flow install \"$PROJECT\" --agent \"$AGENT\"" >&2
+        return 1
+      fi
+    fi
+  done
+}
 
 manifest_eval() {
   node - "$MANIFEST_PATH" "$@" <<'NODE'
@@ -262,6 +322,12 @@ if [[ -z "$VERSION" ]]; then
   echo "ERROR: could not determine goat-flow version from package.json"
   exit 1
 fi
+
+# Dependency errors must reach the user before migrations, directory scaffolding, or staged file writes begin.
+preflight_installer_dependencies
+
+# A v1-only CLI or direct script must not mutate a target once v2 state controls admission.
+require_managed_install_admission
 
 COPIED=0
 SKIPPED=0
@@ -1085,9 +1151,16 @@ const staleHookRe = /^  guard-(destructive-shell|secret-paths|repository-writes)
 const removedHookRe = /^  plan-checkbox-guard:\s*$/u;
 let changed = false;
 let legacyEnabled = "true";
+for (const legacyId of ["guard-destructive-shell", "guard-secret-paths", "guard-repository-writes"]) {
+  if (parsedHooks?.[legacyId]?.enabled === false) legacyEnabled = "false";
+}
 
 function insertHookEntry(lines, hooksIndex, hookId, enabled) {
-  const hookRe = new RegExp(`^  ${hookId}:\\s*$`, "u");
+  const firstChild = lines.slice(hooksIndex + 1).find((line) =>
+    line.trim() !== "" && !line.trimStart().startsWith("#"),
+  );
+  const indent = firstChild?.match(/^( +)\S/u)?.[1] ?? "  ";
+  const hookRe = new RegExp(`^${indent}${hookId}:\\s*$`, "u");
   if (
     lines.some((line) => hookRe.test(line)) ||
     (parsedHooks !== null &&
@@ -1096,11 +1169,12 @@ function insertHookEntry(lines, hooksIndex, hookId, enabled) {
     return false;
   }
   let insertAt = hooksIndex + 1;
-  while (insertAt < lines.length && /^  [A-Za-z0-9_-]+:\s*$/u.test(lines[insertAt])) {
+  const siblingRe = new RegExp(`^${indent}[A-Za-z0-9_-]+:\\s*$`, "u");
+  while (insertAt < lines.length && siblingRe.test(lines[insertAt])) {
     insertAt += 1;
-    while (insertAt < lines.length && /^    /.test(lines[insertAt])) insertAt += 1;
+    while (insertAt < lines.length && lines[insertAt].startsWith(`${indent} `)) insertAt += 1;
   }
-  lines.splice(insertAt, 0, `  ${hookId}:`, `    enabled: ${enabled}`);
+  lines.splice(insertAt, 0, `${indent}${hookId}:`, `${indent.repeat(2)}enabled: ${enabled}`);
   return true;
 }
 
@@ -1128,17 +1202,19 @@ function flowMappingCloseIndex(line) {
   return -1;
 }
 
-// Splice one missing managed hook into a single-line flow mapping, leaving every other byte alone.
-// Returns null when the mapping does not close on its own line; corrupting user YAML is never an option.
+// Splice into a parsed flow mapping while preserving existing choices and YAML node properties.
 function insertFlowHookEntry(line, hookId, enabled) {
   const openIndex = line.indexOf("{");
   const closeIndex = flowMappingCloseIndex(line);
-  if (openIndex === -1 || closeIndex === -1) return null;
-  const body = line.slice(openIndex + 1, closeIndex);
+  if (openIndex === -1) return null;
   const entry = `${hookId}: { enabled: ${enabled} }`;
+  // A valid multiline flow mapping can accept a new first entry, including a trailing comma.
+  if (closeIndex === -1) return `${line.slice(0, openIndex + 1)} ${entry},${line.slice(openIndex + 1)}`;
+  const body = line.slice(openIndex + 1, closeIndex);
+  const trimmedBody = body.replace(/\s+$/u, "");
   const mutatedBody = body.trim().length === 0
     ? ` ${entry} `
-    : `${body.replace(/\s+$/u, "")}, ${entry} `;
+    : `${trimmedBody}${trimmedBody.endsWith(",") ? "" : ","} ${entry} `;
   return `${line.slice(0, openIndex + 1)}${mutatedBody}${line.slice(closeIndex)}`;
 }
 
@@ -1166,13 +1242,18 @@ if (hooksIndex !== -1) {
   hooksIndex = lines.findIndex((line) =>
     /^(?:hooks|"hooks"|'hooks')\s*:/u.test(line),
   );
+  if (typeof parsedHooks?.["deny-dangerous"]?.enabled === "boolean") {
+    legacyEnabled = String(parsedHooks["deny-dangerous"].enabled);
+  }
   const hooksInlineValue = lines[hooksIndex].slice(lines[hooksIndex].indexOf(":") + 1).trim();
-  if (hooksInlineValue.startsWith("{")) {
+  const hooksNodeValue = hooksInlineValue.replace(/^&[^\s]+[ \t]+/u, "");
+  if (hooksNodeValue.startsWith("{")) {
     // A flow-style mapping must converge inside its own braces; block-style insertion would break the parse.
     // Without a successful parse the missing set is unknown, so the registry defaults stay authoritative.
     if (parsedHooks !== null) {
       for (const [flowHookId, flowEnabled] of [
         ["deny-dangerous", legacyEnabled],
+        ["deny-git-mutations", legacyEnabled],
         ["post-turn-safety", "true"],
         ["gruff-code-quality", "false"],
       ]) {
@@ -1184,12 +1265,23 @@ if (hooksIndex !== -1) {
       }
     }
   } else {
+    const hasMissingHook = ["deny-dangerous", "deny-git-mutations", "post-turn-safety", "gruff-code-quality"]
+      .some((hookId) => !Object.prototype.hasOwnProperty.call(parsedHooks ?? {}, hookId));
+    if (parsedHooks !== null && hasMissingHook && /^\*[^\s]+(?:\s+#.*)?$/u.test(hooksNodeValue)) {
+      // A merge preserves the aliased defaults while the new choice belongs only to hooks.
+      lines[hooksIndex] = lines[hooksIndex].slice(0, lines[hooksIndex].indexOf(":") + 1);
+      lines.splice(hooksIndex + 1, 0, `  <<: ${hooksNodeValue}`);
+      changed = true;
+    }
     changed = insertHookEntry(lines, hooksIndex, "deny-dangerous", legacyEnabled) || changed;
+    changed = insertHookEntry(lines, hooksIndex, "deny-git-mutations", legacyEnabled) || changed;
     changed = insertHookEntry(lines, hooksIndex, "post-turn-safety", "true") || changed;
     changed = insertHookEntry(lines, hooksIndex, "gruff-code-quality", "false") || changed;
   }
   if (changed) {
-    fs.writeFileSync(path, `${lines.join(eol)}${hadFinalNewline ? eol : ""}`);
+    const migrated = `${lines.join(eol)}${hadFinalNewline ? eol : ""}`;
+    if (parsedHooks !== null) yaml.load(migrated);
+    fs.writeFileSync(path, migrated);
     console.log("changed");
   } else {
     console.log("unchanged");
@@ -1205,6 +1297,8 @@ next += [
   "hooks:",
   "  deny-dangerous:",
   "    enabled: true",
+  "  deny-git-mutations:",
+  "    enabled: true",
   "  post-turn-safety:",
   "    enabled: true",
   "  gruff-code-quality:",
@@ -1216,6 +1310,332 @@ console.log("changed");
 NODE
   )"; then
     echo "ERROR: could not stage hook config for '$path'; previous destination was preserved" >&2
+    discard_staged_payload
+    return 1
+  fi
+  complete_staged_transform "$path" "$transform_result"
+}
+
+# Persist an exact repository-owned Gruff path that the runtime deliberately does not discover recursively.
+# Existing binary configuration remains authoritative; this only fills an absent override for the supported strands_agents layout.
+ensure_config_gruff_binary_entry() {
+  local path="$1"
+  local transform_result
+  stage_existing_destination "$path"
+  if ! transform_result="$(node - "$STAGED_PAYLOAD_PATH" "$GOAT_FLOW_ROOT" <<'NODE'
+const fs = require("node:fs");
+const path = require("node:path");
+
+const configPath = process.argv[2];
+const frameworkRoot = process.argv[3];
+const yaml = require(require.resolve("js-yaml", { paths: [frameworkRoot] }));
+const relativeBinaryPath = "strands_agents/.venv/bin/gruff-py";
+const projectRoot = fs.realpathSync(process.cwd());
+const candidatePath = path.join(projectRoot, relativeBinaryPath);
+
+function candidateIsContainedExecutable() {
+  try {
+    fs.accessSync(candidatePath, fs.constants.X_OK);
+    const binaryRealPath = fs.realpathSync(candidatePath);
+    const relativeRealPath = path.relative(projectRoot, binaryRealPath);
+    if (
+      relativeRealPath === ".." ||
+      relativeRealPath.startsWith(`..${path.sep}`) ||
+      path.isAbsolute(relativeRealPath)
+    ) {
+      return false;
+    }
+    return fs.statSync(binaryRealPath).isFile();
+  } catch {
+    return false;
+  }
+}
+
+if (!candidateIsContainedExecutable()) {
+  console.log("unchanged");
+  process.exit(0);
+}
+
+const content = fs.readFileSync(configPath, "utf8");
+let parsedConfig;
+try {
+  parsedConfig = yaml.load(content);
+} catch {
+  console.log("unchanged");
+  process.exit(0);
+}
+const hooks = parsedConfig?.hooks;
+const gruffHook = hooks?.["gruff-code-quality"];
+if (
+  gruffHook === null ||
+  typeof gruffHook !== "object" ||
+  Array.isArray(gruffHook) ||
+  Object.prototype.hasOwnProperty.call(gruffHook, "binaries")
+) {
+  console.log("unchanged");
+  process.exit(0);
+}
+
+const eol = content.includes("\r\n") ? "\r\n" : "\n";
+const hadFinalNewline = /\r?\n$/u.test(content);
+let lines = content.split(/\r?\n/u);
+if (hadFinalNewline) lines.pop();
+
+// Find one flow mapping's closing brace across lines without counting quoted or commented braces.
+function mappingClosePosition(lines, startLineIndex, openIndex) {
+  let depth = 0;
+  let inSingle = false;
+  let inDouble = false;
+  let lastCodeCharacter = "";
+  for (let lineIndex = startLineIndex; lineIndex < lines.length; lineIndex += 1) {
+    const line = lines[lineIndex];
+    const firstIndex = lineIndex === startLineIndex ? openIndex : 0;
+    let escaped = false;
+    for (let index = firstIndex; index < line.length; index += 1) {
+      const character = line[index];
+      if (escaped) { escaped = false; continue; }
+      if (inDouble && character === "\\") { escaped = true; continue; }
+      if (!inDouble && character === "'") {
+        inSingle = !inSingle;
+        lastCodeCharacter = character;
+        continue;
+      }
+      if (!inSingle && character === '"') {
+        inDouble = !inDouble;
+        lastCodeCharacter = character;
+        continue;
+      }
+      if (inSingle || inDouble) continue;
+      if (
+        character === "#" &&
+        (index === 0 || /\s/u.test(line[index - 1]))
+      ) {
+        break;
+      }
+      if (/\s/u.test(character)) continue;
+      if (character === "{") {
+        depth += 1;
+        lastCodeCharacter = character;
+        continue;
+      }
+      if (character === "}") {
+        depth -= 1;
+        if (depth === 0) {
+          return {
+            lineIndex,
+            index,
+            hasTrailingSeparator: lastCodeCharacter === ",",
+          };
+        }
+        if (depth < 0) return null;
+      }
+      lastCodeCharacter = character;
+    }
+  }
+  return null;
+}
+
+// Return the first YAML comment marker outside quoted scalars; line.length means no comment.
+function yamlCommentIndex(line) {
+  let inSingle = false;
+  let inDouble = false;
+  let escaped = false;
+  for (let index = 0; index < line.length; index += 1) {
+    const character = line[index];
+    if (escaped) { escaped = false; continue; }
+    if (inDouble && character === "\\") { escaped = true; continue; }
+    if (!inDouble && character === "'") { inSingle = !inSingle; continue; }
+    if (!inSingle && character === '"') { inDouble = !inDouble; continue; }
+    if (
+      !inSingle &&
+      !inDouble &&
+      character === "#" &&
+      (index === 0 || /\s/u.test(line[index - 1]))
+    ) {
+      return index;
+    }
+  }
+  return line.length;
+}
+
+// Find a key whose value opens a flow mapping at the caller's required nesting depth.
+function mappingOpenIndex(line, key, initialDepth, expectedParentDepth) {
+  const yamlCode = line.slice(0, yamlCommentIndex(line));
+  if (yamlCode.trim().length === 0) return -1;
+  const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  const entryPattern = new RegExp(
+    `(?:^|[{,])\\s*(?:"${escapedKey}"|'${escapedKey}'|${escapedKey})\\s*:\\s*\\{`,
+    "gu",
+  );
+  for (const match of yamlCode.matchAll(entryPattern)) {
+    const openIndex = match.index + match[0].lastIndexOf("{");
+    let depth = initialDepth;
+    let inSingle = false;
+    let inDouble = false;
+    let escaped = false;
+    for (let index = 0; index < openIndex; index += 1) {
+      const character = yamlCode[index];
+      if (escaped) { escaped = false; continue; }
+      if (inDouble && character === "\\") { escaped = true; continue; }
+      if (!inDouble && character === "'") { inSingle = !inSingle; continue; }
+      if (!inSingle && character === '"') { inDouble = !inDouble; continue; }
+      if (inSingle || inDouble) continue;
+      if (character === "{" || character === "[") depth += 1;
+      if (character === "}" || character === "]") depth -= 1;
+    }
+    if (!inSingle && !inDouble && depth === expectedParentDepth) return openIndex;
+  }
+  return -1;
+}
+
+// Carry flow nesting forward so a nested lookalike key cannot be mistaken for a direct hook.
+function mappingDepthAfterLine(line, initialDepth) {
+  const yamlCode = line.slice(0, yamlCommentIndex(line));
+  let depth = initialDepth;
+  let inSingle = false;
+  let inDouble = false;
+  let escaped = false;
+  for (const character of yamlCode) {
+    if (escaped) { escaped = false; continue; }
+    if (inDouble && character === "\\") { escaped = true; continue; }
+    if (!inDouble && character === "'") { inSingle = !inSingle; continue; }
+    if (!inSingle && character === '"') { inDouble = !inDouble; continue; }
+    if (inSingle || inDouble) continue;
+    if (character === "{" || character === "[") depth += 1;
+    if (character === "}" || character === "]") depth -= 1;
+  }
+  return depth;
+}
+
+// Insert one property without reserializing user YAML; false means the parsed mapping was not located.
+function appendFlowProperty(lines, lineIndex, openIndex, entry, hasProperties) {
+  const close = mappingClosePosition(lines, lineIndex, openIndex);
+  if (close === null) return false;
+  if (close.lineIndex !== lineIndex) {
+    const closeLine = lines[close.lineIndex];
+    const separator = hasProperties && !close.hasTrailingSeparator ? ", " : "";
+    lines[close.lineIndex] = `${closeLine.slice(0, close.index)}${separator}${entry} ${closeLine.slice(close.index)}`;
+    return true;
+  }
+  const line = lines[lineIndex];
+  const body = line.slice(openIndex + 1, close.index);
+  const separator = close.hasTrailingSeparator ? " " : ", ";
+  const nextBody = !hasProperties
+    ? ` ${entry} `
+    : `${body.replace(/\s+$/u, "")}${separator}${entry} `;
+  lines[lineIndex] = `${line.slice(0, openIndex + 1)}${nextBody}${line.slice(close.index)}`;
+  return true;
+}
+
+const hooksIndex = lines.findIndex((line) => /^(?:hooks|"hooks"|'hooks')\s*:/u.test(line));
+if (hooksIndex === -1) {
+  console.log("unchanged");
+  process.exit(0);
+}
+let hooksEnd = hooksIndex + 1;
+while (hooksEnd < lines.length) {
+  const line = lines[hooksEnd];
+  if (
+    line.trim() !== "" &&
+    !line.trimStart().startsWith("#") &&
+    !/^\s/u.test(line)
+  ) {
+    break;
+  }
+  hooksEnd += 1;
+}
+
+let changed = false;
+const hooksIsFlow = /^(?:hooks|"hooks"|'hooks')\s*:\s*\{/u.test(
+  lines[hooksIndex].slice(0, yamlCommentIndex(lines[hooksIndex])),
+);
+const expectedParentDepth = hooksIsFlow ? 1 : 0;
+let mappingDepth = 0;
+for (let index = hooksIndex; index < hooksEnd; index += 1) {
+  const openIndex = mappingOpenIndex(
+    lines[index],
+    "gruff-code-quality",
+    mappingDepth,
+    expectedParentDepth,
+  );
+  if (openIndex !== -1) {
+    changed = appendFlowProperty(
+      lines,
+      index,
+      openIndex,
+      `binaries: { py: ${relativeBinaryPath} }`,
+      Object.keys(gruffHook).length > 0,
+    );
+    break;
+  }
+  mappingDepth = mappingDepthAfterLine(lines[index], mappingDepth);
+}
+
+if (!changed) {
+  const directHookIndent = lines
+    .slice(hooksIndex + 1, hooksEnd)
+    .filter((line) => line.trim() !== "" && !line.trimStart().startsWith("#"))
+    .map((line) => line.length - line.trimStart().length)
+    .filter((indent) => indent > 0)
+    .reduce((smallest, indent) => Math.min(smallest, indent), Infinity);
+  const gruffIndex = lines.findIndex(
+    (line, index) => {
+      if (index <= hooksIndex || index >= hooksEnd) return false;
+      const match = /^( *)(?:gruff-code-quality|"gruff-code-quality"|'gruff-code-quality')\s*:\s*(?:#.*)?$/u.exec(line);
+      return match !== null && match[1].length === directHookIndent;
+    },
+  );
+  if (gruffIndex !== -1) {
+    let gruffEnd = gruffIndex + 1;
+    while (gruffEnd < hooksEnd) {
+      const line = lines[gruffEnd];
+      const indent = line.length - line.trimStart().length;
+      if (
+        line.trim() !== "" &&
+        !line.trimStart().startsWith("#") &&
+        indent <= directHookIndent
+      ) {
+        break;
+      }
+      gruffEnd += 1;
+    }
+    const configuredFieldIndents = lines
+      .slice(gruffIndex + 1, gruffEnd)
+      .filter((line) => line.trim() !== "" && !line.trimStart().startsWith("#"))
+      .map((line) => line.length - line.trimStart().length)
+      .filter((indent) => indent > directHookIndent);
+    const fieldIndent = configuredFieldIndents.length > 0
+      ? Math.min(...configuredFieldIndents)
+      : directHookIndent + 2;
+    const indentStep = fieldIndent - directHookIndent;
+    let insertAt = gruffEnd;
+    const enabledIndex = lines.findIndex(
+      (line, index) => {
+        if (index <= gruffIndex || index >= gruffEnd) return false;
+        const match = /^( *)enabled\s*:/u.exec(line);
+        return match !== null && match[1].length === fieldIndent;
+      },
+    );
+    if (enabledIndex !== -1) insertAt = enabledIndex + 1;
+    lines.splice(
+      insertAt,
+      0,
+      `${" ".repeat(fieldIndent)}binaries:`,
+      `${" ".repeat(fieldIndent + indentStep)}py: ${relativeBinaryPath}`,
+    );
+    changed = true;
+  }
+}
+
+if (!changed) {
+  console.log("unchanged");
+  process.exit(0);
+}
+fs.writeFileSync(configPath, `${lines.join(eol)}${hadFinalNewline ? eol : ""}`);
+console.log("changed");
+NODE
+  )"; then
+    echo "ERROR: could not stage Gruff binary detection for '$path'; previous destination was preserved" >&2
     discard_staged_payload
     return 1
   fi
@@ -1274,6 +1694,8 @@ NODE
 
 migrate_agent_hook_config() {
   local user_hook_config_path="$1"
+  local registration_agent="${2:-$AGENT}"
+  local registration_hook="${3:-}"
   local desired_state_contract_path="$GOAT_FLOW_ROOT/workflow/hooks/agent-config/managed-hook-desired-state.json"
   local transform_result
   LAST_TRANSFORM_RESULT="unchanged"
@@ -1289,7 +1711,7 @@ migrate_agent_hook_config() {
   fi
 
   stage_existing_destination "$user_hook_config_path"
-  if ! transform_result="$(node - "$STAGED_PAYLOAD_PATH" "$desired_state_contract_path" "$AGENT" "$GOAT_FLOW_ROOT" <<'NODE'
+  if ! transform_result="$(node - "$STAGED_PAYLOAD_PATH" "$desired_state_contract_path" "$registration_agent" "$GOAT_FLOW_ROOT" "$registration_hook" <<'NODE'
 /**
  * Reconciles one staged user hook config from the TypeScript-generated desired-state contract.
  * Use during standalone setup so enabled, disabled, duplicate, and retired rows match CLI and dashboard behavior.
@@ -1299,7 +1721,7 @@ const childProcess = require("node:child_process");
 const fs = require("node:fs");
 const pathModule = require("node:path");
 
-const [userHookConfigPath, desiredStateContractPath, agentId, frameworkRoot] =
+const [userHookConfigPath, desiredStateContractPath, agentId, frameworkRoot, selectedHookId] =
   process.argv.slice(2);
 const CONTRACT_SCHEMA = "goat-flow.managed-hook-desired-state.v1";
 const yaml = require(require.resolve("js-yaml", { paths: [frameworkRoot] }));
@@ -1345,7 +1767,14 @@ function commandReferencesScriptToken(commandText, scriptName) {
   return scriptTokenPattern.test(commandText);
 }
 
-/** Detect a direct provider command owned by any current or retired managed hook script. */
+/**
+ * Detect a provider command owned by any current or retired managed hook script.
+ * Use during install or sync so stale Windows-only registrations are replaced without touching user commands.
+ *
+ * @param {object} entry - provider row; null, primitive, or array values cannot be direct commands
+ * @param {string[]} scriptNames - managed filenames; empty means no command belongs to Goat Flow
+ * @returns {boolean} true when any platform command names a managed script; false preserves the user's row
+ */
 function entryReferencesManagedScript(entry, scriptNames) {
   // Null, primitive, and array values cannot be direct runnable command objects.
   if (!isObject(entry)) return false;
@@ -1357,6 +1786,7 @@ function entryReferencesManagedScript(entry, scriptNames) {
     : "";
   const commandText = [
     typeof entry.command === "string" ? entry.command : "",
+    typeof entry.commandWindows === "string" ? entry.commandWindows : "",
     typeof entry.bash === "string" ? entry.bash : "",
     typeof entry.powershell === "string" ? entry.powershell : "",
     structuredArgumentText,
@@ -1448,6 +1878,9 @@ function configuredHookEnabled(hookId, defaultEnabled) {
       : undefined);
   if (isObject(configuredHook) && typeof configuredHook.enabled === "boolean") {
     return configuredHook.enabled;
+  }
+  if (hookId === "deny-git-mutations") {
+    return configuredHookEnabled("deny-dangerous", true);
   }
   return defaultEnabled === true;
 }
@@ -1756,11 +2189,31 @@ function postTurnRootContractAllowsRegistration() {
   );
 }
 
+/** Hooks already explained once, so a repeated registration pass cannot repeat the notice. */
+const explainedBlockedHookIds = new Set();
+
+/**
+ * Tell the user why an enabled hook was left unregistered, using the package contract's wording.
+ * Losing a safety hook during an upgrade is invisible otherwise, so this prints once per hook.
+ */
+function explainBlockedRegistration(hookId, hookContract) {
+  if (explainedBlockedHookIds.has(hookId)) return;
+  explainedBlockedHookIds.add(hookId);
+  const prerequisite = hookContract.registrationPrerequisite;
+  // A contract without prerequisite prose has nothing truthful to add beyond the skipped registration.
+  if (!isObject(prerequisite)) return;
+  // stdout carries the migrated/unchanged protocol word, so user-facing prose goes to stderr.
+  console.error(`  ! ${hookId} not registered: ${prerequisite.reason}`);
+  console.error(`    fix: ${prerequisite.remediation}`);
+}
+
 /** Combine the user's toggle with any hook-specific registration prerequisite. */
 function shouldRegisterManagedHook(hookId, hookContract) {
   if (!configuredHookEnabled(hookId, hookContract.defaultEnabled)) return false;
   if (hookId !== "post-turn-safety") return true;
-  return postTurnRootContractAllowsRegistration();
+  if (postTurnRootContractAllowsRegistration()) return true;
+  explainBlockedRegistration(hookId, hookContract);
+  return false;
 }
 
 /** Validate the generated package contract before it can influence a user's config. */
@@ -1863,13 +2316,14 @@ if (!isObject(agentContract) || !isObject(agentContract.hooks)) {
     "managed hook desired-state contract has no selected agent",
   );
 }
-const hookEntries = managedHookEntries(agentContract);
+const hookEntries = managedHookEntries(agentContract).filter(([hookId]) => !selectedHookId || hookId === selectedHookId);
 const supportedHookEntries = hookEntries.filter(
   ([, hookContract]) => hookContract.supported,
 );
 const currentConfig = readJsonObject(userHookConfigPath);
 // Invalid user JSON remains untouched so setup never replaces settings the user needs to repair.
 if (!currentConfig) {
+  if (selectedHookId) throw new Error("Cannot establish Git protection in invalid provider JSON; existing runtime preserved");
   console.log("unchanged");
   process.exit(0);
 }
@@ -1879,7 +2333,7 @@ const originalConfig = JSON.stringify(currentConfig);
 if (agentId === "antigravity") {
   const managedHookIds = new Set([
     ...hookEntries.flatMap(([, hookContract]) => hookContract.cleanup.hookIds),
-    ...desiredStateContract.retiredHookIds,
+    ...(selectedHookId ? [] : desiredStateContract.retiredHookIds),
   ]);
   const managedScriptNames = [
     ...new Set(
@@ -1908,7 +2362,7 @@ if (agentId === "antigravity") {
   if (!isObject(currentConfig.hooks)) currentConfig.hooks = {};
   removeManagedRowsFromSharedHooks(
     currentConfig.hooks,
-    desiredStateContract.retiredHookScriptNames,
+    selectedHookId ? [] : desiredStateContract.retiredHookScriptNames,
   );
   // Every supported current hook is removed from all events before its user-selected state is rebuilt.
   for (const [, hookContract] of hookEntries) {
@@ -2130,22 +2584,26 @@ const canonicalDenyPatterns = new Set([
   "**/.env.test",
   "**/.envrc",
   "**/.env.*.local",
-  "**/secrets/**",
   "**/.ssh/**",
   "**/.aws/**",
-  "**/.docker/**",
   "**/.gnupg/**",
+  "**/.config/gcloud/**",
+  "**/.docker/**",
   "**/.kube/**",
-  "**/credentials*",
   "**/.npmrc",
   "**/.pypirc",
   "**/*.pem",
   "**/*.key",
   "**/*.pfx",
 ]);
+// Patterns goat-flow generated in earlier releases and no longer ships. They are dropped on refresh instead of being
+// kept as user additions; a matching pattern the user added by hand cannot be told apart, so each removal is printed.
+// `**/secrets/**` and `**/credentials*` were retired because a plain folder or file name blocks ordinary application
+// code such as a secrets route or a credentials.ts provider.
 const oldGeneratedPatterns = new Set([
   ".",
   "secrets/**",
+  "**/secrets/**",
   ".ssh/**",
   ".aws/**",
   ".docker/**",
@@ -2153,6 +2611,7 @@ const oldGeneratedPatterns = new Set([
   ".kube/**",
   "**/.env*",
   "**/credentials",
+  "**/credentials*",
 ]);
 
 function escapeTomlString(value) {
@@ -2245,16 +2704,25 @@ const shouldRefreshGoatFlowProfile =
 const missingCanonicalDenyPatterns = [...canonicalDenyPatterns].some(
   (pattern) => !activeDenyPatterns.has(pattern),
 );
+// A profile written by an earlier release still denies a retired pattern, so the refresh must run to drop it.
+const retiredDenyPatterns = [...activeDenyPatterns].filter((pattern) =>
+  oldGeneratedPatterns.has(pattern),
+);
 
 if (
   !hasInvalidEntry &&
   !usesLegacyAnchor &&
   !usesLegacyAccess &&
   !shouldRefreshGoatFlowProfile &&
-  !missingCanonicalDenyPatterns
+  !missingCanonicalDenyPatterns &&
+  retiredDenyPatterns.length === 0
 ) {
   console.log("unchanged");
   process.exit(0);
+}
+// Name each dropped pattern so a user who added the same text by hand can put it back deliberately.
+for (const pattern of retiredDenyPatterns) {
+  console.error(`  - retired Codex deny pattern removed: ${pattern}`);
 }
 
 const canonicalBlock = [
@@ -2270,6 +2738,9 @@ const canonicalBlock = [
   "# .env* deny cannot be re-opened for the sample file. Real env variants are",
   "# denied individually so .env.example stays readable, matching the Bash deny",
   "# hook; nonstandard variants (e.g. .env.backup) are covered by that hook.",
+  "# Rules match secret content shapes and credential stores, never plain folder",
+  "# or file names such as secrets/ or credentials*, which collide with ordinary",
+  "# application code. The Bash deny hook covers shell access to home stores.",
   '"**/.env" = "deny"',
   '"**/.env.local" = "deny"',
   '"**/.env.development" = "deny"',
@@ -2278,13 +2749,12 @@ const canonicalBlock = [
   '"**/.env.test" = "deny"',
   '"**/.envrc" = "deny"',
   '"**/.env.*.local" = "deny"',
-  '"**/secrets/**" = "deny"',
   '"**/.ssh/**" = "deny"',
   '"**/.aws/**" = "deny"',
-  '"**/.docker/**" = "deny"',
   '"**/.gnupg/**" = "deny"',
+  '"**/.config/gcloud/**" = "deny"',
+  '"**/.docker/**" = "deny"',
   '"**/.kube/**" = "deny"',
-  '"**/credentials*" = "deny"',
   '"**/.npmrc" = "deny"',
   '"**/.pypirc" = "deny"',
   '"**/*.pem" = "deny"',
@@ -2404,6 +2874,42 @@ const ENV_DENY_EXPANSIONS = new Map([
     ],
   ],
 ]);
+// Deny rules goat-flow shipped in earlier releases and no longer ships. The shell
+// denies duplicated the Bash deny hook with a substring match that also blocked
+// read-only commands quoting the word; the folder and file-name rules blocked
+// ordinary application code such as a secrets route or a credentials.ts provider.
+// A rule the user added by hand with the same text cannot be told apart, so each
+// removal is printed for the user to put back deliberately.
+const RETIRED_DENY_RULES = new Set([
+  "Bash(*sudo *)",
+  "Bash(*mkfs*)",
+  "Bash(*dd if=*)",
+  "Bash(*git reset --hard*)",
+  "Read(**/secrets/**)",
+  "Edit(**/secrets/**)",
+  "Read(**/credentials*)",
+  "Edit(**/credentials*)",
+]);
+// A bare **/ pattern resolves under the working directory, so the old in-project
+// rules never protected the real credential stores in the home directory.
+// Each one is rewritten to its ~/ form; the whole .docker and .kube directories
+// replace the single config files so the pair matches the Codex template.
+const HOME_ANCHOR_REWRITES = new Map([
+  ["Read(**/.ssh/**)", "Read(~/.ssh/**)"],
+  ["Read(**/.aws/**)", "Read(~/.aws/**)"],
+  ["Read(**/.gnupg/**)", "Read(~/.gnupg/**)"],
+  ["Read(**/.docker/config.json)", "Read(~/.docker/**)"],
+  ["Read(**/.kube/config)", "Read(~/.kube/**)"],
+  ["Read(**/.npmrc)", "Read(~/.npmrc)"],
+  ["Read(**/.pypirc)", "Read(~/.pypirc)"],
+  ["Edit(**/.ssh/**)", "Edit(~/.ssh/**)"],
+  ["Edit(**/.aws/**)", "Edit(~/.aws/**)"],
+  ["Edit(**/.gnupg/**)", "Edit(~/.gnupg/**)"],
+  ["Edit(**/.docker/config.json)", "Edit(~/.docker/**)"],
+  ["Edit(**/.kube/config)", "Edit(~/.kube/**)"],
+  ["Edit(**/.npmrc)", "Edit(~/.npmrc)"],
+  ["Edit(**/.pypirc)", "Edit(~/.pypirc)"],
+]);
 
 let raw;
 try {
@@ -2432,9 +2938,15 @@ if (!perms || typeof perms !== "object") {
 const parseRule = (entry) =>
   typeof entry === "string" ? entry.match(/^([A-Za-z]+)\((.*)\)$/u) : null;
 
-// Return replacement entries for a stale rule, or null to keep it untouched.
-const replacementsFor = (entry, expandEnv) => {
-  if (expandEnv && ENV_DENY_EXPANSIONS.has(entry)) {
+// Return replacement entries for a stale rule, an empty list to drop it, or null to keep it untouched.
+// Retirement, env expansion, and home anchoring apply to the deny list only: an allow or ask rule
+// with the same text is the user's own choice and stays exactly as written.
+const replacementsFor = (entry, isDenyList) => {
+  if (isDenyList && RETIRED_DENY_RULES.has(entry)) return [];
+  if (isDenyList && HOME_ANCHOR_REWRITES.has(entry)) {
+    return [HOME_ANCHOR_REWRITES.get(entry)];
+  }
+  if (isDenyList && ENV_DENY_EXPANSIONS.has(entry)) {
     return ENV_DENY_EXPANSIONS.get(entry);
   }
   const rule = parseRule(entry);
@@ -2444,24 +2956,28 @@ const replacementsFor = (entry, expandEnv) => {
   return null;
 };
 
-// Drop removed-tool rules, rewrite/expand stale forms, and dedupe against
+// Drop removed-tool and retired rules, rewrite/expand stale forms, and dedupe against
 // rules already present. Untouched rules keep their exact position. Returns
 // the repaired array, or null when nothing changed.
-const repairRules = (rules, expandEnv) => {
+const repairRules = (rules, isDenyList) => {
   if (!Array.isArray(rules)) return null;
   const survivors = rules.filter((entry) => {
     const rule = parseRule(entry);
     return !(rule && REMOVED_CLAUDE_TOOLS.has(rule[1]));
   });
   const present = new Set(
-    survivors.filter((entry) => replacementsFor(entry, expandEnv) === null),
+    survivors.filter((entry) => replacementsFor(entry, isDenyList) === null),
   );
   const kept = [];
   for (const entry of survivors) {
-    const replacements = replacementsFor(entry, expandEnv);
+    const replacements = replacementsFor(entry, isDenyList);
     if (replacements === null) {
       kept.push(entry);
       continue;
+    }
+    // A retired rule has no replacement; name it so a user who typed the same rule can restore it on purpose.
+    if (replacements.length === 0) {
+      console.error(`  - retired Claude deny rule removed: ${entry}`);
     }
     for (const replacement of replacements) {
       if (present.has(replacement)) continue;
@@ -2476,14 +2992,14 @@ const repairRules = (rules, expandEnv) => {
 };
 
 let migrated = false;
-// Env expansion applies to deny only: expanding an allow would revoke the
-// user's .env.example read intent instead of preserving it.
-for (const [arrayName, expandEnv] of [
+// Retirement, env expansion, and home anchoring apply to deny only: rewriting an
+// allow would revoke the user's .env.example read intent instead of preserving it.
+for (const [arrayName, isDenyList] of [
   ["deny", true],
   ["allow", false],
   ["ask", false],
 ]) {
-  const repaired = repairRules(perms[arrayName], expandEnv);
+  const repaired = repairRules(perms[arrayName], isDenyList);
   if (repaired) {
     perms[arrayName] = repaired;
     migrated = true;
@@ -2679,7 +3195,7 @@ echo ""
 # 2. Create .goat-flow/ directories
 # ==========================================================================
 echo "Directories:"
-for dir in .goat-flow/learning-loop/footguns .goat-flow/learning-loop/lessons .goat-flow/learning-loop/patterns .goat-flow/learning-loop/decisions .goat-flow/plans .goat-flow/scratchpad .goat-flow/logs/sessions .goat-flow/logs/quality .goat-flow/logs/events .goat-flow/logs/critiques .goat-flow/logs/review .goat-flow/logs/security .goat-flow/skill-docs .goat-flow/skill-docs/playbooks .goat-flow/skill-docs/skill-quality-testing .goat-flow/hooks .goat-flow/hooks/deny-dangerous; do
+for dir in .goat-flow/learning-loop/footguns .goat-flow/learning-loop/lessons .goat-flow/learning-loop/patterns .goat-flow/learning-loop/decisions .goat-flow/plans .goat-flow/scratchpad .goat-flow/state/locks .goat-flow/logs/sessions .goat-flow/logs/quality .goat-flow/logs/events .goat-flow/logs/critiques .goat-flow/logs/review .goat-flow/logs/security .goat-flow/skill-docs .goat-flow/skill-docs/playbooks .goat-flow/skill-docs/skill-quality-testing .goat-flow/hooks .goat-flow/hooks/deny-dangerous; do
   assert_safe_installer_directory "$dir"
   # Missing safe directories are created for the user's local workflow surfaces.
   if [[ ! -d "$dir" ]]; then
@@ -2776,9 +3292,19 @@ copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/page-capture.md" ".goat-flo
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/release-notes.md" ".goat-flow/skill-docs/playbooks/release-notes.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/skill-playbook-authoring-sync.md" ".goat-flow/skill-docs/playbooks/skill-playbook-authoring-sync.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/test-selection.md" ".goat-flow/skill-docs/playbooks/test-selection.md"
+copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/writing-agent-facing-instructions.md" ".goat-flow/skill-docs/playbooks/writing-agent-facing-instructions.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/writing-sentence-diagnostics.md" ".goat-flow/skill-docs/playbooks/writing-sentence-diagnostics.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/writing-structure-diagnostics.md" ".goat-flow/skill-docs/playbooks/writing-structure-diagnostics.md"
-copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/writing-style.md" ".goat-flow/skill-docs/playbooks/writing-style.md"
+copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/writing-human-facing-prose.md" ".goat-flow/skill-docs/playbooks/writing-human-facing-prose.md"
+# Retired playbooks may contain local guidance that users still need while adopting the replacement documents.
+for retired_writing_playbook in \
+  ".goat-flow/skill-docs/playbooks/writing-for-agents.md" \
+  ".goat-flow/skill-docs/playbooks/writing-style.md"; do
+  # An upgrade may find a locally edited copy; leave review and removal to the project owner.
+  if [[ -f "$retired_writing_playbook" ]]; then
+    echo "  - retained retired $retired_writing_playbook; review local content before removing it"
+  fi
+done
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/skill-quality-testing.md" ".goat-flow/skill-docs/skill-quality-testing/README.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/skill-quality-testing/tdd-iteration.md" ".goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/skill-quality-testing/adversarial-framing.md" ".goat-flow/skill-docs/skill-quality-testing/adversarial-framing.md"
@@ -2872,6 +3398,12 @@ if [[ -f "$CONFIG_PATH" ]]; then
     CONFIG_CHANGED=true
     CONFIG_NOTES+=("hook toggles added")
   fi
+  ensure_config_gruff_binary_entry "$CONFIG_PATH"
+  # Detection persists one reviewed project convention without widening runtime discovery.
+  if [[ "$LAST_TRANSFORM_RESULT" == "changed" ]]; then
+    CONFIG_CHANGED=true
+    CONFIG_NOTES+=("strands_agents gruff-py path detected")
+  fi
   remove_config_plan_guard_entry "$CONFIG_PATH"
   # A changed result removes configuration for the retired plan guard.
   if [[ "$LAST_TRANSFORM_RESULT" == "changed" ]]; then
@@ -2888,13 +3420,42 @@ if [[ -f "$CONFIG_PATH" ]]; then
   fi
 else
   prepare_staged_payload "$CONFIG_PATH"
-  printf 'version: "%s"\n\nskills:\n  install: all\n\nhooks:\n  deny-dangerous:\n    enabled: true\n  post-turn-safety:\n    enabled: true\n  gruff-code-quality:\n    enabled: false\n' "$VERSION" > "$STAGED_PAYLOAD_PATH"
+  printf 'version: "%s"\n\nskills:\n  install: all\n\nhooks:\n  deny-dangerous:\n    enabled: true\n  deny-git-mutations:\n    enabled: true\n  post-turn-safety:\n    enabled: true\n  gruff-code-quality:\n    enabled: false\n' "$VERSION" > "$STAGED_PAYLOAD_PATH"
   # A first install may scaffold config, but a concurrent or existing user file wins.
   commit_staged_payload "$CONFIG_PATH" "create-only"
   COPIED=$((COPIED + 1))
-  echo "  ✓ $CONFIG_PATH (scaffolded)"
+  ensure_config_gruff_binary_entry "$CONFIG_PATH"
+  if [[ "$LAST_TRANSFORM_RESULT" == "changed" ]]; then
+    echo "  ✓ $CONFIG_PATH (scaffolded; strands_agents gruff-py path detected)"
+  else
+    echo "  ✓ $CONFIG_PATH (scaffolded)"
+  fi
 fi
 echo ""
+
+# Establish requested Git protection in every existing provider before shared policy bytes change.
+# The selected provider may be new; seed its ordinary config before registration, preserving existing settings.
+if $HOOKS_ENABLED; then
+  if [[ -n "${HOOK_CONFIG_DST:-}" && -n "${HOOK_CONFIG_SRC:-}" ]]; then
+    copy_if_missing "$GOAT_FLOW_ROOT/$HOOK_CONFIG_SRC" "$HOOK_CONFIG_DST"
+  elif [[ -n "${SETTINGS_DST:-}" && -n "${SETTINGS_SRC:-}" ]]; then
+    copy_if_missing "$GOAT_FLOW_ROOT/$SETTINGS_SRC" "$SETTINGS_DST"
+  fi
+  policy_providers="$(node - "$GOAT_FLOW_ROOT/workflow/hooks/agent-config/managed-hook-desired-state.json" <<'NODE'
+const contract = require(process.argv[2]);
+if (!contract.agents || !Object.values(contract.agents).every((entry) => entry.hooks?.["deny-git-mutations"])) {
+  throw new Error("Split Git policy registration contract is incomplete");
+}
+for (const [agent, definition] of Object.entries(contract.agents)) {
+  console.log(`${agent}\t${definition.hookConfigFile}`);
+}
+NODE
+  )" || exit 1
+  while IFS=$'\t' read -r policy_agent policy_config_path; do
+    [[ -f "$policy_config_path" ]] || continue
+    migrate_agent_hook_config "$policy_config_path" "$policy_agent" "deny-git-mutations"
+  done <<< "$policy_providers"
+fi
 
 # ==========================================================================
 # 8. Install hooks (always overwrite - verbatim copy)
@@ -2904,6 +3465,7 @@ if $HOOKS_ENABLED; then
   copy_file "$GOAT_FLOW_ROOT/workflow/hooks/run-with-bash.mjs" "$HOOKS_DIR/run-with-bash.mjs" "system-owned" "755"
   copy_file "$GOAT_FLOW_ROOT/workflow/hooks/hook-provider-adapters.mjs" "$HOOKS_DIR/hook-provider-adapters.mjs" "system-owned" "755"
   copy_file "$GOAT_FLOW_ROOT/workflow/hooks/hook-launch-runtime.mjs" "$HOOKS_DIR/hook-launch-runtime.mjs" "system-owned" "755"
+  copy_file "$GOAT_FLOW_ROOT/workflow/hooks/deny-git-mutations.sh" "$HOOKS_DIR/deny-git-mutations.sh" "system-owned" "755"
   copy_file "$GOAT_FLOW_ROOT/workflow/hooks/deny-dangerous.sh" "$HOOKS_DIR/deny-dangerous.sh" "system-owned" "755"
   copy_file "$GOAT_FLOW_ROOT/workflow/hooks/gruff-code-quality.sh" "$HOOKS_DIR/gruff-code-quality.sh" "system-owned" "755"
   copy_file "$GOAT_FLOW_ROOT/workflow/hooks/post-turn-safety.sh" "$HOOKS_DIR/post-turn-safety.sh" "system-owned" "755"
@@ -2911,6 +3473,7 @@ if $HOOKS_ENABLED; then
   prune_legacy_agent_hook_copies
   echo "Hook policy → .goat-flow/hooks/deny-dangerous/:"
   for hook_policy_script in \
+    guard-runtime.sh \
     patterns-shell.sh \
     patterns-paths.sh \
     patterns-writes.sh \
@@ -3060,7 +3623,9 @@ echo ""
 # Summary
 # ==========================================================================
 echo "─────────────────────────────────────────"
-echo "DONE: $COPIED files installed, $SKIPPED skipped, $REMOVED stale removed"
+echo "HELPER DONE: $COPIED files copied, $SKIPPED skipped, $REMOVED stale removed"
+echo "The public goat-flow CLI verifies managed files and records install state after this helper exits."
+echo "Direct script use does not perform those CLI steps."
 echo ""
 
 # Warn when deny hook is installed but settings file was skipped (hook may not be registered)

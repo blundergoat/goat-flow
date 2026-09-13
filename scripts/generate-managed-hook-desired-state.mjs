@@ -34,6 +34,20 @@ const OUTPUT_PATH = join(
   "managed-hook-desired-state.json",
 );
 const CONTRACT_SCHEMA = "goat-flow.managed-hook-desired-state.v1";
+
+/**
+ * Wording the standalone installer prints when a hook's registration prerequisite blocks it.
+ * The installer keeps its own eligibility check and only borrows this text, so an upgrade that
+ * drops an enabled hook can say why. `test/unit/managed-hook-contract.test.ts` pins each string
+ * against the registrar's live output so the two copies cannot drift apart silently.
+ */
+const HOOK_REGISTRATION_PREREQUISITES = {
+  "post-turn-safety": {
+    reason: "A non-Git workspace requires explicit post-turn scan roots.",
+    remediation:
+      "Configure valid scan roots or disable this hook before registering it.",
+  },
+};
 const RETIRED_HOOK_IDS = [
   "plan-checkbox-guard",
   ...LEGACY_DENY_DANGEROUS_HOOK_IDS,
@@ -139,6 +153,13 @@ function buildManagedHookContract() {
             agentProfile,
             hookSpec,
           ),
+          // Only a hook with a registration prerequisite ships the prose explaining a skipped registration.
+          ...(HOOK_REGISTRATION_PREREQUISITES[hookSpec.id]
+            ? {
+                registrationPrerequisite:
+                  HOOK_REGISTRATION_PREREQUISITES[hookSpec.id],
+              }
+            : {}),
         };
       }
 

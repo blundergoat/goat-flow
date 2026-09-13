@@ -1,15 +1,16 @@
 /**
- * Dashboard /api/audit report endpoint: returns the full report shape covering all supported
- * agents regardless of config, keeps the audit cache a gitignored local artifact that invalidates
- * after instruction/hook/lesson edits yet serves cache hits under budget, and (with quality=true)
- * folds in harness concerns without running deny-hook self-tests or changing the shared report.
+ * Exercise the real dashboard Audit and Hooks endpoints against disposable projects.
+ *
+ * Check displayed report fields, cache freshness and read-only summaries across supported providers.
+ * Hook POST cases verify request admission, exact replacement review and unchanged bytes after refusal.
  */
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import {
   assert,
   assertAuditScope,
   assertDashboardReport,
   AUDIT_VERSION,
+  baseUrl,
   childProcess,
   commitDashboardCacheProject,
   describe,
@@ -138,6 +139,7 @@ describe("dashboard /api/audit", () => {
     const agentScores = report.agentScores as unknown[];
     assert.ok(agentScores.length > 0, "Dashboard report should include agents");
     const scoresById = new Map<string, Record<string, unknown>>();
+    // Every agent card must retain the fields used by Home, Setup and Quality.
     for (const [index, score] of agentScores.entries()) {
       const entry = expectRecord(score, "Dashboard report agent score");
       const id = String(entry.id);
@@ -154,6 +156,7 @@ describe("dashboard /api/audit", () => {
         Array.isArray(enforcement.capabilities),
         "Dashboard report should include enforcement capabilities",
       );
+      // Null means this agent has no harness score; a present score must follow the displayed audit shape.
       if (entry.harness !== null) {
         assertAuditScope(
           entry.harness,
@@ -169,6 +172,7 @@ describe("dashboard /api/audit", () => {
     scoresById: Map<string, Record<string, unknown>>,
     ids: readonly string[],
   ): void {
+    // Name each missing provider so a disappearing dashboard card produces an actionable failure.
     for (const id of ids) {
       assert.ok(scoresById.has(id), `Dashboard report should include ${id}`);
     }
@@ -183,6 +187,7 @@ describe("dashboard /api/audit", () => {
       agentScores.length > 0,
       "Dashboard summary should preserve per-agent cards",
     );
+    // Every summary card needs agent, harness and concern evidence for its readiness display.
     for (const [index, score] of agentScores.entries()) {
       const entry = expectRecord(
         score,
@@ -288,6 +293,26 @@ describe("dashboard /api/audit", () => {
       );
       assert.equal((await fetchProfiledAudit(project.root)).body.cached, true);
 
+      // Both new policy inputs must invalidate cached reports even when an edit preserves file size.
+      for (const policyPath of [
+        ".goat-flow/hooks/deny-git-mutations.sh",
+        ".goat-flow/hooks/deny-dangerous/guard-runtime.sh",
+      ]) {
+        await writeProjectFile(project.root, policyPath, "# policy AAAA\n");
+        await fetchProfiledAudit(project.root);
+        assert.equal(
+          (await fetchProfiledAudit(project.root)).body.cached,
+          true,
+        );
+        await writeProjectFile(project.root, policyPath, "# policy BBBB\n");
+        const afterPolicyEdit = await fetchProfiledAudit(project.root);
+        assert.equal(afterPolicyEdit.body.cached, false, policyPath);
+        assert.equal(
+          spanCount(getProfileSpans(afterPolicyEdit.body), "runAuditBatch"),
+          1,
+        );
+      }
+
       await writeProjectFile(
         project.root,
         ".goat-flow/learning-loop/lessons/cache.md",
@@ -374,6 +399,8 @@ describe("dashboard /api/audit", () => {
     );
     const hooksPayload = expectRecord(hooksResponse.body, "Hooks response");
 
+    assert.equal(dashboardReport.status, "pass");
+    assert.equal(auditCoverage.status, "warning");
     assert.deepEqual(auditCoverage.hooks, hooksPayload.hooks);
   });
 
@@ -407,6 +434,7 @@ describe("dashboard /api/audit", () => {
   it("with quality=true avoids deny hook self-tests during dashboard summary loads", async () => {
     let selfTestCalls = 0;
     childProcess.execFileSync = ((file, args, options) => {
+      // Opening a summary must not execute the selected project's hook self-tests.
       if (
         Array.isArray(args) &&
         args.some((arg) => String(arg).startsWith("--self-test"))
@@ -494,9 +522,19 @@ describe("dashboard /api/audit", () => {
     const project = await makeDashboardCacheProject();
     const markerPath = join(project.root, "launcher-executed.marker");
     try {
-      // The selected project configures a launcher that records execution
-      // before delegating to the managed script. A passive per-agent audit
-      // must never run it: the audited checkout's config is untrusted input.
+      // Install the real shared policy dependencies so the HTTP case inspects a complete hook installation.
+      for (const hookFile of [
+        "deny-git-mutations.sh",
+        "deny-dangerous/guard-runtime.sh",
+      ]) {
+        await writeProjectFile(
+          project.root,
+          `.goat-flow/hooks/${hookFile}`,
+          readFileSync(join(PROJECT_PATH, "workflow/hooks", hookFile), "utf8"),
+        );
+      }
+      // The selected project configures a launcher that records execution before delegating to the managed script. A passive per-agent audit must
+      // never run it: the audited checkout's config is untrusted input.
       await writeProjectFile(
         project.root,
         ".codex/hooks.json",
@@ -509,6 +547,10 @@ describe("dashboard /api/audit", () => {
                   {
                     type: "command",
                     command: `touch "${markerPath}"; bash .goat-flow/hooks/deny-dangerous.sh`,
+                  },
+                  {
+                    type: "command",
+                    command: `touch "${markerPath}"; bash .goat-flow/hooks/deny-git-mutations.sh`,
                   },
                 ],
               },
@@ -593,3 +635,240 @@ describe("dashboard /api/audit", () => {
     }
   });
 });
+
+describe("dashboard guarded hook actions", () => {
+  it("syncs the selected project, requires exact replacement, and returns every affected row", async () => {
+    const projectPath = await mkdtemp(join(tmpdir(), "goat-flow-hook-api-"));
+    try {
+      await writeProjectFile(projectPath, ".claude/settings.json", "{}\n");
+      const endpoint = `/api/hooks?path=${encodeURIComponent(projectPath)}`;
+      const synced = await fetchJson(endpoint, { method: "POST", body: "{}" });
+      assert.equal(synced.res.status, 200);
+      const rows = expectRecord(synced.body, "Synced hooks").hooks as Array<
+        Record<string, unknown>
+      >;
+      assert.ok(rows.length > 0);
+      const toggleEndpoint = `/api/hooks/deny-dangerous/toggle?path=${encodeURIComponent(projectPath)}`;
+      const disabled = await fetchJson(toggleEndpoint, {
+        method: "POST",
+        body: JSON.stringify({ enabled: false }),
+      });
+      assert.equal(disabled.res.status, 200);
+      const disabledBody = expectRecord(disabled.body, "Disabled hook");
+      assert.equal(
+        expectRecord(disabledBody.hook, "Compatible hook response").enabled,
+        false,
+      );
+      assert.equal((disabledBody.hooks as unknown[]).length, rows.length);
+
+      const sharedPath = join(
+        projectPath,
+        ".goat-flow/hooks/deny-dangerous/guard-runtime.sh",
+      );
+      const officialBytes = readFileSync(sharedPath, "utf-8");
+      writeFileSync(
+        sharedPath,
+        `${officialBytes}\n# local hook customization\n`,
+      );
+      const reviewResponse = await fetchJson(toggleEndpoint, {
+        method: "POST",
+        body: JSON.stringify({ enabled: true }),
+      });
+      assert.equal(reviewResponse.res.status, 409);
+      const review = expectRecord(reviewResponse.body, "Replacement review");
+      assert.equal(review.code, "hook-replacement-required");
+      assert.equal(review.replacementAvailable, true);
+      assert.deepEqual(review.hookIds, [
+        "deny-dangerous",
+        "deny-git-mutations",
+      ]);
+      assert.match(String(review.confirmationIdentity), /^[a-f0-9]{64}$/u);
+      const savedChoices = readFileSync(
+        join(projectPath, ".goat-flow/config.yaml"),
+        "utf-8",
+      );
+
+      // A second editor save while the user reviews the dialog must invalidate its earlier approval.
+      writeFileSync(sharedPath, `${officialBytes}\n# revised customization\n`);
+      const stale = await fetchJson(toggleEndpoint, {
+        method: "POST",
+        body: JSON.stringify({
+          enabled: true,
+          replace: true,
+          confirmationIdentity: review.confirmationIdentity,
+        }),
+      });
+      assert.equal(stale.res.status, 409);
+      const freshReview = expectRecord(stale.body, "Fresh replacement review");
+      assert.equal(freshReview.code, "hook-review-stale");
+      assert.equal(
+        readFileSync(join(projectPath, ".goat-flow/config.yaml"), "utf-8"),
+        savedChoices,
+      );
+      const replaced = await fetchJson(toggleEndpoint, {
+        method: "POST",
+        body: JSON.stringify({
+          enabled: true,
+          replace: true,
+          confirmationIdentity: freshReview.confirmationIdentity,
+        }),
+      });
+      assert.equal(replaced.res.status, 200);
+      assert.equal(readFileSync(sharedPath, "utf-8"), officialBytes);
+      assert.equal(
+        expectRecord(
+          expectRecord(replaced.body, "Replaced hooks").hook,
+          "Enabled hook",
+        ).enabled,
+        true,
+      );
+      const refreshed = await fetchJson(endpoint);
+      assert.deepEqual(
+        expectRecord(replaced.body, "All changed rows").hooks,
+        expectRecord(refreshed.body, "Current rows").hooks,
+      );
+    } finally {
+      await rm(projectPath, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects malformed or unauthorized hook writes without changing the selected project", async () => {
+    const projectPath = await mkdtemp(
+      join(tmpdir(), "goat-flow-hook-request-"),
+    );
+    try {
+      await writeProjectFile(projectPath, ".claude/settings.json", "{}\n");
+      const endpoint = `/api/hooks?path=${encodeURIComponent(projectPath)}`;
+      const original = hookApiFileSnapshot(projectPath);
+      const rejectedRequests = [
+        { endpoint, body: "{" },
+        { endpoint, body: "[]" },
+        {
+          endpoint,
+          body: JSON.stringify({ paths: [".claude/settings.json"] }),
+        },
+        { endpoint, body: JSON.stringify({ replace: false }) },
+        { endpoint, body: JSON.stringify({ replace: true }) },
+        {
+          endpoint,
+          body: JSON.stringify({
+            replace: true,
+            confirmationIdentity: "old-review",
+          }),
+        },
+        {
+          endpoint: `/api/hooks/deny-dangerous/toggle?path=${encodeURIComponent(projectPath)}`,
+          body: JSON.stringify({ enabled: "true" }),
+        },
+        {
+          endpoint: `/api/hooks/%E0%A4%A/toggle?path=${encodeURIComponent(projectPath)}`,
+          body: JSON.stringify({ enabled: true }),
+        },
+      ];
+      // Client-supplied paths and incomplete approvals cannot authorize any destination write.
+      for (const request of rejectedRequests) {
+        const response = await fetchJson(request.endpoint, {
+          method: "POST",
+          body: request.body,
+        });
+        assert.equal(response.res.status, 400, request.body);
+        assert.deepEqual(
+          hookApiFileSnapshot(projectPath),
+          original,
+          request.body,
+        );
+      }
+      const withoutToken = await fetch(`${baseUrl}${endpoint}`, {
+        method: "POST",
+        body: "{}",
+      });
+      assert.equal(withoutToken.status, 403);
+      const hostileOrigin = await fetchJson(endpoint, {
+        method: "POST",
+        body: "{}",
+        headers: { Origin: "https://example.invalid" },
+      });
+      assert.equal(hostileOrigin.res.status, 403);
+      const missingTarget = await fetchJson(
+        `/api/hooks?path=${encodeURIComponent(MISSING_PATH)}`,
+        { method: "POST", body: "{}" },
+      );
+      assert.equal(missingTarget.res.status, 400);
+      assert.deepEqual(hookApiFileSnapshot(projectPath), original);
+    } finally {
+      await rm(projectPath, { recursive: true, force: true });
+    }
+  });
+
+  it("never offers replacement for newer hook files or invalid install history", async () => {
+    const projectPath = await mkdtemp(
+      join(tmpdir(), "goat-flow-hook-refusal-"),
+    );
+    try {
+      await writeProjectFile(projectPath, ".claude/settings.json", "{}\n");
+      const endpoint = `/api/hooks?path=${encodeURIComponent(projectPath)}`;
+      assert.equal(
+        (await fetchJson(endpoint, { method: "POST", body: "{}" })).res.status,
+        200,
+      );
+      const hookPath = join(projectPath, ".goat-flow/hooks/deny-dangerous.sh");
+      const officialBytes = readFileSync(hookPath, "utf-8");
+      writeFileSync(
+        hookPath,
+        "#!/usr/bin/env bash\n# goat-flow-hook-version: 999.0.0\n",
+      );
+      const newerSnapshot = hookApiFileSnapshot(projectPath);
+      const newer = await fetchJson(endpoint, {
+        method: "POST",
+        body: JSON.stringify({
+          replace: true,
+          confirmationIdentity: "0".repeat(64),
+        }),
+      });
+      assert.equal(newer.res.status, 409);
+      assert.equal(
+        expectRecord(newer.body, "Newer hook refusal").replacementAvailable,
+        false,
+      );
+      assert.deepEqual(hookApiFileSnapshot(projectPath), newerSnapshot);
+      writeFileSync(hookPath, officialBytes);
+      writeFileSync(
+        join(projectPath, ".goat-flow/state/install/managed.json"),
+        "{",
+      );
+      const invalidSnapshot = hookApiFileSnapshot(projectPath);
+      const invalid = await fetchJson(endpoint, { method: "POST", body: "{}" });
+      assert.equal(invalid.res.status, 409);
+      assert.equal(
+        expectRecord(invalid.body, "Invalid history refusal")
+          .replacementAvailable,
+        false,
+      );
+      assert.deepEqual(hookApiFileSnapshot(projectPath), invalidSnapshot);
+    } finally {
+      await rm(projectPath, { recursive: true, force: true });
+    }
+  });
+});
+
+/** Capture selected-project bytes so a rejected browser request cannot hide a partial config or script write. */
+function hookApiFileSnapshot(projectPath: string): Record<string, string> {
+  const files: Record<string, string> = {};
+  /** Walk only this disposable project; claim markers are coordination state, not admitted hook destinations. */
+  function readDirectory(relativePath: string): void {
+    // Record each visible destination so a late refusal cannot mask an earlier mutation.
+    for (const entry of readdirSync(join(projectPath, relativePath), {
+      withFileTypes: true,
+    })) {
+      const path = relativePath ? `${relativePath}/${entry.name}` : entry.name;
+      // Claim creation and owner-checked cleanup may happen during a refused operation.
+      if (path === ".goat-flow/state/locks") continue;
+      // Descend into fixture folders so a refusal cannot hide a changed nested hook file.
+      if (entry.isDirectory()) readDirectory(path);
+      else
+        files[path] = readFileSync(join(projectPath, path)).toString("base64");
+    }
+  }
+  readDirectory("");
+  return files;
+}

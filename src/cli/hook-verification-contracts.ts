@@ -11,7 +11,11 @@ type HookVerificationEvidenceLevel =
 
 /** One hook's complete scenario set and the evidence level users must produce. */
 export interface HookVerificationContract {
-  hookId: "deny-dangerous" | "gruff-code-quality" | "post-turn-safety";
+  hookId:
+    | "deny-dangerous"
+    | "deny-git-mutations"
+    | "gruff-code-quality"
+    | "post-turn-safety";
   scenarioGroup: HookScenario;
   requiredScenarioIds: readonly string[];
   evidenceLevel: HookVerificationEvidenceLevel;
@@ -25,7 +29,18 @@ export const HOOK_VERIFICATION_CONTRACTS = {
     requiredScenarioIds: [
       "secret-shell-read",
       "pipe-to-shell",
+      "github-write",
+      "read-only-control",
+    ],
+    evidenceLevel: "managed-hook-classifier",
+  },
+  "git-mutations-hook": {
+    hookId: "deny-git-mutations",
+    scenarioGroup: "git-mutations-hook",
+    requiredScenarioIds: [
+      "repository-commit",
       "repository-push",
+      "repository-destructive",
       "read-only-control",
     ],
     evidenceLevel: "managed-hook-classifier",

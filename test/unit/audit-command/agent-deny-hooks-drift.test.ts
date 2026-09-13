@@ -5,6 +5,13 @@
  * Stubbed configurations retain coverage for legacy paths and every supported agent.
  */
 import {
+  buildAgentHookCommand,
+  commandEntryReferencesSpec,
+} from "../../../src/cli/server/agent-hook-command.js";
+import { getHookSpec } from "../../../src/cli/server/hooks-registry.js";
+import { compareHooks } from "../../../src/cli/audit/check-drift-hooks.js";
+import type { DriftFinding } from "../../../src/cli/audit/types.js";
+import {
   AGENT_CHECKS,
   PROFILES,
   PROJECT_ROOT,
@@ -22,6 +29,84 @@ import { existsSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { applyHookState, checkHookRuntimeSmoke } from "../../src.js";
 import { withTempProject } from "../hook-registrar.helpers.js";
+
+describe("Copilot split-policy registration order", () => {
+  const configPath = ".github/hooks/hooks.json";
+  const template = JSON.parse(
+    readFileSync(
+      resolve(PROJECT_ROOT, "workflow/hooks/agent-config/copilot-hooks.json"),
+      "utf8",
+    ),
+  ) as { hooks: { preToolUse: Record<string, unknown>[] } };
+
+  /** Compare native config in memory; complete canonical runtime files isolate registration drift. */
+  function nativeConfigFindings(
+    entries: Record<string, unknown>[],
+  ): DriftFinding[] {
+    const installed = `${JSON.stringify({ ...template, hooks: { ...template.hooks, preToolUse: entries } }, null, 2)}\n`;
+    const fs = stubFS({
+      readFile: (path) => {
+        if (path === configPath) return installed;
+        if (path.startsWith(".goat-flow/hooks/")) {
+          const sourcePath = resolve(
+            PROJECT_ROOT,
+            path.replace(".goat-flow/hooks/", "workflow/hooks/"),
+          );
+          return existsSync(sourcePath)
+            ? readFileSync(sourcePath, "utf8")
+            : null;
+        }
+        return null;
+      },
+    });
+    const findings: DriftFinding[] = [];
+    compareHooks(
+      fs,
+      PROJECT_ROOT,
+      PROJECT_ROOT,
+      findings,
+      new Set(),
+      "copilot",
+    );
+    return findings.filter((finding) => finding.path === configPath);
+  }
+
+  it("accepts either order of the two independently registered policy hooks", () => {
+    assert.deepEqual(nativeConfigFindings(template.hooks.preToolUse), []);
+    assert.deepEqual(
+      nativeConfigFindings([...template.hooks.preToolUse].reverse()),
+      [],
+    );
+  });
+
+  it("still reports a duplicate or missing policy registration", () => {
+    const [dangerous, git] = template.hooks.preToolUse;
+    assert.ok(dangerous && git);
+    for (const entries of [[git], [git, dangerous, git]]) {
+      assert.ok(
+        nativeConfigFindings(entries).some(
+          (finding) => finding.kind === "content",
+        ),
+      );
+    }
+  });
+
+  it("still reports changed policy commands, timeouts and unrelated registrations", () => {
+    const [dangerous, git] = template.hooks.preToolUse;
+    assert.ok(dangerous && git);
+    for (const entries of [
+      [{ ...git, timeoutSec: 1 }, dangerous],
+      [{ ...git, bash: `${String(git.bash)} --unexpected` }, dangerous],
+      [git, dangerous, { type: "command", bash: "printf user-hook" }],
+    ]) {
+      assert.ok(
+        nativeConfigFindings(entries).some(
+          (finding) => finding.kind === "content",
+        ),
+      );
+    }
+  });
+});
 
 /** Build a context that deliberately crosses the trusted runtime-evidence boundary. */
 function makeRuntimeCtx(
@@ -135,6 +220,43 @@ function withHookLaunchTimeout(
   }
 }
 
+/** Add the Git sibling to an otherwise complete provider fixture without changing the command under test. */
+function withGitRegistration(
+  path: string,
+  content: string | null,
+): string | null {
+  if (
+    content === null ||
+    ![".codex/hooks.json", ".claude/settings.json"].includes(path)
+  )
+    return content;
+  const config = JSON.parse(content);
+  const dangerous = getHookSpec("deny-dangerous");
+  assert.ok(dangerous);
+  if (
+    !config.hooks?.PreToolUse?.some((group: { hooks?: unknown[] }) =>
+      group.hooks?.some((row) => commandEntryReferencesSpec(row, dangerous)),
+    )
+  )
+    return content;
+  const spec = getHookSpec("deny-git-mutations");
+  assert.ok(spec);
+  config.hooks.PreToolUse.push({
+    matcher: "Bash",
+    hooks: [
+      {
+        type: "command",
+        command: buildAgentHookCommand(
+          path.startsWith(".codex") ? "codex" : "claude",
+          ".goat-flow/hooks",
+          spec,
+        ),
+      },
+    ],
+  });
+  return JSON.stringify(config);
+}
+
 describe("agent deny hook template comparison", () => {
   const denyCheck = AGENT_CHECKS.find(
     (check) => check.id === "agent-guardrails",
@@ -142,6 +264,14 @@ describe("agent deny hook template comparison", () => {
   /** Read canonical deny-dangerous templates used for drift comparisons. */
   function guardrailTemplates() {
     return {
+      git: readFileSync(
+        resolve(PROJECT_ROOT, "workflow/hooks/deny-git-mutations.sh"),
+        "utf-8",
+      ),
+      runtime: readFileSync(
+        resolve(PROJECT_ROOT, "workflow/hooks/deny-dangerous/guard-runtime.sh"),
+        "utf-8",
+      ),
       dispatcher: readFileSync(
         resolve(PROJECT_ROOT, "workflow/hooks/deny-dangerous.sh"),
         "utf-8",
@@ -184,6 +314,8 @@ describe("agent deny hook template comparison", () => {
   ) {
     const files: Record<string, string> = {
       [".goat-flow/hooks/deny-dangerous.sh"]: templates.dispatcher,
+      ".goat-flow/hooks/deny-git-mutations.sh": templates.git,
+      ".goat-flow/hooks/deny-dangerous/guard-runtime.sh": templates.runtime,
       ".goat-flow/hooks/deny-dangerous/patterns-shell.sh": templates.shell,
       ".goat-flow/hooks/deny-dangerous/patterns-paths.sh": templates.paths,
       ".goat-flow/hooks/deny-dangerous/patterns-writes.sh": templates.writes,
@@ -192,7 +324,8 @@ describe("agent deny hook template comparison", () => {
     };
     /** Resolve installed hook content from overrides before template defaults. */
     const readInstalledGuardrail = (path: string) => {
-      if (Object.hasOwn(overrides, path)) return overrides[path] ?? null;
+      if (Object.hasOwn(overrides, path))
+        return withGitRegistration(path, overrides[path] ?? null);
       return files[path] ?? null;
     };
     return readInstalledGuardrail;
@@ -249,6 +382,69 @@ describe("agent deny hook template comparison", () => {
       });
     });
   });
+
+  it(
+    "selects any present Codex Windows override instead of falling back to its default shell command",
+    { skip: process.platform !== "win32" },
+    () => {
+      withRealCodexAudit((targetProjectPath, auditContext) => {
+        const hookConfigPath = join(targetProjectPath, ".codex", "hooks.json");
+        const hookConfig = JSON.parse(
+          readFileSync(hookConfigPath, "utf-8"),
+        ) as {
+          hooks: {
+            PreToolUse: Array<{
+              hooks: Array<{
+                command?: string;
+                commandWindows?: string;
+              }>;
+            }>;
+          };
+        };
+        const registeredHook = hookConfig.hooks.PreToolUse[0]?.hooks[0];
+        assert.ok(registeredHook);
+        assert.equal(typeof registeredHook?.commandWindows, "string");
+        assert.equal(typeof registeredHook?.command, "string");
+        const defaultCommand = registeredHook.command;
+
+        // This remains a recognizable managed row but fails if audit incorrectly selects the Bash field on Windows.
+        registeredHook.command = `${defaultCommand}; printf "default command selected\\n" >&2; exit 99`;
+        writeFileSync(
+          hookConfigPath,
+          `${JSON.stringify(hookConfig, null, 2)}\n`,
+        );
+
+        assert.equal(checkHookRuntimeSmoke(auditContext), null);
+      });
+
+      withRealCodexAudit((targetProjectPath, auditContext) => {
+        const hookConfigPath = join(targetProjectPath, ".codex", "hooks.json");
+        const hookConfig = JSON.parse(
+          readFileSync(hookConfigPath, "utf-8"),
+        ) as {
+          hooks: {
+            PreToolUse: Array<{
+              hooks: Array<{
+                commandWindows?: string;
+              }>;
+            }>;
+          };
+        };
+        const registeredHook = hookConfig.hooks.PreToolUse[0]?.hooks[0];
+        assert.ok(registeredHook);
+
+        // Presence controls Codex's platform selection, so an empty override is invalid instead of falling back to Bash.
+        registeredHook.commandWindows = "";
+        writeFileSync(
+          hookConfigPath,
+          `${JSON.stringify(hookConfig, null, 2)}\n`,
+        );
+        const emptyOverrideFailure = checkHookRuntimeSmoke(auditContext);
+        assert.ok(emptyOverrideFailure);
+        assert.match(emptyOverrideFailure.message, /empty commandWindows/u);
+      });
+    },
+  );
 
   it("fails when an exact configured hook command points at a stale path", () => {
     assert.ok(denyCheck, "agent deny check should exist");
@@ -466,6 +662,14 @@ describe("agent deny hook template comparison", () => {
   /** Read canonical deny-dangerous templates used for drift comparisons. */
   function guardrailTemplates() {
     return {
+      git: readFileSync(
+        resolve(PROJECT_ROOT, "workflow/hooks/deny-git-mutations.sh"),
+        "utf-8",
+      ),
+      runtime: readFileSync(
+        resolve(PROJECT_ROOT, "workflow/hooks/deny-dangerous/guard-runtime.sh"),
+        "utf-8",
+      ),
       dispatcher: readFileSync(
         resolve(PROJECT_ROOT, "workflow/hooks/deny-dangerous.sh"),
         "utf-8",
@@ -508,6 +712,8 @@ describe("agent deny hook template comparison", () => {
   ) {
     const files: Record<string, string> = {
       [".goat-flow/hooks/deny-dangerous.sh"]: templates.dispatcher,
+      ".goat-flow/hooks/deny-git-mutations.sh": templates.git,
+      ".goat-flow/hooks/deny-dangerous/guard-runtime.sh": templates.runtime,
       ".goat-flow/hooks/deny-dangerous/patterns-shell.sh": templates.shell,
       ".goat-flow/hooks/deny-dangerous/patterns-paths.sh": templates.paths,
       ".goat-flow/hooks/deny-dangerous/patterns-writes.sh": templates.writes,
@@ -516,7 +722,8 @@ describe("agent deny hook template comparison", () => {
     };
     /** Resolve installed hook content from overrides before template defaults. */
     const readInstalledGuardrail = (path: string) => {
-      if (Object.hasOwn(overrides, path)) return overrides[path] ?? null;
+      if (Object.hasOwn(overrides, path))
+        return withGitRegistration(path, overrides[path] ?? null);
       return files[path] ?? null;
     };
     return readInstalledGuardrail;
@@ -548,6 +755,14 @@ describe("agent deny hook template comparison", () => {
   /** Read canonical deny-dangerous templates used for drift comparisons. */
   function guardrailTemplates() {
     return {
+      git: readFileSync(
+        resolve(PROJECT_ROOT, "workflow/hooks/deny-git-mutations.sh"),
+        "utf-8",
+      ),
+      runtime: readFileSync(
+        resolve(PROJECT_ROOT, "workflow/hooks/deny-dangerous/guard-runtime.sh"),
+        "utf-8",
+      ),
       dispatcher: readFileSync(
         resolve(PROJECT_ROOT, "workflow/hooks/deny-dangerous.sh"),
         "utf-8",
@@ -590,6 +805,8 @@ describe("agent deny hook template comparison", () => {
   ) {
     const files: Record<string, string> = {
       [".goat-flow/hooks/deny-dangerous.sh"]: templates.dispatcher,
+      ".goat-flow/hooks/deny-git-mutations.sh": templates.git,
+      ".goat-flow/hooks/deny-dangerous/guard-runtime.sh": templates.runtime,
       ".goat-flow/hooks/deny-dangerous/patterns-shell.sh": templates.shell,
       ".goat-flow/hooks/deny-dangerous/patterns-paths.sh": templates.paths,
       ".goat-flow/hooks/deny-dangerous/patterns-writes.sh": templates.writes,
@@ -598,7 +815,8 @@ describe("agent deny hook template comparison", () => {
     };
     /** Resolve installed hook content from overrides before template defaults. */
     const readInstalledGuardrail = (path: string) => {
-      if (Object.hasOwn(overrides, path)) return overrides[path] ?? null;
+      if (Object.hasOwn(overrides, path))
+        return withGitRegistration(path, overrides[path] ?? null);
       return files[path] ?? null;
     };
     return readInstalledGuardrail;
@@ -633,6 +851,14 @@ describe("agent deny hook template comparison", () => {
   /** Read canonical deny-dangerous templates used for drift comparisons. */
   function guardrailTemplates() {
     return {
+      git: readFileSync(
+        resolve(PROJECT_ROOT, "workflow/hooks/deny-git-mutations.sh"),
+        "utf-8",
+      ),
+      runtime: readFileSync(
+        resolve(PROJECT_ROOT, "workflow/hooks/deny-dangerous/guard-runtime.sh"),
+        "utf-8",
+      ),
       dispatcher: readFileSync(
         resolve(PROJECT_ROOT, "workflow/hooks/deny-dangerous.sh"),
         "utf-8",
@@ -675,6 +901,8 @@ describe("agent deny hook template comparison", () => {
   ) {
     const files: Record<string, string> = {
       [".goat-flow/hooks/deny-dangerous.sh"]: templates.dispatcher,
+      ".goat-flow/hooks/deny-git-mutations.sh": templates.git,
+      ".goat-flow/hooks/deny-dangerous/guard-runtime.sh": templates.runtime,
       ".goat-flow/hooks/deny-dangerous/patterns-shell.sh": templates.shell,
       ".goat-flow/hooks/deny-dangerous/patterns-paths.sh": templates.paths,
       ".goat-flow/hooks/deny-dangerous/patterns-writes.sh": templates.writes,
@@ -683,7 +911,8 @@ describe("agent deny hook template comparison", () => {
     };
     /** Resolve installed hook content from overrides before template defaults. */
     const readInstalledGuardrail = (path: string) => {
-      if (Object.hasOwn(overrides, path)) return overrides[path] ?? null;
+      if (Object.hasOwn(overrides, path))
+        return withGitRegistration(path, overrides[path] ?? null);
       return files[path] ?? null;
     };
     return readInstalledGuardrail;
@@ -727,6 +956,14 @@ describe("agent deny hook template comparison", () => {
   /** Read canonical deny-dangerous templates used for drift comparisons. */
   function guardrailTemplates() {
     return {
+      git: readFileSync(
+        resolve(PROJECT_ROOT, "workflow/hooks/deny-git-mutations.sh"),
+        "utf-8",
+      ),
+      runtime: readFileSync(
+        resolve(PROJECT_ROOT, "workflow/hooks/deny-dangerous/guard-runtime.sh"),
+        "utf-8",
+      ),
       dispatcher: readFileSync(
         resolve(PROJECT_ROOT, "workflow/hooks/deny-dangerous.sh"),
         "utf-8",
@@ -769,6 +1006,8 @@ describe("agent deny hook template comparison", () => {
   ) {
     const files: Record<string, string> = {
       [".goat-flow/hooks/deny-dangerous.sh"]: templates.dispatcher,
+      ".goat-flow/hooks/deny-git-mutations.sh": templates.git,
+      ".goat-flow/hooks/deny-dangerous/guard-runtime.sh": templates.runtime,
       ".goat-flow/hooks/deny-dangerous/patterns-shell.sh": templates.shell,
       ".goat-flow/hooks/deny-dangerous/patterns-paths.sh": templates.paths,
       ".goat-flow/hooks/deny-dangerous/patterns-writes.sh": templates.writes,
@@ -777,7 +1016,8 @@ describe("agent deny hook template comparison", () => {
     };
     /** Resolve installed hook content from overrides before template defaults. */
     const readInstalledGuardrail = (path: string) => {
-      if (Object.hasOwn(overrides, path)) return overrides[path] ?? null;
+      if (Object.hasOwn(overrides, path))
+        return withGitRegistration(path, overrides[path] ?? null);
       return files[path] ?? null;
     };
     return readInstalledGuardrail;

@@ -86,7 +86,11 @@ export function redactPlanExportRecord(
     sourceFile: scrubDurableText(record.sourceFile),
     title: scrubDurableText(record.title),
     status: scrubDurableText(record.status),
+    statusReason: scrubDurableText(record.statusReason),
     dependencies: scrubDurableText(record.dependencies),
+    ...(record.lane !== undefined && {
+      lane: scrubDurableText(record.lane),
+    }),
     objective: scrubDurableText(record.objective),
     scopeMarkdown: scrubDurableText(record.scopeMarkdown),
     boundaryMarkdown: scrubDurableText(record.boundaryMarkdown),
@@ -121,6 +125,8 @@ export function redactPlanExportRecord(
     verificationMarkdown: scrubDurableText(record.verificationMarkdown),
     exitCriteriaMarkdown: scrubDurableText(record.exitCriteriaMarkdown),
     stopMarkdown: scrubDurableText(record.stopMarkdown),
+    // Parse warnings can echo malformed user text, so previews scrub them before they reach a terminal or generated file.
+    warnings: record.warnings.map((warning) => scrubDurableText(warning)),
     // Effort numbers are safe to preserve, while nested author explanations need redaction.
     ...(record.effort && {
       effort: redactExportEffort(record.effort),
@@ -136,6 +142,7 @@ function markdownExportFilename(sourceFile: string): string {
 /** Render the optional effort metadata shared by legacy and current milestones. */
 function renderEffortMetadata(record: PlanExportRecord): string[] {
   const lines: string[] = [];
+  // The headline forecast is the first effort detail a reader needs.
   if (record.effort) {
     lines.push(renderEffortLine(record.effort));
   }
@@ -143,12 +150,15 @@ function renderEffortMetadata(record: PlanExportRecord): string[] {
   if (record.effort?.forecastBasis) {
     lines.push(renderForecastBasisLine(record.effort.forecastBasis));
   }
+  // The range shows the reader how much variation surrounds the likely estimate.
   if (record.effort?.forecastRange) {
     lines.push(renderForecastRangeLine(record.effort.forecastRange));
   }
+  // Actual effort appears after the forecast so readers can compare planned and recorded work.
   if (record.effort?.actual) {
     lines.push(renderActualLine(record.effort.actual));
   }
+  // Administrative time remains hidden when the milestone author supplied no estimate.
   if (record.planAdminEstimate?.estimateMinutes !== undefined) {
     lines.push(
       `**Plan/admin overhead:** ${record.planAdminEstimate.estimateMinutes} min other`,
@@ -175,7 +185,13 @@ export function renderPlanExportMarkdown(record: PlanExportRecord): string {
     `# ${record.title}`,
     "",
     `**Status:** ${record.status}`,
+    ...(record.statusReason
+      ? [`**Status reason:** ${record.statusReason}`]
+      : []),
     `**Depends on:** ${providedOrMissing(record.dependencies, "none declared")}`,
+    ...(record.lane === undefined
+      ? []
+      : [record.lane === "" ? "**Lane:**" : `**Lane:** ${record.lane}`]),
     ...renderEffortMetadata(record),
     `**Objective:** ${providedOrMissing(record.objective, missingText)}`,
     "",
@@ -242,23 +258,25 @@ function assertOutputPathsAvailable(
 
 /**
  * Require every export destination to be a single-link regular file or absent before writing.
+ * This runs under force too: replacement never authorizes a symlink, hard link, or directory that redirects a generated filename.
+ * An unsafe destination stops the whole export before the user receives a partial bundle.
  *
- * Runs even under force: replacement authorizes new content, never writing through a symlink, hardlink, or directory that shadows a generated
- * filename.
- * Throws a usage-safe error naming the first unsafe destination so nothing is written.
+ * @throws PlansExportInputError when a destination is unreadable, redirected, shared, or not a regular file
  */
 function assertWritableDestinations(outputPaths: string[]): void {
+  // Every requested export must be safe before the command writes the first artifact.
   for (const outputPath of outputPaths) {
     let destinationStats;
     try {
       destinationStats = lstatSync(outputPath);
     } catch (error) {
-      // Absent is the normal case: the export write creates the file.
+      // Example: the user chose a new filename, so the missing destination is safe to create.
       if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
       throw new PlansExportInputError(
         `Cannot inspect export output ${outputPath} before writing.`,
       );
     }
+    // A symlink, directory, or shared hard link could redirect or split the user's export unexpectedly.
     if (!destinationStats.isFile() || destinationStats.nlink !== 1) {
       throw new PlansExportInputError(
         `Export output must be a single-link regular file or absent: ${outputPath}. Move the conflicting path before exporting.`,
@@ -280,18 +298,20 @@ function assertRealDirectoryPathOrAbsent(
     .filter(Boolean);
   let inspectedPath = rootPath;
 
+  // Each existing parent must be a real directory before recursive creation can continue safely.
   for (const component of pathComponents) {
     inspectedPath = join(inspectedPath, component);
     let componentStats;
     try {
       componentStats = lstatSync(inspectedPath);
     } catch (error) {
-      // Once a component is absent, all descendants are absent and mkdirSync may create them.
+      // Example: the user named a new export folder, so its first missing component can be created with all descendants.
       if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
       throw new PlansExportInputError(
         `Cannot inspect ${outputLabel} path component ${inspectedPath} before writing.`,
       );
     }
+    // A file or symlink in the path means the export would not land in the directory the user selected.
     if (!componentStats.isDirectory()) {
       throw new PlansExportInputError(
         `${outputLabel} must be a real directory or absent at every existing path component: ${inspectedPath}. Move the conflicting path before exporting.`,
@@ -306,6 +326,7 @@ function assertRealDirectoryPathOrAbsent(
  */
 function assertUniqueOutputPaths(outputPaths: string[]): void {
   const uniqueOutputPaths = new Set(outputPaths);
+  // One destination per milestone prevents later exports from overwriting earlier ones in the same run.
   if (uniqueOutputPaths.size === outputPaths.length) return;
   throw new PlansExportInputError(
     "Multiple milestones resolve to the same export filename after redaction and sanitization. Rename the source milestone files before exporting.",
@@ -327,13 +348,14 @@ function assertOutputPathsDoNotAliasSources(
     try {
       return sourcePaths.has(realpathSync(outputPath));
     } catch (error) {
-      // An absent destination cannot alias an existing source; every other lookup failure is unsafe.
+      // Example: a new export filename does not resolve yet and therefore cannot point back to the source milestone.
       if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
       throw new PlansExportInputError(
         `Cannot inspect export output ${outputPath} for source aliasing.`,
       );
     }
   });
+  // No alias means the generated output cannot overwrite a milestone the user is exporting.
   if (!aliasedPath) return;
   throw new PlansExportInputError(
     `Export --output would overwrite source milestone ${aliasedPath}. Choose a separate export destination.`,
@@ -398,6 +420,7 @@ export function writeJsonExport(
   sourceDirectory: string,
   sourceFiles: readonly string[],
 ): string[] {
+  // A directory passed as a JSON filename cannot hold the single artifact the user requested.
   if (existsSync(outputPath) && statSync(outputPath).isDirectory()) {
     throw new PlansExportInputError(
       `JSON --output must be a file: ${outputPath}.`,

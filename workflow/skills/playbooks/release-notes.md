@@ -1,9 +1,11 @@
 ---
-goat-flow-reference-version: "1.16.0"
+goat-flow-reference-version: "1.17.0"
 ---
 # Release Notes
 
 Use this when writing a user-facing release announcement: GitHub release body, app-store notes, email, in-app "what's new", or short social copy. For the durable in-repo change ledger, load [`changelog.md`](./changelog.md) first.
+
+> **Illustrative examples below define shape only; they are not incident evidence.**
 
 ## Availability Check
 
@@ -22,7 +24,7 @@ An authoritative project release-note policy controls the chosen surface, voice,
 
 ## Prose Routing
 
-This playbook owns audience, evidence selection, output surface, and release-note shape. Set those here, then apply [`writing-style.md`](./writing-style.md) as the core prose pass.
+This playbook owns audience, evidence selection, output surface, and release-note shape. Set those here, then apply [`writing-human-facing-prose.md`](./writing-human-facing-prose.md) as the core prose pass.
 
 Load [`writing-structure-diagnostics.md`](./writing-structure-diagnostics.md) only when a document-level assembly defect remains, and [`writing-sentence-diagnostics.md`](./writing-sentence-diagnostics.md) only when a sentence-level reader cost remains. If both apply, repair structure first. Diagnostics may refine admitted prose but never add or remove release facts, change version attribution, or expand the write scope.
 
@@ -165,7 +167,7 @@ Before publishing:
 ## Related References
 
 - [`changelog.md`](./changelog.md) - source-of-truth release ledger.
-- [`writing-style.md`](./writing-style.md) - core correctness and diagnostic routing after audience and selection are settled.
+- [`writing-human-facing-prose.md`](./writing-human-facing-prose.md) - core correctness and diagnostic routing after audience and selection are settled.
 - [`writing-structure-diagnostics.md`](./writing-structure-diagnostics.md) - optional document-level assembly diagnosis before sentence work.
 - [`writing-sentence-diagnostics.md`](./writing-sentence-diagnostics.md) - optional sentence-level diagnosis after structure is sound.
 - Project's prior release announcements - match voice and structure before inventing a new one.

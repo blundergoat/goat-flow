@@ -1,14 +1,13 @@
 /**
- * The shared vocabulary every review-report check speaks.
+ * Shared report fields and authority metadata used throughout review validation.
+ * Use these types and JSON helpers when capturing a selection or checking a saved receipt.
  *
- * A review report is validated by several independent passes - anchors, integrity fields, refutation ledger, sections, ship verdict - and they all
- * need the same things: the shape of a violation, the stable check id a user sees beside it, and how to slice the report into addressable sections
- * and lines.
- *
- * Keeping that here means a finding raised by any pass carries the same identity and points at the same line the author is looking at.
- * The check-id registry is the load-bearing part: those ids appear in user-facing output and in review contracts, so a code without one would surface
- * as an unattributable error.
+ * Stable issue codes connect every failed check to the report line the reviewer can repair.
+ * Canonical serialization keeps the same selected bytes identifiable across capture, anchors, and recorded gate attempts.
  */
+import { createHash } from "node:crypto";
+import { isAbsolute } from "node:path";
+
 /** One actionable validation issue, optionally tied to a report line. */
 export interface ReviewValidationViolation {
   checkId: ReviewCheckId;
@@ -24,6 +23,9 @@ export interface ReviewValidationResult {
   warnings: ReviewValidationViolation[];
 }
 
+/** Validation phase controls whether the report is still awaiting its final proof. */
+export type ReviewValidationStage = "draft" | "final";
+
 /** One report line with its one-based source location. */
 export interface LocatedLine {
   line: number;
@@ -38,6 +40,12 @@ export interface MarkdownSection {
 
 /** Refutation claim extracted while validating the integrity surface. */
 export interface IntegrityResult {
+  fields: IntegrityFieldMap;
+  flags: ReadonlySet<string>;
+  isCompact: boolean;
+  validationStage: ReviewValidationStage;
+  finalDispositions: Record<string, FinalDisposition> | null;
+  ledgerIds: string[] | null;
   anchorAuthority: ReviewAnchorAuthority;
   conclusion: ReviewIntegrityConclusion | null;
   isRiskDepthDeclined: boolean;
@@ -51,8 +59,119 @@ export interface IntegrityResult {
   verdictCounts: VerdictCountClaim | null;
 }
 
+/** The final outcome of one suspicion; refuted items appear only in ledger/history, never active findings. */
+export type FinalDisposition =
+  "confirmed" | "adjusted" | "refuted" | "unresolved";
+
+/**
+ * Read canonical metadata before validating the report's manifests and per-ID maps.
+ *
+ * Invalid JSON adds a violation; an absent optional field returns null without inventing a value.
+ *
+ * @param fields - visible integrity rows; an absent optional row returns null
+ * @param label - metadata field the reviewer can repair
+ * @param violations - appended JSON grammar failures
+ * @returns parsed JSON, or null when absent or invalid; required-row checks own missing metadata
+ */
+export function readIntegrityJson(
+  fields: IntegrityFieldMap,
+  label: string,
+  violations: ReviewValidationViolation[],
+): JsonValue | null {
+  const field = fields.get(label);
+  // Missing optional metadata has no evidence to parse; required omissions are reported by their field owner.
+  if (!field) return null;
+  try {
+    return parseReviewJson(field.value, true);
+  } catch (error) {
+    // A copied map with duplicate keys or noncanonical JSON needs a corrected row before any of its IDs can count.
+    addViolation(
+      violations,
+      "integrity-format",
+      field.line,
+      `${label} requires canonical JSON: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    return null;
+  }
+}
+
+/**
+ * Require a limitation's explanation to name the affected findings, gates, or evidence totals.
+ * Use after checking the trigger; the explanation discloses a claim without proving the underlying investigation.
+ *
+ * @param integrity - parsed report; an absent flag leaves this explanation inapplicable
+ * @param flag - declared limitation whose affected evidence must remain visible
+ * @param references - exact IDs or totals to identify; empty means there is no affected evidence to name
+ *
+ * @param violations - appended failures when the report hides an affected reference
+ */
+export function requireDegradationReferences(
+  integrity: IntegrityResult,
+  flag: string,
+  references: string[],
+  violations: ReviewValidationViolation[],
+): void {
+  // Without this declared limitation or affected evidence, there is no reference requirement to enforce here.
+  if (!integrity.flags.has(flag) || references.length === 0) return;
+  const evidence = readIntegrityJson(
+    integrity.fields,
+    "Degradation evidence",
+    violations,
+  );
+  const reason =
+    evidence && typeof evidence === "object" && !Array.isArray(evidence)
+      ? evidence[flag]
+      : null;
+  // Matching whole reference tokens prevents R-0010 or 11 OBSERVED from supplying R-001 or 1 OBSERVED evidence.
+  const namesEveryReference = references.every((reference) => {
+    const literal = reference.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+    return (
+      typeof reason === "string" &&
+      new RegExp(`(?:^|[^A-Za-z0-9])${literal}(?=$|[^A-Za-z0-9])`, "u").test(
+        reason,
+      )
+    );
+  });
+  // A generic limitation cannot tell the reader which result or check needs follow-up.
+  if (!namesEveryReference)
+    addViolation(
+      violations,
+      "integrity-format",
+      integrity.fields.get("Degradation evidence")?.line ?? null,
+      `${flag} evidence must name ${references.join(", ")}`,
+    );
+}
+
+/**
+ * Match a whole missing path in its disclosure so readers can identify which selected source was not examined.
+ *
+ * @param reason - omission explanation; empty text cannot identify a missing file
+ * @param path - one nonempty selected path; quote names containing spaces or separators in the explanation
+ * @returns true when the explanation names this exact file, rather than a longer filename containing it
+ */
+export function disclosureNamesPath(reason: string, path: string): boolean {
+  const quotedStrings = /"(?:[^"\\]|\\.)*"/gu;
+  // JSON quoting preserves spaces and separators in filenames without accepting a substring of another quoted path.
+  if (
+    [...reason.matchAll(quotedStrings)].some(
+      (match) => match[0] === JSON.stringify(path),
+    )
+  )
+    return true;
+  // Delimiter-bearing filenames need the quoted form so prose separators cannot change which file was omitted.
+  if (!/^[\w./@+-]+$/u.test(path)) return false;
+  const literal = path.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  const prose = reason.replace(quotedStrings, " ");
+  return new RegExp(
+    `(?:^|[\\s,;:([\\]{}'\x60])${literal}(?=$|[\\s,;:()\\[\\]{}'\x60]|\\.(?=\\s|$))`,
+    "u",
+  ).test(prose);
+}
+
 /** Parsed finding definition used for stable-ID and conditional-section checks. */
 export interface FindingDefinition {
+  /** Original visible capsule; absent only for legacy programmatic consumers outside report parsing. */
+  text?: string;
   action: FindingAction;
   evidence: "INFERRED" | "OBSERVED" | null;
   id: string;
@@ -93,8 +212,11 @@ export interface ShipVerdictClaim {
 
 /** Source whose bytes semantic anchors must be resolved against. */
 export type ReviewAnchorAuthority =
-  | { kind: "git-object"; oid: string }
-  | { kind: "worktree" }
+  | {
+      kind: "snapshot";
+      snapshot: ReviewAuthoritySnapshot;
+      readAnchor: (path: string, side?: "old" | "new") => Buffer;
+    }
   | { kind: "invalid" };
 
 /** Parsed Evidence totals and their report location. */
@@ -116,13 +238,28 @@ export interface VerdictCountClaim {
 /** Canonical authority-bearing fields extracted from Scope snapshot. */
 export interface ParsedScopeSnapshot {
   authority: string;
+  base: string;
   bundle: string;
+  chunking: string;
   drift: string;
   head: string;
   isAreaAudit: boolean;
   signals: string;
   source: string;
   uncommitted: string;
+}
+
+/** Numeric scope evidence parsed from a full or compact report receipt. */
+export interface ReviewSizeClaim {
+  fileCount: number;
+  unitCount: number;
+  unitLabel: string;
+  line: number;
+}
+
+/** Compact scope evidence plus the terminal chunking state it declares. */
+export interface CompactReviewSizeClaim extends ReviewSizeClaim {
+  chunking: string;
 }
 
 /** Stable V-number shown beside each issue so a user can look the check up. */
@@ -146,6 +283,13 @@ const CHECK_IDENTIFIER_BY_CODE = {
   "finding-evidence": "V4",
   "finding-proof": "V4",
   "integrity-format": "V5",
+  "authority-format": "V5",
+  "authority-object": "V5",
+  "authority-path": "V5",
+  "authority-unsupported": "V5",
+  "authority-drift": "V5",
+  "gate-origin": "V5",
+  "gate-state": "V5",
   "integrity-section-duplicate": "V5",
   "integrity-field-duplicate": "V5",
   "ship-verdict-format": "V5",
@@ -191,6 +335,23 @@ export const TOP_FIVE_HEADINGS = [
 export const FINDING_CANDIDATE = /^\s*-\s+\S/u;
 export const FINDING_PREFIX =
   /^\s*-\s+(R-\d{3})\s+\[(MUST|SHOULD|MAY):(patch|needs-decision|intent-mismatch|needs-signal|pre-existing)\](?:\s+\[(?:(?:overlap-confirmed|bot-only-locally-verified|disputed-match):[^\]\s]+|local-only|CONFIRMED-CROSS-MODEL)\])*\s+\*\*[^*\n]+\*\*/u;
+
+/**
+ * Read classification tags before the finding title; quoted tags in explanations carry no review credit.
+ *
+ * @param text - visible finding line; ordinary prose or malformed findings return no tags
+ * @returns declared provenance/refuter tags, excluding severity/action; empty means none were declared
+ */
+export function readFindingPrefixTags(text: string): string[] {
+  const prefix = text.match(FINDING_PREFIX)?.[0];
+  // Only a valid finding prefix can declare who verified the concern or how it was discovered.
+  if (!prefix) return [];
+  const tags = prefix.slice(prefix.indexOf("]") + 1, prefix.indexOf("**"));
+  return [...tags.matchAll(/\[([^\]]+)\]/gu)].map((match) =>
+    match[0].slice(1, -1),
+  );
+}
+
 export const EVIDENCE_TAG =
   /(?:^|\|\s*)Evidence:\s*(OBSERVED|INFERRED)(?=\s*(?:\||$))/u;
 export const PROOF_TAG =
@@ -204,15 +365,26 @@ export const REFUTATION_LEDGER_PATH =
   /^\.goat-flow\/logs\/review\/goat-review-refutations\.[^\/\s]+\.txt$/u;
 export const REVIEW_BUNDLE_PATH =
   /^\.goat-flow\/logs\/review\/goat-review-bundle\.[^\/\s]+\.diff$/u;
-export const IMMUTABLE_OBJECT_IDENTIFIER = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/iu;
 export const SCOPE_SNAPSHOT =
-  /^source=(worktree|staged|unstaged|PR(?:\s+#[^,\s]+)?|branch diff|area|explicit path list),\s*base=([^,]+),\s*head=([^,]+),\s*authority=([^,]+),\s*drift=([^,]+),\s*uncommitted=(yes|no|n\/a),\s*signals=(\d+),\s*bundle=([^,]+),\s*chunking=(\S.*)$/iu;
+  /^source=(worktree|staged|unstaged|PR(?:\s+#[^,\s]+)?|branch diff|range \.{2,3}|commit|area|explicit path list),\s*base=([^,]+),\s*head=([^,]+),\s*authority=([^,]+),\s*drift=([^,]+),\s*uncommitted=(yes|no|n\/a),\s*signals=(\d+),\s*bundle=([^,]+),\s*chunking=(\S.*)$/iu;
+/** Twenty is binding because goat-review forbids larger file scopes from entering Pass 1 unchunked. */
+export const REVIEW_CHUNK_FILE_LIMIT = 20;
+/** Three thousand is binding because goat-review forbids larger diffs from entering Pass 1 unchunked. */
+export const REVIEW_CHUNK_CHANGED_LINE_LIMIT = 3000;
+export const FULL_REVIEW_SIZE_VALUE =
+  /^(\d+)\s+files?,\s*(\d+)\s+(changed[- ]lines?|clusters?)\s+\(source coverage: (\d+)\/(\d+) exactly once\)$/iu;
+export const COMPACT_REVIEW_SCOPE_SIZE =
+  /^\s*Scope:\s*\S.*?\b(\d+)\s+files?\s+(?:and|,)\s*(\d+)\s+changed[- ]lines?\b.*;\s*chunking=(no|none|accepted)\.?\s*$/iu;
 
 export const REQUIRED_INTEGRITY_FIELDS: ReadonlyArray<
   readonly [label: string, valuePattern: RegExp]
 > = [
   ["Scope snapshot", /\S/u],
+  ["Authority snapshot", /\S/u],
+  ["Gate authority", /\S/u],
   ["Files opened in Pass 2", /^\d+\/\d+\b/u],
+  ["Source coverage", /\S/u],
+  ["Degradation evidence", /\S/u],
   ["Evidence", /^\d+ OBSERVED\s*\/\s*\d+ INFERRED$/u],
   ["Verdicts", /^\d+\/\d+\/\d+\/\d+$/u],
   ["Refutations logged", /^\d+(?:\s+\(persist-skipped\))?$/u],
@@ -236,14 +408,17 @@ export const AUTOMATED_REVIEW_VALUE =
   /^(?:n\/a|no-automated-review-present|overlap-confirmed=\d+,\s*local-only=\d+,\s*bot-only-locally-verified=\d+,\s*disputed-match=\d+;\s*.+)$/u;
 export const REFUTER_VALUE =
   /^(?:yes|no|skipped);\s*confirmed=\d+,\s*refuted=\d+,\s*unresolved=\d+,\s*leads-verified=\d+,\s*model=\S.+$/u;
-export const COMPACT_INTEGRITY =
-  /^\s*Review Integrity:\s*(confident|coverage-degraded|high-inference|partial);\s*\d+\/\d+\s+files opened;\s*no degradation flags;\s*validator=(?:validated|validator-unavailable)\.?\s*$/u;
+const COMPACT_INTEGRITY =
+  /^\s*Review Integrity:\s*(confident|coverage-degraded|high-inference|partial);\s*(\d+)\/(\d+)\s+files opened;\s*(?:no degradation flags|flags=([^;]+));\s*validator=(?:validated|validator-unavailable)\.?\s*$/u;
+const COMPACT_DRAFT_INTEGRITY =
+  /^\s*Review Integrity:\s*(confident|coverage-degraded|high-inference|partial);\s*(\d+)\/(\d+)\s+files opened;\s*(?:no degradation flags|flags=([^;]+));\s*validator=pending\.?\s*$/u;
 export const COMPACT_CLEAN_REVIEW_FIELDS = [
   {
     label: "Scope",
     prefix: /^\s*Scope:/u,
-    value: /^\s*Scope:\s*\S.*$/u,
-    requirement: "must not be empty",
+    value: /^\s*Scope:\s*\S.*;\s*chunking=(?:no|none|accepted)\.?\s*$/iu,
+    requirement:
+      "must end with chunking=no, chunking=none, or chunking=accepted",
   },
   {
     label: "Zero findings",
@@ -270,16 +445,18 @@ export const SHIP_VERDICT_LADDER = [
   "NO",
 ] as const;
 
-/** One durable ledger record; every field is mandatory and single-line. */
+/** One ledger record; every field is mandatory, single-line, and free of separator pipes. */
 export const REFUTATION_LEDGER_RECORD =
-  /^-\s+R-\d{3}\s+\|\s+Suspicion:\s+[^|]*\S[^|]*\s+\|\s+Evidence:\s+[^|]*\S[^|]*\s+\|\s+Rationale:\s+\S.*$/u;
+  /^-\s+R-\d{3}\s+\|\s+Suspicion:\s+[^|]*[^\s|][^|]*\s+\|\s+Evidence:\s+[^|]*[^\s|][^|]*\s+\|\s+Rationale:\s+[^|]*[^\s|][^|]*$/u;
+
+/** Exact in-memory separator between a report draft and its transient ledger. */
+export const REVIEW_DRAFT_LEDGER_MARKER =
+  "<!-- goat-flow-review-ledger-draft -->";
 
 export const KNOWN_DEGRADATION_FLAGS = new Set([
   "none",
   "persist-skipped: redactor-unavailable",
   "chunked-partial",
-  "large-diff-unchunked",
-  "large-area-unchunked",
   "gates-not-run",
   "gate-evidence-incomplete",
   "risk-depth-declined",
@@ -301,6 +478,12 @@ export const KNOWN_DEGRADATION_FLAGS = new Set([
   "refuter-citation-unverified",
 ]);
 
+/** Historical flags that described a workflow state the current skill forbids. */
+export const RETIRED_DEGRADATION_FLAGS = new Set([
+  "large-diff-unchunked",
+  "large-area-unchunked",
+]);
+
 /**
  * Return every matching H2 section without consuming nested H3 headings.
  *
@@ -313,6 +496,7 @@ export function readSections(
   heading: string,
 ): MarkdownSection[] {
   const sections: MarkdownSection[] = [];
+  // Only visible H2 headings can establish the report sections that later checks trust.
   for (let index = 0; index < lines.length; index += 1) {
     const match = lines[index]?.match(/^##\s+(.+?)(?:\s+<!--.*)?\s*$/u);
     // A reviewer who wrote `## Ship Verdict ##` sees "Ship Verdict" rendered, so the section is
@@ -321,7 +505,9 @@ export function readSections(
     // Not the section being looked for, so keep scanning the rest of the report.
     if (renderedHeading !== heading) continue;
     let endIndex = lines.length;
+    // A section ends at the next H2; nested headings remain part of its evidence.
     for (let end = index + 1; end < lines.length; end += 1) {
+      // The next report section must not lend fields or anchors to the current one.
       if (/^##\s+/u.test(lines[end] ?? "")) {
         endIndex = end;
         break;
@@ -358,6 +544,7 @@ export function readSection(
  * @param violations - shared violation list, appended in report order so a reader sees issues top-down; a violation makes the report fail
  * @param code - stable issue code, which carries the check id a reader sees beside the message
  * @param line - report line the issue belongs to; null means the issue is about the report as a whole
+ *
  * @param message - user-facing explanation of what is wrong and what would satisfy the check
  */
 export function addViolation(
@@ -380,6 +567,7 @@ export function addViolation(
  * @param warnings - shared advisory list; entries here inform the author without changing the pass/fail verdict
  * @param code - stable issue code, which carries the check id a reader sees beside the message
  * @param line - report line the issue belongs to; null means the issue is about the report as a whole
+ *
  * @param message - user-facing explanation of what is wrong and what would satisfy the check
  */
 export function addWarning(
@@ -404,3 +592,626 @@ export interface IntegrityField {
 
 /** Review Integrity rows keyed by field name; an absent key means the author omitted that row. */
 export type IntegrityFieldMap = Map<string, IntegrityField>;
+
+/**
+ * Select the stage-specific grammar for one validator receipt.
+ *
+ * @param label - integrity row label being checked
+ * @param valuePattern - final-report grammar owned by the row registry
+ * @param validationStage - pending draft or completed final report
+ *
+ * @returns the value grammar that binds at the selected stage
+ */
+export function reviewIntegrityValuePattern(
+  label: string,
+  valuePattern: RegExp,
+  validationStage: ReviewValidationStage,
+): RegExp {
+  return label === "Review validator" && validationStage === "draft"
+    ? /^pending$/u
+    : valuePattern;
+}
+
+/**
+ * Explain one malformed integrity row in stage-aware terms.
+ *
+ * @param label - integrity row label being checked
+ * @param field - parsed row, or undefined when the row is absent
+ * @param validationStage - pending draft or completed final report
+ *
+ * @returns a user-facing violation message
+ */
+export function reviewIntegrityFormatMessage(
+  label: string,
+  field: IntegrityField | undefined,
+  validationStage: ReviewValidationStage,
+): string {
+  // An omitted field needs an actionable missing-field message instead of a value-format error.
+  if (!field) return `Review Integrity is missing ${label}`;
+  // A draft is still awaiting final proof, so its validator receipt must explicitly remain pending.
+  if (label === "Review validator" && validationStage === "draft") {
+    return "Review validator must remain pending until final validation passes";
+  }
+  return `Review Integrity ${label} has an invalid value`;
+}
+
+/**
+ * Return whether measured scope requires accepted chunks under the skill contract.
+ *
+ * @param fileCount - files declared by the review receipt
+ * @param unitCount - changed-line or cluster count declared by the receipt
+ * @param unitLabel - unit paired with unitCount
+ *
+ * @returns true only when a binding file or changed-line threshold is exceeded
+ */
+export function reviewScopeExceedsChunkLimit(
+  fileCount: number,
+  unitCount: number,
+  unitLabel: string,
+): boolean {
+  const changedLines = /^changed/iu.test(unitLabel) ? unitCount : 0;
+  return (
+    fileCount > REVIEW_CHUNK_FILE_LIMIT ||
+    changedLines > REVIEW_CHUNK_CHANGED_LINE_LIMIT
+  );
+}
+
+/**
+ * Match the stage-specific compact validator receipt.
+ *
+ * @param line - compact Review Integrity line
+ * @param validationStage - pending draft or completed final report
+ * @returns the stage-specific match, or null for malformed input
+ */
+export function matchCompactReviewIntegrity(
+  line: string,
+  validationStage: ReviewValidationStage,
+): RegExpMatchArray | null {
+  const pattern =
+    validationStage === "draft" ? COMPACT_DRAFT_INTEGRITY : COMPACT_INTEGRITY;
+  return line.match(pattern);
+}
+
+/**
+ * Values admitted by review requests and receipts; null is an explicit absence marker.
+ */
+export type JsonValue =
+  null | boolean | number | string | JsonValue[] | JsonRecord;
+/**
+ * Named request or receipt fields; schema checks reject missing and unknown keys.
+ */
+export interface JsonRecord {
+  [key: string]: JsonValue;
+}
+/**
+ * Regular-file modes supported by byte authority; executable permission remains part of the selected state.
+ */
+export type FileMode = "100644" | "100755";
+/**
+ * One selected side; absent records a missing file, while file records identify its raw bytes and origin.
+ */
+export type FileState =
+  | { kind: "absent" }
+  | {
+      kind: "file";
+      from: "git" | "index" | "live";
+      mode: FileMode;
+      sha256: string;
+      blob?: string;
+      revision?: string;
+    };
+/**
+ * One literal selected path; old is null when the request has no comparison side.
+ */
+export interface InventoryMember {
+  path: string;
+  old: FileState | null;
+  new: FileState;
+}
+/**
+ * A staged path and its semantic flags; timestamps are excluded so a Git refresh does not invalidate the review.
+ */
+export interface IndexEntry {
+  path: string;
+  mode: FileMode;
+  blob: string;
+  stage: number;
+  intentToAdd: boolean;
+  skipWorktree: boolean;
+  assumeUnchanged: boolean;
+}
+/**
+ * Transient local Git reads for one selected project; objectFormat is null outside Git and cached blobs never persist.
+ */
+export interface GitContext {
+  root: string;
+  objectFormat: "sha1" | "sha256" | null;
+  blobs: Map<string, Buffer>;
+  index?: IndexEntry[];
+}
+/**
+ * Resolved source and its old/new files; null before means no comparison, and null index means no staged identity is needed.
+ */
+export interface SelectedFiles {
+  source: JsonRecord;
+  before: Map<string, FileState> | null;
+  after: Map<string, FileState>;
+  index: string | null;
+}
+
+/**
+ * Retain the selected files and source identity while reviewing and validating the report.
+ *
+ * The fingerprint binds this metadata; recapture compares with it and never silently replaces it.
+ * Null workspace means no executable source state was captured; an empty inventory means no selected file changes.
+ */
+export interface ReviewAuthoritySnapshot {
+  schema: "goat-review-authority/v1";
+  objectFormat: "sha1" | "sha256" | null;
+  source: JsonRecord;
+  index: string | null;
+  inventory: InventoryMember[];
+  renames: { old: string; new: string }[];
+  workspace: string | null;
+  fingerprint: string;
+}
+
+/**
+ * Return the captured review source beside the operator's current checkout identity.
+ *
+ * Use the authority throughout the review and the checkout measurements when deciding whether a gate can earn execution credit.
+ * Null checkout fingerprint means no execution measurement is available; reason explains why.
+ */
+export interface ReviewSnapshotEnvelope {
+  authority: ReviewAuthoritySnapshot;
+  checkout: { fingerprint: string | null; reason: string | null };
+}
+
+/**
+ * An actionable capture refusal, retained as a V5 code when validating a report.
+ *
+ * An unresolved branch stops the review instead of selecting HEAD.
+ * The CLI renders the same cause as a capture error without exposing file contents.
+ */
+export class ReviewAuthorityError extends Error {
+  /**
+   * Keep the stable failure code beside the explanation the reviewer can act on.
+   *
+   * @param code - issue category retained by report validation
+   * @param message - refusal shown without exposing selected file contents
+   */
+  constructor(
+    public readonly code: ReviewIssueCode,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+/**
+ * Reject an ambiguous selection before it can supply evidence for a finding.
+ *
+ * @param condition - required source or receipt constraint; false means this authority cannot be used
+ * @param message - repairable refusal shown to the reviewer
+ * @param code - stable issue category; omitted uses authority-format
+ *
+ * @returns nothing; a true condition allows validation to continue
+ * @throws ReviewAuthorityError when the selected source or receipt breaks the required constraint
+ */
+export function requireAuthority(
+  condition: unknown,
+  message: string,
+  code: ReviewIssueCode = "authority-format",
+): asserts condition {
+  // A failed condition means the report cannot identify the files it claims to review.
+  if (!condition) throw new ReviewAuthorityError(code, message);
+}
+
+/** Reject text whose UTF-16 spelling cannot round-trip through the UTF-8 wire format. */
+function validText(value: string): string {
+  requireAuthority(
+    Buffer.from(value, "utf8").toString("utf8") === value,
+    "authority text must round-trip as UTF-8",
+  );
+  return value;
+}
+
+/** Check the decimal spelling before floating-point rounding can change the caller's selected parent or recorded exit code. */
+function isExactIntegerLiteral(literal: string): boolean {
+  const [coefficient = "", exponent = "0"] = literal.toLowerCase().split("e");
+  const fractionLength = coefficient.split(".")[1]?.length ?? 0;
+  const digits = coefficient.replace(/[-.]/gu, "");
+  const significantDigits = digits.replace(/0+$/u, "");
+  // Every spelling of zero is exact, including exponents too large to represent as a number.
+  if (significantDigits === "") return true;
+  return (
+    Number(exponent) -
+      fractionLength +
+      digits.length -
+      significantDigits.length >=
+    0
+  );
+}
+
+/**
+ * Read request JSON without allowing duplicate fields to hide an earlier selection.
+ *
+ * The cursor handles one JSON value at a time; ordinary request whitespace is allowed.
+ * Frozen evidence additionally has to match the canonical serializer byte for byte.
+ */
+class ReviewJsonReader {
+  private cursor = 0;
+  /**
+   * Retain the caller's transient JSON text while parsing its selection.
+   *
+   * @param text - one request or frozen receipt; empty text is refused when parsing starts
+   */
+  constructor(private readonly text: string) {}
+  /** Advance to the next visible JSON token; whitespace carries no request meaning. */
+  private skipSpace(): void {
+    this.cursor += this.text
+      .slice(this.cursor)
+      .match(/^[\t\n\r ]*/u)![0].length;
+  }
+  /** Read a field name or literal string without accepting malformed escapes. */
+  private readString(): string {
+    const match = this.text
+      .slice(this.cursor)
+      .match(/^"(?:[^"\\\u0000-\u001f]|\\(?:["\\/bfnrt]|u[0-9a-fA-F]{4}))*"/u);
+    requireAuthority(match, "authority JSON contains an invalid string");
+    this.cursor += match[0].length;
+    return validText(JSON.parse(match[0]) as string);
+  }
+  /** Read one object and reject repeated keys, including differently escaped spellings. */
+  private readObject(depth: number): JsonRecord {
+    const record: JsonRecord = Object.create(null) as JsonRecord;
+    this.cursor++;
+    this.skipSpace();
+    // An empty object is syntactically valid; the selected schema checks required fields later.
+    if (this.text[this.cursor] === "}") {
+      this.cursor++;
+      return record;
+    }
+    // Every object field must be read so a later duplicate cannot silently replace an earlier selection.
+    while (true) {
+      const key = this.readString();
+      requireAuthority(
+        !Object.hasOwn(record, key),
+        `duplicate authority JSON key: ${key}`,
+      );
+      this.skipSpace();
+      requireAuthority(
+        this.text[this.cursor++] === ":",
+        "authority JSON requires a colon after each key",
+      );
+      record[key] = this.readValue(depth + 1);
+      this.skipSpace();
+      const separator = this.text[this.cursor++];
+      // The closing brace completes this selection; another member needs an explicit comma.
+      if (separator === "}") return record;
+      requireAuthority(
+        separator === ",",
+        "authority JSON requires a comma or closing brace",
+      );
+      this.skipSpace();
+    }
+  }
+  /** Read a path or evidence list without discarding an empty or malformed member. */
+  private readArray(depth: number): JsonValue[] {
+    const values: JsonValue[] = [];
+    this.cursor++;
+    this.skipSpace();
+    // Empty lists remain explicit, so later checks can distinguish no gates from missing evidence.
+    if (this.text[this.cursor] === "]") {
+      this.cursor++;
+      return values;
+    }
+    // Every list member stays in the request; malformed separators cannot hide an omitted path or gate.
+    while (true) {
+      values.push(this.readValue(depth + 1));
+      this.skipSpace();
+      const separator = this.text[this.cursor++];
+      // A closing bracket finishes this list; trailing commas are never accepted.
+      if (separator === "]") return values;
+      requireAuthority(
+        separator === ",",
+        "authority JSON requires a comma or closing bracket",
+      );
+    }
+  }
+  /** Parse one schema value with bounded nesting and exact integer values. */
+  private readValue(depth: number): JsonValue {
+    requireAuthority(depth <= 100, "authority JSON exceeds 100 nested values");
+    this.skipSpace();
+    const token = this.text[this.cursor];
+    // Objects, lists, and strings preserve their original members for schema validation.
+    if (token === "{") return this.readObject(depth);
+    // A selected list retains member order and explicit empty membership for its schema check.
+    if (token === "[") return this.readArray(depth);
+    // A quoted filename or evidence literal must keep its exact spelling through parsing.
+    if (token === '"') return this.readString();
+    const literal = this.text
+      .slice(this.cursor)
+      .match(
+        /^(?:true|false|null|-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?)/u,
+      );
+    requireAuthority(literal, "authority JSON contains an invalid value");
+    this.cursor += literal[0].length;
+    const value = JSON.parse(literal[0]) as null | boolean | number;
+    requireAuthority(
+      typeof value !== "number" ||
+        (Number.isSafeInteger(value) && isExactIntegerLiteral(literal[0])),
+      "authority JSON numbers must be safe integers",
+    );
+    return value;
+  }
+  /** Finish one request; appended JSON cannot override its earlier fields. */
+  read(): JsonValue {
+    const value = this.readValue(0);
+    this.skipSpace();
+    requireAuthority(
+      this.cursor === this.text.length,
+      "authority JSON has trailing content",
+    );
+    return value;
+  }
+}
+
+/**
+ * Serialize review metadata with stable key order and escapes that keep JSON visible in Markdown.
+ *
+ * @param value - request or receipt metadata; null remains explicit and arrays retain their recorded order
+ * @returns canonical JSON used by snapshots, report fields, and fingerprint inputs
+ * @throws ReviewAuthorityError when text cannot round-trip as UTF-8 or a value is outside the supported JSON grammar
+ */
+export function canonicalReviewJson(value: unknown): string {
+  // Null is a deliberate absence marker, never a missing field silently dropped by JSON.stringify.
+  if (value === null) return "null";
+  // Markdown punctuation is escaped so a filename cannot hide or split its containing authority field.
+  if (typeof value === "string")
+    return JSON.stringify(validText(value)).replace(
+      /[<>&`|]/gu,
+      (character) =>
+        `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`,
+    );
+  // Boolean request choices retain their explicit true/false meaning in the receipt.
+  if (typeof value === "boolean") return String(value);
+  // Counts must remain exact so rounding cannot change the identity of an authority record.
+  if (typeof value === "number") {
+    requireAuthority(
+      Number.isSafeInteger(value),
+      "authority numbers must be safe integers",
+    );
+    return String(value);
+  }
+  // Ordered lists retain their captured membership instead of being treated as unordered JSON objects.
+  if (Array.isArray(value))
+    return `[${value.map(canonicalReviewJson).join(",")}]`;
+  requireAuthority(
+    typeof value === "object",
+    "authority contains a value outside JSON",
+  );
+  return `{${Object.entries(value)
+    .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+    .map(
+      ([key, member]) =>
+        `${canonicalReviewJson(key)}:${canonicalReviewJson(member)}`,
+    )
+    .join(",")}}`;
+}
+
+/**
+ * Parse requests or frozen evidence without allowing duplicate keys to change the selected source.
+ *
+ * @param text - supplied JSON; empty, malformed, or trailing content is refused
+ * @param frozen - true requires the exact canonical spelling retained by the snapshot producer
+ * @returns parsed metadata; null is a JSON value and is rejected later where a record is required
+ *
+ * @throws ReviewAuthorityError when JSON is ambiguous, unsupported, or noncanonical frozen evidence
+ */
+export function parseReviewJson(text: string, frozen = false): JsonValue {
+  const value = new ReviewJsonReader(text).read();
+  requireAuthority(
+    !frozen || canonicalReviewJson(value) === text,
+    "authority evidence must use canonical JSON from review snapshot",
+  );
+  return value;
+}
+
+/**
+ * Require one named record before checking its authority fields.
+ *
+ * @param value - parsed schema value; null, absent values, and lists cannot stand in for a record
+ * @param label - field name used to identify the invalid input in the CLI refusal
+ * @returns the record for its source-specific checks
+ *
+ * @throws ReviewAuthorityError when the input is not a record
+ */
+export function record(
+  value: JsonValue | undefined,
+  label: string,
+): JsonRecord {
+  requireAuthority(
+    value !== null && typeof value === "object" && !Array.isArray(value),
+    `${label} must be an object`,
+  );
+  return value;
+}
+
+/**
+ * Reject omitted, misspelled, or additional fields instead of silently changing a request's meaning.
+ *
+ * @param value - parsed record whose shape must match the selected schema
+ * @param required - fields that must be present, even when their value may be null
+ * @param optional - permitted extra fields; empty means only required fields are accepted
+ *
+ * @throws ReviewAuthorityError when any required field is missing or an unknown field is present
+ */
+export function exactKeys(
+  value: JsonRecord,
+  required: string[],
+  optional: string[] = [],
+): void {
+  requireAuthority(
+    required.every((key) => Object.hasOwn(value, key)) &&
+      Object.keys(value).every(
+        (key) => required.includes(key) || optional.includes(key),
+      ),
+    `expected fields: ${required.join(", ")}${optional.length ? `; optional: ${optional.join(", ")}` : ""}`,
+  );
+}
+
+/**
+ * Require a nonempty literal before using a path, selector, or receipt label.
+ *
+ * @param value - parsed field; absent, empty, and non-text values stop authority validation
+ * @param label - field name used in the reviewer's refusal message
+ * @returns the unchanged UTF-8-compatible text
+ *
+ * @throws ReviewAuthorityError when the field cannot identify its intended source or receipt value
+ */
+export function textField(value: JsonValue | undefined, label: string): string {
+  requireAuthority(
+    typeof value === "string" && value.length > 0 && !value.includes("\0"),
+    `${label} must be nonempty text without NUL`,
+  );
+  return value;
+}
+
+/**
+ * Keep path inventories in byte order so locale settings cannot change a review fingerprint.
+ *
+ * @param left - first literal project path to compare
+ * @param right - second literal project path to compare
+ * @returns negative, zero, or positive for UTF-8 byte order
+ */
+export function comparePaths(left: string, right: string): number {
+  return Buffer.compare(Buffer.from(left), Buffer.from(right));
+}
+
+/**
+ * Require a literal path that stays within the selected project without normalization.
+ *
+ * @param value - project-relative path; absent, empty, absolute, or traversal spellings are refused
+ * @param directory - allow the exact dot path when the operator selects the project root
+ * @returns the unchanged safe path used to identify a selected file or area
+ *
+ * @throws ReviewAuthorityError when the path is unsafe or has an ambiguous spelling
+ */
+export function projectPath(
+  value: JsonValue | undefined,
+  directory = false,
+): string {
+  const path = textField(value, "path");
+  // The operator may select the project root as a directory, but never as a file anchor.
+  if (directory && path === ".") return path;
+  requireAuthority(
+    !isAbsolute(path) &&
+      !/^[a-z]:/iu.test(path) &&
+      !path.includes("\\") &&
+      path
+        .split("/")
+        .every(
+          (part) =>
+            part !== "" &&
+            part !== "." &&
+            part !== ".." &&
+            part.toLowerCase() !== ".git",
+        ),
+    `unsafe or ambiguous project path: ${canonicalReviewJson(path)}`,
+    "authority-path",
+  );
+  return path;
+}
+
+/**
+ * Read a unique, ordered selection without merging differently spelled paths.
+ *
+ * @param value - path array; empty is allowed here and source-specific checks decide whether it is meaningful
+ * @param directories - allow dot as an explicit project-root selection
+ * @returns the selected paths in UTF-8 byte order
+ *
+ * @throws ReviewAuthorityError when paths are duplicated, unsafe, or not supplied as an array
+ */
+export function pathList(
+  value: JsonValue | undefined,
+  directories = false,
+): string[] {
+  requireAuthority(Array.isArray(value), "path membership must be an array");
+  const paths = value.map((path) => projectPath(path, directories));
+  requireAuthority(
+    new Set(paths).size === paths.length,
+    "duplicate selected path",
+    "authority-path",
+  );
+  return paths.sort(comparePaths);
+}
+
+/**
+ * Identify the exact selected bytes without Git filters or text normalization.
+ *
+ * @param bytes - file bytes or protocol text; empty content still has a real hash
+ * @returns lowercase raw SHA-256 used in file and provenance records
+ */
+export function rawHash(bytes: Buffer | string): string {
+  return createHash("sha256").update(bytes).digest("hex");
+}
+
+/**
+ * Separate authority, index, workspace, and gate identities so one kind cannot substitute for another.
+ *
+ * @param kind - protocol domain that fixes the hash prefix and identity label
+ * @param value - metadata serialized canonically before hashing
+ * @returns the versioned domain fingerprint retained in the review receipt
+ */
+export function taggedHash(
+  kind: "index" | "authority" | "workspace" | "gate",
+  value: unknown,
+): string {
+  const label = kind === "authority" ? "review" : kind;
+  return `${label}-v1:sha256:${rawHash(`goat-review-${kind}/v1\0${canonicalReviewJson(value)}`)}`;
+}
+
+/**
+ * Identify one selected command from its arguments, working directory, and trusted origin.
+ *
+ * @param argv - exact executable and arguments; gate validation rejects an empty command
+ * @param cwd - literal project-relative execution directory, including dot for the root
+ * @param origin - recorded trusted Git source or host instruction reference
+ *
+ * @returns the stable gate-v1 fingerprint used to detect duplicate or substituted commands
+ */
+export function reviewGateId(
+  argv: string[],
+  cwd: string,
+  origin: unknown,
+): string {
+  return taggedHash("gate", { argv, cwd, origin });
+}
+
+/**
+ * Convert one integrity count while rejecting precision-losing integers.
+ *
+ * @param countText - decimal count from a report field; malformed text is rejected by its field grammar
+ * @param label - field name shown in a repairable count error
+ * @param line - visible report line owning this count
+ * @param violations - report errors to append when the value cannot be represented exactly
+ * @returns exact nonnegative count, including zero; null means the claimed count is unsafe and has received a violation
+ */
+export function readSafeIntegrityCount(
+  countText: string,
+  label: string,
+  line: number,
+  violations: ReviewValidationViolation[],
+): number | null {
+  const count = Number(countText);
+  // Exact counts can be reconciled; values that lose integer precision must be refused.
+  if (Number.isSafeInteger(count)) return count;
+  addViolation(
+    violations,
+    "integrity-format",
+    line,
+    `${label} must be a safe non-negative integer`,
+  );
+  return null;
+}

@@ -1,7 +1,7 @@
 # .goat-flow/config.yaml - project configuration
 # Docs: https://github.com/blundergoat/goat-flow
 
-version: "1.16.0"
+version: "1.17.0"
 
 # ── Project Setup ───────────────────────────────
 skills:
@@ -24,13 +24,10 @@ skills:
 toolchain:
   lint:
     - >-
-      shellcheck scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh
+      shellcheck scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh workflow/install-goat-flow.sh
       workflow/hooks/*.sh workflow/hooks/deny-dangerous/*.sh .goat-flow/hooks/*.sh
       .goat-flow/hooks/deny-dangerous/*.sh
-    - >-
-      bash -n scripts/*.sh scripts/maintenance/*.sh scripts/installers/*.sh
-      workflow/hooks/*.sh workflow/hooks/deny-dangerous/*.sh .goat-flow/hooks/*.sh
-      .goat-flow/hooks/deny-dangerous/*.sh
+    - bash scripts/maintenance/check-shell-syntax.sh
   build:
     - npm run typecheck
   test:
@@ -53,6 +50,8 @@ learning-loop:
 # Togglable goat-flow hook state. Missing entries use registry defaults.
 # Manage with the dashboard Hooks page or `goat-flow hooks <enable|disable|sync>`.
 hooks:
+  deny-git-mutations:
+    enabled: true
   deny-dangerous:
     enabled: true
   gruff-code-quality:

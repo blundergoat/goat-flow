@@ -45,6 +45,7 @@ last_reviewed: YYYY-MM-DD
 **Status:** active | **Created:** YYYY-MM-DD | **Evidence:** <choose one: ACTUAL_MEASURED, OBSERVED, or EXTERNAL_REFERENCE>
 **Decision changed:** [the future READ/SCOPE/ACT/VERIFY decision this changes]
 **Trigger phase:** READ | SCOPE | ACT | VERIFY (optional)
+**Caught at:** READ | SCOPE | ACT | VERIFY (optional; use only when different)
 **Symptoms:** [what a human sees go wrong]
 **Why it happens:** [the hidden coupling or drift]
 **Evidence:**
@@ -65,6 +66,8 @@ RULES:
 - New entries should describe the smallest useful trap, not a vague theme
 - If two entries are actually the same trap, merge them instead of creating
   near-duplicate titles
+- `Trigger phase` names the earliest phase where retrieval can prevent the failure, not where the failure surfaced; use optional `Caught at` when those phases differ
+- Real example: `Isolated fixtures must create every dependency they assert` uses `Trigger phase: ACT` because fixture construction prevents the failure and `Caught at: VERIFY` because the missing dependency surfaced during proof
 - Split a bucket when it grows too large (roughly >200 lines or >10 entries)
 
 PROPAGATION:

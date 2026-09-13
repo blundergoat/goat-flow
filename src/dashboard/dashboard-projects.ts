@@ -1,20 +1,20 @@
 /**
  * Powers the Projects screen: the folder browser, the saved project table, display titles, and the state that survives a reload.
  *
- * This is where a user starts a session, adding a workspace, switching between them, renaming one, or refreshing their status.
+ * Use these helpers when adding or selecting a workspace, changing its display title, or refreshing its adoption status.
  *
  * The helpers keep Alpine methods thin while protecting what the user can see, so:
  * - saved order is never rewritten just by sorting or viewing the table
- * - a project keeps its identity across path changes, so a renamed folder does not lose its title
+ * - server-resolved identities connect known path aliases to the same saved project title
  * - server state wins, with browser localStorage kept only as a migration fallback
  */
 
 /**
  * The Projects screen state shared by the list, browser, title-editing, and persistence helpers.
  *
- * Every field here is something the user can see or has chosen, so an empty string means "not currently selected or visible".
+ * Lists, drafts, loading flags, and identity maps support project selection and persistence; their empty states have different meanings.
  *
- * Invariant: these method names must match the Alpine fragments that call them, or the template silently binds to nothing.
+ * The method contract matches the merged Alpine fragments that provide title lookup, navigation, feedback, and saved state.
  */
 interface DashboardProjectsContext {
   projectPath: string;
@@ -36,14 +36,14 @@ interface DashboardProjectsContext {
   /**
    * Return the visible project title for a path, honoring saved aliases.
    *
-   * @param path - project path shown in the UI; empty means the raw display name fallback is used
+   * @param path - project path used for title lookup; without a saved title, its directory name becomes the label
    * @returns project title shown to the user, or a path-derived fallback when no alias exists
    */
   displayNameFor(path: string): string;
   /**
    * Return the stable identity key used for saved project titles.
    *
-   * @param path - project path being titled; empty means title state cannot bind to a project identity
+   * @param path - project path whose saved identity is preferred; missing identity keeps the path as the title key
    * @returns saved title key, or the path when no durable identity is known
    */
   projectKeyFor(path: string): string;
@@ -65,7 +65,7 @@ interface DashboardProjectsContext {
   /**
    * Load browser rows for a filesystem path the user wants to inspect.
    *
-   * @param path - directory path to open; empty means the browser cannot show meaningful rows
+   * @param path - directory forwarded to the browse endpoint; an empty value is passed unchanged for server validation
    * @returns promise that settles after browser rows or an error toast are visible
    */
   browseTo(path: string): Promise<void>;
@@ -87,7 +87,7 @@ interface DashboardProjectsContext {
  * Remember every path alias that points at the same saved project identity.
  * Use when a server project row tells the UI that moved or renamed paths belong together.
  *
- * @param ctx - dashboard state being updated; missing identity storage means aliases cannot be remembered
+ * @param ctx - dashboard state whose identity map receives the server's known project aliases
  * @param project - project row from the server; missing identity means the UI keeps path-based titles only
  * @returns nothing; aliases are written into dashboard state for later title lookup
  */
@@ -98,6 +98,7 @@ function dashboardRememberProjectIdentity(
   // Without a durable identity, the user sees titles tied only to the current path.
   if (!project.identity) return;
 
+  // Older rows without an alias list still associate the current path with the supplied project identity.
   const aliases =
     project.paths && project.paths.length > 0 ? project.paths : [project.path];
   ctx.projectIdentities[project.path] = project.identity;
@@ -203,7 +204,7 @@ function dashboardReadProjectRecords(storedProjects: unknown): ProjectEntry[] {
  * Use before adding launch defaults so the Projects view does not show duplicates.
  *
  * @param projects - saved project rows; empty means the path is not already visible
- * @param path - path being checked; empty cannot match a selectable project row
+ * @param path - candidate project path matched against current paths and known aliases without normalization
  * @returns `true` when the path is already represented in the Projects view
  */
 function dashboardContainsProjectPath(
@@ -219,7 +220,7 @@ function dashboardContainsProjectPath(
  * Toggle the project browser at the current workspace path.
  * Use when the user clicks the browse control while choosing or changing a project.
  *
- * @param ctx - dashboard state for the browser; empty current path means the browser opens with no rows
+ * @param ctx - dashboard state whose selected project path seeds the first browse request
  * @returns promise that settles after the browser has opened or closed
  */
 async function dashboardOpenBrowser(
@@ -234,10 +235,10 @@ async function dashboardOpenBrowser(
 /**
  * Loads the folder rows the user sees while drilling down to pick a project.
  *
- * Error behavior: never throws; a rejected path reports as a toast and leaves the user on the folder they were already viewing.
+ * Request and decoding failures recover as toasts while the previous folder rows remain visible.
  *
  * @param ctx - dashboard state that receives the browser rows
- * @param path - directory the user clicked; an empty path comes back as a server error toast rather than a blank panel
+ * @param path - directory the user clicked; an empty value is forwarded unchanged for server validation
  * @returns promise that settles once either new rows or an error toast are on screen
  */
 async function dashboardBrowseTo(
@@ -265,7 +266,7 @@ async function dashboardBrowseTo(
           .filter((dir): dir is BrowseDir => dir !== null)
       : [];
   } catch {
-    // For example, the user clicked into a folder they lack permission to read, or an external drive was unplugged mid-browse.
+    // A lost server connection or malformed directory response leaves the previous folder rows visible and reports Browse failed.
     ctx.showToast("Browse failed", true);
   }
 }
@@ -294,6 +295,7 @@ function dashboardSelectDir(
     // Choosing a discovered row is an explicit registration, so it may now be persisted.
     if (existingProject) {
       Reflect.deleteProperty(existingProject, "discovered");
+      // Selecting an archived saved project restores it before refreshing its active audit.
       if (existingProject.archivedAt) {
         void dashboardSetProjectArchived(ctx, dir.path, false).then(() =>
           ctx.runAudit(),
@@ -313,11 +315,8 @@ function dashboardSelectDir(
 }
 
 /**
- * Adds the path the user typed to the saved Projects table and fetches its first audit status.
- *
- * The row appears immediately showing "Auditing...", so the user gets feedback before the server has answered.
- *
- * Error behavior: never throws; a failed status leaves the placeholder row in place rather than removing the project the user just added.
+ * Register the entered project and request its lightweight adoption status, showing an Auditing... placeholder while waiting.
+ * The status request reports failures to the console and retains the newly added row; existing saved or archived entries are reused.
  *
  * @param ctx - dashboard state holding the draft path; an empty draft means the user clicked Add without choosing anything, so nothing happens
  * @returns promise that settles once the row is added, refreshed, and persisted
@@ -339,9 +338,13 @@ async function dashboardAddProject(
     const projectPath = ctx.newProjectPath;
     ctx.showAddProject = false;
     ctx.newProjectPath = "";
+    // Adding a retained archive returns that saved project to the active list.
     if (existingProject.archivedAt) {
       await dashboardSetProjectArchived(ctx, projectPath, false);
-    } else if (existingProject.discovered) {
+    } else if (
+      // Adding a discovered sibling explicitly registers it for future dashboard loads.
+      existingProject.discovered
+    ) {
       Reflect.deleteProperty(existingProject, "discovered");
       ctx._saveProjectsList();
     }
@@ -376,7 +379,7 @@ async function dashboardAddProject(
       dashboardRememberProjectIdentity(ctx, result);
     }
   } catch (err) {
-    // Surface, don't swallow: the row is already visible as "Auditing...", so silence strands it there.
+    // A connection or decoding failure leaves the placeholder row visible; the console records why its status could not refresh.
     console.warn("[goat-flow] Failed to load status for added project:", err);
   }
   ctx.newProjectPath = "";
@@ -406,6 +409,7 @@ async function dashboardSetProjectArchived(
     });
     const payload = readRecord(await res.json(), "Project archive response");
     const error = readErrorMessage(payload);
+    // A refused archive or restore cannot be presented as a completed change to saved project state.
     if (!res.ok || error) {
       throw new Error(error || `Server returned ${res.status}`);
     }
@@ -413,6 +417,7 @@ async function dashboardSetProjectArchived(
     await dashboardRefreshProjectStatuses(ctx);
     ctx.showToast(isArchived ? "Project archived" : "Project restored");
   } catch (err) {
+    // A rejected server action or lost connection keeps the failure visible as a toast instead of claiming an archive or restore succeeded.
     const message = err instanceof Error ? err.message : String(err);
     ctx.showToast(message || `Project ${action} failed`, true);
   }
@@ -423,7 +428,7 @@ async function dashboardSetProjectArchived(
  * Use when the user clicks a column heading.
  *
  * @param ctx - dashboard state holding the current sort; empty project rows are unaffected
- * @param key - column key the user clicked; empty is not allowed by the typed table controls
+ * @param key - typed column selected by the user; clicking the active column reverses its direction
  * @returns nothing; the visible sorted list updates through derived state
  */
 function dashboardSortProjects(
@@ -482,6 +487,7 @@ async function dashboardRefreshProjectStatuses(
   const activeProjects = ctx.projectsList.filter(
     (project) => !project.archivedAt,
   );
+  // An empty or fully archived project list needs no active-project status request.
   if (activeProjects.length === 0) return;
 
   ctx.projectsRefreshing = true;
@@ -515,32 +521,30 @@ async function dashboardRefreshProjectStatuses(
       dashboardRememberProjectIdentities(ctx, ctx.projectsList);
     }
   } catch (err) {
-    // For example, the user clicked Refresh Status with a saved project whose folder has since been deleted or moved off the machine.
-    // Surface, don't swallow: stale rows stay visible, so the user needs a retry signal rather than silence.
+    // Refreshing while the server is unreachable, or receiving malformed status JSON, keeps current rows and records the cause in the console.
     console.warn("[goat-flow] Failed to refresh project statuses:", err);
   }
   ctx.projectsRefreshing = false;
 }
 
 /**
- * Picks whichever saved list the user would rather keep when server state and browser storage disagree.
+ * Choose the saved project or favorite list for startup, preferring nonempty server state after a successful load.
+ * Empty server state uses browser storage; after a failed load, a longer browser list takes precedence.
  *
- * Server state normally wins, but a failed load must never silently shrink the projects or favorites the user already had on this machine.
- *
- * @param serverList - list restored from the server; empty means the server had nothing saved for this user yet
+ * @param serverList - list restored from the server; empty uses the browser list, whether the server was empty or unavailable
  * @param localList - list restored from browser storage, kept only as a migration fallback for older builds
- * @param wasLoadedFromServer - false when the server request failed, which promotes the larger local list instead
- * @returns the list to show; never shorter than what the user already had locally
+ * @param wasLoadedFromServer - false when server loading failed, allowing a longer browser list to take precedence
+ * @returns the chosen saved list; successful nonempty server state may be shorter than the browser's older list
  */
 function dashboardPreferredSavedList(
   serverList: string[],
   localList: string[],
   wasLoadedFromServer: boolean,
 ): string[] {
-  // The server had nothing saved, so browser storage is the only place the user's earlier choices still exist.
+  // Empty server results leave browser storage as the available source of earlier choices.
   if (serverList.length === 0) return localList;
 
-  // The server request failed, so a longer local list is more likely to be what the user actually had.
+  // After a failed server load, keep a longer browser list rather than reducing the restored choices.
   if (!wasLoadedFromServer && localList.length > serverList.length) {
     return localList;
   }
@@ -548,13 +552,10 @@ function dashboardPreferredSavedList(
 }
 
 /**
- * Reads whatever saved dashboard state the server holds, so startup has a single place that talks to the projects store.
+ * Load saved projects, favorites, titles, and discovered sibling paths for dashboard startup.
+ * Request or decoding failures recover as empty collections with wasLoadedFromServer false, allowing browser-storage fallback.
  *
- * Error behavior: never throws. An unreachable or pre-projects-store server reports `wasLoadedFromServer` false
- * with empty lists, which is the caller's signal to fall back to browser storage.
- *
- * @returns saved paths, favorites, titles, identity-aware records, and discovered siblings; a false
- *   `wasLoadedFromServer` means every list is empty because the request or its parse failed
+ * @returns saved state and discovery data; wasLoadedFromServer false means request or parsing failed and every returned collection is empty
  */
 async function dashboardReadSavedServerState(): Promise<{
   savedPaths: string[];
@@ -585,7 +586,7 @@ async function dashboardReadSavedServerState(): Promise<{
       wasLoadedFromServer: true,
     };
   } catch {
-    // For example, the user is on a build whose server predates the projects store, so nothing answers and localStorage restores the screen instead.
+    // An unreachable server or undecodable response lets startup restore projects and favorites from browser storage.
     return {
       savedPaths: [],
       savedFavorites: [],
@@ -626,6 +627,7 @@ function dashboardBuildProjectRows(
 
   // Discovered siblings are visible without becoming persisted registrations or writing markers.
   for (const path of discoveredPaths) {
+    // A sibling already represented by a saved path or alias must not appear as a duplicate discovered project.
     if (dashboardContainsProjectPath(projectRows, path)) continue;
     projectRows.push({
       path,
@@ -639,14 +641,10 @@ function dashboardBuildProjectRows(
 }
 
 /**
- * Restores the user's projects, favorites, and titles on dashboard startup so they reopen where they left off.
+ * Restore saved projects, favorites, titles, and discovery rows when the dashboard opens.
  *
- * Server state is authoritative; browser localStorage is read only as a migration fallback for users upgrading from an older build.
- *
- * The comparisons below deliberately keep the larger of the two lists, because:
- * - a half-written server response must never silently shrink the user's saved project list
- * - a user who added projects before the server store existed keeps them on first load
- * - Error behavior: never throws; an unreachable endpoint falls back to localStorage instead of opening an empty dashboard
+ * Server state takes precedence, while empty or unavailable server lists allow legacy browser-storage fallback.
+ * Preserve archives, seed the launch project, and write migrated state back only when server loading succeeded.
  *
  * @param ctx - dashboard state being hydrated; no saved state leaves just the launch project visible
  * @returns promise that settles once saved state has been applied, and re-saved when a migration happened
@@ -730,12 +728,11 @@ async function dashboardLoadSavedDashboardState(
 }
 
 /**
- * Persist the current dashboard state to localStorage and the server store.
- * Use after users change saved projects, prompt favorites, or project titles.
- * Swallows server persistence failures after logging because localStorage already preserves the UI.
+ * Save active registered project paths and favorites in browser storage, and send them with project titles to the server.
+ * It reports rejected fetch promises to the console; browser paths and favorites remain available for recovery.
  *
- * @param ctx - dashboard state to save; empty lists mean the next launch has no saved projects or favorites
- * @returns nothing; server failures are logged while local state remains available
+ * @param ctx - state to save; empty active lists send no registrations or favorites, while archives remain server-owned
+ * @returns nothing; fetch rejections are logged after browser paths and favorites have been saved
  */
 function dashboardSaveDashboardState(ctx: DashboardProjectsContext): void {
   const savedActiveProjects = ctx.projectsList.filter(
@@ -761,7 +758,7 @@ function dashboardSaveDashboardState(ctx: DashboardProjectsContext): void {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ paths, favorites, projectTitles }),
   }).catch((err: unknown) => {
-    // Local storage already updated, so the user keeps state even if server persistence fails.
+    // A lost server connection leaves paths and favorites in browser storage; the console records the failed server save.
     console.warn("[goat-flow] Failed to persist dashboard state:", err);
   });
 }
@@ -770,7 +767,7 @@ function dashboardSaveDashboardState(ctx: DashboardProjectsContext): void {
  * Begin inline editing for the current project's display title.
  * Use when the user clicks the project title in the dashboard header.
  *
- * @param ctx - dashboard state for the active project; empty project path shows a path-derived draft
+ * @param ctx - active project state; the current display title becomes the draft shown in the header
  * @returns nothing; title draft controls become visible in the UI
  */
 function dashboardStartEditProjectTitle(ctx: DashboardProjectsContext): void {
@@ -819,7 +816,7 @@ function dashboardSaveProjectTitle(ctx: DashboardProjectsContext): void {
  * Discard the inline title edit and hide the draft controls.
  * Use when the user cancels editing the current project title.
  *
- * @param ctx - dashboard state holding the draft; empty draft means there is nothing visible to discard
+ * @param ctx - dashboard state whose draft is cleared and editor is closed, even when the draft is empty
  * @returns nothing; the saved project title is left unchanged
  */
 function dashboardCancelEditProjectTitle(ctx: DashboardProjectsContext): void {
