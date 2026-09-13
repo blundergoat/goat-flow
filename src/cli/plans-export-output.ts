@@ -1,12 +1,8 @@
 /**
- * Turns parsed milestones into the files a user gets from `plans export`.
+ * Render the JSON or Markdown a plan author requests through `plans export`.
  *
- * This is the write half of the command: it redacts anything that should not leave the author's machine, renders each milestone as readable Markdown,
- * and refuses to write when a destination would clobber something or cannot be created.
- *
- * Redaction runs before rendering rather than after, so a value that should never be shared cannot reach a rendered string in the first place.
- * Destination checks all happen up front too: a partial export that wrote three files and then failed would leave the user with a directory they have
- * to reason about, so nothing is written until every path is proven safe.
+ * Scrub recognized credential patterns before previewing or writing the exported text.
+ * Check every destination before writing so known collisions or unsafe paths cannot overwrite source milestones.
  */
 import {
   existsSync,
@@ -27,6 +23,72 @@ import {
   type PlanExportEffort,
 } from "./plans-effort.js";
 import type { PlanExportRecord } from "./plans-export.js";
+import type { PlanForecastContext } from "./plans-forecast-context.js";
+
+/**
+ * Decode a saved JSON section before scrubbing so escaped credential text cannot survive in a portable forecast record.
+ * Preserve the author's original formatting when decoded values need no redaction; malformed JSON still receives readable-text scrubbing.
+ */
+function redactForecastRecordSection(section: string): string {
+  const fence = section.match(
+    /^(`{3,}|~{3,})json[ \t]*\r?\n([\s\S]*?)\r?\n\1[ \t]*$/u,
+  );
+  // An incomplete pasted section remains available for repair through the existing readable-text redaction boundary.
+  if (!fence) return scrubDurableText(section);
+  try {
+    const parsed: unknown = JSON.parse(fence[2] ?? "");
+    const normalized = JSON.stringify(parsed, null, 2);
+    const redacted = scrubDurableText(
+      JSON.stringify(
+        parsed,
+        (_key, field: unknown) =>
+          typeof field === "string" ? scrubDurableText(field) : field,
+        2,
+      ),
+    );
+    // Re-emit decoded JSON only when scrubbing changed a value; otherwise preserve the author's source representation.
+    if (redacted === normalized) return scrubDurableText(section);
+    return `${fence[1]}json\n${redacted}\n${fence[1]}`;
+  } catch {
+    // A pasted record with a missing comma cannot be decoded; keep its repair context and scrub recognizable text patterns.
+    return scrubDurableText(section);
+  }
+}
+
+/**
+ * Scrub strings in parsed forecast records and rejected raw text before the author previews or shares an export.
+ */
+function redactForecastContext(
+  context: PlanForecastContext,
+): PlanForecastContext {
+  const serialized = JSON.stringify(context, (_key, field: unknown) =>
+    typeof field === "string" ? scrubDurableText(field) : field,
+  );
+  const redacted = JSON.parse(serialized) as PlanForecastContext; // -- rationale: string-to-string scrubbing preserves the parsed JSON shape and numbers.
+  return {
+    ...redacted,
+    recordSections: context.recordSections.map(redactForecastRecordSection),
+  };
+}
+
+/**
+ * Keep authored forecast sections in Markdown even when invalid; method declarations render separately in the header.
+ */
+function renderForecastContext(
+  context: PlanForecastContext | undefined,
+): string[] {
+  // Older plans have no forecast history section to add to their Markdown export.
+  if (!context) return [];
+  return [
+    ...context.recordSections.flatMap((section) => [
+      "",
+      "## Forecast records",
+      "",
+      section,
+      "",
+    ]),
+  ];
+}
 
 /**
  * Scrub the optional explanations nested inside effort metadata before a preview or file export.
@@ -75,8 +137,7 @@ function redactExportEffort(effort: PlanExportEffort): PlanExportEffort {
  * Scrub every user-authored string before it can reach stdout or a generated file.
  *
  * @param record - parsed milestone whose text fields may hold tokens or secrets
- * @returns the same record shape with readable text scrubbed; numeric effort fields
- *   pass through unchanged
+ * @returns the same record shape with readable text scrubbed; numeric effort fields remain unchanged
  */
 export function redactPlanExportRecord(
   record: PlanExportRecord,
@@ -131,6 +192,9 @@ export function redactPlanExportRecord(
     ...(record.effort && {
       effort: redactExportEffort(record.effort),
     }),
+    ...(record.forecastContext && {
+      forecastContext: redactForecastContext(record.forecastContext),
+    }),
   };
 }
 
@@ -175,8 +239,7 @@ function providedOrMissing(fieldText: string, missingText: string): string {
 /**
  * Render one milestone as an issue-ready Markdown body without posting it remotely.
  *
- * @param record - one already-redacted milestone; sections the author left out render as an
- *   explicit placeholder rather than vanishing, so a reader can see the gap
+ * @param record - already-redacted milestone; absent sections render as placeholders so readers can see the missing context
  * @returns the complete Markdown body for that milestone
  */
 export function renderPlanExportMarkdown(record: PlanExportRecord): string {
@@ -193,11 +256,15 @@ export function renderPlanExportMarkdown(record: PlanExportRecord): string {
       ? []
       : [record.lane === "" ? "**Lane:**" : `**Lane:** ${record.lane}`]),
     ...renderEffortMetadata(record),
+    ...(record.forecastContext?.declaredMethods.map(
+      (method) => `**Forecast method:** ${method}`,
+    ) ?? []),
     `**Objective:** ${providedOrMissing(record.objective, missingText)}`,
     "",
     ...(record.timingReceiptMarkdown
       ? ["## Timing Receipt", "", record.timingReceiptMarkdown, ""]
       : []),
+    ...renderForecastContext(record.forecastContext),
     "## Scope",
     "",
     providedOrMissing(record.scopeMarkdown, missingText),
@@ -258,8 +325,9 @@ function assertOutputPathsAvailable(
 
 /**
  * Require every export destination to be a single-link regular file or absent before writing.
- * This runs under force too: replacement never authorizes a symlink, hard link, or directory that redirects a generated filename.
- * An unsafe destination stops the whole export before the user receives a partial bundle.
+ *
+ * Force still refuses symlinks, hard links and directories that redirect a generated filename.
+ * Known unsafe destinations stop the export before any files are written.
  *
  * @throws PlansExportInputError when a destination is unreadable, redirected, shared, or not a regular file
  */
@@ -364,7 +432,7 @@ function assertOutputPathsDoNotAliasSources(
 
 /**
  * Writes one Markdown file per milestone, but only after every destination has passed its collision checks.
- * It throws before writing anything when a destination is taken or unsafe, so the user never ends up with a half-finished export directory.
+ * Known collisions and unsafe destinations throw before writing; later filesystem failures can still interrupt an export.
  *
  * @param records - milestones to write, already redacted
  * @param outputDirectory - directory the user passed to `--output`

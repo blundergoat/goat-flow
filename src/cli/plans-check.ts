@@ -1,11 +1,8 @@
 /**
- * Local contract checker behind `plans check`.
- * Default mode preserves legacy effort arithmetic; strict mode additionally validates current-plan structure, local dependencies, and lifecycle
- * snapshots.
+ * Validate the local milestone plan an author selects with `plans check`.
  *
- * Plan-level 70/20/10 mix drift stays advisory.
- *
- * User-invoked only - never part of audit or quality gates.
+ * Check declared effort and forecast records; strict mode also checks current-plan structure, dependencies and lifecycle state.
+ * Report historical calibration and category mix as advice; this user-invoked command does not participate in audit or quality gates.
  */
 import { realpathSync } from "node:fs";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
@@ -43,6 +40,10 @@ import {
   collectPlanStructureAdvisories,
   collectPlanStructureErrors,
 } from "./plans-check-structure.js";
+import {
+  forecastAllocation,
+  issuedPlanForecast,
+} from "./plans-forecast-context.js";
 
 /** Category iteration order for split arithmetic and rendering. */
 const CATEGORIES = ["product", "proof", "other"] as const;
@@ -95,14 +96,14 @@ function renderSplit(split: PlanEffortSplit): string {
 }
 
 /**
- * Decide which warnings are fatal after strict mode is selected.
- * The public checker routes here to keep complexity bounded; other callers should use {@link isValidationWarning}.
+ * Identify warnings that stop a strict plan check.
+ *
  * Receipt shape stays advisory unless a measured Actual or live clock depends on it.
  *
- * @param warning - one parser warning from the milestone record
- * @param isReceiptClaimed - whether an Actual derives its authority from the receipt
- * @param isReceiptActive - whether the receipt currently controls an executing clock
- * @returns true when the warning should become a check error under strict mode
+ * @param warning - parser diagnostic shown with the milestone that needs repair
+ * @param isReceiptClaimed - whether the authored Actual relies on measured receipt evidence
+ * @param isReceiptActive - whether the receipt controls a running clock
+ * @returns true when the warning prevents strict validation
  */
 function isStrictValidationWarning(
   warning: string,
@@ -144,19 +145,21 @@ function isValidationWarning(
   if (warning.startsWith("forecast range not parseable")) return true;
   // An unreadable basis hides the work-unit count and provenance behind the headline.
   if (warning.startsWith("forecast basis not parseable")) return true;
+  // Invalid opt-in metadata must be repaired before the author can rely on a contextual forecast.
+  if (warning.startsWith("forecast context:")) return true;
   // Default mode leaves newer structural rules advisory for archived plans.
   if (!isStrict) return false;
   return isStrictValidationWarning(warning, isReceiptClaimed, isReceiptActive);
 }
 
 /**
- * Convert fatal parser warnings into source-labelled check errors.
- * Receipt shape is fatal only when a measured Actual or live clock makes the user depend on it; retrospective historical receipts stay advisory.
- * Measured Actuals also undergo receipt reconciliation so both the grammar and recorded allocation are visible.
+ * Turn fatal parser warnings into errors naming the milestone the author needs to repair.
  *
- * @param record - one parsed milestone
- * @param isStrict - whether strict current-plan validation is selected
- * @returns error lines naming the milestone; empty means no warning was fatal
+ * A measured Actual, running clock or remaining forecast depends on valid receipt evidence.
+ *
+ * @param record - milestone with its authored fields and parser warnings
+ * @param isStrict - whether current-plan structural obligations apply
+ * @returns source-labelled errors; empty means no parser warning was fatal
  */
 function collectWarningErrors(
   record: PlanExportRecord,
@@ -171,7 +174,9 @@ function collectWarningErrors(
     .map((warning) => `${record.sourceFile}: ${warning}`);
 }
 
-/** Read one category total without spreading optional-record checks through arithmetic. */
+/**
+ * Read a category allocation for the effort report; an absent split contributes zero until the author supplies it.
+ */
 function categoryMinutes(
   split: PlanEffortSplit | undefined,
   category: keyof PlanEffortSplit,
@@ -181,19 +186,26 @@ function categoryMinutes(
   return split[category];
 }
 
-/** Compare declared split categories with either strict counted work or legacy task sums. */
+/**
+ * Compare the headline split with saved whole-work allocations, strict live work or legacy task totals, as applicable.
+ */
 function collectCategoryErrors(
   record: PlanExportRecord,
   split: PlanEffortSplit,
   isStrict: boolean,
 ): string[] {
   const errors: string[] = [];
+  const issuedForecast = issuedPlanForecast(record);
+  // A remaining-work revision keeps the original headline accountable to its saved whole-work items.
+  const countedWork = issuedForecast
+    ? forecastAllocation(issuedForecast)
+    : record.workEstimateTotals;
   // Each category receives its own diagnostic so the user can repair every mismatch in one pass.
   for (const category of CATEGORIES) {
     const taskMinutes = categoryMinutes(record.taskEstimateTotals, category);
-    const countedMinutes = categoryMinutes(record.workEstimateTotals, category);
-    // Strict plans must account for every task, proof item, and plan-overhead estimate.
-    if (isStrict) {
+    const countedMinutes = categoryMinutes(countedWork, category);
+    // Saved originals must reconcile in both modes; strict legacy plans count all live tasks, proof and administrative work.
+    if (isStrict || issuedForecast) {
       // A mismatch means the authored split does not describe all work visible in the milestone.
       if (countedMinutes !== split[category]) {
         errors.push(
@@ -245,10 +257,7 @@ function collectSplitErrors(
 }
 
 /**
- * Check an optional forecast band against its own ordering and the headline.
- *
- * Validation exists only when the band does: a milestone that forecasts one point stays valid, so this returns nothing rather than demanding notation
- * legacy and in-flight plans were never written with.
+ * Check a supplied forecast's ordering and likely time against the author's headline; legacy point estimates add no range requirement.
  */
 function collectForecastRangeErrors(record: PlanExportRecord): string[] {
   const effort = record.effort;
@@ -286,13 +295,15 @@ function collectForecastBasisErrors(record: PlanExportRecord): string[] {
   const forecastBasis = record.effort?.forecastBasis;
   // Plans without the opt-in field keep their existing estimate contract and receive no error.
   if (!forecastBasis) return [];
-  // Missing plan/admin time contributes no unit, matching what the author sees in the milestone.
-  const countedAgentWorkUnits = countAgentWorkUnits([
-    ...record.tasks,
-    ...record.testingGateItems,
-    ...record.midProofItems,
-    record.planAdminEstimate ?? {},
-  ]);
+  // Saved originals own their issued unit count; legacy plans count current work, with no unit for omitted administrative time.
+  const countedAgentWorkUnits =
+    issuedPlanForecast(record)?.items.length ??
+    countAgentWorkUnits([
+      ...record.tasks,
+      ...record.testingGateItems,
+      ...record.midProofItems,
+      record.planAdminEstimate ?? {},
+    ]);
   // Prefix each shared validation message with the milestone the user needs to edit.
   return validateForecastBasis(
     forecastBasis,
@@ -629,11 +640,16 @@ function collectStatusReasonErrors(
   const errors: string[] = [];
   const statusReason = record.statusReason.trim();
   const hasExceptionalStatus = EXCEPTIONAL_STATUSES.has(status);
+  // A blocked, abandoned, superseded or deferred milestone must explain why ordinary execution stopped.
   if (hasExceptionalStatus && statusReason.length === 0) {
     errors.push(
       `${record.sourceFile}: ${status} milestone requires Status reason`,
     );
-  } else if (!hasExceptionalStatus && statusReason.length > 0) {
+  } else if (
+    // Ordinary lifecycle states cannot retain a stale explanation that says execution stopped.
+    !hasExceptionalStatus &&
+    statusReason.length > 0
+  ) {
     errors.push(
       `${record.sourceFile}: ${status} milestone must not include Status reason`,
     );
@@ -684,14 +700,11 @@ function collectLifecycleErrors(record: PlanExportRecord): string[] {
 }
 
 /**
- * Collect deterministic structure, lifecycle, and arithmetic errors for one milestone.
+ * Collect the errors that prevent the author's selected milestone from satisfying its declared effort and lifecycle contracts.
  *
- * Branches gate on what the author declared because each declaration creates its own obligation: notation errors always apply, split-sum errors need
- * a declared split, task-coverage errors need declared tasks - which is why a legacy milestone falls through every check untouched.
- *
- * @param record - parsed milestone; one declaring nothing reaches no check and returns clean
- * @param isStrict - whether current-format authoring obligations are mandatory
- * @returns error lines naming the milestone; empty means its arithmetic holds up
+ * @param record - parsed milestone; optional legacy fields create no obligations unless supplied
+ * @param isStrict - whether current-plan structure and lifecycle requirements also apply
+ * @returns source-labelled errors; empty means the applicable contracts hold
  */
 function collectMilestoneErrors(
   record: PlanExportRecord,
@@ -754,6 +767,7 @@ function assertCheckUsage(options: ParsedCLI): void {
 
 /**
  * Check one plan directory and report to stdout.
+ *
  * Exit code 1 signals deterministic contract or arithmetic errors; mix drift and default-mode legacy absence never fail.
  * Records are redacted before use.
  *
@@ -847,14 +861,18 @@ function isWithinPlanRoot(root: string, selectedPath: string): boolean {
 }
 
 /**
- * Locate project policy only for a canonical plan operand that remains physically contained.
- * External operands and escaped symlinks retain the default instead of borrowing ancestor or working-directory config.
- * Swallows realpath errors as a null fallback; the plan loader owns unreadable-input diagnostics.
+ * Find the project policy that owns a physically contained `.goat-flow/plans/` operand.
+ *
+ * External or escaped paths retain defaults; realpath failures return null and the plan loader reports unreadable input.
+ *
+ * @param planPath - selected plan directory; absence or an unresolved path cannot grant project-config authority
+ * @returns owning project root, or null when no trusted owner can be established
  */
 function canonicalPlanProjectRoot(planPath: string): string | null {
   const absolutePath = resolve(planPath);
   const marker = `${sep}.goat-flow${sep}plans${sep}`;
   const markerIndex = `${absolutePath}${sep}`.lastIndexOf(marker);
+  // A plan outside the canonical local workspace uses defaults instead of borrowing this checkout's config.
   if (markerIndex < 0) return null;
   const projectRoot = resolve(`${absolutePath.slice(0, markerIndex)}${sep}`);
   try {
@@ -889,6 +907,7 @@ function resolvePlanPolicy(options: ParsedCLI): {
   if (options.plansMaxActive !== null && options.plansBandQuantiles !== null)
     return defaults;
   const projectRoot = canonicalPlanProjectRoot(options.projectPath);
+  // Without a trusted owning project, the user's explicit flags and built-in defaults remain authoritative.
   if (projectRoot === null) return defaults;
   const policy = readPlanPolicy(projectRoot);
   return {
@@ -909,11 +928,13 @@ function readPlanPolicy(projectRoot: string) {
   try {
     loaded = loadConfig(projectRoot);
   } catch (error) {
+    // If the selected project's config became unreadable, report its path so the user can repair access and retry.
     throw new CLIError(
       `${configPath}: ${error instanceof Error ? error.message : String(error)}`,
       2,
     );
   }
+  // Invalid project policy must be repaired before this plan check can rely on its limits or forecast settings.
   if (!loaded.valid) {
     throw new CLIError(
       `${configPath}: ${loaded.errors.map((issue) => `${issue.path}: ${issue.message}`).join("; ")}`,
@@ -924,7 +945,7 @@ function readPlanPolicy(projectRoot: string) {
 }
 
 /**
- * Route local plan subcommands between the export bundler and the effort check.
+ * Route the author's plan request to export, effort validation or receipt timing.
  * The single `plans` dispatch entry - every `goat-flow plans ...` invocation lands here first.
  *
  * @param options - parsed CLI options carrying the chosen subcommand
@@ -941,5 +962,6 @@ export function handlePlansCommand(options: ParsedCLI): void {
     handlePlansCheckCommand(options);
     return;
   }
+  // A request without check or time selects the portable plan export.
   handlePlansExportCommand(options);
 }

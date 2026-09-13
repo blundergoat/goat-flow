@@ -1,6 +1,6 @@
 ---
 category: plan-artifacts
-last_reviewed: 2026-09-13
+last_reviewed: 2026-09-14
 ---
 
 **Scope:** The grammar and validation of plan, milestone, and review artifacts: evidence fields, proof gates, machine-parsed dependency links, effort accounting, and when a validator runs relative to persistence. CLI process behaviour and output streams live in [cli.md](cli.md).
@@ -57,7 +57,7 @@ last_reviewed: 2026-09-13
 **Decision changed:** Validate structural evidence against rendered Markdown semantics and exact documented field values, then pair every exclusion fixture with a visible-content control.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
-**Incident count:** 12 | **Latest occurrence:** 2026-09-06
+**Incident count:** 13 | **Latest occurrence:** 2026-09-14
 
 **Prevention:**
 1. Pair every Markdown exclusion change with two regressions: hidden headings and fields stay hidden, and visible structure immediately after the construct keeps its offset. Cover complete custom tags that open CommonMark type-7 blocks and a control proving they do not interrupt a paragraph.
@@ -78,6 +78,23 @@ Formatted empty sample exclusions and a different filename containing the missin
 `src/cli/review-validate-common.ts` (search: `readFindingPrefixTags`; `disclosureNamesPath`) and `src/cli/review-validate-sections.ts`
 (search: `validateAreaSampleBoundary`) retain the boundaries. `test/unit/review-command-parser.test.ts` (search: `review CLI metadata boundaries`)
 and `test/unit/review-validate.test.ts` (search: `retains all five selected files`) exercise valid controls and specific refusals.
+
+**Recurrence 2026-09-14:** Removing a forecast method's whole source line also removed an attached multiline comment opener. The section parser then treated commented Forecast records and Tasks headings as live input. `src/cli/plans-forecast-context.ts` (search: `maskForecastMethodLines`) keeps the comment opener at column zero with its remaining source. `test/unit/plans-effort.test.ts` (search: `keeps multiline comments attached to forecast methods hidden`) checks the original failure, a standalone-opener control, both checker modes and a Markdown round trip. Preserve delimiter state when transforming source before another Markdown parse.
+
+---
+
+## Footgun: Matching forecast totals can hide replacement work
+
+**Status:** active | **Created:** 2026-09-14 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Bind counted live work to unique saved item identities before accepting residual counts and category budgets.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** For forecast-context work, compare the live description and category to saved identities; require an appended revision for reopened or replacement scope. Reject ambiguous descriptions instead of matching by position or allocated minutes. Redaction fixtures must preserve the same description on both sides of this relation, and JSON escape substitutions must target JSON rather than the live checklist.
+
+**Symptoms:** Completing the remaining export task and reopening the removed parser task preserved counts and category totals, so both checker modes accepted a stale remaining forecast. Adding identity validation also exposed a redaction fixture whose saved description differed from the checklist; its first repair escaped the checklist marker rather than the intended JSON marker.
+
+**Evidence:** `src/cli/plans-forecast-context.ts` (search: `collectLiveItemProblems`) validates unique identities across issued records and membership in the current snapshot. `test/unit/plans-effort.test.ts` (search: `binds remaining work to saved identities before accepting matching totals`) exercises both checker modes and the appended-revision control; (search: `scrubs context strings in JSON and Markdown while preserving numerical inputs`) preserves the matching description through readable redaction.
 
 ---
 
@@ -128,14 +145,17 @@ and `test/unit/review-validate.test.ts` (search: `retains all five selected file
 **Decision changed:** Measure every file a milestone names as the owner of added cases against its configured size gate during planning, and record the headroom, before that scope is approved alongside a no-new-files constraint.
 **Trigger phase:** SCOPE
 **Caught at:** VERIFY
+**Incident count:** 3 | **Latest occurrence:** 2026-09-13
 
-**Prevention:** When a Scope names an existing file as the owner of new cases, measure it against each configured size gate before approving the plan and write the headroom into the milestone; zero or unknown headroom means the plan authorises a split up front or names a different owner. Measure by writing the base blob to a disposable ignored path and bisecting appended substantive lines, because raw line count is not the gate's metric. Plan the split to land clearly under the gate, not just below it, and never resolve the conflict by suppressing or retuning the rule.
+**Prevention:** When a Scope names an existing file as the owner of new cases, measure its configured size gate and record the headroom before approval. Zero or unknown headroom needs an approved split or another named owner. Raw line count is not the gate's metric. Use baseline stdin or an equivalent scoped check; any temporary baseline copy must stay outside the repository. Leave room for fixture repairs, and never suppress or retune the rule to fit the change.
 
 **Symptoms:** A milestone implements exactly what its Scope names, and the required post-edit analyzer run reports a new error-severity size finding on that same file. Both constraints are approved and cannot both hold, so implementation stops for a human gate after the work exists.
 
 **Why it happens:** `.gruff-ts.yaml` (search: `size.file-length`) sets `threshold: 1000` at `severity: error` over substantive lines, and a compliant file returns no finding and therefore no headroom reading, so planning has no signal short of measuring.
 
 **Evidence:** Measured 2026-08-30 at `cd676a8e069c72e4515eec0ce5c87d221e8b1a5c` during 1.17.0 M74: `test/unit/quality-report-contract.test.ts` was 1,140 raw lines with no finding, and bisection showed one appended substantive line trips the rule. M74 named that file as owner of three RED cases beside "No new source or test file", so the user approved splitting into `test/unit/quality-report-contract-audit.test.ts` (search: `quality report contract: audit evidence`). A second trip the same day: repairing a fixture the split exposed cost 14 substantive lines and put the file back to 1,014; `src/cli/prompt/compose-quality-common.ts` (search: `appendHookCoverageSummary`).
+
+**Recurrence 2026-09-13:** New forecast-record cases pushed `test/unit/plans-export-parsing.test.ts` above the configured substantive-line limit. Moving those additions to the already approved `test/unit/plans-effort.test.ts` (search: `plans export: forecast context`) restored the parser test file to its starting bytes; the six new cases and existing parser coverage passed together. Check owner headroom before placing new cases, including fixture and comment costs.
 
 ---
 

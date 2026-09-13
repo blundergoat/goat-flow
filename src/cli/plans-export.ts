@@ -1,8 +1,8 @@
 /**
- * Local milestone export adapter for portable plan review and issue drafting.
+ * Read local milestones for portable review through `plans export` and validation through `plans check`.
  *
- * It parses goat-plan Markdown, preserves delivery and verification context, scrubs readable text before rendering, previews to stdout by default,
- * and writes generated JSON or Markdown only when users choose `--output`.
+ * Preserve task, proof, effort and forecast history while reporting missing or conflicting authored fields.
+ * Export previews are redacted before reaching stdout; only an explicit `--output` request creates generated files.
  */
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -29,6 +29,12 @@ import {
   type PlanTimingReceipt,
 } from "./plans-time.js";
 import { PLAN_STRUCTURE_SECTIONS } from "./plans-check-structure.js";
+import {
+  readPlanForecastContext,
+  maskForecastMethodLines,
+  collectPlanForecastProblems,
+  type PlanForecastContext,
+} from "./plans-forecast-context.js";
 import {
   redactPlanExportRecord,
   renderPlanExportMarkdown,
@@ -66,6 +72,8 @@ export interface PlanExportRecord {
   midProofItems: PlanExportTask[];
   exitCriteriaItems: PlanExportTask[];
   effort?: PlanExportEffort;
+  /** Absent for legacy milestones; declared inputs survive invalid opt-in metadata. */
+  forecastContext?: PlanForecastContext;
   timingReceiptMarkdown: string;
   timingReceipt?: PlanTimingReceipt;
   taskEstimateTotals?: PlanEffortSplit;
@@ -123,7 +131,9 @@ function readMilestoneLane(
   const lane = values.at(0);
   // Older milestones must keep their existing export shape when no Lane is declared.
   if (lane === undefined) return undefined;
+  // Competing lanes make it unclear where the author intends this milestone to run.
   if (values.length > 1) warnings.push("multiple Lane values supplied");
+  // An explicit empty lane retains the default; other values must be portable lane names.
   if (lane !== "" && !/^[a-z0-9][a-z0-9-]{0,39}$/u.test(lane)) {
     warnings.push("invalid Lane value; expected ^[a-z0-9][a-z0-9-]{0,39}$");
   }
@@ -139,18 +149,23 @@ function addStatusReasonWarnings(
   const canonicalValue = canonicalValues.at(0);
   const legacyValue = legacyValues.at(0);
 
+  // Multiple reasons leave the author without one clear explanation for the milestone state.
   if (canonicalValues.length > 1) {
     warnings.push("multiple Status reason values supplied");
   }
+  // Repeated legacy reasons remain visible as ambiguity when an older plan is exported.
   if (legacyValues.length > 1) {
     warnings.push("multiple Abandoned values supplied");
   }
+  // A blank reason was supplied explicitly and cannot explain why work stopped.
   if (canonicalValue !== undefined && canonicalValue.length === 0) {
     warnings.push("blank Status reason supplied");
   }
+  // Older abandoned plans retain their explanation, with guidance to use the current field when edited.
   if (legacyValue !== undefined) {
     warnings.push("legacy Abandoned field supplied; use Status reason");
   }
+  // Mixing old and current reason fields creates two competing explanations for the same milestone.
   if (canonicalValue !== undefined && legacyValue !== undefined) {
     warnings.push("conflicting status reason representations");
   }
@@ -205,6 +220,7 @@ function readMilestoneSections(content: string): MarkdownSection[] {
  */
 function markdownIndentColumns(indentation: string): number {
   let column = 0;
+  // Tabs and spaces must select the same outer checklist level the author sees in Markdown.
   for (const character of indentation) {
     column += character === "\t" ? 4 - (column % 4) : 1;
   }
@@ -324,7 +340,9 @@ function firstPopulated(primary: string, fallback: string): string {
   return primary.length > 0 ? primary : fallback;
 }
 
-/** Attach optional effort fields without conditional-spread complexity in the parser. */
+/**
+ * Attach the author's optional effort fields so previews retain legacy absence and show every supplied allocation.
+ */
 function addEffortFields(
   record: PlanExportRecord,
   effort: PlanExportEffort | undefined,
@@ -353,6 +371,7 @@ function readSingleSectionMarkdown(
 ): string {
   const matches = readMilestoneSectionMatches(sections, headingAliases);
   addRepresentationConflict(warnings, matches.length > 1, conflictLabel);
+  // An absent section stays empty so the export can show the missing context explicitly.
   return matches.at(0)?.body ?? "";
 }
 
@@ -508,7 +527,7 @@ export function parseMilestoneMarkdown(
   }
 
   const warnings: string[] = [];
-  const sections = readMilestoneSections(content);
+  const sections = readMilestoneSections(maskForecastMethodLines(content));
   const status = readMilestoneField(content, "Status", warnings);
   const statusReason = readStatusReason(content, status, warnings);
   const dependencies = readMilestoneField(content, "Depends on", warnings);
@@ -635,6 +654,21 @@ export function parseMilestoneMarkdown(
   );
   // A valid receipt travels with the export so readers can audit measured Actuals.
   if (timingReceipt) record.timingReceipt = timingReceipt;
+  const forecastContext = readPlanForecastContext(
+    content,
+    sections
+      .filter((section) => section.heading === "forecast records")
+      .map((section) => section.body),
+    warnings,
+  );
+  // Optional forecast history is included only when the author supplied context metadata.
+  if (forecastContext) {
+    record.forecastContext = forecastContext;
+    const problems = collectPlanForecastProblems(record);
+    // Invalid records remain reviewable, but cannot silently activate forecast advice.
+    if (problems.length > 0) forecastContext.method = null;
+    warnings.push(...problems.map((problem) => `forecast context: ${problem}`));
+  }
   return record;
 }
 
@@ -662,8 +696,7 @@ function listMilestoneFiles(planPath: string): string[] {
  * Load every milestone record from one selected plan directory.
  * Throws when the plan is empty or any milestone is unreadable or malformed.
  *
- * @param planPath - plan directory the user selected; one without M*.md files is a
- *   usage error, never a silently empty report
+ * @param planPath - selected directory; no M*.md files means a usage error rather than an empty report
  * @returns one record per milestone file in numeric order; never empty
  */
 export function loadPlanExportRecords(planPath: string): PlanExportRecord[] {
