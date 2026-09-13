@@ -1,5 +1,8 @@
 /**
- * Unit tests for hook-enabled config reads and managed hook-block writes.
+ * Checks the saved hook choices used by command-line and dashboard actions.
+ *
+ * Use these cases when changing how a hook toggle reads or rewrites project configuration.
+ * Temporary projects verify that unrelated settings and user-controlled paths retain their meaning.
  */
 import assert from "node:assert/strict";
 import {
@@ -14,8 +17,10 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
+import { load } from "js-yaml";
 import {
   migrateGitHookChoice,
+  prepareHookConfig,
   readHookEnabled,
   readHookScanRoots,
   removeTopLevelConfigBlock,
@@ -47,6 +52,49 @@ function writeConventionalGruffPy(root: string): string {
 }
 
 describe("config writer", () => {
+  // Sync must preserve a saved YAML anchor when adding the separate Git choice, including spaces before a quoted key's colon.
+  it("preserves anchored hook choices during Sync with a spaced quoted key", () => {
+    withTempProject((root) => {
+      // Both supported quote styles must retain the anchor used by another project setting.
+      for (const quote of ['"', "'"]) {
+        const hookHeader = `${quote}hooks${quote} : &saved`;
+        const siblings = '"plans" :\n  path: custom-plans/\ncustom: *saved\n';
+        const original = `${hookHeader}\n  deny-dangerous:\n    enabled: false\n${siblings}`;
+        const prepared = prepareHookConfig(original, root);
+        const parsed = load(prepared) as Record<string, unknown>;
+        assert.ok(prepared.startsWith(hookHeader), `Retain ${quote} header`);
+        assert.ok(prepared.endsWith(siblings), `Retain ${quote} siblings`);
+        assert.deepEqual(parsed.hooks, {
+          "deny-dangerous": { enabled: false },
+          "deny-git-mutations": { enabled: false },
+        });
+        assert.deepEqual(parsed.custom, parsed.hooks);
+        assert.equal(prepareHookConfig(prepared, root), prepared);
+      }
+    });
+  });
+
+  it("preserves quoted top-level siblings when preparing a hook toggle", () => {
+    withTempProject((root) => {
+      // Users can quote saved YAML keys either way; both forms must retain the following settings and comments.
+      for (const quote of ['"', "'"]) {
+        const siblings = `${quote}plans${quote} : # keep this comment\n  path: custom-plans/\nui:\n  theme: dark\n`;
+        const original = `${quote}hooks${quote} :\n  deny-git-mutations:\n    enabled: true\n${siblings}`;
+        const toggle = { hookId: "deny-git-mutations", enabled: false };
+        const prepared = prepareHookConfig(original, root, toggle);
+        const parsed = load(prepared) as Record<string, unknown>;
+        const before = load(original) as Record<string, unknown>;
+        assert.ok(prepared.endsWith(siblings), prepared);
+        assert.deepEqual(parsed.plans, before.plans);
+        assert.deepEqual(parsed.ui, before.ui);
+        assert.deepEqual(parsed.hooks, {
+          "deny-git-mutations": { enabled: false },
+        });
+        assert.equal(prepareHookConfig(prepared, root, toggle), prepared);
+      }
+    });
+  });
+
   it("preserves four-space hook siblings when inserting the inherited Git choice", () => {
     withTempProject((root) => {
       const path = join(root, ".goat-flow/config.yaml");

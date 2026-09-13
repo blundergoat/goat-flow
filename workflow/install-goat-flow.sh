@@ -3296,12 +3296,13 @@ copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/writing-agent-facing-instru
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/writing-sentence-diagnostics.md" ".goat-flow/skill-docs/playbooks/writing-sentence-diagnostics.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/writing-structure-diagnostics.md" ".goat-flow/skill-docs/playbooks/writing-structure-diagnostics.md"
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/writing-human-facing-prose.md" ".goat-flow/skill-docs/playbooks/writing-human-facing-prose.md"
+# Retired playbooks may contain local guidance that users still need while adopting the replacement documents.
 for retired_writing_playbook in \
   ".goat-flow/skill-docs/playbooks/writing-for-agents.md" \
   ".goat-flow/skill-docs/playbooks/writing-style.md"; do
+  # An upgrade may find a locally edited copy; leave review and removal to the project owner.
   if [[ -f "$retired_writing_playbook" ]]; then
-    rm -f "$retired_writing_playbook"
-    echo "  - removed retired $retired_writing_playbook"
+    echo "  - retained retired $retired_writing_playbook; review local content before removing it"
   fi
 done
 copy_file "$GOAT_FLOW_ROOT/workflow/skills/playbooks/skill-quality-testing.md" ".goat-flow/skill-docs/skill-quality-testing/README.md"

@@ -14,6 +14,7 @@ import {
   lstatSync,
   openSync,
   readFileSync,
+  realpathSync,
   renameSync,
   unlinkSync,
   writeFileSync,
@@ -91,10 +92,10 @@ const ENTRY_HEADING: Record<LearnEntryType, string> = {
 };
 
 /**
- * Carry the author's selected entry type, category, title, and evidence from the command line.
+ * Describe the entry the developer wants to preview or publish, including optional report output.
  *
- * Validation checks paired evidence before previewing or publishing a learning-loop entry.
- * A dry run returns the same scaffold without changing the selected project.
+ * Evidence must be paired, and saved reports must stay outside learning storage.
+ * A dry run validates without publishing an entry; the caller remains responsible for printing or saving the report.
  */
 export interface LearnScaffoldRequest {
   projectRoot: string;
@@ -105,6 +106,8 @@ export interface LearnScaffoldRequest {
   searchLiterals: readonly string[];
   evidenceKind: LearnEvidenceKind | null;
   shouldDryRun: boolean;
+  /** Optional saved report, checked before publication; absent, null, or empty keeps output in the terminal. */
+  reportOutputPath?: string | null;
 }
 
 /**
@@ -406,13 +409,79 @@ function inspectBucketParents(
   }
 }
 
-// Return whether a configured bucket path would escape the selected project and write somewhere the developer did not choose.
-function resolvesOutsideProject(projectRelativePath: string): boolean {
+/**
+ * Check whether a destination escapes the directory that a caller is protecting before any file write.
+ *
+ * @param relativePath - destination relative to that directory; empty means the directory itself
+ * @returns true for an outside destination, false for the directory or one of its children
+ */
+function isOutsideDirectory(relativePath: string): boolean {
   return (
-    projectRelativePath === ".." ||
-    projectRelativePath.startsWith(`..${sep}`) ||
-    isAbsolute(projectRelativePath)
+    relativePath === ".." ||
+    relativePath.startsWith(`..${sep}`) ||
+    isAbsolute(relativePath)
   );
+}
+
+/**
+ * Keep a saved command report separate from the project's learning content before publishing an entry.
+ * Use for previews and real writes; a linked file or a destination inside learning storage is rejected without changing the project.
+ *
+ * @param projectRoot - inspected project with an existing learning-loop directory
+ * @param reportOutputPath - caller-selected report file; absent or empty means print the result without saving a report
+ * @returns nothing; throws a usage error when the report destination cannot safely be distinguished from learning content
+ */
+function validateLearnReportDestination(
+  projectRoot: string,
+  reportOutputPath: string | null | undefined,
+): void {
+  // Without a saved report, there is no second file write that could replace the user's learning content.
+  if (!reportOutputPath) return;
+  try {
+    let existingAncestor = resolve(reportOutputPath);
+    const missingPathParts: string[] = [];
+    let ancestorStats = lstatOrNull(existingAncestor);
+    // A new report folder may sit below a directory alias, so resolve its existing parent before checking containment.
+    while (ancestorStats === null) {
+      const parentPath = dirname(existingAncestor);
+      // A destination on an unavailable filesystem cannot be checked before the entry is published.
+      if (parentPath === existingAncestor) {
+        throw new Error("The report destination has no accessible parent.");
+      }
+      missingPathParts.unshift(basename(existingAncestor));
+      existingAncestor = parentPath;
+      ancestorStats = lstatOrNull(existingAncestor);
+    }
+    // A linked report file can also name learning content; directories and other non-files are not report destinations.
+    if (
+      missingPathParts.length === 0 &&
+      (!ancestorStats.isFile() || ancestorStats.nlink !== 1)
+    ) {
+      throw new Error(
+        "Choose a new report path or a single-link regular file, not a linked file or directory.",
+      );
+    }
+    const resolvedReportPath = resolve(
+      realpathSync(existingAncestor),
+      ...missingPathParts,
+    );
+    const learningRoot = realpathSync(
+      join(projectRoot, ".goat-flow/learning-loop"),
+    );
+    const relativeReportPath = relative(learningRoot, resolvedReportPath);
+    // Saving a preview over an existing lesson or a future index must stop before either publication or report output starts.
+    if (!isOutsideDirectory(relativeReportPath)) {
+      throw new Error(
+        "Choose a report destination outside the learning-loop directory.",
+      );
+    }
+  } catch (error) {
+    // A removed report folder or dangling directory alias prevents inspection; the caller gets a usage error before any learning-loop write.
+    throw new CLIError(
+      `Cannot use --output for this learning-loop command: ${error instanceof Error ? error.message : String(error)}`,
+      2,
+    );
+  }
 }
 
 // Resolve and snapshot one category bucket; throws a usage error when containment, link identity, or readable-file checks fail.
@@ -430,7 +499,7 @@ function inspectBucketDestination(
   const projectRelativePath = relative(absoluteProjectRoot, absoluteBucketPath);
   inspectProjectRoot(absoluteProjectRoot);
   // The configured path must remain inside the selected project even if a future config source relaxes today's canonical path rules.
-  if (resolvesOutsideProject(projectRelativePath)) {
+  if (isOutsideDirectory(projectRelativePath)) {
     throw new CLIError(
       "Configured learning-loop bucket resolves outside the selected project.",
       2,
@@ -1001,6 +1070,7 @@ export function runLearnScaffold(
     bucketDirectory,
     request.category,
   );
+  validateLearnReportDestination(projectRoot, request.reportOutputPath);
   validateCitations(
     projectRoot,
     snapshot.projectRelativePath,

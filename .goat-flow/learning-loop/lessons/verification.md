@@ -1,6 +1,6 @@
 ---
 category: verification
-last_reviewed: 2026-09-05
+last_reviewed: 2026-09-13
 ---
 
 **Scope:** General verification discipline - what counts as proof, reading before claiming, and checking the thing you actually changed. Siblings own the narrower surfaces: [verification-validators.md](verification-validators.md) for getting a checker right, [verification-scanners.md](verification-scanners.md) for proving a guard guards, [verification-testing.md](verification-testing.md) for what a test must establish, [verification-preflight.md](verification-preflight.md) and [verification-formatting.md](verification-formatting.md) for repo-wide gates, [verification-gruff.md](verification-gruff.md) for the analyzer, [verification-environment.md](verification-environment.md) for whether the build, tree, or sandbox you measured is the one your claim is about, [milestone-accounting.md](milestone-accounting.md) for plan arithmetic, and [milestone-timing.md](milestone-timing.md) for timing receipts.
@@ -192,11 +192,15 @@ Evidence anchors: `test/unit/audit-harness/settings-rules-matched.test.ts` (sear
 **Trigger phase:** ACT
 **Caught at:** VERIFY
 
-**Prevention:** Bind the focused fixture to semantic anchors around the production block, run that exact block with only the primitives it needs, and assert both final filesystem state and operation order. Do not copy the migration sequence into the test, and keep the full installer run as separate repository proof because it covers unrelated stages. Evidence anchors: `workflow/install-goat-flow.sh` (search: `retired_writing_playbook`), `test/integration/setup-install-migrations.test.ts` (search: `installs renamed standalone playbooks before pruning retired filenames`), `test/integration/setup-install.helpers.ts` (search: `timeout: 30000`).
+**Prevention:** Bind the focused fixture to semantic anchors around the production block, run that exact block with only the primitives it needs, and assert both final filesystem state and operation order. Do not copy the migration sequence into the test, and keep the full installer run as separate repository proof because it covers unrelated stages. Evidence anchors: `workflow/install-goat-flow.sh` (search: `retired_writing_playbook`), `test/integration/setup-install-migrations.test.ts` (search: `preserves retired writing playbooks when installing replacements`), `test/integration/setup-install.helpers.ts` (search: `timeout: 30000`).
+
+**Evidence note:** The current test checks public preview, then executes the production playbook block in isolation. Full installer runs remain separate proof.
 
 **What happened:** The first renamed-playbook migration test invoked the complete shell installer. On a Windows host the helper reached both replacement copies and both retired-file removals, then hit its 30-second process limit during later skill installation, so the test received `status: null` before its assertions and teardown reported `EPERM` for the contended temporary directory. The corrected fixture executes the installer's real standalone-playbook block with a minimal copy primitive and completed in about two seconds with one passing test.
 
 **Root cause:** A local replacement-before-pruning contract was coupled to every downstream installer stage, and the larger process added runtime and platform failure modes that fail before the test can read migration evidence it has already produced.
+
+**Recurrence 2026-09-13:** The preservation fix replaced the isolated fixture with a full installer run. Self-review caught the return to this documented timeout trap; the focused test now keeps preview and exact-content assertions without executing later installer stages. Restoring the block also crossed Gruff's file-size limit, so repeated fixture setup and assertions were consolidated in place. Evidence: `test/integration/setup-install-migrations.test.ts` (search: `preserves retired writing playbooks when installing replacements`).
 
 ---
 

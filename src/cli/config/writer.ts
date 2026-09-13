@@ -196,21 +196,35 @@ function renderHooksBlock(hooks: HookConfigMap): string {
   ].join("\n");
 }
 
-/** Detect top-level YAML keys so hook-block replacement preserves following config sections. */
-function isTopLevelLine(line: string): boolean {
-  return /^[A-Za-z0-9_-]+:/u.test(line);
+/**
+ * Identify a saved top-level setting so hook edits stop before the next configuration section.
+ *
+ * @param line - one configuration line; blank lines, comments, and indented settings do not start a new section
+ * @returns true for a plain or quoted top-level key, including whitespace before its colon
+ */
+function isTopLevelConfigKey(line: string): boolean {
+  return /^(?:[A-Za-z0-9_-]+|"(?:[^"\\]|\\.)*"|'(?:[^']|'')*')[ \t]*:/u.test(
+    line,
+  );
 }
 
-/** Replace only the managed top-level hooks block, preserving all unrelated config text. */
+/**
+ * Prepare the hook section after a toggle or cleanup without replacing following configuration sections.
+ *
+ * @param text - captured configuration; an empty document receives its first hook section
+ * @param block - rendered hook choices and their generated guidance, ready to replace the saved section
+ * @returns configuration containing the prepared choices and the other saved settings
+ */
 function replaceTopLevelHooksBlock(text: string, block: string): string {
   const lines = text.replace(/\s*$/u, "\n").split("\n");
   const start = lines.findIndex((line) =>
-    /^(?:hooks|"hooks"|'hooks'):/u.test(line),
+    /^(?:hooks|"hooks"|'hooks')[ \t]*:/u.test(line),
   );
   // Append a hooks section when the user has not saved any hook settings yet.
   if (start === -1) return `${lines.join("\n").trimEnd()}\n\n${block}\n`;
 
   let prefixEnd = start;
+  // Replace generated guidance with its hook section so repeated toggles do not accumulate duplicate instructions.
   while (
     prefixEnd > 0 &&
     HOOK_BLOCK_COMMENT_LINES.has(lines[prefixEnd - 1] ?? "")
@@ -219,10 +233,11 @@ function replaceTopLevelHooksBlock(text: string, block: string): string {
   }
 
   let end = start + 1;
+  // Walk only the saved hook section; the next top-level key belongs to another project setting.
   while (end < lines.length) {
     const line = lines[end] ?? "";
     // Stop at the next setting so changing hooks preserves the rest of the project config.
-    if (line.trim() !== "" && isTopLevelLine(line)) break;
+    if (line.trim() !== "" && isTopLevelConfigKey(line)) break;
     end += 1;
   }
   return [...lines.slice(0, prefixEnd), block, ...lines.slice(end)]
@@ -255,7 +270,7 @@ function topLevelBlockRange(
   while (end < lines.length) {
     const line = lines[end] ?? "";
     // The next top-level setting belongs to another feature and must survive this edit.
-    if (line.trim() !== "" && isTopLevelLine(line)) break;
+    if (line.trim() !== "" && isTopLevelConfigKey(line)) break;
     end += 1;
   }
   return { start, end };
@@ -467,7 +482,7 @@ function insertInheritedGitHookChoice(
 ): string {
   const choice = initialGitHookChoice(hooks);
   const header =
-    /^(?:hooks|"hooks"|'hooks'):[ \t]*((?:&[\w-]+[ \t]*)?)([^\r\n]*)/mu.exec(
+    /^(?:hooks|"hooks"|'hooks')[ \t]*:[ \t]*((?:&[\w-]+[ \t]*)?)([^\r\n]*)/mu.exec(
       text,
     );
   const entry = `  deny-git-mutations:\n    enabled: ${choice.enabled}`;

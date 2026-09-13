@@ -581,8 +581,12 @@ const COMMAND_HANDLERS: Partial<
 };
 
 /**
- * Run the explicit learning-loop scaffold selected by the developer.
- * Use after parsing has validated flag placement; it throws a usage error for incomplete programmatic calls and forwards writer failures.
+ * Preview or publish the developer's requested learning entry, then print or save its report.
+ * Use after CLI parsing; invalid author input or a colliding report destination stops before publication.
+ *
+ * @param options - parsed command and report choices; missing author fields produce a usage error, while absent output prints to the terminal
+ * @returns resolves after report output; rejects when validation, publication, or report writing fails
+ * @throws CLIError for invalid author input or an unsafe report destination; publication and output errors also propagate
  */
 async function handleLearnCommand(options: ParsedCLI): Promise<void> {
   // Missing authoring fields mean a programmatic caller bypassed normal parsing, so dispatch returns the same actionable usage contract.
@@ -607,6 +611,7 @@ async function handleLearnCommand(options: ParsedCLI): Promise<void> {
     searchLiterals: options.learnSearchLiterals,
     evidenceKind: options.learnEvidenceKind,
     shouldDryRun: options.shouldDryRun,
+    reportOutputPath: options.output,
   });
   const output =
     options.format === "json"

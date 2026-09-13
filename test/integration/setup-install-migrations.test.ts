@@ -1,11 +1,13 @@
 /**
  * Exercises setup migrations that remove retired managed state while preserving user-owned files and settings.
+ *
  * Use when installer cleanup or hook convergence changes what returning users receive during an upgrade.
  * Fixtures cover historical layouts, provider registrations, config aliases, and repeated installation.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   copyFileSync,
   existsSync,
@@ -13,9 +15,10 @@ import {
   readFileSync,
   writeFileSync,
 } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import { getAgentProfiles } from "../../src/cli/agents/registry.js";
+import { managedInstallStatePath } from "../../src/cli/managed-setup-state.js";
 import {
   getHookSpec,
   listHookSpecs,
@@ -192,24 +195,58 @@ describe("setup --apply installer upgrade migrations", () => {
     });
   }
 
-  // Run the production block in a disposable project: it writes both replacements, then removes both retired files.
-  // The minimal copy primitive isolates that ordering contract from unrelated installer work.
-  it("installs renamed standalone playbooks before pruning retired filenames", () => {
+  // Writes legacy install state, then runs public preview and the playbook install block against locally edited guidance in a disposable project.
+  // The invariant is exact preservation alongside installed replacements; later installer stages cannot hide these results behind a timeout.
+  it("preserves retired writing playbooks when installing replacements", () => {
     const root = makeTempProject();
-    const playbookDirectory = join(
-      root,
-      ".goat-flow",
-      "skill-docs",
-      "playbooks",
-    );
+    const playbookDirectory = join(root, ".goat-flow/skill-docs/playbooks");
     mkdirSync(playbookDirectory, { recursive: true });
-    const retiredAgentInstructions = join(
-      playbookDirectory,
-      "writing-for-agents.md",
-    );
+    const retiredAgentPath = join(playbookDirectory, "writing-for-agents.md");
     const retiredHumanProse = join(playbookDirectory, "writing-style.md");
-    writeFileSync(retiredAgentInstructions, "# Retired agent instructions\n");
-    writeFileSync(retiredHumanProse, "# Retired human prose\n");
+    const agentContent =
+      "# Local agent guidance\n\nKeep our project-specific review checklist.\n";
+    const humanContent =
+      "# Local prose guidance\n\nKeep our project-specific terminology.\n";
+    writeFileSync(retiredAgentPath, agentContent);
+    writeFileSync(retiredHumanProse, humanContent);
+    const retiredPlaybookPaths = [
+      ".goat-flow/skill-docs/playbooks/writing-for-agents.md",
+      ".goat-flow/skill-docs/playbooks/writing-style.md",
+    ];
+    const statePath = managedInstallStatePath(root, "codex");
+    mkdirSync(dirname(statePath), { recursive: true });
+    // The old package baseline deliberately differs from both locally edited files.
+    const legacyBaseline = {
+      schemaVersion: "goat-flow.install-state.v1",
+      agent: "codex",
+      goatFlowVersion: "1.16.0",
+      files: retiredPlaybookPaths.map((path) => ({
+        path,
+        expectedSha256: createHash("sha256")
+          .update("retired package template\n")
+          .digest("hex"),
+      })),
+    };
+    writeFileSync(statePath, `${JSON.stringify(legacyBaseline, null, 2)}\n`);
+    const preview = runCliInstaller(
+      root,
+      "--agent",
+      "codex",
+      "--dry-run",
+      "--format",
+      "json",
+    );
+    assert.equal(preview.status, 0, preview.stderr || preview.stdout);
+    const report = JSON.parse(preview.stdout) as {
+      files: { path: string; state: string; action: string }[];
+    };
+    // Both retired names must carry the preservation promise before the test exercises installation.
+    for (const retiredPath of retiredPlaybookPaths) {
+      const previewRow = report.files.find((file) => file.path === retiredPath);
+      assert.ok(previewRow, `Preview must list ${retiredPath}`);
+      assert.equal(previewRow.state, "removed", `Retired: ${retiredPath}`);
+      assert.equal(previewRow.action, "preserve", `Preserve: ${retiredPath}`);
+    }
 
     const installerSource = readFileSync(
       join(PROJECT_ROOT, "workflow", "install-goat-flow.sh"),
@@ -221,11 +258,8 @@ describe("setup --apply installer upgrade migrations", () => {
       blockStart,
     );
     assert.ok(blockStart >= 0, "standalone playbook install block is missing");
-    assert.ok(
-      blockEnd > blockStart,
-      "standalone playbook block end is missing",
-    );
-    const standalonePlaybookBlock = installerSource.slice(blockStart, blockEnd);
+    assert.ok(blockEnd > blockStart, "playbook block end is missing");
+    // Execute the shipped migration, not a copy of its policy; only the ordinary copy primitive is supplied by the fixture.
     const install = spawnSync(
       "bash",
       [
@@ -238,7 +272,7 @@ describe("setup --apply installer upgrade migrations", () => {
           '  cp "$src" "$dst"',
           '  printf "%s\\n" "$dst"',
           "}",
-          standalonePlaybookBlock,
+          installerSource.slice(blockStart, blockEnd),
         ].join("\n"),
       ],
       {
@@ -248,58 +282,32 @@ describe("setup --apply installer upgrade migrations", () => {
         timeout: 10000,
       },
     );
-
     assert.equal(install.status, 0, install.stderr || install.stdout);
-    const installedAgentInstructions = join(
-      playbookDirectory,
+    // Every replacement must contain the shipped guidance while the project's retired copies remain available below.
+    for (const replacementPlaybook of [
       "writing-agent-facing-instructions.md",
-    );
-    const installedHumanProse = join(
-      playbookDirectory,
       "writing-human-facing-prose.md",
-    );
-    assert.equal(
-      readFileSync(installedAgentInstructions, "utf-8"),
-      readFileSync(
-        join(
-          PROJECT_ROOT,
-          "workflow",
-          "skills",
-          "playbooks",
-          "writing-agent-facing-instructions.md",
-        ),
-        "utf-8",
-      ),
-    );
-    assert.equal(
-      readFileSync(installedHumanProse, "utf-8"),
-      readFileSync(
-        join(
-          PROJECT_ROOT,
-          "workflow",
-          "skills",
-          "playbooks",
-          "writing-human-facing-prose.md",
-        ),
-        "utf-8",
-      ),
-    );
-    assert.equal(existsSync(retiredAgentInstructions), false);
-    assert.equal(existsSync(retiredHumanProse), false);
-
-    const agentCopyIndex = install.stdout.indexOf(
-      ".goat-flow/skill-docs/playbooks/writing-agent-facing-instructions.md",
-    );
-    const humanCopyIndex = install.stdout.indexOf(
-      ".goat-flow/skill-docs/playbooks/writing-human-facing-prose.md",
-    );
-    const cleanupIndex = install.stdout.indexOf(
-      "removed retired .goat-flow/skill-docs/playbooks/writing-for-agents.md",
-    );
-    assert.ok(agentCopyIndex >= 0, install.stdout);
-    assert.ok(humanCopyIndex >= 0, install.stdout);
-    assert.ok(cleanupIndex > agentCopyIndex, install.stdout);
-    assert.ok(cleanupIndex > humanCopyIndex, install.stdout);
+    ]) {
+      const templatePath = join(
+        PROJECT_ROOT,
+        "workflow/skills/playbooks",
+        replacementPlaybook,
+      );
+      assert.equal(
+        readFileSync(join(playbookDirectory, replacementPlaybook), "utf-8"),
+        readFileSync(templatePath, "utf-8"),
+        `Installed content: ${replacementPlaybook}`,
+      );
+    }
+    assert.equal(readFileSync(retiredAgentPath, "utf-8"), agentContent);
+    assert.equal(readFileSync(retiredHumanProse, "utf-8"), humanContent);
+    // The install log must tell users that old copies remain available for their own review and removal.
+    for (const retiredPath of retiredPlaybookPaths) {
+      assert.ok(
+        install.stdout.includes(`retained retired ${retiredPath}`),
+        `Missing retention notice for ${retiredPath}: ${install.stdout}`,
+      );
+    }
   });
 
   it("keeps derived config migration flags under the force alias", () => {

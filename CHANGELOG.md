@@ -8,6 +8,9 @@
 
 ### Fixed
 
+- **Learning reports cannot replace learning content** - `learn new --output` rejects destinations inside learning storage and linked report files before publishing, including during dry runs.
+- **Hook changes preserve quoted configuration sections** - Toggling hooks retains following settings whose YAML keys are single- or double-quoted.
+- **Installation preserves retired writing playbooks** - Existing `writing-for-agents.md` and `writing-style.md` copies remain untouched; review their local content before removing them.
 - **Browser evidence instructions follow installed capabilities** - Check `browser-use --help` before choosing the Python-stdin workflow or legacy commands; the playbook now documents `browser-use skill`, bounded waits, fixture-login safeguards, and tab recovery.
 
 ## v1.17.0 - 2026-09-05

@@ -840,6 +840,150 @@ last_reviewed: 2026-08-01
     }
   });
 
+  // Report output must never replace a learning bucket or any generated index, including during a preview.
+  for (const shouldDryRun of [false, true]) {
+    // Cover visible destinations and filesystem aliases through the same public command, with exact-content checks after rejection.
+    for (const reportDestination of [
+      "bucket",
+      "other-index",
+      "directory-alias",
+      "symlinked-index",
+      "hard-linked-index",
+    ] as const) {
+      it(`rejects ${reportDestination} report collisions before writing with dry-run=${shouldDryRun}`, async (testContext) => {
+        const projectRoot = createLearningProject();
+        try {
+          const { bucketPath, content } =
+            writeExistingLessonBucket(projectRoot);
+          let outputPath = bucketPath;
+          // A different bucket's index is still shared learning content that publication can regenerate.
+          if (reportDestination === "other-index") {
+            outputPath = join(projectRoot, LEARNING_ROOT, "patterns/INDEX.md");
+          }
+          // A report directory alias can conceal an index destination from a lexical path check.
+          if (reportDestination === "directory-alias") {
+            const aliasPath = join(projectRoot, "report-directory");
+            symlinkSync(
+              join(projectRoot, LEARNING_ROOT, "patterns"),
+              aliasPath,
+              "junction",
+            );
+            outputPath = join(aliasPath, "reports", "result.json");
+          }
+          const linkedIndexPath = join(
+            projectRoot,
+            LEARNING_ROOT,
+            "patterns/INDEX.md",
+          );
+          const linksExistingIndex =
+            reportDestination === "symlinked-index" ||
+            reportDestination === "hard-linked-index";
+          // A file alias outside learning storage can still overwrite an existing index when the report is saved.
+          if (linksExistingIndex) {
+            writeFileSync(linkedIndexPath, "# Existing index\n");
+            outputPath = join(projectRoot, "linked-report.json");
+            // File symlinks are optional on hosts that disallow creating them without elevated permissions.
+            if (reportDestination === "symlinked-index") {
+              // A host-level skip means this alias could not be created; it must not count as verified protection.
+              if (!symlinkFileOrSkip(testContext, linkedIndexPath, outputPath))
+                return;
+            } else {
+              linkSync(linkedIndexPath, outputPath);
+            }
+          }
+          const options = parseCLIArgs([
+            "learn",
+            "new",
+            projectRoot,
+            "--type",
+            "lesson",
+            "--category",
+            "verification",
+            "--title",
+            "Keep literal proof",
+            "--format",
+            "json",
+            "--output",
+            outputPath,
+            ...(shouldDryRun ? ["--dry-run"] : []),
+          ]);
+          await assert.rejects(
+            dispatchCommand(options),
+            /--output.*learning-loop/u,
+          );
+          assert.equal(readFileSync(bucketPath, "utf-8"), content);
+          // Rejection must preserve a linked index's bytes without creating indexes in any other bucket.
+          for (const bucketDirectory of BUCKET_DIRECTORIES) {
+            const indexPath = join(projectRoot, bucketDirectory, "INDEX.md");
+            // Only the seeded linked index existed before the command; every other index must remain absent.
+            if (linksExistingIndex && indexPath === linkedIndexPath) {
+              assert.equal(
+                readFileSync(indexPath, "utf-8"),
+                "# Existing index\n",
+              );
+            } else {
+              assert.equal(existsSync(indexPath), false, indexPath);
+            }
+          }
+          assert.equal(
+            existsSync(join(projectRoot, LEARNING_ROOT, "patterns/reports")),
+            false,
+          );
+        } finally {
+          rmSync(projectRoot, { recursive: true, force: true });
+        }
+      });
+    }
+  }
+
+  // Writes a report in a similarly named directory, then checks that publishing retains existing lessons while refreshing the report.
+  it("publishes a lesson while replacing an ordinary report outside learning storage", async () => {
+    const projectRoot = createLearningProject();
+    try {
+      const { bucketPath } = writeExistingLessonBucket(projectRoot);
+      const outputPath = join(
+        projectRoot,
+        ".goat-flow/learning-loop-reports/result.json",
+      );
+      mkdirSync(join(projectRoot, ".goat-flow/learning-loop-reports"), {
+        recursive: true,
+      });
+      writeFileSync(outputPath, "previous report\n");
+      await dispatchCommand(
+        parseCLIArgs([
+          "learn",
+          "new",
+          projectRoot,
+          "--type",
+          "lesson",
+          "--category",
+          "verification",
+          "--title",
+          "Keep literal proof",
+          "--format",
+          "json",
+          "--output",
+          outputPath,
+        ]),
+      );
+      const savedReport = JSON.parse(readFileSync(outputPath, "utf-8")) as {
+        wasWritten: boolean;
+      };
+      assert.equal(savedReport.wasWritten, true);
+      assert.match(
+        readFileSync(bucketPath, "utf-8"),
+        /^## Lesson: Existing entry$/mu,
+      );
+      assert.match(
+        readFileSync(bucketPath, "utf-8"),
+        /^## Lesson: Keep literal proof$/mu,
+      );
+      assertAllIndexFiles(projectRoot, true);
+    } finally {
+      rmSync(projectRoot, { recursive: true, force: true });
+    }
+  });
+
   it("emits the promised JSON schema through the public learn handler", async () => {
     const projectRoot = createLearningProject();
     const outputPath = join(projectRoot, "learn-result.json");
