@@ -38,6 +38,10 @@ When recurrence is measured, add `**Incident count:** <positive integer>` and `*
 
 Entry bodies are retrieved by agents but verified by people in code review and staleness checks: write them per `.goat-flow/skill-docs/playbooks/writing-human-facing-prose.md`. Body prose only - frontmatter, schema lines, and semantic anchors stay exempt as fixed schema.
 
+## Editing Contract-Pinned Guidance
+
+Before rewording an existing entry, search its filename and distinctive sentence in `test/contract/`. Some prose defines parser or workflow behavior and is pinned verbatim; for example, `test/contract/skill-hardening-plan-2.test.ts` (search: `Current objective parsing accepts a bold field`) pins milestone-accounting guidance. Preserve the required behavior and semantic anchors, then update any affected assertion deliberately. A wording change alone is not a reason to remove the contract.
+
 ## Entry Body Conventions
 
 Keep the metadata block immediately below the heading, including `**Decision changed:**` when present.

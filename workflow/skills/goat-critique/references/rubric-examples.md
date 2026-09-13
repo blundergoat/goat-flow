@@ -66,7 +66,7 @@ Prefer the explicitly supplied milestone/set. Otherwise use `.goat-flow/plans/.a
 - **Finding ID:** F-01 | **Severity:** HIGH | **Confidence:** HIGH
 - **Evidence:** `<target-project>/plan.md` (search: "Verification gate") - current-session size and version checks found state drift after the draft plan was written
 - **Proof attempt:** Re-read the target plan's verification gate and ran the named current-state checks
-- **Proof class:** STATIC
+- **Proof class:** RUNTIME
 - **Evidence quality:** OBSERVED
 - **SKEPTIC:** A plan can look internally consistent while the repo has drifted underneath it
 - **ANALYST:** The failure appeared only when live commands re-checked the current files, so synthesis alone was insufficient

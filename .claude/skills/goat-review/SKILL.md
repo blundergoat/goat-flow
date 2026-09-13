@@ -173,7 +173,7 @@ Offer Pass 3 for user opt-in, `coverage-degraded`/`high-inference`, or a MUST-ne
 
 ## Review Integrity (confidence signal)
 
-**Always emit:** Scope snapshot; Authority snapshot; Gate authority; Files opened in Pass 2; Source coverage; Final dispositions; Evidence; Verdicts: confirmed/adjusted/refuted/unresolved; Gates; Size; Degradation evidence. Both forms follow `docs/cli.md` (search: `Review integrity contract`).
+**Always emit:** Scope snapshot; Authority snapshot; Gate authority; Files opened in Pass 2; Source coverage; Final dispositions; Evidence; Verdicts: confirmed/adjusted/refuted/unresolved; Gates; Size; Degradation evidence. Both follow packaged `docs/cli.md` (search: `Review integrity contract`).
 
 - **Final dispositions:** every final `R-NNN` to exactly one lowercase `confirmed`/`adjusted`/`refuted`/`unresolved`; `{}` when empty. Pass 2 refutations keep a distinct R-ID: one ledger record, one `refuted` map entry, no finding body; `Verdicts` refuted equals `Refutations logged`.
 - **JSON rows:** bare canonical JSON, never code spans; `Degradation evidence` has exactly one entry per emitted flag.

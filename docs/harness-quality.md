@@ -32,6 +32,8 @@ npx @blundergoat/goat-flow@latest quality diff --agent claude
 
 Saved reports live locally under `.goat-flow/logs/quality/` as validated JSON. New reports record run provenance under `assessment_context`, require a `refuted_candidates` array that may be empty, and include `score_rationale` for all eight setup and system axes. Each rationale row has non-empty, single-line `evidence` and `deduction` text capped at 240 characters per field. Each refuted row explains what claim was excluded and the source or command evidence that disproved it, keeping it separate from actionable findings.
 
+New prompts also retain up to five categorized `improvements` and before/after `workspace_snapshot` fingerprints. Runtime findings require the actual command, exit code, and result summary. History shows saved recommendations; diff exposes `comparisonWarnings` for missing or differing provenance without changing scores. Missing legacy recommendations mean they were not recorded, not that none existed. See the [quality save contract](cli.md#goat-flow-quality-save-project) for fields, bounds, and capture limits.
+
 `history` and `diff` keep older reports loadable when these fields predate their schema. A missing legacy refutation ledger is read as `[]`; missing score rationale remains absent and text output labels it `rationale unavailable (legacy report)`. Current rationale is shown beside the saved `/25` value without recalculating or averaging it. It explains one assessor's judgment but does not make reports from different agents or modes comparable.
 
 ---

@@ -7,12 +7,14 @@ last_reviewed: 2026-09-05
 
 **Context:** `goat-flow quality` produces one JSON report per runner (Claude, Codex, Antigravity, Copilot) and their findings overlap unevenly. Acting on every finding linearly wastes effort when one is real and another is hallucinated; let the agreement shape set the verification order.
 
-**Approach:** Before opening any code, bucket findings by how many runners flagged them:
+**Approach:** Establish each report's project, mode, rubric, revision, assessed workspace, and grounding first. Prioritize security and correctness by evidence; use runner agreement to order equally risky candidates, never as proof. Then group comparable claims by how many runners flagged them:
 1. **Convergent (all runners):** high signal, usually something with loud evidence such as a failing preflight gate. Verify once anyway, because every runner may have read the same outdated state, then fix.
 2. **Multi-runner (some):** suggestive; verify against live code for each runner's framing.
 3. **Singleton (one):** a hypothesis. It is a real issue one runner noticed (typically with a file anchor), a hallucinated fact (a file that does not exist), or a defensible trade-off one runner misread. Verify before acting; reject hallucinations and document trade-offs instead of fixing them.
 
-Treat hallucinations as a routine 5-10% rate per report, not a character flaw. When a singleton turns out real, ask why the other runners missed it (blind spot or tool access) to tune rubrics. With one runner, convergence is unavailable; weight each finding by its `evidence_method` and `evidence_command` fields instead (`src/cli/quality/schema-parser.ts`, search: `evidence_method`).
+Do not assume a fixed hallucination rate; the reports do not establish one. When a singleton turns out real, ask why the other runners missed it (blind spot or tool access) to tune rubrics. With one runner, convergence is unavailable; weight each finding by its `evidence_method` and `evidence_command` fields instead (`src/cli/quality/schema-parser.ts`, search: `evidence_method`).
+
+**Assessment contract:** Keep confirmed defects, qualification gaps, maintenance, and design opportunities distinct. Retain recommendations and actual command exits through the save boundary; missing output is an unverified probe, not a clean result. `src/cli/prompt/compose-quality-contract.ts` (search: `same completed tool call`) owns the current guidance, and `test/integration/quality-assessment.test.ts` (search: `retains recommendations and provenance through real save`) verifies persistence. Matching report fingerprints describe recorded file state, not independent launcher attestation.
 
 **Evidence (OBSERVED, 2026-05-25 self-review by four runners):**
 - Convergent 4-of-4: the lessons `verification.md` bucket at 41,323 bytes exceeded the bucket-size gate (`src/cli/stats/stats.ts`, search: `BUCKET_SIZE_WARN_BYTES`); preflight confirmed it, and splitting external-PR lessons into a patterns bucket brought it to 33,325 bytes. It was already fixed when the reports arrived, which the triage pass surfaced as a fast no-op.
@@ -61,6 +63,8 @@ throw new Error("Condition X did not become true within 5 seconds");
 **Context:** Reducing complexity in a specific function.
 
 **Approach:** Lint the whole file before declaring the pass complete. One extracted function can leave sibling offenders, and helper rewrites can introduce small follow-up mistakes. The file, not the original function, is the verification unit.
+
+**Evidence (OBSERVED, 2026-09-13):** Quality-report persistence regressions and typecheck passed, but preflight found complexity 12 in `src/cli/quality/schema-assessment.ts` (search: `parseAssessmentContext`) and 11 in `src/cli/quality/schema-parser.ts` (search: `parseFindingEvidence`), above the limit of 10. Extracting snapshot-context and evidence-method parsing cleared file-level ESLint; the same 72-test regression set still passed.
 
 ## Pattern: Refactors need typecheck before preflight
 

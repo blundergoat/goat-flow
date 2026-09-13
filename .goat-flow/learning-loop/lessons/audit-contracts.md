@@ -1,6 +1,6 @@
 ---
 category: audit-contracts
-last_reviewed: 2026-09-04
+last_reviewed: 2026-09-13
 ---
 
 **Scope:** The audit's own contracts - skip semantics, renderer defaults for new report fields, repair paths sourced from target evidence, and boundary behaviour of inverse metrics. Tests that pin wording and serialization are [contract-testing.md](contract-testing.md); the CLI surface is [cli-contracts.md](cli-contracts.md).
@@ -133,3 +133,15 @@ last_reviewed: 2026-09-04
 **What happened:** goat-security required a narrow specialist cross-check when Full Assessment triggers fired but did not define who qualified, whether delegation was authorized, what evidence the specialist returned, or what happened when none was available. In isolated RED runs, one evaluator counted same-context rereading as the specialist while another blocked release indefinitely.
 
 **Root cause:** The word `required` supplied urgency without an executable orchestration contract. Agents filled the four missing decisions differently under release pressure, so the same prose permitted both false independence and unnecessary blocking.
+
+## Lesson: Verify the capture mode and output contract before encoding assessment evidence
+
+**Status:** active | **Created:** 2026-09-13
+**Decision changed:** Run the documented capture shape and inspect the produced fields before prescribing it or asserting its terminal labels.
+**Trigger phase:** ACT | **Caught at:** VERIFY
+
+**Prevention:** Use the existing command contract against the actual project before embedding it in an assessment prompt. Distinguish unsupported capture from failed assessment, and use explicit named fields at TypeScript boundaries instead of assuming array indexes exist.
+
+**What happened:** Quality-process work first tried a worktree snapshot, which refused this repository's content-conversion settings. The documented raw `area` capture succeeded. Typecheck also rejected possibly undefined snapshot endpoints, and a persistence regression initially expected `grounding:` while the renderer emitted `assessment:`. Reading the owning paths corrected each assumption before the repository gates ran.
+
+**Evidence:** `docs/cli.md` (search: `live comparisons needing content conversion`), `src/cli/quality/schema-assessment.ts` (search: `parseSnapshotFingerprint`), `src/cli/quality/history-render.ts` (search: `assessment:`), and `test/integration/quality-assessment.test.ts` (search: `retains recommendations and provenance through real save`).

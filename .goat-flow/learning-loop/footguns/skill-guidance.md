@@ -40,7 +40,7 @@ For a closed vocabulary or reconciliation equation, also grep every label and to
 
 **Symptoms:** A playbook edit clears local checks, then preflight rejects its body budget, or a compensating compression breaks exact-phrase contracts.
 
-**Why it happens:** Binding per-file caps leave little headroom while regex assertions pin literal phrasing, and neither constraint is visible in the Markdown editor. The routed caps are often far below the ADR tier: `code-comments.md` is capped at 2880 with 84 `assert.match` pins, and the writing playbooks at 1700-2000 and 900-1150 words.
+**Why it happens:** Binding per-file caps leave little headroom while regex assertions pin literal phrasing, and neither constraint is visible in the Markdown editor. The routed caps can differ from the ADR tier. Read the current `code-comments.md` cap and phrase assertions in `test/contract/skill-hardening-contracts.test.ts` (search: `code-comments.md`); historical recurrence counts below describe their recorded dates, not today's available headroom.
 
 **Evidence:** 2026-08-10, `writing-human-facing-prose.md`: eight approved additions took the body from 2998 to 3672 words, `test/contract/skill-hardening-contracts.test.ts` (search: `ADR-023 word budget tiers`) reported `3672 words meets or exceeds progressive cap 3000`, and compressing back to 2997 broke eight assertions in `test/contract/skill-hardening-shared-2.test.ts` (search: `keeps human-facing prose edits truth-preserving and source-aware`), among them `claim strength and specificity to the evidence` and a capitalisation-only change from `status,` to `Status,`.
 

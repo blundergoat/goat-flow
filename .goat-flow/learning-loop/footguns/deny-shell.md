@@ -136,20 +136,22 @@ Sibling buckets: `deny-secrets.md`, `deny-writes.md`.
 
 ---
 
-## Footgun: Interpreter eval scan matches any identifier ending in the exec word
-
-**Status:** active | **Created:** 2026-08-22 | **Evidence:** ACTUAL_MEASURED
-
-**Prevention:** Guardrail token lists need an explicit left boundary or a qualified receiver, never a bare substring that can also be a method name. When a rule names a language primitive, add an allow case for the same word as used by the language's own standard library, because the deny corpus varies shell structure but never identifier context. Narrowing either pattern is a security-policy change: re-run the full self-test and confirm the child-process and os-prefixed forms still block. Sibling lesson: `.goat-flow/learning-loop/lessons/hook-testing.md` (search: `deny-dangerous self-test missed a whole false-positive class while green`).
-
-**Symptoms:** A read-only Node `-e` one-liner is denied `Policy destructive: Interpreter -c/-e with shell-execution primitive` for calling `RegExp.prototype.exec`. Measured 2026-08-22: a payload whose only suspicious token is a regex `exec(` call returns status 2 and the identical payload using `test(` returns 0, blocking two benign log-analysis commands while `--self-test=full` stayed green at `executed=481, skipped=0`. The regex is unchanged as of 2026-09-05, so the false positive is live.
-
-**Why it happens:** `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `shell_primitive_re`) lists `exec` followed by optional whitespace and `(` with no left boundary, so any identifier ending in that word matches. The genuine Node hazard already matches the `child_process` alternative and the Python hazard the `os.`-prefixed alternatives, so the bare entry mostly produces false positives on JavaScript's most common regex idiom.
-
-**Related measurement (same session, undecided):** writing a Markdown file through a quoted heredoc was denied `Policy destructive: Backtick command substitution hides nested execution` because the prose held code spans. A quoted delimiter suppresses all substitution, so that body is inert, but the backtick scanner does not distinguish quoted from unquoted delimiters. Narrowing it is a deliberate call against the heredoc-masking entry above, and no decision has been recorded.
-
 ## Resolved Entries
 
 > Historical record. These entries are no longer active traps.
+
+## Footgun: Interpreter eval scan matches any identifier ending in the exec word
+
+**Status:** resolved | **Created:** 2026-08-22 | **Evidence:** ACTUAL_MEASURED
+
+**Prevention:** Guardrail token lists need an explicit left boundary or a qualified receiver, never a bare substring that can also be a method name. When a rule names a language primitive, add an allow case for the same word as used by the language's own standard library, so identifier context stays covered alongside shell structure. Narrowing either pattern is a security-policy change: re-run the full self-test and confirm the child-process and os-prefixed forms still block. Sibling lesson: `.goat-flow/learning-loop/lessons/hook-testing.md` (search: `deny-dangerous self-test missed a whole false-positive class while green`).
+
+**Symptoms:** A read-only Node `-e` one-liner is denied `Policy destructive: Interpreter -c/-e with shell-execution primitive` for calling `RegExp.prototype.exec`. Measured 2026-08-22: a payload whose only suspicious token is a regex `exec(` call returns status 2 and the identical payload using `test(` returns 0, blocking two benign log-analysis commands while `--self-test=full` stayed green at `executed=481, skipped=0`. This remained reproducible on 2026-09-13 before the correction below.
+
+**Why it happens:** `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `shell_primitive_re`) previously listed `exec` followed by optional whitespace and `(` with no left boundary, so any identifier ending in that word matches. The genuine Node hazard already matches the `child_process` alternative and the Python hazard the `os.`-prefixed alternatives, so the bare entry mostly produces false positives on JavaScript's most common regex idiom.
+
+**Related historical measurement (2026-08-22):** writing Markdown through a quoted heredoc was denied `Policy destructive: Backtick command substitution hides nested execution` because the prose held code spans. Preserve that incident without treating it as current policy: quoted-data coverage now includes `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `bounded redactor treats Markdown prose as data`), and ADR-052 owns the accepted interpreter limits.
+
+**Resolution 2026-09-13:** Inline interpreter checks now distinguish standalone `exec(` from receiver methods such as Node regex `.exec()`, retain qualified shell APIs, and detect literal backticks in Perl/Ruby/PHP eval bodies. JavaScript template literals and the plain word `backtick` remain allowed. The regression corpus in `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `Perl eval backticks remain executable inside shell quotes`) classifies these strings without executing their contents. Interpreter heredoc limits remain governed by ADR-052; this repair does not claim general interpreter sandboxing.
 
 - **Deny hook blocks read-only commands with dangerous string literals** (resolved 2026-07-12) - the read-only fast path failed when a quoted repository-policy alternation preceded a real top-level pipe, because `patterns-writes.sh` split raw text on every `|` and treated the second quoted branch as a stage. The shared scanner now preserves quoted, escaped, and substitution-contained data while `split_top_level_pipeline_stages_into` exposes only real stages; coverage in `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `single-quoted repository alternation in read-only pipeline`) and `test/unit/audit-command/agent-deny-hooks.test.ts` (search: `allows quoted repository evidence`).

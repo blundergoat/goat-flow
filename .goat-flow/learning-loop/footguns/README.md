@@ -83,6 +83,10 @@ New entries SHOULD include `**Decision changed:**`; stats JSON exposes missing g
 
 When recurrence is measured, add `**Incident count:** <positive integer>` and `**Latest occurrence:** YYYY-MM-DD`. Record each new incident with the canonical `**Recurrence YYYY-MM-DD:**` prose label. Recurrence prose records individual evidence; Incident count records the total. Keep both current; neither suppresses the other.
 
+## Editing Contract-Pinned Guidance
+
+Before rewording an existing entry, search its filename and distinctive sentence in `test/contract/`. Some prose defines parser or workflow behavior and is pinned verbatim; for example, `test/contract/skill-hardening-plan-2.test.ts` (search: `Current objective parsing accepts a bold field`) pins milestone-accounting guidance. Preserve the required behavior and semantic anchors, then update any affected assertion deliberately. A wording change alone is not a reason to remove the contract.
+
 ## Entry Body Conventions
 
 Keep the metadata block immediately below the heading, including `**Decision changed:**` when present.

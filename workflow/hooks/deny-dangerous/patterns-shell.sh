@@ -2,17 +2,16 @@
 #
 # Protects the user's files and machine from destructive shell commands.
 # Use through deny-dangerous.sh before an agent-proposed command can execute.
+#
 # Safe inspection, local data handling, and scoped build cleanup remain available.
 # This module is sourced by the dispatcher and is not executable on its own.
 # shellcheck shell=bash disable=SC2034,SC2154,SC2317,SC2319
 
 # Is this an rm command that deletes recursively (-r/-R/--recursive)?
-# First gate of the delete guard: only recursive removals get the strict
-# path checks below - a plain `rm file.txt` is left alone.
+# First gate of the delete guard: only recursive removals get the strict path checks below - a plain `rm file.txt` is left alone.
 rm_has_recursive() {
   local c="$1"
-  # Match by basename so /bin/rm, /usr/bin/rm, etc. are all caught after
-  # normalize_command_candidate has stripped any wrappers.
+  # Match by basename so /bin/rm, /usr/bin/rm, etc. are all caught after normalize_command_candidate has stripped any wrappers.
   local base
   base=$(first_word_base "$c")
   # Not rm at all -> nothing for this rule to judge.
@@ -23,6 +22,7 @@ rm_has_recursive() {
 }
 
 # Decide whether every recursive deletion target is explicit and project-scoped.
+#
 # Use for user-requested cleanup: `vendor` is allowed, while `cache/$TARGET` blocks.
 # Absolute, home-relative, traversing, or unresolved targets remain manual decisions.
 rm_is_safely_scoped() {
@@ -35,9 +35,9 @@ rm_is_safely_scoped() {
   [[ -z "$targets_str" ]] && return 1
   # Check each target independently - one unsafe path fails the whole command.
   local target
+  # Check every cleanup target before allowing recursive removal of project files.
   for target in $targets_str; do
-    # Strip quotes before every scope check: a leading quote otherwise defeats
-    # the absolute/home/drive checks below AND the safe-target allowlist, so
+    # Strip quotes before every scope check: a leading quote otherwise defeats the absolute/home/drive checks below AND the safe-target allowlist, so
     # `rm -rf "/etc"` slipped through while `rm -rf "node_modules"` was blocked.
     target=$(strip_shell_quotes_for_path_scan "$target")
     # `--` only ends option parsing; it is not a path.
@@ -52,9 +52,8 @@ rm_is_safely_scoped() {
     # Any unresolved expansion can move a reviewed cleanup outside the project.
     # For example, `cache/$TARGET` may become `cache/../../home` at execution time.
     [[ "$target" == *'$'* || "$target" == *'`'* ]] && return 1
-    # Brace expansion (`{a,b}`, `{1..9}`) expands to several paths the reviewer never saw and
-    # can carry an absolute target that never starts with `/`, so `rm -rf {/etc,/var}` would
-    # otherwise read as project-relative below. Refuse it like the variable expansions above.
+    # Brace expansion can hide absolute cleanup targets: `rm -rf {/etc,/var}` would otherwise appear project-relative.
+    # Refuse both list (`{a,b}`) and sequence (`{1..9}`) expansion, as with unresolved variables above.
     [[ "$target" == *'{'*','*'}'* || "$target" == *'{'*'..'*'}'* ]] && return 1
     # Dot traversal makes the path shown in review differ from what rm deletes.
     case "/$target/" in
@@ -66,8 +65,7 @@ rm_is_safely_scoped() {
     [[ "$target" == /* ]] && return 1
     # Home-relative paths (~/...) reach the user's personal files -> block.
     [[ "$target" == "~"* ]] && return 1
-    # Windows drive-rooted paths (e.g. C:/Users/x or C:\Users\x) are absolute
-    # in Windows semantics; reject them the same way as POSIX-absolute paths.
+    # Windows paths such as C:/Users/x or C:\Users\x are absolute and receive the same protection as POSIX-absolute paths.
     [[ "$target" =~ ^[A-Za-z]:[/\\] ]] && return 1
     # Well-known disposable build/cache dirs are always fine to remove.
     case "$target" in
@@ -148,8 +146,9 @@ find_has_destructive_action() {
 }
 
 # Decide whether a bare command word names a POSIX-family shell binary.
-# Shared so pipeline classification and the script-file exemption cover the same shells; a shell
-# recognized by only one of them would either bypass the guard or lose a legitimate exemption.
+#
+# Shared so pipeline classification and the script-file exemption cover the same shells; a shell recognized by only one of them would either bypass
+# the guard or lose a legitimate exemption.
 is_shell_name() {
   case "$1" in
     bash|sh|dash|zsh|ksh|ksh93|mksh|ash|yash) return 0 ;;
@@ -158,8 +157,9 @@ is_shell_name() {
 }
 
 # Decide whether a command word starts a shell that would execute piped bytes as its program.
-# Every POSIX-family shell reads stdin the same way, so classifying only bash and sh would let
-# `printf payload | dash` run the payload while `printf payload | bash` stayed blocked.
+#
+# Every POSIX-family shell reads stdin the same way, so classifying only bash and sh would let `printf payload | dash` run the payload while `printf
+# payload | bash` stayed blocked.
 is_shell_command() {
   local c
   c=$(normalize_command_candidate "$1")
@@ -189,8 +189,8 @@ is_script_file_shell_command() {
   # A shell plus one script operand is the smallest safe file-backed shape.
   [[ "${#shell_words[@]}" -gt 1 ]] || return 1
   local shell_name="${shell_words[0]##*/}"
-  # The exemption must cover exactly the shells the pipeline check classifies; a shell blocked
-  # there but unrecognized here would lose its legitimate explicit-script-file exemption.
+  # The exemption must cover exactly the shells the pipeline check classifies; a shell blocked there but unrecognized here would lose its legitimate
+  # explicit-script-file exemption.
   is_shell_name "$shell_name" || return 1
 
   local shell_word_index=1
@@ -211,8 +211,9 @@ is_script_file_shell_command() {
         return 1
         ;;
       --init-file|--rcfile)
-        # A startup file is read before the script operand, so `--rcfile /dev/stdin -i script.sh`
-        # would execute the piped bytes as the interactive rcfile while the operand looked safe.
+        # A startup file is read before the script operand, so `--rcfile /dev/stdin -i script.sh` would execute the piped bytes as the interactive
+        #
+        # rcfile while the operand looked safe.
         # A checked-in startup file stays allowed; only stdin-backed sources are rejected.
         shell_word_index=$((shell_word_index + 1))
         script_file_word_is_safe "${shell_words[$shell_word_index]:-}" || return 1
@@ -245,6 +246,8 @@ is_script_file_shell_command() {
   script_file_word_is_safe "${shell_words[$shell_word_index]}"
 }
 
+# Identify an interpreter stage before deciding whether a user's pipeline feeds it executable input.
+
 is_interpreter_command() {
   local c
   c=$(normalize_command_candidate "$1")
@@ -259,6 +262,7 @@ is_interpreter_command() {
 }
 
 # Decide whether a pipeline stage is a known read-only local data producer.
+#
 # Use to allow fixed scripts to consume local text; unknown or network tools stay blocked.
 # For example, `tail app.log | python -c ...` is local, while `ssh host cat file` is not.
 is_local_data_pipe_source() {
@@ -270,6 +274,8 @@ is_local_data_pipe_source() {
     *) return 1 ;;
   esac
 }
+
+# Identify network download stages so downloaded bytes cannot flow straight into code execution.
 
 is_downloader_pipe_source() {
   local c
@@ -287,6 +293,8 @@ is_inert_download_pipe_consumer() {
   is_local_data_pipe_source "$1"
 }
 
+# Recognize inline interpreter flags before allowing a pipeline to treat its input as ordinary data.
+
 is_inline_interpreter_command() {
   local c="$1"
   local -a words=()
@@ -297,6 +305,7 @@ is_inline_interpreter_command() {
   [[ "${#words[@]}" -gt 0 ]] || return 1
 
   base="${words[0]##*/}"
+  # Inspect interpreter flags before treating piped input as local data for a script.
   for ((i = 1; i < ${#words[@]}; i++)); do
     word="${words[$i]}"
     case "$base:$word" in
@@ -307,6 +316,8 @@ is_inline_interpreter_command() {
   done
   return 1
 }
+
+# Accept an explicit script operand for local-data pipelines; unresolved or option-shaped words cannot prove safe scope.
 
 script_file_word_is_safe() {
   local word="$1"
@@ -325,6 +336,10 @@ script_file_word_is_safe() {
   esac
   return 1
 }
+
+# Classify one interpreter option while locating the user's script file.
+
+# The caller uses the action to skip operands or reject forms that execute stdin or inline code.
 
 interpreter_option_action() {
   local base="$1"
@@ -357,6 +372,7 @@ interpreter_option_action() {
           INTERPRETER_OPTION_ACTION="skip"
           ;;
         *)
+          # Recognized Ruby option bundles preserve ordinary script invocation without hiding inline execution.
           if [[ "$word" =~ ^-[bBdEhiIOqRsSuvVxO]+$ ]]; then
             INTERPRETER_OPTION_ACTION="skip"
           fi
@@ -414,13 +430,10 @@ interpreter_option_action() {
   esac
 }
 
-# Does this interpreter invocation run a script FILE (python x.py,
-# node tools/build.mjs), leaving piped stdin as plain data? Fail-closed: the
-# first positional word after known option parsing must be path-shaped (contain
-# a slash or a script extension), which rejects stdin-as-program spellings
-# ("-", /dev/stdin, /dev/fd/*, /proc/*), unresolved $/backtick expansions,
-# module execution (`python -m code` runs stdin as a REPL program), and
-# path-looking flag values (`node --require ./setup.js`, `python3 -W ./x`).
+# Recognize explicit interpreter scripts whose piped stdin remains ordinary user data.
+#
+# The first operand after known options must be path-shaped; bare words, inline code, and unresolved operands cannot establish a safe script.
+# Use this check before allowing local data to flow into an interpreter pipeline stage.
 is_script_file_interpreter_command() {
   local c="$1"
   local -a words=()
@@ -437,8 +450,10 @@ is_script_file_interpreter_command() {
   esac
 
   options_done=0
+  # Find the script operand while respecting options, so safe local-data pipelines remain usable.
   for ((i = 1; i < ${#words[@]}; i++)); do
     word="${words[$i]}"
+    # Before the script operand, switches can change whether stdin is data or executable code.
     if [[ "$options_done" -eq 0 ]]; then
       interpreter_option_action "$base" "$word"
       action="$INTERPRETER_OPTION_ACTION"
@@ -467,12 +482,17 @@ is_script_file_interpreter_command() {
   return 1
 }
 
-# Piped bytes stay DATA when the interpreter's program comes from somewhere
-# else: an inline code flag (python -c, node -e) or a checked-in script file.
+# Piped bytes stay DATA when the interpreter's program comes from somewhere else: an inline code flag (python -c, node -e) or a checked-in script
+#
+# file.
 # Bare interpreters and stdin-path spellings execute the pipe as the program.
 interpreter_treats_stdin_as_data() {
   is_inline_interpreter_command "$1" || is_script_file_interpreter_command "$1"
 }
+
+# Hide quoted SQL values inside a shell argument before matching destructive database verbs.
+
+# Use for mixed quoting so ordinary query text cannot trigger a false block.
 
 strip_sql_literals_inside_double_quotes() {
   local input="$1"
@@ -482,23 +502,28 @@ strip_sql_literals_inside_double_quotes() {
   local escaped=0
   local i=0
 
+  # Keep quoting boundaries while hiding SQL string data from destructive-command matching.
   for ((i = 0; i < ${#input}; i++)); do
     char="${input:i:1}"
 
+    # An escaped byte stays literal so quoted SQL text does not change the command scan.
     if [[ "$escaped" -eq 1 ]]; then
       out+="$char"
       escaped=0
       continue
     fi
 
+    # Remember an escape before interpreting the next byte as a quote boundary.
     if [[ "$char" == "\\" ]]; then
       out+="$char"
       escaped=1
       continue
     fi
 
+    # Double quotes identify the shell argument whose SQL literals need separate handling.
     if [[ "$char" == '"' ]]; then
       out+="$char"
+      # Closing the quoted shell argument restores the outer command scan.
       if [[ "$in_double" -eq 1 ]]; then
         in_double=0
       else
@@ -507,11 +532,14 @@ strip_sql_literals_inside_double_quotes() {
       continue
     fi
 
+    # A SQL literal inside the shell argument is data, so its words cannot justify a destructive verdict.
     if [[ "$in_double" -eq 1 && "$char" == "'" ]]; then
       out+="''"
       i=$((i + 1))
+      # Skip the SQL literal until its closing quote without inspecting its words as commands.
       while (( i < ${#input} )); do
         char="${input:i:1}"
+        # The closing SQL quote ends the data span and resumes command inspection.
         if [[ "$char" == "'" ]]; then
           break
         fi
@@ -526,14 +554,20 @@ strip_sql_literals_inside_double_quotes() {
   printf '%s' "$out"
 }
 
+# Reject download-then-execute chains that leave no opportunity to inspect the downloaded file.
+
+# Use at the outer command level; nested command checks retain their own policy context.
+
 check_command_chain_policy() {
   local input="$1"
   local depth="${2:-0}"
   local download_re='(^|[[:space:]])(curl|wget|fetch|http)([[:space:]]|$)'
-  # Match every POSIX shell name the pipeline path recognises (keep in sync with is_shell_name),
-  # plus any path-qualified spelling like /bin/zsh, so a download cannot reach an alternate
-  # interpreter. Matching only (ba)?sh let `curl ... ; dash file` and `/bin/bash file` through.
+  # Match every POSIX shell name the pipeline path recognises (keep in sync with is_shell_name), plus any path-qualified spelling like /bin/zsh, so a
+  #
+  # download cannot reach an alternate interpreter.
+  # Matching only (ba)?sh let `curl ... ; dash file` and `/bin/bash file` through.
   local execute_re='(;|&&|\|\|)[[:space:]]*([^[:space:];&|]*/)?(bash|dash|zsh|ksh93|ksh|mksh|ash|yash|sh)[[:space:]]+[^[:space:]&|;]+'
+  # Downloading and immediately executing a file leaves the maintainer no inspection step.
   if [[ "$depth" -eq 0 && "$input" =~ $download_re && "$input" =~ $execute_re ]]; then
     block "Download-then-execute (curl/wget ... && bash file). Inspect the downloaded file before running it." || return $?
   fi
@@ -570,6 +604,7 @@ check_pipeline_shell_consumers() {
 
     # Local data stays data when Bash reads its program from an explicit script file.
     if is_shell_command "$current_part"; then
+      # A top-level local-data pipeline into an explicit shell script is allowed after upstream sources are checked.
       if [[ "${depth:-0}" -eq 0 && "$saw_downloader_pipe_source" -eq 0 && "$all_upstream_pipe_sources_local" -eq 1 ]] && is_script_file_shell_command "$current_part"; then
         continue
       fi
@@ -578,6 +613,7 @@ check_pipeline_shell_consumers() {
 
     # Known language runtimes may consume local data only when their program is explicit.
     if is_interpreter_command "$current_part"; then
+      # A top-level local-data pipeline may feed an explicit interpreter script without executing stdin as code.
       if [[ "${depth:-0}" -eq 0 && "$saw_downloader_pipe_source" -eq 0 && "$all_upstream_pipe_sources_local" -eq 1 ]] && interpreter_treats_stdin_as_data "$current_part"; then
         continue
       fi
@@ -597,11 +633,14 @@ check_xargs_destructive_payload() {
   fi
 }
 
+# Inspect each pipeline stage for xargs-driven recursive removal before the user's command can run.
+
 check_pipeline_xargs_destructive_payloads() {
   local pipe_scan="${CMD_UNQUOTED//||/__GOAT_OR__}"
   local -a pipeline_parts
   local pipe_index
   IFS='|' read -ra pipeline_parts <<< "$pipe_scan"
+  # Inspect every stage so xargs cannot hide recursive removal from the policy verdict.
   for ((pipe_index = 0; pipe_index < ${#pipeline_parts[@]}; pipe_index++)); do
     check_xargs_destructive_payload "${pipeline_parts[$pipe_index]}" || return $?
   done
@@ -617,14 +656,17 @@ strip_leading_shell_redirections() {
   local attached_target_re='^(([0-9]+|\{[a-zA-Z_][a-zA-Z0-9_]*\})?(<<<|<<-|<<|<>|>>\||>>|>\||>&|<&|>|<)|&>>|&>).+$'
 
   split_shell_words_into command_words "$candidate"
+  # Find the actual program after leading redirects before deciding whether a pipeline executes input.
   while (( word_index < ${#command_words[@]} )); do
     word="${command_words[$word_index]}"
+    # A separate redirect operator consumes its target rather than naming the program to inspect.
     if [[ "$word" =~ $operator_only_re ]]; then
       # An operator-only word consumes the following filename, descriptor, or here-document delimiter.
       (( word_index + 1 < ${#command_words[@]} )) || return 1
       word_index=$((word_index + 2))
       continue
     fi
+    # An attached redirect target is still redirect syntax; the next word may name the program.
     if [[ "$word" =~ $attached_target_re ]]; then
       word_index=$((word_index + 1))
       continue
@@ -673,18 +715,23 @@ check_destructive_segment() {
   local cmd="$1"
   cmd="$CMD_TRIMMED"
 
+  # Piped data can become executable input downstream, so inspect consumers before allowing the command.
   if [[ "$HAS_PIPE" -eq 1 ]]; then
     check_pipeline_shell_consumers || return $?
   fi
 
+  # Plain inspection without pipes or redirects can proceed without matching dangerous words in search data.
   if is_unredirected_unpiped_read_only "$cmd"; then
     return 0
   fi
 
+  # Recursive cleanup needs explicit target checks before it can remove project content.
   if rm_has_recursive "$CMD_NORMALIZED"; then
+    # A parent-directory traversal can escape the cleanup area and requires an explicit resolved path.
     if [[ "$CMD_NORMALIZED" == *".."* ]]; then
       block "rm -r with path traversal (..). Resolve the full path first." || return $?
     fi
+    # An unresolved or broad cleanup target cannot safely proceed as an agent command.
     if ! rm_is_safely_scoped "$CMD_NORMALIZED"; then
       block "rm -r without safe scoping. Specify an explicit target path." || return $?
     fi
@@ -692,21 +739,25 @@ check_destructive_segment() {
 
   check_pipeline_xargs_destructive_payloads || return $?
 
+  # Deletion through find can affect many matches, so the maintainer must review and run it manually.
   if find_has_destructive_action "$CMD_NORMALIZED" "$depth"; then
     block "find deletion action (-delete / -exec rm -r) can remove many files. Review matches and run manually." || return $?
   fi
 
+  # World-writable permissions expose project files to other users and require a more restrictive mode.
   if [[ "$CMD_NORMALIZED" =~ (^|[[:space:]])chmod([[:space:]]|$) ]] &&      [[ "$CMD_NORMALIZED" =~ chmod[[:space:]]+([^;&|]*[[:space:]])?0?777([[:space:]]|$) ]]; then
     block "chmod 777 sets world-writable permissions. Use a more restrictive mode." || return $?
   fi
 
   local mkfs_re='(^|[[:space:]])mkfs(\.[^[:space:]]*)?([[:space:]]|$)'
+  # Filesystem formatting can destroy user data and remains a manual operation.
   if [[ "$CMD_NORMALIZED" =~ $mkfs_re ]]; then
     block "mkfs formats filesystems and can destroy data. Run manually with explicit confirmation." || return $?
   fi
 
   local dd_re='(^|[[:space:]])dd([[:space:]]|$)'
   local dd_device_re='(^|[[:space:]])of=/dev/([^[:space:]]+)'
+  # Writing dd output to a device needs scrutiny before allowing a machine-level write.
   if [[ "$CMD_NORMALIZED" =~ $dd_re && "$CMD_NORMALIZED" =~ $dd_device_re ]]; then
     local dd_target="${BASH_REMATCH[2]}"
     case "$dd_target" in
@@ -722,6 +773,7 @@ check_destructive_segment() {
   local lockfile_name_re='(package-lock\.json|pnpm-lock\.yaml|composer\.lock|Cargo\.lock|yarn\.lock)'
   local lockfile_redirect_re="(>|>>)[[:space:]]*[\"']?([^[:space:]<>|;&\"']*/)*${lockfile_name_re}[\"']?([[:space:]|;&]|$)"
   local lockfile_tool_write_re="(^|[[:space:]])([^[:space:]]*/)?(tee|sed[[:space:]]+-i)[[:space:]]+.*${lockfile_name_re}([[:space:]|;&]|$)"
+  # Direct lockfile edits bypass the package manager and can leave dependency state inconsistent.
   if [[ "$cmd" =~ $lockfile_redirect_re ]] || [[ "$cmd" =~ $lockfile_tool_write_re ]]; then
     block "Direct lockfile modification. Use the package manager (npm install, composer update, etc.)." || return $?
   fi
@@ -732,14 +784,17 @@ check_destructive_segment() {
   fi
 
   local bare_redirect_re='^[[:space:]]*>[[:space:]]'
+  # A redirect with no producing command empties the destination file.
   if [[ "$cmd" =~ $bare_redirect_re ]]; then
     block "Redirect to empty file. This truncates the target. Use a safer approach." || return $?
   fi
   local null_redirect_re='^[[:space:]]*(:|true)[[:space:]]+>{1,2}\|?[[:space:]]*[^[:space:]<>]'
+  # A null command followed by redirection truncates a file even though the command itself does nothing.
   if [[ "$CMD_NORMALIZED" =~ $null_redirect_re ]]; then
     block "Null-command (: / true) followed by redirect truncates the target. Use a safer approach." || return $?
   fi
   local cat_null_redirect_re='(^|[[:space:]])cat[[:space:]]+/dev/null[[:space:]]*>{1,2}\|?[[:space:]]*[^[:space:]<>]'
+  # Redirecting /dev/null into a project file erases its current content.
   if [[ "$CMD_NORMALIZED" =~ $cat_null_redirect_re ]]; then
     block "cat /dev/null redirected to a file truncates the target. Use a safer approach." || return $?
   fi
@@ -747,72 +802,95 @@ check_destructive_segment() {
   local empty_printf_double_re='printf[[:space:]]+""[[:space:]]*>\|?[[:space:]]+[^[:space:]]'
   local empty_echo_single_re="echo[[:space:]]+(-n[[:space:]]+)?''[[:space:]]*>\\|?[[:space:]]+[^[:space:]]"
   local empty_echo_double_re='echo[[:space:]]+(-n[[:space:]]+)?""[[:space:]]*>\|?[[:space:]]+[^[:space:]]'
+  # Empty command output still truncates the destination, so harmless-looking output is not a safe write.
   if [[ "$cmd" =~ $empty_printf_single_re ]] || [[ "$cmd" =~ $empty_printf_double_re ]] || [[ "$cmd" =~ $empty_echo_single_re ]] || [[ "$cmd" =~ $empty_echo_double_re ]]; then
     block "Empty-output redirect truncates the target file. Use a safer approach." || return $?
   fi
+  # The clobber operator overrides shell protection against overwriting an existing file.
   if [[ "$CMD_UNQUOTED" == *">|"* ]]; then
     block "Clobber redirect (>|) overrides noclobber and truncates the target. Use a safer approach." || return $?
   fi
+  # Truncating a file can discard user data and requires a deliberate manual decision.
   if [[ "$cmd" =~ truncate[[:space:]] ]]; then
     block "truncate can destroy file contents. Verify intent before proceeding." || return $?
   fi
 
   local cmd_db_scan="$CMD_LOWER"
+  # Strip quoted SQL values before matching command verbs so ordinary query data does not become a false block.
   if [[ "$cmd_db_scan" == *'"'* && "$cmd_db_scan" == *"'"* ]]; then
     cmd_db_scan=$(strip_sql_literals_inside_double_quotes "$cmd_db_scan")
   fi
   local db_cli_re='(^|[[:space:]])(mysql|mariadb|psql|sqlite3|mongosh|cqlsh)([[:space:]]|$)'
   local db_eval_flag_re='(-e|-c|--command|--eval)'
   local db_destructive_re='(drop[[:space:]]+(database|table|schema|index|view)|truncate[[:space:]]+table|delete[[:space:]]+from|\.drop[[:space:]]*\(|\.deletemany[[:space:]]*\(|\.deleteone[[:space:]]*\(|\.remove[[:space:]]*\()'
+  # Destructive inline database statements need manual verification of the affected data.
   if [[ "$cmd_db_scan" =~ $db_cli_re ]] && [[ "$cmd_db_scan" =~ $db_eval_flag_re ]] && [[ "$cmd_db_scan" =~ $db_destructive_re ]]; then
     block "Destructive database command (DROP/TRUNCATE/DELETE). Run manually with verification." || return $?
   fi
+  # A database file argument hides SQL contents from this command check and needs separate inspection.
   if [[ "$CMD_LOWER" =~ (^|[[:space:]])(psql|mysql|mariadb|sqlite3|mongosh)([[:space:]]+|$).*-f[[:space:]] ]]; then
     block "File-fed database command. Inspect the SQL file and run it manually." || return $?
   fi
 
   local cmd_normalized_lower="${CMD_NORMALIZED,,}"
+  # Revoking registry credentials is irreversible and remains a manual account-management action.
   if [[ "$cmd_normalized_lower" =~ ^npm[[:space:]]+token[[:space:]]+(delete|revoke) ]]; then
     block "npm token delete/revoke is irreversible. Manage tokens manually via the npm website." || return $?
   fi
 
   local interpreter_eval_re='(^|[[:space:]])(python|python2|python3|node|nodejs|deno|perl|ruby|php)([[:space:]]+-[a-zA-Z]+)*[[:space:]]+-(c|e|-eval|-execute)'
-  if [[ "$cmd" =~ $interpreter_eval_re ]]; then
-    local shell_primitive_re='(os\.system|os\.popen|os\.exec|subprocess|child_process|system[[:space:]]*\(|backtick|exec[[:space:]]*\(|popen|shell_exec)'
-    if [[ "$cmd" =~ $shell_primitive_re ]]; then
-      block "Interpreter -c/-e with shell-execution primitive. Run the destructive operation directly so the hook can review it." || return $?
+  local php_eval_re='(^|[[:space:]])(php)([[:space:]]+-[a-zA-Z]+)*[[:space:]]+-r'
+  # Inline interpreter input can launch commands hidden from the outer shell; PHP uses -r for this user workflow.
+  if [[ "$cmd" =~ $interpreter_eval_re ]] || [[ "$cmd" =~ $php_eval_re ]]; then
+    local interpreter="${BASH_REMATCH[2]}"
+    # A JavaScript regex receiver is not the standalone exec primitive.
+    # Namespaced process APIs remain explicit.
+    local shell_primitive_re='(os\.system|os\.popen|os\.exec|subprocess|child_process|system[[:space:]]*\(|(^|[^[:alnum:]_.])exec[[:space:]]*\(|popen|shell_exec)'
+    # Shell quoting makes these bytes inert only to the outer shell; Perl/Ruby/PHP can execute them again.
+    # JavaScript backticks are template literals, so they must not inherit another language's command semantics.
+    if [[ "$cmd" =~ $shell_primitive_re ]] ||
+       { [[ "$interpreter" == perl || "$interpreter" == ruby || "$interpreter" == php ]] && [[ "$cmd" == *'`'* ]]; }; then
+      block "Interpreter -c/-e with shell-execution primitive, or equivalent PHP -r. Run the destructive operation directly so the hook can review it." || return $?
     fi
   fi
 
   local shell_here_string_re='(^|[[:space:]])(ba)?sh([[:space:]]+-[a-zA-Z]+)*[[:space:]]+<<<'
   local shell_here_doc_re="(^|[[:space:]])(ba)?sh([[:space:]]+-[a-zA-Z]+)*[[:space:]]+<<-?[[:space:]]*['\"]?[A-Za-z_]"
+  # Shell code supplied through stdin hides its commands from this inspection path.
   if [[ "$cmd" =~ $shell_here_string_re ]] || [[ "$cmd" =~ $shell_here_doc_re ]]; then
     block "Shell stdin (<<< / here-doc) hides commands from inspection. Run the command directly." || return $?
   fi
 
   local powershell_eval_re='(^|[[:space:]])(powershell|pwsh)(\.exe)?([[:space:]]+--?[a-z0-9-]+(=[^[:space:]]+)?)*[[:space:]]+--?(c|command|encodedcommand)([[:space:]]|$)'
+  # Inline PowerShell can mutate the machine even when the outer shell command appears indirect.
   if [[ "$CMD_LOWER" =~ $powershell_eval_re ]]; then
+    # Destructive PowerShell verbs need manual execution with explicit intent.
     if [[ "$CMD_LOWER" =~ (remove-item|clear-disk|format-volume|stop-computer|restart-computer|set-executionpolicy[[:space:]]+(unrestricted|bypass)) ]]; then
       block "PowerShell destructive verb. Run manually with explicit confirmation." || return $?
     fi
+    # Encoded PowerShell input cannot be inspected here; review the decoded command separately.
     if [[ "$CMD_LOWER" =~ --?encodedcommand[[:space:]]+ ]]; then
       block "PowerShell -EncodedCommand is opaque to inspection. Run the decoded command directly." || return $?
     fi
   fi
   local cmd_eval_re='(^|[[:space:]])cmd(\.exe)?[[:space:]]+/[ck][[:space:]]+'
+  # Windows command-shell input needs the same destructive-operation check as direct shell commands.
   if [[ "$CMD_LOWER" =~ $cmd_eval_re ]]; then
     local cmd_destructive_re='(^|[[:space:]/"])(del|erase|rmdir|rd|format)([[:space:]]|$|\.exe)'
+    # Windows deletion or formatting verbs remain manual operations.
     if [[ "$CMD_LOWER" =~ $cmd_destructive_re ]]; then
       block "cmd.exe destructive verb (del/rmdir/rd/format). Run manually with explicit confirmation." || return $?
     fi
   fi
 
   local sudo_package_re='(^|[[:space:];&|])sudo[[:space:]]+(apt(-get)?|dnf|yum|pacman|brew)[[:space:]]+(install|remove|upgrade|update)'
+  # Privileged package changes affect the user's machine beyond project files.
   if [[ "$CMD_LOWER" =~ $sudo_package_re ]]; then
     block "Privileged package-manager mutation. Ask the user to run it manually." || return $?
   fi
   local infra_re='(^|[[:space:];&|])(docker[[:space:]]+push|terraform[[:space:]]+destroy|terraform[[:space:]]+apply[^;&|]*-auto-approve|aws[[:space:]]+s3[[:space:]]+rm|aws[[:space:]]+ec2[[:space:]]+terminate)'
   local infra_normalized_re='^(docker[[:space:]]+push|terraform[[:space:]]+destroy|terraform[[:space:]]+apply[^;&|]*-auto-approve|aws[[:space:]]+s3[[:space:]]+rm|aws[[:space:]]+ec2[[:space:]]+terminate)'
+  # Publishing or destroying cloud infrastructure requires the user's direct manual action.
   if [[ "$CMD_LOWER" =~ $infra_re ]] || [[ "$CMD_NORMALIZED" =~ $infra_normalized_re ]]; then
     block "Cloud or infrastructure destructive command. Ask the user to run it manually." || return $?
   fi

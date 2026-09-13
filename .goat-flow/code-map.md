@@ -132,7 +132,8 @@ src/cli/                         = Node CLI, audit engine, dashboard server, pro
 │   ├── agent-hook-writer.ts     = reads and writes per-agent hook config entries
 │   ├── hook-managed-installation.ts = syncs managed files and verifies trust and release bytes
 │   ├── hook-runtime-proof.ts    = promotes hook status from current local verification evidence
-│   └── hook-registrar.ts        = coordinates registry state, files, configs, and support gates
+│   ├── hook-registrar.ts        = coordinates registry state, files, configs, and support gates
+│   └── hook-operation.ts        = validates, applies, and verifies complete hook changes under path claims
 │
 └── stats/                       = learning-loop health report and renderer
 ```
@@ -294,6 +295,7 @@ docs/                            = user and maintainer documentation
 ├── architecture.md              = canonical architecture and persistence tiers
 ├── code-map.md                  = this file
 ├── glossary.md                  = project terms and canonical surfaces
+├── state/                       = gitignored install baselines and exclusive path-write claims
 ├── learning-loop/               = durable project knowledge
 │   ├── decisions/               = ADRs and decision indexes
 │   ├── footguns/                = architectural traps with semantic-anchor evidence

@@ -157,6 +157,8 @@ The `--mode` flag selects a focused quality assessment. Each mode generates a di
 - `quality history` lists saved reports and same-agent setup/system score deltas. New reports also retain revision, worktree, grounding, unverified-probe, and score-confidence context so readers can identify non-comparable runs without changing the scores. Each of the eight score axes carries a compact `evidence` and `deduction` rationale; text output shows it beside the original `/25` value, while older reports are labeled `rationale unavailable (legacy report)`.
 - `quality diff` derives `absent`, `new`, `persisted`, and `stuck` from saved same-agent report ids, then shows each side's recorded score rationale without recalculating or averaging scores.
 
+New prompts also retain up to five categorized `improvements` and before/after `workspace_snapshot` fingerprints. Runtime findings require the actual command, exit code, and result summary. History shows saved recommendations; diff exposes `comparisonWarnings` for missing or differing provenance without changing scores. Missing legacy recommendations mean they were not recorded, not that none existed. See the [quality save contract](cli.md#goat-flow-quality-save-project) for fields, bounds, and capture limits.
+
 Score rationale makes an assessor's rating-band judgment inspectable; it does not turn subjective scores into deterministic measurements or make different agents' reports comparable. History and diff therefore continue to compare only the same agent and quality mode.
 
 The two commands stay separated in storage as well as terminology: audit output goes to stdout or `--output`, while quality reports land in a gitignored log directory for local trend analysis.

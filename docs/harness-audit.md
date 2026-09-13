@@ -148,13 +148,13 @@ Agents that run for minutes or hours need durable state. Without recovery mechan
 
 ## 5. Feedback Loop
 
-**Question:** Are the feedback-loop directories wired up?
+**Question:** Are the feedback-loop directories present and their recorded evidence usable?
 
-A fresh install with zero footguns and zero lessons is a valid PASS. The audit only checks that the infrastructure exists; `quality` assesses whether the content is high-quality and actively maintained.
+A fresh install with zero footguns and zero lessons is a valid PASS. Existing entries must also pass deterministic reference, metadata, and bucket-review freshness checks; `quality` judges whether their guidance is accurate and useful.
 
 **Feedback Loop checks (2):**
 
-- `feedback-loop-active` - `.goat-flow/learning-loop/footguns/` and `.goat-flow/learning-loop/lessons/` directories both exist. Entry count is reported but never used as a failure condition.
+- `feedback-loop-active` - the configured footgun and lesson directories both exist. Stale file or semantic-anchor references, invalid line references, actionable bucket-format errors, and stale `last_reviewed` dates fail this check. Entry count is reported but never used as a failure condition.
 - `decisions-tracked` - `.goat-flow/learning-loop/decisions/` directory exists. Record count is reported informationally.
 
-**Not checked here:** entry counts, recency (`**Created:**` dates), content accuracy, staleness of semantic-anchor references in footgun entries, whether active/resolved statuses are accurate. All of these are content-quality judgments that belong in `quality`.
+**Not checked here:** whether entry counts are sufficient, incident recency (`**Created:**` dates), content accuracy, or whether active/resolved statuses reflect reality. These judgments belong in `quality`; resolving an anchor does not prove that the cited code supports the entry's claim.

@@ -124,14 +124,25 @@ function dashboardQualityModePreset(
   return ctx.presets.find((preset) => preset.id === presetId) ?? null;
 }
 
-// Reset quality-history rows and warnings before loading a new mode or project.
+/**
+ * Clear the previous selection's history before a new project or mode loads.
+ * Use during selection changes so old rows and warnings do not appear to describe the newly selected project.
+ *
+ * @param ctx - current view state; clearing rows prevents evidence from the previous selection remaining visible
+ * @returns nothing; the shared history state becomes empty until the next load
+ */
 function dashboardClearQualityHistory(ctx: DashboardSetupQualityContext): void {
   ctx.qualityHistoryRows = [];
   ctx.qualityHistoryLatest = null;
   ctx.qualityHistoryWarnings = [];
 }
 
-// Build the read-only harness-engineering assessment prompt used by the Quality page.
+/**
+ * Build the harness assessment guidance shown when the user chooses the Harness Quality card.
+ * Use in the browser fallback; the separate report-contract block supplies its save instructions.
+ *
+ * @returns non-empty assessment instructions; these do not launch a runner or save a report
+ */
 function dashboardHarnessQualityPrompt(): string {
   return [
     "AI Harness Engineering Quality Assessment",
@@ -222,7 +233,12 @@ function dashboardSelectedQualityModeMeta(
   );
 }
 
-// Return the goat-flow controlling workspace path for framework-scoped quality modes.
+/**
+ * Choose the controlling workspace for framework-scoped Quality modes.
+ * Use when resolving report ownership; absent injected metadata falls back to the current directory.
+ *
+ * @returns the injected framework path, or the current-directory selector when metadata is absent
+ */
 function dashboardQualityControllingWorkspace(): string {
   return window.__GOAT_FLOW_DEFAULT_PATH__ ?? ".";
 }
@@ -295,7 +311,9 @@ function dashboardQualityReportLogPrompt(
   const agentJson = JSON.stringify(agent);
   const projectPathJson = JSON.stringify(projectPath);
   const modeJson = JSON.stringify(mode.id);
-  const versionJson = JSON.stringify(window.__GOAT_FLOW_VERSION__ ?? "unknown");
+  // A dashboard without version metadata cannot claim a compatible CLI for the user's assessment.
+  const reportVersion = window.__GOAT_FLOW_VERSION__ ?? "unknown";
+  const versionJson = JSON.stringify(reportVersion);
   const scopeJson = JSON.stringify(
     mode.id === "process" || mode.id === "skills"
       ? "framework-self"
@@ -329,7 +347,8 @@ function dashboardQualityReportLogPrompt(
     '    "working_tree_state": "unavailable",',
     '    "grounding_status": "blocked",',
     '    "unverified_probes": ["runtime grounding not yet recorded"],',
-    '    "score_confidence": "low"',
+    '    "score_confidence": "low",',
+    '    "workspace_snapshot": { "start": null, "end": null }',
     "  },",
     '  "scores": {',
     '    "setup": { "total": 0, "accuracy": 0, "relevance": 0, "completeness": 0, "friction": 0 },',
@@ -352,19 +371,27 @@ function dashboardQualityReportLogPrompt(
     '  "findings": [',
     '    { "type": "setup_quality", "severity": "MAJOR", "file": ".goat-flow/architecture.md", "line": null, "summary": "One-line finding summary", "detail": "Why it matters", "evidence_quality": "OBSERVED", "evidence_method": "static-analysis", "delta_tag": "new" }',
     "  ],",
-    '  "refuted_candidates": []',
+    '  "refuted_candidates": [],',
+    '  "improvements": []',
     "}",
     "```",
     "- Use exact score axis values `0 | 5 | 10 | 15 | 20 | 25`; each total must equal its axis sum.",
     "- Every score axis requires `evidence` and `deduction` as non-empty single-line strings of 240 characters or fewer.",
     "- Allowed finding types: `setup_quality`, `skill_flaw`, `contradiction`, `false_path`, `content_quality`, `framework_flaw`.",
     "- Allowed severities: `BLOCKER`, `MAJOR`, `MINOR`. Allowed evidence methods: `runtime-probe`, `static-analysis`, `mixed`.",
+    "- A `runtime-probe` or `mixed` finding requires `evidence_command`, `evidence_exit_code`, and `evidence_summary` from the same completed tool call. Optional `evidence_warning_count` and `evidence_excerpt` must match that output.",
+    "- Capture command output and its real exit code together. A grep with no matches can exit 1; a failed analyzer startup is not a clean run. Truncated output, a signal, or an unavailable exit code cannot support a precise count or a fabricated exit 0; name the missing evidence in `unverified_probes`.",
+    "- Recheck each candidate against current source, accepted decisions, and a negative control before scoring it. Report findings only for concrete current defects. Keep qualification gaps, maintenance work, and design opportunities distinct; a local classifier test does not prove live provider delivery. State whether a skill was inspected or invoked; static inspection is valid evidence for static claims.",
+    "- Record up to 5 actionable recommendations in `improvements`, or `[]` when none remain. Each row has `category` (`defect`, `qualification-gap`, `maintenance`, `design-opportunity`), `summary` (up to 240 characters), `action` and `evidence` (up to 1000 each), and `file` (path or null for project-wide work). Text must be non-empty and single-line. Preserve the same recommendations in prose; do not repeat refuted candidates or change rubric scores merely because an opportunity exists.",
     "- `refuted_candidates` is REQUIRED and may be `[]`. Each row requires `claim`, `why_excluded`, nullable `file` and `line`, `evidence_quality`, `evidence_method`, and `evidence_summary`; excluded candidates do not belong in `findings`.",
     "- A `runtime-probe` or `mixed` refuted candidate requires `evidence_command`, `evidence_exit_code`, and `evidence_summary` so the disproval is reproducible.",
     '- A refuted candidate must use `evidence_quality: "OBSERVED"`; an `INFERRED` candidate remains unresolved and must not enter the refutation ledger.',
     '- A `static-analysis` or `mixed` refuted candidate requires a non-null `file` and a grep-friendly semantic anchor such as `(search: "pattern")` in `evidence_summary`.',
     '- `prior_report_id`: keep `null` unless you can cite a specific prior report id (from `goat-flow quality history`) for this same agent/mode. When it is set, `delta_tag` is REQUIRED on every finding (`"new"` unless the finding materially matches that prior report; then `"persisted"`); when it is `null`, leave `delta_tag` as `null` or omit it.',
     "- `assessment_context`: record `project_revision`, `working_tree_state` (`clean`, `dirty`, `not-git`, or `unavailable`), `grounding_status` (`complete`, `partial`, or `blocked`), every skipped, denied, or unavailable command or skill probe in `unverified_probes`, and `score_confidence` (`high`, `medium`, or `low`). Use an empty probe array only for complete grounding. This metadata does not change or cap the rubric scores.",
+    "- Record `workspace_snapshot.start` before assessment and `.end` afterwards using the same raw-file snapshot request below; copy each returned `authority.fingerprint`. This covers the selected project's non-ignored regular files, not ignored plans/logs, symlinks, or nested repositories. Re-read any ignored evidence separately. These are reviewer-recorded fingerprints, not launcher attestation.",
+    `- With a version-matched CLI, send {"schema":"goat-review-request/v1","source":{"kind":"area","roots":["."],"sample":null}} on stdin to \`goat-flow review snapshot --project ${reportRootShell} --expected-version ${reportVersion}\`. In the controlling framework checkout, the matching \`node --import tsx src/cli/cli.ts\` prefix is also valid.`,
+    "- If snapshot capture is unavailable, use null for that endpoint and name the limitation in `unverified_probes`. If endpoints differ, recheck affected findings and use partial grounding while the drift remains unresolved. A shared HEAD or a dirty/clean label alone does not establish identical assessed content. Compare score changes only with matching rubric, scope, and adequately grounded evidence.",
     "- Live review findings should cite `file` + semantic anchor after re-reading the cited file and anchor. Durable footguns, lessons, patterns, and decisions must use file paths plus semantic anchors rather than line numbers.",
     "- **Version-skew calibration:** Executable version checks select a compatible report saver; they are not findings or score inputs. Before publication, the framework checkout may be newer than the bare `goat-flow` on `PATH`; use the matching source CLI and do not report or score that PATH-only skew. Raise version findings only when repository-owned declarations or managed target artifacts disagree.",
     "- In the controlling goat-flow checkout, confirm `node --import tsx src/cli/cli.ts --version` matches the report version, then run:",
@@ -596,7 +623,14 @@ async function dashboardGenerateSetupPromptForAgent(
   }
 }
 
-// Generate setup output for the agent selected in the setup view.
+/**
+ * Generate Setup guidance for the agent currently selected in the form.
+ * Use from the Generate action; the shared per-agent path handles caching, loading state, and errors.
+ *
+ * @param ctx - form state providing the current project and selected agent
+ * @param options - force option; omission allows the shared generator to reuse a matching cached prompt
+ * @returns when the shared per-agent generation finishes; no prompt text is returned directly
+ */
 async function dashboardGenerateSetupPrompt(
   ctx: DashboardSetupQualityContext,
   { force: shouldForce = false }: Partial<Record<"force", boolean>> = {},
@@ -606,7 +640,13 @@ async function dashboardGenerateSetupPrompt(
   });
 }
 
-// Schedule setup prompt generation after setup detection gets a paint.
+/**
+ * Schedule Setup guidance after the detection result has had time to render.
+ * Use after form context changes; a newer request replaces any pending generation timer.
+ *
+ * @param ctx - current form state; a null timer means no generation is waiting
+ * @returns nothing; replaces the pending timer and later starts prompt generation
+ */
 function dashboardScheduleSetupPrompt(ctx: DashboardSetupQualityContext): void {
   // Rapid context changes replace pending generation so only the latest scheduled setup action starts.
   if (ctx._setupPromptTimer !== null) {
@@ -730,7 +770,13 @@ async function dashboardGenerateQualityHistory(
   if (isCurrentRequest()) ctx.qualityHistoryLoading = false;
 }
 
-// Schedule quality-history loading after the prompt path gets a paint.
+/**
+ * Schedule saved Quality history after the current prompt can render.
+ * Use after mode or project changes; newer requests replace pending loads.
+ *
+ * @param ctx - current Quality selection; a null timer means no history load is waiting
+ * @returns nothing; replaces the pending timer and later starts history loading
+ */
 function dashboardScheduleQualityHistory(
   ctx: DashboardSetupQualityContext,
 ): void {
@@ -744,7 +790,13 @@ function dashboardScheduleQualityHistory(
   }, QUALITY_HISTORY_LOAD_DELAY_MS);
 }
 
-// Copy the current quality prompt to the clipboard.
+/**
+ * Copy the currently generated Quality prompt and briefly confirm the action on the button.
+ * Use for Copy; an empty prompt leaves both the clipboard and button unchanged.
+ *
+ * @param ctx - current Quality result; null or empty prompt text makes Copy a no-op
+ * @returns nothing; available text reaches the clipboard and the temporary button label
+ */
 function dashboardCopyQuality(ctx: DashboardSetupQualityContext): void {
   // Until generation supplies prompt text, Copy has no meaningful Quality content to send to the clipboard.
   if (!ctx.qualityResult?.prompt) return;

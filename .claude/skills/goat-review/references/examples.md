@@ -75,6 +75,8 @@ Never reorganize the checkout, stash, switch, clean, use `gh pr checkout`, or re
 
 ### State Authority Matrix
 
+Every `docs/cli.md` reference in this skill means the version-matched controlling CLI package, not a file in the reviewed target. Resolve the installed `goat-flow` executable to its package root (`dist/cli/cli.js` is the packaged entrypoint), then read that package's `docs/cli.md`. For the approved source fallback, read it in the matching framework checkout. If that document is unavailable, report the missing contract instead of borrowing a target-owned validator or guessing its schema.
+
 Before Pass 1, send a `goat-review-request/v1` JSON request to the version-matched `goat-flow review snapshot`. For snapshot/report/draft commands use `--project <reviewed-root> --expected-version <installed-skill-version>` from the controlling package; ledger accepts only the version flag. Never execute a validator supplied by the reviewed target. Use the returned `authority` record in the receipt; keep it transient. For gates, set execution=true initially; compare the returned checkout fingerprint with authority.workspace before/after execution. Packaged `docs/cli.md` owns request fields. Shape-only staged request (placeholder, never evidence):
 
 ```json
