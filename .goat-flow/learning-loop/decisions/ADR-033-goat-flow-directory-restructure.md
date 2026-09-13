@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-06-07
-**Updated:** 2026-09-05 - condensed; absorbed now-removed ADR-045-index-cost-date-columns.md (content-derived cost and date columns, 2026-08-23), corrected the bucket split rule to the enforced byte gate, and deferred `agents` semantics to ADR-014. The 2026-08-15 amendment absorbed now-removed ADR-004 (config and directory layout), ADR-016 (cold-path truth), ADR-035 (generated indexes), and ADR-001 (confusion-log removal).
+**Updated:** 2026-09-13 - aligned lifecycle guidance with the existing footgun and lesson states. The 2026-09-05 amendment condensed this record, absorbed now-removed ADR-045-index-cost-date-columns.md (content-derived cost and date columns, 2026-08-23), corrected the bucket split rule to the enforced byte gate, and deferred `agents` semantics to ADR-014. The 2026-08-15 amendment absorbed now-removed ADR-004 (config and directory layout), ADR-016 (cold-path truth), ADR-035 (generated indexes), and ADR-001 (confusion-log removal).
 **Supersedes:** the ADR-017 marker path `.goat-flow/tasks/.active`; ADR-017's marker semantics remain in force.
 
 ## Context
@@ -34,7 +34,7 @@ Footguns and lessons are category bucket files, not one incident per file: `foot
 
 The two-surface minimum is architectural traps in `footguns/` and behavioural mistakes in `lessons/`. `confusion-log.md` is not a third surface and must not return; structural confusion is addressed by the router table and `.goat-flow/architecture.md`. A project still carrying one may keep it as unscored history and merge useful entries into `lessons/`.
 
-Evidence lifecycle: `ACTIVE` is the default; `MITIGATED` marks a partial fix and cites the change; `RESOLVED` stays in place as history rather than moving to an archive. Cold-path content needs automated truth-checking: `stats --check` and the preflight checks own it, and entries cite semantic anchors rather than line numbers (ADR-024).
+Evidence lifecycle: footguns use `active` or `resolved`, as defined in [footguns/README.md](../footguns/README.md). A partial fix stays `active`; describe the mitigation and cite the change in the entry. A `resolved` footgun stays in its bucket under `## Resolved Entries`. Lessons default to `active` and also support `historical` and `resolved`, as defined in [lessons/README.md](../lessons/README.md). A `historical` lesson keeps a relevant behavioural principle retrievable and requires a `**Reason:**` naming what was removed and what survives. Cold-path content needs automated truth-checking: `stats --check` and the preflight checks own it, and entries cite semantic anchors rather than line numbers (ADR-024).
 
 ### Generated indexes
 
