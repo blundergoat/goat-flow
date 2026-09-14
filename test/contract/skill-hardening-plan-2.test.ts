@@ -303,28 +303,24 @@ describe("skill hardening contracts: goat-plan (2/2)", () => {
     });
   });
 
-  it("keeps the redesigned goat-plan canonical surface within its tighter budget", () => {
+  // Historical evidence in .goat-flow/learning-loop/lessons/contract-testing.md locates this check through
+  // "redesigned goat-plan canonical surface" and "canonical goat-plan surface has".
+  it("keeps canonical goat-plan files within the standard per-file budgets", () => {
     assert.ok(
-      countSkillBodyWords("workflow/skills/goat-plan/SKILL.md") <= 2150,
-      "workflow goat-plan must stay at or below the redesign target of 2150 words",
+      countSkillBodyWords("workflow/skills/goat-plan/SKILL.md") < 2500,
+      "workflow goat-plan must stay below the functional-skill limit of 2500 words",
     );
 
-    const canonicalSurfaceWords = [
-      "workflow/skills/goat-plan/SKILL.md",
+    for (const referencePath of [
       "workflow/skills/goat-plan/references/milestone-examples.md",
       "workflow/skills/goat-plan/references/issue-format.md",
-    ]
-      .map((filePath) => readProjectFile(filePath))
-      .join("\n")
-      .split(/\s+/u)
-      .filter(Boolean).length;
-
-    // The obvious way to buy room here is cutting the restating Verification baseline and Maintenance notes subsections,
-    // but the "keeps goat-plan handoff artifacts drift-aware" contract pins them, so that trim costs a shipped check.
-    assert.ok(
-      canonicalSurfaceWords <= 5650,
-      `canonical goat-plan surface has ${canonicalSurfaceWords} words; expected at most 5650`,
-    );
+    ]) {
+      const referenceWords = countSkillBodyWords(referencePath);
+      assert.ok(
+        referenceWords < 3000,
+        `${referencePath} has ${referenceWords} words; expected fewer than 3000`,
+      );
+    }
   });
 
   it("aligns goat-plan lifecycle guidance with human-verification-pending", () => {

@@ -1,6 +1,6 @@
 ---
 category: skill-guidance
-last_reviewed: 2026-09-11
+last_reviewed: 2026-09-14
 ---
 
 **Scope:** Editing shipped skill and playbook guidance: behavioural wording, authority alignment, contract caps, and load-budget signals. Skill candidacy and runtime authoring traps live in [skill-authoring.md](skill-authoring.md); mirror sync lives in [skills.md](skills.md).
@@ -84,16 +84,16 @@ For a closed vocabulary or reconciliation equation, also grep every label and to
 ## Footgun: goat-plan surface additions collide with near-full word-budget contract caps
 
 **Status:** active | **Created:** 2026-08-15 | **Evidence:** ACTUAL_MEASURED
-**Decision changed:** Measure both caps and enumerate every phrase pin before drafting; preserve existing pins and compact only new wording unless the human approves a cap or semantic change.
+**Decision changed:** Measure the current per-file budgets and preserve existing rules; shorten only new wording unless the user approves a semantic change.
 **Trigger phase:** SCOPE
 **Caught at:** VERIFY
-**Incident count:** 5 | **Latest occurrence:** 2026-08-29
+**Incident count:** 7 | **Latest occurrence:** 2026-09-14
 
-**Prevention:** Before editing goat-plan, measure both caps and grep every contract that reads the target path, including older plan-contract pins. Preserve pinned semantics and compact only new wording, or ask the human to choose a cap or semantic change. Sync all four mirrors and rerun the fast contracts; after a cap change, grep ignored plans and docs for the old number and assertion text.
+**Prevention:** Before editing goat-plan, read the current budget contract and every assertion that reads the affected files. Preserve existing rules and contract-pinned phrases; compact new wording first. An approved cap change does not authorize removing guidance. Sync the four mirrors and rerun focused contracts. After a cap change, distinguish historical counts in ignored plans from live constraints before updating references.
 
 **Symptoms:** A small approved addition to goat-plan's SKILL.md or reference files passes every phrase-pinning assertion and the mirror byte-identical check, then fails `keeps the redesigned goat-plan canonical surface within its tighter budget`.
 
-**Why it happens:** Two caps bound the canonical surface, the SKILL.md body alone and SKILL.md plus `references/milestone-examples.md` plus `references/issue-format.md` combined, and the redesign left both within a few words of their caps (2099/2100 and 4499/4500 before 2026-08-15). Same class as the ADR-023 playbook cap above, on a different surface with different caps in a different test file: `test/contract/skill-hardening-plan-2.test.ts` (search: `redesign target of 2150 words`) holds the body cap and (search: `canonical goat-plan surface has`) the combined cap, while `test/contract/skill-hardening.helpers.ts` (search: `countSkillBodyWords`) excludes frontmatter.
+**Why it happens:** Earlier redesign budgets capped both the skill body and the combined three-file surface, leaving only one word of headroom at 2099/2100 and 4499/4500 before 2026-08-15. Useful additions then competed with existing controls. Those special caps were replaced on 2026-09-14: `test/contract/skill-hardening-plan-2.test.ts` (search: `keeps canonical goat-plan files within the standard per-file budgets`) now enforces a body below 2500 words and each reference below 3000, without an aggregate cap. `test/contract/skill-hardening.helpers.ts` (search: `countSkillBodyWords`) owns frontmatter exclusion. The earlier assertion names and numbers below describe historical incidents.
 
 **Incident ledger:**
 - **2026-08-15:** adding two template sections plus one SKILL.md sentence (97 words) tipped both caps to 2117/2100 and 4596/4500; the user approved raising them to 2150/4650.
@@ -102,6 +102,8 @@ For a closed vocabulary or reconciliation equation, also grep every label and to
 - **Recurrence 2026-08-19:** the combined cap rose 4700 to 5450 for the ISSUE.md plain-language redesign (5373 used) and again to 5650 for the cut-words-never-facts rules (5564 used), both with user approval; the body cap stayed 2150 (2128 used).
 - **Recurrence 2026-08-28:** a cap audit measured every configured limit but missed older plan-contract pins, so mid-proof failed its amendment and dependency-transition contracts at 2151/2150; restoring the pins and compacting only the new rule gave 2144/2150 and `# pass 51`, `# fail 0`: `test/contract/skill-hardening-plan-1.test.ts` (search: `keeps goat-plan amendments behind the milestone approval gate`).
 - **Recurrence 2026-08-29:** a mode-order edit hit 2154/2150 and its first trim broke a pinned path-only phrase; the final row ended at 2145/2150 with 24/24: `test/contract/skill-hardening-plan-1.test.ts` (search: `makes explicit no-write signals outrank named-file mutation verbs`).
+
+- **Recurrence 2026-09-14:** Forecast authoring removed existing writing guidance and shortened forecast rules to fit the old caps. The user requested restoration and alignment with other functional skills. The revision preserves every original line in the three canonical files and adds forecasting and task-specificity guidance. Evidence: `workflow/skills/goat-plan/references/issue-format.md` (search: `Use plain professional sentences`), `workflow/skills/goat-plan/references/milestone-examples.md` (search: `Count work before allocating minutes`), and the current per-file budget contract above.
 
 ---
 

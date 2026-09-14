@@ -833,7 +833,12 @@ function collectLiveItemProblems(
   const usedIds = new Set<string>();
   for (const workItem of work) {
     const description = workItem.text
-      .replace(/\(est:\s*\d+\s*min(?:ute)?s?\s+[a-z]+\)\s*$/iu, "")
+      // Supporting lists follow the parent's estimate in flattened checklist text.
+      .replace(
+        /\(est:\s*\d+\s*min(?:ute)?s?\s+[a-z]+\)(?=\s+(?:[-*+]|\d+[.)])\s|$)/iu,
+        "",
+      )
+      .replace(/\s+/gu, " ")
       .trim();
     // Match authored scope, excluding allocation minutes so later completion cannot change identity.
     const matchesItem = (saved: PlanForecastItem): boolean =>

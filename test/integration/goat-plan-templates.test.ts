@@ -12,6 +12,7 @@ import { parseMilestoneMarkdown } from "../../src/cli/plans-export.js";
 import { applyPlanTimeTransition } from "../../src/cli/plans-time.js";
 import {
   PROJECT_ROOT,
+  registeredHistoryFixture,
   runPlansCheck,
   writeCheckPlan,
 } from "../unit/plans-check.helpers.js";
@@ -222,6 +223,102 @@ function expectInventory(
 }
 
 describe("shipped goat-plan templates", () => {
+  // The shipped nested paths must remain countable and match saved scope; changing
+  // one path must still require a revision. check() owns temporary files and cleanup.
+  it("counts the short-task example without promoting supporting paths to work units", () => {
+    const tasks = shippedFence(EXAMPLES, "Short task example");
+    const body = milestone("Standard")
+      .replace(/## Tasks\n[\s\S]*?(?=\n## Commands)/u, `## Tasks\n${tasks}\n`)
+      .replace("~15 min agent-time (10 product", "~9 min agent-time (4 product")
+      .replace(
+        "5 agent work units; 1-3.0000-5",
+        "7 agent work units; 1-1.2857-5",
+      )
+      .replace("5-25 agent-time", "7-35 agent-time")
+      .replace("likely 15;", "likely 9;");
+    const record = parseMilestoneMarkdown(body, "M01-template.md");
+    const descriptions = [
+      "[CORE] Validate assessment metadata when parsing reports. - `<validation-file>` (`<validation-symbol>`).",
+      "[CORE] Preserve assessment metadata when saving reports. - `<save-file>` (`<save-symbol>`).",
+      "[CORE] Preserve assessment metadata when loading report history. - `<history-file>` (`<history-symbol>`).",
+      "[CORE] Add regression cases for metadata validation, saving and history loading. - `<test-file>`.",
+    ];
+    assert.deepEqual(
+      record.tasks.map((item) =>
+        item.text.replace(" (est: 1 min product)", ""),
+      ),
+      descriptions,
+    );
+    for (const task of record.tasks) {
+      assert.equal(task.estimateCategory, "product", task.text);
+      assert.equal(task.estimateMinutes, 1, task.text);
+      assert.match(task.text, /<[^>]+-file>/u, `supporting path: ${task.text}`);
+    }
+    expectAccepted(body);
+
+    // Save independently declared scope: allocation estimates are not task identity,
+    // but supporting file and symbol details must survive forecast matching.
+    const { forecast } = registeredHistoryFixture(100, 23, false, {
+      items: [
+        ...descriptions.map((description, index) => ({
+          id: `T${index + 1}`,
+          description,
+          category: "product" as const,
+          units: 1,
+          estimateMinutes: 1,
+        })),
+        {
+          id: "P1",
+          description:
+            "C1: Every planned proof item remains countable → Commands: Source version [RUNTIME] [automated]",
+          category: "proof",
+          units: 1,
+          estimateMinutes: 2,
+        },
+        {
+          id: "P2",
+          description:
+            "C2: The rendered plan preserves human approval → Inspect the rendered approval row [RUNTIME] [manual]",
+          category: "proof",
+          units: 1,
+          estimateMinutes: 2,
+        },
+        {
+          id: "A1",
+          description: "Plan/admin overhead",
+          category: "other",
+          units: 1,
+          estimateMinutes: 1,
+        },
+      ],
+      basis: {
+        agentWorkUnits: 7,
+        lowMinutesPerUnit: 1,
+        likelyMinutesPerUnit: 1.2857,
+        highMinutesPerUnit: 5,
+        source: "declared test inventory",
+      },
+      range: { lowMinutes: 7, likelyMinutes: 9, highMinutes: 35 },
+    });
+    const contextual = `${body}\nForecast method: contextual-v1\n\n## Forecast records\n\n\`\`\`json\n${JSON.stringify({ schemaVersion: 1, records: [forecast] })}\n\`\`\`\n`;
+    expectAccepted(contextual);
+    expectAccepted(
+      contextual.replaceAll(
+        "`<test-file>`.",
+        "`<test-file>` (est: 9 min proof)",
+      ),
+    );
+
+    const changedScope = check(
+      contextual.replace("<validation-file>", "<replacement-file>"),
+    );
+    assert.equal(changedScope.status, 1);
+    assert.match(
+      changedScope.stdout,
+      /live work items must uniquely match the current forecast snapshot/u,
+    );
+  });
+
   for (const kind of ["Small", "Standard"] as const) {
     it(`T1: preserves ${kind} work and accepts it in both CLI modes`, () => {
       const body = milestone(kind);

@@ -619,7 +619,7 @@ npx @blundergoat/goat-flow@latest plans check .goat-flow/plans/1.15.0 --strict
 
 Default mode preserves legacy plans. It errors on malformed notation, a declared split that does not sum to its headline, task estimates exceeding a declared category, or unestimated Tasks beneath a declared effort line; plans without effort fields pass with one informational line.
 
-Malformed task estimates, plan/admin overhead, forecast bases, and forecast ranges report the accepted grammar beside the JSON-escaped value received. Received text is redacted before CLI or export rendering, so the diagnostic remains useful without exposing a pasted token or terminal control sequence. The canonical copy-ready shapes remain in `workflow/skills/goat-plan/references/milestone-examples.md` under `Effort Estimates`.
+Malformed task estimates, plan/admin overhead, forecast bases, and forecast ranges report the accepted grammar beside the JSON-escaped value received. Received text is redacted before CLI or export rendering, so the diagnostic remains useful without exposing a pasted token or terminal control sequence. Milestone templates remain in `workflow/skills/goat-plan/references/milestone-examples.md`; forecast field grammar is below under `Forecast context and history`.
 
 The shallowest checkbox indentation in each estimate-bearing section defines its tasks. Indented list items remain visible as supporting task prose, but they do not become work units or hide an estimate already written on the parent task.
 
@@ -650,6 +650,43 @@ Calibration eligibility uses raw receipt seconds and a positive estimate in both
 Band coverage reports observed inclusion (both endpoints), below/above counts and median high/low width for receipt-backed measured milestones with stored ranges; zero lower bounds produce unbounded width, and an empty cohort reports unavailable percentages and width. Plan total divides summed raw receipt minutes by summed stored forecast minutes over all calibration-eligible IDs, including legacy milestones without ranges, reports its sample count, and describes past totals rather than predictive coverage or estimator bias.
 
 Plan-level drift beyond 15 percentage points produces an advisory with exit 0. Roughly 70/20/10 is a flexible diagnostic guide, never a quota or pass/fail rule: consolidate duplicated proof, but retain and explain proof justified by the task's risk. This command remains user-invoked and outside `audit` because plans are optional local workflow state. The report prints to stdout; `--output` and `--force` are rejected.
+
+#### Forecast context and history
+
+The default numerical method remains `legacy`. An explicit `**Forecast method:** contextual-v1` selects experimental context matching; it needs valid saved records. `**Forecast method:** legacy` disables matching while retaining those records. Omitting both declarations and records preserves legacy exports. This feature records and explains forecasts; it has not qualified a more accurate default.
+
+Before sizing new work, separate independently verifiable product changes and count each foreground proof execution, including repeated runs. A claim that reuses completed output adds no execution. Register this decomposition as `observable-change-v1`; existing `legacy-checkbox-v1` history keeps its original meaning. Do not relabel old checklists to supply missing forecast-time context.
+
+Show one primary forecast with its work state, history source, sample count and limitations. Cite comparable measured costs and required commands/repetitions before presenting a numerical low as feasible. Without that evidence, label the low provisional, put a bounded investigation before dependent work, and name its stop condition and reforecast checkpoint. Broad prior ranges and planned category allocations do not establish execution speed. Keep valid positive short receipts, including rounded-zero minutes; distinguish their applicability to fresh implementation without imposing a duration floor.
+
+Forecast field grammar (placeholders describe required input, not evidence):
+
+```markdown
+**Forecast basis:** <units> agent work units; <low>-<likely>-<high> min/unit low-likely-high; source: <cold-start prior or selected historical quantiles>
+**Forecast range:** <low>-<high> agent-time minutes on one recorded-unpaused milestone timeline; likely <n>; <confidence and why>
+```
+
+For saved context, add exactly one `## Forecast records` section containing one JSON fence with `{"schemaVersion":1,"records":[...]}`. Each record supplies every required field below; empty lists and explicit nulls are significant.
+
+| Fields | Contract |
+|---|---|
+| `id`, `predecessorId`, `reason`, `issuedAt` | Unique forecast ID, previous ID or null for the original, nonblank reason, actual UTC issue time before predicted work. Revisions have strictly later issue times. |
+| `methodVersion`, `workState`, `scopeKind`, `unitRubric` | Method `legacy` or `contextual-v1`; work state `fresh-implementation`, `reconciliation`, `verification-only` or `unknown`; scope `whole` or `remaining`; rubric `legacy-checkbox-v1` or `observable-change-v1`. Missing legacy context stays unknown. |
+| `items` | One object per positive agent-owned item: stable `id`, `description`, `category` (`product`, `proof`, `other`), `units: 1`, positive integer `estimateMinutes`. Description includes supporting detail, with the parent estimate removed and whitespace collapsed; admin description is `Plan/admin overhead`. |
+| `basis` | `agentWorkUnits`, `lowMinutesPerUnit`, `likelyMinutesPerUnit`, `highMinutesPerUnit`, and nonblank `source`; count and rates derive the issued bounds. |
+| `range`, `quantiles` | Range object with integer `lowMinutes`, `likelyMinutes`, `highMinutes` and optional `rationale`; percentile pair straddling 50, normally `[10,90]`. |
+| `selection`, `selectionReason`, `sourceVersion` | Selection is `context-matched`, `selected-plan` or `cold-prior`; give its reason and the actual method/source version. |
+| `sampleCount`, `history` | Count equals history length. Each selected source has project-relative `id`, lowercase SHA-256 `sha256`, and actual `completedAt` strictly before issue time. No invented history. |
+| `scopeDelta` | Object with `added` and `removed` ID arrays; both empty for the original, exact item-set differences for revisions. Keep existing description/category identities bound to their IDs. |
+| `receiptCutoff` | Null for whole work; for remaining work, `{segmentId, recordedSeconds}` identifies the last closed receipt segment and its cumulative recorded seconds. |
+
+Preserve the original whole-work record and issued estimate, basis, range and split. Append remaining-work revisions at a closed cutoff before the next segment starts; snapshot only residual work. Update live item allocations and the overview together, showing recorded effort at that cutoff plus the remaining forecast. Never add elapsed effort to a whole-work forecast or score a residual prediction against whole Actual. If the original issue-time evidence or cutoff is missing, disclose the gap and withhold a validated residual record rather than inventing timing. The checker validates structural consistency but cannot prove when a file existed.
+
+Each plan's `evaluation/prospective-registration.json` provides the separate provenance contract: `schemaVersion: 1` and a `forecasts` array. Each entry contains milestone basename `milestone`, `forecastId`, actual whole-second UTC `registeredAt`, the complete frozen `forecast` object, and `sha256` of its canonical compact JSON (recursively sorted object keys; preserved array order). Optional `receiptId` identifies the measurement. Register every original and revision after issue and before its predicted work begins; retain the frozen objects. Hashes prove consistency, not independent timestamp authenticity. Missing or mismatching registration leaves that history diagnostic-only for context matching and retains the existing numerical fallback.
+
+History discovery stays inside the selected plan's physical project root, visiting direct plan directories and one `_done` layer without following symlinks. Sibling parse or lifecycle problems are reported as history exclusions, not selected-plan errors. Matching requires at least three registered, complete measured samples with equal known work state, scope kind and rubric, completed strictly before issue time. Matching uses the saved percentile pair and median, published to two decimal places. Otherwise the selected-plan method remains the numerical fallback, including its cold prior when needed; broad pooling is diagnostic. If the resulting rates cannot fit positive integer allocations, retain issued values and disclose the attempted forecast. All recommendations are read-only.
+
+Contextual records and functional tests do not prove forecasting accuracy. Default promotion remains gated on the registered prospective evaluation; an incomplete pilot keeps the method opt-in.
 
 ### `goat-flow plans time <start|stop|status> <milestone-file> [--category <c>] [--finalize|--discard-open]`
 

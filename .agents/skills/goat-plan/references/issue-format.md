@@ -31,6 +31,10 @@ Write for GitHub readers across technical levels. Make Outcome, At a glance, pro
 - Preserve stable requirements in Requirements; completion ticks verified Tasks instead of rewriting requirements as history.
 - Milestone files keep their own one-line band (70-120 characters) for the shared problem and benefit sections.
 
+Apply `.goat-flow/skill-docs/playbooks/writing-human-facing-prose.md` to non-checkbox narrative. Keep the decision and necessary facts; shorten repeated explanation and link supporting evidence to its owner. Do not apply prose shortening to exact requirements, commands or acceptance criteria.
+
+Checkbox tasks need a concrete action, affected surface and observable result. Name the relevant command, option, format, screen or data behavior when readers need it to understand the deliverable. A broad label such as "improve validation" is insufficient without saying which input is checked and what changes. Keep executor-only paths and detailed cases in the milestone; specificity must survive that separation.
+
 Avoid these words in prose sections; use the replacement:
 
 | Avoid | Use |
@@ -52,6 +56,27 @@ Worked rewrites (illustrative placeholders, never repository evidence):
 - GOOD: "Repeat searches reuse stored results, so common questions get answers in under one second."
 - BAD: "Fix three command-line bugs."
 - GOOD: "Fix the three command-line problems: audits that overclaim, odd folder names crashing, misspelled options hiding."
+
+## Human-facing exports
+
+Apply these rules when copying milestone content into an issue, PR or handoff. Public readers must understand the result without private plan files. The owner's links are useful inside a local plan; for publication, inline the necessary facts or link an accessible repository artifact instead. Verify that a linked artifact is available to the intended reader.
+
+- Replace milestone, requirement and proof labels with plain descriptions. Strip risk/proof tags and `(est: ...)` control fields from copied checkboxes. Preserve real public issue numbers and technical names when they identify the work.
+- Keep the explicitly labelled coding-agent delivery bands required by this ISSUE format; never translate a milestone's control field into an unlabelled developer estimate such as “about three minutes”.
+- Give each checkbox one independently checkable outcome. Start with the operation and name the affected behavior; “finalize the contract” alone supplies neither a concrete change nor a completion check.
+- Aim for short task lines; put necessary file paths or symbols beneath technical handoff tasks, one path per bullet. The plain-language ISSUE sections retain their audience rules above.
+- State observable evidence: the request appears, the saved value survives reload, the query returns the expected row, or the command exits successfully. “Verify it works” is insufficient. One relevant check may cover several changes.
+- Put exact commands and queries in one named location accessible to that reader. Preserve their literal text; refer to that location instead of repeating or paraphrasing the invocation.
+- For a bug, reproduce the observed failure before changing it. Otherwise start with prerequisite checks; then order changes, confirmation, cleanup and any required monitoring by dependency.
+- When the user drops a design, remove its residue from current tasks and summaries, including unnecessary negative exclusions. Preserve immutable evidence and decision history; retain exclusions readers still need to understand scope.
+
+These export rules also govern ISSUE drafts stored beside milestones. Local storage does not make the requester an executor with access to private files. Replace “the work plan owns detailed tasks” or “requirements map to the milestone checks” with the actual acceptance facts needed here.
+
+For one milestone with several deliverables, allocate shares of its recorded low, likely and high totals across the required delivery phases. Sum the shares back to the original forecast and label them delivery allocations, not independently calibrated forecasts. Avoid counting the milestone twice or collapsing distinct deliverables merely to avoid allocating its total.
+
+Before export, inspect every prose section, table and checklist for unexplained IDs, private pointers and stale alternatives. Check task coverage separately from length: a compact sentence can still hide several deliverables. Use verified technical anchors; the other project's examples describe its incident, not facts about this repository.
+
+Illustrative rewrite, shape only: “Finalize the report metadata contract” becomes “Preserve assessment metadata when saving reports”, followed by the check “Reload the saved report; confirm its assessment metadata is unchanged”. Validation and history loading receive separate change tasks when required; they must not disappear inside the saving task.
 
 The headings below are the default output order. The snippets are illustrative input/output shape only, never repository evidence.
 
@@ -135,6 +160,22 @@ Show three to six delivery phases without duplicating milestone tasks. End lines
 ```
 
 Every ISSUE delivery band is derived from milestone forecasts; reconcile Tasks with the "How long will it take?" answer separately: `plans check` ignores ISSUE content. ISSUE bands never input a milestone estimate. Exclude prerequisites from the subtotal.
+
+For active work, show recorded effort plus the latest remaining forecast at its named cutoff; keep issued whole forecasts separate. Missing timing means the combined total is unavailable. Label unsupported fast cases provisional and name the investigation checkpoint; never add elapsed work to a whole-work forecast.
+
+### Forecast presentation
+
+Read `milestone-examples.md` → Effort Estimates before deriving delivery bands. Summarize its recorded forecasts in language readers can act on; keep forecast schemas, hashes and registration commands in the milestone and its evidence.
+
+- For work that has not started, derive each delivery phase's low, likely and high from the milestones it covers. Count each milestone once and keep separately labelled prerequisites outside the subtotal.
+- For active work, distinguish effort already recorded at a named cutoff, the latest estimate for work remaining at that cutoff, and their combined completion estimate. Explain that these are coding-agent working minutes; waiting for people is excluded.
+- For completed work, use recorded Actual with its provenance. A retrospective estimate, incomplete timer or missing receipt cannot become measured time through summary wording. When any required timing is missing, show the known amounts and say the combined total is unavailable.
+- Keep the originally issued whole-work forecast available for comparison. A revision changes what remains; it must not erase the original commitment or add elapsed time to work already included in a whole-work estimate.
+- Make the "How long will it take?" answer agree with the current Tasks bands. State the cutoff when showing an older snapshot. Summed milestone bounds are a planning window, not a probability guarantee or a calendar schedule.
+
+Explain the main uncertainty beside the range: what evidence supports the fast case, what could make work take longer, and what the next investigation will resolve. When relevant history is sparse or poorly matched, disclose that limitation. Do not present a broad prior or historical percentile span as confidence established by prospective results.
+
+When evidence does not support a feasible fast case, call the lower bound provisional and name the bounded investigation and reforecast checkpoint. If scope or required proof changes, revise the affected milestone first, then refresh the delivery phase and headline together. Never shorten a range by omitting mandatory checks, reusing an old whole-work estimate as a remaining estimate, or changing stable Requirements to disguise scope changes.
 
 ## Out of scope
 

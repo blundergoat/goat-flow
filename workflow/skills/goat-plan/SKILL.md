@@ -97,7 +97,19 @@ Each item states the claim and evidence with a proof-class tag. Omit inapplicabl
 
 **Tasks:** Use one action, target, and done condition. Put rationale, paths, and proof beneath the task only when needed. Pin paths when downstream work depends on them.
 
+Start task text with the operation; prefer about 25 words excluding tags and estimates and put supporting detail beneath it. Validation, saving and history loading are separate observable changes: give each its own counted task. Separate test authoring from test execution. Read `references/milestone-examples.md` → Short task example before rendering checkboxes.
+
+Verify existing paths, symbols and behavior against the target revision before naming them. Label proposed paths as new and unresolved anchors `(confirm: what)`; schedule the investigation before dependent implementation.
+
+For issue, PR or handoff exports, read `references/issue-format.md` → Human-facing exports. Before delivery, compare the saved first and final drafts: claim only corrections visible in that diff; an unchanged valid draft is a valid second pass. Run commands against the actual saved artifact, and distinguish structural acceptance from task coverage and forecast evidence.
+
+Treat every ISSUE as requester-facing, including a local draft. Before delivery, read its tasks, tables and prose without the milestone open. Replace references to private task or proof owners with the acceptance facts readers need. A plain phrase such as “the work plan owns the commands” still sends readers to unavailable material; removing IDs alone is insufficient.
+
 **Effort estimate (agent-time):** Count positive agent-owned Task/Proof/Mid-proof and one admin; exclude `[HUMAN]`/zero-minute items. `Forecast basis:` records agent work units, rates, historical `source:` quantiles. Use `0.5-2.5-10 min/unit` until three eligible bases, then `plans check` evidence. Never use duration intuition; ~70/20/10 stays advisory. If scope changes, reforecast before implementation; `reforecast required` blocks. Execution uses `references/milestone-examples.md` → Timing receipts. `Forecast range:` is required with a basis; legacy points and range-only estimates remain valid.
+
+Before authoring or revising forecasts, read `references/milestone-examples.md` → Effort Estimates for work counting, history selection, fast-case evidence and immutable revisions. Read `references/issue-format.md` → Forecast presentation when summarizing delivery.
+
+**Readable narrative, specific tasks:** Apply `.goat-flow/skill-docs/playbooks/writing-human-facing-prose.md` to non-checkbox ISSUE and milestone prose. Keep necessary facts and shorten explanation. Checkbox tasks name a concrete action, technical target and checkable result; task criteria, commands and fixed fields retain their exact meaning. Use the reference's audience-specific task guidance.
 
 **Cold-start bar:** Identify files, conventions, scope, commands, and recovery.
 

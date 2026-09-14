@@ -92,12 +92,35 @@ Use Standard for multi-milestone or cold-start work: at most 900 words and ten H
 
 Commands owns each invocation: a literal command appears once per milestone; other sections reference its purpose. The Objective is one plain sentence; ids/paths belong in Context/Scope. Done conditions state claims; cases belong in tests/Commands.
 
+### Concise narrative and specific tasks
+
+Apply `.goat-flow/skill-docs/playbooks/writing-human-facing-prose.md` to non-checkbox explanation. Keep the facts needed to act; remove repeated background and place supporting evidence in its named owner. Short paragraphs and flat lists help readers find scope, uncertainty and the next decision.
+
+Each task must name the operation, its technical target and an observable done condition. Use a verified file, function, command, field or behavior when it identifies the work. Verbs such as "fix", "update" or "verify" need that target and result. Split distinct deliverables into separate checkboxes; keep rationale and detailed cases beneath the task or in Commands. Preserve exact requirements and proof criteria when shortening prose.
+
 Write from the incident in Context, not by shortening the Objective - that sentence is for the implementer. One sentence each. `goat-flow plans check --strict` enforces current-heading length and internal identifiers. Name commands with their tool; visible user surfaces are not internal. The problem sentence names who hits it. The benefit sentence names what they can now do, never what ships. Neither restates the other. A spike that ships nothing says so.
 
 - BAD: "Runtime proof executing target-controlled launchers needs a trusted-target choice."
 - GOOD: "Reviewing a stranger's repository cannot run its code on your machine without your approval."
 - BAD: "Ships as a registered hook, default-on for verified agents, gated elsewhere."
 - GOOD: "Your agent starts each session knowing the project's rules, so you do not have to repeat them."
+
+## Short task example
+
+Illustrative placeholders for shape only; paths and estimates are not repository evidence. Keep estimates before indented details so the parser counts the task. Each path supports its parent; it adds no work unit.
+
+```markdown
+- [ ] [CORE] Validate assessment metadata when parsing reports. (est: 1 min product)
+  - `<validation-file>` (`<validation-symbol>`).
+- [ ] [CORE] Preserve assessment metadata when saving reports. (est: 1 min product)
+  - `<save-file>` (`<save-symbol>`).
+- [ ] [CORE] Preserve assessment metadata when loading report history. (est: 1 min product)
+  - `<history-file>` (`<history-symbol>`).
+- [ ] [CORE] Add regression cases for metadata validation, saving and history loading. (est: 1 min product)
+  - `<test-file>`.
+```
+
+Name observable checks in Proof and exact invocations once in Commands. Shared checks may cover several tasks; count each required execution without repeating it mechanically. For a bug, reproduce the failing observable before changing it. For new work, check prerequisites first.
 
 ## Status reason
 
@@ -187,6 +210,40 @@ Before using an older checker, stop every extra open receipt. Keep one milestone
 
 A basis requires its derived range/headline in both modes, excluding `[HUMAN]`/zero-minute units. Legacy points and range-only estimates remain valid.
 
+### Count work before allocating minutes
+
+Split independently verifiable product changes into separate tasks. Count each required foreground proof execution, including baseline, post-change and repeated stability runs. Multiple commands beneath one proof checkbox still represent separate executions; give each a counted item. Reusing existing output adds no run. Record the admin item once, then derive the headline before distributing product/proof/other minutes. Planned allocations are not measured execution costs.
+
+For new saved forecasts, identify this decomposition as `observable-change-v1`. Preserve historical `legacy-checkbox-v1` counts and labels. Do not make an implementation forecast smaller by bundling changes or removing required proof.
+
+### Choose and explain history
+
+State whether the forecast covers `fresh-implementation`, `reconciliation`, `verification-only` or `unknown` work, and whether it predicts `whole` or `remaining` scope. Missing historical context stays unknown. Show one primary forecast with its selected source, sample count, percentile pair and limitations.
+
+The default remains `legacy`. Explicit `**Forecast method:** contextual-v1` opts into experimental matching and requires saved Forecast records. Matching needs at least three earlier, complete measured samples with registered snapshots and the same known work state, scope kind and rubric. History sources must also opt in. When matching is insufficient, retain the selected-plan numerical fallback, including its cold-start prior below three eligible selected-plan bases. Broad history is diagnostic, not an alternative chosen for a preferred estimate.
+
+Use the checker's published low/median/high rates and identify the actual percentile pair in `source:`. Historical percentile spans do not guarantee future coverage. If suggested rates cannot produce valid positive integer allocations, retain issued values and report the incompatibility; never clamp rates or invent effective ones.
+
+### Establish the fast case
+
+Before describing the lower bound as feasible, cite comparable measured costs and include required commands, repetitions and integration work. A small diff, planned allocation or short closure receipt alone does not establish implementation speed.
+
+If evidence is missing, label the lower bound provisional. Put a bounded investigation before dependent implementation; name the uncertainty, evidence to collect, stop condition and reforecast checkpoint. Preserve valid positive short receipts, including minutes rounded to zero. Explain their limited comparability without imposing a minimum duration or inventing a late timer.
+
+### Preserve originals and revise remaining work
+
+Before predicted work begins, save the whole-work estimate, basis, range, category split and item identities. Revisions append to exactly one `## Forecast records` JSON section; never overwrite the original to make it agree with later scope or Actual.
+
+When scope changes, stop the timer and identify the last closed segment and cumulative recorded seconds. Append a linked `remaining` snapshot before the next segment starts. Keep stable IDs for unchanged items; record added/removed IDs and only the unfinished scope. Reconcile current task allocations with the remaining snapshot, while preserving the issued whole forecast separately. Compare remaining predictions with work after their cutoff, never with whole-milestone Actual.
+
+If the original issue-time evidence or receipt cutoff is unavailable, disclose the gap and withhold a validated residual record. Do not backdate a snapshot or reconstruct missing timing from the desired total.
+
+### Register provenance and validate
+
+Before creating saved records or registrations, read the installed goat-flow package's `docs/cli.md` → Forecast context and history for the complete field schema, canonical JSON hashing and history exclusions. Each plan's `evaluation/prospective-registration.json` freezes forecast IDs, complete snapshots, hashes and actual registration times before their predicted work. Missing or mismatching registration leaves that history diagnostic-only and preserves the numerical fallback. Hash consistency cannot independently prove when a file existed.
+
+Run strict validation after authoring or revision, then reconcile ISSUE totals separately using `issue-format.md` → Forecast presentation. The checker never rewrites a plan. Context matching remains opt-in until prospective evaluation qualifies a default change; structural validity and application trials do not prove forecast accuracy.
+
 ## Timing receipts
 
 Use absolute milestone paths under `.goat-flow/plans/`; retain repository cwd for source-loader resolution. CLI stamps UTC/epoch seconds.
@@ -220,6 +277,8 @@ Each milestone owns its receipt; separate valid lanes can hold simultaneous span
 ### Calibration
 
 `plans check` reports estimate/Actual ratios and raw seconds per matching work unit. Only complete/measured milestones calibrate; pending never qualifies. Below three bases keep the cold-start prior; otherwise use local low-median-high rates. Unfinished `reforecast required` blocks implementation. The CLI advises, never rewrites.
+
+Positive raw receipts remain valid when minutes round to zero; eligibility does not establish comparability.
 
 A goat-debug milestone estimated two hours, self-reporting 256 active seconds: retrospective, ineligible for calibration. One ratio cannot size later milestones.
 
