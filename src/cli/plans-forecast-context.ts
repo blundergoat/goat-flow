@@ -19,7 +19,7 @@ import {
 } from "./rendered-markdown.js";
 
 /** Explicit numerical method; omission in a milestone keeps legacy behavior. */
-export type PlanForecastMethod = "legacy" | "contextual-v1";
+type PlanForecastMethod = "legacy" | "contextual-v1";
 
 /**
  * One independently countable item; minutes are allocation, never model input.
@@ -64,7 +64,7 @@ export interface PlanForecastRecord {
  * Records start with one whole-work original and append linked revisions in issue order.
  * An empty history or unsupported schema version is invalid and remains available as raw export text.
  */
-export interface PlanForecastDocument {
+interface PlanForecastDocument {
   schemaVersion: 1;
   records: PlanForecastRecord[];
 }

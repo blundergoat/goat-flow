@@ -31,7 +31,9 @@ import {
 } from "../../src/cli/plans-effort.js";
 
 /** Contract fixture: explicit inputs isolate preservation from estimator fitting. */
-function forecastDocumentFixture(): import("../../src/cli/plans-forecast-context.js").PlanForecastDocument {
+function forecastDocumentFixture(): NonNullable<
+  import("../../src/cli/plans-forecast-context.js").PlanForecastContext["document"]
+> {
   return {
     schemaVersion: 1,
     records: [

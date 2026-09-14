@@ -9,12 +9,149 @@
  * each state differently: a live clock creates obligations a historical note does not.
  */
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import assert from "node:assert/strict";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import type { PlanForecastRecord } from "../../src/cli/plans-forecast-context.js";
 
 export const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
 export const CLI_PATH = join(PROJECT_ROOT, "src", "cli", "cli.ts");
+
+/**
+ * Build three observable-change units with independently chosen receipt times; this contract fixture is never predictive evidence.
+ *
+ * @param start - epoch second at which the first measured span starts; the forecast is issued ten seconds earlier
+ * @param seconds - positive raw outcome used by the complete fixture; short receipts may round to zero minutes
+ * @param complete - false removes the receipt and Actual and leaves all work unchecked for a new-plan target
+ * @param context - explicit snapshot variations for registration and scope cases; omitted fields retain the valid cold-start fixture
+ * @returns source Markdown, its saved forecast and an independently hashed prospective registration
+ */
+export function registeredHistoryFixture(
+  start = 100,
+  seconds = 23,
+  complete = true,
+  context: Partial<PlanForecastRecord> = {},
+) {
+  const forecast: PlanForecastRecord = {
+    id: "F1",
+    predecessorId: null,
+    reason: "Contract fixture",
+    issuedAt: receiptStamp(start - 10).split(" / ")[0]!,
+    methodVersion: "contextual-v1",
+    workState: "fresh-implementation",
+    scopeKind: "whole",
+    unitRubric: "observable-change-v1",
+    items: [
+      {
+        id: "T1",
+        description: "Build the thing",
+        category: "product",
+        units: 1,
+        estimateMinutes: 3,
+      },
+      {
+        id: "P1",
+        description: "Run typecheck",
+        category: "proof",
+        units: 1,
+        estimateMinutes: 3,
+      },
+      {
+        id: "A1",
+        description: "Plan/admin overhead",
+        category: "other",
+        units: 1,
+        estimateMinutes: 3,
+      },
+    ],
+    basis: {
+      agentWorkUnits: 3,
+      lowMinutesPerUnit: 0.5,
+      likelyMinutesPerUnit: 3,
+      highMinutesPerUnit: 10,
+      source: "recorded planning basis",
+    },
+    range: { lowMinutes: 1, likelyMinutes: 9, highMinutes: 30 },
+    quantiles: [10, 90],
+    selection: "cold-prior",
+    selectionReason: "Contract cold start",
+    sourceVersion: "contract-v1",
+    sampleCount: 0,
+    history: [],
+    scopeDelta: { added: [], removed: [] },
+    receiptCutoff: null,
+    ...context,
+  };
+  let body = eligibleWorkUnitSampleBody(seconds)
+    .replace(receiptStamp(100 + seconds), receiptStamp(start + seconds))
+    .replace(receiptStamp(100), receiptStamp(start));
+  if (!complete)
+    body = body
+      .replace("Status: complete", "Status: not-started")
+      .replace(/^Actual:.*\n/mu, "Actual: _\n")
+      .replace(/## Timing Receipt[\s\S]*?## Scope/u, "## Scope")
+      .replaceAll("- [x]", "- [ ]");
+  body += `\nForecast method: contextual-v1\n\n## Forecast records\n\n\`\`\`json\n${JSON.stringify({ schemaVersion: 1, records: [forecast] })}\n\`\`\`\n`;
+  return {
+    body,
+    forecast,
+    registration: {
+      schemaVersion: 1,
+      forecasts: [historyRegistration(forecast)],
+    },
+  };
+}
+
+/**
+ * Build the documented sorted-key JSON hash independently of the production reader, preserving JSON array order.
+ *
+ * @param forecast - complete snapshot bound to its ID and issue time before the test's predicted work
+ * @param receiptId - optional shared provenance for explicit-copy cases; absence claims no relationship to another source
+ * @returns one registration entry for the fixture's milestone basename
+ */
+export function historyRegistration(
+  forecast: PlanForecastRecord,
+  receiptId?: string,
+) {
+  const serialized = JSON.stringify(forecast, (_key, field: unknown) =>
+    field && typeof field === "object" && !Array.isArray(field)
+      ? Object.fromEntries(
+          Object.entries(field).sort(([left], [right]) =>
+            left < right ? -1 : left > right ? 1 : 0,
+          ),
+        )
+      : field,
+  );
+  return {
+    milestone: "M01-work.md",
+    forecastId: forecast.id,
+    registeredAt: forecast.issuedAt,
+    sha256: createHash("sha256").update(serialized).digest("hex"),
+    forecast,
+    ...(receiptId ? { receiptId } : {}),
+  };
+}
+
+/**
+ * Write the milestone and registration under one explicit plan directory, creating its evaluation folder when absent.
+ *
+ * @param directory - test-owned plan path; the caller owns removal of the temporary project
+ * @param fixture - source and matching registration to write; tests may intentionally mutate either afterward
+ * @returns the plan directory to pass to the CLI or bounded discovery
+ */
+export function writeRegisteredHistory(
+  directory: string,
+  fixture: ReturnType<typeof registeredHistoryFixture>,
+): string {
+  mkdirSync(join(directory, "evaluation"), { recursive: true });
+  writeFileSync(join(directory, "M01-work.md"), fixture.body);
+  writeFileSync(
+    join(directory, "evaluation", "prospective-registration.json"),
+    JSON.stringify(fixture.registration),
+  );
+  return directory;
+}
 
 /** Spawns the real CLI so parser, dispatch, and report rendering stay integrated.
  *

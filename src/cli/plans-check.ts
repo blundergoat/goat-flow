@@ -32,6 +32,7 @@ import {
 } from "./plans-time.js";
 import {
   renderCalibrationSummary,
+  renderForecastHistorySummary,
   renderActivePlanSummary,
   renderMilestoneLine,
   renderPlanSummary,
@@ -44,6 +45,8 @@ import {
   forecastAllocation,
   issuedPlanForecast,
 } from "./plans-forecast-context.js";
+import { discoverPlanForecastHistory } from "./plans-forecast-history.js";
+import { renderForecastModelSummary } from "./plans-forecast-model.js";
 
 /** Category iteration order for split arithmetic and rendering. */
 const CATEGORIES = ["product", "proof", "other"] as const;
@@ -769,7 +772,7 @@ function assertCheckUsage(options: ParsedCLI): void {
  * Check one plan directory and report to stdout.
  *
  * Exit code 1 signals deterministic contract or arithmetic errors; mix drift and default-mode legacy absence never fail.
- * Records are redacted before use.
+ * Selected records are redacted before validation; history identities are redacted when their advisory lines are rendered.
  *
  * @param options - parsed plan path plus global flags
  * @returns nothing; the report goes to stdout and the exit code carries the verdict
@@ -824,6 +827,8 @@ function handlePlansCheckCommand(options: ParsedCLI): void {
     );
   }
 
+  reportLines.push(...renderProjectHistory(records, options.projectPath));
+
   // No effort rows and no errors means the user selected a legacy plan, even when prose advice follows.
   if (
     milestoneLines.length === 0 &&
@@ -848,6 +853,27 @@ function handlePlansCheckCommand(options: ParsedCLI): void {
     process.exitCode = 1;
   }
   writeOutput({ ...options, output: null }, reportLines.join("\n"));
+}
+
+/** Discover history only for explicit opt-in; sibling diagnostics never enter selected-plan errors or totals. */
+function renderProjectHistory(
+  records: PlanExportRecord[],
+  selectedPath: string,
+): string[] {
+  if (
+    !records.some(
+      (record) => record.forecastContext?.method === "contextual-v1",
+    )
+  )
+    return [];
+  const history = discoverPlanForecastHistory(
+    canonicalPlanProjectRoot(selectedPath),
+    selectedPath,
+  );
+  return [
+    ...renderForecastHistorySummary(records, history),
+    ...renderForecastModelSummary(records, history),
+  ];
 }
 
 /** Check containment by path components, including the root itself. */

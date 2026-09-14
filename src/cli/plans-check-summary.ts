@@ -7,6 +7,11 @@
  * Estimate-to-Actual calibration and work-unit rates need at least three eligible finished milestones.
  * Coverage and plan-total diagnostics describe even smaller cohorts and always display their sample counts; they do not establish estimator bias.
  */
+import { scrubDurableText } from "./evidence/redaction.js";
+import {
+  selectPlanForecastHistory,
+  type PlanForecastHistory,
+} from "./plans-forecast-history.js";
 import {
   countAgentWorkUnits,
   deriveForecastRangeFromBasis,
@@ -14,6 +19,7 @@ import {
   type PlanEffortForecastBasis,
   type PlanEffortSplit,
 } from "./plans-effort.js";
+import type { PlanForecastRecord } from "./plans-forecast-context.js";
 import type { PlanExportRecord } from "./plans-export.js";
 import { readActiveMilestones } from "./plans-check-structure.js";
 import { DEFAULT_FORECAST_BAND_QUANTILES } from "./config/config-vocabulary.js";
@@ -443,6 +449,88 @@ function collectWorkUnitCalibrationSamples(
     );
 }
 
+/**
+ * Reproduce the selected-plan rates available at a frozen forecast's issue time.
+ * Admission, three-sample threshold and published precision match legacy advice.
+ *
+ * @param records - selected-folder records only; later outcomes cannot train this origin
+ * @param target - frozen work count and registered percentile pair
+ * @returns the unchanged selected-plan method, including its cold prior when sparse
+ */
+export function selectedPlanForecastBasis(
+  records: PlanExportRecord[],
+  target: PlanForecastRecord,
+) {
+  const earlier = records.filter((record) => {
+    const ends =
+      record.timingReceipt?.segments
+        .filter((segment) => segment.state === "closed")
+        .map((segment) => segment.endEpochSeconds ?? Infinity) ?? [];
+    return (
+      ends.length > 0 && Math.max(...ends) * 1000 < Date.parse(target.issuedAt)
+    );
+  });
+  const samples = collectWorkUnitCalibrationSamples(earlier);
+  const local = samples.length >= MINIMUM_CALIBRATION_SAMPLES;
+  const rates = local
+    ? readLocalWorkUnitRates(samples, target.quantiles)
+    : {
+        lowMinutesPerUnit: 0.5,
+        likelyMinutesPerUnit: 2.5,
+        highMinutesPerUnit: 10,
+      };
+  return {
+    samples,
+    selection: local ? ("selected-plan" as const) : ("cold-prior" as const),
+    basis: {
+      agentWorkUnits: target.items.length,
+      lowMinutesPerUnit: Number(rates.lowMinutesPerUnit.toFixed(2)),
+      likelyMinutesPerUnit: Number(rates.likelyMinutesPerUnit.toFixed(2)),
+      highMinutesPerUnit: Number(rates.highMinutesPerUnit.toFixed(2)),
+      source: local
+        ? "selected-plan earlier measured receipts"
+        : "cold-start prior",
+    },
+  };
+}
+
+/**
+ * Report pool selection separately from issued forecasts and selected-plan arithmetic; redact source-controlled identities before output.
+ *
+ * @param records - selected-plan milestones; completed or non-contextual records emit no history advice
+ * @param history - bounded same-project discovery, including failures that remain advisory
+ * @returns readable redacted selection, provenance and exclusion lines without replacement numerical forecasts
+ */
+export function renderForecastHistorySummary(
+  records: PlanExportRecord[],
+  history: PlanForecastHistory,
+): string[] {
+  const lines: string[] = [];
+  for (const record of records) {
+    if (
+      record.forecastContext?.method !== "contextual-v1" ||
+      record.status.trim().toLowerCase() === "complete"
+    )
+      continue;
+    const selected = selectPlanForecastHistory(history, record);
+    lines.push(
+      `history selection: ${record.sourceFile} - pool ${selected.selection}; ${selected.samples.length} matched samples; ${selected.intactCount} intact measurements before deduplication; ${selected.reason}`,
+    );
+    for (const sample of selected.samples)
+      lines.push(
+        `history sample: ${record.sourceFile} <- ${sample.id}; forecast ${sample.forecastId}; sha256 ${sample.sha256}; registered ${sample.registeredAt}; completed ${sample.completedAt}; ${sample.measuredSeconds}s / ${sample.agentWorkUnits} units`,
+      );
+    for (const exclusion of selected.exclusions)
+      lines.push(
+        `history exclusion: ${record.sourceFile} <- ${exclusion.id} - ${exclusion.reason}`,
+      );
+    lines.push(
+      `history limitation: ${record.sourceFile} - selection checks provided registration consistency, not independent timestamp authenticity; issued forecasts remain unchanged`,
+    );
+  }
+  return lines.map((line) => scrubDurableText(line));
+}
+
 /** Middle value of a sorted ratio list, averaging the pair when the count is even. */
 function medianRatio(sortedRatios: number[]): number {
   const middle = Math.floor(sortedRatios.length / 2);
@@ -539,6 +627,8 @@ function renderRequiredReforecasts(
 ): string[] {
   // Review each milestone separately so the CLI names exactly where the user must edit.
   return records.flatMap((milestoneRecord) => {
+    // Contextual advice owns its frozen origin and residual scope; legacy whole-work replacement would conflict with it.
+    if (milestoneRecord.forecastContext?.method === "contextual-v1") return [];
     const forecastBasis = milestoneRecord.effort?.forecastBasis;
     const milestoneStatus = milestoneRecord.status.trim().toLowerCase();
 
