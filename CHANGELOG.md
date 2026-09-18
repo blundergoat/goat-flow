@@ -2,17 +2,6 @@
 
 ## Unreleased
 
-### Changed
-
-- **BREAKING: Local operational state moves under `.goat-flow/state/`** - Stop and upgrade every writer, then run `goat-flow install . --agent <id>` to move installation records to `state/install/` and write claims to `state/locks/`. Outstanding claims or occupied destinations block migration; the old paths are removed, and older goat-flow versions must not run afterward. This direct cutover replaces a compatibility-alias period.
-
-### Fixed
-
-- **Learning reports cannot replace learning content** - `learn new --output` rejects destinations inside learning storage and linked report files before publishing, including during dry runs.
-- **Hook changes preserve quoted configuration sections** - Toggling hooks retains following settings whose YAML keys are single- or double-quoted.
-- **Installation preserves retired writing playbooks** - Existing `writing-for-agents.md` and `writing-style.md` copies remain untouched; review their local content before removing them.
-- **Browser evidence instructions follow installed capabilities** - Check `browser-use --help` before choosing the Python-stdin workflow or legacy commands; the playbook now documents `browser-use skill`, bounded waits, fixture-login safeguards, and tab recovery.
-
 ## v1.17.0 - 2026-09-05
 
 The next release adds per-command `--help`, path-aware learning recall, one project-wide install baseline, whole-suite hook verification, and stricter `--strict` plan checks, and it untangles Claude and Copilot hook registrations.
@@ -106,6 +95,28 @@ The next release adds per-command `--help`, path-aware learning recall, one proj
 - **`/goat-security` returns late leads to verification** - The dependency audit runs during lead gathering when authorized; missing execution controls yield `execution-withheld`, while an approval-only gap yields `scanner-withheld`. Any later lead re-enters Phase 2 before the proof gate; reporting having begun neither suppresses nor promotes it.
 - **Fast security checks run against source** - Stale built dashboard presets no longer fail security checks; preset parity runs after the build.
 - **`/goat-security` uses one gate name, one spelling, and ten diff states** - Consumer aliases resolve to the Shared Pre-Probe Gate and the Exhaustive inventory gate, ledger values are spelled one way everywhere, the common reference lists all ten Git delta states, design text is evidence for a stated requirement but never for deployed behaviour, and an escaped anchor is labelled so it stays findable.
+
+### Changed
+
+- **GitHub writes share the Git switch** - **Deny Git and GitHub writes** keeps the saved `deny-git-mutations` choice and existing read/comment exceptions. Mixed-policy upgrades require separate consent on the dashboard Hooks page; CLI and installer force options stop for that review.
+- **BREAKING: Local operational state moves under `.goat-flow/state/`** - Stop and upgrade every writer, then run `goat-flow install . --agent <id>` to move installation records to `state/install/` and write claims to `state/locks/`. Outstanding claims or occupied destinations block migration; the old paths are removed, and older goat-flow versions must not run afterward. This direct cutover replaces a compatibility-alias period.
+
+### Fixed
+
+- **Hook actions preserve default-on Git protection** - Sync and unrelated toggles keep a missing Git choice on; upgrades record inheritance once.
+- **Hooks retains server refusals** - Malformed policy-review data keeps the server's diagnostic and offers no approval action.
+- **Codex post-turn evidence is current** - Linux interactive CLI 0.154.0 delivered conflict feedback and completed after repair; target scenario verification remains required, and the evidence expires on 2026-10-17.
+- **Legacy-state recovery no longer loops between install and dashboard review** - Use `install --agent <id> --migrate-state-only` to move bookkeeping first, then review hook changes and finish installation. Hook files and policy choices stay unchanged during the move; unsafe state and outstanding claims still block it.
+- **Policy disable preserves saved hook commands** - Explicit off skips enforcement through retained registrations; incompatible launchers require reviewed Sync before the choice is saved.
+- **Learning reports cannot replace learning content** - `learn new --output` rejects destinations inside learning storage and linked report files before publishing, including during dry runs.
+- **Hook changes preserve quoted configuration sections and anchors** - Toggles retain quoted sibling settings and YAML references to the hook block.
+- **Installation preserves retired writing playbooks** - Existing `writing-for-agents.md` and `writing-style.md` copies remain untouched; review their local content before removing them.
+- **Browser evidence instructions follow installed capabilities** - Check `browser-use --help` before choosing the Python-stdin workflow or legacy commands; the playbook now documents `browser-use skill`, bounded waits, fixture-login safeguards, and tab recovery.
+
+### Security
+
+- **The Git guard denies aliased commits and destructive flags** - Temporary and saved aliases expanding to `commit`, `reset --hard`, `clean -f` or `--no-verify` deny even when alias words or flags contain quotes or escapes; read-only aliases stay allowed.
+- **The shell guard denies each interpreter's execution spellings** - Inline Perl, Ruby, Python, PHP and Deno commands deny paren-less process calls, executable `qx`/`%x`, pipe-open, `passthru`, `proc_open`, `pty.spawn` and `Deno.Command`; ordinary quoted operator text and JavaScript regex `.exec()` stay allowed.
 
 ## v1.16.0 - 2026-08-20
 
