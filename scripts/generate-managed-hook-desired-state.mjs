@@ -1,5 +1,6 @@
 /**
  * Generates the portable managed-hook contract consumed by the standalone installer.
+ *
  * Use `--write` after registry changes and `--check` in verification or release builds.
  * Every provider fragment comes from the TypeScript writer, so users receive the same registrations through Bash, the CLI, and the dashboard.
  */
@@ -36,10 +37,10 @@ const OUTPUT_PATH = join(
 const CONTRACT_SCHEMA = "goat-flow.managed-hook-desired-state.v1";
 
 /**
- * Wording the standalone installer prints when a hook's registration prerequisite blocks it.
- * The installer keeps its own eligibility check and only borrows this text, so an upgrade that
- * drops an enabled hook can say why. `test/unit/managed-hook-contract.test.ts` pins each string
- * against the registrar's live output so the two copies cannot drift apart silently.
+ * Explain why setup cannot register an enabled hook, using the same wording the registrar shows users.
+ *
+ * The installer owns eligibility and borrows this text when an upgrade drops a registration.
+ * test/unit/managed-hook-contract.test.ts compares each string with the registrar's output to catch wording drift.
  */
 const HOOK_REGISTRATION_PREREQUISITES = {
   "post-turn-safety": {
@@ -93,14 +94,10 @@ function hookCleanupContract(hookSpec) {
 }
 
 /**
- * Derive one deterministic provider/hook contract from the same public writer used by UI toggles and sync.
+ * Derive a deterministic installer contract from the public writer used by the user's toggles and Sync.
  *
- * Why the control flow is split:
- * - The provider loop excludes unsupported hooks, so users never receive registrations their agent cannot deliver.
- * - The hook loop isolates each generated fragment, preventing one enabled hook from leaking another hook's rows.
- *
- * It writes into one temporary filesystem tree and removes that tree in `finally`. The public invariant is that
- * rendered writer JSON is the installer source of truth, which avoids a second command implementation.
+ * Exclude unsupported registrations and isolate each hook's fragment so one enabled choice cannot leak another hook's rows.
+ * Invariant: writer JSON owns installer commands; this helper writes one temporary tree and removes it in finally.
  */
 function buildManagedHookContract() {
   const temporaryProjectRoot = mkdtempSync(
@@ -140,6 +137,9 @@ function buildManagedHookContract() {
           supported: true,
           cleanup,
           defaultEnabled: hookSpec.defaultEnabled,
+          retainRegistrationWhenDisabled:
+            deriveManagedHookDesiredState(agentProfile, hookSpec, false)
+              .registrationTargets.length > 0,
           commandScriptNames: [
             hookSpec.primaryScript,
             ...(hookSpec.id === "deny-dangerous"

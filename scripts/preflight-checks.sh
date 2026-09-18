@@ -668,9 +668,13 @@ _emit_section_row() {
         !in_t { next }
         $1=="ROW" {
             rc++
+            # A failed check makes this section fail in the developer report.
             if ($2=="FAIL") st="FAIL"
+            # A warning remains visible unless the section already contains a failure.
             else if ($2=="WARN" && st!="FAIL") st="WARN"
+            # A pass cannot hide an earlier warning or failure in the section summary.
             else if ($2=="PASS" && st!="FAIL" && st!="WARN") st="PASS"
+            # A skipped-only section reports missing coverage rather than a passed check.
             else if ($2=="SKIP" && st=="EMPTY") st="SKIP"
         }
         END { printf "%s\t%d", st, rc }
@@ -911,7 +915,8 @@ function emit(status, message) {
 }
 
 function payloadFor(mode, script) {
-  const command = script === "deny-git-mutations.sh" ? "git push origin main" : "gh pr create --fill";
+  // Probe the action each saved policy owns after GitHub writes moved to the Git policy.
+  const command = script === "deny-git-mutations.sh" ? "git push origin main" : "cat .env";
   if (mode === "copilot-json") {
     return {
       input: JSON.stringify({ toolName: "bash", toolArgs: { command } }),
