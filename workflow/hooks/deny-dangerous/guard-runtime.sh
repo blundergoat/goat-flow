@@ -2,9 +2,13 @@
 # shellcheck disable=SC2034,SC2154,SC2317,SC2319
 # goat-flow-hook-version: 1.17.0
 # Shared command parser and provider responses for the two managed policy hooks.
+#
 # Entry points own the immutable policy selection and bootstrap failure response.
+# Use before an agent command runs so both policies inspect the same command and return the expected provider response.
 
+# Read the proposed command or provider payload before classifying the agent action; check mode never executes its text.
 read_payload() {
+  # Check mode supplies explicit command text for classification; provider mode reads its payload from stdin instead.
   if [[ -n "$CHECK_COMMAND" ]]; then
     printf '%s' "$CHECK_COMMAND"
     return
@@ -12,33 +16,46 @@ read_payload() {
   cat || true
 }
 
+# Choose full JSON decoding when jq is available; restricted installations use the conservative fallback reader.
 jq_available() {
   [[ "${GOAT_DENY_FORCE_NO_JQ:-}" != "1" ]] && command -v jq >/dev/null 2>&1
 }
 
+# Read one provider field with jq; absent fields or decoding failures leave empty text for the caller to handle.
 json_value() {
   local payload="$1"
   local expr="$2"
+  # Full JSON decoding makes the provider field usable; without jq, leave extraction to the conservative fallback reader.
   if jq_available; then
     printf '%s' "$payload" | jq -r "$expr // empty" 2>/dev/null || true
   fi
 }
 
+# Decode a supported JSON string without jq so provider commands remain inspectable; unsupported escapes report an unsafe payload.
 json_fallback_string_value() {
   local payload="$1"
   local key_re="$2"
   awk -v key_re="^(${key_re})$" '
+    # Decode one JSON string so fallback field extraction preserves the proposed command and rejects unsupported escapes.
     function parse_string(pos,    out, c, esc) {
       out = ""
       esc = 0
+      # Decode each payload character so escaped user command text reaches policy checks without being executed.
       for (; pos <= n; pos += 1) {
         c = substr(s, pos, 1)
+        # A JSON escape changes the next character into command data; decode only the supported escape forms.
         if (esc == 1) {
+          # JSON punctuation escapes preserve the command text exactly rather than adding shell syntax.
           if (c == "\"" || c == "\\" || c == "/") out = out c
+          # Decode escaped backspace so provider command text reaches inspection unchanged.
           else if (c == "b") out = out "\b"
+          # Decode escaped form feed so provider command text reaches inspection unchanged.
           else if (c == "f") out = out "\f"
+          # Decode an escaped newline so multiline commands retain their boundaries during inspection.
           else if (c == "n") out = out "\n"
+          # Decode an escaped carriage return so Windows command payloads retain their text during inspection.
           else if (c == "r") out = out "\r"
+          # Decode an escaped tab so command arguments keep their original separation during inspection.
           else if (c == "t") out = out "\t"
           else {
             parse_error = 1
@@ -47,10 +64,12 @@ json_fallback_string_value() {
           esc = 0
           continue
         }
+        # Remember a JSON escape before interpreting the next character as the end of the command string.
         if (c == "\\") {
           esc = 1
           continue
         }
+        # The closing JSON quote completes this provider field and returns inspection to the surrounding payload.
         if (c == "\"") {
           parsed = out
           return pos + 1
@@ -63,21 +82,31 @@ json_fallback_string_value() {
 
     { s = s $0 "\n" }
     END {
+      # Discard only the reader-added final newline so provider field matching sees the original payload.
       if (length(s) > 0) s = substr(s, 1, length(s) - 1)
       n = length(s)
+      # Find the requested provider field among JSON strings so missing jq does not skip command inspection.
       for (i = 1; i <= n; i += 1) {
+        # Only a JSON string can name a provider field; other payload characters contribute no field name.
         if (substr(s, i, 1) != "\"") continue
         next_pos = parse_string(i + 1)
+        # An unsupported escape cannot establish safe command text, so report unsafe extraction to the policy gate.
         if (parse_error == 1) exit 2
         key = parsed
         i = next_pos
+        # Whitespace around a provider key has no command meaning; move to its JSON separator.
         while (i <= n && substr(s, i, 1) ~ /[[:space:]]/) i += 1
+        # A quoted value without a key separator is not the requested provider field and must not become command text.
         if (substr(s, i, 1) != ":") continue
         i += 1
+        # Whitespace before the provider value has no command meaning; move to the actual JSON value.
         while (i <= n && substr(s, i, 1) ~ /[[:space:]]/) i += 1
+        # Only string-valued fields can supply this fallback reader with command text; skip other JSON value shapes.
         if (substr(s, i, 1) != "\"") continue
         value_pos = parse_string(i + 1)
+        # An unsupported value escape leaves the command uncertain, so report unsafe extraction rather than allowing it.
         if (parse_error == 1) exit 2
+        # The requested key supplies the command or path used by the next policy check; unrelated fields remain unused.
         if (key ~ key_re) {
           print parsed
           exit 0
@@ -89,11 +118,13 @@ json_fallback_string_value() {
   ' <<<"$payload"
 }
 
+# Read direct or JSON-encoded tool arguments without jq; missing fields stay empty, while unsupported escapes remain explicit failures.
 json_fallback_nested_string_value() {
   local payload="$1"
   local key_re="$2"
   local value=""
   local status=0
+  # A direct provider field already exposes the requested text, so encoded argument containers need no extra decoding.
   if value="$(json_fallback_string_value "$payload" "$key_re")"; then
     printf '%s' "$value"
     return 0
@@ -103,8 +134,11 @@ json_fallback_nested_string_value() {
   fi
 
   local nested_key nested=""
+  # Try both provider spellings for encoded tool arguments so supported clients reach the same policy checks.
   for nested_key in toolArgs tool_args; do
+    # A readable encoded argument container may hold the command that the outer payload did not expose.
     if nested="$(json_fallback_string_value "$payload" "$nested_key")"; then
+      # A usable field inside encoded arguments supplies the same policy input as a direct provider field.
       if value="$(json_fallback_string_value "$nested" "$key_re")"; then
         printf '%s' "$value"
         return 0
@@ -121,12 +155,15 @@ json_fallback_nested_string_value() {
   return 3
 }
 
+# Choose the denial channel expected by the invoking provider so its agent receives the policy result.
 detect_output_mode() {
   local payload="$1"
+  # Copilot expects JSON permission decisions; select that response channel before reporting a denial.
   if [[ "$payload" == *'"toolName"'* && "$payload" != *'"tool_name"'* ]]; then
     printf 'copilot-json'
     return
   fi
+  # Antigravity expects its own JSON decision envelope; select it so the invoking agent receives the verdict.
   if [[ "$payload" == *'"toolCall"'* ]]; then
     printf 'antigravity-json'
     return
@@ -134,6 +171,7 @@ detect_output_mode() {
   printf 'stderr-exit'
 }
 
+# Identify the provider tool that requested this action; unsupported JSON escapes report unsafe extraction instead of a trusted tool name.
 extract_tool_name() {
   local payload="$1"
   local tool=""
@@ -141,14 +179,17 @@ extract_tool_name() {
   local unsafe=0
   local tool_pattern='"(toolName|tool_name|name)"[[:space:]]*:[[:space:]]*"([^"]+)"'
   tool="$(json_value "$payload" '.toolName // .tool_name // .toolCall.name')"
+  # Without jq and a readable tool name, decode the supported provider fields through the conservative fallback.
   if [[ -z "$tool" ]] && ! jq_available; then
     fallback_status=0
     tool="$(json_fallback_nested_string_value "$payload" 'toolName|tool_name|name')" || fallback_status=$?
+    # Missing or unsafe fallback fields leave no trusted tool name; unsupported escapes also mark extraction unsafe.
     if [[ "$fallback_status" -ne 0 ]]; then
       [[ "$fallback_status" -eq 2 ]] && unsafe=1
       tool=""
     fi
   fi
+  # A simple visible tool field supplies a last fallback name; unsafe extraction remains flagged for refusal.
   if [[ -z "$tool" && "$payload" =~ $tool_pattern ]]; then
     tool="${BASH_REMATCH[2]}"
   fi
@@ -157,6 +198,7 @@ extract_tool_name() {
   return 0
 }
 
+# Read the proposed command and file path across provider payload shapes; unsupported escapes report unsafe extraction for the policy gate.
 extract_command_text() {
   local payload="$1"
   local command=""
@@ -165,15 +207,20 @@ extract_command_text() {
   local unsafe=0
   local command_pattern='"(command|CommandLine|commandLine|input)"[[:space:]]*:[[:space:]]*"([^"]+)"'
   local path_pattern='"(file_path|path|AbsolutePath|TargetFile|FilePath|SearchPath)"[[:space:]]*:[[:space:]]*"([^"]+)"'
+  # Explicit check mode classifies the supplied command instead of treating it as a provider JSON payload.
   if [[ -n "$CHECK_COMMAND" ]]; then
     printf '%s' "$CHECK_COMMAND"
     return
   fi
+  # Full JSON decoding supports direct and encoded command arguments; installations without jq use narrower extraction.
   if jq_available; then
     command="$(json_value "$payload" '
       def extract_command(value):
+        # Absent tool arguments contain no proposed command and must not produce an invented policy input.
         if value == null then empty
+        # Structured arguments expose their command fields directly for the same policy checks as ordinary shell requests.
         elif (value | type) == "object" then (value.command // value.CommandLine // value.commandLine // value.input // empty)
+        # Encoded argument strings need JSON decoding before their command fields can become policy input.
         elif (value | type) == "string" then
           ((value | fromjson? // {}) | if type == "object" then (.command // .CommandLine // .commandLine // .input // empty) else empty end)
         else empty end;
@@ -191,8 +238,11 @@ extract_command_text() {
     ')"
     file_path="$(json_value "$payload" '
       def extract_path(value):
+        # Absent tool arguments contain no file path and must not produce an invented secret-path target.
         if value == null then empty
+        # Structured arguments expose the requested file path for the selected secret-path policy.
         elif (value | type) == "object" then (value.file_path // value.path // value.AbsolutePath // value.TargetFile // value.FilePath // value.SearchPath // empty)
+        # Encoded argument strings need JSON decoding before a requested file path can become policy input.
         elif (value | type) == "string" then
           ((value | fromjson? // {}) | if type == "object" then (.file_path // .path // .AbsolutePath // .TargetFile // .FilePath // .SearchPath // empty) else empty end)
         else empty end;
@@ -214,23 +264,28 @@ extract_command_text() {
   else
     fallback_status=0
     command="$(json_fallback_nested_string_value "$payload" 'command|CommandLine|commandLine|input')" || fallback_status=$?
+    # A missing or unsupported command field leaves no trusted command; unsupported escapes also mark extraction unsafe.
     if [[ "$fallback_status" -ne 0 ]]; then
       [[ "$fallback_status" -eq 2 ]] && unsafe=1
       command=""
     fi
     fallback_status=0
     file_path="$(json_fallback_nested_string_value "$payload" 'file_path|path|AbsolutePath|TargetFile|FilePath|SearchPath')" || fallback_status=$?
+    # A missing or unsupported path field leaves no trusted target; unsupported escapes also mark extraction unsafe.
     if [[ "$fallback_status" -ne 0 ]]; then
       [[ "$fallback_status" -eq 2 ]] && unsafe=1
       file_path=""
     fi
   fi
+  # A simple visible command field supplies a last fallback candidate; unsafe decoding remains flagged for refusal.
   if [[ -z "$command" && "$payload" =~ $command_pattern ]]; then
     command="${BASH_REMATCH[2]}"
   fi
+  # A simple visible path field supplies a last fallback target; unsafe decoding remains flagged for refusal.
   if [[ -z "$file_path" && "$payload" =~ $path_pattern ]]; then
     file_path="${BASH_REMATCH[2]}"
   fi
+  # Include a separately supplied file path so a provider file action receives the same secret-path inspection as command text.
   if [[ -n "$file_path" && "$command" != *"$file_path"* ]]; then
     command="${command} ${file_path}"
   fi
@@ -239,6 +294,7 @@ extract_command_text() {
   return 0
 }
 
+# Escape denial text for the provider JSON response so the user receives a readable policy reason.
 json_escape() {
   local s="$1"
   s="${s//\\/\\\\}"
@@ -246,6 +302,7 @@ json_escape() {
   printf '%s' "$s"
 }
 
+# Identify provider tools that run shell commands and therefore require command-policy inspection.
 tool_is_shell_command() {
   local tool_lc="${1,,}"
   case "$tool_lc" in
@@ -254,6 +311,7 @@ tool_is_shell_command() {
   esac
 }
 
+# Identify provider file tools whose requested paths need the selected secret-path policy.
 tool_is_secret_file_operation() {
   local tool_lc="${1,,}"
   case "$tool_lc" in
@@ -262,17 +320,12 @@ tool_is_secret_file_operation() {
   esac
 }
 
+# Recognize stdin consumers whose heredoc body this guard does not interpret as shell commands.
 goat_first_word_is_inert() {
-  # A command that treats the heredoc body as data, or runs it as its OWN
-  # (non-shell) language - never as shell commands. Keep this list conservative:
-  # anything NOT listed (a shell, xargs/parallel, source/., read/mapfile, a control
-  # keyword, ssh, or any unknown command) makes the masker leave the body
-  # inspectable. NB the interpreters/clients here still execute the body AS THEIR
-  # OWN LANGUAGE (python `os.system`, sed `e`, awk `system()`, sql `\!`/`.shell`) -
-  # a deliberately accepted scope limit: deny-dangerous guards SHELL, not
-  # interpreter languages, the same reason `python - <<X` is not inspected.
-  # Some data consumers can persist or exfiltrate the body (`tee`, mail tools);
-  # that is outside this single-shell-command guard's scope.
+  # Only listed non-shell consumers qualify; shells, dispatchers, variable handoffs and unknown commands keep the body visible.
+  #
+  # Interpreter-language execution, data persistence and exfiltration remain outside this shell-policy check.
+  # For example, an accepted Python heredoc still runs Python; this classification does not inspect its own-language program.
   case "$1" in
     cat|tac|tee|head|tail|sort|uniq|wc|nl|rev|cut|tr|fold|fmt|column|paste|join|comm|expand|unexpand|strings|iconv|\
     base64|base32|xxd|hexdump|od|md5sum|sha1sum|sha256sum|sha512sum|cksum|\
@@ -285,6 +338,7 @@ goat_first_word_is_inert() {
   return 1
 }
 
+# Recognize report and prose commands that consume stdin as data; other Goat Flow commands keep their heredoc contents inspectable.
 goat_flow_cli_consumes_heredoc_as_data() {
   local command="$1"
   local word="${command%%[[:space:]]*}"
@@ -295,15 +349,15 @@ goat_flow_cli_consumes_heredoc_as_data() {
   arguments="${command#"$word"}"
   arguments="${arguments#"${arguments%%[![:space:]]*}"}"
 
-  # These three CLI surfaces parse stdin as report/prose data. Keep the match
-  # command-shaped: other goat-flow subcommands may mutate projects or launch
-  # runtimes, so the executable itself must never enter the broad inert list.
+  # Only these three Goat Flow commands consume report or prose data on stdin.
+  # Match the full command: other subcommands can change projects or launch runtimes, so Goat Flow itself is not an inert consumer.
   [[ "$arguments" =~ ^quality[[:space:]]+save([[:space:]]|$) ]] && return 0
   [[ "$arguments" =~ ^review[[:space:]]+validate([[:space:]]|$) ]] && return 0
   [[ "$arguments" =~ ^redact([[:space:]]|$) ]] && return 0
   return 1
 }
 
+# Recognize the sole larger report-data transport after masking; unrelated commands retain the ordinary inspection size limit.
 large_quality_save_heredoc_is_bounded_data() {
   local command_policy="$1"
   local opener normalized word base arguments
@@ -316,10 +370,12 @@ large_quality_save_heredoc_is_bounded_data() {
   arguments="${normalized#"$word"}"
   arguments="${arguments#"${arguments%%[![:space:]]*}"}"
 
+  # The installed quality saver may carry larger quoted report data after that data has been safely masked.
   if [[ "$base" == "goat-flow" ]]; then
     [[ "$arguments" =~ ^quality[[:space:]]+save([[:space:]]|$) ]]
     return $?
   fi
+  # The source-CLI quality saver receives the same bounded report-data allowance as the installed command.
   if [[ "$base" == "node" || "$base" == "nodejs" ]]; then
     [[ "$arguments" =~ ^--import(=tsx|[[:space:]]+tsx)[[:space:]]+src/cli/cli\.ts[[:space:]]+quality[[:space:]]+save([[:space:]]|$) ]]
     return $?
@@ -327,6 +383,7 @@ large_quality_save_heredoc_is_bounded_data() {
   return 1
 }
 
+# Check every heredoc consumer, including process substitutions, before hiding data that cannot execute as shell commands.
 heredoc_command_list_is_inert() {
   local scan segment first normalized inner match ps_re substitution_count iterations
   local -a segs=()
@@ -336,16 +393,14 @@ heredoc_command_list_is_inert() {
   # shellcheck disable=SC2001  # regex strip of quoted spans, not a glob
   scan=$(printf '%s' "$1" | sed -E "s/'[^']*'//g; s/\"[^\"]*\"//g")
 
-  # Process substitutions route the body to/from their inner command: `cat >
-  # >(bash)`, `tee >(bash)` feed the heredoc body straight into that command's
-  # stdin. The `;&|` split below never looks inside `>(...)`/`<(...)`, so classify
-  # the whole inner command list here; `>(printf ''; bash)` is not inert even
-  # though its first command is. Replace each checked substitution with a token so
-  # the loop terminates and the leftover never confuses the segment split.
+  # Process substitutions route the body to another consumer; inspect it before hiding heredoc data that could feed a shell.
+  #
+  # Replace reviewed substitutions with placeholders so the remaining opener can be split without rescanning the same consumer.
   substitution_count="$(count_substitution_openers "$scan")"
   (( substitution_count > 32 )) && return 1
   ps_re='[<>]\(([^()]*)\)'
   iterations=0
+  # Inspect each process-substitution consumer before treating heredoc bytes as data rather than shell code.
   while [[ "$scan" =~ $ps_re ]]; do
     iterations=$((iterations + 1))
     (( iterations > 32 )) && return 1
@@ -360,10 +415,10 @@ heredoc_command_list_is_inert() {
   scan="${scan//$'\n'/;}"
   IFS=';&|' read -ra segs <<< "$scan"
   (( ${#segs[@]} > 0 )) || return 1
-  # An opener with many pipeline commands is not a simple inert-consumer pipeline;
-  # refuse to mask (inspect instead). This also bounds the per-segment subshell
-  # forks so a crafted `cat <<X; cat; cat; ...` opener cannot fork-DoS the masker.
+  # Inspect openers with more than 64 pipeline commands instead of masking them as data.
+  # Bound parser subprocesses so a long submitted opener cannot fork-DoS the masker and exhaust the hook's resources.
   (( ${#segs[@]} > 64 )) && return 1
+  # Every opener stage must consume non-shell data before the heredoc body may be hidden from command checks.
   for segment in "${segs[@]}"; do
     segment="${segment#"${segment%%[![:space:]]*}"}"
     [[ -z "$segment" ]] && continue
@@ -375,23 +430,15 @@ heredoc_command_list_is_inert() {
   return 0
 }
 
+# Hide quoted heredoc data only after every opener stage and process-substitution consumer passes the non-shell check.
 heredoc_body_is_inert() {
-  # SAFE BY DEFAULT. Mask a quoted heredoc body (hide it from chain-counting and
-  # content checks) ONLY when EVERY command in the opener's pipeline - including
-  # every command in any process-substitution target - is a known NON-shell
-  # consumer. Anything else - a shell, an `xargs`/`parallel` dispatcher,
-  # `source`/`.`, a `read`/`mapfile` variable handoff, a control keyword
-  # (while/for/if/do/then/done), `ssh`, a `>(bash)` process substitution, or any
-  # unrecognised command - means we do NOT mask, so the body stays inspectable and
-  # an executed `rm -rf /` is caught however it is reached. The opener arrives
-  # continuation-joined; its own redirects/args are still policy-checked
-  # separately, so masking the body never hides a dangerous opener. Trade-off
-  # (chosen deliberately): a >50-line heredoc to an unrecognised or
-  # compound-wrapped consumer may trip the chain cap - a safe false positive
-  # ("review and run manually"), never a bypass.
+  # SAFE BY DEFAULT: hide data only after every opener stage and process-substitution consumer qualifies; other consumers remain inspectable.
+  #
+  # The opener, redirects and arguments still receive policy checks; a long unrecognized heredoc may hit the chain limit and need manual review.
   heredoc_command_list_is_inert "$1"
 }
 
+# Hide only reviewed non-shell heredoc data so long report text does not count as executable command chains.
 mask_safe_quoted_heredoc_bodies() {
   local input="$1"
   local output=""
@@ -406,14 +453,19 @@ mask_safe_quoted_heredoc_bodies() {
   local single_quoted_re="(<<-?)[[:space:]]*'([^']+)'"
   local double_quoted_re='(<<-?)[[:space:]]*"([^"]+)"'
 
+  # Read the complete proposed script so heredoc openers and bodies receive consistent inspection.
   while IFS= read -r line || [[ -n "$line" ]]; do
+    # Inside a heredoc, classify body data separately from the opener that may execute or redirect it.
     if (( in_body )); then
       stripped_line="$line"
+      # A tab-stripping heredoc may indent its closing delimiter; account for that syntax before ending body inspection.
       if (( strip_tabs )); then
+        # Remove only delimiter-leading tabs so an indented heredoc close does not look like another body line.
         while [[ "$stripped_line" == $'\t'* ]]; do
           stripped_line="${stripped_line#$'\t'}"
         done
       fi
+      # The closing delimiter returns inspection to executable commands after the heredoc.
       if [[ "$line" == "$delimiter" || "$stripped_line" == "$delimiter" ]]; then
         output+="$line"$'\n'
         in_body=0
@@ -421,14 +473,11 @@ mask_safe_quoted_heredoc_bodies() {
         strip_tabs=0
         body_masked=0
         delimiter=""
+      # Reviewed non-shell data needs a single placeholder; executable shell-fed data remains visible in the alternate branch.
       elif (( mask_body )); then
-        # Collapse the whole inert body to ONE placeholder: a quoted-interpreter
-        # heredoc (e.g. python - <<'PY' ... PY) is a single command argument, not
-        # one chain link per line. Emitting one token per line let a body over 50
-        # lines trip the 50-chained-segment cap - a false positive on ordinary
-        # inline smoke scripts. Shell-fed heredocs keep mask_body=0 and fall to
-        # the else branch below, so they stay emitted line by line, inspectable
-        # and still counted.
+        # Collapse the whole inert body to one placeholder so a long inline smoke script does not count as dozens of chained shell actions.
+        #
+        # Shell-fed bodies remain visible line by line for command inspection and chain counting.
         if (( ! body_masked )); then
           output+="__goat_quoted_heredoc_body__"$'\n'
           body_masked=1
@@ -439,21 +488,22 @@ mask_safe_quoted_heredoc_bodies() {
       continue
     fi
 
-    # Join bash line-continuations into one logical opener so a heredoc whose
-    # pipeline/dispatcher is split across `\`<newline> (e.g. `cat <<'X' \`<nl>`|
-    # bash`) is classified as a whole. A trailing `\` inside a heredoc body is
-    # literal and is handled by the in_body branch above, never here.
+    # Join bash line-continuations so a heredoc piped into Bash is inspected as one executable command.
+    # Backslashes inside the heredoc body remain literal data; the body branch above handles them separately.
     logical="$line"
+    # Join a continued opener before classification so a shell consumer on its next line cannot hide executable input.
     while [[ "$logical" =~ (^|[^\\])(\\\\)*\\$ ]]; do
       IFS= read -r line || break
       logical="${logical%\\}$line"
     done
 
     output+="$logical"$'\n'
+    # Only explicitly quoted heredoc bodies qualify for this data-masking review; ordinary command text stays visible.
     if [[ "$logical" =~ $single_quoted_re ]] || [[ "$logical" =~ $double_quoted_re ]]; then
       strip_tabs=0
       [[ "${BASH_REMATCH[1]}" == "<<-" ]] && strip_tabs=1
       delimiter="${BASH_REMATCH[2]}"
+      # All opener consumers have been classified as non-shell, so hiding their data does not hide a shell command.
       if heredoc_body_is_inert "$logical"; then
         mask_body=1
       else
@@ -467,6 +517,7 @@ mask_safe_quoted_heredoc_bodies() {
   printf '%s' "${output%$'\n'}"
 }
 
+# Find a complete nested command boundary while respecting quoted operands; an unmatched opener leaves no safe boundary to inspect.
 find_matching_shell_paren() {
   local input="$1"
   local open_index="$2"
@@ -477,18 +528,23 @@ find_matching_shell_paren() {
   local i=0
   local char=""
 
+  # Walk the nested command until its real closing parenthesis so quoted delimiters cannot shorten inspection.
   for ((i = open_index; i < ${#input}; i++)); do
     char="${input:i:1}"
 
+    # An escaped character stays literal so quotes or separators in an argument cannot change the inspected command boundary.
     if [[ "$escaped" -eq 1 ]]; then
       escaped=0
       continue
     fi
+    # Outside single quotes, an escape protects the next character from becoming a command or argument boundary.
     if [[ "$in_single" -eq 0 && "$char" == "\\" ]]; then
       escaped=1
       continue
     fi
+    # Single-quoted text belongs to a literal operand, so its separators and substitution markers cannot become executable actions.
     if [[ "$in_double" -eq 0 && "$char" == "'" ]]; then
+      # Closing a single-quoted operand returns inspection to the surrounding command context.
       if [[ "$in_single" -eq 1 ]]; then
         in_single=0
       else
@@ -496,7 +552,9 @@ find_matching_shell_paren() {
       fi
       continue
     fi
+    # Double quotes preserve an argument boundary while still allowing executable command substitutions to be inspected.
     if [[ "$in_single" -eq 0 && "$char" == '"' ]]; then
+      # Closing double quotes restores the surrounding word boundaries for the proposed action.
       if [[ "$in_double" -eq 1 ]]; then
         in_double=0
       else
@@ -504,14 +562,18 @@ find_matching_shell_paren() {
       fi
       continue
     fi
+    # Quoted delimiters are operand data rather than nested command boundaries; keep scanning for the real closing parenthesis.
     if [[ "$in_single" -eq 1 || "$in_double" -eq 1 ]]; then
       continue
     fi
 
+    # A nested opener extends the command boundary; its enclosed commands still need complete policy inspection.
     if [[ "$char" == "(" ]]; then
       depth=$((depth + 1))
+    # A closing parenthesis narrows the nesting level until the complete proposed substitution has been found.
     elif [[ "$char" == ")" ]]; then
       depth=$((depth - 1))
+      # The matching outer close gives policy checks a complete substitution body rather than a partial command.
       if [[ "$depth" -eq 0 ]]; then
         printf '%s\n' "$i"
         return 0
@@ -522,6 +584,7 @@ find_matching_shell_paren() {
   return 1
 }
 
+# Inspect commands executed inside substitutions before the outer action; unresolved forms deny execution with a direct-command instruction.
 check_command_substitutions() {
   local remaining="$1"
   local depth="$2"
@@ -538,19 +601,19 @@ check_command_substitutions() {
   local in_double=0
   local escaped=0
 
-  # Candidate projections are built during the quote walk so each substitution
-  # class sees only characters Bash can execute in that context. Command
-  # substitutions and backticks execute inside double quotes; process
-  # substitutions do not.
+  # Inspect substitutions using only characters Bash can execute in the user's quoted context.
+  # Double quotes allow command substitutions and backticks to execute, but keep process substitutions literal.
   for ((i = 0; i < ${#remaining}; i++)); do
     char="${remaining:i:1}"
 
+    # An escaped character stays literal so quotes or separators in an argument cannot change the inspected command boundary.
     if [[ "$escaped" -eq 1 ]]; then
       residual+="$char"
       # Escaped characters separate adjacent opener text. A backslash-newline
       # is removed by Bash, so it does not add a separator.
       if [[ "$char" != $'\n' ]]; then
         command_substitution_candidates+="__goat_escaped__"
+        # Only unquoted text can start a process substitution; double-quoted text still needs command-substitution inspection.
         if [[ "$in_double" -eq 0 ]]; then
           process_substitution_candidates+="__goat_escaped__"
         fi
@@ -558,12 +621,15 @@ check_command_substitutions() {
       escaped=0
       continue
     fi
+    # Outside single quotes, an escape protects the next character from becoming a command or argument boundary.
     if [[ "$in_single" -eq 0 && "$char" == "\\" ]]; then
       residual+="$char"
       escaped=1
       continue
     fi
+    # Single-quoted text belongs to a literal operand, so its separators and substitution markers cannot become executable actions.
     if [[ "$in_double" -eq 0 && "$char" == "'" ]]; then
+      # Closing a single-quoted operand returns inspection to the surrounding command context.
       if [[ "$in_single" -eq 1 ]]; then
         in_single=0
       else
@@ -572,7 +638,9 @@ check_command_substitutions() {
       residual+="$char"
       continue
     fi
+    # Double quotes preserve an argument boundary while still allowing executable command substitutions to be inspected.
     if [[ "$in_single" -eq 0 && "$char" == '"' ]]; then
+      # Closing double quotes restores the surrounding word boundaries for the proposed action.
       if [[ "$in_double" -eq 1 ]]; then
         in_double=0
       else
@@ -582,38 +650,49 @@ check_command_substitutions() {
       continue
     fi
 
+    # Single-quoted command data cannot execute substitutions; inspect executable contexts separately.
     if [[ "$in_single" -eq 0 ]]; then
       next="${remaining:i+1:1}"
       next2="${remaining:i+2:1}"
+      # Arithmetic expansion can contain nested executable substitutions, so inspect its interior before hiding arithmetic syntax.
       if [[ "$char$next" == "\$(" && "$next2" == "(" ]]; then
+        # A complete arithmetic boundary lets nested-command checks inspect the entire expression before the outer action.
         if close_index="$(find_matching_shell_paren "$remaining" $((i + 1)))"; then
           inner="${remaining:i+3:close_index-i-3}"
           check_command_substitutions "$inner" "$depth" || return $?
           residual+="__goat_arith__"
           command_substitution_candidates+="__goat_arith__"
+          # Unquoted arithmetic placeholders also keep the process-substitution projection aligned with the inspected expression.
           if [[ "$in_double" -eq 0 ]]; then
             process_substitution_candidates+="__goat_arith__"
           fi
           i="$close_index"
           continue
         fi
+      # Command substitution executes its interior before the outer command, so it needs its own policy verdict.
       elif [[ "$char$next" == "\$(" ]]; then
+        # A complete command-substitution boundary allows inspection of the whole nested action.
         if close_index="$(find_matching_shell_paren "$remaining" $((i + 1)))"; then
           inner="${remaining:i+2:close_index-i-2}"
+          # An empty substitution contains no action to classify; nonempty interiors receive the same policy checks as direct commands.
           if [[ -n "$inner" ]]; then
             check_command_segments "$inner" $((depth + 1)) || return $?
           fi
           residual+="__goat_subst__"
           command_substitution_candidates+="__goat_subst__"
+          # Unquoted substitution placeholders keep process-boundary detection aligned after the nested command is checked.
           if [[ "$in_double" -eq 0 ]]; then
             process_substitution_candidates+="__goat_subst__"
           fi
           i="$close_index"
           continue
         fi
+      # Process substitution launches another command outside double quotes, so inspect that action before the outer command.
       elif [[ "$in_double" -eq 0 && ( "$char$next" == '<(' || "$char$next" == '>(' ) ]]; then
+        # A complete process-substitution boundary lets the policy inspect the whole producer or consumer action.
         if close_index="$(find_matching_shell_paren "$remaining" $((i + 1)))"; then
           inner="${remaining:i+2:close_index-i-2}"
+          # An empty process substitution supplies no action; a nonempty body must pass the selected policy.
           if [[ -n "$inner" ]]; then
             check_command_segments "$inner" $((depth + 1)) || return $?
           fi
@@ -627,30 +706,36 @@ check_command_substitutions() {
     fi
 
     residual+="$char"
+    # Only executable contexts contribute substitution candidates; literal single-quoted data cannot add hidden actions.
     if [[ "$in_single" -eq 0 ]]; then
       command_substitution_candidates+="$char"
+      # Process substitutions execute only outside double quotes, unlike command substitutions within quoted arguments.
       if [[ "$in_double" -eq 0 ]]; then
         process_substitution_candidates+="$char"
       fi
     fi
   done
 
+  # An unresolved executable substitution cannot be inspected safely; ask for its expanded command before proceeding.
   if [[ "$command_substitution_candidates" =~ \$\( ||
         "$process_substitution_candidates" =~ [\<\>]\( ]]; then
     block "Complex command substitution. Write the expanded command directly." || return $?
   fi
 
+  # Executable backticks hide another command; require direct command text so the user can review the actual action.
   if [[ "$command_substitution_candidates" == *\`* ]]; then
     block "Backtick command substitution hides nested execution. Use a direct command instead, or for an inline script run it from a file (e.g. node script.js)." || return $?
   fi
 }
 
+# Identify the executable basename so an absolute command path receives the same policy as its ordinary command name.
 first_word_base() {
   local c="${1#"${1%%[![:space:]]*}"}"
   local word="${c%%[[:space:]]*}"
   printf '%s' "${word##*/}"
 }
 
+# Remove shell quoting from the executable name while keeping quoted spaces inside that word for consistent policy classification.
 normalize_leading_command_word() {
   local c="$1"
   local rest=""
@@ -663,10 +748,13 @@ normalize_leading_command_word() {
   local word_space="__goat_word_space__"
 
   c="${c#"${c%%[![:space:]]*}"}"
+  # Read the executable word with its quoting intact so quoted spaces cannot turn a different program into a trusted command name.
   for ((i = 0; i < ${#c}; i++)); do
     char="${c:i:1}"
 
+    # An escaped character stays literal so quotes or separators in an argument cannot change the inspected command boundary.
     if [[ "$escaped" -eq 1 ]]; then
+      # An escaped space belongs to the executable word rather than separating its first argument.
       if [[ "$char" =~ [[:space:]] ]]; then
         current+="$word_space"
       else
@@ -676,12 +764,15 @@ normalize_leading_command_word() {
       continue
     fi
 
+    # Outside single quotes, an escape protects the next character from becoming a command or argument boundary.
     if [[ "$in_single" -eq 0 && "$char" == "\\" ]]; then
       escaped=1
       continue
     fi
 
+    # Single-quoted text belongs to a literal operand, so its separators and substitution markers cannot become executable actions.
     if [[ "$in_double" -eq 0 && "$char" == "'" ]]; then
+      # Closing a single-quoted operand returns inspection to the surrounding command context.
       if [[ "$in_single" -eq 1 ]]; then
         in_single=0
       else
@@ -690,7 +781,9 @@ normalize_leading_command_word() {
       continue
     fi
 
+    # Double quotes preserve an argument boundary while still allowing executable command substitutions to be inspected.
     if [[ "$in_single" -eq 0 && "$char" == '"' ]]; then
+      # Closing double quotes restores the surrounding word boundaries for the proposed action.
       if [[ "$in_double" -eq 1 ]]; then
         in_double=0
       else
@@ -699,9 +792,11 @@ normalize_leading_command_word() {
       continue
     fi
 
+    # Only unquoted whitespace ends the executable word; quoted spaces remain part of the program name.
     if [[ "$in_single" -eq 0 && "$in_double" -eq 0 && "$char" =~ [[:space:]] ]]; then
       rest="${c:i+1}"
       rest="${rest#"${rest%%[![:space:]]*}"}"
+      # Arguments following the executable stay attached to the policy candidate; a command without arguments needs no separator.
       if [[ -n "$rest" ]]; then
         printf '%s %s' "$current" "$rest"
       else
@@ -710,6 +805,7 @@ normalize_leading_command_word() {
       return 0
     fi
 
+    # Spaces still inside the executable word must not become argument boundaries during policy inspection.
     if [[ "$char" =~ [[:space:]] ]]; then
       current+="$word_space"
     else
@@ -717,6 +813,7 @@ normalize_leading_command_word() {
     fi
   done
 
+  # A trailing escape remains part of the proposed word rather than disappearing from policy inspection.
   if [[ "$escaped" -eq 1 ]]; then
     current+="\\"
   fi
@@ -724,6 +821,7 @@ normalize_leading_command_word() {
   printf '%s' "$current"
 }
 
+# Skip one complete quoted option value so wrapper settings cannot conceal the command the agent would run.
 drop_first_shell_word() {
   local c="$1"
   local char=""
@@ -733,20 +831,25 @@ drop_first_shell_word() {
   local i=0
 
   c="${c#"${c%%[![:space:]]*}"}"
+  # Skip one quoted word without executing it so the wrapper value cannot replace the actual program in policy checks.
   for ((i = 0; i < ${#c}; i++)); do
     char="${c:i:1}"
 
+    # An escaped character stays literal so quotes or separators in an argument cannot change the inspected command boundary.
     if [[ "$escaped" -eq 1 ]]; then
       escaped=0
       continue
     fi
 
+    # Outside single quotes, an escape protects the next character from becoming a command or argument boundary.
     if [[ "$in_single" -eq 0 && "$char" == "\\" ]]; then
       escaped=1
       continue
     fi
 
+    # Single-quoted text belongs to a literal operand, so its separators and substitution markers cannot become executable actions.
     if [[ "$in_double" -eq 0 && "$char" == "'" ]]; then
+      # Closing a single-quoted operand returns inspection to the surrounding command context.
       if [[ "$in_single" -eq 1 ]]; then
         in_single=0
       else
@@ -755,7 +858,9 @@ drop_first_shell_word() {
       continue
     fi
 
+    # Double quotes preserve an argument boundary while still allowing executable command substitutions to be inspected.
     if [[ "$in_single" -eq 0 && "$char" == '"' ]]; then
+      # Closing double quotes restores the surrounding word boundaries for the proposed action.
       if [[ "$in_double" -eq 1 ]]; then
         in_double=0
       else
@@ -764,6 +869,7 @@ drop_first_shell_word() {
       continue
     fi
 
+    # Unquoted whitespace completes the skipped word and reveals the remaining proposed command.
     if [[ "$in_single" -eq 0 && "$in_double" -eq 0 && "$char" =~ [[:space:]] ]]; then
       local rest="${c:i+1}"
       rest="${rest#"${rest%%[![:space:]]*}"}"
@@ -775,6 +881,7 @@ drop_first_shell_word() {
   printf ''
 }
 
+# Read quoted command arguments without executing expansions so option and path checks inspect the same words the agent proposed.
 split_shell_words_into() {
   local -n __goat_words_out__="$1"
   local input="$2"
@@ -786,21 +893,26 @@ split_shell_words_into() {
   local escaped=0
   local i=0
 
+  # Read each proposed argument without expanding it so paths and wrapper operands remain reviewable data.
   for ((i = 0; i < ${#input}; i++)); do
     char="${input:i:1}"
 
+    # An escaped character stays literal so quotes or separators in an argument cannot change the inspected command boundary.
     if [[ "$escaped" -eq 1 ]]; then
       current+="$char"
       escaped=0
       continue
     fi
 
+    # Outside single quotes, an escape protects the next character from becoming a command or argument boundary.
     if [[ "$in_single" -eq 0 && "$char" == "\\" ]]; then
       escaped=1
       continue
     fi
 
+    # Single-quoted text belongs to a literal operand, so its separators and substitution markers cannot become executable actions.
     if [[ "$in_double" -eq 0 && "$char" == "'" ]]; then
+      # Closing a single-quoted operand returns inspection to the surrounding command context.
       if [[ "$in_single" -eq 1 ]]; then
         in_single=0
       else
@@ -809,7 +921,9 @@ split_shell_words_into() {
       continue
     fi
 
+    # Double quotes preserve an argument boundary while still allowing executable command substitutions to be inspected.
     if [[ "$in_single" -eq 0 && "$char" == '"' ]]; then
+      # Closing double quotes restores the surrounding word boundaries for the proposed action.
       if [[ "$in_double" -eq 1 ]]; then
         in_double=0
       else
@@ -818,7 +932,9 @@ split_shell_words_into() {
       continue
     fi
 
+    # Only unquoted whitespace separates arguments; spaces in a quoted user path stay within that path.
     if [[ "$in_single" -eq 0 && "$in_double" -eq 0 && "$char" =~ [[:space:]] ]]; then
+      # A complete nonempty word becomes one reviewed argument; repeated spaces add no synthetic operand.
       if [[ -n "$current" ]]; then
         __goat_words_out__+=("$current")
         current=""
@@ -829,19 +945,23 @@ split_shell_words_into() {
     current+="$char"
   done
 
+  # A trailing escape remains part of the proposed word rather than disappearing from policy inspection.
   if [[ "$escaped" -eq 1 ]]; then
     current+="\\"
   fi
+  # Retain the final nonempty argument so a command without trailing whitespace still receives complete inspection.
   if [[ -n "$current" ]]; then
     __goat_words_out__+=("$current")
   fi
 }
 
+# Rebuild the remaining proposed command after wrapper options so downstream policies see its executable and arguments together.
 join_shell_words_from() {
   local -n __goat_words_join_ref__="$1"
   local start_index="$2"
   local out=""
   local i
+  # Keep the remaining argument order when rebuilding the executable action after wrapper settings.
   for ((i = start_index; i < ${#__goat_words_join_ref__[@]}; i++)); do
     out+="${__goat_words_join_ref__[$i]} "
   done
@@ -990,14 +1110,18 @@ strip_parallel_payload_command() {
   join_shell_words_from parallel_words "$parallel_word_index"
 }
 
+# Read the Git command and retain the repository/config options needed to resolve the user's saved aliases.
+# The lookup runs only Git's read-only config command; the proposed subcommand is never executed.
 __goat_git_strip_globals() {
-  __goat_git_aliased_push=0
+  reset_git_alias_flags
   __goat_git_rest=""
   local c="$1"
   c=$(normalize_leading_command_word "$c")
 
   local -a words=()
+  local -a alias_config_options=()
   split_shell_words_into words "$c"
+  # Empty command text cannot select a Git repository or invoke an alias.
   [[ "${#words[@]}" -gt 0 ]] || return 1
 
   local command_base="${words[0]##*/}"
@@ -1006,6 +1130,7 @@ __goat_git_strip_globals() {
   local i=1
   local opt=""
   local val=""
+  # Global options select the project and config before the proposed Git action.
   while [[ "$i" -lt "${#words[@]}" ]]; do
     opt="${words[$i]}"
     case "$opt" in
@@ -1015,25 +1140,38 @@ __goat_git_strip_globals() {
         ;;
       -c|-C|--git-dir|--work-tree|--namespace|--exec-path|--config-env)
         val="${words[$((i + 1))]:-}"
-        if [[ "$opt" == "-c" ]] && is_git_publication_alias_config "$val"; then
-          __goat_git_aliased_push=1
+        # Repository selection and temporary config must affect alias lookup exactly as they affect the proposed command.
+        case "$opt" in
+          -c|-C|--git-dir|--work-tree|--config-env) alias_config_options+=("$opt" "$val") ;;
+        esac
+        # An inline guarded alias still denies even when the command invokes another word.
+        if [[ "$opt" == "-c" ]]; then
+          record_git_alias_config "$val"
         fi
         i=$((i + 2))
         continue
         ;;
       -c?*)
         val="${opt#-c}"
-        if is_git_publication_alias_config "$val"; then
-          __goat_git_aliased_push=1
-        fi
+        alias_config_options+=("$opt")
+        record_git_alias_config "$val"
         i=$((i + 1))
         continue
         ;;
       -C?*|--git-dir=*|--work-tree=*|--namespace=*|--exec-path=*|--config-env=*)
+        # Preserve attached values so Git itself decides which option spellings its config reader accepts.
+        case "$opt" in
+          -C?*|--git-dir=*|--work-tree=*|--config-env=*) alias_config_options+=("$opt") ;;
+        esac
         i=$((i + 1))
         continue
         ;;
-      --no-pager|--paginate|--bare|--literal-pathspecs|--glob-pathspecs|--noglob-pathspecs|--icase-pathspecs|--help|--version|--html-path|--man-path|--info-path)
+      --bare)
+        alias_config_options+=("$opt")
+        i=$((i + 1))
+        continue
+        ;;
+      --no-pager|--paginate|--literal-pathspecs|--glob-pathspecs|--noglob-pathspecs|--icase-pathspecs|--help|--version|--html-path|--man-path|--info-path)
         i=$((i + 1))
         continue
         ;;
@@ -1046,14 +1184,18 @@ __goat_git_strip_globals() {
   done
 
   local rest=""
+  # Keep the proposed action and arguments together for each repository-policy check.
   while [[ "$i" -lt "${#words[@]}" ]]; do
     rest+="${words[$i]} "
     i=$((i + 1))
   done
   __goat_git_rest="${rest% }"
+  # A saved alias can hide a guarded command behind an unrecognised first word.
+  record_git_persistent_alias "$__goat_git_rest" "${alias_config_options[@]}"
   return 0
 }
 
+# Remove one environment assignment without splitting its quoted value so the following executable receives policy checks.
 strip_one_assignment_prefix() {
   local c="$1"
   [[ "$c" =~ ^[a-zA-Z_][a-zA-Z0-9_]*= ]] || return 1
@@ -1063,20 +1205,25 @@ strip_one_assignment_prefix() {
   local in_double=0
   local escaped=0
 
+  # Read the assignment value as one quoted word before revealing the executable that follows it.
   for ((i = 0; i < ${#c}; i++)); do
     char="${c:i:1}"
 
+    # An escaped character stays literal so quotes or separators in an argument cannot change the inspected command boundary.
     if [[ "$escaped" -eq 1 ]]; then
       escaped=0
       continue
     fi
 
+    # Outside single quotes, an escape protects the next character from becoming a command or argument boundary.
     if [[ "$in_single" -eq 0 && "$char" == "\\" ]]; then
       escaped=1
       continue
     fi
 
+    # Single-quoted text belongs to a literal operand, so its separators and substitution markers cannot become executable actions.
     if [[ "$in_double" -eq 0 && "$char" == "'" ]]; then
+      # Closing a single-quoted operand returns inspection to the surrounding command context.
       if [[ "$in_single" -eq 1 ]]; then
         in_single=0
       else
@@ -1085,7 +1232,9 @@ strip_one_assignment_prefix() {
       continue
     fi
 
+    # Double quotes preserve an argument boundary while still allowing executable command substitutions to be inspected.
     if [[ "$in_single" -eq 0 && "$char" == '"' ]]; then
+      # Closing double quotes restores the surrounding word boundaries for the proposed action.
       if [[ "$in_double" -eq 1 ]]; then
         in_double=0
       else
@@ -1094,6 +1243,7 @@ strip_one_assignment_prefix() {
       continue
     fi
 
+    # Unquoted whitespace ends the environment assignment and reveals the action that still requires policy inspection.
     if [[ "$in_single" -eq 0 && "$in_double" -eq 0 && "$char" =~ [[:space:]] ]]; then
       local rest="${c:i+1}"
       rest="${rest#"${rest%%[![:space:]]*}"}"
@@ -1106,61 +1256,77 @@ strip_one_assignment_prefix() {
   return 0
 }
 
+# Reveal the executable after env settings so a changed environment cannot hide a guarded command.
 normalize_env_prefix() {
   local c="$1"
   local stripped=""
 
+  # Remove only recognized environment settings until the proposed executable is exposed.
   while true; do
     c="${c#"${c%%[![:space:]]*}"}"
 
+    # An attached environment-unset value configures env rather than naming the command to inspect.
     if [[ "$c" =~ ^--unset=[^[:space:]]+[[:space:]]* ]]; then
       c="${c#"${BASH_REMATCH[0]}"}"
       continue
     fi
+    # A separated environment-unset value must be skipped with its option so the real command stays visible.
     if [[ "$c" =~ ^--unset[[:space:]]+[^[:space:]]+[[:space:]]* ]]; then
       c="${c#"${BASH_REMATCH[0]}"}"
       continue
     fi
+    # The short unset option consumes its variable name before the guarded executable begins.
     if [[ "$c" =~ ^-u[[:space:]]+[^[:space:]]+[[:space:]]* ]]; then
       c="${c#"${BASH_REMATCH[0]}"}"
       continue
     fi
+    # An attached short unset value belongs to env settings rather than the executable action.
     if [[ "$c" =~ ^-u[^[:space:]]+[[:space:]]* ]]; then
       c="${c#"${BASH_REMATCH[0]}"}"
       continue
     fi
+    # Environment-reset options change the child environment but do not exempt its command from policy.
     if [[ "$c" =~ ^--(ignore-environment|null)[[:space:]]* ]]; then
       c="${c#"${BASH_REMATCH[0]}"}"
       continue
     fi
+    # An attached working-directory setting precedes the executable; inspect the remaining command normally.
     if [[ "$c" =~ ^--chdir=[^[:space:]]+[[:space:]]* ]]; then
       c="${c#"${BASH_REMATCH[0]}"}"
       continue
     fi
+    # A separated working-directory setting consumes a quoted folder before the executable can be identified.
     if [[ "$c" =~ ^--chdir[[:space:]]+ ]]; then
       c="${c#"${BASH_REMATCH[0]}"}"
       c=$(drop_first_shell_word "$c")
       continue
     fi
+    # Short directory options consume their folder value before policy checks identify the executable.
     if [[ "$c" =~ ^-[cC][[:space:]]+ ]]; then
       c="${c#"${BASH_REMATCH[0]}"}"
       c=$(drop_first_shell_word "$c")
       continue
     fi
+    # Environment-reset short flags change settings only; the remaining action still requires inspection.
     if [[ "$c" =~ ^-[i0][[:space:]]* ]]; then
       c="${c#"${BASH_REMATCH[0]}"}"
       continue
     fi
+    # Split-string mode carries the command in its remaining text, so expose that text for ordinary policy classification.
     if [[ "$c" =~ ^(-[sS]|--split-string)(=|[[:space:]]+) ]]; then
       c="${c#"${BASH_REMATCH[0]}"}"
+      # Remove the split string's outer single quotes so its command word reaches the same policy as a direct call.
       if [[ "$c" == \'* ]]; then c="${c#\'}"; c="${c%\'}"; fi
+      # Remove the split string's outer double quotes so its command word reaches the same policy as a direct call.
       if [[ "$c" == \"* ]]; then c="${c#\"}"; c="${c%\"}"; fi
       break
     fi
+    # The option terminator marks the remaining executable rather than another environment setting.
     if [[ "$c" =~ ^--[[:space:]]+ ]]; then
       c="${c#"${BASH_REMATCH[0]}"}"
       continue
     fi
+    # An environment assignment is setup for the child command; continue until its executable is exposed.
     if stripped=$(strip_one_assignment_prefix "$c"); then
       c="$stripped"
       continue
@@ -1171,29 +1337,36 @@ normalize_env_prefix() {
   printf '%s' "$c"
 }
 
+# Reveal the executable after timing and output options so measured commands receive ordinary policy checks.
 normalize_time_prefix() {
   local c="$1"
 
+  # Skip supported timing settings until the measured executable can receive its policy check.
   while true; do
     c="${c#"${c%%[![:space:]]*}"}"
 
+    # Timing display flags do not change which guarded command the agent would execute.
     if [[ "$c" =~ ^(--portability|--verbose|--quiet|--append|-p|-v|-q|-a)[[:space:]]+ ]]; then
       c="${c#"${BASH_REMATCH[0]}"}"
       continue
     fi
+    # An attached timing format or output setting is wrapper data; the remaining executable still needs inspection.
     if [[ "$c" =~ ^(--format|--output)= ]]; then
       c=$(drop_first_shell_word "$c")
       continue
     fi
+    # A separated timing format or output setting consumes its quoted value before the executable begins.
     if [[ "$c" =~ ^(--format|--output|-f|-o)[[:space:]]+ ]]; then
       c="${c#"${BASH_REMATCH[0]}"}"
       c=$(drop_first_shell_word "$c")
       continue
     fi
+    # Attached short timing values belong to wrapper settings rather than the command being measured.
     if [[ "$c" =~ ^(-f|-o)[^[:space:]]+[[:space:]]* ]]; then
       c="${c#"${BASH_REMATCH[0]}"}"
       continue
     fi
+    # The timing option terminator leaves the remaining executable ready for ordinary policy inspection.
     if [[ "$c" =~ ^--[[:space:]]+ ]]; then
       c="${c#"${BASH_REMATCH[0]}"}"
       continue
@@ -1204,30 +1377,38 @@ normalize_time_prefix() {
   printf '%s' "$c"
 }
 
+# Reveal the executable after sudo options so elevated commands receive the same policy as direct commands.
 normalize_sudo_prefix() {
   local c="$1"
+  # Skip recognized privilege-wrapper settings until the elevated executable becomes visible to the policy.
   while true; do
     c="${c#"${c%%[![:space:]]*}"}"
+    # Privilege options consume their separated identity, folder or timeout value before the executable begins.
     if [[ "$c" =~ ^-[ugCDRTp][[:space:]]+[^[:space:]]+[[:space:]]* ]]; then
       c="${c#"${BASH_REMATCH[0]}"}"
       continue
     fi
+    # Attached privilege option values configure sudo and must not conceal the remaining executable.
     if [[ "$c" =~ ^-[ugCDRTp][^[:space:]-]+[[:space:]]* ]]; then
       c="${c#"${BASH_REMATCH[0]}"}"
       continue
     fi
+    # Long privilege option values configure the wrapper; elevated commands still receive the ordinary policy check.
     if [[ "$c" =~ ^--(user|group|close-from|chdir|role|type|other-user|prompt|command-timeout|preserve-env)=[^[:space:]]*[[:space:]]* ]]; then
       c="${c#"${BASH_REMATCH[0]}"}"
       continue
     fi
+    # Short privilege flags change wrapper behavior without removing policy checks from the child command.
     if [[ "$c" =~ ^-[AbeEHhiKknPSsV]+[[:space:]]* ]]; then
       c="${c#"${BASH_REMATCH[0]}"}"
       continue
     fi
+    # Long privilege flags configure the wrapper without granting the child command a policy exemption.
     if [[ "$c" =~ ^--(askpass|background|bell|edit|preserve-env|set-home|help|login|list|remove-timestamp|reset-timestamp|non-interactive|stdin|shell|validate|version)[[:space:]]* ]]; then
       c="${c#"${BASH_REMATCH[0]}"}"
       continue
     fi
+    # The privilege option terminator exposes the executable that still requires policy inspection.
     if [[ "$c" =~ ^--[[:space:]]+ ]]; then
       c="${c#"${BASH_REMATCH[0]}"}"
     fi
@@ -1236,17 +1417,20 @@ normalize_sudo_prefix() {
   printf '%s' "$c"
 }
 
+# Identify an I/O operand that cannot safely serve as the executable revealed by a wrapper.
 word_starts_with_redirection() {
   local redirection_re='^([0-9]+)?[<>]'
   [[ "$1" =~ $redirection_re ]]
 }
 
+# Reveal a supported exec payload; missing operands or unfamiliar options keep the original command visible for inspection.
 normalize_exec_prefix() {
   local c="$1"
   local -a words=()
   split_shell_words_into words "$c"
   local i=0
   local word=""
+  # Walk supported exec options until the launched command is visible to policy checks.
   while [[ "$i" -lt "${#words[@]}" ]]; do
     word="${words[$i]}"
     case "$word" in
@@ -1260,6 +1444,7 @@ normalize_exec_prefix() {
         continue
         ;;
       -*)
+        # Recognized exec flags change the launch environment; unfamiliar flags leave the original action unnormalized for review.
         if [[ "$word" =~ ^-[cl]+$ ]]; then
           i=$((i + 1))
           continue
@@ -1275,12 +1460,14 @@ normalize_exec_prefix() {
   join_shell_words_from words "$i"
 }
 
+# Reveal the command after timeout options and duration; incomplete or unfamiliar forms remain unnormalized for inspection.
 normalize_timeout_prefix() {
   local c="$1"
   local -a words=()
   split_shell_words_into words "$c"
   local i=0
   local word=""
+  # Walk supported timeout options until the launched command is visible to policy checks.
   while [[ "$i" -lt "${#words[@]}" ]]; do
     word="${words[$i]}"
     case "$word" in
@@ -1316,12 +1503,14 @@ normalize_timeout_prefix() {
   join_shell_words_from words "$i"
 }
 
+# Reveal a supported session-launch command so a new session cannot conceal the guarded executable.
 normalize_setsid_prefix() {
   local c="$1"
   local -a words=()
   split_shell_words_into words "$c"
   local i=0
   local word=""
+  # Walk supported setsid options until the launched command is visible to policy checks.
   while [[ "$i" -lt "${#words[@]}" ]]; do
     word="${words[$i]}"
     case "$word" in
@@ -1337,6 +1526,7 @@ normalize_setsid_prefix() {
         return 1
         ;;
       -*)
+        # Recognized session flags change launch behavior; unfamiliar flags leave the original action visible for review.
         if [[ "$word" =~ ^-[cfw]+$ ]]; then
           i=$((i + 1))
           continue
@@ -1350,12 +1540,14 @@ normalize_setsid_prefix() {
   join_shell_words_from words "$i"
 }
 
+# Reveal the command after stream-buffer settings so output buffering does not change policy classification.
 normalize_stdbuf_prefix() {
   local c="$1"
   local -a words=()
   split_shell_words_into words "$c"
   local i=0
   local word=""
+  # Walk supported stdbuf options until the launched command is visible to policy checks.
   while [[ "$i" -lt "${#words[@]}" ]]; do
     word="${words[$i]}"
     case "$word" in
@@ -1385,12 +1577,14 @@ normalize_stdbuf_prefix() {
   join_shell_words_from words "$i"
 }
 
+# Reveal a newly launched command after I/O scheduling options; existing-process forms supply no launch payload.
 normalize_ionice_prefix() {
   local c="$1"
   local -a words=()
   split_shell_words_into words "$c"
   local i=0
   local word=""
+  # Walk supported ionice options until the launched command is visible to policy checks.
   while [[ "$i" -lt "${#words[@]}" ]]; do
     word="${words[$i]}"
     case "$word" in
@@ -1423,12 +1617,14 @@ normalize_ionice_prefix() {
   join_shell_words_from words "$i"
 }
 
+# Reveal a newly launched command after CPU selection; existing-process forms supply no launch payload.
 normalize_taskset_prefix() {
   local c="$1"
   local -a words=()
   split_shell_words_into words "$c"
   local i=0
   local word=""
+  # Walk supported taskset options until the launched command is visible to policy checks.
   while [[ "$i" -lt "${#words[@]}" ]]; do
     word="${words[$i]}"
     case "$word" in
@@ -1458,12 +1654,14 @@ normalize_taskset_prefix() {
   join_shell_words_from words "$i"
 }
 
+# Reveal a newly launched command after scheduling policy and priority; existing-process forms supply no launch payload.
 normalize_chrt_prefix() {
   local c="$1"
   local -a words=()
   split_shell_words_into words "$c"
   local i=0
   local word=""
+  # Walk supported chrt options until the launched command is visible to policy checks.
   while [[ "$i" -lt "${#words[@]}" ]]; do
     word="${words[$i]}"
     case "$word" in
@@ -1502,12 +1700,14 @@ normalize_chrt_prefix() {
   join_shell_words_from words "$i"
 }
 
+# Reveal the executable or explicit command string protected by a lock; incomplete lock-only forms supply no launch payload.
 normalize_flock_prefix() {
   local c="$1"
   local -a words=()
   split_shell_words_into words "$c"
   local i=0
   local word=""
+  # Walk supported flock options until the launched command is visible to policy checks.
   while [[ "$i" -lt "${#words[@]}" ]]; do
     word="${words[$i]}"
     case "$word" in
@@ -1551,11 +1751,13 @@ normalize_flock_prefix() {
     break
   done
   [[ "$i" -lt "${#words[@]}" ]] || return 1
+  # A descriptor-only lock request has no child command whose action this wrapper parser can reveal.
   if [[ "${words[$i]}" =~ ^[0-9]+$ && $((i + 1)) -ge "${#words[@]}" ]]; then
     return 1
   fi
   i=$((i + 1)) # lock file/dir or fd
   [[ "$i" -lt "${#words[@]}" ]] || return 1
+  # An explicit locked command string is the action to classify rather than the lock file itself.
   if [[ "${words[$i]}" == "-c" || "${words[$i]}" == "--command" ]]; then
     [[ $((i + 1)) -lt "${#words[@]}" ]] || return 1
     printf '%s' "${words[$((i + 1))]}"
@@ -1574,13 +1776,12 @@ normalize_command_candidate() {
   local after_word=""
   local case_arm_re='^case[[:space:]][^)]*\)[[:space:]]*'
 
+  # Peel supported wrappers repeatedly so nested launch syntax cannot conceal the command the agent would actually run.
   while true; do
     c="${c#"${c%%[![:space:]]*}"}"
 
-    # Leading redirections (`2>/dev/null`, `>out`, `{fd}>file`, `2> file`, here-docs) change
-    # only the command's I/O, never which program runs. Peel them first so the verb the user
-    # would execute drives every verb-gated policy module; otherwise CMD_VERB resolves to the
-    # redirection token and rm / git / find / sudo policy silently misses the real command.
+    # Remove leading redirections before identifying the program the user's command would run.
+    # Redirections change input/output, so treating one as CMD_VERB would hide the real rm, Git, find or sudo command from policy checks.
     if stripped=$(strip_leading_shell_redirections "$c"); then
       c="$stripped"
       continue
@@ -1598,46 +1799,57 @@ normalize_command_candidate() {
       c="${c#"${BASH_REMATCH[0]}"}"
       continue
     fi
+    # A subshell opener wraps the action without changing its command policy; expose its interior for inspection.
     if [[ "$c" == \(* ]]; then
       c="${c#\(}"
       continue
     fi
+    # A command-group opener wraps executable actions; the contained command still requires ordinary policy inspection.
     if [[ "$c" == \{* ]]; then
       c="${c#\{}"
       continue
     fi
+    # A case-arm label selects a branch but does not exempt its contained executable action from policy.
     if [[ "$c" =~ $case_arm_re ]]; then
       c="${c#"${BASH_REMATCH[0]}"}"
       continue
     fi
+    # A named coprocess wrapper starts another executable action; expose that command before applying policy.
     if [[ "$c" =~ ^coproc[[:space:]]+[a-zA-Z_][a-zA-Z0-9_]*[[:space:]]+\{[[:space:]]* ]]; then
       c="${c#"${BASH_REMATCH[0]}"}"
       continue
     fi
+    # A coprocess keyword precedes the action that still needs the same checks as a direct command.
     if [[ "$c" =~ ^coproc[[:space:]]+ ]]; then
       c="${c#"${BASH_REMATCH[0]}"}"
       continue
     fi
+    # Control-flow keywords organize proposed actions; inspect the executable command after the keyword.
     if [[ "$c" =~ ^(then|do|else|if|elif|while|until|in)[[:space:]]+ ]]; then
       c="${c#"${BASH_REMATCH[0]}"}"
       continue
     fi
+    # A function declaration can carry guarded commands in its body, so expose the body for inspection.
     if [[ "$c" =~ ^[a-zA-Z_][a-zA-Z0-9_]*[[:space:]]*\(\)[[:space:]]*\{[[:space:]]* ]]; then
       c="${c#"${BASH_REMATCH[0]}"}"
       continue
     fi
+    # Alternate function-declaration syntax also carries executable body text that must receive policy checks.
     if [[ "$c" =~ ^function[[:space:]]+[a-zA-Z_][a-zA-Z0-9_]*([[:space:]]*\(\))?[[:space:]]*\{[[:space:]]* ]]; then
       c="${c#"${BASH_REMATCH[0]}"}"
       continue
     fi
+    # The command builtin changes lookup behavior without exempting the executable that follows it.
     if [[ "$c" =~ ^command[[:space:]]+ ]]; then
       c="${c#"${BASH_REMATCH[0]}"}"
       c="${c#"${c%%[![:space:]]*}"}"
+      # Command-lookup options are wrapper settings; the remaining word identifies the action to inspect.
       while [[ "$c" =~ ^(-p|--)[[:space:]]+ ]]; do
         c="${c#"${BASH_REMATCH[0]}"}"
       done
       continue
     fi
+    # The builtin keyword selects a shell builtin whose action still needs ordinary policy classification.
     if [[ "$c" =~ ^builtin[[:space:]]+ ]]; then
       c="${c#"${BASH_REMATCH[0]}"}"
       c="${c#"${c%%[![:space:]]*}"}"
@@ -1649,22 +1861,27 @@ normalize_command_candidate() {
     fi
     word="${c%%[[:space:]]*}"
     base="${word##*/}"
+    # Timing and hangup wrappers do not change the child action, so reveal its executable before classification.
     if [[ "$base" == "time" || "$base" == "nohup" ]]; then
       c="${c#"$word"}"
       c="${c#"${c%%[![:space:]]*}"}"
+      # Timing options precede the measured command and must not become its apparent executable name.
       if [[ "$base" == "time" ]]; then
         c=$(normalize_time_prefix "$c")
       fi
       continue
     fi
+    # Priority adjustment wraps the proposed action without granting it a policy exemption.
     if [[ "$base" == "nice" ]]; then
       c="${c#"$word"}"
       c="${c#"${c%%[![:space:]]*}"}"
+      # The priority value configures nice; the following executable determines the actual policy verdict.
       if [[ "$c" =~ ^(-n[[:space:]]+[^[:space:]]+|--adjustment(=|[[:space:]]+)[^[:space:]]+|-[0-9]+)[[:space:]]+ ]]; then
         c="${c#"${BASH_REMATCH[0]}"}"
       fi
       continue
     fi
+    # Privilege elevation wraps the action but does not authorize an otherwise guarded command.
     if [[ "$base" == "sudo" ]]; then
       c="${c#"$word"}"
       c="${c#"${c%%[![:space:]]*}"}"
@@ -1675,48 +1892,56 @@ normalize_command_candidate() {
     after_word="${after_word#"${after_word%%[![:space:]]*}"}"
     case "$base" in
       exec)
+        # A supported exec wrapper reveals its child action for the same policy checks as a direct command.
         if stripped=$(normalize_exec_prefix "$after_word"); then
           c="$stripped"
           continue
         fi
         ;;
       timeout)
+        # A supported timeout wrapper reveals its child action for the same policy checks as a direct command.
         if stripped=$(normalize_timeout_prefix "$after_word"); then
           c="$stripped"
           continue
         fi
         ;;
       setsid)
+        # A supported setsid wrapper reveals its child action for the same policy checks as a direct command.
         if stripped=$(normalize_setsid_prefix "$after_word"); then
           c="$stripped"
           continue
         fi
         ;;
       stdbuf)
+        # A supported stdbuf wrapper reveals its child action for the same policy checks as a direct command.
         if stripped=$(normalize_stdbuf_prefix "$after_word"); then
           c="$stripped"
           continue
         fi
         ;;
       ionice)
+        # A supported ionice wrapper reveals its child action for the same policy checks as a direct command.
         if stripped=$(normalize_ionice_prefix "$after_word"); then
           c="$stripped"
           continue
         fi
         ;;
       taskset)
+        # A supported taskset wrapper reveals its child action for the same policy checks as a direct command.
         if stripped=$(normalize_taskset_prefix "$after_word"); then
           c="$stripped"
           continue
         fi
         ;;
       chrt)
+        # A supported chrt wrapper reveals its child action for the same policy checks as a direct command.
         if stripped=$(normalize_chrt_prefix "$after_word"); then
           c="$stripped"
           continue
         fi
         ;;
       flock)
+        # A supported flock wrapper reveals its child action for the same policy checks as a direct command.
         if stripped=$(normalize_flock_prefix "$after_word"); then
           c="$stripped"
           continue
@@ -1742,11 +1967,13 @@ normalize_command_candidate() {
       c="$stripped"
       continue
     fi
+    # Environment settings precede the executable; inspect that executable after supported env syntax is removed.
     if [[ "$c" =~ ^env([[:space:]]|$) ]]; then
       c="${c#env}"
       c=$(normalize_env_prefix "$c")
       continue
     fi
+    # A path-qualified env wrapper receives the same normalization as its ordinary command-name spelling.
     if [[ "$c" =~ ^(/usr)?/bin/env([[:space:]]|$) ]]; then
       c="${c#"${BASH_REMATCH[0]}"}"
       c=$(normalize_env_prefix "$c")
@@ -1868,9 +2095,11 @@ split_command_segments_into() {
       # ampersands stay with their operator.
       if [[ "$command_character" == "&" && "$next_command_character" != ">" ]]; then
         previous_command_character=""
+        # The character before an ampersand distinguishes a background action from an I/O operator.
         if [[ "$command_index" -gt 0 ]]; then
           previous_command_character="${developer_command:command_index-1:1}"
         fi
+        # A true background separator starts another executable action; descriptor and stderr-pipe ampersands stay with their operator.
         if [[ "$previous_command_character" != ">" &&
               "$previous_command_character" != "<" &&
               "$previous_command_character" != "|" ]]; then
@@ -1900,6 +2129,7 @@ split_top_level_pipeline_stages_into() {
   split_command_segments_into "$1" "$2" 1
 }
 
+# Return a policy denial through the invoking provider channel so the agent stops and the user sees the reason.
 block() {
   local reason="$1"
   case "$OUTPUT_MODE" in
@@ -1921,7 +2151,9 @@ block() {
   esac
 }
 
+# Finish an allowed policy check using the provider continuation contract; this result supplies no proof of a completed safety scan.
 allow() {
+  # Antigravity requires an explicit allow envelope so its agent can continue after this policy check.
   if [[ "$OUTPUT_MODE" == "antigravity-json" ]]; then
     printf '{"decision":"allow"}
 '
@@ -1929,6 +2161,7 @@ allow() {
   exit 0
 }
 
+# Remove actual shell comments while preserving quoted search text so prose cannot create false policy matches.
 strip_unquoted_shell_comments() {
   local input="$1"
   local out=""
@@ -1939,9 +2172,11 @@ strip_unquoted_shell_comments() {
   local escaped=0
   local i=0
 
+  # Read command quoting before removing comments so literal search data cannot disappear from policy context.
   for ((i = 0; i < ${#input}; i++)); do
     char="${input:i:1}"
 
+    # An escaped character stays literal so quotes or separators in an argument cannot change the inspected command boundary.
     if [[ "$escaped" -eq 1 ]]; then
       out+="$char"
       escaped=0
@@ -1949,6 +2184,7 @@ strip_unquoted_shell_comments() {
       continue
     fi
 
+    # Outside single quotes, an escape protects the next character from becoming a command or argument boundary.
     if [[ "$in_single" -eq 0 && "$char" == "\\" ]]; then
       out+="$char"
       escaped=1
@@ -1956,7 +2192,9 @@ strip_unquoted_shell_comments() {
       continue
     fi
 
+    # Single-quoted text belongs to a literal operand, so its separators and substitution markers cannot become executable actions.
     if [[ "$in_double" -eq 0 && "$char" == "'" ]]; then
+      # Closing a single-quoted operand returns inspection to the surrounding command context.
       if [[ "$in_single" -eq 1 ]]; then
         in_single=0
       else
@@ -1967,7 +2205,9 @@ strip_unquoted_shell_comments() {
       continue
     fi
 
+    # Double quotes preserve an argument boundary while still allowing executable command substitutions to be inspected.
     if [[ "$in_single" -eq 0 && "$char" == '"' ]]; then
+      # Closing double quotes restores the surrounding word boundaries for the proposed action.
       if [[ "$in_double" -eq 1 ]]; then
         in_double=0
       else
@@ -1978,7 +2218,9 @@ strip_unquoted_shell_comments() {
       continue
     fi
 
+    # Only an unquoted hash can begin a shell comment; quoted hashes remain part of the user's argument.
     if [[ "$in_single" -eq 0 && "$in_double" -eq 0 && "$char" == "#" ]]; then
+      # A hash at a word boundary starts nonexecuting prose; a hash inside a command word remains inspectable text.
       if [[ -z "$previous" || "$previous" =~ [[:space:]] ]]; then
         break
       fi
@@ -2001,6 +2243,7 @@ prepare_segment_context() {
   local saved_cmd_trimmed saved_cmd_normalized saved_cmd_verb saved_cmd_unquoted saved_cmd_lower
   local saved_has_redirect saved_has_pipe
 
+  # A command containing a hash needs quote-aware comment removal so search prose cannot create false blocks.
   if [[ "$cmd" == *"#"* ]]; then
     policy_cmd=$(strip_unquoted_shell_comments "$cmd")
   else
@@ -2015,6 +2258,7 @@ prepare_segment_context() {
   CMD_VERB="${CMD_VERB##*/}"
 
   CMD_UNQUOTED="$policy_cmd"
+  # Quoted spans are argument data for redirect and pipe detection; inspect executable operators outside those spans.
   if [[ "$policy_cmd" == *"'"* || "$policy_cmd" == *'"'* ]]; then
     # shellcheck disable=SC2001  # ERE alternation; parameter expansion uses globs
     CMD_UNQUOTED=$(sed -E "s/'[^']*'//g; s/\"[^\"]*\"//g" <<<"$policy_cmd")
@@ -2032,8 +2276,10 @@ prepare_segment_context() {
   [[ "$pipe_stripped" == *"|"* ]] && HAS_PIPE=1
 
   local shell_c_re="(^|[[:space:]])(ba)?sh([[:space:]]+-[a-zA-Z]+)*[[:space:]]+-[a-zA-Z]*c[a-zA-Z]*[[:space:]]+[\$]?(['\"])([^'\"]*)(['\"])"
+  # Inline shell code executes inside the outer action, so its body must receive its own complete policy inspection.
   if [[ "$policy_cmd" =~ $shell_c_re ]]; then
     local inner_c="${BASH_REMATCH[5]}"
+    # An empty inline shell body contains no action; a nonempty body must pass the same checks as direct commands.
     if [[ -n "$inner_c" ]]; then
       saved_cmd_trimmed="$CMD_TRIMMED"
       saved_cmd_normalized="$CMD_NORMALIZED"
@@ -2054,6 +2300,7 @@ prepare_segment_context() {
   fi
 }
 
+# Recognize direct inspection that cannot redirect or pipe output; modifying sed forms still require policy checks.
 is_unredirected_unpiped_read_only() {
   local cmd="$1"
   [[ "$HAS_REDIRECT" -eq 0 && "$HAS_PIPE" -eq 0 ]] || return 1
@@ -2061,6 +2308,7 @@ is_unredirected_unpiped_read_only() {
     grep|egrep|fgrep|rg|ag|ack|cat|head|tail|less|more|wc|file|diff|printf|echo|read|ls|stat|test)
       return 0 ;;
     sed)
+      # Ordinary sed inspection remains available; in-place editing must continue through write-policy checks.
       if ! [[ "$cmd" =~ sed[[:space:]]+-[a-zA-Z]*i || "$cmd" =~ sed[[:space:]]+--in-place ]]; then
         return 0
       fi ;;
@@ -2068,25 +2316,27 @@ is_unredirected_unpiped_read_only() {
   return 1
 }
 
+# Inspect each executable action and its nested commands while preserving the selected policy and bounded parser work.
 check_command_segments() {
   local input="$1"
   local depth="${2:-0}"
   local -a nested_segments=()
   local nested_segment
 
+  # Only the destructive-shell policy owns download-then-execute chain checks; Git policy retains its separate scope.
   if [[ "$GOAT_GUARD_SCOPE" == "deny-dangerous" ]] && declare -F check_command_chain_policy >/dev/null 2>&1; then
     check_command_chain_policy "$input" "$depth" || return $?
   fi
 
   split_command_segments_into nested_segments "$input"
 
-  # Substitution interiors stay intact through split_command_segments_into and
-  # are recursed into here, so enforce the chain-count cap at nested depths too
-  # (depth 0 is already capped in main).
+  # Enforce the chain-count cap at nested depths too; splitting preserves substitution contents for this recursive inspection.
+  # The main entry point already caps top-level commands, while this branch protects nested commands the user could execute.
   if (( depth > 0 && ${#nested_segments[@]} > 50 )); then
     block "Command has more than 50 chained segments; review and run manually if intended." || return $?
   fi
 
+  # Every nonempty action in the proposed chain must pass policy before the agent can run the overall command.
   for nested_segment in "${nested_segments[@]}"; do
     nested_segment="${nested_segment#"${nested_segment%%[![:space:]]*}"}"
     nested_segment="${nested_segment%"${nested_segment##*[![:space:]]}"}"
@@ -2095,6 +2345,7 @@ check_command_segments() {
   done
 }
 
+# Count executable substitution openers before recursive inspection so excessive nesting cannot stall the agent turn.
 count_substitution_openers() {
   local input="$1"
   local count=0
@@ -2102,17 +2353,22 @@ count_substitution_openers() {
   local in_single=0
   local in_double=0
   local escaped=0
+  # Count possible nested executable actions before recursively inspecting the proposed command.
   for ((i = 0; i < ${#input}; i += 1)); do
     ch="${input:i:1}"
+    # An escaped character stays literal so quotes or separators in an argument cannot change the inspected command boundary.
     if [[ "$escaped" -eq 1 ]]; then
       escaped=0
       continue
     fi
+    # Outside single quotes, an escape protects the next character from becoming a command or argument boundary.
     if [[ "$in_single" -eq 0 && "$ch" == "\\" ]]; then
       escaped=1
       continue
     fi
+    # Single-quoted text belongs to a literal operand, so its separators and substitution markers cannot become executable actions.
     if [[ "$in_double" -eq 0 && "$ch" == "'" ]]; then
+      # Closing a single-quoted operand returns inspection to the surrounding command context.
       if [[ "$in_single" -eq 1 ]]; then
         in_single=0
       else
@@ -2120,7 +2376,9 @@ count_substitution_openers() {
       fi
       continue
     fi
+    # Double quotes preserve an argument boundary while still allowing executable command substitutions to be inspected.
     if [[ "$in_single" -eq 0 && "$ch" == '"' ]]; then
+      # Closing double quotes restores the surrounding word boundaries for the proposed action.
       if [[ "$in_double" -eq 1 ]]; then
         in_double=0
       else
@@ -2131,10 +2389,13 @@ count_substitution_openers() {
     [[ "$in_single" -eq 1 ]] && continue
     next="${input:i+1:1}"
     next2="${input:i+2:1}"
+    # A command-substitution opener adds another action to the bounded inspection workload.
     if [[ "$ch$next" == "\$(" ]]; then
+      # Arithmetic expansion itself is not a child command; count only executable command-substitution openers here.
       if [[ "$next2" != '(' ]]; then
         count=$((count + 1))
       fi
+    # A process-substitution opener also starts a child action and consumes the same inspection budget.
     elif [[ "$ch$next" == '<(' || "$ch$next" == '>(' ]]; then
       count=$((count + 1))
     fi
@@ -2142,12 +2403,14 @@ count_substitution_openers() {
   printf '%s\n' "$count"
 }
 
+# Read one command source, validate provider input and parser limits, then deliver the selected policy verdict to the agent.
 main() {
   OUTPUT_MODE="stderr-exit"
   SELF_TEST_MODE=""
   CHECK_COMMAND=""
   local check_command_source=""
 
+  # Read check and self-test options before choosing the command source so diagnostic requests never execute their operand.
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --self-test)
@@ -2166,6 +2429,7 @@ main() {
         check_command_source="check-flag"
         ;;
       *)
+        # The first positional operand supplies check text; later arguments must not silently replace the inspected command.
         if [[ -z "$CHECK_COMMAND" ]]; then
           CHECK_COMMAND="$1"
           check_command_source="positional"
@@ -2177,6 +2441,7 @@ main() {
 
   local script_dir
   script_dir="${GOAT_GUARD_SCRIPT_DIR:-$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)}"
+  # A self-test request runs the policy corpus instead of waiting for or inspecting an ordinary provider payload.
   if [[ -n "$SELF_TEST_MODE" ]]; then
     [[ -r "$GOAT_HOOK_LIB_DIR/deny-dangerous-self-test.sh" ]] ||
       deny_dangerous_unavailable "missing required policy self-test"
@@ -2184,10 +2449,12 @@ main() {
   fi
 
   local payload structured_input payload_trimmed tool_name command command_policy extraction_status
+  # A positional command plus piped input could identify two different actions; check that only one source was supplied.
   if [[ "$check_command_source" == "positional" && ! -t 0 ]]; then
     local competing_payload competing_payload_trimmed
     competing_payload="$(cat || true)"
     competing_payload_trimmed="${competing_payload#"${competing_payload%%[![:space:]]*}"}"
+    # Competing nonempty stdin makes the intended action ambiguous, so deny it with the provider's expected response channel.
     if [[ -n "$competing_payload_trimmed" ]]; then
       OUTPUT_MODE="$(detect_output_mode "$competing_payload")"
       block "Hook received both positional command and stdin payload. Submit exactly one command source."
@@ -2197,6 +2464,7 @@ main() {
   payload="$(read_payload)"
   structured_input=0
   payload_trimmed="${payload#"${payload%%[![:space:]]*}"}"
+  # Provider JSON requires structured extraction; explicit check text remains a literal proposed command.
   if [[ -z "$CHECK_COMMAND" && "$payload_trimmed" == \{* ]]; then
     structured_input=1
     OUTPUT_MODE="$(detect_output_mode "$payload")"
@@ -2204,6 +2472,7 @@ main() {
 
   tool_name=""
   command=""
+  # Structured provider input must expose a trustworthy tool and command before any relevant action can be allowed.
   if [[ "$structured_input" -eq 1 ]]; then
     extraction_status=0
     tool_name="$(extract_tool_name "$payload")" || extraction_status=$?
@@ -2211,13 +2480,18 @@ main() {
     extraction_status=0
     command="$(extract_command_text "$payload")" || extraction_status=$?
     [[ "$extraction_status" -eq 2 ]] && JSON_EXTRACTION_UNSAFE=1
+    # Unsupported JSON escapes leave the provider action uncertain and require a refusal for policy-relevant tools.
     if [[ "$JSON_EXTRACTION_UNSAFE" -eq 1 ]]; then
+      # Unknown, shell and file tools can reach guarded actions; unsafe extraction cannot establish permission to continue.
       if [[ -z "$tool_name" ]] || tool_is_shell_command "$tool_name" || tool_is_secret_file_operation "$tool_name"; then
         block "Hook payload contains unsupported JSON escapes. Fail closed and rerun with jq installed or a simpler payload."
       fi
     fi
+    # A known tool name decides whether this policy owns the requested action or should return provider continuation.
     if [[ -n "$tool_name" ]]; then
+      # Non-shell tools bypass shell classification only when the selected policy does not own their requested file action.
       if ! tool_is_shell_command "$tool_name"; then
+        # The dangerous-hook entrypoint still inspects secret-file operations even when no shell tool was invoked.
         if { [[ "$GOAT_GUARD_SCOPE" == "secret" ]] || [[ "$GOAT_GUARD_NAME" == "deny-dangerous.sh" ]]; } && tool_is_secret_file_operation "$tool_name"; then
           :
         else
@@ -2229,13 +2503,16 @@ main() {
     command="$payload"
   fi
 
+  # No command text means there is no action to inspect; policy-relevant structured requests must explain that absence.
   if [[ -z "$command" ]]; then
+    # A relevant structured request without command text cannot establish a safe action, so report a malformed payload.
     if [[ "$structured_input" -eq 1 ]] && { [[ -z "$tool_name" ]] || tool_is_shell_command "$tool_name" || tool_is_secret_file_operation "$tool_name"; }; then
       block "Hook payload did not expose a bash command to evaluate"
     fi
     allow
   fi
 
+  # Multiline commands and heredocs need data masking before parser limits; executable opener text remains policy-checked.
   if [[ "$command" == *"<<"* || "$command" == *$'\n'* ]]; then
     command_policy="$(mask_safe_quoted_heredoc_bodies "$command")"
   else
@@ -2243,12 +2520,12 @@ main() {
     command_policy="$command"
   fi
 
-  # Keep the parser's ordinary 16KB ceiling. The quality prompt is the sole
-  # larger transport: a quoted body consumed as data may reach 256KB only when
-  # masking removes every byte above the ordinary policy surface.
+  # Keep the ordinary 16KB inspection limit; only the quoted quality-report data transport may reach 256KB.
+  # That larger body is admitted only when masking leaves an executable command within the ordinary limit.
   if (( ${#command} > 262144 )); then
     block "Command is too large for policy inspection; use file or stdin input for large data."
   fi
+  # Only safely masked quality-report data may exceed the ordinary command size limit; other large actions need file or stdin input.
   if (( ${#command} > 16384 )) && {
     (( ${#command_policy} > 16384 )) ||
       ! large_quality_save_heredoc_is_bounded_data "$command_policy"
@@ -2258,21 +2535,21 @@ main() {
 
   declare -a _goat_chain_segments=()
   split_command_segments_into _goat_chain_segments "$command_policy"
+  # Too many chained actions exceed bounded inspection; ask the user to review and run the intended command manually.
   if (( ${#_goat_chain_segments[@]} > 50 )); then
     block "Command has more than 50 chained segments; review and run manually if intended."
   fi
   unset _goat_chain_segments
 
-  # Cap total command/process substitution openers before the recursive
-  # check_command_segments walk. Each `$(`/`<(`/`>(` triggers its own recursive
-  # re-scan, so a command packed with hundreds (e.g. `cat <(:) <(:) ... <(:)`) is a
-  # policy-parser DoS (~10s at 300). This flat O(len) count bounds the work;
-  # real commands use a handful, so pathological input blocks ("run it manually").
+  # Count executable substitution openers once before recursion to prevent a policy-parser DoS from excessive nested actions.
+  #
+  # Excessive nested actions require manual review so a crafted command cannot stall the agent turn.
   local _goat_subst_n=0
   # shellcheck disable=SC2016  # literal substitution openers are matched, not expanded
   if [[ "$command_policy" == *'$('* || "$command_policy" == *'<('* || "$command_policy" == *'>('* ]]; then
     _goat_subst_n="$(count_substitution_openers "$command_policy")"
   fi
+  # Too many executable substitutions exceed bounded inspection; return a manual-review refusal instead of stalling the agent turn.
   if (( _goat_subst_n > 32 )); then
     block "Command has too many command substitutions; review and run manually if intended."
   fi
@@ -2288,7 +2565,9 @@ required_hook_lib_files=(
   "patterns-writes.sh"
 )
 
+# Every required policy module must be readable before the entrypoint can return a trustworthy verdict.
 for required_hook_lib_file in "${required_hook_lib_files[@]}"; do
+  # A missing or unreadable policy file prevents complete inspection; report an unavailable hook instead of allowing the action.
   if [[ ! -r "$GOAT_HOOK_LIB_DIR/$required_hook_lib_file" ]]; then
     deny_dangerous_unavailable "missing required hook policy file $GOAT_HOOK_LIB_DIR/$required_hook_lib_file"
   fi
@@ -2303,11 +2582,12 @@ source "$GOAT_HOOK_LIB_DIR/patterns-writes.sh" || deny_dangerous_unavailable "fa
 
 # During an interrupted upgrade the old policy file can still be present. It
 # must not reach main without the split API and accidentally allow on return 127.
-for required_policy_function in check_destructive_segment check_secret_segment check_repository_segment check_git_segment; do
+for required_policy_function in check_destructive_segment check_secret_segment check_repository_segment check_git_segment reset_git_alias_flags normalize_git_alias_expansion record_git_alias_config record_git_persistent_alias; do
   declare -F "$required_policy_function" >/dev/null ||
     deny_dangerous_unavailable "policy store lacks required function $required_policy_function"
 done
 
+# Inspect one action with the selected policy and restore the enclosing denial scope for nested command checks.
 check_segment() {
   local cmd="$1"
   local depth="${2:-0}"
@@ -2316,23 +2596,25 @@ check_segment() {
   # Parse once per segment. Every policy module below consumes the same
   # CMD_* and HAS_* context; reparsing here would add policy-count latency.
   GOAT_ACTIVE_GUARD_SCOPE="destructive"
+  # Git policy uses the repository denial label so the user sees which switch owns the proposed write.
   if [[ "$GOAT_GUARD_SCOPE" == "deny-git-mutations" ]]; then
     GOAT_ACTIVE_GUARD_SCOPE="repository"
   fi
   prepare_segment_context "$cmd" "$depth" || return $?
+  # Git policy checks native Git and GitHub actions; the alternate branch checks destructive shell and secret-file actions.
   if [[ "$GOAT_GUARD_SCOPE" == "deny-git-mutations" ]]; then
     # The existing find walker recursively checks executable payloads. Its
     # deletion verdict belongs to the sibling shell policy, not this hook.
     find_has_destructive_action "$CMD_NORMALIZED" "$depth" || true
     check_git_segment "$cmd" "$depth" || return $?
+    check_repository_segment "$cmd" "$depth" || return $?
   else
     check_destructive_segment "$cmd" "$depth" || return $?
     GOAT_ACTIVE_GUARD_SCOPE="secret"
     check_secret_segment "$cmd" "$depth" || return $?
-    GOAT_ACTIVE_GUARD_SCOPE="repository"
-    check_repository_segment "$cmd" "$depth" || return $?
   fi
 
+  # Nested inspection restores its enclosing policy label so any later denial names the correct user-visible protection.
   if [[ -n "$previous_scope" ]]; then
     GOAT_ACTIVE_GUARD_SCOPE="$previous_scope"
   else

@@ -38,6 +38,7 @@ const LEGACY_HOOK_DEADLINES_MS = new Map([
  * Resolve a fixed hook-owned Windows utility without searching the project or PATH.
  *
  * @param {NodeJS.ProcessEnv} environment - Host folders; missing or empty roots disable the utility.
+ *
  * @param {string} utilityFileName - Fixed basename; empty or path-shaped input is rejected.
  * @returns {string | null} Absolute System32 path, or null when either trusted component is missing.
  */
@@ -60,6 +61,7 @@ function windowsSystemUtilityPath(environment, utilityFileName) {
  * Side effect: starts `where.exe`; lookup errors return no matches for fallback discovery.
  *
  * @param {string} executableName - Name to locate; empty produces no usable matches.
+ *
  * @param {NodeJS.ProcessEnv} environment - Host folders; missing system roots skip PATH lookup.
  * @returns {string[]} Command paths; empty means PATH provided no match.
  */
@@ -229,6 +231,7 @@ export function pickWindowsBashPath(candidatePaths) {
  *
  * @param {string} providerIdentifier - active host; empty or unknown text has no JSON policy shape
  * @param {string} unavailableReason - non-empty explanation shown with the deny decision
+ *
  * @param {string} lineBreak - host line separator; empty keeps valid JSON but hurts terminal display
  * @returns {number | null} handled exit code, or null when standard fail-closed output must be used
  */
@@ -264,6 +267,7 @@ function reportProviderPolicyUnavailable(
  * Report a failed hook launch while preserving the user's host response policy.
  *
  * @param {string} hookResponseMode - Agent protocol; empty or unknown fails closed.
+ *
  * @param {string} userFacingReason - Practical failure detail; empty gives a generic message.
  * @returns {number} Exit status the host should treat as handled or blocked.
  */
@@ -321,8 +325,10 @@ function reportUnavailable(hookResponseMode, userFacingReason, hookIdentifier) {
  *
  * @param {string} hookResponseMode - registered mode; empty text falls back to policy failure
  * @param {object | null} providerAdapterRuntime - loaded adapter, or null for legacy hooks
+ *
  * @param {object | null} launchContract - decoded managed contract, or null for legacy hooks
  * @param {string} hookIdentifier - entrypoint identity used to attribute policy startup failures
+ *
  * @param {object} failure - reason code and user context, with optional child diagnostics and duration
  * @returns {number} Exit status the registered host treats as handled or blocked.
  */
@@ -377,10 +383,12 @@ function reportLauncherUnavailable(
 
 /**
  * Refuse a managed hook whose file shape could redirect the user's execution.
+ *
  * Use before Bash starts so rejected shapes become a visible unavailable result.
  * Error behavior: never throws; path races return "hook script was not found".
  *
  * @param {string} projectRoot - Project the user selected; the hook must resolve inside it.
+ *
  * @param {string} hookScriptPath - Absolute path to the hook file, already known to exist.
  * @returns {string | null} Failure reason, or null when the reviewed project script may run.
  */
@@ -440,6 +448,7 @@ function hookScriptShapeFailure(projectRoot, hookScriptPath) {
  *
  * @param {import("node:child_process").ChildProcess} hookProcess - Started Bash process; a missing PID means launch failed before user work began.
  * @param {NodeJS.Platform} hostPlatform - Active host; an empty value cannot select a safe platform-specific tree kill.
+ *
  * @param {NodeJS.ProcessEnv} hookEnvironment - Host folders; missing Windows roots use direct-process cleanup only.
  * @returns {void} No result; an already-finished process means the user's cleanup is complete.
  */
@@ -485,6 +494,7 @@ function stopHookProcessTree(hookProcess, hostPlatform, hookEnvironment) {
  * Side effect: pipes child bytes into the host without closing the host stream when the child ends.
  *
  * @param {NodeJS.ReadableStream} hookOutputStream - Child output; an ended stream simply pipes no more bytes.
+ *
  * @param {NodeJS.WritableStream} hostOutputStream - Host destination; a saturated stream pauses the child source until drain.
  * @returns {void} No value; Node's pipe lifecycle owns pause and resume behavior.
  */
@@ -497,10 +507,13 @@ export function relayLegacyHookOutput(hookOutputStream, hostOutputStream) {
  *
  * @param {string} bashExecutable - Resolved Bash command; empty would fail through the launch-error result.
  * @param {string} hookScriptPath - Non-empty verified script path inside the user's project.
+ *
  * @param {string} projectRoot - Non-empty selected project used as the hook's working directory.
  * @param {NodeJS.ProcessEnv} hookEnvironment - Hook environment; missing values remain unavailable to the script.
+ *
  * @param {number} launchTimeout - Positive deadline in milliseconds; zero would time out immediately.
  * @param {NodeJS.Platform} hostPlatform - Active host used for process-tree cleanup.
+ *
  * @param {Function | null} appendCapturedHookOutput - adapter writer; null relays legacy streams without exposing provider handles to descendants.
  * @returns {ReturnType<typeof captureHookProcessUntilDeadline>} Result for the user; empty streams mean legacy relay or no child output.
  */
@@ -547,10 +560,12 @@ function runHookProcessUntilDeadline(
 
 /**
  * Resolve one legacy deadline or load the migrated provider launch contract.
+ *
  * Side effect: dynamically loads the provider adapter only for namespaced modes.
  * Error behavior: never throws for contract or adapter failures; returns a failure reason instead.
  *
  * @param {string} hookResponseMode - Registered response mode; empty text is invalid policy input.
+ *
  * @param {NodeJS.ProcessEnv} initialHookEnvironment - Host environment passed to the managed hook.
  * @returns {Promise<object>} Prepared runtime fields, or a failure reason with no runnable contract.
  */
@@ -638,8 +653,10 @@ async function prepareHookLaunchRuntime(
  *
  * @param {string} hookResponseMode - Registered host response mode for unavailable fallbacks.
  * @param {object | null} providerAdapterRuntime - Loaded adapter, or null for legacy hooks.
+ *
  * @param {object | null} launchContract - Decoded provider contract, or null for legacy hooks.
  * @param {object} hookExecution - Completed process result with bounded output and status.
+ *
  * @param {number} launchTimeout - Applied deadline in milliseconds for timeout evidence.
  * @returns {number} Exit status the registered host treats as handled, blocked, or advisory.
  */
@@ -723,30 +740,46 @@ function renderHookExecutionResult(
   );
 }
 
-/**
- * Run a managed project hook through Bash while preserving its host-facing result.
- *
- * Use when an agent event must reach the selected project's managed policy or feedback script.
- * Expected failures return host-specific status; unexpected host I/O rejects the promise so the agent can report a launcher fault.
- *
- * @param {string} hookScriptArgument - Project-relative hook path; empty is rejected.
- * @param {string} hookResponseMode - Agent response protocol; empty uses policy behavior.
- * @param {object} launchOptions - Test/platform overrides; omitted values use the live project.
- * @returns {Promise<number>} Hook exit status, or the protocol-specific unavailable result.
- * @throws {Error} When unexpected filesystem or process I/O prevents a host-specific result.
- */
-export async function runHookWithBash(
-  hookScriptArgument,
-  hookResponseMode = "policy",
-  launchOptions = {},
+/** Return off/unavailable status before Bash discovery; null leaves enabled and unrelated hooks on the normal path. */
+async function policyChoiceBeforeBash(
+  projectRoot,
+  hookIdentifier,
+  hookResponseMode,
 ) {
-  // A normal hook starts in the selected project; tests can provide a fixture root.
-  const hookIdentifier = basename(
-    hookScriptArgument.replaceAll("\\", "/"),
-    ".sh",
-  );
-  const projectRoot = launchOptions.root ?? process.cwd();
-  const hookScriptPath = resolve(projectRoot, hookScriptArgument);
+  // Retained policy registrations let cached bootstraps reach the saved choice.
+  // Validate the script first; an incomplete install must never look disabled.
+  if (
+    hookIdentifier === "deny-dangerous" ||
+    hookIdentifier === "deny-git-mutations"
+  ) {
+    // An unsupported response mode cannot safely report the user's policy decision to the provider.
+    if (!["policy", "antigravity", "copilot"].includes(hookResponseMode)) {
+      return reportUnavailable(
+        hookResponseMode,
+        "unsupported policy response mode",
+        hookIdentifier,
+      );
+    }
+    try {
+      const { default: policyState } = await import("./hook-policy-state.cjs");
+      // Only the user's explicit verified false skips this policy's enforcement before Bash launches.
+      if (policyState.readPolicyChoices(projectRoot)[hookIdentifier] === false)
+        return 0;
+    } catch {
+      // A missing reader or malformed saved YAML leaves protection unknown; return the provider's setup-repair refusal.
+      return reportUnavailable(
+        hookResponseMode,
+        "policy configuration or reader is unavailable",
+        hookIdentifier,
+      );
+    }
+  }
+
+  return null;
+}
+
+/** Reject escaped script paths using physical identity when available; missing paths retain the lexical check. */
+function hookScriptContainmentFailure(projectRoot, hookScriptPath) {
   let containmentProjectRoot;
   let containmentHookScriptPath;
   // Existing paths are compared by physical identity so a symlinked spelling of the selected
@@ -772,12 +805,48 @@ export async function runHookWithBash(
     projectRelativeHookPath.startsWith("..\\") ||
     isAbsolute(projectRelativeHookPath)
   ) {
+    return "hook script path escaped the project root";
+  }
+  return null;
+}
+
+/**
+ * Run a managed project hook through Bash while preserving its host-facing result.
+ *
+ * Use when an agent event must reach the selected project's managed policy or feedback script.
+ * Expected failures return host-specific status; unexpected host I/O rejects the promise so the agent can report a launcher fault.
+ *
+ * @param {string} hookScriptArgument - Project-relative hook path; empty is rejected.
+ * @param {string} hookResponseMode - Agent response protocol; empty uses policy behavior.
+ *
+ * @param {object} launchOptions - Test/platform overrides; omitted values use the live project.
+ * @returns {Promise<number>} Hook exit status, or the protocol-specific unavailable result.
+ *
+ * @throws {Error} When unexpected filesystem or process I/O prevents a host-specific result.
+ */
+export async function runHookWithBash(
+  hookScriptArgument,
+  hookResponseMode = "policy",
+  launchOptions = {},
+) {
+  // A normal hook starts in the selected project; tests can provide a fixture root.
+  const hookIdentifier = basename(
+    hookScriptArgument.replaceAll("\\", "/"),
+    ".sh",
+  );
+  const projectRoot = launchOptions.root ?? process.cwd();
+  const hookScriptPath = resolve(projectRoot, hookScriptArgument);
+  const containmentFailure = hookScriptContainmentFailure(
+    projectRoot,
+    hookScriptPath,
+  );
+  // A script escaping the selected project is refused before the user's command can run.
+  if (containmentFailure !== null)
     return reportUnavailable(
       hookResponseMode,
-      "hook script path escaped the project root",
+      containmentFailure,
       hookIdentifier,
     );
-  }
   // For example, a partial install may register a hook whose script was never copied.
   if (!existsSync(hookScriptPath)) {
     return reportUnavailable(
@@ -790,6 +859,7 @@ export async function runHookWithBash(
     projectRoot,
     hookScriptPath,
   );
+  // An unsafe hook-script path receives a repair response instead of executing a substituted policy script.
   if (hookScriptShapeReason !== null) {
     return reportUnavailable(
       hookResponseMode,
@@ -797,6 +867,14 @@ export async function runHookWithBash(
       hookIdentifier,
     );
   }
+
+  const policyChoiceExit = await policyChoiceBeforeBash(
+    projectRoot,
+    hookIdentifier,
+    hookResponseMode,
+  );
+  // A saved opt-out or policy-read refusal completes this request without starting Bash enforcement.
+  if (policyChoiceExit !== null) return policyChoiceExit;
 
   // Normal launches follow the host platform; tests can model native Windows.
   const hostPlatform = launchOptions.platform ?? process.platform;
@@ -833,6 +911,7 @@ export async function runHookWithBash(
     hookResponseMode,
     hookEnvironment,
   );
+  // An unavailable provider adapter or launch runtime needs a startup refusal rather than partial policy enforcement.
   if (launchRuntime.failureReason !== null) {
     return reportUnavailable(
       hookResponseMode,

@@ -83,7 +83,7 @@ skipped=0
 hook_path() {
   local hook="$1"
   case "$hook" in
-    git) printf '%s/deny-git-mutations.sh' "${DISPATCHER%/*}" ;;
+    git|writes) printf '%s/deny-git-mutations.sh' "${DISPATCHER%/*}" ;;
     shared) printf '%s' "$DISPATCHER" ;;
     *) printf '%s/deny-dangerous.sh' "${DISPATCHER%/*}" ;;
   esac
@@ -96,8 +96,8 @@ selected_hook() {
   # Shared assertions run for either policy; specific assertions must match the selected hook.
   if [[ "$hook" != "shared" ]]; then
     # Skip assertions for the other policy so its protections are not attributed to this hook.
-    if [[ "$POLICY_FILTER" == "deny-git-mutations" && "$hook" != "git" ]] ||
-       [[ "$POLICY_FILTER" == "deny-dangerous" && "$hook" == "git" ]]; then
+    if [[ "$POLICY_FILTER" == "deny-git-mutations" && "$hook" != "git" && "$hook" != "writes" ]] ||
+       [[ "$POLICY_FILTER" == "deny-dangerous" && ( "$hook" == "git" || "$hook" == "writes" ) ]]; then
       return 1
     fi
   fi
@@ -1031,6 +1031,62 @@ run_full() {
   expect_block git "git -c 'alias.publish=pu\"sh\"' publish" "git alias partially quoted command word"
   expect_block git "git -c 'alias.publish=\"!git push origin main\"' publish" "git alias quoted bang form"
   expect_allow git "git -c 'alias.inspect=\"status --short\"' inspect" "benign git alias keeps quotes"
+  # Commit and destructive alias values deny like publication values, whichever word is invoked.
+  expect_block git "git -c alias.c=commit c -m x" "git alias commit"
+  expect_block git "git -c 'alias.c=commit --no-verify' c -m x" "git alias commit no-verify"
+  expect_block git "git -c alias.nuke='reset --hard' nuke" "git alias reset hard"
+  expect_block git "git -c 'alias.wipe=clean -fdx' wipe" "git alias clean force"
+  expect_block git "git -c 'alias.nuke=reset \"--hard\"' nuke" "git alias quoted hard-reset argument"
+  expect_block git "git -c \"alias.nuke=reset '--hard'\" nuke" "git alias single-quoted hard-reset argument"
+  expect_block git "git -c 'alias.nuke=reset --ha\\rd' nuke" "git alias escaped hard-reset argument"
+  expect_block git "git -c 'alias.wipe=clean \"-fdx\"' wipe" "git alias quoted forced-clean argument"
+  expect_block git "git -c 'alias.replay=rebase \"--no-verify\"' replay" "git alias quoted no-verify argument"
+  expect_allow git "git -c 'alias.inspect=status \"--short\"' inspect" "git alias quoted inspection argument"
+  expect_allow shell "git -c 'alias.nuke=reset \"--hard\"' nuke" "general policy leaves quoted hard-reset alias to Git"
+  expect_allow shell "git -c \"alias.nuke=reset '--hard'\" nuke" "general policy leaves single-quoted hard-reset alias to Git"
+  expect_allow shell "git -c 'alias.nuke=reset --ha\\rd' nuke" "general policy leaves escaped hard-reset alias to Git"
+  expect_allow shell "git -c 'alias.wipe=clean \"-fdx\"' wipe" "general policy leaves quoted forced-clean alias to Git"
+  expect_allow shell "git -c 'alias.replay=rebase \"--no-verify\"' replay" "general policy leaves quoted no-verify alias to Git"
+  expect_allow shell "git -c 'alias.inspect=status \"--short\"' inspect" "general policy allows quoted inspection alias"
+  expect_block git "git -c 'alias.c=\"commit\"' c -m x" "git alias quoted commit word"
+  expect_block git "git -c alias.c=commit status" "git alias commit config with another invoked word"
+  expect_block_message git "git -c alias.c=commit c -m x" "git alias commit copy" "repository" "git commit is not allowed"
+  expect_allow git "git -c alias.inspect=status log --oneline" "unused benign alias config"
+  expect_allow git "git -c alias.inspect=status inspect" "benign git alias command word"
+  # A saved alias resolves through one bounded config read; the fixture file replaces the host's global and system config.
+  local saved_alias_config
+  saved_alias_config="$(mktemp)"
+  git config --file "$saved_alias_config" alias.gfrecord commit
+  git config --file "$saved_alias_config" alias.gfnuke 'reset --hard'
+  git config --file "$saved_alias_config" alias.gfquotednuke 'reset "--hard"'
+  git config --file "$saved_alias_config" alias.gfquotedwipe 'clean "-fdx"'
+  git config --file "$saved_alias_config" alias.gfinspect 'status --short'
+  GIT_CONFIG_GLOBAL="$saved_alias_config" GIT_CONFIG_NOSYSTEM=1 expect_block git "git gfrecord -m x" "saved commit alias"
+  GIT_CONFIG_GLOBAL="$saved_alias_config" GIT_CONFIG_NOSYSTEM=1 expect_block git "git gfnuke" "saved destructive alias"
+  GIT_CONFIG_GLOBAL="$saved_alias_config" GIT_CONFIG_NOSYSTEM=1 expect_block git "git gfquotednuke" "saved alias quoted hard-reset argument"
+  GIT_CONFIG_GLOBAL="$saved_alias_config" GIT_CONFIG_NOSYSTEM=1 expect_block git "git gfquotedwipe" "saved alias quoted forced-clean argument"
+  GIT_CONFIG_GLOBAL="$saved_alias_config" GIT_CONFIG_NOSYSTEM=1 expect_allow git "git gfinspect" "saved benign alias"
+  GIT_CONFIG_GLOBAL="$saved_alias_config" GIT_CONFIG_NOSYSTEM=1 expect_allow git "git status" "builtin word skips the alias lookup"
+  GIT_CONFIG_GLOBAL="$saved_alias_config" GIT_CONFIG_NOSYSTEM=1 expect_allow git "git -c alias.gfrecord=status gfrecord" "temporary config overrides saved alias"
+  # An agent may use -C to inspect another project; its local aliases must be checked in that project's config.
+  local alias_project_root alias_project_options
+  alias_project_root="$(mktemp -d)"
+  mkdir "$alias_project_root/other repository"
+  git init -q "$alias_project_root/other repository"
+  git -C "$alias_project_root/other repository" config alias.gfselectedrecord commit
+  git -C "$alias_project_root/other repository" config alias.gfselectedinspect 'status --short'
+  # Quoted paths, repeated -C and both Git-directory forms must preserve alias denial and read-only controls.
+  for alias_project_options in \
+    "-C '$alias_project_root/other repository'" \
+    "-C '$alias_project_root' -C 'other repository'" \
+    "--git-dir '$alias_project_root/other repository/.git'" \
+    "--git-dir='$alias_project_root/other repository/.git' --work-tree='$alias_project_root/other repository'"; do
+    GIT_CONFIG_GLOBAL="$saved_alias_config" GIT_CONFIG_NOSYSTEM=1 expect_block git "git $alias_project_options gfselectedrecord -m inspection" "selected repository commit alias"
+    GIT_CONFIG_GLOBAL="$saved_alias_config" GIT_CONFIG_NOSYSTEM=1 expect_allow git "git $alias_project_options gfselectedinspect" "selected repository read alias"
+  done
+  rm -f "$saved_alias_config"
+  rm -rf "$alias_project_root"
+  expect_allow git "git gfrecord -m x" "unrecognised word without a saved alias"
   local optional_xargs_flag
   # Optional xargs values must not consume the command word and hide a destructive action.
   for optional_xargs_flag in -e -i -l --eof --replace --max-lines; do
@@ -1168,11 +1224,61 @@ run_full() {
   expect_block shell $'perl -e \'system(q(id))\'' "Perl eval system control"
   expect_block shell $'perl -e \'exec(q(id))\'' "standalone interpreter exec remains denied"
   expect_block shell $'node -e \'require("child_process").exec("id")\'' "Node child process exec remains denied"
+  # Process-module names remain conservative raw-text denials, including when printed as data.
+  expect_block shell $'node -e \'console.log("child_process")\'' "Node printed process-module name remains denied"
+  expect_block shell $'python3 -c \'print("subprocess")\'' "Python printed process-module name remains denied"
   expect_block shell $'python3 -c \'import os; os.system("id")\'' "Python namespaced process primitive remains denied"
   expect_allow shell $'node -e \'console.log(/a(b)/.exec(process.argv[1]))\' ab' "Node regex exec is ordinary inspection"
   expect_allow shell $'node -e \'console.log("the word backtick")\'' "literal backtick word is ordinary data"
   expect_allow shell $'node -e \'console.log(`id`)\'' "Node backticks are template literals"
   expect_allow shell $'php -r \'echo strlen("inspection");\'' "PHP inline string inspection remains allowed"
+  # Each interpreter's own execution spellings deny, with or without parentheses and with any delimiter.
+  expect_block shell $'perl -e \'print qx(id)\'' "Perl qx paren"
+  expect_block shell $'perl -e \'print qx{id}\'' "Perl qx brace"
+  expect_block shell $'perl -e \'print qx/id/\'' "Perl qx slash"
+  expect_block shell $'perl -e \'print qx"id"\'' "Perl qx double-quote delimiter"
+  expect_block shell "perl -e \"print qx'id'\"" "Perl qx single-quote delimiter"
+  expect_allow shell $'perl -e \'print "qx{id}"\'' "Perl printed qx operator text"
+  expect_allow shell "perl -e \"print 'qx(id)'\"" "Perl single-quoted qx data"
+  expect_block shell $'perl -e \'print "@{[qx{id}]}"\'' "Perl qx in executable string interpolation"
+  expect_block shell $'perl -e \'print "qx{id}"; print qx(id)\'' "Perl qx after printed operator text"
+  expect_block shell $'perl -e \'system "printf", "inspection"\'' "Perl paren-less system list"
+  expect_block shell $'perl -e \'exec "printf", "inspection"\'' "Perl paren-less exec list"
+  expect_block shell $'perl -e \'open(my $fh, "id |")\'' "Perl pipe-open"
+  expect_block shell $'ruby -e \'puts %x(id)\'' "Ruby percent-x paren"
+  expect_block shell $'ruby -e \'puts %x{id}\'' "Ruby percent-x brace"
+  expect_block shell $'ruby -e \'puts %x"id"\'' "Ruby percent-x double-quote delimiter"
+  expect_block shell "ruby -e \"puts %x'id'\"" "Ruby percent-x single-quote delimiter"
+  expect_allow shell $'ruby -e \'puts "%x(id)"\'' "Ruby printed percent-x operator text"
+  expect_allow shell "ruby -e \"puts '%x{id}'\"" "Ruby single-quoted percent-x data"
+  expect_block shell $'ruby -e \'puts "#{%x(id)}"\'' "Ruby percent-x in executable string interpolation"
+  expect_block shell $'ruby -e \'puts "%x(id)"; system "id"\'' "Ruby command after printed operator text"
+  expect_block shell $'ruby -e \'system "id"\'' "Ruby paren-less system"
+  expect_block shell $'ruby -e \'spawn("id")\'' "Ruby spawn"
+  expect_block shell $'ruby -e \'Kernel.exec("id")\'' "Ruby Kernel.exec receiver"
+  expect_block shell $'ruby -e \'Process.spawn("id")\'' "Ruby Process.spawn receiver"
+  expect_block shell $'ruby -e \'require "open3"; Open3.capture2("id")\'' "Ruby Open3 capture"
+  expect_block shell $'python3 -c \'import os; os.spawnl(os.P_WAIT, "/usr/bin/id", "id")\'' "Python os.spawnl"
+  expect_block shell $'python3 -c \'import pty; pty.spawn("/bin/sh")\'' "Python pty.spawn"
+  expect_block shell $'php -r \'passthru("id");\'' "PHP passthru"
+  expect_block shell $'php -r \'proc_open("id", [], $p);\'' "PHP proc_open"
+  expect_block shell $'deno eval \'new Deno.Command("id").output()\'' "Deno Command eval"
+  # Review only inert command text: quoting must preserve both hidden-command denial and ordinary printed output.
+  expect_block shell 'ruby -e '"'"'puts "it'"'"'"'"'"'"'"'"'s inspection"; system "id"'"'"'' "Ruby command after shell-concatenated quotes"
+  expect_allow shell 'ruby -e '"'"'puts "it'"'"'"'"'"'"'"'"'s inspection"'"'"'' "Ruby shell-concatenated text stays data"
+  expect_block shell 'ruby -e '"'"'puts '"'"'"'"'"'"'"'"'"'"'"'"'"'"'"'"'"'; system '"'"'"'"'"'"'"'"'id'"'"'"'"'"'"'"'"'; puts '"'"'"'"'"'"'"'"'"'"'"'"'"'"'"'"'"''"'"'' "Ruby command between opposite-quote literals"
+  expect_allow shell 'ruby -e '"'"'puts '"'"'"'"'"'"'"'"'"'"'"'"'"'"'"'"'"'; puts '"'"'"'"'"'"'"'"'inspection'"'"'"'"'"'"'"'"'; puts '"'"'"'"'"'"'"'"'"'"'"'"'"'"'"'"'"''"'"'' "Ruby opposite-quote literals stay data"
+  expect_block shell 'ruby -e '"'"'puts "escaped \\\" quote"; system "id"'"'"'' "Ruby command after escaped string quote"
+  expect_allow shell 'ruby -e '"'"'puts "escaped \\\" system word"'"'"'' "Ruby escaped quote stays inside string"
+  expect_allow shell 'ruby -e '"'"''"'"' '"'"'system id'"'"'' "empty inline program keeps arguments as data"
+  # Quoted bare-call words remain data; a Node string containing subprocess must not activate Python's process rule.
+  expect_allow shell $'python3 -c \'print("system ready")\'' "Python word-in-string system"
+  expect_allow shell $'ruby -e \'puts "spawn point"\'' "Ruby word-in-string spawn"
+  expect_allow shell $'perl -e \'print "exec summary"\'' "Perl word-in-string exec"
+  expect_allow shell $'node -e \'console.log("subprocess")\'' "Node quoted subprocess word"
+  expect_allow shell $'perl -e \'print q(inspection)\'' "Perl q string is not qx"
+  expect_allow shell $'ruby -e \'puts %q(inspection)\'' "Ruby percent-q string is not percent-x"
+  expect_allow shell $'python3 -c \'print("inspection")\'' "Python plain print"
   expect_block git 'echo $(git push origin main)' "git push inside subst"
   expect_block shell 'echo $(echo $(echo $(echo $(rm -rf /))))' "deeply nested subst rm"
   expect_allow shell 'echo $(dirname $(dirname $(dirname $(pwd))))' "deep benign path nesting allowed (no depth cap)"

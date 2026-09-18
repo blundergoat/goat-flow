@@ -1,13 +1,16 @@
 # patterns-writes.sh
 #
 # Protects the developer's repository and GitHub project from agent-authored writes.
-# deny-git-mutations.sh selects native Git rules; deny-dangerous.sh selects GitHub rules.
+# deny-git-mutations.sh controls both native Git and GitHub writes for the selected project.
+#
 # Both use the shared parser before classifying history, publication, or remote writes.
 # Read-only status and search evidence remain available to the developer.
 # shellcheck shell=bash disable=SC2034,SC2154,SC2317,SC2319
 
 __goat_git_rest=""
 __goat_git_aliased_push=0
+__goat_git_aliased_commit=0
+__goat_git_aliased_destructive=0
 
 # Decide whether a direct subcommand or alias expansion publishes Git objects.
 # Use for both visible Git commands and alias config so their deny set cannot drift.
@@ -20,33 +23,115 @@ is_git_publication_target() {
   esac
 }
 
-# Reveal the command word Git will actually run from an alias value.
-# Word splitting removes the operand's outer shell quoting, but Git runs the alias through its own
-# split_cmdline, which removes a second layer of quotes and backslash escapes. Without this,
-# `alias.publish="push"`, `alias.publish=pu"sh"`, and `alias.publish=pu\sh` all reach the remote while
-# the guard sees a command word it does not recognise. Only the command word is normalized; arguments
-# keep their text so a benign alias such as `alias.inspect="status --short"` still reads as status.
-git_alias_expansion_command_word() {
-  local expansion="$1"
-  expansion="${expansion#"${expansion%%[![:space:]]*}"}"
-  local command_word="${expansion%%[[:space:]]*}"
-  local arguments="${expansion:${#command_word}}"
-  command_word="${command_word//\"/}"
-  command_word="${command_word//\'/}"
-  command_word="${command_word//\\/}"
-  printf '%s%s' "$command_word" "$arguments"
+# Reveal the command and flags Git reads after splitting an alias value.
+#
+# The operand's outer shell quotes are already removed; Git removes another layer from every word.
+# Reuse the inert word parser so quoted destructive flags reach the same checks as visible flags.
+normalize_git_alias_expansion() {
+  local -a alias_words=()
+  split_shell_words_into alias_words "$1"
+  join_shell_words_from alias_words 0
 }
 
 # Decide whether one Git config operand defines an alias that can publish.
+# Kept for an older guard runtime that still calls it during a partial install; new runtimes record every class below.
 is_git_publication_alias_config() {
   local config_operand="$1"
   local alias_expansion=""
+  # Only an alias value can hide a publishing action; other temporary Git settings add no publication target.
   if [[ "$config_operand" =~ ^alias\.[a-zA-Z0-9_-]+=(.*)$ ]]; then
-    alias_expansion="$(git_alias_expansion_command_word "${BASH_REMATCH[1]}")"
+    alias_expansion="$(normalize_git_alias_expansion "${BASH_REMATCH[1]}")"
     is_git_publication_target "$alias_expansion"
     return $?
   fi
   return 1
+}
+
+# Decide whether a direct subcommand or alias expansion creates history reserved for the developer.
+is_git_commit_target() {
+  local candidate="$1"
+  candidate="${candidate#"${candidate%%[![:space:]]*}"}"
+  [[ "$candidate" =~ ^commit([[:space:]]|$) ]]
+}
+
+# Decide whether a direct subcommand or alias expansion carries a guarded destructive flag.
+# Use for both the visible command and alias values so the deny set cannot drift between them.
+is_git_destructive_target() {
+  local rest="$1"
+  rest="${rest#"${rest%%[![:space:]]*}"}"
+  # No-verify bypasses project checks the user expects before history changes.
+  if [[ "$rest" =~ (^|[[:space:]])--no-verify([[:space:]]|$) ]]; then
+    return 0
+  fi
+  # Hard reset can discard the user's index and worktree state.
+  if [[ "$rest" =~ ^reset([[:space:]]|$) ]] && [[ "$rest" =~ (^|[[:space:]])--hard([[:space:]]|$) ]]; then
+    return 0
+  fi
+  # Forced clean can remove untracked work the user has not reviewed.
+  if [[ "$rest" =~ ^clean([[:space:]]|$) ]] && \
+     { [[ "$rest" =~ (^|[[:space:]])--force([[:space:]]|$) ]] || \
+       [[ "$rest" =~ (^|[[:space:]])-[^-[:space:]]*f[^[:space:]]*([[:space:]]|$) ]]; }; then
+    return 0
+  fi
+  return 1
+}
+
+# Clear the recorded alias classes before a Git command is parsed so one command never inherits another's aliases.
+reset_git_alias_flags() {
+  __goat_git_aliased_push=0
+  __goat_git_aliased_commit=0
+  __goat_git_aliased_destructive=0
+}
+
+# Record all guarded actions in an alias so another visible command word cannot hide a developer-only write.
+record_git_alias_expansion() {
+  local alias_expansion
+  alias_expansion="$(normalize_git_alias_expansion "$1")"
+  # Publishing through an alias requires the same developer-controlled action as a direct Git publication command.
+  if is_git_publication_target "$alias_expansion"; then
+    __goat_git_aliased_push=1
+  fi
+  # History creation remains reserved for the developer even when an alias conceals the commit subcommand.
+  if is_git_commit_target "$alias_expansion"; then
+    __goat_git_aliased_commit=1
+  fi
+  # Destructive flags in an alias retain the same manual-review boundary as a visible destructive Git command.
+  if is_git_destructive_target "$alias_expansion"; then
+    __goat_git_aliased_destructive=1
+  fi
+}
+
+# Record the guarded classes of one `-c alias.<name>=<expansion>` operand; other config keys are ignored.
+record_git_alias_config() {
+  local config_operand="$1"
+  # Alias definitions contribute executable expansion text; unrelated config settings cannot add an alias action.
+  if [[ "$config_operand" =~ ^alias\.[a-zA-Z0-9_-]+=(.*)$ ]]; then
+    record_git_alias_expansion "${BASH_REMATCH[1]}"
+  fi
+}
+
+# Git never expands an alias that shadows a builtin, so only an unrecognised first word needs a config lookup.
+# The list mirrors `git --list-cmds=builtins` for Git 2.43; a newer builtin missing here only costs one lookup.
+__goat_git_builtin_words=" add am annotate apply archive bisect blame branch bugreport bundle cat-file check-attr check-ignore check-mailmap check-ref-format checkout checkout--worker checkout-index cherry cherry-pick clean clone column commit commit-graph commit-tree config count-objects credential credential-cache credential-cache--daemon credential-store describe diagnose diff diff-files diff-index diff-tree difftool fast-export fast-import fetch fetch-pack fmt-merge-msg for-each-ref for-each-repo format-patch fsck fsck-objects fsmonitor--daemon gc get-tar-commit-id grep hash-object help hook index-pack init init-db interpret-trailers log ls-files ls-remote ls-tree mailinfo mailsplit maintenance merge merge-base merge-file merge-index merge-ours merge-recursive merge-recursive-ours merge-recursive-theirs merge-subtree merge-tree mktag mktree multi-pack-index mv name-rev notes pack-objects pack-redundant pack-refs patch-id pickaxe prune prune-packed pull push range-diff read-tree rebase receive-pack reflog remote remote-ext remote-fd repack replace rerere reset restore rev-list rev-parse revert rm send-pack shortlog show show-branch show-index show-ref sparse-checkout stage stash status stripspace submodule--helper switch symbolic-ref tag unpack-file unpack-objects update-index update-ref update-server-info upload-archive upload-archive--writer upload-pack var verify-commit verify-pack verify-tag version whatchanged worktree write-tree "
+
+# Recognize Git's built-in commands so their names cannot be mistaken for user-defined aliases during policy inspection.
+is_git_builtin_word() {
+  [[ "$__goat_git_builtin_words" == *" $1 "* ]]
+}
+
+# Resolve a saved alias in the repository and config selected by the proposed Git command.
+# A missing Git, an unreadable config or an absent alias leaves the visible word unclassified.
+record_git_persistent_alias() {
+  local rest="$1"
+  shift
+  local word="${rest%%[[:space:]]*}"
+  [[ "$word" =~ ^[A-Za-z0-9][A-Za-z0-9_-]*$ ]] || return 0
+  is_git_builtin_word "$word" && return 0
+  local expansion=""
+  expansion="$(GIT_TERMINAL_PROMPT=0 git "$@" config --get "alias.$word" 2>/dev/null </dev/null)" || return 0
+  # No saved expansion means there is no alias action to add to the user's policy check.
+  [[ -n "$expansion" ]] || return 0
+  record_git_alias_expansion "$expansion"
 }
 
 # Decide whether a proposed Git command would publish work to a remote.
@@ -65,22 +150,9 @@ is_git_push() {
 # Use before execution so the developer retains the manual recovery decision.
 is_git_destructive() {
   __goat_git_strip_globals "$1" || return 1
-  local rest="$__goat_git_rest"
-  # No-verify bypasses project checks the user expects before history changes.
-  if [[ "$rest" =~ (^|[[:space:]])--no-verify([[:space:]]|$) ]]; then
-    return 0
-  fi
-  # Hard reset can discard the user's index and worktree state.
-  if [[ "$rest" =~ ^reset([[:space:]]|$) ]] && [[ "$rest" =~ (^|[[:space:]])--hard([[:space:]]|$) ]]; then
-    return 0
-  fi
-  # Forced clean can remove untracked work the user has not reviewed.
-  if [[ "$rest" =~ ^clean([[:space:]]|$) ]] && \
-     { [[ "$rest" =~ (^|[[:space:]])--force([[:space:]]|$) ]] || \
-       [[ "$rest" =~ (^|[[:space:]])-[^-[:space:]]*f[^[:space:]]*([[:space:]]|$) ]]; }; then
-    return 0
-  fi
-  return 1
+  is_git_destructive_target "$__goat_git_rest" && return 0
+  # A configured Git alias can carry the guarded flag even when the visible word looks harmless.
+  [[ "$__goat_git_aliased_destructive" -eq 1 ]]
 }
 
 # Reveal a direct Git-push candidate after common shell wrappers.
@@ -106,7 +178,9 @@ normalize_git_policy_candidate() {
 # Decide whether a Git command creates history reserved for the developer.
 is_git_commit() {
   __goat_git_strip_globals "$1" || return 1
-  [[ "$__goat_git_rest" =~ ^commit([[:space:]]|$) ]]
+  is_git_commit_target "$__goat_git_rest" && return 0
+  # A configured Git alias can commit even when the visible subcommand is different.
+  [[ "$__goat_git_aliased_commit" -eq 1 ]]
 }
 
 # Decide whether `gh api` uses a write method or an implicit body-bearing POST.
@@ -326,7 +400,7 @@ check_git_segment() {
 
 }
 
-# Apply GitHub CLI policy after shared shell and secret checks.
+# Apply GitHub CLI policy beside native Git checks under the same repository-write switch.
 check_repository_segment() {
   local developer_command="$CMD_TRIMMED"
   is_unredirected_unpiped_read_only "$developer_command" && return 0
@@ -335,10 +409,10 @@ check_repository_segment() {
   split_top_level_pipeline_stages_into repository_pipeline_stages "$developer_command"
   # Remote project stages are checked separately so read-only Git evidence does not mask a GitHub mutation.
   for repository_pipeline_stage in "${repository_pipeline_stages[@]}"; do
-    # A GitHub mutation is drafted for the developer instead of being sent without approval.
+    # The runtime blocks this write; conversational approval does not release the hook.
     if is_gh_write_operation "$repository_pipeline_stage"; then
       block \
-        "GitHub write via gh is not allowed. Draft the content or command and wait for explicit user approval." ||
+        "GitHub write via gh is blocked by Deny Git and GitHub writes. Draft the change for the user to perform; conversational approval does not bypass this hook." ||
         return $?
     fi
   done
