@@ -7,8 +7,7 @@
 # This module is sourced by the dispatcher and is not executable on its own.
 # shellcheck shell=bash disable=SC2034,SC2154,SC2317,SC2319
 
-# Is this an rm command that deletes recursively (-r/-R/--recursive)?
-# First gate of the delete guard: only recursive removals get the strict path checks below - a plain `rm file.txt` is left alone.
+# Identify recursive removal before checking its targets; a plain single-file removal does not enter this strict cleanup gate.
 rm_has_recursive() {
   local c="$1"
   # Match by basename so /bin/rm, /usr/bin/rm, etc. are all caught after normalize_command_candidate has stripped any wrappers.
@@ -37,8 +36,7 @@ rm_is_safely_scoped() {
   local target
   # Check every cleanup target before allowing recursive removal of project files.
   for target in $targets_str; do
-    # Strip quotes before every scope check: a leading quote otherwise defeats the absolute/home/drive checks below AND the safe-target allowlist, so
-    # `rm -rf "/etc"` slipped through while `rm -rf "node_modules"` was blocked.
+    # Strip outer quotes so quoted paths receive the same cleanup checks; previously, quoted /etc bypassed them and quoted node_modules blocked.
     target=$(strip_shell_quotes_for_path_scan "$target")
     # `--` only ends option parsing; it is not a path.
     [[ "$target" == "--" ]] && continue
@@ -147,8 +145,7 @@ find_has_destructive_action() {
 
 # Decide whether a bare command word names a POSIX-family shell binary.
 #
-# Shared so pipeline classification and the script-file exemption cover the same shells; a shell recognized by only one of them would either bypass
-# the guard or lose a legitimate exemption.
+# Keep pipeline classification and script-file exemptions on the same shell list so alternate shells cannot bypass checks or lose valid data input.
 is_shell_name() {
   case "$1" in
     bash|sh|dash|zsh|ksh|ksh93|mksh|ash|yash) return 0 ;;
@@ -158,8 +155,7 @@ is_shell_name() {
 
 # Decide whether a command word starts a shell that would execute piped bytes as its program.
 #
-# Every POSIX-family shell reads stdin the same way, so classifying only bash and sh would let `printf payload | dash` run the payload while `printf
-# payload | bash` stayed blocked.
+# Cover every recognized POSIX shell so piping program text into dash receives the same policy as piping it into Bash.
 is_shell_command() {
   local c
   c=$(normalize_command_candidate "$1")
@@ -189,8 +185,7 @@ is_script_file_shell_command() {
   # A shell plus one script operand is the smallest safe file-backed shape.
   [[ "${#shell_words[@]}" -gt 1 ]] || return 1
   local shell_name="${shell_words[0]##*/}"
-  # The exemption must cover exactly the shells the pipeline check classifies; a shell blocked there but unrecognized here would lose its legitimate
-  # explicit-script-file exemption.
+  # Use the pipeline check's shell list so a recognized shell reading an explicit script can still consume ordinary local data.
   is_shell_name "$shell_name" || return 1
 
   local shell_word_index=1
@@ -211,10 +206,8 @@ is_script_file_shell_command() {
         return 1
         ;;
       --init-file|--rcfile)
-        # A startup file is read before the script operand, so `--rcfile /dev/stdin -i script.sh` would execute the piped bytes as the interactive
-        #
-        # rcfile while the operand looked safe.
-        # A checked-in startup file stays allowed; only stdin-backed sources are rejected.
+        # A startup file runs before the named script; reject stdin-backed startup files so piped data cannot become executable code.
+        # Checked-in startup files still qualify for ordinary local-data input.
         shell_word_index=$((shell_word_index + 1))
         script_file_word_is_safe "${shell_words[$shell_word_index]:-}" || return 1
         shell_word_index=$((shell_word_index + 1))
@@ -372,7 +365,7 @@ interpreter_option_action() {
           INTERPRETER_OPTION_ACTION="skip"
           ;;
         *)
-          # Recognized Ruby option bundles preserve ordinary script invocation without hiding inline execution.
+          # Recognized Python option bundles preserve script invocation without allowing the separately rejected inline-code flags.
           if [[ "$word" =~ ^-[bBdEhiIOqRsSuvVxO]+$ ]]; then
             INTERPRETER_OPTION_ACTION="skip"
           fi
@@ -482,10 +475,124 @@ is_script_file_interpreter_command() {
   return 1
 }
 
-# Piped bytes stay DATA when the interpreter's program comes from somewhere else: an inline code flag (python -c, node -e) or a checked-in script
+# Read the inline program as one shell argument, including adjacent quote fragments, before checking what the agent would run.
+# Ordinary arguments after the program remain user data and are excluded from this scan.
+inline_interpreter_program() {
+  local segment="$1"
+  local flag_match="$2"
+  local program="${segment#*"$flag_match"}"
+  program="${program#"${program%%[![:space:]]*}"}"
+  local -a program_words=()
+  # A prefix preserves an empty quoted program; otherwise the shared parser would return its first ordinary argument instead.
+  split_shell_words_into program_words "_$program"
+  printf '%s' "${program_words[0]:1}"
+}
+
+# Hide ordinary complete strings while retaining quote-delimited operators and possible executable interpolation.
+# Track each string's own quote and escapes; unfinished text remains visible.
+inline_program_visible_code() {
+  local program="$1"
+  local interpreter="${2:-}"
+  local visible_program="" quoted_text="" active_quote="" character=""
+  local quoted_operator_re="" interpolation_re=""
+  case "$interpreter" in
+    perl)
+      quoted_operator_re='(^|[^[:alnum:]_$@%&])qx[[:space:]]*$'
+      interpolation_re='[@$][{]'
+      ;;
+    ruby)
+      quoted_operator_re='(^|[^[:alnum:]_])%x$'
+      interpolation_re='#[{]'
+      ;;
+  esac
+  local keep_quoted=0
+  local escaped=0 character_index
+  # Read in order so a double quote printed inside a single-quoted string cannot hide the next real command.
+  for ((character_index = 0; character_index < ${#program}; character_index++)); do
+    character="${program:character_index:1}"
+    # Inside a string, only an unescaped matching quote returns us to executable code.
+    if [[ -n "$active_quote" ]]; then
+      quoted_text+="$character"
+      # An escaped quote belongs to the user's string rather than ending it.
+      if [[ "$escaped" -eq 1 ]]; then
+        escaped=0
+      # An escape keeps the next quote inside the user's string instead of returning to executable interpreter code.
+      elif [[ "$character" == "\\" ]]; then
+        escaped=1
+      # A matching unescaped quote ends the string; command-producing quoting forms still need their contents inspected.
+      elif [[ "$character" == "$active_quote" ]]; then
+        # A quote can delimit qx/%x, and double-quoted interpolation can itself execute code.
+        if [[ "$keep_quoted" -eq 1 ]] ||
+           [[ "$active_quote" == '"' && -n "$interpolation_re" && "$quoted_text" =~ $interpolation_re ]]; then
+          visible_program+="$quoted_text"
+        else
+          visible_program+=" "
+        fi
+        active_quote=""
+        quoted_text=""
+      fi
+    # Ordinary quoted output is data; retain it only when this interpreter's quoting form can itself execute commands.
+    elif [[ "$character" == '"' || "$character" == "'" ]]; then
+      active_quote="$character"
+      quoted_text="$character"
+      keep_quoted=0
+      [[ -n "$quoted_operator_re" && "$visible_program" =~ $quoted_operator_re ]] && keep_quoted=1
+    else
+      visible_program+="$character"
+    fi
+  done
+  printf '%s' "$visible_program$quoted_text"
+}
+
+# Decide whether an inline interpreter program reaches a shell-execution primitive.
 #
-# file.
-# Bare interpreters and stdin-path spellings execute the pipe as the program.
+# Each interpreter adds its own command APIs; quoted bare words stay ordinary output, and JavaScript regex .exec() stays allowed.
+# Perl, Ruby and PHP backticks execute commands, while JavaScript backticks are template literals.
+inline_program_executes_commands() {
+  local interpreter="$1"
+  local segment="$2"
+  local program="$3"
+  local stripped
+  stripped="$(inline_program_visible_code "$program" "$interpreter")"
+  # A JavaScript regex receiver is not the standalone exec primitive. Namespaced process APIs remain explicit.
+  local shell_primitive_re='(os\.system|os\.popen|os\.exec|os\.spawn|pty\.spawn|child_process|system[[:space:]]*\(|(^|[^[:alnum:]_.])exec[[:space:]]*\(|popen|shell_exec)'
+  [[ "$segment" =~ $shell_primitive_re ]] && return 0
+  local module_re='' bare_word_re='' delimiter_re='' pipe_open_re=''
+  case "$interpreter" in
+    python|python2|python3)
+      # Python's process module is unambiguous wherever it appears; a Node string carrying the word is not Python.
+      module_re='subprocess'
+      ;;
+    node|nodejs|deno)
+      module_re='Deno\.(Command|run)'
+      ;;
+    perl)
+      bare_word_re='(^|[^[:alnum:]_$@%&:>-])(system|exec|readpipe)([[:space:]]|\(|$)'
+      delimiter_re='(^|[^[:alnum:]_$@%&])qx[[:space:]]*[^[:alnum:]_[:space:]]'
+      pipe_open_re='open[[:space:]]*\([^)]*[|]'
+      ;;
+    ruby)
+      bare_word_re='(^|[^[:alnum:]_$@:-])(system|exec|spawn)([[:space:]]|\(|$)'
+      module_re='Open3'
+      delimiter_re='(^|[^[:alnum:]_])%x[^[:alnum:]_[:space:]]'
+      ;;
+    php)
+      bare_word_re='(^|[^[:alnum:]_$>])(passthru|proc_open|pcntl_exec)[[:space:]]*\('
+      ;;
+  esac
+  [[ -n "$module_re" && "$segment" =~ $module_re ]] && return 0
+  [[ -n "$bare_word_re" && "$stripped" =~ $bare_word_re ]] && return 0
+  [[ -n "$delimiter_re" && "$stripped" =~ $delimiter_re ]] && return 0
+  [[ -n "$pipe_open_re" && "$program" =~ $pipe_open_re ]] && return 0
+  # Shell quoting makes backticks inert only to the outer shell; Perl, Ruby and PHP execute them again.
+  case "$interpreter" in
+    perl|ruby|php) [[ "$segment" == *'`'* ]] && return 0 ;;
+  esac
+  return 1
+}
+
+# Allow piped local data only when the interpreter's program is explicit inline code or a named script file.
+# Bare interpreters and stdin-backed script paths instead execute the pipe as their program and do not qualify.
 interpreter_treats_stdin_as_data() {
   is_inline_interpreter_command "$1" || is_script_file_interpreter_command "$1"
 }
@@ -562,10 +669,7 @@ check_command_chain_policy() {
   local input="$1"
   local depth="${2:-0}"
   local download_re='(^|[[:space:]])(curl|wget|fetch|http)([[:space:]]|$)'
-  # Match every POSIX shell name the pipeline path recognises (keep in sync with is_shell_name), plus any path-qualified spelling like /bin/zsh, so a
-  #
-  # download cannot reach an alternate interpreter.
-  # Matching only (ba)?sh let `curl ... ; dash file` and `/bin/bash file` through.
+  # Cover the pipeline check's full shell list and path-qualified names so a download cannot execute through an alternate shell spelling.
   local execute_re='(;|&&|\|\|)[[:space:]]*([^[:space:];&|]*/)?(bash|dash|zsh|ksh93|ksh|mksh|ash|yash|sh)[[:space:]]+[^[:space:]&|;]+'
   # Downloading and immediately executing a file leaves the maintainer no inspection step.
   if [[ "$depth" -eq 0 && "$input" =~ $download_re && "$input" =~ $execute_re ]]; then
@@ -840,16 +944,14 @@ check_destructive_segment() {
 
   local interpreter_eval_re='(^|[[:space:]])(python|python2|python3|node|nodejs|deno|perl|ruby|php)([[:space:]]+-[a-zA-Z]+)*[[:space:]]+-(c|e|-eval|-execute)'
   local php_eval_re='(^|[[:space:]])(php)([[:space:]]+-[a-zA-Z]+)*[[:space:]]+-r'
-  # Inline interpreter input can launch commands hidden from the outer shell; PHP uses -r for this user workflow.
-  if [[ "$cmd" =~ $interpreter_eval_re ]] || [[ "$cmd" =~ $php_eval_re ]]; then
+  local deno_eval_re='(^|[[:space:]])(deno)[[:space:]]+eval([[:space:]]|$)'
+  # Inline interpreter input can launch commands hidden from the outer shell; PHP uses -r and Deno uses eval for this user workflow.
+  if [[ "$cmd" =~ $interpreter_eval_re ]] || [[ "$cmd" =~ $php_eval_re ]] || [[ "$cmd" =~ $deno_eval_re ]]; then
     local interpreter="${BASH_REMATCH[2]}"
-    # A JavaScript regex receiver is not the standalone exec primitive.
-    # Namespaced process APIs remain explicit.
-    local shell_primitive_re='(os\.system|os\.popen|os\.exec|subprocess|child_process|system[[:space:]]*\(|(^|[^[:alnum:]_.])exec[[:space:]]*\(|popen|shell_exec)'
-    # Shell quoting makes these bytes inert only to the outer shell; Perl/Ruby/PHP can execute them again.
-    # JavaScript backticks are template literals, so they must not inherit another language's command semantics.
-    if [[ "$cmd" =~ $shell_primitive_re ]] ||
-       { [[ "$interpreter" == perl || "$interpreter" == ruby || "$interpreter" == php ]] && [[ "$cmd" == *'`'* ]]; }; then
+    local inline_program
+    inline_program="$(inline_interpreter_program "$cmd" "${BASH_REMATCH[0]}")"
+    # A command-launching interpreter primitive hides the downstream action; require direct command text for user review.
+    if inline_program_executes_commands "$interpreter" "$cmd" "$inline_program"; then
       block "Interpreter -c/-e with shell-execution primitive, or equivalent PHP -r. Run the destructive operation directly so the hook can review it." || return $?
     fi
   fi
