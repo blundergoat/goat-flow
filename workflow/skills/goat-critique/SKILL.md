@@ -32,7 +32,7 @@ Use for multi-perspective critique of a concrete plan, security assessment, debu
 
 ## Step 0 - Intake
 
-goat-critique runs only full delegated mode: Phases 1-5, 5.5 meta-audit, 5.6 outcome capture, three critique sub-agents, one meta-agent. Lighter-mode suggestions are the failure this design prevents.
+goat-critique runs only full delegated mode: Phases 1-5, 5.5 meta-audit, 5.6 outcome capture, three critique sub-agents, one meta-agent.
 
 **Intake checklist:**
 - Require a concrete artifact (file, plan, or findings), not a vague idea.
@@ -57,7 +57,7 @@ Agents A and B each use the combined SKEPTIC/ANALYST/STRATEGIST lens; never spli
 - **ANALYST** - "What does the evidence actually say? What's the cost/benefit? What do the numbers and code paths tell us?"
 - **STRATEGIST** - "What's the fastest path to shipping? What can we defer? What's the highest-leverage change?"
 
-A/B use all three perspectives. C provides a fresh-eyes comparison with no lens quota; use `N/A - fresh-eyes scope` when a lens adds nothing.
+C provides a fresh-eyes comparison with no lens quota; use `N/A - fresh-eyes scope` when a lens adds nothing.
 
 **Context split:**
 
@@ -135,7 +135,7 @@ Before drafting, apply Final-finding schema and Audit payload identity from `ref
 
 **Blind spot check:** List unaddressed artifact sections, unmapped rubric aspects, and unread referenced files as "What Wasn't Critiqued." Name actual limits, or a supported `none identified` statement within a declared scope; never invent one.
 
-**Proof Gate:** Apply the Proof Gate (see Constraints) to every synthesised finding before inclusion. Every synthesised finding must carry proof class `RUNTIME | CONTRACT-GREP | STATIC | NOT-REPRODUCED`.
+**Proof Gate:** Apply the Proof Gate (see Constraints) to every synthesised finding before inclusion.
 
 **Phase 5.5 - Meta-audit.** Assemble a self-contained packet for the 2-call meta-agent: the frozen draft with its `report_revision`, selected dimensions, and the reference pack's complete Meta-audit rubric (read now; including Packet vocabulary), Final-finding schema and Audit payload identity. It grades that packet alone. Score each 0 or 10; their sum is `Meta-score`; no partial credit. Emit non-empty `## Auto-Detected Issues`: failures, or at 100/100 write exactly `No failed meta-audit checks.` Never invent issues. Put `Meta-score: N/100` in Verdict. Corrections edit the report, never the artifact.
 

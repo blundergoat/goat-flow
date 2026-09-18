@@ -34,7 +34,7 @@ installed policy works.
 
 ## Intent
 
-`deny-dangerous` protects against destructive shell, secret access and GitHub CLI writes. `deny-git-mutations` protects native Git commit, publication and destructive operations. Both use one parser and policy store. Policy testing proves three separate outcomes:
+`deny-dangerous` protects against destructive shell and secret access. `deny-git-mutations` protects against Git commit, publication, destructive Git operations and GitHub CLI writes. Both use one parser and policy store. Mixed existing/requested policy choices require explicit dashboard consent before ownership bytes change; test policy-only review, separate replacement consent, Cancel, stale identities and zero-write CLI/direct-installer refusal. Force and CLI admission cannot bypass review. Policy testing proves three separate outcomes:
 
 1. dangerous command grammar is denied;
 2. a nearby harmless control remains allowed;
@@ -85,7 +85,7 @@ no secrets, retain only the exit and sanitized result, and remove the payload af
 bash .goat-flow/hooks/deny-dangerous.sh < .goat-flow/scratchpad/payload.json
 ```
 
-Use `deny-git-mutations.sh` for a native Git payload and `deny-dangerous.sh` for shell, secret or GitHub policy. The redirect leaves the guarded phrase in the file, so the command line stays clear of
+Use `deny-git-mutations.sh` for Git or GitHub payloads and `deny-dangerous.sh` for shell or secret policy. The redirect leaves the guarded phrase in the file, so the command line stays clear of
 provider-matched text. Read the exit and stream against the event shape your provider sends:
 
 | Provider shape | Event key | Expected result |
@@ -225,7 +225,7 @@ goat-flow hooks verify . --agent <id> --scenario git-mutations-hook --trusted-ta
 goat-flow hooks verify . --agent <id> --scenario all --trusted-target
 ```
 
-Both policy groups send fixed provider-shaped inputs through the exact configured handler; command operands are classified, never executed. `deny-hook` checks secret reads, pipe-to-shell, GitHub writes and a read-only control. `git-mutations-hook` checks commit, push, destructive Git and a read-only control. `all` runs thirteen scenarios: four dangerous, four Git, three Gruff and two post-turn.
+Both policy groups send fixed provider-shaped inputs through the exact configured handler; command operands are classified, never executed. `deny-hook` checks secret reads, pipe-to-shell and a read-only control. `git-mutations-hook` checks commit, push, destructive Git, GitHub writes and a read-only control. `all` runs thirteen scenarios: three dangerous, five Git, three Gruff and two post-turn.
 A proven run exits `0`, reports `pass` for every selected scenario, and records one
 local `hook.verify` event per scenario. `fail`, `unsupported`, `not-configured`,
 `error`, a wrong total, or a missing evidence event means the requested proof is incomplete.
