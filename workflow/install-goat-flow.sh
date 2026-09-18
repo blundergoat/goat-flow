@@ -50,6 +50,7 @@ require_managed_install_admission() {
   local marker_path known_agent
   local -a known_agents=()
 
+  # The public CLI has already claimed the complete install batch, so this admitted setup can proceed.
   if [[ "${GOAT_FLOW_INSTALL_ADMISSION:-}" == "v2" ]]; then
     return 0
   fi
@@ -60,13 +61,17 @@ require_managed_install_admission() {
   fi
 
   IFS=',' read -r -a known_agents <<< "$SUPPORTED_AGENTS_CSV"
+  # Check each provider's earlier receipt before allowing direct setup to change the selected project.
   for known_agent in "${known_agents[@]}"; do
     marker_path="$PROJECT/.goat-flow/state/install/$known_agent.json"
+    # A linked or non-file receipt needs the CLI's repair checks before setup can write anything.
     if [[ -L "$marker_path" || ( -e "$marker_path" && ! -f "$marker_path" ) ]]; then
       echo "ERROR: managed install state requires the public CLI. Run: goat-flow install \"$PROJECT\" --agent \"$AGENT\"" >&2
       return 1
     fi
+    # An existing provider receipt may record the cutover that requires managed installation.
     if [[ -f "$marker_path" ]]; then
+      # Unreadable receipts and completed cutovers route the user back through the public install command.
       if [[ ! -r "$marker_path" ]] || grep -Eq '"schemaVersion"[[:space:]]*:[[:space:]]*"goat-flow\.install-state\.v1-cutover"' "$marker_path"; then
         echo "ERROR: managed install state requires the public CLI. Run: goat-flow install \"$PROJECT\" --agent \"$AGENT\"" >&2
         return 1
@@ -75,6 +80,7 @@ require_managed_install_admission() {
   done
 }
 
+# Read manifest-owned agents, skills and destinations so setup follows the selected provider and file ownership rules.
 manifest_eval() {
   node - "$MANIFEST_PATH" "$@" <<'NODE'
 const fs = require("node:fs");
@@ -82,37 +88,46 @@ const fs = require("node:fs");
 const manifestPath = process.argv[2];
 const mode = process.argv[3];
 const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+// Normalize manifest directory prefixes for ownership checks; an absent directory yields no configured destination.
 const trimDir = (value) =>
   typeof value === "string" ? value.replace(/\/$/, "") : "";
 const agentIds = Object.keys(manifest.agents || {});
 
+// List the supported agents so setup can validate the user's provider choice.
 if (mode === "supported-agents") {
   console.log(agentIds.join(","));
   console.log(agentIds.join("|"));
   process.exit(0);
 }
 
+// List the canonical workflows available for the selected agent's installation.
 if (mode === "supported-skills") {
+  // An absent skill list yields no install entries; each declared skill is emitted for setup.
   for (const skill of manifest.skills?.canonical || []) {
     console.log(skill);
   }
   process.exit(0);
 }
 
+// List retired workflow names so refresh can remove their old installed copies.
 if (mode === "stale-skills") {
+  // An absent retired list means no workflows need this cleanup.
   for (const skill of manifest.skills?.stale_names || []) {
     console.log(skill);
   }
   process.exit(0);
 }
 
+// List retired hook names so refresh does not leave obsolete launchers installed.
 if (mode === "stale-hooks") {
+  // An absent retired list means no hook files need this cleanup.
   for (const hook of manifest.hooks?.stale_names || []) {
     console.log(hook);
   }
   process.exit(0);
 }
 
+// Resolve who owns a destination before setup decides whether it may replace that file.
 if (mode === "file-ownership") {
   const destinationPath = process.argv[4];
   const declaredFile = manifest.file_ownership?.[destinationPath];
@@ -161,10 +176,12 @@ if (mode === "file-ownership") {
   process.exit(3);
 }
 
+// Resolve the files belonging to the requested skill before copying it into the project.
 if (mode === "skill-files") {
   const skillName = process.argv[4];
   const canonical = manifest.skills?.canonical;
   const references = manifest.skills?.references || {};
+  // An unknown skill is refused instead of copying an undeclared workflow.
   if (!Array.isArray(canonical) || !canonical.includes(skillName)) {
     process.stderr.write(`unknown skill: ${skillName}\n`);
     process.exit(2);
@@ -176,15 +193,18 @@ if (mode === "skill-files") {
     "SKILL.md",
     ...referenceFiles,
   ];
+  // Emit the entry point and declared references that make this installed skill usable.
   for (const file of files) {
     console.log(file);
   }
   process.exit(0);
 }
 
+// Resolve the selected agent's settings, skill and hook destinations for setup.
 if (mode === "agent-profile") {
   const agentId = process.argv[4];
   const agent = manifest.agents?.[agentId];
+  // An unknown provider cannot supply safe destinations, so setup stops.
   if (!agent) {
     process.stderr.write(`unknown agent: ${agentId}\n`);
     process.exit(2);
@@ -213,6 +233,7 @@ if (mode === "agent-profile") {
       typeof agent.deny_hook === "string" ? agent.deny_hook : "",
   };
 
+  // Emit each resolved destination; an empty value means this provider has no such install surface.
   for (const [key, value] of Object.entries(entries)) {
     console.log(`${key}\t${value}`);
   }
@@ -239,6 +260,7 @@ PRESERVE_PATHS=()
 # User-owned destinations the CLI admitted for replacement under named, twice-given authority.
 REPLACE_USER_PATHS=()
 
+# Read the user's target and setup options before resolving any destination paths.
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --agent) AGENT="$2"; shift 2 ;;
@@ -263,11 +285,13 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# Without a selected project, show usage and stop before creating setup files.
 if [[ -z "$PROJECT" ]]; then
   echo "Usage: $0 /path/to/project --agent <${SUPPORTED_AGENTS_PIPE}>"
   exit 1
 fi
 
+# A missing target directory cannot receive the selected agent's setup.
 if [[ ! -d "$PROJECT" ]]; then
   echo "ERROR: $PROJECT is not a directory"
   exit 1
@@ -279,6 +303,7 @@ PROFILE_DATA="$(manifest_eval agent-profile "$AGENT")" || {
   exit 1
 }
 
+# Load the selected provider's destinations from the manifest so setup writes its own settings and hooks.
 while IFS=$'\t' read -r key value; do
   case "$key" in
     skills_dir) SKILLS_DIR="$value" ;;
@@ -291,13 +316,16 @@ while IFS=$'\t' read -r key value; do
   esac
 done <<< "$PROFILE_DATA"
 
+# An incomplete skill destination stops setup before the user's project changes.
 if [[ -z "${SKILLS_DIR:-}" ]]; then
   echo "ERROR: manifest profile for '$AGENT' is incomplete"
   exit 1
 fi
 
 HOOKS_ENABLED=false
+# A provider declaring hooks must supply the complete hook destination contract.
 if [[ -n "${HOOKS_DIR:-}" || -n "${DENY_HOOK_DST:-}" || -n "${HOOK_CONFIG_DST:-}" || -n "${HOOK_CONFIG_SRC:-}" ]]; then
+  # Missing hook paths stop setup rather than leave the user's guardrails partly installed.
   if [[ -z "${HOOKS_DIR:-}" || -z "${DENY_HOOK_DST:-}" ]]; then
     echo "ERROR: manifest hook profile for '$AGENT' is incomplete"
     exit 1
@@ -305,6 +333,7 @@ if [[ -n "${HOOKS_DIR:-}" || -n "${DENY_HOOK_DST:-}" || -n "${HOOK_CONFIG_DST:-}
   HOOKS_ENABLED=true
 fi
 
+# A settings destination needs its shipped seed before setup can create that file.
 if [[ -n "${SETTINGS_DST:-}" && -z "${SETTINGS_SRC:-}" ]]; then
   echo "ERROR: manifest profile for '$AGENT' is missing settings_src"
   exit 1
@@ -318,6 +347,7 @@ VERSION=$(
     sed -n 's/^[[:space:]]*"version":[[:space:]]*"\([^"]*\)".*/\1/p' "$GOAT_FLOW_ROOT/package.json" | head -n1
 )
 
+# A package without a version cannot record which framework the user installed.
 if [[ -z "$VERSION" ]]; then
   echo "ERROR: could not determine goat-flow version from package.json"
   exit 1
@@ -325,6 +355,24 @@ fi
 
 # Dependency errors must reach the user before migrations, directory scaffolding, or staged file writes begin.
 preflight_installer_dependencies
+
+# Mixed policy upgrades require dashboard review even when the CLI already admitted file replacements or the caller supplied force.
+node - "$PROJECT" "$GOAT_FLOW_ROOT/workflow/hooks" <<'NODE'
+const [projectRoot, bundledHooksRoot] = process.argv.slice(2);
+try {
+  const { inspectPolicyUpgrade } = require(bundledHooksRoot + "/hook-policy-state.cjs");
+  const review = inspectPolicyUpgrade(projectRoot, bundledHooksRoot);
+  // An older installation with differing switches would change GitHub protection; no installer flag expresses that consent.
+  if (review) {
+    console.error("ERROR: GitHub policy review is required before installation. Review the choices and affected files on the newer dashboard Hooks page, then retry. Force cannot approve this change.");
+    process.exitCode = 1;
+  }
+} catch {
+  // Invalid YAML or a linked policy file leaves the current protection unknown, so setup must stop before creating any target files.
+  console.error("ERROR: policy choices or ownership files could not be read safely; repair the project's hook configuration before installation.");
+  process.exitCode = 1;
+}
+NODE
 
 # A v1-only CLI or direct script must not mutate a target once v2 state controls admission.
 require_managed_install_admission
@@ -600,6 +648,7 @@ assert_file_ownership() {
 }
 
 # Report whether the CLI preview asked this destination to keep its current bytes.
+#
 # A preserved path holds local content that the current package template does not change,
 # so replacing it would destroy project content for no delivered difference.
 installer_path_is_preserved() {
@@ -612,10 +661,12 @@ installer_path_is_preserved() {
 }
 
 # Report whether the CLI admitted this user-owned destination for replacement.
+#
 # Reaching here needs both --force-user-owned and a matching --force-path, so the
 # create-only rule is lifted for exactly the paths the user named and nothing else.
 installer_user_path_is_replaceable() {
   local candidate="$1" replaceable_path
+  # Match the user's explicit replacement choices before replacing a user-owned destination.
   for replaceable_path in ${REPLACE_USER_PATHS+"${REPLACE_USER_PATHS[@]}"}; do
     [[ "$replaceable_path" == "$candidate" ]] && return 0
   done
@@ -681,6 +732,7 @@ copy_if_missing() {
   copy_file "$src" "$dst" "user-owned"
 }
 
+# Retire undeclared Markdown references after refreshing an installed skill; retain the manifest-listed workflow files.
 prune_unlisted_skill_references() {
   local skill="$1" skill_dst="$2"
   local references_dir="$skill_dst/references"
@@ -700,18 +752,23 @@ const expected = new Set(
     .map((file) => file.replace(/\\/g, "/")),
 );
 
+// Find obsolete installed Markdown references recursively so refresh retains only this skill's declared reference files.
 function walk(dir) {
+  // Inspect each installed reference so refresh can identify obsolete Markdown files.
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const fullPath = path.join(dir, entry.name);
+    // Nested reference folders are checked too, preserving their declared current files.
     if (entry.isDirectory()) {
       walk(fullPath);
       continue;
     }
+    // Non-Markdown files are outside this reference cleanup and remain user-owned.
     if (!entry.isFile() || !entry.name.endsWith(".md")) continue;
 
     const relativePath = path
       .relative(skillDir, fullPath)
       .replace(/\\/g, "/");
+    // An undeclared Markdown reference is reported for the installer's checked retirement step.
     if (!expected.has(relativePath)) {
       console.log(relativePath);
     }
@@ -722,6 +779,7 @@ walk(referencesDir);
 NODE
   )
 
+  # Remove only references absent from this installed skill's current manifest; keep its remaining content.
   for stale_reference in "${stale_references[@]}"; do
     [[ -n "$stale_reference" ]] || continue
     case "$stale_reference" in
@@ -749,10 +807,12 @@ NODE
   done
 }
 
+# Remove the manifest-listed retired hook copies so the selected agent uses the current shared runtime.
 prune_unlisted_hook_files() {
   local hooks_dir="$1"
   [[ -d "$hooks_dir" ]] || return 0
   readarray -t stale_hooks < <(manifest_eval stale-hooks)
+  # Check the manifest's retired hook filenames rather than claim arbitrary user scripts.
   for stale_hook in "${stale_hooks[@]}"; do
     [[ -n "$stale_hook" ]] || continue
     case "$stale_hook" in
@@ -767,6 +827,7 @@ prune_unlisted_hook_files() {
         exit 1
         ;;
     esac
+    # Remove an existing retired hook copy so the agent cannot retain that obsolete launcher.
     if [[ -f "$hooks_dir/$stale_hook" ]]; then
       rm -f "$hooks_dir/$stale_hook"
       REMOVED=$((REMOVED + 1))
@@ -780,6 +841,7 @@ prune_unlisted_hook_files() {
 assert_atomic_migration_filesystem() {
   local source_path="$1" destination_parent="$2"
 
+  # A filesystem lookup failure stops migration before the user's source can be moved.
   if ! node - "$source_path" "$destination_parent" <<'NODE'
 const fs = require("node:fs");
 
@@ -822,10 +884,12 @@ rename_migration_path_no_overwrite() {
   fi
 }
 
+# Move one legacy setup file to its current location; an occupied destination leaves the user with both files to inspect.
 move_file_no_overwrite() {
   local src="$1" dst="$2"
   local rename_status=0
   [[ -f "$src" ]] || return 0
+  # Keep both files when the new destination already contains user content.
   if [[ -e "$dst" ]]; then
     SKIPPED=$((SKIPPED + 1))
     echo "  · $src → $dst (target exists, left old file in place)"
@@ -846,10 +910,12 @@ move_file_no_overwrite() {
   echo "  ✓ $src → $dst"
 }
 
+# Move or merge a legacy setup folder while preserving every destination collision for the user to resolve.
 migrate_dir_no_overwrite() {
   local src="$1" dst="$2"
   local rename_status=0
   [[ -d "$src" ]] || return 0
+  # An unused destination allows the old directory to move as one complete setup folder.
   if [[ ! -e "$dst" ]]; then
     rename_migration_path_no_overwrite "$src" "$dst" || rename_status=$?
     # A racing destination preserves the complete legacy directory for manual resolution.
@@ -871,9 +937,11 @@ migrate_dir_no_overwrite() {
   local moved=false
   local entry base target
   shopt -s dotglob nullglob
+  # Merge the old directory one entry at a time, retaining any destination collisions.
   for entry in "$src"/*; do
     base="$(basename "$entry")"
     target="$dst/$base"
+    # A matching destination belongs to the user, so leave this old entry in place.
     if [[ -e "$target" ]]; then
       SKIPPED=$((SKIPPED + 1))
       echo "  · $entry → $target (target exists, left old entry in place)"
@@ -897,16 +965,21 @@ migrate_dir_no_overwrite() {
   done
   shopt -u dotglob nullglob
   rmdir "$src" 2>/dev/null || true
+  # Tell the user when every entry was retained because no collision-free move was available.
   if [[ "$moved" == false ]]; then
     echo "  · $src/ (no movable entries)"
   fi
 }
 
+# Retire known per-agent launchers after the shared runtime is installed so agents use one current policy implementation.
 prune_legacy_agent_hook_copies() {
   local script
+  # Inspect the earlier per-agent hook folders after installing the shared runtime.
   for legacy_hooks_dir in .claude/hooks .codex/hooks .agents/hooks .github/hooks; do
     [[ -d "$legacy_hooks_dir" ]] || continue
+    # Retire only these known framework launchers from the old agent folders.
     for script in run-with-bash.mjs hook-provider-adapters.mjs hook-launch-runtime.mjs deny-dangerous.sh gruff-code-quality.sh post-turn-safety.sh plan-checkbox-guard.sh post-turn-validate.sh; do
+      # An existing old launcher is removed after its shared replacement is installed.
       if [[ -f "$legacy_hooks_dir/$script" ]]; then
         rm -f "$legacy_hooks_dir/$script"
         REMOVED=$((REMOVED + 1))
@@ -917,6 +990,7 @@ prune_legacy_agent_hook_copies() {
   done
 }
 
+# Create an absent folder anchor so the selected project can retain empty workflow directories in version control.
 touch_anchor() {
   local dst="$1"
   assert_file_ownership "$dst" "generated"
@@ -934,6 +1008,7 @@ touch_anchor() {
   echo "  ✓ $dst"
 }
 
+# Add a missing setup ignore entry while preserving the user's newline style and existing equivalent entries.
 ensure_gitignore_entry() {
   local path="$1"
   local entry="$2"
@@ -944,6 +1019,7 @@ ensure_gitignore_entry() {
     return 0
   fi
   stage_existing_destination "$path"
+  # A failed config read or staged write discards the transform and preserves the user's previous destination.
   if ! transform_result="$(node - "$STAGED_PAYLOAD_PATH" "$entry" <<'NODE'
 const fs = require("node:fs");
 
@@ -961,12 +1037,14 @@ const equivalentEntries = new Set([
   `**/${entry.replace(/\/$/u, "")}`,
 ]);
 
+// An equivalent ignore entry already hides this setup path, so leave the user's file unchanged.
 if (lines.some((line) => equivalentEntries.has(line.trim()))) {
   console.log("unchanged");
   process.exit(0);
 }
 
 let next = content;
+// Separate the new ignore entry from an existing final line that lacks a newline.
 if (next.length > 0 && !/\r?\n$/u.test(next)) next += eol;
 next += `${entry}${eol}`;
 fs.writeFileSync(path, next);
@@ -980,10 +1058,12 @@ NODE
   complete_staged_transform "$path" "$transform_result"
 }
 
+# Record the requested framework version in staged project config before replacing the user's original file.
 update_config_version_line() {
   local path="$1"
   local transform_result
   stage_existing_destination "$path"
+  # A failed config read or staged write discards the transform and preserves the user's previous destination.
   if ! transform_result="$(node - "$STAGED_PAYLOAD_PATH" "$VERSION" <<'NODE'
 const fs = require("node:fs");
 
@@ -1001,10 +1081,12 @@ NODE
   complete_staged_transform "$path" "$transform_result"
 }
 
+# Remove the retired agents config section during setup while preserving the user's other project configuration.
 remove_config_agents_entry() {
   local path="$1"
   local transform_result
   stage_existing_destination "$path"
+  # A failed config read or staged write discards the transform and preserves the user's previous destination.
   if ! transform_result="$(node - "$STAGED_PAYLOAD_PATH" <<'NODE'
 const fs = require("node:fs");
 
@@ -1013,33 +1095,40 @@ const content = fs.readFileSync(path, "utf8");
 const eol = content.includes("\r\n") ? "\r\n" : "\n";
 const hadFinalNewline = /\r?\n$/u.test(content);
 
+// Read a config line's indentation to keep a retired section migration inside its own user settings.
 function indentOf(line) {
   return line.match(/^\s*/u)?.[0] ?? "";
 }
 
 let lines = content.split(/\r?\n/u);
+// Keep the original final-newline choice when rebuilding the user's config.
 if (hadFinalNewline) lines = lines.slice(0, -1);
 
 const agentKeyRe = /^agents\s*:\s*(.*?)(\s*#.*)?$/u;
 const index = lines.findIndex((line) => agentKeyRe.test(line));
 
+// Without the retired agents section, this migration has nothing to remove.
 if (index === -1) {
   console.log("unchanged");
   process.exit(0);
 }
 
 let removeUntil = index + 1;
+// Find the retired section's end without consuming the user's next top-level setting.
 while (removeUntil < lines.length) {
   const line = lines[removeUntil];
   const trimmed = line.trim();
+  // Blank lines stay within the section search until another setting establishes its boundary.
   if (trimmed !== "") {
     const currentIndentLength = indentOf(line).length;
+    // A new top-level setting belongs to the user's remaining config and ends removal.
     if (currentIndentLength === 0) break;
   }
   removeUntil += 1;
 }
 
 lines.splice(index, removeUntil - index);
+// Collapse only duplicate blanks left at the removed section's boundary.
 while (lines.length > 1 && lines[index] === "" && lines[index - 1] === "") {
   lines.splice(index, 1);
 }
@@ -1054,10 +1143,12 @@ NODE
   complete_staged_transform "$path" "$transform_result"
 }
 
+# Move the old tasks settings into plans, keeping an existing plans section as the user's current choice.
 migrate_config_tasks_entry() {
   local path="$1"
   local transform_result
   stage_existing_destination "$path"
+  # A failed config read or staged write discards the transform and preserves the user's previous destination.
   if ! transform_result="$(node - "$STAGED_PAYLOAD_PATH" <<'NODE'
 const fs = require("node:fs");
 
@@ -1066,18 +1157,23 @@ const content = fs.readFileSync(path, "utf8");
 const eol = content.includes("\r\n") ? "\r\n" : "\n";
 const hadFinalNewline = /\r?\n$/u.test(content);
 
+// Read a config line's indentation to keep a retired section migration inside its own user settings.
 function indentOf(line) {
   return line.match(/^\s*/u)?.[0] ?? "";
 }
 
+// Find a top-level section's bounds for plan migration; null means the user has no such section to migrate.
 function topLevelBlockRange(lines, key) {
   const keyRe = new RegExp(`^${key}\\s*:\\s*(?:#.*)?$`, "u");
   const index = lines.findIndex((line) => keyRe.test(line));
+  // A missing section returns null so migration can leave unrelated project settings alone.
   if (index === -1) return null;
   let end = index + 1;
+  // Find the next top-level setting to bound this config section's migration.
   while (end < lines.length) {
     const line = lines[end];
     const trimmed = line.trim();
+    // The next nonblank top-level line belongs to another user setting.
     if (trimmed !== "" && indentOf(line).length === 0) break;
     end += 1;
   }
@@ -1085,19 +1181,23 @@ function topLevelBlockRange(lines, key) {
 }
 
 let lines = content.split(/\r?\n/u);
+// Keep the original final-newline choice when rebuilding the user's config.
 if (hadFinalNewline) lines = lines.slice(0, -1);
 
 const tasksRange = topLevelBlockRange(lines, "tasks");
+// Without old tasks settings, no plan migration is needed.
 if (!tasksRange) {
   console.log("unchanged");
   process.exit(0);
 }
 
 const plansRange = topLevelBlockRange(lines, "plans");
+// An existing plans section keeps the user's current choices; otherwise migrate the old section.
 if (plansRange) {
   lines.splice(tasksRange.index, tasksRange.end - tasksRange.index);
 } else {
   lines[tasksRange.index] = lines[tasksRange.index].replace(/^tasks/u, "plans");
+  // Update paths inside the migrated section so the user's plans use their current directory.
   for (let i = tasksRange.index + 1; i < tasksRange.end; i += 1) {
     lines[i] = lines[i].replace(/\.goat-flow\/tasks\//gu, ".goat-flow/plans/");
     lines[i] = lines[i].replace(/\.goat-flow\/tasks\b/gu, ".goat-flow/plans");
@@ -1115,10 +1215,12 @@ NODE
   complete_staged_transform "$path" "$transform_result"
 }
 
+# Fill missing hook choices and migrate retired toggles during refresh without replacing the user's saved current choices.
 ensure_config_hooks_entry() {
   local path="$1"
   local transform_result
   stage_existing_destination "$path"
+  # A failed config read or staged write discards the transform and preserves the user's previous destination.
   if ! transform_result="$(node - "$STAGED_PAYLOAD_PATH" "$GOAT_FLOW_ROOT" <<'NODE'
 const fs = require("node:fs");
 
@@ -1130,10 +1232,12 @@ const eol = content.includes("\r\n") ? "\r\n" : "\n";
 const repeatedEol = new RegExp(`(?:${eol === "\r\n" ? "\\r\\n" : "\\n"}){3,}`, "gu");
 const hadFinalNewline = /\r?\n$/u.test(content);
 let lines = content.split(/\r?\n/u);
+// Keep the original final-newline choice when rebuilding the user's config.
 if (hadFinalNewline) lines.pop();
 let parsedHooks = null;
 try {
   const parsedConfig = yaml.load(content);
+  // Only a parsed hooks mapping can supply saved choices for migration.
   if (
     parsedConfig !== null &&
     typeof parsedConfig === "object" &&
@@ -1151,16 +1255,20 @@ const staleHookRe = /^  guard-(destructive-shell|secret-paths|repository-writes)
 const removedHookRe = /^  plan-checkbox-guard:\s*$/u;
 let changed = false;
 let legacyEnabled = "true";
+// Check each retired guard choice before deriving the combined guard's initial state.
 for (const legacyId of ["guard-destructive-shell", "guard-secret-paths", "guard-repository-writes"]) {
+  // A saved disabled guard carries that opt-out into this upgrade's combined guard default.
   if (parsedHooks?.[legacyId]?.enabled === false) legacyEnabled = "false";
 }
 
+// Fill one missing hook choice in block YAML while retaining the user's existing hook choices and nesting.
 function insertHookEntry(lines, hooksIndex, hookId, enabled) {
   const firstChild = lines.slice(hooksIndex + 1).find((line) =>
     line.trim() !== "" && !line.trimStart().startsWith("#"),
   );
   const indent = firstChild?.match(/^( +)\S/u)?.[1] ?? "  ";
   const hookRe = new RegExp(`^${indent}${hookId}:\\s*$`, "u");
+  // An existing text or parsed hook entry is the user's choice and is not inserted again.
   if (
     lines.some((line) => hookRe.test(line)) ||
     (parsedHooks !== null &&
@@ -1170,8 +1278,10 @@ function insertHookEntry(lines, hooksIndex, hookId, enabled) {
   }
   let insertAt = hooksIndex + 1;
   const siblingRe = new RegExp(`^${indent}[A-Za-z0-9_-]+:\\s*$`, "u");
+  // Place a missing hook after its existing siblings instead of disturbing their order.
   while (insertAt < lines.length && siblingRe.test(lines[insertAt])) {
     insertAt += 1;
+    // Skip each sibling's nested settings so the new hook stays at the correct level.
     while (insertAt < lines.length && lines[insertAt].startsWith(`${indent} `)) insertAt += 1;
   }
   lines.splice(insertAt, 0, `${indent}${hookId}:`, `${indent.repeat(2)}enabled: ${enabled}`);
@@ -1185,17 +1295,27 @@ function flowMappingCloseIndex(line) {
   let inDouble = false;
   let escaped = false;
   let started = false;
+  // Scan the flow mapping while preserving braces and brackets inside the user's quoted values.
   for (let index = line.indexOf("{"); index >= 0 && index < line.length; index += 1) {
     const character = line[index];
+    // An escaped character is literal user text and cannot change the YAML structure being read.
     if (escaped) { escaped = false; continue; }
+    // A backslash inside a double-quoted value protects the next character from structural interpretation.
     if (inDouble && character === "\\") { escaped = true; continue; }
+    // Track single-quoted user values so their punctuation cannot become YAML structure.
     if (!inDouble && character === "'") { inSingle = !inSingle; continue; }
+    // Track double-quoted user values so their punctuation cannot become YAML structure.
     if (!inSingle && character === '"') { inDouble = !inDouble; continue; }
+    // Quoted punctuation belongs to the user's value and does not open or close a mapping.
     if (inSingle || inDouble) continue;
+    // An unquoted container opens a nested value that must remain separate from the direct hook entry.
     if (character === "{" || character === "[") { depth += 1; started = true; continue; }
+    // An unquoted closing container returns the parser toward the direct hook entry.
     if (character === "}" || character === "]") {
       depth -= 1;
+      // The outer closing brace marks where a missing hook entry can be appended.
       if (started && depth === 0) return character === "}" ? index : -1;
+      // Unbalanced nesting cannot provide a safe insertion point for the user's YAML.
       if (depth < 0) return -1;
     }
   }
@@ -1206,6 +1326,7 @@ function flowMappingCloseIndex(line) {
 function insertFlowHookEntry(line, hookId, enabled) {
   const openIndex = line.indexOf("{");
   const closeIndex = flowMappingCloseIndex(line);
+  // Without an opening mapping brace, leave the user's hook text unchanged.
   if (openIndex === -1) return null;
   const entry = `${hookId}: { enabled: ${enabled} }`;
   // A valid multiline flow mapping can accept a new first entry, including a trailing comma.
@@ -1221,15 +1342,20 @@ function insertFlowHookEntry(line, hookId, enabled) {
 let hooksIndex = lines.findIndex((line) =>
   /^(?:hooks|"hooks"|'hooks')\s*:/u.test(line),
 );
+// Migrate an existing hooks section before considering a new section.
 if (hooksIndex !== -1) {
   const next = [];
+  // Retain the user's config lines while removing only recognized retired hook blocks.
   for (let i = 0; i < lines.length; i += 1) {
+    // A recognized retired hook block is replaced by the current hook choices.
     if (i > hooksIndex && (staleHookRe.test(lines[i]) || removedHookRe.test(lines[i]))) {
       changed = true;
       const staleGuardrailHook = staleHookRe.test(lines[i]);
       i += 1;
+      // Inspect the retired block's nested settings before removing its lines.
       while (i < lines.length && /^    /.test(lines[i])) {
         const match = lines[i].match(/^    enabled:\s*(true|false)\s*$/u);
+        // A retired guard's disabled choice carries into the combined guard during upgrade.
         if (staleGuardrailHook && match && match[1] === "false") legacyEnabled = "false";
         i += 1;
       }
@@ -1242,23 +1368,28 @@ if (hooksIndex !== -1) {
   hooksIndex = lines.findIndex((line) =>
     /^(?:hooks|"hooks"|'hooks')\s*:/u.test(line),
   );
+  // An explicit current guard choice takes priority over inherited retired choices.
   if (typeof parsedHooks?.["deny-dangerous"]?.enabled === "boolean") {
     legacyEnabled = String(parsedHooks["deny-dangerous"].enabled);
   }
   const hooksInlineValue = lines[hooksIndex].slice(lines[hooksIndex].indexOf(":") + 1).trim();
   const hooksNodeValue = hooksInlineValue.replace(/^&[^\s]+[ \t]+/u, "");
+  // A flow-style hooks mapping needs an insertion inside its existing braces.
   if (hooksNodeValue.startsWith("{")) {
     // A flow-style mapping must converge inside its own braces; block-style insertion would break the parse.
     // Without a successful parse the missing set is unknown, so the registry defaults stay authoritative.
     if (parsedHooks !== null) {
+      // Fill each missing current hook choice without replacing choices already saved in the mapping.
       for (const [flowHookId, flowEnabled] of [
         ["deny-dangerous", legacyEnabled],
         ["deny-git-mutations", legacyEnabled],
         ["post-turn-safety", "true"],
         ["gruff-code-quality", "false"],
       ]) {
+        // A saved flow entry remains the user's choice and is not added again.
         if (Object.prototype.hasOwnProperty.call(parsedHooks, flowHookId)) continue;
         const mutatedLine = insertFlowHookEntry(lines[hooksIndex], flowHookId, flowEnabled);
+        // A mapping without a safe insertion point ends this text migration without guessing its structure.
         if (mutatedLine === null) break;
         lines[hooksIndex] = mutatedLine;
         changed = true;
@@ -1267,6 +1398,7 @@ if (hooksIndex !== -1) {
   } else {
     const hasMissingHook = ["deny-dangerous", "deny-git-mutations", "post-turn-safety", "gruff-code-quality"]
       .some((hookId) => !Object.prototype.hasOwnProperty.call(parsedHooks ?? {}, hookId));
+    // A hooks alias receives only missing entries through a merge mapping, retaining the user's anchor.
     if (parsedHooks !== null && hasMissingHook && /^\*[^\s]+(?:\s+#.*)?$/u.test(hooksNodeValue)) {
       // A merge preserves the aliased defaults while the new choice belongs only to hooks.
       lines[hooksIndex] = lines[hooksIndex].slice(0, lines[hooksIndex].indexOf(":") + 1);
@@ -1278,8 +1410,10 @@ if (hooksIndex !== -1) {
     changed = insertHookEntry(lines, hooksIndex, "post-turn-safety", "true") || changed;
     changed = insertHookEntry(lines, hooksIndex, "gruff-code-quality", "false") || changed;
   }
+  // Write the staged hook config only when this migration changed its choices.
   if (changed) {
     const migrated = `${lines.join(eol)}${hadFinalNewline ? eol : ""}`;
+    // Reparse migrated YAML when the original parsed successfully before accepting the staged result.
     if (parsedHooks !== null) yaml.load(migrated);
     fs.writeFileSync(path, migrated);
     console.log("changed");
@@ -1290,6 +1424,7 @@ if (hooksIndex !== -1) {
 }
 
 let next = content;
+// Separate a newly appended hooks section from a final line that lacks a newline.
 if (next.length > 0 && !/\r?\n$/u.test(next)) next += eol;
 next += [
   "",
@@ -1322,6 +1457,7 @@ ensure_config_gruff_binary_entry() {
   local path="$1"
   local transform_result
   stage_existing_destination "$path"
+  # A failed config read or staged write discards the transform and preserves the user's previous destination.
   if ! transform_result="$(node - "$STAGED_PAYLOAD_PATH" "$GOAT_FLOW_ROOT" <<'NODE'
 const fs = require("node:fs");
 const path = require("node:path");
@@ -1333,11 +1469,13 @@ const relativeBinaryPath = "strands_agents/.venv/bin/gruff-py";
 const projectRoot = fs.realpathSync(process.cwd());
 const candidatePath = path.join(projectRoot, relativeBinaryPath);
 
+// Verify the repository-owned analyzer binary before saving an override; false leaves the user's config unchanged.
 function candidateIsContainedExecutable() {
   try {
     fs.accessSync(candidatePath, fs.constants.X_OK);
     const binaryRealPath = fs.realpathSync(candidatePath);
     const relativeRealPath = path.relative(projectRoot, binaryRealPath);
+    // A binary resolving outside the selected project cannot become its saved analyzer override.
     if (
       relativeRealPath === ".." ||
       relativeRealPath.startsWith(`..${path.sep}`) ||
@@ -1346,11 +1484,13 @@ function candidateIsContainedExecutable() {
       return false;
     }
     return fs.statSync(binaryRealPath).isFile();
+  // A missing or non-executable environment binary leaves the user's analyzer configuration unchanged.
   } catch {
     return false;
   }
 }
 
+// Without a verified project binary, setup does not add an analyzer path.
 if (!candidateIsContainedExecutable()) {
   console.log("unchanged");
   process.exit(0);
@@ -1360,12 +1500,14 @@ const content = fs.readFileSync(configPath, "utf8");
 let parsedConfig;
 try {
   parsedConfig = yaml.load(content);
+// Invalid hand-edited YAML is preserved rather than rewritten while adding an analyzer path.
 } catch {
   console.log("unchanged");
   process.exit(0);
 }
 const hooks = parsedConfig?.hooks;
 const gruffHook = hooks?.["gruff-code-quality"];
+// A missing or malformed Gruff entry, or an existing override, leaves this config unchanged.
 if (
   gruffHook === null ||
   typeof gruffHook !== "object" ||
@@ -1379,6 +1521,7 @@ if (
 const eol = content.includes("\r\n") ? "\r\n" : "\n";
 const hadFinalNewline = /\r?\n$/u.test(content);
 let lines = content.split(/\r?\n/u);
+// Keep the original final-newline choice when rebuilding the user's config.
 if (hadFinalNewline) lines.pop();
 
 // Find one flow mapping's closing brace across lines without counting quoted or commented braces.
@@ -1387,39 +1530,51 @@ function mappingClosePosition(lines, startLineIndex, openIndex) {
   let inSingle = false;
   let inDouble = false;
   let lastCodeCharacter = "";
+  // Search across mapping lines so multiline user YAML can receive the missing binary field.
   for (let lineIndex = startLineIndex; lineIndex < lines.length; lineIndex += 1) {
     const line = lines[lineIndex];
     const firstIndex = lineIndex === startLineIndex ? openIndex : 0;
     let escaped = false;
+    // Inspect each character without treating the user's quoted braces as mapping boundaries.
     for (let index = firstIndex; index < line.length; index += 1) {
       const character = line[index];
+      // An escaped character is literal user text and cannot change the YAML structure being read.
       if (escaped) { escaped = false; continue; }
+      // A backslash inside a double-quoted value protects the next character from structural interpretation.
       if (inDouble && character === "\\") { escaped = true; continue; }
+      // Track single-quoted user values so their punctuation cannot become YAML structure.
       if (!inDouble && character === "'") {
         inSingle = !inSingle;
         lastCodeCharacter = character;
         continue;
       }
+      // Track double-quoted user values so their punctuation cannot become YAML structure.
       if (!inSingle && character === '"') {
         inDouble = !inDouble;
         lastCodeCharacter = character;
         continue;
       }
+      // Quoted punctuation belongs to the user's value and does not open or close a mapping.
       if (inSingle || inDouble) continue;
+      // An unquoted YAML comment ends the setting text; quoted hash characters remain part of the user's value.
       if (
         character === "#" &&
         (index === 0 || /\s/u.test(line[index - 1]))
       ) {
         break;
       }
+      // Whitespace does not change where the user's flow mapping closes.
       if (/\s/u.test(character)) continue;
+      // An unquoted opening brace starts another mapping that must remain intact.
       if (character === "{") {
         depth += 1;
         lastCodeCharacter = character;
         continue;
       }
+      // An unquoted closing brace may end the mapping receiving the analyzer override.
       if (character === "}") {
         depth -= 1;
+        // At the outer boundary, return the insertion point and whether its existing comma can be reused.
         if (depth === 0) {
           return {
             lineIndex,
@@ -1427,6 +1582,7 @@ function mappingClosePosition(lines, startLineIndex, openIndex) {
             hasTrailingSeparator: lastCodeCharacter === ",",
           };
         }
+        // Broken brace nesting returns null so setup preserves the user's original mapping.
         if (depth < 0) return null;
       }
       lastCodeCharacter = character;
@@ -1440,12 +1596,18 @@ function yamlCommentIndex(line) {
   let inSingle = false;
   let inDouble = false;
   let escaped = false;
+  // Find actual YAML comments while keeping hash characters inside the user's quoted values.
   for (let index = 0; index < line.length; index += 1) {
     const character = line[index];
+    // An escaped character is literal user text and cannot change the YAML structure being read.
     if (escaped) { escaped = false; continue; }
+    // A backslash inside a double-quoted value protects the next character from structural interpretation.
     if (inDouble && character === "\\") { escaped = true; continue; }
+    // Track single-quoted user values so their punctuation cannot become YAML structure.
     if (!inDouble && character === "'") { inSingle = !inSingle; continue; }
+    // Track double-quoted user values so their punctuation cannot become YAML structure.
     if (!inSingle && character === '"') { inDouble = !inDouble; continue; }
+    // An unquoted YAML comment ends the setting text; quoted hash characters remain part of the user's value.
     if (
       !inSingle &&
       !inDouble &&
@@ -1461,28 +1623,39 @@ function yamlCommentIndex(line) {
 // Find a key whose value opens a flow mapping at the caller's required nesting depth.
 function mappingOpenIndex(line, key, initialDepth, expectedParentDepth) {
   const yamlCode = line.slice(0, yamlCommentIndex(line));
+  // An empty or comment-only line cannot contain the analyzer's mapping entry.
   if (yamlCode.trim().length === 0) return -1;
   const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
   const entryPattern = new RegExp(
     `(?:^|[{,])\\s*(?:"${escapedKey}"|'${escapedKey}'|${escapedKey})\\s*:\\s*\\{`,
     "gu",
   );
+  // Check candidate hook keys at the required nesting level so unrelated nested settings remain intact.
   for (const match of yamlCode.matchAll(entryPattern)) {
     const openIndex = match.index + match[0].lastIndexOf("{");
     let depth = initialDepth;
     let inSingle = false;
     let inDouble = false;
     let escaped = false;
+    // Read the nesting before this key to distinguish a direct hook from a quoted or nested lookalike.
     for (let index = 0; index < openIndex; index += 1) {
       const character = yamlCode[index];
+      // An escaped character is literal user text and cannot change the YAML structure being read.
       if (escaped) { escaped = false; continue; }
+      // A backslash inside a double-quoted value protects the next character from structural interpretation.
       if (inDouble && character === "\\") { escaped = true; continue; }
+      // Track single-quoted user values so their punctuation cannot become YAML structure.
       if (!inDouble && character === "'") { inSingle = !inSingle; continue; }
+      // Track double-quoted user values so their punctuation cannot become YAML structure.
       if (!inSingle && character === '"') { inDouble = !inDouble; continue; }
+      // Quoted punctuation belongs to the user's value and does not open or close a mapping.
       if (inSingle || inDouble) continue;
+      // An unquoted container opens a nested value that must remain separate from the direct hook entry.
       if (character === "{" || character === "[") depth += 1;
+      // An unquoted closing container returns the parser toward the direct hook entry.
       if (character === "}" || character === "]") depth -= 1;
     }
+    // A direct unquoted mapping key supplies the safe analyzer-field insertion point.
     if (!inSingle && !inDouble && depth === expectedParentDepth) return openIndex;
   }
   return -1;
@@ -1495,13 +1668,21 @@ function mappingDepthAfterLine(line, initialDepth) {
   let inSingle = false;
   let inDouble = false;
   let escaped = false;
+  // Carry nesting across the user's flow-mapping lines without counting quoted braces.
   for (const character of yamlCode) {
+    // An escaped character is literal user text and cannot change the YAML structure being read.
     if (escaped) { escaped = false; continue; }
+    // A backslash inside a double-quoted value protects the next character from structural interpretation.
     if (inDouble && character === "\\") { escaped = true; continue; }
+    // Track single-quoted user values so their punctuation cannot become YAML structure.
     if (!inDouble && character === "'") { inSingle = !inSingle; continue; }
+    // Track double-quoted user values so their punctuation cannot become YAML structure.
     if (!inSingle && character === '"') { inDouble = !inDouble; continue; }
+    // Quoted punctuation belongs to the user's value and does not open or close a mapping.
     if (inSingle || inDouble) continue;
+    // An unquoted container opens a nested value that must remain separate from the direct hook entry.
     if (character === "{" || character === "[") depth += 1;
+    // An unquoted closing container returns the parser toward the direct hook entry.
     if (character === "}" || character === "]") depth -= 1;
   }
   return depth;
@@ -1510,7 +1691,9 @@ function mappingDepthAfterLine(line, initialDepth) {
 // Insert one property without reserializing user YAML; false means the parsed mapping was not located.
 function appendFlowProperty(lines, lineIndex, openIndex, entry, hasProperties) {
   const close = mappingClosePosition(lines, lineIndex, openIndex);
+  // No closing mapping boundary means the user's YAML cannot be safely amended.
   if (close === null) return false;
+  // A multiline mapping receives the property on its closing line without reserializing user settings.
   if (close.lineIndex !== lineIndex) {
     const closeLine = lines[close.lineIndex];
     const separator = hasProperties && !close.hasTrailingSeparator ? ", " : "";
@@ -1528,13 +1711,16 @@ function appendFlowProperty(lines, lineIndex, openIndex, entry, hasProperties) {
 }
 
 const hooksIndex = lines.findIndex((line) => /^(?:hooks|"hooks"|'hooks')\s*:/u.test(line));
+// Without a hooks section, there is no existing Gruff choice to amend.
 if (hooksIndex === -1) {
   console.log("unchanged");
   process.exit(0);
 }
 let hooksEnd = hooksIndex + 1;
+// Bound the hooks section before searching for the analyzer entry.
 while (hooksEnd < lines.length) {
   const line = lines[hooksEnd];
+  // The next real top-level setting belongs to the user's other configuration.
   if (
     line.trim() !== "" &&
     !line.trimStart().startsWith("#") &&
@@ -1551,6 +1737,7 @@ const hooksIsFlow = /^(?:hooks|"hooks"|'hooks')\s*:\s*\{/u.test(
 );
 const expectedParentDepth = hooksIsFlow ? 1 : 0;
 let mappingDepth = 0;
+// Search only this hooks section for a direct Gruff flow mapping.
 for (let index = hooksIndex; index < hooksEnd; index += 1) {
   const openIndex = mappingOpenIndex(
     lines[index],
@@ -1558,6 +1745,7 @@ for (let index = hooksIndex; index < hooksEnd; index += 1) {
     mappingDepth,
     expectedParentDepth,
   );
+  // A verified direct mapping receives the missing binary override in place.
   if (openIndex !== -1) {
     changed = appendFlowProperty(
       lines,
@@ -1571,6 +1759,7 @@ for (let index = hooksIndex; index < hooksEnd; index += 1) {
   mappingDepth = mappingDepthAfterLine(lines[index], mappingDepth);
 }
 
+// If flow insertion did not apply, look for the user's block-style Gruff entry.
 if (!changed) {
   const directHookIndent = lines
     .slice(hooksIndex + 1, hooksEnd)
@@ -1580,16 +1769,20 @@ if (!changed) {
     .reduce((smallest, indent) => Math.min(smallest, indent), Infinity);
   const gruffIndex = lines.findIndex(
     (line, index) => {
+      // Lines outside the hooks section cannot be this project's direct analyzer entry.
       if (index <= hooksIndex || index >= hooksEnd) return false;
       const match = /^( *)(?:gruff-code-quality|"gruff-code-quality"|'gruff-code-quality')\s*:\s*(?:#.*)?$/u.exec(line);
       return match !== null && match[1].length === directHookIndent;
     },
   );
+  // An existing block-style Gruff entry can receive the missing binary field at its own indentation.
   if (gruffIndex !== -1) {
     let gruffEnd = gruffIndex + 1;
+    // Find this hook's boundary so the new override does not enter a sibling hook.
     while (gruffEnd < hooksEnd) {
       const line = lines[gruffEnd];
       const indent = line.length - line.trimStart().length;
+      // A nonblank sibling or parent setting ends this hook's block.
       if (
         line.trim() !== "" &&
         !line.trimStart().startsWith("#") &&
@@ -1611,11 +1804,13 @@ if (!changed) {
     let insertAt = gruffEnd;
     const enabledIndex = lines.findIndex(
       (line, index) => {
+        // Search for the saved enabled choice only inside the current Gruff block.
         if (index <= gruffIndex || index >= gruffEnd) return false;
         const match = /^( *)enabled\s*:/u.exec(line);
         return match !== null && match[1].length === fieldIndent;
       },
     );
+    // Keep the enabled choice first when placing the new binary override.
     if (enabledIndex !== -1) insertAt = enabledIndex + 1;
     lines.splice(
       insertAt,
@@ -1627,6 +1822,7 @@ if (!changed) {
   }
 }
 
+// If no safe supported YAML location was found, preserve the user's config unchanged.
 if (!changed) {
   console.log("unchanged");
   process.exit(0);
@@ -1642,10 +1838,12 @@ NODE
   complete_staged_transform "$path" "$transform_result"
 }
 
+# Retire the old plan-guard config and its guidance when setup installs the current plan workflow.
 remove_config_plan_guard_entry() {
   local path="$1"
   local transform_result
   stage_existing_destination "$path"
+  # A failed config read or staged write discards the transform and preserves the user's previous destination.
   if ! transform_result="$(node - "$STAGED_PAYLOAD_PATH" <<'NODE'
 const fs = require("node:fs");
 
@@ -1655,26 +1853,32 @@ const eol = content.includes("\r\n") ? "\r\n" : "\n";
 const repeatedEol = new RegExp(`(?:${eol === "\r\n" ? "\\r\\n" : "\\n"}){3,}`, "gu");
 const hadFinalNewline = /\r?\n$/u.test(content);
 let lines = content.split(/\r?\n/u);
+// Keep the original final-newline choice when rebuilding the user's config.
 if (hadFinalNewline) lines.pop();
 
 const start = lines.findIndex((line) => /^plan-guard\s*:/u.test(line));
+// Without the retired plan-guard section, no removal is needed.
 if (start === -1) {
   console.log("unchanged");
   process.exit(0);
 }
 let end = start + 1;
+// Find the retired section's end before the user's next top-level choice.
 while (end < lines.length) {
   const line = lines[end] ?? "";
+  // The next top-level setting is preserved as part of the user's current config.
   if (line.trim() !== "" && /^[A-Za-z0-9_-]+:/u.test(line)) break;
   end += 1;
 }
 let prefixStart = start;
+// Remove the retired section's own guidance along with its obsolete settings.
 if (
   prefixStart > 0 &&
   lines[prefixStart - 1] === "# Workflow reminder settings for the plan checkbox guard."
 ) {
   prefixStart -= 1;
 }
+// Remove its separator too so the user's remaining config does not gain an extra blank block.
 if (prefixStart > 0 && (lines[prefixStart - 1] ?? "").trim() === "") {
   prefixStart -= 1;
 }
@@ -1692,6 +1896,7 @@ NODE
   complete_staged_transform "$path" "$transform_result"
 }
 
+# Reconcile staged provider registrations with saved hook choices while preserving unrelated user commands and settings.
 migrate_agent_hook_config() {
   local user_hook_config_path="$1"
   local registration_agent="${2:-$AGENT}"
@@ -1711,15 +1916,18 @@ migrate_agent_hook_config() {
   fi
 
   stage_existing_destination "$user_hook_config_path"
+  # A failed config read or staged write discards the transform and preserves the user's previous destination.
   if ! transform_result="$(node - "$STAGED_PAYLOAD_PATH" "$desired_state_contract_path" "$registration_agent" "$GOAT_FLOW_ROOT" "$registration_hook" <<'NODE'
 /**
  * Reconciles one staged user hook config from the TypeScript-generated desired-state contract.
+ *
  * Use during standalone setup so enabled, disabled, duplicate, and retired rows match CLI and dashboard behavior.
  * Invalid user JSON is preserved; an invalid package contract stops installation before replacement.
  */
 const childProcess = require("node:child_process");
 const fs = require("node:fs");
 const pathModule = require("node:path");
+const { isDeepStrictEqual } = require("node:util");
 
 const [userHookConfigPath, desiredStateContractPath, agentId, frameworkRoot, selectedHookId] =
   process.argv.slice(2);
@@ -1772,6 +1980,7 @@ function commandReferencesScriptToken(commandText, scriptName) {
  * Use during install or sync so stale Windows-only registrations are replaced without touching user commands.
  *
  * @param {object} entry - provider row; null, primitive, or array values cannot be direct commands
+ *
  * @param {string[]} scriptNames - managed filenames; empty means no command belongs to Goat Flow
  * @returns {boolean} true when any platform command names a managed script; false preserves the user's row
  */
@@ -1798,12 +2007,15 @@ function entryReferencesManagedScript(entry, scriptNames) {
 
 /** Detect one exact managed command anywhere inside a provider definition. */
 function valueReferencesManagedScript(value, scriptNames) {
+  // Search grouped provider definitions so managed commands can be repaired without claiming unrelated rows.
   if (Array.isArray(value)) {
     return value.some((nestedValue) =>
       valueReferencesManagedScript(nestedValue, scriptNames),
     );
   }
+  // A primitive or null value cannot name a provider command owned by setup.
   if (!isObject(value)) return false;
+  // An exact managed command match identifies a definition setup may refresh.
   if (entryReferencesManagedScript(value, scriptNames)) return true;
   return Object.values(value).some((nestedValue) =>
     valueReferencesManagedScript(nestedValue, scriptNames),
@@ -1868,6 +2080,7 @@ function configuredHookEnabled(hookId, defaultEnabled) {
     // A missing or malformed config cannot override the registry's documented default.
     return defaultEnabled === true;
   }
+  // Missing or malformed hooks config leaves the registry default as the install choice.
   if (!isObject(configValue) || !isObject(configValue.hooks)) {
     return defaultEnabled === true;
   }
@@ -1876,11 +2089,9 @@ function configuredHookEnabled(hookId, defaultEnabled) {
     (hookId === "gruff-code-quality"
       ? configValue.hooks["gruff-on-change"]
       : undefined);
+  // A saved boolean toggle is the user's authority over this hook's registration.
   if (isObject(configuredHook) && typeof configuredHook.enabled === "boolean") {
     return configuredHook.enabled;
-  }
-  if (hookId === "deny-git-mutations") {
-    return configuredHookEnabled("deny-dangerous", true);
   }
   return defaultEnabled === true;
 }
@@ -1892,17 +2103,22 @@ function stripYamlComment(text) {
   let inSingle = false;
   let inDouble = false;
   let escaped = false;
+  // Find the YAML comment boundary without truncating hash characters in the user's quoted values.
   for (let index = 0; index < text.length; index += 1) {
     const character = text[index];
+    // An escaped character is literal user text and cannot change the YAML structure being read.
     if (escaped) {
       escaped = false;
       continue;
     }
+    // A backslash inside a double-quoted value protects the next character from structural interpretation.
     if (inDouble && character === "\\") {
       escaped = true;
       continue;
     }
+    // Track single-quoted user values so their punctuation cannot become YAML structure.
     if (!inDouble && character === singleQuote) {
+      // A doubled single quote is literal text in the user's YAML rather than the end of its value.
       if (inSingle && text[index + 1] === singleQuote) {
         index += 1;
         continue;
@@ -1910,10 +2126,12 @@ function stripYamlComment(text) {
       inSingle = !inSingle;
       continue;
     }
+    // Track double-quoted user values so their punctuation cannot become YAML structure.
     if (!inSingle && character === "\"") {
       inDouble = !inDouble;
       continue;
     }
+    // An unquoted YAML comment ends the setting text; quoted hash characters remain part of the user's value.
     if (
       !inSingle &&
       !inDouble &&
@@ -1929,18 +2147,23 @@ function stripYamlComment(text) {
 /** Parse one YAML string scalar accepted by the post-turn runtime parser. */
 function yamlStringScalar(rawValue) {
   const value = stripYamlComment(rawValue).trim();
+  // An empty scalar cannot identify a scan directory, so registration cannot use it.
   if (value.length === 0) return null;
+  // Decode a single-quoted root while retaining literal quotes in the user's path.
   if (value.startsWith(singleQuote) && value.endsWith(singleQuote)) {
     return value.slice(1, -1).split(singleQuote + singleQuote).join(singleQuote);
   }
+  // Decode a double-quoted root before checking where the user's post-turn scan will run.
   if (value.startsWith("\"") && value.endsWith("\"")) {
     try {
       const decoded = JSON.parse(value);
       return typeof decoded === "string" ? decoded : null;
+    // A malformed quoted scan root is rejected so setup cannot register an ambiguous directory.
     } catch {
       return null;
     }
   }
+  // YAML booleans, nulls and numbers cannot stand in for a user's scan-directory path.
   if (
     /^(?:null|~|true|false)$/iu.test(value) ||
     /^[-+]?\d+(?:\.\d+)?$/u.test(value)
@@ -1953,28 +2176,35 @@ function yamlStringScalar(rawValue) {
 /** Parse one inline YAML string list without accepting mappings or scalar coercion. */
 function yamlFlowStringList(rawValue) {
   const value = stripYamlComment(rawValue).trim();
+  // A non-list value cannot supply explicit post-turn scan roots.
   if (!value.startsWith("[") || !value.endsWith("]")) return null;
   const body = value.slice(1, -1);
+  // An empty list selects no scan directories and cannot satisfy explicit-root registration.
   if (body.trim().length === 0) return [];
   const rawItems = [];
   let item = "";
   let inSingle = false;
   let inDouble = false;
   let escaped = false;
+  // Split the user's inline roots only at commas outside quoted paths.
   for (let index = 0; index < body.length; index += 1) {
     const character = body[index];
+    // An escaped character is literal user text and cannot change the YAML structure being read.
     if (escaped) {
       item += character;
       escaped = false;
       continue;
     }
+    // A backslash inside a double-quoted value protects the next character from structural interpretation.
     if (inDouble && character === "\\") {
       item += character;
       escaped = true;
       continue;
     }
+    // Track single-quoted user values so their punctuation cannot become YAML structure.
     if (!inDouble && character === singleQuote) {
       item += character;
+      // A doubled single quote belongs to the scan path and is retained in this list item.
       if (inSingle && body[index + 1] === singleQuote) {
         item += body[index + 1];
         index += 1;
@@ -1983,11 +2213,13 @@ function yamlFlowStringList(rawValue) {
       inSingle = !inSingle;
       continue;
     }
+    // Track double-quoted user values so their punctuation cannot become YAML structure.
     if (!inSingle && character === "\"") {
       item += character;
       inDouble = !inDouble;
       continue;
     }
+    // An unquoted comma separates the user's scan directories.
     if (!inSingle && !inDouble && character === ",") {
       rawItems.push(item);
       item = "";
@@ -1995,6 +2227,7 @@ function yamlFlowStringList(rawValue) {
     }
     item += character;
   }
+  // Unfinished quotes or escapes make the roots ambiguous, so setup rejects the list.
   if (inSingle || inDouble || escaped) return null;
   rawItems.push(item);
   const parsedItems = rawItems.map(yamlStringScalar);
@@ -2005,6 +2238,7 @@ function yamlFlowStringList(rawValue) {
 
 /** Count leading spaces and reject tab-indented config as ambiguous. */
 function lineIndent(line) {
+  // Tab-indented config cannot prove the scan roots' nesting, so registration treats it as ambiguous.
   if (line.includes("\t")) return -1;
   return line.length - line.trimStart().length;
 }
@@ -2014,6 +2248,7 @@ function configuredPostTurnScanRoots() {
   let configText;
   try {
     configText = fs.readFileSync(".goat-flow/config.yaml", "utf8");
+  // A missing or unreadable project config supplies no explicit scan roots for registration.
   } catch {
     return null;
   }
@@ -2022,10 +2257,13 @@ function configuredPostTurnScanRoots() {
     (line) =>
       lineIndent(line) === 0 && stripYamlComment(line).trim() === "hooks:",
   );
+  // Without a supported hooks section, setup cannot establish explicit post-turn roots.
   if (hooksIndex < 0) return null;
   let hooksEnd = lines.length;
+  // Find the hooks boundary before interpreting the user's scan settings.
   for (let index = hooksIndex + 1; index < lines.length; index += 1) {
     const cleanLine = stripYamlComment(lines[index]);
+    // Another top-level setting ends the hooks section and stays outside this scan lookup.
     if (cleanLine.trim().length > 0 && lineIndent(lines[index]) <= 0) {
       hooksEnd = index;
       break;
@@ -2033,8 +2271,10 @@ function configuredPostTurnScanRoots() {
   }
   let hookIndex = -1;
   let hookIndent = -1;
+  // Find the post-turn hook inside the user's hooks section.
   for (let index = hooksIndex + 1; index < hooksEnd; index += 1) {
     const indent = lineIndent(lines[index]);
+    // A nested post-turn section establishes the scope of its scan settings.
     if (
       indent > 0 &&
       stripYamlComment(lines[index]).trim() === "post-turn-safety:"
@@ -2044,29 +2284,40 @@ function configuredPostTurnScanRoots() {
       break;
     }
   }
+  // Without a post-turn section, setup has no explicit roots to validate.
   if (hookIndex < 0) return null;
+  // Look inside this hook for the user's explicit scan-roots setting.
   for (let index = hookIndex + 1; index < hooksEnd; index += 1) {
     const cleanLine = stripYamlComment(lines[index]);
     const trimmedLine = cleanLine.trim();
+    // Blank guidance lines do not supply scan-root settings.
     if (trimmedLine.length === 0) continue;
     const indent = lineIndent(lines[index]);
+    // A sibling or parent setting ends the post-turn hook's configuration.
     if (indent <= hookIndent) break;
     const fieldMatch = /^scan-roots:\s*(.*)$/u.exec(trimmedLine);
+    // Other post-turn settings are not directory choices and remain outside this lookup.
     if (!fieldMatch) continue;
     const inlineValue = fieldMatch[1].trim();
+    // An inline list is decoded using the same accepted root shapes as the runtime.
     if (inlineValue.length > 0) return yamlFlowStringList(inlineValue);
     const roots = [];
+    // Read the block list of scan directories until another user setting begins.
     for (
       let rootIndex = index + 1;
       rootIndex < hooksEnd;
       rootIndex += 1
     ) {
       const rootLine = stripYamlComment(lines[rootIndex]);
+      // Blank list lines do not add a directory to the user's scan scope.
       if (rootLine.trim().length === 0) continue;
+      // A line outside this list's indentation ends the scan-root choices.
       if (lineIndent(lines[rootIndex]) <= indent) break;
       const itemMatch = /^-\s+(.+)$/u.exec(rootLine.trim());
+      // A non-list child makes the explicit roots ambiguous, so setup refuses that registration contract.
       if (!itemMatch) return null;
       const root = yamlStringScalar(itemMatch[1]);
+      // A null or non-string root cannot select a safe scan directory.
       if (root === null) return null;
       roots.push(root);
     }
@@ -2078,8 +2329,10 @@ function configuredPostTurnScanRoots() {
 /** Resolve one existing directory physically, or return null on any lookup failure. */
 function physicalDirectory(directoryPath) {
   try {
+    // A file cannot act as the directory where the user's scan runs.
     if (!fs.statSync(directoryPath).isDirectory()) return null;
     return fs.realpathSync(directoryPath);
+  // A deleted directory or denied filesystem lookup supplies no verified scan location.
   } catch {
     return null;
   }
@@ -2098,6 +2351,7 @@ function gitTopLevel(directoryPath) {
       windowsHide: true,
     },
   );
+  // Failed Git discovery or empty output cannot establish ownership of the user's scan directory.
   if (
     result.error ||
     result.status !== 0 ||
@@ -2123,8 +2377,10 @@ function relativePathEscapesRoot(relativePath) {
 function filesystemDirectoryIdentity(directoryPath) {
   try {
     const stats = fs.statSync(directoryPath, { bigint: true });
+    // A non-directory or unavailable file identity cannot prove two scan paths are the same directory.
     if (!stats.isDirectory() || stats.ino === 0n) return null;
     return { device: stats.dev, inode: stats.ino };
+  // A removed or unreadable directory cannot provide the identity needed to verify its scan scope.
   } catch {
     return null;
   }
@@ -2132,10 +2388,12 @@ function filesystemDirectoryIdentity(directoryPath) {
 
 /** Compare physical spellings first, then exact identity for aliases such as Windows short paths. */
 function filesystemPathsAreEquivalent(leftDirectory, rightDirectory) {
+  // A missing directory on either side prevents setup from proving equivalent scan locations.
   if (!leftDirectory || !rightDirectory) return false;
   const spellingsMatch =
     pathModule.relative(leftDirectory, rightDirectory) === "" &&
     pathModule.relative(rightDirectory, leftDirectory) === "";
+  // Equivalent physical path spellings already establish the user's directory identity.
   if (spellingsMatch) return true;
 
   const leftIdentity = filesystemDirectoryIdentity(leftDirectory);
@@ -2150,6 +2408,7 @@ function filesystemPathsAreEquivalent(leftDirectory, rightDirectory) {
 
 /** Validate one configured root against lexical, physical, and exact Git ownership. */
 function isContainedGitScanRoot(projectRoot, configuredRoot) {
+  // An empty, absolute or non-string root cannot select a contained project scan directory.
   if (
     typeof configuredRoot !== "string" ||
     configuredRoot.length === 0 ||
@@ -2161,10 +2420,13 @@ function isContainedGitScanRoot(projectRoot, configuredRoot) {
   }
   const lexicalCandidate = pathModule.resolve(projectRoot, configuredRoot);
   const lexicalRelative = pathModule.relative(projectRoot, lexicalCandidate);
+  // A path escaping the selected project is outside the user's permitted scan scope.
   if (relativePathEscapesRoot(lexicalRelative)) return false;
   const physicalCandidate = physicalDirectory(lexicalCandidate);
+  // A missing physical directory cannot receive a post-turn scan registration.
   if (physicalCandidate === null) return false;
   const physicalRelative = pathModule.relative(projectRoot, physicalCandidate);
+  // A symlink resolving outside the selected project cannot expand the user's scan scope.
   if (relativePathEscapesRoot(physicalRelative)) return false;
   return filesystemPathsAreEquivalent(
     gitTopLevel(physicalCandidate),
@@ -2175,7 +2437,9 @@ function isContainedGitScanRoot(projectRoot, configuredRoot) {
 /** Apply the registrar's implicit-Git or all-explicit-roots registration contract. */
 function postTurnRootContractAllowsRegistration() {
   const projectRoot = physicalDirectory(process.cwd());
+  // An unresolved project directory cannot establish a safe post-turn registration.
   if (projectRoot === null) return false;
+  // An exact project Git root satisfies the implicit scan contract without additional roots.
   if (filesystemPathsAreEquivalent(gitTopLevel(projectRoot), projectRoot)) {
     return true;
   }
@@ -2197,6 +2461,7 @@ const explainedBlockedHookIds = new Set();
  * Losing a safety hook during an upgrade is invisible otherwise, so this prints once per hook.
  */
 function explainBlockedRegistration(hookId, hookContract) {
+  // A hook already explained in this install does not repeat the same repair notice.
   if (explainedBlockedHookIds.has(hookId)) return;
   explainedBlockedHookIds.add(hookId);
   const prerequisite = hookContract.registrationPrerequisite;
@@ -2209,8 +2474,13 @@ function explainBlockedRegistration(hookId, hookContract) {
 
 /** Combine the user's toggle with any hook-specific registration prerequisite. */
 function shouldRegisterManagedHook(hookId, hookContract) {
-  if (!configuredHookEnabled(hookId, hookContract.defaultEnabled)) return false;
+  // A disabled choice keeps a registration only when this hook's contract requires an inert installed row.
+  if (!configuredHookEnabled(hookId, hookContract.defaultEnabled)) {
+    return hookContract.retainRegistrationWhenDisabled;
+  }
+  // Other hooks do not need the post-turn scan-root prerequisite.
   if (hookId !== "post-turn-safety") return true;
+  // Verified scan ownership allows the user's enabled post-turn hook to register.
   if (postTurnRootContractAllowsRegistration()) return true;
   explainBlockedRegistration(hookId, hookContract);
   return false;
@@ -2238,6 +2508,7 @@ function managedHookEntries(agentContract) {
   // Every generated hook row declares support and cleanup ownership before optional enabled state.
   for (const [hookId, hookContract] of hookEntries) {
     const cleanup = isObject(hookContract) ? hookContract.cleanup : null;
+    // An incomplete generated cleanup row cannot safely determine which provider commands setup owns.
     if (
       !hookId ||
       !isObject(hookContract) ||
@@ -2252,8 +2523,10 @@ function managedHookEntries(agentContract) {
     }
     // Unsupported rows carry cleanup only, preventing this provider from receiving unusable config.
     if (!hookContract.supported) continue;
+    // An incomplete supported hook row stops setup before executable provider config is replaced.
     if (
       typeof hookContract.defaultEnabled !== "boolean" ||
+      typeof hookContract.retainRegistrationWhenDisabled !== "boolean" ||
       !Array.isArray(hookContract.commandScriptNames) ||
       !Array.isArray(hookContract.managedScriptFiles) ||
       !Array.isArray(hookContract.registrationTargets) ||
@@ -2323,11 +2596,38 @@ const supportedHookEntries = hookEntries.filter(
 const currentConfig = readJsonObject(userHookConfigPath);
 // Invalid user JSON remains untouched so setup never replaces settings the user needs to repair.
 if (!currentConfig) {
+  // A targeted Git-protection repair needs valid provider JSON; preserve the runtime and report the problem otherwise.
   if (selectedHookId) throw new Error("Cannot establish Git protection in invalid provider JSON; existing runtime preserved");
   console.log("unchanged");
   process.exit(0);
 }
 const originalConfig = JSON.stringify(currentConfig);
+
+// Codex binds trust to row position. Keep each already-current hook where the user reviewed it.
+const preservedCodexHooks = new Set();
+// Current Codex rows keep their reviewed positions so refresh preserves the user's trust decisions.
+if (agentId === "codex" && isObject(currentConfig.hooks)) {
+  // Check each supported hook for an already-current Codex registration.
+  for (const [hookId, hookContract] of supportedHookEntries) {
+    // Hooks without a runnable registration choice or prerequisite do not qualify for position preservation.
+    if (!shouldRegisterManagedHook(hookId, hookContract)) continue;
+    const ownedEvents = {};
+    // Compare the hook's owned rows across the provider's lifecycle events.
+    for (const [eventName, entries] of Object.entries(currentConfig.hooks)) {
+      // Malformed event values cannot supply current runnable Codex rows.
+      if (!Array.isArray(entries)) continue;
+      const ownedEntries = entries.filter((entry) =>
+        valueReferencesManagedScript(entry, hookContract.cleanup.commandScriptNames),
+      );
+      // Only events containing owned commands contribute to this hook's current registration shape.
+      if (ownedEntries.length > 0) ownedEvents[eventName] = ownedEntries;
+    }
+    // Stale fields, duplicate rows and misplaced events still take the ordinary repair path.
+    if (isDeepStrictEqual(ownedEvents, hookContract.config.hooks)) {
+      preservedCodexHooks.add(hookId);
+    }
+  }
+}
 
 // Antigravity stores managed hook definitions as top-level ids instead of shared lifecycle arrays.
 if (agentId === "antigravity") {
@@ -2344,6 +2644,7 @@ if (agentId === "antigravity") {
   ];
   // Exact command ownership removes renamed definitions as well as canonical current and retired ids.
   for (const [definitionId, definition] of Object.entries(currentConfig)) {
+    // Remove only recognized managed definitions before restoring the user's enabled Antigravity hooks.
     if (
       managedHookIds.has(definitionId) ||
       valueReferencesManagedScript(definition, managedScriptNames)
@@ -2364,8 +2665,10 @@ if (agentId === "antigravity") {
     currentConfig.hooks,
     selectedHookId ? [] : desiredStateContract.retiredHookScriptNames,
   );
-  // Every supported current hook is removed from all events before its user-selected state is rebuilt.
-  for (const [, hookContract] of hookEntries) {
+  // Repair hooks whose current rows do not match the desired state.
+  for (const [hookId, hookContract] of hookEntries) {
+    // A current Codex hook keeps its reviewed rows instead of entering the repair path.
+    if (preservedCodexHooks.has(hookId)) continue;
     removeManagedRowsFromSharedHooks(
       currentConfig.hooks,
       hookContract.cleanup.commandScriptNames,
@@ -2374,6 +2677,8 @@ if (agentId === "antigravity") {
   // Enabled hooks append one generated provider fragment; disabled hooks remain installed but inert.
   for (const [hookId, hookContract] of supportedHookEntries) {
     // The config toggle is the user's authority over whether their agent runs this hook.
+    if (preservedCodexHooks.has(hookId)) continue;
+    // A disabled choice or unmet prerequisite does not append a runnable registration.
     if (!shouldRegisterManagedHook(hookId, hookContract)) continue;
     appendSharedHookFragment(currentConfig, hookContract.config);
   }
@@ -2397,10 +2702,12 @@ NODE
   complete_staged_transform "$user_hook_config_path" "$transform_result"
 }
 
+# Rename Codex's retired hook feature flag while preserving an explicit current flag and the user's chosen boolean.
 migrate_codex_hooks_feature_flag() {
   local path="$1"
   local transform_result
   stage_existing_destination "$path"
+  # A failed config read or staged write discards the transform and preserves the user's previous destination.
   if ! transform_result="$(node - "$STAGED_PAYLOAD_PATH" <<'NODE'
 const fs = require("node:fs");
 
@@ -2409,13 +2716,17 @@ const content = fs.readFileSync(path, "utf8");
 const eol = content.includes("\r\n") ? "\r\n" : "\n";
 const hadFinalNewline = /\r?\n$/u.test(content);
 const lines = content.split(/\r?\n/u);
+// Keep the user's original final-newline choice when rebuilding Codex settings.
 if (hadFinalNewline) lines.pop();
 
+// Read a saved Codex hook flag without changing its boolean; null means the line has no migratable flag.
 function parseFeatureBooleanAssignment(line, section) {
+  // Blank and comment lines cannot supply a hook feature toggle.
   if (/^\s*(#|$)/u.test(line)) return null;
   const match = line.match(
     /^(\s*)([A-Za-z0-9_.-]+)(\s*=\s*)(true|false)(\s*(?:#.*)?)$/u,
   );
+  // A non-boolean assignment is outside this hook-flag migration.
   if (!match) return null;
   const [, indent, rawKey, separator, value, suffix] = match;
   const normalizedKey =
@@ -2428,27 +2739,34 @@ function parseFeatureBooleanAssignment(line, section) {
 let section = "";
 const deprecated = [];
 const current = [];
+// Inspect Codex feature assignments while retaining the user's surrounding settings.
 for (let index = 0; index < lines.length; index += 1) {
   const sectionMatch = lines[index].match(/^\s*\[([^\]]+)\]\s*(?:#.*)?$/u);
+  // Track the TOML table so a hook flag is interpreted in its actual section.
   if (sectionMatch) {
     section = sectionMatch[1].trim();
     continue;
   }
   const assignment = parseFeatureBooleanAssignment(lines[index], section);
+  // Unrelated assignments do not change the user's hook feature choice.
   if (!assignment) continue;
+  // Collect the retired hook flag so its saved boolean can migrate.
   if (assignment.normalizedKey === "features.codex_hooks") {
     deprecated.push({ index, assignment });
+  // A current hook flag takes priority over the user's earlier retired flag.
   } else if (assignment.normalizedKey === "features.hooks") {
     current.push(index);
   }
 }
 
+// Without the retired flag, the user's current feature settings need no migration.
 if (deprecated.length === 0) {
   console.log("unchanged");
   process.exit(0);
 }
 
 const remove = new Set();
+// If no current flag exists, rename the first retired flag while keeping its saved boolean.
 if (current.length === 0) {
   const first = deprecated[0];
   const replacementKey = first.assignment.rawKey.includes(".")
@@ -2460,8 +2778,10 @@ if (current.length === 0) {
     first.assignment.separator +
     first.assignment.value +
     first.assignment.suffix;
+  // Remove duplicate retired flags after retaining the user's first migrated choice.
   for (const entry of deprecated.slice(1)) remove.add(entry.index);
 } else {
+  // Remove retired flags when a current flag already records the user's choice.
   for (const entry of deprecated) remove.add(entry.index);
 }
 
@@ -2477,10 +2797,12 @@ NODE
   complete_staged_transform "$path" "$transform_result"
 }
 
+# Refresh the active Codex permission profile while carrying forward the user's additional deny patterns.
 migrate_codex_filesystem_permissions() {
   local path="$1"
   local transform_result
   stage_existing_destination "$path"
+  # A failed config read or staged write discards the transform and preserves the user's previous destination.
   if ! transform_result="$(node - "$STAGED_PAYLOAD_PATH" <<'NODE'
 const fs = require("node:fs");
 
@@ -2489,6 +2811,7 @@ const content = fs.readFileSync(path, "utf8");
 const eol = content.includes("\r\n") ? "\r\n" : "\n";
 const hadFinalNewline = /\r?\n$/u.test(content);
 const lines = content.split(/\r?\n/u);
+// Keep the user's original final-newline choice when rebuilding Codex settings.
 if (hadFinalNewline) lines.pop();
 
 const anySectionPattern = /^\s*\[[^\]]+\]\s*$/u;
@@ -2516,39 +2839,49 @@ const legacyInlineAccessPattern = new RegExp(
 );
 const legacyProjectRootsPattern = /":project_roots"/u;
 
+// Decode a quoted permission profile or key so setup and validation use the user's actual saved spelling.
 function parseTomlBasicString(value) {
   try {
     return JSON.parse(`"${value}"`);
+  // A quoted TOML value with escapes JSON cannot decode keeps the simple quote/backslash fallback for profile matching.
   } catch {
     return value.replace(/\\"/gu, '"').replace(/\\\\/gu, "\\");
   }
 }
 
+// Read a matched permission key; an empty result has no named restriction to retain during profile refresh.
 function tomlKeyFromMatch(match) {
   return match[1] ?? match[2] ?? "";
 }
 
+// Read a matched permission mode; an empty result supplies no deny choice for the refreshed profile.
 function tomlModeFromMatch(match) {
   return match[3] ?? match[4] ?? "";
 }
 
+// Select the user's nonempty default permission profile; absent or empty selections use the managed goat-flow profile.
 function readActivePermissionProfile(configLines) {
+  // Find the user's explicit active permission profile before falling back to the managed profile.
   for (const line of configLines) {
     const basicMatch = line.match(
       /^\s*default_permissions\s*=\s*"((?:\\.|[^"\\])*)"\s*(?:#.*)?$/u,
     );
+    // A quoted default profile selects the permission table setup should refresh.
     if (basicMatch) {
       const profile = parseTomlBasicString(basicMatch[1]).trim();
+      // An empty decoded profile does not select a permission table; continue to the fallback.
       if (profile) return profile;
     }
     const literalMatch = line.match(
       /^\s*default_permissions\s*=\s*'([^']+)'\s*(?:#.*)?$/u,
     );
+    // A nonempty literal profile selects the user's active permission table.
     if (literalMatch && literalMatch[1].trim()) return literalMatch[1].trim();
   }
   return "goat-flow";
 }
 
+// Match the user's permission profile name literally so punctuation cannot select another TOML table.
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }
@@ -2566,11 +2899,12 @@ const filesystemSectionPattern = new RegExp(
   "u",
 );
 
-// Single source of truth: a "none" key is only invalid if it contains a glob
-// metacharacter AND is not a trailing-/** subtree. Codex accepts exact paths
-// and trailing /** subtrees but rejects other glob shapes. Must match the
-// validator's isInvalidNoneKey in validate_codex_settings_after_install.
+// Single source of truth: a "none" key is only invalid if it contains * and does not end in the accepted /** subtree form.
+//
+// Exact paths and trailing /** subtrees are accepted; other globs require repair.
+// Keep this check identical to isInvalidNoneKey in validate_codex_settings_after_install.
 function isInvalidNoneKey(key) {
+  // An exact path contains no unsupported glob and does not need this compatibility repair.
   if (!key.includes("*")) return false;
   return !key.endsWith("/**");
 }
@@ -2596,10 +2930,9 @@ const canonicalDenyPatterns = new Set([
   "**/*.key",
   "**/*.pfx",
 ]);
-// Patterns goat-flow generated in earlier releases and no longer ships. They are dropped on refresh instead of being
-// kept as user additions; a matching pattern the user added by hand cannot be told apart, so each removal is printed.
-// `**/secrets/**` and `**/credentials*` were retired because a plain folder or file name blocks ordinary application
-// code such as a secrets route or a credentials.ts provider.
+// Retire earlier generated patterns during refresh; identical user-added patterns cannot be distinguished, so each removal is reported.
+//
+// The retired **/secrets/** and **/credentials* patterns also blocked application code such as secrets routes and credentials.ts providers.
 const oldGeneratedPatterns = new Set([
   ".",
   "secrets/**",
@@ -2614,6 +2947,7 @@ const oldGeneratedPatterns = new Set([
   "**/credentials*",
 ]);
 
+// Quote a retained user deny pattern safely when writing the refreshed TOML permission profile.
 function escapeTomlString(value) {
   return value.replace(/\\/gu, "\\\\").replace(/"/gu, '\\"');
 }
@@ -2621,15 +2955,20 @@ function escapeTomlString(value) {
 const regions = [];
 const profileRegions = [];
 let i = 0;
+// Find only the active profile's permission regions before refreshing user settings.
 while (i < lines.length) {
+  // Record the active profile's metadata section for workspace inheritance checks.
   if (profileSectionPattern.test(lines[i])) {
     const start = i;
     i += 1;
+    // Stop this profile region at the next TOML table so unrelated user settings remain intact.
     while (i < lines.length && !anySectionPattern.test(lines[i])) i += 1;
     profileRegions.push({ start, end: i });
+  // Record the active profile's filesystem tables for deny-rule migration.
   } else if (filesystemSectionPattern.test(lines[i])) {
     const start = i;
     i += 1;
+    // Stop this filesystem region at the next table without consuming unrelated settings.
     while (i < lines.length && !anySectionPattern.test(lines[i])) i += 1;
     regions.push({ start, end: i });
   } else {
@@ -2637,6 +2976,7 @@ while (i < lines.length) {
   }
 }
 
+// Without an active permission profile or selection, this setup has no profile to refresh.
 if (
   regions.length === 0 &&
   profileRegions.length === 0 &&
@@ -2652,26 +2992,36 @@ let usesLegacyAnchor = false;
 let profileExtendsWorkspace = false;
 const additionalDenyPatterns = new Set();
 const activeDenyPatterns = new Set();
+// Check active profile metadata before deciding whether workspace inheritance needs repair.
 for (const region of profileRegions) {
+  // Inspect each metadata line without treating unrelated TOML tables as profile choices.
   for (let j = region.start; j < region.end; j += 1) {
+    // Workspace inheritance already supplies the base editing permissions for this profile.
     if (/^\s*extends\s*=\s*":workspace"\s*(?:#.*)?$/u.test(lines[j])) {
       profileExtendsWorkspace = true;
     }
   }
 }
+// Inspect only active filesystem regions for legacy and additional deny rules.
 for (const region of regions) {
+  // Read each active permission line before rebuilding the selected profile.
   for (let j = region.start; j < region.end; j += 1) {
     const line = lines[j];
+    // The retired project-root anchor needs the current workspace-root spelling.
     if (legacyProjectRootsPattern.test(line)) usesLegacyAnchor = true;
+    // The retired none access value needs the current deny spelling.
     if (legacyAccessPattern.test(line) || legacyInlineAccessPattern.test(line)) {
       usesLegacyAccess = true;
     }
+    // Collect each explicit deny entry so the refresh can retain the user's additional restrictions.
     for (const entry of line.matchAll(filesystemAccessEntryPattern)) {
       const pattern = tomlKeyFromMatch(entry);
       const mode = tomlModeFromMatch(entry);
+      // A named none or deny entry contributes to the active restriction list.
       if ((mode === "none" || mode === "deny") && pattern) {
         activeDenyPatterns.add(pattern);
       }
+      // A noncanonical, nonretired deny pattern is retained as the user's additional restriction.
       if (
         (mode === "none" || mode === "deny") &&
         pattern &&
@@ -2680,17 +3030,22 @@ for (const region of regions) {
       ) {
         additionalDenyPatterns.add(pattern);
       }
+      // An unsupported none glob requires a profile refresh before Codex can use these settings.
       if (mode === "none" && isInvalidNoneKey(pattern)) {
         hasInvalidEntry = true;
       }
     }
     const noneMatch = line.match(noneEntryPattern);
+    // A standalone unsupported none entry also triggers the compatibility refresh.
     if (noneMatch && isInvalidNoneKey(tomlKeyFromMatch(noneMatch))) {
       hasInvalidEntry = true;
     }
     const inlineMatch = line.match(inlineTablePattern);
+    // An inline permission table needs the same compatibility checks as a block table.
     if (inlineMatch) {
+      // Inspect each inline none entry before accepting the selected profile.
       for (const entry of inlineMatch[1].matchAll(inlineEntryPattern)) {
+        // An unsupported inline glob triggers the same refresh as a standalone entry.
         if (isInvalidNoneKey(tomlKeyFromMatch(entry))) hasInvalidEntry = true;
       }
     }
@@ -2709,6 +3064,7 @@ const retiredDenyPatterns = [...activeDenyPatterns].filter((pattern) =>
   oldGeneratedPatterns.has(pattern),
 );
 
+// A complete current profile needs no rewrite and keeps the user's existing settings bytes.
 if (
   !hasInvalidEntry &&
   !usesLegacyAnchor &&
@@ -2761,15 +3117,20 @@ const canonicalBlock = [
   '"**/*.key" = "deny"',
   '"**/*.pfx" = "deny"',
 ];
+// Carry the user's additional deny patterns into the refreshed active profile.
 for (const pattern of additionalDenyPatterns) {
   canonicalBlock.push(`"${escapeTomlString(pattern)}" = "deny"`);
 }
 
 const inRegion = new Array(lines.length).fill(false);
+// Mark the old filesystem regions that the refreshed profile will replace.
 for (const region of regions) {
+  // Each line in these owned regions is omitted from the retained surrounding settings.
   for (let j = region.start; j < region.end; j += 1) inRegion[j] = true;
 }
+// Mark the old profile metadata region replaced by the refreshed profile.
 for (const region of profileRegions) {
+  // Keep metadata replacement bounded to this active profile's lines.
   for (let j = region.start; j < region.end; j += 1) inRegion[j] = true;
 }
 
@@ -2779,18 +3140,24 @@ const firstRegionStart = Math.min(
 );
 const before = lines.slice(0, firstRegionStart);
 const after = [];
+// Retain the settings after the first replaced region, excluding the other replaced profile regions.
 for (let j = firstRegionStart; j < lines.length; j += 1) {
+  // Lines outside the replaced regions remain part of the user's settings.
   if (!inRegion[j]) after.push(lines[j]);
 }
 
+// Trim only blank separators immediately before the rebuilt permission profile.
 while (before.length && before[before.length - 1].trim() === "") before.pop();
 let trailingStart = 0;
+// Trim only blank separators immediately after the rebuilt permission profile.
 while (trailingStart < after.length && after[trailingStart].trim() === "")
   trailingStart += 1;
 
 const rebuilt = [...before];
+// Separate the refreshed profile from earlier retained user settings.
 if (rebuilt.length > 0) rebuilt.push("");
 rebuilt.push(...canonicalBlock);
+// Append later retained settings with one separator after the refreshed profile.
 if (trailingStart < after.length) {
   rebuilt.push("");
   rebuilt.push(...after.slice(trailingStart));
@@ -2807,45 +3174,29 @@ NODE
   complete_staged_transform "$path" "$transform_result"
 }
 
-# Repair the permission rule arrays (deny/allow/ask) of an existing
-# .claude/settings.json so they stop printing Claude Code launch warnings and
-# match the current env policy. Three stale rule classes:
-#   - MultiEdit(...) rules ("matches no known tool" - Claude Code v2.x removed
-#     MultiEdit, folded into Edit): dropped.
-#   - Write/NotebookEdit/Glob path rules ("not matched by file permission
-#     checks - only Edit(path) rules are"; Edit covers all file-editing tools,
-#     Read covers reads): rewritten to the matched equivalent, or dropped when
-#     the covering rule already exists.
-#   - The broad Read(**/.env*) and Edit(**/.env*) denies (shadowed the shipped
-#     .env.example allow and blocked sample-file edits - deny wins): expanded
-#     to the enumerated real env variants, deny only.
-# Remove/rewrite-list (not allow-list) on purpose: never touch user-added
-# rules for valid matched tools (Bash, Read, Edit, WebFetch, mcp__*). Keep
-# REMOVED_CLAUDE_TOOLS, UNMATCHED_RULE_REWRITES, and ENV_DENY_EXPANSIONS
-# in sync with test/unit/agent-config-template-parity.test.ts. Untouched rules
-# keep their exact position; writes back only when a rule was actually
-# removed, rewritten, or expanded, so already-clean files are never
-# reformatted. Echoes "migrated" or "unchanged".
+# Repair existing Claude permission lists during refresh so launch warnings stop and sample environment files remain usable.
+#
+# Retire removed tools, rename unsupported file-rule tools and expand broad environment denies while retaining valid user rules in order.
+# Report migrated or unchanged; a current settings file keeps its original bytes and formatting.
 migrate_claude_permission_deny() {
   local path="$1"
   local transform_result
   stage_existing_destination "$path"
+  # A failed config read or staged write discards the transform and preserves the user's previous destination.
   if ! transform_result="$(node - "$STAGED_PAYLOAD_PATH" <<'NODE'
 const fs = require("node:fs");
 const path = process.argv[2];
 
+// Claude removed MultiEdit in favor of Edit; keep all three migration lists aligned with agent-config-template-parity.test.ts.
 const REMOVED_CLAUDE_TOOLS = new Set(["MultiEdit"]);
-// Permission checks only match Edit(path)/Read(path) file rules; these forms
-// warn at launch and enforce nothing, so rewrite them to the covering tool.
+// File checks use Edit(path) for editing and Read(path) for reading; these unmatched forms warn at launch and enforce nothing.
 const UNMATCHED_RULE_REWRITES = new Map([
   ["Write", "Edit"],
   ["NotebookEdit", "Edit"],
   ["Glob", "Read"],
 ]);
-// Deny rules win over allow rules, so the broad env read deny silently
-// blocked .env.example despite the shipped allow entries, and the broad env
-// edit deny blocked sample-file writes. Expand both to the enumerated real
-// env variants; .env.example then matches no deny.
+// Broad environment denies blocked reading and editing .env.example even with an allow rule, because deny rules take precedence.
+// Expand only denies into explicit sensitive-file variants so the user's sample file no longer matches a deny.
 const ENV_DENY_EXPANSIONS = new Map([
   [
     "Read(**/.env*)",
@@ -2874,12 +3225,8 @@ const ENV_DENY_EXPANSIONS = new Map([
     ],
   ],
 ]);
-// Deny rules goat-flow shipped in earlier releases and no longer ships. The shell
-// denies duplicated the Bash deny hook with a substring match that also blocked
-// read-only commands quoting the word; the folder and file-name rules blocked
-// ordinary application code such as a secrets route or a credentials.ts provider.
-// A rule the user added by hand with the same text cannot be told apart, so each
-// removal is printed for the user to put back deliberately.
+// Retire earlier generated denies that blocked read-only quoted commands or application names such as secrets routes and credentials.ts.
+// Identical user-added rules cannot be distinguished, so each removal is reported for the user to inspect.
 const RETIRED_DENY_RULES = new Set([
   "Bash(*sudo *)",
   "Bash(*mkfs*)",
@@ -2890,10 +3237,8 @@ const RETIRED_DENY_RULES = new Set([
   "Read(**/credentials*)",
   "Edit(**/credentials*)",
 ]);
-// A bare **/ pattern resolves under the working directory, so the old in-project
-// rules never protected the real credential stores in the home directory.
-// Each one is rewritten to its ~/ form; the whole .docker and .kube directories
-// replace the single config files so the pair matches the Codex template.
+// Home credential stores need ~/ rules; a bare **/ pattern only protects paths inside the current project.
+// Migrate to home paths and protect the whole .docker and .kube directories so installed Codex permissions match the shipped template.
 const HOME_ANCHOR_REWRITES = new Map([
   ["Read(**/.ssh/**)", "Read(~/.ssh/**)"],
   ["Read(**/.aws/**)", "Read(~/.aws/**)"],
@@ -2914,6 +3259,7 @@ const HOME_ANCHOR_REWRITES = new Map([
 let raw;
 try {
   raw = fs.readFileSync(path, "utf8");
+// A settings file removed or made unreadable during setup is left unchanged instead of replaced.
 } catch {
   console.log("unchanged");
   process.exit(0);
@@ -2923,12 +3269,13 @@ let settings;
 try {
   settings = JSON.parse(raw);
 } catch {
-  // Not JSON we can safely rewrite; leave it for the user.
+  // A hand-edited syntax error leaves no safe JSON to merge; preserve the user's settings for repair.
   console.log("unchanged");
   process.exit(0);
 }
 
 const perms = settings && settings.permissions;
+// Without a permissions object, there are no existing Claude rule lists to migrate.
 if (!perms || typeof perms !== "object") {
   console.log("unchanged");
   process.exit(0);
@@ -2938,28 +3285,31 @@ if (!perms || typeof perms !== "object") {
 const parseRule = (entry) =>
   typeof entry === "string" ? entry.match(/^([A-Za-z]+)\((.*)\)$/u) : null;
 
-// Return replacement entries for a stale rule, an empty list to drop it, or null to keep it untouched.
-// Retirement, env expansion, and home anchoring apply to the deny list only: an allow or ask rule
-// with the same text is the user's own choice and stays exactly as written.
+// Replace a stale permission rule; an empty list retires it, while null keeps the user's existing rule.
+// Only deny rules receive retirement, environment expansion and home anchoring; matching allow or ask choices remain as saved.
 const replacementsFor = (entry, isDenyList) => {
+  // A retired deny rule has no replacement; the user's allow and ask rules do not enter this retirement.
   if (isDenyList && RETIRED_DENY_RULES.has(entry)) return [];
+  // A retired home-path deny rule receives the current anchored form.
   if (isDenyList && HOME_ANCHOR_REWRITES.has(entry)) {
     return [HOME_ANCHOR_REWRITES.get(entry)];
   }
+  // A broad retired environment deny expands into the current explicit sensitive-file rules.
   if (isDenyList && ENV_DENY_EXPANSIONS.has(entry)) {
     return ENV_DENY_EXPANSIONS.get(entry);
   }
   const rule = parseRule(entry);
+  // A renamed permission tool gets the current rule spelling while retaining the user's path pattern.
   if (rule && UNMATCHED_RULE_REWRITES.has(rule[1])) {
     return [`${UNMATCHED_RULE_REWRITES.get(rule[1])}(${rule[2]})`];
   }
   return null;
 };
 
-// Drop removed-tool and retired rules, rewrite/expand stale forms, and dedupe against
-// rules already present. Untouched rules keep their exact position. Returns
-// the repaired array, or null when nothing changed.
+// Repair stale permission rules and avoid duplicate replacements while retaining untouched user rules in order.
+// Return the repaired array, or null when the saved list needs no change.
 const repairRules = (rules, isDenyList) => {
+  // A missing or malformed rule list returns null so setup leaves that setting untouched.
   if (!Array.isArray(rules)) return null;
   const survivors = rules.filter((entry) => {
     const rule = parseRule(entry);
@@ -2969,8 +3319,10 @@ const repairRules = (rules, isDenyList) => {
     survivors.filter((entry) => replacementsFor(entry, isDenyList) === null),
   );
   const kept = [];
+  // Repair surviving rules in order so unrelated user permissions keep their positions.
   for (const entry of survivors) {
     const replacements = replacementsFor(entry, isDenyList);
+    // A rule needing no replacement is retained exactly as the user saved it.
     if (replacements === null) {
       kept.push(entry);
       continue;
@@ -2979,7 +3331,9 @@ const repairRules = (rules, isDenyList) => {
     if (replacements.length === 0) {
       console.error(`  - retired Claude deny rule removed: ${entry}`);
     }
+    // Append each replacement once without duplicating a restriction already present.
     for (const replacement of replacements) {
+      // An existing equivalent rule already expresses this permission choice.
       if (present.has(replacement)) continue;
       present.add(replacement);
       kept.push(replacement);
@@ -2992,20 +3346,21 @@ const repairRules = (rules, isDenyList) => {
 };
 
 let migrated = false;
-// Retirement, env expansion, and home anchoring apply to deny only: rewriting an
-// allow would revoke the user's .env.example read intent instead of preserving it.
+// Only denies receive environment expansion and home anchoring; applying these to allows would revoke the user's .env.example read choice.
 for (const [arrayName, isDenyList] of [
   ["deny", true],
   ["allow", false],
   ["ask", false],
 ]) {
   const repaired = repairRules(perms[arrayName], isDenyList);
+  // Replace a permission array only when its repaired rules differ from the user's saved array.
   if (repaired) {
     perms[arrayName] = repaired;
     migrated = true;
   }
 }
 
+// If every permission list is current, preserve the user's settings file unchanged.
 if (!migrated) {
   console.log("unchanged");
   process.exit(0);
@@ -3013,6 +3368,7 @@ if (!migrated) {
 const eol = raw.includes("\r\n") ? "\r\n" : "\n";
 const hadFinalNewline = /\r?\n$/u.test(raw);
 let out = JSON.stringify(settings, null, 2);
+// Restore Windows newlines when that was the user's existing settings style.
 if (eol === "\r\n") out = out.replace(/\n/gu, "\r\n");
 fs.writeFileSync(path, out + (hadFinalNewline ? eol : ""));
 console.log("migrated");
@@ -3025,11 +3381,13 @@ NODE
   complete_staged_transform "$path" "$transform_result"
 }
 
+# Check the active Codex permission profile before setup reports completion; return problem text for the user to repair.
 validate_codex_settings_after_install() {
   local path="$1"
   node - "$path" <<'NODE'
 const fs = require("node:fs");
 const path = process.argv[2];
+// An absent Codex settings file has no installed permission profile to validate.
 if (!fs.existsSync(path)) {
   console.log("ok");
   process.exit(0);
@@ -3037,10 +3395,12 @@ if (!fs.existsSync(path)) {
 const content = fs.readFileSync(path, "utf8");
 const problems = new Set();
 
-// Single source of truth: must match isInvalidNoneKey in
-// migrate_codex_filesystem_permissions. A key is invalid only if it contains a
-// glob metacharacter AND is not a trailing-/** subtree.
+// Single source of truth: must match isInvalidNoneKey in migrate_codex_filesystem_permissions.
+//
+// Use during setup validation to report unsupported none globs before the user launches Codex.
+// Exact paths and trailing /** subtrees pass; other globs require repair.
 function isInvalidNoneKey(key) {
+  // An exact path contains no unsupported glob and passes this compatibility check.
   if (!key.includes("*")) return false;
   return !key.endsWith("/**");
 }
@@ -3053,31 +3413,39 @@ const legacyAccessPattern = /^\s*"[^"]+"\s*=\s*"none"\s*(?:#.*)?$/u;
 const legacyInlineAccessPattern = /"[^"]+"\s*=\s*"none"/u;
 const legacyProjectRootsPattern = /":project_roots"/u;
 
+// Decode a quoted permission profile or key so setup and validation use the user's actual saved spelling.
 function parseTomlBasicString(value) {
   try {
     return JSON.parse(`"${value}"`);
+  // A quoted TOML value with escapes JSON cannot decode keeps the simple quote/backslash fallback for profile matching.
   } catch {
     return value.replace(/\\"/gu, '"').replace(/\\\\/gu, "\\");
   }
 }
 
+// Select the user's nonempty default permission profile; absent or empty selections use the managed goat-flow profile.
 function readActivePermissionProfile(configLines) {
+  // Find the user's explicit active permission profile before falling back to the managed profile.
   for (const line of configLines) {
     const basicMatch = line.match(
       /^\s*default_permissions\s*=\s*"((?:\\.|[^"\\])*)"\s*(?:#.*)?$/u,
     );
+    // A quoted default profile selects which permission table completion must validate.
     if (basicMatch) {
       const profile = parseTomlBasicString(basicMatch[1]).trim();
+      // An empty decoded selection leaves validation to the default profile fallback.
       if (profile) return profile;
     }
     const literalMatch = line.match(
       /^\s*default_permissions\s*=\s*'([^']+)'\s*(?:#.*)?$/u,
     );
+    // A nonempty literal selection identifies the user's active permission profile.
     if (literalMatch && literalMatch[1].trim()) return literalMatch[1].trim();
   }
   return "goat-flow";
 }
 
+// Match the user's permission profile name literally so punctuation cannot select another TOML table.
 function escapeRegExp(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }
@@ -3096,21 +3464,25 @@ const filesystemSectionPattern = new RegExp(
   "u",
 );
 
-// Build filesystem section regions so we only flag entries that actually live
-// under the active [permissions.<default_permissions>.filesystem*] profile. A
-// bare "*.pem" = "none" in an unrelated table is not a Codex filesystem error.
+// Validate only the active [permissions.<default_permissions>.filesystem*] profile, keeping unrelated user tables outside these checks.
+// A bare "*.pem" = "none" in another table is not a Codex filesystem error.
 const regions = [];
 const profileRegions = [];
 let i = 0;
+// Find only the active permission profile before reporting setup problems.
 while (i < lines.length) {
+  // Record the active profile's metadata region for workspace inheritance validation.
   if (profileSectionPattern.test(lines[i])) {
     const start = i;
     i += 1;
+    // Bound profile metadata at the next table so unrelated settings cannot produce false errors.
     while (i < lines.length && !anySectionPattern.test(lines[i])) i += 1;
     profileRegions.push({ start, end: i });
+  // Record the active filesystem regions whose restrictions Codex will apply.
   } else if (filesystemSectionPattern.test(lines[i])) {
     const start = i;
     i += 1;
+    // Bound each filesystem region at the next TOML table.
     while (i < lines.length && !anySectionPattern.test(lines[i])) i += 1;
     regions.push({ start, end: i });
   } else {
@@ -3119,13 +3491,17 @@ while (i < lines.length) {
 }
 
 let profileExtendsWorkspace = false;
+// Check the active profile's metadata for its base workspace permissions.
 for (const region of profileRegions) {
+  // Inspect each metadata line without validating unrelated permission profiles.
   for (let j = region.start; j < region.end; j += 1) {
+    // Workspace inheritance satisfies this profile's required base editing contract.
     if (/^\s*extends\s*=\s*":workspace"\s*(?:#.*)?$/u.test(lines[j])) {
       profileExtendsWorkspace = true;
     }
   }
 }
+// An active managed profile without workspace inheritance cannot be reported as usable.
 if (
   activeProfile === "goat-flow" &&
   hasDefaultPermissions &&
@@ -3134,22 +3510,30 @@ if (
   problems.add('active goat-flow profile does not extend ":workspace"');
 }
 
+// Validate each active filesystem region before reporting setup completion.
 for (const region of regions) {
+  // Inspect each active permission entry for incompatible legacy forms.
   for (let j = region.start; j < region.end; j += 1) {
     const line = lines[j];
     const match = line.match(sectionEntryPattern);
+    // An unsupported none glob is reported with the entry the user needs to repair.
     if (match && isInvalidNoneKey(match[1])) {
       problems.add(`section entry "${match[1]}" with access="none"`);
     }
+    // A remaining legacy none value is reported rather than silently accepted.
     if (legacyAccessPattern.test(line) || legacyInlineAccessPattern.test(line)) {
       problems.add('legacy access value "none" still present');
     }
+    // A remaining retired project-root anchor is reported for settings repair.
     if (legacyProjectRootsPattern.test(line)) {
       problems.add("legacy :project_roots anchor still present");
     }
     const inlineMatch = line.match(inlineTablePattern);
+    // Inline permission tables receive the same checks as block entries.
     if (inlineMatch) {
+      // Inspect every inline none entry in the active permission table.
       for (const entry of inlineMatch[1].matchAll(inlineEntryPattern)) {
+        // An unsupported inline glob is included in the user's repair report.
         if (isInvalidNoneKey(entry[1])) {
           problems.add(`inline entry "${entry[1]}" with access="none"`);
         }
@@ -3158,6 +3542,7 @@ for (const region of regions) {
   }
 }
 
+// Collected permission problems prevent setup from claiming a usable Codex configuration.
 if (problems.size > 0) {
   console.log("invalid:" + [...problems].join("; "));
   process.exit(0);
@@ -3195,6 +3580,7 @@ echo ""
 # 2. Create .goat-flow/ directories
 # ==========================================================================
 echo "Directories:"
+# Create the learning, plan, log and hook folders that the selected project's workflows use.
 for dir in .goat-flow/learning-loop/footguns .goat-flow/learning-loop/lessons .goat-flow/learning-loop/patterns .goat-flow/learning-loop/decisions .goat-flow/plans .goat-flow/scratchpad .goat-flow/state/locks .goat-flow/logs/sessions .goat-flow/logs/quality .goat-flow/logs/events .goat-flow/logs/critiques .goat-flow/logs/review .goat-flow/logs/security .goat-flow/skill-docs .goat-flow/skill-docs/playbooks .goat-flow/skill-docs/skill-quality-testing .goat-flow/hooks .goat-flow/hooks/deny-dangerous; do
   assert_safe_installer_directory "$dir"
   # Missing safe directories are created for the user's local workflow surfaces.
@@ -3245,10 +3631,10 @@ fi
 echo ""
 
 # ==========================================================================
-# 4. Sweep transitional skill-doc files from older installed layouts.
-#    Current installs keep doctrine at .goat-flow/skill-docs/, standalone
-#    playbooks at .goat-flow/skill-docs/playbooks/, and skill-authoring
-#    methodology at .goat-flow/skill-docs/skill-quality-testing/.
+# 4. Retire transitional skill references after installing their current replacements.
+#
+#    Doctrine lives at .goat-flow/skill-docs/; playbooks live in its playbooks/ folder.
+#    Skill-authoring methodology lives at .goat-flow/skill-docs/skill-quality-testing/.
 # ==========================================================================
 legacy_reference_files=(
   ".goat-flow/skill-docs/browser-use.md"
@@ -3256,9 +3642,12 @@ legacy_reference_files=(
   ".goat-flow/skill-docs/skill-quality-testing.md"
 )
 removed_any=false
+# Check the listed legacy references after their canonical replacements are available.
 for legacy_file in "${legacy_reference_files[@]}"; do
+  # Remove a legacy file only when that exact retired path exists.
   if [[ -f "$legacy_file" ]]; then
     rm -f "$legacy_file"
+    # Retiring the old QA reference also retires its obsolete QA playbook folder.
     if [[ "$legacy_file" == ".goat-flow/skill-docs/skill-quality-testing.md" ]]; then
       echo "  ✓ migrated $legacy_file → .goat-flow/skill-docs/skill-quality-testing/README.md"
     else
@@ -3267,6 +3656,7 @@ for legacy_file in "${legacy_reference_files[@]}"; do
     removed_any=true
   fi
 done
+# Report the removed references so the user can see what this refresh retired.
 if [[ "$removed_any" == true ]]; then
   echo ""
 fi
@@ -3316,14 +3706,17 @@ echo ""
 # 6. Install skills (always overwrite - verbatim from templates)
 # ==========================================================================
 echo "Skills → $SKILLS_DIR/:"
+# Install each canonical skill for the selected agent using the manifest's file list.
 for skill in "${SKILL_NAMES[@]}"; do
   skill_dir="$GOAT_FLOW_ROOT/workflow/skills/$skill"
+  # A missing shipped skill is reported and skipped instead of creating an empty installed workflow.
   if [[ ! -d "$skill_dir" ]]; then
     echo "  ✗ $skill (template dir not found: $skill_dir)"
     continue
   fi
   readarray -t skill_files < <(manifest_eval skill-files "$skill")
   prune_unlisted_skill_references "$skill" "$SKILLS_DIR/$skill" "${skill_files[@]}"
+  # Copy only the declared skill entry point and references into the user's agent directory.
   while IFS= read -r relative_file; do
     [[ -n "$relative_file" ]] || continue
     copy_file "$skill_dir/$relative_file" "$SKILLS_DIR/$skill/$relative_file"
@@ -3336,12 +3729,15 @@ echo ""
 # ==========================================================================
 if $CLEAN_DEPRECATED; then
   readarray -t STALE_NAMES < <(manifest_eval stale-skills)
+  # Retired skill names need cleanup only when the manifest declares any.
   if [[ ${#STALE_NAMES[@]} -gt 0 ]]; then
     DEPRECATED_REMOVED=0
     echo "Deprecated skill cleanup:"
+    # Check each retired skill destination without touching unrelated agent workflows.
     for stale in "${STALE_NAMES[@]}"; do
       [[ -n "$stale" ]] || continue
       stale_path="$SKILLS_DIR/$stale"
+      # Remove an existing retired skill so the agent cannot discover its obsolete instructions.
       if [[ -d "$stale_path" ]]; then
         rm -rf "$stale_path"
         DEPRECATED_REMOVED=$((DEPRECATED_REMOVED + 1))
@@ -3349,6 +3745,7 @@ if $CLEAN_DEPRECATED; then
         echo "  ✗ $stale_path (removed)"
       fi
     done
+    # Tell the user when there were no retired skill folders to remove.
     if [[ $DEPRECATED_REMOVED -eq 0 ]]; then
       echo "  · no deprecated skills found"
     fi
@@ -3367,7 +3764,9 @@ assert_file_ownership "$CONFIG_PATH" "user-owned"
 if [[ -f "$CONFIG_PATH" ]]; then
   CONFIG_CHANGED=false
   CONFIG_NOTES=()
+  # Change the saved framework version only when the user requested a version refresh.
   if $UPDATE_CONFIG_VERSION; then
+    # Replace the existing version entry; a config without one receives a new entry.
     if grep -q "^version:" "$CONFIG_PATH"; then
       update_config_version_line "$CONFIG_PATH"
       CONFIG_CHANGED=true
@@ -3410,6 +3809,7 @@ if [[ -f "$CONFIG_PATH" ]]; then
     CONFIG_CHANGED=true
     CONFIG_NOTES+=("removed retired plan guard config")
   fi
+  # Show the user which config migrations changed their saved setup.
   if $CONFIG_CHANGED; then
     COPIED=$((COPIED + 1))
     note_text="$(IFS=', '; echo "${CONFIG_NOTES[*]}")"
@@ -3425,6 +3825,7 @@ else
   commit_staged_payload "$CONFIG_PATH" "create-only"
   COPIED=$((COPIED + 1))
   ensure_config_gruff_binary_entry "$CONFIG_PATH"
+  # Report the newly saved Gruff path only when this transform added an override.
   if [[ "$LAST_TRANSFORM_RESULT" == "changed" ]]; then
     echo "  ✓ $CONFIG_PATH (scaffolded; strands_agents gruff-py path detected)"
   else
@@ -3436,21 +3837,26 @@ echo ""
 # Establish requested Git protection in every existing provider before shared policy bytes change.
 # The selected provider may be new; seed its ordinary config before registration, preserving existing settings.
 if $HOOKS_ENABLED; then
+  # A provider with a separate hook file establishes Git protection in that dedicated destination.
   if [[ -n "${HOOK_CONFIG_DST:-}" && -n "${HOOK_CONFIG_SRC:-}" ]]; then
     copy_if_missing "$GOAT_FLOW_ROOT/$HOOK_CONFIG_SRC" "$HOOK_CONFIG_DST"
+  # A provider with embedded hooks establishes Git protection in its settings destination.
   elif [[ -n "${SETTINGS_DST:-}" && -n "${SETTINGS_SRC:-}" ]]; then
     copy_if_missing "$GOAT_FLOW_ROOT/$SETTINGS_SRC" "$SETTINGS_DST"
   fi
   policy_providers="$(node - "$GOAT_FLOW_ROOT/workflow/hooks/agent-config/managed-hook-desired-state.json" <<'NODE'
 const contract = require(process.argv[2]);
+// An incomplete generated Git-protection contract stops setup before reconciling provider files.
 if (!contract.agents || !Object.values(contract.agents).every((entry) => entry.hooks?.["deny-git-mutations"])) {
   throw new Error("Split Git policy registration contract is incomplete");
 }
+// Emit each provider's Git-guard config destination for the existing-install reconciliation pass.
 for (const [agent, definition] of Object.entries(contract.agents)) {
   console.log(`${agent}\t${definition.hookConfigFile}`);
 }
 NODE
   )" || exit 1
+  # Reconcile Git protection only in provider files the user already has installed.
   while IFS=$'\t' read -r policy_agent policy_config_path; do
     [[ -f "$policy_config_path" ]] || continue
     migrate_agent_hook_config "$policy_config_path" "$policy_agent" "deny-git-mutations"
@@ -3465,6 +3871,8 @@ if $HOOKS_ENABLED; then
   copy_file "$GOAT_FLOW_ROOT/workflow/hooks/run-with-bash.mjs" "$HOOKS_DIR/run-with-bash.mjs" "system-owned" "755"
   copy_file "$GOAT_FLOW_ROOT/workflow/hooks/hook-provider-adapters.mjs" "$HOOKS_DIR/hook-provider-adapters.mjs" "system-owned" "755"
   copy_file "$GOAT_FLOW_ROOT/workflow/hooks/hook-launch-runtime.mjs" "$HOOKS_DIR/hook-launch-runtime.mjs" "system-owned" "755"
+  copy_file "$GOAT_FLOW_ROOT/workflow/hooks/hook-policy-state.cjs" "$HOOKS_DIR/hook-policy-state.cjs" "system-owned" "644"
+  copy_file "$GOAT_FLOW_ROOT/workflow/hooks/vendor/js-yaml.cjs" "$HOOKS_DIR/vendor/js-yaml.cjs" "system-owned" "644"
   copy_file "$GOAT_FLOW_ROOT/workflow/hooks/deny-git-mutations.sh" "$HOOKS_DIR/deny-git-mutations.sh" "system-owned" "755"
   copy_file "$GOAT_FLOW_ROOT/workflow/hooks/deny-dangerous.sh" "$HOOKS_DIR/deny-dangerous.sh" "system-owned" "755"
   copy_file "$GOAT_FLOW_ROOT/workflow/hooks/gruff-code-quality.sh" "$HOOKS_DIR/gruff-code-quality.sh" "system-owned" "755"
@@ -3472,6 +3880,7 @@ if $HOOKS_ENABLED; then
   prune_unlisted_hook_files "$HOOKS_DIR"
   prune_legacy_agent_hook_copies
   echo "Hook policy → .goat-flow/hooks/deny-dangerous/:"
+  # Install the shared policy reader and launch support used by the selected agent's guards.
   for hook_policy_script in \
     guard-runtime.sh \
     patterns-shell.sh \
@@ -3493,6 +3902,7 @@ if $HOOKS_ENABLED; then
     COPIED=$((COPIED + 1))
     echo "  ✓ .goat-flow/.gitignore (hooks/** un-ignored)"
   fi
+  # A dedicated hook file is seeded or reconciled separately from the provider's settings.
   if [[ -n "${HOOK_CONFIG_DST:-}" && -n "${HOOK_CONFIG_SRC:-}" ]]; then
     echo "Hooks config:"
     copy_if_missing "$GOAT_FLOW_ROOT/$HOOK_CONFIG_SRC" "$HOOK_CONFIG_DST"
@@ -3514,10 +3924,12 @@ echo ""
 # ==========================================================================
 echo "Settings:"
 SETTINGS_SKIPPED=false
+# Seed or migrate settings only for providers whose manifest declares a settings file.
 if [[ -n "${SETTINGS_SRC:-}" && -n "${SETTINGS_DST:-}" ]]; then
   # Existing settings receive narrow migrations; a managed force refresh cannot replace the user's permissions or comments.
   if [[ -f "$SETTINGS_DST" ]]; then
     SETTINGS_MIGRATIONS=()
+    # Refresh Codex's hook flag and filesystem permissions in the staged settings file.
     if [[ "$AGENT" == "codex" ]]; then
       migrate_codex_hooks_feature_flag "$SETTINGS_DST"
       # A migrated result means Codex will recognize the current hooks feature name.
@@ -3529,6 +3941,7 @@ if [[ -n "${SETTINGS_SRC:-}" && -n "${SETTINGS_DST:-}" ]]; then
       if [[ "$LAST_TRANSFORM_RESULT" == "migrated" ]]; then
         SETTINGS_MIGRATIONS+=("Codex permission profile")
       fi
+    # Refresh Claude's permission rules while preserving the user's other settings.
     elif [[ "$AGENT" == "claude" ]]; then
       migrate_claude_permission_deny "$SETTINGS_DST"
       # A migrated result removes launch warnings (removed tools, unmatched
@@ -3537,6 +3950,7 @@ if [[ -n "${SETTINGS_SRC:-}" && -n "${SETTINGS_DST:-}" ]]; then
         SETTINGS_MIGRATIONS+=("stale or superseded permission rules")
       fi
     fi
+    # Summarize completed settings migrations so the user can inspect the refresh.
     if [[ ${#SETTINGS_MIGRATIONS[@]} -gt 0 ]]; then
       COPIED=$((COPIED + 1))
       SETTINGS_NOTE="$(IFS=', '; echo "${SETTINGS_MIGRATIONS[*]}")"
@@ -3555,16 +3969,20 @@ fi
 # Personal Claude overrides carry the same shipped rule shapes; repair them too.
 if [[ "$AGENT" == "claude" && -n "${SETTINGS_DST:-}" ]]; then
   SETTINGS_LOCAL_DST="${SETTINGS_DST%.json}.local.json"
+  # Migrate an existing local Claude override as well as the shared settings file.
   if [[ -f "$SETTINGS_LOCAL_DST" ]]; then
     migrate_claude_permission_deny "$SETTINGS_LOCAL_DST"
+    # Report local permission changes only when the override actually changed.
     if [[ "$LAST_TRANSFORM_RESULT" == "migrated" ]]; then
       COPIED=$((COPIED + 1))
       echo "  ✓ $SETTINGS_LOCAL_DST (migrated: stale or superseded permission rules)"
     fi
   fi
 fi
+# Validate installed Codex settings before reporting a usable agent setup.
 if [[ "$AGENT" == "codex" && -n "${SETTINGS_DST:-}" && -f "$SETTINGS_DST" ]]; then
   CODEX_VALIDATION="$(validate_codex_settings_after_install "$SETTINGS_DST")"
+  # Invalid Codex permissions stop completion and show the settings the user needs to repair.
   if [[ "$CODEX_VALIDATION" != "ok" ]]; then
     echo ""
     echo "ERROR: $SETTINGS_DST still has invalid Codex permission entries:" >&2
@@ -3575,6 +3993,7 @@ if [[ "$AGENT" == "codex" && -n "${SETTINGS_DST:-}" && -f "$SETTINGS_DST" ]]; th
     exit 1
   fi
 fi
+# Providers without a separate hook file receive enabled registrations in their existing settings.
 if $HOOKS_ENABLED && [[ -z "${HOOK_CONFIG_DST:-}" && -n "${SETTINGS_DST:-}" && -n "${SETTINGS_SRC:-}" && -f "$SETTINGS_DST" ]]; then
   migrate_agent_hook_config "$SETTINGS_DST"
   # A changed embedded registration makes the central guardrail active for this agent.
@@ -3589,21 +4008,23 @@ echo ""
 # ==========================================================================
 # 10. Write .active marker if exactly one version-named subdir exists
 # ==========================================================================
-# Convention: .goat-flow/plans/.active is a one-line file naming the active
-# plan subdir (e.g. "1.2.2"). Skills (goat, goat-plan) read it to scope their
-# scan. See ADR-017. We only write it automatically when there is no ambiguity.
+# The goat and goat-plan skills read .goat-flow/plans/.active to select the user's current plan (ADR-017).
+# Write this one-line directory marker automatically only when exactly one plan can be selected.
 echo "Active plan marker:"
 ACTIVE_FILE=".goat-flow/plans/.active"
+# Keep the user's current plan pin instead of selecting another plan during refresh.
 if [[ -f "$ACTIVE_FILE" ]]; then
   SKIPPED=$((SKIPPED + 1))
   echo "  · $ACTIVE_FILE (exists, skipped)"
 else
   shopt -s nullglob
   version_subdirs=()
+  # Look for versioned plan folders when setup needs to create an initial plan pin.
   for d in .goat-flow/plans/[0-9]*.[0-9]*.[0-9]*/; do
     [[ -d "$d" ]] && version_subdirs+=("$(basename "$d")")
   done
   shopt -u nullglob
+  # One version folder gives setup an unambiguous initial plan destination.
   if [[ ${#version_subdirs[@]} -eq 1 ]]; then
     prepare_staged_payload "$ACTIVE_FILE"
     printf '%s\n' "${version_subdirs[0]}" > "$STAGED_PAYLOAD_PATH"
@@ -3611,6 +4032,7 @@ else
     commit_staged_payload "$ACTIVE_FILE" "create-only"
     COPIED=$((COPIED + 1))
     echo "  ✓ $ACTIVE_FILE → ${version_subdirs[0]}"
+  # Without a version folder, leave plan selection for the later project setup step.
   elif [[ ${#version_subdirs[@]} -eq 0 ]]; then
     echo "  · no version subdirs found, skipped (skills will fall back to asking)"
   else
@@ -3634,10 +4056,12 @@ if $HOOKS_ENABLED && $SETTINGS_SKIPPED && [[ -f "$HOOKS_DIR/deny-dangerous.sh" ]
   echo "  The central guardrail hooks in $HOOKS_DIR were installed but may not be"
   echo "  registered in $SETTINGS_DST. Verify your settings file includes"
   echo "  root-resolving PreToolUse hook entries that invoke .goat-flow/hooks/run-with-bash.mjs."
+  # Show Claude users where to merge the preserved project instructions after refresh.
   if [[ "$AGENT" == "claude" ]]; then
     echo ""
     echo "  For Claude, reconcile $SETTINGS_DST, then run:"
     echo "    npx @blundergoat/goat-flow@$VERSION hooks sync"
+  # Show Codex users where to merge the preserved project instructions after refresh.
   elif [[ "$AGENT" == "codex" ]]; then
     echo ""
     echo "  For Codex, sync hooks or mirror workflow/hooks/agent-config/codex-hooks.json."
@@ -3647,27 +4071,27 @@ if $HOOKS_ENABLED && $SETTINGS_SKIPPED && [[ -f "$HOOKS_DIR/deny-dangerous.sh" ]
   echo ""
 fi
 
-# Hint about previously-hidden committed goat-flow surfaces.
-# Older .goat-flow/.gitignore templates lacked one or more current exceptions, so
-# upgraders may have files on disk that git still treats as untracked-but-ignored.
-# Detect by asking git itself, only inside a git repo, and only when at least
-# one of the directories holds files. No automatic `git add` - that is the
-# user's decision.
+# Earlier ignore templates hid some setup files, so check Git's ignored-path status before telling the user where files may be hidden.
+# Report existing ignored folders inside a Git repository; staging those files remains the user's choice.
 if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   hidden_paths=()
+  # Inspect setup folders that a broad ignore rule might hide from the user's file searches.
   for hint_dir in \
     ".goat-flow/learning-loop" \
     ".goat-flow/skill-docs" \
     ".goat-flow/hooks" \
     ".goat-flow/plans"
   do
+    # Record an existing folder only when Git confirms that it is ignored.
     if [[ -d "$hint_dir" ]] && \
        git -C . check-ignore -q "$hint_dir/." 2>/dev/null; then
       hidden_paths+=("$hint_dir/")
     fi
   done
+  # Explain hidden setup folders when at least one was found.
   if [[ ${#hidden_paths[@]} -gt 0 ]]; then
     echo "⚠ Some installed directories are still gitignored:"
+    # List each hidden path so the user knows where to inspect their installed workflow.
     for path in "${hidden_paths[@]}"; do
       echo "    $path"
     done

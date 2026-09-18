@@ -48,6 +48,8 @@
     ".goat-flow/hooks/gruff-code-quality.sh",
     ".goat-flow/hooks/hook-provider-adapters.mjs",
     ".goat-flow/hooks/hook-launch-runtime.mjs",
+    ".goat-flow/hooks/hook-policy-state.cjs",
+    ".goat-flow/hooks/vendor/js-yaml.cjs",
     ".goat-flow/hooks/post-turn-safety.sh",
     ".goat-flow/hooks/run-with-bash.mjs",
     ".goat-flow/hooks/deny-dangerous/patterns-shell.sh",
@@ -240,6 +242,14 @@
     ".goat-flow/hooks/hook-launch-runtime.mjs": {
       "ownership": "system-owned",
       "source": "workflow/hooks/hook-launch-runtime.mjs"
+    },
+    ".goat-flow/hooks/hook-policy-state.cjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/hook-policy-state.cjs"
+    },
+    ".goat-flow/hooks/vendor/js-yaml.cjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/vendor/js-yaml.cjs"
     },
     ".goat-flow/hooks/post-turn-safety.sh": {
       "ownership": "system-owned",
