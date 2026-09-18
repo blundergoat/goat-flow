@@ -1,6 +1,7 @@
 /**
  * Cross-agent installer smoke coverage for every manifest-backed profile.
  * Use when installer, hook registration, skill paths, or cleanup behavior changes.
+ *
  * The fixtures install into disposable consumer targets without launching an AI agent.
  * Static Windows and PowerShell checks prove emitted command shape, not real-OS execution.
  */
@@ -136,11 +137,11 @@ const MANAGED_HOOK_DESIRED_STATE_FIXTURES: ManagedHookDesiredStateFixture[] = [
   {
     state: "disabled",
     currentManagedFiles: "current",
-    currentRegistrationCount: 0,
+    currentRegistrationCount: 1,
     isDesiredEnabled: false,
     authority: "normal",
     expectedManagedFiles: "current",
-    expectedRegistrationCount: 0,
+    expectedRegistrationCount: 1,
     expectedResult: "ready",
     expectedWriteTargets: [],
   },
@@ -151,9 +152,13 @@ const MANAGED_HOOK_DESIRED_STATE_FIXTURES: ManagedHookDesiredStateFixture[] = [
     isDesiredEnabled: false,
     authority: "normal",
     expectedManagedFiles: "current",
-    expectedRegistrationCount: 0,
+    expectedRegistrationCount: 1,
     expectedResult: "repair",
-    expectedWriteTargets: ["primary-managed-file", "install-state"],
+    expectedWriteTargets: [
+      "primary-managed-file",
+      "agent-hook-config",
+      "install-state",
+    ],
   },
   {
     state: "locally-edited",
@@ -184,9 +189,13 @@ const MANAGED_HOOK_DESIRED_STATE_FIXTURES: ManagedHookDesiredStateFixture[] = [
     isDesiredEnabled: false,
     authority: "force-managed",
     expectedManagedFiles: "current",
-    expectedRegistrationCount: 0,
+    expectedRegistrationCount: 1,
     expectedResult: "repair",
-    expectedWriteTargets: ["primary-managed-file", "install-state"],
+    expectedWriteTargets: [
+      "primary-managed-file",
+      "agent-hook-config",
+      "install-state",
+    ],
   },
 ];
 
@@ -228,6 +237,7 @@ function countManagedHookRegistrations(
   configValue: unknown,
   primaryScript: string,
 ): number {
+  // Grouped provider definitions are searched recursively so fixture counts include nested managed registrations.
   if (Array.isArray(configValue)) {
     return configValue.reduce(
       (count, nestedValue) =>
@@ -235,6 +245,7 @@ function countManagedHookRegistrations(
       0,
     );
   }
+  // Nulls and primitive settings contain no runnable managed command to count.
   if (configValue === null || typeof configValue !== "object") return 0;
   const configEntry = configValue as Record<string, unknown>;
   // Structured exec-form rows carry the script path as an argv element, not command text.
@@ -268,6 +279,7 @@ function countManagedHookRegistrations(
  * Use after install or deliberate damage to show the path a user needs to repair.
  *
  * @param targetProjectPath - selected consumer; empty would make target evidence meaningless
+ *
  * @param agentId - manifest profile installed in that consumer; empty is rejected by CLI parsing
  * @returns parsed JSON report; empty stdout means the public command failed the fixture contract
  */
@@ -473,6 +485,7 @@ function verifyFreshAgentInstall(agentProfile: AgentProfile): string {
 
 /**
  * Prove one profile repairs managed damage while retaining visible user content.
+ *
  * Use per profile so cleanup failures never hide behind a shared matrix loop.
  * Writes disposable fixture files and launches installer subprocesses only inside that target.
  *
@@ -658,6 +671,7 @@ function verifyStandaloneInstallerHookSemantics(
     readFileSync(join(targetProjectPath, agentProfile.hookConfigFile), "utf-8"),
   ) as unknown;
 
+  // Antigravity's top-level definitions need their own registration assertions instead of lifecycle-array expectations.
   if (agentProfile.id === "antigravity") {
     const antigravityConfig = installedHookConfig as Record<string, unknown>;
     assert.equal(
@@ -773,6 +787,7 @@ function seedDuplicateAndStaleDenyRows(
     matcher: "Bash",
     hooks: [{ type: "command", command: STALE_DENY_COMMAND }],
   });
+  // A Windows-only stale command reproduces a partially migrated Codex row that refresh must replace.
   if (agentProfile.id === "codex") {
     // A partially migrated row can retain the managed script only in its Windows override.
     hooks.PreToolUse.push({
@@ -794,6 +809,7 @@ function seedDuplicateAndStaleDenyRows(
 
 /**
  * Prove the standalone installer converges duplicate and stale deny rows across
+ *
  * three consecutive runs while preserving the user's own hook rows; it writes into a disposable consumer target.
  * Use per agent so a convergence failure names the exact provider shape.
  *
@@ -833,6 +849,7 @@ function verifyInstallerDuplicateConvergence(
 
   // Three consecutive runs must converge once and then hold the exact bytes.
   const configBytesPerRun: string[] = [];
+  // Repeated installer runs must converge instead of duplicating the user's managed registrations.
   for (let installerRun = 0; installerRun < 3; installerRun += 1) {
     const repairRun = runInstaller(
       targetProjectPath,
@@ -885,13 +902,16 @@ describe("cross-agent install smoke matrix", () => {
     ["claude", "codex", "antigravity", "copilot"],
   );
 
+  // Disabled policies retain a handler; these fixture rows keep each provider's repair and no-change expectations consistent.
   it("defines one complete managed-hook desired-state matrix per agent", () => {
     assert.deepEqual(
       MANAGED_HOOK_DESIRED_STATE_FIXTURES.map((fixture) => fixture.state),
       MANAGED_HOOK_STATE_NAMES,
     );
 
+    // Verify the desired-state fixtures for every manifest-supported provider.
     for (const agentProfile of supportedAgentProfiles) {
+      // Each saved-state fixture must produce only its declared provider writes and registration result.
       for (const fixture of MANAGED_HOOK_DESIRED_STATE_FIXTURES) {
         const expectedWritePaths = expectedManagedHookWritePaths(
           fixture,
@@ -914,9 +934,10 @@ describe("cross-agent install smoke matrix", () => {
         );
         assert.equal(
           fixture.expectedRegistrationCount,
-          fixture.isDesiredEnabled ? 1 : 0,
-          `${agentProfile.id} ${fixture.state} registration target disagrees with config`,
+          1,
+          `${agentProfile.id} ${fixture.state} must retain the policy registration even when off`,
         );
+        // A conflicting saved state must preserve all destination bytes instead of partially refreshing the user's setup.
         if (fixture.expectedResult === "blocked-conflict") {
           assert.deepEqual(
             expectedWritePaths,
@@ -970,6 +991,7 @@ describe("cross-agent install smoke matrix", () => {
     });
   }
 
+  // Writes an inline-YAML project to prove off keeps the policy handler registered and an enabled quality hook still installs.
   it("reads inline and quoted hook toggles as semantic YAML", () => {
     const targetProjectPath = makeTempProject();
     const claudeProfile = supportedAgentProfiles.find(
@@ -997,7 +1019,7 @@ describe("cross-agent install smoke matrix", () => {
     assert.equal(installResult.status, 0, installResult.stderr);
     assert.equal(
       readAgentHookState(targetProjectPath, claudeProfile, denySpec).installed,
-      false,
+      true,
     );
     assert.equal(
       readAgentHookState(targetProjectPath, claudeProfile, gruffSpec).installed,
@@ -1018,6 +1040,7 @@ describe("cross-agent install smoke matrix", () => {
   // Preserve serialized choices while adding the Git policy in every reproduced YAML form.
   const legacyHookChoices =
     '"deny-dangerous": { enabled: false }, "gruff-code-quality": { enabled: true }';
+  // Replay block aliases and flow mappings so config migration preserves the user's existing YAML relationships.
   for (const [shape, config] of Object.entries({
     "plain flow": `hooks: { ${legacyHookChoices} }\n`,
     "anchored flow": `hooks: &policy { ${legacyHookChoices} }\ncopy: *policy\n`,
@@ -1040,12 +1063,15 @@ describe("cross-agent install smoke matrix", () => {
         ...original.hooks,
         "deny-git-mutations": { enabled: false },
       });
+      // An alias-backed hooks section must retain the user's original defaults mapping.
       if (shape === "alias")
         assert.deepEqual(parsed.defaults, original.defaults);
+      // An anchored flow section must still resolve its user's referenced copy after migration.
       if (shape === "anchored flow")
         assert.deepEqual(parsed.copy, parsed.hooks);
       assert.ok(migrated.includes(legacyHookChoices));
       assert.ok(migrated.endsWith("\n"));
+      // Non-alias flow updates preserve the compact line layout of the user's config.
       if (shape !== "alias")
         assert.equal(migrated.split("\n").length, config.split("\n").length);
       const second = runInstaller(root, "--agent", "claude");
@@ -1054,6 +1080,7 @@ describe("cross-agent install smoke matrix", () => {
     });
   }
 
+  // Writes a disposable installation to prove an old disabled choice stays off while its retained handler can read that choice.
   it("migrates a legacy disabled guard before reconciling registration", () => {
     const targetProjectPath = makeTempProject();
     const claudeProfile = supportedAgentProfiles.find(
@@ -1080,9 +1107,10 @@ describe("cross-agent install smoke matrix", () => {
     );
 
     assert.equal(migration.status, 0, migration.stderr);
+    // The user's disabled policy stays registered so saved sessions can read its off choice.
     assert.equal(
       readAgentHookState(targetProjectPath, claudeProfile, denySpec).installed,
-      false,
+      true,
     );
     const migratedConfig = readFileSync(
       join(targetProjectPath, ".goat-flow", "config.yaml"),

@@ -14,7 +14,9 @@ import {
   mkdtempSync,
   openSync,
   readFileSync,
+  renameSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -30,6 +32,10 @@ import {
 import { writeAgentHookState } from "../../src/cli/server/agent-hook-writer.js";
 import { getHookSpec } from "../../src/cli/server/hooks-registry.js";
 import {
+  applyHookState,
+  syncHookStates,
+} from "../../src/cli/server/hook-registrar.js";
+import {
   FINDING_GRUFF_CONTRACT_ENVELOPE,
   writeContractGruffBinary,
 } from "./gruff-code-quality-smoke.helpers.js";
@@ -39,6 +45,8 @@ const WORKFLOW_HOOKS = join(PROJECT_ROOT, "workflow", "hooks");
 const SHARED_HOOK_FILES = [
   "run-with-bash.mjs",
   "hook-launch-runtime.mjs",
+  "hook-policy-state.cjs",
+  "vendor/js-yaml.cjs",
   "hook-provider-adapters.mjs",
   "deny-dangerous.sh",
   "deny-git-mutations.sh",
@@ -75,6 +83,7 @@ interface RegisteredHandler {
 
 /**
  * Build a Git project whose name carries spaces and shell metacharacters, with
+ *
  * the shipped hook files installed and all three selected-provider hooks registered.
  * It writes one temporary tree, recorded for suite cleanup.
  *
@@ -91,6 +100,7 @@ function createRegisteredHostileProject(
   mkdirSync(join(projectRoot, ".goat-flow", "hooks", "deny-dangerous"), {
     recursive: true,
   });
+  // Create the chosen provider's marker so hook setup registers the handlers that this consumer would receive.
   if (agentId === "claude") {
     mkdirSync(join(projectRoot, ".claude"), { recursive: true });
     writeFileSync(join(projectRoot, ".claude", "settings.json"), "{}\n");
@@ -110,9 +120,11 @@ function createRegisteredHostileProject(
       "hooks",
       sharedHookFile,
     );
+    mkdirSync(join(installedPath, ".."), { recursive: true });
     cpSync(join(WORKFLOW_HOOKS, sharedHookFile), installedPath);
     chmodSync(installedPath, 0o755);
   }
+  // Install every shared policy module before replaying the provider's saved handler.
   for (const denyPolicyFile of DENY_POLICY_FILES) {
     cpSync(
       join(WORKFLOW_HOOKS, "deny-dangerous", denyPolicyFile),
@@ -145,6 +157,7 @@ function createRegisteredHostileProject(
  * The registrar wrote the fixture, so a missing row fails the test naturally.
  *
  * @param projectRoot - fixture project root
+ *
  * @param lifecycleEvent - Claude settings event key holding the handler
  * @returns the exec-form handler exactly as registered
  */
@@ -197,6 +210,7 @@ function registeredHandler(
 function registeredCodexHandler(
   projectRoot: string,
   lifecycleEvent: "PreToolUse" | "PostToolUse" | "Stop",
+  policyHookId = "deny-dangerous",
 ): { command: string; commandWindows: string } {
   const settings = JSON.parse(
     readFileSync(join(projectRoot, ".codex", "hooks.json"), "utf-8"),
@@ -208,7 +222,13 @@ function registeredCodexHandler(
       }>
     >;
   };
-  const registeredHook = settings.hooks[lifecycleEvent]![0]!.hooks[0]!;
+  const registeredHook = settings.hooks[lifecycleEvent]!.flatMap(
+    (entry) => entry.hooks,
+  ).find(
+    (entry) =>
+      lifecycleEvent !== "PreToolUse" ||
+      entry.command?.includes(`${policyHookId}.sh`),
+  )!;
   const command = registeredHook.command;
   const commandWindows = registeredHook.commandWindows;
   assert.equal(typeof command, "string");
@@ -233,8 +253,10 @@ function denyPayload(shellCommand: string): string {
  *
  * @param projectRoot - fixture root; a different cwd exercises root discovery
  * @param handler - registered executable plus argv tuple
+ *
  * @param payload - hook input JSON delivered on stdin
  * @param cwd - working directory; defaults to the project root
+ *
  * @returns the finished handler process with captured streams
  */
 function runRegisteredHandler(
@@ -270,6 +292,7 @@ function runRegisteredCodexHandler(
     env: options.environment ?? process.env,
     timeout: 60_000,
   };
+  // Piped requests reproduce the provider's direct payload delivery to its configured command.
   if ((options.stdin ?? "pipe") === "pipe") {
     return spawnSync(selected.command, selected.args, {
       ...spawnOptions,
@@ -291,6 +314,7 @@ function runRegisteredCodexHandler(
       stdio: [payloadDescriptor, "pipe", "pipe"],
     });
   } finally {
+    // Close an opened payload file after replay so the fixture does not retain resources across cases.
     if (payloadDescriptor !== null) closeSync(payloadDescriptor);
     rmSync(payloadDirectory, { recursive: true, force: true });
   }
@@ -403,6 +427,7 @@ describe("hook command spawn matrix", () => {
         return result;
       });
 
+      // Each blocked replay must retain the user's sensitive-file protection and actionable denial.
       for (const blocked of blockedReplays) {
         assert.equal(blocked.status, 2, handlerDiagnostics(blocked));
         assert.match(String(blocked.stderr), /BLOCKED: Policy secret/u);
@@ -497,7 +522,9 @@ describe("hook command spawn matrix", () => {
       mkdirSync(emptyExecutablePath);
 
       const nodeUnavailableEnvironment = { ...process.env };
+      // Remove every spelling of PATH so this fixture reproduces a launcher unable to discover Node.
       for (const environmentName of Object.keys(nodeUnavailableEnvironment)) {
+        // Windows-style case differences must not leave another executable search path available to this failure fixture.
         if (environmentName.toUpperCase() === "PATH") {
           delete nodeUnavailableEnvironment[environmentName];
         }
@@ -559,6 +586,7 @@ const DEGRADATION_CASES: DegradationCase[] = [
     name: "missing launcher fails root classification with the policy response",
     lifecycleEvent: "PreToolUse",
     payload: denyPayload("git status"),
+    // Filesystem side effects: removes a disposable installed file to reproduce an absent launch dependency before provider replay.
     mutate: (projectRoot) =>
       rmSync(join(projectRoot, ".goat-flow", "hooks", "run-with-bash.mjs")),
     expectedStatus: 2,
@@ -569,6 +597,7 @@ const DEGRADATION_CASES: DegradationCase[] = [
     name: "corrupt launcher source becomes the policy could-not-start response",
     lifecycleEvent: "PreToolUse",
     payload: denyPayload("git status"),
+    // Filesystem side effects: writes a disposable installed file to reproduce an invalid or incomplete launch dependency before provider replay.
     mutate: (projectRoot) =>
       writeFileSync(
         join(projectRoot, ".goat-flow", "hooks", "run-with-bash.mjs"),
@@ -582,6 +611,7 @@ const DEGRADATION_CASES: DegradationCase[] = [
     name: "launcher without the runHookWithBash API is an explicit mismatch",
     lifecycleEvent: "PreToolUse",
     payload: denyPayload("git status"),
+    // Filesystem side effects: writes a disposable installed file to reproduce an invalid or incomplete launch dependency before provider replay.
     mutate: (projectRoot) =>
       writeFileSync(
         join(projectRoot, ".goat-flow", "hooks", "run-with-bash.mjs"),
@@ -595,6 +625,7 @@ const DEGRADATION_CASES: DegradationCase[] = [
     name: "missing launch runtime breaks the launcher import chain",
     lifecycleEvent: "PreToolUse",
     payload: denyPayload("git status"),
+    // Filesystem side effects: removes a disposable installed file to reproduce an absent launch dependency before provider replay.
     mutate: (projectRoot) =>
       rmSync(
         join(projectRoot, ".goat-flow", "hooks", "hook-launch-runtime.mjs"),
@@ -607,6 +638,7 @@ const DEGRADATION_CASES: DegradationCase[] = [
     name: "corrupt launch runtime breaks the launcher import chain",
     lifecycleEvent: "PreToolUse",
     payload: denyPayload("git status"),
+    // Filesystem side effects: writes a disposable installed file to reproduce an invalid or incomplete launch dependency before provider replay.
     mutate: (projectRoot) =>
       writeFileSync(
         join(projectRoot, ".goat-flow", "hooks", "hook-launch-runtime.mjs"),
@@ -620,6 +652,7 @@ const DEGRADATION_CASES: DegradationCase[] = [
     name: "missing hook script fails root classification with the policy response",
     lifecycleEvent: "PreToolUse",
     payload: denyPayload("git status"),
+    // Filesystem side effects: removes a disposable installed file to reproduce an absent launch dependency before provider replay.
     mutate: (projectRoot) =>
       rmSync(join(projectRoot, ".goat-flow", "hooks", "deny-dangerous.sh")),
     expectedStatus: 2,
@@ -630,6 +663,7 @@ const DEGRADATION_CASES: DegradationCase[] = [
     name: "missing provider adapter keeps the Gruff soft-skip contract",
     lifecycleEvent: "PostToolUse",
     payload: GRUFF_EDIT_PAYLOAD,
+    // Filesystem side effects: removes a disposable installed file to reproduce an absent launch dependency before provider replay.
     mutate: (projectRoot) =>
       rmSync(
         join(projectRoot, ".goat-flow", "hooks", "hook-provider-adapters.mjs"),
@@ -642,6 +676,7 @@ const DEGRADATION_CASES: DegradationCase[] = [
     name: "corrupt provider adapter keeps the Gruff soft-skip contract",
     lifecycleEvent: "PostToolUse",
     payload: GRUFF_EDIT_PAYLOAD,
+    // Filesystem side effects: writes a disposable installed file to reproduce an invalid or incomplete launch dependency before provider replay.
     mutate: (projectRoot) =>
       writeFileSync(
         join(projectRoot, ".goat-flow", "hooks", "hook-provider-adapters.mjs"),
@@ -655,6 +690,7 @@ const DEGRADATION_CASES: DegradationCase[] = [
     name: "corrupt launcher keeps the post-turn Stop failure channel",
     lifecycleEvent: "Stop",
     payload: STOP_PAYLOAD,
+    // Filesystem side effects: writes a disposable installed file to reproduce an invalid or incomplete launch dependency before provider replay.
     mutate: (projectRoot) =>
       writeFileSync(
         join(projectRoot, ".goat-flow", "hooks", "run-with-bash.mjs"),
@@ -708,5 +744,201 @@ describe("catchable managed-file failures keep provider responses", () => {
       String(result.stderr).length > 0,
       "a corrupt script must fail visibly, never silently allow",
     );
+  });
+});
+
+/** Saved handlers must survive the exact registrar transitions used by the Hooks page. */
+describe("retained policy registrations", () => {
+  // Exercise both saved policy switches through repeated disable, Sync and enable actions.
+  for (const hookId of ["deny-dangerous", "deny-git-mutations"]) {
+    const blockedCommand =
+      hookId === "deny-dangerous" ? "rm -rf /" : "git commit -m blocked";
+    // The same lifecycle must work for both supported provider handler shapes.
+    for (const provider of ["claude", "codex"] as const) {
+      it(`${provider}:${hookId} reuses a saved handler through two off/sync/on cycles`, () => {
+        const root = createRegisteredHostileProject(provider);
+        syncHookStates(root);
+        const spec = getHookSpec(hookId)!;
+        const saved =
+          provider === "claude"
+            ? registeredHandler(root, "PreToolUse", hookId)
+            : registeredCodexHandler(root, "PreToolUse", hookId);
+        // Replay the handler saved before toggling so each cycle proves an already-loaded registration remains usable.
+        const run = (command: string) =>
+          "args" in saved
+            ? runRegisteredHandler(root, saved, denyPayload(command))
+            : runRegisteredCodexHandler(root, saved, denyPayload(command));
+        const configPath = join(
+          root,
+          provider === "claude" ? ".claude/settings.json" : ".codex/hooks.json",
+        );
+        const config = JSON.parse(readFileSync(configPath, "utf8"));
+        config.hooks.PreToolUse.push({
+          matcher: "Bash",
+          hooks: [{ command: "echo preserved-user-hook" }],
+        });
+        writeFileSync(configPath, JSON.stringify(config));
+        const sibling =
+          hookId === "deny-dangerous" ? "deny-git-mutations" : "deny-dangerous";
+        // Repeat the lifecycle to prove later Sync actions do not wedge the user's saved handler.
+        for (let cycle = 0; cycle < 2; cycle += 1) {
+          assert.equal(run("git status").status, 0);
+          assert.equal(run(blockedCommand).status, 2);
+          const disabled = applyHookState(hookId, false, root);
+          assert.equal(disabled.agents[provider].drift, undefined);
+          assert.equal(
+            disabled.agents[provider].effectiveState.status,
+            "disabled",
+          );
+          const bytes = readFileSync(
+            join(root, ".goat-flow/hooks", spec.primaryScript),
+            "utf8",
+          );
+          // While disabled, benign and normally blocked requests must both pass without a policy denial.
+          for (const command of ["git status", blockedCommand]) {
+            const result = run(command);
+            assert.equal(result.status, 0, handlerDiagnostics(result));
+            assert.equal(result.stderr, "");
+            assert.equal(result.stdout, "");
+          }
+          const synced = syncHookStates(root);
+          assert.equal(
+            synced.find((state) => state.id === sibling)?.enabled,
+            true,
+          );
+          assert.equal(
+            readFileSync(
+              join(root, ".goat-flow/hooks", spec.primaryScript),
+              "utf8",
+            ),
+            bytes,
+          );
+          assert.ok(
+            readFileSync(configPath, "utf8").includes("preserved-user-hook"),
+          );
+          assert.ok(readFileSync(configPath, "utf8").includes(`${hookId}.sh`));
+          assert.equal(run(blockedCommand).status, 0);
+          applyHookState(hookId, true, root);
+          assert.equal(run(blockedCommand).status, 2);
+          assert.equal(run("git status").status, 0);
+        }
+      });
+    }
+
+    it(`${hookId} defaults absent choices on and refuses invalid config or missing launch dependencies`, () => {
+      const root = createRegisteredHostileProject();
+      const saved = registeredHandler(root, "PreToolUse", hookId);
+      const config = join(root, ".goat-flow/config.yaml");
+      assert.equal(
+        runRegisteredHandler(root, saved, denyPayload(blockedCommand)).status,
+        2,
+      );
+      assert.equal(
+        runRegisteredHandler(root, saved, denyPayload("git status")).status,
+        0,
+      );
+      // Malformed or ambiguous saved choices must never authorize skipping the user's policy enforcement.
+      for (const text of [
+        "hooks: [",
+        `hooks: {${hookId}: {enabled: 'false'}}`,
+        `hooks: {${hookId}: {enabled: false}, guard-secret-paths: {enabled: nope}}`,
+      ]) {
+        writeFileSync(config, text);
+        const failed = runRegisteredHandler(
+          root,
+          saved,
+          denyPayload("git status"),
+        );
+        assert.equal(failed.status, 2);
+        assert.match(String(failed.stderr), /unavailable/);
+      }
+      writeFileSync(config, `hooks: {${hookId}: {enabled: false}}`);
+      // Break each launch dependency to verify an archived handler cannot silently skip protection.
+      for (const dependency of [
+        "run-with-bash.mjs",
+        "hook-launch-runtime.mjs",
+        `${hookId}.sh`,
+        "hook-policy-state.cjs",
+        "vendor/js-yaml.cjs",
+      ]) {
+        const installed = join(root, ".goat-flow/hooks", dependency);
+        const bytes = readFileSync(installed);
+        rmSync(installed);
+        assert.equal(
+          runRegisteredHandler(root, saved, denyPayload("git status")).status,
+          2,
+          dependency,
+        );
+        writeFileSync(installed, bytes);
+      }
+      // A complete off decision skips downstream policy code without requiring Bash.
+      rmSync(join(root, ".goat-flow/hooks/deny-dangerous/guard-runtime.sh"));
+      assert.equal(
+        runRegisteredHandler(root, saved, denyPayload(blockedCommand)).status,
+        0,
+      );
+      const selected = agentHookSpawnDescriptor({ form: "argv", ...saved });
+      const noBash = spawnSync(process.execPath, selected.args, {
+        cwd: root,
+        encoding: "utf8",
+        input: denyPayload(blockedCommand),
+        env: { ...process.env, PATH: "" },
+      });
+      assert.equal(noBash.status, 0, handlerDiagnostics(noBash));
+    });
+
+    it(`${hookId} rejects unsafe config components even for explicit off`, () => {
+      const root = createRegisteredHostileProject();
+      const saved = registeredHandler(root, "PreToolUse", hookId);
+      const config = join(root, ".goat-flow/config.yaml");
+      writeFileSync(config + ".target", `hooks: {${hookId}: {enabled: false}}`);
+      symlinkSync(config + ".target", config);
+      assert.equal(
+        runRegisteredHandler(root, saved, denyPayload("git status")).status,
+        2,
+      );
+      rmSync(config);
+      writeFileSync(config, `hooks: {${hookId}: {enabled: false}}`);
+      renameSync(join(root, ".goat-flow"), join(root, "moved-state"));
+      symlinkSync(join(root, "moved-state"), join(root, ".goat-flow"), "dir");
+      assert.equal(
+        runRegisteredHandler(root, saved, denyPayload("git status")).status,
+        2,
+      );
+    });
+  }
+
+  it("reports disabled policy launcher cost", () => {
+    const root = createRegisteredHostileProject();
+    const saved = registeredHandler(root, "PreToolUse");
+    const config = join(root, ".goat-flow/config.yaml");
+    // Measure both saved choices so enabled enforcement and an explicit opt-out remain bounded.
+    for (const enabled of [true, false]) {
+      writeFileSync(config, `hooks: {deny-dangerous: {enabled: ${enabled}}}`);
+      const durations = Array.from({ length: 5 }, () => {
+        const started = performance.now();
+        const result = runRegisteredHandler(
+          root,
+          saved,
+          denyPayload("git status"),
+        );
+        assert.equal(result.status, 0, handlerDiagnostics(result));
+        assert.equal(result.stderr, "");
+        assert.equal(result.stdout, "");
+        return performance.now() - started;
+      }).sort((a, b) => a - b);
+      console.log(
+        JSON.stringify({
+          policy: "deny-dangerous",
+          enabled,
+          repetitions: 5,
+          cache:
+            "fresh Node process; OS cache uncontrolled/warm; same fixture and benign payload",
+          medianMs: durations[2],
+          minMs: durations[0],
+          maxMs: durations[4],
+        }),
+      );
+    }
   });
 });

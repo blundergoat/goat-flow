@@ -63,7 +63,9 @@ describe("hook registrar: launchers and installation", () => {
     const defaultGitBash = "C:\\Program Files\\Git\\bin\\bash.exe";
     const candidates = discoverHookWindowsBashCandidates({
       environment: { ProgramFiles: "C:\\Program Files" },
+      // Model the default Git Bash install so the launcher fixture cannot depend on this machine's Windows tools.
       pathExists: (candidate: string) => candidate === defaultGitBash,
+      // Model PATH finding only the WSL shim so the fixture proves the user's native Git Bash fallback is selected.
       runWhere: (executable: string) =>
         executable === "bash" ? ["C:\\Windows\\System32\\bash.exe"] : [],
     });
@@ -170,6 +172,7 @@ describe("hook registrar: launchers and installation", () => {
         gruffSpec?.scriptFiles.includes("hook-provider-adapters.mjs"),
         true,
       );
+      // Missing provider guidance becomes empty text and fails here; the user must see why Gruff feedback is unavailable.
       assert.match(
         gruffSpec?.unsupportedAgents?.antigravity ?? "",
         /cannot deliver Gruff feedback/u,
@@ -209,7 +212,12 @@ describe("hook registrar: launchers and installation", () => {
         deriveManagedHookDesiredState(desiredStateCase.agent, hookSpec, false),
         {
           managedScriptFiles: hookSpec.scriptFiles,
-          registrationTargets: [],
+          registrationTargets: [
+            "deny-dangerous",
+            "deny-git-mutations",
+          ].includes(hookSpec.id)
+            ? desiredStateCase.registrationTargets
+            : [],
         },
       );
     });
@@ -529,13 +537,27 @@ describe("hook registrar: launchers and installation", () => {
         "deny-dangerous.sh",
       );
       assert.equal(existsSync(managedHookPath), true);
-      // Git retains its independently inherited choice while the selected hook stays disabled.
+      // Git retains its default-on choice while the selected hook stays disabled.
       const initialConfig = readFileSync(
         join(root, ".codex", "hooks.json"),
         "utf-8",
       );
-      assert.equal(initialConfig.includes("deny-dangerous.sh"), false);
+      assert.equal(initialConfig.includes("deny-dangerous.sh"), true);
       assert.equal(initialConfig.includes("deny-git-mutations.sh"), true);
+
+      // Dashboard switches retain the reviewed Codex definitions, including their order and exact file bytes.
+      for (const [policyId, enabled] of [
+        ["deny-dangerous", true],
+        ["deny-dangerous", false],
+        ["deny-git-mutations", false],
+        ["deny-git-mutations", true],
+      ] as const) {
+        applyHookState(policyId, enabled, root);
+        assert.equal(
+          readFileSync(join(root, ".codex", "hooks.json"), "utf-8"),
+          initialConfig,
+        );
+      }
 
       // For example, the user may restore a checkout after its managed hook file was deleted.
       rmSync(managedHookPath);
@@ -549,13 +571,18 @@ describe("hook registrar: launchers and installation", () => {
         PROFILES.codex,
         denyDangerousSpec,
       );
-      assert.equal(disabledState.registrationIssue, "registration-missing");
+      assert.equal(disabledState.registrationIssue, undefined);
       assert.equal(disabledState.configMissing, undefined);
-      assert.equal(disabledState.installed, false);
-      // Git retains its independently inherited choice while the selected hook stays disabled.
+      assert.equal(disabledState.installed, true);
+      // Git retains its independent choice while the selected hook stays disabled.
       const config = readFileSync(join(root, ".codex", "hooks.json"), "utf-8");
-      assert.equal(config.includes("deny-dangerous.sh"), false);
+      assert.equal(config.includes("deny-dangerous.sh"), true);
       assert.equal(config.includes("deny-git-mutations.sh"), true);
+      assert.equal(
+        config,
+        initialConfig,
+        "Sync must retain the already-reviewed Codex registrations",
+      );
     });
   });
 

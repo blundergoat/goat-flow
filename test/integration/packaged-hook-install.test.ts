@@ -19,6 +19,7 @@ import {
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
+import { pathToFileURL } from "node:url";
 import { agentHookSpawnDescriptor } from "../../src/cli/server/agent-hook-command.js";
 
 const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
@@ -67,6 +68,7 @@ function makeDisposablePackageWorkspace(workspaceName: string): string {
 
 /**
  * Pack the current candidate without publication and extract its real archived bytes.
+ *
  * Use before consumer execution so repository paths cannot satisfy package assertions.
  * Side effects: spawns npm and tar, which write a temporary archive and extracted package.
  *
@@ -187,6 +189,7 @@ function preparePackedCliLaunch(): PackedCliLaunch {
  *
  * @param packedCliLaunchPath - non-empty bin link or declared JavaScript entry; empty cannot start the package
  * @param cliArguments - user-entered CLI arguments; empty means the package should show its default flow
+ *
  * @param workingDirectoryPath - existing user cwd; empty would make root resolution meaningless
  * @returns Captured process result; empty output is valid only when the selected command is silent.
  */
@@ -203,11 +206,79 @@ function runPackedCli(
 }
 
 /**
+ * Review an old launcher with no recorded install history before the packed CLI can sync it.
+ *
+ * Use the archived dashboard handler for consent, then prove the public CLI converges without another review.
+ * Starts child processes that replace reviewed files in the disposable project.
+ *
+ * @param packedPackageRoot - extracted package whose handler performs the review; empty cannot locate that handler
+ * @param packedCliLaunchPath - archived CLI entry; empty cannot start the user's Sync command
+ *
+ * @param projectPath - existing disposable install; empty would lose the selected-project boundary
+ * @returns final CLI result; empty output is valid when Sync finishes silently
+ */
+function reviewAndSyncPackedHooks(
+  packedPackageRoot: string,
+  packedCliLaunchPath: string,
+  projectPath: string,
+) {
+  const priorFiles = [
+    ".codex/hooks.json",
+    ".goat-flow/hooks/run-with-bash.mjs",
+  ];
+  const priorBytes = priorFiles.map((file) =>
+    readFileSync(join(projectPath, file)),
+  );
+  const refused = runPackedCli(
+    packedCliLaunchPath,
+    ["hooks", "sync", projectPath],
+    projectPath,
+  );
+  assert.equal(refused.status, 1, refused.stderr || refused.stdout);
+  assert.match(refused.stderr, /review and explicitly replace/u);
+  // Asking for review must preserve the user's launcher and provider configuration.
+  for (const [index, file] of priorFiles.entries()) {
+    assert.deepEqual(readFileSync(join(projectPath, file)), priorBytes[index]);
+  }
+  const registrarUrl = pathToFileURL(
+    join(packedPackageRoot, "dist/cli/server/hook-registrar.js"),
+  ).href;
+  const reviewed = spawnSync(
+    process.execPath,
+    [
+      "--input-type=module",
+      "-e",
+      `
+    import assert from "node:assert/strict";
+    const { syncHookStates } = await import(${JSON.stringify(registrarUrl)});
+    const projectPath = ${JSON.stringify(projectPath)};
+    let review;
+    // An old launcher without recorded install history requires the user's replacement review.
+    try { syncHookStates(projectPath); } catch (error) { review = error.details; }
+    assert.equal(review?.code, "hook-replacement-required");
+    assert.deepEqual(review.paths, [".goat-flow/hooks/run-with-bash.mjs"]);
+    assert.equal(review.replacementAvailable, true);
+    syncHookStates(projectPath, { replace: true, confirmationIdentity: review.confirmationIdentity });
+  `,
+    ],
+    { cwd: projectPath, encoding: "utf8", timeout: 120_000 },
+  );
+  assert.equal(reviewed.status, 0, reviewed.stderr || reviewed.stdout);
+  return runPackedCli(
+    packedCliLaunchPath,
+    ["hooks", "sync", projectPath],
+    projectPath,
+  );
+}
+
+/**
  * Read an exact prior-release file for a real upgrade fixture.
+ *
  * Use when migration behavior must not be approximated from current source.
  * Side effects: starts a read-only Git process without changing the checkout.
  *
  * @param releaseVersion - release version used to select the exact `v`-prefixed tag
+ *
  * @param relativePath - non-empty tagged file path; empty cannot identify prior release bytes
  * @returns Tagged bytes, or `null` when a shallow checkout cannot provide the release fixture.
  */
@@ -263,9 +334,11 @@ function readInstalledCodexDenyHandler(targetProjectPath: string): {
   const installedHookConfiguration = JSON.parse(
     readFileSync(join(targetProjectPath, ".codex", "hooks.json"), "utf8"),
   ) as CodexHookConfiguration;
-  // Empty registration means the package left the user's shell without the managed deny guard.
+  // Reviewed registration order belongs to Codex trust; locate the general policy by its owned script.
   const installedDenyHandler =
-    installedHookConfiguration.hooks?.PreToolUse?.[0]?.hooks?.[0];
+    installedHookConfiguration.hooks?.PreToolUse?.flatMap(
+      (entry) => entry.hooks ?? [],
+    ).find((handler) => handler.command?.includes("deny-dangerous.sh"));
   assert.equal(typeof installedDenyHandler?.command, "string");
   return {
     command: installedDenyHandler.command,
@@ -277,6 +350,7 @@ function readInstalledCodexDenyHandler(targetProjectPath: string): {
 
 /**
  * Replay the user's installed policy command and prove safe work passes while danger blocks.
+ *
  * Use after fresh install or migration so direct-script success cannot hide stale registration.
  * Side effects: starts two bounded policy processes; the submitted shell text is classified, not run.
  *
@@ -330,6 +404,7 @@ function assertInstalledCodexPolicy(targetProjectPath: string): void {
  * Use to prove the canary cannot fall back to source-checkout launcher modules.
  *
  * @param packedPackageRoot - non-empty extracted package root; empty has no archived hooks
+ *
  * @param disposableConsumerPath - non-empty consumer root; empty would escape fixture ownership
  * @returns Absolute packed launcher path; never empty after archived bytes are copied.
  */
@@ -374,6 +449,7 @@ function installPackedCanaryBytes(
  * Use to compare archived behavior with the source consumer's user-visible result.
  *
  * @param disposableConsumerPath - non-empty installed consumer root; empty cannot resolve hooks
+ *
  * @param packedLauncherPath - non-empty archived launcher path; empty cannot start Node
  * @returns Child-process evidence; empty stdout means packed users receive no feedback.
  */
@@ -587,9 +663,9 @@ describe("packaged hook installation canary", () => {
         V1_16_0_BASH_RUNNER,
       );
 
-      const migrationResult = runPackedCli(
+      const migrationResult = reviewAndSyncPackedHooks(
+        packedPackageRoot,
         packedCliLaunchPath,
-        ["hooks", "sync", upgradedProjectPath],
         upgradedProjectPath,
       );
       assert.equal(
@@ -654,9 +730,9 @@ describe("packaged hook installation canary", () => {
         join(upgradedProjectPath, ".goat-flow", "hooks", "run-with-bash.mjs"),
         V1_15_0_BASH_RUNNER,
       );
-      const migrationResult = runPackedCli(
+      const migrationResult = reviewAndSyncPackedHooks(
+        packedPackageRoot,
         packedCliLaunchPath,
-        ["hooks", "sync", upgradedProjectPath],
         upgradedProjectPath,
       );
       assert.equal(

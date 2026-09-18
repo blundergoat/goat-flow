@@ -1,8 +1,9 @@
 /**
  * Exercises the deny hook as users experience it before a shell command runs.
+ *
  * Each fixture passes inert command text through `--check`; no candidate command executes.
- * Paired block and allow cases keep safety repairs from breaking ordinary inspection,
- * local script input, disposable build cleanup, or approved GitHub comments.
+ * Paired cases preserve ordinary inspection, local script input, disposable build cleanup and approved GitHub comments.
+ *
  * Use this suite when changing command grammar or policy boundaries.
  */
 import assert from "node:assert/strict";
@@ -26,27 +27,63 @@ assert.equal(spawnSync("git", ["init", "-q", policyFixture]).status, 0);
 after(() => rmSync(policyFixture, { recursive: true, force: true }));
 type PolicyHook = "deny-dangerous" | "deny-git-mutations";
 
-/** Classify inert command text using only the candidate fixture runtime. */
-function runSplitPolicyCheck(hook: PolicyHook, command: string) {
+// Persistent aliases resolve through Git config, so the fixture owns its own config file and
+// never depends on aliases saved on the host that runs this suite.
+const savedAliasConfig = resolve(policyFixture, "alias.gitconfig");
+writeFileSync(
+  savedAliasConfig,
+  "[alias]\n\tgfrecord = commit\n\tgfnuke = reset --hard\n\tgfinspect = status --short\n",
+);
+const savedAliasEnv = {
+  ...process.env,
+  GIT_CONFIG_GLOBAL: savedAliasConfig,
+  GIT_CONFIG_NOSYSTEM: "1",
+};
+
+/**
+ * Classify inert command text using only the candidate fixture runtime.
+ * Spawns one hook process per call; nothing in the command text is executed.
+ *
+ * @param hook - policy entrypoint under test; each hook applies a different rule set
+ * @param command - command text passed with --check; classified, never run
+ *
+ * @param env - environment for the spawned hook; saved-alias cases replace the Git config it reads
+ * @returns the spawn result whose status and stderr carry the classifier's decision
+ */
+function runSplitPolicyCheck(
+  hook: PolicyHook,
+  command: string,
+  env: NodeJS.ProcessEnv = process.env,
+) {
   return spawnSync(
     "bash",
     [resolve(fixtureHooks, `${hook}.sh`), "--check", command],
     {
       cwd: policyFixture,
       encoding: "utf8",
+      env,
       stdio: ["ignore", "pipe", "pipe"],
     },
   );
 }
 
 describe("separate Git policy ownership", () => {
+  // Replay Git and GitHub writes to prove repository protection belongs to the Git policy switch.
   for (const command of [
     "git commit -m x",
+    "gh api repos/owner/repo -X POST",
+    "gh pr create --fill",
     "git push origin main",
     "git reset --hard",
     "find . -exec git push origin main \\;",
+    "git -c alias.c=commit c -m x",
+    "git -c 'alias.c=commit --no-verify' c -m x",
+    "git -c alias.nuke='reset --hard' nuke",
+    "git -c 'alias.wipe=clean -fdx' wipe",
+    "git -c 'alias.c=\"commit\"' c -m x",
+    "git -c alias.c=commit status",
   ]) {
-    it(`routes native Git through its own hook: ${command}`, () => {
+    it(`routes Git and GitHub writes through their own hook: ${command}`, () => {
       const owner = runSplitPolicyCheck("deny-git-mutations", command);
       assert.equal(owner.status, 2, owner.stderr);
       assert.match(owner.stderr, /Policy repository/u);
@@ -55,12 +92,8 @@ describe("separate Git policy ownership", () => {
       assert.equal(sibling.stderr, "");
     });
   }
-  for (const command of [
-    "rm -rf /",
-    "cat .env",
-    "gh api repos/owner/repo -X POST",
-    "gh pr create --fill",
-  ]) {
+  // Replay destructive and sensitive-file requests to prove the general policy retains its own protections.
+  for (const command of ["rm -rf /", "cat .env"]) {
     it(`retains non-Git policy in deny-dangerous: ${command}`, () => {
       const owner = runSplitPolicyCheck("deny-dangerous", command);
       assert.equal(owner.status, 2, owner.stderr);
@@ -70,12 +103,14 @@ describe("separate Git policy ownership", () => {
       assert.equal(sibling.stderr, "");
     });
   }
+  // Mixed requests must remain blocked when they contain work owned by either policy.
   for (const command of [
     "git push origin main; cat .env",
-    "git commit -m x; gh pr create --fill",
+    "cat .env; gh pr create --fill",
     "git reset --hard; rm -rf /",
   ]) {
     it(`checks both owners in mixed commands: ${command}`, () => {
+      // Replay each mixed request through both guards to verify their independent policy boundaries.
       for (const hook of ["deny-dangerous", "deny-git-mutations"] as const) {
         const result = runSplitPolicyCheck(hook, command);
         assert.equal(result.status, 2, result.stderr);
@@ -83,12 +118,48 @@ describe("separate Git policy ownership", () => {
       }
     });
   }
+  // Read-only aliases must remain usable so the developer can inspect their repository.
+  for (const command of [
+    "git -c alias.inspect=status inspect",
+    "git -c alias.inspect=status log --oneline",
+  ]) {
+    it(`keeps benign alias config allowed by both hooks: ${command}`, () => {
+      // Both guards must permit these read-only alias forms without printing a denial.
+      for (const hook of ["deny-dangerous", "deny-git-mutations"] as const) {
+        const result = runSplitPolicyCheck(hook, command);
+        assert.equal(result.status, 0, result.stderr);
+        assert.equal(result.stderr, "");
+      }
+    });
+  }
+});
+
+describe("persistent Git aliases", () => {
+  // The Git hook reads the saved expansion; the general hook never applies native Git policy,
+  // and a word with no saved alias stays unrecognised and allowed.
+  for (const [command, env, gitHookStatus] of [
+    ["git gfrecord -m x", savedAliasEnv, 2],
+    ["git gfnuke", savedAliasEnv, 2],
+    ["git gfinspect", savedAliasEnv, 0],
+    ["git gfabsent -m x", process.env, 0],
+  ] as const) {
+    it(`classifies a saved alias only through the Git hook: ${command}`, () => {
+      const owner = runSplitPolicyCheck("deny-git-mutations", command, env);
+      assert.equal(owner.status, gitHookStatus, owner.stderr);
+      // Blocked Git cases also need a repository explanation the user can act on.
+      if (gitHookStatus === 2) assert.match(owner.stderr, /Policy repository/u);
+      const sibling = runSplitPolicyCheck("deny-dangerous", command, env);
+      assert.equal(sibling.status, 0, sibling.stderr);
+    });
+  }
 });
 
 // Partial installs occur between individual atomic file replacements. Exercise
 // real entrypoints with absent helpers and the pre-split module API in each transport.
 describe("split policy partial installation", () => {
+  // Exercise startup failures for both policy switches so missing setup cannot silently permit a request.
   for (const hook of ["deny-dangerous", "deny-git-mutations"] as const) {
+    // Break each declared dependency to verify the provider receives a useful denial rather than a partial guard.
     for (const brokenDependency of [
       "guard-runtime.sh",
       "patterns-shell.sh",
@@ -104,6 +175,7 @@ describe("split policy partial installation", () => {
             recursive: true,
           });
           assert.equal(spawnSync("git", ["init", "-q", root]).status, 0);
+          // An earlier unsplit API reproduces a stale installed runtime that needs a setup refresh.
           if (brokenDependency === "pre-split-api") {
             writeFileSync(
               resolve(hooks, "deny-dangerous/patterns-writes.sh"),
@@ -112,6 +184,7 @@ describe("split policy partial installation", () => {
           } else {
             rmSync(resolve(hooks, "deny-dangerous", brokenDependency));
           }
+          // Replay each provider payload shape so startup failure preserves that provider's required denial response.
           for (const [payload, decision] of [
             [
               {
@@ -147,6 +220,7 @@ describe("split policy partial installation", () => {
               decision === null ? 2 : 0,
               result.stderr,
             );
+            // JSON-based providers need their explicit deny field; the shell provider uses its failure status.
             if (decision !== null)
               assert.equal(JSON.parse(result.stdout)[decision], "deny");
             assert.match(
@@ -190,8 +264,10 @@ type ParserBoundaryCase = {
 /**
  * Run one proposed user command through the hook's inert classifier.
  * This starts Bash for the hook only; the proposed command never runs and project files stay unchanged.
+ *
  * Use it to compare the block or allow result shown before a user executes a command.
  * @param userCommand - exact shell text the user would otherwise run; empty means no command was submitted
+ *
  * @returns the completed hook process; a null status means Bash never started
  */
 function runInertPolicyCheck(
@@ -213,6 +289,7 @@ function runInertPolicyCheck(
  * Side effects: starts the inert policy hook; neither submitted command is executed.
  *
  * @param stdinCommand - shell text carried by the provider payload; empty remains a valid fixture value
+ *
  * @param positionalCommand - optional legacy positional command; absence proves pure stdin dispatch
  * @returns the completed policy process; a null status means Bash never started
  */
@@ -222,6 +299,7 @@ function runStdinPolicyCheck(
   hook: PolicyHook = "deny-dangerous",
 ): ReturnType<typeof spawnSync> {
   const args = [resolve(fixtureHooks, `${hook}.sh`)];
+  // A positional command exercises the dispatcher's alternate CLI input form without changing the fixture text.
   if (positionalCommand !== undefined) args.push(positionalCommand);
   return spawnSync("bash", args, {
     cwd: policyFixture,
@@ -324,6 +402,7 @@ const policyBlockCases: PolicyBlockCase[] = [
   },
   {
     name: "xargs long arg file hiding a GitHub write",
+    hook: "deny-git-mutations",
     userCommand: "xargs --arg-file commands.txt gh pr create --fill",
     expectedPolicyMessage: /Policy repository/u,
   },
@@ -372,9 +451,8 @@ const policyBlockCases: PolicyBlockCase[] = [
     hook: "deny-git-mutations",
     expectedPolicyMessage: /Policy repository/u,
   },
-  // Git's split_cmdline unquotes an alias value before running it, so quote characters left
-  // inside the value still expand to a publishing subcommand. Outer shell quoting is already
-  // removed by word splitting; these fixtures carry the quotes the alias value itself keeps.
+  // Git's split_cmdline removes quotes within a configured alias before executing its publishing subcommand.
+  // These fixtures keep the alias value's own quotes; word splitting has already removed the surrounding shell quotes.
   {
     name: "Git alias whose value keeps double quotes around push",
     userCommand: `git -c 'alias.publish="push"' publish`,
@@ -488,17 +566,20 @@ const policyBlockCases: PolicyBlockCase[] = [
   },
   {
     name: "nested GitHub deploy-key addition",
+    hook: "deny-git-mutations",
     userCommand: "gh repo deploy-key add deploy.pub",
     expectedPolicyMessage: /Policy repository/u,
   },
   {
     name: "nested GitHub deploy-key addition with inherited repo option",
+    hook: "deny-git-mutations",
     userCommand:
       "gh repo --repo owner/project deploy-key add deploy.pub --title ci",
     expectedPolicyMessage: /Policy repository/u,
   },
   {
     name: "GitHub codespace stop",
+    hook: "deny-git-mutations",
     userCommand: "gh codespace stop -c example",
     expectedPolicyMessage: /Policy repository/u,
   },
@@ -923,6 +1004,7 @@ describe("deny-dangerous existing policy boundaries", () => {
   // Each safe neighbour protects a normal user workflow from an over-broad repair.
   for (const policyAllowCase of policyAllowCases) {
     it(`allows ${policyAllowCase.name}`, () => {
+      // Both policy switches must preserve the documented allow case for the developer's ordinary command.
       for (const hook of ["deny-dangerous", "deny-git-mutations"] as const) {
         const policyResult = runInertPolicyCheck(
           policyAllowCase.userCommand,
@@ -979,12 +1061,15 @@ describe("deny-dangerous parser boundaries", () => {
     { name: "direct --check", run: runInertPolicyCheck },
     {
       name: "provider payload",
+      // Replay inert command text through stdin so this boundary fixture checks the user's alternate dispatcher input form.
       run: (userCommand: string, hook?: PolicyHook) =>
         runStdinPolicyCheck(userCommand, undefined, hook),
     },
   ] as const;
 
+  // Replay each quoted-command boundary to verify the same allowed or blocked decision across input forms.
   for (const parserCase of parserBoundaryCases) {
+    // Each dispatcher input form must preserve the user's command text and policy decision.
     for (const inputMode of inputModes) {
       const verdict = parserCase.expectedStatus === 0 ? "allows" : "blocks";
       it([verdict, parserCase.name, "via", inputMode.name].join(" "), () => {
@@ -999,6 +1084,7 @@ describe("deny-dangerous parser boundaries", () => {
           parserCase.expectedStatus,
           policyResult.stderr,
         );
+        // An allowed request returns silently so the provider can continue the developer's work.
         if (parserCase.expectedStatus === 0) {
           assert.equal(policyResult.stderr, "");
           return;

@@ -229,6 +229,45 @@ function writeClaudeHookSettings(
 }
 
 describe("effective hook state", () => {
+  // An ordinary Sync or another hook's toggle must keep the user's unsaved Git choice on in a current installation.
+  for (const action of ["sync", "unrelated-toggle"] as const) {
+    it(`preserves a missing Git choice during current-installed ${action}`, () => {
+      const projectPath = createClaudeProject();
+      syncHookStates(projectPath);
+      // Current trusted bytes require no policy-upgrade review; ordinary persistence must retain the default.
+      writeFileSync(
+        join(projectPath, ".goat-flow/config.yaml"),
+        'version: "1.17.0"\nhooks:\n  deny-dangerous:\n    enabled: false\n',
+      );
+      const before = requiredHook(
+        readAllHookStates(projectPath),
+        "deny-git-mutations",
+      );
+      assert.equal(before.enabled, true);
+      assert.equal(before.agents.claude.isRegistered, true);
+      assert.equal(before.agents.claude.isCurrentVersionInstalled, true);
+      assert.equal(before.agents.claude.isTrusted, true);
+      // Sync preserves the current choices; the alternate action enables post-turn coverage without changing Git protection.
+      if (action === "sync") {
+        syncHookStates(projectPath);
+      } else {
+        applyHookState("post-turn-safety", true, projectPath);
+      }
+      const after = requiredHook(
+        readAllHookStates(projectPath),
+        "deny-git-mutations",
+      );
+      assert.equal(after.enabled, true);
+      assert.equal(after.agents.claude.isRegistered, true);
+      assert.equal(after.agents.claude.isCurrentVersionInstalled, true);
+      assert.equal(after.agents.claude.isTrusted, true);
+      assert.equal(
+        requiredHook(readAllHookStates(projectPath), "deny-dangerous").enabled,
+        false,
+      );
+    });
+  }
+
   /** Invariant: deterministic fixture evidence stays below live support in user-facing state. */
   it("keeps deterministic delivery evidence below live support", () => {
     const denySpec = getHookSpec("deny-dangerous");
@@ -259,8 +298,8 @@ describe("effective hook state", () => {
     );
   });
 
-  /** Current deny and Gruff proof expire while the uncaptured Stop registration stays stale. */
-  it("expires exact Codex proof while keeping uncaptured Stop stale", () => {
+  /** Each published Codex capture stays current through its deadline and expires immediately afterward. */
+  it("expires exact Codex deny, Gruff and Stop proof", () => {
     const denySpec = getHookSpec("deny-dangerous");
     const gruffSpec = getHookSpec("gruff-code-quality");
     const postTurnSpec = getHookSpec("post-turn-safety");
@@ -304,9 +343,19 @@ describe("effective hook state", () => {
       "provider-capture-stale",
     );
 
-    assert.equal(postTurnCodexEvidence.expiresAt, undefined);
+    assert.equal(postTurnCodexEvidence.expiresAt, "2026-10-17T00:00:00Z");
     assert.equal(
-      currentHookProviderSupportGate(postTurnCodexEvidence),
+      currentHookProviderSupportGate(
+        postTurnCodexEvidence,
+        new Date("2026-10-17T00:00:00.000Z"),
+      ),
+      "scenario-unverified",
+    );
+    assert.equal(
+      currentHookProviderSupportGate(
+        postTurnCodexEvidence,
+        new Date("2026-10-17T00:00:00.001Z"),
+      ),
       "provider-capture-stale",
     );
   });
@@ -431,7 +480,7 @@ describe("effective hook state", () => {
   /**
    * Fixture purpose: stores an exact managed Antigravity command under a noncanonical sibling id.
    *
-   * Filesystem side effects: rewrites one disposable provider config and requests managed removal.
+   * Filesystem side effects: rewrites one disposable provider config and requests disable.
    * Invariant: ownership follows the exact script reference while unrelated definitions remain user-owned.
    */
   it("removes an Antigravity alias that references the exact managed script", () => {
@@ -463,7 +512,9 @@ describe("effective hook state", () => {
       string,
       unknown
     >;
-    assert.equal(countOwnedCommandRows(cleaned, denySpec), 0);
+    assert.equal(countOwnedCommandRows(cleaned, denySpec), 1);
+    assert.equal(cleaned["renamed-managed-policy"], undefined);
+    assert.ok(cleaned["deny-dangerous"]);
     assert.ok(cleaned["team-audit"]);
   });
 
@@ -471,7 +522,7 @@ describe("effective hook state", () => {
    * Fixture purpose: locally diverges a registered script after recording its prior managed hash.
    *
    * Filesystem side effects: toggles the disposable hook off while preserving its inert edited bytes.
-   * Invariant: disabling unregisters execution and never needs authority to refresh dormant files.
+   * Invariant: disabling retains its launcher registration without refreshing dormant policy files.
    */
   it("disables a diverged hook without refreshing its managed files", () => {
     const projectPath = createClaudeProject();
@@ -486,10 +537,12 @@ describe("effective hook state", () => {
 
     assert.equal(disabled.enabled, false);
     assert.equal(readFileSync(hookPath, "utf-8"), localBytes);
-    assert.doesNotMatch(
+    assert.match(
       readFileSync(join(projectPath, ".claude", "settings.json"), "utf-8"),
       /deny-dangerous\.sh/u,
     );
+    assert.equal(disabled.agents.claude.effectiveState.status, "disabled");
+    assert.equal(disabled.agents.claude.drift, undefined);
   });
 
   /**
@@ -840,7 +893,7 @@ describe("effective hook state", () => {
     );
     assert.deepEqual(
       report.scenarios.map((scenario) => scenario.observed),
-      ["blocked", "blocked", "blocked", "allowed"],
+      ["blocked", "blocked", "allowed"],
     );
     assert.deepEqual(
       claudeHookState(projectPath, "deny-dangerous").effectiveState,
@@ -938,7 +991,7 @@ describe("effective hook state", () => {
       assert.equal(report.summary.pass, report.scenarios.length);
       assert.deepEqual(
         report.scenarios.map((scenario) => scenario.observed),
-        ["blocked", "blocked", "blocked", "allowed"],
+        ["blocked", "blocked", "allowed"],
       );
       assert.deepEqual(
         codexHookState(projectPath, "deny-dangerous").effectiveState,
@@ -990,7 +1043,12 @@ describe("effective hook state", () => {
   it(
     "replays Codex Stop results without upgrading stale provider proof",
     { skip: process.platform !== "win32" },
-    () => {
+    (testContext) => {
+      // Local replay cannot renew a capture after its published deadline.
+      testContext.mock.timers.enable({
+        apis: ["Date"],
+        now: new Date("2026-10-17T00:00:00.001Z"),
+      });
       const projectPath = createCodexProject();
       initializeDisposableGitProject(projectPath);
       mkdirSync(join(projectPath, "src"), { recursive: true });
@@ -1049,4 +1107,40 @@ describe("effective hook state", () => {
       { status: "effective", severity: "success" },
     );
   });
+});
+
+// Write an incompatible launcher in a disposable project; an off request must preserve both saved config and launcher bytes.
+it("refuses off before changing an incompatible launcher and preserves all config bytes", () => {
+  const root = createClaudeProject();
+  syncHookStates(root);
+  const launcher = join(root, ".goat-flow/hooks/run-with-bash.mjs");
+  writeFileSync(
+    launcher,
+    readFileSync(launcher, "utf8") + "\n// locally edited launcher\n",
+  );
+  const config = join(root, ".goat-flow/config.yaml");
+  const before = readFileSync(config, "utf8"),
+    launchBefore = readFileSync(launcher, "utf8");
+  // Each safety switch must refuse an off request while its launcher is incompatible, leaving both config and launcher untouched.
+  for (const hookId of ["deny-dangerous", "deny-git-mutations"]) {
+    assert.throws(
+      () => applyHookState(hookId, false, root),
+      /Sync hooks on the Hooks page/,
+    );
+    assert.equal(readFileSync(config, "utf8"), before);
+    assert.equal(readFileSync(launcher, "utf8"), launchBefore);
+  }
+});
+
+it("does not present malformed policy config as a trusted disabled state", () => {
+  const root = createClaudeProject();
+  syncHookStates(root);
+  writeFileSync(
+    join(root, ".goat-flow/config.yaml"),
+    "hooks: {deny-dangerous: {enabled: 'false'}}\n",
+  );
+  assert.throws(
+    () => readAllHookStates(root),
+    /configuration is invalid or unavailable/,
+  );
 });

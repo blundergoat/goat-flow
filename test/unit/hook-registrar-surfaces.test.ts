@@ -1,7 +1,7 @@
 /**
- * How hooks decide where they belong: only detected agent surfaces are enabled, uninstalled
- * ones are never scaffolded, removed hooks are pruned rather than resurrected, and sync
- * repairs configuration without inventing project state.
+ * Check which detected agent surfaces can receive hook registration and show usable protection to the user.
+ *
+ * Uninstalled surfaces remain absent, retired hooks stay removed and Sync repairs existing configuration.
  * Every case builds a real project and reads back what the registrar actually wrote.
  */
 import assert from "node:assert/strict";
@@ -174,6 +174,7 @@ describe("hook registrar: surface detection, toggles, and sync", () => {
   it("registers every valid explicit child repository as one post-turn contract", () => {
     withTempProject((root) => {
       const configuredRoots = ["services/api", "packages/web"];
+      // Create each explicit child repository so post-turn registration can verify the user's chosen scan directories.
       for (const configuredRoot of configuredRoots) {
         const childRoot = join(root, configuredRoot);
         mkdirSync(childRoot, { recursive: true });
@@ -205,6 +206,7 @@ describe("hook registrar: surface detection, toggles, and sync", () => {
     });
   });
 
+  // Missing, escaping and invalid roots must produce the corresponding user-visible registration repair state.
   for (const rootCase of [
     { name: "absent", roots: null, expectedStatus: "missing" },
     { name: "escaping", roots: ["../outside"], expectedStatus: "invalid" },
@@ -216,7 +218,10 @@ describe("hook registrar: surface detection, toggles, and sync", () => {
       expectedStatus: "invalid",
     },
   ] as const) {
-    it(`keeps ${rootCase.name} non-Git root state wholly unregistered`, () => {
+    it(`keeps ${rootCase.name} non-Git root state wholly unregistered`, (testContext) => {
+      // Keep provider proof fresh so this case isolates invalid local roots.
+      const now = new Date("2026-09-18T00:00:00Z");
+      testContext.mock.timers.enable({ apis: ["Date"], now });
       withTempProject((root) => {
         mkdirSync(join(root, ".codex"), { recursive: true });
         mkdirSync(join(root, ".goat-flow"), { recursive: true });
@@ -241,19 +246,17 @@ describe("hook registrar: surface detection, toggles, and sync", () => {
         );
 
         const state = applyHookState("post-turn-safety", true, root);
+        const { codex } = state.agents;
 
         assert.equal(state.scanRoots?.status, rootCase.expectedStatus);
         assert.deepEqual(state.scanRoots?.roots, rootCase.roots ?? []);
-        assert.equal(state.agents.codex.installed, false);
-        assert.equal(state.agents.codex.isRegistered, false);
-        // ADR-052's expired provider capture precedes the separately asserted local registration gap.
-        assert.equal(
-          state.agents.codex.effectiveState.status,
-          "provider-capture-stale",
-        );
-        assert.equal(state.agents.codex.repairCommand, null);
+        assert.equal(codex.installed, false);
+        assert.equal(codex.isRegistered, false);
+        // Fresh provider proof cannot register a hook whose local roots are invalid.
+        assert.equal(codex.effectiveState.status, "not-registered");
+        assert.equal(codex.repairCommand, null);
         assert.match(
-          state.agents.codex.repairSummary,
+          codex.repairSummary,
           /configure valid scan roots or disable this hook/iu,
         );
         assert.equal(existsSync(join(root, ".codex", "hooks.json")), false);
@@ -268,6 +271,7 @@ describe("hook registrar: surface detection, toggles, and sync", () => {
     "  post-turn-safety:",
     "    enabled: true",
   ];
+  // Alias-backed scan roots must not expand the user's scan scope beyond the supported literal runtime contract.
   for (const aliasCase of [
     {
       name: "a scalar alias for the whole list",
@@ -290,7 +294,10 @@ describe("hook registrar: surface detection, toggles, and sync", () => {
       scanRootLines: ["    scan-roots: &roots", "      - services/api"],
     },
   ]) {
-    it(`refuses post-turn scan roots written as ${aliasCase.name}`, () => {
+    it(`refuses post-turn scan roots written as ${aliasCase.name}`, (testContext) => {
+      // Keep provider proof fresh so this case isolates invalid local roots.
+      const now = new Date("2026-09-18T00:00:00Z");
+      testContext.mock.timers.enable({ apis: ["Date"], now });
       withTempProject((root) => {
         const childRoot = join(root, "services", "api");
         mkdirSync(childRoot, { recursive: true });
@@ -313,13 +320,12 @@ describe("hook registrar: surface detection, toggles, and sync", () => {
           (hookState) => hookState.id === "post-turn-safety",
         );
 
+        const codex = state?.agents.codex;
+
         assert.equal(state?.scanRoots?.status, "invalid");
         assert.match(state?.scanRoots?.issue ?? "", /anchor|alias/iu);
-        assert.equal(state?.agents.codex.isRegistered, false);
-        assert.equal(
-          state?.agents.codex.effectiveState.status,
-          "provider-capture-stale",
-        );
+        assert.equal(codex?.isRegistered, false);
+        assert.equal(codex?.effectiveState.status, "not-registered");
       });
     });
   }
@@ -333,6 +339,7 @@ describe("hook registrar: surface detection, toggles, and sync", () => {
       runGit(externalRoot, ["init", "-q"]);
       withTempProject((root) => {
         const linkedRepo = join(root, "linked-repo");
+        // A host without symlink support cannot exercise this escaping-root fixture and records a skip.
         if (!symlinkOrSkip(testContext, externalRoot, linkedRepo, "dir")) {
           return;
         }
@@ -1025,6 +1032,7 @@ describe("hook registrar: managed surface preservation", () => {
     it(`rejects a ${fixture.name} without exposing its root`, (testContext) => {
       withTempProject((fixtureProjectPath) => {
         const installedLauncher = installCodexDenyHook(fixtureProjectPath);
+        // A host unable to create this unsafe path records a skip instead of claiming the guard rejected that shape.
         if (!mutateOrSkip(testContext, fixture, fixtureProjectPath)) {
           return;
         }

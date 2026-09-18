@@ -171,8 +171,8 @@ describe("skill hardening contracts: goat-plan (1/2)", () => {
       );
     });
     assert.ok(
-      countSkillBodyWords("workflow/skills/goat-plan/SKILL.md") <= 2500,
-      "workflow goat-plan must stay within the functional-skill word budget",
+      countSkillBodyWords("workflow/skills/goat-plan/SKILL.md") < 2500,
+      "workflow goat-plan must stay below the functional-skill limit of 2500 words",
     );
   });
 
@@ -446,13 +446,14 @@ describe("skill hardening contracts: goat-plan (1/2)", () => {
   it("makes explicit no-write signals outrank named-file mutation verbs", () => {
     assertForEachTarget(installedSkillPaths("goat-plan"), (skillPath) => {
       const intake = readMarkdownSection(skillPath, "Step 0 - Intake");
-      const readOnlyIndex = intake.indexOf("**2: Read-Only Analysis**");
+      const pathOnlyIndex = intake.indexOf("**0: Path-Only Intake");
+      const readOnlyIndex = intake.indexOf("**No-file guard: Mode 2**");
       const namedFileIndex = intake.indexOf("**1: Named-File Update**");
 
       assert.notEqual(
         readOnlyIndex,
         -1,
-        `${skillPath}: missing read-only mode`,
+        `${skillPath}: missing early no-file guard`,
       );
       assert.notEqual(
         namedFileIndex,
@@ -460,7 +461,9 @@ describe("skill hardening contracts: goat-plan (1/2)", () => {
         `${skillPath}: missing named-file update mode`,
       );
       assert.ok(
-        readOnlyIndex < namedFileIndex,
+        pathOnlyIndex !== -1 &&
+          pathOnlyIndex < readOnlyIndex &&
+          readOnlyIndex < namedFileIndex,
         `${skillPath}: explicit no-write signals lose first-match selection`,
       );
       assert.match(
@@ -479,13 +482,14 @@ describe("skill hardening contracts: goat-plan (1/2)", () => {
       );
       assert.deepEqual(
         modeIds,
-        ["0", "2", "1", "R", "2", "3", "4"],
-        `${skillPath}: stable labels must retain the approved first-match order`,
+        ["0", "1", "R", "2", "3", "4"],
+        `${skillPath}: list each mode once; retain the inline fallback after reconciliation`,
       );
       const delivery = readMarkdownSection(
         skillPath,
         "Phase 2 - Deliver Milestones",
       );
+      // Every admitted plan mode needs matching delivery guidance so the agent can finish the user's selected workflow.
       for (const modeId of new Set(modeIds)) {
         assert.ok(
           delivery.includes(`### Mode ${modeId}:`),

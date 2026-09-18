@@ -85,6 +85,7 @@ function hookPageFixture() {
   let cancelFocusCount = 0;
   const sandbox = createContext({
     URL,
+    // Model the user cancelling a confirmation so the Hooks fixture can verify that the action is refused.
     window: { confirm: () => false, location: { href: "http://localhost/" } },
     document: { title: "" },
     localStorage: {
@@ -138,21 +139,28 @@ function hookPageFixture() {
     supportedAgents: [],
     serverSessions: [],
     sessions: [],
+    // Retain navigation callbacks so the fixture can replay the user changing project or view.
     $watch: (name: string, callback: (...args: string[]) => void) =>
       watchers.set(name, callback),
+    // Run deferred UI work immediately so this fixture can observe focus after a Hooks review opens.
     $nextTick: (callback: () => void) => callback(),
     $refs: {
       hookReplacementCancel: {
+        // Count focus on Cancel so the fixture can verify the user can safely dismiss the replacement review.
         focus: () => {
           cancelFocusCount += 1;
         },
       },
     },
+    // Retain visible notifications so the fixture can assert what the user sees after a hook action.
     showToast: (message: string) => toasts.push(message),
     /** Keep unrelated terminal cleanup inert while real project-navigation watchers run. */
     detachTerminal() {},
+    // Keep terminal reconnection inert while the fixture exercises real Hooks navigation behavior.
     reconnectTerminal: async () => {},
+    // Keep unrelated session counting inert while the fixture exercises real Hooks navigation behavior.
     updateSessionCount: async () => {},
+    // Keep unrelated Home quality work inert while the fixture exercises real Hooks navigation behavior.
     generateHomeQualitySummary: async () => {},
   });
   sandbox.fixtureContext = ctx;
@@ -227,7 +235,10 @@ describe("dashboard hook actions", () => {
     const enabling = page.ctx.toggleHook({ ...HOOK, enabled: false }, true);
     respond(page.requests[0], REVIEW, 409);
     await enabling;
+    assert.ok(page.ctx.hooksReplacement);
+    page.ctx.hooksReplacement.hasAcceptedReplacement = true;
     const retrying = page.ctx.confirmHookReplacement();
+    // No retry request becomes an empty URL and fails the assertion instead of hiding a missing user action.
     assert.match(
       page.requests[1]?.url ?? "",
       /deny-dangerous\/toggle\?path=%2Fproject-a/u,
@@ -245,12 +256,101 @@ describe("dashboard hook actions", () => {
     respond(page.requests[1], { hook: HOOK, hooks: [HOOK, sibling] });
     await retrying;
     assert.deepEqual(plain(page.ctx.hooksState), [HOOK, sibling]);
-    assert.deepEqual(page.toasts, ["Deny dangerous hook enabled"]);
+    assert.deepEqual(page.toasts, ["Deny dangerous hook: on saved"]);
     assert.equal(
       page.requests.length,
       2,
       "the successful POST already supplies every affected row",
     );
+  });
+
+  // A policy upgrade can require consent without replacing local edits, so each checkbox has independent request authority.
+  for (const hasConflicts of [false, true]) {
+    it(`keeps policy and replacement consent separate with conflicts=${hasConflicts}`, async () => {
+      const page = hookPageFixture();
+      const saving = page.ctx.syncOfficialHooks();
+      respond(
+        page.requests[0],
+        {
+          ...REVIEW,
+          code: "hook-policy-review-required",
+          replacementAvailable: hasConflicts,
+          conflicts: hasConflicts ? REVIEW.conflicts : [],
+          policyReview: {
+            original: { "deny-dangerous": true, "deny-git-mutations": false },
+            requested: { "deny-dangerous": true, "deny-git-mutations": false },
+            paths: [".goat-flow/hooks/deny-dangerous/guard-runtime.sh"],
+          },
+        },
+        409,
+      );
+      await saving;
+      assert.ok(page.ctx.hooksReplacement);
+      assert.equal(page.ctx.hooksReplacement.hasAcceptedPolicyChange, false);
+      await page.ctx.confirmHookReplacement();
+      assert.equal(page.requests.length, 1);
+      page.ctx.hooksReplacement.hasAcceptedPolicyChange = true;
+      // Policy consent alone cannot authorize a separate file conflict displayed in the same panel.
+      if (hasConflicts) {
+        await page.ctx.confirmHookReplacement();
+        assert.equal(page.requests.length, 1);
+        page.ctx.hooksReplacement.hasAcceptedReplacement = true;
+      }
+      const retry = page.ctx.confirmHookReplacement();
+      assert.deepEqual(JSON.parse(String(page.requests[1]?.init?.body)), {
+        acceptPolicyChange: true,
+        ...(hasConflicts ? { replace: true } : {}),
+        confirmationIdentity: REVIEW.confirmationIdentity,
+      });
+      respond(page.requests[1], { hooks: [HOOK] });
+      await retry;
+    });
+  }
+
+  // Incomplete before/after choices must retain the server's refusal and never offer the user an approval retry.
+  for (const policyReview of [
+    "invalid review",
+    { original: null, requested: {}, paths: ["runtime.sh"] },
+    { original: {}, requested: [], paths: ["runtime.sh"] },
+  ]) {
+    it(`preserves the server diagnostic for a malformed policy review: ${JSON.stringify(policyReview)}`, async () => {
+      const page = hookPageFixture();
+      const saving = page.ctx.syncOfficialHooks();
+      const error = "Policy upgrade refused; no hook files changed.";
+      respond(page.requests[0], { ...REVIEW, error, policyReview }, 409);
+      await saving;
+      assert.equal(page.ctx.hooksError, error);
+      assert.equal(page.ctx.hooksReplacement, null);
+      await page.ctx.confirmHookReplacement();
+      assert.equal(page.requests.length, 1);
+      assert.deepEqual(page.toasts, []);
+    });
+  }
+
+  // Cancelling policy-only review must leave the project untouched, even if a stale confirmation follows.
+  it("cancels a policy-only review without another request", async () => {
+    const page = hookPageFixture();
+    const saving = page.ctx.syncOfficialHooks();
+    respond(
+      page.requests[0],
+      {
+        ...REVIEW,
+        replacementAvailable: false,
+        conflicts: [],
+        policyReview: {
+          original: { "deny-dangerous": false, "deny-git-mutations": true },
+          requested: { "deny-dangerous": false, "deny-git-mutations": true },
+          paths: [".goat-flow/hooks/deny-dangerous/guard-runtime.sh"],
+        },
+      },
+      409,
+    );
+    await saving;
+    assert.ok(page.ctx.hooksReplacement);
+    page.ctx.cancelHookReplacement();
+    await page.ctx.confirmHookReplacement();
+    assert.equal(page.requests.length, 1);
+    assert.equal(page.ctx.hooksReplacement, null);
   });
 
   // Every completion type must respect both project and page visit changes, including returning to the original value.
