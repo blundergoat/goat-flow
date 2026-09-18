@@ -6,10 +6,12 @@ Guardrails are goat-flow's runtime command-safety hooks. Each agent registers `d
 
 | Surface | Path | Role |
 | --- | --- | --- |
-| Dangerous policy | `workflow/hooks/deny-dangerous.sh` | Blocks recursive force deletion, privileged package-manager mutation, secret-path access, and GitHub write operations through `gh` |
-| Native Git policy | `workflow/hooks/deny-git-mutations.sh` | Blocks `git commit`, publication including `git push`, and destructive history or cleanup operations |
+| Dangerous policy | `workflow/hooks/deny-dangerous.sh` | Blocks recursive force deletion, privileged package-manager mutation, and secret-path access |
+| Git and GitHub policy | `workflow/hooks/deny-git-mutations.sh` | Blocks Git commits, publication, destructive Git operations, and GitHub writes; permits GitHub reads and issue/PR comments |
 | Policy store | `.goat-flow/hooks/deny-dangerous/` | Shared `guard-runtime.sh` parser and response implementation plus three policy modules |
 | Self-test | `.goat-flow/hooks/deny-dangerous/deny-dangerous-self-test.sh` | Routes smoke/full cases to each owning policy; preflight invokes both entrypoints |
+
+GitHub write checks now belong to **Deny Git and GitHub writes** (saved ID: `deny-git-mutations`). If either the current or requested switch pair has one policy on and the other off, changing an existing installation’s ownership files requires review on the newer dashboard Hooks page. Review the selected project, both sets of choices, affected files and GitHub protection before accepting. Policy consent and replacement of local edits have separate checkboxes; Cancel changes nothing. CLI Sync, install and force options cannot provide policy consent. Once the ownership files match the bundle, ordinary Sync needs no repeated policy review.
 
 ## Agent Mapping
 
@@ -29,7 +31,7 @@ Guardrails are goat-flow's runtime command-safety hooks. Each agent registers `d
 - `goat-flow hooks list --json`
 - After trusting the selected checkout: `goat-flow hooks verify . --agent <id> --scenario all --trusted-target`
 
-Both policies default on. Upgrades preserve an explicit Git-hook choice or inherit the previous dangerous-hook choice once; later toggles are independent. Shared-file repairs can stale both proof records. `hooks sync` repairs installation, and each policy's verification group supplies fresh proof. Agents still never commit or push, regardless of toggle state.
+Both policies default on. Explicit upgrade migration preserves a saved Git-hook choice or inherits the previous dangerous-hook choice once. Ordinary toggles and `hooks sync` preserve saved choices and keep a missing Git choice on. Shared-file repairs can stale both proof records. `hooks sync` repairs installation, and each policy's verification group supplies fresh proof. Agents still never commit or push, regardless of toggle state.
 
 ## Troubleshooting a blocked check
 
@@ -45,6 +47,19 @@ A policy denial means the hook rejected the proposed command. An unavailable pol
 The launcher can report these failures only after Node starts. A host that cannot start Node or rejects the handler before launch has a host-prerequisite failure; the hook cannot guarantee a blocking response at that earlier boundary.
 
 For shell-context problems, distinguish the hook's launcher from the command being inspected. A PowerShell registration describes how the hook starts, not which shell will interpret the proposed command. Use the provider's captured command fields and established tool-shell context when diagnosing grammar. Missing context leaves the case unresolved; it does not justify stripping escapes or relaxing a denial.
+
+## Recovering an older installation
+
+On the newer dashboard's Hooks page, select the affected project and use **Sync official hooks** before changing an incompatible policy installation.
+Approve policy ownership and local-file replacement separately. If legacy state blocks Sync, stop and upgrade every writer, then run
+`goat-flow install <project-path> --agent <id> --migrate-state-only` from a normal terminal before requesting a fresh review.
+The action moves bookkeeping only; it keeps hook files and policy choices unchanged and refuses unsafe state or outstanding claims.
+Complete any remaining install-file review separately, then change only the affected switch and retry a benign request.
+
+Disabled policies retain their registrations so saved handlers can read the current off choice; other hooks keep their existing registration rules.
+Complete v1.16.0 Codex upgrade and saved-handler recovery are fixture-verified on a non-Windows host.
+Provider reload in an existing session is unverified; test a fresh session separately and do not treat it as recovery of the old one.
+See the [CLI recovery steps](cli.md#recovering-an-older-policy-installation) for the verified sequence and evidence limits.
 
 ## Limitations
 

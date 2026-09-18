@@ -248,6 +248,7 @@ scripts/                         = development, release, test, and maintenance s
 ├── dependency-install.sh        = guarded npm install wrapper
 ├── dependency-update.sh         = guarded dependency update wrapper
 ├── deploy-landing.sh            = docs/site deployment helper
+├── generate-hook-policy-parser.mjs = vendors the locked YAML parser and license for dependency-free installed hooks
 ├── generate-managed-hook-desired-state.mjs = regenerates the standalone installer's managed-hook contract from the TypeScript writer
 ├── gruff-ts.sh                  = gruff-ts static-analysis wrapper; args pass through, bare run prints the digest
 ├── install-browser-tools.sh     = browser-use and Playwright install helper
