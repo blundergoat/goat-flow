@@ -49,13 +49,13 @@ Plans are local workflow state, not a setup invariant. Mode R is read-only: repo
 
 **0: Path-Only Intake / Read-Only Orientation** - path-only or ambiguous task path. Summarize status, ask next action, stop.
 
-**2: Read-Only Analysis** - reporting-only/no-file constraints forbid writes; no-implementation alone does not. Conflicting write/no-write instructions preserve bytes and require clarification.
+**No-file guard: Mode 2** - reporting-only/no-file constraints forbid writes; no-implementation alone does not. Conflicting write/no-write instructions preserve bytes and require clarification.
 
 **1: Named-File Update** - explicit plan edits, including reconcile-and-fix with implementation prohibited. A path alone is not write approval; use Phase 2 § Mode 1, never implement code.
 
 **R: Reconcile Existing Plan State** - reconcile/audit without requested edits: compare evidence, propose corrections, stop without writes.
 
-**2: Read-Only Analysis** - inline planning without artifact authority; skip Phase 3. File mode needs later authorization.
+**2: Read-Only Analysis** - inline planning without artifact authority; skip Phase 3. File mode requires authorization.
 
 **3: Small File-Write** - explicit planning artifacts for Hotfix / Small Feature (1-2 milestones); use Mode 4's write path with compact ceremony.
 

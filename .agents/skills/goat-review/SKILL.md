@@ -104,7 +104,7 @@ Assign stable `R-001…` IDs in report order; reuse in risks/refuter output. `MU
 
 **Evidence before severity:** resolve reachability, attacker control, preconditions, authentication, and blast radius before labeling. When axes disagree, use the lower tier; cap any threat-model boost at one tier.
 
-Use prefix `R-NNN [SEVERITY:ACTION]`; MUST/SHOULD lines add `Harm:`.
+Use prefix `R-NNN [SEVERITY:ACTION]`.
 
 **Proof Capsule:** use `RUNTIME` | `CONTRACT-GREP` | `STATIC` | `NOT-REPRODUCED`. Evidence tags measure certainty, proof classes method, verdicts disposition; `UNVERIFIED` ≠ `NOT-REPRODUCED`. MUST/correctness-SHOULD prefer runtime/grep; NOT-REPRODUCED adds `not-reproduced-findings`.
 
@@ -165,7 +165,7 @@ Offer Pass 3 for user opt-in, `coverage-degraded`/`high-inference`, or a MUST-ne
 
 **Method:** After approval, use `references/refuter-spec.md` with authenticated non-host; send authority metadata plus R-ID FINDINGS LIST, never the diff.
 
-**Synthesis:** Refuter output is advisory; only host-reproduced evidence changes findings (Finding authority). After host proof, tag unverifiable citations `refuter-citation-unverified`, unresolved claims `cross-model-unresolved`, and return leads to Pass 2.
+**Synthesis:** Refuter output is advisory; apply Finding authority to host-reproduced evidence. After host proof, tag unverifiable citations `refuter-citation-unverified`, unresolved claims `cross-model-unresolved`, and return leads to Pass 2.
 
 **Constraints:** Before approval, run only reference-listed availability/auth checks; versions do not prove auth. Without an authenticated refuter, skip with `cross-model-refuter-failed`.
 
@@ -203,7 +203,7 @@ Never emit a whole field for `n/a` except failed PR ingestion; subvalues may use
 - MUST NOT surface Pass 2-refuted suspicions
 - MUST chunk per Step 0; oversized scopes never enter Pass 1 unchunked, and a decline ends at the terminal Step 0 receipt
 - After each accepted chunk, host-redact `.goat-flow/logs/review/goat-review-chunks.<random>.md` with the scope snapshot, bound authority, chunks completed, chunks remaining, findings with R-IDs, refutation ledger. Resume by re-binding the same authority, verify no drift, continue at the next chunk, and emit one consolidated verdict. Drift stops.
-- If skipped, record `Spec drift: skipped` without a degradation flag only for selected opt-in; otherwise omit the row
+- If skipped, record `Spec drift: skipped` without a degradation flag
 - MUST NOT edit files unless user separately says to apply, edit, update, fix, or implement; MUST NOT frame Pass 1/Pass 2 as doer/verifier
 - **Consequence Gate:** every MUST/SHOULD finding MUST state concrete harm (breakage, leaks, regressions, silent failure, corruption, or blockage). Without named harm, downgrade to MAY.
 - **Ship Verdict (diff/PR or explicit release/merge question):** unresolved MUST or INTENT-MISMATCH -> NO; SHOULD-only -> YES WITH CONDITIONS; MAY-only -> YES. Ladder: YES -> YES WITH CONDITIONS -> PARTIAL -> NO. PENDING REFUTER/HUMAN is a pending state, not a ladder rung. Review Integrity `coverage-degraded`, `high-inference`, or `partial` lowers one rung.
