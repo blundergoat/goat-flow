@@ -1,6 +1,6 @@
 ---
 category: hooks
-last_reviewed: 2026-09-05
+last_reviewed: 2026-09-18
 ---
 
 **Scope:** Hook runtime delivery, provider result adapters, policy-module execution, and performance. Scanner blind spots live in [hook-scanning.md](hook-scanning.md); install, launch, registration, and config-drift plumbing in [hook-installation.md](hook-installation.md); the `deny-dangerous` policy parser in [deny-shell.md](deny-shell.md), [deny-secrets.md](deny-secrets.md), and [deny-writes.md](deny-writes.md).
@@ -22,11 +22,15 @@ last_reviewed: 2026-09-05
 ## Footgun: Registered Stop hooks can be dead config behind agent trust gates
 
 **Status:** active | **Created:** 2026-06-13 | **Evidence:** ACTUAL_MEASURED
-**Incident count:** 2 | **Latest occurrence:** 2026-08-10
+**Incident count:** 4 | **Latest occurrence:** 2026-09-18
 **Decision changed:** Treat project-layer trust, hook-handler trust, and live model delivery as separate gates before enabling a registration.
 **Trigger phase:** VERIFY
 
 **Prevention:** Treat hook registration facts as config evidence only. Before claiming an agent runs a Stop hook, capture a live payload or hook-side log write from that exact provider version, mode, config source, and trust state, and expire the record after 30 days or any relevant provider, hook, adapter, mode, source, or trust change. Gate default registration on verified delivery, not documented support, and keep the gate consistent across every Stop hook for that agent. Gating one Stop hook for one agent is a lock-step edit: `workflow/manifest.json` `hook_events.post_turn` to `null`, which flips `supportsPostTurnHook` in `src/cli/agents/registry.ts` (search: `supportsPostTurnHook`) so `check-verification.ts` skips the agent instead of penalising it; `hooks-registry.ts` `unsupportedAgents`; the generated `.agents/hooks.json` via `goat-flow hooks sync`, never hand-edited; plus the README hook table, CHANGELOG, `docs/dashboard.md`, and the `hook-registrar` tests.
+
+**Recurrence 2026-09-17:** In a live Codex CLI 0.154.0 capture, turning Git protection off in the dashboard moved its unchanged PreToolUse registration after the general policy. A fresh session then showed both hooks as modified, with two installed, zero active and two awaiting review, even though the general switch remained on. The in-memory replay preserved both definition hashes and reproduced the captured file exactly. `src/cli/server/agent-hook-writer.ts` (search: `prepareAgentHookState`) removes and appends owned rows; `src/cli/server/hook-registrar.ts` (search: `reconcileHook(change, gitSpec, true)`) reconciles the sibling first on a general toggle. Preserve current Codex registration bytes and order across toggles and Sync; config equivalence does not establish retained provider trust. `test/unit/hook-registrar.test.ts` (search: `keeps current managed files while a user leaves a hook disabled`) now compares exact registration bytes through both policy cycles and Sync; its assertion failed before the writer repair. The capture stopped without accepting the new trust prompts; live recovery remains unverified.
+
+**Recurrence 2026-09-18 (public installer):** After the dashboard repair, the approved public install still reversed the two unchanged PreToolUse rows. Both install calls exited zero and the second preserved all target bytes. Reconstructing the original registration order matched its saved SHA-256 exactly. The earlier live capture established that this row movement can invalidate Codex trust; trust after this installer run was not observed. Keep already-current Codex rows in place in the standalone installer as well as the registrar, and check exact registration bytes through public install after reviewed Sync. Owners: `workflow/install-goat-flow.sh` (search: `const originalConfig = JSON.stringify(currentConfig)`) and `test/integration/hook-sync-recovery.test.ts` (search: `recovers a full v1.16.0 installation`).
 
 **Symptoms:** Writing a Stop entry into `.codex/hooks.json` or `.agents/hooks.json` does not mean the agent executes it. On 2026-06-13, with Stop hooks registered for all three agents, Claude fired and delivered the full payload; Codex (codex-cli 0.139.0, `features` reporting `hooks stable true`, docs listing `Stop`) never executed the hook across four `codex exec` runs even with `--dangerously-bypass-hook-trust`, project trust, and a project config layer; Antigravity (agy 1.0.6) logged `Loaded hooks.json ... 1 total handlers` and `JSON hook "jsonhook__stop-capture_Stop_0_0": executing command`, but execution waited on `~/.gemini/trusted_hooks.json` review (`toolPermission=request-review`) and print mode exited first.
 

@@ -1,6 +1,6 @@
 ---
 category: hook-script-authoring
-last_reviewed: 2026-08-29
+last_reviewed: 2026-09-16
 ---
 
 **Scope:** The generated hook script and its helpers as code - ShellCheck on generated bodies, regex placement, template delimiters, helper dependencies, and PATH assumptions. Driving a hook with payloads is [hook-probe-testing.md](hook-probe-testing.md); coverage strategy is [hook-testing.md](hook-testing.md).
@@ -83,6 +83,8 @@ last_reviewed: 2026-08-29
 **What happened:** After splitting the guard hooks through `deny-dangerous.sh`, PreToolUse started reporting hook failures with exit code 127 when a thin policy hook could not load the shared helper. The script used `set -uo pipefail`, so a failed `source` did not stop execution; the hook then reached `main "$@"` before `main` existed.
 
 **Root cause:** I tested normal installed mirrors but did not test the degraded install shape where a policy hook exists without its required shared helper. That missed the actual failure users see during partial installs, stale mirrors, or interrupted setup.
+
+**Recurrence 2026-09-16:** Registry and manifest changes omitted the standalone installer's explicit reader/parser copy list. Its real-process off fixture failed as unavailable until both files shipped. Exercise the public installation path before relying on source-tree parity, and keep absent-provider regression tests unchanged: retained disabled registrations must not scaffold a provider from legacy script residue alone. Evidence: workflow/install-goat-flow.sh (search: hook-policy-state.cjs), test/integration/setup-install-preflight.test.ts (search: retains both off policy registrations), and test/unit/hook-registrar-surfaces.test.ts (search: cleans existing script residue).
 
 ## Lesson: Restricted-PATH hook fixtures break helpers that shell out
 

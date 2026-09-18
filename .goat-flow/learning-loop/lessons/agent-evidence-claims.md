@@ -1,6 +1,6 @@
 ---
 category: agent-evidence-claims
-last_reviewed: 2026-09-11
+last_reviewed: 2026-09-18
 ---
 
 **Scope:** What counts as citable evidence - mechanism claims need a read source, absence and exact-count claims need untruncated searches, gitignored paths are never durable anchors, and final verification gates need supported scopes with captured logs. Reading the request and retrieving memory is [agent-behavior.md](agent-behavior.md); using tools and the environment is [agent-tooling.md](agent-tooling.md); skill-trial evidence is [skill-trial-evidence.md](skill-trial-evidence.md).
@@ -122,7 +122,7 @@ The recurring failure is crediting a sampled or truncated capture as complete. T
 **Status:** active | **Created:** 2026-05-19
 **Decision changed:** Use repository-owned package scripts for supported gates; baseline bespoke checks and scope them to the claim they prove.
 **Trigger phase:** VERIFY
-**Incident count:** 25 | **Latest occurrence:** 2026-09-08
+**Incident count:** 28 | **Latest occurrence:** 2026-09-18
 
 **Prevention:** Run supported format, lint, Knip, and test gates with captured output, one command per gate. A predecessor may exempt one named RED fixture only when a blocked dependent owns it; preserve the full failure receipt, run every other test, and keep the green gate downstream. Any extra failure stops. Copy each gate's invocation from its owner instead of improvising a scope, and quote the literal result line: `package.json` (search: `test:fast`), `package.json` (search: `"format:check"`), `scripts/preflight-checks.sh` (search: `lint_targets[@]`), `knip.json` (search: `ignoreDependencies`). Evidence anchor: `test/integration/setup-install-agent-matrix.test.ts` (search: `must have one exact registration`).
 
@@ -155,6 +155,26 @@ The recurring failure is crediting a sampled or truncated capture as complete. T
 
 
 **Recurrence 2026-09-08 (comment contracts):** Rewording two private test helpers introduced `docs.missing-invariant-doc` advisories despite the scoped baseline having none. Reading the installed rule showed that it recognizes specific contract words. State the actual must-hold rule in plain English, preserve useful parameter and return context, then repeat the same scoped formatter and analyzer commands. The repaired check reported no findings across the three selected files. **Evidence:** OBSERVED; `test/contract/skill-hardening-security-1.test.ts` (search: `posturesInReadingOrder`, `tokensInReadingOrder`); `scripts/gruff-ts.sh` (search: `exec "$GRUFF_BIN" "$@"`).
+
+**Recurrence 2026-09-18 (ignored test lint):** Installer closeout again treated ESLint's ignored-file exit zero as proof, then `--no-ignore` failed because tests are outside the parser projects. Read the supported target set before issuing a check; keep the ignored result and parser failure visible, and use Prettier plus runtime tests for this test source. Owners: `eslint.config.mjs` (search: `"test/**"`), `scripts/preflight-checks.sh` (search: `lint_targets=(src/cli src/dashboard)`), and `test/integration/hook-sync-recovery.test.ts` (search: `recovers a full v1.16.0 installation`).
+
+**Recurrence 2026-09-18 (policy selector):** The broad installer suite failed two archived-package migrations because its helper replayed the first PreToolUse row as the general guard. The migrated first row belonged to Git policy, which correctly allowed the destructive-shell payload. An isolated candidate selecting `deny-dangerous.sh` passed both failures without changing the payload or expected deny result. Bind policy proof to its owned script, preserve user-reviewed row order, and run the packaged cases after registration changes. Owners: `test/integration/packaged-hook-install.test.ts` (search: `readInstalledCodexDenyHandler`) and `src/cli/server/hook-registrar.ts` (search: `prepareGitProtection`). The candidate remained unapplied at the scope gate.
+
+**Recurrence 2026-09-18 (comments pass):** Comment edits exposed verification mistakes that changed the next gate decision.
+
+- A staged-only selected file gained an unstaged edit, and the snapshot check treated its working-copy status change as outside drift.
+  Record each write before admitting that status change; keep HEAD, staged columns, path membership and outside bytes fixed.
+  A nonzero tool exit did not throw automatically, so dependent writes also need an explicit exit-code gate.
+- Gruff reported two new documentation findings after rewording helpers. Read the installed rule and state the actual throws or writes contract.
+  Owners: `workflow/hooks/hook-policy-state.cjs` (search: `requireIdentity`) and
+  `test/unit/hooks-runtime-evidence.test.ts` (search: `Fixture side effects: writes managed files`).
+- Shortened shell comments removed cited search phrases, and the learning-loop check reported stale references.
+  Restore cited phrases before rerunning the check; passing runtime tests cannot validate evidence links.
+  Owner: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `chain-count cap at nested depths`, `SAFE BY DEFAULT`).
+- The layout scan checked block comments but missed dense paragraphs formed by adjacent line comments.
+  Check both forms before claiming full layout coverage; `src/cli/cli-parser.ts` (search: `Trusted audit needs full runtime deny proof`).
+
+**Evidence:** OBSERVED. Write-accounting owner: `AGENTS.md` (search: `record the write allowlist`, `literal pass/fail line copied verbatim`).
 
 ---
 
@@ -193,8 +213,11 @@ The recurring failure is crediting a sampled or truncated capture as complete. T
 **Trigger phase:** ACT
 **Caught at:** VERIFY
 
-**Prevention:** Treat "already said elsewhere" as an evidence claim with three parts: where, reachable by whom, asserted how. A cut that cannot fill all three is not a cut. Measure the token delta per pair first; pipe-joined lists are nearly free under a whitespace cap, prose is not, and the cheapest-looking cut is often a single-owner rule.
+**Prevention:** Treat "already said elsewhere" as an evidence claim with three parts: where, reachable by whom, asserted how. Before cutting the old wording, search inbound semantic anchors as well as contract assertions; preserve a cited phrase or explicitly migrate its consumers. A cut that cannot fill all three is not a cut. Measure the token delta per pair first; pipe-joined lists are nearly free under a whitespace cap, prose is not, and the cheapest-looking cut is often a single-owner rule.
 
 **What happened:** In 1.17.0 M47 the goat-security root had one word of headroom and needed a posture field, a conclusion definition and a loading contract. Two cuts were justified as duplicates and were not: the Phase 6 requirement to verify referenced submodule content (search: `verify referenced content`), which no other line carried, and the Quick output clause excluding Full-only rows, whose loss let a trial evaluator add inventory-integrity rows to a Quick report. The contract suite caught the first; the paired-arm adjudicator caught the second. Both were restored and paid for by cuts whose survivor was named and asserted.
 
 **Root cause:** A nearby sentence on the same topic was read as the same rule. Overlap in subject is not identity of obligation, and a reader who reaches one line need not reach the other.
+
+
+**Recurrence 2026-09-18:** Quality follow-up M07 retained the accepted-risk and unavailable-tool rules in goat-security Phases 5/6, but removed the Constraints sentence cited by a lesson. All 240 skill contracts passed; `stats --check` then reported a stale reference. Rule equivalence did not preserve citation identity. Evidence: `.goat-flow/learning-loop/lessons/agent-behavior.md` (search: `A written repair list is a diagnosis, not a proof`) cites `workflow/skills/goat-security/SKILL.md` (search: `MUST NOT let accepted risk`). Preserve that anchor in the smaller proposed cut; validate learning references before declaring a trim complete.

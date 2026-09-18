@@ -1,6 +1,6 @@
 ---
 category: audit-contracts
-last_reviewed: 2026-09-13
+last_reviewed: 2026-09-18
 ---
 
 **Scope:** The audit's own contracts - skip semantics, renderer defaults for new report fields, repair paths sourced from target evidence, and boundary behaviour of inverse metrics. Tests that pin wording and serialization are [contract-testing.md](contract-testing.md); the CLI surface is [cli-contracts.md](cli-contracts.md).
@@ -139,9 +139,15 @@ last_reviewed: 2026-09-13
 **Status:** active | **Created:** 2026-09-13
 **Decision changed:** Run the documented capture shape and inspect the produced fields before prescribing it or asserting its terminal labels.
 **Trigger phase:** ACT | **Caught at:** VERIFY
+**Incident count:** 3 | **Latest occurrence:** 2026-09-18
 
-**Prevention:** Use the existing command contract against the actual project before embedding it in an assessment prompt. Distinguish unsupported capture from failed assessment, and use explicit named fields at TypeScript boundaries instead of assuming array indexes exist.
+**Prevention:** Use the existing command contract against the actual project before embedding it in an assessment prompt. For live hooks, map each required observation to a capture channel before requesting launch approval: event input, production output and exit, and the subsequent model response need separate evidence. A sibling observer cannot supply the production result. Read the exact provider clean-result contract before asserting a JSON shape; empty output with exit zero is valid for Codex Stop. Send terminal shortcuts separately from Enter, then inspect the native state before prompts. Distinguish unsupported capture from failed assessment, and use explicit named fields at TypeScript boundaries instead of assuming array indexes exist.
 
 **What happened:** Quality-process work first tried a worktree snapshot, which refused this repository's content-conversion settings. The documented raw `area` capture succeeded. Typecheck also rejected possibly undefined snapshot endpoints, and a persistence regression initially expected `grounding:` while the renderer emitted `assessment:`. Reading the owning paths corrected each assumption before the repository gates ran.
 
 **Evidence:** `docs/cli.md` (search: `live comparisons needing content conversion`), `src/cli/quality/schema-assessment.ts` (search: `parseSnapshotFingerprint`), `src/cli/quality/history-render.ts` (search: `assessment:`), and `test/integration/quality-assessment.test.ts` (search: `retains recommendations and provenance through real save`).
+
+
+**Recurrence 2026-09-18:** The Codex 0.154.0 Stop capture reached two trusted active handlers, returned the clean-control reply and saved nine live input field names. The packet retained only a sibling observer, so neither that event nor the inspected native transcript established the production handler's completion result. The agent stopped before the conflict trial and retained an inconclusive result. Native review also required restoring the two approved handlers after batched shortcut/Enter input temporarily toggled them off; both were active before the prompt. Contract owners: `src/cli/hook-contracts.ts` (search: `HookProviderCaptureEvidence`, `resultDelivery`, `modelResultVisibility`) and `workflow/hooks/hook-provider-adapters.mjs` (search: `adaptStopResult`). The local milestone capture records the actual observation; no provider defect or support promotion was established.
+
+**Recurrence 2026-09-18 (clean-output assertion):** The revised recorder forwarded the direct clean command's empty stdout, empty stderr and exit zero unchanged. The comparison helper nevertheless tried to decode clean stdout as JSON and failed. `workflow/hooks/hook-provider-adapters.mjs` (search: `adaptCleanResult`) explicitly returns those empty channels for Codex Stop. Correcting only the helper expectation and repeating the clean comparison verified the contract; the conflict comparison also preserved both output streams and exit. The subsequent live capture delivered the conflict finding, received a one-file model repair and completed cleanly. This establishes the reviewed instrumented capture, not forced-timeout recovery or other provider modes.

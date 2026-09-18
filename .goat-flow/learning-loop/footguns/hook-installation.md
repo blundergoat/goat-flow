@@ -1,6 +1,6 @@
 ---
 category: hook-installation
-last_reviewed: 2026-09-06
+last_reviewed: 2026-09-17
 ---
 
 **Scope:** Hook install, launch, registration, and config-drift plumbing. The `deny-dangerous` policy parser lives in [deny-shell.md](deny-shell.md), [deny-secrets.md](deny-secrets.md), and [deny-writes.md](deny-writes.md); runtime delivery and provider adapters live in [hooks.md](hooks.md).
@@ -13,7 +13,7 @@ last_reviewed: 2026-09-06
 **Prevention:**
 1. Treat hook support and agent installation as different facts: support comes from the manifest, installation from target-project surfaces.
 2. Do not count shared markers such as `AGENTS.md` or `.agents/skills/` as a per-agent opt-in when several profiles share them.
-3. On disable, remove existing residue, but never create a missing hook config just to remove an entry from it.
+3. Disabled policy hooks retain owned registrations; other hooks remove existing residue without creating a missing provider config.
 4. Regenerate installed configs through the hook writer so project toggles survive; raw template copies are only defaults.
 5. Match legacy residue to its owning provider before queueing changes; pending cleanup in another provider's folder is never an opt-in.
 
@@ -31,6 +31,7 @@ Keep legacy detection provider-specific and cleanup separate: `src/cli/server/ho
 ## Footgun: Hook recovery guidance can drift from the public CLI
 
 **Status:** active | **Created:** 2026-09-06 | **Evidence:** ACTUAL_MEASURED
+**Incident count:** 3 | **Latest occurrence:** 2026-09-17
 **Decision changed:** Reuse the public claim-inspection command builder and preserve recovery guidance in every hook error consumer.
 
 **Prevention:**
@@ -49,6 +50,25 @@ Owners: `src/cli/server/hook-operation.ts` (search: `hookClaimReleaseFailure`),
 `src/dashboard/dashboard-app-hook-setup-fragments.ts` (search: `dashboardShowHookActionFailure`).
 Tests: `test/integration/hook-sync-recovery.test.ts` (search: `prints working inspection commands`),
 `test/unit/dashboard-hook-actions.test.ts` (search: `while retaining the error, recovery and changed-file list`).
+
+
+**Recurrence 2026-09-17:** A mixed-policy project with legacy state could not finish recovery: install required dashboard consent, while reviewed Sync required install to migrate state before claims.
+Use `install --migrate-state-only` after stopping and upgrading every writer, then obtain fresh dashboard consent and finish install.
+An unrelated installer file conflict remains a separate decision; Sync's policy consent does not authorize replacing `.goat-flow/.gitignore`.
+Evidence: `src/cli/install-command.ts` (search: `migrateInstallStateOnly`, `policyUpgradeBlocker`) and
+`test/integration/setup-install-preflight.test.ts` (search: `reports review in CLI dry-run and refuses force before legacy-state migration`).
+The fixture verifies byte-preserving relocation, no-write refusals, exact policy consent, named file authority and repeated-install convergence.
+
+
+**Recurrence 2026-09-17 (archived shell install):** The live recovery target had no full-install history because the archived shell installer never recorded it.
+Reviewed Sync recorded 13 hook rows and no receipt; public install then refused 55 other paths without changing files.
+All 55 still matched the archived installation. State-only migration cannot create missing history, and hook consent cannot authorize those replacements.
+Preview public install against the exact installation route before limiting replacement scope; review each protected path separately.
+Owners: `src/cli/managed-setup-preview.ts` (search: `recordManagedHookAfterVerification`),
+`src/cli/managed-setup-admission.ts` (search: `managedSetupAdmissionFailure`),
+and `test/integration/hook-sync-recovery.test.ts` (search: `installArchivedCodexProject`).
+Public-install convergence requires a separate replay after Sync and saved-handler recovery.
+
 
 ## Footgun: Hook command strings can fail before guard code starts
 
@@ -70,7 +90,13 @@ Tests: `test/integration/hook-sync-recovery.test.ts` (search: `prints working in
 
 **Evidence:** Preflight and audit parse the configured command strings from every agent config, require an exact guard script path, and replay them with safe deny payloads: `scripts/preflight-checks.sh` (search: `configured_hook_smoke_output`) and `src/cli/audit/check-agent-deny-runtime.ts` (search: `configuredGuardCommands`). Contract anchors: `workflow/hooks/README.md` (search: `Failure Modes / Runtime Contracts`) and `src/cli/server/agent-hook-command.ts` (search: `managed root unavailable`).
 
+**Compatibility proof 2026-09-17:** A complete pinned v1.16.0 install confirms recovery through its exact saved general-policy handler after reviewed Sync.
+That release has shared policy modules but no separate Git hook; capture the new Git handler only after upgrade.
+Disabled registrations remain reachable, independent choices survive Sync, and user rows and other projects stay unchanged.
+Evidence: `test/integration/hook-sync-recovery.test.ts` (search: `recovers a full v1.16.0 installation`). This is non-Windows fixture proof, not live-session reload.
+
 **Incident ledger:**
+
 - **Recurrence 2026-06-01:** `verifyConfiguredHookRuntime` parsed the configured command but launched `bash` against `configured.scriptPath`, so a broken `$root` resolver or stale wrapper passed audit. It now executes `configured.command` directly: `src/cli/audit/check-agent-deny-runtime.ts` (search: `verifyConfiguredHookRuntime`), `test/unit/audit-command/agent-deny-hooks-drift.test.ts` (search: `exact configured hook command points at a stale path`), `test/unit/audit-command/agent-deny-hooks.test.ts` (search: `hides the script path in shell text`).
 - **Recurrence 2026-06-04 (PR #47):** the launcher added a `$CLAUDE_PROJECT_DIR` fallback for the script path but still ran from the old cwd, so the dispatcher recomputed policy root from the wrong directory. The Node launcher now preserves the corrected root as child cwd: `src/cli/server/agent-hook-command.ts` (search: `hookLaunchBootstrap`), `workflow/hooks/deny-dangerous.sh` (search: `git rev-parse --show-toplevel`), `workflow/hooks/agent-config/claude.json` and `.claude/settings.json` (search: `CLAUDE_PROJECT_DIR`).
 - **Recurrence 2026-06-09 (Codex):** bare `.goat-flow/hooks/deny-dangerous.sh` commands exited 127 from a nested cwd. The shell wrapper became a Node bootstrap plus managed Bash launcher: `workflow/hooks/agent-config/codex-hooks.json` (search: `run-with-bash.mjs`), `src/cli/server/agent-hook-command.ts` (search: `rootEnvironmentName`), `test/unit/hook-registrar.test.ts` (search: `generated Codex launchers resolve the active root`).

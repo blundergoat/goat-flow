@@ -1,6 +1,6 @@
 ---
 category: docs-and-crossrefs
-last_reviewed: 2026-09-05
+last_reviewed: 2026-09-18
 ---
 
 ## Footgun: Path validators can treat gitignored local-state markers as missing docs
@@ -71,16 +71,18 @@ last_reviewed: 2026-09-05
 **Decision changed:** Stage a rename before registering its destination; search all tracked files, not only Markdown, for old paths.
 **Trigger phase:** SCOPE
 **Caught at:** VERIFY
-**Incident count:** 8
-**Latest occurrence:** 2026-08-27
+**Incident count:** 9
+**Latest occurrence:** 2026-09-18
 
-**Prevention:** Before a rename, use `git grep` for the exact path and bare filename across all tracked files, stage the destination before changing existence-validated pointers, and repeat both sweeps after edits, classifying old-path hits as compatibility, legacy, or history; include hidden-file `rg` when ignored state matters. After merging a learning-loop bucket or generated index, run `goat-flow index` and `goat-flow stats --check` even when Git reports a clean auto-merge. This is DoD gate #6.
+**Prevention:** Before a rename, use `git grep` for the exact path and bare filename across all tracked files, stage the destination before changing existence-validated pointers, and repeat both sweeps after edits, classifying old-path hits as compatibility, legacy, or history; include hidden-file `rg` when ignored state matters. After merging a learning-loop bucket or generated index, run `goat-flow index` and `goat-flow stats --check` even when Git reports a clean auto-merge. For semantic-anchor changes, search all tracked text, including hidden learning buckets; prefer stable function or event identities over test titles that describe a temporary evidence state. This is DoD gate #6.
 
 **Symptoms:** A renamed or moved file breaks links in several documents at once. The glossary's Canonical File column, the `NEXT:` links in `workflow/setup/01-system-overview.md`, and the component tables in `.goat-flow/architecture.md` are dense pointer maps, so one stale path misleads setup, glossary, and architecture readers together.
 
 **Why it happens:** Hundreds of committed Markdown files reference each other by relative path (`git ls-files '*.md' | wc -l` gives the current count), so renaming one file typically breaks references in 5 to 10 others.
 
-**Evidence:** 2026-07-27: M01 registered a destination before M02 created it, so audit failed `evidence_path does not exist`, and M02 missed two synthetic config references. 2026-08-09: correcting M02's timeout premise left removed-phrase anchors in two roadmaps and two analysis reports that `rg --hidden --no-ignore` caught. 2026-08-27: renaming the Codex capture-expiry integration test updated the new recurrence but left an older one pointing at the previous title, and later that day Git auto-merged concurrent edits to a bucket and its generated index without a textual conflict while the combined index kept the old decision text and token estimate; `stats --check` caught both. Enforcers: `src/cli/audit/provenance-types.ts` (search: `evidence_path does not exist`), `scripts/profile-dashboard-audit.mjs` (search: `Synthetic. Commit rules`), `src/cli/facts/shared/search-anchors.ts` (search: `Validate one parsed citation`), `test/integration/hook-effective-state.test.ts` (search: `expires exact Codex proof while keeping uncaptured Stop stale`), `src/cli/stats/stats.ts` (search: `stale file ref`), `src/cli/stats/index-freshness.ts` (search: `const expected = formatIndex`). The historical M13 setup-step renumber left three stale pointers at the removed steps 09-customise-to-project and 05-install-skills, since fixed to `workflow/setup/05-customise-to-project.md` and `workflow/setup/03-install-skills.md`.
+**Evidence:** 2026-07-27: M01 registered a destination before M02 created it, so audit failed `evidence_path does not exist`, and M02 missed two synthetic config references. 2026-08-09: correcting M02's timeout premise left removed-phrase anchors in two roadmaps and two analysis reports that `rg --hidden --no-ignore` caught. 2026-08-27: renaming the Codex capture-expiry integration test updated the new recurrence but left an older one pointing at the previous title, and later that day Git auto-merged concurrent edits to a bucket and its generated index without a textual conflict while the combined index kept the old decision text and token estimate; `stats --check` caught both. Enforcers: `src/cli/audit/provenance-types.ts` (search: `evidence_path does not exist`), `scripts/profile-dashboard-audit.mjs` (search: `Synthetic. Commit rules`), `src/cli/facts/shared/search-anchors.ts` (search: `Validate one parsed citation`), `test/integration/hook-effective-state.test.ts` (search: `currentHookProviderSupportGate`), `src/cli/stats/stats.ts` (search: `stale file ref`), `src/cli/stats/index-freshness.ts` (search: `const expected = formatIndex`). The historical M13 setup-step renumber left three stale pointers at the removed steps 09-customise-to-project and 05-install-skills, since fixed to `workflow/setup/05-customise-to-project.md` and `workflow/setup/03-install-skills.md`.
+
+**Recurrence 2026-09-18:** M03 renewed the Codex Stop expiry test and repaired its lesson citation, but its four-file patch omitted the older citation in this footgun. The foreground learning check reported that test title as a stale file reference after both test owners passed. The source-wide search located this remaining citation. Evidence: `test/integration/hook-effective-state.test.ts` (search: `currentHookProviderSupportGate`), `src/cli/stats/stats.ts` (search: `stale file ref`).
 
 ---
 

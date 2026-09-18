@@ -1,6 +1,6 @@
 ---
 category: redaction
-last_reviewed: 2026-09-12
+last_reviewed: 2026-09-16
 ---
 
 **Scope:** Scrubbing secrets out of durable text - ordered rule interaction, redacting before the first write to a durable path, and metadata fields the body scrubber misses. Fixtures that must not embed real secret shapes are [hook-testing.md](hook-testing.md).
@@ -39,10 +39,20 @@ last_reviewed: 2026-09-12
 
 ## Lesson: Durable exports must redact metadata as well as body fields
 
-**Status:** active | **Created:** 2026-07-13
+**Status:** active | **Created:** 2026-07-13 | **Evidence:** ACTUAL_MEASURED
+**Incident count:** 4 | **Latest occurrence:** 2026-09-18
 
 **Prevention:** Inventory every serialized field, including filenames, identifiers, labels, and warning text. Add a secret-shaped value outside the main body to every durable-export redaction test.
 
 **What happened:** The first milestone-export scrubber cleaned titles and section bodies but returned the source filename unchanged, so a token-shaped filename remained visible in JSON preview output.
 
 **Evidence:** `src/cli/plans-export-output.ts` (search: `sourceFile: scrubDurableText`) now scrubs the filename with every other exported field; `test/unit/plans-export-writes.test.ts` (search: `prints redacted JSON preview`) reproduces the metadata leak and proves the preview removes it without writing files.
+
+**Recurrence 2026-09-16:** Text redaction of a serialized forecast case containing historical Markdown produced invalid JSON. Whole-history registration also recursively embedded the study and exceeded the serializer limit. Freeze only the registration fields consumed by the replay, exclude the target from its inputs, and validate sanitized JSON plus frozen hashes before publishing. Preserve failed output as diagnostics; never publish it as a valid registration. Evidence: src/cli/evidence/redaction.ts (search: DURABLE_TEXT_REDACTION_RULES) performs ordered text replacement, while src/cli/plans-forecast-history.ts (search: registrationEntries) reads schemaVersion and forecasts. Sanitize readable fields before serialization where the contract permits; do not silently change frozen source bytes to force a match.
+
+**Recurrence 2026-09-16 (M12):** I redacted and published a whole forecast registry before parsing the result, corrupting quoted text in three previously frozen Markdown sources.
+The original files still matched their saved hashes, allowing exact restoration without changing issued forecasts.
+Validate sanitized additions before merging them; preserve already frozen records byte-for-byte and replay the final candidate before publication.
+The existing evidence owners above apply: the text redactor does not preserve JSON string escaping, while forecast history depends on exact saved records.
+
+**Recurrence 2026-09-18:** M04 reused a whole-document redaction helper despite the M12 warning above. The resulting registry failed JSON parsing and altered the same three frozen input bodies. Their original files still matched every saved hash; exact restoration recovered all 3,764 origin/input checks and the pilot replay. Read this entry before registration work, sanitize new narrative fields before serialization, and validate the assembled JSON and frozen hashes before replacing the registry. The code owners above still apply; no forecast value, timestamp or protocol field changed.

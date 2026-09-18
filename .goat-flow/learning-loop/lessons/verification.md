@@ -1,9 +1,9 @@
 ---
 category: verification
-last_reviewed: 2026-09-14
+last_reviewed: 2026-09-15
 ---
 
-**Scope:** General verification discipline - what counts as proof, reading before claiming, and checking the thing you actually changed. Siblings own the narrower surfaces: [verification-validators.md](verification-validators.md) for getting a checker right, [verification-scanners.md](verification-scanners.md) for proving a guard guards, [verification-testing.md](verification-testing.md) for what a test must establish, [verification-preflight.md](verification-preflight.md) and [verification-formatting.md](verification-formatting.md) for repo-wide gates, [verification-gruff.md](verification-gruff.md) for the analyzer, [verification-environment.md](verification-environment.md) for whether the build, tree, or sandbox you measured is the one your claim is about, [milestone-accounting.md](milestone-accounting.md) for plan arithmetic, and [milestone-timing.md](milestone-timing.md) for timing receipts.
+**Scope:** General verification discipline - what counts as proof, reading before claiming, and checking the thing you actually changed. Siblings own the narrower surfaces: [verification-validators.md](verification-validators.md) for getting a checker right, [verification-scanners.md](verification-scanners.md) for proving a guard guards, [verification-testing.md](verification-testing.md) for what a test must establish, [verification-preflight.md](verification-preflight.md) and [verification-formatting.md](verification-formatting.md) for repo-wide gates, [verification-gruff.md](verification-gruff.md) for the analyzer, [verification-environment.md](verification-environment.md) for whether the build, tree, or sandbox you measured is the one your claim is about, [milestone-accounting.md](milestone-accounting.md) for plan arithmetic, [milestone-timing.md](milestone-timing.md) for timing receipts, and [skill-trial-evidence.md](skill-trial-evidence.md) for skill-trial baselines and scoring.
 
 ## Lesson: A plan's named defect is a claim to verify, not a finding to implement
 
@@ -38,6 +38,20 @@ last_reviewed: 2026-09-14
 
 **Root cause:** The message named a required substring and "must name" was read as "must contain", although an anchored regex is the likelier reading for a machine-parsed field and the file was one grep away.
 
+**Recurrence 2026-09-17:** Clearing M12's recovery block retained `Status reason` on `not-started`; strict validation rejected the ordinary state.
+Move recovery context to prose and reserve that field for exceptional states. Evidence: `src/cli/plans-check.ts` (search: `collectStatusReasonErrors`).
+
+**Recurrence 2026-09-17 (packaged tests):** Adding "reviewed" to an existing upgrade test title broke its cited learning-loop anchor.
+The original title still described the behavior, so it was restored; the helper comment now explains replacement consent.
+Before renaming a test, search its full title across code and learning entries. Evidence: `test/integration/packaged-hook-install.test.ts`
+(search: `syncs a 1.15.0 install through the archived CLI bin`) and `.goat-flow/learning-loop/footguns/hook-installation.md`
+(search: `syncs a 1.15.0 install through the archived CLI bin`).
+
+
+**Recurrence 2026-09-17 (review receipt):** The draft used `uncommitted=yes` for an explicit-path authority; validation requires `n/a` for that selector.
+Read the source-owned labels before assembling a receipt, and describe live dirty bytes in adjacent prose.
+Evidence: `src/cli/review-validate-authority.ts` (search: `reviewScopeLabels`).
+
 ---
 
 ## Lesson: I edited a dead code path because I assumed one implementation
@@ -52,6 +66,13 @@ last_reviewed: 2026-09-14
 **What happened:** Fixing the gruff hook's file-scope blind spot, the `--changed-scope` flag changed in `run_gruff_json` and the behaviour did not move. The hook has two paths, a legacy `analyse` path and a contract path selected when the analyzer advertises `gruff.hook.v1`; gruff-ts 0.4.0 advertises it, so `process_file_contract` runs and the edit was in code that never executes.
 
 **Root cause:** One plausible implementation was matched to the symptom and edited without checking whether it was the live branch, and the file was long enough that the second path sat past where reading stopped.
+
+**Recurrence 2026-09-17:** Running the workflow entrypoint still loaded the installed parser, so unchanged self-test counts did not exercise source edits.
+A later mirror write overlapped a running corpus and invalidated that run. Finish mirror updates before starting proof, then freeze bytes until it exits.
+The alias fixture also expected attached `-Cpath` to execute, but Git's read-only config probe rejected it with exit 129; keep only valid command forms.
+A first integration-test placement crossed Gruff's file-size threshold; the regressions moved to the existing central corpus.
+Evidence: `workflow/hooks/deny-dangerous.sh` (search: `GOAT_HOOK_LIB_DIR`) and
+`workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `selected repository commit alias`).
 
 ---
 
@@ -121,47 +142,12 @@ last_reviewed: 2026-09-14
 
 ---
 
-## Lesson: Skill RED baselines must retain current owner guidance
-
-**Status:** active | **Created:** 2026-08-14
-**Decision changed:** Before treating an unskilled run as evidence for a new skill, include every current owner and classify each failure against those owners before crediting the candidate.
-**Trigger phase:** SCOPE
-**Caught at:** VERIFY
-**Incident count:** 9 | **Latest occurrence:** 2026-09-14
-
-**Prevention:** Run the baseline in four ordered steps.
-
-1. **Freeze the owner manifest.** Give evaluators the same current instructions, playbooks, and routing an ordinary run would receive, and remove only the candidate artifact.
-2. **Prove delivery, then evaluability.** Require exact-volume per-file completion markers before dispatch. Set orchestration and nested output budgets; neither requested budgets nor successful commands prove delivered bytes. Budget persistence, validation, a second application and end-clock capture. Send large artifacts through supported stdin with a compact launch command. Freeze complete candidate packets and use the capacity-tested direct helper; an interpreter wrapper changes transport. After input growth, repartition to proven visible capacity and repeat the full trial. Run an end-to-end probe with the full diff, source, learning, consumer and verification volume; owner-only proof is insufficient. If complete baseline delivery cannot fit the registered call limit, stop candidacy instead of reducing context.
-3. **Freeze fixtures immutably.** Give baseline and candidate runs the baseline request only; expose a registered transformation only to its variation run. For a pull-request fixture, pin comparison commits and require the sorted local diff-path manifest to equal the authenticated files result before dispatch; a closed PR's current base-branch pointer is not evidence.
-4. **Classify before scoring.** Map every failed row back to the manifest: violating an already-loaded owner's gate or output stays owner noncompliance even when it repeats. Preserve omitted-owner and loaded-owner noncompliance as fixture evidence, but credit only a candidate-owned failure. Return separate owner, candidate, and infrastructure verdicts, and require a candidate verdict to cite one exact candidate-only clause.
-
-Evidence anchors: `AGENTS.md` (search: `Sub-agents: ONE objective`), `.goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md` (search: `Current constraints`), `.goat-flow/skill-docs/playbooks/code-comments.md` (search: `tie goes to the incumbent`), `.goat-flow/skill-docs/playbooks/naming-and-placement.md` (search: `Reconcile work using one unit per equation`), `.goat-flow/learning-loop/decisions/ADR-009-skill-consolidation.md` (search: `prefer modes inside an existing skill`).
-
-**What happened:** Goat-clarity candidacy runs reproduced compliant-comment churn after receiving a short project preservation rule, and the first interpretation treated the repetition as evidence for a code-clarity skill. The baseline had omitted the current comment and naming playbooks, including their stronger incumbent-tie rule and the existing ledger and report contract, so the runs measured reduced-context instruction adherence rather than whether a new skill beat ordinary ACT plus its owners.
-
-**Root cause:** "Without the candidate skill" was treated as "with only a distilled fixture rule", which removed both the proposed artifact and the existing alternative and made the counterfactual unfair. Repeated failure cannot establish artifact need when the baseline is weaker than the shipped route.
-
-The recurrences share a host-design error: delivery, capacity, fixture identity, or scoring changed what the trial could establish. Incident ledger:
-
-- **Recurrence 2026-08-15 (owner transport):** Both compact PR evaluators received truncated `gruff-code-quality.md` and missed five other owners. Neither read the PR; both were transport failures. Owner anchor: `.goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md` (search: `Current constraints`).
-- **Recurrence 2026-08-15 (immutable PR range):** A closed PR's live `base.sha` produced hundreds of local paths against a handful in the authenticated file list. Pinning the commit-graph range restored exact sorted-manifest agreement; closed metadata is not an immutable baseline. Owner anchor: `AGENTS.md` (search: `Never fabricate codebase facts`).
-- **Recurrence 2026-08-15 (context capacity):** All owners arrived, yet adding diff, source, learnings, consumers, and verification exhausted one evaluator on its fifth call. Complete delivery did not prove end-to-end capacity. Owner anchor: `AGENTS.md` (search: `Sub-agents: ONE objective`).
-- **Recurrence 2026-08-15 (mixed score ledgers):** Two isolated runs met delivery and call limits, but rewrote a compliant control. The host first scored candidate reproduction as 1 of 2; the frozen classification showed every candidate-only row passed, so it corrected this to 0 of 2. Existing-owner noncompliance stayed separate. Owner anchors: `.goat-flow/skill-docs/playbooks/code-comments.md` (search: `tie goes to the incumbent`) and `.goat-flow/skill-docs/playbooks/naming-and-placement.md` (search: `Reconcile work using one unit per equation`).
-- **Recurrence 2026-09-14:** Three forecast-planning baselines recovered outer-wrapper truncation but exhausted their eight-call budgets when oversized artifact commands were rejected. The host also exposed variation instructions in baseline inputs and omitted the routed prose owner from the frozen manifest. Their invalid drafts and partial decisions remain diagnostics. Direct stdin successfully preserved recovered evidence; it did not backfill evaluator completion. The approved replacement protocol requires one complete registered trial before the others. This session's local trial records are gitignored; durable transport owners are `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `Command is too large for policy inspection`) and `src/cli/redact-command.ts` (search: `Read a candidate durable artifact from stdin`).
-
-- **Recurrence 2026-09-14 (candidate intake):** After six complete baselines, the host appended candidate guidance through a `python3 -c` wrapper containing `subprocess.run`. Policy rejected that prescribed second call before the candidate could receive all owners or save a draft. The attempt remained diagnostic; the user approved a separately counted replacement using prepared packets through the direct helper. Owner anchor: `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Interpreter -c/-e with shell-execution primitive`).
-
-- **Recurrence 2026-09-14 (expanded candidate volume):** The next P trial used the direct helper and requested 25,000 tokens at both output layers, yet its revised-guidance response visibly omitted 719 tokens. It saved two valid drafts and an end clock, but missing body text still invalidated full delivery. A root read returned the entire command output; the exact later truncation component remains unverified. The proposed repair partitions unchanged owners and expands only the input-read budget. Owner anchor: `.goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md` (search: `Score application, not citation`).
-
----
-
 ## Lesson: Proof gates must distinguish execution, mode, and semantic outcome
 
 **Status:** active | **Created:** 2026-08-17 | **Evidence:** ACTUAL_MEASURED
 **Decision changed:** Accept a verification result only after confirming the command executed, selected the intended mode, and asserted the behavior rather than a shared keyword.
 **Trigger phase:** VERIFY
-**Incident count:** 17 | **Latest occurrence:** 2026-09-14
+**Incident count:** 18 | **Latest occurrence:** 2026-09-14
 **Merged:** 2026-09-05 - absorbed two assertion-design recurrences (2026-08-01, 2026-08-23) from `.goat-flow/learning-loop/lessons/audit-contracts.md`.
 
 **Prevention:** Before accepting any proof, answer three questions in order.
@@ -196,6 +182,8 @@ Evidence anchors: `test/unit/audit-harness/settings-rules-matched.test.ts` (sear
 **Recurrence 2026-09-14 (task-writing repair):** Fenced examples repeated an edit anchor; root selected a unique prose anchor. New-test formatting failed after candidate freeze; root repaired whitespace and recorded its hash transition. Preflight failed a subprocess timing case, which passed unchanged alone and in the full rerun. Fresh trials separated saving and history but still pointed requesters to private plans; one collapsed phases to avoid allocation. Treat local ISSUE drafts as public and explain shares of one forecast. Freeze formatted inputs; strict validation cannot prove export quality. Evidence: `test/integration/goat-plan-templates.test.ts` (search: `counts the short-task example`), `test/integration/preflight-progress.test.ts` (search: `escapedPipeReadyFile`), `workflow/skills/goat-plan/references/issue-format.md` (search: `Human-facing exports`); detailed receipts stay with the milestone.
 
 **Recurrence 2026-09-14 (saved forecast identity):** Legacy-only proof missed saved forecasts rejecting the nested-path example. `src/cli/plans-forecast-context.ts` (`collectLiveItemProblems`) removed only trailing estimates. Exercise documented formats in each supported mode, including changed-scope controls. `test/integration/goat-plan-templates.test.ts` (`counts the short-task example`) now accepts saved nested detail and rejects changed paths. Rereading the template corrected an initial proof-label error in this fixture.
+
+**Recurrence 2026-09-14 (resume):** `collectRemainingCutoffProblems` rejected mixed timestamp precision; align forecast/timer resolution and preserve corrections. A trial again guessed a missing directory; expose the saved target before command proof. Owner: `src/cli/plans-forecast-context.ts`.
 
 ---
 

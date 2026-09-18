@@ -1,9 +1,9 @@
 ---
 category: skill-trial-evidence
-last_reviewed: 2026-09-12
+last_reviewed: 2026-09-15
 ---
 
-**Scope:** Skill-trial evidence: validate produced output, observe the action behind a behavioural claim, and run every evaluation fixture.
+**Scope:** Skill-trial evidence: validate produced output, observe the action behind a behavioural claim, run every evaluation fixture, and keep an unskilled baseline loaded with every current owner before crediting a candidate.
 General evidence claims belong in [agent-evidence-claims.md](agent-evidence-claims.md).
 
 ## Lesson: Score a skill's output grammar with its validator, not by reading the report
@@ -93,3 +93,41 @@ M60 closeout also caught an unmatched metadata replacement: plans time finalized
 **Recurrence 2026-09-12 (M61/M63 forecast diagnostics):** A bare token-scanner hash rejected three comment-only edits; inverse substitution of those exact comment spans recovered the complete prior file digest. Treat an unvalidated preservation checker as a hypothesis, and verify the actual changed bytes before attributing its failure to source behavior. The focused forecast suite also omitted an adjacent whole-stdout assertion whose expected transcript lacked both new diagnostic lines. Search consumers of changed output before freezing the write scope, then rerun the actual failing fixture after its approved reconciliation. Evidence: `src/cli/plans-check-summary.ts` (search: `renderCalibrationSummary`) and `test/unit/plans-check.test.ts` (search: `reports the same cap-one transcript with omitted and explicit policy`).
 
 M63's preservation comparison then rejected its own prospectively advancing timing receipt while the completed corpus and original numerical output were unchanged. Separate the executing owner's permitted lifecycle changes from the frozen measured corpus: identify the exact changed fields before granting an owner-only exception, and continue comparing its forecast fields and every other record. Evidence: `src/cli/plans-time.ts` (search: `applyPlanTimeTransition`, `writeReceiptSection`) and `src/cli/plans-check-summary.ts` (search: `renderCalibrationSummary`).
+
+---
+
+## Lesson: Skill RED baselines must retain current owner guidance
+
+**Status:** active | **Created:** 2026-08-14
+**Decision changed:** Before treating an unskilled run as evidence for a new skill, include every current owner and classify each failure against those owners before crediting the candidate.
+**Trigger phase:** SCOPE
+**Caught at:** VERIFY
+**Incident count:** 10 | **Latest occurrence:** 2026-09-14
+**Merged:** 2026-09-15 - moved here from `.goat-flow/learning-loop/lessons/verification.md`; skill-trial baselines sit with skill-trial evidence, and the move recovered that bucket's headroom.
+
+**Prevention:** Run the baseline in four ordered steps.
+
+1. **Freeze the owner manifest.** Give evaluators the same current instructions, playbooks, and routing an ordinary run would receive, and remove only the candidate artifact.
+2. **Prove delivery, then evaluability.** Require exact-volume per-file completion markers before dispatch. Set orchestration and nested output budgets; neither requested budgets nor successful commands prove delivered bytes. Budget persistence, validation, a second application and end-clock capture. Send large artifacts through supported stdin with a compact launch command. Freeze complete candidate packets and use the capacity-tested direct helper; an interpreter wrapper changes transport. After input growth, repartition to proven visible capacity and repeat the full trial. Run an end-to-end probe with the full diff, source, learning, consumer and verification volume; owner-only proof is insufficient. If complete baseline delivery cannot fit the registered call limit, stop candidacy instead of reducing context.
+3. **Freeze fixtures immutably.** Give baseline and candidate runs the baseline request only; expose a registered transformation only to its variation run. For a pull-request fixture, pin comparison commits and require the sorted local diff-path manifest to equal the authenticated files result before dispatch; a closed PR's current base-branch pointer is not evidence.
+4. **Classify before scoring.** Map every failed row back to the manifest: violating an already-loaded owner's gate or output stays owner noncompliance even when it repeats. Preserve omitted-owner and loaded-owner noncompliance as fixture evidence, but credit only a candidate-owned failure. Return separate owner, candidate, and infrastructure verdicts, and require a candidate verdict to cite one exact candidate-only clause.
+
+Evidence anchors: `AGENTS.md` (search: `Sub-agents: ONE objective`), `.goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md` (search: `Current constraints`), `.goat-flow/skill-docs/playbooks/code-comments.md` (search: `tie goes to the incumbent`), `.goat-flow/skill-docs/playbooks/naming-and-placement.md` (search: `Reconcile work using one unit per equation`), `.goat-flow/learning-loop/decisions/ADR-009-skill-consolidation.md` (search: `prefer modes inside an existing skill`).
+
+**What happened:** Goat-clarity candidacy runs reproduced compliant-comment churn after receiving a short project preservation rule, and the first interpretation treated the repetition as evidence for a code-clarity skill. The baseline had omitted the current comment and naming playbooks, including their stronger incumbent-tie rule and the existing ledger and report contract, so the runs measured reduced-context instruction adherence rather than whether a new skill beat ordinary ACT plus its owners.
+
+**Root cause:** "Without the candidate skill" was treated as "with only a distilled fixture rule", which removed both the proposed artifact and the existing alternative and made the counterfactual unfair. Repeated failure cannot establish artifact need when the baseline is weaker than the shipped route.
+
+The recurrences share a host-design error: delivery, capacity, fixture identity, or scoring changed what the trial could establish. Incident ledger:
+
+- **Recurrence 2026-08-15 (owner transport):** Both compact PR evaluators received truncated `gruff-code-quality.md` and missed five other owners. Neither read the PR; both were transport failures. Owner anchor: `.goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md` (search: `Current constraints`).
+- **Recurrence 2026-08-15 (immutable PR range):** A closed PR's live `base.sha` produced hundreds of local paths against a handful in the authenticated file list. Pinning the commit-graph range restored exact sorted-manifest agreement; closed metadata is not an immutable baseline. Owner anchor: `AGENTS.md` (search: `Never fabricate codebase facts`).
+- **Recurrence 2026-08-15 (context capacity):** All owners arrived, yet adding diff, source, learnings, consumers, and verification exhausted one evaluator on its fifth call. Complete delivery did not prove end-to-end capacity. Owner anchor: `AGENTS.md` (search: `Sub-agents: ONE objective`).
+- **Recurrence 2026-08-15 (mixed score ledgers):** Two isolated runs met delivery and call limits, but rewrote a compliant control. The host first scored candidate reproduction as 1 of 2; the frozen classification showed every candidate-only row passed, so it corrected this to 0 of 2. Existing-owner noncompliance stayed separate. Owner anchors: `.goat-flow/skill-docs/playbooks/code-comments.md` (search: `tie goes to the incumbent`) and `.goat-flow/skill-docs/playbooks/naming-and-placement.md` (search: `Reconcile work using one unit per equation`).
+- **Recurrence 2026-09-14:** Three forecast-planning baselines recovered outer-wrapper truncation but exhausted their eight-call budgets when oversized artifact commands were rejected. The host also exposed variation instructions in baseline inputs and omitted the routed prose owner from the frozen manifest. Their invalid drafts and partial decisions remain diagnostics. Direct stdin successfully preserved recovered evidence; it did not backfill evaluator completion. The approved replacement protocol requires one complete registered trial before the others. This session's local trial records are gitignored; durable transport owners are `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `Command is too large for policy inspection`) and `src/cli/redact-command.ts` (search: `Read a candidate durable artifact from stdin`).
+
+- **Recurrence 2026-09-14 (candidate intake):** After six complete baselines, the host appended candidate guidance through a `python3 -c` wrapper containing `subprocess.run`. Policy rejected that prescribed second call before the candidate could receive all owners or save a draft. The attempt remained diagnostic; the user approved a separately counted replacement using prepared packets through the direct helper. Owner anchor: `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `Interpreter -c/-e with shell-execution primitive`).
+
+- **Recurrence 2026-09-14 (expanded candidate volume):** The next P trial used the direct helper and requested 25,000 tokens at both output layers, yet its revised-guidance response visibly omitted 719 tokens. It saved two valid drafts and an end clock, but missing body text still invalidated full delivery. A root read returned the entire command output; the exact later truncation component remains unverified. The proposed repair partitions unchanged owners and expands only the input-read budget. Owner anchor: `.goat-flow/skill-docs/skill-quality-testing/tdd-iteration.md` (search: `Score application, not citation`).
+
+- **Recurrence 2026-09-14:** Raw-only PTY output hid session IDs; retain launch metadata.

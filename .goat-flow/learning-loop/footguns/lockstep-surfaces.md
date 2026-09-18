@@ -1,6 +1,6 @@
 ---
 category: lockstep-surfaces
-last_reviewed: 2026-09-08
+last_reviewed: 2026-09-16
 ---
 
 **Scope:** Changes where adding or renaming one artifact obliges a matching edit on several other surfaces at once, and the partial-update failures that follow. Stale pointers, path validation, and evidence rot live in [docs-and-crossrefs.md](docs-and-crossrefs.md).
@@ -54,13 +54,16 @@ last_reviewed: 2026-09-08
 ## Footgun: Hook additions and renames cross runtime, dashboard, and audit surfaces
 
 **Status:** active | **Created:** 2026-05-25 | **Evidence:** ACTUAL_MEASURED
-**Incident count:** 3 | **Latest occurrence:** 2026-08-15
+**Incident count:** 4 | **Latest occurrence:** 2026-09-16
 
-**Prevention:** When adding, renaming, or deleting a hook, update the whole lock-step list: canonical scripts, central self-test, registry entry, config default, installer copy list, the generated desired-state contract in `scripts/generate-managed-hook-desired-state.mjs`, managed installation and retirement in `src/cli/server/hook-managed-installation.ts`, scenario mapping in `src/cli/hook-verification-contracts.ts`, launch runtime and provider adapters in `workflow/hooks/hook-launch-runtime.mjs` and `workflow/hooks/hook-provider-adapters.mjs`, manifest `hooks[]`, per-agent config templates, installed mirrors, audit fact extraction, preflight self-test, parity, and runtime smoke, packaged-install coverage in `test/integration/packaged-hook-install.test.ts`, dashboard view and API when the response shape changes, CLI help, docs, code-map, architecture, changelog, and tests. Then grep the old hook id and run a runtime-shaped smoke through an installed hook.
+**Prevention:** When adding, renaming, deleting, or moving policy ownership between hooks, update the whole lock-step list: canonical scripts, central self-test, registry entry, config default, installer copy list, the generated desired-state contract in `scripts/generate-managed-hook-desired-state.mjs`, managed installation and retirement in `src/cli/server/hook-managed-installation.ts`, scenario mapping in `src/cli/hook-verification-contracts.ts`, launch runtime and provider adapters in `workflow/hooks/hook-launch-runtime.mjs` and `workflow/hooks/hook-provider-adapters.mjs`, manifest `hooks[]`, per-agent config templates, installed mirrors, audit fact extraction, preflight self-test, parity, and runtime smoke, packaged-install coverage in `test/integration/packaged-hook-install.test.ts`, dashboard view and API when the response shape changes, CLI help, docs, code-map, architecture, changelog, and tests. Then grep the old hook id and run a runtime-shaped smoke through an installed hook.
 
 **Symptoms:** A hook script exists and passes its own smoke test while the registry, installer, manifest, preflight parity, audit facts, config templates, mirrors, and docs disagree about whether it is installed or togglable.
 
 **Evidence:** The 2026-05-25 split touched `src/cli/server/hooks-registry.ts` (search: `deny-dangerous`), `src/cli/facts/agent/hooks.ts` (search: `LEGACY_GUARDRAIL_HOOK_FILES`), and `src/cli/hooks-command.ts` (search: `handleHooksCommand`) beside the self-test, manifest, installer, preflight, templates, and mirrors. **Recurrence 2026-05-26:** the `gruff-code-quality` rename failed `test/integration/audit-drift-checkdrift-hook-templates.test.ts` (search: `writeHookFixtures`) because the fixture copied only two guardrail files and had to copy all three split guards. **Recurrence 2026-08-15:** 1.16.0 M01 confirmed surfaces the original list predates, each separately owned: `src/cli/hook-verification-contracts.ts` (search: `HOOK_VERIFICATION_CONTRACTS`), `src/cli/server/hook-managed-installation.ts` (search: `removeHookScripts`), `scripts/generate-managed-hook-desired-state.mjs` (search: `RETIRED_HOOK_SCRIPT_NAMES`), `workflow/hooks/hook-launch-runtime.mjs` (search: `captureHookProcessUntilDeadline`), `workflow/hooks/hook-provider-adapters.mjs` (search: `decodeHookLaunchContract`), and `test/integration/packaged-hook-install.test.ts` (search: `packaged hook installation canary`), the only coverage that runs archived package bytes.
+
+
+**Recurrence 2026-09-16:** M10 moved GitHub enforcement and verification scenarios but missed the audit probe and a scenario-count contract. The full suite caught four failures; final reference review also found a stale general-hook description and README scenario summary. Before freezing scope, trace the operand through audit probes, contract counts and every current ownership description. Evidence: `src/cli/audit/check-agent-deny-runtime.ts` (search: `configuredRuntimeProbes`), `test/contract/command-phrases.test.ts` (search: `three dangerous, five Git`), `src/cli/server/hooks-registry.ts` (search: `Block risky shell operations`), `workflow/hooks/README.md` (search: `covers shell secrets`).
 
 ---
 

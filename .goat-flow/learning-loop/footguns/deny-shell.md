@@ -1,6 +1,6 @@
 ---
 category: deny-shell
-last_reviewed: 2026-09-05
+last_reviewed: 2026-09-18
 ---
 
 Command-grammar and parser traps in the deny hook: how a command string is split into segments, stages, substitutions, and heredoc bodies before any policy runs. A miss here silently un-guards every policy layered on top.
@@ -133,6 +133,34 @@ Sibling buckets: `deny-secrets.md`, `deny-writes.md`.
 **Why it happens:** Copilot `preToolUse` delivers Bash and non-Bash payloads through one hook, so Bash-only deny logic that ignores `toolName` either denies safe file tools or regexes structured payloads.
 
 **Evidence:** `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `detect_output_mode`) and (search: `def extract_path(value)`); `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `stringified non-bash file read`).
+
+---
+
+## Footgun: One language-neutral primitive list misses each interpreter's own execution spellings
+
+**Status:** active | **Created:** 2026-09-16 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** The inline interpreter guard keeps its shared dotted-primitive list and adds per-interpreter matching on the program with its string literals removed; the receiver-method and template-literal exemptions belong to JavaScript only.
+**Trigger phase:** ACT
+**hallucination-risk:** high
+**Incident count:** 3 | **Latest occurrence:** 2026-09-18
+
+**Prevention:**
+1. When an interpreter gains an inline execution spelling, add it to that interpreter's own case in `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `inline_program_visible_code`) and pair it with a word-in-string control in `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `Perl qx brace`); never widen the shared list into a bare identifier ban.
+2. Match paren-less calls and `qx`/`%x` delimiters on visible program text. Hide ordinary complete quoted strings, but retain quote-delimited execution operators, unfinished strings and possible executable interpolation. Keep the existing conservative raw process-module scans; printing `child_process` in Node or `subprocess` in Python still denies.
+3. Keep one exemption per language, not per token: JavaScript's regex `.exec(` and template literals are ordinary code, while Ruby's `Kernel.exec(` and Perl, Ruby and PHP backticks execute.
+
+**Symptoms:** On 2026-09-14 at `55233485`, Perl `qx` with brace or slash delimiters, paren-less Perl and Ruby `system` and `exec`, Ruby `spawn`, `Kernel.exec`, `Process.spawn` and `Open3`, Python `os.spawnl` and `pty.spawn`, PHP `passthru` and `proc_open`, a Perl pipe-open and `Deno.Command` all exited 0 under `deny-dangerous`, while a quoted `subprocess` word inside a Node expression exited 2.
+
+**Why it happens:** `shell_primitive_re` was one list for six interpreters: it required parentheses, exempted every `.exec(` receiver because JavaScript regexes use that shape, and matched module names anywhere in the command, so Ruby's receiver calls slipped through the JavaScript exemption and a Node string literal tripped Python's module name. The resolved entry in `.goat-flow/learning-loop/footguns/deny-shell.md` (search: `Interpreter eval scan matches any identifier ending in the exec word`) records the earlier false positive on the same list.
+
+**Evidence:** `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `inline_program_executes_commands`) holds the shared `shell_primitive_re` list and the per-interpreter cases, and `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `Ruby Kernel.exec receiver`) pins each denial beside its allow control; the RED run of that corpus against the pre-fix module failed exactly those nineteen assertions.
+
+**Recurrence 2026-09-17:** A Ruby `system` call denied until an earlier printed apostrophe required adjacent shell-quote fragments; that shape returned 0.
+Opposite quotes inside printed strings also hid a later call. Decode the complete shell argument, then track matching string quotes and escapes.
+Evidence: `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `inline_interpreter_program`, `inline_program_visible_code`) and
+`workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `Ruby command after shell-concatenated quotes`, `Ruby command between opposite-quote literals`).
+
+**Recurrence 2026-09-18:** `perl -e 'print "qx{id}"'` and Ruby's printed `"%x(id)"` returned 2 because delimiter matching scanned raw program text. Ordinary quote masking allows those data strings; it retains `qx"id"`, `%x"id"` and possible executable interpolation so the repair does not hide commands. Evidence: `workflow/hooks/deny-dangerous/patterns-shell.sh` (search: `inline_program_visible_code`) and the corpus (search: `Perl printed qx operator text`, `Ruby percent-x in executable string interpolation`, `Node printed process-module name remains denied`). This bounded scanner is not a complete interpreter lexer.
 
 ---
 

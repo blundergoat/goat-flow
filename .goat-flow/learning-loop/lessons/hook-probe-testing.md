@@ -1,6 +1,6 @@
 ---
 category: hook-probe-testing
-last_reviewed: 2026-08-29
+last_reviewed: 2026-09-18
 ---
 
 **Scope:** Driving a hook with realistic input - per-agent payload shapes, sandbox and interpreter controls, registered-path smokes, and grammar probes that catch false positives. The script under test is [hook-script-authoring.md](hook-script-authoring.md).
@@ -86,7 +86,7 @@ last_reviewed: 2026-08-29
 ## Lesson: Hook parser regressions need false-positive grammar probes
 
 **Status:** active | **Created:** 2026-05-27
-**Incident count:** 2 | **Latest occurrence:** 2026-08-19
+**Incident count:** 4 | **Latest occurrence:** 2026-09-18
 
 **Prevention:** For shell hooks, build regression matrices from valid per-command grammar and common inert syntax, not only incident strings. Record whether every short or long option is standalone, consumes one or more values, accepts an equals or attached value, supplies the primary expression, or reads a file. Include CLI subcommands that collide with shell keywords, unquoted comments, quoted `#`, jq/yq dotted queries, and filename controls such as `private.key`, `deploy.pem`, and `prod.pfx`. Evidence anchors: `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `powershell double-dash command remove-item`), (search: `git --git-dir push`), (search: `jq bundled raw filter file`), and (search: `yq eval subcommand key query`).
 
@@ -95,6 +95,10 @@ last_reviewed: 2026-08-29
 **Root cause:** The tests covered obvious dangerous strings and a few equals-valued options, but not valid long-option space forms, shell comments, or dotted query syntax that resembles key-file extensions.
 
 **Recurrence 2026-08-19:** A jq/yq false-positive repair added a quote-aware filter-role parser but tested jq's ordinary `-f` form and yq's bare dotted expression only. A fresh review found protected-file bypasses behind jq short bundles, yq boolean flags, yq implicit inputs, attached expression options, and file-valued options; it also found `yq eval` blocked as shell `eval`. The expanded RED corpus failed 9 of 463 cases before the parser split the two command grammars; the final installed and workflow corpora each pass 470 cases after harmless jq data options were separated from file-reading options. Evidence anchors: `workflow/hooks/deny-dangerous/patterns-paths.sh` (search: `yq auto-detects whether a positional token is an expression or a file`), `workflow/hooks/deny-dangerous/patterns-shell.sh` (`check_destructive_segment`), and `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `jq literal key-looking string argument`; search: `jq bundled raw filter file`; search: `yq eval subcommand key query`).
+
+**Recurrence 2026-09-18:** Follow-up review found quoted alias flags allowed and printed `qx`/`%x` text denied after the obvious forms had been repaired. The missing neighbours were Git's second quoting layer, operator-looking data, quote-delimited execution and executable string interpolation. The initial focused regressions failed 17 assertions; the corrected classifier corpus passed with those controls and retained raw process-module denials. Evidence: `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `git alias quoted hard-reset argument`, `Perl printed qx operator text`, `Ruby percent-x in executable string interpolation`). A separate current-installed Sync fixture exposed default-on Git protection becoming off during persistence; it must run with current ownership bytes so upgrade review cannot conceal the defect. Evidence: `test/integration/hook-effective-state.test.ts` (search: `preserves a missing Git choice during current-installed`).
+
+**Recurrence 2026-09-18:** The next recheck extended valid YAML shapes across Sync, prepared toggles and direct saves. An anchored hook block passed Sync, but both toggle paths removed the anchor while another setting still referenced it; the direct writer saved invalid YAML. Test every supported config shape at each write boundary, then parse the saved result and check unrelated settings and repeated preparation. Both new toggle regressions failed before `src/cli/config/writer.ts` (search: `replaceTopLevelHooksBlock`) retained the anchor. Full verification then caught the replacement function exceeding its complexity limit; extracting `retainHooksAnchor` preserved the behavior within that budget. The same gate read a stale index after lesson edits continued during verification. Finish source, lesson and index edits before starting the final gate. Evidence: `test/unit/config-writer.test.ts` (search: `keeps hook anchors usable during an ordinary`).
 
 ## Lesson: Normalize agent hook payload variants before field access
 

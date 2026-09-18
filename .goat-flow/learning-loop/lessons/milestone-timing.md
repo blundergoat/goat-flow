@@ -1,6 +1,6 @@
 ---
 category: milestone-timing
-last_reviewed: 2026-09-13
+last_reviewed: 2026-09-18
 ---
 
 **Scope:** Milestone timing receipts - prospective measurement, category changes, activation and finalization. Plan state, estimates and release accounting are in [milestone-accounting.md](milestone-accounting.md).
@@ -11,10 +11,10 @@ last_reviewed: 2026-09-13
 **Decision changed:** Start a timestamped timing receipt before milestone work; never reconstruct Actual from planned task estimates.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
-**Incident count:** 11 | **Latest occurrence:** 2026-08-30
+**Incident count:** 13 | **Latest occurrence:** 2026-09-18
 
 **Prevention:**
-1. Before the first action, record UTC and epoch seconds for an active segment tagged `product`, `proof`, or `other`; close it before a human gate, interruption, backgrounded command, or unrelated task, and open a new one when work resumes.
+1. Before the first action, record UTC and epoch seconds for an active segment tagged `product`, `proof`, or `other`; close it before a human gate, interruption, backgrounded command, or unrelated task, and open a new one when work resumes. Change categories with `plans time stop` followed by `plans time start --category`; there is no `switch` action.
 2. Preserve raw seconds in the milestone and round once when rendering Actual; the category split comes from segments, not task weights.
 3. Report wall-clock and aggregate sub-agent time separately; never add parallel agent effort and present it as elapsed time.
 4. If timing was not started prospectively, label Actual a low-confidence retrospective estimate; never call it measured or derive it from the plan.
@@ -32,6 +32,10 @@ Evidence anchors: `workflow/skills/goat-plan/SKILL.md` (search: `Successful AI p
 **Recurrences 2026-08-23 and 2026-08-28 (finalized before the gates):** M07 finalized a 465-second receipt before strict validation and learning-loop closeout, and strict validation then rejected an added proof row twice. M58 finalized a 2,529-second receipt before the plan-wide check found it and M37 simultaneously active. Both receipts exclude the correction and index work that followed, so both label Actual incomplete. `src/cli/plans-check-structure.ts` (search: `multiple active milestones`).
 **Recurrence 2026-08-10 (file path):** `plans time stop` was given a display identifier instead of the milestone-file path and rejected it. `src/cli/plans-time.ts` (search: `requires an M*.md milestone file`).
 **Recurrence 2026-08-17 (grammar):** Abandoned M40's Actual read `unavailable - timing was never started`; strict validation rejected the separator until the canonical `unavailable: timing was never started` form. `test/unit/plans-effort.test.ts` (search: `unavailable: timing was never started`), `test/unit/plans-export-parsing.test.ts` (search: `rejects Start with`).
+
+**Recurrence 2026-09-16:** Quality follow-up M01 left product segment S04 open across an interrupted handoff. Recovery used `plans time stop --discard-open`, preserving the closed segments and marking Actual incomplete. Human acceptance cannot turn this into a measured calibration sample or a scored prospective case; rerun the outcome check and keep the invalid case visible. `src/cli/plans-time.ts` (search: `receipt contains a discarded open span`) owns the incomplete Actual; `src/cli/plans-check-summary.ts` (search: `function readCalibrationSample`) excludes non-measured outcomes.
+
+**Recurrence 2026-09-18:** During quality follow-up M07, `plans time switch` exited 2 before changing the receipt. The documented stop/start sequence succeeded, preserving the original timestamps without backfill. Read the command grammar before scripting a transition: `src/cli/cli-parser-positionals.ts` (search: `parsePlansTimePositionals`) accepts only start, stop and status; `workflow/skills/goat-plan/references/milestone-examples.md` (search: `Change category`) gives the sequence.
 
 ---
 
@@ -85,15 +89,17 @@ Evidence anchors: `workflow/skills/goat-plan/SKILL.md` (search: `Successful AI p
 **Status:** active | **Created:** 2026-08-14 | **Evidence:** OBSERVED
 **Decision changed:** Finalize milestone timing through the plans-time command; when repairing a receipt manually, reconcile both summary lines before claiming measured Actual.
 **Trigger phase:** VERIFY
-**Incident count:** 2 | **Latest occurrence:** 2026-09-08
+**Incident count:** 3 | **Latest occurrence:** 2026-09-16
 **Merged:** 2026-09-05 - moved here from `.goat-flow/learning-loop/lessons/verification.md`; timing receipts sit with the three sibling entries above rather than in general verification discipline.
 
-**Prevention:** Use `plans time stop <milestone> --finalize` for normal closure. For manual recovery, restore both summaries, derive the largest-remainder split, then validate the terminal status. Unknown Actual uses `unavailable: reason` or `incomplete: reason`, never the CLI display dash. Evidence anchors: `docs/cli.md` (search: `plans time stop .goat-flow/plans/<active>/M01-example.md --finalize`), `src/cli/plans-time-receipt.ts` (search: `Compare rounded total, category sum, and largest-remainder allocation`), `src/cli/plans-check.ts` (search: `measured Actual requires a finalized embedded Timing Receipt`).
+**Prevention:** Finalization writes an Actual field automatically. If measured spans omit known work, replace that field with one incomplete Actual instead of appending a second field. Use `plans time stop <milestone> --finalize` for normal closure. For manual recovery, restore both summaries, derive the largest-remainder split, then validate the terminal status. Unknown Actual uses `unavailable: reason` or `incomplete: reason`, never the CLI display dash. Evidence anchors: `docs/cli.md` (search: `plans time stop .goat-flow/plans/<active>/M01-example.md --finalize`), `src/cli/plans-time-receipt.ts` (search: `Compare rounded total, category sum, and largest-remainder allocation`), `src/cli/plans-check.ts` (search: `measured Actual requires a finalized embedded Timing Receipt`).
 
 **What happened:** A milestone's segment table, receipt state, and measured Actual were finalized by hand, but the first strict completion check rejected them because the receipt omitted the `Recorded seconds` and `Allocated minutes` lines, leaving the parser no summary object to validate the Actual claim against. After those lines were added, the next check rejected a manually rounded category split that did not follow the canonical largest-remainder allocation.
 
 **Root cause:** The visible segment arithmetic was treated as the whole embedded receipt and category minutes were rounded by intuition, although the strict checker requires both canonical parsed summaries and its deterministic allocation.
 
 **Recurrence 2026-09-08:** M35 used the display dash in an unavailable Actual; strict parsing failed until the colon was restored. Source grammar: `src/cli/plans-effort.ts` (search: `ACTUAL_UNKNOWN_STATE_PATTERN`).
+
+**Recurrence 2026-09-16:** After finalization inserted a measured Actual, I appended an incomplete Actual for untimed work. Strict validation rejected the duplicate. Keep the finalized subtotal, replace the generated field, and recheck the terminal state. Evidence: src/cli/plans-time.ts (search: writeActualField) and src/cli/plans-effort.ts (search: multiple Actual values supplied).
 
 ---
