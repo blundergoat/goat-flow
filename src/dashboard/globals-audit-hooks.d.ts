@@ -259,4 +259,14 @@ interface HookReplacementReview {
   action: HookUserAction;
   confirmationIdentity: string;
   conflicts: HookReplacementFile[];
+  policyReview: HookPolicyReview | null;
+  hasAcceptedPolicyChange: boolean;
+  hasAcceptedReplacement: boolean;
+}
+
+/** The policy choices and changed runtime files the user reviews before upgrading GitHub protection. */
+interface HookPolicyReview {
+  original: Record<"deny-dangerous" | "deny-git-mutations", boolean>;
+  requested: Record<"deny-dangerous" | "deny-git-mutations", boolean>;
+  paths: string[];
 }

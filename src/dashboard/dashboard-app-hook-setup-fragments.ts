@@ -63,7 +63,7 @@ function dashboardHookRequestFailureMessage(error: unknown): string {
 
 /**
  * Refresh the selected project's hook rows, optionally retaining a failed write's recovery message.
- * Catches read failures into the Hooks banner; only the latest read for this visit can replace rows or stop loading.
+ * Error recovery: reports read failures in the Hooks banner; only the latest read for this visit can replace rows or stop loading.
  *
  * @param ctx - dashboard state for the selected project
  *
@@ -144,6 +144,47 @@ function dashboardReadHookReplacement(
 }
 
 /**
+ * Read the policy comparison before opening the user's migration review.
+ *
+ * @returns complete choices and affected files, or null when no review exists or incomplete evidence prevents informed consent
+ */
+function dashboardReadHookPolicyReview(
+  payload: Record<string, unknown>,
+): HookPolicyReview | null {
+  // Ordinary replacement errors have no policy decision; malformed identities cannot authorize either decision.
+  if (
+    !isRecord(payload.policyReview) ||
+    typeof payload.confirmationIdentity !== "string" ||
+    !/^[a-f0-9]{64}$/u.test(payload.confirmationIdentity)
+  )
+    return null;
+  const review = payload.policyReview;
+  // Incomplete review data keeps the server's refusal visible and offers no policy approval.
+  if (!isRecord(review.original) || !isRecord(review.requested)) return null;
+  const original = review.original;
+  const requested = review.requested;
+  // Both switches must be explicit because GitHub protection moves between them during this upgrade.
+  for (const choices of [original, requested]) {
+    // A missing switch would hide part of the before/after comparison, so do not offer policy approval.
+    if (
+      typeof choices["deny-dangerous"] !== "boolean" ||
+      typeof choices["deny-git-mutations"] !== "boolean"
+    )
+      return null;
+  }
+  // An empty or partial file list cannot explain which policy files the user is accepting.
+  if (
+    !Array.isArray(review.paths) ||
+    review.paths.length === 0 ||
+    !review.paths.every(
+      (path: unknown) => typeof path === "string" && path.length > 0,
+    )
+  )
+    return null;
+  return { original, requested, paths: review.paths } as HookPolicyReview; // The switch maps and nonempty paths were validated above.
+}
+
+/**
  * Keep a refused or partial hook change visible and offer only a complete, current replacement review.
  *
  * @param ctx - live Hooks state receiving the error and any changed-file list
@@ -157,9 +198,13 @@ function dashboardReadHookReplacement(
 async function dashboardShowHookActionFailure(
   ctx: DashboardAppContext,
   payload: Record<string, unknown>,
-  request: Omit<HookReplacementReview, "confirmationIdentity" | "conflicts">,
+  request: Pick<
+    HookReplacementReview,
+    "projectPath" | "visitGeneration" | "requestGeneration" | "action"
+  >,
   isCurrent: () => boolean,
 ): Promise<void> {
+  // A failure without usable server text still needs a visible Hooks banner.
   const errorMessage = readErrorMessage(payload) || "Hook change failed.";
   ctx.hooksError = errorMessage;
   // Inspection commands must remain visible after the page refreshes; absent or empty guidance leaves the original error intact.
@@ -167,12 +212,18 @@ async function dashboardShowHookActionFailure(
     ctx.hooksError = `${errorMessage}\n${payload.recovery.trim()}`;
   }
   const conflicts = dashboardReadHookReplacement(payload);
+  const policyReview = dashboardReadHookPolicyReview(payload);
+  // A partial policy explanation cannot be reduced to a file-only approval, even if replacement evidence is complete.
+  if (payload.policyReview && !policyReview) return;
   // Complete server evidence permits a separate decision, with Cancel focused before the destructive action.
-  if (conflicts.length > 0) {
+  if (conflicts.length > 0 || policyReview) {
     ctx.hooksReplacement = {
       ...request,
       confirmationIdentity: payload.confirmationIdentity as string,
       conflicts,
+      policyReview,
+      hasAcceptedPolicyChange: false,
+      hasAcceptedReplacement: false,
     };
     ctx.$nextTick(() => {
       // Navigation can happen before Alpine renders the replacement panel.
@@ -213,9 +264,15 @@ function dashboardPrepareHookActionRequest(
   const body = {
     // A global sync preserves configured choices; only a row toggle supplies a new choice.
     ...(action.kind === "toggle" ? { enabled: action.enabled } : {}),
-    // Only the exact review the user accepted may authorize replacing differing local files.
+    // Each checkbox approves only its displayed decision; the identity binds both to this exact project and action.
     ...(review
-      ? { replace: true, confirmationIdentity: review.confirmationIdentity }
+      ? {
+          ...(review.hasAcceptedReplacement ? { replace: true } : {}),
+          ...(review.hasAcceptedPolicyChange
+            ? { acceptPolicyChange: true }
+            : {}),
+          confirmationIdentity: review.confirmationIdentity,
+        }
       : {}),
   };
   return { endpoint, body };
@@ -226,14 +283,14 @@ function dashboardHookActionSuccessMessage(action: HookUserAction): string {
   // A row toggle confirms its new state; global sync confirms the bundled files were reconciled.
   return action.kind === "sync"
     ? "Official hook files synced"
-    : `${action.hookName} ${action.enabled ? "enabled" : "disabled"}`;
+    : `${action.hookName}: ${action.enabled ? "on" : "off"} saved`;
 }
 
 /**
  * Submit Sync, a toggle or an exact replacement retry and display its verified result.
  *
  * One coordinator binds every response branch to the same visit and save lock because users can navigate while a request is pending.
- * Catches connection failures into a refresh instruction; partial writes reload rows while retaining recovery details.
+ * Error recovery: reports connection failures with a refresh instruction; partial writes reload rows while retaining recovery details.
  *
  * @param ctx - live Hooks state; one action owns the shared busy flag until its matching response finishes
  * @param action - explicit user action; sync preserves configured choices and toggle names its desired state
@@ -632,6 +689,12 @@ function dashboardHookSetupActionsFragment(
         review.requestGeneration !== this.hooksActionGeneration
       )
         return;
+      // Clicking Continue cannot submit until every decision shown in this review has its own checked consent box.
+      if (
+        (review.policyReview && !review.hasAcceptedPolicyChange) ||
+        (review.conflicts.length > 0 && !review.hasAcceptedReplacement)
+      )
+        return;
       await dashboardRunHookAction(this, review.action, review);
     },
 
@@ -928,6 +991,7 @@ function dashboardHookFilterActionsFragment(): DashboardAppFragment {
      * @returns exact state label shared with CLI audit and hook-list JSON
      */
     hookAgentStatusLabel(state: HookAgentState): string {
+      // An empty display label falls back to the exact status so the user's coverage gap stays visible.
       return state.effectiveStateLabel || state.effectiveState.status;
     },
 

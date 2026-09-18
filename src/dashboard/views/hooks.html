@@ -74,10 +74,69 @@
       role="region"
       aria-labelledby="hook-replacement-title"
     >
-      <h2 id="hook-replacement-title">
-        Replace local files with official copies?
-      </h2>
+      <h2 id="hook-replacement-title">Review hook changes</h2>
       <p>
+        Selected project: <code x-text="hooksReplacement?.projectPath"></code>
+      </p>
+      <template x-if="hooksReplacement?.policyReview">
+        <div>
+          <p>
+            After this change, <strong>Deny Git and GitHub writes</strong>
+            controls GitHub write checks. Earlier versions used
+            <strong>Deny dangerous commands</strong>. The installed policy files
+            differ, so saved switches alone cannot confirm current protection.
+          </p>
+          <table>
+            <thead>
+              <tr>
+                <th>Policy</th>
+                <th>Saved</th>
+                <th>Requested</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <th>Deny dangerous commands</th>
+                <td
+                  x-text="hooksReplacement.policyReview.original['deny-dangerous'] ? 'On' : 'Off'"
+                ></td>
+                <td
+                  x-text="hooksReplacement.policyReview.requested['deny-dangerous'] ? 'On' : 'Off'"
+                ></td>
+              </tr>
+              <tr>
+                <th>Deny Git and GitHub writes</th>
+                <td
+                  x-text="hooksReplacement.policyReview.original['deny-git-mutations'] ? 'On' : 'Off'"
+                ></td>
+                <td
+                  x-text="hooksReplacement.policyReview.requested['deny-git-mutations'] ? 'On' : 'Off'"
+                ></td>
+              </tr>
+            </tbody>
+          </table>
+          <p
+            x-text="'GitHub write protection after this change: ' + (hooksReplacement.policyReview.requested['deny-git-mutations'] ? 'on' : 'off') + '. Allowed reads and issue/PR comments stay allowed.'"
+          ></p>
+          <ul aria-label="Policy files changing ownership">
+            <template
+              x-for="path in hooksReplacement.policyReview.paths"
+              :key="path"
+            >
+              <li><code x-text="path"></code></li>
+            </template>
+          </ul>
+          <label>
+            <input
+              type="checkbox"
+              x-model="hooksReplacement.hasAcceptedPolicyChange"
+              :disabled="!!hookSavingId"
+            />
+            I accept this change to GitHub protection.
+          </label>
+        </div>
+      </template>
+      <p x-show="hooksReplacement?.conflicts.length">
         Save any changes you want to keep before continuing. Replacement
         discards the current contents of these files.
       </p>
@@ -95,6 +154,16 @@
           </li>
         </template>
       </ul>
+      <template x-if="hooksReplacement?.conflicts.length">
+        <label>
+          <input
+            type="checkbox"
+            x-model="hooksReplacement.hasAcceptedReplacement"
+            :disabled="!!hookSavingId"
+          />
+          I accept replacing the listed local files with official copies.
+        </label>
+      </template>
       <div class="gf-hooks-filter-group">
         <button
           type="button"
@@ -108,11 +177,11 @@
         <button
           type="button"
           @click="confirmHookReplacement()"
-          :disabled="!!hookSavingId"
+          :disabled="!!hookSavingId || !hooksReplacement || (!!hooksReplacement.policyReview && !hooksReplacement.hasAcceptedPolicyChange) || (hooksReplacement.conflicts.length > 0 && !hooksReplacement.hasAcceptedReplacement)"
           class="gf-btn gf-btn-md gf-btn-primary"
           x-text="hooksReplacement?.action.kind === 'toggle'
-            ? (hooksReplacement.action.enabled ? 'Replace with official files and enable' : 'Replace with official files and disable')
-            : 'Replace listed files and sync'"
+            ? (hooksReplacement.action.enabled ? 'Apply reviewed changes and enable' : 'Apply reviewed changes and disable')
+            : 'Apply reviewed changes and sync'"
         ></button>
       </div>
     </section>
