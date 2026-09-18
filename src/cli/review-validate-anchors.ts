@@ -55,6 +55,7 @@ import {
  * Return whether a resolved path remains under the reviewed project's real path.
  *
  * @param projectRoot - reviewed project root; anchors are confined to it so a report cannot cite files it was never authorised to read
+ *
  * @param candidatePath - path an anchor points at; anything resolving outside the reviewed project is refused rather than followed
  * @returns true when the path stays inside the reviewed project; false means the anchor is refused rather than resolved
  */
@@ -74,10 +75,12 @@ export function isWithinProject(
  * Resolve a finding's literal evidence from its frozen source before the report can credit it.
  *
  * @param projectRoot - reviewed root used to reject paths outside the selected project
+ *
  * @param authority - captured source and reader; invalid means an earlier scope issue already blocks evidence
  * @param filePath - literal selected path; an absent side cannot provide finding evidence
  *
  * @param searchText - nonempty literal the reviewer expects in the selected bytes
+ *
  * @param line - visible report line where an unresolved anchor is reported
  * @param violations - appended evidence failures, preserving the repair list
  *
@@ -141,6 +144,7 @@ export function validateAnchor(
  * Validate Evidence, Proof, and severity-dependent Harm fields.
  *
  * @param text - raw line text exactly as the author wrote it
+ *
  * @param severity - declared finding severity, which decides whether it can block the ship verdict
  * @param line - visible report line where the reviewer can repair the finding's evidence fields
  *
@@ -186,6 +190,7 @@ function validateFindingFields(
  * Validate every literal semantic anchor carried by one finding.
  *
  * @param locatedLine - one report line with its number, so a violation can point at it
+ *
  * @param projectRoot - reviewed project root; anchors are confined to it so a report cannot cite files it was never authorised to read
  * @param authority - frozen Git/index/live selection and its reader; invalid means an earlier scope failure prevents evidence credit
  *
@@ -229,6 +234,7 @@ function validateFindingAnchors(
  * Check escaped evidence in visible report prose, including findings and risk summaries.
  *
  * @param lines - visible report lines; receipt metadata and ordinary anchor literals cannot introduce another anchor
+ *
  * @param projectRoot - selected root that bounds every evidence path
  * @param authority - frozen source reader; invalid authority cannot provide evidence
  *
@@ -341,10 +347,12 @@ function readFindingEvidence(text: string): FindingDefinition["evidence"] {
  * Read one finding and check its evidence before it contributes to the report's totals.
  *
  * @param locatedLine - visible report line used to locate any repairable issue
+ *
  * @param section - containing finding-section name; it determines where the definition is recorded
  * @param isAreaAudit - true permits pre-existing findings that are outside a specific diff
  *
  * @param projectRoot - reviewed root used to confine cited evidence
+ *
  * @param authority - original source reader; invalid means an earlier scope check already blocks evidence
  * @param violations - appended finding grammar and evidence failures
  *
@@ -403,6 +411,7 @@ export function validateFindingLine(
  * Read local Git metadata without optional writes, replacements, execution helpers, or lazy fetching.
  *
  * @param root - selected project's real root; inherited Git location overrides cannot select a different project
+ *
  * @param args - fixed read command and literal arguments chosen by the authority reader
  * @param input - transient command input; absent means no stdin payload
  *
@@ -463,6 +472,7 @@ export function readGit(
  * Read literal NUL-delimited paths without letting whitespace split one selected file into several.
  *
  * @param bytes - raw Git output; empty means there are no entries
+ *
  * @returns complete UTF-8 records with the final delimiter removed
  * @throws ReviewAuthorityError when output is unterminated or a path cannot round-trip as UTF-8
  */
@@ -485,6 +495,7 @@ export function nulRecords(bytes: Buffer): string[] {
  * Bind metadata reads to the exact reviewed root, including a standalone folder outside Git.
  *
  * @param projectRoot - operator-selected project; a subfolder cannot silently borrow its parent repository
+ *
  * @returns transient read context; null objectFormat means only supported non-Git sources can be selected
  * @throws ReviewAuthorityError when the root is not the repository root or its object format is unsupported
  */
@@ -520,6 +531,7 @@ export function gitContext(projectRoot: string): GitContext {
  * Validate a full object ID against the selected repository's hash format.
  *
  * @param context - local repository format established for this capture
+ *
  * @param value - resolved full object ID; abbreviations and non-Git contexts cannot provide this authority
  * @returns the unchanged complete object ID
  *
@@ -544,6 +556,7 @@ export function objectId(context: GitContext, value: string): string {
  * Resolve the operator's selector to a commit; a tree or missing endpoint cannot become a review head.
  *
  * @param context - selected repository and its object format
+ *
  * @param selector - named revision; absent or empty means the review did not identify an endpoint
  * @returns the full resolved commit ID used throughout the frozen review
  *
@@ -571,6 +584,7 @@ export function commitId(
  * Resolve a comparison base, allowing an empty old side only before a repository's first commit.
  *
  * @param context - selected local repository
+ *
  * @param selector - explicit base; only HEAD on an unborn symbolic branch may resolve to null
  * @returns the base commit, or null when there is no first commit to compare against
  *
@@ -608,6 +622,7 @@ export function baseCommit(
  * Load raw blobs in one local read and cache them for this capture.
  *
  * @param context - selected repository; only its transient blob cache is changed
+ *
  * @param identifiers - required blob IDs; an empty or already cached set needs no Git call
  * @throws ReviewAuthorityError when a selected blob or its length-delimited response is unavailable
  */
@@ -668,6 +683,7 @@ function fileMode(mode: string): FileMode {
  * Bind immutable tree files to literal paths, regular-file modes, and raw blob hashes.
  *
  * @param context - selected repository and transient blob cache
+ *
  * @param revision - selected commit; null records an empty old side for a root commit or unborn branch
  * @param selectedPaths - optional exact path filter; absent selects the whole tree, while empty selects no files
  *
@@ -686,7 +702,7 @@ export function treeFiles(
   ).flatMap((entry) => {
     const match = entry.match(/^(\d+) (\S+) ([0-9a-f]+)\t([\s\S]+)$/u);
     requireAuthority(
-      match,
+      match?.[1] && match[3],
       "invalid selected Git tree record",
       "authority-object",
     );
@@ -699,7 +715,7 @@ export function treeFiles(
       "authority-unsupported",
     );
     return [
-      { path, mode: fileMode(match[1]!), blob: objectId(context, match[3]!) },
+      { path, mode: fileMode(match[1]), blob: objectId(context, match[3]) },
     ];
   });
   loadBlobs(
@@ -707,17 +723,25 @@ export function treeFiles(
     entries.map((entry) => entry.blob),
   );
   return new Map(
-    entries.map((entry) => [
-      entry.path,
-      {
-        kind: "file",
-        from: "git",
-        mode: entry.mode,
-        blob: entry.blob,
-        revision,
-        sha256: rawHash(context.blobs.get(entry.blob)!),
-      },
-    ]),
+    entries.map((entry) => {
+      const bytes = context.blobs.get(entry.blob);
+      requireAuthority(
+        bytes,
+        "selected Git blob is unavailable",
+        "authority-object",
+      );
+      return [
+        entry.path,
+        {
+          kind: "file",
+          from: "git",
+          mode: entry.mode,
+          blob: entry.blob,
+          revision,
+          sha256: rawHash(bytes),
+        },
+      ];
+    }),
   );
 }
 
@@ -725,6 +749,7 @@ export function treeFiles(
  * Capture stage-zero paths and semantic index flags without refreshing or writing the index.
  *
  * @param context - selected repository; a previously read index is reused only within this capture
+ *
  * @returns sorted staged entries; an empty index is a valid empty selection
  * @throws ReviewAuthorityError when the index is unmerged, sparse, intent-to-add, malformed, or contains unsupported file kinds
  */
@@ -764,11 +789,11 @@ export function indexEntries(context: GitContext): IndexEntry[] {
         /^  ctime: [^\n]*\n  mtime: [^\n]*\n  dev: [^\n]*\n  uid: [^\n]*\n  size: [^\n]*\tflags: ([0-9a-f]+)\n/u,
       );
     requireAuthority(
-      match && details,
+      match?.[1] && match[2] && details,
       "unsupported Git index debug format",
       "authority-unsupported",
     );
-    const flags = Number.parseInt(details[1]!, 16);
+    const flags = Number(`0x${details[1]}`);
     const stage = Number(match[3]);
     const intentToAdd = (flags & 0x20000000) !== 0;
     const skipWorktree = (flags & 0x40000000) !== 0;
@@ -779,8 +804,8 @@ export function indexEntries(context: GitContext): IndexEntry[] {
     );
     entries.push({
       path: projectPath(match[4]),
-      mode: fileMode(match[1]!),
-      blob: objectId(context, match[2]!),
+      mode: fileMode(match[1]),
+      blob: objectId(context, match[2]),
       stage,
       intentToAdd,
       skipWorktree,
@@ -802,6 +827,7 @@ export function indexEntries(context: GitContext): IndexEntry[] {
  * Bind each staged path to its index blob rather than HEAD or an editor's newer save.
  *
  * @param context - selected repository and captured semantic index
+ *
  * @returns staged file states; empty means the index has no files
  * @throws ReviewAuthorityError when an index entry or blob cannot supply supported evidence
  */
@@ -812,16 +838,24 @@ export function indexFiles(context: GitContext): Map<string, FileState> {
     entries.map((entry) => entry.blob),
   );
   return new Map(
-    entries.map((entry) => [
-      entry.path,
-      {
-        kind: "file",
-        from: "index",
-        mode: entry.mode,
-        blob: entry.blob,
-        sha256: rawHash(context.blobs.get(entry.blob)!),
-      },
-    ]),
+    entries.map((entry) => {
+      const bytes = context.blobs.get(entry.blob);
+      requireAuthority(
+        bytes,
+        "selected Git blob is unavailable",
+        "authority-object",
+      );
+      return [
+        entry.path,
+        {
+          kind: "file",
+          from: "index",
+          mode: entry.mode,
+          blob: entry.blob,
+          sha256: rawHash(bytes),
+        },
+      ];
+    }),
   );
 }
 
@@ -842,6 +876,7 @@ export function indexFingerprint(context: GitContext): string {
  * Check every live path boundary before opening the file selected by the reviewer.
  *
  * @param root - selected project's real root
+ *
  * @param path - literal project-relative file path; no segment may enter a symlink or nested repository
  * @returns the checked path; a missing segment remains missing so capture can record absence
  *
@@ -879,6 +914,7 @@ export function livePath(root: string, path: string): string {
  * Read one regular live file without following its final symlink.
  *
  * @param root - selected project's real root
+ *
  * @param path - literal selected file path; a deleted file is represented by null
  * @returns raw bytes and executable mode, or null when the file is absent
  *
@@ -923,6 +959,7 @@ export function liveBytes(
  * Freeze a live file's mode and hash across two reads; a saved edit cannot become a fresh baseline.
  *
  * @param root - selected project's real root
+ *
  * @param path - literal selected path, retained even when the file is absent
  * @returns matching file metadata, or an explicit absent state when both reads find no file
  *
@@ -954,6 +991,7 @@ export function liveState(root: string, path: string): FileState {
  * Capture every declared live member, retaining deleted paths so removal remains reviewable.
  *
  * @param context - selected project root
+ *
  * @param paths - frozen literal membership; empty produces an empty file map
  * @returns each selected file's raw state, including explicit absence
  *
@@ -970,6 +1008,7 @@ export function liveFiles(
  * List nonignored untracked files without refreshing the index or reading their contents.
  *
  * @param context - selected local repository
+ *
  * @param excludeNestedRepositories - true lets an area audit omit nested repositories; full execution inventories refuse them
  * @returns paths in stable byte order; empty means no eligible untracked files
  *
@@ -1003,6 +1042,7 @@ export function untrackedPaths(
  * Refuse comparisons whose Git attributes would transform the bytes the reviewer actually sees.
  *
  * @param context - selected local repository whose attributes and config determine conversion
+ *
  * @param paths - comparison membership; empty has no content to convert
  * @throws ReviewAuthorityError when filters, encoding, text, or line-ending conversion prevent a raw-byte comparison
  */

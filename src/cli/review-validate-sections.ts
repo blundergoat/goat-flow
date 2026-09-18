@@ -45,8 +45,10 @@ import {
  *
  * @param lines - the report split into lines; an empty report fails earlier than this
  * @param isAreaAudit - whether the report declared itself an area audit, which relaxes some coverage expectations
+ *
  * @param projectRoot - reviewed project root; anchors are confined to it so a report cannot cite files it was never authorised to read
  * @param authority - selected live, index, or Git source used to resolve anchors; invalid authority supplies no evidence
+ *
  * @param violations - shared violation list, appended in report order so a reader sees issues top-down; a violation makes the report fail
  * @returns findings parsed from every recognised section; empty means the report surfaced none
  */
@@ -134,6 +136,7 @@ export function validateUniqueFindingIds(
  * Reconcile integrity totals with visible findings and the refutation ledger claim.
  *
  * @param integrity - the parsed Review Integrity block; absent fields are reported individually rather than failing the whole block
+ *
  * @param definitions - parsed active findings and optional refuter history; empty means the report defines no issue IDs
  * @param violations - shared violation list, appended in report order so a reader sees issues top-down; a violation makes the report fail
  */
@@ -447,7 +450,7 @@ function validateRefuterOutcomes(
         ),
     );
     requireAuthority(
-      counts[3]! <= availableLeads.length,
+      counts[3] <= availableLeads.length,
       "verified refuter leads cannot exceed active confirmed/adjusted IDs outside the submitted outcomes",
     );
     requireAuthority(
@@ -476,8 +479,10 @@ function validateRefuterOutcomes(
 function readRefuterRunCounts(
   match: RegExpMatchArray | null | undefined,
   outcomes: JsonRecord,
-): number[] {
-  const counts = match ? match.slice(2, 6).map(Number) : [0, 0, 0, 0];
+): [number, number, number, number] {
+  const counts: [number, number, number, number] = match
+    ? [Number(match[2]), Number(match[3]), Number(match[4]), Number(match[5])]
+    : [0, 0, 0, 0];
   requireAuthority(
     counts.every(Number.isSafeInteger),
     "Refuter pass counts must be safe integers",
@@ -491,7 +496,7 @@ function readRefuterRunCounts(
     "no/skipped refuter requires zero counts, model=n/a, and no outcomes",
   );
   requireAuthority(
-    !didRun || match?.[6] !== "n/a",
+    !didRun || match[6] !== "n/a",
     "a completed refuter needs its actual model identifier",
   );
   return counts;
@@ -633,7 +638,9 @@ function validateAbsentPrProvenance(
   violations: ReviewValidationViolation[],
 ): void {
   const ingestionFailed = integrity.flags.has("automated-review-uningested");
-  const hasBotTags = ids[0]!.length + ids[2]!.length + ids[3]!.length > 0;
+  const hasBotTags = ids.some(
+    (group, index) => index !== 1 && group.length > 0,
+  );
   // Missing ingestion needs its own flag, while an empty successful response must not claim that failure.
   if ((field.value === "n/a") !== ingestionFailed || hasBotTags)
     addViolation(
@@ -665,8 +672,8 @@ function validatePrProvenanceCounts(
         ids.filter((group) => group.includes(definition.id)).length !== 1,
     ) ||
     ids.some((group, index) => group.length !== Number(match[index + 1])) ||
-    JSON.stringify(listed(match[5]!)) !== JSON.stringify(ids[2]) ||
-    JSON.stringify(listed(match[6]!)) !== JSON.stringify(ids[1])
+    JSON.stringify(listed(match[5] ?? "")) !== JSON.stringify(ids[2]) ||
+    JSON.stringify(listed(match[6] ?? "")) !== JSON.stringify(ids[1])
   )
     addViolation(
       violations,
@@ -681,6 +688,7 @@ function validatePrProvenanceCounts(
  * One risk summary per report is the contract: two would leave a reader unsure which set of risks the review actually stands behind.
  *
  * @param lines - the report split into lines; an empty report fails earlier than this
+ *
  * @param violations - shared violation list, appended in report order so a reader sees issues top-down; a violation makes the report fail
  * @returns the Top 5 Risks section, or null when the author did not include one
  */
@@ -711,6 +719,7 @@ export function readTopFiveSection(
  *
  * @param section - one located report section; null means the heading was absent entirely
  * @param projectRoot - reviewed project root; anchors are confined to it so a report cannot cite files it was never authorised to read
+ *
  * @param authority - selected live, index, or Git source used to resolve anchors; invalid authority supplies no evidence
  * @param violations - shared violation list, appended in report order so a reader sees issues top-down; a violation makes the report fail
  */
@@ -744,6 +753,7 @@ export function validateSectionAnchors(
  * Fail Top 5 references that do not name one surfaced finding definition.
  *
  * @param section - one located report section; null means the heading was absent entirely
+ *
  * @param definitions - parsed active findings and optional refuter history; empty means the report defines no issue IDs
  * @param violations - shared violation list, appended in report order so a reader sees issues top-down; a violation makes the report fail
  */
@@ -778,6 +788,7 @@ export function validateTopFiveReferences(
  * Fail secondary R-ID references in refuter output when no definition exists.
  *
  * @param lines - the report split into lines; an empty report fails earlier than this
+ *
  * @param definitions - parsed active findings and optional refuter history; empty means the report defines no issue IDs
  * @param violations - shared violation list, appended in report order so a reader sees issues top-down; a violation makes the report fail
  */
@@ -847,6 +858,7 @@ function warnEmptyOptionalSections(
  *
  * @param topFive - the Top 5 Risks section; absent means the author did not provide one
  * @param findingsHeadingLine - line the Findings heading sits on, so a shape warning points the author at the right place
+ *
  * @param surfacedCount - how many findings the report actually surfaced, cross-checked against its own claims
  * @param warnings - shared advisory list; entries here inform the author without changing the pass/fail verdict
  */
@@ -890,6 +902,7 @@ function warnTopFiveShape(
  *
  * @param lines - the report split into lines; an empty report fails earlier than this
  * @param topFive - the Top 5 Risks section; absent means the author did not provide one
+ *
  * @param definitions - parsed active findings and optional refuter history; empty means the report defines no issue IDs
  * @param warnings - shared advisory list; entries here inform the author without changing the pass/fail verdict
  */
@@ -937,6 +950,7 @@ export function validateSpecDrift(
  * Parse the visible finding-evidence totals for later reconciliation.
  *
  * @param fields - visible integrity rows; missing or malformed Evidence is diagnosed by the field validator
+ *
  * @param violations - errors to append when a count cannot be represented exactly
  * @returns OBSERVED/INFERRED totals, including zero; null means no complete valid pair is available
  */
@@ -978,6 +992,7 @@ function hasFourSafeCounts(
  * Parse confirmed/adjusted/refuted/unresolved totals for reconciliation.
  *
  * @param fields - visible integrity rows; missing or malformed Verdicts is diagnosed by the field validator
+ *
  * @param violations - errors to append when a disposition count cannot be represented exactly
  * @returns four exclusive outcome totals, including zeros; null prevents arithmetic on absent or invalid counts
  */
@@ -1039,6 +1054,7 @@ export function readVerdictCounts(
  * Require sampled area reports to disclose their excluded surroundings beside the frozen roots and selected paths.
  *
  * @param integrity - selected source authority; whole-area and non-area reviews need no sample exclusion
+ *
  * @param lines - rendered report lines used to locate the excluded surroundings
  * @param violations - errors to append when a sampled area lacks a meaningful exclusion disclosure
  */
@@ -1082,6 +1098,7 @@ export function validateAreaSampleBoundary(
  * Parse the final per-ID map; absence is retained for the narrow legacy inference checked after ledger reads.
  *
  * @param fields - visible integrity rows; an omitted map retains the narrow legacy inference route
+ *
  * @param violations - errors to append for noncanonical maps, malformed IDs, or unknown outcomes
  * @returns one final outcome per ID; an empty map has no issues, while null needs legacy inference or error handling
  */

@@ -1,13 +1,14 @@
 /**
- * Runs the deterministic install command: preview, admission, Bash, then post-install writes.
+ * Runs installation or explicit state-only recovery for the selected project.
  *
- * Kept apart from the command router because install is the only command that shows a user a decision, spawns the bundled installer, and then
- * verifies what that installer produced.
- * The preview built here is the single authority both admission and apply consume.
+ * Normal installation previews changes, checks authority, runs the bundled installer and verifies its result.
+ * State-only recovery relocates legacy bookkeeping while preserving installed files and policy choices.
  */
-import { readFileSync } from "node:fs";
+import { lstatSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { inspectPolicyUpgrade } from "../../workflow/hooks/hook-policy-state.cjs";
 import { migrateLegacyLocalState } from "./local-state-migration.js";
+import { readManagedInstallStateFacade } from "./managed-setup-state.js";
 
 import { getAgentProfile, getAgentProfiles } from "./agents/registry.js";
 import { classifyProjectState } from "./classify-state.js";
@@ -71,28 +72,31 @@ function deriveInstallFlags(
     const projectFS = createFS(projectPath);
     const state = classifyProjectState(projectFS, agentId);
     const flags: string[] = [];
+    // Refreshing an older installation also records the current config version unless the user already requested that flag.
     if (
       !options.updateConfigVersion &&
       (state.state === "outdated" || state.state === "v0.9")
     ) {
       flags.push("--update-config-version");
     }
+    // The older layout needs retired-skill cleanup to complete the user's upgrade.
     if (!options.cleanDeprecated && state.state === "v0.9") {
       flags.push("--clean-deprecated");
     }
     return flags;
   } catch {
+    // An unreadable adoption marker supplies no inferred upgrade flags; the user's explicit options still reach setup.
     return [];
   }
 }
 
 /**
  * Build the installer flag list from user choices plus the preview's own decisions.
- * The preview is the single authority on which managed paths this package leaves alone, so apply receives that decision instead of re-deriving it in
- * Bash.
+ * The preview decides which managed paths remain preserved; Bash receives those choices rather than deciding them again.
  *
  * @param options - parsed user choices carrying the target and any explicit authority
  * @param agent - selected agent whose managed mirror is installed
+ *
  * @param preview - the report already shown to the user; its preserved rows become skip flags
  * @returns the complete argument list appended after the installer's target and agent
  */
@@ -102,10 +106,13 @@ function collectInstallerFlags(
   preview: ManagedSetupPreview,
 ): string[] {
   const flags: string[] = [];
+  // Pass the user's explicit version-refresh choice to the bundled installer.
   if (options.updateConfigVersion) flags.push("--update-config-version");
+  // Pass the user's explicit retired-skill cleanup choice to the bundled installer.
   if (options.cleanDeprecated) flags.push("--clean-deprecated");
   // Each row's own decision travels to Bash, so apply cannot re-derive a different one.
   for (const file of preview.files) {
+    // Locally preserved files stay in the user's project during the installer run.
     if (file.state === "local-preserved") {
       flags.push("--preserve-path", file.path);
     }
@@ -159,6 +166,7 @@ const SHIPPED_HOOK_TOGGLES = [
  *
  * @param projectPath - selected target root containing the relative path
  * @param relativePath - repository-relative file to inspect and read
+ *
  * @returns file text, or null for absence, redirection, hard links, or read errors
  * @throws Never; filesystem failures are represented by null
  */
@@ -166,6 +174,7 @@ function readExistingTargetText(
   projectPath: string,
   relativePath: string,
 ): string | null {
+  // An absent or unsafe target supplies no readable text for a proposed migration.
   if (readManagedTargetEvidence(projectPath, relativePath).status !== "regular")
     return null;
   try {
@@ -201,8 +210,11 @@ function hookRegistrationEdit(
   current: AgentHookReadState,
   shouldRegister: boolean,
 ): HookRegistrationEdit | null {
+  // Missing or invalid provider config cannot supply an existing registration to edit.
   if (current.configMissing || current.configInvalid) return null;
+  // An enabled current registration already matches the user's desired state.
   if (shouldRegister && current.installed) return null;
+  // An enabled hook needs restoration when absent, or repair when its existing row has drifted.
   if (shouldRegister) {
     return current.registrationIssue === "registration-missing"
       ? "restore"
@@ -230,9 +242,11 @@ function pendingHookRegistrationEdit(
   hookStates: ReadonlyMap<string, HookState>,
   spec: HookSpec,
 ): HookRegistrationEdit | null {
+  // An unsupported provider cannot receive this hook's registration.
   if (spec.unsupportedAgents?.[agent] !== undefined) return null;
   const hookState = hookStates.get(spec.id);
   const agentState = hookState?.agents[agent];
+  // An unreported or unsupported hook has no provider registration to include in the user's preview.
   if (!hookState || !agentState?.supported) return null;
   const current = readAgentHookState(projectPath, profile, spec);
   // Root eligibility matters because standalone apply removes an ineligible Stop row instead of restoring it.
@@ -244,6 +258,7 @@ function pendingHookRegistrationEdit(
  * Missing configs are covered by the preview's create action, while invalid JSON stays preserved.
  *
  * @param projectPath - selected target whose current config and root contract are inspected
+ *
  * @param agent - selected provider whose one hook-config row receives the summary
  * @returns concise edit phrases; empty means hook reconciliation leaves the config unchanged
  */
@@ -253,6 +268,7 @@ function pendingHookConfigEdits(
   selectedHookId?: string,
 ): string[] {
   const profile = getAgentProfile(agent);
+  // Without an existing hook-config file, the preview's create action covers setup instead of a migration edit.
   if (
     profile.hookConfigFile === null ||
     readExistingTargetText(projectPath, profile.hookConfigFile) === null
@@ -274,7 +290,9 @@ function pendingHookConfigEdits(
 
   const removalReasons: string[] = [];
 
+  // Inspect registry hooks to name the registration changes the user will see before install.
   for (const spec of listHookSpecs()) {
+    // A targeted repair previews only the requested hook's registration changes.
     if (selectedHookId !== undefined && spec.id !== selectedHookId) continue;
     const edit = pendingHookRegistrationEdit(
       projectPath,
@@ -283,6 +301,7 @@ function pendingHookConfigEdits(
       hookStates,
       spec,
     );
+    // A hook needing no registration edit contributes no migration sentence.
     if (edit === null) continue;
     edits[edit].push(spec.id);
 
@@ -310,6 +329,7 @@ function pendingHookConfigEdits(
  *
  * @param hookState - registrar state for the hook; undefined means the registry never reported it
  * @param agent - provider whose per-agent reason and repair summary apply
+ *
  * @param hookId - hook the removal names, echoed so grouped output stays attributable
  * @returns reason and fix lines, or an empty array when the registrar published no reason
  */
@@ -343,20 +363,24 @@ function addPendingMigration(
  */
 function hasDeprecatedCodexHooksFlag(settingsText: string): boolean {
   let section = "";
+  // Inspect saved feature assignments to decide whether the user's Codex settings need the retired flag migration.
   for (const line of settingsText.split(/\r?\n/u)) {
     const sectionMatch = /^\s*\[([^\]]+)\]\s*(?:#.*)?$/u.exec(line);
+    // Track the TOML section so a hook flag is read in its actual settings table.
     if (sectionMatch) {
       section = sectionMatch[1]?.trim() ?? "";
       continue;
     }
     const assignment =
       /^\s*([A-Za-z0-9_.-]+)\s*=\s*(?:true|false)\s*(?:#.*)?$/u.exec(line);
+    // Unrelated or non-boolean assignments cannot establish the retired hook feature choice.
     if (!assignment) continue;
     const rawKey = assignment[1] ?? "";
     const normalizedKey =
       section === "features" && !rawKey.includes(".")
         ? `features.${rawKey}`
         : rawKey;
+    // A retired hook flag makes these settings eligible for the install preview's migration notice.
     if (normalizedKey === "features.codex_hooks") return true;
   }
   return false;
@@ -386,9 +410,9 @@ const CODEX_CANONICAL_DENY_PATTERNS = [
 ] as const;
 
 /**
- * Codex deny patterns goat-flow used to ship and now removes on upgrade because a plain folder or file name blocks ordinary
- * application code (a secrets route, a credentials.ts provider). A profile still carrying one is refreshed; the same pattern
- * added by hand cannot be told apart, so the install output names each removal.
+ * Retire earlier Codex denies that also blocked application names such as secrets routes and credentials.ts providers.
+ *
+ * A profile retaining one needs refresh; identical user-added patterns cannot be distinguished, so install reports each removal.
  */
 const CODEX_RETIRED_DENY_PATTERNS = [
   "**/secrets/**",
@@ -461,6 +485,7 @@ interface CodexPermissionProfileText {
 
 /**
  * Read only the selected Codex permission profile's TOML regions.
+ *
  * The standalone installer rewrites these regions and preserves every other profile, so preview
  * must not let an inactive profile satisfy or trigger an active-profile migration check.
  */
@@ -484,14 +509,19 @@ function selectedCodexPermissionProfileText(
   };
   let selectedSection: keyof CodexPermissionProfileText | null = null;
 
+  // Collect only the active Codex profile's settings before deciding what the install will refresh.
   for (const line of settingsText.split(/\r?\n/u)) {
+    // The active profile table supplies its base permission metadata.
     if (profileSection.test(line)) {
       selectedSection = "profile";
+      // The active filesystem table supplies the user's current path restrictions.
     } else if (filesystemSection.test(line)) {
       selectedSection = "filesystem";
+      // Another table ends the active profile region and remains outside this migration check.
     } else if (anySection.test(line)) {
       selectedSection = null;
     }
+    // Only active profile lines contribute to the user's permission migration decision.
     if (selectedSection !== null) selectedLines[selectedSection].push(line);
   }
 
@@ -544,6 +574,7 @@ function codexPermissionProfileNeedsMigration(settingsText: string): boolean {
       settingsText,
     )?.[1] ?? "goat-flow";
   const hasDefaultProfile = /^\s*default_permissions\s*=/mu.test(settingsText);
+  // Without an active permission surface, this project has no existing Codex profile to refresh.
   if (
     !hasCodexPermissionSurface(settingsText, defaultProfile, hasDefaultProfile)
   )
@@ -575,6 +606,7 @@ function codexPermissionProfileNeedsMigration(settingsText: string): boolean {
  * Side effects: none; malformed JSON is treated as preserved, matching standalone apply.
  *
  * @param settingsText - current JSON bytes from a safe regular settings file
+ *
  * @returns true only when a recognized stale rule would be changed
  * @throws Never; parse failures return false
  */
@@ -583,11 +615,14 @@ function claudePermissionsNeedMigration(settingsText: string): boolean {
   try {
     parsed = JSON.parse(settingsText) as unknown;
   } catch {
+    // Hand-edited invalid JSON stays preserved during setup, so this preview names no permission-rule migration.
     return false;
   }
+  // Malformed settings cannot supply a Claude permission migration preview.
   if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed))
     return false;
   const permissions = (parsed as Record<string, unknown>).permissions;
+  // A missing or malformed permissions object has no rule lists for this migration to inspect.
   if (
     permissions === null ||
     typeof permissions !== "object" ||
@@ -597,6 +632,7 @@ function claudePermissionsNeedMigration(settingsText: string): boolean {
   const permissionRecord = permissions as Record<string, unknown>;
   return ["deny", "allow", "ask"].some((arrayName) => {
     const rules = permissionRecord[arrayName];
+    // A missing or malformed rule list has no saved permission entries to preview.
     if (!Array.isArray(rules)) return false;
     return rules.some((rule) => installRewritesClaudeRule(arrayName, rule));
   });
@@ -604,16 +640,21 @@ function claudePermissionsNeedMigration(settingsText: string): boolean {
 
 /**
  * Decide whether install would change one Claude permission rule during an upgrade.
+ *
  * Unmatched tool forms are repaired in every list; only deny rules are retired, expanded, or re-anchored,
  * because an allow or ask rule with the same text is the user's own choice.
  *
  * @param arrayName - permission list the rule came from: `deny`, `allow`, or `ask`
+ *
  * @param rule - one raw list entry; a non-string entry is left untouched and reports false
  * @returns true when the standalone installer would remove or rewrite this entry
  */
 function installRewritesClaudeRule(arrayName: string, rule: unknown): boolean {
+  // A non-string permission entry cannot identify a tool rule that setup rewrites.
   if (typeof rule !== "string") return false;
+  // These retired tool spellings need repair before Claude can enforce the user's file rules.
   if (/^(?:MultiEdit|Write|NotebookEdit|Glob)\(/u.test(rule)) return true;
+  // Only deny lists receive environment expansion and retired-path cleanup; allow and ask choices retain their meaning.
   if (arrayName !== "deny") return false;
   return (
     rule === "Read(**/.env*)" ||
@@ -636,14 +677,18 @@ function pendingAgentSettingsEdits(
   agent: AgentId,
 ): string[] {
   const edits: string[] = [];
+  // Codex settings receive the feature-flag and permission-profile migrations owned by this installer.
   if (agent === "codex") {
+    // A saved retired feature flag adds a specific migration notice to the user's preview.
     if (hasDeprecatedCodexHooksFlag(settingsText)) {
       edits.push("migrate the deprecated codex_hooks feature flag");
     }
+    // An outdated permission profile adds its refresh notice to the user's preview.
     if (codexPermissionProfileNeedsMigration(settingsText)) {
       edits.push("refresh the Codex permission profile");
     }
   }
+  // Claude's stale permission rules add their repair notice to the user's preview.
   if (agent === "claude" && claudePermissionsNeedMigration(settingsText)) {
     edits.push("repair stale, unmatched, or retired Claude permission rules");
   }
@@ -657,12 +702,16 @@ function pendingAgentSettingsMigrations(
 ): Map<string, string[]> {
   const profile = getAgentProfile(agent);
   const settingsMigrations = new Map<string, string[]>();
+  // A provider without settings has no settings file to include in the migration preview.
   if (profile.settingsFile === null) return settingsMigrations;
 
+  // Inspect the provider's shared and applicable local settings before listing migration edits.
   for (const settingsPath of agentSettingsPaths(profile.settingsFile, agent)) {
     const settingsText = readExistingTargetText(projectPath, settingsPath);
+    // Missing or unsafe settings cannot supply an existing migration target.
     if (settingsText === null) continue;
     const edits = pendingAgentSettingsEdits(settingsText, agent);
+    // Only files needing edits appear in the user's settings migration summary.
     if (edits.length > 0) settingsMigrations.set(settingsPath, edits);
   }
   return settingsMigrations;
@@ -671,6 +720,7 @@ function pendingAgentSettingsMigrations(
 /** Return whether install will append its dependency ignore to an existing root policy. */
 function rootGitignoreNeedsMigration(projectPath: string): boolean {
   const gitignoreText = readExistingTargetText(projectPath, ".gitignore");
+  // An absent or unsafe root ignore file has no existing content to migrate.
   if (gitignoreText === null) return false;
   const equivalentEntries = new Set([
     "node_modules/",
@@ -691,6 +741,7 @@ function pendingConfigMigrationEdits(
   agent: AgentId,
 ): string[] {
   const configText = readTargetConfigText(options.projectPath);
+  // An absent or unsafe config supplies no existing top-level settings to migrate.
   if (configText === null) return [];
 
   const edits: string[] = [];
@@ -699,13 +750,17 @@ function pendingConfigMigrationEdits(
     deriveInstallFlags(options.projectPath, agent, options).includes(
       "--update-config-version",
     );
+  // A requested version change appears as a config edit in the install preview.
   if (migratesConfigVersion) edits.push("update the version field");
+  // Inspect each retired config section before naming its removal in the preview.
   for (const retired of RETIRED_CONFIG_BLOCKS) {
+    // A present retired section adds only its own removal notice.
     if (retired.pattern.test(configText)) edits.push(retired.edit);
   }
   const absentToggles = SHIPPED_HOOK_TOGGLES.filter(
     (hookId) => !new RegExp(`^\\s{2}${hookId}\\s*:`, "mu").test(configText),
   );
+  // Missing hook choices are listed so the user can see which defaults setup will add.
   if (absentToggles.length > 0) {
     edits.push(`add hook toggles: ${absentToggles.join(", ")}`);
   }
@@ -714,10 +769,12 @@ function pendingConfigMigrationEdits(
 
 /**
  * Name every in-place edit this run will make to the user's config, keyed by path.
+ *
  * Users cannot verify "this file may change" after the fact, so the row names each edit install will perform: the requested version bump plus any
  * retired block or missing toggle.
  *
  * @param options - parsed user choices carrying the target and any explicit migration flag
+ *
  * @param agent - selected agent whose adoption state can derive a version migration
  * @returns path-to-summary entries; empty when this run edits no user-owned file in place
  */
@@ -727,6 +784,7 @@ function pendingMigrations(
 ): ReadonlyMap<string, string> {
   const migrations = new Map<string, string>();
   const configEdits = pendingConfigMigrationEdits(options, agent);
+  // Only changed project config receives a migration row in the install preview.
   if (configEdits.length > 0) {
     addPendingMigration(
       migrations,
@@ -737,6 +795,7 @@ function pendingMigrations(
 
   const profile = getAgentProfile(agent);
   const hookConfigEdits = pendingHookConfigEdits(options.projectPath, agent);
+  // An existing provider hook file receives a migration row when its registrations need reconciliation.
   if (profile.hookConfigFile !== null && hookConfigEdits.length > 0) {
     addPendingMigration(
       migrations,
@@ -744,6 +803,7 @@ function pendingMigrations(
       `Install edits this user-owned hook config in place to ${hookConfigEdits.join("; ")}. Unrelated hook rows and top-level fields retain their semantic values, but JSON formatting may be normalized.`,
     );
   }
+  // Add each existing settings file with its own concrete migration summary.
   for (const [settingsPath, edits] of pendingAgentSettingsMigrations(
     options.projectPath,
     agent,
@@ -757,6 +817,7 @@ function pendingMigrations(
       `Install edits this user-owned settings file in place to ${edits.join("; ")}. ${preservationClaim}`,
     );
   }
+  // An outdated root ignore entry adds its own migration notice to the user's preview.
   if (rootGitignoreNeedsMigration(options.projectPath)) {
     addPendingMigration(
       migrations,
@@ -766,6 +827,7 @@ function pendingMigrations(
   }
   const commitGuidanceBridgePath =
     pendingCommitGuidanceMigrationInstructionPath(options.projectPath, agent);
+  // An existing commit-guidance bridge receives a notice when its installed guidance needs refresh.
   if (commitGuidanceBridgePath !== null) {
     addPendingMigration(
       migrations,
@@ -788,6 +850,7 @@ function claimReleaseDiagnostic(
   results: readonly PathWriteClaimReleaseResult[],
 ): string | null {
   const failures = failedClaimReleases(results);
+  // Successful claim cleanup needs no recovery diagnostic for the user.
   if (failures.length === 0) return null;
   const details = failures
     .map((failure) => `${failure.targetPath} (${failure.status})`)
@@ -828,6 +891,7 @@ function acquireManagedInstallClaims(
     }));
     return acquirePathWriteClaims(projectPath, requests);
   } catch (error) {
+    // A write-claim refusal becomes an install-specific recovery error before the project can be changed.
     if (error instanceof PathWriteClaimError) {
       throw managedInstallClaimError(error, projectPath);
     }
@@ -847,10 +911,13 @@ function releaseManagedInstallClaims(
   try {
     diagnostic = claimReleaseDiagnostic(releasePathWriteClaims(claims));
   } catch {
+    // A replaced or unreadable claim marker prevents confirmed cleanup; tell the user to inspect claims before retrying.
     diagnostic =
       "Managed install could not confirm owner-safe claim release. Inspect the write claims before retrying; do not remove them while a writer may be active.";
   }
+  // Successful cleanup needs no additional completion message.
   if (diagnostic === null) return;
+  // After an earlier install failure, report cleanup trouble without hiding the original failure.
   if (didTransactionFail) {
     console.error(diagnostic);
     return;
@@ -860,6 +927,7 @@ function releaseManagedInstallClaims(
 
 /**
  * Include existing sibling-provider Git registrations in the install write set.
+ *
  * Shared policy bytes affect those providers too, so their exact config rows receive
  * the same existing preview/admission contract before the standalone upgrade writes them.
  */
@@ -874,13 +942,16 @@ function buildInstallPreview(
     authority,
     pendingMigrations(options, agent),
   );
+  // Check installed sibling providers because shared Git protection may require changes beyond the selected agent.
   for (const sibling of getAgentProfiles()) {
+    // The selected provider is already covered, and a provider without a hook file has no sibling migration row.
     if (sibling.id === agent || sibling.hookConfigFile === null) continue;
     const edits = pendingHookConfigEdits(
       options.projectPath,
       sibling.id,
       "deny-git-mutations",
     );
+    // A sibling needing no hook edits does not enlarge the user's install preview.
     if (edits.length === 0) continue;
     const migrations = new Map([
       [
@@ -897,8 +968,10 @@ function buildInstallPreview(
     const row = siblingPreview.files.find(
       (file) => file.path === sibling.hookConfigFile,
     );
+    // Add a sibling destination only once so the user sees one row per affected file.
     if (row && !preview.files.some((file) => file.path === row.path))
       preview.files.push(row);
+    // A blocked or unmanaged sibling file makes the shared install require review before replacement.
     if (row && (isBlockingManagedFile(row) || row.state === "unmanaged"))
       preview.verdict = "blocked";
   }
@@ -921,7 +994,9 @@ function revalidateManagedInstallPreview(
     revalidatedPreview,
     authority,
   );
+  // A new overwrite blocker stops installation before the user's files can change.
   if (overwriteBlocker !== null) throw new CLIError(overwriteBlocker, 1);
+  // Changed preview inputs invalidate admission so setup cannot replace files the user did not review.
   if (JSON.stringify(revalidatedPreview) !== JSON.stringify(initialPreview)) {
     throw new CLIError(
       "Managed install inputs changed after claim admission. No target files were changed.",
@@ -946,7 +1021,46 @@ function managedInstallStateRecovery(
 type ClaimedManagedInstallOutcome = "completed" | "installer-failed";
 
 /**
+ * Explain pending GitHub ownership review before installation can change the selected project.
+ *
+ * @returns guidance for the newer dashboard Hooks page, or null when existing policy choices need no review
+ * @throws CLIError when config or ownership files cannot be inspected safely; installation stops before writes
+ */
+function policyUpgradeBlocker(projectPath: string): string | null {
+  try {
+    const review = inspectPolicyUpgrade(
+      projectPath,
+      getTemplatePath("workflow/hooks"),
+    );
+    // Fresh installs, identical ownership files and matching switch choices need no migration consent.
+    if (!review) return null;
+    return `GitHub policy review is required before installation. Use the newer dashboard Hooks page to review the original and requested choices and affected files, then retry. If legacy local state blocks review, stop and upgrade all writers, then run install with --agent <id> --migrate-state-only first. Force options cannot approve this policy change. Files: ${review.paths.join(", ")}`;
+  } catch {
+    // A malformed config or linked ownership file prevents the installer from identifying the protection the user would change.
+    throw new CLIError(
+      "Policy choices or ownership files could not be read safely. Repair the selected project's hook configuration before installation.",
+      1,
+    );
+  }
+}
+
+/** Add pending policy review to dry-run diagnostics without granting authority or changing any project files. */
+function policyReviewPreview(
+  preview: ManagedSetupPreview,
+  policyBlocker: string | null,
+): ManagedSetupPreview {
+  // No policy decision is pending, so the user sees the original managed-file verdict.
+  if (!policyBlocker) return preview;
+  return {
+    ...preview,
+    verdict: "blocked",
+    limits: [...preview.limits, policyBlocker],
+  };
+}
+
+/**
  * Apply, verify, and record one install while its caller retains every write claim.
+ *
  * Error behavior: preserves installer exits and translates verified-but-unrecorded state into the accepted recovery error.
  * @returns completed after verified state and post-install writes, or installer-failed after preserving a non-zero child status
  */
@@ -962,6 +1076,9 @@ async function runClaimedManagedInstall(
     authority,
     initialPreview,
   );
+  const policyBlocker = policyUpgradeBlocker(options.projectPath);
+  // Another writer may have changed policy choices after preview; stop before publishing any install-state markers.
+  if (policyBlocker) throw new CLIError(policyBlocker, 1);
   // V2 state and every old-reader marker become visible while the complete claim batch is held, before Bash receives permission to mutate targets.
   prepareManagedInstallStateForApply(options.projectPath);
   const installerLaunch = buildInstallerInvocation({
@@ -971,6 +1088,7 @@ async function runClaimedManagedInstall(
     installerFlags: collectInstallerFlags(options, agent, installPreview),
     platform: process.platform,
   });
+  // An unavailable safe installer launcher stops this install before its subprocess starts.
   if (!installerLaunch.ok) throw new CLIError(installerLaunch.error, 1);
 
   const { spawnInheritedSync } = await import("./server/safe-exec.js");
@@ -984,18 +1102,21 @@ async function runClaimedManagedInstall(
       GOAT_FLOW_INSTALL_ADMISSION: "v2",
     },
   });
+  // A missing executable or launch failure is reported as an installer error to the caller.
   if (installResult.error) {
     throw new CLIError(
       `Could not run installer with ${installerProcess.command}: ${installResult.error.message}`,
       1,
     );
   }
+  // A terminated installer cannot be reported as a completed setup.
   if (installResult.signal) {
     throw new CLIError(
       `Installer terminated by signal ${installResult.signal}`,
       1,
     );
   }
+  // A failed installer preserves its exit status and skips recording successful install state.
   if (installResult.status !== 0) {
     process.exitCode = installResult.status ?? 1;
     return "installer-failed";
@@ -1008,11 +1129,13 @@ async function runClaimedManagedInstall(
       agent,
     );
   } catch (error) {
+    // Unrecordable managed state gives the user explicit recovery guidance instead of claiming verified completion.
     if (error instanceof ManagedInstallStateRecordError) {
       throw managedInstallStateRecovery(options.projectPath, agent);
     }
     throw error;
   }
+  // Template mismatches prevent a success receipt even when the installer process exited successfully.
   if (installationMismatches.length > 0) {
     throw new CLIError(
       `Installer exited successfully, but ${installationMismatches.length} managed file(s) do not match their templates. Install state was not recorded.`,
@@ -1025,15 +1148,83 @@ async function runClaimedManagedInstall(
 }
 
 /**
- * Run a managed preview or deterministic install after the user chooses an agent.
+ * Move legacy bookkeeping when install and dashboard review are waiting on each other.
+ * Preserves record bytes, hooks and policy choices; a repeated request reports that no migration is needed.
+ *
+ * @param projectPath - existing selected project; a missing, linked or non-directory root is refused before migration
+ * @throws CLIError when the project or saved evidence is unsafe, claims remain, or relocation fails
+ */
+function migrateInstallStateOnly(projectPath: string): void {
+  try {
+    const projectDirectory = lstatSync(projectPath);
+    // A recovery action must stay inside the real project the operator selected.
+    if (!projectDirectory.isDirectory() || projectDirectory.isSymbolicLink()) {
+      throw new CLIError(
+        "State migration requires a real project directory.",
+        1,
+      );
+    }
+    const installEvidence = readManagedInstallStateFacade(projectPath);
+    // Invalid or competing receipts require repair; moving their directory must not appear to validate them.
+    if (
+      installEvidence.status === "malformed-blocking" ||
+      installEvidence.status === "conflicting"
+    ) {
+      // Missing diagnostic text still gives the operator a repair step instead of treating invalid evidence as safe.
+      throw new CLIError(
+        installEvidence.error ??
+          "Repair the project's install evidence before migrating local state.",
+        1,
+      );
+    }
+    const stateWasMigrated = migrateLegacyLocalState(projectPath);
+    console.log(
+      stateWasMigrated
+        ? "Local state migrated. Hooks and policy choices are unchanged; complete dashboard review, then retry install."
+        : "No legacy local state requires migration. Hooks and policy choices are unchanged.",
+    );
+  } catch (error) {
+    // A linked state folder, an outstanding Sync claim, or lost rename permission can stop the user's recovery request.
+    throw new CLIError(
+      error instanceof Error ? error.message : "Local-state migration failed.",
+      1,
+    );
+  }
+}
+
+/**
+ * Run preview, installation or explicit state-only recovery after the user chooses an agent.
  * Use for install or setup dry-run/apply; it throws CLI errors or preserves a non-zero child exit.
  *
  * @param options - parsed user choices; a missing agent is rejected before preview or installation
- * @returns completion after preview or install; no value means output and exit state already describe the result
+ * @returns completion after preview, migration or install; no value means output and exit state already describe the result
  */
 export async function handleInstallCommand(options: ParsedCLI): Promise<void> {
   const selectedAgent = validateManagedSetupRequest(options);
+  // The user explicitly chose bookkeeping recovery before returning to dashboard consent and ordinary installation.
+  if (options.shouldMigrateStateOnly) {
+    migrateInstallStateOnly(options.projectPath);
+    return;
+  }
+  await installManagedFiles(options, selectedAgent);
+}
+
+/**
+ * Complete ordinary installation after the user selects an agent and any required policy review is resolved.
+ * Preview, file authority and write claims still govern every installed file and its verified receipt.
+ *
+ * @param options - parsed install choices; missing replacement authority preserves conflicting local files
+ * @param selectedAgent - validated profile whose managed installation the user requested
+ *
+ * @returns no value; output and process exit describe completion or a failed installer
+ * @throws CLIError when preview, admission, migration or verification cannot safely finish
+ */
+async function installManagedFiles(
+  options: ParsedCLI,
+  selectedAgent: AgentId,
+): Promise<void> {
   const authority = readManagedSetupAuthority(options);
+  const policyBlocker = policyUpgradeBlocker(options.projectPath);
   let installPreview = buildInstallPreview(options, selectedAgent, authority);
   const installerLaunch = buildInstallerInvocation({
     scriptPath: getTemplatePath("workflow/install-goat-flow.sh"),
@@ -1050,10 +1241,15 @@ export async function handleInstallCommand(options: ParsedCLI): Promise<void> {
   if (options.shouldDryRun) {
     emitManagedSetupDryRun(
       options,
-      managedSetupPreviewForInstallerLaunch(installPreview, installerLaunch),
+      managedSetupPreviewForInstallerLaunch(
+        policyReviewPreview(installPreview, policyBlocker),
+        installerLaunch,
+      ),
     );
     return;
   }
+  // Generic install or force authority cannot replace the separate policy decision shown on the Hooks page.
+  if (policyBlocker) throw new CLIError(policyBlocker, 1);
 
   const overwriteBlocker = managedSetupAdmissionFailure(
     installPreview,
@@ -1069,15 +1265,18 @@ export async function handleInstallCommand(options: ParsedCLI): Promise<void> {
 
   // Relocation is an apply-only upgrade step, after preview and launch admission.
   try {
+    // Relocated legacy state requires a new preview before the admitted install can continue.
     if (migrateLegacyLocalState(options.projectPath)) {
       installPreview = buildInstallPreview(options, selectedAgent, authority);
       const migrationBlocker = managedSetupAdmissionFailure(
         installPreview,
         authority,
       );
+      // A blocker discovered after state migration stops the file installation and reports the required recovery.
       if (migrationBlocker !== null) throw new CLIError(migrationBlocker, 1);
     }
   } catch (error) {
+    // An unreadable legacy state path or a newly discovered blocker stops file installation and retains its recovery error.
     throw new CLIError(
       error instanceof Error ? error.message : "Local-state migration failed.",
       1,
@@ -1098,6 +1297,7 @@ export async function handleInstallCommand(options: ParsedCLI): Promise<void> {
     );
     didTransactionFail = installOutcome === "installer-failed";
   } catch (error) {
+    // A failed installer or verification keeps its original error; later claim cleanup must not hide it from the user.
     didTransactionFail = true;
     throw error;
   } finally {

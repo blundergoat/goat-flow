@@ -356,6 +356,7 @@ function validateLinkedGateFindings(
  * Evaluate one report while retaining parsed integrity for draft-envelope checks.
  *
  * @param markdown - human-readable report without a transient ledger appendix
+ *
  * @param projectRoot - reviewed project whose anchors and ledgers must resolve
  * @param shouldVerifyPersistedLedger - whether the declared ledger must already exist
  *
@@ -473,6 +474,7 @@ function evaluateReviewReport(
  * Validate a completed report, including the exact persisted ledger it declares.
  *
  * @param markdown - completed human-readable review report
+ *
  * @param projectRoot - reviewed project whose anchors and ledger must resolve
  * @returns deterministic status plus structural violations and advisory warnings
  */
@@ -606,6 +608,7 @@ function renderReviewValidationHeader(
  * Render a deterministic human-readable validation result for shell pipelines.
  *
  * @param result - pure validation result
+ *
  * @param commandLabel - subcommand name shown in the verdict header
  * @param passContext - qualifier appended to a passing header; null means no additional proof limitation is shown
  *
@@ -672,6 +675,7 @@ function renderReviewSnapshot(input: string, projectRoot: string): string {
  * Read the supplied report or request without silently replacing invalid UTF-8 bytes.
  *
  * @param path - saved input file; null reads stdin from the calling terminal or pipeline
+ *
  * @returns exact decoded input; empty text remains empty so the selected parser can report its missing content
  * @throws CLIError when stdin or the named file is unreadable or cannot round-trip as UTF-8
  */
@@ -697,6 +701,7 @@ function readReviewInput(path: string | null): string {
  * Usage and read errors throw CLIError; structural failures set the process exit code after rendering.
  *
  * @param options - parsed review request; a missing validation operation or unreadable input path is a usage error
+ *
  * @returns nothing; validation output is written through the shared CLI sink
  * @throws CLIError when command usage is invalid or the selected input cannot be read
  */
@@ -944,8 +949,8 @@ function validateAttemptFingerprints(attempt: JsonRecord): void {
     ["reviewAfter", "review"],
     ["workspaceBefore", "workspace"],
     ["workspaceAfter", "workspace"],
-  ]) {
-    const value = attempt[field!];
+  ] as const) {
+    const value = attempt[field];
     requireAuthority(
       value === null ||
         (typeof value === "string" &&
@@ -1076,10 +1081,12 @@ function validateGate(
  * Validate recorded gate provenance and source-state consistency without executing a command.
  *
  * @param text - exactly one canonical gates record; an empty gate list means no execution credit
+ *
  * @param projectRoot - reviewed project where a trusted Git source must resolve
  * @param snapshot - original review authority shared by every recorded attempt
  *
  * @param claimedGates - readable Gates field, or null for a compact receipt without that field
+ *
  * @param line - visible report location; null means the report as a whole
  * @param violations - appended failures; host consent and actual historic execution remain outside this validator's proof
  */

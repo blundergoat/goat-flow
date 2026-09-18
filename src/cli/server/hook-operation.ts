@@ -13,6 +13,13 @@ import {
   unlinkSync,
 } from "node:fs";
 import { join } from "node:path";
+import {
+  POLICY_OWNERSHIP_FILES,
+  parsePolicyChoices,
+  policyUpgradeReview,
+  type PolicyUpgradeReview,
+} from "../../../workflow/hooks/hook-policy-state.cjs";
+import { getTemplatePath } from "../paths.js";
 import { pathWriteClaimInspectCommand } from "../claims-command.js";
 import { AUDIT_VERSION } from "../constants.js";
 import {
@@ -32,6 +39,7 @@ import { KNOWN_AGENT_IDS } from "../types.js";
 import { projectIsAheadOfCli } from "../version-compare.js";
 import {
   HookManagedInstallationError,
+  type HookChangeFailure,
   type HookReplacementConflict,
 } from "./hook-managed-installation.js";
 import { writeFileAtomic } from "./safe-exec.js";
@@ -40,9 +48,10 @@ import { writeFileAtomic } from "./safe-exec.js";
 export type HookChangeIntent =
   { kind: "sync" } | { kind: "toggle"; hookId: string; enabled: boolean };
 
-/** Explicit approval of the exact replacement list; absence requests an ordinary safe change. */
+/** Separate consent for the exact policy and replacement review; absent fields grant neither approval. */
 export interface HookReplacementConfirmation {
   replace?: boolean;
+  acceptPolicyChange?: boolean;
   confirmationIdentity?: string;
 }
 
@@ -169,6 +178,12 @@ export class PreparedHookChange {
   readonly projectPath: string;
   readonly destinations = new Map<string, HookDestination>();
   readonly baseline: ReturnType<typeof readManagedSetupV2Baseline>;
+  private policyReview: PolicyUpgradeReview | null = null;
+  private ownershipEvidence: {
+    path: string;
+    originalIdentity: string | null;
+    incomingIdentity: string;
+  }[] = [];
 
   /**
    * Capture the selected project's complete shared history before preparing any writes.
@@ -340,6 +355,50 @@ export class PreparedHookChange {
     );
   }
 
+  /** Capture ownership inputs before review identity and claims, including files preserved by disabled hooks. */
+  preparePolicyReview(): void {
+    const policyDestinations = this.sortedDestinations().filter(
+      (file) =>
+        file.hookIds.has("deny-dangerous") ||
+        file.hookIds.has("deny-git-mutations"),
+    );
+    // An action affecting no policy hook cannot migrate GitHub protection in the selected project.
+    if (policyDestinations.length === 0) return;
+    const config = this.capture(".goat-flow/config.yaml");
+    // A missing config uses enabled defaults; a prepared config records the choices the user is about to apply.
+    const original = parsePolicyChoices(config.originalText ?? "");
+    const requested = parsePolicyChoices(
+      config.replacement ?? config.originalText ?? "",
+    );
+    // Disabled hooks retain their files, so capture their ownership too; null identity means a missing file cannot prove prior consent.
+    this.ownershipEvidence = POLICY_OWNERSHIP_FILES.map((name) => {
+      const file = this.capture(`.goat-flow/hooks/${name}`);
+      return {
+        path: file.path,
+        originalIdentity:
+          file.originalIdentity.state === "present"
+            ? file.originalIdentity.sha256
+            : null,
+        incomingIdentity: contentHash(
+          readFileSync(getTemplatePath(`workflow/hooks/${name}`)),
+        ),
+      };
+    });
+    const hasPolicyInstallation = this.sortedDestinations().some(
+      (file) =>
+        file.originalText !== null &&
+        /\/(?:deny-dangerous|deny-git-mutations|guard-repository-writes)\.sh$/u.test(
+          file.path,
+        ),
+    );
+    this.policyReview = policyUpgradeReview(
+      original,
+      requested,
+      hasPolicyInstallation,
+      this.ownershipEvidence,
+    );
+  }
+
   /**
    * Bind the user's review to the project, action, complete destination set, permissions and incoming bundle.
    * Equivalent sorted evidence yields the same identity; any relevant change requires a fresh review.
@@ -350,6 +409,8 @@ export class PreparedHookChange {
         project: this.projectPath,
         version: AUDIT_VERSION,
         intent: this.intent,
+        policyReview: this.policyReview,
+        ownershipEvidence: this.ownershipEvidence,
         destinations: this.sortedDestinations().map((destination) => ({
           path: destination.path,
           original: destination.originalIdentity,
@@ -401,10 +462,10 @@ export class PreparedHookChange {
   }
 
   /**
-   * Require exact replacement approval before discarding differing local hook bytes.
+   * Require separate, current consent before changing policy ownership or replacing the user's differing hook files.
    * A supplied stale identity also refuses when the current conflict list is empty, so old approval cannot authorize a new action.
    *
-   * @param confirmation - reviewed identity and replacement intent; empty means an ordinary safe request
+   * @param confirmation - reviewed identity and separate consent choices; empty means an ordinary safe request
    * @throws a structured conflict before any destination changes
    */
   assertReplacementApproved(confirmation: HookReplacementConfirmation): void {
@@ -412,23 +473,26 @@ export class PreparedHookChange {
     const conflicts = this.replacementConflicts();
     const hasConfirmation =
       confirmation.replace !== undefined ||
+      confirmation.acceptPolicyChange !== undefined ||
       confirmation.confirmationIdentity !== undefined;
-    const matchesReview =
-      confirmation.replace === true &&
-      confirmation.confirmationIdentity === identity;
+    const doesReviewMatch = confirmation.confirmationIdentity === identity;
     // Confirmation is valid only for the same files and action; a now-empty conflict list cannot revive an old review.
     if (
-      (hasConfirmation && !matchesReview) ||
-      (conflicts.length > 0 && !matchesReview)
+      (hasConfirmation && !doesReviewMatch) ||
+      !this.hasRequiredConsent(
+        confirmation,
+        conflicts.length > 0,
+        doesReviewMatch,
+      )
     ) {
-      const isStale = hasConfirmation;
+      const isStale = hasConfirmation && !doesReviewMatch;
       throw new HookManagedInstallationError(
         isStale
           ? "Hook files or choices changed since review. Review the current files before trying again."
-          : `Refusing to sync ${conflicts.every((conflict) => conflict.reason === "diverged") ? "diverged" : "unclassified or diverged"} managed hook files. Use the dashboard Hooks page to review and explicitly replace them with official files.`,
+          : this.reviewMessage(conflicts),
         409,
         {
-          code: isStale ? "hook-review-stale" : "hook-replacement-required",
+          code: this.reviewFailureCode(isStale),
           paths: conflicts.map((conflict) => conflict.path),
           hookIds: [
             ...new Set(conflicts.flatMap((conflict) => conflict.hookIds)),
@@ -436,9 +500,45 @@ export class PreparedHookChange {
           replacementAvailable: conflicts.length > 0,
           confirmationIdentity: identity,
           conflicts,
+          ...(this.policyReview ? { policyReview: this.policyReview } : {}),
         },
       );
     }
+  }
+
+  /** Tell the Hooks page whether to discard stale approval or request the missing policy or replacement decision. */
+  private reviewFailureCode(isStale: boolean): HookChangeFailure["code"] {
+    // A file or choice changed since review, so neither prior checkbox authorizes the new operation.
+    if (isStale) return "hook-review-stale";
+    return this.policyReview
+      ? "hook-policy-review-required"
+      : "hook-replacement-required";
+  }
+
+  /** Matching identity and independent consent are required for each kind of review. */
+  private hasRequiredConsent(
+    confirmation: HookReplacementConfirmation,
+    hasConflicts: boolean,
+    doesReviewMatch: boolean,
+  ): boolean {
+    // Replacing a local edit needs its own checkbox even when the user has accepted the policy change.
+    if (hasConflicts && (!doesReviewMatch || confirmation.replace !== true))
+      return false;
+    // Accepting file replacement alone cannot approve a change in which switch controls GitHub writes.
+    if (
+      this.policyReview &&
+      (!doesReviewMatch || confirmation.acceptPolicyChange !== true)
+    )
+      return false;
+    return true;
+  }
+
+  /** Keep ordinary replacement diagnostics intact; policy migration has its own explicit decision. */
+  private reviewMessage(conflicts: HookReplacementConflict[]): string {
+    // A policy change needs the dashboard comparison even when every installed file is pristine.
+    if (this.policyReview)
+      return "Review the GitHub policy change and any file replacements separately on the newer dashboard Hooks page before retrying. CLI and installer force options cannot approve this review.";
+    return `Refusing to sync ${conflicts.every((conflict) => conflict.reason === "diverged") ? "diverged" : "unclassified or diverged"} managed hook files. Use the dashboard Hooks page to review and explicitly replace them with official files.`;
   }
 
   /**
@@ -652,6 +752,7 @@ export function executeHookChange(
   let claims: ReturnType<typeof acquirePathWriteClaims>;
   try {
     reviewed = prepare();
+    reviewed.preparePolicyReview();
     reviewed.assertReplacementApproved(confirmation);
     claims = acquireHookChangeClaims(reviewed);
   } catch (error) {
@@ -661,6 +762,7 @@ export function executeHookChange(
   let failure: HookManagedInstallationError | undefined;
   try {
     const admitted = prepare();
+    admitted.preparePolicyReview();
     // Rebuilding under claims catches changed choices, provider selection, or package bytes before apply.
     if (admitted.confirmationIdentity() !== reviewed.confirmationIdentity()) {
       throw new HookManagedInstallationError(

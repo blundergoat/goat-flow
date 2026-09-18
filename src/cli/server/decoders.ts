@@ -91,6 +91,7 @@ type HookToggleBody = Record<"enabled", boolean> & HookReplacementBody;
 /** Exact replacement intent returned by the Hooks page after the user reviews its file list. */
 interface HookReplacementBody {
   replace?: boolean;
+  acceptPolicyChange?: boolean;
   confirmationIdentity?: string;
 }
 
@@ -521,6 +522,7 @@ export function decodeHookToggleBody(
   const confirmation = decodeHookReplacement(raw, [
     "enabled",
     "replace",
+    "acceptPolicyChange",
     "confirmationIdentity",
   ]);
   // An incomplete or malformed replacement review cannot accompany an otherwise valid toggle.
@@ -545,11 +547,32 @@ export function decodeHookSyncBody(
     return buildDecodeError("body", "must be a JSON object");
   return decodeHookReplacement(parsed.value, [
     "replace",
+    "acceptPolicyChange",
     "confirmationIdentity",
   ]);
 }
 
-/** Require both explicit replacement intent and a complete review identity; client-supplied file lists are never accepted. */
+/** Read checked consent fields; omitted fields grant no authority, and unchecked or malformed values refuse the request. */
+function decodeHookConsents(
+  raw: Record<string, unknown>,
+): DecodeResult<HookReplacementBody> {
+  const consent: HookReplacementBody = {};
+  // Both checkboxes have the same explicit-true contract but authorize different changes for the selected project.
+  for (const field of ["replace", "acceptPolicyChange"] as const) {
+    // An absent checkbox leaves that kind of change unapproved.
+    if (raw[field] === undefined) continue;
+    // Text, null and false cannot represent the user's deliberate approval.
+    if (raw[field] !== true)
+      return buildDecodeError(
+        `body.${field}`,
+        "must be true for explicit consent",
+      );
+    consent[field] = true;
+  }
+  return { ok: true, value: consent };
+}
+
+/** Validate each consent separately because accepting GitHub policy ownership cannot authorize overwriting local hook edits. */
 function decodeHookReplacement(
   raw: Record<string, unknown>,
   allowedFields: readonly string[],
@@ -560,15 +583,20 @@ function decodeHookReplacement(
   // Extra action or path fields cannot expand the server-derived operation the user reviewed.
   if (unsupportedField)
     return buildDecodeError(`body.${unsupportedField}`, "is not supported");
-  const hasReplacement =
-    raw.replace !== undefined || raw.confirmationIdentity !== undefined;
-  // The first Sync or toggle request asks the server to apply only changes that need no replacement approval.
-  if (!hasReplacement) return { ok: true, value: {} };
-  // Only an explicit true authorizes replacing the reviewed local files.
-  if (raw.replace !== true)
+  const hasConfirmation =
+    raw.replace !== undefined ||
+    raw.acceptPolicyChange !== undefined ||
+    raw.confirmationIdentity !== undefined;
+  // Initial Sync and toggle requests ask for safe changes and show a review if either kind of consent is needed.
+  if (!hasConfirmation) return { ok: true, value: {} };
+  const consent = decodeHookConsents(raw);
+  // Invalid checkbox values stop here rather than turning a partial review into authority.
+  if (!consent.ok) return consent;
+  // Copying a review identity alone does not express either decision shown on the Hooks page.
+  if (Object.keys(consent.value).length === 0)
     return buildDecodeError(
-      "body.replace",
-      "must be true for explicit replacement",
+      "body.confirmationIdentity",
+      "requires explicit replacement or policy consent",
     );
   // A retry must identify the exact review the user confirmed; a missing or malformed identity grants no replacement.
   if (
@@ -582,7 +610,10 @@ function decodeHookReplacement(
   }
   return {
     ok: true,
-    value: { replace: true, confirmationIdentity: raw.confirmationIdentity },
+    value: {
+      ...consent.value,
+      confirmationIdentity: raw.confirmationIdentity,
+    },
   };
 }
 

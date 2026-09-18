@@ -66,6 +66,7 @@ const OMIT_WHEN_INAPPLICABLE_INTEGRITY_FIELDS = new Set([
  * Extract colon-delimited integrity fields and fail repeated authority claims.
  *
  * @param section - existing full receipt section; its heading locates missing-field issues
+ *
  * @param violations - shared violation list, appended in report order so a reader sees issues top-down; a violation makes the report fail
  * @returns the Review Integrity rows keyed by field name; an empty map means the block was missing entirely
  */
@@ -600,7 +601,7 @@ function readOpenedPaths(
     );
     return null;
   }
-  const text = match[2]!;
+  const text = match[2] ?? "";
   // The legacy simple list is safe only when its filenames cannot contain its own separators.
   if (match[1] === "diff paths") {
     const paths = text === "none" ? [] : text.split(/,\s*/u);
@@ -1098,10 +1099,12 @@ function readCompactReceipt(
  * Validate a full or compact receipt before its coverage and evidence claims can influence the verdict.
  *
  * @param projectRoot - selected project whose original authority must still resolve
+ *
  * @param lines - visible report lines; empty input is reported as missing integrity
  * @param findingCandidateCount - candidate finding rows; nonzero disallows the compact clean-review form
  *
  * @param violations - appended failures that prevent the report from passing
+ *
  * @param warnings - advisory issues that inform the reader without failing validation
  * @param validationStage - draft requires a pending receipt; final requires a completed validator state
  *

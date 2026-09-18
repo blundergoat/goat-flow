@@ -78,28 +78,40 @@ export interface AbandonedPathWriteClaimEvidence {
 export type AbandonedPathWriteClaimRemoval = "removed" | "missing" | "changed";
 
 const FAILURE_MESSAGES = {
+  // Explain that another writer owns this project target before the caller can change it.
   busy: (targetPath: string) =>
     `Another cooperating writer owns ${targetPath}; no write admission was granted.`,
+  // Explain that an unsafe ownership marker prevents the caller from writing this project target.
   "claim-integrity": (targetPath: string) =>
     `The ownership marker for ${targetPath} is not a safe single-link claim file.`,
+  // Explain that claim storage cannot coordinate the requested project write.
   "coordination-unavailable": (targetPath: string) =>
     `Write-claim coordination is unavailable for ${targetPath}.`,
+  // Explain why a batch naming the same project target twice cannot receive admission.
   "duplicate-target": (targetPath: string) =>
     `${targetPath} appears more than once in the write-claim batch.`,
+  // Explain that the caller has not supplied a valid captured identity for this project target.
   "invalid-identity": (targetPath: string) =>
     `${targetPath} has an invalid expected content identity.`,
+  // Explain that the requested project target is not a normalized relative path.
   "invalid-target": (targetPath: string) =>
     `${targetPath} is not a normalized project-relative target path.`,
+  // Tell the operator how to migrate legacy coordination state before retrying project writes.
   "migration-required": () =>
-    "Legacy local state requires migration. Stop and upgrade all writers, then run goat-flow install for this project before retrying.",
+    "Legacy local state requires migration. Stop and upgrade all writers, then run goat-flow install for this project with --agent <id> --migrate-state-only before retrying.",
+  // Explain that changed target bytes invalidate the caller's earlier write request.
   "target-changed": (targetPath: string) =>
     `${targetPath} changed after it was read; no write admission was granted.`,
+  // Explain why the caller cannot claim a target whose exact content cannot be read.
   "target-unreadable": (targetPath: string) =>
     `${targetPath} could not be read for exact content identity.`,
+  // Explain that the selected project must be a physical directory before writes can be coordinated.
   "unsafe-project": () =>
     "The selected project root must be a real local directory.",
+  // Explain that linked or non-file target paths cannot receive project write admission.
   "unsafe-target": (targetPath: string) =>
     `${targetPath} contains a symlinked, linked, or non-regular path component.`,
+  // Explain that this filesystem cannot provide the exclusive claim required for the user's write.
   "unsupported-filesystem": (targetPath: string) =>
     `The filesystem cannot provide exclusive write claims for ${targetPath}.`,
 } satisfies Record<PathWriteClaimFailureReason, (targetPath: string) => string>;
@@ -222,6 +234,7 @@ function normalizeTargetPath(targetPath: string): string {
     normalized.startsWith("../"),
     targetPath.endsWith("/"),
   ].includes(true);
+  // An empty or noncanonical target cannot receive a write claim for the user's project.
   if (invalidShape) {
     throw new PathWriteClaimError("invalid-target", targetPath);
   }
@@ -383,6 +396,7 @@ function identitiesMatch(
   left: PathWriteTargetIdentity,
   right: PathWriteTargetIdentity,
 ): boolean {
+  // A missing target matches only another missing target; creating it meanwhile invalidates the caller's captured state.
   if (left.state === "missing" || right.state === "missing") {
     return left.state === right.state;
   }
@@ -431,6 +445,7 @@ function assertCoordinationDirectorySnapshot(
 ): void {
   try {
     const current = fs.lstatSync(snapshot.path, { bigint: true });
+    // A linked, replaced or non-directory coordination path cannot safely serialize the user's writers.
     if (
       !current.isDirectory() ||
       current.isSymbolicLink() ||
@@ -440,6 +455,7 @@ function assertCoordinationDirectorySnapshot(
       throw new PathWriteClaimError("claim-integrity", targetPath);
     }
   } catch (error) {
+    // Preserve a specific claim refusal instead of replacing it with a generic coordination error.
     if (error instanceof PathWriteClaimError) throw error;
     throw new PathWriteClaimError("coordination-unavailable", targetPath);
   }
@@ -468,8 +484,10 @@ function ensureClaimDirectory(
   try {
     hasLegacyState = hasLegacyLocalState(projectRoot);
   } catch {
+    // Linked or unreadable legacy coordination state cannot admit a project write; ask the caller to repair its integrity.
     throw new PathWriteClaimError("claim-integrity", targetPath);
   }
+  // Legacy claim state must migrate before current writers can safely share the selected project's namespace.
   if (hasLegacyState) {
     throw new PathWriteClaimError("migration-required", targetPath);
   }
@@ -509,6 +527,7 @@ function existingClaimDirectory(
   try {
     relativeDirectory = claimInspectionDirectory(projectRoot);
   } catch {
+    // Unsafe legacy coordination paths cannot supply trusted claim evidence for the user's recovery command.
     throw new PathWriteClaimError("claim-integrity", targetPath);
   }
   const components = [
@@ -529,6 +548,7 @@ function existingClaimDirectory(
     } catch (error) {
       // A removed directory means there is nothing to recover; permission or I/O failures leave the claim state unverified.
       if (error instanceof PathWriteClaimError) throw error;
+      // An absent claim directory means this project has no current claim markers to inspect.
       if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
       throw new PathWriteClaimError("coordination-unavailable", targetPath);
     }
@@ -598,6 +618,7 @@ function readStableClaimSnapshot(
   try {
     const bytes = fs.readFileSync(markerPath);
     const after = fs.lstatSync(markerPath, { bigint: true });
+    // A replaced marker cannot prove the writer still owns the file it read.
     if (!isSameClaimEntry(before, after)) {
       return { status: "unsafe" };
     }
@@ -621,7 +642,9 @@ function readStableClaimSnapshot(
 /** Capture one bounded marker identity without accepting links or directories. */
 function readClaimSnapshot(markerPath: string): ClaimSnapshotResult {
   const result = readClaimStats(markerPath);
+  // Missing or unsafe marker results retain their meaning without pretending a claim was read.
   if (result.status !== "present") return result;
+  // An unsafe marker entry cannot establish ownership of this requested project write.
   if (!isSafeClaimEntry(result.stats)) return { status: "unsafe" };
   return readStableClaimSnapshot(markerPath, result.stats);
 }
@@ -672,7 +695,9 @@ function readOwnedClaimSnapshot(
     return { status: "unsafe" };
   }
   const claim = readClaimSnapshot(markerPath);
+  // A missing or unsafe marker cannot prove this process still owns its claimed write.
   if (claim.status !== "present") return { status: "unsafe" };
+  // A marker not matching the held descriptor must remain untouched for recovery.
   if (!claimSnapshotMatchesDescriptor(claim.snapshot, descriptorStats)) {
     return { status: "unsafe" };
   }
@@ -687,7 +712,9 @@ function exclusiveCreateFailure(
   targetPath: string,
 ): PathWriteClaimError {
   const code = (error as NodeJS.ErrnoException).code;
+  // An existing marker means another writer already owns this target, so admission is refused.
   if (code === "EEXIST") return new PathWriteClaimError("busy", targetPath);
+  // Unsupported exclusive creation cannot provide the user's required single-writer protection.
   if (code && UNSUPPORTED_EXCLUSIVE_CREATE_CODES.has(code)) {
     return new PathWriteClaimError("unsupported-filesystem", targetPath);
   }
@@ -737,6 +764,7 @@ function cleanupFailedClaimInitialization(
   try {
     const descriptorStats = fs.fstatSync(descriptor, { bigint: true });
     const claim = readClaimSnapshot(markerPath);
+    // Clean up only the marker whose identity and bytes still match this failed initialization.
     if (
       isOwnedInitializationClaim(claim, descriptorStats, expectedMarkerBytes)
     ) {
@@ -773,8 +801,10 @@ function cleanupFailedClaimInitialization(
  *
  * @param markerPath - absolute claim path selected for this target; it must still identify the new descriptor
  * @param markerBytes - owner evidence written after binding; empty input would create no usable ownership evidence
+ *
  * @param targetPath - project-relative user target named in any refusal
  * @param claimDirectory - previously validated directory chain that must retain its identity
+ *
  * @returns open descriptor for the bound marker; the caller keeps it until ownership-checked release
  * @throws PathWriteClaimError when creation, binding, writing, or flushing cannot establish a usable claim
  */
@@ -812,6 +842,7 @@ function createClaimMarker(
   } catch (error) {
     // A full disk, lost permission, or failed flush aborts admission and removes only this command's proven marker.
     cleanupFailedClaimInitialization(markerPath, descriptor);
+    // Preserve a specific claim error so the calling command can show the correct recovery action.
     if (error instanceof PathWriteClaimError) throw error;
     throw exclusiveCreateFailure(error, targetPath);
   }
@@ -849,6 +880,7 @@ function acquireOneClaim(
   try {
     assertClaimDirectory(claimDirectory, targetPath);
   } catch (error) {
+    // A parent directory replaced during admission invalidates this claim; clean up only its owned marker and preserve the refusal.
     cleanupFailedClaimInitialization(markerPath, descriptor, markerBytes);
     throw error;
   }
@@ -958,6 +990,7 @@ function prevalidateClaimTargets(
   projectRoot: string,
   requests: readonly NormalizedPathWriteClaimRequest[],
 ): void {
+  // Read every target's identity before admitting the complete batch of project writes.
   for (const request of requests) {
     readIdentityAtRoot(projectRoot, request.targetPath);
   }
@@ -1011,6 +1044,7 @@ function admissionFailure(
   ownedClaims: readonly OwnedPathWriteClaim[],
 ): PathWriteClaimError {
   const cleanupResults = releaseOwnedClaims(ownedClaims);
+  // Retain the original claim reason and target while adding any cleanup results the user must inspect.
   if (error instanceof PathWriteClaimError) {
     return new PathWriteClaimError(
       error.reason,
@@ -1030,6 +1064,7 @@ function admissionFailure(
  * Use before asking for admission; the batch acquisition repeats this read while claims are held.
  *
  * @param projectRoot - selected real project directory
+ *
  * @param targetPath - normalized POSIX-shaped project-relative file path
  * @returns missing state or the lowercase SHA-256 of exact current bytes
  */
@@ -1048,6 +1083,7 @@ export function readPathWriteTargetIdentity(
  *
  * @param projectRoot - selected real project directory shared by every request
  * @param requests - complete target set with identities captured before admission
+ *
  * @returns opaque held batch whose target paths are in canonical UTF-8 byte order
  * @throws PathWriteClaimError when targets are unsafe, changed, busy, unreadable, duplicated, or unsupported by the selected filesystem
  */
@@ -1059,6 +1095,7 @@ export function acquirePathWriteClaims(
   const normalizedRequests = normalizeClaimRequests(requests);
   assertUniqueClaimTargets(normalizedRequests);
   const firstRequest = normalizedRequests[0];
+  // An empty request list holds no target markers and returns a valid empty batch.
   if (!firstRequest) return createClaimBatch(canonicalRoot, [], []);
 
   prevalidateClaimTargets(canonicalRoot, normalizedRequests);
@@ -1078,6 +1115,7 @@ export function acquirePathWriteClaims(
  * Use in a caller's `finally` block; a non-released result needs operator-visible recovery rather than pattern deletion.
  *
  * @param batch - exact opaque value returned by `acquirePathWriteClaims`
+ *
  * @returns one owner-check result per canonical target path
  * @throws Error when this process did not acquire the supplied batch
  */
@@ -1085,6 +1123,7 @@ export function releasePathWriteClaims(
   batch: PathWriteClaimBatch,
 ): PathWriteClaimReleaseResult[] {
   const ownedClaims = OWNED_BATCHES.get(batch);
+  // A batch this process did not acquire cannot authorize removal of another writer's markers.
   if (!ownedClaims) {
     throw new Error("Path-write claim batch was not acquired by this process.");
   }
@@ -1098,6 +1137,7 @@ export function releasePathWriteClaims(
  *
  * @param projectRoot - selected real project directory
  * @param targetPath - normalized POSIX-shaped project-relative target path
+ *
  * @returns opaque recovery evidence, or null when no marker exists
  * @throws PathWriteClaimError when the project, target, or marker cannot be validated safely
  */
@@ -1133,6 +1173,7 @@ export function inspectPathWriteClaim(
  * Never call from elapsed time or process-liveness guesses; changed evidence stays fail-closed for a fresh inspection.
  *
  * @param evidence - exact opaque snapshot returned by `inspectPathWriteClaim`
+ *
  * @returns whether that same marker was removed, had disappeared, or changed
  * @throws Error when this process did not issue the supplied evidence
  */

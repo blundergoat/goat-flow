@@ -2,6 +2,7 @@
  * Check the review receipts named by pending drafts and completed reports.
  *
  * Use the same path checks for bundles and refutation ledgers so neither can hide a redirected file or parent.
+ *
  * Drafts require fresh destinations; final reports require safe existing files unless persistence is explicitly skipped.
  * Counted ledger records give each refuted suspicion one inspectable ID.
  */
@@ -82,8 +83,10 @@ function sameReceiptEntry(before: Stats, after: Stats): boolean {
  *
  * @param projectRoot - selected project; its canonical root contains every accepted receipt
  * @param receipt - project-relative path under the review log directory
+ *
  * @param stage - draft checks a future destination; final requires an existing regular file
  * @returns final bytes, including an allowed empty bundle; null means draft persistence remains unverified
+ *
  * @throws Error when a path is absent at final, already exists at draft, is redirected, or changes during the read
  */
 export function readReviewReceipt(
@@ -118,8 +121,8 @@ function inspectReceiptPath(
   ];
   let current = root;
   // Inspect each directory before the leaf so an internal symlink cannot redirect a seemingly contained path.
-  for (let index = 0; index < parts.length; index += 1) {
-    current = join(current, parts[index]!);
+  for (const [index, part] of parts.entries()) {
+    current = join(current, part);
     const details = lstatSync(current, { throwIfNoEntry: false });
     // A future draft path may have missing parents; the validator reserves nothing and promises no persistence.
     if (!details) {
@@ -154,8 +157,9 @@ function readUnchangedReceipt(
   );
   try {
     const opened = fstatSync(descriptor);
+    const lastObserved = observed.at(-1);
     // A replacement between path inspection and open cannot supply the bytes the report originally named.
-    if (!sameReceiptEntry(observed.at(-1)!.details, opened))
+    if (!lastObserved || !sameReceiptEntry(lastObserved.details, opened))
       throw new Error("declared receipt changed before open");
     const bytes = readFileSync(descriptor);
     // Changing the opened file during its read invalidates the evidence the report named.
@@ -197,7 +201,7 @@ function validateLedgerRecordGrammar(
   );
   // Once record grammar is valid, unique IDs establish how many distinct suspicions were refuted.
   if (invalidLine < 0) {
-    const ids = lines.map((line) => line.match(/^-\s+(R-\d{3})\s/u)![1]);
+    const ids = lines.map((line) => line.match(/^-\s+(R-\d{3})\s/u)?.[1]);
     // The same suspicion cannot earn several refutations merely by repeating its ledger record.
     if (new Set(ids).size === ids.length) return true;
     addViolation(
@@ -253,7 +257,7 @@ function validatePersistedRefutationLedger(
     if (!validateLedgerRecordGrammar(ledgerLines, claimLine, violations))
       return;
     integrity.ledgerIds = ledgerLines.map(
-      (line) => line.match(/^-\s+(R-\d{3})\s/u)![1]!,
+      (line) => line.match(/^-\s+(R-\d{3})\s/u)?.[1] ?? "",
     );
     // The saved records must account for the exact number of refutations claimed to the reader.
     if (ledgerLines.length !== integrity.refutationsLogged) {
@@ -280,6 +284,7 @@ function validatePersistedRefutationLedger(
  *
  * @param projectRoot - reviewed project root; anchors are confined to it so a report cannot cite files it was never authorised to read
  * @param integrity - the parsed Review Integrity block; absent fields are reported individually rather than failing the whole block
+ *
  * @param violations - shared violation list, appended in report order so a reader sees issues top-down; a violation makes the report fail
  * @param shouldVerifyPersistedLedger - false checks the declaration only, before the transient bytes are persisted
  */
@@ -342,7 +347,7 @@ export function validateRefutationLedgerText(
     recordCount: lines.length,
     ids:
       violations.length === 0
-        ? lines.map((line) => line.match(/^-\s+(R-\d{3})\s/u)![1]!)
+        ? lines.map((line) => line.match(/^-\s+(R-\d{3})\s/u)?.[1] ?? "")
         : [],
   };
 }
@@ -351,6 +356,7 @@ export function validateRefutationLedgerText(
  * Check the bundle's final file or fresh draft destination without granting it raw-source authority.
  *
  * @param projectRoot - selected project whose review directory contains the receipt
+ *
  * @param integrity - parsed scope and persistence claims; absent scope is diagnosed by its owning field check
  * @param violations - report errors to append when receipt claims disagree or the named file is unsafe
  */

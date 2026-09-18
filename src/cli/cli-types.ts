@@ -79,6 +79,7 @@ export type ClaimsSubcommand = "inspect" | "recover";
 
 /**
  * Second positional accepted after `hooks`: state operations, toggles, and explicit verification.
+ *
  * `enable`/`disable` additionally require a `<hook-id>`; `verify` requires one selected agent.
  * Keep this in sync with HOOK_SUBCOMMANDS, the parser's runtime membership check.
  */
@@ -114,8 +115,9 @@ export type HookScenarioSelection = HookScenario | "all";
 
 /**
  * The mutually exclusive modes of the `quality` command.
- * `prompt` (the default when no subcommand positional is given) emits an assessment prompt; `history`/`diff` read prior runs; `save` redacts,
- * validates, and persists an in-memory report; `validate` schema-checks a written report; `candidacy` scores a skill/playbook idea.
+ *
+ * - prompt emits an assessment prompt and is the default without a subcommand; history and diff read prior runs.
+ * - save redacts, validates and persists an in-memory report; validate checks a written report's schema; candidacy scores an artifact idea.
  *
  * The parser maps the first positional to one of these, and dispatch routes on the chosen member.
  */
@@ -125,8 +127,9 @@ export type QualitySubcommand =
 /**
  * One resolved input to `quality candidacy`, distinguishing the two ways a caller can supply it.
  *
- * `mode: "draft"` means `value` is a resolved filesystem path to an existing draft to score; `mode: "description"` means `value` is the free-form
- * text describing the proposed artifact.
+ * - mode: "draft" selects an existing draft's resolved path for scoring.
+ * - mode: "description" supplies the caller's text describing the proposed artifact.
+ *
  * The two are mutually exclusive at the CLI; the parser rejects supplying both.
  */
 export interface CandidacyInputArg {
@@ -193,6 +196,8 @@ export interface ParsedCLI extends CLIOptions {
   shouldCheck: boolean;
   shouldApply: boolean;
   shouldDryRun: boolean;
+  /** Move legacy bookkeeping only; false leaves the normal preview/install workflow selected. */
+  shouldMigrateStateOnly: boolean;
   shouldForce: boolean;
   shouldForceManaged: boolean;
   shouldForceUserOwned: boolean;
@@ -247,11 +252,9 @@ export interface ParsedCLI extends CLIOptions {
 }
 
 /**
- * The slice of ParsedCLI that the `skill` command path populates, projected out so the parser can build and spread just the skill-authoring fields
- * without restating each one.
+ * Group the skill command's parsed fields so the parser can build and pass its authoring input together.
  *
- * Every member is meaningful only when the command is `skill`; for any other command the parser fills these with their null/false defaults, so the
- * subcommand identifies authoring versus read-only diagnosis.
+ * Other commands retain null or false defaults; for skill, the subcommand distinguishes authoring from read-only diagnosis.
  */
 export type SkillCLIFields = Pick<
   ParsedCLI,

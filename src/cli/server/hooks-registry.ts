@@ -2,6 +2,7 @@
  * Defines the hooks users can enable from the dashboard or CLI.
  *
  * Use when setup, sync, and audit need one display name, script, event, and deadline.
+ *
  * The manifest still decides which coding agents support hook registration.
  * Keeping these values central makes every user-facing setup path agree.
  */
@@ -15,6 +16,7 @@ type HookEvent = "PreToolUse" | "PostToolUse" | "Stop";
 
 /**
  * Names the result protocol, adapter, and deadline used by a registered hook.
+ *
  * Use when setup writes a command users expect their coding agent to run.
  * Invariant: the launcher deadline stays below the host timeout.
  */
@@ -26,6 +28,7 @@ export interface HookDeliveryContract {
 
 /**
  * Names deterministic adapter evidence and one host's first unmet support gate.
+ *
  * Use when UI and audit surfaces explain why delivery is not yet verified.
  * Invariant: fixture identity never upgrades itself into live provider proof.
  */
@@ -38,6 +41,7 @@ export interface HookProviderRegistryEvidence {
 
 /**
  * Defines one hook users can install, toggle, and inspect across supported agents.
+ *
  * Use as the shared setup, dashboard, and audit registration contract.
  * Invariant: active hooks identify delivery; only removed-hook tombstones may omit it.
  */
@@ -88,6 +92,8 @@ const CODEX_POST_TURN_DELIVERY_CONTRACT: HookDeliveryContract = {
 
 // Both entrypoints load this complete target-local policy store.
 const POLICY_RUNTIME_FILES = [
+  "hook-policy-state.cjs",
+  "vendor/js-yaml.cjs",
   "deny-dangerous/guard-runtime.sh",
   "deny-dangerous/patterns-shell.sh",
   "deny-dangerous/patterns-paths.sh",
@@ -99,8 +105,7 @@ const HOOKS: HookSpec[] = [
   {
     id: "deny-dangerous",
     displayName: "Deny dangerous hook",
-    description:
-      "Block risky shell operations, direct secret-path access, and GitHub write operations.",
+    description: "Block risky shell operations and direct secret-path access.",
     event: "PreToolUse",
     matcher: "Bash",
     scriptFiles: [
@@ -139,9 +144,9 @@ const HOOKS: HookSpec[] = [
   },
   {
     id: "deny-git-mutations",
-    displayName: "Deny Git mutations",
+    displayName: "Deny Git and GitHub writes",
     description:
-      "Block native Git commits, publication, and destructive history or cleanup operations.",
+      "Block Git commits, publication, destructive Git operations, and GitHub writes; allow GitHub reads and issue or PR comments.",
     event: "PreToolUse",
     matcher: "Bash",
     scriptFiles: [
@@ -240,9 +245,8 @@ const HOOKS: HookSpec[] = [
     togglable: true,
     defaultEnabled: true,
     requiresConfirmDialog: false,
-    // Above the script's internal 60s scan budget so its own
-    // "scan incomplete" diagnostic prints before the runner kills the
-    // wrapper; a silent mid-scan kill would mean unreported partial coverage.
+    // Allow the script's 60s scan budget to finish and print "scan incomplete" before killing its wrapper.
+    // A silent early kill would leave the user unaware that the scan covered only part of the project.
     timeoutSec: 90,
     deliveryContract: FEEDBACK_DELIVERY_CONTRACT,
     providerDeliveryContracts: {
@@ -255,7 +259,8 @@ const HOOKS: HookSpec[] = [
       },
       codex: {
         identity: "hook-provider-adapter.v1:codex:turn-stop",
-        effectiveSupportGate: "provider-capture-stale",
+        effectiveSupportGate: "scenario-unverified",
+        expiresAt: "2026-10-17T00:00:00Z",
       },
       antigravity: {
         identity: "hook-provider-adapter.v1:antigravity:turn-stop",
@@ -282,6 +287,7 @@ const HOOKS_BY_IDENTIFIER = new Map(HOOKS.map((hook) => [hook.id, hook]));
  * Use when setup, audit, or the dashboard reads one provider support gate.
  *
  * @param providerEvidence - registry proof; an absent expiry means this gate has no live-capture clock
+ *
  * @param supportCheckDate - time shown by the current run; an invalid date cannot keep live proof green
  * @returns current support gate; never empty, and stale when a dated proof is invalid or expired
  */

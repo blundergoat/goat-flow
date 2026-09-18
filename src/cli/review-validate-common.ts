@@ -70,6 +70,7 @@ export type FinalDisposition =
  *
  * @param fields - visible integrity rows; an absent optional row returns null
  * @param label - metadata field the reviewer can repair
+ *
  * @param violations - appended JSON grammar failures
  * @returns parsed JSON, or null when absent or invalid; required-row checks own missing metadata
  */
@@ -100,6 +101,7 @@ export function readIntegrityJson(
  * Use after checking the trigger; the explanation discloses a claim without proving the underlying investigation.
  *
  * @param integrity - parsed report; an absent flag leaves this explanation inapplicable
+ *
  * @param flag - declared limitation whose affected evidence must remain visible
  * @param references - exact IDs or totals to identify; empty means there is no affected evidence to name
  *
@@ -146,6 +148,7 @@ export function requireDegradationReferences(
  * Match a whole missing path in its disclosure so readers can identify which selected source was not examined.
  *
  * @param reason - omission explanation; empty text cannot identify a missing file
+ *
  * @param path - one nonempty selected path; quote names containing spaces or separators in the explanation
  * @returns true when the explanation names this exact file, rather than a longer filename containing it
  */
@@ -488,6 +491,7 @@ export const RETIRED_DEGRADATION_FLAGS = new Set([
  * Return every matching H2 section without consuming nested H3 headings.
  *
  * @param lines - the report split into lines; an empty report fails earlier than this
+ *
  * @param heading - exact H2 heading to locate; a heading that never appears yields no section
  * @returns every matching section in report order; empty means the heading never appears, which callers treat as "not provided" rather than an error
  */
@@ -528,6 +532,7 @@ export function readSections(
  * Return the first matching H2 section for contracts that permit one copy.
  *
  * @param lines - the report split into lines; an empty report fails earlier than this
+ *
  * @param heading - exact H2 heading to locate; a heading that never appears yields no section
  * @returns the first matching section, or null when the heading is absent so the caller can decide whether that is allowed
  */
@@ -542,6 +547,7 @@ export function readSection(
  * Record one violation while preserving report order for readable CLI output.
  *
  * @param violations - shared violation list, appended in report order so a reader sees issues top-down; a violation makes the report fail
+ *
  * @param code - stable issue code, which carries the check id a reader sees beside the message
  * @param line - report line the issue belongs to; null means the issue is about the report as a whole
  *
@@ -565,6 +571,7 @@ export function addViolation(
  * Record one advisory issue without changing the validator's failure status.
  *
  * @param warnings - shared advisory list; entries here inform the author without changing the pass/fail verdict
+ *
  * @param code - stable issue code, which carries the check id a reader sees beside the message
  * @param line - report line the issue belongs to; null means the issue is about the report as a whole
  *
@@ -597,6 +604,7 @@ export type IntegrityFieldMap = Map<string, IntegrityField>;
  * Select the stage-specific grammar for one validator receipt.
  *
  * @param label - integrity row label being checked
+ *
  * @param valuePattern - final-report grammar owned by the row registry
  * @param validationStage - pending draft or completed final report
  *
@@ -616,6 +624,7 @@ export function reviewIntegrityValuePattern(
  * Explain one malformed integrity row in stage-aware terms.
  *
  * @param label - integrity row label being checked
+ *
  * @param field - parsed row, or undefined when the row is absent
  * @param validationStage - pending draft or completed final report
  *
@@ -639,6 +648,7 @@ export function reviewIntegrityFormatMessage(
  * Return whether measured scope requires accepted chunks under the skill contract.
  *
  * @param fileCount - files declared by the review receipt
+ *
  * @param unitCount - changed-line or cluster count declared by the receipt
  * @param unitLabel - unit paired with unitCount
  *
@@ -660,6 +670,7 @@ export function reviewScopeExceedsChunkLimit(
  * Match the stage-specific compact validator receipt.
  *
  * @param line - compact Review Integrity line
+ *
  * @param validationStage - pending draft or completed final report
  * @returns the stage-specific match, or null for malformed input
  */
@@ -792,6 +803,7 @@ export class ReviewAuthorityError extends Error {
  * Reject an ambiguous selection before it can supply evidence for a finding.
  *
  * @param condition - required source or receipt constraint; false means this authority cannot be used
+ *
  * @param message - repairable refusal shown to the reviewer
  * @param code - stable issue category; omitted uses authority-format
  *
@@ -849,9 +861,8 @@ class ReviewJsonReader {
   constructor(private readonly text: string) {}
   /** Advance to the next visible JSON token; whitespace carries no request meaning. */
   private skipSpace(): void {
-    this.cursor += this.text
-      .slice(this.cursor)
-      .match(/^[\t\n\r ]*/u)![0].length;
+    this.cursor +=
+      this.text.slice(this.cursor).match(/^[\t\n\r ]*/u)?.[0].length ?? 0;
   }
   /** Read a field name or literal string without accepting malformed escapes. */
   private readString(): string {
@@ -873,7 +884,7 @@ class ReviewJsonReader {
       return record;
     }
     // Every object field must be read so a later duplicate cannot silently replace an earlier selection.
-    while (true) {
+    for (;;) {
       const key = this.readString();
       requireAuthority(
         !Object.hasOwn(record, key),
@@ -907,7 +918,7 @@ class ReviewJsonReader {
       return values;
     }
     // Every list member stays in the request; malformed separators cannot hide an omitted path or gate.
-    while (true) {
+    for (;;) {
       values.push(this.readValue(depth + 1));
       this.skipSpace();
       const separator = this.text[this.cursor++];
@@ -961,6 +972,7 @@ class ReviewJsonReader {
  * Serialize review metadata with stable key order and escapes that keep JSON visible in Markdown.
  *
  * @param value - request or receipt metadata; null remains explicit and arrays retain their recorded order
+ *
  * @returns canonical JSON used by snapshots, report fields, and fingerprint inputs
  * @throws ReviewAuthorityError when text cannot round-trip as UTF-8 or a value is outside the supported JSON grammar
  */
@@ -1004,6 +1016,7 @@ export function canonicalReviewJson(value: unknown): string {
  * Parse requests or frozen evidence without allowing duplicate keys to change the selected source.
  *
  * @param text - supplied JSON; empty, malformed, or trailing content is refused
+ *
  * @param frozen - true requires the exact canonical spelling retained by the snapshot producer
  * @returns parsed metadata; null is a JSON value and is rejected later where a record is required
  *
@@ -1022,6 +1035,7 @@ export function parseReviewJson(text: string, frozen = false): JsonValue {
  * Require one named record before checking its authority fields.
  *
  * @param value - parsed schema value; null, absent values, and lists cannot stand in for a record
+ *
  * @param label - field name used to identify the invalid input in the CLI refusal
  * @returns the record for its source-specific checks
  *
@@ -1042,6 +1056,7 @@ export function record(
  * Reject omitted, misspelled, or additional fields instead of silently changing a request's meaning.
  *
  * @param value - parsed record whose shape must match the selected schema
+ *
  * @param required - fields that must be present, even when their value may be null
  * @param optional - permitted extra fields; empty means only required fields are accepted
  *
@@ -1065,6 +1080,7 @@ export function exactKeys(
  * Require a nonempty literal before using a path, selector, or receipt label.
  *
  * @param value - parsed field; absent, empty, and non-text values stop authority validation
+ *
  * @param label - field name used in the reviewer's refusal message
  * @returns the unchanged UTF-8-compatible text
  *
@@ -1082,6 +1098,7 @@ export function textField(value: JsonValue | undefined, label: string): string {
  * Keep path inventories in byte order so locale settings cannot change a review fingerprint.
  *
  * @param left - first literal project path to compare
+ *
  * @param right - second literal project path to compare
  * @returns negative, zero, or positive for UTF-8 byte order
  */
@@ -1093,6 +1110,7 @@ export function comparePaths(left: string, right: string): number {
  * Require a literal path that stays within the selected project without normalization.
  *
  * @param value - project-relative path; absent, empty, absolute, or traversal spellings are refused
+ *
  * @param directory - allow the exact dot path when the operator selects the project root
  * @returns the unchanged safe path used to identify a selected file or area
  *
@@ -1128,6 +1146,7 @@ export function projectPath(
  * Read a unique, ordered selection without merging differently spelled paths.
  *
  * @param value - path array; empty is allowed here and source-specific checks decide whether it is meaningful
+ *
  * @param directories - allow dot as an explicit project-root selection
  * @returns the selected paths in UTF-8 byte order
  *
@@ -1161,6 +1180,7 @@ export function rawHash(bytes: Buffer | string): string {
  * Separate authority, index, workspace, and gate identities so one kind cannot substitute for another.
  *
  * @param kind - protocol domain that fixes the hash prefix and identity label
+ *
  * @param value - metadata serialized canonically before hashing
  * @returns the versioned domain fingerprint retained in the review receipt
  */
@@ -1176,6 +1196,7 @@ export function taggedHash(
  * Identify one selected command from its arguments, working directory, and trusted origin.
  *
  * @param argv - exact executable and arguments; gate validation rejects an empty command
+ *
  * @param cwd - literal project-relative execution directory, including dot for the root
  * @param origin - recorded trusted Git source or host instruction reference
  *
@@ -1194,8 +1215,10 @@ export function reviewGateId(
  *
  * @param countText - decimal count from a report field; malformed text is rejected by its field grammar
  * @param label - field name shown in a repairable count error
+ *
  * @param line - visible report line owning this count
  * @param violations - report errors to append when the value cannot be represented exactly
+ *
  * @returns exact nonnegative count, including zero; null means the claimed count is unsafe and has received a violation
  */
 export function readSafeIntegrityCount(

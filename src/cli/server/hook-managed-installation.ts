@@ -6,7 +6,9 @@
  */
 import { existsSync, lstatSync, readFileSync, realpathSync } from "node:fs";
 import { isAbsolute, join, relative, resolve } from "node:path";
+import type { PolicyUpgradeReview } from "../../../workflow/hooks/hook-policy-state.cjs";
 import { AUDIT_VERSION } from "../constants.js";
+import { getAgentProfiles } from "../agents/registry.js";
 import {
   classifyManagedSetupFile,
   managedSetupChangeDirection,
@@ -19,6 +21,82 @@ import type { AgentId, AgentProfile } from "../types.js";
 import { projectIsAheadOfCli } from "../version-compare.js";
 import { listHookSpecs, type HookSpec } from "./hooks-registry.js";
 import type { PreparedHookChange } from "./hook-operation.js";
+
+/** These files must understand explicit off before a retained policy can be disabled. */
+const POLICY_CHOICE_FILES = new Set([
+  "run-with-bash.mjs",
+  "hook-launch-runtime.mjs",
+  "hook-policy-state.cjs",
+  "vendor/js-yaml.cjs",
+]);
+
+/**
+ * Compare trusted launch dependencies with the bundle before treating retained registration as disabled.
+ * @param projectPath - selected physical project root
+ *
+ * @param agent - provider whose hook directory owns the dependencies
+ * @param spec - policy being inspected; unrelated hooks return false
+ *
+ * @returns true for current trusted dependencies; swallows read failures as a false fallback
+ */
+export function policyDisableIsReady(
+  projectPath: string,
+  agent: AgentProfile,
+  spec: HookSpec,
+): boolean {
+  // Other hooks do not use the saved policy off-switch contract checked by this readiness helper.
+  if (spec.id !== "deny-dangerous" && spec.id !== "deny-git-mutations")
+    return false;
+  try {
+    return [...POLICY_CHOICE_FILES].every((name) => {
+      const target = installedHookTarget(projectPath, agent, name);
+      return (
+        managedFileIsTrusted(projectPath, target) &&
+        readFileSync(target, "utf8") === hookScriptContent(name)
+      );
+    });
+  } catch {
+    // An unreadable saved-choice reader, such as a partial hook install, leaves the off switch unavailable until setup is repaired.
+    return false;
+  }
+}
+
+/**
+ * Refuse off before a toggle can rewrite old or edited launch dependencies to manufacture readiness.
+ * @param change - pending operation; captured files participate in write-claim validation
+ *
+ * @param spec - selected policy; unrelated hooks are unchanged
+ * @throws HookManagedInstallationError for incompatible bytes; unsafe captures also refuse before writes
+ */
+export function assertPolicyDisableReady(
+  change: PreparedHookChange,
+  spec: HookSpec,
+): void {
+  // Only the two policy hooks require verified launch support before the user's disabled choice can be saved.
+  if (!["deny-dangerous", "deny-git-mutations"].includes(spec.id)) return;
+  const profiles = getAgentProfiles();
+  // Inspect each installed provider that this hook change will reconcile.
+  for (const agent of profiles) {
+    // Providers without a supported installed hook surface do not need this policy readiness check.
+    if (
+      !agent.hooksDir ||
+      spec.unsupportedAgents?.[agent.id] ||
+      !shouldReconcileAgent(change.projectPath, agent, spec, profiles)
+    )
+      continue;
+    // Compare every saved-choice reader and launch file before accepting an off switch for this provider.
+    for (const name of POLICY_CHOICE_FILES) {
+      const existing = change.readText(`${agent.hooksDir}/${name}`);
+      // A fresh install may fill missing files; a saved old launcher needs reviewed Sync first.
+      if (existing !== null && existing !== hookScriptContent(name)) {
+        throw new HookManagedInstallationError(
+          "This policy launcher cannot honor the saved off choice. Sync hooks on the Hooks page, review any replacements, then retry disable.",
+          409,
+        );
+      }
+    }
+  }
+}
 
 const LEGACY_AGENT_HOOK_DIRECTORIES: Record<AgentId, string> = {
   claude: ".claude/hooks",
@@ -46,6 +124,7 @@ export interface HookReplacementConflict {
 export interface HookChangeFailure {
   code:
     | "hook-replacement-required"
+    | "hook-policy-review-required"
     | "hook-review-stale"
     | "hook-change-refused"
     | "hook-apply-failed"
@@ -55,6 +134,7 @@ export interface HookChangeFailure {
   replacementAvailable: boolean;
   confirmationIdentity?: string;
   conflicts?: HookReplacementConflict[];
+  policyReview?: PolicyUpgradeReview;
   changedPaths?: string[];
   recovery?: string;
 }
@@ -475,7 +555,7 @@ function profilePathIsUnique(
  * @param agentProfiles - all profiles used to exclude shared markers; empty leaves only explicit config paths
  * @returns true when an agent-owned marker exists; false means setup leaves that agent untouched
  */
-function agentInstalledSurfaceExists(
+export function agentInstalledSurfaceExists(
   projectPath: string,
   agent: AgentProfile,
   agentProfiles: AgentProfile[],
@@ -689,7 +769,7 @@ function assertNoNewerManagedHookFiles(
  * @param agent - reconciled provider with a registry-owned hook directory
  *
  * @param hookSpec - selected hook's complete dependency set
- * @param shouldOverwriteExisting - false fills only missing files for a disabled hook
+ * @param shouldOverwriteExisting - false preserves dormant policy files; Sync still refreshes launch dependencies
  */
 function copyDeclaredHookScripts(
   change: PreparedHookChange,
@@ -714,7 +794,8 @@ function copyDeclaredHookScripts(
       path,
       hookScriptContent(scriptName),
       hookIds,
-      shouldOverwriteExisting,
+      shouldOverwriteExisting ||
+        (change.intent.kind === "sync" && POLICY_CHOICE_FILES.has(scriptName)),
     );
   }
 }

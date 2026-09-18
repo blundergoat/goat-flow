@@ -81,7 +81,7 @@ function comparisonBase(
     "multiple merge bases require an explicit two-dot comparison",
     "authority-unsupported",
   );
-  return objectId(context, bases[0]!);
+  return objectId(context, bases[0] ?? "");
 }
 
 /** Resolve PR, branch, or range endpoints separately from their actual comparison base. */
@@ -127,9 +127,10 @@ function selectCommit(
 ): SelectedFiles {
   exactKeys(requested, ["kind", "commit", "parent"]);
   const head = commitId(context, requested.commit);
-  const parents = readGit(context.root, ["cat-file", "commit", head])
+  const [header = ""] = readGit(context.root, ["cat-file", "commit", head])
     .toString()
-    .split("\n\n", 1)[0]!
+    .split("\n\n", 1);
+  const parents = header
     .split("\n")
     .filter((line) => line.startsWith("parent "))
     .map((line) => objectId(context, line.slice(7)));
@@ -147,12 +148,12 @@ function selectCommit(
     "authority-unsupported",
   );
   const parentNumber = selected ?? (parents.length === 1 ? 1 : null);
+  const base = parentNumber === null ? null : parents[parentNumber - 1];
   requireAuthority(
-    parentNumber === null || parentNumber <= parents.length,
+    base !== undefined,
     "selected commit parent does not exist",
     "authority-object",
   );
-  const base = parentNumber === null ? null : parents[parentNumber - 1]!;
   return {
     source: {
       kind: "commit",
@@ -278,6 +279,7 @@ function selectPaths(
         path,
       ) ?? { kind: "absent" };
     } else // An index-qualified file uses its staged bytes even if the editor shows a newer save.
+    // An index-selected member is compared with staged bytes, keeping the review bound to the source the caller selected.
     if (member.from === "index") {
       usesIndex = true;
       state = indexFiles(context).get(path) ?? { kind: "absent" };
@@ -711,6 +713,7 @@ function captureOnce(
  * Capture a canonical review selection for CLI output or a report fixture, without persisting it.
  *
  * @param requestText - explicit source request; empty input is a capture error, never a default worktree selection
+ *
  * @param projectRoot - selected project root whose local files and Git objects supply authority
  * @returns frozen metadata and optional checkout identity; null workspace means gates cannot claim that execution state
  */
@@ -784,6 +787,7 @@ function authorityViolation(
  * Parse and verify one frozen authority field before any finding can use it.
  *
  * @param text - canonical producer output's authority object; empty or malformed metadata is refused
+ *
  * @param projectRoot - selected project, never an inferred controlling workspace
  * @param line - report location for a repairable authority error; null identifies the whole report
  *
@@ -838,6 +842,7 @@ export function readReviewAuthority(
  * Recheck the original selection at a pass boundary; drift becomes a report violation without refreshing the baseline.
  *
  * @param projectRoot - reviewed project where the original selection must still resolve
+ *
  * @param snapshot - metadata captured before the review began
  * @param violations - failures appended for the reviewer's final repair list
  *
@@ -917,6 +922,7 @@ export function reviewScopeLabels(snapshot: ReviewAuthoritySnapshot): {
  * Require the readable scope to describe the same selected state as the canonical receipt.
  *
  * @param scope - parsed human-readable scope fields
+ *
  * @param snapshot - original selected authority used by evidence readers
  * @param line - report location where the reviewer can repair a contradictory scope
  *
@@ -950,6 +956,7 @@ export function validateAuthorityScope(
  * Read one inventory member from the frozen side and verify the live/index state around that read.
  *
  * @param projectRoot - root from which the selected review was captured
+ *
  * @param snapshot - original verified authority; never substitute a fresh capture here
  * @param path - literal inventory path; absent or out-of-inventory paths cannot support findings
  *
@@ -1054,6 +1061,7 @@ export function validateVisibleAuthorityFields(
  * Bind either receipt form to its original source and a reader that rechecks anchor bytes.
  *
  * @param fields - parsed receipt rows; absent authority fields cannot borrow trust from free-text scope
+ *
  * @param projectRoot - selected project used for source and anchor revalidation
  * @param violations - appended source, shape, or impossible coverage failures
  *
@@ -1092,6 +1100,7 @@ export function readAuthorityFields(
   return {
     kind: "snapshot",
     snapshot,
+    // Read the caller's selected evidence side through the frozen snapshot so findings stay bound to the original review.
     readAnchor: (path, side) =>
       readReviewAnchor(projectRoot, snapshot, path, side),
   };

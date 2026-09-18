@@ -116,6 +116,10 @@ const COMMAND_HELP_CATALOG = {
     flags: [
       ["--agent <id>", "Select the agent profile to install."],
       ["--dry-run", "Preview every planned write."],
+      [
+        "--migrate-state-only",
+        "Move legacy local state without installing files; stop and upgrade all writers first.",
+      ],
       ["--force", "Authorize inspected managed-file conflicts."],
       ["--force-managed", "Authorize every inspected managed conflict."],
       [
@@ -553,6 +557,7 @@ function renderGlobalHelp(): string {
  * Use it for flags or subcommands so users only see sections with available choices.
  *
  * @param sectionTitle - heading shown above the available choices
+ *
  * @param helpRows - visible label and description pairs; absent or empty means omit the section
  * @returns formatted section lines; empty means the user has no choices in this section
  */

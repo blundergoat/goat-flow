@@ -39,11 +39,14 @@ import {
 } from "./agent-hook-writer.js";
 import {
   HookManagedInstallationError as HookRegistrarError,
+  assertPolicyDisableReady,
+  agentInstalledSurfaceExists,
   copyHookScripts,
   createManagedHookInspection,
   type ManagedHookInspection,
   managedFileIsTrusted,
   managedHookInstallationFacts,
+  policyDisableIsReady,
   removeHookScripts,
   shouldReconcileAgent,
   type ManagedHookInstallationFacts,
@@ -191,6 +194,7 @@ function unsupportedReasonForSpec(
   spec: HookSpec,
   agent: AgentProfile,
 ): string | null {
+  // No registry exclusion lets this agent continue through local installation and proof checks.
   return spec.unsupportedAgents?.[agent.id] ?? null;
 }
 
@@ -381,8 +385,7 @@ function postTurnScanRootState(
       issue: "A non-Git workspace requires explicit post-turn scan roots.",
     };
   }
-  // js-yaml has already resolved any anchor or alias here, but the hook's own parser cannot: at Stop time such a config reads as no roots and fails
-  // closed with a misleading message. Refuse it now, while the user is looking at the Hooks page or the sync output.
+  // Show unsupported YAML aliases now in Hooks or Sync; otherwise the post-turn parser would reject those scan folders when the turn ends.
   if (hookScanRootsUseYamlAliases(projectPath)) {
     return {
       status: "invalid",
@@ -577,20 +580,16 @@ interface HookAgentStateFacts {
 }
 
 /**
- * Combine provider support and local evidence into the hook state, label and next repair shown to the user.
+ * Resolve the hook state, evidence identity and repair shown for the selected provider.
  * Provider exclusions take precedence so the page does not offer local repairs for coverage the provider cannot deliver.
  *
- * @param projectPath - selected project, used to check local proof of provider support
- * @param agent - agent whose hook state is being resolved
+ * @param projectPath - selected project used to check local proof of provider support
+ * @param agent - provider whose hook state is being resolved
  *
- * @param spec - hook being resolved, supplying its provider evidence
- * @param facts - the observed hook facts; `doesProviderExclusionOwnState` defaults to false. When the provider excludes the hook, that exclusion owns
+ * @param spec - registry definition supplying provider evidence
+ * @param facts - observed local state; `doesProviderExclusionOwnState` defaults to false and lets provider exclusions satisfy local facts
  *
- * the state and the local facts count as satisfied, so the user is shown "the provider does not support this" instead of a repair they cannot
- * perform.
- *
- * @returns the effective state, its label, evidence identity, and the repair the user should run; the identity is null when the provider is
- * undocumented
+ * @returns resolved state, label and repair; undocumented providers have a null evidence identity
  */
 function effectiveAgentState(
   projectPath: string,
@@ -639,6 +638,7 @@ function effectiveAgentState(
   return {
     effectiveState,
     effectiveStateLabel: HOOK_EFFECTIVE_STATE_LABELS[effectiveState.status],
+    // Missing provider evidence leaves this row without a proof identity; file presence alone cannot establish coverage.
     evidenceIdentity: providerEvidence?.identity ?? null,
     repairCommand: repair.command,
     repairSummary: repair.summary,
@@ -657,7 +657,7 @@ function installedHookIssue(
   if (!installationFacts.hasAllRequiredFiles) {
     return "managed-files-missing";
   }
-  // M02's shared direction decides whether sync is safe, destructive, or unproven.
+  // Saved install history distinguishes an older pristine hook from local edits or bytes whose origin is unknown.
   if (!installationFacts.hasCurrentRequiredFiles) {
     // A pristine older copy can be advanced by bundled Sync.
     if (installationFacts.changeDirection === "behind") {
@@ -757,11 +757,13 @@ function unsupportedAgentHookState(
 function hookDrift(
   shouldBeEnabled: boolean,
   installed: boolean,
+  honorsDisabledChoice: boolean,
 ): HookDrift | undefined {
   // The user enabled this hook, but its installed state does not yet provide that coverage.
   if (shouldBeEnabled && !installed) return "desired-on-actual-off";
   // An installed registration can still run even though the user asked for the hook to be disabled.
-  if (!shouldBeEnabled && installed) return "desired-off-actual-on";
+  if (!shouldBeEnabled && installed && !honorsDisabledChoice)
+    return "desired-off-actual-on";
   return undefined;
 }
 
@@ -912,7 +914,11 @@ function supportedAgentHookState(
     isRegistered,
     installationFacts,
   );
-  const drift = hookDrift(isDesiredByUser, installed);
+  const drift = hookDrift(
+    isDesiredByUser,
+    installed,
+    policyDisableIsReady(projectPath, agent, spec),
+  );
   const effectivePresentation = effectiveAgentState(projectPath, agent, spec, {
     isDesiredByUser,
     isRegistered,
@@ -935,6 +941,7 @@ function supportedAgentHookState(
     isRegistered,
     isCurrentVersionInstalled,
     isTrusted: localDetails.isTrusted,
+    // No registration issue means this command passed its check; file trust and delivery still have separate gates.
     registrationIssue: registrationState.registrationIssue ?? null,
     installationIssue: localDetails.installationIssue,
     ...effectivePresentation,
@@ -994,9 +1001,21 @@ function agentHookState(
   );
 }
 
-/** Read persisted desired hook state, falling back to the registry default. */
-function readDesired(projectPath: string, spec: HookSpec): boolean {
-  return readHookEnabled(projectPath, spec.id, spec.defaultEnabled);
+/**
+ * Read the saved switch for one Hooks row, using its default when the user has no override.
+ *
+ * @throws HookRegistrarError with HTTP 409 when policy config cannot be trusted; the user must repair it before changing hooks
+ */
+function readDesiredHookEnabled(projectPath: string, spec: HookSpec): boolean {
+  try {
+    return readHookEnabled(projectPath, spec.id, spec.defaultEnabled);
+  } catch {
+    // A hand-edited policy value or unreadable config prevents a reliable switch state; show a repair error instead of guessing.
+    throw new HookRegistrarError(
+      "Policy configuration is invalid or unavailable. Repair .goat-flow/config.yaml before changing hooks.",
+      409,
+    );
+  }
 }
 
 /** Compose one provider's registration change from captured JSON, keeping unrelated user commands. */
@@ -1013,6 +1032,20 @@ function prepareHookRegistration(
     agent.hookConfigFile,
     prepareAgentHookState(text, agent, spec, isEnabled),
     0,
+  );
+}
+
+/** Disabled policy registrations require an installed provider; leftover scripts alone do not qualify. */
+function providerPermitsRegistration(
+  projectPath: string,
+  agent: AgentProfile,
+  profiles: AgentProfile[],
+  isEnabled: boolean,
+  canRegisterForRoots: boolean,
+): boolean {
+  return (
+    canRegisterForRoots &&
+    (isEnabled || agentInstalledSurfaceExists(projectPath, agent, profiles))
   );
 }
 
@@ -1042,11 +1075,18 @@ function reconcileHook(
       continue;
     const desired = deriveManagedHookDesiredState(agent, spec, isEnabled);
     const shouldRegister =
-      desired.registrationTargets.length > 0 && rootsPermitRegistration;
+      desired.registrationTargets.length > 0 &&
+      providerPermitsRegistration(
+        change.projectPath,
+        agent,
+        profiles,
+        isEnabled,
+        rootsPermitRegistration,
+      );
     // Disabled hooks fill missing inert files but preserve every existing disabled-only byte.
     if (desired.managedScriptFiles.length > 0)
       copyHookScripts(change, agent, spec, isEnabled);
-    // Disabling edits an existing config only; enabling may create the provider's missing hook config.
+    // Retained policy rows may be added only to an installed provider; residue alone cannot scaffold one.
     if (shouldRegister || configExists)
       prepareHookRegistration(change, agent, spec, shouldRegister);
   }
@@ -1080,7 +1120,7 @@ function readHookState(
   inspection: ManagedHookInspection = createManagedHookInspection(projectPath),
 ): HookState {
   const spec = resolveSpec(hookId);
-  const enabled = readDesired(projectPath, spec);
+  const enabled = readDesiredHookEnabled(projectPath, spec);
   const scanRoots = postTurnScanRootState(projectPath, spec);
   const agents = Object.fromEntries(
     getAgentProfiles().map((agent) => [
@@ -1134,11 +1174,19 @@ function prepareGitProtection(
   }
 }
 
+/** Validate an off toggle before preparing any config or installation writes. */
+function assertDisabledPolicyReady(change: PreparedHookChange): void {
+  const intent = change.intent;
+  // Turning protection off requires a launcher that honors the saved choice before any project file can change.
+  if (intent.kind === "toggle" && !intent.enabled)
+    assertPolicyDisableReady(change, resolveSpec(intent.hookId));
+}
+
 /**
  * Prepare the complete Sync or toggle result before any destination mutation.
  *
  * @param projectPath - project selected by the CLI or Hooks page
- * @param intent - requested action; toggles preserve the inherited Git choice before changing its sibling
+ * @param intent - requested action; toggles preserve other saved choices and registry defaults
  *
  * @returns captured, deduplicated operation with prepared provider configs and official files
  * @throws when captured state cannot safely produce the requested change
@@ -1148,6 +1196,7 @@ function prepareHookChange(
   intent: HookChangeIntent,
 ): PreparedHookChange {
   const change = new PreparedHookChange(projectPath, intent);
+  assertDisabledPolicyReady(change);
   const configPath = ".goat-flow/config.yaml";
   const config = prepareHookConfig(
     change.readText(configPath),
@@ -1173,7 +1222,7 @@ function prepareHookChange(
   }
   // Global Sync preserves every saved choice and refreshes all installed supported surfaces.
   if (intent.kind === "sync") {
-    // Global Sync reconciles every toggle using its saved or inherited enabled choice.
+    // Global Sync reconciles every toggle using its saved choice or registry default.
     for (const spec of listHookSpecs().filter((spec) => spec.togglable))
       reconcileHook(change, spec, desiredChoice(spec));
   } else {

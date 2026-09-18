@@ -6,6 +6,7 @@
  */
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { isDeepStrictEqual } from "node:util";
 import type { AgentProfile } from "../types.js";
 import {
   LEGACY_DENY_DANGEROUS_HOOK_IDS,
@@ -171,7 +172,7 @@ function matcherParts(matcher: string): string[] {
  * @param agent - supported provider; a missing hook surface is rejected before this derivation
  * @param spec - registry hook; an empty script list produces an empty managed-file target
  *
- * @param isEnabled - true targets one command per provider event/matcher; false targets no registrations
+ * @param isEnabled - false retains policy launchers but removes registrations for other hooks
  * @returns current script filenames plus exact provider registration targets; disabled keeps current files
  */
 export function deriveManagedHookDesiredState(
@@ -180,8 +181,13 @@ export function deriveManagedHookDesiredState(
   isEnabled: boolean,
 ): ManagedHookDesiredState {
   const managedScriptFiles = [...spec.scriptFiles];
-  // A disabled hook keeps current inert files but gives the user's agent nothing to run.
-  if (!isEnabled) return { managedScriptFiles, registrationTargets: [] };
+  // Policy launchers read the saved choice; cached bootstraps still need their registration.
+  if (
+    !isEnabled &&
+    spec.id !== "deny-dangerous" &&
+    spec.id !== "deny-git-mutations"
+  )
+    return { managedScriptFiles, registrationTargets: [] };
 
   const event = hookEventKey(agent, spec);
   // Stop and Copilot use one matcherless registration for the user's lifecycle event.
@@ -412,7 +418,7 @@ function appendHookEntries(
   desiredState: ManagedHookDesiredState,
 ): void {
   const firstRegistrationTarget = desiredState.registrationTargets[0];
-  // An empty target is the user's disabled state, so there is no provider row to append.
+  // Disabled non-policy hooks have no provider row; policy launchers remain registered.
   if (!firstRegistrationTarget) return;
   // Antigravity stores each hook as a named top-level definition instead of a shared event array.
   if (agent.id === "antigravity") {
@@ -726,7 +732,7 @@ export function readAgentHookState(
  * @param agent - selected provider; a null config path throws before writing
  *
  * @param spec - registry hook whose enabled or disabled registration is saved
- * @param isEnabled - true installs current rows; false removes only setup-owned rows
+ * @param isEnabled - true installs current rows; false retains policy rows and removes other owned rows
  *
  * @returns nothing; successful completion leaves unrelated user hooks unchanged
  * @throws when existing config is invalid JSON or the agent lacks a writable surface
@@ -772,6 +778,46 @@ function readPreparedAgentHookConfig(
 }
 
 /**
+ * Keep current Codex registrations in place so changing a dashboard switch does not require renewed hook trust.
+ * Sync still repairs stale labels, commands, matchers, timeouts, duplicates, and retired registrations.
+ *
+ * @param text - captured file bytes; null means setup must create the missing registration file
+ * @param config - captured provider settings; empty settings need registration
+ *
+ * @param agent - selected provider; other providers keep their existing repair path
+ *
+ * @param spec - managed hook selected by the user's toggle or Sync action
+ * @param desiredState - requested registrations; empty means the user is removing this non-policy hook
+ *
+ * @returns true when the existing Codex rows match every requested field and can retain their positions
+ */
+function canPreserveCodexRegistrations(
+  text: string | null,
+  config: AgentHookJsonObject,
+  agent: AgentProfile,
+  spec: HookSpec,
+  desiredState: ManagedHookDesiredState,
+): text is string {
+  // Missing files or targets and retired registrations still need the usual setup, removal, or migration step.
+  if (
+    text === null ||
+    agent.id !== "codex" ||
+    desiredState.registrationTargets.length === 0 ||
+    hasRetiredDenyRegistration(config, spec)
+  )
+    return false;
+  // A stale or duplicate command must remain repairable when the user chooses Sync.
+  if (!hasAllExpectedEntries(config, agent, spec)) return false;
+  const currentRegistrations = expectedEventEntries(config, agent, spec).filter(
+    (entry) => entryReferencesSpec(entry, spec),
+  );
+  return isDeepStrictEqual(
+    currentRegistrations,
+    claudeCodexEntries(agent, spec, desiredState.registrationTargets),
+  );
+}
+
+/**
  * Prepare one registration from captured bytes without rereading or changing the target.
  * The hook operation composes these results before claiming its complete destination set.
  *
@@ -792,6 +838,9 @@ export function prepareAgentHookState(
 ): string {
   const config = readPreparedAgentHookConfig(text, agent);
   const desiredState = deriveManagedHookDesiredState(agent, spec, isEnabled);
+  // For example, switching Git protection off must not move the still-enabled general policy into another trust slot.
+  if (canPreserveCodexRegistrations(text, config, agent, spec, desiredState))
+    return text;
   // Antigravity keeps managed hooks as top-level definitions with provider-specific migration ids.
   if (agent.id === "antigravity") {
     // Ownership follows the exact managed command, even when an older install used a different sibling id.
@@ -811,16 +860,15 @@ export function prepareAgentHookState(
         Reflect.deleteProperty(config, legacyId);
       }
     }
-    // A non-empty target adds the current definition; disabled state leaves it absent.
+    // Policy targets remain present while off so cached handlers can reach the saved choice.
     if (desiredState.registrationTargets.length > 0) {
       appendHookEntries(config, agent, spec, desiredState);
     }
     return `${JSON.stringify(config, null, 2)}\n`;
   }
-  // A row moved to another lifecycle event still belongs to this spec and must not outlive the sync that reinstates the canonical row, nor survive
-  // the user disabling the hook.
+  // Remove stale lifecycle rows before appending the canonical targets, including retained off-policy rows.
   removeOwnedHookEntriesEverywhere(config, spec);
-  // Enabled state appends exact current rows after stale managed rows are removed.
+  // A disabled non-policy hook has no targets to append.
   if (desiredState.registrationTargets.length > 0) {
     appendHookEntries(config, agent, spec, desiredState);
   }

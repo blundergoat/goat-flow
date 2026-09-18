@@ -65,6 +65,7 @@ const CLAIM_MARKER_SHA256 = /^[a-f0-9]{64}$/u;
 
 /**
  * Flags a developer can use to describe one learning-loop scaffold.
+ *
  * Kept together so strict parsing and command-specific validation expose the same authoring vocabulary.
  * The parser loads this group only as option declarations; validation still prevents other commands from accepting them.
  */
@@ -96,6 +97,7 @@ const CLI_ARG_OPTIONS = {
   check: { type: "boolean", default: false },
   apply: { type: "boolean", default: false },
   "dry-run": { type: "boolean", default: false },
+  "migrate-state-only": { type: "boolean", default: false },
   force: { type: "boolean", default: false },
   "force-managed": { type: "boolean", default: false },
   "force-user-owned": { type: "boolean", default: false },
@@ -198,8 +200,10 @@ function parseAgentArg(rawAgent: string | undefined): AgentId | null {
  *
  * @param command - command the user actually invoked
  * @param expectedCommand - the only command this flag is valid for
+ *
  * @param flag - flag name as the user typed it, echoed verbatim in the message
  * @param isSet - whether the user supplied the flag; false always passes
+ *
  * @returns nothing; returning at all means the placement is valid
  */
 function rejectFlagOutsideCommand(
@@ -400,6 +404,7 @@ function validateClaimsRecoveryFlags(values: ParsedArgValues): void {
 
 /**
  * Keep marker identity and explicit confirmation on the single recovery route that consumes them.
+ *
  * The branches stay separate because inspection must remain read-only while recovery requires two independent operator inputs.
  * Error behavior: throws CLIError with exit code 2 before marker access for misplaced, missing, malformed, or persistence-capable options.
  */
@@ -443,6 +448,7 @@ function validateClaimsFlags(
  *
  * @param command - command the user invoked
  * @param values - parsed flag map; only `--scenario` is inspected here
+ *
  * @param hookSubcommand - hooks subcommand, or null when the command is not `hooks`
  * @returns nothing; returning means no misplaced scenario flag was supplied
  */
@@ -495,6 +501,7 @@ function validateDryRunFlag(command: Command, values: ParsedArgValues): void {
  * because replacing user-owned content is never a broad choice; every such file must be named explicitly.
  *
  * @param command - command the user invoked; only install and setup routes may carry force flags
+ *
  * @param values - parsed flag map; the three force flags are inspected here
  * @returns nothing; returning means no force flag widens the write beyond the named paths
  */
@@ -529,8 +536,40 @@ function validateAuthorityFlags(
   }
 }
 
+/** Keep recovery storage-only; throws CLIError before dispatch when the user's command or flags conflict. */
+function validateStateMigrationFlag(
+  command: Command,
+  values: ParsedArgValues,
+): void {
+  // Ordinary commands keep their existing validation when the user has not selected storage recovery.
+  if (!parsedFlag(values, "migrate-state-only")) return;
+  // Only the explicit install recovery action may relocate the selected project's old bookkeeping.
+  if (command !== "install") {
+    throw new CLIError("--migrate-state-only is only valid for install.", 2);
+  }
+  const conflictingFlags = [
+    "dry-run",
+    "force",
+    "force-managed",
+    "force-user-owned",
+    "update-config-version",
+    "clean-deprecated",
+  ];
+  // A recovery request must not also authorize preview, replacement, or installation cleanup.
+  if (
+    conflictingFlags.some((flag) => parsedFlag(values, flag)) ||
+    parsedStringList(values, "force-path").length > 0
+  ) {
+    throw new CLIError(
+      "--migrate-state-only cannot be combined with --dry-run, force options, --update-config-version, or --clean-deprecated.",
+      2,
+    );
+  }
+}
+
 /** Validate deterministic install/setup flags; throws CLIError when flags target the wrong command. */
 function validateInstallFlags(command: Command, values: ParsedArgValues): void {
+  validateStateMigrationFlag(command, values);
   validateDryRunFlag(command, values);
   validateAuthorityFlags(command, values);
   // Applying setup changes is specific to setup; another command cannot inherit that request.
@@ -616,9 +655,8 @@ function validateTargetTrustFlags(
     );
   }
 
-  // Trusted audit raises deny-mechanism evidence to `full`, but the runtime deny probe only runs
-  // for a selected agent. Without one the report would claim runtime proof that nothing produced,
-  // so the omission is refused here rather than allowed to reach the audit.
+  // Trusted audit needs full runtime deny proof for a selected agent.
+  // Refuse an omitted agent here so the user's report cannot claim a probe that never ran.
   if (
     command === "audit" &&
     suppliedFlag === "--trusted-target" &&
@@ -639,6 +677,7 @@ function validateTargetTrustFlags(
  *
  * @param command - command the user invoked; non-quality commands pass through untouched
  * @param values - parsed flag map; `--mode` and `--output` are inspected here
+ *
  * @param qualitySubcommand - selected quality subcommand
  * @returns nothing; returning means both flags are on routes that honour them
  */
@@ -820,10 +859,13 @@ function validateLearnFlags(command: Command, values: ParsedArgValues): void {
  *
  * @param command - command the user invoked
  * @param values - parsed flag map handed to each validator in turn
+ *
  * @param qualitySubcommand - selected quality subcommand
  * @param skillSubcommand - skill subcommand, or null when the command is not `skill`
+ *
  * @param hookSubcommand - hooks subcommand, or null when the command is not `hooks`
  * @param plansSubcommand - plans subcommand, or null when the command is not `plans`
+ *
  * @param plansTimeAction - timing action, or null when the subcommand is not `time`
  * @returns nothing; returning means every combination check passed. It throws the first CLIError raised by any validator, all with exit code 2.
  */
@@ -882,6 +924,7 @@ function parseEventsLimitArg(rawLimit: string | undefined): number {
 
 /**
  * Project choices produced by each positional grammar before the active command selects one.
+ *
  * Every value is absolute, so dispatch never has to reinterpret what directory the developer named.
  * Keeping all namespaces visible here prevents a new command from accidentally using another command's path.
  */
@@ -1180,6 +1223,7 @@ export function parseCLIArgs(argv: string[]): ParsedCLI {
     shouldCheck: parsedFlag(parsedValues, "check"),
     shouldApply: parsedFlag(parsedValues, "apply"),
     shouldDryRun: parsedFlag(parsedValues, "dry-run"),
+    shouldMigrateStateOnly: parsedFlag(parsedValues, "migrate-state-only"),
     shouldForce: parsedFlag(parsedValues, "force"),
     shouldForceManaged: parsedFlag(parsedValues, "force-managed"),
     shouldForceUserOwned: parsedFlag(parsedValues, "force-user-owned"),
