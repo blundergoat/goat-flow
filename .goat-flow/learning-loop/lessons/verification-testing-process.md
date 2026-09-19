@@ -1,6 +1,6 @@
 ---
 category: verification-testing-process
-last_reviewed: 2026-09-15
+last_reviewed: 2026-09-19
 ---
 
 **Scope:** Process-lifecycle tests - timeout deadlines independent of child close, observable readiness before termination signals, and delegated multi-turn runs that must keep recoverable session state. What a test must establish in general is [verification-testing.md](verification-testing.md); building fixtures is [test-fixtures.md](test-fixtures.md).
@@ -28,11 +28,11 @@ last_reviewed: 2026-09-15
 **Status:** active | **Created:** 2026-05-30
 **Decision changed:** Process-lifecycle tests wait for an observable ready state before sending termination signals; elapsed time alone is never readiness.
 **Trigger phase:** VERIFY
-**Incident count:** 4 | **Latest occurrence:** 2026-08-06
+**Incident count:** 5 | **Latest occurrence:** 2026-09-19
 **Merged:** 2026-09-05 - moved here from `.goat-flow/learning-loop/lessons/browser-evidence.md`, which owns proving browser-visible behaviour; every incident here is process readiness in the preflight runner, and the sibling entry above owns the completion bound for the same runner.
 **Merged:** 2026-09-15 - moved here from `.goat-flow/learning-loop/lessons/verification-testing.md` when that bucket was split along the process-lifecycle seam to recover its headroom.
 
-**Prevention:** Isolate real-timer smoke tests from heavy suites. For process lifecycle tests, synchronize on an observable ready state through a channel whose contract is live at that point; do not sleep for an assumed startup window or wait on output that is documented to flush only at close. Reproduce failures on the CI-supported Node runtime before treating a newer local runtime as disproof. Evidence anchors: `test/smoke/dashboard-endpoints.test.ts` (search: `uses the fallback deadline when runner output keeps updating`), `test/integration/preflight-progress.test.ts` (search: `progressReadyFile`), `scripts/preflight-command-runner.mjs` (search: `capturedOutputChunks`).
+**Prevention:** Isolate real-timer smoke tests from heavy suites. For process lifecycle tests, synchronize on an observable ready state through a channel whose contract is live at that point; do not sleep for an assumed startup window or wait on output that is documented to flush only at close. Reproduce failures on the CI-supported Node runtime before treating a newer local runtime as disproof. While `publish:check` or another suite containing these tests runs, start no other work until it exits. Evidence anchors: `test/smoke/dashboard-endpoints.test.ts` (search: `uses the fallback deadline when runner output keeps updating`), `test/integration/preflight-progress.test.ts` (search: `progressReadyFile`), `scripts/preflight-command-runner.mjs` (search: `capturedOutputChunks`).
 
 **What happened:** During `docs.missing-internal-function-doc` cleanup, a combined focused command that grouped the dashboard smoke test with heavier unit suites failed `uses the fallback deadline when runner output keeps updating`: `spawned.writes` was still `[]` at the 5600ms assertion. The touched code was comment-only. Rerunning `node --import tsx --test test/smoke/dashboard-endpoints.test.ts` immediately afterward passed with `# pass 15` / `# fail 0`; the two edited unit files also passed in isolated runs.
 
@@ -41,6 +41,8 @@ last_reviewed: 2026-09-15
 **Recurrence 2026-08-05:** PR #57 CI run `30947991560` failed `shows retry progress before close while keeping child output captured` because the test compared two-decimal elapsed labels and required each displayed interval to be at least 0.03 seconds. CPU contention reproduced the failure even though progress remained bounded and visible. The correction makes the child remain alive until the fixture observes the first progress event through an out-of-band readiness file; it asserts the lifecycle contract without treating rounded display cadence as scheduler evidence.
 
 **Recurrence 2026-08-06:** PR #57 pull-request run `31097377526` failed `returns after escalation when an escaped descendant retains the capture pipe` because its 100 ms timeout fired before the Node fixture wrote the detached child's PID. The push run for the same commit passed. The corrected fixture signals parent cleanup only after an out-of-band ready file proves the escaped child exists, while the production deadline remains unchanged.
+
+**Recurrence 2026-09-19:** A local `publish:check` release run failed the same escaped-pipe test: `runner returned after 2063ms instead of its bounded cleanup window`, against a 2,000 ms bound. The fast suite stopped the gate, so the slow suite never ran. The agent had started four `hooks verify` runs alongside it, and they overlapped the fast suite. Run alone, the test passed in 1,149 ms. A rerun with nothing else running passed the fast suite, 3010 of 3015 with 5 skipped. The runner defect in the entry above was not the cause.
 
 **Root cause:** Real-timer tests treated scheduler time as proof that an asynchronous process or terminal had reached the state their assertions required. Heavy concurrent work can delay that state independently of the timer, and buffered output cannot serve as a live readiness signal.
 

@@ -1,6 +1,6 @@
 ---
 category: plan-artifacts
-last_reviewed: 2026-09-16
+last_reviewed: 2026-09-19
 ---
 
 **Scope:** The grammar and validation of plan, milestone, and review artifacts: evidence fields, proof gates, machine-parsed dependency links, effort accounting, and when a validator runs relative to persistence. CLI process behaviour and output streams live in [cli.md](cli.md).
@@ -193,6 +193,21 @@ and `test/unit/review-validate.test.ts` (search: `retains all five selected file
 
 
 **Recurrence 2026-09-16:** During M09 hook-disable design, the strict checker rejected a move to testing-gate while the contract and downstream-scope implementation tasks were still open. Approval of the diagnosis was not acceptance of the unfinished contract. Keep the milestone in-progress for that review, pause timing before the human wait, and close tasks only when their full conditions hold. The owning enforcement remains src/cli/plans-check.ts (search: "open implementation tasks"); status selection cannot substitute for task completion.
+
+---
+
+## Footgun: A heading that starts with a milestone section name counts as a second copy of that section
+
+**Status:** active | **Created:** 2026-09-19 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Name added milestone notes with a heading that does not begin with a section name, such as `## Forecast revision <date>` rather than `## Scope revision`.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Before adding a `##` heading to a milestone, check that it does not begin with Objective, Scope, Proof, Stop / rescope or another section name followed by a space. Run `plans check <plan-dir> --strict` after adding any heading.
+
+**Symptoms:** On 2026-09-19 a milestone gained a `## Scope revision` section to record an approved scope change. `plans check --strict` then failed with `error: M26-slow-suite-contract-alignment.md: conflicting scope representations`, and renaming the heading to `## Forecast revision 2026-09-19` cleared it. A scratch copy reproduced it: the same milestone file without the heading lacked that error, and appending `## Scope revision` added it.
+
+**Why it happens:** `src/cli/plans-export.ts` (search: `function readMilestoneSectionMatches`) matches a section when its heading equals an alias or starts with the alias and a space. More than one match is reported as a conflict (search: `function readFieldOrSectionMarkdown`). Objective, Scope, Proof and Stop / rescope all read through this helper.
 
 ## Resolved Entries
 

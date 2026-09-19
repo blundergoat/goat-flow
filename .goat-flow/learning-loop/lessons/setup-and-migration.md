@@ -1,6 +1,6 @@
 ---
 category: setup-and-migration
-last_reviewed: 2026-09-10
+last_reviewed: 2026-09-19
 ---
 
 **Scope:** Installing goat-flow into a project and migrating an existing install - what a package smoke proves, mirror fan-out, the scope a setup agent may write, and concepts that survive their own removal. Repo-wide gates that catch the fallout are [verification-preflight.md](verification-preflight.md).
@@ -148,3 +148,18 @@ last_reviewed: 2026-09-10
 **What happened:** Asked to rename a v0.3 improvements TODO file to v0.4, the agent ran `mv` without checking that v0.4 already existed, overwriting it. When the user said "undo", the agent moved v0.4, by then holding v0.3's content, back to v0.3, destroying v0.4's original content. The file was untracked and unrecoverable.
 
 **Root cause:** A rename was treated as a move of one file rather than a write to a path that might already hold something.
+
+---
+
+## Lesson: Predicting a policy migration outcome needs the reader's defaults for omitted switches
+
+**Status:** active | **Created:** 2026-09-19
+**Decision changed:** Before a fix plan says what a policy fixture will do, resolve every switch the way the reader does, including switches the fixture omits, or run the case once against current code.
+**Trigger phase:** SCOPE
+**Caught at:** VERIFY
+
+**Prevention:** A fix plan's sentence about what a test case will show is a claim about current code. For hook-policy migrations, work out both the original and the requested choices: an omitted switch keeps its enforced default, and an upgrade can copy one switch's saved choice into another. If that trace is not quick, run the case before promising the outcome. Evidence anchors: `workflow/hooks/hook-policy-state.cjs` (search: `function effectivePolicyChoices`), `workflow/hooks/hook-policy-state.cjs` (search: `An older config may omit the Git switch`), `test/integration/setup-install-migrations.test.ts` (search: `requires policy review before migrating disabled split guardrail config`).
+
+**What happened:** A goat-debug fix plan for 19 stale slow-suite tests split one legacy test into two cases. Conflicting 1.8.0 guard choices would be refused, and agreeing ones would still migrate. The agreeing fixture turned all three retired guards off and had no Git switch. The installer answered "GitHub policy review is required": the original choices resolved to dangerous off and Git on, and mixed choices with changed ownership files require review by contract. The milestone stopped at a checkpoint, the plan's claim was reported as wrong, and the user approved a policy-review case instead.
+
+**Root cause:** "All guards off" was read from the keys the fixture wrote. The reader fills an omitted switch with its enforced default, so the fixture's effective choices disagreed.
