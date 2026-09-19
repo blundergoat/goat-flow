@@ -8,6 +8,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import type { SpawnSyncReturns } from "node:child_process";
 import {
   chmodSync,
   closeSync,
@@ -23,6 +24,7 @@ import {
 import { join } from "node:path";
 import { load } from "js-yaml";
 
+import { setHookEnabled } from "../../src/cli/config/writer.js";
 import { emitCommitGuidanceInstallResult } from "../../src/cli/prompt/commit-guidance.js";
 import {
   acquirePathWriteClaims,
@@ -236,7 +238,7 @@ describe("setup --apply installer", () => {
     );
   });
 
-  // Fixture purpose: runs the installed hook through its persisted nested analyzer override; writes stay in the disposable project.
+  // Fixture purpose: runs the installed hook with Gruff saved off, then on, via the persisted analyzer override; writes stay in the fixture.
   it(
     "runs the installed Gruff hook through the detected strands_agents binary",
     { skip: process.platform === "win32" },
@@ -259,42 +261,61 @@ describe("setup --apply installer", () => {
         installResult.stderr || installResult.stdout,
       );
 
-      const payloadPath = join(root, "post-tool-payload.json");
-      writeFileSync(
-        payloadPath,
-        JSON.stringify({
-          tool_name: "Edit",
-          tool_input: {
-            file_path: "src/sample.py",
-            changed_ranges: [{ startLine: 3, endLine: 3 }],
-          },
-        }),
-      );
-      const bashPath = resolveTool("bash");
-      const payloadHandle = openSync(payloadPath, "r");
-      let hookResult: ReturnType<typeof spawnSync>;
-      try {
-        // Argv contains only the test runner's resolved Bash and the hook installed below this disposable fixture root.
-        hookResult = spawnSync(
-          bashPath,
-          [join(root, ".goat-flow", "hooks", "gruff-code-quality.sh")],
-          {
-            cwd: root,
-            encoding: "utf-8",
-            env: {
-              ...process.env,
-              GRUFF_PY_BIN: "",
-              PATH: "/usr/bin:/bin",
+      /**
+       * Runs the installed hook once for an edit to src/sample.py, as the registered handler would after the user's edit.
+       * It writes a one-use payload file in the fixture root and removes it afterwards.
+       *
+       * @returns the finished hook process with its captured output
+       */
+      const runInstalledHook = (): SpawnSyncReturns<string> => {
+        const payloadPath = join(root, "post-tool-payload.json");
+        writeFileSync(
+          payloadPath,
+          JSON.stringify({
+            tool_name: "Edit",
+            tool_input: {
+              file_path: "src/sample.py",
+              changed_ranges: [{ startLine: 3, endLine: 3 }],
             },
-            stdio: [payloadHandle, "pipe", "pipe"],
-          },
+          }),
         );
-      } finally {
-        // For example, a hook process can fail while reading the payload, so its file handle and one-use fixture must still be released.
-        closeSync(payloadHandle);
-        unlinkSync(payloadPath);
-      }
+        const payloadHandle = openSync(payloadPath, "r");
+        try {
+          // Argv contains only the test runner's resolved Bash and the hook installed below this disposable fixture root.
+          return spawnSync(
+            resolveTool("bash"),
+            [join(root, ".goat-flow", "hooks", "gruff-code-quality.sh")],
+            {
+              cwd: root,
+              encoding: "utf-8",
+              env: {
+                ...process.env,
+                GRUFF_PY_BIN: "",
+                PATH: "/usr/bin:/bin",
+              },
+              stdio: [payloadHandle, "pipe", "pipe"],
+            },
+          );
+        } finally {
+          // For example, a hook process can fail while reading the payload, so its file handle and one-use fixture must still be released.
+          closeSync(payloadHandle);
+          unlinkSync(payloadPath);
+        }
+      };
 
+      // A fresh install saves Gruff off, and the hook respects that choice even when it is run directly.
+      const disabledResult = runInstalledHook();
+      assert.equal(
+        disabledResult.status,
+        0,
+        disabledResult.stderr || disabledResult.stdout,
+      );
+      assert.equal(disabledResult.stdout, "");
+      assert.deepEqual(readInvocations(root), []);
+
+      // Enabling Gruff keeps the pinned analyzer, so the installed hook now runs through it.
+      setHookEnabled(root, "gruff-code-quality", true);
+      const hookResult = runInstalledHook();
       assert.equal(
         hookResult.status,
         0,
