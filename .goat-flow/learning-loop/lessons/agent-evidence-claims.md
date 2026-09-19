@@ -236,3 +236,19 @@ The recurring failure is crediting a sampled or truncated capture as complete. T
 **What happened:** A milestone drafted ADR-066 and asked the user to approve a wider allowlist. Both said the Gruff launcher change would alter every provider's registration, four agent-config templates and three installed agent configs. The user approved. Implementation then reached the generator, whose comment says ADR-052 freezes the Codex, Copilot and Antigravity registrations byte for byte. The change was narrowed to Claude's structured bootstrap, ADR-066 was corrected after acceptance, and the generated contract diff showed three changed rows, all Claude's Gruff handlers. The template named in the request holds no Gruff row at all.
 
 **Root cause:** The request was written from the measured incident and the file names that mention the bootstrap, without reading the generator that owns those bytes. The accepted decisions that constrain it were found only while editing.
+
+---
+
+## Lesson: A run record is read from the session's command outputs, not recalled
+
+**Status:** active | **Created:** 2026-09-19
+**Decision changed:** Before writing which harness, model and effort ran a piece of work, search the session for the requester's model and effort commands and copy what their outputs say.
+**Trigger phase:** VERIFY
+**Caught at:** VERIFY
+**Incident count:** 2 | **Latest occurrence:** 2026-09-19
+
+**Prevention:** A slash command such as a model or effort change leaves its own output line in the conversation. Treat a run record as an evidence claim: find those lines, quote their values, and tie each change to the timing segment it fell in. Write "not observable" only for a setting that no command output mentions, and never write that a command was not seen without searching for it first.
+
+**What happened:** One milestone closeout recorded effort xhigh and said the model switch was not seen, although the requester had set effort max and switched the model in visible commands. The next milestone's closeout corrected that record, then repeated the mistake in its own: it said no command was seen for a second model switch and kept effort max, while both the model command and a new effort command sat in the same turn. A requested second check caught it after handoff.
+
+**Root cause:** The record was written from the settings remembered from the start of the work. Mid-turn commands arrive between tool results, where they are easy to pass over, and nothing in the closeout routine searched for them.

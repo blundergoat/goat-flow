@@ -1091,8 +1091,8 @@ describe("effective hook state", () => {
     },
   );
 
-  // An edited source without a Gruff config is unavailable, while other payload classes stay explicit.
-  it("replays incomplete, advisory, and unavailable Gruff results through its configured command", () => {
+  // An edited source without a Gruff config is unavailable and malformed input is incomplete, while a non-source edit stays quiet.
+  it("replays incomplete, quiet, and unavailable Gruff results through its configured command", () => {
     const projectPath = createClaudeProject();
     initializeDisposableGitProject(projectPath);
     enableGruffForProject(projectPath);
@@ -1112,7 +1112,7 @@ describe("effective hook state", () => {
     );
     assert.deepEqual(
       report.scenarios.map((scenario) => scenario.observed),
-      ["incomplete", "finding", "unavailable"],
+      ["incomplete", "clean", "unavailable"],
     );
     assert.deepEqual(
       claudeHookState(projectPath, "gruff-code-quality").effectiveState,

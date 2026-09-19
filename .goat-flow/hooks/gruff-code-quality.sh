@@ -538,6 +538,80 @@ payload_supported_file_paths() {
   done | awk '!seen[$0]++'
 }
 
+# Resolve a named path to an absolute form without `.` or `..` segments, touching no file.
+# A relative name resolves from the root, and a drive-letter path keeps its drive.
+lexical_absolute_path() {
+  local root="$1" file_path="${2//\\//}"
+  local drive="" segment
+  local -a segments=() kept=()
+  case "$file_path" in
+    /*|[A-Za-z]:/*) ;;
+    *) file_path="${root//\\//}/$file_path" ;;
+  esac
+  case "$file_path" in
+    [A-Za-z]:/*) drive="${file_path%%/*}" ;;
+  esac
+  IFS='/' read -r -a segments <<< "${file_path#"$drive"}"
+  for segment in "${segments[@]}"; do
+    case "$segment" in
+      ''|.) ;;
+      ..) [[ "${#kept[@]}" -eq 0 ]] || unset "kept[$(( ${#kept[@]} - 1 ))]" ;;
+      *) kept+=("$segment") ;;
+    esac
+  done
+  local IFS='/'
+  printf '%s/%s' "$drive" "${kept[*]}"
+}
+
+# True when a path lies below a directory; both arguments must already share one absolute form.
+path_is_beneath() {
+  local candidate="$1" directory="${2%/}"
+  [[ -n "$candidate" && "$candidate" == "$directory"/* ]]
+}
+
+# List named source files inside the provider project that this install did not analyse (ADR-066 rule 1).
+#
+# Rules for one named path:
+# - A name no analyzer reads ends its check before any path is resolved, because this runs on every docs and config edit.
+# - Paths outside the provider project, skipped directories and opted-out owners are irrelevant, so none is printed.
+# - A path counts as inside when its lexical or its physical form is, so a symlinked name cannot hide missed source.
+unattributed_source_paths() {
+  local root="$1" named_paths="$2"
+  local lexical_boundary="" physical_boundary="" is_boundary_resolved=0
+  local file_path lexical_path physical_path base relative
+  local reported=$'\n'
+  while IFS= read -r file_path; do
+    # Blank provider fields cannot name a file the user edited.
+    [[ -n "$file_path" ]] || continue
+    variant_for_path "$file_path" >/dev/null || continue
+    [[ -n "$lexical_boundary" ]] || lexical_boundary="$(lexical_absolute_path "$root" "${CLAUDE_PROJECT_DIR:-$root}")"
+    lexical_path="$(lexical_absolute_path "$root" "$file_path")"
+    if path_is_beneath "$lexical_path" "$lexical_boundary"; then
+      base="$lexical_boundary"
+      relative="${lexical_path#"${lexical_boundary%/}"/}"
+    else
+      # The physical forms are resolved only for a name that reads as outside, and the boundary only once.
+      if [[ "$is_boundary_resolved" -eq 0 ]]; then
+        physical_boundary="$(cd "$lexical_boundary" 2>/dev/null && pwd -P)" || physical_boundary=""
+        is_boundary_resolved=1
+      fi
+      physical_path="$(physical_existing_path "$lexical_path")" || physical_path=""
+      # Scratchpad, memory and other files outside the provider project are never Gruff's work.
+      if [[ -z "$physical_boundary" ]] || ! path_is_beneath "$physical_path" "$physical_boundary"; then
+        continue
+      fi
+      base="$physical_boundary"
+      relative="${physical_path#"${physical_boundary%/}"/}"
+    fi
+    supported_candidate_path "$relative" || continue
+    owner_opted_out "$base" "$relative" && continue
+    # Two spellings of one file are one missed file.
+    [[ "$reported" == *$'\n'"$lexical_path"$'\n'* ]] && continue
+    reported+="$lexical_path"$'\n'
+    printf '%s\n' "$lexical_path"
+  done <<< "$named_paths"
+}
+
 # Read the repo-owned analyzer override for one binary from
 # `.goat-flow/config.yaml` (`hooks.gruff-code-quality.binaries.<lang>`). Prints
 # the raw configured value, or nothing when the config or key is absent. The
@@ -2516,8 +2590,8 @@ main() {
   local migrated_result_mode started_seconds duration_ms changed_paths git_status
   local attempted_units completed_units skipped_units coverage_status
   local best_priority best_outcome best_reason findings_json verified_exchange verified_binary
-  local diagnostic_path
-  local -a file_paths
+  local diagnostic_path unattributed_paths
+  local -a file_paths unattributed_files
   # Bare and explicit smoke forms give users the same safe installation check.
   if [[ "$#" -eq 1 && ( "$1" == "--self-test" || "$1" == "--self-test=smoke" ) ]]; then
     self_test
@@ -2573,12 +2647,25 @@ main() {
   # Provider-declared source paths are the narrowest trustworthy edit scope.
   if [[ -n "$payload_paths" ]]; then
     mapfile -t file_paths <<< "$payload_paths"
-  # A named non-source path must not fall back to unrelated dirty source files.
+  # Named paths with no analysable source never fall back to unrelated dirty source files.
+  # Irrelevant edits get the silent zero-unit result; project source this install could not reach stays visible.
   elif [[ -n "$all_payload_paths" ]]; then
     if [[ "$migrated_result_mode" -eq 1 ]]; then
+      unattributed_paths="$(unattributed_source_paths "$root" "$all_payload_paths")"
       duration_ms=$(( (SECONDS - started_seconds) * 1000 ))
-      emit_hook_result "advisory" "complete" 0 0 0 "findings-reported" \
-        '[{"code":"analysis-not-applicable","message":"The completed edit did not target a supported Gruff source file","target":"project"}]' "$duration_ms"
+      if [[ -z "$unattributed_paths" ]]; then
+        emit_hook_result "pass" "complete" 0 0 0 "completed-clean" '[]' "$duration_ms"
+        exit 0
+      fi
+      mapfile -t unattributed_files <<< "$unattributed_paths"
+      findings_json='[]'
+      # Without jq the emitter prints its fixed parser-missing result and ignores these findings.
+      if command -v jq >/dev/null 2>&1; then
+        findings_json="$(printf '%s\n' "${unattributed_files[@]}" | jq -cRn '[inputs | {code: "edited-path-outside-project",
+          message: "The edited source file is outside the selected project, so Gruff did not analyse it", target: .}] | .[:20]')"
+      fi
+      emit_hook_result "incomplete" "none" "${#unattributed_files[@]}" 0 "${#unattributed_files[@]}" \
+        "coverage-incomplete" "$findings_json" "$duration_ms"
     fi
     exit 0
   else

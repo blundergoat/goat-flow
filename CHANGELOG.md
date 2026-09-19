@@ -15,6 +15,9 @@
 - **Current Gruff analyzers are read through their own protocol** - Analyzers that advertise `gruff.hook.v2` now report findings, warnings and failures directly instead of falling back to `gruff analyse`; older analyzers keep working.
 - **A Gruff analyzer that cannot run says why** - A refused config, an unreadable file or a file the analyzer skipped is reported with the analyzer's own reason, not as malformed output or a clean result.
 - **Whole-file edits no longer fail on older Gruff analyzers** - The hook asks for `file` scope only when the analyzer lists it, and analyzer warnings on stderr no longer break its JSON result.
+- **Gruff stays quiet about edits it has no work for** - Docs, skipped folders, opted-out nested projects and files outside the session's project no longer get an `analysis-not-applicable` notice; deleted, renamed, binary and ignored source files keep theirs.
+- **Source that Gruff could not reach is reported** - A source file inside the session's project but outside the selected install now reports `edited-path-outside-project` as incomplete coverage, not as not applicable.
+- **`hooks verify` expects a quiet non-source edit** - The Gruff `non-source-edit` scenario passes only on a quiet result, and the source scenario fails on a quiet one.
 
 ## v1.17.0 - 2026-09-05
 

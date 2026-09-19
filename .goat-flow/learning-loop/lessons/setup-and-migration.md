@@ -91,7 +91,7 @@ last_reviewed: 2026-09-19
 ## Lesson: Removing a concept requires full-repo grep, not just code grep
 
 **Status:** active | **Created:** 2026-03-22
-**Incident count:** 2 | **Latest occurrence:** 2026-08-15
+**Incident count:** 3 | **Latest occurrence:** 2026-09-19
 
 **Prevention:** After removing or renaming a concept, search the entire tracked repository with `git grep -l` rather than a curated directory list, then run both `stats --check` and the harness audit, because they cover different surfaces and neither validates search anchors inside ADRs.
 
@@ -100,6 +100,8 @@ last_reviewed: 2026-09-19
 **Root cause:** A curated grep list encodes where the author expects the concept to live, while a removed concept survives exactly where nobody expected it.
 
 **Recurrence 2026-08-15:** Consolidating 48 ADRs to 24 used a hand-enumerated target list that omitted `.goat-flow/glossary.md`, leaving its Instruction Budget row pointing at a deleted ADR. `stats --check` passed throughout because its anchor validation covers footgun, lesson, and pattern buckets only; the harness audit's `doc-paths-resolve` check caught it at 157 of 158 resolved. `.goat-flow/learning-loop/footguns/docs-drift.md` (search: `The audit validates structure`).
+
+**Recurrence 2026-09-19:** Changing what the Gruff `hooks verify` scenarios accept left a stale sentence in `docs/cli.md` (search: `a non-source edit that must stay quiet`), which still listed `clean` as an accepted source result. The search before handoff covered a hand-picked directory list and the old advisory's literal strings, so prose that described the behaviour in other words was never matched. A requested second check found it with `git grep` for the scenario's subject words across every tracked file.
 
 ---
 

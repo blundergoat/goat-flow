@@ -61,7 +61,7 @@ export type HookRuntimeReasonCode =
 
 /** Expected user-visible outcome declared by one fixed offline scenario. */
 export type HookProbeExpected =
-  "blocked" | "allowed" | "typed-result" | "incomplete" | "advisory";
+  "blocked" | "allowed" | "typed-result" | "incomplete" | "clean";
 /** Observed bounded outcome after a managed command returns. */
 export type HookProbeObserved =
   | "blocked"
@@ -389,24 +389,25 @@ const GRUFF_HOOK_SCENARIOS: readonly ConfiguredHookScenario[] = [
   },
   {
     id: HOOK_VERIFICATION_CONTRACTS["gruff-hook"].requiredScenarioIds[1],
-    label: "A non-source edit produces explicit not-applicable feedback",
-    expected: "advisory",
+    label: "A non-source edit completes quietly with no feedback",
+    expected: "clean",
     payload: JSON.stringify({
       tool_name: "Edit",
       tool_input: { file_path: "README.md" },
     }),
-    acceptedObservations: ["finding"],
+    acceptedObservations: ["clean"],
   },
   {
     id: HOOK_VERIFICATION_CONTRACTS["gruff-hook"].requiredScenarioIds[2],
-    label:
-      "A source edit reports its available, incomplete, or clean analyzer result",
+    label: "A source edit always gets a visible result; a quiet response fails",
     expected: "typed-result",
     payload: JSON.stringify({
       tool_name: "Edit",
       tool_input: { file_path: "goat-flow-hook-verify-missing.ts" },
     }),
-    acceptedObservations: ["clean", "finding", "incomplete", "unavailable"],
+    // The probe file does not exist. A working hook reports it as unavailable, incomplete or having no source lines left,
+    // so the only quiet response is a broken launch, and that must not pass as proof of analysis.
+    acceptedObservations: ["finding", "incomplete", "unavailable"],
   },
 ];
 

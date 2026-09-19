@@ -23,7 +23,7 @@ last_reviewed: 2026-09-05
 **Decision changed:** Measure whole-file ESLint and gruff immediately after the first parser GREEN, and pay for new branches by removing duplicate parsing rather than adding a late helper alone.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
-**Incident count:** 6 | **Latest occurrence:** 2026-09-05
+**Incident count:** 7 | **Latest occurrence:** 2026-09-19
 
 **Prevention:**
 1. Before extending a shared parser or dispatcher, measure its line and complexity headroom; near-threshold files need an extraction in the initial GREEN design.
@@ -44,6 +44,7 @@ last_reviewed: 2026-09-05
 - **Recurrence 2026-08-07:** Timing stamp validation passed 116 focused tests before ESLint rejected `parseStamp` at complexity 11. A helper extraction created five file-length warnings. Deriving UTC from the epoch inside `parseStamp`, folding regressions into existing cases, and preserving the `plans-time.ts` size cleared the gates without weakening invalid-calendar or rendered-heading checks.
 - **Recurrence 2026-09-01:** Playbook inventory tests passed before preflight rejected `driftSkillPlaybookInventory` at complexity 11. Extracting `describePlaybookInventoryProblems` preserved the exact-set cases and restored ESLint.
 - **Recurrence 2026-09-05:** Adding `--max-active` produced 1,015 substantive lines against the configured 1,000-line gate. Folding flag checks together still left 1,008 lines after formatting. Moving plan argument handling into `src/cli/cli-parser-plans.ts` (search: `validatePlansFlags`) cleared the size error without importing plan runtime into the parser.
+- **Recurrence 2026-09-19:** A test file hit the same gate twice in one milestone. Seven new hook cases took `test/integration/gruff-code-quality-contract.test.ts` to 1,002 substantive lines; shortening the case labels bought 14 lines, and two more tests then took it to 1,038. The cases moved to `test/integration/gruff-code-quality-quiet-feedback.test.ts` (search: `quiets edits outside the analysed scope`), which needed a second allowlist approval mid-milestone. Measure a test file's Gruff headroom before the first case is added, and plan the new file when the headroom is smaller than the planned cases.
 
 ---
 
