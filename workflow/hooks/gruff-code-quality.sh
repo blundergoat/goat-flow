@@ -331,6 +331,95 @@ analyzer_target_for_path() {
   done
 }
 
+# Find the nearest goat-flow install above an edited file, bounded by the entry root (ADR-066).
+# The owner supplies the saved Gruff choice and analyzer overrides; none of its scripts run from here.
+owner_install_root() {
+  local root="$1" rel_path="$2"
+  local candidate_rel_dir="${rel_path%/*}"
+  # A root-level file belongs to the entry install itself.
+  if [[ "$candidate_rel_dir" == "$rel_path" ]]; then
+    candidate_rel_dir="."
+  fi
+  while [[ "$candidate_rel_dir" != "." ]]; do
+    # A saved goat-flow config marks a nested project whose choices apply to the files beneath it.
+    if [[ -f "$root/$candidate_rel_dir/.goat-flow/config.yaml" ]]; then
+      printf '%s' "$root/$candidate_rel_dir"
+      return 0
+    fi
+    if [[ "$candidate_rel_dir" == */* ]]; then
+      candidate_rel_dir="${candidate_rel_dir%/*}"
+    else
+      candidate_rel_dir="."
+    fi
+  done
+  printf '%s' "$root"
+}
+
+# Read the owner's saved Gruff choice: prints `enabled`, `disabled`, or `invalid`.
+# An absent config or key keeps the default on. A config that cannot be read, or a value that is not a
+# YAML boolean, is `invalid` so a damaged file is never mistaken for an opt-out.
+owner_gruff_choice() {
+  local owner_root="$1"
+  local config_file="$owner_root/.goat-flow/config.yaml"
+  local value
+  [[ -f "$config_file" ]] || { printf 'enabled'; return 0; }
+  [[ -r "$config_file" ]] || { printf 'invalid'; return 0; }
+  value="$(awk '
+    function inline_enabled(rest, body) {
+      # Compact configs may hold the choice in a one-line map on the hooks or hook row.
+      if (rest !~ /\{.*\}/) return ""
+      body = rest
+      if (depth == 1) {
+        if (!match(body, /gruff-code-quality[[:space:]]*:[[:space:]]*\{[^}]*\}/)) return ""
+        body = substr(body, RSTART, RLENGTH)
+      }
+      if (!match(body, /enabled[[:space:]]*:[[:space:]]*[^,}[:space:]]+/)) return ""
+      body = substr(body, RSTART, RLENGTH)
+      sub(/^enabled[[:space:]]*:[[:space:]]*/, "", body)
+      return body
+    }
+    BEGIN { want[1] = "hooks"; want[2] = "gruff-code-quality"; want[3] = "enabled"; depth = 0 }
+    {
+      sub(/\r$/, "")
+      trimmed = $0
+      sub(/^ */, "", trimmed)
+      if (trimmed == "" || trimmed ~ /^#/) next
+      ind = length($0) - length(trimmed)
+      while (depth > 0 && ind <= lvl[depth]) depth--
+      if (depth == 0 && ind != 0) next
+      if (trimmed !~ /^[A-Za-z0-9_-]+:( |$)/) next
+      key = trimmed
+      sub(/:.*$/, "", key)
+      if (key != want[depth + 1]) next
+      depth++
+      lvl[depth] = ind
+      rest = trimmed
+      sub(/^[A-Za-z0-9_-]+:[ ]*/, "", rest)
+      sub(/[[:space:]]+#.*$/, "", rest)
+      if (depth < 3) {
+        found = inline_enabled(rest)
+        if (found != "") { print found; exit }
+        next
+      }
+      print rest
+      exit
+    }
+  ' "$config_file" 2>/dev/null || true)"
+  value="${value%"${value##*[![:space:]]}"}"
+  case "$value" in
+    '') printf 'enabled' ;;
+    true|True|TRUE) printf 'enabled' ;;
+    false|False|FALSE) printf 'disabled' ;;
+    *) printf 'invalid' ;;
+  esac
+}
+
+# A file under an install that turned Gruff off is skipped, and no parent install analyses it (ADR-066).
+owner_opted_out() {
+  local root="$1" rel_path="$2"
+  [[ "$(owner_gruff_choice "$(owner_install_root "$root" "$rel_path")")" == "disabled" ]]
+}
+
 variant_for_path() {
   local file_path="$1"
   case "${file_path##*.}" in
@@ -395,8 +484,8 @@ git_changed_supported_paths() {
   fi
   combined_paths="${unstaged_paths}${unstaged_paths:+$'\n'}${staged_paths}${staged_paths:+$'\n'}${untracked_paths}"
   printf '%s\n' "$combined_paths" | while IFS= read -r rel_path; do
-    # Only supported source files can map to a Gruff analyzer.
-    if supported_candidate_path "$rel_path"; then
+    # Only supported source files whose owner keeps Gruff on can map to an analyzer.
+    if supported_candidate_path "$rel_path" && ! owner_opted_out "$root" "$rel_path"; then
       printf '%s\n' "$rel_path"
     fi
   done | awk 'length($0) && !seen[$0]++'
@@ -440,6 +529,8 @@ payload_supported_file_paths() {
       ""|.|..|../*|*/../*) continue ;;
     esac
     supported_candidate_path "$rel_path" || continue
+    # An owner that turned Gruff off keeps its files out of every install's analysis.
+    owner_opted_out "$normalized_root" "$rel_path" && continue
     printf '%s\n' "$rel_path"
   done | awk '!seen[$0]++'
 }
@@ -610,6 +701,7 @@ discover_binary() {
   local root="$1"
   local binary="$2"
   local target_root="${3:-$root}"
+  local owner_root="${4:-$root}"
   local candidate env_name override config_override resolved
   env_name="$(binary_env_name "$binary")"
   override="${!env_name:-}"
@@ -619,11 +711,12 @@ discover_binary() {
     fi
     return 0
   fi
-  config_override="$(config_binary_override "$root" "$binary")"
+  # The install that owns the edited file names its analyzer; containment is judged against that owner (ADR-066).
+  config_override="$(config_binary_override "$owner_root" "$binary")"
   if [[ -n "$config_override" ]]; then
-    resolved="$(resolve_config_binary "$root" "$config_override")"
+    resolved="$(resolve_config_binary "$owner_root" "$config_override")"
     if [[ -n "$resolved" && -f "$resolved" && -x "$resolved" ]] && \
-      configured_binary_is_contained "$root" "$resolved"; then
+      configured_binary_is_contained "$owner_root" "$resolved"; then
       printf '%s' "$resolved"
     fi
     return 0
@@ -633,6 +726,10 @@ discover_binary() {
     "$target_root/node_modules/.bin/$binary" \
     "$target_root/bin/$binary" \
     "$target_root/.venv/bin/$binary" \
+    "$owner_root/vendor/bin/$binary" \
+    "$owner_root/node_modules/.bin/$binary" \
+    "$owner_root/bin/$binary" \
+    "$owner_root/.venv/bin/$binary" \
     "$root/vendor/bin/$binary" \
     "$root/node_modules/.bin/$binary" \
     "$root/bin/$binary" \
@@ -862,6 +959,40 @@ git_diff_ranges() {
   return 11
 }
 
+# Derive changed lines from the repository that contains the edited file, not from the entry root (ADR-066).
+# Status 13 prints whole-file ranges when no repository contains the file. Any `.git` entry above the
+# file means a repository exists, so a failed lookup there stays a Git failure (12), never whole-file scope.
+file_scope_ranges() {
+  local abs_path="$1" allow_cached_fallback="${2:-1}"
+  local file_dir search_dir git_root git_prefix ranges
+  file_dir="${abs_path%/*}"
+  # A deleted file may leave no directory; the nearest existing ancestor still identifies its repository.
+  while [[ ! -d "$file_dir" && "$file_dir" == */* && -n "${file_dir%/*}" ]]; do
+    file_dir="${file_dir%/*}"
+  done
+  if git_root="$(GIT_CONFIG_NOSYSTEM=1 git -C "$file_dir" rev-parse --show-toplevel 2>/dev/null)" && [[ -n "$git_root" ]]; then
+    # The prefix is relative to the repository Git resolved, so symlinked roots cannot skew the pathspec.
+    git_prefix="$(GIT_CONFIG_NOSYSTEM=1 git -C "$file_dir" rev-parse --show-prefix 2>/dev/null)" || return 12
+    git_diff_ranges "$git_root" "${git_prefix}${abs_path#"$file_dir"/}" "$abs_path" "$allow_cached_fallback"
+    return $?
+  fi
+  search_dir="$file_dir"
+  while [[ -n "$search_dir" ]]; do
+    # A gitfile or a directory with a HEAD is a repository Git could not open: a Git failure, not proof of absence.
+    # An empty stray `.git` directory is not a repository to Git either, so it does not count.
+    if [[ -f "$search_dir/.git" || -e "$search_dir/.git/HEAD" ]]; then
+      return 12
+    fi
+    search_dir="${search_dir%/*}"
+  done
+  # A missing file has no remaining content to analyse.
+  [[ -f "$abs_path" ]] || return 10
+  ranges="$(all_file_range "$abs_path")"
+  [[ -n "$ranges" ]] || return 10
+  printf '%s' "$ranges"
+  return 13
+}
+
 changed_ranges() {
   local payload="$1"
   local root="$2"
@@ -904,7 +1035,7 @@ changed_ranges() {
       return 0
     fi
   fi
-  git_diff_ranges "$root" "$rel_path" "$abs_path" "$allow_cached_fallback"
+  file_scope_ranges "$abs_path" "$allow_cached_fallback"
 }
 
 self_test() {
@@ -1809,6 +1940,11 @@ process_file() {
   ranges="$(changed_ranges "$payload" "$root" "$rel_path" "$abs_path" "$file_count" "$allow_cached_fallback")"
   range_status=$?
   set -e
+  # No repository contains this file, so the whole file is the honest scope and the operator is told so.
+  if [[ "$range_status" -eq 13 ]]; then
+    printf 'gruff-code-quality: %s is in no Git repository; analysing the whole file\n' "$rel_path" >&2
+    range_status=0
+  fi
   # Legacy launches keep their established fail-soft skip for every unavailable range state.
   if [[ "$range_status" -ne 0 || -z "$ranges" ]]; then
     printf 'gruff-code-quality: no changed lines detected for %s; skipping gruff output\n' "$rel_path" >&2
@@ -1950,7 +2086,7 @@ process_file_result() {
   local target_root target_rel_path config_file binary_path ranges range_status
   local hook_caps help output status uses_native_regions changed_scope
   local config_error ignored_desc report_json floor_rank max_findings
-  local config_binary config_key resolved_binary
+  local config_binary config_key resolved_binary owner_root
 
   reset_file_result
 
@@ -1978,6 +2114,14 @@ process_file_result() {
   fi
   FILE_RESULT_BINARY="$binary"
 
+  owner_root="$(owner_install_root "$root" "$rel_path")"
+  # A damaged owner config cannot say whether this project opted out, so the file is reported instead of guessed.
+  if [[ "$(owner_gruff_choice "$owner_root")" == "invalid" ]]; then
+    record_file_result 80 "unavailable" "hook-unavailable" "owner-config-invalid" \
+      "hooks.gruff-code-quality.enabled in ${owner_root#"$root"/}/.goat-flow/config.yaml is unreadable or not true/false" "$rel_path" 0 0
+    return 0
+  fi
+
   set +e
   target_details="$(analyzer_target_for_path "$root" "$rel_path" "$binary")"
   target_status=$?
@@ -1996,14 +2140,14 @@ process_file_result() {
   fi
   IFS=$'\t' read -r target_root target_rel_path config_file <<< "$target_details"
 
-  binary_path="$(discover_binary "$root" "$binary" "$target_root")"
+  binary_path="$(discover_binary "$root" "$binary" "$target_root" "$owner_root")"
   # A configured file without an executable analyzer is an unavailable check.
   if [[ -z "$binary_path" ]]; then
-    config_binary="$(config_binary_override "$root" "$binary")"
+    config_binary="$(config_binary_override "$owner_root" "$binary")"
     config_key="hooks.gruff-code-quality.binaries.${binary#gruff-}"
-    resolved_binary="$(resolve_config_binary "$root" "$config_binary")"
+    resolved_binary="$(resolve_config_binary "$owner_root" "$config_binary")"
     if [[ -n "$config_binary" && -n "$resolved_binary" && -e "$resolved_binary" ]] && \
-      ! configured_binary_is_contained "$root" "$resolved_binary"; then
+      ! configured_binary_is_contained "$owner_root" "$resolved_binary"; then
       record_file_result 80 "unavailable" "hook-unavailable" "analyzer-binary-outside-project" \
         "$config_key resolves outside the repository" "$rel_path" 0 0
     else
@@ -2023,6 +2167,11 @@ process_file_result() {
   ranges="$(changed_ranges "$payload" "$root" "$rel_path" "$abs_path" "$file_count" "$allow_cached_fallback")"
   range_status=$?
   set -e
+  # No repository contains this file, so the whole file is the honest scope and the operator is told so.
+  if [[ "$range_status" -eq 13 ]]; then
+    printf 'gruff-code-quality: %s is in no Git repository; analysing the whole file\n' "$rel_path" >&2
+    range_status=0
+  fi
   # A deletion or binary-only edit leaves no source lines for after-edit analysis.
   if [[ "$range_status" -eq 10 ]]; then
     record_file_result 20 "advisory" "findings-reported" "analysis-not-applicable" \

@@ -1,6 +1,6 @@
 ---
 category: agent-evidence-claims
-last_reviewed: 2026-09-18
+last_reviewed: 2026-09-19
 ---
 
 **Scope:** What counts as citable evidence - mechanism claims need a read source, absence and exact-count claims need untruncated searches, gitignored paths are never durable anchors, and final verification gates need supported scopes with captured logs. Reading the request and retrieving memory is [agent-behavior.md](agent-behavior.md); using tools and the environment is [agent-tooling.md](agent-tooling.md); skill-trial evidence is [skill-trial-evidence.md](skill-trial-evidence.md).
@@ -221,3 +221,18 @@ The recurring failure is crediting a sampled or truncated capture as complete. T
 
 
 **Recurrence 2026-09-18:** Quality follow-up M07 retained the accepted-risk and unavailable-tool rules in goat-security Phases 5/6, but removed the Constraints sentence cited by a lesson. All 240 skill contracts passed; `stats --check` then reported a stale reference. Rule equivalence did not preserve citation identity. Evidence: `.goat-flow/learning-loop/lessons/agent-behavior.md` (search: `A written repair list is a diagnosis, not a proof`) cites `workflow/skills/goat-security/SKILL.md` (search: `MUST NOT let accepted risk`). Preserve that anchor in the smaller proposed cut; validate learning references before declaring a trim complete.
+
+---
+
+## Lesson: An approval request's file list is a claim about the generator it changes
+
+**Status:** active | **Created:** 2026-09-19
+**Decision changed:** Before asking the user to approve a change to generated hook registrations, read the generator and its freeze comments, then list only the providers and files the change can legally reach.
+**Trigger phase:** SCOPE
+**Caught at:** ACT
+
+**Prevention:** A decision record and an allowlist sent for approval describe what the code will do. Read the function that emits the bytes before writing either. For hook registrations, check which providers ADR-052 and ADR-053 freeze, and confirm the reach with the generated contract diff, not with the template file names. Evidence anchors: `src/cli/server/agent-hook-command.ts` (search: `ADR-052 freezes deferred provider registrations`), `src/cli/server/agent-hook-command.ts` (search: `provider-project-first`), `.goat-flow/learning-loop/decisions/ADR-066-gruff-edit-scope-from-edited-file.md` (search: `narrowed to Claude's registration`).
+
+**What happened:** A milestone drafted ADR-066 and asked the user to approve a wider allowlist. Both said the Gruff launcher change would alter every provider's registration, four agent-config templates and three installed agent configs. The user approved. Implementation then reached the generator, whose comment says ADR-052 freezes the Codex, Copilot and Antigravity registrations byte for byte. The change was narrowed to Claude's structured bootstrap, ADR-066 was corrected after acceptance, and the generated contract diff showed three changed rows, all Claude's Gruff handlers. The template named in the request holds no Gruff row at all.
+
+**Root cause:** The request was written from the measured incident and the file names that mention the bootstrap, without reading the generator that owns those bytes. The accepted decisions that constrain it were found only while editing.

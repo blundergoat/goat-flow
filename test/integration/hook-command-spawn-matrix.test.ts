@@ -97,9 +97,7 @@ function createRegisteredHostileProject(
   );
   disposableParents.push(disposableParent);
   const projectRoot = join(disposableParent, "goat's flow & (matrix) [m03]");
-  mkdirSync(join(projectRoot, ".goat-flow", "hooks", "deny-dangerous"), {
-    recursive: true,
-  });
+  mkdirSync(projectRoot, { recursive: true });
   // Create the chosen provider's marker so hook setup registers the handlers that this consumer would receive.
   if (agentId === "claude") {
     mkdirSync(join(projectRoot, ".claude"), { recursive: true });
@@ -111,8 +109,32 @@ function createRegisteredHostileProject(
   // A fake secret proves the block response without ever exposing real content.
   writeFileSync(join(projectRoot, ".env"), `${ENV_CANARY}\n`);
   execFileSync("git", ["init", "-q", projectRoot]);
+  installShippedHookFiles(projectRoot);
 
-  // Ship the exact repository hook bytes so the replay covers real launch code.
+  // Register through the public writer so the fixture rows equal user rows.
+  for (const hookId of [
+    "deny-dangerous",
+    "deny-git-mutations",
+    "gruff-code-quality",
+    "post-turn-safety",
+  ]) {
+    const hookSpec = getHookSpec(hookId);
+    assert.ok(hookSpec);
+    writeAgentHookState(projectRoot, PROFILES[agentId], hookSpec, true);
+  }
+  return projectRoot;
+}
+
+/**
+ * Copies the exact repository hook bytes into one project so replays cover real launch code.
+ * It writes the managed hook files only; registration stays with the caller.
+ *
+ * @param projectRoot - existing project directory that receives `.goat-flow/hooks`
+ */
+function installShippedHookFiles(projectRoot: string): void {
+  mkdirSync(join(projectRoot, ".goat-flow", "hooks", "deny-dangerous"), {
+    recursive: true,
+  });
   for (const sharedHookFile of SHARED_HOOK_FILES) {
     const installedPath = join(
       projectRoot,
@@ -137,19 +159,6 @@ function createRegisteredHostileProject(
       ),
     );
   }
-
-  // Register through the public writer so the fixture rows equal user rows.
-  for (const hookId of [
-    "deny-dangerous",
-    "deny-git-mutations",
-    "gruff-code-quality",
-    "post-turn-safety",
-  ]) {
-    const hookSpec = getHookSpec(hookId);
-    assert.ok(hookSpec);
-    writeAgentHookState(projectRoot, PROFILES[agentId], hookSpec, true);
-  }
-  return projectRoot;
 }
 
 /**
@@ -256,6 +265,7 @@ function denyPayload(shellCommand: string): string {
  *
  * @param payload - hook input JSON delivered on stdin
  * @param cwd - working directory; defaults to the project root
+ * @param providerProjectDirectory - value Claude exports as CLAUDE_PROJECT_DIR; null models a provider that exports none
  *
  * @returns the finished handler process with captured streams
  */
@@ -264,12 +274,20 @@ function runRegisteredHandler(
   handler: RegisteredHandler,
   payload: string,
   cwd: string = projectRoot,
+  providerProjectDirectory: string | null = projectRoot,
 ): ReturnType<typeof spawnSync> {
   const selected = agentHookSpawnDescriptor({ form: "argv", ...handler });
+  // Pin the provider directory so a developer's own session variable never selects their real checkout.
+  const environment: NodeJS.ProcessEnv = { ...process.env };
+  delete environment.CLAUDE_PROJECT_DIR;
+  if (providerProjectDirectory !== null) {
+    environment.CLAUDE_PROJECT_DIR = providerProjectDirectory;
+  }
   // The public writer owns this executable and argv; fixture payloads reach stdin only.
   return spawnSync(selected.command, selected.args, {
     cwd,
     encoding: "utf8",
+    env: environment,
     input: payload,
     timeout: 60_000,
   });
@@ -940,5 +958,96 @@ describe("retained policy registrations", () => {
         }),
       );
     }
+  });
+});
+
+/** Source edit with no analyzer config: a stable Gruff result that proves which install answered. */
+const GRUFF_SOURCE_EDIT_PAYLOAD = JSON.stringify({
+  tool_name: "Edit",
+  tool_input: { file_path: "src/sample.ts" },
+});
+/** Stderr text printed only by the child install's substituted Gruff script. */
+const CHILD_RUNTIME_MARKER = "child Gruff runtime ran";
+
+/**
+ * Builds a registered parent project holding one nested child repository, as measured in a consumer workspace.
+ * It writes temporary trees: the child gets the shipped hook files, and only a `registered` child also registers Gruff.
+ *
+ * @param childRegistration - `disabled` leaves script copies without a registration; `registered` adds a marker runtime
+ * @returns parent root and child root
+ */
+function createParentWithChildInstall(
+  childRegistration: "disabled" | "registered",
+): { parentRoot: string; childRoot: string } {
+  const parentRoot = createRegisteredHostileProject();
+  mkdirSync(join(parentRoot, "src"));
+  writeFileSync(join(parentRoot, "src", "sample.ts"), "export {};\n");
+  const childRoot = join(parentRoot, "child");
+  mkdirSync(join(childRoot, ".claude"), { recursive: true });
+  writeFileSync(join(childRoot, ".claude", "settings.json"), "{}\n");
+  execFileSync("git", ["init", "-q", childRoot]);
+  installShippedHookFiles(childRoot);
+  // A registered child models a sibling install whose older runtime must not answer for the parent's session.
+  if (childRegistration === "registered") {
+    const gruffSpec = getHookSpec("gruff-code-quality");
+    assert.ok(gruffSpec);
+    writeAgentHookState(childRoot, PROFILES.claude, gruffSpec, true);
+    writeFileSync(
+      join(childRoot, ".goat-flow", "hooks", "gruff-code-quality.sh"),
+      `#!/usr/bin/env bash\nprintf '${CHILD_RUNTIME_MARKER}\\n' >&2\n`,
+    );
+  }
+  return { parentRoot, childRoot };
+}
+
+describe("Gruff entry selection ignores the shell working directory", () => {
+  // Incident: a child install with Gruff disabled stopped the parent's registration for unrelated edits.
+  for (const providerDirectory of ["exported", "absent"] as const) {
+    it(`answers from the parent when the cwd is a Gruff-disabled child (provider directory ${providerDirectory})`, () => {
+      const { parentRoot, childRoot } =
+        createParentWithChildInstall("disabled");
+      const result = runRegisteredHandler(
+        parentRoot,
+        registeredHandler(parentRoot, "PostToolUse"),
+        GRUFF_SOURCE_EDIT_PAYLOAD,
+        childRoot,
+        providerDirectory === "exported" ? parentRoot : null,
+      );
+      assert.equal(result.status, 0, handlerDiagnostics(result));
+      assert.doesNotMatch(String(result.stderr), /managed root incomplete/u);
+      assert.match(String(result.stdout), /analyzer-config-missing/u);
+    });
+  }
+
+  it("runs the provider project's runtime when the cwd is a child with its own Gruff registration", () => {
+    const { parentRoot, childRoot } =
+      createParentWithChildInstall("registered");
+    const result = runRegisteredHandler(
+      parentRoot,
+      registeredHandler(parentRoot, "PostToolUse"),
+      GRUFF_SOURCE_EDIT_PAYLOAD,
+      childRoot,
+    );
+    assert.equal(result.status, 0, handlerDiagnostics(result));
+    assert.doesNotMatch(
+      String(result.stderr),
+      new RegExp(CHILD_RUNTIME_MARKER, "u"),
+    );
+    assert.match(String(result.stdout), /analyzer-config-missing/u);
+  });
+
+  it("keeps the fail-closed corrupt classification for policy hooks in the same child", () => {
+    const { parentRoot, childRoot } = createParentWithChildInstall("disabled");
+    const blocked = runRegisteredHandler(
+      parentRoot,
+      registeredHandler(parentRoot, "PreToolUse"),
+      denyPayload("git status"),
+      childRoot,
+    );
+    assert.equal(blocked.status, 2, handlerDiagnostics(blocked));
+    assert.match(
+      String(blocked.stderr),
+      /BLOCKED: Policy hook unavailable: deny-dangerous\.sh: managed root incomplete\./u,
+    );
   });
 });

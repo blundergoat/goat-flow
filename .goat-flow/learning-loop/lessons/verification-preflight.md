@@ -183,3 +183,17 @@ last_reviewed: 2026-09-19
 **Recurrence 2026-08-17:** An M43 verification search again placed Markdown backticks inside a double-quoted `rg` argument; a single-quoted plain search expressed the same read-only query safely.
 **Recurrence 2026-08-23:** Checking whether revised source comments were cited by learning-loop entries, an `rg` pattern put Markdown backticks inside double-quoted shell text; the hook stopped it before execution and removing the syntax-significant quoting produced the intended read-only search.
 **Recurrence 2026-08-28:** A read-only search for the Knip lesson copied its Markdown-formatted `ignore` token into a double-quoted `rg` argument; PreToolUse blocked it before any nested execution or file change, and a single-quoted substitution-free search returned the intended entry.
+
+---
+
+## Lesson: Regenerate the learning-loop index after the last entry edit, not the first
+
+**Status:** active | **Created:** 2026-09-19
+**Decision changed:** Run `goat-flow index` and `stats --check` as the final step after any edit to an ADR, lesson, footgun or pattern, immediately before preflight.
+**Trigger phase:** VERIFY
+
+**Prevention:** The generated index carries text from each entry, so a later wording change makes it stale even when no entry was added or removed. Treat every edit to an entry as invalidating the index, and rerun both commands before the release gate.
+
+**What happened:** A milestone created ADR-066, regenerated the decisions index and saw `stats --check` pass. It later narrowed the ADR's text without regenerating. Preflight then failed its Learning-loop schema row with `index-stale` for `.goat-flow/learning-loop/decisions/INDEX.md`, 185 seconds into the run. Regenerating the index fixed it, and the second preflight passed.
+
+**Root cause:** The index was treated as tied to entry creation. It is tied to entry content.

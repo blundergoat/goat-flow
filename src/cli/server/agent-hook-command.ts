@@ -150,9 +150,40 @@ const STRUCTURED_REGISTRATION_RECOGNITION_FRAGMENTS = [
  * complete managed roots.
  * Use after a registration recognizer is defined; both bootstraps must select identical roots.
  *
+ * ADR-066 exception: Claude's Gruff handler passes `provider-project-first`, so the provider project directory is inspected before the shell cwd
+ * and a folder holding only a script copy (a child that disabled Gruff) is passed over. Every other handler keeps the ADR-053 order byte for byte.
+ *
+ * @param rootRule - `shared` for the ADR-053 contract; `provider-project-first` for Claude's Gruff handler
  * @returns ordered source fragments ending with the validated launcher path; never empty
  */
-function rootDiscoveryFragments(): string[] {
+function rootDiscoveryFragments(
+  rootRule: "shared" | "provider-project-first" = "shared",
+): string[] {
+  const providerRootStep =
+    "if(selected.state!=='complete'&&rootEnvironmentName!=='-'&&process.env[rootEnvironmentName]){const inspected=inspectOnce(process.env[rootEnvironmentName]);if(inspected.state==='corrupt')reportUnavailable('managed root incomplete');if(inspected.state==='complete')selected=inspected;}";
+  // Gruff's entry must not follow `cd`: a registration decides relevance, and the provider project is tried before the cwd's Git root.
+  if (rootRule === "provider-project-first") {
+    return rootDiscoveryFragments()
+      .map((fragment) =>
+        fragment.replace(
+          "const relevant=scriptSeen||registered;",
+          "const relevant=registered;",
+        ),
+      )
+      .flatMap((fragment) => {
+        if (fragment.startsWith("const gitRootLookup=")) return [];
+        if (fragment === providerRootStep) return [];
+        if (fragment === "let selected={state:'none',root:''};") {
+          return [fragment, providerRootStep];
+        }
+        if (fragment.startsWith("if(gitRootLookup.status===0")) {
+          return [
+            "if(selected.state!=='complete'){const gitRootLookup=childProcess.spawnSync('git',['rev-parse','--show-toplevel'],{encoding:'utf8'});if(gitRootLookup.status===0&&gitRootLookup.stdout.trim()){const inspected=inspectOnce(gitRootLookup.stdout.trim());if(inspected.state==='corrupt')reportUnavailable('managed root incomplete');if(inspected.state==='complete')selected=inspected;}}",
+          ];
+        }
+        return [fragment];
+      });
+  }
   return [
     "const realDirectory=(candidate)=>{try{const absolute=path.resolve(candidate);const entry=filesystem.lstatSync(absolute);if(entry.isSymbolicLink()||!entry.isDirectory())return '';const real=filesystem.realpathSync(absolute);return filesystem.lstatSync(real).isDirectory()?real:'';}catch{return '';}};",
     "const containedRelativePath=(relativePath)=>{if(!relativePath||path.isAbsolute(relativePath))return '';const normalized=path.normalize(relativePath);return normalized==='..'||normalized.startsWith('..'+path.sep)?'':normalized;};",
@@ -166,7 +197,7 @@ function rootDiscoveryFragments(): string[] {
     "if(gitRootLookup.status===0&&gitRootLookup.stdout.trim()){selected=inspectOnce(gitRootLookup.stdout.trim());if(selected.state==='corrupt')reportUnavailable('managed root incomplete');}",
     "let ancestor=realDirectory(process.cwd());",
     "while(selected.state!=='complete'&&ancestor){const inspected=inspectOnce(ancestor);if(inspected.state==='corrupt')reportUnavailable('managed root incomplete');if(inspected.state==='complete'){selected=inspected;break;}const parent=path.dirname(ancestor);if(parent===ancestor)break;ancestor=parent;}",
-    "if(selected.state!=='complete'&&rootEnvironmentName!=='-'&&process.env[rootEnvironmentName]){const inspected=inspectOnce(process.env[rootEnvironmentName]);if(inspected.state==='corrupt')reportUnavailable('managed root incomplete');if(inspected.state==='complete')selected=inspected;}",
+    providerRootStep,
     "if(selected.state!=='complete')reportUnavailable('managed root unavailable');",
     "const projectRoot=selected.root;",
     "const bashLauncherPath=path.join(projectRoot,containedRelativePath(bashLauncherRelativePath));",
@@ -224,10 +255,18 @@ function hookLaunchBootstrap(hookResponseMode: string): string {
 function structuredHookLaunchBootstrap(hookResponseMode: string): string {
   const unavailableResponseProgram =
     unavailableHookResponseProgram(hookResponseMode);
+  // Only the Gruff edit hook resolves its entry from the provider project (ADR-066); policy and Stop handlers keep the shared contract.
+  const responseModeParts = hookResponseMode.split(":");
+  const responseKind =
+    responseModeParts.length === HOOK_LAUNCH_MODE_PART_COUNT
+      ? responseModeParts[1]
+      : hookResponseMode;
+  const rootRule =
+    responseKind === "gruff" ? "provider-project-first" : "shared";
   return [
     ...bootstrapPreludeFragments(unavailableResponseProgram),
     ...STRUCTURED_REGISTRATION_RECOGNITION_FRAGMENTS,
-    ...rootDiscoveryFragments(),
+    ...rootDiscoveryFragments(rootRule),
     ...STRUCTURED_IMPORT_TAIL_FRAGMENTS,
   ].join("");
 }

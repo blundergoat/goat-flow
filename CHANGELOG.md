@@ -8,6 +8,10 @@
 - **Preflight shows why tests failed** - A failed Tests row now includes the first failure's assertion and error, capped at 30 lines of 200 bytes.
 - **Install refusals name their cause** - A symlinked `.goat-flow` is reported as unsafe, and a failed hook-policy read includes the reason.
 - **Toggling a hook no longer reorders provider files** - Disabling or enabling a policy keeps Claude, Copilot and Antigravity hook entries in place.
+- **Gruff feedback in Claude no longer depends on where the shell is** - After a `cd` into a nested project, edits elsewhere are still analysed by the install in the session's project; run `goat-flow hooks sync` once to pick this up.
+- **Gruff finds changed lines from the edited file's own Git repository** - Edits to child repositories under a folder that is not a repository no longer end in `git-scope-failed`.
+- **Gruff analyses files that belong to no Git repository** - The whole edited file is checked and the hook log says so; a Git failure inside a repository still reports `git-scope-failed`.
+- **A nested project's Gruff opt-out and analyzer overrides apply to its own files** - `hooks.gruff-code-quality.enabled: false` in a nested `.goat-flow/config.yaml` skips that project's files, and its `binaries` overrides are used for them.
 
 ## v1.17.0 - 2026-09-05
 

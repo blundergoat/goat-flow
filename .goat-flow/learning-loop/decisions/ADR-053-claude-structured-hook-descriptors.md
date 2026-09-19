@@ -4,6 +4,7 @@
 **Date:** 2026-08-13
 **Ticket/Context:** `.goat-flow/plans/1.17.0/M53-copilot-claude-hook-routing-decision.md`; `.goat-flow/plans/1.17.0/M54-copilot-claude-hook-routing-fix.md`
 **Updated:** 2026-09-05 - condensed; the deleted local spawn-matrix reproduction is replaced by the CI job that runs it. The 2026-08-22 amendment added Codex `commandWindows`; the 2026-08-25 amendment added Claude's inert Copilot routing fields.
+**Updated:** 2026-09-19 - ADR-066 changes root selection for the Gruff edit hook only; policy and Stop hooks keep this contract.
 
 ## Context
 
