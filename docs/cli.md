@@ -856,6 +856,33 @@ Both policy hooks default on. On upgrade, an explicit new Git-hook choice wins; 
 
 Hook self-tests remain the broad internal regression corpus. `hooks verify` proves fixed outcomes at this checkout's exact configured-command boundary. It does not launch the external coding agent, prove provider-side hook delivery or model visibility, promote a live-support state, or change the cost or semantics of `audit --harness`.
 
+#### Setting up Gruff feedback
+
+Gruff feedback is off after a fresh install. Turn it on, then replay its registered command:
+
+```bash
+npx @blundergoat/goat-flow@latest hooks enable gruff-code-quality
+npx @blundergoat/goat-flow@latest hooks verify . --agent claude --scenario gruff-hook --trusted-target
+```
+
+The replay proves the registered command answers. It does not prove an analyzer ran, because a clean analysis is silent. To see analysis, edit a source file that has a known finding and check that the finding comes back.
+
+For each edited file, the hook takes the nearest `.goat-flow/config.yaml` above the file as the owning install and the nearest `.gruff-<lang>.yaml` above the file as the analyzer config. The owning install's `hooks.gruff-code-quality.binaries.<lang>` names an analyzer outside the standard locations; the path is relative to that install and must stay inside it. Setting `enabled: false` there skips that project's files, and no parent project analyses them. A file in no Git repository is analysed whole.
+
+Only one install's hook runs for an edit, and it analyses only files beneath its own folder. Claude Code uses the install at the folder the session opened when that folder has one; other agents, and Claude otherwise, use the install found from the shell's working directory (its Git root, then the folders above it).
+
+In a workspace that holds several projects, open the session at the workspace root. Each project with its own install keeps its own choice and `binaries` entries. Folders without an install use the workspace root's, so name their analyzers there and give each package its own analyzer config. For example, when the root owns a package that holds TypeScript but no install, its root config names the TypeScript analyzer:
+
+```yaml
+hooks:
+  gruff-code-quality:
+    enabled: true
+    binaries:
+      ts: gruff-ts/bin/gruff-ts
+```
+
+Upgrade with `install --dry-run` first. `install` and `hooks sync` keep a saved `enabled: false` and saved `binaries` entries, and `hooks enable` keeps the `binaries` entries. The agent-facing detail, including what each hook result means, is in the installed playbook `.goat-flow/skill-docs/playbooks/gruff-code-quality.md` under "Edit Hook Feedback".
+
 #### Recovering an older policy installation
 
 Use the newer goat-flow package from a normal terminal or a separately running dashboard when the agent's own terminal is blocked.

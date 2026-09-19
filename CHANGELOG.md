@@ -18,6 +18,7 @@
 - **Gruff stays quiet about edits it has no work for** - Docs, skipped folders, opted-out nested projects and files outside the session's project no longer get an `analysis-not-applicable` notice; deleted, renamed, binary and ignored source files keep theirs.
 - **Source that Gruff could not reach is reported** - A source file inside the session's project but outside the selected install now reports `edited-path-outside-project` as incomplete coverage, not as not applicable.
 - **`hooks verify` expects a quiet non-source edit** - The Gruff `non-source-edit` scenario passes only on a quiet result, and the source scenario fails on a quiet one.
+- **Gruff feedback setup is documented for workspaces with several projects** - `docs/cli.md` and the Gruff playbook now say which install, analyzer config and executable answer for an edited file, what each hook result means, and how to check that analysis ran.
 
 ## v1.17.0 - 2026-09-05
 

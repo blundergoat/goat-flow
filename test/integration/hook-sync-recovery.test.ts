@@ -636,3 +636,74 @@ describe("hook sync migration and claim recovery", () => {
     });
   }
 });
+
+describe("saved Gruff choices across the supported upgrade", () => {
+  /**
+   * Runs one public CLI command against the disposable project, as a project owner upgrading from a terminal would.
+   * It spawns the repository's own CLI; every write stays inside the selected project.
+   *
+   * @param cliArguments - command words after `goat-flow`, including the project path
+   * @returns nothing; a failed command stops the test with the CLI's own output
+   */
+  function runPublicCli(cliArguments: string[]): void {
+    const run = spawnSync(
+      process.execPath,
+      [
+        "--import",
+        "tsx",
+        join(REPOSITORY_ROOT, "src/cli/cli.ts"),
+        ...cliArguments,
+      ],
+      { cwd: REPOSITORY_ROOT, encoding: "utf8", timeout: 120_000 },
+    );
+    assert.equal(run.status, 0, run.stderr || run.stdout);
+  }
+
+  // Writes a 1.16.0-shaped project whose owner turned Gruff off and named an analyzer, then upgrades it through the public CLI.
+  it("keeps a Gruff opt-out and its analyzer override through install, Sync and a later enable", (t) => {
+    const projectPath = fs.mkdtempSync(join(tmpdir(), "gruff-saved-choice-"));
+    t.after(() => fs.rmSync(projectPath, { recursive: true, force: true }));
+    fs.mkdirSync(join(projectPath, ".claude"));
+    fs.mkdirSync(join(projectPath, ".goat-flow"));
+    fs.writeFileSync(join(projectPath, ".claude/settings.json"), "{}\n");
+    const configPath = join(projectPath, ".goat-flow/config.yaml");
+    fs.writeFileSync(
+      configPath,
+      [
+        'version: "1.16.0"',
+        "hooks:",
+        "  deny-dangerous:",
+        "    enabled: true",
+        "  gruff-code-quality:",
+        "    enabled: false",
+        "    binaries:",
+        "      ts: tools/gruff-ts",
+        "",
+      ].join("\n"),
+    );
+    const savedGruffBlock =
+      /gruff-code-quality:\n {4}enabled: (true|false)\n {4}binaries:\n {6}ts: tools\/gruff-ts\n/u;
+    /**
+     * Counts how often Claude's settings name the Gruff script, so a kept opt-out shows as zero handlers.
+     *
+     * @returns the number of registered Gruff handlers; zero while the project keeps Gruff off
+     */
+    const gruffRegistrationCount = (): number =>
+      fs
+        .readFileSync(join(projectPath, ".claude/settings.json"), "utf8")
+        .split("gruff-code-quality.sh").length - 1;
+
+    runPublicCli(["install", projectPath, "--agent", "claude"]);
+    runPublicCli(["hooks", "sync", projectPath]);
+    const upgradedConfig = fs.readFileSync(configPath, "utf8");
+    // The install must have rewritten the saved version, so the choices below survived a real upgrade.
+    assert.match(upgradedConfig, /^version: "(?!1\.16\.0")[^"]+"$/mu);
+    assert.equal(savedGruffBlock.exec(upgradedConfig)?.[1], "false");
+    assert.equal(gruffRegistrationCount(), 0);
+
+    runPublicCli(["hooks", "enable", "gruff-code-quality", projectPath]);
+    const enabledConfig = fs.readFileSync(configPath, "utf8");
+    assert.equal(savedGruffBlock.exec(enabledConfig)?.[1], "true");
+    assert.ok(gruffRegistrationCount() > 0);
+  });
+});

@@ -51,7 +51,10 @@ For shell-context problems, distinguish the hook's launcher from the command bei
 ## Recovering an older installation
 
 On the newer dashboard's Hooks page, select the affected project and use **Sync official hooks** before changing an incompatible policy installation.
-Approve policy ownership and local-file replacement separately. If legacy state blocks Sync, stop and upgrade every writer, then run
+Approve policy ownership and local-file replacement separately.
+Before approving a replacement, compare each local policy file with the official one; `goat-flow install <project-path> --agent <id> --dry-run` lists locally edited files as `both-changed`.
+Replacement discards local edits, including a protection the official policy does not have.
+If legacy state blocks Sync, stop and upgrade every writer, then run
 `goat-flow install <project-path> --agent <id> --migrate-state-only` from a normal terminal before requesting a fresh review.
 The action moves bookkeeping only; it keeps hook files and policy choices unchanged and refuses unsafe state or outstanding claims.
 Complete any remaining install-file review separately, then change only the affected switch and retry a benign request.

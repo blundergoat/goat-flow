@@ -3,7 +3,7 @@ goat-flow-reference-version: "1.17.0"
 ---
 # Gruff Code Quality
 
-Use this when the user asks to run or fix findings from `gruff-go`, `gruff-rs`, `gruff-ts`, `gruff-php`, or `gruff-py`. Gruff is static analysis: it reports quality findings; it does not replace tests, typecheck, lint, or maintainer judgment.
+Use this when the user asks to run or fix findings from `gruff-go`, `gruff-rs`, `gruff-ts`, `gruff-php`, or `gruff-py`, or when goat-flow's Gruff edit hook returns a result after your edit (see Edit Hook Feedback). Gruff is static analysis: it reports quality findings; it does not replace tests, typecheck, lint, or maintainer judgment.
 
 You are a coding agent. Your job is to run the right gruff tool, fix one cohesive cluster, prove the finding changed with a targeted rerun, then run the normal project verification.
 
@@ -264,6 +264,27 @@ Before claiming gruff work is done:
 9. For a documentation pass, compare before/after identities and report any documentation-caused size finding, the untouched-compliant count, and every rename.
 10. For CONFIGURE or BASELINE, show the exact true-positive and known-good negative-control results.
 11. Report remaining findings by action category, not as "fixed".
+
+## Edit Hook Feedback
+
+When the project enables goat-flow's `gruff-code-quality` hook, the hook checks each source file you edit and returns a result after the edit. Read the result before continuing. Run gruff yourself only for work the result does not cover.
+
+| Result | Meaning | Action |
+|---|---|---|
+| No output | The edit named nothing to analyse (docs, a skipped directory, a file outside the session's project, a project that turned Gruff off), or analysis finished clean | Continue |
+| `ADVISORY` | Analysis finished with findings on the edited lines, the file or the project; or an `analysis-not-applicable` notice for a file that was deleted, renamed without changes, binary or ignored by config | Fix findings your edit caused and report the rest; a notice needs no action |
+| `INCOMPLETE` | Supported source was not fully analysed: a file outside the install that runs the hook (`edited-path-outside-project`), a Git failure, an analyzer timeout, output the hook could not read, or an analyzer that analysed nothing | Do not call the edit checked. Run the analyzer on that file directly, then report the gap |
+| `UNAVAILABLE` | The check could not run: no analyzer config (`analyzer-config-missing`), two configs in one folder, a config the analyzer refused (`analyzer-config-invalid`), no executable, an analyzer failure or protocol mismatch, an unreadable project choice, or a missing `jq` | Fix it when the message names project configuration inside your task; otherwise report it. Do not fetch or install tooling without approval |
+
+What decides the result for one edited file:
+
+- **Owning install:** the nearest folder above the file that holds `.goat-flow/config.yaml`. If its `hooks.gruff-code-quality.enabled` is `false`, the files beneath it are skipped and no parent project analyses them.
+- **Analyzer config:** the nearest `.gruff-<lang>.yaml` or `.yml` above the file. Give each package its own config when packages need different rules.
+- **Executable:** `GRUFF_<LANG>_BIN`, then the owning install's `binaries.<lang>` path, then `vendor/bin`, `node_modules/.bin`, `bin` and `.venv/bin` in the analyzer config's folder, the owning install and the install that runs the hook, in that order, then `~/.local/bin`, then `PATH` last. An override that is set but unusable never falls back to discovery: the result is `analyzer-binary-missing`, or `analyzer-binary-outside-project` when a `binaries` path leaves its install.
+- **Changed lines:** they come from the Git repository that contains the file. A file in no repository is analysed whole, and the hook log says so. A Git failure inside a repository is `INCOMPLETE`.
+- **Analyzer protocol:** the hook reads `gruff.hook.v2` and `gruff.hook.v1` analyzers through their own `hook` command, and older analyzers through `analyse --format json`. `analyzer-capability-unsupported` means the two do not match: if the message says the analyzer advertises a contract the hook cannot read, update goat-flow; if it says the analyzer has no JSON output, update the analyzer.
+
+One install's hook runs for each edit, and it analyses only files beneath its own folder. In Claude Code that is the install at the folder the session opened, when that folder has one; other agents, and Claude otherwise, use the install found from the shell's working directory (its Git root, then the folders above it). In a workspace that holds several projects, each file still takes its choice and `binaries` entries from its own owning install; files that no nested install owns use the choice and `binaries` entries of the install that runs the hook. A fresh install leaves this hook off: `goat-flow hooks enable gruff-code-quality` turns it on, and `goat-flow hooks verify . --agent <id> --scenario gruff-hook --trusted-target` replays it without a model.
 
 ## Troubleshooting
 

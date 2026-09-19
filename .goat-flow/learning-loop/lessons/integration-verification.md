@@ -1,6 +1,6 @@
 ---
 category: integration-verification
-last_reviewed: 2026-08-28
+last_reviewed: 2026-09-19
 ---
 
 **Scope:** Proof that separately-correct components still cooperate - manifest against installer, built against source-run server paths, helper ownership across splits, and API contracts beyond the happy path.
@@ -137,3 +137,18 @@ last_reviewed: 2026-08-28
 **Root cause:** I documented the fixture's scenario instead of the caller-visible filesystem effect. The helper name explained the test setup but not which local state it mutates.
 
 **Fix:** Expanded the original doc block to state that the helper reads and rewrites only the fixture's Codex baseline and why the next installer run needs that loaded state. Its v2 successor, `downgradeManagedStateToSevenCodexSkills`, preserves the contract by naming the contained `managed.json` rewrite and the next preview's invariant.
+
+---
+
+## Lesson: A slimmed copy of an install must keep every managed file, or the preview blames the target
+
+**Status:** active | **Created:** 2026-09-19
+**Decision changed:** Before trusting an install preview run against a reduced copy of a project, list the managed paths the copy left out and either copy them or discount exactly those rows.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** `install --dry-run` compares every manifest-owned path, including the README and `.gitignore` anchors inside folders that look like disposable local state. A copy that excludes those folders turns each anchor into a `missing` row with a `protect` action, and the verdict reads `blocked` for a reason the real project does not have. Exclude only contents, never the managed anchors: keep `logs/*/README.md`, `plans/README.md`, `plans/.gitignore`, `scratchpad/README.md` and `scratchpad/.gitignore`. Then check that a project known to be clean previews as unblocked before reading any other row. Evidence anchor: `docs/cli.md` (search: `Exact-copy`).
+
+**What happened:** A disposable replica of a multi-project workspace left out `logs`, `plans` and `scratchpad` to stay small. Every project's upgrade preview came back `blocked`, and the first summary mixed real local edits with rows the copy had caused. Two rebuilds were needed, first restoring the log READMEs and then the plans and scratchpad anchors, before two clean projects previewed as upgradable and the real conflicts stood alone.
+
+**Root cause:** The exclusion list was chosen by size and by what looked like throwaway state, without reading which paths the installer owns inside those folders.

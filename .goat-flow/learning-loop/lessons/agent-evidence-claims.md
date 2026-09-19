@@ -245,10 +245,12 @@ The recurring failure is crediting a sampled or truncated capture as complete. T
 **Decision changed:** Before writing which harness, model and effort ran a piece of work, search the session for the requester's model and effort commands and copy what their outputs say.
 **Trigger phase:** VERIFY
 **Caught at:** VERIFY
-**Incident count:** 2 | **Latest occurrence:** 2026-09-19
+**Incident count:** 3 | **Latest occurrence:** 2026-09-19
 
-**Prevention:** A slash command such as a model or effort change leaves its own output line in the conversation. Treat a run record as an evidence claim: find those lines, quote their values, and tie each change to the timing segment it fell in. Write "not observable" only for a setting that no command output mentions, and never write that a command was not seen without searching for it first.
+**Prevention:** Model and effort commands leave output lines in the conversation. Find them, quote their values, and tie each change to its timing segment. A harness notice naming a new model is the effect of such a command: look for the command just before it. Write "not observable" only for a setting no output mentions; never say a command was not seen without searching.
 
-**What happened:** One milestone closeout recorded effort xhigh and said the model switch was not seen, although the requester had set effort max and switched the model in visible commands. The next milestone's closeout corrected that record, then repeated the mistake in its own: it said no command was seen for a second model switch and kept effort max, while both the model command and a new effort command sat in the same turn. A requested second check caught it after handoff.
+**What happened:** One closeout recorded effort xhigh and an unseen model switch; the requester had set effort max and switched models in visible commands. The next closeout corrected it, then missed a second model switch and a new effort command in one turn. A requested second check caught it.
 
-**Root cause:** The record was written from the settings remembered from the start of the work. Mid-turn commands arrive between tool results, where they are easy to pass over, and nothing in the closeout routine searched for them.
+**Recurrence 2026-09-19:** The next milestone, written after this lesson, again claimed no command for a switch to Opus 5; its "Set model to Opus 5" output sat just before the notice the record cited. A second check caught it.
+
+**Root cause:** The record came from settings remembered at the start. Mid-turn commands arrive between tool results, and the closeout never searched for them.

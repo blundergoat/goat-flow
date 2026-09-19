@@ -28,7 +28,7 @@ last_reviewed: 2026-09-19
 **Status:** active | **Created:** 2026-05-30
 **Decision changed:** Process-lifecycle tests wait for an observable ready state before sending termination signals; elapsed time alone is never readiness.
 **Trigger phase:** VERIFY
-**Incident count:** 5 | **Latest occurrence:** 2026-09-19
+**Incident count:** 6 | **Latest occurrence:** 2026-09-19
 **Merged:** 2026-09-05 - moved here from `.goat-flow/learning-loop/lessons/browser-evidence.md`, which owns proving browser-visible behaviour; every incident here is process readiness in the preflight runner, and the sibling entry above owns the completion bound for the same runner.
 **Merged:** 2026-09-15 - moved here from `.goat-flow/learning-loop/lessons/verification-testing.md` when that bucket was split along the process-lifecycle seam to recover its headroom.
 
@@ -43,6 +43,8 @@ last_reviewed: 2026-09-19
 **Recurrence 2026-08-06:** PR #57 pull-request run `31097377526` failed `returns after escalation when an escaped descendant retains the capture pipe` because its 100 ms timeout fired before the Node fixture wrote the detached child's PID. The push run for the same commit passed. The corrected fixture signals parent cleanup only after an out-of-band ready file proves the escaped child exists, while the production deadline remains unchanged.
 
 **Recurrence 2026-09-19:** A local `publish:check` release run failed the same escaped-pipe test: `runner returned after 2063ms instead of its bounded cleanup window`, against a 2,000 ms bound. The fast suite stopped the gate, so the slow suite never ran. The agent had started four `hooks verify` runs alongside it, and they overlapped the fast suite. Run alone, the test passed in 1,149 ms. A rerun with nothing else running passed the fast suite, 3010 of 3015 with 5 skipped. The runner defect in the entry above was not the cause.
+
+**Recurrence 2026-09-19:** A second failure the same day. The same test failed a plain `npm test` with nothing started alongside it: `runner returned after 2136ms instead of its bounded cleanup window`. The load average was 5.94 just after the run, from the fast suite's own eight-way concurrency and other sessions on the machine. The file alone passed 24 of 24, and an immediate full rerun passed 3049 of 3054 with 5 skipped. Keeping other work off the machine is therefore not enough: alone the test takes about 1,150 ms, but on a loaded host it overran the 2,000 ms bound by 136 ms. A first failure of this one test is rerun once, alone and then in the full suite, and recorded; a failure that repeats alone is investigated as a product regression.
 
 **Root cause:** Real-timer tests treated scheduler time as proof that an asynchronous process or terminal had reached the state their assertions required. Heavy concurrent work can delay that state independently of the timer, and buffered output cannot serve as a live readiness signal.
 
