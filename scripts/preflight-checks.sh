@@ -2026,7 +2026,29 @@ if [[ -f package.json ]] && grep -q '"test"' package.json; then
         printf '%s\n' "$test_output" | tail -20 | details_pipe || true
     else
         fail "Tests failed ($fail_count/$test_count failures)"
-        grep -m 5 'not ok' <<< "$test_output" | details_pipe || true
+        # Name up to five failing tests, then show the first failure's diagnostic without its stack so the maintainer sees why Tests stopped.
+        # The line and byte caps stop one flooded assertion message from burying the report.
+        LC_ALL=C awk -v max_lines=30 -v max_bytes=200 '
+            /^[ \t]*not ok [0-9]/ {
+                if (names < 5) name[names++] = $0
+                if (!first_failure_found) { first_failure_found = 1; awaiting_block = 1 }
+                next
+            }
+            awaiting_block {
+                awaiting_block = 0
+                if ($0 ~ /^[ \t]*---$/) { indent = index($0, "-") - 1; in_block = 1 }
+                next
+            }
+            in_block {
+                text = substr($0, indent + 1)
+                if (text ~ /^(\.\.\.|stack:)/) { in_block = 0; next }
+                block[blocks++] = text
+            }
+            END {
+                for (i = 0; i < names && shown < max_lines; i++) { print substr(name[i], 1, max_bytes); shown++ }
+                for (i = 0; i < blocks && shown < max_lines; i++) { print substr(block[i], 1, max_bytes); shown++ }
+            }
+        ' <<< "$test_output" | details_pipe || true
     fi
 
     # Show coverage only when the selected command promised it and returned output.

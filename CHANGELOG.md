@@ -5,6 +5,7 @@
 - **The skill Proof Gate adds a Report step** - Completion claims list each requested outcome with its evidence and any remaining gap.
 - **Graduation docs match `goat-flow stats`** - An entry becomes a candidate at two incidents, from its `Incident count` or its recurrence labels.
 - **Lesson capture excludes bare command failures** - A failed command becomes a lesson only when an agent decision caused or mishandled it.
+- **Preflight shows why tests failed** - A failed Tests row now includes the first failure's assertion and error, capped at 30 lines of 200 bytes.
 
 ## v1.17.0 - 2026-09-05
 

@@ -281,9 +281,11 @@ describe("agent deny hook template comparison", () => {
           "rg -n 'git commit|git push' workflow/hooks/deny-dangerous | head -n 10",
       },
     });
+    // Both probes run non-login bash -c, like the production hook launcher. A login shell loads profile scripts such as nvm, which
+    // reject an inherited npm_config_prefix; node is then not found and the policy launcher never starts (exit 127).
     const quotedEvidenceResult = originalSpawnSync(
       "bash",
-      ["-lc", registeredCodexHookCommand],
+      ["-c", registeredCodexHookCommand],
       {
         cwd: PROJECT_ROOT,
         input: quotedEvidencePayload,
@@ -295,7 +297,6 @@ describe("agent deny hook template comparison", () => {
       0,
       quotedEvidenceResult.stderr || "quoted evidence should be allowed",
     );
-    // This case has flaked under a loaded coverage run; keep the observed streams so a rerun can name the cause.
     assert.equal(
       quotedEvidenceResult.stderr,
       "",
@@ -308,7 +309,7 @@ describe("agent deny hook template comparison", () => {
     });
     const blockedRepositoryWriteResult = originalSpawnSync(
       "bash",
-      ["-lc", registeredCodexHookCommand],
+      ["-c", registeredCodexHookCommand],
       {
         cwd: PROJECT_ROOT,
         input: blockedRepositoryWritePayload,
@@ -695,7 +696,7 @@ describe("agent deny hook template comparison", () => {
       auditResult.message,
       /registered deny hook runtime check failed for claude/,
     );
-    // Dangerous policy has four block probes and one allow; Git has one of each.
+    // Dangerous policy has three block probes and one allow; Git has two block probes and one allow.
     assert.equal(configuredRuntimeProbeCalls, 7);
     assert.equal(directRuntimeProbeCalls, 1);
   });
