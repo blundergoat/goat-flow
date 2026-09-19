@@ -1035,10 +1035,14 @@ function policyUpgradeBlocker(projectPath: string): string | null {
     // Fresh installs, identical ownership files and matching switch choices need no migration consent.
     if (!review) return null;
     return `GitHub policy review is required before installation. Use the newer dashboard Hooks page to review the original and requested choices and affected files, then retry. If legacy local state blocks review, stop and upgrade all writers, then run install with --agent <id> --migrate-state-only first. Force options cannot approve this policy change. Files: ${review.paths.join(", ")}`;
-  } catch {
+  } catch (error) {
     // A malformed config or linked ownership file prevents the installer from identifying the protection the user would change.
+    // The reader's first line names the key or path to repair, such as conflicting choices for one policy.
+    const reason = (error instanceof Error ? error.message : String(error))
+      .split("\n")[0]
+      ?.slice(0, 200);
     throw new CLIError(
-      "Policy choices or ownership files could not be read safely. Repair the selected project's hook configuration before installation.",
+      `Policy choices or ownership files could not be read safely (${reason}). Repair the selected project's hook configuration before installation.`,
       1,
     );
   }

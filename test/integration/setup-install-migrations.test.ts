@@ -19,10 +19,7 @@ import { dirname, join } from "node:path";
 
 import { getAgentProfiles } from "../../src/cli/agents/registry.js";
 import { managedInstallStatePath } from "../../src/cli/managed-setup-state.js";
-import {
-  getHookSpec,
-  listHookSpecs,
-} from "../../src/cli/server/hooks-registry.js";
+import { getHookSpec } from "../../src/cli/server/hooks-registry.js";
 import {
   readAgentHookState,
   writeAgentHookState,
@@ -57,10 +54,14 @@ describe("setup --apply installer upgrade migrations", () => {
       const hookDirectory = join(root, ".goat-flow/hooks");
       mkdirSync(hookDirectory, { recursive: true });
       assert.equal(spawnSync("git", ["init", "--quiet", root]).status, 0);
+      mkdirSync(join(hookDirectory, "vendor"));
+      // The launcher reads saved policy choices through this reader and its bundled parser before starting Bash.
       for (const file of [
         "run-with-bash.mjs",
         "hook-launch-runtime.mjs",
         "hook-provider-adapters.mjs",
+        "hook-policy-state.cjs",
+        "vendor/js-yaml.cjs",
       ]) {
         copyFileSync(
           join(PROJECT_ROOT, "workflow/hooks", file),
@@ -933,8 +934,13 @@ describe("setup --apply installer upgrade migrations", () => {
     assert.match(result.stdout, /migrated deny hook registration/);
   });
 
-  // Fixture purpose: writes disabled split-hook config to cover deny-dangerous state migration.
-  it("preserves disabled split guardrail config when migrating to deny-dangerous", () => {
+  /**
+   * Writes a 1.8.0 split-guardrail install whose three retired guard choices all map to deny-dangerous.
+   *
+   * @param isSecretPathsEnabled - saved secret-paths choice; true conflicts with the other two disabled guards
+   * @returns project root containing the legacy Codex guard scripts and config
+   */
+  function writeSplitGuardrailProject(isSecretPathsEnabled: boolean): string {
     const root = makeTempProject();
     mkdirSync(join(root, ".codex", "hooks"), { recursive: true });
     mkdirSync(join(root, ".goat-flow"), { recursive: true });
@@ -958,71 +964,45 @@ describe("setup --apply installer upgrade migrations", () => {
         "  guard-destructive-shell:",
         "    enabled: false",
         "  guard-secret-paths:",
-        "    enabled: true",
+        `    enabled: ${isSecretPathsEnabled}`,
         "  guard-repository-writes:",
-        "    enabled: true",
+        "    enabled: false",
         "",
       ].join("\n"),
     );
+    return root;
+  }
+
+  // Conflicting retired choices leave protection unknown, so install stops before migrating or writing anything.
+  it("refuses conflicting split guardrail choices without changing config", () => {
+    const root = writeSplitGuardrailProject(true);
+    const configPath = join(root, ".goat-flow", "config.yaml");
+    const configBefore = readFileSync(configPath, "utf-8");
 
     const result = runInstaller(root, "--agent", "codex");
-    assert.equal(result.status, 0, result.stderr || result.stdout);
-
-    const config = readFileSync(
-      join(root, ".goat-flow", "config.yaml"),
-      "utf-8",
+    assert.notEqual(result.status, 0);
+    assert.match(
+      result.stderr,
+      /could not be read safely \(Hook config has conflicting choices for deny-dangerous\)/u,
     );
-    assert.doesNotMatch(
-      config,
-      /guard-(destructive-shell|secret-paths|repository-writes)/,
+    assert.equal(readFileSync(configPath, "utf-8"), configBefore);
+    assert.equal(
+      existsSync(join(root, ".codex", "hooks", "guard-common.sh")),
+      true,
     );
-    assert.match(config, /deny-dangerous:\n    enabled: false/);
   });
 
-  const disabledHookSpecs = listHookSpecs();
-  const managedScriptFiles = [
-    ...new Set(disabledHookSpecs.flatMap((hookSpec) => hookSpec.scriptFiles)),
-  ];
-  const disabledConfig =
-    "hooks:\n  deny-dangerous:\n    enabled: false\n  gruff-code-quality:\n    enabled: false\n  post-turn-safety:\n    enabled: false\n";
-  // Each named fixture writes an all-off config and launches setup twice so provider defaults cannot silently return.
-  for (const agentProfile of getAgentProfiles()) {
-    it(`${agentProfile.id} keeps disabled hooks installed and inert`, () => {
-      const consumerRoot = makeTempProject();
-      const { id: agentId, hookConfigFile, hooksDir } = agentProfile;
-      mkdirSync(join(consumerRoot, ".goat-flow"), { recursive: true });
-      writeFileSync(
-        join(consumerRoot, ".goat-flow", "config.yaml"),
-        disabledConfig,
-      );
-      const firstInstall = runInstaller(consumerRoot, "--agent", agentId);
-      assert.equal(
-        firstInstall.status,
-        0,
-        firstInstall.stderr || firstInstall.stdout,
-      );
-      assert.ok(hookConfigFile && hooksDir);
-      const hookConfigPath = join(consumerRoot, hookConfigFile);
-      const firstHookConfig = readFileSync(hookConfigPath, "utf-8");
-      assert.equal(
-        disabledHookSpecs.some((hookSpec) =>
-          firstHookConfig.includes(hookSpec.primaryScript),
-        ),
-        false,
-        `${agentId} restored a hook the user disabled`,
-      );
-      assert.equal(
-        managedScriptFiles.every((file) =>
-          existsSync(join(consumerRoot, hooksDir, file)),
-        ),
-        true,
-        `${agentId} removed files needed by a later UI toggle`,
-      );
-      const repeatedInstall = runInstaller(consumerRoot, "--agent", agentId);
-      assert.equal(repeatedInstall.status, 0, repeatedInstall.stderr);
-      assert.equal(readFileSync(hookConfigPath, "utf-8"), firstHookConfig);
-    });
-  }
+  // Disabled retired guards with no saved Git choice would add GitHub blocking, so install defers to the dashboard review.
+  it("requires policy review before migrating disabled split guardrail config", () => {
+    const root = writeSplitGuardrailProject(false);
+    const configPath = join(root, ".goat-flow", "config.yaml");
+    const configBefore = readFileSync(configPath, "utf-8");
+
+    const result = runInstaller(root, "--agent", "codex");
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /GitHub policy review is required/u);
+    assert.equal(readFileSync(configPath, "utf-8"), configBefore);
+  });
 
   it("prunes stale per-skill reference files during upgrades", () => {
     const root = makeTempProject();

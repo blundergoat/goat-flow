@@ -65,6 +65,22 @@ interface ClaudeHookSettingsFixture {
   >;
 }
 
+/**
+ * Find the managed deny-dangerous row; the Git policy shares its Bash matcher, so position cannot identify it.
+ *
+ * @param settings - parsed Claude fixture settings after Sync
+ * @returns the PreToolUse row whose handler runs deny-dangerous.sh, or undefined when none is registered
+ */
+function denyDangerousEntry(settings: ClaudeHookSettingsFixture) {
+  return settings.hooks.PreToolUse?.find((eventEntry) =>
+    eventEntry.hooks?.some((hook) =>
+      hook.args?.some((argumentValue) =>
+        argumentValue.endsWith("deny-dangerous.sh"),
+      ),
+    ),
+  );
+}
+
 /** Remove every project created by this suite after its user-state assertions finish. */
 after(() => {
   // Each recorded path is a suite-owned temporary directory, never a user workspace.
@@ -639,9 +655,7 @@ describe("effective hook state", () => {
     syncHookStates(projectPath);
 
     const matcherSettings = readClaudeHookSettings(projectPath);
-    const denyEventEntry = matcherSettings.hooks.PreToolUse?.find(
-      (eventEntry) => eventEntry.matcher === "Bash",
-    );
+    const denyEventEntry = denyDangerousEntry(matcherSettings);
     assert.ok(denyEventEntry);
     denyEventEntry.matcher = "Read";
     const gruffEventEntry = matcherSettings.hooks.PostToolUse?.find(
@@ -718,9 +732,7 @@ describe("effective hook state", () => {
 
     syncHookStates(projectPath);
     const commandSettings = readClaudeHookSettings(projectPath);
-    const denyCommand = commandSettings.hooks.PreToolUse?.find(
-      (eventEntry) => eventEntry.matcher === "Bash",
-    )?.hooks?.[0];
+    const denyCommand = denyDangerousEntry(commandSettings)?.hooks?.[0];
     assert.ok(denyCommand?.command);
     assert.ok(Array.isArray(denyCommand.args));
     // Claude's structured handler keeps its response mode as one argv operand.

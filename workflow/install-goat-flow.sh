@@ -356,35 +356,6 @@ fi
 # Dependency errors must reach the user before migrations, directory scaffolding, or staged file writes begin.
 preflight_installer_dependencies
 
-# Mixed policy upgrades require dashboard review even when the CLI already admitted file replacements or the caller supplied force.
-node - "$PROJECT" "$GOAT_FLOW_ROOT/workflow/hooks" <<'NODE'
-const [projectRoot, bundledHooksRoot] = process.argv.slice(2);
-try {
-  const { inspectPolicyUpgrade } = require(bundledHooksRoot + "/hook-policy-state.cjs");
-  const review = inspectPolicyUpgrade(projectRoot, bundledHooksRoot);
-  // An older installation with differing switches would change GitHub protection; no installer flag expresses that consent.
-  if (review) {
-    console.error("ERROR: GitHub policy review is required before installation. Review the choices and affected files on the newer dashboard Hooks page, then retry. Force cannot approve this change.");
-    process.exitCode = 1;
-  }
-} catch {
-  // Invalid YAML or a linked policy file leaves the current protection unknown, so setup must stop before creating any target files.
-  console.error("ERROR: policy choices or ownership files could not be read safely; repair the project's hook configuration before installation.");
-  process.exitCode = 1;
-}
-NODE
-
-# A v1-only CLI or direct script must not mutate a target once v2 state controls admission.
-require_managed_install_admission
-
-COPIED=0
-SKIPPED=0
-REMOVED=0
-ACTIVE_STAGING_DIRECTORIES=()
-STAGED_PAYLOAD_PATH=""
-STAGED_PAYLOAD_DIRECTORY=""
-LAST_TRANSFORM_RESULT=""
-
 # Validate every component of one user-visible installer destination.
 # Use before directory creation and final replacement so setup cannot follow a target symlink.
 assert_safe_installer_destination() {
@@ -449,6 +420,40 @@ assert_safe_installer_directory() {
     return 1
   fi
 }
+
+# A symlinked shared setup root would redirect the policy read below, so report the unsafe directory first.
+( cd "$PROJECT" && assert_safe_installer_directory ".goat-flow" ) || exit 1
+
+# Mixed policy upgrades require dashboard review even when the CLI already admitted file replacements or the caller supplied force.
+node - "$PROJECT" "$GOAT_FLOW_ROOT/workflow/hooks" <<'NODE'
+const [projectRoot, bundledHooksRoot] = process.argv.slice(2);
+try {
+  const { inspectPolicyUpgrade } = require(bundledHooksRoot + "/hook-policy-state.cjs");
+  const review = inspectPolicyUpgrade(projectRoot, bundledHooksRoot);
+  // An older installation with differing switches would change GitHub protection; no installer flag expresses that consent.
+  if (review) {
+    console.error("ERROR: GitHub policy review is required before installation. Review the choices and affected files on the newer dashboard Hooks page, then retry. Force cannot approve this change.");
+    process.exitCode = 1;
+  }
+} catch (error) {
+  // Invalid YAML or a linked policy file leaves the current protection unknown, so setup must stop before creating any target files.
+  // The reader's first line names the key or path to repair, such as conflicting choices for one policy.
+  const reason = String(error && error.message ? error.message : error).split("\n")[0].slice(0, 200);
+  console.error("ERROR: policy choices or ownership files could not be read safely (" + reason + "); repair the project's hook configuration before installation.");
+  process.exitCode = 1;
+}
+NODE
+
+# A v1-only CLI or direct script must not mutate a target once v2 state controls admission.
+require_managed_install_admission
+
+COPIED=0
+SKIPPED=0
+REMOVED=0
+ACTIVE_STAGING_DIRECTORIES=()
+STAGED_PAYLOAD_PATH=""
+STAGED_PAYLOAD_DIRECTORY=""
+LAST_TRANSFORM_RESULT=""
 
 # Remove one installer-owned sibling payload without recursively deleting user paths.
 # Use after success or failure; an unexpected leftover stays visible with a cleanup warning.

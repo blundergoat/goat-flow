@@ -661,9 +661,10 @@ describe("dashboard guarded hook actions", () => {
       );
       assert.equal((disabledBody.hooks as unknown[]).length, rows.length);
 
+      // A shared policy module outside the two ownership files isolates file replacement from the mixed-choice policy review.
       const sharedPath = join(
         projectPath,
-        ".goat-flow/hooks/deny-dangerous/guard-runtime.sh",
+        ".goat-flow/hooks/deny-dangerous/patterns-shell.sh",
       );
       const officialBytes = readFileSync(sharedPath, "utf-8");
       writeFileSync(

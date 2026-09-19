@@ -5,17 +5,35 @@
  * These fixtures run the public CLI against disposable targets and compare content snapshots, so an undisclosed
  * write or a non-converging hook toggle fails by path name. Removals stay outside the compared set by contract,
  * which the preview itself declares.
+ *
+ * The all-hooks-off cases run the standalone installer twice and check which registrations and saved choices remain.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { lstatSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  writeFileSync,
+} from "node:fs";
 import { join, relative, sep } from "node:path";
 import { spawnSync } from "node:child_process";
 
 import { getAgentProfiles } from "../../src/cli/agents/registry.js";
+import { listHookSpecs } from "../../src/cli/server/hooks-registry.js";
 import type { AgentProfile } from "../../src/cli/types.js";
-import { PROJECT_ROOT, makeTempProject } from "./setup-install.helpers.js";
+import {
+  isPolicyHook,
+  readPolicyChoices,
+} from "../../workflow/hooks/hook-policy-state.cjs";
+import {
+  PROJECT_ROOT,
+  makeTempProject,
+  runInstaller,
+} from "./setup-install.helpers.js";
 
 /** Managed script whose registration count proves enable and disable converged. */
 const MANAGED_DENY_SCRIPT = "deny-dangerous.sh";
@@ -482,13 +500,19 @@ extends = ":workspace"
         "deny-dangerous",
         projectPath,
       );
+      // Disable keeps the policy registration and saves the off choice, so the retained handler stays neutral.
       assert.equal(
         managedDenyRowCount(hookConfigPath),
-        0,
-        `${agentProfile.id} disable must leave no managed deny registration`,
+        1,
+        `${agentProfile.id} disable must keep exactly one managed deny registration`,
+      );
+      assert.equal(
+        readPolicyChoices(projectPath)["deny-dangerous"],
+        false,
+        `${agentProfile.id} disable must save the off choice`,
       );
 
-      // A managed refresh must not resurrect a registration the user switched off.
+      // A managed refresh must leave the retained registration and the saved off choice unchanged.
       const beforeDisabledInstall = snapshotProject(projectPath);
       runCliStep(
         `${agentProfile.id} install while disabled`,
@@ -502,7 +526,7 @@ extends = ":workspace"
         { written: [], deleted: [] },
         `${agentProfile.id} install must not rewrite a disabled hook state`,
       );
-      assert.equal(managedDenyRowCount(hookConfigPath), 0);
+      assert.equal(managedDenyRowCount(hookConfigPath), 1);
 
       assertRepeatIsNoOp(
         projectPath,
@@ -531,6 +555,63 @@ extends = ":workspace"
         "preserve",
         `${agentProfile.id} toggles must preserve unrelated hook-config keys`,
       );
+    });
+  }
+});
+
+describe("setup installs with every hook disabled", () => {
+  const disabledHookSpecs = listHookSpecs();
+  const managedScriptFiles = [
+    ...new Set(disabledHookSpecs.flatMap((hookSpec) => hookSpec.scriptFiles)),
+  ];
+  const disabledConfig =
+    "hooks:\n  deny-dangerous:\n    enabled: false\n  gruff-code-quality:\n    enabled: false\n  post-turn-safety:\n    enabled: false\n";
+  // Each named fixture writes an all-off config and launches setup twice so provider defaults cannot silently return.
+  for (const agentProfile of getAgentProfiles()) {
+    it(`${agentProfile.id} keeps disabled hooks installed and inert`, () => {
+      const consumerRoot = makeTempProject();
+      const { id: agentId, hookConfigFile, hooksDir } = agentProfile;
+      mkdirSync(join(consumerRoot, ".goat-flow"), { recursive: true });
+      writeFileSync(
+        join(consumerRoot, ".goat-flow", "config.yaml"),
+        disabledConfig,
+      );
+      const firstInstall = runInstaller(consumerRoot, "--agent", agentId);
+      assert.equal(
+        firstInstall.status,
+        0,
+        firstInstall.stderr || firstInstall.stdout,
+      );
+      assert.ok(hookConfigFile && hooksDir);
+      const hookConfigPath = join(consumerRoot, hookConfigFile);
+      const firstHookConfig = readFileSync(hookConfigPath, "utf-8");
+      // Disabled policies keep their registration and stay neutral through the saved off choice; other disabled hooks stay unregistered.
+      assert.deepEqual(
+        disabledHookSpecs
+          .filter((hookSpec) =>
+            firstHookConfig.includes(hookSpec.primaryScript),
+          )
+          .map((hookSpec) => hookSpec.id),
+        disabledHookSpecs
+          .filter((hookSpec) => isPolicyHook(hookSpec.id))
+          .map((hookSpec) => hookSpec.id),
+        `${agentId} restored a disabled hook or dropped a retained policy registration`,
+      );
+      assert.deepEqual(
+        readPolicyChoices(consumerRoot),
+        { "deny-dangerous": false, "deny-git-mutations": false },
+        `${agentId} changed a saved off policy choice`,
+      );
+      assert.equal(
+        managedScriptFiles.every((file) =>
+          existsSync(join(consumerRoot, hooksDir, file)),
+        ),
+        true,
+        `${agentId} removed files needed by a later UI toggle`,
+      );
+      const repeatedInstall = runInstaller(consumerRoot, "--agent", agentId);
+      assert.equal(repeatedInstall.status, 0, repeatedInstall.stderr);
+      assert.equal(readFileSync(hookConfigPath, "utf-8"), firstHookConfig);
     });
   }
 });

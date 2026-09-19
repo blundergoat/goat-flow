@@ -6,6 +6,8 @@
 - **Graduation docs match `goat-flow stats`** - An entry becomes a candidate at two incidents, from its `Incident count` or its recurrence labels.
 - **Lesson capture excludes bare command failures** - A failed command becomes a lesson only when an agent decision caused or mishandled it.
 - **Preflight shows why tests failed** - A failed Tests row now includes the first failure's assertion and error, capped at 30 lines of 200 bytes.
+- **Install refusals name their cause** - A symlinked `.goat-flow` is reported as unsafe, and a failed hook-policy read includes the reason.
+- **Toggling a hook no longer reorders provider files** - Disabling or enabling a policy keeps Claude, Copilot and Antigravity hook entries in place.
 
 ## v1.17.0 - 2026-09-05
 

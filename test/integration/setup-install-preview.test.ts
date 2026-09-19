@@ -615,7 +615,8 @@ describe("managed setup preview", () => {
     const installedHookConfig = readFileSync(codexHooksPath, "utf-8");
     assert.match(installedHookConfig, /node user-hook\.js/u);
     assert.match(installedHookConfig, /keep my status/u);
-    assert.doesNotMatch(installedHookConfig, /deny-dangerous\.sh/u);
+    // The disabled policy keeps its registration; the saved off choice asserted above keeps it neutral.
+    assert.match(installedHookConfig, /deny-dangerous\.sh/u);
     assert.doesNotMatch(installedHookConfig, /post-turn-safety\.sh/u);
   });
 

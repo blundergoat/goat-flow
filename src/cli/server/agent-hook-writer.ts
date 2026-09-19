@@ -778,39 +778,54 @@ function readPreparedAgentHookConfig(
 }
 
 /**
- * Keep current Codex registrations in place so changing a dashboard switch does not require renewed hook trust.
+ * Keep exact current registrations in place so a toggle or Sync of an already-exact hook leaves the provider file unchanged.
+ * A moved row rewrites the file the provider watches; Codex also ties hook trust to each row's position.
  * Sync still repairs stale labels, commands, matchers, timeouts, duplicates, and retired registrations.
  *
  * @param text - captured file bytes; null means setup must create the missing registration file
  * @param config - captured provider settings; empty settings need registration
  *
- * @param agent - selected provider; other providers keep their existing repair path
+ * @param agent - selected provider whose exact registration shape is compared
  *
  * @param spec - managed hook selected by the user's toggle or Sync action
  * @param desiredState - requested registrations; empty means the user is removing this non-policy hook
  *
- * @returns true when the existing Codex rows match every requested field and can retain their positions
+ * @returns true when the existing rows match every requested field and can retain their positions
  */
-function canPreserveCodexRegistrations(
+function canPreserveExistingRegistrations(
   text: string | null,
   config: AgentHookJsonObject,
   agent: AgentProfile,
   spec: HookSpec,
   desiredState: ManagedHookDesiredState,
 ): text is string {
+  const firstRegistrationTarget = desiredState.registrationTargets[0];
   // Missing files or targets and retired registrations still need the usual setup, removal, or migration step.
   if (
     text === null ||
-    agent.id !== "codex" ||
-    desiredState.registrationTargets.length === 0 ||
+    !firstRegistrationTarget ||
     hasRetiredDenyRegistration(config, spec)
   )
     return false;
   // A stale or duplicate command must remain repairable when the user chooses Sync.
   if (!hasAllExpectedEntries(config, agent, spec)) return false;
+  // Antigravity keeps each managed hook as one named definition rather than event rows.
+  if (agent.id === "antigravity") {
+    return isDeepStrictEqual(
+      config[spec.id],
+      antigravityHookDefinition(agent, spec, firstRegistrationTarget),
+    );
+  }
   const currentRegistrations = expectedEventEntries(config, agent, spec).filter(
     (entry) => entryReferencesSpec(entry, spec),
   );
+  // Copilot needs a numeric schema version beside its one dual-shell row; a missing version still takes the repair path.
+  if (agent.id === "copilot") {
+    return (
+      typeof config.version === "number" &&
+      isDeepStrictEqual(currentRegistrations, [copilotEntry(agent, spec)])
+    );
+  }
   return isDeepStrictEqual(
     currentRegistrations,
     claudeCodexEntries(agent, spec, desiredState.registrationTargets),
@@ -838,8 +853,8 @@ export function prepareAgentHookState(
 ): string {
   const config = readPreparedAgentHookConfig(text, agent);
   const desiredState = deriveManagedHookDesiredState(agent, spec, isEnabled);
-  // For example, switching Git protection off must not move the still-enabled general policy into another trust slot.
-  if (canPreserveCodexRegistrations(text, config, agent, spec, desiredState))
+  // For example, switching one policy off must not move either retained policy registration or rewrite the provider file.
+  if (canPreserveExistingRegistrations(text, config, agent, spec, desiredState))
     return text;
   // Antigravity keeps managed hooks as top-level definitions with provider-specific migration ids.
   if (agent.id === "antigravity") {
