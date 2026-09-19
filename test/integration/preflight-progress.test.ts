@@ -2,22 +2,26 @@
  * Exercises the command runner that keeps preflight users informed during long Tests phases.
  * Use when changing timeout, capture, or heartbeat behavior so interactive progress
  * remains visible without contaminating the deterministic CI report.
+ *
+ * Other groups run production preflight sections and the test runner's shard parser on captured output or temporary fixtures.
  * The fixtures execute harmless child processes and never run the repository test suite.
  */
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import {
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import type { Readable } from "node:stream";
 import { afterEach, describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
+import { runInNewContext } from "node:vm";
 
 const PROJECT_ROOT = fileURLToPath(new URL("../../", import.meta.url));
 const PREFLIGHT_SCRIPT_PATH = join(
@@ -31,6 +35,7 @@ const PREFLIGHT_RUNNER_PATH = join(
   "preflight-command-runner.mjs",
 );
 const TEST_RUNNER_PATH = join(PROJECT_ROOT, "scripts", "run-tests.mjs");
+const SHELL_SYNTAX_HELPER = "scripts/maintenance/check-shell-syntax.sh";
 const CHILD_FAILURE_STATUS = 7;
 const fixtureProcessIds = new Set<number>();
 const fixtureTemporaryDirectories = new Set<string>();
@@ -255,6 +260,36 @@ afterEach(() => {
 });
 
 describe("preflight Tests-phase progress", () => {
+  it("launches installed npm through the production runner", async () => {
+    const runnerResult = await runPreflightRunnerFixture({
+      childCommand: "npm",
+      childArguments: ["--version"],
+      timeoutSeconds: 10,
+      heartbeatSeconds: 0,
+    });
+    assert.equal(runnerResult.status, 0, runnerResult.capturedOutput);
+    assert.match(runnerResult.capturedOutput.trim(), /^\d+\.\d+\.\d+$/u);
+    assert.equal(runnerResult.runnerErrorOutput, "");
+  });
+
+  it("passes hostile literal arguments to installed npm without shell interpretation", async () => {
+    const literalArgument = "spaces & | ; $(echo INJECTED) %PATH% ! ' \"";
+    const runnerResult = await runPreflightRunnerFixture({
+      childCommand: process.platform === "win32" ? "npm.cmd" : "npm",
+      childArguments: [
+        "--user-agent",
+        literalArgument,
+        "config",
+        "get",
+        "user-agent",
+      ],
+      timeoutSeconds: 10,
+      heartbeatSeconds: 0,
+    });
+    assert.equal(runnerResult.status, 0, runnerResult.capturedOutput);
+    assert.equal(runnerResult.capturedOutput.trim(), literalArgument);
+  });
+
   it("shows test progress before close while keeping child output captured", async () => {
     const progressTemporaryDirectory = mkdtempSync(
       join(tmpdir(), "goat-flow-preflight-progress-"),
@@ -340,8 +375,12 @@ describe("preflight Tests-phase progress", () => {
     assert.equal(runnerResult.runnerErrorOutput, "");
   });
 
-  // This fixture reproduces a test tree that ignores graceful stop and keeps a worker alive.
-  it("times out with exit 124 and removes the whole child process group", async () => {
+  // Writes a temporary npm package and launches its script to check timeout cleanup through a real shell.
+  it("times out installed npm with exit 124 and removes its script and worker", async () => {
+    const timeoutTemporaryDirectory = mkdtempSync(
+      join(tmpdir(), "goat-flow-preflight-npm-timeout-"),
+    );
+    fixtureTemporaryDirectories.add(timeoutTemporaryDirectory);
     const timeoutFixtureSource = String.raw`
       const { spawn } = require("node:child_process");
       process.on("SIGTERM", () => {});
@@ -354,10 +393,19 @@ describe("preflight Tests-phase progress", () => {
       process.stdout.write("WORKER_PID=" + worker.pid + "\\n");
       setInterval(() => {}, 1000);
     `;
+    writeFileSync(
+      join(timeoutTemporaryDirectory, "package.json"),
+      JSON.stringify({ scripts: { hold: "node hold.cjs" } }),
+    );
+    writeFileSync(
+      join(timeoutTemporaryDirectory, "hold.cjs"),
+      timeoutFixtureSource,
+    );
     const runnerResult = await runPreflightRunnerFixture({
-      timeoutSeconds: 0.2,
+      childCommand: "npm",
+      childArguments: ["--prefix", timeoutTemporaryDirectory, "run", "hold"],
+      timeoutSeconds: 2,
       heartbeatSeconds: 0.05,
-      childSource: timeoutFixtureSource,
     });
     const parentProcessId = fixtureProcessId(
       runnerResult.capturedOutput,
@@ -424,7 +472,7 @@ describe("preflight Tests-phase progress", () => {
     },
   );
 
-  it("reports signal exits and spawn errors once with status 1", async () => {
+  it("reports child termination and unavailable commands separately", async () => {
     const signalledResult = await runPreflightRunnerFixture({
       childSource: 'process.kill(process.pid, "SIGTERM");',
     });
@@ -434,11 +482,15 @@ describe("preflight Tests-phase progress", () => {
     });
 
     assert.equal(signalledResult.status, 1);
-    assert.equal(
-      signalledResult.capturedOutput.split("terminated by SIGTERM").length - 1,
-      1,
-    );
-    assert.equal(missingCommandResult.status, 1);
+    // Windows reports this termination as a numeric child exit, without a POSIX signal name.
+    if (process.platform !== "win32") {
+      assert.equal(
+        signalledResult.capturedOutput.split("terminated by SIGTERM").length -
+          1,
+        1,
+      );
+    }
+    assert.equal(missingCommandResult.status, 127);
     assert.equal(
       missingCommandResult.capturedOutput.split("failed to start").length - 1,
       1,
@@ -446,14 +498,18 @@ describe("preflight Tests-phase progress", () => {
   });
 
   // This fixture reproduces a worker that remains active when the user closes preflight.
-  it("cleans the child process group before returning a parent termination", async () => {
-    const parentStopTemporaryDirectory = mkdtempSync(
-      join(tmpdir(), "goat-flow-preflight-parent-stop-"),
-    );
-    fixtureTemporaryDirectories.add(parentStopTemporaryDirectory);
-    const parentStopReadyFile = join(parentStopTemporaryDirectory, "ready");
-    // Fixture source for a process tree that ignores SIGTERM: spawns a worker and writes a ready file.
-    const parentStopFixtureSource = String.raw`
+  // Windows forcibly terminates the runner on kill(SIGTERM), so only POSIX can exercise its signal handler.
+  it(
+    "cleans the child process group before returning a parent termination",
+    { skip: process.platform === "win32" },
+    async () => {
+      const parentStopTemporaryDirectory = mkdtempSync(
+        join(tmpdir(), "goat-flow-preflight-parent-stop-"),
+      );
+      fixtureTemporaryDirectories.add(parentStopTemporaryDirectory);
+      const parentStopReadyFile = join(parentStopTemporaryDirectory, "ready");
+      // Fixture source for a process tree that ignores SIGTERM: spawns a worker and writes a ready file.
+      const parentStopFixtureSource = String.raw`
       const { spawn } = require("node:child_process");
       const { writeFileSync } = require("node:fs");
       process.on("SIGTERM", () => {});
@@ -467,37 +523,38 @@ describe("preflight Tests-phase progress", () => {
       writeFileSync(${JSON.stringify(parentStopReadyFile)}, "ready");
       setInterval(() => {}, 1000);
     `;
-    const runnerResult = await runPreflightRunnerFixture({
-      timeoutSeconds: 3,
-      heartbeatSeconds: 0.05,
-      parentStopAfterFile: parentStopReadyFile,
-      childSource: parentStopFixtureSource,
-    });
-    const parentProcessId = fixtureProcessId(
-      runnerResult.capturedOutput,
-      "PARENT_STOP_PID",
-    );
-    const workerProcessId = fixtureProcessId(
-      runnerResult.capturedOutput,
-      "PARENT_STOP_WORKER_PID",
-    );
+      const runnerResult = await runPreflightRunnerFixture({
+        timeoutSeconds: 3,
+        heartbeatSeconds: 0.05,
+        parentStopAfterFile: parentStopReadyFile,
+        childSource: parentStopFixtureSource,
+      });
+      const parentProcessId = fixtureProcessId(
+        runnerResult.capturedOutput,
+        "PARENT_STOP_PID",
+      );
+      const workerProcessId = fixtureProcessId(
+        runnerResult.capturedOutput,
+        "PARENT_STOP_WORKER_PID",
+      );
 
-    assert.equal(runnerResult.status, 143);
-    assert.equal(
-      runnerResult.capturedOutput.split("stopped after parent SIGTERM").length -
+      assert.equal(runnerResult.status, 143);
+      assert.equal(
+        runnerResult.capturedOutput.split("stopped after parent SIGTERM")
+          .length - 1,
         1,
-      1,
-    );
-    assert.equal(await waitForFixtureProcessExit(parentProcessId), true);
-    assert.equal(await waitForFixtureProcessExit(workerProcessId), true);
-  });
+      );
+      assert.equal(await waitForFixtureProcessExit(parentProcessId), true);
+      assert.equal(await waitForFixtureProcessExit(workerProcessId), true);
+    },
+  );
 
   it("pins one bounded coverage run to interactive ten-second heartbeats", () => {
     const preflightSource = readFileSync(PREFLIGHT_SCRIPT_PATH, "utf-8");
     const fastSelectionIndex = preflightSource.indexOf('"test:fast"');
     const coverageSelectionIndex = preflightSource.indexOf('"test:coverage"');
 
-    assert.match(preflightSource, /preflight_test_heartbeat_seconds=10/u);
+    assert.match(preflightSource, /preflight_heartbeat_seconds=10/u);
     assert.match(preflightSource, /\[\[ "\$_is_tty" -eq 1 \]\]/u);
     assert.match(preflightSource, /"Tests" "\$\{test_command\[@\]\}"/u);
     assert.match(
@@ -507,13 +564,150 @@ describe("preflight Tests-phase progress", () => {
     assert.ok(fastSelectionIndex >= 0);
     assert.ok(coverageSelectionIndex < fastSelectionIndex);
     assert.doesNotMatch(preflightSource, /Tests retry/u);
+    assert.match(
+      preflightSource,
+      /fail "\$test_label unavailable: command failed to start"/u,
+    );
     assert.doesNotMatch(preflightSource, /GOAT_FLOW_PREFLIGHT_TEST_COMMAND/u);
     assert.equal(
       [...preflightSource.matchAll(/run_command_capture_with_timeout/gu)]
         .length,
-      2,
-      "expected one helper definition plus one bounded Tests call site",
+      3,
+      "expected one helper definition plus bounded Tests and Dependency Audit call sites",
     );
+  });
+
+  it("bounds dependency audit without exposing a release-gate bypass", () => {
+    const preflightSource = readFileSync(PREFLIGHT_SCRIPT_PATH, "utf-8");
+    const auditStart = preflightSource.indexOf("# ── Dependency Audit");
+    const auditEnd = preflightSource.indexOf(
+      "# ── Removed Patterns",
+      auditStart,
+    );
+    assert.ok(auditStart >= 0 && auditEnd > auditStart);
+    const auditSource = preflightSource.slice(auditStart, auditEnd);
+
+    assert.match(
+      preflightSource,
+      /GOAT_FLOW_PREFLIGHT_AUDIT_TIMEOUT_SECONDS=N[\s\S]+dependency audit timeout in seconds \(default: 120; 0 disables\)/u,
+    );
+    assert.match(
+      auditSource,
+      /GOAT_FLOW_PREFLIGHT_AUDIT_TIMEOUT_SECONDS:-120/u,
+    );
+    assert.match(
+      auditSource,
+      /run_command_capture_with_timeout\s+\\\s+audit_output audit_exit "\$audit_timeout_seconds" "Dependency Audit" npm audit/u,
+    );
+    assert.match(
+      auditSource,
+      /"\$audit_exit" -eq 124[\s\S]+fail "npm audit timed out after \$\{audit_timeout_seconds\}s"/u,
+    );
+    assert.doesNotMatch(
+      preflightSource,
+      /GOAT_FLOW_PREFLIGHT_(?:SKIP_AUDIT|AUDIT_COMMAND)/u,
+    );
+    assert.match(
+      auditSource,
+      /fail "npm audit unavailable: command failed to start"/u,
+    );
+  });
+
+  it("surfaces passing stats advisories as non-blocking preflight warnings", () => {
+    const preflightSource = readFileSync(PREFLIGHT_SCRIPT_PATH, "utf-8");
+    const schemaStart = preflightSource.indexOf("# ── Learning-Loop Schema");
+    const schemaEnd = preflightSource.indexOf(
+      "# ── Content Drift",
+      schemaStart,
+    );
+    assert.ok(schemaStart >= 0 && schemaEnd > schemaStart);
+    const schemaSource = preflightSource.slice(schemaStart, schemaEnd);
+
+    assert.match(schemaSource, /stats \. --check --format text/u);
+    assert.match(schemaSource, /stats_warning_count/u);
+    assert.match(
+      schemaSource,
+      /stats_warning_label="warning"[\s\S]+stats_warning_count" -ne 1[\s\S]+stats_warning_label="warnings"/u,
+    );
+    assert.match(
+      schemaSource,
+      /warn "Footgun\/lesson schema passes \(\$\{stats_warning_count\} \$\{stats_warning_label\}\)"/u,
+    );
+    assert.match(schemaSource, /stats_output[\s\S]+details_pipe/u);
+    assert.match(
+      preflightSource,
+      /warning_label="warning"[\s\S]+warnings" -ne 1[\s\S]+warning_label="warnings"[\s\S]+"\$warnings" "\$warning_label"/u,
+    );
+  });
+
+  it("keeps Knip failure guidance on the heap-safe preflight invocation", () => {
+    const preflightSource = readFileSync(PREFLIGHT_SCRIPT_PATH, "utf-8");
+
+    assert.match(
+      preflightSource,
+      /knip_command=\(\s+node\s+--max-old-space-size=5120\s+node_modules\/knip\/bin\/knip\.js\s+--no-progress\s+--no-gitignore\s+\)/u,
+    );
+    assert.match(
+      preflightSource,
+      /knip_output=\$\("\$\{knip_command\[@\]\}" 2>&1\)/u,
+    );
+    assert.match(preflightSource, /run \$\{knip_command\[\*\]\} for details/u);
+    assert.doesNotMatch(preflightSource, /run npx knip for details/u);
+  });
+
+  it("selects Codex's Windows override for native configured-hook smokes", () => {
+    const preflightSource = readFileSync(PREFLIGHT_SCRIPT_PATH, "utf-8");
+    const functionStart = preflightSource.indexOf("function runCommand(");
+    const functionEnd = preflightSource.indexOf(
+      "\nfunction spawnFailureMessage(",
+      functionStart,
+    );
+    assert.ok(functionStart >= 0 && functionEnd > functionStart);
+    const runCommandSource = preflightSource.slice(functionStart, functionEnd);
+    const calls: unknown[][] = [];
+    const runCommand = runInNewContext(`${runCommandSource}\nrunCommand`, {
+      process: { platform: "win32", env: {} },
+      spawnSync: (...args: unknown[]) => {
+        calls.push(args);
+        return { status: 0 };
+      },
+    }) as (
+      entry: { command: string; commandWindows?: string; args?: string[] },
+      input: string,
+      cwd: string,
+    ) => unknown;
+
+    assert.match(preflightSource, /typeof value\.commandWindows === "string"/u);
+    assert.match(
+      preflightSource,
+      /process\.platform === "win32" && entry\.commandWindows !== undefined/u,
+    );
+    assert.match(
+      preflightSource,
+      /\["-NoProfile", "-NonInteractive", "-Command", entry\.commandWindows\]/u,
+    );
+    assert.match(preflightSource, /entry\.commandWindows \?\? ""/u);
+
+    runCommand(
+      { command: "echo default", commandWindows: "" },
+      "payload",
+      "C:\\fixture",
+    );
+    assert.equal(calls[0]?.[0], "powershell.exe");
+    assert.deepEqual(Array.from(calls[0]?.[1] as string[]), [
+      "-NoProfile",
+      "-NonInteractive",
+      "-Command",
+      "",
+    ]);
+
+    calls.length = 0;
+    runCommand({ command: "echo default" }, "payload", "C:\\fixture");
+    assert.equal(calls[0]?.[0], "bash");
+    assert.deepEqual(Array.from(calls[0]?.[1] as string[]), [
+      "-c",
+      'printf %s "$GOAT_HOOK_SMOKE_PAYLOAD" | { echo default; }',
+    ]);
   });
 
   it("keeps fast concurrency bounded and isolates observed subprocess-heavy suites", () => {
@@ -531,6 +725,337 @@ describe("preflight Tests-phase progress", () => {
       runnerSource,
       /test\/integration\/setup-quality-lifecycle\.test\.ts/u,
     );
+  });
+});
+
+describe("preflight Tests failure details", () => {
+  // Real TAP from a registered-hook test that failed under an inherited npm prefix; only the user home directory is replaced.
+  const capturedPrefixFailureLines = [
+    "TAP version 13",
+    "# Subtest: agent deny hook template comparison",
+    "    # Subtest: allows quoted repository evidence while the registered hook still blocks repository writes",
+    "    not ok 1 - allows quoted repository evidence while the registered hook still blocks repository writes",
+    "      ---",
+    "      duration_ms: 94.109826",
+    "      type: 'test'",
+    "      location: '/home/user/projects/goat-flow/test/unit/audit-command/agent-deny-hooks.test.ts:1:5326'",
+    "      failureType: 'testCodeFailure'",
+    "      error: |-",
+    '        nvm is not compatible with the "npm_config_prefix" environment variable: currently set to "/home/user/.cursor-server/bin"',
+    "        Run `unset npm_config_prefix` to unset it.",
+    "        bash: line 1: node: command not found",
+    "        ",
+    "        ",
+    "        127 !== 0",
+    "        ",
+    "      code: 'ERR_ASSERTION'",
+    "      name: 'AssertionError'",
+    "      expected: 0",
+    "      actual: 127",
+    "      operator: 'strictEqual'",
+    "      stack: |-",
+    "        TestContext.<anonymous> (/home/user/projects/goat-flow/test/unit/audit-command/agent-deny-hooks.test.ts:293:12)",
+    "        Test.runInAsyncScope (node:async_hooks:214:14)",
+    "        Test.run (node:internal/test_runner/test:1047:25)",
+    "        Test.start (node:internal/test_runner/test:944:17)",
+    "        node:internal/test_runner/test:1440:71",
+    "        node:internal/per_context/primordials:466:82",
+    "        new Promise (<anonymous>)",
+    "        new SafePromise (node:internal/per_context/primordials:435:3)",
+    "        node:internal/per_context/primordials:466:9",
+    "        Array.map (<anonymous>)",
+    "      ...",
+    "    1..1",
+    "not ok 1 - agent deny hook template comparison",
+    "  ---",
+    "  duration_ms: 94.731027",
+    "  type: 'suite'",
+    "  location: '/home/user/projects/goat-flow/test/unit/audit-command/agent-deny-hooks.test.ts:1:2602'",
+    "  failureType: 'subtestsFailed'",
+    "  error: '1 subtest failed'",
+    "  code: 'ERR_TEST_FAILURE'",
+    "  ...",
+    "1..1",
+    "# tests 1",
+    "# suites 1",
+    "# pass 0",
+    "# fail 1",
+    "# cancelled 0",
+    "# skipped 0",
+    "# todo 0",
+    "# duration_ms 302.462432",
+  ];
+  const capturedPrefixFailure = capturedPrefixFailureLines.join("\n");
+  // Must match the caps in preflight's Tests failure branch; change both together.
+  const maximumDetailLines = 30;
+  const maximumDetailBytes = 200;
+
+  /**
+   * Writes a temporary project registered for cleanup, then spawns Bash on the production details writer and Tests section.
+   * Only the suite launch, verdict rows and report ledger location are replaced; captured output stands in for the suite.
+   *
+   * @param suiteOutput - captured test-runner output returned in place of a real suite run with exit 1
+   * @returns shell status, recorded verdict rows and the detail lines a maintainer would see under Tests
+   */
+  function runTestsFailureSection(suiteOutput: string) {
+    const source = readFileSync(PREFLIGHT_SCRIPT_PATH, "utf8");
+    const detailsStart = source.indexOf("details_pipe() {");
+    const detailsEnd = source.indexOf("\n}\n", detailsStart);
+    const start = source.indexOf('section "Tests"');
+    const end = source.indexOf("# Show coverage only when", start);
+    assert.ok(detailsStart >= 0 && detailsEnd > detailsStart);
+    assert.ok(start >= 0 && end > start);
+    const directory = mkdtempSync(join(tmpdir(), "goat-flow-tests-failure-"));
+    fixtureTemporaryDirectories.add(directory);
+    writeFileSync(
+      join(directory, "package.json"),
+      '{"scripts":{"test":"","test:coverage":""}}\n',
+    );
+    writeFileSync(join(directory, "suite-output.tap"), suiteOutput);
+    const result = spawnSync(
+      "bash",
+      [
+        "-c",
+        `
+      set -euo pipefail
+      errors=0
+      current_section=Tests
+      LEDGER=ledger.tsv
+      section() { :; }
+      pass() { printf 'ROW\\tPASS\\t%s\\n' "$1" >> "$LEDGER"; }
+      warn() { printf 'ROW\\tWARN\\t%s\\n' "$1" >> "$LEDGER"; }
+      fail() { errors=$((errors + 1)); printf 'ROW\\tFAIL\\t%s\\n' "$1" >> "$LEDGER"; }
+      run_command_capture_with_timeout() { printf -v "$1" '%s' "$(cat suite-output.tap)"; printf -v "$2" '%s' 1; }
+      ${source.slice(detailsStart, detailsEnd + 2)}
+      ${source.slice(start, end)}
+      [[ "$errors" -eq 0 ]]
+    `,
+      ],
+      { cwd: directory, encoding: "utf8" },
+    );
+    const ledger = readFileSync(join(directory, "ledger.tsv"), "utf8").split(
+      "\n",
+    );
+    return {
+      status: result.status,
+      stderr: result.stderr,
+      rows: ledger.filter((line) => line.startsWith("ROW\t")),
+      details: ledger
+        .filter((line) => line.startsWith("DETAIL\tTests\t"))
+        .map((line) => line.slice("DETAIL\tTests\t".length)),
+    };
+  }
+
+  it("shows the first failure's assertion within a fixed bound and keeps Tests failing", () => {
+    const captured = runTestsFailureSection(capturedPrefixFailure);
+    assert.equal(captured.status, 1, captured.stderr);
+    assert.deepEqual(captured.rows, ["ROW\tFAIL\tTests failed (1/1 failures)"]);
+    assert.match(
+      captured.details[0] ?? "",
+      /not ok 1 - allows quoted repository evidence while the registered hook still blocks repository writes/u,
+    );
+    const shownDetails = captured.details.join("\n");
+    assert.match(
+      shownDetails,
+      /nvm is not compatible with the "npm_config_prefix" environment variable/u,
+    );
+    assert.match(shownDetails, /bash: line 1: node: command not found/u);
+    assert.match(shownDetails, /127 !== 0/u);
+    assert.doesNotMatch(shownDetails, /Test\.runInAsyncScope/u);
+
+    // A flooded assertion message is cut to the same bound instead of burying the report.
+    const nvmWarning = capturedPrefixFailureLines.find((line) =>
+      line.includes("nvm is not compatible"),
+    );
+    assert.ok(nvmWarning);
+    const flooded = runTestsFailureSection(
+      capturedPrefixFailure.replace(
+        nvmWarning,
+        Array(40).fill(nvmWarning.repeat(3)).join("\n"),
+      ),
+    );
+    assert.equal(flooded.status, 1, flooded.stderr);
+    assert.deepEqual(flooded.rows, captured.rows);
+    assert.equal(flooded.details.length, maximumDetailLines);
+    assert.equal(flooded.details[0], captured.details[0]);
+    assert.ok(
+      [...captured.details, ...flooded.details].every(
+        (line) => Buffer.byteLength(line) <= maximumDetailBytes,
+      ),
+      "every Tests failure detail line must fit the byte bound",
+    );
+  });
+});
+
+describe("preflight shell syntax", () => {
+  // One file in every required group catches directory omissions; whitespace must remain one argument.
+  const fixtureScripts = [
+    "workflow/install-goat-flow.sh",
+    "scripts/a-valid.sh",
+    SHELL_SYNTAX_HELPER,
+    "scripts/installers/a-valid.sh",
+    "workflow/hooks/a-valid.sh",
+    "workflow/hooks/deny-dangerous/a-valid.sh",
+    ".goat-flow/hooks/a-valid.sh",
+    ".goat-flow/hooks/deny-dangerous/a-valid.sh",
+    ".goat-flow/hooks/deny-dangerous/z later.sh",
+  ];
+
+  /** Writes temporary shell fixtures and copies the real helper; registers every file's directory for cleanup. */
+  function createSyntaxFixture(): string {
+    const directory = mkdtempSync(join(tmpdir(), "goat-flow-shell-syntax-"));
+    fixtureTemporaryDirectories.add(directory);
+    for (const script of fixtureScripts) {
+      const destination = join(directory, script);
+      mkdirSync(dirname(destination), { recursive: true });
+      writeFileSync(
+        destination,
+        "#!/usr/bin/env bash\nprintf executed > execution-marker\n",
+      );
+    }
+    writeFileSync(
+      join(directory, SHELL_SYNTAX_HELPER),
+      readFileSync(join(PROJECT_ROOT, SHELL_SYNTAX_HELPER)),
+    );
+    return directory;
+  }
+
+  /** Spawns Bash on the actual syntax section, replacing only preflight's report renderer to capture its verdict. */
+  function runSyntaxSection(directory: string) {
+    const source = readFileSync(PREFLIGHT_SCRIPT_PATH, "utf8");
+    const start = source.indexOf('section "Shell Scripts"');
+    const end = source.indexOf("if command -v shellcheck", start);
+    assert.ok(start >= 0 && end > start);
+    return spawnSync(
+      "bash",
+      [
+        "-c",
+        `
+      set -euo pipefail
+      errors=0
+      section() { :; }
+      pass() { printf 'PASS %s\\n' "$1"; }
+      fail() { errors=$((errors + 1)); printf 'FAIL %s\\n' "$1"; }
+      details_pipe() { cat; }
+      ${source.slice(start, end)}
+      [[ "$errors" -eq 0 ]]
+    `,
+      ],
+      { cwd: directory, encoding: "utf8" },
+    );
+  }
+
+  it("parses every required file, including whitespace paths, without executing scripts", () => {
+    const directory = createSyntaxFixture();
+    const result = spawnSync("bash", [SHELL_SYNTAX_HELPER], {
+      cwd: directory,
+      encoding: "utf8",
+    });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    const parsed = result.stdout
+      .split("\n")
+      .filter((line) => line.startsWith("PASS Bash syntax: "))
+      .map((line) => line.slice("PASS Bash syntax: ".length));
+    assert.deepEqual(parsed.sort(), [...fixtureScripts].sort());
+    assert.equal(existsSync(join(directory, "execution-marker")), false);
+    assert.equal(runSyntaxSection(directory).status, 0);
+  });
+
+  it("reports a malformed later whitespace path through the preflight gate", () => {
+    const directory = createSyntaxFixture();
+    const invalid = ".goat-flow/hooks/deny-dangerous/z later.sh";
+    writeFileSync(join(directory, invalid), "if then\n");
+    const result = runSyntaxSection(directory);
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.ok(result.stdout.includes(`FAIL Bash syntax: ${invalid}`));
+    assert.ok(
+      result.stdout.indexOf("PASS Bash syntax: workflow/install-goat-flow.sh") <
+        result.stdout.indexOf(`FAIL Bash syntax: ${invalid}`),
+    );
+    assert.match(result.stdout, /syntax error/u);
+  });
+
+  it("reports multiple malformed files and still parses later valid groups", () => {
+    const directory = createSyntaxFixture();
+    const invalidFiles = ["scripts/a-valid.sh", "workflow/hooks/a-valid.sh"];
+    for (const script of invalidFiles)
+      writeFileSync(join(directory, script), "if then\n");
+    const result = runSyntaxSection(directory);
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    for (const script of invalidFiles)
+      assert.ok(result.stdout.includes(`FAIL Bash syntax: ${script}`), script);
+    assert.match(
+      result.stdout,
+      /PASS Bash syntax: \.goat-flow\/hooks\/deny-dangerous\/z later\.sh/u,
+    );
+    assert.match(result.stdout, /9 files checked; 2 failures/u);
+  });
+
+  it("fails for an absent required installer and an empty required script group", () => {
+    const directory = createSyntaxFixture();
+    rmSync(join(directory, "workflow/install-goat-flow.sh"));
+    rmSync(join(directory, "scripts/installers/a-valid.sh"));
+    const result = runSyntaxSection(directory);
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.match(
+      result.stdout,
+      /FAIL Bash syntax: workflow\/install-goat-flow\.sh/u,
+    );
+    assert.match(
+      result.stdout,
+      /FAIL required shell group: scripts\/installers\/\*\.sh/u,
+    );
+    assert.match(result.stdout, /2 failures/u);
+  });
+
+  // Writes valid and malformed fixtures, then spawns each published command to prove failure propagation.
+  it("runs each published syntax command against a valid control and a later malformed file", () => {
+    const surfaces = [
+      "AGENTS.md",
+      "CLAUDE.md",
+      ".github/copilot-instructions.md",
+      ".github/workflows/ci.yml",
+      ".goat-flow/config.yaml",
+      "docs/coding-standards/conventions.md",
+    ];
+    const directory = createSyntaxFixture();
+    const laterFile = join(directory, "scripts/z-later.sh");
+    // Each real publisher must reach the parser; a source-only equality check cannot prove its exit behavior.
+    for (const surface of surfaces) {
+      const content = readFileSync(join(PROJECT_ROOT, surface), "utf8");
+      const matches = [
+        ...content.matchAll(
+          /^\s*(?:run:\s*|-\s*)?(bash scripts\/maintenance\/check-shell-syntax\.sh)\s*$/gmu,
+        ),
+      ];
+      assert.equal(matches.length, 1, surface);
+      const command = matches[0]?.[1];
+      assert.ok(command, surface);
+      writeFileSync(laterFile, ":\n");
+      const valid = spawnSync("bash", ["-c", command], {
+        cwd: directory,
+        encoding: "utf8",
+      });
+      assert.equal(
+        valid.status,
+        0,
+        `${surface}: ${valid.stdout}${valid.stderr}`,
+      );
+      writeFileSync(laterFile, "if then\n");
+      const invalid = spawnSync("bash", ["-c", command], {
+        cwd: directory,
+        encoding: "utf8",
+      });
+      assert.equal(
+        invalid.status,
+        1,
+        `${surface}: ${invalid.stdout}${invalid.stderr}`,
+      );
+      assert.ok(
+        invalid.stdout.includes("FAIL Bash syntax: scripts/z-later.sh"),
+        surface,
+      );
+    }
   });
 });
 

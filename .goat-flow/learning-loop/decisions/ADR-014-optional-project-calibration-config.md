@@ -2,28 +2,24 @@
 
 **Date:** 2026-04-15
 **Status:** Implemented
-**Updated:** 2026-05-19 - clarified that `agents:` later became a legacy ignored field; previous 2026-05-18 update repaired absorbed-history reference to the now-removed `ADR-026-userRole-local-only.md`.
+**Updated:** 2026-09-05 - condensed; this record owns the `agents` field semantics that ADR-033 defers to. Earlier amendments (2026-05-18, 2026-05-19) marked `agents:` legacy.
 
 ## Context
 
-`toolchain` and `ask_first` existed in `.goat-flow/config.yaml`, parser types, setup docs, prompts, and harness quality checks. In practice they required setup agents to guess project-specific commands and high-risk boundaries during base install. That made 1.1.0 heavier and created drift between human-reviewed instruction files and machine-readable config.
-
-`userRole` created a related but narrower failure class: contract tests asserted that the committed project config contained a per-user preference (`developer`) even though that value is not durable project truth.
+`toolchain` and `ask_first` lived in `.goat-flow/config.yaml`, the parser, setup docs, prompts, and harness checks. They forced setup agents to guess project commands and high-risk boundaries during base install, which made 1.1.0 heavier and let machine-readable config drift from the human-reviewed instruction files. `userRole` had a narrower version of the same defect: contract tests asserted a per-user preference in committed project config.
 
 ## Decision
 
-For 1.1.0:
+`toolchain`, `ask_first`, and `userRole` are optional calibration that the config reader accepts and that setup and audit never require.
 
-1. Remove `toolchain` and `ask_first` from the shipped config scaffold and base setup flow.
-2. Keep parser support so existing projects do not break and the concept can be revisited later without a schema break.
-3. Treat the fields as optional project-calibration inputs in harness and critique surfaces, not missing setup.
-4. Defer any reintroduction to a dedicated 1.2.0 task file.
-5. Treat `userRole` as reader-supported but optional. When absent, the config reader defaults to `developer`; committed config does not need to store personal preferences.
+1. The shipped scaffold and base setup flow omit `toolchain` and `ask_first`. Parser support stays so existing projects keep working and the fields can return without a schema break.
+2. Harness and quality surfaces treat the fields as optional input, not as missing setup. `audit --harness` must not penalise their absence.
+3. `userRole` defaults to `developer` when absent; committed config does not store personal preferences.
+4. `agents:` is a legacy field: the reader ignores it and the installer removes it. Agent detection comes from the filesystem and the ADR-020 roster.
 
 ## Consequences
 
-- `.goat-flow/config.yaml` stays minimal: version, skills, telemetry, line-limits; legacy `agents:` is ignored by the reader and removed by the installer
-- `workflow/install-goat-flow.sh` and setup docs stop asking agents to invent project commands and boundary lists
-- `audit --harness` must not penalize the absence of these fields
-- Contract tests must distinguish between "the reader supports this field" and "the committed project config contains this field"
-- Personal preferences stay out of the committed config surface unless a future ADR promotes them to shared project truth
+- A minimal config carries `version`, `skills`, `telemetry`, and `line-limits`. The reader also accepts `learning-loop`, `hooks`, `terminal`, `harness`, and per-bucket `path` overrides; none is required. A project may add `toolchain` for explicit verification gates, as this repository does.
+- `workflow/install-goat-flow.sh` and setup docs stop asking agents to invent commands and boundary lists.
+- Contract tests distinguish "the reader supports this field" from "the committed config contains this field".
+- Personal preferences stay out of committed config unless a later ADR promotes them to shared project truth.

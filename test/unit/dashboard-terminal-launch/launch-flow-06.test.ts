@@ -490,7 +490,8 @@ describe("dashboard terminal launch flow", () => {
   });
 
   it("warms xterm when the workspace or setup view opens", () => {
-    const source = readDashboardAppSource();
+    // Comment-only lines do not change the warmup behavior this source assertion protects.
+    const source = readDashboardAppSource().replace(/^\s*\/\/[^\n]*$/gmu, "");
     assert.match(
       source,
       /function dashboardShouldWarmXterm\([\s\S]{0,220}\(view === "workspace" \|\| view === "setup"\) && ctx\.terminalAvailable/,

@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.16.0"
+goat-flow-reference-version: "1.17.0"
 ---
 # Automated-Review Overlap Protocol
 
@@ -7,10 +7,6 @@ Loaded by `/goat-review` in PR mode. Defines how to ingest existing
 automated-reviewer findings (Copilot, CodeQL/github-advanced-security,
 claude[bot], or any other repo bot) after Pass 2 records local findings,
 and how to report human/automated provenance in Review Integrity.
-
-Borrowed from awslabs/cli-agent-orchestrator PR #245 review pattern, where
-the human reviewer posted a Copilot/Manual finding tally that made the
-review accountable ("Copilot 11, Manual 3, accuracy 100%").
 
 ## Post-Pass-2 Ingestion
 
@@ -45,12 +41,20 @@ and `.body`. Use `reviews[]` only to detect reviewer participation or summary
 claims; never manufacture file positions from review summaries. Use
 `comments[]` only as issue-level context.
 
-Normalize known GitHub identities before matching:
+Normalize known GitHub identities before matching. Strip one trailing `[bot]` suffix first, then map the
+remaining alias. The same account is spelled differently per endpoint: `pulls/<number>/reviews` returns the
+suffixed form, `gh pr view` returns it bare, and an inline comment may carry a display name instead. A
+per-alias list that does not strip the suffix first will miss the same reviewer on half its own evidence.
 
 - `Copilot` and `copilot-pull-request-reviewer` -> `copilot-pull-request-reviewer`
-- `github-advanced-security[bot]` and `github-advanced-security` -> `github-advanced-security`
-- `claude[bot]` -> `claude`
+- `github-advanced-security` -> `github-advanced-security`
+- `chatgpt-codex-connector` -> `chatgpt-codex-connector`
+- `coderabbitai` -> `coderabbitai`
+- `claude` -> `claude`
 - any other repo-specific bot the user names -> its stable login
+
+An author matching no row stays unknown. Never infer a vendor from a partial name, and never merge two
+unmapped logins because they look similar.
 
 For each automated finding, record `{ reviewer, file, line?, brief, symbol?, ruleId?, category?, rootCause? }`,
 where `brief` is the first 80 chars of the inline comment body. Preserve the
@@ -77,7 +81,9 @@ For a bot-only candidate, the host reruns the normal Pass 2 evidence procedure o
 
 ### Matching Hierarchy
 
-Compare in this order: symbol, rule ID, category, root cause, line range, then token similarity on the normalized brief. File equality is a prerequisite, not proof of one defect. The same line with different root causes stays two findings. When confidence is insufficient, preserve the existing err-toward-`[new]` bias: use `local-only` plus `disputed-match` rather than merging. Never suppress a finding as overlap.
+Compare in this order: symbol, rule ID, category, root cause, semantic location, then token similarity on the normalized brief. A bot's reported line locates its claim; the semantic anchor decides identity, because line numbers go stale on every edit while anchors survive. File equality is a prerequisite, not proof of one defect. The same line with different root causes stays two findings.
+
+When confidence is insufficient, preserve the existing err-toward-`[new]` bias: keep the bot candidate as a separate annex record and classify the active local finding as `disputed-match`. Keep the pre-ingestion local record unchanged. Never add `local-only` as a second class. Never suppress a finding as overlap.
 
 Report both deltas explicitly: "Automated findings the local review missed" lists verified bot-only IDs; "Local findings every bot missed" lists local-only R-IDs. `overlap-confirmed` is confirmation, not independent local yield.
 
@@ -90,8 +96,11 @@ Extend the Review Integrity surface defined in SKILL.md with this line when in P
 ```
 
 When no automated review: `Automated-review provenance: no-automated-review-present`.
-When fetch failed: include `automated-review-uningested` in Degradation flags.
-Outside PR mode: omit the line entirely or write `n/a`.
+Counts and missed-ID lists describe active final findings only; refuted history adds no current provenance credit.
+Each active ID has exactly one provenance class, declared before its bold title. Several reviewers may confirm that class, but the ID counts once.
+Tags mentioned in the title or explanation do not declare provenance.
+When fetch failed: use `Automated-review provenance: n/a`, include `automated-review-uningested`, and explain the ingestion failure in `Degradation evidence`.
+Outside PR mode: omit the line; truthful legacy `n/a` remains accepted.
 
 ## Degradation Flag
 

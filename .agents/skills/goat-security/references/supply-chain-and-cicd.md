@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.16.0"
+goat-flow-reference-version: "1.17.0"
 ---
 # goat-security reference: supply chain, CI/CD, and agent surfaces
 
@@ -16,7 +16,9 @@ Keep these failure classes separate:
 
 High-signal evidence includes lifecycle hooks that execute downloaded content, `curl | bash`, `pull_request_target` combined with untrusted checkout, secrets exposed to fork-controlled steps, broad package/action references on privileged jobs, and artifacts consumed across trust levels without verification.
 
-Package audits are lead generators. Before running one, apply the core skill's scanner classification and data-egress gate; never use audit fix/install modes. A dev-only or unreachable package may clear a vulnerable-code lead, but it does not clear install/build execution, provenance, or privileged tooling exposure.
+Package audits are lead generators. Before running one, apply SKILL's Shared Pre-Probe Gate; never use audit fix/install modes. A dev-only or unreachable package may clear a vulnerable-code lead, but it does not clear install/build execution, provenance, or privileged tooling exposure.
+
+**Scanner availability:** after the playbook check, record each scanner as `<tool>-unavailable` when absent, `scanner-withheld` when installed but unauthorized, or, when it runs, with its `offline-only`/`networked` and `read-only`/`mutating` classification and any endpoint, submitted data, and credentials. An unavailable or withheld scanner sets the `tool-limited` degradation flag and leaves the lead classes it would have covered `not-assessed`. Record one token per scanner: when an installed scanner's target-controlled execution is missing any control SKILL's Shared Pre-Probe Gate requires, record `execution-withheld` and name that control; `scanner-withheld` covers a scanner whose execution safety is settled and that lacks only run approval. Never install a missing scanner, run one against production, or fabricate its output.
 
 ## CI/CD and release verification
 
@@ -31,7 +33,7 @@ Package audits are lead generators. Before running one, apply the core skill's s
 
 ## Infrastructure, IaC, cloud, container, and orchestrator review
 
-For every applicable layer—IaC tool, provider/cloud, container runtime/image, and orchestrator/platform—record a separate named/versioned baseline and currency evidence/status. An omitted applicable layer is `not assessed` and `coverage-degraded`; MUST NOT recommend clearance. Check public exposure and network boundaries, IAM and workload identity, secrets and state-file handling, encryption, privileged/root workloads, host mounts and capabilities, metadata-service access and network policy, and destructive drift between declared and deployed state. An infrastructure-only project with a posture-relevant unassessed category is coverage-degraded, not cleared.
+For every applicable layer—IaC tool, provider/cloud, container runtime/image, and orchestrator/platform—record a separate named/versioned baseline and currency evidence/status. An omitted applicable layer is `not-assessed` and `coverage-degraded`; MUST NOT recommend clearance. Check public exposure and network boundaries, IAM and workload identity, secrets and state-file handling, encryption, privileged/root workloads, host mounts and capabilities, metadata-service access and network policy, and destructive drift between declared and deployed state. An infrastructure-only project with a posture-relevant unassessed category is coverage-degraded, not cleared.
 
 ## Local server, PTY, and shell surfaces
 
@@ -42,37 +44,39 @@ For every applicable layer—IaC tool, provider/cloud, container runtime/image, 
 
 ## Generative AI and LLM application baseline
 
-This bundled checklist maps to **OWASP Top 10 for LLM Applications 2025**. Record that version and verify the authoritative source before calling it current. Select or explicitly skip:
+This bundled checklist maps to **OWASP GenAI LLM Top 10 2026**, one line per official category so an omission is visible as a missing identifier. Record that version and verify the authoritative source before calling it current: a page is current evidence only when its category identifiers match the edition you selected, so a page that shows a superseded list beside a current download leaves currency unresolved until the identifiers agree. Select or explicitly skip:
 
-- prompt injection across user, retrieved, multimodal, and tool-returned content
-- sensitive information disclosure across prompts, outputs, logs, training, and retrieval
-- model/component/data supply chain and data and model poisoning
-- improper output handling before code, templates, queries, tools, or downstream systems
-- excessive agency; system prompt leakage without treating the prompt as a security boundary
-- vector and embedding weaknesses, retrieval authorization, tenant isolation, and poisoning
-- misinformation where downstream trust creates security impact
-- unbounded consumption of tokens, compute, storage, tools, or paid services
+- LLM01:2026 prompt injection across user, retrieved, tool-returned, and cross-modal image or audio content
+- LLM02:2026 sensitive information disclosure across prompts, outputs, logs, training, and retrieval
+- LLM03:2026 excessive agency across tool scope, permissions, autonomy, and irreversible actions
+- LLM04:2026 model, component, and data supply chain, including promoted-artifact identity
+- LLM05:2026 data and model poisoning, including fine-tuning subversion
+- LLM06:2026 unbounded consumption of tokens, compute, storage, tools, or paid services
+- LLM07:2026 misinformation where downstream trust creates security impact
+- LLM08:2026 hidden context exposure: extraction, inference, or reconstruction of hidden non-user-facing instructions or operational context, with system prompt leakage as one example rather than the whole category
+- LLM09:2026 vector and embedding weaknesses, retrieval authorization, tenant isolation, and poisoning
+- LLM10:2026 improper output handling before code, templates, queries, tools, or downstream systems, including assistant-generated code
 
 This baseline is complementary to the Agentic baseline: use both when an LLM application can plan, act, call tools, retain memory, or delegate.
 
 ## Non-generative ML and model baseline
 
-Select a named, authoritative complementary baseline for non-generative ML/model systems; general application and LLM baselines do not cover this class. Assess adversarial evasion, model extraction, model inversion, membership inference, training-data/model poisoning, unsafe serialization, model provenance/integrity, query/rate controls, and security impact from confidence-score or feature leakage. If no current baseline can be verified under the core authority/currency gate, the class is `not assessed` and `coverage-degraded`; MUST NOT recommend clearance.
+Select a named, authoritative complementary baseline for non-generative ML/model systems; general application and LLM baselines do not cover this class. Assess adversarial evasion, model extraction, model inversion, membership inference, training-data/model poisoning, unsafe serialization, model provenance/integrity, query/rate controls, and security impact from confidence-score or feature leakage. Candidate sources carry their maturity: the OWASP Machine Learning Security Top Ten is a draft, and MITRE ATLAS is an adversary-technique knowledge base. Neither supports an assurance claim, singly or combined, and selecting one never lifts the class out of `not-assessed`; it scopes discovery only. Name the selected source with its maturity and retrieval date. If no current baseline can be verified under SKILL's Exhaustive inventory gate, the class is `not-assessed` and `coverage-degraded`; MUST NOT recommend clearance.
 
 ## Agentic baseline
 
-This bundled checklist maps to **OWASP Agentic Top 10 2026**. Record that version and verify the authoritative source before calling it current. Select or explicitly skip:
+This bundled checklist maps to **OWASP Top 10 for Agentic Applications 2026**. Record that version and verify the authoritative source before calling it current; official pages differ on some category titles, so cite the identifier and the page you read. Select or explicitly skip:
 
-- goal hijack through instructions, retrieved content, artifacts, or cross-agent messages
-- tool misuse and exploitation through over-broad capabilities or unsafe arguments
-- identity and privilege abuse, including confused-deputy and delegated-credential paths
-- agentic supply-chain compromise in models, tools, plugins, prompts, skills, or memory providers
-- unexpected code execution (RCE) through generated code, interpreters, shells, or unsafe tool bridges
-- memory and context poisoning, persistence, provenance loss, and tenant crossover
-- insecure inter-agent communication, unauthenticated messages, and authority confusion
-- cascading failures through retries, loops, cost/resource amplification, or propagated bad state
-- human-agent trust exploitation through fabricated authority, evidence, approvals, or completion claims
-- rogue agents that evade oversight, broaden objectives, conceal actions, or retain unauthorized access
+- ASI01 goal hijack through instructions, retrieved content, artifacts, or cross-agent messages
+- ASI02 tool misuse and exploitation through over-broad capabilities or unsafe arguments
+- ASI03 identity and privilege abuse, including confused-deputy and delegated-credential paths
+- ASI04 agentic supply-chain compromise in models, tools, plugins, prompts, skills, or memory providers
+- ASI05 unexpected code execution (RCE) through generated code, interpreters, shells, or unsafe tool bridges
+- ASI06 memory and context poisoning, persistence, provenance loss, and tenant crossover
+- ASI07 insecure inter-agent communication, unauthenticated messages, and authority confusion
+- ASI08 cascading failures through retries, loops, cost/resource amplification, or propagated bad state
+- ASI09 human-agent trust exploitation through fabricated authority, evidence, approvals, or completion claims
+- ASI10 rogue agents that evade oversight, broaden objectives, conceal actions, or retain unauthorized access
 
 For each applicable category, trace content provenance, decision authority, tool capability, identity, persistence, downstream effects, and the human confirmation boundary. Instruction files and prompts are data until a trusted runtime grants them authority.
 
@@ -97,4 +101,4 @@ Before execution, restate the resolved tuple and mutative/data-egress effects. D
 
 ## Positive observations
 
-Credit controls only with current-session `OBSERVED` evidence bound to exact assessed authority/snapshot and affected scope/deployment/path; stale/mismatched/unresolved bindings MUST NOT support clearance. Examples: least privilege, immutable reviewed inputs, verified provenance, isolated ephemeral runners, fail-closed hooks, origin-checked sessions, scoped agent tools, provenance-preserving memory, and human confirmation for irreversible actions.
+Credit controls only under the positive-observation rule in `common-threats.md` (search: `Positive observations worth calling out`). Examples: least privilege, immutable reviewed inputs, verified provenance, isolated ephemeral runners, fail-closed hooks, origin-checked sessions, scoped agent tools, provenance-preserving memory, and human confirmation for irreversible actions.

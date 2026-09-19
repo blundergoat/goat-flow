@@ -45,17 +45,22 @@ after(cleanupHookTestDirs);
 
 describe("gruff-code-quality hook (gruff.hook.v1 contract)", () => {
   it("routes naming guidance to the naming and placement owner", () => {
-    const hookSource = readFileSync(
+    for (const hookPath of [
       join(PROJECT_ROOT, "workflow", "hooks", "gruff-code-quality.sh"),
-      "utf8",
-    );
-    const namingGuidance = hookSource.match(
-      /printf 'gruff-code-quality: naming findings[^']+'/u,
-    );
+      join(PROJECT_ROOT, ".goat-flow", "hooks", "gruff-code-quality.sh"),
+    ]) {
+      const hookSource = readFileSync(hookPath, "utf8");
+      const namingGuidance = hookSource.match(
+        /printf 'gruff-code-quality: naming findings[^']+'/u,
+      );
 
-    assert.ok(namingGuidance?.[0], "hook must retain focused naming guidance");
-    assert.match(namingGuidance[0], /naming-and-placement\.md/u);
-    assert.doesNotMatch(namingGuidance[0], /code-comments\.md/u);
+      assert.ok(
+        namingGuidance?.[0],
+        `${hookPath}: hook must retain focused naming guidance`,
+      );
+      assert.match(namingGuidance[0], /naming-and-placement\.md/u, hookPath);
+      assert.doesNotMatch(namingGuidance[0], /code-comments\.md/u, hookPath);
+    }
   });
 
   // Fixture purpose: writes a hook-envelope mock to cover finding and suppression rendering.
@@ -828,6 +833,218 @@ describe("gruff-code-quality hook (gruff.hook.v1 contract)", () => {
         (entryName) => entryName.startsWith(".gruff-hook-health."),
       ).length,
       2,
+    );
+  });
+});
+
+/**
+ * Writes one analysable package: a Gruff config, a clean contract analyzer and one source file.
+ * It creates files under the given directory only.
+ *
+ * @param packageRoot - package directory to create; its analyzer logs argv beside the config
+ */
+function writeAnalysablePackage(packageRoot: string): void {
+  writeContractGruffBinary(packageRoot, CLEAN_GRUFF_CONTRACT_ENVELOPE);
+  writeFileSync(join(packageRoot, ".gruff-ts.yaml"), "rules: {}\n");
+  mkdirSync(join(packageRoot, "src"), { recursive: true });
+  writeFileSync(join(packageRoot, "src", "sample.ts"), "a\nb\nc\n");
+}
+
+/**
+ * Saves a nested install's Gruff settings the way a consumer's `.goat-flow/config.yaml` holds them.
+ * It writes one config file under the given install root.
+ *
+ * @param installRoot - nested project that owns the edited files
+ * @param gruffSettings - YAML lines nested under `hooks.gruff-code-quality`
+ */
+function writeOwnerGruffConfig(
+  installRoot: string,
+  gruffSettings: string[],
+): void {
+  mkdirSync(join(installRoot, ".goat-flow"), { recursive: true });
+  writeFileSync(
+    join(installRoot, ".goat-flow", "config.yaml"),
+    ["hooks:", "  gruff-code-quality:", ...gruffSettings, ""].join("\n"),
+  );
+}
+
+describe("gruff-code-quality hook resolves ownership from the edited file", () => {
+  it("derives scope from each sibling repository under a parent that is not a repository", () => {
+    const workspaceRoot = makeRoot();
+    // Two child repositories under a non-git parent reproduce the measured consumer workspace.
+    for (const port of ["port-a", "port-b"]) {
+      writeAnalysablePackage(join(workspaceRoot, port));
+      initGit(join(workspaceRoot, port));
+    }
+    const hookRun = runMigratedHook(
+      workspaceRoot,
+      {
+        tool_name: "multi_replace_file_content",
+        tool_input: {
+          edits: [
+            { file_path: "port-a/src/sample.ts" },
+            { file_path: "port-b/src/sample.ts" },
+          ],
+        },
+      },
+      "/usr/bin:/bin",
+    );
+    const result = readMigratedGruffResult(hookRun);
+    assert.equal(result.outcome, "pass", String(hookRun.stderr));
+    assert.deepEqual(result.coverage, {
+      status: "complete",
+      attemptedUnits: 2,
+      completedUnits: 2,
+      skippedUnits: 0,
+    });
+    assert.doesNotMatch(String(hookRun.stderr), /no Git repository/u);
+  });
+
+  it("analyses the whole file and says so when no Git repository contains it", () => {
+    const workspaceRoot = makeRoot();
+    writeAnalysablePackage(join(workspaceRoot, "spec"));
+    // An empty stray .git directory is not a repository to Git, so it must not block the whole-file scope.
+    mkdirSync(join(workspaceRoot, ".git"));
+    const hookRun = runMigratedHook(
+      workspaceRoot,
+      { tool_name: "Edit", tool_input: { file_path: "spec/src/sample.ts" } },
+      "/usr/bin:/bin",
+    );
+    assert.equal(readMigratedGruffResult(hookRun).outcome, "pass");
+    assert.match(
+      String(hookRun.stderr),
+      /spec\/src\/sample\.ts.*no Git repository/u,
+    );
+    assert.equal(
+      readFileSync(join(workspaceRoot, "spec", "gruff-hook-args.log"), "utf8"),
+      "hook --format json src/sample.ts\n",
+    );
+  });
+
+  // Fixture purpose: an unopenable gitfile is a Git failure, never proof of absence; Side effects: writes one package and that gitfile.
+  it("keeps a failed Git lookup incomplete instead of analysing the whole file", () => {
+    const workspaceRoot = makeRoot();
+    writeAnalysablePackage(join(workspaceRoot, "broken"));
+    writeFileSync(
+      join(workspaceRoot, "broken", ".git"),
+      "gitdir: /nonexistent/goat-flow-fixture\n",
+    );
+    const result = readMigratedGruffResult(
+      runMigratedHook(
+        workspaceRoot,
+        {
+          tool_name: "Edit",
+          tool_input: { file_path: "broken/src/sample.ts" },
+        },
+        "/usr/bin:/bin",
+      ),
+    );
+    assert.equal(result.outcome, "incomplete");
+    assert.equal(
+      (result.findings as Array<{ code: string }>)[0]?.code,
+      "git-scope-failed",
+    );
+    assert.equal(
+      existsSync(join(workspaceRoot, "broken", "gruff-hook-args.log")),
+      false,
+    );
+  });
+
+  it("skips files under a nested install that disables Gruff and still analyses the rest", () => {
+    const workspaceRoot = makeRoot();
+    writeAnalysablePackage(join(workspaceRoot, "enabled"));
+    writeAnalysablePackage(join(workspaceRoot, "opted-out"));
+    writeOwnerGruffConfig(join(workspaceRoot, "opted-out"), [
+      "    enabled: false",
+    ]);
+    const result = readMigratedGruffResult(
+      runMigratedHook(
+        workspaceRoot,
+        {
+          tool_name: "multi_replace_file_content",
+          tool_input: {
+            edits: [
+              { file_path: "enabled/src/sample.ts" },
+              { file_path: "opted-out/src/sample.ts" },
+            ],
+          },
+        },
+        "/usr/bin:/bin",
+      ),
+    );
+    assert.equal(
+      (result.coverage as Record<string, unknown>).attemptedUnits,
+      1,
+    );
+    assert.equal(
+      existsSync(join(workspaceRoot, "enabled", "gruff-hook-args.log")),
+      true,
+    );
+    assert.equal(
+      existsSync(join(workspaceRoot, "opted-out", "gruff-hook-args.log")),
+      false,
+    );
+  });
+
+  it("reports an owner config with an unusable Gruff choice as unavailable, not as an opt-out", () => {
+    const workspaceRoot = makeRoot();
+    writeAnalysablePackage(join(workspaceRoot, "port"));
+    writeOwnerGruffConfig(join(workspaceRoot, "port"), ["    enabled: maybe"]);
+    const result = readMigratedGruffResult(
+      runMigratedHook(
+        workspaceRoot,
+        {
+          tool_name: "Edit",
+          tool_input: {
+            file_path: "port/src/sample.ts",
+            changed_ranges: [{ startLine: 3, endLine: 3 }],
+          },
+        },
+        "/usr/bin:/bin",
+      ),
+    );
+    assert.equal(result.outcome, "unavailable");
+    assert.equal(
+      (result.findings as Array<{ code: string }>)[0]?.code,
+      "owner-config-invalid",
+    );
+    assert.equal(
+      existsSync(join(workspaceRoot, "port", "gruff-hook-args.log")),
+      false,
+    );
+  });
+
+  it("reads the analyzer override from the nested install that owns the edited file", () => {
+    const workspaceRoot = makeRoot();
+    const portRoot = join(workspaceRoot, "port");
+    writeAnalysablePackage(portRoot);
+    // Move the analyzer out of every standard location so only the owner's saved override can find it.
+    mkdirSync(join(portRoot, "tools"));
+    copyFileSync(
+      join(portRoot, "node_modules", ".bin", "gruff-ts"),
+      join(portRoot, "tools", "gruff-ts"),
+    );
+    chmodSync(join(portRoot, "tools", "gruff-ts"), 0o755);
+    rmSync(join(portRoot, "node_modules"), { recursive: true });
+    writeOwnerGruffConfig(portRoot, [
+      "    binaries:",
+      "      ts: tools/gruff-ts",
+    ]);
+    const hookRun = runMigratedHook(
+      workspaceRoot,
+      {
+        tool_name: "Edit",
+        tool_input: {
+          file_path: "port/src/sample.ts",
+          changed_ranges: [{ startLine: 3, endLine: 3 }],
+        },
+      },
+      "/usr/bin:/bin",
+    );
+    assert.equal(
+      readMigratedGruffResult(hookRun).outcome,
+      "pass",
+      String(hookRun.stdout),
     );
   });
 });

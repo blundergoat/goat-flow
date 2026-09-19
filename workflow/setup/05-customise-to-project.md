@@ -103,7 +103,7 @@ Re-run `goat-flow index` after adding, editing, renaming, or resolving entries; 
 - Review the Ask First section. Are the boundaries specific to this project's real risk areas?
 - Are there directories with complex ownership, migration scripts, config that shouldn't be touched?
 - Update with real paths and real reasons
-- If existing instruction files exist in `.github/instructions/`, reference them from the router table. Keep them as the canonical local-instructions surface.
+- Reference existing provider-appropriate local instruction files from the Router Table. Do not claim another harness loads Copilot's `.github/instructions/` files or any other provider-specific surface.
 
 ---
 

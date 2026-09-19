@@ -65,6 +65,7 @@ interface DecisionFileSummary {
 interface StatsWarning {
   file: string;
   rule:
+    | "bucket-size-headroom"
     | "decision-metadata"
     | "empty-learning-loop"
     | "index-missing"
@@ -97,6 +98,7 @@ interface StatsFinding {
     | "stale-last-reviewed"
     | "stale-ref"
     | "invalid-line-ref"
+    | "missing-anchor"
     | "evidence-label"
     | "format"
     | "bucket-size"
@@ -253,6 +255,9 @@ function checkBucketLastReviewed(
 /** Shared byte threshold where one learning-loop bucket becomes costly to retrieve. */
 export const BUCKET_SIZE_WARN_BYTES = 40_000;
 
+/** Advisory threshold that leaves one kilobyte to split a bucket before the blocking limit. */
+export const BUCKET_SIZE_HEADROOM_WARN_BYTES = 39_000;
+
 /**
  * Collect every blocking problem for one learning-loop bucket.
  * It reports all of them together, because an operator fixing a bucket should see the full repair list rather than one problem per run.
@@ -365,24 +370,30 @@ function isEmptyLearningLoopDiagnostic(message: string): boolean {
 }
 
 /**
- * Collect advisory learning-loop warnings for valid empty directories.
- * Use when users need orientation without turning a fresh learning loop into a failure.
+ * Collect advisory learning-loop warnings for valid empty directories and near-limit buckets.
+ * Use when users need orientation or split headroom without turning either state into a failure.
  */
 function collectWarnings(section: BucketSection): StatsWarning[] {
-  // A clean bucket has no format diagnostic, so there is no advisory message to show users.
-  if (section.formatDiagnostic === null) return [];
-  // Only valid empty-state diagnostics become warnings; other diagnostics remain blocking findings.
-  return (
-    section.formatDiagnostic
-      .split("; ")
-      .filter(isEmptyLearningLoopDiagnostic)
-      // Each empty directory gets one explicit warning row in text and JSON output.
-      .map((message) => ({
-        file: section.path,
-        rule: "empty-learning-loop",
-        message,
-      }))
-  );
+  const emptyStateWarnings = (section.formatDiagnostic ?? "")
+    .split("; ")
+    .filter(isEmptyLearningLoopDiagnostic)
+    .map((message) => ({
+      file: section.path,
+      rule: "empty-learning-loop" as const,
+      message,
+    }));
+  const headroomWarnings = section.buckets
+    .filter(
+      (bucket) =>
+        bucket.sizeBytes >= BUCKET_SIZE_HEADROOM_WARN_BYTES &&
+        bucket.sizeBytes <= BUCKET_SIZE_WARN_BYTES,
+    )
+    .map((bucket) => ({
+      file: bucket.path,
+      rule: "bucket-size-headroom" as const,
+      message: `${bucket.path}: ${bucket.sizeBytes} bytes leaves ${BUCKET_SIZE_WARN_BYTES - bucket.sizeBytes} bytes before the ${BUCKET_SIZE_WARN_BYTES}-byte blocking threshold; split into narrower category buckets`,
+    }));
+  return [...emptyStateWarnings, ...headroomWarnings];
 }
 
 const VALID_TRIGGER_PHASES = new Set(["READ", "SCOPE", "ACT", "VERIFY"]);
@@ -400,6 +411,10 @@ function describeMemoryQualityIssues(entry: LearningLoopEntryFact): string[] {
     !VALID_TRIGGER_PHASES.has(entry.triggerPhase)
   ) {
     issues.push(`invalid Trigger phase "${entry.triggerPhase}"`);
+  }
+  // Caught-at metadata uses the same vocabulary but remains optional and advisory.
+  if (entry.caughtAt !== null && !VALID_TRIGGER_PHASES.has(entry.caughtAt)) {
+    issues.push(`invalid Caught at "${entry.caughtAt}"`);
   }
   // A recurrence before creation makes the user's incident chronology internally impossible.
   if (
@@ -492,6 +507,27 @@ function collectPatternReferenceFindings(
     }
   }
   return findings;
+}
+
+/**
+ * Require every active footgun to retain at least one resolving evidence anchor.
+ * Resolved history stays readable without retroactive migration because it no longer drives current prevention work.
+ */
+function collectActiveFootgunAnchorFindings(
+  learningLoopEntries: LearningLoopEntryFact[],
+): StatsFinding[] {
+  return learningLoopEntries
+    .filter(
+      (entry) =>
+        entry.kind === "footgun" &&
+        entry.status === "active" &&
+        !entry.hasValidAnchor,
+    )
+    .map((entry) => ({
+      file: entry.sourcePath,
+      rule: "missing-anchor" as const,
+      message: `${entry.sourcePath}: active footgun "${entry.title}" is missing a valid evidence anchor; cite a repository-relative file path immediately followed by (search: "stable semantic needle")`,
+    }));
 }
 
 const ADR_FILENAME = /^ADR-\d{3}-[a-z0-9-]+\.md$/;
@@ -662,11 +698,14 @@ export function checkStats(report: StatsCheckInput): StatsCheckReport {
   const learningLoopEntries = report.learningLoopEntries ?? [];
   const patternReferenceFindings =
     collectPatternReferenceFindings(learningLoopEntries);
+  const activeFootgunAnchorFindings =
+    collectActiveFootgunAnchorFindings(learningLoopEntries);
   // Hard integrity defects combine into the blocking list that controls the user's exit status.
   const findings = [
     ...collectFindings(report.footguns),
     ...collectFindings(report.lessons),
     ...patternReferenceFindings,
+    ...activeFootgunAnchorFindings,
     ...decisionFindings,
     ...indexFindings,
   ];

@@ -13,7 +13,8 @@ The generated prompt asks an agent to judge whether the harness is usable, not j
 1. **Ground yourself** - run the project's validation commands (`audit --harness`, `stats --check`), save the output
 2. **Concern-by-concern analysis** - for each of the 5 harness concerns (Context, Constraints, Verification, Recovery, Feedback Loop), assess what works, what fails or is weak, and provide file or semantic-anchor evidence
 3. **False positive and false negative risks** - identify where a structural PASS hides a real gap, and where a FAIL is misleading
-4. **Top 5 improvements** - prioritize actionable fixes with evidence and verification commands
+4. **Refuted candidates** - preserve suspected findings the assessor tested and ruled out, with the reason and source or command evidence
+5. **Top 5 improvements** - prioritize actionable fixes with evidence and verification commands
 
 Findings are severity-ranked (BLOCKER / MAJOR / MINOR) with evidence quality marked (OBSERVED vs INFERRED). The prompt embeds the current audit results so the agent knows what's already passing or failing.
 
@@ -29,7 +30,11 @@ npx @blundergoat/goat-flow@latest quality history --agent claude
 npx @blundergoat/goat-flow@latest quality diff --agent claude
 ```
 
-Saved reports live locally under `.goat-flow/logs/quality/` as validated JSON. New reports record the assessed revision, worktree state, grounding coverage, unverified probes, and score confidence under `assessment_context`; these facts explain evidence gaps without automatically changing a score. `history` and `diff` also keep older reports loadable when that context predates their schema.
+Saved reports live locally under `.goat-flow/logs/quality/` as validated JSON. New reports record run provenance under `assessment_context`, require a `refuted_candidates` array that may be empty, and include `score_rationale` for all eight setup and system axes. Each rationale row has non-empty, single-line `evidence` and `deduction` text capped at 240 characters per field. Each refuted row explains what claim was excluded and the source or command evidence that disproved it, keeping it separate from actionable findings.
+
+New prompts also retain up to five categorized `improvements` and before/after `workspace_snapshot` fingerprints. Runtime findings require the actual command, exit code, and result summary. History shows saved recommendations; diff exposes `comparisonWarnings` for missing or differing provenance without changing scores. Missing legacy recommendations mean they were not recorded, not that none existed. See the [quality save contract](cli.md#goat-flow-quality-save-project) for fields, bounds, and capture limits.
+
+`history` and `diff` keep older reports loadable when these fields predate their schema. A missing legacy refutation ledger is read as `[]`; missing score rationale remains absent and text output labels it `rationale unavailable (legacy report)`. Current rationale is shown beside the saved `/25` value without recalculating or averaging it. It explains one assessor's judgment but does not make reports from different agents or modes comparable.
 
 ---
 
@@ -54,7 +59,7 @@ The audit checks whether files exist, paths resolve, and patterns are registered
 
 **Quality evaluates:**
 - Are Ask First boundaries specific to real risk areas in this codebase, or generic placeholders?
-- Does the deny-dangerous hook pass its self-test (`deny-dangerous.sh --self-test`)?
+- Do both policy hooks pass their self-tests (`deny-dangerous.sh --self-test` and `deny-git-mutations.sh --self-test`)?
 - Does `.goat-flow/config.yaml` stay lean and accurate for this project? Optional project-calibration fields such as `toolchain` are valid only when they reflect real commands; their absence is not a setup gap.
 - Are there static analysis tools in the project's package manifest that aren't registered as constraints?
 

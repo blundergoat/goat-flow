@@ -17,8 +17,12 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { PassThrough, Writable } from "node:stream";
 import { describe, it } from "node:test";
-import { windowsTaskkillExecutablePath } from "../../workflow/hooks/run-with-bash.mjs";
+import {
+  relayLegacyHookOutput,
+  windowsTaskkillExecutablePath,
+} from "../../workflow/hooks/run-with-bash.mjs";
 import {
   describeInvalidHookLaunchTimeout,
   resolveHookLaunchTimeoutMs,
@@ -159,7 +163,7 @@ describe("hook launcher script validation", () => {
         assert.match(result[fixture.stream], fixture.pattern);
         assert.match(
           result[fixture.stream],
-          /exceeded its deadline and was killed/u,
+          /exceeded its deadline; process-tree termination was requested/u,
         );
         assert.ok(Date.now() - startedAt < 1_500, launcherDiagnostics(result));
       });
@@ -205,7 +209,7 @@ describe("hook launcher script validation", () => {
       );
       assert.match(
         launcherResult.stderr,
-        /exceeded its deadline and was killed/u,
+        /exceeded its deadline; process-tree termination was requested/u,
       );
       assert.equal(readFileSync(childStartedMarkerPath, "utf8"), "started\n");
       assert.ok(
@@ -240,6 +244,31 @@ describe("hook launcher script validation", () => {
       assert.equal(launcherResult.stdout, "legacy stdout\n");
       assert.equal(launcherResult.stderr, "legacy stderr\n");
     });
+  });
+
+  // Fixture purpose: saturates a one-byte destination so the relay must pause its source until the pending write drains.
+  it("applies host backpressure to legacy hook output", async () => {
+    let finishPendingWrite: (() => void) | null = null;
+    const hookOutput = new PassThrough({ highWaterMark: 128 * 1024 });
+    const hostOutput = new Writable({
+      highWaterMark: 1,
+      // Hold the first destination write open so Node exposes the relay's pause behavior.
+      write(_chunk, _encoding, callback) {
+        finishPendingWrite = callback;
+      },
+    });
+    relayLegacyHookOutput(hookOutput, hostOutput);
+
+    hookOutput.write(Buffer.alloc(64 * 1024));
+    await new Promise<void>((resolveTurn) => setImmediate(resolveTurn));
+    assert.equal(hookOutput.isPaused(), true);
+    assert.ok(finishPendingWrite);
+
+    finishPendingWrite();
+    await new Promise<void>((resolveTurn) => setImmediate(resolveTurn));
+    assert.equal(hookOutput.isPaused(), false);
+    hookOutput.destroy();
+    hostOutput.destroy();
   });
 
   // Fixture purpose: prove Claude-visible advice. Side effects: writes and starts one script.
@@ -439,6 +468,58 @@ describe("hook launcher script validation", () => {
       assert.equal(launcherResult.stderr, "");
     });
   });
+
+  // ADD INTEGRATION: split guards share a launcher; startup and deadline failures must name the selected policy.
+  for (const hookId of ["deny-dangerous", "deny-git-mutations"]) {
+    for (const responseMode of ["policy", "antigravity", "copilot"]) {
+      for (const failure of ["missing script", "deadline"]) {
+        it(`attributes ${failure} to ${hookId} in ${responseMode}`, () => {
+          withTempProject((root) => {
+            const hookDirectory = createManagedHookDirectory(root);
+            if (failure === "deadline") {
+              writeFileSync(
+                join(hookDirectory, `${hookId}.sh`),
+                "#!/usr/bin/env bash\nsleep 5\n",
+              );
+            }
+            const result = runLauncherProcess(
+              root,
+              `.goat-flow/hooks/${hookId}.sh`,
+              responseMode,
+              {
+                ...process.env,
+                GOAT_FLOW_HOOK_LAUNCH_TIMEOUT_MS: "10",
+              },
+            );
+            assert.equal(
+              result.status,
+              responseMode === "policy" ? 2 : 0,
+              launcherDiagnostics(result),
+            );
+            const reason =
+              responseMode === "policy"
+                ? result.stderr
+                : responseMode === "antigravity"
+                  ? JSON.parse(result.stdout).reason
+                  : JSON.parse(result.stdout).permissionDecisionReason;
+            assert.ok(reason.includes(hookId), reason);
+            assert.match(
+              reason,
+              failure === "deadline" ? /exceeded its deadline/u : /not found/u,
+            );
+            if (responseMode !== "policy") {
+              const response = JSON.parse(result.stdout);
+              assert.equal(
+                response.decision ?? response.permissionDecision,
+                "deny",
+              );
+              assert.equal(result.stderr, "");
+            }
+          });
+        });
+      }
+    }
+  }
 
   const invalidPolicyTimeoutValues = ["0", "1.5", "+1", " 1", "invalid"];
   // Separate names show exactly which mistyped user setting stopped being rejected.

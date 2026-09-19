@@ -1,12 +1,10 @@
 /**
- * Shared types and derived agent constants for the dashboard's non-terminal HTTP routes.
+ * Defines shared types and agent constants for the dashboard's non-terminal HTTP routes.
  *
- * Owns the dependency-bag and request-context interfaces every route closure consumes, the validated query-parameter shapes, the per-request
- * audit-profiler contract, and the agent lists/sets derived once from the agent registry (used for `?agent=` validation and the client bootstrap
- * payload).
+ * Routes use validated request shapes and one server context to serve project, audit, and quality responses consistently.
+ * Registry-derived agent lists supply both query validation and the browser's supported-agent data.
  *
- * Pure type and constant module - the route context is constructed in dashboard-route-context.ts and
- * the handlers live in the sibling dashboard-*-routes.ts files.
+ * The context implementation and route handlers live in the sibling dashboard server modules.
  */
 import type { IncomingMessage, ServerResponse } from "node:http";
 import {
@@ -53,14 +51,16 @@ export const QUALITY_EVALUATE_MAX_BODY_BYTES =
   MAX_EVALUATE_CONTENT_BYTES + 64 * 1024;
 
 /**
- * Outcome of the `/api/quality` audit-cache lookup, surfaced to the dashboard so the UI can show whether the audit was reused: `hit` served from
- * cache, `miss` recomputed and cached, `bypass` a `fresh=true` request that skipped the cache.
+ * Reports the quality cache lookup: a hit found a saved audit, a miss found none, and bypass means freshness skipped lookup.
+ * A miss does not promise a recomputation because a fast-cache request can return without running an audit.
  */
 export type QualityAuditCacheStatus = "hit" | "miss" | "bypass";
 
 /**
- * Preset JSON shape served to the dashboard; keep fields aligned with the
- * bundled `preset-prompts.json` asset rather than deriving labels at runtime.
+ * Describes a bundled prompt preset sent to the dashboard's preset picker.
+ *
+ * The stable field names match `preset-prompts.json` and its browser consumers.
+ * Labels and prompt text come from that asset so the selected preset reaches the user without runtime label derivation.
  */
 interface DashboardPresetData {
   id: string;
@@ -71,7 +71,10 @@ interface DashboardPresetData {
 }
 
 /**
- * Normalised `/api/quality` query parameters after mode and agent validation.
+ * Carries a validated quality request for the selected agent and mode.
+ *
+ * A fresh request can bypass cached audits; the fast-cache option separately controls whether a missing audit is run.
+ * Keeping these choices separate lets the route report cache availability without promising a recomputation.
  */
 export interface QualityRequestParams {
   agent: AgentId;
@@ -87,7 +90,10 @@ type JsonResponder = (
 ) => void;
 
 /**
- * Request-body read limits for upload and mutation routes.
+ * Lets an upload or mutation route choose its request-body limits.
+ *
+ * An omitted byte limit keeps the body reader's default; a supplied limit applies to the whole body.
+ * An omitted error message keeps the reader's default oversized-request response.
  */
 interface BodyReadOptions {
   maxBytes?: number;
@@ -100,7 +106,10 @@ type BodyReader = (
 ) => Promise<string>;
 
 /**
- * Per-step server timing exposed only for explicit audit profiling requests.
+ * Records one named audit stage for an explicitly profiled request.
+ *
+ * Duration is elapsed time in milliseconds, recorded even if that stage throws.
+ * Nested stages can overlap, so their sum is not the request's wall-clock duration.
  */
 export interface DashboardAuditProfileSpan {
   name: string;
@@ -108,20 +117,26 @@ export interface DashboardAuditProfileSpan {
 }
 
 /**
- * Per-request profiler so dashboard audit timings cannot leak between responses.
+ * Keeps collected audit timings within one dashboard request.
+ *
+ * Disabled profiling still runs each wrapped stage and returns its result.
+ * An empty spans list means no timings were collected; enabled stages append a duration even when their work throws.
  */
 export interface DashboardAuditProfiler extends Record<"enabled", boolean> {
   spans: DashboardAuditProfileSpan[];
-  /** Time one labelled step of a dashboard audit; implementations return whatever the wrapped block returned. */
+  // Time one labelled step of a dashboard audit; implementations return whatever the wrapped block returned.
   span<T>(name: string, block: () => T): T;
 }
 
 /**
- * Dependency bag for non-terminal dashboard routes across dev and packaged modes.
+ * Supplies shared server inputs to non-terminal dashboard routes.
+ *
+ * Project defaults, package metadata, presets, and template access describe this dashboard instance.
+ * Response and body-reading helpers keep HTTP encoding and request limits consistent across its handlers.
  */
 export interface DashboardRouteDependencies {
   absDefault: string;
-  devMode: boolean;
+  isDevMode: boolean;
   getTemplate: () => string;
   packageVersion: string;
   dashboardToken: string;
@@ -131,15 +146,13 @@ export interface DashboardRouteDependencies {
 }
 
 /**
- * Per-server request context shared by every non-terminal route handler.
- * Extends the raw dependency bag with values resolved once per server: the state-file locations, the in-memory quality audit cache, and the IO
- * helpers (evidence recording, path validation, error-to-status mapping).
+ * Shares state paths, helpers, and a quality cache across one dashboard server's routes.
  *
- * Built by createDashboardRouteContext.
+ * Built by `createDashboardRouteContext`; each server receives its own cache, reused by that server's requests.
+ * Evidence recording and error mapping keep route results consistent for the selected project.
  *
- * Invariant: every handler shares one context instance per server, so the qualityAuditCache is a single process-wide store, not per-request.
- * The security contract is that handlers must resolve any caller-supplied path through validatedPath before touching the filesystem; that method is
- * the sole boundary check, and responseStatusForError must map its rejection to a 400.
+ * Caller-supplied paths must pass the applicable path validation contract before filesystem work.
+ * Project-local state helpers add containment checks for saved data and markers.
  */
 export interface DashboardRouteContext extends DashboardRouteDependencies {
   dashboardStateFile: string;
@@ -155,13 +168,14 @@ export interface DashboardRouteContext extends DashboardRouteDependencies {
 }
 
 /**
- * Normalise agent `--version` output to the first printable line.
+ * Extract the first trimmed output line for the detected agent version, removing trailing punctuation after a digit.
  *
- * @param raw - Raw stdout captured from the agent binary.
- * @returns A trimmed version line, or `null` when the command produced no text.
+ * @param raw - stdout captured from the agent binary; empty or whitespace-only output carries no version
+ * @returns a trimmed version line, or null when the command produced no text
  */
 export function normalizeAgentVersionOutput(raw: string): string | null {
   const firstLine = raw.trim().split(/\r?\n/)[0]?.trim() ?? "";
+  // An agent command that prints no version leaves the dashboard without a detected version label.
   if (!firstLine) return null;
   return firstLine.replace(/(\d)[.,;:]+$/u, "$1");
 }

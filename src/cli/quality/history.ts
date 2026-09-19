@@ -2,6 +2,7 @@
  * Load and compare persisted quality-report history.
  *
  * Use when the CLI or dashboard shows previous quality runs, latest summaries, or before/after diffs.
+ *
  * Agent-written reports are non-blocking: malformed files become warnings while valid history stays visible.
  * Finding ids are attached at load time so users can compare runs without trusting agent-written ids.
  */
@@ -44,8 +45,10 @@ export interface QualityHistoryRow {
   blockerCount: number;
   majorCount: number;
   minorCount: number;
-  /** Distinct evidence methods used across this run's findings. Lets the
-   *  dashboard distinguish runtime-probe runs from static-only runs. */
+  /**
+   * Distinct evidence methods used across this run's findings.
+   * Lets the dashboard distinguish runtime-probe runs from static-only runs.
+   */
   evidenceMethods: SavedQualityFinding["evidence_method"][];
 }
 
@@ -59,6 +62,7 @@ export interface QualityDiffFindingRow {
 
 /**
  * One finding where the agent's self-reported `delta_tag` contradicts the deterministic id-based diff class.
+ *
  * Surfaced as a methodology signal: the agent either found a real continuity the id algorithm missed, or tagged sloppily - either way the user should
  * see it, not have it silently ignored.
  */
@@ -71,6 +75,7 @@ export interface QualityDeltaTagDisagreementRow extends QualityDiffFindingRow {
 
 /**
  * Diff result for two same-agent, same-mode quality-history entries.
+ *
  * Use when a user asks which findings appeared, disappeared, or carried forward between runs.
  * Invariant: both entries must be comparable before these buckets are rendered to the CLI.
  */
@@ -79,14 +84,18 @@ export interface QualityDiffResult {
   to: QualityHistoryEntry;
   setupDelta: number;
   systemDelta: number;
+  /** Evidence limits shown beside score changes; these are caveats, not additional findings. */
+  comparisonWarnings?: string[];
   /**
    * Findings present in the older report and missing from the newer one.
    *
-   * Absence is not proof of a fix. The bucket is a pure id set difference, so a finding lands here when the defect
-   * was repaired, when the newer run never examined that artifact, and when its id shifted for encoding a line number.
+   * Absence is not proof of a fix.
    *
-   * A degraded run is the worst case: a report generated without prior-report context carries `prior_report_id:
-   * null`, nothing can be tagged `persisted`, and every earlier finding reads as absent.
+   * The bucket is a pure id set difference, so a finding lands here when the defect was repaired, when the newer run never examined that artifact,
+   * and when its id shifted for encoding a line number.
+   *
+   * A degraded run is the worst case: a report generated without prior-report context carries `prior_report_id: null`, nothing can be tagged
+   * `persisted`, and every earlier finding reads as absent.
    *
    * Treat this as a prompt to re-check each cited artifact, never as evidence for closing remediation work.
    */
@@ -96,6 +105,7 @@ export interface QualityDiffResult {
   stuck: QualityDiffFindingRow[];
   /**
    * Agent-vs-deterministic `delta_tag` contradictions.
+   *
    * Only populated when this diff's source report IS the baseline the newer report was tagged against (`to.report.prior_report_id === from.id`) -
    * against any other pair the agent's tags describe a different comparison and disagreement would be noise.
    */
@@ -307,6 +317,7 @@ export function loadQualityHistory(projectPath: string): {
     try {
       raw = JSON.parse(readFileSync(fullPath, "utf-8"));
     } catch (error) {
+      // A hand-edited JSON file or a report removed during loading produces a warning while other saved runs remain visible.
       warnings.push(
         `Skipping malformed quality history file ${filename}: ${
           error instanceof Error ? error.message : String(error)
@@ -350,6 +361,7 @@ export function loadQualityHistory(projectPath: string): {
 
 /**
  * Load only the newest dashboard-sized quality-history window.
+ *
  * For selected agent tables, one extra matching entry is parsed so the oldest displayed row can still calculate its delta without parsing the whole
  * history directory.
  *
@@ -417,6 +429,7 @@ function tryParseHistoryFile(
   try {
     raw = JSON.parse(readFileSync(fullPath, "utf-8"));
   } catch (error) {
+    // A report deleted between listing and reading, or damaged JSON, skips this row and returns a visible warning.
     return {
       entry: null,
       warning: `Skipping malformed quality history file ${filename}: ${error instanceof Error ? error.message : String(error)}`,
@@ -521,6 +534,7 @@ export function selectQualityHistoryEntries(
 
 /**
  * Build display rows with same-agent, same-mode setup deltas.
+ *
  * Deltas are only ever taken against the previous run by the same agent in the same mode, because comparing across either one is not a like-for-like
  * contract and would show the user movement that never happened.
  *

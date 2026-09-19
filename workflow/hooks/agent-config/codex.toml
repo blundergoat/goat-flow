@@ -28,6 +28,12 @@ glob_scan_max_depth = 3
 # the Bash deny hook. Only these enumerated variants are denied at the file
 # layer; nonstandard names (e.g. .env.backup) are blocked by the Bash deny
 # hook for shell commands, not for direct file reads.
+# Rules match secret content shapes (env files, key extensions) and credential
+# stores (dot-directories), never plain folder or file names such as
+# secrets/ or credentials*, which collide with ordinary application code.
+# Workspace-root patterns cannot express home paths; the Claude template
+# anchors the same credential stores at ~/ and the Bash deny hook covers
+# shell access to them for every agent.
 "**/.env" = "deny"
 "**/.env.local" = "deny"
 "**/.env.development" = "deny"
@@ -36,13 +42,12 @@ glob_scan_max_depth = 3
 "**/.env.test" = "deny"
 "**/.envrc" = "deny"
 "**/.env.*.local" = "deny"
-"**/secrets/**" = "deny"
 "**/.ssh/**" = "deny"
 "**/.aws/**" = "deny"
-"**/.docker/**" = "deny"
 "**/.gnupg/**" = "deny"
+"**/.config/gcloud/**" = "deny"
+"**/.docker/**" = "deny"
 "**/.kube/**" = "deny"
-"**/credentials*" = "deny"
 "**/.npmrc" = "deny"
 "**/.pypirc" = "deny"
 "**/*.pem" = "deny"

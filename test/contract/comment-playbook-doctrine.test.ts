@@ -1,5 +1,8 @@
 /**
- * Locks the verification-led comment doctrine across canonical and installed playbooks.
+ * Check the rules used when agents edit code comments and docstrings.
+ *
+ * Canonical and installed playbooks must require accurate descriptions, preserved meaning, and verifiable changes.
+ * Use these contracts when changing comment guidance, its authority boundaries, or portability requirements.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -10,11 +13,12 @@ const PLAYBOOK_ROOTS = [
   ".goat-flow/skill-docs/playbooks",
 ] as const;
 
-/** Applies one doctrine assertion to the canonical and installed copies. */
+// Applies one doctrine assertion to the canonical and installed copies.
 function assertForPlaybook(
   playbookName: string,
   assertion: (content: string, playbookPath: string) => void,
 ): void {
+  // Apply the same rule to canonical and installed guidance so users do not receive a weaker comment workflow.
   for (const playbookRoot of PLAYBOOK_ROOTS) {
     const playbookPath = `${playbookRoot}/${playbookName}`;
     assertion(readFileSync(playbookPath, "utf8"), playbookPath);
@@ -41,7 +45,7 @@ describe("comment playbook verification doctrine", () => {
       );
       assert.match(
         content,
-        /When neither defines a\s+width, 150 characters is the fallback ceiling/u,
+        /When neither defines a\s+width, the 150-character fallback is a ceiling, not a target/u,
         playbookPath,
       );
       assert.match(
@@ -52,6 +56,16 @@ describe("comment playbook verification doctrine", () => {
       assert.match(
         content,
         /never split one point across lines merely to stay short/u,
+        playbookPath,
+      );
+      assert.match(
+        content,
+        /Do not hard-wrap at an arbitrary narrower column/u,
+        playbookPath,
+      );
+      assert.match(
+        content,
+        /Keep one complete point on one line when it fits/u,
         playbookPath,
       );
       assert.doesNotMatch(
@@ -120,6 +134,22 @@ describe("comment playbook verification doctrine", () => {
     });
   });
 
+  it("preserves valid tags while repairing tags made stale by the code", () => {
+    assertForPlaybook("code-comments.md", (content, playbookPath) => {
+      assert.match(content, /Preserve current valid tags/u, playbookPath);
+      assert.match(
+        content,
+        /Remove or repair a tag only when it is stale, invalid, or names a removed parameter/u,
+        playbookPath,
+      );
+      assert.doesNotMatch(
+        content,
+        /Tighten without deleting `@param`, `@return`, or `@returns`|a `@param`, `@return`, or `@returns` line is never the thing you cut/u,
+        playbookPath,
+      );
+    });
+  });
+
   it("names acting components conditionally and governs em dashes", () => {
     assertForPlaybook("code-comments.md", (content, playbookPath) => {
       assert.match(
@@ -178,6 +208,41 @@ describe("comment playbook verification doctrine", () => {
         /self-explanatory private\/local units need none/u,
         playbookPath,
       );
+      assert.match(
+        content,
+        /rejects mechanical narration, not comments above branches or loops/iu,
+        playbookPath,
+      );
+    });
+  });
+
+  it("contrasts mechanical narration with hidden consequences across control flow", () => {
+    assertForPlaybook("code-comments.md", (content, playbookPath) => {
+      assert.match(
+        content,
+        /Illustrative context examples \(not incident evidence\)/u,
+        playbookPath,
+      );
+      assert.match(
+        content,
+        /Bad: repeats exactly what the code says/u,
+        playbookPath,
+      );
+      assert.match(
+        content,
+        /A pointer is orientation prose, not a promise to enumerate every installed playbook/u,
+        playbookPath,
+      );
+      assert.match(
+        content,
+        /A changed ancestor invalidates claim admission because the marker may no longer belong to the project the user selected/u,
+        playbookPath,
+      );
+      assert.match(
+        content,
+        /No earlier assessment exists, so findings in this run have no comparison baseline/u,
+        playbookPath,
+      );
     });
   });
 
@@ -220,6 +285,7 @@ describe("comment playbook verification doctrine", () => {
 
   it("keeps defect codes report-only and rejects compensating prose", () => {
     assertForPlaybook("code-comments.md", (content, playbookPath) => {
+      // Each diagnosis label must remain available to explain a comment defect without inserting review labels into source code.
       for (const defectCode of [
         "STALE",
         "FALSE",
@@ -371,9 +437,10 @@ describe("comment playbook verification doctrine", () => {
         /machine-readable annotations[\s\S]+sanctioned bullet shapes[\s\S]+known false-positive classes/iu,
         playbookPath,
       );
+      assert.match(content, /Preserve current valid tags/u, playbookPath);
       assert.match(
         content,
-        /without deleting `@param`, `@return`, or `@returns`/u,
+        /Remove or repair a tag only when it is stale, invalid, or names a removed parameter/u,
         playbookPath,
       );
     });
@@ -386,7 +453,9 @@ describe("Gruff documentation-pass doctrine", () => {
       const configOffset = content.indexOf(
         "hooks.gruff-code-quality.binaries.<go|rs|ts|php|py>",
       );
-      const wrapperOffset = content.indexOf('"bin/test/$target-analyse.sh"');
+      const binTestWrapperOffset = content.indexOf('"bin/test/$target.sh"');
+      const binWrapperOffset = content.indexOf('"bin/$target.sh"');
+      const scriptsWrapperOffset = content.indexOf('"scripts/$target.sh"');
       const releaseOffset = content.indexOf('"target/release/$target"');
       const checkoutBinOffset = content.indexOf('"bin/$target"');
       const composerShimOffset = content.indexOf('"vendor/bin/$target"');
@@ -402,8 +471,10 @@ describe("Gruff documentation-pass doctrine", () => {
       const userLocalOffset = content.indexOf('"$HOME/.local/bin/$target"');
       const pathOffset = content.indexOf('"$target"');
       assert.ok(configOffset >= 0, playbookPath);
-      assert.ok(configOffset < wrapperOffset, playbookPath);
-      assert.ok(wrapperOffset < releaseOffset, playbookPath);
+      assert.ok(configOffset < binTestWrapperOffset, playbookPath);
+      assert.ok(binTestWrapperOffset < binWrapperOffset, playbookPath);
+      assert.ok(binWrapperOffset < scriptsWrapperOffset, playbookPath);
+      assert.ok(scriptsWrapperOffset < releaseOffset, playbookPath);
       assert.ok(releaseOffset < checkoutBinOffset, playbookPath);
       assert.ok(checkoutBinOffset < composerShimOffset, playbookPath);
       assert.ok(composerShimOffset < composerPackageOffset, playbookPath);
@@ -413,6 +484,7 @@ describe("Gruff documentation-pass doctrine", () => {
       assert.ok(virtualenvOffset < cargoOffset, playbookPath);
       assert.ok(cargoOffset < userLocalOffset, playbookPath);
       assert.ok(userLocalOffset < pathOffset, playbookPath);
+      assert.doesNotMatch(content, /\$target-analyse\.sh/u, playbookPath);
       assert.match(
         content,
         /Do not recursively execute name-matched binaries/u,
@@ -480,12 +552,7 @@ describe("Gruff documentation-pass doctrine", () => {
       assert.match(content, /do not smuggle in a file split/u, playbookPath);
       assert.match(
         content,
-        /when the symbol is a public\/exported API/u,
-        playbookPath,
-      );
-      assert.match(
-        content,
-        /file\/module\/class boundary has a non-obvious\s+contract/u,
+        /when the symbol is a public\/exported API, or when a\s+file\/module\/class boundary has a non-obvious\s+contract/u,
         playbookPath,
       );
       assert.match(
@@ -507,63 +574,73 @@ describe("Gruff documentation-pass doctrine", () => {
   });
 });
 
-describe("writing-style code-prose boundary", () => {
+describe("human-facing prose code-prose boundary", () => {
   it("separates code comments from replies to people", () => {
-    assertForPlaybook("writing-style.md", (content, playbookPath) => {
-      assert.doesNotMatch(
-        content,
-        /Comments and replies addressed to a person/u,
-        playbookPath,
-      );
-      assert.match(
-        content,
-        /Review comments and replies to a person\s*\|\s*Correctness and residue only/u,
-        playbookPath,
-      );
-      assert.match(
-        content,
-        /Code comments and docstrings\s*\|\s*No - see `code-comments\.md`/u,
-        playbookPath,
-      );
-    });
+    assertForPlaybook(
+      "writing-human-facing-prose.md",
+      (content, playbookPath) => {
+        assert.doesNotMatch(
+          content,
+          /Comments and replies addressed to a person/u,
+          playbookPath,
+        );
+        assert.match(
+          content,
+          /Review comments and replies to a person\s*\|\s*Correctness and residue only/u,
+          playbookPath,
+        );
+        assert.match(
+          content,
+          /Code comments and docstrings\s*\|\s*No - see `code-comments\.md`/u,
+          playbookPath,
+        );
+      },
+    );
   });
 
   it("treats code prose as a citation and substitution as suspicion only", () => {
-    assertForPlaybook("writing-style.md", (content, playbookPath) => {
-      assert.match(
-        content,
-        /prose describes code behaviour[\s\S]+function, query, or getter/u,
-        playbookPath,
-      );
-      assert.match(content, /## Quick Tests/u, playbookPath);
-      assert.match(content, /\*\*Substitution test\./u, playbookPath);
-      assert.match(content, /raises suspicion, not proof/u, playbookPath);
-    });
+    assertForPlaybook(
+      "writing-human-facing-prose.md",
+      (content, playbookPath) => {
+        assert.match(
+          content,
+          /prose describes code behaviour[\s\S]+function, query, or getter/u,
+          playbookPath,
+        );
+        assert.match(content, /## Quick Tests/u, playbookPath);
+        assert.match(content, /\*\*Substitution test\./u, playbookPath);
+        assert.match(content, /raises suspicion, not proof/u, playbookPath);
+      },
+    );
   });
 
   it("keeps examples correct and links the code-comment owner", () => {
-    assertForPlaybook("writing-style.md", (content, playbookPath) => {
-      assert.match(
-        content,
-        /exempt from stylistic rewriting, not correctness, syntax, or security/u,
-        playbookPath,
-      );
-      assert.match(
-        content,
-        /`code-comments\.md` - code comments and docstrings/u,
-        playbookPath,
-      );
-    });
+    assertForPlaybook(
+      "writing-human-facing-prose.md",
+      (content, playbookPath) => {
+        assert.match(
+          content,
+          /exempt from stylistic rewriting, not correctness, syntax, or security/u,
+          playbookPath,
+        );
+        assert.match(
+          content,
+          /`code-comments\.md` - code comments and docstrings/u,
+          playbookPath,
+        );
+      },
+    );
   });
 });
 
 describe("shipped playbook portability", () => {
   it("excludes consumer-specific and ignored-feedback residue", () => {
+    // Every shipped clarity guide must be usable in a consumer project without private paths or session-specific residue.
     for (const playbookName of [
       "code-comments.md",
       "gruff-code-quality.md",
       "naming-and-placement.md",
-      "writing-style.md",
+      "writing-human-facing-prose.md",
     ]) {
       assertForPlaybook(playbookName, (content, playbookPath) => {
         assert.doesNotMatch(

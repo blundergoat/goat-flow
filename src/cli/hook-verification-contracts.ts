@@ -1,5 +1,6 @@
 /**
  * Defines the fixed offline scenarios that can close a user's hook verification gate.
+ *
  * Use when writers record proof or status views decide whether every required case passed.
  * Scenario payloads stay in their runners; this contract keeps only safe stable identifiers.
  */
@@ -11,7 +12,11 @@ type HookVerificationEvidenceLevel =
 
 /** One hook's complete scenario set and the evidence level users must produce. */
 export interface HookVerificationContract {
-  hookId: "deny-dangerous" | "gruff-code-quality" | "post-turn-safety";
+  hookId:
+    | "deny-dangerous"
+    | "deny-git-mutations"
+    | "gruff-code-quality"
+    | "post-turn-safety";
   scenarioGroup: HookScenario;
   requiredScenarioIds: readonly string[];
   evidenceLevel: HookVerificationEvidenceLevel;
@@ -25,7 +30,18 @@ export const HOOK_VERIFICATION_CONTRACTS = {
     requiredScenarioIds: [
       "secret-shell-read",
       "pipe-to-shell",
+      "read-only-control",
+    ],
+    evidenceLevel: "managed-hook-classifier",
+  },
+  "git-mutations-hook": {
+    hookId: "deny-git-mutations",
+    scenarioGroup: "git-mutations-hook",
+    requiredScenarioIds: [
+      "repository-commit",
       "repository-push",
+      "repository-destructive",
+      "github-write",
       "read-only-control",
     ],
     evidenceLevel: "managed-hook-classifier",
@@ -53,6 +69,7 @@ export const HOOK_VERIFICATION_CONTRACTS = {
  * Use when repair guidance must name the exact bounded verification command.
  *
  * @param hookId - current registry hook; empty or unknown text is an internal contract error
+ *
  * @returns fixed scenario group; never null or empty for a current managed hook
  * @throws Error when a registry hook has no offline verification contract
  */

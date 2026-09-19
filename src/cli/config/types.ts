@@ -5,6 +5,10 @@
  *
  * That distinction matters to the user, because it is why a half-written config still produces a working audit rather than a crash.
  */
+/** Historical percentile endpoints; validation keeps the median strictly between them. */
+export type ForecastBandQuantiles = readonly [number, number];
+
+/** Normalized project commands; an empty group means no commands were configured for that purpose. */
 interface GoatFlowToolchain {
   test: string[];
   lint: string[];
@@ -58,7 +62,11 @@ export interface GoatFlowConfig extends GoatFlowConfigBooleanFields {
   footguns: { path: string };
   lessons: { path: string };
   decisions: { path: string };
-  plans: { path: string };
+  plans: {
+    path: string;
+    maxActiveMilestones: number;
+    forecastBandQuantiles: ForecastBandQuantiles;
+  };
   /** Legacy normalized field retained for old tests/fixtures; new code uses `plans.path`. */
   tasks?: { path: string };
   logs: { path: string };

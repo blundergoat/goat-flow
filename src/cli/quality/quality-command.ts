@@ -10,11 +10,18 @@
 import { randomBytes } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import {
+  closeSync,
+  fstatSync,
+  ftruncateSync,
+  fsyncSync,
   lstatSync,
   mkdirSync,
+  openSync,
   readFileSync,
   realpathSync,
   statSync,
+  type Stats,
+  unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { basename, join, resolve } from "node:path";
@@ -46,10 +53,12 @@ export interface QualityCommandDeps {
 
 /**
  * Dependencies needed by the one CLI/dashboard report persistence path.
- * Production uses the real directory creator; tests can reproduce two users saving at once.
+ * Contract: production uses real filesystem operations; optional callbacks reproduce the same allocation and write boundaries.
  */
 interface QualityPersistenceDeps extends Pick<QualityCommandDeps, "CLIError"> {
   createReportDirectory?: (directoryPath: string) => void;
+  openReportFile?: (reportPath: string) => number;
+  writeReportFile?: (reportDescriptor: number, report: string) => void;
 }
 
 /**
@@ -114,6 +123,7 @@ async function handleQualityHistorySubcommand(
       agent: options.agent,
       qualityMode: options.qualityMode,
       includeAll: options.includeAll,
+      entries: selectedEntries,
     }),
   );
 }
@@ -220,13 +230,15 @@ async function handleQualityCandidacySubcommand(
 }
 
 /**
- * Validate one saved report file against the quality report schema.
+ * Validate one saved report file, separating reports `quality save` accepts from merely readable legacy ones.
+ * A current report prints an unqualified receipt; a report only the compatibility parser accepts prints a labelled
+ * receipt and names the current-report rule it misses on stderr, so nobody reads success as save-acceptance.
  * Error behavior: throws CLIError with exit code 2 for a missing path, an unreadable file, invalid JSON, or a schema violation, each naming the file
  * so the user can fix the right report.
  *
  * @param options - parsed CLI options carrying the report path to validate
  * @param deps - injected CLI error type and output writer
- * @returns nothing; a valid report writes `OK <path>` through `deps.writeOutput`
+ * @returns nothing; writes `OK <path>` for a current report, or `OK LEGACY-COMPATIBLE <path>` for a compatibility-only one
  */
 async function handleQualityValidateSubcommand(
   options: ParsedCLI,
@@ -252,14 +264,27 @@ async function handleQualityValidateSubcommand(
       2,
     );
   }
-  const parsed = parseQualityReport(raw, { requireCurrentFields: false });
-  if (!parsed.ok) {
+  // Current rules run first so a report the saver would accept keeps its unqualified receipt.
+  const current = parseQualityReport(raw, { requireCurrentFields: true });
+  if (current.ok) {
+    deps.writeOutput(options, `OK ${path}`);
+    return;
+  }
+
+  // Failing the compatibility parser too means the file is not a readable quality report at all.
+  const compatible = parseQualityReport(raw, { requireCurrentFields: false });
+  if (!compatible.ok) {
     throw new deps.CLIError(
-      `quality validate: schema error in ${path}: ${parsed.error}`,
+      `quality validate: schema error in ${path}: ${compatible.error}`,
       2,
     );
   }
-  deps.writeOutput(options, `OK ${path}`);
+
+  // The note goes to stderr so the receipt on stdout stays machine-readable, as quality history already does.
+  console.error(
+    `quality validate: legacy-compatible only, so \`quality save\` would reject it: ${current.error}`,
+  );
+  deps.writeOutput(options, `OK LEGACY-COMPATIBLE ${path}`);
 }
 
 /**
@@ -389,6 +414,24 @@ function assertCurrentQualitySaveDirectories(
   }
 }
 
+/** Return the fixed project-local directory chain that owns saved quality reports. */
+function qualitySaveDirectoryComponents(projectRoot: string): Array<{
+  path: string;
+  display: string;
+}> {
+  return [
+    { path: join(projectRoot, ".goat-flow"), display: ".goat-flow" },
+    {
+      path: join(projectRoot, ".goat-flow", "logs"),
+      display: ".goat-flow/logs",
+    },
+    {
+      path: join(projectRoot, ".goat-flow", "logs", "quality"),
+      display: ".goat-flow/logs/quality",
+    },
+  ];
+}
+
 /**
  * Validate the ignored report destination, then create and recheck its directory chain.
  *
@@ -406,17 +449,7 @@ function ensureQualitySaveDirectory(
   relativeReportPath: string,
   deps: QualityPersistenceDeps,
 ): string {
-  const components = [
-    { path: join(projectRoot, ".goat-flow"), display: ".goat-flow" },
-    {
-      path: join(projectRoot, ".goat-flow", "logs"),
-      display: ".goat-flow/logs",
-    },
-    {
-      path: join(projectRoot, ".goat-flow", "logs", "quality"),
-      display: ".goat-flow/logs/quality",
-    },
-  ];
+  const components = qualitySaveDirectoryComponents(projectRoot);
   const inspectedComponents = components.map((component) => ({
     ...component,
     stats: qualitySaveDirectoryStats(component.path, component.display, deps),
@@ -455,11 +488,147 @@ function ensureQualitySaveDirectory(
   );
 }
 
+/** Match the allocated descriptor to the expected single-link pathname and byte count. */
+function isExpectedQualityReportAllocation(
+  descriptorStats: Stats,
+  pathStats: Stats,
+  expectedSize: number,
+): boolean {
+  return (
+    descriptorStats.isFile() &&
+    pathStats.isFile() &&
+    descriptorStats.nlink === 1 &&
+    pathStats.nlink === 1 &&
+    descriptorStats.dev === pathStats.dev &&
+    descriptorStats.ino === pathStats.ino &&
+    descriptorStats.size === expectedSize &&
+    pathStats.size === expectedSize
+  );
+}
+
+/**
+ * Confirm an allocated report still belongs to the checked directory chain.
+ * Comparing the descriptor with the path closes the check-to-write redirect gap before report bytes are written.
+ * Error behavior: throws CLIError with exit code 2 when the directory chain, inode identity, link count, type, or expected byte count changed.
+ */
+function assertAllocatedQualityReport(
+  projectRoot: string,
+  reportPath: string,
+  reportDescriptor: number,
+  expectedSize: number,
+  deps: QualityPersistenceDeps,
+): void {
+  assertCurrentQualitySaveDirectories(
+    qualitySaveDirectoryComponents(projectRoot),
+    deps,
+  );
+  try {
+    const descriptorStats = fstatSync(reportDescriptor);
+    const pathStats = lstatSync(reportPath);
+    if (
+      !isExpectedQualityReportAllocation(
+        descriptorStats,
+        pathStats,
+        expectedSize,
+      )
+    ) {
+      throw new Error("allocated report identity changed");
+    }
+  } catch (error) {
+    if (error instanceof deps.CLIError) throw error;
+    throw new deps.CLIError(
+      "quality save: allocated report changed before persistence completed.",
+      2,
+    );
+  }
+}
+
+/** Whether two snapshots still identify the same single-link regular report allocation. */
+function qualityReportSnapshotsMatch(left: Stats, right: Stats): boolean {
+  return (
+    left.isFile() &&
+    right.isFile() &&
+    left.nlink === 1 &&
+    right.nlink === 1 &&
+    left.dev === right.dev &&
+    left.ino === right.ino &&
+    left.ctimeMs === right.ctimeMs &&
+    left.size === right.size
+  );
+}
+
+/**
+ * Read an identity-bound rejected allocation only while its directory chain remains local.
+ * Swallows filesystem and safety errors as a null fallback when ancestry or identity cannot be proven.
+ */
+function readRejectedQualityReportSnapshot(
+  projectRoot: string,
+  reportPath: string,
+  reportDescriptor: number,
+  deps: QualityPersistenceDeps,
+): Stats | null {
+  try {
+    assertCurrentQualitySaveDirectories(
+      qualitySaveDirectoryComponents(projectRoot),
+      deps,
+    );
+    const descriptorStats = fstatSync(reportDescriptor);
+    const pathStats = lstatSync(reportPath);
+    return qualityReportSnapshotsMatch(descriptorStats, pathStats)
+      ? pathStats
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Zero, close, and owner-safely unlink a rejected project-local allocation.
+ * Throws on truncation, close, or unlink failures, but preserves unsafe or changed paths for inspection.
+ */
+function discardRejectedQualityReport(
+  projectRoot: string,
+  reportPath: string,
+  reportDescriptor: number,
+  deps: QualityPersistenceDeps,
+): void {
+  let ownedSnapshot: Stats | null = null;
+  try {
+    ftruncateSync(reportDescriptor, 0);
+    fsyncSync(reportDescriptor);
+    ownedSnapshot = readRejectedQualityReportSnapshot(
+      projectRoot,
+      reportPath,
+      reportDescriptor,
+      deps,
+    );
+  } finally {
+    closeSync(reportDescriptor);
+  }
+  // An unsafe or redirected path is left empty for explicit inspection rather than unlinking outside the selected project.
+  if (ownedSnapshot === null) return;
+  try {
+    assertCurrentQualitySaveDirectories(
+      qualitySaveDirectoryComponents(projectRoot),
+      deps,
+    );
+    const currentSnapshot = lstatSync(reportPath);
+    if (!qualityReportSnapshotsMatch(currentSnapshot, ownedSnapshot)) return;
+    unlinkSync(reportPath);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+    if (error instanceof deps.CLIError) return;
+    throw error;
+  }
+}
+
 /**
  * Write one validated report with exclusive-create semantics and return its path.
  *
- * Exclusive create plus a random suffix means two concurrent saves never overwrite one another; the bounded retry exists so a collision reports as an
- * error rather than looping forever.
+ * Exclusive empty allocation plus a random suffix means two concurrent saves never overwrite one another. The control flow keeps the descriptor open
+ * across pre-write and post-fsync identity checks so later pathname redirects cannot receive report bytes; the bounded retry prevents collisions from
+ * looping forever.
+ * Why: validating a pathname and then writing through that pathname leaves a race in which a checked parent can be replaced before the write opens it.
  * Side effect: writes the report file into the project's gitignored quality log directory.
  *
  * Error behavior: throws CLIError with exit code 2 when no unique filename could be allocated.
@@ -467,7 +636,7 @@ function ensureQualitySaveDirectory(
  * @param projectRoot - realpath-resolved repository root that owns the report
  * @param agent - agent id embedded in the generated filename
  * @param serializedReport - validated report JSON written verbatim
- * @param deps - injected CLI error type and optional directory creator used by tests
+ * @param deps - injected CLI error type plus optional directory creator and file allocator used by tests
  * @returns the absolute path of the written report
  */
 function writeQualityReport(
@@ -487,23 +656,54 @@ function writeQualityReport(
       deps,
     );
     const reportPath = join(qualityDirectory, reportName);
+    let reportDescriptor: number | null = null;
     try {
-      writeFileSync(reportPath, serializedReport, {
-        encoding: "utf8",
-        flag: "wx",
-        mode: 0o600,
-      });
+      const openReportFile =
+        deps.openReportFile ?? ((path: string) => openSync(path, "wx", 0o600));
+      reportDescriptor = openReportFile(reportPath);
+      assertAllocatedQualityReport(
+        projectRoot,
+        reportPath,
+        reportDescriptor,
+        0,
+        deps,
+      );
+      const writeReportFile =
+        deps.writeReportFile ??
+        ((descriptor: number, report: string) => {
+          writeFileSync(descriptor, report, { encoding: "utf8" });
+        });
+      writeReportFile(reportDescriptor, serializedReport);
+      fsyncSync(reportDescriptor);
+      assertAllocatedQualityReport(
+        projectRoot,
+        reportPath,
+        reportDescriptor,
+        Buffer.byteLength(serializedReport, "utf8"),
+        deps,
+      );
+      closeSync(reportDescriptor);
+      reportDescriptor = null;
     } catch (error) {
+      if (reportDescriptor !== null) {
+        try {
+          discardRejectedQualityReport(
+            projectRoot,
+            reportPath,
+            reportDescriptor,
+            deps,
+          );
+        } catch {
+          throw new deps.CLIError(
+            "quality save: could not discard a rejected report allocation.",
+            2,
+          );
+        }
+      }
       if ((error as NodeJS.ErrnoException).code === "EEXIST") continue;
+      if (error instanceof deps.CLIError) throw error;
       throw new deps.CLIError(
         "quality save: could not persist the validated report.",
-        2,
-      );
-    }
-    const stats = lstatSync(reportPath);
-    if (!stats.isFile() || stats.nlink !== 1) {
-      throw new deps.CLIError(
-        "quality save: persisted report is not a single-link regular file.",
         2,
       );
     }

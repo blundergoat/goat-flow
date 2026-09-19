@@ -18,12 +18,13 @@ If the version is older, there is no maintained in-place upgrade guide. Refresh 
   ```
   The installer is the only path that overwrites `.goat-flow/.gitignore` from the current template. Older installs may be missing the current committed-surface exceptions for `learning-loop/`, `skill-docs/`, `hooks/`, or `plans/`, which makes installed files exist locally but stay hidden from git. Skipping the installer leaves this misconfigured.
 - After the installer overwrites `.goat-flow/.gitignore`, run `git add .goat-flow/learning-loop/ .goat-flow/skill-docs/ .goat-flow/hooks/ .goat-flow/plans/` to track files that were previously hidden. The `goat-flow-gitignore` audit check (in `goat-flow audit . --agent {agent}`) confirms the exceptions are present; fix any failure before moving on.
+- **Reconcile the agent's permission rules by hand** - the installer repairs only rules goat-flow itself shipped and later retired or superseded (it prints each removal); it never adds a rule and never touches one the project added. Compare the installed settings file (`.claude/settings.json`, or the active permission profile in `.codex/config.toml`) with its shipped template under `workflow/hooks/agent-config/`: add each missing template rule unless the project removed it on purpose (ask before restoring a deliberate removal), keep every rule the template does not list, and edit in place with a visible diff rather than replacing the file. Agents whose hook config is fully managed have nothing to reconcile.
 - Then continue with `workflow/setup/02-instruction-file.md` and the remaining numbered setup steps.
 - If you encounter legacy flat learning-loop docs, old skill names, or legacy task-state files, promote durable content into `.goat-flow/learning-loop/lessons/`, `.goat-flow/learning-loop/footguns/`, or `.goat-flow/learning-loop/decisions/` before removing them. Session logs are local continuity only.
 
 ## File ownership during install and setup
 
-`workflow/manifest.json` gives every required or optional file one update policy. Run `goat-flow manifest` for class totals or `goat-flow manifest --format json` for the exact path records.
+`workflow/manifest.json` gives every exact-copy template file one update policy. Run `goat-flow manifest` for class totals or `goat-flow manifest --format json` for the exact path records.
 
 - **system-owned:** the installer replaces the file from its declared workflow source.
 - **user-owned:** the installer seeds the file when missing and otherwise preserves local content; `--force` is the explicit override.
@@ -31,7 +32,7 @@ If the version is older, there is no maintained in-place upgrade guide. Refresh 
 - **deprecated:** audit reports the retired path and its supported cleanup command before removal.
 - **external:** goat-flow may verify the path but never writes it.
 
-If a destination has no ownership record, stop instead of guessing. Never treat a directory as one ownership unit: `.goat-flow/` intentionally mixes canonical templates, user knowledge, generated indexes, and gitignored local state.
+Not every destination has a template. User-owned files the installer seeds or migrates in place, and generated files the CLI rewrites from project state, carry no manifest record; `goat-flow install . --dry-run` previews that second half of the write set. If a destination appears in neither source, stop instead of guessing. Never treat a directory as one ownership unit: `.goat-flow/` intentionally mixes canonical templates, user knowledge, generated indexes, and gitignored local state.
 
 ## What goat-flow is
 
@@ -51,8 +52,10 @@ Create `.goat-flow/logs/sessions/` if it doesn't exist, then use one shared loca
 - After each numbered step, append one progress marker line (for example: `Step 03 complete: 8 skills installed`).
 - Step 06 finalises the same local continuity file with the audit result, file manifest, time spent, and tokens if available.
 
-## File ownership
+## Setup write set
 
 Setup creates/edits files in `.goat-flow/`, the agent's instruction file (CLAUDE.md / AGENTS.md / `.github/copilot-instructions.md`), and the agent's own directories (see agent config file for "Owns" list - skills, hooks, settings). Everything else in the project is hands-off - do not modify source code, tests, CI, or other agents' files.
+
+This write set is conditional: it depends on the selected agent and on what is already installed. It does not decide whether a managed file is replaced or preserved. Update policy has two sources: `workflow/manifest.json` for exact-copy templates, and the `goat-flow install . --dry-run` preview for the user-owned and generated destinations that have no template. Read both before writing any managed path.
 
 NEXT: proceed to `02-instruction-file.md`

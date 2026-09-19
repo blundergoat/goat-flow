@@ -1,5 +1,5 @@
 ---
-goat-flow-reference-version: "1.16.0"
+goat-flow-reference-version: "1.17.0"
 ---
 # Skill Playbook Authoring Sync
 
@@ -12,6 +12,10 @@ registries, and manifest ownership aligned so users receive one usable artifact.
 This is a documentary authoring reference, not a runnable tool. Apply the
 Applicability Gate below before following any repository path; no CLI probe
 applies.
+
+## Project Authority
+
+Project playbook conventions govern consumer-owned shape, vocabulary, and supported registration surfaces. When no designated project standard answers a point, use this playbook's generic default. Explicit current instructions and the authoritative project hierarchy remain higher. Project conventions and generic defaults cannot override safety, accepted architecture, verified facts, evidence requirements, or verification gates.
 
 ## Applicability Gate
 
@@ -104,13 +108,13 @@ ownership semantics does need an ADR before implementation.
 2. Add or edit the canonical file under `workflow/skills/playbooks/` first.
 3. Apply the required frontmatter and first-H2 contract before writing the body.
 4. Copy the same content to `.goat-flow/skill-docs/playbooks/` and keep the two
-   files semantically identical.
+   files byte-identical.
 5. Add the same discovery row to both playbook README copies.
 6. Add the installed path to `STANDALONE_PLAYBOOK_FILES` in
    `src/cli/audit/skill-docs-contract.ts`; `check-goat-flow.ts` imports that
    inventory into both `NAMED_PATHS` and `REQUIRED_SKILL_DOC_FILES`.
 7. Register the source/install pair in `SHARED_ARTIFACT_MIRRORS` in
-   `src/cli/audit/check-artifact-integrity.ts`.
+   `src/cli/audit/artifact-templates.ts`.
 8. Register ownership/source in `workflow/manifest.json` `required_files`, and
    name the playbook in the playbooks `directory_purposes` description.
 9. Add the `copy_file` enrollment to `workflow/install-goat-flow.sh` and the
@@ -144,7 +148,7 @@ share one source declaration so their inventories cannot drift:
 2. `REQUIRED_SKILL_DOC_FILES` makes a missing installed reference fail setup.
    Add both through `STANDALONE_PLAYBOOK_FILES` in
    `src/cli/audit/skill-docs-contract.ts`, which `check-goat-flow.ts` imports.
-3. `SHARED_ARTIFACT_MIRRORS` compares canonical and installed content.
+3. `SHARED_ARTIFACT_MIRRORS` compares canonical and installed content byte-for-byte.
 4. `workflow/manifest.json` tells the installer which source owns the file.
 
 `check-drift.ts` consumes `SHARED_ARTIFACT_MIRRORS`; it does not own a second
@@ -218,8 +222,8 @@ registries.
 
 ## Related References
 
-- `../skill-preamble.md` - shared Proof Gate and evidence classifications.
-- `../skill-conventions.md` - task tracking, recovery, and authoring boundaries.
-- `../skill-quality-testing/README.md` - skill-specific TDD methodology; skills
+- `.goat-flow/skill-docs/skill-preamble.md` - shared Proof Gate and evidence classifications.
+- `.goat-flow/skill-docs/skill-conventions.md` - task tracking, recovery, and authoring boundaries.
+- `.goat-flow/skill-docs/skill-quality-testing/README.md` - skill-specific TDD methodology; skills
   and playbooks have different testing methods.
-- `README.md` - playbook discovery table and artifact admission checklist.
+- `.goat-flow/skill-docs/playbooks/README.md` - playbook discovery table and artifact admission checklist.

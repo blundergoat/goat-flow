@@ -211,7 +211,9 @@ describe("codex config migration", () => {
       config,
       /\[permissions\.goat-flow\.filesystem\.":workspace_roots"\]/,
     );
-    assert.match(config, /"\*\*\/secrets\/\*\*"\s*=\s*"deny"/);
+    // The legacy bare secrets/ shape is dropped rather than promoted; the canonical stores and key extensions replace it.
+    assert.doesNotMatch(config, /"\*\*\/secrets\/\*\*"\s*=\s*"deny"/);
+    assert.match(config, /"\*\*\/\.ssh\/\*\*"\s*=\s*"deny"/);
     assert.match(config, /"\*\*\/\*\.key"\s*=\s*"deny"/);
     assert.match(config, /model = "gpt-5"/);
     assert.match(config, /\[other\]\s*\npreserved = "yes"/);
@@ -247,7 +249,8 @@ describe("codex config migration", () => {
     const config = readFileSync(join(codexDir, "config.toml"), "utf-8");
     assert.doesNotMatch(config, /:project_roots/);
     assert.match(config, /extends = ":workspace"/);
-    assert.match(config, /"\*\*\/secrets\/\*\*"\s*=\s*"deny"/);
+    assert.doesNotMatch(config, /"\*\*\/secrets\/\*\*"\s*=\s*"deny"/);
+    assert.match(config, /"\*\*\/\.ssh\/\*\*"\s*=\s*"deny"/);
   });
 
   // Fixture purpose: writes a missing active profile to cover default permission repair.
@@ -328,11 +331,17 @@ describe("codex config migration", () => {
     assert.match(config, /"\*\*\/\.env\.local" = "deny"/);
     assert.match(config, /"\*\*\/\.env\.\*\.local" = "deny"/);
     assert.doesNotMatch(config, /"\*\*\/\.env\*" = "deny"/);
-    assert.match(config, /"\*\*\/credentials\*"\s*=\s*"deny"/);
+    // Both credentials shapes are retired now; the gcloud store joins the canonical list and the project's own deny survives.
+    assert.doesNotMatch(config, /"\*\*\/credentials\*?"\s*=\s*"deny"/);
+    assert.doesNotMatch(config, /"\*\*\/secrets\/\*\*"\s*=\s*"deny"/);
+    assert.match(config, /"\*\*\/\.config\/gcloud\/\*\*"\s*=\s*"deny"/);
     assert.match(config, /"private\/\*\*"\s*=\s*"deny"/);
     assert.match(config, /env\.example stays readable/);
-    assert.doesNotMatch(config, /"\*\*\/credentials"\s*=\s*"deny"/);
     assert.match(result.stdout, /migrated:.*Codex permission profile/);
+    assert.match(
+      result.stderr,
+      /retired Codex deny pattern removed: \*\*\/secrets\/\*\*/,
+    );
   });
 
   // Fixture purpose: writes a custom active profile to cover non-goat-flow migration.
@@ -418,7 +427,8 @@ describe("codex config migration", () => {
 
     const config = readFileSync(join(codexDir, "config.toml"), "utf-8");
     assert.doesNotMatch(config, /"\*\.pem"\s*=\s*"none"/);
-    assert.match(config, /"\*\*\/secrets\/\*\*"\s*=\s*"deny"/);
+    assert.doesNotMatch(config, /"\*\*\/secrets\/\*\*"\s*=\s*"deny"/);
+    assert.match(config, /"\*\*\/\*\.pem"\s*=\s*"deny"/);
     assert.match(result.stdout, /migrated:.*Codex permission profile/);
   });
 
@@ -447,13 +457,12 @@ describe("codex config migration", () => {
         '"**/.env.test" = "deny"',
         '"**/.envrc" = "deny"',
         '"**/.env.*.local" = "deny"',
-        '"**/secrets/**" = "deny"',
         '"**/.ssh/**" = "deny"',
         '"**/.aws/**" = "deny"',
-        '"**/.docker/**" = "deny"',
         '"**/.gnupg/**" = "deny"',
+        '"**/.config/gcloud/**" = "deny"',
+        '"**/.docker/**" = "deny"',
         '"**/.kube/**" = "deny"',
-        '"**/credentials*" = "deny"',
         '"**/.npmrc" = "deny"',
         '"**/.pypirc" = "deny"',
         '"**/*.pem" = "deny"',
@@ -466,6 +475,7 @@ describe("codex config migration", () => {
     const result = runInstaller(root, "--agent", "codex");
     assert.equal(result.status, 0, result.stderr || result.stdout);
 
+    // The profile already matches the current canonical list, so only a real legacy anchor could trigger a rewrite.
     const config = readFileSync(join(codexDir, "config.toml"), "utf-8");
     assert.match(config, /# legacy :project_roots anchor was replaced/);
     assert.doesNotMatch(result.stdout, /migrated:.*Codex permission profile/);

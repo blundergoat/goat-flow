@@ -59,6 +59,18 @@ describe("settings-rules-matched harness check", () => {
     );
   });
 
+  it("qualifies passing evidence to the managed settings file", () => {
+    assert.ok(settingsRulesMatched, "settings-rules-matched check must exist");
+    const result = settingsRulesMatched.run(
+      makeCtx({ agents: [stubAgentFacts()] }),
+    );
+
+    assert.deepEqual(result.findings, [
+      "claude: managed .claude/settings.json permission rules use matched forms",
+    ]);
+    assert.doesNotMatch(result.findings.join("\n"), /all permission rules/u);
+  });
+
   it("names the stale rule form actually found", () => {
     const result = runWriteOnlyCheck();
     const message = result.recommendations.join("\n");

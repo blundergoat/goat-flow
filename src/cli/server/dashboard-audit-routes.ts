@@ -1,13 +1,10 @@
 /**
- * Audit, setup-detect, and setup-prompt HTTP route handlers for the dashboard server.
+ * Supply the audit results, setup detection, and setup prompts shown for the selected project.
  *
- * Backs `/api/audit` (the shared DashboardReport for Home/Setup/Quality), `/api/setup/detect`, and `/api/setup`.
- * Aggregate `/api/audit` requests fold a persisted disk cache and a per-request profiler over `runAuditBatch`; explicit per-agent requests skip the
- * cache.
+ * Home, Setup, and Quality share one audit report; aggregate packaged-install requests can reuse a matching disk cache.
+ * Agent-specific requests run live, and route handlers report audit or path failures as JSON errors the dashboard can display.
  *
- * Handlers return their outcome as JSON and never throw to the server, so a failed audit becomes an error body rather than a crashed request.
- *
- * Route wiring lives in dashboard-routes.ts; report assembly in dashboard-reporting.ts.
+ * Route registration lives in dashboard-routes.ts; dashboard-reporting.ts owns report assembly and cache storage.
  */
 import type { ServerResponse } from "node:http";
 import { isPackagedInstall } from "../paths.js";
@@ -39,7 +36,12 @@ import {
 import { buildSetupDetectPayload } from "./setup-detect.js";
 import type { DashboardReport } from "./types.js";
 
-/** Route handlers exported by the dashboard audit/setup route group. */
+/**
+ * Group the audit and setup requests used while inspecting a project's harness installation.
+ *
+ * A handler returns false when another route group should answer the URL.
+ * Matching requests send their own JSON response; prompt composition is asynchronous.
+ */
 interface AuditRouteHandlers {
   handleAuditRequest: (url: URL, res: ServerResponse) => boolean;
   handleSetupDetectRequest: (url: URL, res: ServerResponse) => boolean;
@@ -49,7 +51,7 @@ interface AuditRouteHandlers {
 /**
  * Decide whether this request may be answered from the persisted audit cache, which is what makes the Home view open instantly.
  *
- * @param agentFilter - agent the user narrowed to; a named agent is answered live because the cache holds the aggregate view
+ * @param agentFilter - selected agent, or null for all agents; a named agent is answered live because the cache holds the aggregate view
  * @param includeHarness - true when the user asked for harness scores as well
  * @returns true when a cached report would answer this exact request
  */
@@ -60,10 +62,11 @@ function isCacheEligible(
   return !agentFilter && includeHarness && isPackagedInstall();
 }
 
-/** Resolve the managed agent list for dashboard aggregate audits. */
+// Audit all supported agents when no runner is selected; a runner-specific request checks only that agent.
 function resolveDashboardManagedAgentIds(
   agentFilter: AgentId | null,
 ): AgentId[] {
+  // Home needs every managed runner represented even when the user has not installed all of them.
   return agentFilter === null ? [...KNOWN_AGENT_IDS] : [agentFilter];
 }
 
@@ -83,7 +86,7 @@ function buildDashboardAuditReport(
   profiler: DashboardAuditProfiler,
 ): DashboardReport {
   const fs = createFS(projectPath);
-  const configAgents = profiler.span("managed-agent resolution", () =>
+  const managedAgentIds = profiler.span("managed-agent resolution", () =>
     resolveDashboardManagedAgentIds(agentFilter),
   );
   const auditFactProfile = agentFilter === null ? "dashboard-summary" : "full";
@@ -94,18 +97,16 @@ function buildDashboardAuditReport(
       {
         agentFilter,
         harness: includeHarness,
-        // Opening a page must never run code from the project the user selected.
-        // Home cards only need to show whether a deny hook is installed, and clicking one agent still stops at static evidence, so the card reads
-        // "limited" instead of claiming proof it did not gather.
+        // Opening a project must not execute its hook commands; Home checks presence and agent details use static evidence.
         //
-        // Real runtime proof is a deliberate CLI audit the user chooses to run against a checkout they trust; picking a folder in the dashboard is
-        // not that choice.
+        // Runtime proof requires a deliberate CLI audit against a trusted checkout.
+        // These passive dashboard reads therefore keep runtime evidence marked "limited".
         denyMechanismEvidenceLevel:
           agentFilter === null ? "present-only" : "static",
         factProfile: auditFactProfile,
         profile: profiler,
       },
-      configAgents,
+      managedAgentIds,
     ),
   );
   return profiler.span("dashboard report build", () =>
@@ -118,12 +119,12 @@ function buildDashboardAuditReport(
   );
 }
 
-/** Convert unknown exceptions to the JSON-safe error message used by dashboard routes. */
+// Convert unknown exceptions to the JSON-safe error message used by dashboard routes.
 function routeErrorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-/** Send a standard dashboard JSON error response for non-profiled routes. */
+// Send a standard dashboard JSON error response for non-profiled routes.
 function jsonErrorResponse(
   ctx: DashboardRouteContext,
   res: ServerResponse,
@@ -141,6 +142,7 @@ function jsonErrorResponse(
  * @param projectPath - validated project the user selected
  * @param isFresh - true when the user pressed Re-audit and asked for live results
  * @param signature - fingerprint of the project state; null means the cache cannot be trusted for this request
+ * @param profiler - timing collector for the dashboard's optional audit profile
  * @returns the cached report, or null when nothing usable was stored and the audit has to run
  */
 function readCachedDashboardAudit(
@@ -150,13 +152,14 @@ function readCachedDashboardAudit(
   signature: string | null,
   profiler: DashboardAuditProfiler,
 ) {
+  // Re-audit requests and unverified project signatures need current results instead of a saved Home report.
   if (isFresh || signature === null) return null;
   return profiler.span("cache read", () =>
     readAuditCache(projectPath, ctx.packageVersion, signature),
   );
 }
 
-/** Record the dashboard audit event after either cache hit or fresh audit run. */
+// Record the dashboard audit event after either cache hit or fresh audit run.
 function recordAuditRunEvent(
   ctx: DashboardRouteContext,
   projectPath: string,
@@ -168,12 +171,13 @@ function recordAuditRunEvent(
   ctx.recordDashboardEvent(projectPath, "audit.run", {
     isCached,
     harness: includeHarness,
+    // An unfiltered Home audit is recorded as covering all agents.
     agent: agentFilter ?? "all",
     status: report.status,
   });
 }
 
-/** Send an audit report response with cache fields and optional profiling metadata. */
+// Send the audit with cache and timing details; a null cachedAt tells the dashboard these results came from the current request.
 function sendAuditReport(
   ctx: DashboardRouteContext,
   res: ServerResponse,
@@ -195,7 +199,7 @@ function sendAuditReport(
   );
 }
 
-/** Send a profiled audit error response so the dashboard can still render spans. */
+// Send a profiled audit error response so the dashboard can still render spans.
 function sendAuditError(
   ctx: DashboardRouteContext,
   res: ServerResponse,
@@ -209,7 +213,7 @@ function sendAuditError(
   );
 }
 
-/** Read, enrich, record, and return a cached audit response when the cache matches. */
+// Read, enrich, record, and return a cached audit response when the cache matches.
 function respondWithCachedAudit(
   ctx: DashboardRouteContext,
   res: ServerResponse,
@@ -236,7 +240,7 @@ function respondWithCachedAudit(
   });
 }
 
-/** Write the fresh audit result to the dashboard cache when the request is eligible. */
+// Write the fresh audit result to the dashboard cache when the request is eligible.
 function writeFreshAuditCache(
   ctx: DashboardRouteContext,
   projectPath: string,
@@ -244,14 +248,16 @@ function writeFreshAuditCache(
   report: DashboardReport,
   profiler: DashboardAuditProfiler,
 ): void {
+  // Without a trusted project signature, saving this result could make a later Home visit reuse unrelated evidence.
   if (signature === null) return;
   profiler.span("cache write", () => {
     writeAuditCache(projectPath, ctx.packageVersion, signature, report);
   });
 }
 
-/** Parse optional agent filters without rejecting dashboard-wide requests. */
+// Treat an absent, empty, or unknown agent filter as an aggregate dashboard audit.
 function parseAgentFilter(param: string | null): AgentId | null {
+  // Only a recognized runner narrows the audit; other query values retain the dashboard-wide view.
   return param && VALID_AGENTS.has(param) ? (param as AgentId) : null;
 }
 
@@ -289,14 +295,16 @@ function recordSetupPrompt(
 function createHandleAuditRequest(
   ctx: DashboardRouteContext,
 ): AuditRouteHandlers["handleAuditRequest"] {
+  // Answer a matching dashboard audit request and report failures with any collected timing spans.
   return function handleAuditRequest(url: URL, res: ServerResponse): boolean {
+    // Leave non-audit requests for the remaining dashboard route groups.
     if (url.pathname !== "/api/audit") return false;
 
     const includeHarness = url.searchParams.get("quality") === "true";
     const agentFilter = parseAgentFilter(url.searchParams.get("agent"));
     const fresh = url.searchParams.get("fresh") === "true";
     const profiler = createDashboardAuditProfiler(
-      shouldProfileAuditRequest(url, ctx.devMode),
+      shouldProfileAuditRequest(url, ctx.isDevMode),
     );
 
     try {
@@ -304,6 +312,7 @@ function createHandleAuditRequest(
         url.searchParams.get("path"),
         "project-read",
       );
+      // Only supported aggregate requests can trust the disk cache; a null signature keeps this audit live.
       const auditCacheSignature = isCacheEligible(agentFilter, includeHarness)
         ? profiler.span("cache signature", () =>
             buildAuditCacheSignature(projectPath, ctx.packageVersion),
@@ -317,6 +326,7 @@ function createHandleAuditRequest(
         auditCacheSignature,
         profiler,
       );
+      // A matching saved report lets the Home view reuse the audit while refreshing learning-loop details.
       if (cached) {
         respondWithCachedAudit(
           ctx,
@@ -356,6 +366,7 @@ function createHandleAuditRequest(
         cachedAt: null,
       });
     } catch (err) {
+      // A selected folder removed since page load fails path validation; the dashboard receives the error with its audit timings.
       sendAuditError(ctx, res, err, profiler);
     }
     return true;
@@ -372,10 +383,12 @@ function createHandleAuditRequest(
 function createHandleSetupDetectRequest(
   ctx: DashboardRouteContext,
 ): AuditRouteHandlers["handleSetupDetectRequest"] {
+  // Answer the Setup view's installation check for the selected project.
   return function handleSetupDetectRequest(
     url: URL,
     res: ServerResponse,
   ): boolean {
+    // Setup detection must not consume a request intended for prompt generation or another view.
     if (url.pathname !== "/api/setup/detect") return false;
 
     try {
@@ -384,26 +397,28 @@ function createHandleSetupDetectRequest(
         "project-read",
       );
       ctx.jsonResponse(res, 200, buildSetupDetectPayload(projectPath));
-      // For example, the user removed or renamed the project folder since adding it to the dashboard.
     } catch (err) {
+      // A project removed or renamed after selection produces a JSON error for the Setup view.
       jsonErrorResponse(ctx, res, err);
     }
     return true;
   };
 }
 
-/** Validate the setup agent parameter and send the route-owned 400 response when invalid. */
+// Return the runner selected for setup, or null after sending a 400 that explains the missing or invalid selection.
 function validateSetupAgentParam(
   ctx: DashboardRouteContext,
   res: ServerResponse,
   agentParam: string | null,
 ): AgentId | null {
+  // A setup prompt needs a selected runner; an absent or empty selection returns the available choices.
   if (!agentParam) {
     ctx.jsonResponse(res, 400, {
       error: `Missing required parameter: agent. Valid: ${KNOWN_AGENT_LIST}`,
     });
     return null;
   }
+  // Reject an unknown runner before composing instructions for an installation the server does not support.
   if (!VALID_AGENTS.has(agentParam)) {
     ctx.jsonResponse(res, 400, {
       error: `Invalid agent: ${agentParam}. Valid: ${KNOWN_AGENT_LIST}`,
@@ -413,7 +428,7 @@ function validateSetupAgentParam(
   return agentParam as AgentId;
 }
 
-/** Compose the setup prompt output using dashboard-summary facts and static deny evidence. */
+// Compose the setup prompt output using dashboard-summary facts and static deny evidence.
 async function composeDashboardSetupOutput(
   projectPath: string,
   agent: AgentId,
@@ -436,6 +451,7 @@ async function composeDashboardSetupOutput(
   const output = composeSetup(auditReport, facts, agent, {
     denyMechanismEvidenceLevel: "static",
   });
+  // When composition has no prompt to offer, the Setup view receives an explicit message instead of an absent output.
   return output ?? "No setup output generated.";
 }
 
@@ -449,10 +465,12 @@ async function composeDashboardSetupOutput(
 function createHandleSetupRequest(
   ctx: DashboardRouteContext,
 ): AuditRouteHandlers["handleSetupRequest"] {
+  // Return the setup prompt for a matching request after the user chooses a supported runner.
   return async function handleSetupRequest(
     url: URL,
     res: ServerResponse,
   ): Promise<boolean> {
+    // Other Setup requests, including detection, belong to their own handlers.
     if (url.pathname !== "/api/setup") return false;
 
     const agent = validateSetupAgentParam(
@@ -460,6 +478,7 @@ function createHandleSetupRequest(
       res,
       url.searchParams.get("agent"),
     );
+    // The runner check already explained why no prompt can be composed, so this response is complete.
     if (agent === null) return true;
 
     try {
@@ -476,6 +495,7 @@ function createHandleSetupRequest(
         output: renderedOutput,
       });
     } catch (err) {
+      // A folder deleted after selection cannot supply setup facts; the response explains why the prompt could not be generated.
       jsonErrorResponse(ctx, res, err);
     }
     return true;
@@ -483,20 +503,11 @@ function createHandleSetupRequest(
 }
 
 /**
- * Bind the audit/setup route handlers to one server's request context so each closure can reach the validated-path resolver, evidence recorder, and
- * JSON responder without per-request wiring.
- *
- * The closure shape is intentional because the context is resolved once per server, and binding it here lets the handlers be registered as plain
- * `(url, res)` callbacks.
- *
- * Each handler reports validation, audit, and cache failures back to the client as a JSON error body instead of throwing, so a failed request never
- * crashes the server.
- *
- * The aggregate audit route also folds a disk cache over `runAuditBatch` to avoid paying a full re-audit on every fresh Home load.
+ * Bind the audit and setup requests to one dashboard server's path validation, cache, and response helpers.
+ * Each handler reports request failures as JSON; matching aggregate audits can reuse a saved report to shorten Home loading.
  *
  * @param ctx - per-server dashboard route context carrying path validation, the audit cache, and IO hooks
- * @returns the three audit/setup handlers; each returns true once it has owned and answered a matching
- *   request, or false to let the next handler try the URL
+ * @returns three handlers that return true after answering their URL, or false so another route group can answer
  */
 export function createAuditRouteHandlers(
   ctx: DashboardRouteContext,

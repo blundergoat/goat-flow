@@ -28,7 +28,10 @@ import {
   type HookProviderEvidenceRecord,
   type HookProviderResponseChannel,
 } from "../../src/cli/hook-contracts.js";
-import { adaptHookResultForProvider } from "../../workflow/hooks/hook-provider-adapters.mjs";
+import {
+  adaptHookResultForProvider,
+  decodeHookResultOutput,
+} from "../../workflow/hooks/hook-provider-adapters.mjs";
 import {
   CLEAN_GRUFF_CONTRACT_ENVELOPE,
   cleanupHookTestDirs,
@@ -468,6 +471,32 @@ describe("hook provider contracts", () => {
   });
 
   describe("configured Stop result delivery", () => {
+    it("owns elapsed timing before emitting a managed Stop result", () => {
+      const projectRoot = makeRoot();
+      const hookExecution = runHook(
+        projectRoot,
+        {
+          GOAT_FLOW_HOOK_RESULT_PROTOCOL: "goat-flow.hook-result.v1",
+          GOAT_FLOW_HOOK_PROVIDER: "codex",
+          GOAT_FLOW_HOOK_EVENT: "turn-stop",
+          GOAT_FLOW_HOOK_PROVIDER_MODE: "managed",
+          GOAT_FLOW_HOOK_ADAPTER_VERSION: "1",
+          SECONDS: "-1",
+        },
+        "invalid-json",
+      );
+
+      assert.equal(hookExecution.status, 0, hookExecution.stderr);
+      const decodedResult = decodeHookResultOutput(hookExecution.stdout);
+      assert.equal(decodedResult.state, "valid", JSON.stringify(decodedResult));
+      assert.equal(decodedResult.result.outcome, "incomplete");
+      assert.equal(decodedResult.result.reasonCode, "input-invalid");
+      assert.ok(
+        Number.isInteger(decodedResult.result.execution.durationMs) &&
+          decodedResult.result.execution.durationMs >= 0,
+      );
+    });
+
     for (const scannerVariant of STOP_SCANNER_VARIANTS) {
       it(`bounds a managed non-Git Stop root with the ${scannerVariant.displayName}`, () => {
         const forceBash3Fallback = scannerVariant.forceBash3Fallback;

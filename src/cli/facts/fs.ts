@@ -406,6 +406,23 @@ export function createFS(rootPath: string): ReadonlyFS {
       return readCachedJson(readFile, path);
     },
 
+    /** Compare stable filesystem identities; stat errors recover to a false fallback, as do unavailable inode identities. */
+    samePathIdentity(leftPath: string, rightPath: string): boolean {
+      try {
+        const leftStats = statSync(resolvePath(leftPath), { bigint: true });
+        const rightStats = statSync(resolvePath(rightPath), { bigint: true });
+        return (
+          leftStats.ino !== 0n &&
+          rightStats.ino !== 0n &&
+          leftStats.dev === rightStats.dev &&
+          leftStats.ino === rightStats.ino
+        );
+      } catch {
+        // A path may disappear after operand detection; recall then treats it as a non-match instead of failing the caller's whole query.
+        return false;
+      }
+    },
+
     ...directoryReader,
 
     /** Check executability; swallows access errors and falls back to shebang detection on Windows. */

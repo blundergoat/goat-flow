@@ -1,9 +1,8 @@
 /**
- * Contracts for guidance every skill inherits: the preamble, conventions, playbook wiring,
- * and the mirror parity that keeps all four install roots saying the same thing.
+ * Check the guidance shared by goat-flow skills, including preambles, conventions, and writing playbooks.
  *
- * Reads the installed copies rather than sources, so a contract fails when the guidance a user
- * actually receives drifts - not merely when the template does.
+ * These contracts inspect canonical and installed copies so supported agents receive consistent instructions.
+ * Use them when changing shared guidance, reference ownership, or installation parity.
  */
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
@@ -46,6 +45,7 @@ describe("skill hardening contracts: shared surfaces (1/3)", () => {
   });
 
   it("enrolls goat-clarity in canonical registry and release owners", () => {
+    // Every release owner must expose goat-clarity so users can discover the same canonical skill.
     for (const ownerPath of [
       "workflow/manifest.json",
       ".goat-flow/config.yaml",
@@ -64,6 +64,7 @@ describe("skill hardening contracts: shared surfaces (1/3)", () => {
   });
 
   it("includes goat-clarity in every setup inventory", () => {
+    // Each setup surface must offer goat-clarity wherever a user chooses or reviews installed skills.
     for (const ownerPath of [
       "workflow/setup/01-system-overview.md",
       "workflow/setup/03-install-skills.md",
@@ -128,12 +129,6 @@ describe("skill hardening contracts: shared surfaces (1/3)", () => {
     );
   });
 
-  /*
-   * Timing evidence is only trustworthy if every harness records it the same way.
-   * A harness that learned a weaker contract would emit Actuals that look
-   * identical to measured ones while resting on nothing.
-   */
-
   it("forces Full depth for one material-risk class regardless of size", () => {
     assertForEachTarget(installedSkillPaths("goat-review"), (skillPath) => {
       const scope = readMarkdownSection(
@@ -157,6 +152,7 @@ describe("skill hardening contracts: shared surfaces (1/3)", () => {
           /One matching class selects Full regardless of size/u,
           referencePath,
         );
+        // Every user-visible material-risk class must select Full review depth, regardless of diff size.
         for (const riskClass of [
           "Security or trust boundary",
           "Migration or persistence",
@@ -254,6 +250,11 @@ describe("skill hardening contracts: shared surfaces (1/3)", () => {
         assert.match(examples, /Clean review compact surface/u, referencePath);
         assert.match(
           examples,
+          /Scope:[^\n]+chunking=<no\|accepted>/u,
+          referencePath,
+        );
+        assert.match(
+          examples,
           /More than five surfaced findings/u,
           referencePath,
         );
@@ -311,21 +312,66 @@ describe("skill hardening contracts: shared surfaces (1/3)", () => {
     });
   });
 
-  it("requires host re-derivation for absence-based findings", () => {
+  it("requires minimum evidence and rejects false proof for every claim type", () => {
+    // Users may request counts, accept check results, or compare timings; every installed preamble must demand evidence that fits each claim.
     for (const preamblePath of [
       "workflow/skills/reference/skill-preamble.md",
       ".goat-flow/skill-docs/skill-preamble.md",
     ]) {
-      const preamble = readMarkdownSection(preamblePath, "Evidence Standard");
-      assert.match(preamble, /load-bearing claim is an absence/u, preamblePath);
+      const evidenceStandard = readMarkdownSection(
+        preamblePath,
+        "Evidence Standard",
+      );
+      const proofGate = readMarkdownSection(preamblePath, "Proof Gate");
+
       assert.match(
-        preamble,
-        /search the exact symbol expecting zero lines/u,
+        evidenceStandard,
+        /exact, untruncated command.*raw total/iu,
         preamblePath,
       );
       assert.match(
-        preamble,
-        /subagent negatives and broad-pattern hits are not evidence/u,
+        evidenceStandard,
+        /Truncated output, sampled scopes, and totals inferred/iu,
+        preamblePath,
+      );
+      assert.match(
+        evidenceStandard,
+        /exact zero-result search.*exact region/iu,
+        preamblePath,
+      );
+      assert.match(
+        evidenceStandard,
+        /Subagent negatives, broad-pattern hits, truncated output/iu,
+        preamblePath,
+      );
+      assert.match(
+        evidenceStandard,
+        /foreground.*process exit code.*per-check result row/iu,
+        preamblePath,
+      );
+      assert.match(
+        evidenceStandard,
+        /clean exit paired with any failing row/iu,
+        preamblePath,
+      );
+      assert.match(
+        evidenceStandard,
+        /RUNTIME.*falsifiable hypothesis.*declared cache state/iu,
+        preamblePath,
+      );
+      assert.match(
+        evidenceStandard,
+        /5\+ iterations.*median plus spread.*byte-identical correctness/iu,
+        preamblePath,
+      );
+      assert.match(
+        evidenceStandard,
+        /One timing, undeclared or mixed cache states, a mean without spread, and timings from changed outputs/iu,
+        preamblePath,
+      );
+      assert.match(
+        proofGate,
+        /all output, the process exit code, and every parsed result row/iu,
         preamblePath,
       );
     }
@@ -348,14 +394,23 @@ describe("skill hardening contracts: shared surfaces (1/3)", () => {
   });
 
   it("names only real safety-critical sub-agent gates", () => {
+    // Delegation must preserve the approvals that authorize consequential actions.
     for (const conventionsPath of [
       "workflow/skills/reference/skill-conventions.md",
       ".goat-flow/skill-docs/skill-conventions.md",
     ]) {
       const conventions = readProjectFile(conventionsPath);
+      // D3 carries its own implementation approval, so naming only the D2 handoff leaves the second gate convertible.
       assert.match(
         conventions,
         /goat-debug D2→D3 "human decides before fixing"/,
+        conventionsPath,
+      );
+      assert.match(conventions, /D3 implementation approval/u, conventionsPath);
+      // Mutation approvals are worded as explicit current-session approval, not BLOCKING GATE, so state they never convert.
+      assert.match(
+        conventions,
+        /are not gate conversions and never downgrade/u,
         conventionsPath,
       );
       assert.match(
@@ -395,7 +450,27 @@ describe("skill hardening contracts: shared surfaces (1/3)", () => {
   it("records routing depth and direct-execution learnings in the Route Snapshot", () => {
     assertForEachTarget(installedSkillPaths("goat"), (skillPath) => {
       const routingFlow = readMarkdownSection(skillPath, "How It Works");
-      assert.match(routingFlow, /Depth: <routing depth>/u, skillPath);
+      assert.match(
+        routingFlow,
+        /Depth: <user request \| destination Step 0 \| not applicable>/u,
+        skillPath,
+      );
+      assert.match(
+        routingFlow,
+        /Only user-requested depth is forwarded/u,
+        skillPath,
+      );
+      assert.match(
+        routingFlow,
+        /otherwise destination Step 0 selects/u,
+        skillPath,
+      );
+      assert.match(routingFlow, /Markers are not depth arguments/u, skillPath);
+      assert.match(
+        routingFlow,
+        /Direct: not applicable; quality: no Route Snapshot/u,
+        skillPath,
+      );
       assert.match(
         routingFlow,
         /Relevant prior learnings: <direct route: matches \| none \| retrieval miss; routed skill: omit>/u,
@@ -407,6 +482,26 @@ describe("skill hardening contracts: shared surfaces (1/3)", () => {
         skillPath,
       );
     });
+  });
+
+  it("keeps shared depth guidance subordinate to destination intake", () => {
+    for (const path of [
+      "workflow/skills/reference/skill-preamble.md",
+      ".goat-flow/skill-docs/skill-preamble.md",
+    ]) {
+      const depth = readMarkdownSection(path, "Depth Choice");
+      assert.match(
+        depth,
+        /Destination Step 0 selects unspecified depth/u,
+        path,
+      );
+      assert.match(
+        depth,
+        /explicit user requests remain subject to destination rules/u,
+        path,
+      );
+      assert.doesNotMatch(depth, /Dispatcher-selected depth/u, path);
+    }
   });
 
   it("keeps public skill workflows aligned with the installed control flow", () => {
@@ -424,6 +519,27 @@ describe("skill hardening contracts: shared surfaces (1/3)", () => {
       /explicit goal and scope continue without waiting/u,
     );
     assert.doesNotMatch(debugDocumentation, /I1 -->\|"BLOCKING GATE"\| I2/u);
+    assert.match(debugDocumentation, /S0 -->\|"Existing fix"\| D4/u);
+    assert.match(debugDocumentation, /D3 -->\|"BLOCKING GATE"\| Implement/u);
+    assert.match(debugDocumentation, /Implement --> D4/u);
+    assert.match(
+      debugDocumentation,
+      /cleanup first[\s\S]*intended state[\s\S]*original reproduction/u,
+    );
+    assert.doesNotMatch(debugDocumentation, /D3 -->\|"BLOCKING GATE"\| D4/u);
+    assert.match(debugDocumentation, /D1\[[^\n]+ --> BrowserCheck/u);
+    assert.match(debugDocumentation, /BrowserCheck -->\|No\| D15/u);
+    assert.match(debugDocumentation, /Browser --> D15/u);
+    assert.match(debugDocumentation, /D15 --> D2/u);
+    assert.match(debugDocumentation, /browser-use\.md[^\n]+manual fallback/u);
+    assert.match(debugDocumentation, /Learning loop if triggered/u);
+    assert.match(
+      debugDocumentation,
+      /verification catches a failure, the agent corrects course, or the user requests/u,
+    );
+    assert.match(debugDocumentation, /Check -->\|Yes\| Pause/u);
+    assert.match(debugDocumentation, /Pause --> I1/u);
+    assert.doesNotMatch(debugDocumentation, /covers stack detection/u);
 
     const reviewDocumentation = readMarkdownSection(
       "docs/skills.md",
@@ -442,7 +558,7 @@ describe("skill hardening contracts: shared surfaces (1/3)", () => {
     assert.match(reviewDocumentation, /R-NNN \[SEVERITY:ACTION\]/u);
     assert.match(
       reviewDocumentation,
-      /version-matched CLI[^\n]+goat-flow review validate[^\n]+does not block/iu,
+      /version-matched CLI[^\n]+goat-flow review validate-ledger[^\n]+goat-flow review validate-draft[^\n]+before redaction[^\n]+final `goat-flow review validate`[^\n]+does not block/iu,
     );
     assert.match(
       reviewDocumentation,
@@ -472,6 +588,7 @@ describe("skill hardening contracts: shared surfaces (1/3)", () => {
   });
 
   it("defers stale-index regeneration when committed writes are forbidden", () => {
+    // Each installed preamble must keep read-only users from triggering an unauthorized generated-index write.
     for (const preamblePath of [
       "workflow/skills/reference/skill-preamble.md",
       ".goat-flow/skill-docs/skill-preamble.md",
@@ -488,6 +605,34 @@ describe("skill hardening contracts: shared surfaces (1/3)", () => {
       assert.match(
         retrievalContract,
         /Otherwise run `goat-flow index` only with user authorization/u,
+        preamblePath,
+      );
+    }
+  });
+
+  it("bounds aggregate INDEX retrieval independently of raw file size", () => {
+    // Both preambles must bound total INDEX retrieval so an agent leaves room for the task’s source evidence.
+    for (const preamblePath of [
+      "workflow/skills/reference/skill-preamble.md",
+      ".goat-flow/skill-docs/skill-preamble.md",
+    ]) {
+      const retrievalContract = readMarkdownSection(
+        preamblePath,
+        "Learning-Loop Retrieval",
+      );
+      assert.match(
+        retrievalContract,
+        /Cap search output across all four INDEXes at 13 rows; never load one wholesale/u,
+        preamblePath,
+      );
+      assert.match(
+        retrievalContract,
+        /Row 13 requires refinement; inspect at most 12 matches/u,
+        preamblePath,
+      );
+      assert.match(
+        retrievalContract,
+        /Open footgun\/lesson hits at `Prevention` or `Decision changed` first/u,
         preamblePath,
       );
     }

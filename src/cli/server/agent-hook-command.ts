@@ -95,14 +95,14 @@ function unavailableHookResponseProgram(hookResponseMode: string): string {
   }
   // Antigravity expects a deny decision on stdout and treats the host response as handled.
   if (providerIdentifier === "antigravity") {
-    return "const reportUnavailable=(reason)=>{process.stdout.write(JSON.stringify({decision:'deny',reason:'Policy hook unavailable: '+reason+'.'})+lineBreak);process.exit(0);};";
+    return "const reportUnavailable=(reason)=>{process.stdout.write(JSON.stringify({decision:'deny',reason:'Policy hook unavailable: '+path.basename(hookScriptPath||'unknown hook')+': '+reason+'.'})+lineBreak);process.exit(0);};";
   }
   // Copilot expects its own permission-decision fields when the policy hook cannot start.
   if (providerIdentifier === "copilot") {
-    return "const reportUnavailable=(reason)=>{process.stdout.write(JSON.stringify({permissionDecision:'deny',permissionDecisionReason:'Policy hook unavailable: '+reason+'.'})+lineBreak);process.exit(0);};";
+    return "const reportUnavailable=(reason)=>{process.stdout.write(JSON.stringify({permissionDecision:'deny',permissionDecisionReason:'Policy hook unavailable: '+path.basename(hookScriptPath||'unknown hook')+': '+reason+'.'})+lineBreak);process.exit(0);};";
   }
   // Safety hooks default to a visible fail-closed response instead of allowing an unchecked command.
-  return "const reportUnavailable=(reason)=>{process.stderr.write('BLOCKED: Policy hook unavailable: '+reason+'.'+lineBreak);process.exit(2);};";
+  return "const reportUnavailable=(reason)=>{process.stderr.write('BLOCKED: Policy hook unavailable: '+path.basename(hookScriptPath||'unknown hook')+': '+reason+'.'+lineBreak);process.exit(2);};";
 }
 
 /**
@@ -150,9 +150,40 @@ const STRUCTURED_REGISTRATION_RECOGNITION_FRAGMENTS = [
  * complete managed roots.
  * Use after a registration recognizer is defined; both bootstraps must select identical roots.
  *
+ * ADR-066 exception: Claude's Gruff handler passes `provider-project-first`, so the provider project directory is inspected before the shell cwd
+ * and a folder holding only a script copy (a child that disabled Gruff) is passed over. Every other handler keeps the ADR-053 order byte for byte.
+ *
+ * @param rootRule - `shared` for the ADR-053 contract; `provider-project-first` for Claude's Gruff handler
  * @returns ordered source fragments ending with the validated launcher path; never empty
  */
-function rootDiscoveryFragments(): string[] {
+function rootDiscoveryFragments(
+  rootRule: "shared" | "provider-project-first" = "shared",
+): string[] {
+  const providerRootStep =
+    "if(selected.state!=='complete'&&rootEnvironmentName!=='-'&&process.env[rootEnvironmentName]){const inspected=inspectOnce(process.env[rootEnvironmentName]);if(inspected.state==='corrupt')reportUnavailable('managed root incomplete');if(inspected.state==='complete')selected=inspected;}";
+  // Gruff's entry must not follow `cd`: a registration decides relevance, and the provider project is tried before the cwd's Git root.
+  if (rootRule === "provider-project-first") {
+    return rootDiscoveryFragments()
+      .map((fragment) =>
+        fragment.replace(
+          "const relevant=scriptSeen||registered;",
+          "const relevant=registered;",
+        ),
+      )
+      .flatMap((fragment) => {
+        if (fragment.startsWith("const gitRootLookup=")) return [];
+        if (fragment === providerRootStep) return [];
+        if (fragment === "let selected={state:'none',root:''};") {
+          return [fragment, providerRootStep];
+        }
+        if (fragment.startsWith("if(gitRootLookup.status===0")) {
+          return [
+            "if(selected.state!=='complete'){const gitRootLookup=childProcess.spawnSync('git',['rev-parse','--show-toplevel'],{encoding:'utf8'});if(gitRootLookup.status===0&&gitRootLookup.stdout.trim()){const inspected=inspectOnce(gitRootLookup.stdout.trim());if(inspected.state==='corrupt')reportUnavailable('managed root incomplete');if(inspected.state==='complete')selected=inspected;}}",
+          ];
+        }
+        return [fragment];
+      });
+  }
   return [
     "const realDirectory=(candidate)=>{try{const absolute=path.resolve(candidate);const entry=filesystem.lstatSync(absolute);if(entry.isSymbolicLink()||!entry.isDirectory())return '';const real=filesystem.realpathSync(absolute);return filesystem.lstatSync(real).isDirectory()?real:'';}catch{return '';}};",
     "const containedRelativePath=(relativePath)=>{if(!relativePath||path.isAbsolute(relativePath))return '';const normalized=path.normalize(relativePath);return normalized==='..'||normalized.startsWith('..'+path.sep)?'':normalized;};",
@@ -166,7 +197,7 @@ function rootDiscoveryFragments(): string[] {
     "if(gitRootLookup.status===0&&gitRootLookup.stdout.trim()){selected=inspectOnce(gitRootLookup.stdout.trim());if(selected.state==='corrupt')reportUnavailable('managed root incomplete');}",
     "let ancestor=realDirectory(process.cwd());",
     "while(selected.state!=='complete'&&ancestor){const inspected=inspectOnce(ancestor);if(inspected.state==='corrupt')reportUnavailable('managed root incomplete');if(inspected.state==='complete'){selected=inspected;break;}const parent=path.dirname(ancestor);if(parent===ancestor)break;ancestor=parent;}",
-    "if(selected.state!=='complete'&&rootEnvironmentName!=='-'&&process.env[rootEnvironmentName]){const inspected=inspectOnce(process.env[rootEnvironmentName]);if(inspected.state==='corrupt')reportUnavailable('managed root incomplete');if(inspected.state==='complete')selected=inspected;}",
+    providerRootStep,
     "if(selected.state!=='complete')reportUnavailable('managed root unavailable');",
     "const projectRoot=selected.root;",
     "const bashLauncherPath=path.join(projectRoot,containedRelativePath(bashLauncherRelativePath));",
@@ -224,10 +255,18 @@ function hookLaunchBootstrap(hookResponseMode: string): string {
 function structuredHookLaunchBootstrap(hookResponseMode: string): string {
   const unavailableResponseProgram =
     unavailableHookResponseProgram(hookResponseMode);
+  // Only the Gruff edit hook resolves its entry from the provider project (ADR-066); policy and Stop handlers keep the shared contract.
+  const responseModeParts = hookResponseMode.split(":");
+  const responseKind =
+    responseModeParts.length === HOOK_LAUNCH_MODE_PART_COUNT
+      ? responseModeParts[1]
+      : hookResponseMode;
+  const rootRule =
+    responseKind === "gruff" ? "provider-project-first" : "shared";
   return [
     ...bootstrapPreludeFragments(unavailableResponseProgram),
     ...STRUCTURED_REGISTRATION_RECOGNITION_FRAGMENTS,
-    ...rootDiscoveryFragments(),
+    ...rootDiscoveryFragments(rootRule),
     ...STRUCTURED_IMPORT_TAIL_FRAGMENTS,
   ].join("");
 }
@@ -317,19 +356,91 @@ export function agentRegistersHostTimeout(
 /**
  * Complete handler shape one provider registers for a managed hook.
  *
- * Shell descriptors carry one host-parsed command string; argv descriptors carry an exec-form executable plus ordered arguments that no shell
- * retokenizes.
- * Readers compare the complete selected descriptor, never a reconstructed string.
+ * Shell descriptors carry one host-parsed command string and may add the provider's Windows-only override. Claude argv descriptors carry an
+ * exec-form executable plus ordered arguments and inert shell routes for hosts that also load Claude config. Readers compare the complete
+ * selected descriptor, never a reconstructed string.
  */
 export type AgentHookHandlerDescriptor =
-  | { form: "shell"; command: string }
-  | { form: "argv"; command: string; args: string[] };
+  | { form: "shell"; command: string; commandWindows?: string }
+  | {
+      form: "argv";
+      command: string;
+      args: string[];
+      bash: string;
+      powershell: string;
+    };
+
+/** Executable and ordered arguments used to replay one configured handler on the current platform. */
+export interface AgentHookSpawnDescriptor {
+  command: string;
+  args: string[];
+}
+
+/** Quote one literal argument for Windows PowerShell without exposing its contents to expression parsing. */
+function quoteWindowsPowerShellArgument(argumentValue: string): string {
+  return `'${argumentValue.replaceAll("'", "''")}'`;
+}
+
+/**
+ * Build Codex's Windows-only shell command from source and literal operands.
+ * The Base64 token keeps the generated bootstrap opaque to PowerShell; removing that token restores the argv indexes the bootstrap reads.
+ */
+function codexWindowsHookCommand(
+  bootstrapSource: string,
+  operands: string[],
+): string {
+  const decoderSource =
+    "eval(Buffer.from(process.argv.splice(1,1)[0],'base64').toString('utf8'))";
+  const nodeCommand = [
+    "node.exe",
+    "-e",
+    quoteWindowsPowerShellArgument(decoderSource),
+    quoteWindowsPowerShellArgument(
+      Buffer.from(bootstrapSource, "utf8").toString("base64"),
+    ),
+    ...operands.map(quoteWindowsPowerShellArgument),
+  ].join(" ");
+  // Literal location restoration preserves hostile-named roots that PowerShell's provider startup rejects as patterns.
+  // The null guard makes a missing Node executable fail instead of reusing PowerShell's empty native status as success.
+  // Explicit exit propagation prevents Windows PowerShell from collapsing every non-zero native status to exit 1.
+  return `Set-Location -LiteralPath ([Environment]::CurrentDirectory); $global:LASTEXITCODE = $null; & ${nodeCommand}; if ($null -eq $LASTEXITCODE) { exit 1 }; exit $LASTEXITCODE`;
+}
+
+/**
+ * Select the exact platform registration a local configured-hook probe must replay.
+ * Windows Codex shell handlers use `commandWindows`; other command strings retain their Bash contract.
+ *
+ * @param descriptor - Registered handler whose current-platform command is selected.
+ * @param platform - Host platform used for selection; defaults to the running Node process.
+ * @returns Executable and ordered arguments that replay the registered handler.
+ */
+export function agentHookSpawnDescriptor(
+  descriptor: AgentHookHandlerDescriptor,
+  platform: NodeJS.Platform = process.platform,
+): AgentHookSpawnDescriptor {
+  if (descriptor.form === "argv") {
+    // Shell-routing fields belong to host config identity, never Claude's direct exec replay.
+    return { command: descriptor.command, args: [...descriptor.args] };
+  }
+  if (platform === "win32" && descriptor.commandWindows !== undefined) {
+    return {
+      command: "powershell.exe",
+      args: [
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        descriptor.commandWindows,
+      ],
+    };
+  }
+  return { command: "bash", args: ["-c", descriptor.command] };
+}
 
 /**
  * Build the handler descriptor written into the selected agent's configuration.
  *
  * Use during install, sync, and audit so every consumer derives one launch contract.
- * Claude uses the ADR-053 argv form; providers without fresh live captures keep their deferred shell command byte-for-byte.
+ * Claude uses the ADR-053 argv form. Codex retains that deferred command for non-Windows hosts and adds a PowerShell-safe Windows override.
  *
  * @param agentId - agent receiving the handler; empty is impossible after setup validation
  * @param hooksDirectory - project hook folder; empty would produce an invalid managed path
@@ -350,7 +461,7 @@ export function buildAgentHookDescriptor(
   if (!registrationPath) throw new Error(`${agentId} has no hook config file`);
   // Codex can use managed ancestors but has no supported final host-root environment fallback.
   const rootEnvironmentName = agentId === "codex" ? "-" : "CLAUDE_PROJECT_DIR";
-  // Claude's live capture approves exec form, so its operands bypass host shells entirely.
+  // Claude's live capture approves exec form, while cross-loading shell hosts receive inert routes.
   if (agentId === "claude") {
     return {
       form: "argv",
@@ -364,14 +475,17 @@ export function buildAgentHookDescriptor(
         registrationPath,
         bashLauncherPath,
       ],
+      bash: "exit 0",
+      powershell: "exit 0",
     };
   }
-  return {
+  const bootstrapSource = hookLaunchBootstrap(hookResponseMode);
+  const shellDescriptor: AgentHookHandlerDescriptor = {
     form: "shell",
     command: [
       "node",
       "-e",
-      JSON.stringify(hookLaunchBootstrap(hookResponseMode)),
+      JSON.stringify(bootstrapSource),
       JSON.stringify(hookScriptPath),
       JSON.stringify(hookResponseMode),
       JSON.stringify(rootEnvironmentName),
@@ -379,6 +493,16 @@ export function buildAgentHookDescriptor(
       JSON.stringify(bashLauncherPath),
     ].join(" "),
   };
+  if (agentId === "codex") {
+    shellDescriptor.commandWindows = codexWindowsHookCommand(bootstrapSource, [
+      hookScriptPath,
+      hookResponseMode,
+      rootEnvironmentName,
+      registrationPath,
+      bashLauncherPath,
+    ]);
+  }
+  return shellDescriptor;
 }
 
 /**
@@ -483,6 +607,7 @@ function entryCommandSearchText(entry: AgentHookJsonObject): string {
     : [];
   return [
     typeof entry.command === "string" ? entry.command : "",
+    typeof entry.commandWindows === "string" ? entry.commandWindows : "",
     typeof entry.bash === "string" ? entry.bash : "",
     typeof entry.powershell === "string" ? entry.powershell : "",
     ...argumentOperands,
@@ -504,16 +629,8 @@ export function commandEntryReferencesSpec(
   // Non-object JSON cannot represent a runnable hook command.
   if (!isAgentHookJsonObject(entry)) return false;
   const commands = entryCommandSearchText(entry);
-  // Current managed script names identify the registration setup owns.
-  if (
-    spec.scriptFiles.some(
-      (script) =>
-        script !== "run-with-bash.mjs" &&
-        commandsReferenceScriptToken(commands, script),
-    )
-  ) {
-    return true;
-  }
+  // Shared runtime files are dependencies, never ownership of a sibling registration.
+  if (commandsReferenceScriptToken(commands, spec.primaryScript)) return true;
   // Historical deny script names remain managed so upgrades can remove them.
   if (
     spec.id === "deny-dangerous" &&
@@ -567,9 +684,25 @@ export function entryCarriesHandlerDescriptor(
       entry.powershell === descriptor.command
     );
   }
-  // Argv handlers must match the executable plus every ordered argument exactly.
+  // Argv handlers must match the executable, every ordered argument, and both inert shell routes exactly.
   if (descriptor.form === "argv") {
-    if (entry.command !== descriptor.command || !Array.isArray(entry.args)) {
+    if (!Array.isArray(entry.args)) return false;
+    const registeredIdentityFields = [
+      entry.command,
+      entry.bash,
+      entry.powershell,
+    ];
+    const expectedIdentityFields = [
+      descriptor.command,
+      descriptor.bash,
+      descriptor.powershell,
+    ];
+    if (
+      !registeredIdentityFields.every(
+        (fieldValue, fieldIndex) =>
+          fieldValue === expectedIdentityFields[fieldIndex],
+      )
+    ) {
       return false;
     }
     const registeredArguments = entry.args;
@@ -581,7 +714,11 @@ export function entryCarriesHandlerDescriptor(
       )
     );
   }
-  return entry.command === descriptor.command;
+  if (entry.command !== descriptor.command) return false;
+  return (
+    descriptor.commandWindows === undefined ||
+    entry.commandWindows === descriptor.commandWindows
+  );
 }
 
 /**
@@ -694,6 +831,7 @@ export function matcherForAgent(agent: AgentProfile, spec: HookSpec): string {
       "multi_replace_file_content",
     ].join("|");
   }
+  if (spec.id === "deny-git-mutations") return "run_command";
   // Antigravity policy coverage includes both shell and direct file actions users can request.
   if (spec.id === "deny-dangerous") {
     return [

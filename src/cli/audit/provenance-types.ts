@@ -7,9 +7,6 @@
  * Co-located with each check's implementation so provenance travels with the check and can't drift from its source.
  * Defined here as the stable import path so back-fill work can consume it without redefining.
  *
- * Schema adapted from the agnix project's rules.json schema and its Rust
- * emission code (agnix-core crate).
- *
  * The `"unknown"` source_type + required `reason` field is the critique-locked escape hatch: existing checks include historical entries that cannot
  * have their provenance reconstructed.
  *

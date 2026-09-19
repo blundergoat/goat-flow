@@ -1,4 +1,4 @@
-// goat-flow-hook-version: 1.16.0
+// goat-flow-hook-version: 1.17.0
 /**
  * Decodes bounded provider-neutral hook results and renders one host response.
  * Use at the managed launcher boundary after a migrated hook finishes, so users
@@ -414,18 +414,67 @@ export function decodeHookResultOutput(childStandardOutput) {
 }
 
 /**
+ * Recognise the one advisory shape that says only "no analysable source unit was present".
+ *
+ * Every condition is required. Analyzer-confirmed ignores report one attempted and one completed unit, so they fail the
+ * zero-coverage test and keep the detailed rendering that carries their distinct explanation. A line break in the target
+ * or message would be lost inside a single line, so those envelopes keep the detailed path too.
+ * Invariant: this never widens an outcome, so a true finding, a block, and incomplete or unavailable analysis always
+ * return false and keep every field the detailed renderer would have shown.
+ *
+ * @param {{hookId: string, outcome: string, reasonCode: string, coverage: {status: string, attemptedUnits: number, completedUnits: number, skippedUnits: number}, findings: ReadonlyArray<{code: string, target?: string, message: string}>}} hookResult - decoded envelope
+ * @param {string} hookEvent - hook event the host is adapting, such as `post-tool`
+ * @returns {boolean} true only for the verified non-source advisory that is safe to compact
+ */
+function isNonApplicableSourceAdvisory(hookResult, hookEvent) {
+  if (
+    hookResult.hookId !== "gruff-code-quality" ||
+    hookEvent !== "post-tool" ||
+    hookResult.outcome !== "advisory" ||
+    hookResult.reasonCode !== "findings-reported" ||
+    hookResult.findings.length !== 1
+  ) {
+    return false;
+  }
+
+  const coverage = hookResult.coverage;
+  if (
+    coverage.status !== "complete" ||
+    coverage.attemptedUnits !== 0 ||
+    coverage.completedUnits !== 0 ||
+    coverage.skippedUnits !== 0
+  ) {
+    return false;
+  }
+
+  const [finding] = hookResult.findings;
+  return (
+    finding.code === "analysis-not-applicable" &&
+    !/[\r\n]/u.test(finding.message) &&
+    !/[\r\n]/u.test(finding.target ?? "")
+  );
+}
+
+/**
  * Render bounded findings and coverage into one concise message for the active agent.
  * Use after validation so every line belongs to a known hook result the user can inspect.
- * Invariant: findings retain input order and coverage always precedes their detail.
+ * Invariant: findings retain input order and coverage always precedes their detail, except for the single compact
+ * advisory above, whose coverage is zero on every axis and therefore adds nothing the finding does not already say.
  *
  * @param {Record<string, unknown>} hookResult - validated result; empty findings use its reason code
+ * @param {string} hookEvent - hook event being adapted; only `post-tool` may take the compact path
  * @returns {string} non-empty feedback text for any non-pass result
  */
-function renderHookResultMessage(hookResult) {
+function renderHookResultMessage(hookResult, hookEvent) {
   const findingLines = hookResult.findings.map((finding) => {
     const findingTarget = finding.target ? ` ${finding.target}` : "";
     return `- [${finding.code}]${findingTarget} ${finding.message}`;
   });
+
+  // A verified non-source edit repeats a three-line advisory that carries one fact; keep that fact and drop the shape.
+  if (isNonApplicableSourceAdvisory(hookResult, hookEvent)) {
+    return `${hookResult.hookId}: ${String(hookResult.outcome).toUpperCase()} ${findingLines[0]}`;
+  }
   const fallbackReason = String(hookResult.reasonCode).replaceAll("-", " ");
   // No findings still needs a useful explanation, such as an unavailable dependency or timeout.
   const resultDetails =
@@ -643,7 +692,10 @@ export function adaptHookResultForProvider(
     return adaptCleanResult(providerIdentifier, expectedHookEvent);
   }
 
-  const userFacingMessage = renderHookResultMessage(hookResult);
+  const userFacingMessage = renderHookResultMessage(
+    hookResult,
+    expectedHookEvent,
+  );
   // Pre-tool results decide whether the user's proposed tool may run.
   if (expectedHookEvent === "pre-tool") {
     return adaptPreToolResult(

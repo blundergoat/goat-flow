@@ -1,7 +1,7 @@
 ---
 name: goat
 description: "Use when you describe an outcome and need the right goat-* workflow chosen for you."
-goat-flow-skill-version: "1.16.0"
+goat-flow-skill-version: "1.17.0"
 ---
 # /goat
 
@@ -12,7 +12,7 @@ Read `.goat-flow/skill-docs/skill-preamble.md` for shared conventions.
 ## Boundary Commands
 
 - **NEVER:** Investigate implementation or make changes before routing.
-- **ALWAYS:** Honor explicit invocations; answer simple facts directly; otherwise split intents and emit Route Snapshots.
+- **ALWAYS:** Honor explicit invocations; answer simple facts directly; split other intents and route each.
 - **DEFER TO:** Routed skills, direct execution for simple changes, or direct answers.
 
 **If a symptom tempts code reading, STOP.** The dispatcher routes; the routed skill investigates.
@@ -38,10 +38,12 @@ Read `.goat-flow/skill-docs/skill-preamble.md` for shared conventions.
 ```
 Intent: <classified user intent>
 Route: </goat-* skill or direct path>
-Depth: <routing depth>
+Depth: <user request | destination Step 0 | not applicable>
 Rationale: <verified routing rule and boundary state>
 Relevant prior learnings: <direct route: matches | none | retrieval miss; routed skill: omit>
 ```
+
+Only user-requested depth is forwarded; otherwise destination Step 0 selects. Markers are not depth arguments. Direct: not applicable; quality: no Route Snapshot.
 
 ## Route Map
 
@@ -68,4 +70,4 @@ Relevant prior learnings: <direct route: matches | none | retrieval miss; routed
 - MUST understand intent conversationally, not via keyword lookup - 0-2 clarification questions max; route with stated assumption if still ambiguous
 - MUST emit a Route Snapshot for every inferred skill or direct-execution dispatch - simple-fact answers are exempt
 - MUST split multi-intent requests into numbered intents and route each
-- MUST pass brief/depth and preserve context; `return-to-implement` preserves build authorization, but Ask First boundaries still gate
+- MUST pass the complete brief and preserve context; `return-to-implement` preserves build authorization, but Ask First boundaries still gate

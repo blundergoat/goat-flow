@@ -1,25 +1,24 @@
 /**
- * Per-context facts narrowing for the audit pipeline.
- * The orchestrator extracts project facts once and reuses them across the aggregate and per-agent audits; this module hands each audit its own view
- * so a per-agent run cannot mutate the shared batch bundle.
+ * Give each aggregate or per-agent audit a separate view of the extracted project facts.
  *
- * The deep-clone choices here are the isolation contract - the only exception is the dashboard-summary profile, which shares stack facts because that
- * profile never mutates them.
+ * A selected agent receives only its own facts, so one report cannot alter another report's agent or shared state.
+ * Dashboard summaries reuse stack facts because that profile excludes stack-dependent checks.
  */
 import type { AgentId, ProjectFacts } from "../types.js";
 import type { AuditFactProfile } from "./types.js";
 
 /**
- * Build an isolated facts view for one audit context from a batch fact bundle.
+ * Prepare facts for one audit report while isolating mutable agent and shared state from the batch.
  *
- * @param facts - shared extracted facts reused across aggregate and per-agent audits
- * @param options - optional agent/profile narrowing for the returned facts view
- * @returns facts narrowed to the requested agent/profile without mutating the batch bundle
+ * @param facts - extracted target facts reused by aggregate and per-agent reports
+ * @param options - omitted agent keeps all agents; dashboard-summary shares stack facts that its checks do not use
+ * @returns - facts for the selected scope; an unmatched agent produces an empty agent list
  */
 export function createAuditFactsView(
   facts: ProjectFacts,
   options: { agentId?: AgentId; factProfile?: AuditFactProfile } = {},
 ): ProjectFacts {
+  // A per-agent report receives only that agent; an omitted selection keeps the aggregate view.
   const selectedAgents = options.agentId
     ? facts.agents.filter(
         (agentFacts) => agentFacts.agent.id === options.agentId,
@@ -27,6 +26,7 @@ export function createAuditFactsView(
     : facts.agents;
   return {
     root: facts.root,
+    // Summary checks do not use stack facts; full audits receive a private copy for their checks.
     stack:
       options.factProfile === "dashboard-summary"
         ? facts.stack

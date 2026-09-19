@@ -6,6 +6,7 @@
  */
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { isDeepStrictEqual } from "node:util";
 import type { AgentProfile } from "../types.js";
 import {
   LEGACY_DENY_DANGEROUS_HOOK_IDS,
@@ -61,8 +62,9 @@ export interface ManagedHookDesiredState {
  * Resolve the config file that stores one agent's user-visible hook state.
  * Use before status or sync reads and writes the selected project.
  *
- * @param projectPath - selected project; empty text cannot identify an owned config root
+ * @param projectPath - selected project whose provider hook config is resolved
  * @param agent - selected agent; a null hook config means this provider cannot host managed hooks
+ *
  * @returns config path for the selected agent; never empty for a hook-capable profile
  * @throws when the agent has no hook configuration surface
  */
@@ -79,6 +81,7 @@ function configPath(projectPath: string, agent: AgentProfile): string {
  * Use when status or sync needs a safe object plus repair flags.
  *
  * @param path - selected agent config path; empty text behaves like a missing file
+ *
  * @returns parsed config and flags; an empty object means the file is missing, invalid, or not an object
  * @throws Never; unreadable or malformed user files return an invalid repair state
  */
@@ -106,8 +109,9 @@ function readJsonFile(path: string): {
  * Translate one registry event into the selected provider's config key.
  * Use so setup writes the lifecycle the user's agent actually reads.
  *
- * @param agent - selected provider; an empty id cannot pass profile validation
- * @param spec - managed hook; an empty event cannot produce a runnable registration
+ * @param agent - selected provider whose event spelling is used
+ *
+ * @param spec - registry hook supplying the lifecycle event
  * @returns provider event key; never empty for a valid registry hook
  */
 function hookEventKey(agent: AgentProfile, spec: HookSpec): string {
@@ -136,7 +140,8 @@ function ensureHooksObject(config: AgentHookJsonObject): AgentHookJsonObject {
  * Use when setup adds or removes the user's managed registration.
  *
  * @param config - parsed agent config; empty means the event array is created
- * @param event - provider event key; empty text would create an unusable property
+ *
+ * @param event - provider lifecycle key whose registration rows are prepared
  * @returns event rows; empty means the user has no registrations for this lifecycle
  */
 function eventEntries(config: AgentHookJsonObject, event: string): unknown[] {
@@ -166,7 +171,8 @@ function matcherParts(matcher: string): string[] {
  *
  * @param agent - supported provider; a missing hook surface is rejected before this derivation
  * @param spec - registry hook; an empty script list produces an empty managed-file target
- * @param isEnabled - true targets one command per provider event/matcher; false targets no registrations
+ *
+ * @param isEnabled - false retains policy launchers but removes registrations for other hooks
  * @returns current script filenames plus exact provider registration targets; disabled keeps current files
  */
 export function deriveManagedHookDesiredState(
@@ -175,8 +181,13 @@ export function deriveManagedHookDesiredState(
   isEnabled: boolean,
 ): ManagedHookDesiredState {
   const managedScriptFiles = [...spec.scriptFiles];
-  // A disabled hook keeps current inert files but gives the user's agent nothing to run.
-  if (!isEnabled) return { managedScriptFiles, registrationTargets: [] };
+  // Policy launchers read the saved choice; cached bootstraps still need their registration.
+  if (
+    !isEnabled &&
+    spec.id !== "deny-dangerous" &&
+    spec.id !== "deny-git-mutations"
+  )
+    return { managedScriptFiles, registrationTargets: [] };
 
   const event = hookEventKey(agent, spec);
   // Stop and Copilot use one matcherless registration for the user's lifecycle event.
@@ -210,6 +221,7 @@ export function deriveManagedHookDesiredState(
  * Use during toggle and sync repairs so a shared provider row keeps the user's other hooks.
  *
  * @param entry - provider row; null or primitive values remain untouched
+ *
  * @param spec - managed hook contract; empty script metadata removes nothing
  * @returns retained row, or undefined when the row contained only this managed hook
  */
@@ -235,7 +247,8 @@ function withoutManagedHookCommand(entry: unknown, spec: HookSpec): unknown {
  * Use before disable or replacement so user-authored hooks remain untouched.
  *
  * @param config - parsed agent config; empty means there are no rows to remove
- * @param event - provider lifecycle key; empty text cannot name a valid managed event
+ * @param event - provider lifecycle key whose managed rows are removed
+ *
  * @param spec - managed hook contract; empty script metadata matches no user command
  * @returns nothing; an empty result removes the event value from the config
  */
@@ -258,9 +271,8 @@ function removeHookEntries(
 }
 
 /**
- * Drop every managed row this spec owns, whatever lifecycle event now holds it.
- * Use before appending the canonical row so a registration that drifted to another event cannot survive a sync or a disable and keep firing on user
- * actions it no longer covers.
+ * Remove this hook's managed rows from every event before Sync or a toggle rebuilds its registration.
+ * A row moved to the wrong event must not keep firing on unrelated user actions.
  *
  * @param config - parsed agent config; a missing hooks container yields nothing to remove
  * @param spec - managed hook contract whose owned rows are removed from every event
@@ -272,18 +284,20 @@ function removeOwnedHookEntriesEverywhere(
   const hooks = ensureHooksObject(config);
   // Snapshot the keys because removal clears emptied event groups while iterating.
   for (const event of Object.keys(hooks)) {
+    // Only event arrays contain removable registration rows; preserve other provider settings.
     if (!Array.isArray(hooks[event])) continue;
     removeHookEntries(config, event, spec);
   }
 }
 
 /**
- * Build the exact Claude or Codex rows setup shows in agent config.
- * Use when enabling Stop or tool-triggered coverage for either provider.
+ * Build the Claude or Codex registration rows needed for the user's enabled hook.
  *
  * @param agent - selected Claude/Codex profile; a null hook directory makes command creation throw
- * @param spec - managed hook contract; empty matchers create no tool-triggered rows
- * @returns provider rows; empty only when a non-Stop hook has no matcher parts
+ * @param spec - hook contract used to build the provider's command and timeout
+ *
+ * @param registrationTargets - required event and matcher slots; an empty list adds no registration rows
+ * @returns one provider row per target; an empty target list produces no rows
  */
 function claudeCodexEntries(
   agent: AgentProfile,
@@ -299,6 +313,12 @@ function claudeCodexEntries(
     // Approved argv handlers register exact operands the host passes without a shell.
     if (handlerDescriptor.form === "argv") {
       command.args = [...handlerDescriptor.args];
+      command.bash = handlerDescriptor.bash;
+      command.powershell = handlerDescriptor.powershell;
+    }
+    // Include the Windows override only for providers whose launcher descriptor supplies one.
+    else if (handlerDescriptor.commandWindows !== undefined) {
+      command.commandWindows = handlerDescriptor.commandWindows;
     }
     // An owned host deadline gives the migrated hook time to return model-visible Stop feedback.
     if (
@@ -323,6 +343,7 @@ function claudeCodexEntries(
  * Use when enabling a managed hook for users on either supported shell.
  *
  * @param agent - selected Copilot profile; a null hook directory makes command creation throw
+ *
  * @param spec - managed hook; an absent timeout uses the provider's 30-second default
  * @returns command row with Bash and PowerShell parity; never empty
  */
@@ -344,6 +365,7 @@ function copilotEntry(
  * Use when setup enables protection in the provider's project policy file.
  *
  * @param agent - selected Antigravity profile; a null hook directory makes command creation throw
+ *
  * @param spec - managed hook; an absent timeout uses the provider's 30-second default
  * @returns enabled provider definition; never empty for a valid registry hook
  */
@@ -385,7 +407,8 @@ function antigravityHookDefinition(
  *
  * @param config - parsed provider config; empty means setup creates the first managed row
  * @param agent - selected provider profile; unsupported surfaces cannot reach this writer
- * @param spec - enabled hook contract; empty script metadata cannot produce a command
+ *
+ * @param spec - enabled hook contract used to build the managed command
  * @returns nothing; the config object is updated in place for later atomic persistence
  */
 function appendHookEntries(
@@ -395,7 +418,7 @@ function appendHookEntries(
   desiredState: ManagedHookDesiredState,
 ): void {
   const firstRegistrationTarget = desiredState.registrationTargets[0];
-  // An empty target is the user's disabled state, so there is no provider row to append.
+  // Disabled non-policy hooks have no provider row; policy launchers remain registered.
   if (!firstRegistrationTarget) return;
   // Antigravity stores each hook as a named top-level definition instead of a shared event array.
   if (agent.id === "antigravity") {
@@ -424,6 +447,7 @@ function appendHookEntries(
  * Use so duplicate or misplaced rows cannot look installed merely because one exact row exists.
  *
  * @param registrationNode - parsed config value; null, empty, or primitive values contain no commands
+ *
  * @param spec - managed hook contract; empty script metadata matches no command
  * @returns physical managed command count; zero means the user has no registration for this hook
  */
@@ -463,6 +487,7 @@ function managedRegistrationCommandCount(
  *
  * @param entry - provider event row; null or primitive values cannot match
  * @param target - desired provider slot; a null matcher requires a matcherless row
+ *
  * @param spec - managed hook contract; empty script metadata matches no owned row
  * @returns true when the row contains this hook under the exact matcher shape
  */
@@ -486,7 +511,8 @@ function entryMatchesRegistrationTarget(
  *
  * @param config - parsed provider config; empty means no registration is current
  * @param agent - selected provider profile
- * @param spec - expected hook contract; empty metadata cannot produce a match
+ *
+ * @param spec - registry hook whose exact registration is checked
  * @returns true only when every required provider row is exact; false requests repair
  */
 function hasAllExpectedEntries(
@@ -520,7 +546,8 @@ function hasAllExpectedEntries(
  *
  * @param config - parsed provider config; empty means there are no event rows
  * @param agent - selected provider profile
- * @param spec - expected hook contract; an empty event cannot identify rows
+ *
+ * @param spec - registry hook supplying the expected lifecycle event
  * @returns event rows; empty means missing, disabled, malformed, or absent state
  */
 function expectedEventEntries(
@@ -548,6 +575,7 @@ function expectedEventEntries(
  *
  * @param entries - expected lifecycle rows; empty cannot cover a tool matcher
  * @param registrationTargets - provider slots; empty means the user requested no registrations
+ *
  * @param spec - expected hook; empty script metadata matches no owned row
  * @returns true when all required matchers are present; false means some user actions are uncovered
  */
@@ -584,6 +612,7 @@ function everyRegistrationTargetMatches(
  * Use so upgrade guidance says migration instead of missing registration.
  *
  * @param config - parsed provider config; empty contains no retired registration
+ *
  * @param spec - current hook; any non-deny hook has no split-deny history
  * @returns true when exact retired identifiers remain; false means another repair owns the state
  */
@@ -606,7 +635,8 @@ function hasRetiredDenyRegistration(
  *
  * @param config - parsed provider config; empty produces a missing-registration issue
  * @param agent - selected provider profile
- * @param spec - expected hook contract; empty metadata cannot form a complete registration
+ *
+ * @param spec - registry hook whose command, matcher and timeout must agree
  * @returns first issue, or undefined when the user's registration is exact and current
  */
 function registrationIssue(
@@ -670,9 +700,10 @@ function registrationIssue(
  * Read one agent's managed registration without changing user config.
  * Use for setup, audit, CLI, and dashboard installed-state reporting.
  *
- * @param projectPath - selected project; empty text cannot locate an owned config
+ * @param projectPath - selected project whose provider registration is inspected
  * @param agent - selected provider; a null config path throws before reading
- * @param spec - expected hook contract; empty metadata cannot be reported installed
+ *
+ * @param spec - registry hook whose registration is reported to the caller
  * @returns installed state plus one missing, invalid, or repair issue; absent issue means current
  */
 export function readAgentHookState(
@@ -694,13 +725,15 @@ export function readAgentHookState(
 }
 
 /**
- * Persist one enabled or disabled managed registration atomically.
- * Use after a user toggles a hook or sync repairs local config drift.
+ * Persist one managed registration for direct callers, preserving unrelated user hooks.
+ * The guarded Sync and toggle operation uses the pure preparation helper and applies its result under claims.
  *
- * @param projectPath - selected project; empty text cannot own a safe config write
+ * @param projectPath - selected project whose provider registration is saved
  * @param agent - selected provider; a null config path throws before writing
- * @param spec - managed hook contract; empty metadata cannot produce a useful command
- * @param isEnabled - true installs current rows; false removes only setup-owned rows
+ *
+ * @param spec - registry hook whose enabled or disabled registration is saved
+ * @param isEnabled - true installs current rows; false retains policy rows and removes other owned rows
+ *
  * @returns nothing; successful completion leaves unrelated user hooks unchanged
  * @throws when existing config is invalid JSON or the agent lacks a writable surface
  */
@@ -711,53 +744,148 @@ export function writeAgentHookState(
   isEnabled: boolean,
 ): void {
   const path = configPath(projectPath, agent);
-  const config = readJsonFile(path);
-  const desiredState = deriveManagedHookDesiredState(agent, spec, isEnabled);
-  // Invalid user JSON cannot be safely merged, so setup asks the user to repair it first.
-  if (config.invalid) {
+  const text = existsSync(path) ? readFileSync(path, "utf-8") : null;
+  writeFileAtomic(
+    path,
+    prepareAgentHookState(text, agent, spec, isEnabled),
+    projectPath,
+  );
+}
+
+/**
+ * Parse captured provider settings before preparing the user's hook change.
+ * Missing settings start empty; malformed or non-object JSON throws before replacement can discard user commands.
+ */
+function readPreparedAgentHookConfig(
+  text: string | null,
+  agent: AgentProfile,
+): AgentHookJsonObject {
+  let parsed: unknown;
+  try {
+    parsed = text === null ? {} : JSON.parse(text);
+  } catch {
+    // A hand-edited settings file with a trailing comma needs repair before Sync can preserve its other commands.
     throw new Error(
       `${agent.id} hook config is not valid JSON: ${agent.hookConfigFile}`,
     );
   }
+  // A JSON array or scalar cannot hold this provider's named hook settings.
+  if (!isAgentHookJsonObject(parsed))
+    throw new Error(
+      `${agent.id} hook config is not valid JSON: ${agent.hookConfigFile}`,
+    );
+  return parsed;
+}
+
+/**
+ * Keep exact current registrations in place so a toggle or Sync of an already-exact hook leaves the provider file unchanged.
+ * A moved row rewrites the file the provider watches; Codex also ties hook trust to each row's position.
+ * Sync still repairs stale labels, commands, matchers, timeouts, duplicates, and retired registrations.
+ *
+ * @param text - captured file bytes; null means setup must create the missing registration file
+ * @param config - captured provider settings; empty settings need registration
+ *
+ * @param agent - selected provider whose exact registration shape is compared
+ *
+ * @param spec - managed hook selected by the user's toggle or Sync action
+ * @param desiredState - requested registrations; empty means the user is removing this non-policy hook
+ *
+ * @returns true when the existing rows match every requested field and can retain their positions
+ */
+function canPreserveExistingRegistrations(
+  text: string | null,
+  config: AgentHookJsonObject,
+  agent: AgentProfile,
+  spec: HookSpec,
+  desiredState: ManagedHookDesiredState,
+): text is string {
+  const firstRegistrationTarget = desiredState.registrationTargets[0];
+  // Missing files or targets and retired registrations still need the usual setup, removal, or migration step.
+  if (
+    text === null ||
+    !firstRegistrationTarget ||
+    hasRetiredDenyRegistration(config, spec)
+  )
+    return false;
+  // A stale or duplicate command must remain repairable when the user chooses Sync.
+  if (!hasAllExpectedEntries(config, agent, spec)) return false;
+  // Antigravity keeps each managed hook as one named definition rather than event rows.
+  if (agent.id === "antigravity") {
+    return isDeepStrictEqual(
+      config[spec.id],
+      antigravityHookDefinition(agent, spec, firstRegistrationTarget),
+    );
+  }
+  const currentRegistrations = expectedEventEntries(config, agent, spec).filter(
+    (entry) => entryReferencesSpec(entry, spec),
+  );
+  // Copilot needs a numeric schema version beside its one dual-shell row; a missing version still takes the repair path.
+  if (agent.id === "copilot") {
+    return (
+      typeof config.version === "number" &&
+      isDeepStrictEqual(currentRegistrations, [copilotEntry(agent, spec)])
+    );
+  }
+  return isDeepStrictEqual(
+    currentRegistrations,
+    claudeCodexEntries(agent, spec, desiredState.registrationTargets),
+  );
+}
+
+/**
+ * Prepare one registration from captured bytes without rereading or changing the target.
+ * The hook operation composes these results before claiming its complete destination set.
+ *
+ * @param text - captured provider JSON, or null when its file is missing
+ * @param agent - provider owning this JSON shape
+ *
+ * @param spec - registry-owned hook being reconciled
+ * @param isEnabled - whether its managed registration is wanted
+ *
+ * @returns complete provider JSON with unrelated registrations retained
+ * @throws when captured JSON cannot safely be merged
+ */
+export function prepareAgentHookState(
+  text: string | null,
+  agent: AgentProfile,
+  spec: HookSpec,
+  isEnabled: boolean,
+): string {
+  const config = readPreparedAgentHookConfig(text, agent);
+  const desiredState = deriveManagedHookDesiredState(agent, spec, isEnabled);
+  // For example, switching one policy off must not move either retained policy registration or rewrite the provider file.
+  if (canPreserveExistingRegistrations(text, config, agent, spec, desiredState))
+    return text;
   // Antigravity keeps managed hooks as top-level definitions with provider-specific migration ids.
   if (agent.id === "antigravity") {
     // Ownership follows the exact managed command, even when an older install used a different sibling id.
-    for (const [definitionId, definition] of Object.entries(config.value)) {
+    for (const [definitionId, definition] of Object.entries(config)) {
+      // Remove this hook's owned definition or stale aliases before adding the registration requested by the user.
       if (
         definitionId === spec.id ||
         managedRegistrationCommandCount(definition, spec) > 0
       ) {
-        Reflect.deleteProperty(config.value, definitionId);
+        Reflect.deleteProperty(config, definitionId);
       }
     }
     // The current deny hook replaces every earlier split Antigravity policy id.
     if (spec.id === "deny-dangerous") {
       // Each exact retired id is Goat Flow-owned and safe to remove from the user's config.
       for (const legacyId of LEGACY_DENY_DANGEROUS_HOOK_IDS) {
-        Reflect.deleteProperty(config.value, legacyId);
+        Reflect.deleteProperty(config, legacyId);
       }
     }
-    // A non-empty target adds the current definition; disabled state leaves it absent.
+    // Policy targets remain present while off so cached handlers can reach the saved choice.
     if (desiredState.registrationTargets.length > 0) {
-      appendHookEntries(config.value, agent, spec, desiredState);
+      appendHookEntries(config, agent, spec, desiredState);
     }
-    writeFileAtomic(
-      path,
-      `${JSON.stringify(config.value, null, 2)}\n`,
-      projectPath,
-    );
-    return;
+    return `${JSON.stringify(config, null, 2)}\n`;
   }
-  // A row moved to another lifecycle event still belongs to this spec and must not outlive
-  // the sync that reinstates the canonical row, nor survive the user disabling the hook.
-  removeOwnedHookEntriesEverywhere(config.value, spec);
-  // Enabled state appends exact current rows after stale managed rows are removed.
+  // Remove stale lifecycle rows before appending the canonical targets, including retained off-policy rows.
+  removeOwnedHookEntriesEverywhere(config, spec);
+  // A disabled non-policy hook has no targets to append.
   if (desiredState.registrationTargets.length > 0) {
-    appendHookEntries(config.value, agent, spec, desiredState);
+    appendHookEntries(config, agent, spec, desiredState);
   }
-  writeFileAtomic(
-    path,
-    `${JSON.stringify(config.value, null, 2)}\n`,
-    projectPath,
-  );
+  return `${JSON.stringify(config, null, 2)}\n`;
 }

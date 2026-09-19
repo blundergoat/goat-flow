@@ -11,6 +11,7 @@ export {
   type QualityFinding,
   type QualityMode,
   type QualityReport,
+  type QualityScoreRationale,
   type SavedQualityFinding,
   type SavedQualityReport,
 } from "./schema-types.js";

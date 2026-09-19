@@ -1,43 +1,35 @@
 ---
 category: cli
-last_reviewed: 2026-08-20
+last_reviewed: 2026-09-05
 ---
 
 ## Footgun: An additive classification rule can silently delete a published state value
 
 **Status:** active | **Created:** 2026-08-16 | **Evidence:** ACTUAL_MEASURED
 
-**Symptoms:** A milestone item reads as purely additive - "add state X before blocker aggregation" - and the implementation is one branch. Nothing warns that a sibling state has become unreachable, because no test constructs the classifier's inputs looking for absence, and the type union still lists it. The removed value stays in the published JSON contract and in user-facing docs until someone greps.
+**Prevention:** After adding or reordering any branch in a classifier whose output is a published contract, grep the repo for every sibling value and confirm each still has a producer. A value with no producer is a contract removal, not dead code, and needs the same doc, fixture, and changelog treatment as any breaking change. Anchors: `src/cli/managed-setup-preview.ts` (search: `classifyManagedSetupFile`) and `test/unit/managed-setup-preview.test.ts` (search: `name: "local-preserved"`).
 
-**Evidence:** 1.16.0 M02 added `local-preserved` to `src/cli/managed-setup-preview.ts` (search: `The package has nothing new to deliver here`). That branch owns the exact condition `newExpectedSha256 === oldExpectedSha256`, which was the only producer of `local-edited`. The state became dead on the first edit while still being exported in `ManagedSetupFileState`, listed in `BLOCKING_STATES`, documented in `docs/cli.md`, and asserted by three fixtures. A repo-wide grep found all five surfaces; removing the state then required repointing those fixtures onto `both-changed`, the only managed conflict that still blocks.
+**Symptoms:** A milestone item reads as purely additive, "add state X before blocker aggregation", and the implementation is one branch. Nothing warns that a sibling state became unreachable: no test constructs the classifier's inputs looking for absence, and the type union still lists it, so the dead value stays in the JSON contract and user docs until someone greps.
 
-**Why it happens:** A classifier is a chain of guarded returns. Adding a branch changes the reachability of every branch below it that shares a condition, but TypeScript checks exhaustiveness of the union, not reachability of its members. Tests that build the classifier's inputs directly keep passing for states they still construct, so the dead value is invisible from inside the unit suite.
+**Why it happens:** A classifier is a chain of guarded returns. Adding a branch changes the reachability of every branch below it that shares a condition, and TypeScript checks exhaustiveness of the union, not reachability of its members.
 
-**Prevention:** After adding or reordering any branch in a classifier whose output is a published contract, grep the repo for every sibling value and confirm each still has a producer. Treat a value with no producer as a contract removal, not dead code: it needs the same doc, fixture, and changelog treatment as any other breaking change. Anchors: `src/cli/managed-setup-preview.ts` (search: `classifyManagedSetupFile`) and `test/unit/managed-setup-preview.test.ts` (search: `name: "local-preserved"`).
+**Evidence:** 1.16.0 M02 added `local-preserved` to `src/cli/managed-setup-preview.ts` (search: `The package has nothing new to deliver here`). That branch owns `newExpectedSha256 === oldExpectedSha256`, the only producer of `local-edited`, which stayed exported in `ManagedSetupFileState`, listed in `BLOCKING_STATES`, documented in `docs/cli.md`, and asserted by three fixtures. Removing it meant repointing those fixtures at `both-changed`, the only managed conflict that still blocks.
 
 ## Footgun: Host-native paths leak into user-visible CLI output on Windows
 
 **Status:** active | **Created:** 2026-05-11 | **Evidence:** ACTUAL_MEASURED
 
-**Symptoms:** Windows users see `C:\Users\developer\...` style backslash paths in setup prompts, audit `evidence` fields, skill scaffold output, glob results, and the `getCliCommand()` re-run hint. When an agent reads the prompt and runs a host-native path inside a Bash subshell, the backslashes can act as escape characters and the command fails. Tests written with POSIX-shape assertions also fail (string-equality on `.endsWith(".claude/skills/...")` etc.). A full-suite run on 2026-05-11 had 25 failures all rooted here.
-
-**Why it happens:** `path.join`, `path.resolve`, and `path.relative` from `node:path` use OS-native separators on Windows. Every place a path is composed for *user-visible* output (prompts, audit findings, JSON payloads, dashboard strings) inherits that shape. The same path is fine for `node:fs` operations (which accept either separator), so the bug is invisible until output is rendered.
-
-**Evidence:**
-- `src/cli/install-invocation.ts` (search: `toBashPath`) - forward-slashes installer argv on win32.
-- `src/cli/prompt/compose-setup.ts` (search: `displayTemplatePath`) - forward-slashes packaged-template references; fixes 6 `composeSetup routing` tests.
-- `src/cli/paths.ts` (search: `getCliCommand`) - forward-slashes the `node dist/cli/cli.js` re-run hint.
-- `src/cli/audit/check-agent-deny-runtime.ts` (search: `evidencePath`) - forward-slashes 3 audit-evidence emission sites.
-- `src/cli/facts/fs.ts` (search: `results.push(relative`) - glob walker forward-slashes results.
-- `src/cli/quality/skill-quality-content.ts` (search: `relPosix`) - forward-slashes artifact paths/mirrors/missingMirrors.
-- `src/cli/skill-author.ts` (search: `proposedPath`) - forward-slashes skill scaffold paths.
-
 **Prevention:**
-1. Treat every emission of a `path.*` result into a string as a candidate for `.replace(/\\/g, "/")`. The boundaries that need this: prompt text, audit findings, JSON output, dashboard URLs/labels, log messages, shell snippets the user or agent will execute.
-2. `fs` operations can stay native (Node accepts both). The rule is about *display*, not *use*.
-3. For path *composition* (joining a host-native projectPath with a POSIX sub-path), prefer `path.posix.join(projectPath, sub).replace(/\\/g, "/")` to avoid `path.resolve`'s drive-letter prepending on Windows.
-4. Test stubs that pattern-match on path strings must normalize incoming paths the same way (`test/unit/audit-command/helpers.ts` (search: `export function stubFS`) is the canonical example).
-5. CI's Windows job (`.github/workflows/ci.yml`, search: `windows-hook-contracts`, added 2026-08-14) runs only the hook spawn-matrix and hook-state contracts, so path-emission changes still ship without Windows coverage - probe them on a Windows host before release.
+1. Treat every `path.*` result that reaches a string as a candidate for `.replace(/\\/g, "/")`: prompt text, audit findings, JSON output, dashboard URLs and labels, log messages, and shell snippets. `fs` calls can stay native; the rule is about display, not use.
+2. When joining a host-native project path with a POSIX sub-path, prefer `path.posix.join(projectPath, sub).replace(/\\/g, "/")` so `path.resolve` cannot prepend a drive letter.
+3. Test stubs that pattern-match on path strings must normalize incoming paths the same way; `test/unit/audit-command/helpers.ts` (search: `export function stubFS`) is the canonical example.
+4. The Windows CI job (`.github/workflows/ci.yml`, search: `windows-hook-contracts`) runs hook spawn, path-claim, deny-hook drift, and one packaged-install contract, not path-emission tests, so probe emission changes on a Windows host before release.
+
+**Symptoms:** Windows users see `C:\Users\developer\...` paths in setup prompts, audit `evidence` fields, skill scaffold output, glob results, and the `getCliCommand()` re-run hint. An agent that runs such a path inside a Bash subshell sees the backslashes act as escapes, and POSIX-shaped test assertions fail; a full-suite run on 2026-05-11 had 25 failures rooted here.
+
+**Why it happens:** `path.join`, `path.resolve`, and `path.relative` use OS-native separators, and `node:fs` accepts either, so the bug is invisible until output is rendered.
+
+**Evidence:** `src/cli/install-invocation.ts` (search: `toBashPath`); `src/cli/prompt/compose-setup.ts` (search: `displayTemplatePath`); `src/cli/paths.ts` (search: `getCliCommand`); `src/cli/audit/check-agent-deny-runtime.ts` (search: `evidencePath`); `src/cli/facts/fs.ts` (search: `results.push(relative`); `src/cli/quality/skill-quality-content.ts` (search: `relPosix`); `src/cli/skill-author.ts` (search: `proposedPath`). Each forward-slashes one emission site.
 
 ---
 
@@ -45,21 +37,13 @@ last_reviewed: 2026-08-20
 
 **Status:** active | **Created:** 2026-04-24 | **Evidence:** ACTUAL_MEASURED
 
-`path.resolve()` does not follow symlinks, but Node's ESM loader resolves symlinks for `import.meta.url` by default (via `--preserve-symlinks-main=false`). Any main-module guard that compares `resolve(process.argv[1])` against `fileURLToPath(import.meta.url)` silently fails when the script is invoked through a symlink - which is always the case for npm-installed CLIs, because `node_modules/.bin/<name>` is a symlink to the package's bin entry.
+**Prevention:** Never compare `resolve(process.argv[1])` directly to `fileURLToPath(import.meta.url)`; wrap both in `realpathSync()`. Run `test/integration/main-guard.test.ts` after any change to the entry-point guard. When Node 24+ becomes the minimum, replace the guard with `import.meta.main`.
 
-**Symptoms:** CLI exits 0 with zero output. No error, no stderr. Downstream scripts that spawn the CLI see the child die immediately with no diagnostic. Only direct invocation via `node dist/cli/cli.js` works.
+**Symptoms:** The CLI exits 0 with no output and no stderr. Only `node dist/cli/cli.js` works, and scripts that spawn the CLI see the child die without a diagnostic.
 
-**Why it happens:** npm creates `node_modules/.bin/goat-flow` → `../@blundergoat/goat-flow/dist/cli/cli.js`. When the shell launches the symlink via shebang, `process.argv[1]` is the symlink path. `resolve()` normalizes it but does not follow the symlink. Meanwhile `import.meta.url` points at the real file because Node's ESM loader follows symlinks by default. The two paths differ, the guard evaluates false, and `main()` never runs.
+**Why it happens:** npm installs `node_modules/.bin/goat-flow` as a symlink. `process.argv[1]` is the symlink path and `resolve()` does not follow it, while Node's ESM loader resolves `import.meta.url` to the real file, so the guard compares two different paths and `main()` never runs.
 
-**Evidence:**
-- `src/cli/cli.ts` (search: `isMainModule`) - the fixed guard uses `realpathSync()` on both sides to normalize through symlinks.
-- `test/integration/main-guard.test.ts` (search: `launched through a symlink`) - regression test that creates a temp-dir symlink and verifies the CLI produces output.
-- Commit 918ca3e introduced the broken guard; the fix adds `realpathSync` to resolve both paths canonically before comparison.
-
-**Prevention:**
-1. Never compare `resolve(process.argv[1])` directly to `fileURLToPath(import.meta.url)`. Always wrap both sides in `realpathSync()`.
-2. `test/integration/main-guard.test.ts` locks this in - any future change to the entry-point guard must pass the symlink test.
-3. When Node 24+ is the minimum, replace the entire guard with `import.meta.main`.
+**Evidence:** `src/cli/cli.ts` (search: `isMainModule`) applies `realpathSync()` to both sides; `test/integration/main-guard.test.ts` (search: `launched through a symlink`) creates a temp-dir symlink and asserts output. Commit 918ca3e introduced the broken guard.
 
 ---
 
@@ -67,42 +51,47 @@ last_reviewed: 2026-08-20
 
 **Status:** active | **Created:** 2026-05-25 | **Evidence:** EXTERNAL_REFERENCE
 
-**Symptoms:** A CLI command emits structured output (JSON, SARIF, JSONL, CSV) to stdout for a downstream consumer (CI parser, GitHub Code Scanning upload, jq pipeline, MCP client). The consumer fails to parse — sometimes silently (jq returns empty), sometimes loudly ("unexpected token at line N"). The bug is intermittent: only fires when a code path that calls `logger.*` or `console.*` happens to run during the structured emission. Test runs pass because the test invocation may not trigger that code path; production runs fail because (e.g.) a single deprecation warning prints to stdout right before the JSON payload.
-
-**Why it happens:** Most logger libraries default to writing all levels to stdout. The structured-output code path assumes it owns stdout exclusively, but any module imported anywhere in the process can `console.log` during import or initialization. Even one `winston` line on the default Console transport interleaves and breaks the payload. Set-once env-var fixes (`PROMPTFOO_LOG_TO_STDERR=1` in the source PR) only work if they're set BEFORE the logger module is imported, which means before ANY module that might transitively trigger logger initialization.
-
-**Evidence (external — promptfoo PR #9329):** `code-scan --format sarif|json` printed the payload via `console.log`. Winston's Console transport had no `stderrLevels` set, so any `logger.warn` / `logger.info` from cache loading, telemetry, or update-check code silently interleaved with the SARIF payload. GitHub Code Scanning rejected the upload as malformed. Fix: detect structured-output mode early in CLI dispatch, set `PROMPTFOO_LOG_TO_STDERR=1` BEFORE the logger import, route all log levels to stderr unconditionally in that mode.
-
-**Goat-flow applicability — HIGH:** Goat-flow CLI surfaces that emit structured stdout:
-- `src/cli/audit/render.ts` and `src/cli/audit/sarif.ts` — SARIF and JSON output modes for audit results.
-- `src/cli/quality/` — JSON quality report exports.
-- Any future `--json` or `--format` flag added to a goat-flow command.
-- MCP server code (when added) — MCP communicates over JSON-RPC stdio; every byte on stdout must be protocol-conformant. A single stray log line breaks the entire MCP session, often with no diagnostic on the consumer side.
-
 **Prevention:**
-1. When adding or modifying a CLI mode that emits structured stdout, detect the mode in `src/cli/cli.ts` (before logger import) and set a routing env var. The logger module reads the env var on first import and routes everything to stderr in that mode.
-2. The detection must run before ANY module that might trigger logger initialization. In practice this means: parse `argv` for the format flag in the entry-point file, set the env var, THEN import the rest of the CLI.
-3. Subprocesses spawned by goat-flow (hooks, git, install scripts) must have their stdout / stderr captured separately. Never merge a subprocess's stdout into the parent's stdout when the parent is in structured-output mode.
-4. Contract test pattern: for every structured-output CLI mode, write a test that exercises a code path KNOWN to log (e.g., cache miss, telemetry init, version check). Assert that the captured stdout parses cleanly as the expected format. If logging would corrupt it, the test fails.
-5. For MCP specifically: stdout is the protocol channel. Treat any `console.log` / `process.stdout.write` outside the MCP framing as a bug. Enforce with a source-grep guardrail (see `.goat-flow/learning-loop/patterns/verification.md` search: `Source-grep guardrail`) banning `console.log` in MCP server source files.
+1. When adding or changing a CLI mode that emits structured stdout, detect the mode in `src/cli/cli.ts` before the logger is imported and route every log level to stderr for that mode. Detection must precede any import that could initialise logging.
+2. Capture subprocess stdout and stderr separately; never merge a child's stdout into the parent's structured stream.
+3. For every structured-output mode, keep a test that exercises a path known to log (cache miss, version check) and asserts the captured stdout still parses.
+
+**Symptoms:** A command emits JSON, SARIF, JSONL, or CSV for a downstream parser, and the consumer fails, sometimes silently (jq returns nothing) and sometimes loudly ("unexpected token at line N"). The failure is intermittent because it needs a code path that logs during emission.
+
+**Why it happens:** Loggers default every level to stdout, and any module imported anywhere can log during initialisation. A set-once env-var fix works only when it runs before the logger module is first imported.
+
+**Evidence:** External: promptfoo PR #9329, where `code-scan --format sarif|json` printed through `console.log` while Winston's Console transport had no `stderrLevels`, so cache, telemetry, and update-check logs interleaved with the SARIF payload and GitHub Code Scanning rejected the upload; the fix set `PROMPTFOO_LOG_TO_STDERR=1` before the logger import. Local surfaces with the same shape: `src/cli/audit/render.ts` (search: "renderAuditJson") and `src/cli/audit/sarif.ts` (search: "renderAuditSarif"), plus JSON quality report exports under `src/cli/quality/`. The source-grep guardrail for banning stray `console.log` lives in `.goat-flow/learning-loop/patterns/verification.md` (search: `Source-grep guardrail`).
 
 ---
 
 ## Resolved Entries
 
+> Historical record. These entries are no longer active traps.
+
+## Footgun: POSIX absolute checks admit Windows drive-relative file operands
+
+**Status:** resolved | **Created:** 2026-08-24 | **Resolved:** 2026-08-27 | **Evidence:** OBSERVED
+**Decision changed:** Reject every Windows drive prefix before passing a project-relative CLI operand to a project-rooted filesystem.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Resolution:** `src/cli/learning-loop-recall.ts` (search: `function normalizeRecallPath`) rejects a drive prefix before the read-only filesystem classifies the operand; `test/unit/learning-loop-recall.test.ts` (search: `rejects absolute, parent-escaping, and Windows drive-relative operands`) pins POSIX absolute, parent escape, drive-absolute, drive-relative, and UNC forms.
+
+**Original symptoms:** A CLI that accepted only project-relative paths admitted `C:outside`. Replacing backslashes and calling `path.posix.normalize()` did not make Windows drive syntax POSIX-absolute, and a guard for `C:/...` missed `C:...` because `path.posix.isAbsolute("C:outside")` is false.
+
+**Safe handling now:** Interfaces that promise project-relative paths reject `^[A-Za-z]:` and UNC prefixes before any host-native resolution; coverage includes both `C:\\path` and `C:path`.
+
+---
+
 ## Footgun: Zero-duration filesystem leases can look live at the clock boundary
 
 **Status:** resolved | **Created:** 2026-08-03 | **Evidence:** ACTUAL_MEASURED
 **Decision changed:** Handle a zero-duration lease as an explicit immediate-expiry state instead of deriving it from wall-clock subtraction.
-**Trigger phase:** VERIFY
+**Trigger phase:** ACT
+**Caught at:** VERIFY
 
-**Symptoms:** Identical CI runs at the same commit disagree on `rejects an orphaned stale claim when its draft is already gone`. The failing run keeps the claim marker and produces no rejection receipt, while a parallel run passes. A local 10,000-sample probe observed 93 freshly written marker timestamps ahead of `Date.now()`, with the most negative delta at about -0.6 ms.
+**Original symptoms:** Identical CI runs at one commit disagreed on `rejects an orphaned stale claim when its draft is already gone`. A local 10,000-sample probe found 93 freshly written marker timestamps ahead of `Date.now()`, the most negative by about 0.6 ms, so a just-created marker under `staleMs: 0` could read as live.
 
-**Why it happened:** `src/cli/server/quality-draft-claims.ts` (search: `function staleClaimSnapshot`) previously classified every lease with `Date.now() - snapshot.mtimeMs >= staleMs`. Node's clock is integer milliseconds, while filesystem modification times can retain fractional precision or be rounded ahead. For the test/recovery contract `staleMs: 0`, a just-created marker can therefore appear live even though zero means immediate expiry.
+**Resolved by:** `src/cli/server/quality-draft-claims.ts` (search: `if (staleMs <= 0) return snapshot`) bypasses timestamp arithmetic for non-positive leases, replacing the `Date.now() - snapshot.mtimeMs >= staleMs` classification in `src/cli/server/quality-draft-claims.ts` (search: `function staleClaimSnapshot`); `test/unit/quality-draft-orphan-recovery.test.ts` (search: `rejects an orphaned stale claim when its draft is already gone`) forces a future marker mtime.
 
-**Resolved by:** `src/cli/server/quality-draft-claims.ts` (search: `if (staleMs <= 0) return snapshot`) now bypasses timestamp arithmetic for non-positive leases. `test/unit/quality-draft-orphan-recovery.test.ts` (search: `rejects an orphaned stale claim when its draft is already gone`) forces a future marker mtime and verifies immediate expiry.
-
-**Safe handling now:**
-1. Treat non-positive lease durations as immediate expiry before doing timestamp arithmetic; keep positive leases on the normal age comparison.
-2. Keep the deterministic future-mtime regression so clock precision cannot make the test intermittent again.
-3. When testing time boundaries, force the boundary condition rather than depending on scheduler delay or filesystem timestamp rounding to reproduce it.
+**Safe handling now:** Treat non-positive lease durations as immediate expiry before timestamp arithmetic, and force boundary conditions in tests rather than relying on scheduler delay or filesystem timestamp rounding.

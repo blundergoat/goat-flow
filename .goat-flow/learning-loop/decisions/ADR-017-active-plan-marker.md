@@ -2,42 +2,34 @@
 
 **Status:** Accepted
 **Date:** 2026-04-17
-**Updated:** 2026-08-15 - status corrected from "Superseded by ADR-033". ADR-033 moved the marker from `.goat-flow/tasks/.active` to `.goat-flow/plans/.active` and says so explicitly; it never replaced the marker semantics below, which remain load-bearing in `workflow/install-goat-flow.sh` (search: `ADR-017`), `src/cli/prompt/compose-quality-static-sections.ts`, and `/goat-plan` routing. The wrong status made the generated INDEX advertise a live decision as dead.
-**Supersedes:** -
-**Related:** ADR-033 (current marker path); `.goat-flow/learning-loop/footguns/docs-and-crossrefs.md` (search: `Cross-reference fragility across docs`).
+**Updated:** 2026-09-05 - condensed. The 2026-08-15 amendment corrected the status from "Superseded by ADR-033": ADR-033 moved the marker from `tasks/` to `plans/` and left these semantics in force.
+**Related:** ADR-033 (marker path); `.goat-flow/learning-loop/footguns/docs-and-crossrefs.md` (search: `Cross-reference fragility across docs`).
 
 ## Context
 
-The task workspace is local working state for milestone files and is gitignored by design. On the goat-flow repo as of 2026-04-17 it held hundreds of local files spread across current, archived, experimental, and scratch entries. The concrete names were local artifacts, not part of the durable decision.
-
-`/goat` and `/goat-plan` skills originally both instructed agents to scan `.goat-flow/plans/` on Step 0 to inventory existing plans. With the directory in this state, the dispatcher and planner burned their read budget on archive clutter before they could plan. A coding-agent critique (2026-04-17) flagged this as the active failure mode.
+The plan workspace is gitignored local state. On this repository it held hundreds of current, archived, experimental, and scratch entries, and both `/goat` and `/goat-plan` told agents to scan the whole directory at Step 0, so they spent their read budget on archive clutter before planning. A 2026-04-17 coding-agent critique flagged this as the active failure.
 
 ## Decision
 
-Adopt **Option B - marker file `.goat-flow/plans/.active`**. Format: one-line, content = name of the active subdir relative to the task workspace. No trailing slash, no leading dot in the value.
+`.goat-flow/plans/.active` holds one line naming the active plan subdirectory, and `/goat-plan` alone reads it.
 
-`/goat-plan` owns `.active` lookup. If it exists and names an existing subdir, `/goat-plan` scans only that subdir. If `.active` is missing or names a missing subdir, `/goat-plan` treats that as normal local churn (completed plan, project switch, or no task workflow), lists top-level entries excluding archive directories, prefers dirs with recent `M*.md` files, and asks the user which is current. `/goat` remains a router only: it classifies planning intent and routes to `/goat-plan` without reading task-state markers.
+- The value is the subdirectory name relative to the plan workspace: no trailing slash, no leading dot.
+- If the marker names an existing subdirectory, `/goat-plan` scans only that. If it is missing or stale, that is normal local churn: list top-level entries excluding archive directories, prefer directories with recent `M*.md` files, and ask the user which is current.
+- `/goat` is a router only. It classifies planning intent and hands off without reading the marker.
+- Mentioning a plan path does not move the marker. Without an action verb, `/goat-plan` treats the path as read-only orientation, may report that the marker points elsewhere, and asks before switching it, changing milestone status, or implementing.
+- `workflow/install-goat-flow.sh` (search: `ADR-017`) writes the marker when exactly one `X.Y.Z`-named subdirectory exists at install time; otherwise it leaves the skill's fallback to run.
+- No setup-scope audit check may fail on a missing or stale marker. Plan state is local working state, not setup integrity; at most a future check may verify skill fallback behaviour or emit an advisory metric.
 
-A referenced task path does not update or override `.active` by itself. If a user mentions a task directory without an explicit action verb, `/goat-plan` treats it as read-only orientation context, may report that `.active` currently points elsewhere, and must ask before switching `.active`, changing milestone status, or implementing code.
+## Failure Mode Comparison
 
-The install script (`workflow/install-goat-flow.sh`) writes `.active` automatically when exactly one `X.Y.Z`-named subdir exists at install time; otherwise leaves it for the skill's fallback path.
-
-## Alternatives considered
-
-**Option A - Directory rename (`active/`).** Rename the current plan's subdir to `active/` and have skills scan only that. **Rejected.** On the goat-flow repo, renaming the active versioned plan directory would have broken many cross-references inside local plan files and archived local plans. That failure class is documented in `.goat-flow/learning-loop/footguns/docs-and-crossrefs.md` (search: `Cross-reference fragility across docs`). The find-replace sweep needed is out of proportion to the problem.
-
-**Option C - Version-derived from `config.yaml`.** Use `config.yaml:version` to compute the active task-plan directory. **Rejected.** Config version is semver-stable; task plan versions churn faster. Strict coupling breaks when active work, pre-release work, experimental forks, or version-lag projects do not match the package version.
+| Option | What fails | Verdict |
+| --- | --- | --- |
+| Rename the current plan directory to `active/` | Breaks cross-references inside local plan files, the class recorded in the footgun above; the find-replace sweep outweighs the problem | Rejected |
+| Derive the directory from the `config.yaml` version | Package version is semver-stable while plan versions churn; pre-release, experimental, and version-lag projects break the coupling | Rejected |
+| One-line marker file | One more local pointer that can drift, and a hidden file that default `ls` hides; mitigated by the glossary, code map, and the installer's automatic write | Accepted |
 
 ## Consequences
 
-**Wins:**
-- No path rewrites; cross-refs stay valid.
-- Multiple version subdirs coexist freely; users keep history without polluting the active scan.
-- Marker is one line, trivially parseable from skills, install script, and any future audit check.
-
-**Costs:**
-- One more local pointer that can drift. Forgetting to update `.active` when starting a new plan version means the planner may need to ask which subdir is current.
-- Hidden file (`.active`) is invisible to default `ls`; contributors who never `ls -la` may not notice it exists. Mitigated by the glossary entry, code-map note, and the install script's automatic write.
-- `/goat-plan` must read the marker before the directory - a small protocol step, not a measurable performance cost. `/goat` must not duplicate this lookup.
-
-**Future enforcement (rejected):** Do not add a setup-scope audit check that fails when `.active` is missing or names a missing subdir. Task state is gitignored local working state, not committed setup integrity. At most, future checks may verify skill fallback behavior or surface an advisory metric; they must not turn local pointer drift into a setup-quality failure.
+- No path rewrites; multiple version subdirectories coexist.
+- The marker is trivially parseable from skills, the installer, and `src/cli/prompt/compose-quality-static-sections.ts`.
+- `/goat-plan` reads the marker before the directory; `/goat` must not duplicate the lookup.

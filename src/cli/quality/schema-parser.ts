@@ -2,6 +2,7 @@
  * Validate quality reports before the CLI saves, compares, or shows them.
  *
  * Use when an agent hands back JSON from a quality run, so the user gets a precise schema error instead of a corrupt history entry or a misleading
+ *
  * dashboard comparison.
  * The parser keeps legacy-read options explicit while current emissions stay strict.
  */
@@ -14,20 +15,19 @@ import {
   QUALITY_EVIDENCE_QUALITIES,
   QUALITY_FINDING_SEVERITIES,
   QUALITY_FINDING_TYPES,
-  QUALITY_GROUNDING_STATUSES,
   QUALITY_MODES,
   QUALITY_REPORT_KIND,
-  QUALITY_SCORE_CONFIDENCES,
   QUALITY_SCOPES,
-  QUALITY_WORKTREE_STATES,
   type ParseResult,
   type QualityAssessmentContext,
   type QualityDeltaTag,
   type QualityEvidenceMethod,
   type QualityFinding,
+  type QualityRefutedCandidate,
   type QualityReport,
   type QualityMode,
   type QualityReportParseOptions,
+  type QualityScoreRationale,
   type QualityScope,
   type QualityScores,
   type QualitySetupScores,
@@ -45,9 +45,16 @@ import {
   isRecord,
   rejectUnknownKeys,
 } from "./schema-expectations.js";
+import { parseReportRefutedCandidates } from "./schema-refuted-candidates.js";
+import { parseQualityScoreRationale } from "./schema-score-rationale.js";
+import {
+  parseAssessmentContext,
+  parseQualityImprovements,
+} from "./schema-assessment.js";
 
 /**
  * Confirm a formatted run date names a real Gregorian calendar day.
+ *
  * Use for new report admission and when legacy history tries to prove consecutive runs.
  * It reads no files and changes no report state.
  *
@@ -252,15 +259,34 @@ function parseScores(
   };
 }
 
-/**
- * Parse one finding row from an agent quality report.
- * Use when the CLI builds the issue list the user reads after a quality run.
- *
- * @param raw - raw finding value; missing or non-object values mean this row cannot be displayed
- * @param index - zero-based finding position; used only to point the user at the broken row
- * @param options - strictness for current versus legacy reports; missing options keep legacy rows readable
- * @returns parsed finding row, or a path-specific error that blocks the report
- */
+/** Parse numeric scores and their optional-for-legacy provenance as one report boundary. */
+function parseReportScoring(
+  raw: Record<string, unknown>,
+  options: QualityReportParseOptions,
+): FieldResult<{
+  scores: QualityScores;
+  scoreRationale: QualityScoreRationale | undefined;
+}> {
+  const scores = parseScores(raw.scores, "report.scores");
+  // Reject invalid score groups before history can show a partial headline.
+  if (!scores.ok) return scores;
+  const scoreRationale = parseOptionalCurrentField(
+    raw,
+    "score_rationale",
+    options,
+    parseQualityScoreRationale,
+  );
+  // A current report needs the explanation behind each rating before save accepts its scores.
+  if (!scoreRationale.ok) return scoreRationale;
+  return {
+    ok: true,
+    value: {
+      scores: scores.scores,
+      scoreRationale: scoreRationale.value,
+    },
+  };
+}
+
 /** A parsed value, or the first path-specific error that should stop the whole report. */
 type FieldResult<T> = { ok: true; value: T } | { ok: false; error: string };
 
@@ -278,8 +304,8 @@ interface FindingCoreFields {
 /**
  * Parse the optional source location a finding points at.
  *
- * Both fields are nullable because a finding can legitimately describe a whole project rather than one line, and a null
- * line with a file still reads correctly as "somewhere in this file".
+ * Both fields are nullable because a finding can legitimately describe a whole project rather than one line, and a null line with a file still reads
+ * correctly as "somewhere in this file".
  *
  * @param raw - the raw finding object
  * @param path - error path prefix identifying which finding failed
@@ -301,8 +327,7 @@ function parseFindingLocation(
 /**
  * Parse the finding fields the issue list cannot render without.
  *
- * The summary length cap exists because the issue row is compact: anything longer belongs in `detail`, where the user can
- * actually read it.
+ * The summary length cap exists because the issue row is compact: anything longer belongs in `detail`, where the user can actually read it.
  *
  * @param raw - the raw finding object, already confirmed to be a record
  * @param path - error path prefix identifying which finding failed
@@ -323,6 +348,7 @@ function parseFindingCore(
   // Unknown severities cannot be sorted or styled reliably for the user.
   if (!severity.ok) return severity;
   const location = parseFindingLocation(raw, path);
+  // An invalid location would send the maintainer to unusable finding evidence.
   if (!location.ok) return location;
   const summary = expectNonEmptyString(raw.summary, `${path}.summary`);
   // A finding without summary text leaves the issue list unreadable.
@@ -370,22 +396,19 @@ interface FindingEvidenceFields {
 }
 
 /**
- * Parse how a finding's evidence was gathered, plus the optional proof fields that back it up.
- *
- * Current reports must declare the method so the user can judge how much to trust the finding. Legacy reports predate the
- * field, so they open with the safest visible default rather than failing and hiding the user's history.
+ * Read the evidence method that helps users judge a finding's trust level.
+ * Current reports must name the method; legacy reports remain readable with the static-analysis default.
  *
  * @param raw - the raw finding object
  * @param path - error path prefix identifying which finding failed
  * @param options - strictness selector; `requireCurrentFields` makes the method mandatory
- * @returns the evidence fields, or the first field error
+ * @returns the supported method, the legacy default when absent, or a validation error
  */
-function parseFindingEvidence(
+function parseFindingEvidenceMethod(
   raw: Record<string, unknown>,
   path: string,
   options: QualityReportParseOptions,
-): FieldResult<FindingEvidenceFields> {
-  let method: QualityEvidenceMethod = "static-analysis";
+): FieldResult<QualityEvidenceMethod> {
   // Current reports must say how evidence was gathered so users can judge trust level.
   if (
     options.requireCurrentFields === true &&
@@ -398,16 +421,32 @@ function parseFindingEvidence(
   }
   // Legacy reports lacked this field, so old history opens with the safest visible default.
   if (Object.hasOwn(raw, "evidence_method")) {
-    const parsedMethod = expectEnumValue(
+    return expectEnumValue(
       raw.evidence_method,
       `${path}.evidence_method`,
       QUALITY_EVIDENCE_METHODS,
     );
-    // Unknown evidence methods cannot be labelled in the report details.
-    if (!parsedMethod.ok) return parsedMethod;
-    method = parsedMethod.value;
   }
+  return { ok: true, value: "static-analysis" };
+}
 
+/**
+ * Validate the evidence fields shown with a saved finding.
+ * Use before save or history loading; current runtime findings must retain the command and result behind their claim.
+ *
+ * @param raw - finding fields; absent optional fields mean that evidence was not recorded
+ * @param path - finding label used in the repair message
+ * @param options - current validation requires runtime proof; legacy loading preserves older reports
+ * @returns supported evidence fields, or the first error the report author must correct
+ */
+function parseFindingEvidence(
+  raw: Record<string, unknown>,
+  path: string,
+  options: QualityReportParseOptions,
+): FieldResult<FindingEvidenceFields> {
+  const method = parseFindingEvidenceMethod(raw, path, options);
+  // An absent or unsupported method cannot explain a current finding's evidence to the reader.
+  if (!method.ok) return method;
   const command = expectOptionalNonEmptyString(
     raw.evidence_command,
     `${path}.evidence_command`,
@@ -439,10 +478,19 @@ function parseFindingEvidence(
   // Bad optional excerpts would show a blank or invalid proof snippet.
   if (!excerpt.ok) return excerpt;
 
+  const runtimeProof = validateRuntimeFindingProof(
+    raw,
+    path,
+    method.value,
+    options,
+  );
+  // A current report cannot claim a completed probe while omitting its reproducible result.
+  if (!runtimeProof.ok) return runtimeProof;
+
   return {
     ok: true,
     value: {
-      method,
+      method: method.value,
       command: command.value,
       exitCode: exitCode.value,
       summary: summary.value,
@@ -453,10 +501,46 @@ function parseFindingEvidence(
 }
 
 /**
+ * Require a reproducible command result when a new finding claims runtime evidence.
+ * Use at save time; historical reports keep opening even when their writers omitted proof fields.
+ *
+ * @param raw - finding fields already checked for valid values; absent proof fields mean the result cannot be reproduced
+ * @param path - finding location included in the repair message shown by quality save
+ * @param method - how this finding was checked; static inspection has no command-result obligation
+ * @param options - current-report validation policy; legacy loading keeps earlier optional fields readable
+ * @returns success, or the first missing proof field the report author must supply
+ */
+function validateRuntimeFindingProof(
+  raw: Record<string, unknown>,
+  path: string,
+  method: QualityEvidenceMethod,
+  options: QualityReportParseOptions,
+): FieldResult<true> {
+  // Reading old history or a source-only finding does not require a command that was never run.
+  if (!options.requireCurrentFields || method === "static-analysis") {
+    return { ok: true, value: true };
+  }
+  // Each runtime claim needs enough information for a maintainer to repeat the same check.
+  for (const field of [
+    "evidence_command",
+    "evidence_exit_code",
+    "evidence_summary",
+  ]) {
+    // An omitted result is different from a real non-zero exit, such as grep finding no matches.
+    if (raw[field] === undefined) {
+      return {
+        ok: false,
+        error: `${path}.${field} is required for runtime-probe or mixed findings`,
+      };
+    }
+  }
+  return { ok: true, value: true };
+}
+
+/**
  * Collect only the evidence fields the report actually supplied.
  *
- * Absent fields are left off the object rather than written as undefined, so a saved report never records a key the user's
- * agent never emitted.
+ * Absent fields are left off the object rather than written as undefined, so a saved report never records a key the user's agent never emitted.
  *
  * @param evidence - the parsed evidence fields
  * @returns an object carrying just the fields that were present
@@ -508,13 +592,8 @@ function parseFindingDeltaTag(
 }
 
 /**
- * Parse one finding row from an agent-emitted quality report.
- *
- * Every rejection names the exact field path, because the user's next action is fixing that field in the report their
- * agent produced.
- *
- * The accepted key set is a closed schema: unknown keys and a caller-supplied `id` are both refused, because hidden fields would make the saved
- * report differ from what the user can inspect, and identity belongs to history rather than the emitting agent.
+ * Validate one finding before it can appear in a saved report.
+ * The schema rejects unknown fields and author-supplied IDs; repair messages identify the exact field to correct.
  *
  * @param raw - raw finding value; anything that is not an object cannot be displayed as a row
  * @param index - zero-based position, used only to point the user at the broken row
@@ -557,10 +636,13 @@ function parseFinding(
   }
 
   const core = parseFindingCore(raw, path);
+  // Invalid issue details block this report instead of producing an incomplete finding row.
   if (!core.ok) return core;
   const evidence = parseFindingEvidence(raw, path, options);
+  // Invalid evidence prevents the report from presenting an unsupported finding as checked.
   if (!evidence.ok) return evidence;
   const deltaTag = parseFindingDeltaTag(raw, path);
+  // An invalid delta label would mislead the reader comparing this run with its baseline.
   if (!deltaTag.ok) return deltaTag;
 
   const findingBase: QualityFinding = {
@@ -591,14 +673,13 @@ interface ReportIdentity {
 /**
  * Parse the fields that say which project, agent, and day a report describes.
  *
- * The project path must be absolute because saved history is keyed on it: a relative path would attach the report
- * to whichever directory happened to be current when it was read back.
+ * The project path must be absolute because saved history is keyed on it: a relative path would attach the report to whichever directory happened to
+ * be current when it was read back.
  *
  * @param raw - the raw report object
  * @param options - strictness selector; `requireCurrentFields` enables the real-date check
- * @returns the identity fields, or the first path-specific error. The date is format-checked for everyone so
- *   history sorts, but only newly saved reports must name a real calendar day, which keeps older history readable
- *   rather than rejecting it on a rule it predates.
+ * @returns the identity fields, or the first path-specific error. The date is format-checked for everyone so history sorts, but only newly saved
+ *   reports must name a real calendar day, which keeps older history readable rather than rejecting it on a rule it predates.
  */
 function parseReportIdentity(
   raw: Record<string, unknown>,
@@ -661,11 +742,8 @@ function parseReportIdentity(
 }
 
 /**
- * Parse a field that current reports must carry but older ones are allowed to omit.
- *
- * Current report fields that retain historical compatibility follow this rule, so the
- * "required now, optional then" policy lives here once instead of being restated per
- * field, where the copies could drift apart.
+ * Read a field required by current reports while keeping earlier reports loadable.
+ * Use at ingestion; a missing legacy field stays absent rather than gaining invented evidence.
  *
  * @param raw - the raw report object
  * @param key - report field name, used for both lookup and the error path
@@ -690,119 +768,16 @@ function parseOptionalCurrentField<T>(
   // Legacy reports predate the field, so their history still opens without it.
   if (!isPresent) return { ok: true, value: undefined };
   const parsed = parseValue(raw[key], `report.${key}`);
+  // A supplied current field must validate even when older reports may omit it.
   if (!parsed.ok) return parsed;
   return { ok: true, value: parsed.value };
-}
-
-/** Parse the commands or probes whose absence limits one report's evidence coverage. */
-function parseUnverifiedProbes(
-  raw: unknown,
-  path: string,
-): FieldResult<string[]> {
-  if (!Array.isArray(raw)) {
-    return { ok: false, error: `${path} must be an array` };
-  }
-  const probes: string[] = [];
-  for (const [index, probe] of raw.entries()) {
-    const parsedProbe = expectNonEmptyString(probe, `${path}[${index}]`);
-    if (!parsedProbe.ok) return parsedProbe;
-    probes.push(parsedProbe.value);
-  }
-  return { ok: true, value: probes };
-}
-
-/** Reject provenance states whose coverage label contradicts their skipped-probe list. */
-function validateAssessmentGrounding(
-  groundingStatus: QualityAssessmentContext["grounding_status"],
-  unverifiedProbes: string[],
-  path: string,
-): FieldResult<true> {
-  if (groundingStatus === "complete" && unverifiedProbes.length > 0) {
-    return {
-      ok: false,
-      error: `${path}.unverified_probes must be empty when grounding_status is complete`,
-    };
-  }
-  if (groundingStatus !== "complete" && unverifiedProbes.length === 0) {
-    return {
-      ok: false,
-      error: `${path}.unverified_probes must name at least one probe when grounding_status is partial or blocked`,
-    };
-  }
-  return { ok: true, value: true };
-}
-
-/** Parse the bounded provenance object that makes independent assessment runs comparable. */
-function parseAssessmentContext(
-  raw: unknown,
-  path: string,
-): FieldResult<QualityAssessmentContext> {
-  if (!isRecord(raw)) return { ok: false, error: `${path} must be an object` };
-  const unknownKeyError = rejectUnknownKeys(
-    raw,
-    [
-      "project_revision",
-      "working_tree_state",
-      "grounding_status",
-      "unverified_probes",
-      "score_confidence",
-    ],
-    path,
-  );
-  if (unknownKeyError) return { ok: false, error: unknownKeyError };
-
-  const projectRevision = expectNullableString(
-    raw.project_revision,
-    `${path}.project_revision`,
-  );
-  if (!projectRevision.ok) return projectRevision;
-  const workingTreeState = expectEnumValue(
-    raw.working_tree_state,
-    `${path}.working_tree_state`,
-    QUALITY_WORKTREE_STATES,
-  );
-  if (!workingTreeState.ok) return workingTreeState;
-  const groundingStatus = expectEnumValue(
-    raw.grounding_status,
-    `${path}.grounding_status`,
-    QUALITY_GROUNDING_STATUSES,
-  );
-  if (!groundingStatus.ok) return groundingStatus;
-  const unverifiedProbes = parseUnverifiedProbes(
-    raw.unverified_probes,
-    `${path}.unverified_probes`,
-  );
-  if (!unverifiedProbes.ok) return unverifiedProbes;
-  const grounding = validateAssessmentGrounding(
-    groundingStatus.value,
-    unverifiedProbes.value,
-    path,
-  );
-  if (!grounding.ok) return grounding;
-  const scoreConfidence = expectEnumValue(
-    raw.score_confidence,
-    `${path}.score_confidence`,
-    QUALITY_SCORE_CONFIDENCES,
-  );
-  if (!scoreConfidence.ok) return scoreConfidence;
-
-  return {
-    ok: true,
-    value: {
-      project_revision: projectRevision.value,
-      working_tree_state: workingTreeState.value,
-      grounding_status: groundingStatus.value,
-      unverified_probes: unverifiedProbes.value,
-      score_confidence: scoreConfidence.value,
-    },
-  };
 }
 
 /**
  * Collect only the report fields that were actually supplied.
  *
- * Absent fields are left off rather than written as undefined, so a legacy report re-saved through this parser does not
- * gain keys its original run never emitted.
+ * Absent fields are left off rather than written as undefined, so a legacy report re-saved through this parser does not gain keys its original run
+ * never emitted.
  *
  * @param fields - the optional values, each undefined when the report omitted it
  * @returns an object carrying just the fields that were present
@@ -813,6 +788,8 @@ function optionalReportFields(fields: {
   qualityMode: QualityMode | undefined;
   priorReportId: string | null | undefined;
   assessmentContext: QualityAssessmentContext | undefined;
+  scoreRationale: QualityScoreRationale | undefined;
+  improvements: QualityReport["improvements"];
 }): Partial<QualityReport> {
   return {
     ...(fields.scope !== undefined ? { scope: fields.scope } : {}),
@@ -828,20 +805,23 @@ function optionalReportFields(fields: {
     ...(fields.assessmentContext !== undefined
       ? { assessment_context: fields.assessmentContext }
       : {}),
+    ...(fields.scoreRationale !== undefined
+      ? { score_rationale: fields.scoreRationale }
+      : {}),
+    ...(fields.improvements !== undefined
+      ? { improvements: fields.improvements }
+      : {}),
   };
 }
 
 /**
- * Parse every finding row, and confirm a compared report labelled all of them.
- *
- * It reports the first bad row and blocks the whole report, because saved history that mixed valid and dropped findings would understate what
- * the run actually found.
+ * Validate finding rows in the order the author emitted them.
+ * Use before save; reports the first bad row or missing comparison label so the author can repair the rejected report.
  *
  * @param rawFindings - the raw findings value; anything other than an array cannot render as an issue list
  * @param options - strictness selector, passed through to each row
  * @param priorReportId - the compared report, when one was named; its presence requires every delta tag to be set
- * @returns the parsed findings in emitted order, or the first row error. It findings keep their emitted order, so the index in an error path
- *   always names the row the user must fix.
+ * @returns findings in emitted order, or the first error with the row index the author must fix; an empty array means no findings were reported
  */
 function parseReportFindings(
   rawFindings: unknown,
@@ -877,6 +857,47 @@ function parseReportFindings(
 }
 
 /**
+ * Validate findings, excluded candidates, and recommendations before constructing saved history.
+ * Use at ingestion so a malformed list cannot silently lose issues, disproval evidence, or next steps.
+ *
+ * @param rawReport - report lists; missing required arrays produce errors, while absent legacy improvements stay unrecorded
+ * @param options - strictness for current versus legacy reports; legacy absence is normalized only for the refutation ledger
+ * @param priorReportId - compared report id; null or absent means finding delta tags may remain null
+ * @returns the validated report collections, or the first list error the report author must fix
+ */
+function parseReportCollections(
+  rawReport: Record<string, unknown>,
+  options: QualityReportParseOptions,
+  priorReportId: string | null | undefined,
+): FieldResult<{
+  findings: QualityFinding[];
+  refutedCandidates: QualityRefutedCandidate[];
+  improvements: QualityReport["improvements"];
+}> {
+  const findings = parseReportFindings(
+    rawReport.findings,
+    options,
+    priorReportId,
+  );
+  // Invalid findings stop the report before its actionable issue list reaches the user.
+  if (!findings.ok) return findings;
+  const refutedCandidates = parseReportRefutedCandidates(rawReport, options);
+  // Invalid exclusions stop the report before its refutation ledger reaches the user.
+  if (!refutedCandidates.ok) return refutedCandidates;
+  const improvements = parseQualityImprovements(rawReport.improvements);
+  // Reject malformed recommendations before save can silently lose a maintainer's next steps.
+  if (!improvements.ok) return improvements;
+  return {
+    ok: true,
+    value: {
+      findings: findings.value,
+      refutedCandidates: refutedCandidates.value,
+      improvements: improvements.value,
+    },
+  };
+}
+
+/**
  * Parse the full quality report object.
  * Use before saving or comparing a run so every user-facing summary and finding row is trustworthy.
  *
@@ -908,7 +929,10 @@ function parseReportInternal(
       "prior_report_id",
       "assessment_context",
       "scores",
+      "score_rationale",
+      "improvements",
       "findings",
+      "refuted_candidates",
     ],
     "report",
   );
@@ -924,6 +948,7 @@ function parseReportInternal(
   }
 
   const identity = parseReportIdentity(raw, options);
+  // The report must identify its owner and run before it can appear in saved history.
   if (!identity.ok) return identity;
 
   const scope = parseOptionalCurrentField(
@@ -932,6 +957,7 @@ function parseReportInternal(
     options,
     (value, path) => expectEnumValue(value, path, QUALITY_SCOPES),
   );
+  // Invalid scope would confuse a framework assessment with a target-project assessment.
   if (!scope.ok) return scope;
   const rubricVersion = parseOptionalCurrentField(
     raw,
@@ -939,6 +965,7 @@ function parseReportInternal(
     options,
     (value, path) => expectNonEmptyString(value, path),
   );
+  // A supplied rubric version must identify the rating rules used by this run.
   if (!rubricVersion.ok) return rubricVersion;
   const qualityMode = parseOptionalCurrentField(
     raw,
@@ -946,6 +973,7 @@ function parseReportInternal(
     options,
     (value, path) => expectEnumValue(value, path, QUALITY_MODES),
   );
+  // Unknown modes cannot be placed in the correct family of saved assessments.
   if (!qualityMode.ok) return qualityMode;
   const assessmentContext = parseOptionalCurrentField(
     raw,
@@ -953,6 +981,7 @@ function parseReportInternal(
     options,
     parseAssessmentContext,
   );
+  // Malformed provenance would hide the limits behind this report's scores.
   if (!assessmentContext.ok) return assessmentContext;
 
   let priorReportId: string | null | undefined;
@@ -967,14 +996,15 @@ function parseReportInternal(
     priorReportId = parsedPriorReportId.value;
   }
 
-  const scores = parseScores(raw.scores, "report.scores");
-  // Score errors stop the report before any headline metrics are shown.
-  if (!scores.ok) return scores;
+  const scoring = parseReportScoring(raw, options);
+  // Score or rationale errors stop the report before any headline metrics are shown.
+  if (!scoring.ok) return scoring;
 
-  const findings = parseReportFindings(raw.findings, options, priorReportId);
-  if (!findings.ok) return findings;
+  const reportCollections = parseReportCollections(raw, options, priorReportId);
+  // Invalid findings or exclusions stop the report before either list reaches history.
+  if (!reportCollections.ok) return reportCollections;
 
-  const reportBase: Omit<QualityReport, "findings"> = {
+  const reportBase: Omit<QualityReport, "findings" | "refuted_candidates"> = {
     report_kind: QUALITY_REPORT_KIND,
     goat_flow_version: identity.value.version,
     agent: identity.value.agent,
@@ -987,13 +1017,19 @@ function parseReportInternal(
       qualityMode: qualityMode.value,
       priorReportId,
       assessmentContext: assessmentContext.value,
+      scoreRationale: scoring.value.scoreRationale,
+      improvements: reportCollections.value.improvements,
     }),
-    scores: scores.scores,
+    scores: scoring.value.scores,
   };
 
   return {
     ok: true,
-    report: { ...reportBase, findings: findings.value },
+    report: {
+      ...reportBase,
+      findings: reportCollections.value.findings,
+      refuted_candidates: reportCollections.value.refutedCandidates,
+    },
   };
 }
 

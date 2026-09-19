@@ -10,6 +10,8 @@ Local-only (gitignored):
 
 - `<YYYY-MM-DD>-<artifact-slug>.md` - confirmed and probable findings with severity, asset, entry→sink, trust boundary, preconditions, blast radius, and proof-of-fix pointers
 
+Each approved run redacts its text before anything reaches disk and creates one new file here. An existing filename is never reused or overwritten, so a repeat review on the same day needs a different slug.
+
 Use:
 
 - Reference prior security reviews when assessing the same area again
