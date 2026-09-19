@@ -75,6 +75,7 @@ Before any completion, fix, or "passing" claim:
 3. **Read** all output, the process exit code, and every parsed result row.
 4. **Verify** it proves this claim, not an adjacent one.
 5. **Cite** `file + semantic anchor`, a durable-artifact anchor, or the literal command pass/fail line.
+6. **Report** each requested outcome with its evidence and any remaining gap.
 
 If proof cannot run, mark the claim **UNVERIFIED** and name the missing evidence.
 

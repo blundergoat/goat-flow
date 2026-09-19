@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **The skill Proof Gate adds a Report step** - Completion claims list each requested outcome with its evidence and any remaining gap.
+- **Graduation docs match `goat-flow stats`** - An entry becomes a candidate at two incidents, from its `Incident count` or its recurrence labels.
+- **Lesson capture excludes bare command failures** - A failed command becomes a lesson only when an agent decision caused or mishandled it.
+
 ## v1.17.0 - 2026-09-05
 
 The next release adds per-command `--help`, path-aware learning recall, one project-wide install baseline, whole-suite hook verification, and stricter `--strict` plan checks, and it untangles Claude and Copilot hook registrations.

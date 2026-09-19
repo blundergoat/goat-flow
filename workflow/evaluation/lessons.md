@@ -50,6 +50,7 @@ If .goat-flow/learning-loop/lessons/ already exists:
 RULES:
 - Do NOT invent entries
 - Do NOT log ordinary code defects unless the agent behaviour caused them
+- A failed command or check alone is neither a harness failure nor grounds for a lesson; log one only when an agent decision caused the failure or mishandled its result
 - Prefer one concrete lesson per entry over a vague umbrella statement
 - Keep the Prevention action-oriented and enforceable
 - `Trigger phase` names the earliest phase where retrieval can prevent the failure, not where the failure surfaced; use optional `Caught at` when those phases differ

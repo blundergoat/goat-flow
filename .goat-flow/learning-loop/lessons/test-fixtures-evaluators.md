@@ -1,9 +1,9 @@
 ---
 category: test-fixtures-evaluators
-last_reviewed: 2026-09-15
+last_reviewed: 2026-09-19
 ---
 
-**Scope:** Fixtures for skill-evaluation trials - pressure scenarios that isolate one rule, evaluator prompts and restrictions, and worktree scheduling for parallel evaluator runs. Test-suite fixtures are [test-fixtures.md](test-fixtures.md); scoring what a trial produced is [skill-trial-evidence.md](skill-trial-evidence.md).
+**Scope:** Fixtures for skill-evaluation trials - pressure scenarios that isolate one rule, evaluator prompts and restrictions, worktree scheduling for parallel evaluator runs, and what a blind evaluator or executor session loads at start. Test-suite fixtures are [test-fixtures.md](test-fixtures.md); scoring what a trial produced is [skill-trial-evidence.md](skill-trial-evidence.md).
 
 ## Lesson: Pressure scenarios must isolate the rule under test
 
@@ -41,3 +41,18 @@ last_reviewed: 2026-09-15
 **What happened:** M31 launched the bare-path planning baseline, which hashes the fixture milestones and must write nothing, and the interrupted-task recovery baseline, which ticks a fixture task, in the same worktree. The bare-path evaluator saw its M02 hash change between its start and end commands, guessed that the strict plan check had written the file, and reported an unexplained anomaly. The change was the recovery run's registered tick. The candidate arms ran in separate checkouts and the bare-path hashes stayed identical.
 
 **Root cause:** The host treated dependency independence between cases as write independence and scheduled by case rather than by write set.
+
+---
+
+## Lesson: Agent memory reaches every session in the checkout, so a blind evaluator or executor is not blind to it
+
+**Status:** active | **Created:** 2026-09-19
+**Decision changed:** Before saving anything to the agent's per-project memory, and before starting a session that must not know something, check whether that session loads the memory; keep predictions, expected answers and graded rules out of it.
+**Trigger phase:** SCOPE
+**Caught at:** VERIFY
+
+**Prevention:** Before starting a session that must stay blind - an evaluator running a baseline, or an executor whose work is being predicted - list every channel it loads at start: instruction files, hooks, and the agent's per-project memory. Claude Code loads that memory into every session started in the checkout, and its index line alone names the file to open. Keep study-sensitive facts in plan-local files, name those files in the blind session's brief as not to be opened, and store only a pointer in memory. When the blind role can run without instruction files and hooks, start it with auto-memory skipped, as the refuter recipe does: `workflow/skills/goat-review/references/refuter-spec.md` (search: `auto-memory, and instruction-file auto-discovery skipped`). Otherwise start it from a checkout at another path; on 2026-09-19 this machine held separate memory directories for the fixture worktree paths earlier sessions had used.
+
+**What happened:** On 2026-09-19 a diagnosing session froze forecast predictions for eleven not-started milestones as a shadow test and told the requester that the executing agent must not see them. For the convenience of later analysis sessions it then saved a memory entry that named the rules under test and the measured rates. The executor of the first milestone, a second Claude Code session in the same checkout, opened that memory file after its timer was finalized and reported the exposure in its closeout. Its own timing predated the read and the dated predictions stayed unseen, but it then knew the rules for the ten milestones still to run. The memory file was rewritten without rules or rates, its index line now steers executors away from the prediction files, and the requester was advised to continue in a fresh session.
+
+**Root cause:** The agent treated its memory as a private notebook. It guarded the plan-local prediction files, then copied their sensitive part into the one place every session in the checkout reads.
