@@ -1,6 +1,6 @@
 ---
 category: hook-testing
-last_reviewed: 2026-09-18
+last_reviewed: 2026-09-19
 ---
 
 **Scope:** Hook test coverage strategy and provider evidence - what a self-test actually exercises, which support layer a capture proves, matrices that interfere with the live guard, fixtures that must not carry real secrets, and splits that only look like coverage. The script under test is [hook-script-authoring.md](hook-script-authoring.md); driving it with payloads is [hook-probe-testing.md](hook-probe-testing.md).
@@ -141,3 +141,18 @@ last_reviewed: 2026-09-18
 
 **Recurrence 2026-08-06:** The rule is narrowed, not a blanket ban on shell substitution: Codex hook commands run with the session cwd, so bare `.goat-flow/hooks/...` paths fail from nested directories, and the Node bootstrap is the current safe shape. `test/unit/hook-registrar.test.ts` (search: `generated Codex launchers resolve the active root`).
 **Recurrence 2026-08-22:** Windows required the `commandWindows` override around that bootstrap, because Windows PowerShell can parse hostile cwd characters incorrectly or turn policy exit 2 into hook-failure exit 1. `src/cli/server/hooks-registry.ts` (search: `provider-capture-stale`).
+
+---
+
+## Lesson: Contract fixtures need a real payload for each branch they model
+
+**Status:** active | **Created:** 2026-09-19
+**Decision changed:** Before writing a fixture for an analyzer error or refusal branch, capture that branch from a real executable; a measured clean envelope does not measure its error fields.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** When tests model an external protocol, take each branch's payload from a real run of that branch: clean, finding, config refusal, fatal diagnostic, ignored operand. A scratch project with a broken config or an ignore pattern produces the refusal and ignored shapes without touching the real project. Run the finished consumer against the real executables before calling the protocol covered. Evidence anchors: `test/integration/gruff-code-quality-smoke.helpers.ts` (search: `shows the analyzer's own message`), `workflow/hooks/gruff-code-quality.sh` (search: `if type == "object" then (.message // tostring)`).
+
+**What happened:** A milestone taught the Gruff hook the v2 analyzer protocol. Its clean fixture envelope came from a real gruff-ts run, but the refused-config case wrote `config.error` as a string. All protocol tests passed. The real-binary check then ran the hook against all five ports with a config missing `schemaVersion`: every port sent `config.error` as an object with `message` and `remediation`, and the hook showed users raw JSON. The hook now reads the message, and the fixture uses the measured object shape.
+
+**Root cause:** One measured payload was treated as proof of the whole envelope's shape, so the unmeasured error branch was modelled from the field name.

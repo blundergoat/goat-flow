@@ -12,6 +12,9 @@
 - **Gruff finds changed lines from the edited file's own Git repository** - Edits to child repositories under a folder that is not a repository no longer end in `git-scope-failed`.
 - **Gruff analyses files that belong to no Git repository** - The whole edited file is checked and the hook log says so; a Git failure inside a repository still reports `git-scope-failed`.
 - **A nested project's Gruff opt-out and analyzer overrides apply to its own files** - `hooks.gruff-code-quality.enabled: false` in a nested `.goat-flow/config.yaml` skips that project's files, and its `binaries` overrides are used for them.
+- **Current Gruff analyzers are read through their own protocol** - Analyzers that advertise `gruff.hook.v2` now report findings, warnings and failures directly instead of falling back to `gruff analyse`; older analyzers keep working.
+- **A Gruff analyzer that cannot run says why** - A refused config, an unreadable file or a file the analyzer skipped is reported with the analyzer's own reason, not as malformed output or a clean result.
+- **Whole-file edits no longer fail on older Gruff analyzers** - The hook asks for `file` scope only when the analyzer lists it, and analyzer warnings on stderr no longer break its JSON result.
 
 ## v1.17.0 - 2026-09-05
 

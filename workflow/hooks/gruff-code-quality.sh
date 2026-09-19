@@ -33,6 +33,9 @@ GRUFF_CODE_QUALITY_MIN_SEVERITY="${GRUFF_CODE_QUALITY_MIN_SEVERITY:-advisory}"
 # Per-binary cache of gruff.hook.v1 capabilities JSON ("" = analyzer is pre-contract).
 declare -A HOOK_CAPS_CACHE
 HOOK_CAPS_RESULT=""
+# Contract an analyzer advertised that this hook cannot read; empty for supported and pre-contract tools.
+declare -A HOOK_CAPS_UNSUPPORTED_CACHE
+HOOK_CAPS_UNSUPPORTED=""
 
 FILE_RESULT_PRIORITY=0
 FILE_RESULT_OUTCOME="pass"
@@ -1281,12 +1284,12 @@ self_test() {
     return 1
   }
 
-  # Contract render: hook_v1_report preserves file/project findings, filters attributable
+  # Contract render: hook_contract_report preserves file/project findings, filters attributable
   # line/symbol spans against the edit, nulls synthetic file/project lines, and severity-sorts.
   report_output='{"findings":[{"severity":"warning","scope":"file","line":1,"file":"x.ts","ruleId":"size.file-length","message":"too long","remediation":"split"},{"severity":"advisory","scope":"line","line":12,"file":"x.ts","ruleId":"naming.x","message":"rename"}]}'
-  report_json="$(hook_v1_report "$report_output" 1 20)"
+  report_json="$(hook_contract_report "$report_output" 1 20)"
   [[ "$(printf '%s' "$report_json" | jq -r '[.total,.surfaced] | @tsv')" == $'2\t2' ]] || {
-    printf 'gruff-code-quality self-test: hook_v1_report counts failed\n' >&2
+    printf 'gruff-code-quality self-test: hook_contract_report counts failed\n' >&2
     return 1
   }
   [[ "$(printf '%s' "$report_json" | jq -r '.lines[0]')" == "- [warning] x.ts size.file-length - too long" ]] || {
@@ -1301,7 +1304,7 @@ self_test() {
   # Finding location falls back file -> filePath -> path, so a port that reports
   # the path under `path` (not `file`) still renders its findings.
   report_output='{"findings":[{"severity":"warning","scope":"line","line":7,"path":"y.ts","ruleId":"r.path","message":"via path key"}]}'
-  report_json="$(hook_v1_report "$report_output" 1 20)"
+  report_json="$(hook_contract_report "$report_output" 1 20)"
   [[ "$(printf '%s' "$report_json" | jq -r '.lines[0]')" == "- [warning] y.ts:7 r.path - via path key" ]] || {
     printf 'gruff-code-quality self-test: hook_v1 .path finding-key fallback failed\n' >&2
     return 1
@@ -1331,6 +1334,15 @@ analyse_help() {
   "$binary_path" analyse --help 2>&1 || true
 }
 
+# `file` scope is port-specific: read the values the analyzer lists for --changed-scope, from that flag to the next.
+supports_file_changed_scope() {
+  local help="$1" scope_help
+  scope_help="$(printf '%s\n' "$help" | awk '/--changed-scope/ { found = 1; shown = 0 } found { print; shown++; if (shown >= 3) exit }')"
+  scope_help="${scope_help#*--changed-scope}"
+  scope_help="${scope_help%%--[a-z]*}"
+  [[ "$scope_help" =~ (^|[^A-Za-z-])file([^A-Za-z-]|$) ]]
+}
+
 supports_json_format() {
   local help="$1"
   [[ "$help" == *"--format"* || "$help" == *"-format"* ]]
@@ -1358,6 +1370,7 @@ run_gruff_json() {
   local ranges="$5"
   local scope="${6:-symbol}"
   local target_root="${7:-.}"
+  local error_path="${8:-/dev/null}"
   local args timeout_seconds
   args=(analyse)
   if [[ "$help" == *"--format"* ]]; then
@@ -1378,11 +1391,11 @@ run_gruff_json() {
 
   # Hosts with GNU timeout keep slow analysis inside the coding-agent feedback window.
   if command -v timeout >/dev/null 2>&1; then
-    (cd "$target_root" && timeout "$timeout_seconds" "$binary_path" "${args[@]}" "$file_path" 2>&1)
+    (cd "$target_root" && timeout "$timeout_seconds" "$binary_path" "${args[@]}" "$file_path" 2>"$error_path")
     return $?
   fi
   # A host without timeout still runs from the package whose config owns this edited file.
-  (cd "$target_root" && "$binary_path" "${args[@]}" "$file_path" 2>&1)
+  (cd "$target_root" && "$binary_path" "${args[@]}" "$file_path" 2>"$error_path")
 }
 
 valid_gruff_json() {
@@ -1657,39 +1670,48 @@ print_scope_header() {
     "$binary" "$rel_path" "$ranges" "$total" "$edit_total" "$structural_total" "$err" "$warn" "$adv"
 }
 
-# Probe a binary's gruff.hook.v1 capabilities once per binary (cached for the
-# run). Returns the capabilities JSON when the binary advertises contractVersion
-# "gruff.hook.v1", else empty - the caller then uses the legacy analyse path, so
-# a pre-contract analyzer is unaffected.
+# Probe a binary's hook capabilities once per binary (cached for the run). Sets HOOK_CAPS_RESULT to the
+# capabilities JSON for gruff.hook.v1 or gruff.hook.v2, else empty - the caller then uses the legacy analyse
+# path, so a pre-contract analyzer is unaffected. A tool that advertises another gruff.hook contract sets
+# HOOK_CAPS_UNSUPPORTED instead, so the caller reports it rather than misreading it through analyse.
 hook_capabilities() {
   local binary_path="$1"
   local binary="${2:-}"
   if [[ -n "${HOOK_CAPS_CACHE[$binary_path]+x}" ]]; then
     HOOK_CAPS_RESULT="${HOOK_CAPS_CACHE[$binary_path]}"
+    HOOK_CAPS_UNSUPPORTED="${HOOK_CAPS_UNSUPPORTED_CACHE[$binary_path]}"
     return 0
   fi
-  local caps="" probe
+  local caps="" unsupported="" probe advertised
   if command -v jq >/dev/null 2>&1; then
     if command -v timeout >/dev/null 2>&1; then
       probe="$(timeout "$(normalized_timeout_seconds "$binary")" "$binary_path" hook --capabilities --format json 2>/dev/null || true)"
     else
       probe="$("$binary_path" hook --capabilities --format json 2>/dev/null || true)"
     fi
-    if printf '%s' "$probe" | jq -e '.contractVersion == "gruff.hook.v1" and (.supports.changedRanges == true) and ((.flags | type) == "object")' >/dev/null 2>&1; then
+    if printf '%s' "$probe" | jq -e '((.contractVersion == "gruff.hook.v1" and (.supports.changedRanges == true)) or .contractVersion == "gruff.hook.v2") and ((.flags | type) == "object")' >/dev/null 2>&1; then
       caps="$probe"
+    else
+      advertised="$(printf '%s' "$probe" | jq -r 'if type == "object" and (.contractVersion | type) == "string" and (.contractVersion | startswith("gruff.hook.")) then .contractVersion else empty end' 2>/dev/null || true)"
+      # A v1 tool without changed-range support keeps the legacy path it has always used.
+      if [[ -n "$advertised" && "$advertised" != "gruff.hook.v1" ]]; then
+        unsupported="$advertised"
+      fi
     fi
   fi
   HOOK_CAPS_CACHE["$binary_path"]="$caps"
+  HOOK_CAPS_UNSUPPORTED_CACHE["$binary_path"]="$unsupported"
   HOOK_CAPS_RESULT="$caps"
+  HOOK_CAPS_UNSUPPORTED="$unsupported"
 }
 
-# Project a gruff.hook.v1 envelope into the same control object
+# Project a gruff.hook.v1 or gruff.hook.v2 envelope into the same control object
 # changed_findings_report emits ({ total, e, w, a, surfaced, floored, more,
 # lines }), so process_file_contract reuses the existing print block. The
 # analyzer owns scope classification; this projection preserves file/project findings and
 # rechecks attributable line/symbol spans against the current edit. file/project-scope
 # findings render without a `:line` because their line is a synthetic anchor, not a code location.
-hook_v1_report() {
+hook_contract_report() {
   local output="$1" floor_rank="$2" max="$3" ranges="${4:-}"
   printf '%s' "$output" | jq -c --argjson floor_rank "$floor_rank" --argjson max "$max" --arg ranges "$ranges" '
     def sev_rank($s):
@@ -1750,9 +1772,9 @@ hook_v1_report() {
 # Run a versioned analyzer exchange and retain a typed result for the provider adapter.
 process_file_contract() {
   local binary_path="$1" binary="$2" rel_path="$3" target_root="$4"
-  local target_rel_path="$5" ranges="$6"
+  local target_rel_path="$5" ranges="$6" contract_version="${7:-gruff.hook.v1}"
   local output status timeout_seconds report_json suppressed analyzer_error_path analyzer_error
-  local config_error ignored_match scope_fields
+  local config_error ignored_match scope_fields fatal_message diagnostic_findings
   local max_findings floor_rank total edit_total structural_total err warn adv surfaced floored more
 
   timeout_seconds="$(normalized_timeout_seconds "$binary")"
@@ -1776,39 +1798,88 @@ process_file_contract() {
     printf 'gruff-code-quality: %s exceeded %ss; analysis incomplete\n' "$binary" "$timeout_seconds" >&2
     return 0
   fi
-  # Contract analyzers use exit zero; any other status means the exchange failed.
-  if [[ "$status" -ne 0 ]]; then
-    record_file_result 80 "unavailable" "hook-unavailable" "analyzer-failed" \
-      "${analyzer_error:-$binary exited $status without a complete result}" "$rel_path" 0 0
-    printf 'gruff-code-quality: %s failed for %s: %s\n' "$binary" "$rel_path" "${analyzer_error:-exit $status}" >&2
-    return 0
-  fi
-  # Exit-zero silence is an invalid response, not evidence that the edited file is clean.
-  if [[ -z "$output" ]]; then
-    record_file_result 60 "incomplete" "output-invalid" "analyzer-response-invalid" \
-      "$binary returned no result for this edit" "$rel_path" 0 0
-    printf 'gruff-code-quality: %s returned no result for %s\n' "$binary" "$rel_path" >&2
-    return 0
-  fi
-  # A schema mismatch means the user cannot trust any finding or clean claim in the payload.
-  if ! printf '%s' "$output" | jq -e '
-    type == "object"
-    and .contractVersion == "gruff.hook.v1"
-    and ((.findings | type == "array") or (.config | type == "object") or (.ignored | type == "object"))
-  ' >/dev/null 2>&1; then
-    record_file_result 60 "incomplete" "output-invalid" "analyzer-response-invalid" \
-      "$binary returned malformed or unsupported result JSON" "$rel_path" 0 0
-    printf 'gruff-code-quality: %s returned an invalid result for %s\n' "$binary" "$rel_path" >&2
-    return 0
-  fi
-
-  config_error="$(config_error_message "$output")"
-  # A rejected project config explains why no reliable analysis reached the UI.
-  if [[ -n "$config_error" ]]; then
-    record_file_result 80 "unavailable" "hook-unavailable" "analyzer-config-invalid" \
-      "$config_error" "$rel_path" 0 0
-    printf 'gruff-code-quality: %s could not analyse %s - %s\n' "$binary" "$rel_path" "$config_error"
-    return 0
+  # gruff.hook.v2 exits 0 when it ran, 1 when a requested gate fired and 2 when it could not run; each
+  # still prints a parseable result, so the payload decides the outcome before anything is classified.
+  if [[ "$contract_version" == "gruff.hook.v2" ]]; then
+    # Any other exit means the exchange itself failed.
+    if [[ "$status" -ne 0 && "$status" -ne 1 && "$status" -ne 2 ]]; then
+      record_file_result 80 "unavailable" "hook-unavailable" "analyzer-failed" \
+        "${analyzer_error:-$binary exited $status without a complete result}" "$rel_path" 0 0
+      printf 'gruff-code-quality: %s failed for %s: %s\n' "$binary" "$rel_path" "${analyzer_error:-exit $status}" >&2
+      return 0
+    fi
+    # An unreadable payload is a failed run after exit 2 and a malformed response otherwise.
+    if ! printf '%s' "$output" | jq -e '
+      type == "object"
+      and .contractVersion == "gruff.hook.v2"
+      and ((.findings | type == "array") or (.config | type == "object"))
+    ' >/dev/null 2>&1; then
+      if [[ "$status" -eq 2 ]]; then
+        record_file_result 80 "unavailable" "hook-unavailable" "analyzer-failed" \
+          "${analyzer_error:-$binary exited 2 without a readable result}" "$rel_path" 0 0
+        printf 'gruff-code-quality: %s could not analyse %s: %s\n' "$binary" "$rel_path" "${analyzer_error:-exit 2}" >&2
+        return 0
+      fi
+      record_file_result 60 "incomplete" "output-invalid" "analyzer-response-invalid" \
+        "$binary returned malformed or unsupported result JSON" "$rel_path" 0 0
+      printf 'gruff-code-quality: %s returned an invalid result for %s\n' "$binary" "$rel_path" >&2
+      return 0
+    fi
+    # A refused config is named as such; a non-fatal config diagnostic is only a note.
+    config_error="$(printf '%s' "$output" | jq -r '
+      if .config.schemaOk == false then
+        (.config.error | if type == "object" then (.message // tostring) elif type == "string" then . else "project gruff config rejected" end)
+      else (first((.diagnostics // [])[] | select(.severity == "fatal" and ((.type // "") | tostring | test("config"))) | .message) // empty)
+      end
+    ' 2>/dev/null || true)"
+    if [[ -n "$config_error" ]]; then
+      record_file_result 80 "unavailable" "hook-unavailable" "analyzer-config-invalid" \
+        "$config_error" "$rel_path" 0 0
+      printf 'gruff-code-quality: %s could not analyse %s - %s\n' "$binary" "$rel_path" "$config_error"
+      return 0
+    fi
+    fatal_message="$(printf '%s' "$output" | jq -r 'first((.diagnostics // [])[] | select(.severity == "fatal") | .message) // empty' 2>/dev/null || true)"
+    # A fatal diagnostic or exit 2 means the analysis did not happen, whatever else the payload holds.
+    if [[ "$status" -eq 2 || -n "$fatal_message" ]]; then
+      record_file_result 80 "unavailable" "hook-unavailable" "analyzer-failed" \
+        "${fatal_message:-${analyzer_error:-$binary could not run for this edit}}" "$rel_path" 0 0
+      printf 'gruff-code-quality: %s could not analyse %s: %s\n' "$binary" "$rel_path" "${fatal_message:-${analyzer_error:-exit $status}}" >&2
+      return 0
+    fi
+  else
+    # gruff.hook.v1 analyzers use exit zero; any other status means the exchange failed.
+    if [[ "$status" -ne 0 ]]; then
+      record_file_result 80 "unavailable" "hook-unavailable" "analyzer-failed" \
+        "${analyzer_error:-$binary exited $status without a complete result}" "$rel_path" 0 0
+      printf 'gruff-code-quality: %s failed for %s: %s\n' "$binary" "$rel_path" "${analyzer_error:-exit $status}" >&2
+      return 0
+    fi
+    # Exit-zero silence is an invalid response, not evidence that the edited file is clean.
+    if [[ -z "$output" ]]; then
+      record_file_result 60 "incomplete" "output-invalid" "analyzer-response-invalid" \
+        "$binary returned no result for this edit" "$rel_path" 0 0
+      printf 'gruff-code-quality: %s returned no result for %s\n' "$binary" "$rel_path" >&2
+      return 0
+    fi
+    # A schema mismatch means the user cannot trust any finding or clean claim in the payload.
+    if ! printf '%s' "$output" | jq -e '
+      type == "object"
+      and .contractVersion == "gruff.hook.v1"
+      and ((.findings | type == "array") or (.config | type == "object") or (.ignored | type == "object"))
+    ' >/dev/null 2>&1; then
+      record_file_result 60 "incomplete" "output-invalid" "analyzer-response-invalid" \
+        "$binary returned malformed or unsupported result JSON" "$rel_path" 0 0
+      printf 'gruff-code-quality: %s returned an invalid result for %s\n' "$binary" "$rel_path" >&2
+      return 0
+    fi
+    config_error="$(config_error_message "$output")"
+    # A rejected project config explains why no reliable analysis reached the UI.
+    if [[ -n "$config_error" ]]; then
+      record_file_result 80 "unavailable" "hook-unavailable" "analyzer-config-invalid" \
+        "$config_error" "$rel_path" 0 0
+      printf 'gruff-code-quality: %s could not analyse %s - %s\n' "$binary" "$rel_path" "$config_error"
+      return 0
+    fi
   fi
 
   ignored_match="$(printf '%s' "$output" | jq -r --arg p "$target_rel_path" '
@@ -1829,11 +1900,19 @@ process_file_contract() {
     return 0
   fi
 
+  # A v2 run that analysed nothing did not check this edit, even though it exited cleanly.
+  if [[ "$contract_version" == "gruff.hook.v2" ]] && printf '%s' "$output" | jq -e '(.run.analysedFiles? | type) == "number" and .run.analysedFiles == 0' >/dev/null 2>&1; then
+    record_file_result 60 "incomplete" "coverage-incomplete" "analyzer-analysed-nothing" \
+      "$binary analysed no file for this edit" "$rel_path" 0 0
+    printf 'gruff-code-quality: %s analysed no file for %s\n' "$binary" "$rel_path" >&2
+    return 0
+  fi
+
   max_findings="$GRUFF_CODE_QUALITY_MAX_FINDINGS"
   # Invalid user configuration falls back to the shared provider-safe cap.
   [[ "$max_findings" =~ ^[0-9]+$ && "$max_findings" -ge 1 ]] || max_findings=20
   floor_rank="$(min_severity_rank "$GRUFF_CODE_QUALITY_MIN_SEVERITY")"
-  report_json="$(hook_v1_report "$output" "$floor_rank" "$max_findings" "$ranges")"
+  report_json="$(hook_contract_report "$output" "$floor_rank" "$max_findings" "$ranges")"
   # A failed projection is itself an invalid analyzer response.
   if [[ -z "$report_json" ]]; then
     record_file_result 60 "incomplete" "output-invalid" "analyzer-response-invalid" \
@@ -1841,6 +1920,26 @@ process_file_contract() {
     return 0
   fi
   record_report_result "$report_json" "$rel_path" "$binary"
+  # v2 warnings reach the user beside any findings; info notes stay in the hook log.
+  if [[ "$contract_version" == "gruff.hook.v2" ]]; then
+    printf '%s' "$output" | jq -r --arg binary "$binary" '
+      (.diagnostics // [])[] | select(.severity == "warning" or .severity == "info")
+      | "gruff-code-quality: \($binary) diagnostic [\(.severity)] \(.type // "diagnostic"): \(.message // "")"
+    ' 2>/dev/null || true
+    diagnostic_findings="$(printf '%s' "$output" | jq -c --arg target "$rel_path" '
+      [ (.diagnostics // [])[] | select(.severity == "warning")
+        | {code: "analyzer-diagnostic", message: ("[warning] " + (.type // "diagnostic") + ": " + (.message // "")), target: $target} ]
+    ' 2>/dev/null || printf '[]')"
+    if [[ "$diagnostic_findings" != "[]" && -n "$diagnostic_findings" ]]; then
+      FILE_RESULT_FINDINGS="$(jq -cn --argjson current "$FILE_RESULT_FINDINGS" --argjson next "$diagnostic_findings" '($current + $next)[:20]')"
+      # A clean run that raised a warning is reported, not shown as a silent pass.
+      if [[ "$FILE_RESULT_OUTCOME" == "pass" ]]; then
+        FILE_RESULT_PRIORITY=20
+        FILE_RESULT_OUTCOME="advisory"
+        FILE_RESULT_REASON_CODE="findings-reported"
+      fi
+    fi
+  fi
   suppressed="$(printf '%s' "$output" | jq -r '.suppressed.count // 0' 2>/dev/null || true)"
   # Missing suppression metadata means no hidden count is shown to the user.
   [[ "$suppressed" =~ ^[0-9]+$ ]] || suppressed=0
@@ -1951,14 +2050,20 @@ process_file() {
     return 0
   fi
 
-  # Contract path: when the analyzer advertises gruff.hook.v1 it owns changed-region
+  # Contract path: when the analyzer advertises gruff.hook.v1 or gruff.hook.v2 it owns changed-region
   # scoping, scope tagging, metadata, remediation and new-only - the hook only
   # renders. Pre-contract analyzers fall through to the legacy analyse path below.
-  local hook_caps
+  local hook_caps analyzer_error_path analyzer_error
   hook_capabilities "$binary_path" "$binary"
   hook_caps="$HOOK_CAPS_RESULT"
+  # A contract this hook cannot read would be misread through analyse, so it is reported instead.
+  if [[ -n "$HOOK_CAPS_UNSUPPORTED" ]]; then
+    printf 'gruff-code-quality: %s advertises %s, which this hook cannot read; update goat-flow; skipped\n' "$binary" "$HOOK_CAPS_UNSUPPORTED" >&2
+    return 0
+  fi
   if [[ -n "$hook_caps" ]]; then
-    process_file_contract "$binary_path" "$binary" "$rel_path" "$root" "$rel_path" "$ranges"
+    process_file_contract "$binary_path" "$binary" "$rel_path" "$root" "$rel_path" "$ranges" \
+      "$(printf '%s' "$hook_caps" | jq -r '.contractVersion')"
     return 0
   fi
 
@@ -1976,35 +2081,41 @@ process_file() {
   # `symbol` scope only serves to hide findings that belong to no symbol - a missing file
   # overview, an over-long file - so widen to `file` scope for that case alone.
   changed_scope="symbol"
-  if [[ -n "$ranges" && "$ranges" == "$(all_file_range "$abs_path")" ]]; then
+  # Only analyzers whose help lists `file` accept it; the others reject the whole request.
+  if [[ -n "$ranges" && "$ranges" == "$(all_file_range "$abs_path")" ]] && supports_file_changed_scope "$help"; then
     changed_scope="file"
   fi
 
+  analyzer_error_path="$(mktemp)"
   set +e
-  output="$(run_gruff_json "$binary_path" "$binary" "$help" "$rel_path" "$ranges" "$changed_scope")"
+  output="$(run_gruff_json "$binary_path" "$binary" "$help" "$rel_path" "$ranges" "$changed_scope" "." "$analyzer_error_path")"
   status=$?
   set -e
+  analyzer_error="$(<"$analyzer_error_path")"
+  rm -f "$analyzer_error_path"
 
   if [[ "$status" -eq 124 || "$status" -eq 137 ]]; then
     printf 'gruff-code-quality: %s exceeded %ss or was killed; changed-line filtering skipped. Raise %s or GRUFF_CODE_QUALITY_TIMEOUT_SECONDS if this analyzer needs more time.\n' "$binary" "$(normalized_timeout_seconds "$binary")" "$(timeout_env_name "$binary")" >&2
     return 0
   fi
+  # A config-schema rejection arrives on stderr: the project's `.<binary>.yaml` lacks the required
+  # `schemaVersion:` line, so `analyse` exits non-zero with an error instead of findings. Relay gruff's
+  # own words so the cause is visible, then bound any destructive upstream suggestion.
+  # The hook never edits the project's gruff config; that file is the project's to own.
+  if ! valid_gruff_json "$output" && [[ "$analyzer_error$output" == *schemaVersion* ]]; then
+    printf 'gruff-code-quality: %s could not analyse - its project config (.%s.yaml) was rejected. gruff reported:\n' "$binary" "$binary"
+    printf '%s\n' "$analyzer_error" "$output" | awk 'NF && ++shown <= 12 { print "  " $0 }'
+    printf 'Safety: Do not run %s init --force in this project. Generate defaults in a fresh temporary directory, compare them with .%s.yaml, and merge deliberately.\n' "$binary" "$binary"
+    return 0
+  fi
   if [[ -z "$output" ]]; then
+    # Only the analyzer's own stderr says why nothing was produced.
+    if [[ -n "$analyzer_error" ]]; then
+      printf 'gruff-code-quality: %s exited %s without JSON output: %s; changed-line filtering skipped\n' "$binary" "$status" "${analyzer_error%%$'\n'*}" >&2
+    fi
     return 0
   fi
   if ! valid_gruff_json "$output"; then
-    # gruff returned no JSON. $output holds gruff's merged stdout+stderr, which
-    # on current builds is usually a config-schema rejection: the project's
-    # `.<binary>.yaml` lacks the required `schemaVersion:` line, so `analyse`
-    # exits non-zero with an error instead of findings. Relay gruff's own words
-    # so the cause is visible, then bound any destructive upstream suggestion.
-    # The hook never edits the project's gruff config; that file is the project's to own.
-    if [[ "$output" == *schemaVersion* ]]; then
-      printf 'gruff-code-quality: %s could not analyse - its project config (.%s.yaml) was rejected. gruff reported:\n' "$binary" "$binary"
-      printf '%s\n' "$output" | awk 'NR <= 12 { print "  " $0 }'
-      printf 'Safety: Do not run %s init --force in this project. Generate defaults in a fresh temporary directory, compare them with .%s.yaml, and merge deliberately.\n' "$binary" "$binary"
-      return 0
-    fi
     printf 'gruff-code-quality: %s exited %s with non-JSON output; changed-line filtering skipped\n' "$binary" "$status" >&2
     return 0
   fi
@@ -2086,7 +2197,7 @@ process_file_result() {
   local target_root target_rel_path config_file binary_path ranges range_status
   local hook_caps help output status uses_native_regions changed_scope
   local config_error ignored_desc report_json floor_rank max_findings
-  local config_binary config_key resolved_binary owner_root
+  local config_binary config_key resolved_binary owner_root analyzer_error_path analyzer_error
 
   reset_file_result
 
@@ -2193,9 +2304,16 @@ process_file_result() {
 
   hook_capabilities "$binary_path" "$binary"
   hook_caps="$HOOK_CAPS_RESULT"
+  # A contract this hook cannot read would be misread through analyse, so it is reported instead.
+  if [[ -n "$HOOK_CAPS_UNSUPPORTED" ]]; then
+    record_file_result 80 "unavailable" "hook-unavailable" "analyzer-capability-unsupported" \
+      "$binary advertises $HOOK_CAPS_UNSUPPORTED, which this hook cannot read; update goat-flow" "$rel_path" 0 0
+    return 0
+  fi
   # Capability-aware analyzers preserve clean, finding, invalid, failed, and timeout states.
   if [[ -n "$hook_caps" ]]; then
-    process_file_contract "$binary_path" "$binary" "$rel_path" "$target_root" "$target_rel_path" "$ranges"
+    process_file_contract "$binary_path" "$binary" "$rel_path" "$target_root" "$target_rel_path" "$ranges" \
+      "$(printf '%s' "$hook_caps" | jq -r '.contractVersion')"
     return 0
   fi
 
@@ -2212,25 +2330,33 @@ process_file_result() {
     uses_native_regions=1
   fi
   changed_scope="symbol"
-  # A whole-file edit also needs file-level findings such as size or missing overview.
-  if [[ "$ranges" == "$(all_file_range "$abs_path")" ]]; then
+  # A whole-file edit also needs file-level findings such as size or missing overview, when the analyzer accepts `file`.
+  if [[ "$ranges" == "$(all_file_range "$abs_path")" ]] && supports_file_changed_scope "$help"; then
     changed_scope="file"
   fi
 
+  analyzer_error_path="$(mktemp)"
   set +e
-  output="$(run_gruff_json "$binary_path" "$binary" "$help" "$target_rel_path" "$ranges" "$changed_scope" "$target_root")"
+  output="$(run_gruff_json "$binary_path" "$binary" "$help" "$target_rel_path" "$ranges" "$changed_scope" "$target_root" "$analyzer_error_path")"
   status=$?
   set -e
+  analyzer_error="$(<"$analyzer_error_path")"
+  rm -f "$analyzer_error_path"
   # A timeout is incomplete analysis even though the editing tool itself finished.
   if [[ "$status" -eq 124 || "$status" -eq 137 ]]; then
     record_file_result 70 "incomplete" "execution-timeout" "analyzer-timeout" \
       "$binary exceeded the configured feedback deadline" "$rel_path" 0 0
     return 0
   fi
-  # Exit-zero silence is not evidence that a legacy analyzer completed cleanly.
+  # Silence on stdout is not evidence that a legacy analyzer completed cleanly; its stderr says why.
   if [[ -z "$output" ]]; then
-    record_file_result 60 "incomplete" "output-invalid" "analyzer-response-invalid" \
-      "$binary returned no analysis result" "$rel_path" 0 0
+    if [[ -n "$analyzer_error" ]]; then
+      record_file_result 60 "incomplete" "output-invalid" "analyzer-response-invalid" \
+        "$binary exited $status without analysis output: ${analyzer_error%%$'\n'*}" "$rel_path" 0 0
+    else
+      record_file_result 60 "incomplete" "output-invalid" "analyzer-response-invalid" \
+        "$binary returned no analysis result" "$rel_path" 0 0
+    fi
     return 0
   fi
   # Non-JSON output cannot safely become a finding or clean state.

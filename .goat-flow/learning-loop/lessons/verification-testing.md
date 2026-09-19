@@ -1,6 +1,6 @@
 ---
 category: verification-testing
-last_reviewed: 2026-09-15
+last_reviewed: 2026-09-19
 ---
 
 **Scope:** What a test must actually establish - observable contracts over incidental shape, telling a transient failure apart from a regression, and the ways a passing suite still fails to prove its claim. Proving a guard or scanner works is [verification-scanners.md](verification-scanners.md); building fixtures is [test-fixtures.md](test-fixtures.md); process-lifecycle and delegated-run tests are [verification-testing-process.md](verification-testing-process.md).
@@ -118,7 +118,7 @@ Read Markdown helper signatures before calling them; a setup exception is not ev
 **Decision changed:** Stop each mutation batch at a declared mid-implementation proof and record its result before applying later-surface edits.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
-**Incident count:** 3 | **Latest occurrence:** 2026-08-23
+**Incident count:** 4 | **Latest occurrence:** 2026-09-19
 
 **Prevention:** Split mutations at every declared mid-implementation proof: apply only the prerequisite files, run and record the exact gate with its exit status, then re-read and edit the later surfaces. Run explicit mechanical constraints, including requested line widths, immediately after each source patch. A late pass validates current state but never backfills the missed checkpoint; mark it late. Evidence anchors: `test/contract/skill-hardening-shared-1.test.ts` (search: `requires minimum evidence and rejects false proof for every claim type`), `workflow/skills/reference/skill-preamble.md` (search: `Claim controls set minimum evidence without changing proof classes`).
 
@@ -127,6 +127,8 @@ Read Markdown helper signatures before calling them; a setup exception is not ev
 **Root cause:** Files were grouped by one conceptual change and the patch boundary was treated as more important than the milestone's temporal proof boundary, which removed the gate's ability to catch a bad shared contract before it propagated; the width limit was judged visually instead of measured.
 
 **Recurrence 2026-08-23:** The first write-scope fixture list included the three local instruction files although the midpoint gate had to run before they changed. Narrowed to the canonical reference plus four setup templates, the gate reported `# pass 76`; the three local paths joined afterwards and the final focused run reported `# pass 91`. `test/contract/command-phrases.test.ts` (search: `WRITE_SCOPE_RECONCILIATION_PATHS`).
+
+**Recurrence 2026-09-19:** A milestone planned its protocol tests after the version-negotiation change and before the result-projection change. Both changes went into the Gruff hook through one scripted edit, so the midpoint never existed. The first combined run failed 7 cases: the new v2 branch fell through into the old v1 schema check, a negotiation defect the midpoint gate would have isolated. The final run passed, and the milestone closeout records the checkpoint as late, not backfilled.
 
 ---
 

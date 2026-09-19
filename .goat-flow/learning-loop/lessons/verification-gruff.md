@@ -122,7 +122,7 @@ last_reviewed: 2026-09-19
 **Decision changed:** Before rewording an existing comment during a docs pass, grep the learning loop for that exact string; a cited comment is a durable artifact, not free text.
 **Trigger phase:** READ
 **Caught at:** VERIFY
-**Incident count:** 3 | **Latest occurrence:** 2026-09-19
+**Incident count:** 4 | **Latest occurrence:** 2026-09-19
 
 **Prevention:** When a docs pass rewords an existing comment, keep the cited substring intact and add the analyzer vocabulary in a second sentence. Run `stats --check` or the harness audit after any batch that rewrites existing comments, not only the targeted Gruff rerun. Evidence anchors: `test/integration/audit-drift.helpers.ts` (search: `Write canonical skill stubs`), `.goat-flow/learning-loop/lessons/verification-gruff.md` (search: `Gruff side-effect comments must name the side effect`).
 
@@ -133,6 +133,8 @@ last_reviewed: 2026-09-19
 **Recurrence 2026-09-06:** The official-hook sync implementation retired two helper anchors and replaced three cited comments. The focused tests, typecheck and Gruff warning gate passed, but `stats --check` found five stale references. The replacement citations name current owners and distinguish retired mechanisms from their present replacements. Search both symbol names and exact cited prose before a refactor, then check references before the final release gate. Current owners: `src/dashboard/dashboard-app-hook-setup-fragments.ts` (search: `dashboardRunHookAction`), `src/cli/server/hook-managed-installation.ts` (search: `removeLegacyAgentHookScripts`), and `src/cli/server/hook-registrar.ts` (search: `reconcileHook`).
 
 **Recurrence 2026-09-19:** To keep the migrations test file under Gruff's 1000-line error, a milestone moved its disabled-hook cases into `test/integration/setup-install-write-set.test.ts` (search: `keeps disabled hooks installed and inert`). A pattern entry cited the old file with that case title, so `stats --check` reported a stale reference after the five changed test files had passed. The repaired anchor keeps the old path and cites that file's own suite title: `test/integration/setup-install-migrations.test.ts` (search: `setup --apply installer upgrade migrations`). Moving code, not only rewording it, needs the same search of cited text first.
+
+**Recurrence 2026-09-19 (renamed function):** A milestone renamed the hook function that projects analyzer results, because it now reads two contract versions. The focused tests, shellcheck and `npm test` passed, then preflight failed two rows on one cause: `stats --check` reported `stale-ref` and the content audit reported `stale-semantic-anchor`, both for a footgun that searched for the old name. The anchor now names the current function: `workflow/hooks/gruff-code-quality.sh` (search: `hook_contract_report`). The M19 recurrence above already said to search cited text before moving code; a rename needs the same search.
 
 ---
 
