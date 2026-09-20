@@ -1,6 +1,6 @@
 ---
 category: verification
-last_reviewed: 2026-09-15
+last_reviewed: 2026-09-20
 ---
 
 **Scope:** General verification discipline - what counts as proof, reading before claiming, and checking the thing you actually changed. Siblings own the narrower surfaces: [verification-validators.md](verification-validators.md) for getting a checker right, [verification-scanners.md](verification-scanners.md) for proving a guard guards, [verification-testing.md](verification-testing.md) for what a test must establish, [verification-preflight.md](verification-preflight.md) and [verification-formatting.md](verification-formatting.md) for repo-wide gates, [verification-gruff.md](verification-gruff.md) for the analyzer, [verification-environment.md](verification-environment.md) for whether the build, tree, or sandbox you measured is the one your claim is about, [milestone-accounting.md](milestone-accounting.md) for plan arithmetic, [milestone-timing.md](milestone-timing.md) for timing receipts, and [skill-trial-evidence.md](skill-trial-evidence.md) for skill-trial baselines and scoring.
@@ -218,3 +218,23 @@ Evidence anchors: `test/unit/audit-harness/settings-rules-matched.test.ts` (sear
 **What happened:** Splitting four entries out of this bucket into `.goat-flow/learning-loop/lessons/verification-environment.md` moved the anchor for the parallel-sessions entry. The bucket README's own post-split instruction named only `goat-flow index` and `stats --check`, and both ran clean. The break surfaced two steps later in preflight as a cold-path lint warning, because an ADR cited the entry by its old bucket path, and repairing that ADR staled `.goat-flow/learning-loop/decisions/INDEX.md` until it was regenerated a second time.
 
 **Evidence:** `.goat-flow/learning-loop/decisions/ADR-048-concurrent-session-detection.md` (search: `Parallel sessions need concurrency-safe file patterns`) is the inbound citation that broke; `src/cli/audit/check-content-quality.ts` (search: `stale-semantic-anchor`) is the rule that caught it; `.goat-flow/learning-loop/lessons/README.md` (search: `Bucket Size`) is the post-split instruction, since corrected to name both gates.
+
+---
+
+## Lesson: A shipped default was recommended from one plan's history before every plan was pooled
+
+**Status:** active | **Created:** 2026-09-20
+**Decision changed:** Before recommending a default, threshold or setting, measure it on every case it will govern, not on the sample already open, and state the sample's reach beside the number.
+**Trigger phase:** READ
+**Caught at:** VERIFY
+**Incident count:** 3 | **Latest occurrence:** 2026-09-20
+
+**Prevention:** Name the population a recommendation will govern before fitting anything. A shipped default governs every project, so pool every measured sample the tool can report and check the candidate there first. When the open data covers one plan, one repository or one run, say so in the same sentence as the number, and treat agreement with that sample as a hypothesis. Check a proposed setting on the cases it is meant to help before advising it; until then it is a question, not advice.
+
+**What happened:** Asked on 2026-09-19 what the cold-start forecast rates should become, the agent fitted 0.5-1.25-5 to the one plan it had been analysing. That plan is the fastest in the repository: measured on 2026-09-20 its median is 0.88 minutes per work unit against 2.41 pooled. The maintainer then relayed that users find the estimate good and the range too wide, which a halved likely contradicts. Pooled on 2026-09-20, only 35 of 133 measured samples finish under the proposed likely, and actual totals run 2.54 times its summed likely. The recommendation was withdrawn and the likely stayed at 2.5.
+
+**Recurrence 2026-09-20:** The same session advised setting a plan's own forecast range to the 5th-95th percentiles at once, before checking it on the fast-plan forecasts the advice was meant to help. Its own saved replay already showed the same 11 of 18 outcomes inside at a greater width. The advice was withdrawn the same day, when the replay was read again.
+
+**Recurrence 2026-09-20 (plan premise):** A proof item for the new `unit growth:` line assumed the plan under work held no growth data, and the first implementation trusted only `contextual-v1` records. Neither had been checked on the plan's own milestones. The first real run showed a finished milestone with eight saved records under the default method and 18 registered added units. `src/cli/plans-forecast-context.ts` (search: `even when the method remains legacy`) states the rule that one read would have found.
+
+**Evidence:** `.goat-flow/learning-loop/decisions/ADR-067-narrow-the-cold-start-forecast-range.md` (search: `fitted to the fastest plan`) records the rejected rates and the pooled figures. `src/cli/config/config-vocabulary.ts` (search: `DEFAULT_FORECAST_BAND_QUANTILES`) owns the percentile pair the second piece of advice would have changed. The replay and the plan files that record both withdrawals are local working state and are not cited as evidence.

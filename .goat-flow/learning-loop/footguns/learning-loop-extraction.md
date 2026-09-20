@@ -1,6 +1,6 @@
 ---
 category: learning-loop-extraction
-last_reviewed: 2026-09-05
+last_reviewed: 2026-09-20
 ---
 
 **Scope:** How the CLI reads its own learning loop: entry counting, resolved-versus-active grammars, decision extraction, and stale-reference detection. Audit check semantics and deny-enforcement verification live in [auditor.md](auditor.md).
@@ -72,6 +72,22 @@ last_reviewed: 2026-09-05
 
 ---
 
+## Footgun: An ADR Decision section that opens with a numbered list indexes as a bare list marker
+
+**Status:** active | **Created:** 2026-09-20 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Open every ADR's `## Decision` section with one full sentence that states the decision, and read the ADR's generated INDEX row before delivery.
+**Trigger phase:** ACT
+**Caught at:** VERIFY
+
+**Prevention:** Put a complete sentence directly under `## Decision`, before any list or table, because that sentence becomes the ADR's hook in `decisions/INDEX.md`. After `goat-flow index`, read the new row. `stats --check` and preflight pass with a useless hook: they check that the index is fresh, not that a row says anything.
+
+**Symptoms:** On 2026-09-20 two new ADRs, ADR-067 and ADR-068, each opened `## Decision` with a numbered list. Both generated rows read `Implemented - 1.`, so an INDEX-first search could match them by title only. `stats --check` and a full preflight passed. A later read of the index found the rows, and a lead sentence in each ADR gave them real hooks.
+
+**Why it happens:** `src/cli/learning-loop-index/parse-bucket.ts` (search: `function decisionSummary`) takes the first paragraph after `## Decision` and hands it to the sentence cutter in the same file (search: `function firstSentence`). That cutter ends a sentence at a full stop followed by whitespace and a capital letter. The list marker `1.` before a capitalised item meets the rule, so the marker becomes the whole sentence.
+
+**Evidence:** Measured 2026-09-20: before the fix both generated rows ended `Implemented - 1.`; after it they carry the lead sentences in `.goat-flow/learning-loop/decisions/ADR-067-narrow-the-cold-start-forecast-range.md` (search: `The cold-start forecast default becomes`) and `.goat-flow/learning-loop/decisions/ADR-068-floor-the-likely-for-fast-plans.md` (search: `the checker floors the advised likely`). The template in `.goat-flow/learning-loop/decisions/README.md` (search: `What was decided. Be specific enough`) shows prose under the heading and does not say its first sentence is indexed.
+
+---
 ## Resolved Entries
 
 > Historical record. These entries are no longer active traps.

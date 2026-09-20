@@ -1,6 +1,6 @@
 ---
 category: contract-testing
-last_reviewed: 2026-09-13
+last_reviewed: 2026-09-20
 ---
 
 **Scope:** Tests that pin a contract rather than behaviour - exact wording, path semantics, word budgets, and user-visible serialization. When the thing under test is a hook, dashboard surface, or fixture, use the bucket that owns it.
@@ -14,9 +14,9 @@ last_reviewed: 2026-09-13
 **Trigger phase:** ACT
 **Caught at:** VERIFY
 
-**Incident count:** 32
+**Incident count:** 33
 
-**Latest occurrence:** 2026-09-05
+**Latest occurrence:** 2026-09-20
 
 **Prevention:** Run `node --import tsx --test test/contract/skill-hardening-contracts.test.ts` immediately after each edit, before aggregate suites; compact before expanding scope. Check bucket headroom first; several sit within tens of bytes of the 40,000-byte gate.
 
@@ -47,6 +47,8 @@ last_reviewed: 2026-09-13
 **Recurrence 2026-09-01:** Inserting a retrieval-cap clause into the shared READ bullet raised that line to 861-863 characters across the seven parity-checked files, and `scripts/check-instruction-parity.mjs` (search: `MAX_INSTRUCTION_LINE_CHARACTERS`) failed on its 800-character line limit - a cap no instruction file or setup template states. Contract and link checks had already passed, so parity was the only gate that saw it. Rewriting the clause to 93 characters with the same meaning restored parity at 794. Instruction files carry a third budget beyond word caps and pinned phrases: characters per line. Measure the target line before inserting, and run the parity script first when a shared section changes.
 
 **Recurrence 2026-09-05:** The lane-aware planning edit first checked only its three new cases and skill-body cap. The complete plan/parity run then reported `# pass 61`, `# fail 7`: six existing phrase pins and a 6,080/5,650 combined surface. The wider skill suite also caught conventions at 1,690 words against the exclusive 1,500 cap. Restoring pinned guidance and routing duplicate rules to their owners yielded 2,139 body words, 5,649 combined words, 1,497 conventions words, and `# pass 249`, `# fail 0`. Measure every affected owner together before mirror writes. Evidence: `test/contract/skill-hardening-plan-2.test.ts` (search: `canonical goat-plan surface has`), `test/contract/skill-hardening-contracts.test.ts` (search: `always-loaded shared references stay within the 1500-word cap`), and `test/contract/skill-hardening-shared-1.test.ts` (search: `carries explicit build intent through planning into ordinary ACT`).
+
+**Recurrence 2026-09-20:** One new sentence in goat-plan's milestone reference, permitting a single likely floor, raised the file from 2,966 to 3,002 words. The plan had named the fast suite as the proof route, so the budget contract first ran there, after the three installed copies were written, and they had to be copied again. Trimming the new sentence left 2,986. The INDEX search before the work never used the word budget, although the milestone named reference budgets as a risk. `test/contract/skill-hardening-plan-2.test.ts` (search: `keeps canonical goat-plan files within the standard per-file budgets`).
 
 **Root cause:** Treated capped prose as tiny.
 

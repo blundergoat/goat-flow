@@ -1,6 +1,6 @@
 ---
 category: milestone-timing
-last_reviewed: 2026-09-18
+last_reviewed: 2026-09-20
 ---
 
 **Scope:** Milestone timing receipts - prospective measurement, category changes, activation and finalization. Plan state, estimates and release accounting are in [milestone-accounting.md](milestone-accounting.md).
@@ -11,7 +11,7 @@ last_reviewed: 2026-09-18
 **Decision changed:** Start a timestamped timing receipt before milestone work; never reconstruct Actual from planned task estimates.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
-**Incident count:** 13 | **Latest occurrence:** 2026-09-18
+**Incident count:** 14 | **Latest occurrence:** 2026-09-20
 
 **Prevention:**
 1. Before the first action, record UTC and epoch seconds for an active segment tagged `product`, `proof`, or `other`; close it before a human gate, interruption, backgrounded command, or unrelated task, and open a new one when work resumes. Change categories with `plans time stop` followed by `plans time start --category`; there is no `switch` action.
@@ -37,6 +37,8 @@ Evidence anchors: `workflow/skills/goat-plan/SKILL.md` (search: `Successful AI p
 
 **Recurrence 2026-09-18:** During quality follow-up M07, `plans time switch` exited 2 before changing the receipt. The documented stop/start sequence succeeded, preserving the original timestamps without backfill. Read the command grammar before scripting a transition: `src/cli/cli-parser-positionals.ts` (search: `parsePlansTimePositionals`) accepts only start, stop and status; `workflow/skills/goat-plan/references/milestone-examples.md` (search: `Change category`) gives the sequence.
 
+**Recurrence 2026-09-20 (finalized before the gates):** Forecast-accuracy M07 finalized a 1,420-second receipt before comparing its segments with the work done. The Actual correction, two lesson recurrences, the index and check re-runs and a final preflight all followed, so they sit outside the receipt. A background preflight had also shared the last proof span with foreground reading. Actual reads `unavailable`.
+
 ---
 
 ## Lesson: A running receipt makes a wrong category split look measured
@@ -45,7 +47,7 @@ Evidence anchors: `workflow/skills/goat-plan/SKILL.md` (search: `Successful AI p
 **Decision changed:** Switch category at each work boundary; correct timestamps cannot make an inaccurate category split measured evidence.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
-**Incident count:** 5 | **Latest occurrence:** 2026-09-07
+**Incident count:** 8 | **Latest occurrence:** 2026-09-20
 
 **Prevention:** On entering evaluation, tests, lint or typecheck, stop the implementation span and start `--category proof`; switch again for implementation or bookkeeping. Before finalizing, compare segment boundaries with the recorded actions. If a category split is wrong and cannot be recovered honestly, preserve timestamps and elapsed totals, disclose the limitation and use `Actual: unavailable`. Never invent a retrospective split to keep a sample eligible. Excluding an invalid sample protects calibration; a structurally valid receipt cannot prove its category reflects the work.
 
@@ -56,6 +58,12 @@ Evidence anchors: `workflow/skills/goat-plan/SKILL.md` (search: `Successful AI p
 **Recurrences 2026-08-04, 2026-08-09, 2026-08-14:** The quality-findings milestone left tests, hook corpora, benchmarks and contracts under product; its split was excluded from calibration. M03 covered debug evaluations and proof until challenged after 1,604 seconds. Code-quality-upstream M03 mixed edits and verification without recoverable boundaries, so its span was discarded and Actual marked incomplete. The discarded-span path is in `src/cli/plans-time.ts` (search: `receipt contains a discarded open span`).
 
 **Recurrence 2026-09-07:** M29, M32 and M33 recorded 999, 342 and 94 seconds entirely as product despite verification. Their corrected records preserve elapsed totals and timestamps but exclude unavailable category allocations from measured calibration.
+
+**Recurrence 2026-09-20:** Forecast-accuracy M07 wrote a lesson and regenerated the indexes inside a product span, ran a failing-first test inside another, and compared segments with actions only after `--finalize`. The 1,420-second total stands, Actual reads `unavailable`, and the milestone gives calibration no sample. The bookkeeping task sat between product tasks in the plan, which is where the switch was missed.
+
+**Recurrence 2026-09-20 (M08):** The next milestone switched category at every planned boundary and compared its segments before finalizing, and still mixed one span: a preflight warning arrived mid-proof, and the lesson note that caused it was moved to another bucket without leaving the proof span. A fix that a proof run asks for is its own boundary. The total stands and Actual reads `unavailable`.
+
+**Recurrence 2026-09-20 (M10):** The third milestone that day switched for every fix a gate asked for, then re-ran the formatter, lint and typecheck inside the 54-second product span that held one such fix. A check of seconds is still proof. The total stands and Actual reads `unavailable`.
 
 **Evidence:** `src/cli/plans-time.ts` (search: `export function applyPlanTimeTransition`) owns category transitions; `src/cli/plans-check.ts` (search: `function collectMeasuredActualErrors`) checks receipt arithmetic; `src/cli/plans-check-summary.ts` (search: `function readCalibrationSample`) excludes non-measured Actuals. Missing timers are covered by `.goat-flow/learning-loop/lessons/milestone-timing.md` (search: `## Lesson: Actual time must come from prospective active-time segments`).
 
