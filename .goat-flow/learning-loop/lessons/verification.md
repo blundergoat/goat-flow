@@ -1,6 +1,6 @@
 ---
 category: verification
-last_reviewed: 2026-09-20
+last_reviewed: 2026-09-21
 ---
 
 **Scope:** General verification discipline - what counts as proof, reading before claiming, and checking the thing you actually changed. Siblings own the narrower surfaces: [verification-validators.md](verification-validators.md) for getting a checker right, [verification-scanners.md](verification-scanners.md) for proving a guard guards, [verification-testing.md](verification-testing.md) for what a test must establish, [verification-preflight.md](verification-preflight.md) and [verification-formatting.md](verification-formatting.md) for repo-wide gates, [verification-gruff.md](verification-gruff.md) for the analyzer, [verification-environment.md](verification-environment.md) for whether the build, tree, or sandbox you measured is the one your claim is about, [milestone-accounting.md](milestone-accounting.md) for plan arithmetic, [milestone-timing.md](milestone-timing.md) for timing receipts, and [skill-trial-evidence.md](skill-trial-evidence.md) for skill-trial baselines and scoring.
@@ -138,7 +138,7 @@ Evidence: `workflow/hooks/deny-dangerous.sh` (search: `GOAT_HOOK_LIB_DIR`) and
 
 **Why stronger rules haven't worked:** Each recurrence added a stronger rule, from tick immediately, to make it the first action, to do it before anything else. All failed because documentation-level enforcement does not work here: the forcing function competes with whatever the agent wants to do next.
 
-**Why it stays open:** Mechanical enforcement was tried and withdrawn, so do not re-propose it blind. ADR-037 (search: `shipped and reverted`) shipped `plan-checkbox-guard.sh` as a Claude-only Stop hook in v1.12.0, exactly the gate this lesson asks for, and ADR-037 (search: `tombstone only`) removed it a day later in v1.12.1: the reminder cost default Stop surface, dashboard hook list, installer and config schema, manifest, and audit fixtures, while non-Claude Stop delivery stayed unverified and stale registrations could keep invoking a deleted script. That ADR also rejects swapping in an immediate replacement, which risks rebuilding the same plan-state heuristics under a new name. The gap is real, but any new proposal must start from that rejection list and show what it does differently.
+**Why it stays open:** Mechanical enforcement was tried and withdrawn, so do not re-propose it blind. `.goat-flow/learning-loop/decisions/ADR-037-separate-post-turn-safety-from-validation.md` (search: `shipped and reverted`), (search: `That path is a tombstone`) records the Claude-only `plan-checkbox-guard.sh` Stop hook shipped in v1.12.0 and removed in v1.12.1: the reminder cost default Stop surface, dashboard hook list, installer and config schema, manifest, and audit fixtures, while non-Claude Stop delivery stayed unverified and stale registrations could keep invoking a deleted script. That ADR also rejects swapping in an immediate replacement, which risks rebuilding the same plan-state heuristics under a new name. The gap is real, but any new proposal must start from that rejection list and show what it does differently.
 
 ---
 
@@ -147,7 +147,7 @@ Evidence: `workflow/hooks/deny-dangerous.sh` (search: `GOAT_HOOK_LIB_DIR`) and
 **Status:** active | **Created:** 2026-08-17 | **Evidence:** ACTUAL_MEASURED
 **Decision changed:** Accept a verification result only after confirming the command executed, selected the intended mode, and asserted the behavior rather than a shared keyword.
 **Trigger phase:** VERIFY
-**Incident count:** 18 | **Latest occurrence:** 2026-09-14
+**Incident count:** 19 | **Latest occurrence:** 2026-09-21
 **Merged:** 2026-09-05 - absorbed two assertion-design recurrences (2026-08-01, 2026-08-23) from `.goat-flow/learning-loop/lessons/audit-contracts.md`.
 
 **Prevention:** Before accepting any proof, answer three questions in order.
@@ -184,6 +184,8 @@ Evidence anchors: `test/unit/audit-harness/settings-rules-matched.test.ts` (sear
 **Recurrence 2026-09-14 (saved forecast identity):** Legacy-only proof missed saved forecasts rejecting the nested-path example. `src/cli/plans-forecast-context.ts` (`collectLiveItemProblems`) removed only trailing estimates. Exercise documented formats in each supported mode, including changed-scope controls. `test/integration/goat-plan-templates.test.ts` (`counts the short-task example`) now accepts saved nested detail and rejects changed paths. Rereading the template corrected an initial proof-label error in this fixture.
 
 **Recurrence 2026-09-14 (resume):** `collectRemainingCutoffProblems` rejected mixed timestamp precision; align forecast/timer resolution and preserve corrections. A trial again guessed a missing directory; expose the saved target before command proof. Owner: `src/cli/plans-forecast-context.ts`.
+
+**Recurrence 2026-09-21 (manifest metadata probe):** A one-off check used the guessed key `directory_semantics` and threw before inspecting the approved description. Reading `workflow/manifest.json` (search: `directory_purposes`) supplied the real key; the corrected probe verified the policy owner and required every other parsed manifest value to match HEAD. Read the owning JSON object before writing a field assertion, and distinguish a broken probe from a product failure.
 
 ---
 
