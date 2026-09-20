@@ -1,7 +1,8 @@
 /**
  * Compute experimental forecasts from registered work and comparable receipts.
  * Saved item minutes never size work. The checker emits advice without editing
- * originals, inventing effective rates, or converting planned splits to evidence.
+ * originals or converting planned splits to evidence. The one rate it adjusts is a
+ * likely floored at one minute per unit for whole-minute items, and the advice says so.
  */
 import { scrubDurableText } from "./evidence/redaction.js";
 import {
@@ -18,6 +19,9 @@ import {
 } from "./plans-forecast-history.js";
 import {
   deriveForecastRangeFromBasis,
+  floorUnallocatableLikely,
+  renderLikelyFloorNote,
+  type FlooredForecastBasis,
   type PlanEffortForecastBasis,
   type PlanEffortForecastRange,
 } from "./plans-effort.js";
@@ -26,7 +30,10 @@ import type { PlanExportRecord } from "./plans-export.js";
 /** Registered policy identity; prospective evaluation also pins source hashes. */
 const SOURCE_VERSION = "matched-rates-v1";
 
-/** The delivered range remains distinct from an incompatible attempted prediction. */
+/**
+ * The delivered range remains distinct from an incompatible attempted prediction.
+ * `likelyFlooredFrom` holds the measured likely rate when the delivered likely is the whole-minute floor; null means no floor applied.
+ */
 interface WorkForecast {
   sourceVersion: string;
   selection: PlanForecastRecord["selection"];
@@ -35,6 +42,7 @@ interface WorkForecast {
   range: PlanEffortForecastRange;
   attemptedRange: PlanEffortForecastRange;
   isCompatible: boolean;
+  likelyFlooredFrom: number | null;
   reason: string;
 }
 
@@ -82,6 +90,46 @@ function hasRepresentableAllocation(
   );
 }
 
+/** One target's computed rates and ranges before compatibility is judged; `attemptedRange` keeps the unfloored attempt. */
+interface ComputedForecast {
+  basis: PlanEffortForecastBasis;
+  range: PlanEffortForecastRange;
+  attemptedRange: PlanEffortForecastRange;
+  floored: FlooredForecastBasis | undefined;
+}
+
+/**
+ * Derive the range a basis implies, flooring the likely alone when history ran under one minute per unit.
+ *
+ * @param computedBasis - matched or fallback rates at published precision
+ * @param deriveRange - the rounding owner for that pool; matched predictions keep raw rounding, the fallback keeps its one-minute clamp
+ * @returns the basis and range to deliver, the unfloored attempt, and the floor when one applied
+ */
+function computeForecast(
+  computedBasis: PlanEffortForecastBasis,
+  deriveRange: (basis: PlanEffortForecastBasis) => PlanEffortForecastRange,
+): ComputedForecast {
+  const attemptedRange = deriveRange(computedBasis);
+  const floored = floorUnallocatableLikely(
+    computedBasis,
+    attemptedRange.likelyMinutes,
+  );
+  if (!floored) {
+    return {
+      basis: computedBasis,
+      range: attemptedRange,
+      attemptedRange,
+      floored,
+    };
+  }
+  return {
+    basis: floored.basis,
+    range: deriveRange(floored.basis),
+    attemptedRange,
+    floored,
+  };
+}
+
 /**
  * Forecast counted work using the accepted matched policy or unchanged fallback.
  *
@@ -97,13 +145,13 @@ export function forecastPlanWork(
 ): WorkForecast {
   const matched =
     selected.selection === "context-matched" && selected.samples.length >= 3;
-  const basis = matched ? matchedBasis(target, selected) : fallback.basis;
-  const attemptedRange = matched
-    ? matchedRange(basis)
-    : deriveForecastRangeFromBasis(basis);
+  const { basis, range, attemptedRange, floored } = computeForecast(
+    matched ? matchedBasis(target, selected) : fallback.basis,
+    matched ? matchedRange : deriveForecastRangeFromBasis,
+  );
   const isCompatible = hasRepresentableAllocation(
     basis,
-    attemptedRange,
+    range,
     target.items.length,
   );
   return {
@@ -111,13 +159,34 @@ export function forecastPlanWork(
     selection: matched ? "context-matched" : fallback.selection,
     sampleCount: matched ? selected.samples.length : fallback.samples.length,
     basis: isCompatible ? basis : target.basis,
-    range: isCompatible ? attemptedRange : target.range,
+    range: isCompatible ? range : target.range,
     attemptedRange,
     isCompatible,
-    reason: isCompatible
-      ? selected.reason
-      : "model output cannot support the positive-integer item allocation and existing basis grammar; retain issued values and investigate sizing",
+    likelyFlooredFrom:
+      isCompatible && floored ? floored.computedLikelyMinutesPerUnit : null,
+    reason: renderForecastReason(isCompatible, floored, selected.reason),
   };
+}
+
+/**
+ * Explain a delivered forecast to the author.
+ *
+ * @param isCompatible - false when the output still cannot fit whole-minute items and the issued values were kept
+ * @param floored - the floor applied to the likely; undefined when the computed likely already fitted
+ * @param selectionReason - the history owner's reason for the pool it selected
+ * @returns the selection reason, extended with the floor when one applied, or the retained-values explanation
+ */
+function renderForecastReason(
+  isCompatible: boolean,
+  floored: FlooredForecastBasis | undefined,
+  selectionReason: string,
+): string {
+  if (!isCompatible) {
+    return "model output cannot support the positive-integer item allocation and existing basis grammar; retain issued values and investigate sizing";
+  }
+  return floored
+    ? `${selectionReason}; ${renderLikelyFloorNote(floored)}`
+    : selectionReason;
 }
 
 /** Keep the only prospective replacement on a validated remaining-work cutoff once timing starts. */
@@ -134,6 +203,21 @@ function needsRemainingSnapshot(
   );
 }
 
+/**
+ * Name how far an author can rely on the advice: matched history is experimental, the selected-plan fallback provisional.
+ *
+ * @param result - delivered forecast; an incompatible result kept the issued values
+ * @returns the state label, marked when the likely is the whole-minute floor and not a measured rate
+ */
+function renderForecastState(result: WorkForecast): string {
+  if (!result.isCompatible) return "incompatible; issued values retained";
+  const evidence =
+    result.selection === "context-matched" ? "experimental" : "provisional";
+  return result.likelyFlooredFrom === null
+    ? evidence
+    : `${evidence}, likely floored`;
+}
+
 /** Render one primary advice range; incompatible output retains the saved forecast explicitly. */
 function renderWorkForecast(
   record: PlanExportRecord,
@@ -145,11 +229,7 @@ function renderWorkForecast(
   const proofUnits = target.items.filter(
     (item) => item.category === "proof",
   ).length;
-  const state = result.isCompatible
-    ? result.selection === "context-matched"
-      ? "experimental"
-      : "provisional"
-    : "incompatible; issued values retained";
+  const state = renderForecastState(result);
   const lines = [
     `forecast advice: ${record.sourceFile} - ${range.lowMinutes}-${range.highMinutes} agent-time minutes; likely ${range.likelyMinutes}; ${state}; method ${result.sourceVersion}; pool ${result.selection}; ${result.sampleCount} samples; ${target.workState}/${target.scopeKind}/${target.unitRubric}; origin ${target.id} at ${target.issuedAt}`,
     `forecast basis advice: ${record.sourceFile} - ${target.items.length} units (${proofUnits} proof executions); ${rates.lowMinutesPerUnit.toFixed(2)}-${rates.likelyMinutesPerUnit.toFixed(2)}-${rates.highMinutesPerUnit.toFixed(2)} min/unit; ${result.reason}`,

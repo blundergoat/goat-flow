@@ -528,6 +528,49 @@ export function deriveForecastRangeFromBasis(
   return { lowMinutes, likelyMinutes, highMinutes };
 }
 
+/** The lowest likely rate whole-minute items can express: every counted unit carries at least one minute. */
+const WHOLE_MINUTE_LIKELY_RATE_FLOOR = 1;
+
+/** A basis whose likely rate was raised to the whole-minute floor, with the measured rate it replaced. */
+export interface FlooredForecastBasis {
+  basis: PlanEffortForecastBasis;
+  computedLikelyMinutesPerUnit: number;
+}
+
+/**
+ * Floor a basis's likely rate at one minute per unit when the likely is the only bound whole-minute items cannot express.
+ * History under one minute per unit otherwise yields a likely below the unit count, which no set of positive whole-minute items can sum to.
+ *
+ * @param basis - published low, likely and high rates with the counted units
+ * @param likelyMinutes - likely minutes already derived from that basis
+ * @returns the floored basis and the rate it replaced; undefined when the likely already fits or the high rate is under the floor
+ */
+export function floorUnallocatableLikely(
+  basis: PlanEffortForecastBasis,
+  likelyMinutes: number,
+): FlooredForecastBasis | undefined {
+  if (
+    likelyMinutes >= basis.agentWorkUnits ||
+    basis.highMinutesPerUnit < WHOLE_MINUTE_LIKELY_RATE_FLOOR
+  ) {
+    return undefined;
+  }
+  return {
+    basis: { ...basis, likelyMinutesPerUnit: WHOLE_MINUTE_LIKELY_RATE_FLOOR },
+    computedLikelyMinutesPerUnit: basis.likelyMinutesPerUnit,
+  };
+}
+
+/**
+ * Say in an advice line that the likely is a floor, naming the measured rate so an author can copy it into `source:`.
+ *
+ * @param floored - result of {@link floorUnallocatableLikely}
+ * @returns a clause without leading punctuation
+ */
+export function renderLikelyFloorNote(floored: FlooredForecastBasis): string {
+  return `likely floored at ${floored.basis.likelyMinutesPerUnit.toFixed(2)} min/unit from ${floored.computedLikelyMinutesPerUnit.toFixed(2)} because whole-minute items cannot sum lower`;
+}
+
 /**
  * Validate that a countable basis still matches plan scope and its displayed range.
  *
