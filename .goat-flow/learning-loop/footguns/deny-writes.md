@@ -10,18 +10,24 @@ Sibling buckets: `deny-shell.md`, `deny-secrets.md`.
 ## Footgun: Git push deny checks must normalize shell wrappers and control bodies
 
 **Status:** active | **Created:** 2026-04-27 | **Evidence:** ACTUAL_MEASURED
-**Incident count:** 2 | **Latest occurrence:** 2026-08-19
+**Incident count:** 4 | **Latest occurrence:** 2026-09-20
 
 **Prevention:**
 1. Normalize to the command word before calling `is_git_push`, and read "command word" as every unquoting layer the target program applies, not only the shell's. Do not add one-off regexes for the latest bypass.
 2. Probe every push-deny edit at runtime with env options, quoted assignments, `if`/`then` bodies, function bodies, `sh`/`bash -c` and `-lc` wrappers, and Git alias values.
 3. Keep the workflow hook source and the installed `.goat-flow/hooks` mirror byte-identical after policy changes.
+4. Fail closed when wrapper option arity is unknown, and apply the full policy to each pipeline stage. Preserve `xargs` context: its input can supply recursive-delete targets absent from the visible payload.
+5. Parse the entire provider response as one JSON object. A nested denial must terminate the parent even when the provider requires exit 0; finding a deny substring does not exclude a later allow.
 
 **Symptoms:** The hook blocks a direct `git push` and allows the same push through `env -i`, a quoted assignment such as `FOO='a b'`, an `if true; then ... fi` body, a function body, `bash -lc '...'`, or a Git alias whose value carries a second quoting layer.
 
 **Why it happens:** A token check that normalizes only the start of a simple command misses shell grammar around the command word. Git also runs an alias through its own `split_cmdline`, which removes a second layer of quotes, so `git -c 'alias.publish="push"' publish` reached the guard as the unrecognised word `"push"` while the unquoted form denied.
 
 **Evidence:** `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `is_git_push`) blocks push and destructive Git mutations, and (search: `normalize_git_alias_expansion`) decodes the complete alias, including quoted flags, while read-only aliases remain allowed; `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `sudo git push`) covers wrapper prefixes. Before the 2026-04-27 fix, `--check` returned exit 0 for `env -i git push origin main`, `FOO='a b' git push origin main`, `if true; then git push origin main; fi`, `f(){ git push origin main; }; f`, and the `-lc` wrappers. On 2026-08-19 at `81636441`, alias values `"push"`, `'push'`, `"send-pack"`, `pu"sh"`, and `"!git push origin main"` all returned exit 0 before the alias fix.
+
+**Recurrence 2026-09-20:** Attached nice options and accepted long-option abbreviations in timeout, stdbuf, setsid, ionice, taskset and xargs reached a harmless printf payload but hid denied commands from the classifier. `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `normalize_command_candidate`), (search: `prepare_segment_context`) now propagates uncertain arity and checks complete pipeline-stage policy. VERIFY caught two incomplete repairs: peeling xargs lost stdin-supplied recursive-delete targets, and checking only downstream uncertainty missed supported nice options. Retain the outer xargs candidate while inspecting nested wrappers, and run both full policy corpora after each change. `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `additional wrapper Git write payload`), (search: `additional downstream wrapper destructive payload`) pins the new denials beside read-only controls.
+
+**Recurrence 2026-09-20:** The pipeline subshell contained provider denial's successful exit, so Antigravity received deny followed by allow and Git pipeline probes produced duplicate deny objects. Both full self-tests still passed because they searched for a deny substring. Retaining the original xargs payload also left `xargs nice -n1 git commit -m fix` and `xargs timeout --signal=TERM 5 git commit -m fix` allowed. `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `wrapper_pipeline_output`) forwards the nested decision and exits the parent; (search: `xargs_prefix`) retains xargs options and stdin-target semantics around the normalized child. `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `provider_json_matches`), (search: `nested xargs stdin deletion targets`) pins whole-response parsing, the reproduced denials and harmless literal controls. The new assertions failed seven cases before the runtime repair and passed afterwards.
 
 ---
 
