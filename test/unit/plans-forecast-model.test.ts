@@ -91,11 +91,16 @@ describe("registered work forecast model", () => {
       assert.match(run.stdout, /planned category splits are not measurements/u);
       assert.equal(runPlansCheck(selected, "--strict").stdout, run.stdout);
       const external = writeRegisteredHistory(join(root, "external"), target);
+      saved.set(join(external, "M01-work.md"), target.body);
       const cold = runPlansCheck(external, "--strict");
       assert.equal(cold.status, 0, cold.stdout + cold.stderr);
       assert.match(
         cold.stdout,
-        /forecast advice: M01-work.md - 1-18 agent-time minutes; likely 8; provisional; method matched-rates-v1; pool cold-prior; 0 samples/u,
+        /forecast advice: M01-work.md - 3-18 agent-time minutes; likely 8; provisional; method matched-rates-v1; pool cold-prior; 0 samples/u,
+      );
+      assert.match(
+        cold.stdout,
+        /forecast basis advice: M01-work.md - 3 units \(1 proof executions\); 1\.00-2\.50-6\.00 min\/unit/u,
       );
       for (const [path, body] of saved)
         assert.equal(readFileSync(path, "utf8"), body, path);
@@ -282,22 +287,35 @@ describe("registered work forecast model", () => {
         "work-unit calibration: 3 eligible measured samples - median 3.00 min/unit, p10-p90 1.40-7.80 min/unit",
       ),
     );
-    const tied = {
-      ...forecast,
-      issuedAt: new Date((4100 + 1620) * 1000).toISOString(),
-    };
-    const cold = forecastPlanWork(
-      tied,
-      selectedRates([]),
-      selectedPlanForecastBasis(records, tied),
-    );
-    assert.equal(cold.selection, "cold-prior");
-    assert.deepEqual(cold.range, {
-      lowMinutes: 1,
-      likelyMinutes: 8,
-      highMinutes: 18,
-    });
-    assert.equal(cold.sampleCount, 2);
+    for (const [sampleCount, completion] of [
+      100 + 180,
+      2100 + 540,
+      4100 + 1620,
+    ].entries()) {
+      const tied = {
+        ...forecast,
+        issuedAt: new Date(completion * 1000).toISOString(),
+      };
+      const cold = forecastPlanWork(
+        tied,
+        selectedRates([]),
+        selectedPlanForecastBasis(records, tied),
+      );
+      assert.equal(cold.selection, "cold-prior");
+      assert.deepEqual(cold.basis, {
+        agentWorkUnits: 3,
+        lowMinutesPerUnit: 1,
+        likelyMinutesPerUnit: 2.5,
+        highMinutesPerUnit: 6,
+        source: "cold-start prior",
+      });
+      assert.deepEqual(cold.range, {
+        lowMinutes: 3,
+        likelyMinutes: 8,
+        highMinutes: 18,
+      });
+      assert.equal(cold.sampleCount, sampleCount);
+    }
   });
 
   it("withholds whole-work replacements after timing begins and preserves the original forecast", () => {

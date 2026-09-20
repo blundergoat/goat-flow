@@ -1,7 +1,8 @@
-# ADR-067: Narrow the cold-start forecast range to 0.5-2.5-6 minutes per work unit
+# ADR-067: Narrow the cold-start forecast range to 1.0-2.5-6 minutes per work unit
 
 **Status:** Implemented
 **Date:** 2026-09-20
+**Updated:** 2026-09-20
 **Ticket/Context:** `.goat-flow/plans/forecast-accuracy/M07-narrow-the-default-forecast-range.md` and that plan's `EXECUTION.md`, "Replan 2026-09-19" (local working state, not committed evidence)
 
 ## Context
@@ -24,18 +25,22 @@ The pooled history is every measured work-unit sample that `plans check` reports
 
 The evidence is exploratory. Every outcome was already known, it comes from one repository with mixed models and executors, and the samples leave out milestones whose counted units changed after their forecast, so the slow tail is understated.
 
+Before shipping 1.17.0, the maintainer explicitly requested `1.0-2.5-6` instead of `0.5-2.5-6`. A fresh pooling on 2026-09-20 reproduced the same 133 reported samples from seven plans: the old range contains 113, with 5 below and 15 above; the requested range contains 96 (72%), with 22 below and 15 above. The replay used raw receipt seconds and each sample's unit count with the shipped floor-low/ceil-high arithmetic. It read the `work-unit sample:` output of `renderCalibrationSummary` across all 79 milestone-bearing plan directories, including `_done`; directories without `M*.md` files were excluded. These local measurements are exploratory, not prospective accuracy evidence.
+
 ## Decision
 
-The cold-start forecast default becomes 0.5-2.5-6 minutes per work unit, and only its high rate changes.
+The cold-start forecast default becomes 1.0-2.5-6 minutes per work unit. This amendment raises only the low rate from 0.5 to 1.0 at the maintainer's request; the original decision had already lowered the high from 10 to 6.
 
-1. The cold-start default is 0.5-2.5-6 minutes per work unit. Only the high changed, from 10 to 6, which is the pooled 90th percentile rounded to a whole number.
+1. The cold-start default is 1.0-2.5-6 minutes per work unit. The high stays at 6, the pooled 90th percentile rounded to a whole number.
 2. The likely rate stays at 2.5. The pooled median is 2.41 and 72 of 133 samples finish under 2.5, which matches what users report about the estimate.
-3. The low rate stays at 0.5. Five of 133 samples fall below it, and raising it to 0.75 more than doubles those misses.
-4. Saved forecasts are never migrated. A milestone issued at 0.5-2.5-10 keeps its numbers and still validates, because the checker compares no saved basis with the current default.
-5. Every statement of the default moves together: the source constant (`src/cli/plans-check-summary.ts`, search: `highMinutesPerUnit: 6`), the skill sentence above, its reference (`workflow/skills/goat-plan/references/milestone-examples.md`, search: `Below three matching measured bases`), the installed skill copies, `docs/cli.md` (search: `cold-start prior. At three or more`) and `docs/skills.md` (search: `cold prior; otherwise use the rates`).
+3. The low rate is 1.0. This is a maintainer-selected default, not a floor on measured historical rates or evidence that the low is feasible for every milestone. The original decision kept 0.5 to avoid the additional below-range outcomes; this amendment reverses that choice.
+4. Saved forecasts are never migrated. Milestones issued at 0.5-2.5-10 or 0.5-2.5-6 keep their numbers and still validate, because the checker compares no saved basis with the current default.
+5. Every statement of the default moves together: the source constant (`src/cli/plans-check-summary.ts`, search: `function selectedPlanForecastBasis`), the skill sentence above, its reference (`workflow/skills/goat-plan/references/milestone-examples.md`, search: `Below three matching measured bases`), the installed skill copies, `docs/cli.md` (search: `cold-start prior. At three or more`) and `docs/skills.md` (search: `cold prior; otherwise use the rates`).
 6. A later change to these rates pools every plan's measured samples first. One plan's history does not set a shipped default.
 
 ## Failure Mode Comparison
+
+The table records the original decision, before the maintainer's low-rate amendment. Its measurements and verdicts remain historical evidence.
 
 | Option | What fails | Verdict |
 | --- | --- | --- |
@@ -47,13 +52,15 @@ The cold-start forecast default becomes 0.5-2.5-6 minutes per work unit, and onl
 | Wait for a second prospective pilot | Strongest case: a prospective test is stronger evidence than known outcomes. The first pilot ran across a 27-milestone plan and could not reach a verdict, and the default governs only a plan's first three milestones | Rejected |
 | 0.5-2.5-6 | Slow milestones exceed the range more often: 15 of 133 against 3 | Accepted |
 
+The amendment accepts `1.0-2.5-6` for a narrower optimistic bound. Keeping 0.5 would retain more known outcomes inside the range; raising it leaves 22 below instead of 5, without changing the likely or high. The maintainer's explicit choice supersedes the original rejection of a low rate of 1.
+
 ## Consequences
 
-- New plans, and plans with fewer than three measured milestones, forecast a range a little over half as wide: 55 minutes against 95 at the pooled median. More of them will run over the high: 15 of 133 pooled samples did, against 3 under the old default.
+- New plans, and plans with fewer than three measured milestones, use the higher optimistic bound. Historical inclusion falls from 113 of 133 (85%) for 0.5-2.5-6 to 96 of 133 (72%) for 1.0-2.5-6; the likely and upper bounds do not change. The original high-rate reduction had narrowed the median range from 95 to 55 minutes and increased above-range outcomes from 3 to 15.
 - Plans with three or more measured milestones are unaffected. They already use their own measured rates (`src/cli/plans-check-summary.ts`, search: `MINIMUM_CALIBRATION_SAMPLES`).
-- Two tests derive numbers from the default and moved with it: `test/unit/plans-forecast-model.test.ts` (search: `pool cold-prior; 0 samples`) and `test/contract/skill-hardening-plan-1.test.ts` (search: `cold-start prior is missing`). Other tests that show 0.5-2.5-10 use it as saved milestone text and stay, because they prove old forecasts still parse.
+- Two tests derive numbers from the default and moved with it: `test/unit/plans-forecast-model.test.ts` (search: `pool cold-prior; 0 samples`) and `test/contract/skill-hardening-plan-1.test.ts` (search: `cold-start prior is missing`). They check CLI arithmetic, unchanged saved files, and the skill/reference defaults in every installed harness. Existing saved-text fixtures retain 0.5-2.5-10 and 0.5-2.5-6 to exercise backward compatibility; measured-history tests retain sub-minute low rates. These deterministic checks do not establish model compliance or predictive accuracy.
 - The plan's first requirement, fewer typical-duration errors and narrower ranges without lost coverage on agreed evaluation cases, was never tested. This change trades coverage for width and says so.
 
 ## Reversibility
 
-Two-way. The default is one constant and the text that states it, and no saved forecast depends on it. Revisit it if a fresh pooling of every plan's measured samples shows the default holding under 80% of outcomes, or if users report the range as too narrow. To repeat the pooling, run `plans check` on every plan folder and collect its `work-unit sample:` lines.
+Two-way. The default is one constant and the text that states it, and no saved forecast depends on it. The amendment proceeds with the observed 72% inclusion, below the original 80% revisit threshold, as an explicit maintainer choice rather than an accuracy claim. Revisit on new pooled evidence or reports that the range is too narrow. To repeat the pooling, run `plans check` on every plan folder and collect its `work-unit sample:` lines; compare raw seconds with the bounds derived from each sample's counted units, not rounded displayed rates.

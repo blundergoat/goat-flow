@@ -600,7 +600,7 @@ export function selectedPlanForecastBasis(
     : {
         // Shipped cold-start default. The goat-plan skill, its milestone reference and the CLI and skills docs state the same three rates as text,
         // and nothing compares that text with this literal, so change them together.
-        lowMinutesPerUnit: 0.5,
+        lowMinutesPerUnit: 1,
         likelyMinutesPerUnit: 2.5,
         highMinutesPerUnit: 6,
       };

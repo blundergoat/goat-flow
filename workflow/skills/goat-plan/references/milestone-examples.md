@@ -193,7 +193,7 @@ Before using an older checker, stop every extra open receipt. Keep one milestone
 ## Effort Estimates
 
 - Count positive Task/Proof/Mid-proof/admin entries; `[HUMAN]`/zero-minute items are excluded from agent work units.
-- Below three matching measured bases use cold `0.5-2.5-6 min/unit`; otherwise use `plans check` low-median-high rates.
+- Below three matching measured bases use cold `1.0-2.5-6 min/unit`; otherwise use `plans check` low-median-high rates.
 - Units × rates: floor low (minimum one), round likely/headline, ceil high. Reforecast all estimates before implementation after scope change or `reforecast required`.
 - Agent-time excludes human waits; exact minutes inform calibration, never promises.
 - Tasks/Proof/Mid-implementation proof plus `Plan/admin overhead: n min other` must reproduce product/proof/other categories and headline.

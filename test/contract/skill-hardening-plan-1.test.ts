@@ -59,7 +59,7 @@ describe("skill hardening contracts: goat-plan (1/2)", () => {
       );
       assert.match(
         breakdown,
-        /0\.5-2\.5-6 min\/unit/u,
+        /1\.0-2\.5-6 min\/unit/u,
         `${skillPath}: cold-start prior is missing`,
       );
       assert.match(
@@ -99,6 +99,11 @@ describe("skill hardening contracts: goat-plan (1/2)", () => {
         assertTimingObligationsDocumented(
           `${effortEstimates}\n${timing}`,
           referencePath,
+        );
+        assert.match(
+          effortEstimates,
+          /1\.0-2\.5-6 min\/unit/u,
+          `${referencePath}: cold-start prior is missing`,
         );
         assert.match(
           effortEstimates,
