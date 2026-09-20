@@ -193,7 +193,7 @@ Before using an older checker, stop every extra open receipt. Keep one milestone
 ## Effort Estimates
 
 - Count positive Task/Proof/Mid-proof/admin entries; `[HUMAN]`/zero-minute items are excluded from agent work units.
-- Below three matching measured bases use cold `0.5-2.5-10 min/unit`; otherwise use `plans check` low-median-high rates.
+- Below three matching measured bases use cold `0.5-2.5-6 min/unit`; otherwise use `plans check` low-median-high rates.
 - Units × rates: floor low (minimum one), round likely/headline, ceil high. Reforecast all estimates before implementation after scope change or `reforecast required`.
 - Agent-time excludes human waits; exact minutes inform calibration, never promises.
 - Tasks/Proof/Mid-implementation proof plus `Plan/admin overhead: n min other` must reproduce product/proof/other categories and headline.
@@ -222,7 +222,7 @@ State whether the forecast covers `fresh-implementation`, `reconciliation`, `ver
 
 The default remains `legacy`. Explicit `**Forecast method:** contextual-v1` opts into experimental matching and requires saved Forecast records. Matching needs at least three earlier, complete measured samples with registered snapshots and the same known work state, scope kind and rubric. History sources must also opt in. When matching is insufficient, retain the selected-plan numerical fallback, including its cold-start prior below three eligible selected-plan bases. Broad history is diagnostic, not an alternative chosen for a preferred estimate.
 
-Use the checker's published low/median/high rates and identify the actual percentile pair in `source:`. Historical percentile spans do not guarantee future coverage. If suggested rates cannot produce valid positive integer allocations, retain issued values and report the incompatibility; never clamp rates or invent effective ones.
+Use the checker's published low/median/high rates and identify the actual percentile pair in `source:`. Historical percentile spans do not guarantee future coverage. When the checker's advice says `likely floored at 1.00 min/unit`, copy that rate and name the measured rate in `source:`. If rates still cannot produce valid positive integer allocations, retain issued values and report the incompatibility; never clamp or invent any other rate.
 
 ### Establish the fast case
 

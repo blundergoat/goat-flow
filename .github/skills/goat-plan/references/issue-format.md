@@ -172,6 +172,7 @@ Read `milestone-examples.md` → Effort Estimates before deriving delivery bands
 - For completed work, use recorded Actual with its provenance. A retrospective estimate, incomplete timer or missing receipt cannot become measured time through summary wording. When any required timing is missing, show the known amounts and say the combined total is unavailable.
 - Keep the originally issued whole-work forecast available for comparison. A revision changes what remains; it must not erase the original commitment or add elapsed time to work already included in a whole-work estimate.
 - Make the "How long will it take?" answer agree with the current Tasks bands. State the cutoff when showing an older snapshot. Summed milestone bounds are a planning window, not a probability guarantee or a calendar schedule.
+- When the plan already has measured milestones, state the checker's `plan total:` ratio beside the summed estimate; it reports how this plan's past totals compared with their forecasts and claims no direction for the work ahead.
 
 Explain the main uncertainty beside the range: what evidence supports the fast case, what could make work take longer, and what the next investigation will resolve. When relevant history is sparse or poorly matched, disclose that limitation. Do not present a broad prior or historical percentile span as confidence established by prospective results.
 
