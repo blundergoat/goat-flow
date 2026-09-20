@@ -307,6 +307,57 @@ is_secret_path_touch() {
   return 1
 }
 
+# Split curl's inner form grammar without treating quoted delimiters as attributes or files.
+split_curl_form_parts_into() {
+  local -n __goat_form_parts__="$1"
+  local value="$2" delimiter="$3" part="" char=""
+  local quoted=0 escaped=0 i
+  __goat_form_parts__=()
+  for ((i = 0; i < ${#value}; i++)); do
+    char="${value:i:1}"
+    if [[ "$escaped" -eq 1 ]]; then
+      part+="$char"
+      escaped=0
+      continue
+    fi
+    if [[ "$quoted" -eq 1 && "$char" == \\ ]]; then
+      part+="$char"
+      escaped=1
+      continue
+    fi
+    if [[ "$char" == '"' ]]; then quoted=$((1 - quoted)); fi
+    if [[ "$quoted" -eq 0 && "$char" == "$delimiter" ]]; then
+      __goat_form_parts__+=("$part")
+      part=""
+    else
+      part+="$char"
+    fi
+  done
+  __goat_form_parts__+=("$part")
+}
+
+# Form uploads and per-part header files are separate file-reading operands.
+curl_form_files_touch_secret() {
+  local form_value="${1#*=}" part file
+  local -a form_parts=() form_files=()
+  split_curl_form_parts_into form_parts "$form_value" ';'
+  part="${form_parts[0]}"
+  if [[ "$part" == @* || "$part" == \<* ]]; then
+    split_curl_form_parts_into form_files "${part:1}" ','
+    for file in "${form_files[@]}"; do
+      if is_secret_path_touch "$file"; then return 0; fi
+    done
+  fi
+  # Attributes apply to literal fields too; only headers=@file reads another local file.
+  for part in "${form_parts[@]:1}"; do
+    part="${part#"${part%%[![:space:]]*}"}"
+    if [[ "$part" == headers=@* ]] && is_secret_path_touch "${part#headers=@}"; then
+      return 0
+    fi
+  done
+  return 1
+}
+
 # Decide whether one curl option value makes curl read a protected local file.
 # Use after option parsing so literal `--data-raw @name` text is not mistaken for a file read.
 curl_file_reference_touches_secret() {
@@ -326,15 +377,8 @@ curl_file_reference_touches_secret() {
       referenced_file="${curl_option_value#*@}"
       ;;
     form)
-      local form_value="$curl_option_value"
-      # A named form field keeps its file marker after the first equals sign.
-      if [[ "$form_value" == *=* ]]; then
-        form_value="${form_value#*=}"
-      fi
-      # Curl form values use either at-file or less-than-file syntax.
-      [[ "$form_value" == @* || "$form_value" == \<* ]] || return 1
-      referenced_file="${form_value:1}"
-      referenced_file="${referenced_file%%;*}"
+      curl_form_files_touch_secret "$curl_option_value"
+      return $?
       ;;
     direct)
       referenced_file="$curl_option_value"
@@ -370,18 +414,18 @@ curl_file_operands_touch_secret() {
     curl_word="${curl_words[$curl_word_index]}"
     curl_option_value=""
     case "$curl_word" in
-      -d|--data|--data-ascii|--data-binary)
+      -d|--data|--data-ascii|--data-binary|--json|-H|--header|--proxy-header)
         curl_word_index=$((curl_word_index + 1))
         curl_option_value="${curl_words[$curl_word_index]:-}"
         # A protected at-file value would expose local credentials to the request target.
         if curl_file_reference_touches_secret data "$curl_option_value"; then return 0; fi
         ;;
-      -d?*)
-        curl_option_value="${curl_word#-d}"
+      -d?*|-H?*)
+        curl_option_value="${curl_word:2}"
         # Attached short data options use the same at-file meaning.
         if curl_file_reference_touches_secret data "$curl_option_value"; then return 0; fi
         ;;
-      --data=*|--data-ascii=*|--data-binary=*)
+      --data=*|--data-ascii=*|--data-binary=*|--json=*|--header=*|--proxy-header=*)
         curl_option_value="${curl_word#*=}"
         # Attached long data options use the same at-file meaning.
         if curl_file_reference_touches_secret data "$curl_option_value"; then return 0; fi

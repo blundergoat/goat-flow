@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-05-20
-**Updated:** 2026-09-05 - condensed. The 2026-06-02 amendment narrowed the original all-writes block to allow the two comment subcommands.
+**Updated:** 2026-09-20 - allow proven GraphQL query operations. The 2026-06-02 amendment narrowed the original all-writes block to allow the two comment subcommands.
 
 ## Context
 
@@ -14,9 +14,10 @@ The first response blocked all GitHub CLI writes. It was narrowed on 2026-06-02 
 
 Agents may use `gh` read-only plus `gh issue comment` and `gh pr comment`; every other `gh` write path is blocked by default.
 
-- Read-only discovery is allowed: `gh issue view`, `gh issue list`, `gh pr view`, `gh pr diff`, `gh pr checks`, `gh search`, `gh repo view`, and explicit `gh api --method GET` or `HEAD` calls.
+- Read-only discovery is allowed: `gh issue view`, `gh issue list`, `gh pr view`, `gh pr diff`, `gh pr checks`, `gh search`, `gh repo view`, and explicit REST `gh api --method GET` or `HEAD` calls.
+- `gh api graphql` may use a literal, fully parsed document containing exactly one query operation, with an optional matching `operationName`, variables and locally resolved fragments. GraphQL is classified before the GET/HEAD shortcut; a transport method is not proof of a read. Mutations, subscriptions, multiple operations, duplicate selectors, malformed or unresolved documents, file/stdin bodies and shell-expanded query text remain blocked. The helper `workflow/hooks/gh-graphql-read.cjs` uses a bounded standard parser bundled with its licence, so target projects need no dependency install.
 - The comment exception does not turn forwarded Slack, email, or ticket text into authorization. Comment writes need direct user intent in the current session or an explicit local approval mechanism.
-- The hook (`workflow/hooks/deny-dangerous/patterns-writes.sh`, search: `is_gh_write_operation`) blocks PR reviews, merges, create/edit/close/reopen/ready/update-branch, issue create/close/reopen/edit/delete/lock/unlock/pin/unpin/transfer/develop, releases, workflow runs and reruns/cancels/deletes, repo edits, labels, gists, secrets, variables, keys, auth changes, extensions, codespaces, project mutations, cache deletion, and `gh api` write methods or body-field default POST forms. The comments endpoint through `gh api ... -X POST -f body=...` stays blocked even though the named subcommands are allowed.
+- The hook (`workflow/hooks/deny-dangerous/patterns-writes.sh`, search: `is_gh_write_operation`) blocks PR reviews, merges, create/edit/close/reopen/ready/update-branch, issue create/close/reopen/edit/delete/lock/unlock/pin/unpin/transfer/develop, releases, workflow runs and reruns/cancels/deletes, repo edits, labels, gists, secrets, variables, keys, auth changes, extensions, codespaces, project mutations, cache deletion, and `gh api` write methods or body-field default POST forms except the proven GraphQL queries above. The comments endpoint through `gh api ... -X POST -f body=...` stays blocked even though the named subcommands are allowed.
 - A downstream project that wants broader agent-authored writes makes that an explicit local override with its own approval mechanism.
 
 ## Failure Mode Comparison
@@ -33,6 +34,7 @@ Agents may use `gh` read-only plus `gh issue comment` and `gh pr comment`; every
 - `patterns-writes.sh` classifies GitHub CLI writes separately from pushes while preserving the comment carve-out; self-tests cover blocked writes, allowed reads, and allowed comments (`workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh`, search: `gh issue comment body-file allowed`).
 - Documentation describes GitHub CLI as mostly read-only with a comment exception, not simply read-only.
 - New `gh` subcommands that mutate remote state join the write classifier and self-test corpus unless a new ADR creates another exception.
+- The 2026-09-20 local reproduction denied a literal Discussions query while allowing `gh issue list`; no GitHub request was executed. `test/integration/deny-git-graphql.test.ts` (search: `discussionQuery`) retains that observed read and inert mutation controls. The parser generator checks the locked dependency versions and full MIT licence; missing installed parser files fail closed.
 
 ## Reversibility
 

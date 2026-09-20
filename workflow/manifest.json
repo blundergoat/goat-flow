@@ -50,6 +50,8 @@
     ".goat-flow/hooks/hook-launch-runtime.mjs",
     ".goat-flow/hooks/hook-policy-state.cjs",
     ".goat-flow/hooks/vendor/js-yaml.cjs",
+    ".goat-flow/hooks/gh-graphql-read.cjs",
+    ".goat-flow/hooks/vendor/graphql.cjs",
     ".goat-flow/hooks/post-turn-safety.sh",
     ".goat-flow/hooks/run-with-bash.mjs",
     ".goat-flow/hooks/deny-dangerous/patterns-shell.sh",
@@ -250,6 +252,14 @@
     ".goat-flow/hooks/vendor/js-yaml.cjs": {
       "ownership": "system-owned",
       "source": "workflow/hooks/vendor/js-yaml.cjs"
+    },
+    ".goat-flow/hooks/gh-graphql-read.cjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/gh-graphql-read.cjs"
+    },
+    ".goat-flow/hooks/vendor/graphql.cjs": {
+      "ownership": "system-owned",
+      "source": "workflow/hooks/vendor/graphql.cjs"
     },
     ".goat-flow/hooks/post-turn-safety.sh": {
       "ownership": "system-owned",

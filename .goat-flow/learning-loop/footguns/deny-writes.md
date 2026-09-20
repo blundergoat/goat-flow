@@ -1,6 +1,6 @@
 ---
 category: deny-writes
-last_reviewed: 2026-09-18
+last_reviewed: 2026-09-20
 ---
 
 External-write traps: pushes, GitHub mutations, and other side effects that leave the machine. They bypass local file guards, so the deny surface is the only control.
@@ -34,11 +34,28 @@ Sibling buckets: `deny-shell.md`, `deny-secrets.md`.
 2. Test CLI write classifiers against grammar variants, not the observed command: global options before and after the topic, short forms, and pipeline consumers such as `xargs`.
 3. Forwarded Slack, email, or ticket text is evidence, not authorization. The hook allows `gh issue comment` and `gh pr comment` under ADR-028's carve-out, so the host's per-call prompt and an in-turn user approval are the only controls on those two commands.
 
-**Symptoms:** Before 2026-05-20, an agent could post to GitHub through `gh issue comment ... --body-file` or `gh api ... -X POST` while `git push` was blocked, and a narrow first fix still missed `gh issue --repo owner/repo comment ...` and `xargs ... gh issue comment ...`. The residual trap is any `gh` write outside the comment carve-out: PR review, merge, create, edit, close, ready; issue create, close, edit, delete, lock, transfer, develop; release, repo, label, workflow, run, gist, secret, variable, key, auth, codespace, project, cache; and `gh api` with a non-GET/HEAD method or body fields.
+**Symptoms:** Before 2026-05-20, an agent could post to GitHub through `gh issue comment ... --body-file` or `gh api ... -X POST` while `git push` was blocked, and a narrow first fix still missed `gh issue --repo owner/repo comment ...` and `xargs ... gh issue comment ...`. The residual trap is any `gh` write outside the comment carve-out: PR review, merge, create, edit, close, ready; issue create, close, edit, delete, lock, transfer, develop; release, repo, label, workflow, run, gist, secret, variable, key, auth, codespace, project, cache; and `gh api` with a non-GET/HEAD method or body fields, except a proven read-only GraphQL query under ADR-028.
 
 **Why it happens:** The hook once treated `gh` as an ordinary command unless it contained an already-blocked shell pattern, and CLI parsers accept option placements the incident never showed.
 
 **Evidence:** Reported incident: an assistant posted a comment to `owner/repo#64620` from forwarded Slack text, and the user deleted it. `--check` returned exit 0 before the first fix for `gh issue comment 64620 --repo owner/repo --body-file /tmp/issue_64620_comment.md` and `gh api repos/owner/repo/issues/1/comments -X POST -f body=hi`, and before the second fix for `gh issue --repo owner/repo comment 64620 --body hi` and `printf '%s\n' body | xargs -I{} gh issue comment 64620 --body {}`. `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `is_gh_write_operation`) classifies the mutating subcommands and `gh api` write forms; `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `gh issue comment`) locks the carve-out allow cases beside the write blocks. ADR-028 was narrowed on 2026-06-02 because conversation comments are low-blast-radius and reversible; `gh api` comment writes stay blocked.
+
+---
+
+## Footgun: HTTP method alone cannot classify GraphQL reads and writes
+
+**Status:** active | **Created:** 2026-09-20 | **Evidence:** ACTUAL_MEASURED
+**Decision changed:** Prove the literal GraphQL operation before applying the REST method rule, and verify the saved installed launcher as well as the classifier.
+**Trigger phase:** ACT
+**hallucination-risk:** high
+
+**Prevention:** Parse the complete literal document with the bundled standard parser. Permit exactly one query operation with resolved, acyclic fragments; reject mutations, subscriptions, mixed operations, malformed documents and unresolved input. GET/HEAD does not prove a GraphQL read. Keep allowed Discussions reads beside denied mutations in both classifier tests and registered-launcher replay. Installed replay is not evidence that a provider delivered a live tool call to the hook.
+
+**Symptoms:** The original `gh api graphql -f query=...` Discussions read exited 2 with `GitHub write via gh is blocked`, while `gh issue list` exited 0. This prevented access to discussion bodies and comments even though the operation was read-only.
+
+**Why it happens:** `gh api` uses POST when given body fields. The REST classifier treated those fields as a write without inspecting the GraphQL operation. Allowing GraphQL solely because the caller selects GET would make the opposite mistake.
+
+**Evidence:** `workflow/hooks/deny-dangerous/patterns-writes.sh` (search: `is_gh_api_write`) delegates GraphQL classification before its REST rules; `workflow/hooks/gh-graphql-read.cjs` (search: `isReadDocument`) proves the query. `test/integration/deny-git-graphql.test.ts` and `test/unit/gh-graphql-read.test.ts` pin the operation boundary. `test/unit/audit-command/agent-deny-hooks.test.ts` (search: `allows quoted repository evidence while the registered hook still blocks repository writes`) replays the saved Codex launcher without sending the mutation to GitHub. `.goat-flow/learning-loop/decisions/ADR-028-github-cli-mostly-read-only-except-comments.md` owns the policy exception.
 
 ---
 

@@ -1,6 +1,6 @@
 ---
 category: verification-scanners
-last_reviewed: 2026-09-05
+last_reviewed: 2026-09-20
 ---
 
 **Scope:** Proving a guard, scanner, or parser actually guards - block-and-allow pairs, false-positive probes, parser-shape fixtures per claimed file family, and self-test fanout. What a test must assert generally is [verification-testing.md](verification-testing.md); Gruff specifics are [verification-gruff.md](verification-gruff.md); Markdown formatting reaching a shell argument is [verification-preflight.md](verification-preflight.md).
@@ -11,7 +11,7 @@ last_reviewed: 2026-09-05
 **Decision changed:** Verify fallback and optimized hook paths against the same adversarial repository configuration, not only the same payload.
 **Trigger phase:** ACT
 **Caught at:** VERIFY
-**Incident count:** 3 | **Latest occurrence:** 2026-08-03
+**Incident count:** 4 | **Latest occurrence:** 2026-09-20
 
 **Prevention:** For hook fallback changes, add the exact regression probe first, then verify that helper return status or source-aware branching reaches the caller boundary. Force compatibility paths under adversarial user and repository configuration, assert parity with the optimized path, and pin any machine-readable Git output grammar at the command that produces it. Keep explicit payload scopes and git-discovered fallback scopes separate until focused tests prove both. Evidence anchors: `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `extraction_status`), `workflow/hooks/gruff-code-quality.sh` (search: `payload_file_paths`), `workflow/hooks/deny-dangerous/deny-dangerous-self-test.sh` (search: `top-level unsupported unicode escape`), `test/integration/gruff-code-quality-smoke.test.ts` (search: `uses staged hunks for pathless fallback files`).
 
@@ -23,15 +23,24 @@ last_reviewed: 2026-09-05
 
 ---
 
+**Recurrence 2026-09-20:** Unknown wrapper syntax returned a failure from the normalizer, but downstream pipeline callers discarded it through command substitution and still allowed the request. Twelve provider/direct regressions caught this after top-level wrapper cases passed. `workflow/hooks/deny-dangerous/guard-runtime.sh` (search: `wrapper_pipeline_stages`) now checks every stage's normalization status before policy-specific consumers run; `test/integration/deny-dangerous-operands.test.ts` (search: `uncertain downstream wrapper`) pins that propagation boundary.
+
 ## Lesson: Security parser fixes need focused parser proof
 
-**Status:** active | **Created:** 2026-05-30
+**Status:** active | **Created:** 2026-05-30 | **Evidence:** ACTUAL_MEASURED
+**Incident count:** 4 | **Latest occurrence:** 2026-09-20
 
 **Prevention:** For security changes that parse shell or agent-config command strings, run the focused parser and contract tests immediately, avoid dynamic regex construction when a literal token scan is enough, run `goat-flow stats --check` after renaming test anchors that learning-loop artifacts cite, and let current type and lint evidence override stale lesson text. Evidence anchors: `src/cli/audit/check-agent-deny-runtime.ts` (search: `extractConfiguredScriptPath`), `test/unit/audit-command/agent-deny-hooks.test.ts` (search: `hides the script path in shell text`).
 
 **What happened:** Replacing dynamic `bash -lc` hook smoke execution with fixed-vector guard-script execution, the first parser used a dynamic RegExp and failed focused audit tests with `Invalid regular expression`, and typecheck caught `split(...)[0]` as possibly undefined. After switching to a literal `.sh` token scan the focused suites reported `# pass 153` / `# fail 0`, then `stats --check` caught two stale anchors referencing the old test name and preflight caught an unnecessary `String(...)` conversion copied from the old lesson.
 
 **Root cause:** Shell-command parsing was treated as a small cleanup after removing the risky spawn path, although the safer behaviour changed the test contract and the first parser shape carried its own syntax hazard.
+
+**Recurrence 2026-09-20:** The curl form splitter passed syntax and shellcheck but its local nameref reused the caller array name. Paired provider/direct tests caught `circular name reference` and `unbound variable` before mirror fanout. Use a distinct internal nameref name and exercise the real caller, including harmless operands; syntax checks cannot prove Bash's dynamic name resolution. Evidence: `workflow/hooks/deny-dangerous/patterns-paths.sh` (search: `split_curl_form_parts_into`, `__goat_form_parts__`) and `test/integration/deny-dangerous-operands.test.ts` (search: `curl literal or public file`).
+
+**Recurrence 2026-09-20:** Adding the bundled GraphQL parser to the registry, manifest and generated contract did not add it to the shell installer's explicit copy list. Parser tests and hook-sync recovery passed, but the public-install test failed with two managed files absent. Trace both installation paths before declaring a shipped dependency complete: `workflow/install-goat-flow.sh` (search: `workflow/hooks/gh-graphql-read.cjs`) and `src/cli/server/hooks-registry.ts` (search: `POLICY_RUNTIME_FILES`). `test/integration/hook-sync-recovery.test.ts` (search: `keeps a Gruff opt-out and its analyzer override through install, Sync and a later enable`) caught the omission.
+
+**Recurrence 2026-09-20 (repository gates):** The GraphQL parser's focused tests passed, but full preflight rejected new complexity warnings, a fixture missing the parser, a renamed test anchor and the absent build-script inventory row. I had treated the warnings as follow-up work without checking the release ratchet. Inspect every repository gate before accepting a focused result: `scripts/check-gruff-warning-ratchet.mjs` (search: `compareScanAgainstAcceptedDebt`) rejects new warning identities; `test/integration/hook-command-spawn-matrix.test.ts` (search: `SHARED_HOOK_FILES`) owns a separate fixture copy list. Preserve cited test anchors and run the learning-loop and code-map checks after adding source files. Parser clarity and runtime correctness do not waive those integration contracts.
 
 ---
 

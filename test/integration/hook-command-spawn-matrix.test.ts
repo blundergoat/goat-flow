@@ -47,6 +47,8 @@ const SHARED_HOOK_FILES = [
   "hook-launch-runtime.mjs",
   "hook-policy-state.cjs",
   "vendor/js-yaml.cjs",
+  "gh-graphql-read.cjs",
+  "vendor/graphql.cjs",
   "hook-provider-adapters.mjs",
   "deny-dangerous.sh",
   "deny-git-mutations.sh",
@@ -293,7 +295,10 @@ function runRegisteredHandler(
   });
 }
 
-/** Spawn Codex's exact current-platform command field with a provider payload on stdin. */
+/**
+ * Spawn Codex's exact current-platform command field with a provider payload on stdin.
+ * Writes and removes a temporary payload file when file-backed stdin is selected.
+ */
 function runRegisteredCodexHandler(
   projectRoot: string,
   handler: { command: string; commandWindows: string },

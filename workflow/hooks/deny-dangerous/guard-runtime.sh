@@ -1032,7 +1032,7 @@ strip_watch_payload_command() {
 
   local watch_word_index=1
   local watch_word=""
-  # Skip only known watch options; unknown grammar remains visible and unmodified.
+  # Return 2 for uncertain option arity so the caller cannot silently allow a hidden payload.
   while [[ "$watch_word_index" -lt "${#watch_words[@]}" ]]; do
     watch_word="${watch_words[$watch_word_index]}"
     case "$watch_word" in
@@ -1041,6 +1041,7 @@ strip_watch_payload_command() {
         break
         ;;
       -n|--interval|-q|--equexit|-s|--shotsdir)
+        [[ $((watch_word_index + 1)) -lt "${#watch_words[@]}" ]] || return 2
         watch_word_index=$((watch_word_index + 2))
         continue
         ;;
@@ -1048,12 +1049,15 @@ strip_watch_payload_command() {
         watch_word_index=$((watch_word_index + 1))
         continue
         ;;
-      -b|-c|-C|-d|--differences|-e|--errexit|-g|--chgexit|-p|--precise|-r|--no-rerun|-t|--no-title|-w|--no-wrap|-x|--exec)
+      -b|--beep|-c|--color|-C|--no-color|-d|--differences|--differences=*|-e|--errexit|-g|--chgexit|-p|--precise|-r|--no-rerun|-t|--no-title|-w|--no-wrap|-x|--exec)
         watch_word_index=$((watch_word_index + 1))
         continue
         ;;
-      -*)
+      -h|--help|-v|--version)
         return 1
+        ;;
+      -*)
+        return 2
         ;;
     esac
     break
@@ -1078,7 +1082,7 @@ strip_parallel_payload_command() {
 
   local parallel_word_index=1
   local parallel_word=""
-  # Skip common options while leaving unfamiliar grammar visible to other checks.
+  # Return 2 for uncertain option arity rather than hiding a child from policy checks.
   while [[ "$parallel_word_index" -lt "${#parallel_words[@]}" ]]; do
     parallel_word="${parallel_words[$parallel_word_index]}"
     case "$parallel_word" in
@@ -1086,20 +1090,24 @@ strip_parallel_payload_command() {
         parallel_word_index=$((parallel_word_index + 1))
         break
         ;;
-      -j|--jobs|-S|--sshlogin|--sshloginfile|--results|--joblog|--timeout|--delay|--retries|--workdir|--halt)
+      -j|--jobs|-S|--sshlogin|--sshloginfile|--results|--joblog|--timeout|--delay|--retries|--workdir|--halt|--tagstring)
+        [[ $((parallel_word_index + 1)) -lt "${#parallel_words[@]}" ]] || return 2
         parallel_word_index=$((parallel_word_index + 2))
         continue
         ;;
-      -j?*|--jobs=*|-S?*|--sshlogin=*|--sshloginfile=*|--results=*|--joblog=*|--timeout=*|--delay=*|--retries=*|--workdir=*|--halt=*)
+      -j?*|--jobs=*|-S?*|--sshlogin=*|--sshloginfile=*|--results=*|--joblog=*|--timeout=*|--delay=*|--retries=*|--workdir=*|--halt=*|--tagstring=*)
         parallel_word_index=$((parallel_word_index + 1))
         continue
         ;;
-      --bar|--eta|--keep-order|-k|--line-buffer|--ungroup|--dry-run)
+      --bar|--eta|--keep-order|-k|--line-buffer|--ungroup|--dry-run|--tag|--will-cite)
         parallel_word_index=$((parallel_word_index + 1))
         continue
+        ;;
+      --help|--version)
+        return 1
         ;;
       -*)
-        return 1
+        return 2
         ;;
     esac
     break
@@ -1285,8 +1293,8 @@ normalize_env_prefix() {
       c="${c#"${BASH_REMATCH[0]}"}"
       continue
     fi
-    # Environment-reset options change the child environment but do not exempt its command from policy.
-    if [[ "$c" =~ ^--(ignore-environment|null)[[:space:]]* ]]; then
+    # Environment and diagnostic options do not exempt the child command from policy.
+    if [[ "$c" =~ ^--(ignore-environment|null|debug)([[:space:]]+|$) ]]; then
       c="${c#"${BASH_REMATCH[0]}"}"
       continue
     fi
@@ -1307,8 +1315,8 @@ normalize_env_prefix() {
       c=$(drop_first_shell_word "$c")
       continue
     fi
-    # Environment-reset short flags change settings only; the remaining action still requires inspection.
-    if [[ "$c" =~ ^-[i0][[:space:]]* ]]; then
+    # Short environment and diagnostic flags leave the child action subject to inspection.
+    if [[ "$c" =~ ^-[i0v]+([[:space:]]+|$) ]]; then
       c="${c#"${BASH_REMATCH[0]}"}"
       continue
     fi
@@ -1330,6 +1338,10 @@ normalize_env_prefix() {
     if stripped=$(strip_one_assignment_prefix "$c"); then
       c="$stripped"
       continue
+    fi
+    # Help/version exit without a payload; every other unrecognised option has uncertain arity.
+    if [[ "$c" == -* && ! "$c" =~ ^--(help|version)([[:space:]]|$) ]]; then
+      return 2
     fi
     break
   done
@@ -1952,6 +1964,8 @@ normalize_command_candidate() {
         if stripped=$(strip_watch_payload_command "$c"); then
           c="$stripped"
           continue
+        else
+          [[ $? -ne 2 ]] || return 2
         fi
         ;;
       parallel)
@@ -1959,6 +1973,8 @@ normalize_command_candidate() {
         if stripped=$(strip_parallel_payload_command "$c"); then
           c="$stripped"
           continue
+        else
+          [[ $? -ne 2 ]] || return 2
         fi
         ;;
     esac
@@ -1970,13 +1986,13 @@ normalize_command_candidate() {
     # Environment settings precede the executable; inspect that executable after supported env syntax is removed.
     if [[ "$c" =~ ^env([[:space:]]|$) ]]; then
       c="${c#env}"
-      c=$(normalize_env_prefix "$c")
+      c=$(normalize_env_prefix "$c") || return 2
       continue
     fi
     # A path-qualified env wrapper receives the same normalization as its ordinary command-name spelling.
     if [[ "$c" =~ ^(/usr)?/bin/env([[:space:]]|$) ]]; then
       c="${c#"${BASH_REMATCH[0]}"}"
-      c=$(normalize_env_prefix "$c")
+      c=$(normalize_env_prefix "$c") || return 2
       continue
     fi
     break
@@ -2253,7 +2269,9 @@ prepare_segment_context() {
   check_command_substitutions "$policy_cmd" "$depth" || return $?
 
   CMD_TRIMMED="${policy_cmd#"${policy_cmd%%[![:space:]]*}"}"
-  CMD_NORMALIZED=$(normalize_command_candidate "$CMD_TRIMMED")
+  if ! CMD_NORMALIZED=$(normalize_command_candidate "$CMD_TRIMMED"); then
+    block "Cannot inspect wrapper options; use supported options or invoke the command directly." || return $?
+  fi
   CMD_VERB="${CMD_NORMALIZED%%[[:space:]]*}"
   CMD_VERB="${CMD_VERB##*/}"
 
@@ -2274,6 +2292,19 @@ prepare_segment_context() {
   [[ "$CMD_UNQUOTED" =~ $redirect_append_re || "$CMD_UNQUOTED" =~ $redirect_clobber_re || "$CMD_UNQUOTED" =~ $redirect_space_re || "$CMD_UNQUOTED" =~ $redirect_word_re ]] && HAS_REDIRECT=1
   local pipe_stripped="${CMD_UNQUOTED//||/}"
   [[ "$pipe_stripped" == *"|"* ]] && HAS_PIPE=1
+
+  # A downstream wrapper has its own option grammar; uncertainty must reach the hook verdict
+  # before policy-specific helpers consume normalized stages through command substitution.
+  if [[ "$HAS_PIPE" -eq 1 ]]; then
+    local -a wrapper_pipeline_stages=()
+    local wrapper_pipeline_stage
+    split_top_level_pipeline_stages_into wrapper_pipeline_stages "$policy_cmd"
+    for wrapper_pipeline_stage in "${wrapper_pipeline_stages[@]}"; do
+      if ! normalize_command_candidate "$wrapper_pipeline_stage" >/dev/null; then
+        block "Cannot inspect wrapper options; use supported options or invoke the command directly." || return $?
+      fi
+    done
+  fi
 
   local shell_c_re="(^|[[:space:]])(ba)?sh([[:space:]]+-[a-zA-Z]+)*[[:space:]]+-[a-zA-Z]*c[a-zA-Z]*[[:space:]]+[\$]?(['\"])([^'\"]*)(['\"])"
   # Inline shell code executes inside the outer action, so its body must receive its own complete policy inspection.
@@ -2563,6 +2594,8 @@ required_hook_lib_files=(
   "patterns-shell.sh"
   "patterns-paths.sh"
   "patterns-writes.sh"
+  "../gh-graphql-read.cjs"
+  "../vendor/graphql.cjs"
 )
 
 # Every required policy module must be readable before the entrypoint can return a trustworthy verdict.
@@ -2582,7 +2615,7 @@ source "$GOAT_HOOK_LIB_DIR/patterns-writes.sh" || deny_dangerous_unavailable "fa
 
 # During an interrupted upgrade the old policy file can still be present. It
 # must not reach main without the split API and accidentally allow on return 127.
-for required_policy_function in check_destructive_segment check_secret_segment check_repository_segment check_git_segment reset_git_alias_flags normalize_git_alias_expansion record_git_alias_config record_git_persistent_alias; do
+for required_policy_function in check_destructive_segment check_secret_segment check_repository_segment check_git_segment reset_git_alias_flags normalize_git_alias_expansion record_git_alias_config record_git_persistent_alias split_curl_form_parts_into curl_form_files_touch_secret; do
   declare -F "$required_policy_function" >/dev/null ||
     deny_dangerous_unavailable "policy store lacks required function $required_policy_function"
 done

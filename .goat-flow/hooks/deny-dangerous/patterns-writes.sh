@@ -188,6 +188,16 @@ is_git_commit() {
 is_gh_api_write() {
   local -n __goat_gh_words_ref__="$1"
   local start_index="$2"
+  local raw_stage="$3"
+  local graphql_status
+  # GraphQL operation proof precedes method shortcuts. A missing parser or uncertain
+  # payload is a denial; only a positively identified REST request reaches the legacy rules.
+  if node "$GOAT_HOOK_LIB_DIR/../gh-graphql-read.cjs" "$raw_stage" "${__goat_gh_words_ref__[@]:start_index}"; then
+    return 1
+  else
+    graphql_status=$?
+  fi
+  [[ "$graphql_status" -eq 3 ]] || return 0
   local method=""
   local has_body_fields=0
   local i="$start_index"
@@ -306,7 +316,7 @@ is_gh_write_operation() {
 
   # API writes use method and field semantics instead of named subcommands.
   if [[ "$topic" == "api" ]]; then
-    is_gh_api_write words $((i + 1))
+    is_gh_api_write words $((i + 1)) "$1"
     return $?
   fi
 

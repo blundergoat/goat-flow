@@ -94,6 +94,8 @@ const CODEX_POST_TURN_DELIVERY_CONTRACT: HookDeliveryContract = {
 const POLICY_RUNTIME_FILES = [
   "hook-policy-state.cjs",
   "vendor/js-yaml.cjs",
+  "gh-graphql-read.cjs",
+  "vendor/graphql.cjs",
   "deny-dangerous/guard-runtime.sh",
   "deny-dangerous/patterns-shell.sh",
   "deny-dangerous/patterns-paths.sh",

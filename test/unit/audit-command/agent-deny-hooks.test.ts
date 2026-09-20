@@ -246,10 +246,8 @@ describe("agent deny hook template comparison", () => {
   });
 
   /**
-   * Exercise the configured Codex launcher with quoted evidence and a real
-   * write-shaped payload. Both halves run in one case because the deny hook
-   * only earns its keep if it separates quoting repository content from
-   * writing to it - passing either half alone would hide a regression.
+   * Pair allowed reads with denied writes through the configured Codex launcher.
+   * Either outcome alone could hide a launcher that permits or rejects everything.
    */
   it("allows quoted repository evidence while the registered hook still blocks repository writes", () => {
     const registeredHookConfig = JSON.parse(
@@ -322,6 +320,41 @@ describe("agent deny hook template comparison", () => {
       `repository write was not blocked; stdout=${JSON.stringify(blockedRepositoryWriteResult.stdout)} stderr=${JSON.stringify(blockedRepositoryWriteResult.stderr)}`,
     );
     assert.match(blockedRepositoryWriteResult.stderr, /Policy repository/);
+
+    // Replay inert input through the saved launcher; no GitHub request executes.
+    for (const { command, expectedStatus } of [
+      {
+        command: `gh api graphql -f query='{ repository(owner: "blundergoat", name: "goat-flow") { discussions(first: 1) { nodes { number title body url comments(first: 5) { nodes { body url } } } } } }'`,
+        expectedStatus: 0,
+      },
+      {
+        command: `gh api graphql -f query='mutation { __typename }'`,
+        expectedStatus: 2,
+      },
+    ]) {
+      const result = originalSpawnSync(
+        "bash",
+        ["-c", registeredCodexHookCommand],
+        {
+          cwd: PROJECT_ROOT,
+          input: JSON.stringify({
+            tool_name: "Bash",
+            tool_input: { command },
+          }),
+          encoding: "utf-8",
+        },
+      );
+      assert.equal(
+        result.status,
+        expectedStatus,
+        `registered GraphQL policy: ${command}; stderr=${result.stderr}`,
+      );
+      if (expectedStatus === 2) {
+        assert.match(result.stderr, /Policy repository/);
+      } else {
+        assert.equal(result.stderr, "");
+      }
+    }
   });
 
   it("reports sandbox spawn denial separately from hook syntax errors", () => {

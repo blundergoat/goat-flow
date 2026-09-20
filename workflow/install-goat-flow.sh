@@ -3878,6 +3878,8 @@ if $HOOKS_ENABLED; then
   copy_file "$GOAT_FLOW_ROOT/workflow/hooks/hook-launch-runtime.mjs" "$HOOKS_DIR/hook-launch-runtime.mjs" "system-owned" "755"
   copy_file "$GOAT_FLOW_ROOT/workflow/hooks/hook-policy-state.cjs" "$HOOKS_DIR/hook-policy-state.cjs" "system-owned" "644"
   copy_file "$GOAT_FLOW_ROOT/workflow/hooks/vendor/js-yaml.cjs" "$HOOKS_DIR/vendor/js-yaml.cjs" "system-owned" "644"
+  copy_file "$GOAT_FLOW_ROOT/workflow/hooks/gh-graphql-read.cjs" "$HOOKS_DIR/gh-graphql-read.cjs" "system-owned" "644"
+  copy_file "$GOAT_FLOW_ROOT/workflow/hooks/vendor/graphql.cjs" "$HOOKS_DIR/vendor/graphql.cjs" "system-owned" "644"
   copy_file "$GOAT_FLOW_ROOT/workflow/hooks/deny-git-mutations.sh" "$HOOKS_DIR/deny-git-mutations.sh" "system-owned" "755"
   copy_file "$GOAT_FLOW_ROOT/workflow/hooks/deny-dangerous.sh" "$HOOKS_DIR/deny-dangerous.sh" "system-owned" "755"
   copy_file "$GOAT_FLOW_ROOT/workflow/hooks/gruff-code-quality.sh" "$HOOKS_DIR/gruff-code-quality.sh" "system-owned" "755"
