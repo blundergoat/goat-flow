@@ -95,7 +95,7 @@ describe("registered work forecast model", () => {
       assert.equal(cold.status, 0, cold.stdout + cold.stderr);
       assert.match(
         cold.stdout,
-        /forecast advice: M01-work.md - 1-30 agent-time minutes; likely 8; provisional; method matched-rates-v1; pool cold-prior; 0 samples/u,
+        /forecast advice: M01-work.md - 1-18 agent-time minutes; likely 8; provisional; method matched-rates-v1; pool cold-prior; 0 samples/u,
       );
       for (const [path, body] of saved)
         assert.equal(readFileSync(path, "utf8"), body, path);
@@ -189,6 +189,75 @@ describe("registered work forecast model", () => {
     }
   });
 
+  it("floors only the likely when history runs under one minute per unit and its high rate reaches one", () => {
+    const { forecast } = registeredHistoryFixture(10000, 23, false);
+    // The median of three rates is the computed likely; three units at this rate round to two minutes, under the unit count.
+    const medianRate = 0.8;
+    const result = forecastPlanWork(
+      forecast,
+      selectedRates([0.5, medianRate, 2]),
+      selectedPlanForecastBasis([], forecast),
+    );
+    assert.equal(result.isCompatible, true);
+    assert.equal(result.likelyFlooredFrom, medianRate);
+    assert.deepEqual(result.range, {
+      lowMinutes: 1,
+      likelyMinutes: 3,
+      highMinutes: 6,
+    });
+    assert.deepEqual(
+      [
+        result.basis.lowMinutesPerUnit,
+        result.basis.likelyMinutesPerUnit,
+        result.basis.highMinutesPerUnit,
+      ],
+      [0.56, 1, 1.76],
+    );
+    assert.equal(result.attemptedRange.likelyMinutes, 2);
+    assert.match(
+      result.reason,
+      /likely floored at 1\.00 min\/unit from 0\.80/u,
+    );
+
+    // A high rate under one minute per unit cannot hold a floored likely, so the issued values stay.
+    const tooFast = forecastPlanWork(
+      forecast,
+      selectedRates([0.5, 0.6, 0.9]),
+      selectedPlanForecastBasis([], forecast),
+    );
+    assert.equal(tooFast.isCompatible, false);
+    assert.equal(tooFast.likelyFlooredFrom, null);
+    assert.deepEqual(tooFast.range, forecast.range);
+
+    // Rendered through the selected-plan fallback: three fast finished samples, then an unstarted target.
+    const records = [
+      ...[90, 144, 360].map((seconds, index) =>
+        parseMilestoneMarkdown(
+          eligibleWorkUnitSampleBody(seconds, `M0${index + 1}`),
+          `M0${index + 1}-sample.md`,
+        ),
+      ),
+      parseMilestoneMarkdown(
+        registeredHistoryFixture(20000, 23, false).body,
+        "M04-target.md",
+      ),
+    ];
+    const lines = renderForecastModelSummary(records, {
+      root: null,
+      sources: [],
+      exclusions: [],
+    });
+    assert.match(
+      lines.join("\n"),
+      /forecast advice: M04-target\.md - 1-6 agent-time minutes; likely 3; provisional, likely floored; method matched-rates-v1; pool selected-plan; 3 samples/u,
+    );
+    assert.match(
+      lines.join("\n"),
+      /forecast basis advice: M04-target\.md - 3 units \(1 proof executions\); 0\.56-1\.00-1\.76 min\/unit; .*likely floored at 1\.00 min\/unit from 0\.80/u,
+    );
+    assert.doesNotMatch(lines.join("\n"), /forecast abstention:/u);
+  });
+
   it("reproduces selected-plan fallback and cold prior using only outcomes earlier than issue", () => {
     const { forecast } = registeredHistoryFixture(20000, 23, false);
     const records = [180, 540, 1620].map((seconds, index) => {
@@ -226,7 +295,7 @@ describe("registered work forecast model", () => {
     assert.deepEqual(cold.range, {
       lowMinutes: 1,
       likelyMinutes: 8,
-      highMinutes: 30,
+      highMinutes: 18,
     });
     assert.equal(cold.sampleCount, 2);
   });
